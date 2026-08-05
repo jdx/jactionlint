@@ -36,11 +36,6 @@
         "next": "v3"
     },
     {
-        "slug": "actions-cool/issues-helper",
-        "tags": ["v1", "v2", "v3"],
-        "next": "v4"
-    },
-    {
         "slug": "actions-rs/audit-check",
         "tags": ["v1"]
     },
