@@ -196,7 +196,7 @@ func (c *LocalReusableWorkflowCache) writeCache(key string, val *ReusableWorkflo
 }
 
 // FindMetadata finds/parses a reusable workflow metadata located by the 'spec' argument. When project
-// is not set to 'proj' field or the spec does not start with "./", this method immediately returns with nil.
+// is not set to 'proj' field or the spec is not a local reference, this method immediately returns with nil.
 //
 // Note that an error is not cached. At first search, let's say this method returned an error since
 // the reusable workflow is invalid. In this case, calling this method with the same spec later will
@@ -205,7 +205,11 @@ func (c *LocalReusableWorkflowCache) writeCache(key string, val *ReusableWorkflo
 //
 // Calling this method is thread-safe.
 func (c *LocalReusableWorkflowCache) FindMetadata(spec string) (*ReusableWorkflowMetadata, error) {
-	if c.proj == nil || !strings.HasPrefix(spec, "./") || ContainsExpression(spec) {
+	if c.proj == nil || ContainsExpression(spec) {
+		return nil, nil
+	}
+	spec, ok := canonLocalUsesSpec(spec)
+	if !ok {
 		return nil, nil
 	}
 

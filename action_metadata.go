@@ -235,13 +235,18 @@ func (c *LocalActionsCache) writeCache(key string, val *ActionMetadata) {
 }
 
 // FindMetadata finds metadata for given spec. The spec should indicate for local action hence it
-// should start with "./". The first return value can be nil even if error did not occur.
+// should start with "./" or with the self-repository prefix "$/". The first return value can be
+// nil even if error did not occur.
 // LocalActionCache caches that the action was not found. At first search, it returns an error that
 // the action was not found. But at the second search, it does not return an error even if the result
 // is nil. This behavior prevents repeating to report the same error from multiple places.
 // Calling this method is thread-safe.
 func (c *LocalActionsCache) FindMetadata(spec string) (*ActionMetadata, bool, error) {
-	if c.proj == nil || !strings.HasPrefix(spec, "./") {
+	if c.proj == nil {
+		return nil, false, nil
+	}
+	spec, ok := canonLocalUsesSpec(spec)
+	if !ok {
 		return nil, false, nil
 	}
 
