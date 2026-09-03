@@ -208,32 +208,34 @@ func (c *LocalReusableWorkflowCache) FindMetadata(spec string) (*ReusableWorkflo
 	if c.proj == nil || ContainsExpression(spec) {
 		return nil, nil
 	}
-	spec, ok := canonLocalUsesSpec(spec)
+	// The cache is keyed by the canonical form so that both spellings share one entry, but errors
+	// quote `spec` so they name the workflow the way the workflow author wrote it.
+	key, ok := canonLocalUsesSpec(spec)
 	if !ok {
 		return nil, nil
 	}
 
-	if m, ok := c.readCache(spec); ok {
+	if m, ok := c.readCache(key); ok {
 		c.debug("Cache hit for %s: %v", spec, m)
 		return m, nil
 	}
 
-	file := filepath.Join(c.proj.RootDir(), filepath.FromSlash(spec))
+	file := filepath.Join(c.proj.RootDir(), filepath.FromSlash(key))
 	src, err := os.ReadFile(file)
 	if err != nil {
-		c.writeCache(spec, nil) // Remember the workflow file was not found
+		c.writeCache(key, nil) // Remember the workflow file was not found
 		return nil, fmt.Errorf("could not read reusable workflow file for %q: %w", spec, err)
 	}
 
 	m, err := parseReusableWorkflowMetadata(src)
 	if err != nil {
-		c.writeCache(spec, nil) // Remember the workflow file was invalid
+		c.writeCache(key, nil) // Remember the workflow file was invalid
 		msg := strings.ReplaceAll(err.Error(), "\n", " ")
 		return nil, fmt.Errorf("error while parsing reusable workflow %q: %s", spec, msg)
 	}
 
 	c.debug("New reusable workflow metadata at %s: %v", file, m)
-	c.writeCache(spec, m)
+	c.writeCache(key, m)
 	return m, nil
 }
 
