@@ -113,6 +113,7 @@ func quoteJoin(vs []string) string {
 		seen[v] = struct{}{}
 		qs = append(qs, strconv.Quote(v))
 	}
+	slices.Sort(qs)
 	return strings.Join(qs, ", ")
 }
 
