@@ -401,3 +401,84 @@ func TestRuleRunnerLabelAllGitHubHostedRunnerLabels(t *testing.T) {
 		}
 	}
 }
+
+func TestRuleRunnerLabelStrictLabels(t *testing.T) {
+	tests := []struct {
+		what   string
+		labels []string
+		known  []string
+		errs   []string
+	}{
+		{
+			what:   "listed label only",
+			labels: []string{"my-runner"},
+			known:  []string{"my-runner"},
+		},
+		{
+			what:   "glob in known labels",
+			labels: []string{"gpu-a100"},
+			known:  []string{"gpu-*"},
+		},
+		{
+			what:   "GitHub-hosted label is rejected",
+			labels: []string{"ubuntu-latest"},
+			known:  []string{"my-runner"},
+			errs:   []string{`label "ubuntu-latest" is not allowed`},
+		},
+		{
+			what:   "default self-hosted label is rejected",
+			labels: []string{"self-hosted", "my-runner"},
+			known:  []string{"my-runner"},
+			errs:   []string{`label "self-hosted" is not allowed`},
+		},
+		{
+			what:   "default label is accepted when explicitly listed",
+			labels: []string{"self-hosted", "my-runner"},
+			known:  []string{"self-hosted", "my-runner"},
+		},
+		{
+			what:   "no known labels rejects everything",
+			labels: []string{"ubuntu-latest"},
+			errs:   []string{`label "ubuntu-latest" is not allowed`},
+		},
+		{
+			what:   "conflict is still detected for listed built-in labels",
+			labels: []string{"ubuntu-latest", "windows-latest"},
+			known:  []string{"ubuntu-latest", "windows-latest"},
+			errs:   []string{`label "windows-latest" conflicts with label "ubuntu-latest"`},
+		},
+		{
+			what:   "invalid glob",
+			labels: []string{"x"},
+			known:  []string{"["},
+			errs:   []string{`label pattern "[" is an invalid glob`},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.what, func(t *testing.T) {
+			pos := &Pos{}
+			labels := make([]*String, 0, len(tc.labels))
+			for _, l := range tc.labels {
+				labels = append(labels, &String{l, false, pos})
+			}
+			node := &Job{RunsOn: &Runner{Labels: labels}}
+			rule := NewRuleRunnerLabel()
+			cfg := Config{}
+			cfg.SelfHostedRunner.Labels = tc.known
+			cfg.SelfHostedRunner.StrictLabels = true
+			rule.SetConfig(&cfg)
+			if err := rule.VisitJobPre(node); err != nil {
+				t.Fatal(err)
+			}
+			errs := rule.Errs()
+			if len(errs) != len(tc.errs) {
+				t.Fatalf("%d error(s) wanted but got %d: %v", len(tc.errs), len(errs), errs)
+			}
+			for i, want := range tc.errs {
+				if !strings.Contains(errs[i].Error(), want) {
+					t.Fatalf("%q not contained in %q", want, errs[i].Error())
+				}
+			}
+		})
+	}
+}

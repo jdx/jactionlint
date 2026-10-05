@@ -312,3 +312,20 @@ func TestConfigGenerateDefaultConfigFileError(t *testing.T) {
 		t.Fatalf("unexpected error message: %q", msg)
 	}
 }
+
+func TestConfigParseStrictLabels(t *testing.T) {
+	c, err := ParseConfig([]byte("self-hosted-runner:\n  strict-labels: true\n  labels: [foo]"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !c.SelfHostedRunner.StrictLabels {
+		t.Fatal("strict-labels was not parsed")
+	}
+	c, err = ParseConfig([]byte("self-hosted-runner:\n  labels: [foo]"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.SelfHostedRunner.StrictLabels {
+		t.Fatal("strict-labels must default to false")
+	}
+}

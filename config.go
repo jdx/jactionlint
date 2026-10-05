@@ -61,6 +61,10 @@ type Config struct {
 	SelfHostedRunner struct {
 		// Labels is label names for self-hosted runner.
 		Labels []string `yaml:"labels"`
+		// StrictLabels makes the runner-label rule accept only the labels listed in Labels. When true, the
+		// built-in labels (GitHub-hosted runner labels and the preset self-hosted labels such as "self-hosted"
+		// and "linux") are reported as unknown unless they are explicitly listed in Labels.
+		StrictLabels bool `yaml:"strict-labels"`
 	} `yaml:"self-hosted-runner"`
 	// ConfigVariables is names of configuration variables used in the checked workflows. When this value is nil,
 	// property names of `vars` context will not be checked. Otherwise actionlint will report a name which is not

@@ -21,6 +21,9 @@ self-hosted-runner:
     - linux.2xlarge
     - windows-latest-xl
     - linux-multi-gpu
+  # When true, only the labels listed above are accepted at 'runs-on:'. Built-in labels such as 'ubuntu-latest' and
+  # 'self-hosted' are reported unless listed. (default: false)
+  strict-labels: false
 
 # Configuration variables in array of strings defined in your repository or organization.
 config-variables:
@@ -47,6 +50,12 @@ paths:
 - `self-hosted-runner`: Configuration for your self-hosted runner environment.
   - `labels`: Label names added to your self-hosted runners as list of pattern. Glob syntax supported by [`path.Match`][pat]
     is available.
+  - `strict-labels`: When `true`, the [runner label check](checks.md#check-runner-labels) accepts only the labels listed in
+    `labels` (glob patterns supported). The built-in labels (GitHub-hosted runner labels such as `ubuntu-latest` and the preset
+    self-hosted labels such as `self-hosted`, `linux`, and `x64`) are reported as errors unless they are listed in `labels`.
+    This is useful when all jobs must run on your own runners, or when your runners (e.g. Actions Runner Controller runner
+    sets) do not have the default `self-hosted` label. Label conflict checks still apply to listed built-in labels. The default
+    is `false`.
 - `config-variables`: [Configuration variables][vars]. When an array is set, actionlint will check `vars` properties strictly.
   An empty array means no variable is allowed. The default value `null` disables the check.
 - `paths`: Configurations for specific file path patterns. This is a mapping from a glob pattern and the corresponding
