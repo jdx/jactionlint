@@ -289,6 +289,11 @@ func (rule *RuleExpression) VisitJobPost(n *Job) error {
 	return nil
 }
 
+// stepParallelKey is the workflow key used to look up context availability for the 'background', 'wait',
+// and 'cancel' step fields. The context availability table does not list these new keys yet, so they
+// are treated like their sibling 'continue-on-error' field.
+const stepParallelKey = "jobs.<job_id>.steps.continue-on-error"
+
 // VisitStep is callback when visiting Step node.
 func (rule *RuleExpression) VisitStep(n *Step) error {
 	rule.checkString(n.Name, "jobs.<job_id>.steps.name")
@@ -312,11 +317,18 @@ func (rule *RuleExpression) VisitStep(n *Step) error {
 		rule.checkString(e.Entrypoint, "jobs.<job_id>.steps.with")
 		rule.checkString(e.Args, "jobs.<job_id>.steps.with")
 		spec = e.Uses
+	case *ExecWait:
+		for _, name := range e.Names {
+			rule.checkString(name, stepParallelKey)
+		}
+	case *ExecCancel:
+		rule.checkString(e.Name, stepParallelKey)
 	}
 
 	rule.checkEnv(n.Env, "jobs.<job_id>.steps.env") // env: at step level can refer 'env' context (#158)
 	rule.checkBool(n.ContinueOnError, "jobs.<job_id>.steps.continue-on-error")
 	rule.checkFloat(n.TimeoutMinutes, "jobs.<job_id>.steps.timeout-minutes")
+	rule.checkBool(n.Background, stepParallelKey)
 
 	if n.ID != nil {
 		if n.ID.ContainsExpression() {

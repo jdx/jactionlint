@@ -220,6 +220,21 @@
               "helpUri": "https://github.com/rhysd/actionlint/blob/main/docs/checks.md"
             },
             {
+              "id": "run-policy",
+              "name": "RunPolicy",
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "description": "Checks opt-in policies for scripts in \"run:\" (\"require-shell\" and \"max-run-lines\" in the config)",
+                "queryURI": "https://github.com/rhysd/actionlint/blob/main/docs/checks.md"
+              },
+              "fullDescription": {
+                "text": "Checks opt-in policies for scripts in \"run:\" (\"require-shell\" and \"max-run-lines\" in the config)"
+              },
+              "helpUri": "https://github.com/rhysd/actionlint/blob/main/docs/checks.md"
+            },
+            {
               "id": "runner-label",
               "name": "RunnerLabel",
               "defaultConfiguration": {

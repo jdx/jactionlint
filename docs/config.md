@@ -63,6 +63,12 @@ timeout-minutes:
 require-commit-hash: true
 # Require explicit permissions at workflow-level or job-level
 require-permissions: true
+
+# Require every 'run:' step to set a shell explicitly with 'shell:' (or 'defaults.run.shell'). (default: false)
+require-shell: true
+
+# Maximum number of non-blank lines allowed in a 'run:' script. 0 disables the check. (default: 0)
+max-run-lines: 30
 ```
 
 - `self-hosted-runner`: Configuration for your self-hosted runner environment.
@@ -74,6 +80,11 @@ require-permissions: true
     This is useful when all jobs must run on your own runners, or when your runners (e.g. Actions Runner Controller runner
     sets) do not have the default `self-hosted` label. Label conflict checks still apply to listed built-in labels. The default
     is `false`.
+- `require-shell`: When `true`, every `run:` step must have an explicit shell by `shell:` of the step or `defaults.run.shell` of
+  the job or the workflow. When omitted, GitHub Actions runs `bash -e {0}` on Linux/macOS, which differs from `shell: bash`
+  (`bash --noprofile --norc -eo pipefail {0}`). See [the check](checks.md#check-run-policy). The default is `false`.
+- `max-run-lines`: Maximum number of non-blank lines allowed in a `run:` script. Longer scripts are reported. `0` disables the
+  check and negative values are rejected. See [the check](checks.md#check-run-policy). The default is `0`.
 - `config-variables`: [Configuration variables][vars]. When an array is set, actionlint will check `vars` properties strictly.
   An empty array means no variable is allowed. The default value `null` disables the check.
 - `config-secrets`: [Secrets][secrets]. When an array is set, actionlint will check `secrets` properties strictly against the

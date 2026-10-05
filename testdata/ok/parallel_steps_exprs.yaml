@@ -1,0 +1,26 @@
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        bg: [true, false]
+        id: [a, b]
+    steps:
+      - run: echo a
+        id: a
+        background: true
+      - run: echo b
+        id: b
+        background: ${{ matrix.bg }}
+      - run: echo c
+        background: ${{ github.event_name == 'push' }}
+      # 'wait-all' takes no arguments: empty, or a boolean for compatibility with the official schema
+      - wait-all:
+      - wait-all: true
+      - wait-all: false
+      - wait: ${{ matrix.id }}
+      - wait:
+          - a
+          - ${{ matrix.id }}
+      - cancel: ${{ matrix.id }}
