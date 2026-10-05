@@ -171,7 +171,7 @@ When releasing v1.2.3 as example:
 6. Run `make CHANGELOG.md` to update [CHANGELOG.md](./CHANGELOG.md) and make a commit for the change. This step requires
    [changelog-from-release](https://github.com/rhysd/changelog-from-release).
 7. Run `git pull` to merge upstream changes to local `main` branch and run `git push origin main`
-8. Update the playground by `./playground/deploy.bash` if it is not updated yet for the release
+8. The playground is deployed by the Pages workflow when `main` changes; check that it ran after the release
 
 > [!NOTE]
 > If you see workflow failure at releasing a new winget package, check the [fork repository](https://github.com/rhysd/winget-pkgs)
@@ -198,31 +198,18 @@ Visit [`playground/README.md`](./playground/README.md).
 
 ## How to deploy playground
 
-Run [`deploy.bash`](./playground/deploy.bash) at root of repository. It does:
+The playground is deployed to https://jactionlint.jdx.dev/ by the [Pages workflow](./.github/workflows/pages.yaml) whenever
+the playground or the Go sources change on `main`. It can also be run by hand from the Actions tab (`workflow_dispatch`).
 
-1. Ensure to install dependencies and to build `main.wasm`
-2. Copy all assets to `./playground-dist` directory
-3. Optimize `main.wasm` with `wasm-opt` which is a part of [Binaryen](https://github.com/WebAssembly/binaryen) toolchain
-3. Switch branch to `gh-pages`
-4. Move all files in `./playground-dist` to root of repository and add to repository
-5. Make commit for deployment
+To build the same site locally in `./playground-dist`:
 
 ```sh
-# Prepare deployment
-bash ./playground/deploy.bash
-# Check it works fine by visiting localhost:1234
-npm run serve
-# If it looks good, deploy it
-git push
+mise run pages
 ```
 
-Note: `SKIP_BUILD_WASM` environment variable can skip building `main.wasm` binary. Please set it when the Wasm binary
-doesn't need to be updated. It is important to avoid bloating a repository size by including a big Wasm binary in a
-commit.
-
-```sh
-SKIP_BUILD_WASM=true bash ./playground/deploy.bash
-```
+This installs dependencies, builds `main.wasm`, copies all assets to `./playground-dist` and optimizes `main.wasm` with
+`wasm-opt`, which is a part of the [Binaryen](https://github.com/WebAssembly/binaryen) toolchain (installed by mise).
+Serve it with any static file server to check it, for example `cd playground-dist && python3 -m http.server 1234`.
 
 ## Maintain auto-generated sources
 
