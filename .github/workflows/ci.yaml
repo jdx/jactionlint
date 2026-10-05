@@ -135,3 +135,35 @@ jobs:
           -- ${{ steps.image.outputs.digest }} -color -verbose
       - name: Lint Dockerfile with hadolint
         run: docker run --rm -i hadolint/hadolint hadolint --ignore DL3018 --strict-labels - < Dockerfile
+
+  # Aggregator that required-status-checks can target. If any upstream job
+  # failed or was skipped, this job exits non-zero so the PR is blocked. Lets
+  # the branch-protection rule depend on one name instead of the whole matrix.
+  final:
+    name: final
+    needs: [unit-tests, wasm, lint, docker]
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    permissions: {}
+    # Run on success or upstream failure but skip when the workflow is
+    # cancelled; `always()` would override cancel-in-progress.
+    if: ${{ !cancelled() }}
+    steps:
+      - name: Gate on upstream job results
+        env:
+          NEEDS_JSON: ${{ toJSON(needs) }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import sys
+
+          needs = json.loads(os.environ["NEEDS_JSON"])
+          failed = False
+          for name, data in sorted(needs.items()):
+              result = data.get("result", "unknown")
+              print(f"{name}: {result}")
+              if result != "success":
+                  failed = True
+          sys.exit(1 if failed else 0)
+          PY
