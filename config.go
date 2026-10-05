@@ -3,6 +3,7 @@ package actionlint
 import (
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -55,6 +56,16 @@ type PathConfig struct {
 	Ignore IgnorePatterns `yaml:"ignore"`
 }
 
+// TimeoutMinutesConfig is a configuration for the "timeout-check" rule. The rule is opt-in; it does nothing
+// unless "required" is true or "max" is set. This is for the "timeout-minutes" mapping in the configuration file.
+type TimeoutMinutesConfig struct {
+	// Required is whether every job (except for jobs calling a reusable workflow, which do not support
+	// "timeout-minutes") must set "timeout-minutes".
+	Required bool `yaml:"required"`
+	// Max is the maximum allowed value of "timeout-minutes" of a job. Zero means no upper limit.
+	Max float64 `yaml:"max"`
+}
+
 // Config is configuration of actionlint. This struct instance is parsed from "actionlint.yaml"
 // file usually put in ".github" directory.
 type Config struct {
@@ -80,6 +91,9 @@ type Config struct {
 	// Paths is a "paths" mapping in the configuration file. The keys are glob patterns to match file paths.
 	// And the values are corresponding configurations applied to the file paths.
 	Paths map[string]PathConfig `yaml:"paths"`
+	// TimeoutMinutes is a configuration for the "timeout-check" rule, which checks "timeout-minutes" of jobs.
+	// The rule is disabled by default.
+	TimeoutMinutes TimeoutMinutesConfig `yaml:"timeout-minutes"`
 	// Requires action and docker versions to use a commit hash instead of version/branch.
 	RequireCommitHash bool `yaml:"require-commit-hash"`
 }
@@ -113,6 +127,9 @@ func ParseConfig(b []byte) (*Config, error) {
 		if !doublestar.ValidatePattern(pat) {
 			return nil, fmt.Errorf("invalid glob pattern %q in \"paths\"", pat)
 		}
+	}
+	if m := c.TimeoutMinutes.Max; math.IsNaN(m) || math.IsInf(m, 0) || m < 0 {
+		return nil, fmt.Errorf("\"max\" in \"timeout-minutes\" must be a non-negative number, but got %v", m)
 	}
 	return &c, nil
 }
@@ -202,6 +219,13 @@ config-secrets: null
 paths:
 #  .github/workflows/**/*.yml:
 #    ignore: []
+
+# Configuration for the "timeout-check" rule, which is disabled by default.
+# "required" set to true requires every job to set "timeout-minutes".
+# "max" is the maximum allowed value of "timeout-minutes" in minutes (0 means no limit).
+#timeout-minutes:
+#  required: false
+#  max: 60
 `)
 	if err := os.WriteFile(path, b, 0644); err != nil {
 		return fmt.Errorf("could not write default configuration file at %q: %w", path, err)
