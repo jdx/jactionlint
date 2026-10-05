@@ -1089,7 +1089,7 @@ func (p *parser) parseContainer(sec string, pos *Pos, n *yaml.Node) *Container {
 		case "ports":
 			ret.Ports = p.parseStringSequence("ports", e.val, true, false)
 		case "volumes":
-			ret.Ports = p.parseStringSequence("volumes", e.val, true, false)
+			ret.Volumes = p.parseStringSequence("volumes", e.val, true, false)
 		case "options":
 			ret.Options = p.parseString(e.val, true)
 		case "command":
@@ -1423,6 +1423,7 @@ func (p *parser) parseJob(id *String, n *yaml.Node) *Job {
 			stepsOnlyKey = k
 		case "services":
 			ret.Services = p.parseServices(v)
+			stepsOnlyKey = k
 		case "uses":
 			call.Uses = p.parseString(v, false)
 			callOnlyKey = k

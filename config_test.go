@@ -84,6 +84,30 @@ paths:
 		{
 			in: `
 paths:
+  foo:
+    ignore: [{}]
+`,
+			want: `"ignore" items must be strings`,
+		},
+		{
+			in: `
+paths:
+  foo:
+    ignore: [[foo]]
+`,
+			want: `"ignore" items must be strings`,
+		},
+		{
+			in: `
+paths:
+  foo:
+    ignore: [42]
+`,
+			want: `"ignore" items must be strings`,
+		},
+		{
+			in: `
+paths:
   foo.{txt,xml:
 `,
 			want: `invalid glob pattern`,
