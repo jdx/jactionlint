@@ -804,13 +804,18 @@ func (rule *RuleExpression) checkExprsIn(s string, pos *Pos, quoted bool, indent
 	return ts, true
 }
 
-func (rule *RuleExpression) exprError(err *ExprError, lineBase, colBase int) {
-	pos := convertExprLineColToPos(err.Line, err.Column, lineBase, colBase)
-	if err.Line > 1 && rule.literalIndent > 0 {
-		// The column is relative to the start of the line in the literal block
-		pos.Col = rule.literalIndent + err.Column
+// exprPos converts a position in an expression to a position in the source. When the expression is in a
+// literal block, the column on lines after the first is relative to the start of the line in the block.
+func (rule *RuleExpression) exprPos(line, col, lineBase, colBase int) *Pos {
+	pos := convertExprLineColToPos(line, col, lineBase, colBase)
+	if line > 1 && rule.literalIndent > 0 {
+		pos.Col = rule.literalIndent + col
 	}
-	rule.Error(pos, err.Message)
+	return pos
+}
+
+func (rule *RuleExpression) exprError(err *ExprError, lineBase, colBase int) {
+	rule.Error(rule.exprPos(err.Line, err.Column, lineBase, colBase), err.Message)
 }
 
 func (rule *RuleExpression) checkSemanticsOfExprNode(expr ExprNode, line, col int, checkUntrusted bool, workflowKey string) (ExprType, bool) {
@@ -893,7 +898,7 @@ func (rule *RuleExpression) checkFalsyTernary(expr ExprNode, line, col int) {
 		}
 		tok := last.Token()
 		rule.Errorf(
-			convertExprLineColToPos(tok.Line, tok.Column, line, col),
+			rule.exprPos(tok.Line, tok.Column, line, col),
 			"value %q after && is always falsy so the expression always evaluates to the value after ||. \"a && b || c\" works as a ternary only when b is truthy",
 			tok.Value,
 		)

@@ -118,3 +118,15 @@ func TestOptInRulesConfigParse(t *testing.T) {
 		t.Error("must be disabled by default")
 	}
 }
+
+func TestCheckFalsyTernaryPositionInLiteralBlock(t *testing.T) {
+	// The column of a token on a later line of a literal block must account for the stripped indentation.
+	src := "on: push\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - run: |\n          echo ${{\n            github.ref == 'x' && '' || 'y'\n          }}\n"
+	errs := lintWithConfig(t, &Config{CheckFalsyTernary: true}, src)
+	if len(errs) != 1 {
+		t.Fatalf("want 1 error: %v", errs)
+	}
+	if errs[0].Line != 8 || errs[0].Column != 34 {
+		t.Errorf("unexpected position %d:%d", errs[0].Line, errs[0].Column)
+	}
+}
