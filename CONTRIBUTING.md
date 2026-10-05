@@ -204,8 +204,9 @@ To build the same site locally in `./playground-dist`:
 mise run pages
 ```
 
-This installs dependencies, builds `main.wasm`, copies all assets to `./playground-dist` and optimizes `main.wasm` with
-`wasm-opt`, which is a part of the [Binaryen](https://github.com/WebAssembly/binaryen) toolchain (installed by mise).
+This installs dependencies, builds `main.wasm` and copies all assets to `./playground-dist`.
+`wasm-opt` is not applied: it needs about 27 GB of memory for `main.wasm` (more than a GitHub-hosted runner has) and only
+shrinks the file by about 2% after compression.
 Serve it with any static file server to check it, for example `cd playground-dist && python3 -m http.server 1234`.
 
 ## Maintain auto-generated sources
