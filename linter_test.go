@@ -220,6 +220,9 @@ func TestLinterLintError(t *testing.T) {
 				if strings.HasSuffix(testName, "_security") {
 					l.defaultConfig.RequireCommitHash = true
 				}
+				if strings.HasSuffix(testName, "_require_permissions") {
+					l.defaultConfig.RequirePermissions = true
+				}
 
 				errs, err := l.Lint("test.yaml", b, proj)
 				if err != nil {

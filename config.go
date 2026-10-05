@@ -96,6 +96,9 @@ type Config struct {
 	TimeoutMinutes TimeoutMinutesConfig `yaml:"timeout-minutes"`
 	// Requires action and docker versions to use a commit hash instead of version/branch.
 	RequireCommitHash bool `yaml:"require-commit-hash"`
+	// RequirePermissions reports jobs which are not covered by an explicit "permissions:" at workflow-level
+	// or job-level. This is opt-in and disabled by default.
+	RequirePermissions bool `yaml:"require-permissions"`
 }
 
 // PathConfigs returns a list of all PathConfig values matching to the given file path. The path must

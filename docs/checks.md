@@ -2230,6 +2230,7 @@ cases they are mistakes, and they may cause some issues on using them in shell s
 actionlint checks environment variable names are correct in `env:` configuration.
 
 <a id="permissions"></a>
+<a id="check-permissions"></a>
 ## Permissions
 
 Example input:
@@ -2282,6 +2283,21 @@ Each permission scopes have their access levels. The default levels and availabl
 [the document][permissions-doc].
 
 actionlint checks permission scopes and access levels in a workflow are correct.
+
+### Require explicit permissions (opt-in)
+
+When `permissions:` is not set, `GITHUB_TOKEN` gets the default permissions of the repository or organization, which may be
+read-write. Setting permissions explicitly follows the principle of least privilege. This check is **disabled by default**.
+To enable it, set `require-permissions: true` in [the configuration file](config.md):
+
+```yaml
+require-permissions: true
+```
+
+When enabled, actionlint reports every job that is not covered by `permissions:`, i.e. the workflow has no top-level
+`permissions:` and the job has no `permissions:` of its own. Either of them is enough, and `permissions: {}` (no permissions)
+counts as explicit. Jobs which call reusable workflows (`uses:`) are checked in the same way because the caller limits the
+permissions of the callee. The error is reported at the job so that it is easy to see which jobs need a fix.
 
 <a id="check-reusable-workflows"></a>
 ## Reusable workflows

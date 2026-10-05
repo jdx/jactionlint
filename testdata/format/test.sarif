@@ -205,6 +205,21 @@
               "helpUri": "https://github.com/rhysd/actionlint/blob/main/docs/checks.md"
             },
             {
+              "id": "require-permissions",
+              "name": "RequirePermissions",
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "description": "Checks that \"permissions:\" is explicitly set at workflow-level or job-level. This rule is opt-in and enabled by \"require-permissions\" in the config",
+                "queryURI": "https://github.com/rhysd/actionlint/blob/main/docs/checks.md"
+              },
+              "fullDescription": {
+                "text": "Checks that \"permissions:\" is explicitly set at workflow-level or job-level. This rule is opt-in and enabled by \"require-permissions\" in the config"
+              },
+              "helpUri": "https://github.com/rhysd/actionlint/blob/main/docs/checks.md"
+            },
+            {
               "id": "runner-label",
               "name": "RunnerLabel",
               "defaultConfiguration": {
