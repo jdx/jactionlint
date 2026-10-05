@@ -1,5 +1,13 @@
 name: CI
-on: [push, pull_request]
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   unit-tests:
@@ -7,57 +15,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, ubuntu-24.04-arm, macos-latest, windows-latest, macos-26-intel, windows-11-arm]
-        go: ['1.25', '1.26']
+        os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - name: Install dependencies on macOS
-        run: |
-          set -x
-          brew install --quiet shellcheck python3 pipx
-          # https://pipx.pypa.io/stable/installation/
-          pipx ensurepath
-          pipx install pyflakes
-          shellcheck --version
-          pyflakes --version
-        if: ${{ runner.os == 'macOS' }}
-      - name: Install dependencies on Linux
-        run: |
-          set -x
-          sudo apt-get install -y shellcheck
-          pip install pyflakes
-          shellcheck --version
-          pyflakes --version
-        if: ${{ runner.os == 'Linux' }}
-      - name: Install dependencies on Windows
-        run: |
-          winget install --id koalaman.shellcheck --disable-interactivity --accept-package-agreements --accept-source-agreements
-          pip install pyflakes
-          pyflakes --version
-        if: ${{ runner.os == 'Windows' && matrix.os != 'windows-11-arm' }}
-      - name: Install dependencies on Windows ARM
-        # winget is not available on the Windows ARM runner image
-        shell: pwsh
-        run: |
-          $dir = Join-Path $env:RUNNER_TEMP 'shellcheck'
-          Invoke-WebRequest -Uri 'https://github.com/koalaman/shellcheck/releases/download/v0.11.0/shellcheck-v0.11.0.zip' -OutFile "$dir.zip"
-          Expand-Archive -Path "$dir.zip" -DestinationPath $dir
-          Add-Content -Path $env:GITHUB_PATH -Value $dir
-          & "$dir\shellcheck.exe" --version
-          pip install pyflakes
-          pyflakes --version
-        if: ${{ matrix.os == 'windows-11-arm' }}
       - uses: actions/checkout@v6
-      - uses: actions/setup-go@v6
-        with:
-          go-version: ${{ matrix.go }}
-          check-latest: true
-      - run: go test -v -race -coverprofile coverage.txt -covermode=atomic ./...
-        # Arm Windows doesn't support -race
-        if: ${{ matrix.os != 'windows-11-arm' }}
-      - run: go test -v -coverprofile coverage.txt -covermode=atomic ./...
-        if: ${{ matrix.os == 'windows-11-arm' }}
-      - run: go tool cover -func ./coverage.txt
+      - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+      - run: go test -v -race ./...
       # Check build without CGO
       - run: go build ./cmd/actionlint
         env:
@@ -65,17 +28,10 @@ jobs:
           CGO_ENABLED: 0
       # Set -race for catching data races on dog fooding (#333)
       - run: go build -race ./cmd/actionlint
-        if: ${{ matrix.os != 'windows-11-arm' }}
       - name: Dog fooding 🐶
         run: |
           echo "::add-matcher::.github/actionlint-matcher.json"
           ./actionlint -color
-      - uses: codecov/codecov-action@v6
-        with:
-          env_vars: OS
-          token: ${{ secrets.CODECOV_TOKEN }}
-        env:
-          OS: ${{ matrix.os }}
   wasm:
     name: Wasm
     runs-on: ubuntu-latest
@@ -84,15 +40,7 @@ jobs:
         working-directory: ./playground
     steps:
       - uses: actions/checkout@v6
-      - uses: actions/setup-go@v6
-        with:
-          go-version: '1.26'
-          check-latest: true
-      - uses: actions/setup-node@v6
-        with:
-          node-version: "lts/*"
-          cache: npm
-          cache-dependency-path: ./playground/package-lock.json
+      - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
       - name: Build playground
         run: make build
       - name: Lint playground
@@ -104,31 +52,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: actions/setup-go@v6
-        with:
-          go-version: '1.26'
-          check-latest: true
-      - name: Install dependencies
-        run: |
-          sudo apt-get install -y shellcheck
-          pip install pyflakes
-          shellcheck --version
-          pyflakes --version
-      - name: Check Go sources are formatted
-        run: |
-          diffs="$(gofmt -d ./*.go ./cmd/actionlint/*.go ./scripts/*/*.go ./playground/*.go)"
-          if [[ "$diffs" != "" ]]; then
-            echo "$diffs" >&2
-            exit 1
-          fi
-      - name: Install staticcheck and govulncheck
-        run: |
-          go install honnef.co/go/tools/cmd/staticcheck@latest
-          go install golang.org/x/vuln/cmd/govulncheck@latest
-          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
-      - run: make lint SKIP_GO_GENERATE=true
-      - name: Lint bash scripts
-        run: shellcheck ./scripts/*.bash ./playground/*.bash
+      - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+      - run: hk check --all
   docker:
     name: Dockerfile
     runs-on: ubuntu-latest
@@ -139,7 +64,7 @@ jobs:
         uses: docker/build-push-action@v7
         with:
           build-args: |
-            GOLANG_VER=1.26
+            GOLANG_VER=1.27
           push: false
       - name: Test Docker image
         run: docker container run
@@ -148,3 +73,35 @@ jobs:
           -- ${{ steps.image.outputs.digest }} -color -verbose
       - name: Lint Dockerfile with hadolint
         run: docker run --rm -i hadolint/hadolint hadolint --ignore DL3018 --ignore DL3066 --strict-labels - < Dockerfile
+
+  # Aggregator that required-status-checks can target. If any upstream job
+  # failed or was skipped, this job exits non-zero so the PR is blocked. Lets
+  # the branch-protection rule depend on one name instead of the whole matrix.
+  final:
+    name: final
+    needs: [unit-tests, wasm, lint, docker]
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    permissions: {}
+    # Run on success or upstream failure but skip when the workflow is
+    # cancelled; `always()` would override cancel-in-progress.
+    if: ${{ !cancelled() }}
+    steps:
+      - name: Gate on upstream job results
+        env:
+          NEEDS_JSON: ${{ toJSON(needs) }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import sys
+
+          needs = json.loads(os.environ["NEEDS_JSON"])
+          failed = False
+          for name, data in sorted(needs.items()):
+              result = data.get("result", "unknown")
+              print(f"{name}: {result}")
+              if result != "success":
+                  failed = True
+          sys.exit(1 if failed else 0)
+          PY

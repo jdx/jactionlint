@@ -1,0 +1,68 @@
+amends "package://github.com/jdx/hk/releases/download/v2.4.0/hk@2.4.0#/Config.pkl"
+import "package://github.com/jdx/hk/releases/download/v2.4.0/hk@2.4.0#/Builtins.pkl"
+
+local fast = new Mapping<String, Step> {
+    // Same files and plain gofmt (no -s) as the CI lint job used to check
+    ["go_fmt"] {
+        glob = List("*.go", "cmd/actionlint/*.go", "scripts/*/*.go", "playground/*.go")
+        check_list_files = """
+            FILES=$(gofmt -l {{files}})
+            if [ -n "$FILES" ]; then
+              echo "$FILES"
+              exit 1
+            fi
+            """
+        fix = "gofmt -w {{files}}"
+    }
+    ["go_vet"] = Builtins.go_vet
+    // Only our own scripts; testdata contains intentionally broken shell scripts
+    ["shellcheck"] {
+        glob = List("scripts/*.bash", "playground/*.bash")
+        check = "shellcheck {{files}}"
+    }
+    // Dog fooding: lint our own workflows with the actionlint in this tree
+    ["actionlint"] {
+        glob = List(".github/workflows/*.yaml", ".github/workflows/*.yml")
+        check = "go run ./cmd/actionlint -color {{files}}"
+    }
+}
+
+local slow = new Mapping<String, Step> {
+    // ./... is not usable here because ./playground/node_modules contains Go packages
+    ["staticcheck"] {
+        glob = "**/*.go"
+        check = "staticcheck ./ ./scripts/... ./cmd/... && mise run lint:wasm"
+    }
+    ["go_vuln_check"] = Builtins.go_vuln_check
+    ["checks_doc"] {
+        glob = List("docs/checks.md", "scripts/check-checks/**", "*.go")
+        check = "go run ./scripts/check-checks -quiet ./docs/checks.md"
+        fix = "go run ./scripts/check-checks -fix ./docs/checks.md"
+        exclusive = true
+    }
+}
+
+hooks {
+    ["pre-commit"] {
+        fix = true
+        stash = "git"
+        steps = fast
+    }
+    ["pre-push"] {
+        steps = (fast) {
+            ...slow
+            // What the old .git-hooks/pre-push ran before pushing
+            ["go_test"] {
+                glob = "**/*.go"
+                check = "go test ./..."
+            }
+        }
+    }
+    ["fix"] {
+        fix = true
+        steps = (fast) { ...slow }
+    }
+    ["check"] {
+        steps = (fast) { ...slow }
+    }
+}

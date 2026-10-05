@@ -17,26 +17,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: actions/setup-go@v6
-        with:
-          go-version: '1.26'
-          check-latest: true
-      - uses: actions/setup-node@v6
-        with:
-          node-version: "lts/*"
-          cache: npm
-          cache-dependency-path: ./playground/package-lock.json
+      - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
       - name: Update test data
-        run: make ./scripts/generate-actionlint-matcher/test/* SKIP_GO_GENERATE=true
+        run: mise run matcher:fixtures
       - name: Test actionlint-matcher.json
         run: node ./scripts/generate-actionlint-matcher/test.mjs
       - name: Ensure .github/actionlint-matcher.json is up-to-date
         run: |
-          make .github/actionlint-matcher.json
+          mise run matcher
           if git diff --quiet; then
             echo 'OK'
           else
-            echo 'ERROR! .github/actionlint-matcher.json is outdated. Update it by "make .github/actionlint-matcher.json"' >&2
+            echo 'ERROR! .github/actionlint-matcher.json is outdated. Update it by "mise run matcher"' >&2
             set -x
             git diff
             exit 1
