@@ -804,13 +804,18 @@ func (rule *RuleExpression) checkExprsIn(s string, pos *Pos, quoted bool, indent
 	return ts, true
 }
 
-func (rule *RuleExpression) exprError(err *ExprError, lineBase, colBase int) {
-	pos := convertExprLineColToPos(err.Line, err.Column, lineBase, colBase)
-	if err.Line > 1 && rule.literalIndent > 0 {
-		// The column is relative to the start of the line in the literal block
-		pos.Col = rule.literalIndent + err.Column
+// exprPos converts a position in an expression to a position in the source. When the expression is in a
+// literal block, the column on lines after the first is relative to the start of the line in the block.
+func (rule *RuleExpression) exprPos(line, col, lineBase, colBase int) *Pos {
+	pos := convertExprLineColToPos(line, col, lineBase, colBase)
+	if line > 1 && rule.literalIndent > 0 {
+		pos.Col = rule.literalIndent + col
 	}
-	rule.Error(pos, err.Message)
+	return pos
+}
+
+func (rule *RuleExpression) exprError(err *ExprError, lineBase, colBase int) {
+	rule.Error(rule.exprPos(err.Line, err.Column, lineBase, colBase), err.Message)
 }
 
 func (rule *RuleExpression) checkSemanticsOfExprNode(expr ExprNode, line, col int, checkUntrusted bool, workflowKey string) (ExprType, bool) {
@@ -856,7 +861,64 @@ func (rule *RuleExpression) checkSemanticsOfExprNode(expr ExprNode, line, col in
 		rule.exprError(err, line, col)
 	}
 
+	if rule.config != nil && rule.config.CheckFalsyTernary {
+		rule.checkFalsyTernary(expr, line, col)
+	}
+
 	return ty, len(errs) == 0
+}
+
+// checkFalsyTernary reports `cond && <falsy literal> || other`. The `a && b || c` idiom works as a ternary
+// operator only when `b` is truthy. When `b` is a literal which is always falsy (`”`, `0`, `false`, `null`),
+// the expression always evaluates to `c`. (rhysd/actionlint#440)
+func (rule *RuleExpression) checkFalsyTernary(expr ExprNode, line, col int) {
+	VisitExprNode(expr, func(n, _ ExprNode, entering bool) {
+		if !entering {
+			return
+		}
+		or, ok := n.(*LogicalOpNode)
+		if !ok || or.Kind != LogicalOpNodeKindOr {
+			return
+		}
+		and, ok := or.Left.(*LogicalOpNode)
+		if !ok || and.Kind != LogicalOpNodeKindAnd {
+			return
+		}
+		// `a && b && c` may be parsed as `a && (b && c)`. The last operand decides the value when all are truthy.
+		last := and.Right
+		for {
+			a, ok := last.(*LogicalOpNode)
+			if !ok || a.Kind != LogicalOpNodeKindAnd {
+				break
+			}
+			last = a.Right
+		}
+		if !isFalsyLiteral(last) {
+			return
+		}
+		tok := last.Token()
+		rule.Errorf(
+			rule.exprPos(tok.Line, tok.Column, line, col),
+			"value %q after && is always falsy so the expression always evaluates to the value after ||. \"a && b || c\" works as a ternary only when b is truthy",
+			tok.Value,
+		)
+	})
+}
+
+func isFalsyLiteral(n ExprNode) bool {
+	switch n := n.(type) {
+	case *NullNode:
+		return true
+	case *BoolNode:
+		return !n.Value
+	case *IntNode:
+		return n.Value == 0
+	case *FloatNode:
+		return n.Value == 0
+	case *StringNode:
+		return n.Value == ""
+	}
+	return false
 }
 
 func (rule *RuleExpression) checkSemantics(src string, line, col int, checkUntrusted bool, workflowKey string) (ExprType, int, bool) {

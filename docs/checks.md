@@ -31,6 +31,7 @@ List of checks:
 - [Runner labels](#check-runner-labels)
 - [Action format in `uses:`](#check-action-format)
 - [Local action inputs validation at `with:`](#check-local-action-inputs)
+- [Local action used before checkout (opt-in)](#check-local-action-checkout)
 - [Popular action inputs validation at `with:`](#check-popular-action-inputs)
 - [Outdated popular actions detection at `uses:`](#detect-outdated-popular-actions)
 - [Shell name validation at `shell:`](#check-shell-names)
@@ -1924,6 +1925,77 @@ When enabled, jactionlint reports the following at `uses:`:
 
 Local actions and workflows (`./path`, `$/path`) are not reported because they always run at the commit of the workflow itself.
 `uses:` values containing `${{ }}` expressions are skipped since they cannot be checked statically.
+
+<a id="check-local-action-checkout"></a>
+### Local action used before checkout (opt-in)
+
+A local action (`uses: ./.github/actions/foo`) is loaded from the workspace of the runner. When the repository has not been
+checked out yet, the step fails at runtime with "Can't find 'action.yml'". This check reports the first local action of a job
+which is not preceded by a checkout step in the same job. It is **disabled by default** since actionlint cannot know how your
+runner prepares the workspace. To enable it, set `require-checkout-before-local-action: true` in
+[the configuration file](config.md):
+
+```yaml
+require-checkout-before-local-action: true
+```
+
+With this option, the following workflow is reported at `uses: ./.github/actions/foo`, because `actions/checkout` comes after it:
+
+```yaml
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: ./.github/actions/foo
+      - uses: actions/checkout@v4
+```
+
+A job is considered to check out the repository when an earlier step in the same job
+
+- uses an action whose `owner/repo` name contains `checkout` (e.g. `actions/checkout`), or
+- has a `run:` script with a line containing `git` and one of `clone`, `init`, `fetch`, `pull`, `checkout`, `worktree` or
+  `submodule`, or `gh repo clone` / `gh pr checkout`.
+
+Known limitations (use `ignore` in the configuration file when they matter):
+
+- Whether the checkout step actually runs (`if:`) is not considered.
+- A self-hosted runner may keep the workspace between jobs, so a job without a checkout step can work there.
+- A step which generates the action directory without checking out the repository is reported.
+- `uses: $/path` (self-repository syntax) is never reported since it does not need a checkout. `uses:` of reusable workflows and
+  composite action files are not checked.
+### Require `${{ }}` in `if:` conditions (opt-in)
+<a id="check-require-expression-wrapping"></a>
+
+GitHub Actions allows omitting `${{ }}` in `if:` conditions of jobs and steps. Some projects prefer to always write it so
+that it is obvious an expression is used. This check is **disabled by default**. To enable it, set
+`require-expression-wrapping: true` in [the configuration file](config.md):
+
+```yaml
+require-expression-wrapping: true
+```
+
+When enabled, `if: github.ref == 'refs/heads/main'` is reported and `if: ${{ github.ref == 'refs/heads/main' }}` is accepted.
+Other keys are not affected because they always need `${{ }}` to evaluate an expression.
+
+### Falsy value in the `a && b || c` ternary idiom (opt-in)
+<a id="check-falsy-ternary"></a>
+
+`cond && b || c` is commonly used as a ternary operator, but it works only when `b` is truthy. Otherwise the result is always
+`c`. This check is **disabled by default**. To enable it, set `check-falsy-ternary: true` in
+[the configuration file](config.md):
+
+```yaml
+check-falsy-ternary: true
+```
+
+When enabled, actionlint reports the idiom when `b` is a literal which is always falsy: `''`, `0`, `false` or `null`.
+Non-literal values (e.g. `github.sha`) are not reported because whether they are falsy is unknown statically.
+
+```yaml
+env:
+  # Always evaluated to 'staging-' regardless of the condition
+  PREFIX: ${{ env.DEPLOY == 'true' && '' || 'staging-' }}
+```
 
 <a id="check-local-action-inputs"></a>
 ## Local action inputs validation at `with:`
