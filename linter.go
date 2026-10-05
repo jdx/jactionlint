@@ -632,6 +632,10 @@ func (l *Linter) check(
 
 	all = l.filterErrors(all, cfg.PathConfigs(path))
 
+	inlineIgnores, ignoreErrs := parseInlineIgnores(content)
+	all = l.filterInlineIgnores(all, inlineIgnores)
+	all = append(all, ignoreErrs...)
+
 	for _, err := range all {
 		err.Filepath = path // Populate filename in the error
 	}
