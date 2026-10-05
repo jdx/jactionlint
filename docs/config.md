@@ -56,7 +56,7 @@ paths:
 - `config-variables`: [Configuration variables][vars]. When an array is set, actionlint will check `vars` properties strictly.
   An empty array means no variable is allowed. The default value `null` disables the check.
 - `config-secrets`: [Secrets][secrets]. When an array is set, actionlint will check `secrets` properties strictly against the
-  list. An empty array means no secret is allowed. The default value `null` disables the check. Note: this check only applies
+  list. An empty array means no secret is allowed. The default value `null` disables the check. `GITHUB_TOKEN` is always allowed. Note: this check only applies
   when secrets are not explicitly declared in the workflow (e.g. via `secrets:` in `on.workflow_call`), since declared secrets
   are already checked by their type.
 - `paths`: Configurations for specific file path patterns. This is a mapping from a glob pattern and the corresponding

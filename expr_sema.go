@@ -727,6 +727,10 @@ func (sema *ExprSemanticsChecker) checkConfigSecrets(n *ObjectDerefNode) {
 	if sema.configSecrets == nil {
 		return
 	}
+	// GITHUB_TOKEN is always provided by GitHub Actions. It does not need to be listed in the configuration.
+	if strings.EqualFold(n.Property, "GITHUB_TOKEN") {
+		return
+	}
 	if len(sema.configSecrets) == 0 {
 		sema.errorf(
 			n,

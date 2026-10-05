@@ -12,3 +12,5 @@ jobs:
       - run: echo '${{ secrets.My_Secret }}'
       # ERROR: Undefined secret
       - run: echo '${{ secrets.PIYO }}'
+      # GITHUB_TOKEN is always available
+      - run: echo '${{ secrets.GITHUB_TOKEN }}'
