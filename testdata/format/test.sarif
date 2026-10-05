@@ -160,6 +160,21 @@
               "helpUri": "https://github.com/rhysd/actionlint/blob/main/docs/checks.md"
             },
             {
+              "id": "local-action-checkout",
+              "name": "LocalActionCheckout",
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "description": "Checks that a local action is not used before checking out the repository (opt-in)",
+                "queryURI": "https://github.com/rhysd/actionlint/blob/main/docs/checks.md"
+              },
+              "fullDescription": {
+                "text": "Checks that a local action is not used before checking out the repository (opt-in)"
+              },
+              "helpUri": "https://github.com/rhysd/actionlint/blob/main/docs/checks.md"
+            },
+            {
               "id": "matrix",
               "name": "Matrix",
               "defaultConfiguration": {

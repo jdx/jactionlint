@@ -104,6 +104,9 @@ type Config struct {
 	// RequirePermissions reports jobs which are not covered by an explicit "permissions:" at workflow-level
 	// or job-level. This is opt-in and disabled by default.
 	RequirePermissions bool `yaml:"require-permissions"`
+	// RequireCheckoutBeforeLocalAction reports a local action (`uses: ./path`) which is used in a job before any
+	// step that checks out the repository.
+	RequireCheckoutBeforeLocalAction bool `yaml:"require-checkout-before-local-action"`
 	// RequireShell requires every "run:" step to have an explicit shell, set by "shell:" of the step or by
 	// "defaults.run.shell" of the job or the workflow.
 	RequireShell bool `yaml:"require-shell"`

@@ -71,6 +71,8 @@ timeout-minutes:
 require-commit-hash: true
 # Require explicit permissions at workflow-level or job-level
 require-permissions: true
+# Report local actions used before any checkout step in the same job
+require-checkout-before-local-action: true
 
 # Require every 'run:' step to set a shell explicitly with 'shell:' (or 'defaults.run.shell'). (default: false)
 require-shell: true
@@ -130,6 +132,9 @@ max-run-lines: 30
 - `require-permissions`: Optional lint to require an explicit `permissions:` at workflow-level or job-level. Defaults to `false`
   (disabled). When `true`, every job not covered by a workflow-level `permissions:` and lacking its own is reported.
   `permissions: {}` counts as explicit. See [the check document](checks.md#check-permissions) for more details.
+- `require-checkout-before-local-action`: Optional lint to report a local action (`uses: ./path`) used in a job before any step that
+  checks out the repository. Defaults to `false` (disabled). See [the check document](checks.md#check-local-action-checkout) for
+  what counts as a checkout and known limitations.
 
 ## Configuration file location and priority
 
