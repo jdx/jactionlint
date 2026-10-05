@@ -8,6 +8,7 @@ permissions:
   vulnerability-alerts: write
   pages: READ
   CHECKS: none
+  code-quality: executable
 
 jobs:
   test_job:
@@ -20,5 +21,6 @@ jobs:
       vulnerability-alerts: write
       pages: READ
       CHECKS: none
+      code-quality: executable
     steps:
       - run: echo hello
