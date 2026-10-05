@@ -57,7 +57,7 @@ func (rule *RuleShellcheck) VisitStep(n *Step) error {
 		return nil
 	}
 
-	rule.runShellcheck(run.Run.Value, rule.getShellName(run), run.RunPos)
+	rule.runShellcheck(run.Run, rule.getShellName(run), run.RunPos)
 	return nil
 }
 
@@ -160,7 +160,25 @@ func sanitizeExpressionsInScript(src string) string {
 	}
 }
 
-func (rule *RuleShellcheck) runShellcheck(src, shell string, pos *Pos) {
+// hasMultilineExpression returns true when some ${{ }} placeholder in the script contains a newline.
+func hasMultilineExpression(src string) bool {
+	for {
+		s := strings.Index(src, "${{")
+		if s == -1 {
+			return false
+		}
+		e := strings.Index(src[s:], "}}")
+		if e == -1 {
+			return false
+		}
+		if strings.Contains(src[s:s+e], "\n") {
+			return true
+		}
+		src = src[s+e+2:]
+	}
+}
+
+func (rule *RuleShellcheck) runShellcheck(srcAst *String, shell string, pos *Pos) {
 	var sh string
 	if shell == "bash" || shell == "sh" {
 		sh = shell
@@ -172,6 +190,7 @@ func (rule *RuleShellcheck) runShellcheck(src, shell string, pos *Pos) {
 		return // Skip checking this shell script since shellcheck doesn't support it
 	}
 
+	src := srcAst.Value
 	src = sanitizeExpressionsInScript(src)
 	rule.Debug("%s: Run shellcheck for %s script:\n%s", pos, sh, src)
 
@@ -201,6 +220,8 @@ func (rule *RuleShellcheck) runShellcheck(src, shell string, pos *Pos) {
 	}
 	script := fmt.Sprintf("%s\n%s\n", setup, src)
 
+	mapLines := srcAst.Literal && srcAst.Pos != nil && !hasMultilineExpression(srcAst.Value)
+
 	rule.cmd.run(args, script, func(stdout []byte, err error) error {
 		if err != nil {
 			rule.Debug("Command %s %s failed: %v", rule.cmd.exe, args, err)
@@ -228,7 +249,17 @@ func (rule *RuleShellcheck) runShellcheck(src, shell string, pos *Pos) {
 			// Consider the first line is setup for running shell which was implicitly added for better check
 			line := err.Line - 1
 			msg := strings.TrimSuffix(err.Message, ".") // Trim period aligning style of error message
-			rule.Errorf(pos, "shellcheck reported issue in this script: SC%d:%s:%d:%d: %s", err.Code, err.Level, line, err.Column, msg)
+
+			// Optimistically map the line in the script to the line in the source. This is only
+			// reliable for literal block scalars ('|', '|-', '|+') where lines are preserved as-is, and
+			// when no ${{ }} spans multiple lines (sanitizing replaces newlines in them). The column is not
+			// restorable because the indentation is stripped by the YAML parser, so the column of 'run:'
+			// is used.
+			errorLocation := *pos
+			if mapLines && line >= 1 {
+				errorLocation.Line = srcAst.Pos.Line + line
+			}
+			rule.Errorf(&errorLocation, "shellcheck reported issue in this script: SC%d:%s:%d:%d: %s", err.Code, err.Level, line, err.Column, msg)
 		}
 
 		return nil

@@ -1,6 +1,7 @@
 package actionlint
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -46,7 +47,7 @@ func (inputs *ActionMetadataInputs) UnmarshalYAML(n *yaml.Node) error {
 	var err error
 
 	md := make(ActionMetadataInputs, len(n.Content)/2)
-	for i := 0; i < len(n.Content); i += 2 {
+	for i := 0; i+1 < len(n.Content); i += 2 {
 		k, v := n.Content[i].Value, n.Content[i+1]
 
 		var m actionInputMetadata
@@ -235,27 +236,34 @@ func (c *LocalActionsCache) writeCache(key string, val *ActionMetadata) {
 }
 
 // FindMetadata finds metadata for given spec. The spec should indicate for local action hence it
-// should start with "./". The first return value can be nil even if error did not occur.
+// should start with "./" or with the self-repository prefix "$/". The first return value can be
+// nil even if error did not occur.
 // LocalActionCache caches that the action was not found. At first search, it returns an error that
 // the action was not found. But at the second search, it does not return an error even if the result
 // is nil. This behavior prevents repeating to report the same error from multiple places.
 // Calling this method is thread-safe.
 func (c *LocalActionsCache) FindMetadata(spec string) (*ActionMetadata, bool, error) {
-	if c.proj == nil || !strings.HasPrefix(spec, "./") {
+	if c.proj == nil {
+		return nil, false, nil
+	}
+	// The cache is keyed by the canonical form so that both spellings share one entry, while `spec`
+	// stays as the workflow author wrote it for logging.
+	key, ok := canonLocalUsesSpec(spec)
+	if !ok {
 		return nil, false, nil
 	}
 
-	if m, ok := c.readCache(spec); ok {
+	if m, ok := c.readCache(key); ok {
 		c.debug("Cache hit for %s: %v", spec, m)
 		return m, true, nil
 	}
 
-	dir := filepath.Join(c.proj.RootDir(), filepath.FromSlash(spec))
+	dir := filepath.Join(c.proj.RootDir(), filepath.FromSlash(key))
 	b, f, ok := c.readLocalActionMetadataFile(dir)
 	if !ok {
 		c.debug("No action metadata found in %s", dir)
 		// Remember action was not found
-		c.writeCache(spec, nil)
+		c.writeCache(key, nil)
 		// Do not complain about the action does not exist (#25, #40).
 		// It seems a common pattern that the local action does not exist in the repository
 		// (e.g. Git submodule) and it is cloned at running workflow (due to a private repository).
@@ -264,15 +272,20 @@ func (c *LocalActionsCache) FindMetadata(spec string) (*ActionMetadata, bool, er
 
 	var meta ActionMetadata
 	if err := yaml.Unmarshal(b, &meta); err != nil {
-		c.writeCache(spec, nil) // Remember action was invalid
+		c.writeCache(key, nil) // Remember action was invalid
 
 		// Unwrap type error when a single type error occurs to simplify the error message
 		var m string
-		if te, ok := err.(*yaml.TypeError); ok {
-			if len(te.Errors) == 1 {
-				m = te.Errors[0].Error()
+		var les *yaml.LoadErrors
+		if errors.As(err, &les) {
+			if len(les.Errors) == 1 {
+				// *yaml.LoadError.Error() renders the verbose "go-yaml load error in constructor
+				// at L4.C9: ..." form. Build the message from Mark and Message instead to keep
+				// the "line 4: ..." shape actionlint has always reported.
+				e := les.Errors[0]
+				m = fmt.Sprintf("line %d: %s", e.Mark.Line, e.Message)
 			} else {
-				m = strings.ReplaceAll(te.Error(), "\n", "")
+				m = strings.ReplaceAll(les.Error(), "\n", "")
 			}
 		} else {
 			m = err.Error()
@@ -284,7 +297,7 @@ func (c *LocalActionsCache) FindMetadata(spec string) (*ActionMetadata, bool, er
 	meta.dir = dir
 
 	c.debug("New metadata parsed from action %s: %v", dir, &meta)
-	c.writeCache(spec, &meta)
+	c.writeCache(key, &meta)
 	return &meta, false, nil
 }
 

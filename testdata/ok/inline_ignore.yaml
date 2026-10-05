@@ -1,0 +1,29 @@
+on:
+  push:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      # actionlint ignore=undefined variable
+      - run: echo '${{ foo }}'
+      # actionlint ignore=undefined variable, potentially untrusted
+      - run: |
+          echo '${{ foo }}'
+          echo '${{ github.event.head_commit.author.name }}'
+      - name: comment before a key applies to the key and its value
+        # actionlint ignore=potentially untrusted
+        run: |
+          echo "hello"
+          echo '${{ github.event.head_commit.author.name }}'
+      - name: regular expression
+        # actionlint ignore=po.*ly un[r-u]*ed
+        run: echo '${{ github.event.head_commit.author.name }}'
+      # stacked comments
+      # actionlint ignore=undefined variable
+      # just a note
+      # actionlint ignore=potentially untrusted
+      - run: echo '${{ foo }} ${{ github.event.head_commit.author.name }}'
+      # actionlint ignore=undefined variable
+      - name: whole sequence item
+        run: echo '${{ foo }}'

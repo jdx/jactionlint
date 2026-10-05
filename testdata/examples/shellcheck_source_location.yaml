@@ -1,0 +1,21 @@
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          echo ok
+          echo $FOO
+          echo "${{ github.sha }}" $BAR
+      - run: |-
+
+          echo $BLANK
+      - run: echo $INLINE
+      - run: >
+          echo $FOLDED
+      - run: |
+          echo "${{
+            github.sha
+          }}"
+          echo $AFTER_MULTILINE
+      - run: "echo $QUOTED"

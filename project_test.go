@@ -80,6 +80,32 @@ func TestProjectsFindProjectFromPath(t *testing.T) {
 	}
 }
 
+func TestProjectKnows(t *testing.T) {
+	root := absPath(filepath.Join("path", "to", "repo"))
+	p := &Project{root, nil}
+	for _, tc := range []struct {
+		what string
+		path string
+		want bool
+	}{
+		{"root itself", root, true},
+		{"child file", filepath.Join(root, "foo.yaml"), true},
+		{"nested file", filepath.Join(root, ".github", "workflows", "test.yaml"), true},
+		{"file with dots in name", filepath.Join(root, "..foo", "test.yaml"), true},
+		{"sibling with shared prefix", root + "-other", false},
+		{"file in sibling with shared prefix", filepath.Join(root+"-other", "test.yaml"), false},
+		{"parent", filepath.Dir(root), false},
+		{"unrelated", absPath(filepath.Join("other", "repo")), false},
+		{"parent traversal", filepath.Join(root, "..", "repo-other", "test.yaml"), false},
+	} {
+		t.Run(tc.what, func(t *testing.T) {
+			if have := p.Knows(tc.path); have != tc.want {
+				t.Fatalf("Knows(%q) wanted %v but got %v (root=%q)", tc.path, tc.want, have, root)
+			}
+		})
+	}
+}
+
 func TestProjectsDoesNotFindProjectFromOutside(t *testing.T) {
 	d := filepath.Join("testdata", "find_project")
 	abs, err := filepath.Abs(d)

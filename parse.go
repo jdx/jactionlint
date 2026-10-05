@@ -1,6 +1,7 @@
 package actionlint
 
 import (
+	"errors"
 	"fmt"
 	"iter"
 	"math"
@@ -35,7 +36,8 @@ func posAt(n *yaml.Node) *Pos {
 
 func newString(n *yaml.Node) *String {
 	quoted := n.Style&(yaml.DoubleQuotedStyle|yaml.SingleQuotedStyle) != 0
-	return &String{n.Value, quoted, posAt(n)}
+	literal := n.Style == yaml.LiteralStyle
+	return &String{n.Value, quoted, posAt(n), literal}
 }
 
 // workflowMappingEntry represents a key-value entry in YAML mapping.
@@ -203,7 +205,7 @@ func (p *parser) mayParseExpression(n *yaml.Node) *String {
 
 func (p *parser) parseString(n *yaml.Node, allowEmpty bool) *String {
 	if !p.checkString(n, allowEmpty) {
-		return &String{"", false, posAt(n)}
+		return &String{"", false, posAt(n), false}
 	}
 	return newString(n)
 }
@@ -756,6 +758,19 @@ func (p *parser) parsePermissions(pos *Pos, n *yaml.Node) *Permissions {
 	return ret
 }
 
+// https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#cache-mode
+func (p *parser) parseCacheMode(n *yaml.Node) *String {
+	mode := p.parseString(n, false)
+	if mode.Value != "" {
+		switch mode.Value {
+		case "read", "write", "write-only", "none":
+		default:
+			p.errorf(n, "%q is invalid for cache-mode. available values are \"read\", \"write\", \"write-only\", \"none\"", mode.Value)
+		}
+	}
+	return mode
+}
+
 // https://docs.github.com/en/actions/learn-github-actions/workflow-syntax-for-github-actions#env
 func (p *parser) parseEnv(n *yaml.Node) *Env {
 	if n.Kind == yaml.ScalarNode {
@@ -1076,7 +1091,7 @@ func (p *parser) parseContainer(sec string, pos *Pos, n *yaml.Node) *Container {
 		case "ports":
 			ret.Ports = p.parseStringSequence("ports", e.val, true, false)
 		case "volumes":
-			ret.Ports = p.parseStringSequence("volumes", e.val, true, false)
+			ret.Volumes = p.parseStringSequence("volumes", e.val, true, false)
 		case "options":
 			ret.Options = p.parseString(e.val, true)
 		case "command":
@@ -1158,7 +1173,7 @@ func (p *parser) parseStepExecAction(entries []workflowMappingEntry, isDocker bo
 					ret.Inputs[e.id] = &Input{e.key, p.parseString(e.val, true)}
 				}
 			}
-		case "id", "if", "name", "env", "continue-on-error", "timeout-minutes":
+		case "id", "if", "name", "env", "continue-on-error", "timeout-minutes", "background":
 			// do nothing
 		default:
 			p.unexpectedKey(e.key, "step to execute action", []string{
@@ -1168,6 +1183,7 @@ func (p *parser) parseStepExecAction(entries []workflowMappingEntry, isDocker bo
 				"env",
 				"continue-on-error",
 				"timeout-minutes",
+				"background",
 				"uses",
 				"with",
 			})
@@ -1190,7 +1206,7 @@ func (p *parser) parseStepExecRun(entries []workflowMappingEntry) *ExecRun {
 			ret.Shell = p.parseString(e.val, false)
 		case "working-directory":
 			ret.WorkingDirectory = p.parseString(e.val, false)
-		case "id", "if", "name", "env", "continue-on-error", "timeout-minutes":
+		case "id", "if", "name", "env", "continue-on-error", "timeout-minutes", "background":
 			// do nothing
 		default:
 			p.unexpectedKey(e.key, "step to run shell command", []string{
@@ -1200,6 +1216,7 @@ func (p *parser) parseStepExecRun(entries []workflowMappingEntry) *ExecRun {
 				"env",
 				"continue-on-error",
 				"timeout-minutes",
+				"background",
 				"run",
 				"shell",
 				"working-directory",
@@ -1211,8 +1228,107 @@ func (p *parser) parseStepExecRun(entries []workflowMappingEntry) *ExecRun {
 	return ret
 }
 
+// parseStepExecWait parses a 'wait' or 'wait-all' step that waits for background steps to complete.
+// https://github.blog/changelog/2026-06-25-actions-steps-can-now-be-run-in-parallel/
+func (p *parser) parseStepExecWait(entries []workflowMappingEntry) *ExecWait {
+	ret := &ExecWait{}
+	waitGiven := false
+
+	for _, e := range entries {
+		switch e.id {
+		case "wait":
+			waitGiven = true
+			ret.Names = p.parseStringOrStringSequence("wait", e.val, false, false)
+		case "wait-all":
+			// 'wait-all' waits for all background steps and takes no arguments. The official schema
+			// types the value as null or boolean, so both `wait-all:` and `wait-all: true` are valid.
+			if e.val.Kind != yaml.ScalarNode || (e.val.Tag != "!!null" && e.val.Tag != "!!bool") {
+				p.errorf(e.val, "\"wait-all\" takes no arguments. it must be empty or a boolean value (e.g. \"wait-all:\" or \"wait-all: true\") but found %s node with %q tag", nodeKindName(e.val.Kind), e.val.Tag)
+			}
+			ret.All = true
+			ret.AllPos = e.key.Pos
+		case "id", "if", "name", "env", "continue-on-error", "timeout-minutes":
+			// do nothing
+		default:
+			p.unexpectedKey(e.key, "step to wait for background steps", []string{
+				"id",
+				"if",
+				"name",
+				"env",
+				"continue-on-error",
+				"timeout-minutes",
+				"wait",
+				"wait-all",
+			})
+		}
+	}
+
+	// 'wait' and 'wait-all' are mutually exclusive: 'wait' targets specific
+	// background steps while 'wait-all' waits for all of them.
+	if waitGiven && ret.All {
+		p.errorAt(ret.AllPos, "\"wait\" and \"wait-all\" cannot be specified in the same step")
+	}
+
+	return ret
+}
+
+// parseStepExecCancel parses a 'cancel' step that cancels running background steps.
+// https://github.blog/changelog/2026-06-25-actions-steps-can-now-be-run-in-parallel/
+func (p *parser) parseStepExecCancel(entries []workflowMappingEntry) *ExecCancel {
+	ret := &ExecCancel{}
+
+	for _, e := range entries {
+		switch e.id {
+		case "cancel":
+			// The 'cancel' step targets a single background step by its ID (not a list).
+			ret.Name = p.parseString(e.val, false)
+		case "id", "if", "name", "env", "continue-on-error", "timeout-minutes":
+			// do nothing
+		default:
+			p.unexpectedKey(e.key, "step to cancel background steps", []string{
+				"id",
+				"if",
+				"name",
+				"env",
+				"continue-on-error",
+				"timeout-minutes",
+				"cancel",
+			})
+		}
+	}
+
+	return ret
+}
+
+// parseStepExecParallel parses a 'parallel' step that runs a group of steps in parallel.
+// https://github.blog/changelog/2026-06-25-actions-steps-can-now-be-run-in-parallel/
+func (p *parser) parseStepExecParallel(entries []workflowMappingEntry) *ExecParallel {
+	ret := &ExecParallel{}
+
+	for _, e := range entries {
+		switch e.id {
+		case "parallel":
+			ret.Steps = p.parseSteps("parallel", e.val)
+		case "id", "if", "name", "env", "continue-on-error", "timeout-minutes":
+			// do nothing
+		default:
+			p.unexpectedKey(e.key, "step to run steps in parallel", []string{
+				"id",
+				"if",
+				"name",
+				"env",
+				"continue-on-error",
+				"timeout-minutes",
+				"parallel",
+			})
+		}
+	}
+
+	return ret
+}
+
 // https://docs.github.com/en/actions/learn-github-actions/workflow-syntax-for-github-actions#jobsjob_idsteps
-func (p *parser) parseStep(n *yaml.Node) *Step {
+func (p *parser) parseStep(sec string, n *yaml.Node) *Step {
 	ret := &Step{Pos: posAt(n)}
 
 	const (
@@ -1220,10 +1336,13 @@ func (p *parser) parseStep(n *yaml.Node) *Step {
 		isAction
 		isDocker
 		isRun
+		isWait
+		isCancel
+		isParallel
 	)
 
 	kind := isUnknown
-	entries := slices.Collect(p.parseMappingAt("element of \"steps\" section", n, false, true))
+	entries := slices.Collect(p.parseMappingAt(fmt.Sprintf("element of %q section", sec), n, false, true))
 	for _, e := range entries {
 		switch e.id {
 		case "id":
@@ -1238,6 +1357,8 @@ func (p *parser) parseStep(n *yaml.Node) *Step {
 			ret.ContinueOnError = p.parseBool(e.val)
 		case "timeout-minutes":
 			ret.TimeoutMinutes = p.parseTimeoutMinutes(e.val)
+		case "background":
+			ret.Background = p.parseBool(e.val)
 		case "uses":
 			if strings.HasPrefix(e.val.Value, "docker://") {
 				kind = isDocker
@@ -1247,6 +1368,13 @@ func (p *parser) parseStep(n *yaml.Node) *Step {
 		case "run":
 			kind = isRun
 			// Note: Unexpected keys are checked in parseStepExecAction or parseStepExecRun later
+		case "wait", "wait-all":
+			kind = isWait
+		case "cancel":
+			kind = isCancel
+		case "parallel":
+			kind = isParallel
+			// Note: Unexpected keys are checked in the parseStepExec* functions later
 		}
 	}
 
@@ -1255,6 +1383,12 @@ func (p *parser) parseStep(n *yaml.Node) *Step {
 		ret.Exec = p.parseStepExecAction(entries, kind == isDocker)
 	case isRun:
 		ret.Exec = p.parseStepExecRun(entries)
+	case isWait:
+		ret.Exec = p.parseStepExecWait(entries)
+	case isCancel:
+		ret.Exec = p.parseStepExecCancel(entries)
+	case isParallel:
+		ret.Exec = p.parseStepExecParallel(entries)
 	default:
 		p.error(n, "step must run script with \"run\" section or run action with \"uses\" section")
 	}
@@ -1263,15 +1397,15 @@ func (p *parser) parseStep(n *yaml.Node) *Step {
 }
 
 // https://docs.github.com/en/actions/learn-github-actions/workflow-syntax-for-github-actions#jobsjob_idsteps
-func (p *parser) parseSteps(n *yaml.Node) []*Step {
-	if ok := p.checkSequence("steps", n, false); !ok {
+func (p *parser) parseSteps(sec string, n *yaml.Node) []*Step {
+	if ok := p.checkSequence(sec, n, false); !ok {
 		return nil
 	}
 
 	ret := make([]*Step, 0, len(n.Content))
 
 	for _, c := range n.Content {
-		if s := p.parseStep(c); s != nil {
+		if s := p.parseStep(sec, c); s != nil {
 			ret = append(ret, s)
 		}
 	}
@@ -1376,6 +1510,8 @@ func (p *parser) parseJob(id *String, n *yaml.Node) *Job {
 			stepsOnlyKey = k
 		case "permissions":
 			ret.Permissions = p.parsePermissions(k.Pos, v)
+		case "cache-mode":
+			ret.CacheMode = p.parseCacheMode(v)
 		case "environment":
 			ret.Environment = p.parseEnvironment(k.Pos, v)
 			stepsOnlyKey = k
@@ -1393,7 +1529,7 @@ func (p *parser) parseJob(id *String, n *yaml.Node) *Job {
 		case "if":
 			ret.If = p.parseString(v, false)
 		case "steps":
-			ret.Steps = p.parseSteps(v)
+			ret.Steps = p.parseSteps("steps", v)
 			stepsOnlyKey = k
 		case "timeout-minutes":
 			ret.TimeoutMinutes = p.parseTimeoutMinutes(v)
@@ -1408,6 +1544,7 @@ func (p *parser) parseJob(id *String, n *yaml.Node) *Job {
 			stepsOnlyKey = k
 		case "services":
 			ret.Services = p.parseServices(v)
+			stepsOnlyKey = k
 		case "uses":
 			call.Uses = p.parseString(v, false)
 			callOnlyKey = k
@@ -1447,6 +1584,7 @@ func (p *parser) parseJob(id *String, n *yaml.Node) *Job {
 				"needs",
 				"runs-on",
 				"permissions",
+				"cache-mode",
 				"environment",
 				"concurrency",
 				"outputs",
@@ -1471,7 +1609,7 @@ func (p *parser) parseJob(id *String, n *yaml.Node) *Job {
 		if stepsOnlyKey != nil {
 			p.errorfAt(
 				stepsOnlyKey.Pos,
-				"when a reusable workflow is called with \"uses\", %q is not available. only following keys are allowed: \"name\", \"uses\", \"with\", \"secrets\", \"needs\", \"if\", and \"permissions\" in job %q",
+				"when a reusable workflow is called with \"uses\", %q is not available. only following keys are allowed: \"name\", \"uses\", \"with\", \"secrets\", \"needs\", \"if\", \"permissions\", and \"cache-mode\" in job %q",
 				stepsOnlyKey.Value,
 				id.Value,
 			)
@@ -1535,6 +1673,8 @@ func (p *parser) parse(n *yaml.Node) *Workflow {
 			w.On = p.parseEvents(v)
 		case "permissions":
 			w.Permissions = p.parsePermissions(k.Pos, v)
+		case "cache-mode":
+			w.CacheMode = p.parseCacheMode(v)
 		case "env":
 			w.Env = p.parseEnv(v)
 		case "defaults":
@@ -1551,6 +1691,7 @@ func (p *parser) parse(n *yaml.Node) *Workflow {
 				"run-name",
 				"on",
 				"permissions",
+				"cache-mode",
 				"env",
 				"defaults",
 				"concurrency",
@@ -1577,13 +1718,20 @@ func (p *parser) parse(n *yaml.Node) *Workflow {
 // }
 
 func handleYAMLUnmarshalError(err error) []*Error {
-	if te, ok := err.(*yaml.TypeError); ok {
-		errs := make([]*Error, 0, len(te.Errors))
-		for _, e := range te.Errors {
+	// go-yaml v4.0.0-rc.5 replaced *yaml.TypeError and *yaml.ParserError with *yaml.LoadErrors
+	// and *yaml.LoadError. Both carry the source position in their Mark field.
+	//
+	// *yaml.LoadErrors must be checked before *yaml.LoadError. LoadErrors implements a custom
+	// As method which unwraps to its first element, so checking the singular type first would
+	// collapse a multiple-errors result into a single error.
+	var les *yaml.LoadErrors
+	if errors.As(err, &les) {
+		errs := make([]*Error, 0, len(les.Errors))
+		for _, e := range les.Errors {
 			errs = append(errs, &Error{
-				Message: fmt.Sprintf("could not parse as YAML: %s", e.Err.Error()),
-				Line:    e.Line,
-				Column:  e.Column,
+				Message: fmt.Sprintf("could not parse as YAML: %s", e.Message),
+				Line:    e.Mark.Line,
+				Column:  e.Mark.Column,
 				Kind:    "syntax-check",
 			})
 		}
@@ -1593,14 +1741,15 @@ func handleYAMLUnmarshalError(err error) []*Error {
 	var m string
 	var l int
 	var c int
-	if pe, ok := err.(*yaml.ParserError); ok {
-		l = pe.Line
-		c = pe.Column
-		m = pe.Message
+	var le *yaml.LoadError
+	if errors.As(err, &le) {
+		l = le.Mark.Line
+		c = le.Mark.Column
+		m = le.Message
 	} else {
 		m = err.Error() // Fallback. I believe this line should be unreachable
 	}
-	return []*Error{&Error{
+	return []*Error{{
 		Message: fmt.Sprintf("could not parse as YAML: %s", m),
 		Kind:    "syntax-check",
 		Line:    l,

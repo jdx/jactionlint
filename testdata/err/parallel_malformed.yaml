@@ -1,0 +1,34 @@
+on: push
+jobs:
+  a:
+    runs-on: ubuntu-latest
+    steps:
+      - wait:
+      - wait: []
+      - wait: {a: b}
+      - wait: [1, [x]]
+      - wait-all: x
+        wait: y
+      - cancel:
+      - cancel: [a]
+      - cancel: ${{ github.event_name }}
+      - parallel:
+      - parallel: x
+      - parallel: [1, {run: x}]
+      - parallel:
+          - parallel:
+              - run: a
+      - background: maybe
+        run: a
+      - background: ${{ github.event_name == 'push' }}
+        id: q
+        run: a
+      - wait: q
+      - run: a
+        wait: x
+      - background: true
+        wait: x
+      - uses: ./x
+        background: true
+        id: Z
+      - cancel: z

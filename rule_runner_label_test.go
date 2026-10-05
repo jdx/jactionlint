@@ -162,8 +162,16 @@ func TestRuleRunnerLabelCheckLabels(t *testing.T) {
 			labels: []string{"${{matrix.os}}"},
 		},
 		{
+			what:   "ubuntu-26.04",
+			labels: []string{"ubuntu-26.04"},
+		},
+		{
 			what:   "ubuntu-24.04",
 			labels: []string{"ubuntu-24.04"},
+		},
+		{
+			what:   "ubuntu-22.04",
+			labels: []string{"ubuntu-22.04"},
 		},
 		// TODO: Add tests for 'include:'
 		// TODO: Check matrix with 'include:'
@@ -253,9 +261,14 @@ func TestRuleRunnerLabelCheckLabels(t *testing.T) {
 			errs:   []string{`label "windows-2022" conflicts with label "windows-2025"`},
 		},
 		{
-			what:   "Linux labels architecture conflict",
+			what:   "Linux labels architecture conflict, 22 and 24",
 			labels: []string{"ubuntu-24.04", "ubuntu-22.04"},
 			errs:   []string{`label "ubuntu-22.04" conflicts with label "ubuntu-24.04"`},
+		},
+		{
+			what:   "Linux labels architecture conflict, 24 and 26",
+			labels: []string{"ubuntu-26.04", "ubuntu-24.04"},
+			errs:   []string{`label "ubuntu-24.04" conflicts with label "ubuntu-26.04"`},
 		},
 		{
 			what:   "macOS labels architecture conflict",
@@ -283,6 +296,16 @@ func TestRuleRunnerLabelCheckLabels(t *testing.T) {
 			errs:   []string{`label "macos-26" conflicts with label "macos-26-xlarge"`},
 		},
 		{
+			what:   "Xcode 27 labels size conflict",
+			labels: []string{"xcode-27", "xcode-27-xlarge"},
+			errs:   []string{`label "xcode-27-xlarge" conflicts with label "xcode-27"`},
+		},
+		{
+			what:   "Xcode 27 conflicts with macOS 26",
+			labels: []string{"xcode-27", "macos-26"},
+			errs:   []string{`label "macos-26" conflicts with label "xcode-27"`},
+		},
+		{
 			what:   "larger runner labels conflict",
 			labels: []string{"ubuntu-latest-16-cores", "windows-latest-8-cores"},
 			errs:   []string{`label "windows-latest-8-cores" conflicts with label "ubuntu-latest-16-cores"`},
@@ -301,7 +324,7 @@ func TestRuleRunnerLabelCheckLabels(t *testing.T) {
 			pos := &Pos{}
 			labels := make([]*String, 0, len(tc.labels))
 			for _, l := range tc.labels {
-				labels = append(labels, &String{l, false, pos})
+				labels = append(labels, &String{l, false, pos, false})
 			}
 			node := &Job{
 				RunsOn: &Runner{
@@ -310,7 +333,7 @@ func TestRuleRunnerLabelCheckLabels(t *testing.T) {
 			}
 
 			if tc.matrix != nil {
-				n := &String{"os", false, pos}
+				n := &String{"os", false, pos, false}
 				row := make([]RawYAMLValue, 0, len(tc.matrix))
 				for _, m := range tc.matrix {
 					row = append(row, &RawYAMLString{m, false, pos})
@@ -376,5 +399,86 @@ func TestRuleRunnerLabelAllGitHubHostedRunnerLabels(t *testing.T) {
 		if _, ok := defaultRunnerOSCompats[l]; !ok {
 			t.Errorf("%q is included in allGitHubHostedRunnerLabels but not included in githubHostedRunnerCompats", l)
 		}
+	}
+}
+
+func TestRuleRunnerLabelStrictLabels(t *testing.T) {
+	tests := []struct {
+		what   string
+		labels []string
+		known  []string
+		errs   []string
+	}{
+		{
+			what:   "listed label only",
+			labels: []string{"my-runner"},
+			known:  []string{"my-runner"},
+		},
+		{
+			what:   "glob in known labels",
+			labels: []string{"gpu-a100"},
+			known:  []string{"gpu-*"},
+		},
+		{
+			what:   "GitHub-hosted label is rejected",
+			labels: []string{"ubuntu-latest"},
+			known:  []string{"my-runner"},
+			errs:   []string{`label "ubuntu-latest" is not allowed`},
+		},
+		{
+			what:   "default self-hosted label is rejected",
+			labels: []string{"self-hosted", "my-runner"},
+			known:  []string{"my-runner"},
+			errs:   []string{`label "self-hosted" is not allowed`},
+		},
+		{
+			what:   "default label is accepted when explicitly listed",
+			labels: []string{"self-hosted", "my-runner"},
+			known:  []string{"self-hosted", "my-runner"},
+		},
+		{
+			what:   "no known labels rejects everything",
+			labels: []string{"ubuntu-latest"},
+			errs:   []string{`label "ubuntu-latest" is not allowed`},
+		},
+		{
+			what:   "conflict is still detected for listed built-in labels",
+			labels: []string{"ubuntu-latest", "windows-latest"},
+			known:  []string{"ubuntu-latest", "windows-latest"},
+			errs:   []string{`label "windows-latest" conflicts with label "ubuntu-latest"`},
+		},
+		{
+			what:   "invalid glob",
+			labels: []string{"x"},
+			known:  []string{"["},
+			errs:   []string{`label pattern "[" is an invalid glob`},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.what, func(t *testing.T) {
+			pos := &Pos{}
+			labels := make([]*String, 0, len(tc.labels))
+			for _, l := range tc.labels {
+				labels = append(labels, &String{l, false, pos, false})
+			}
+			node := &Job{RunsOn: &Runner{Labels: labels}}
+			rule := NewRuleRunnerLabel()
+			cfg := Config{}
+			cfg.SelfHostedRunner.Labels = tc.known
+			cfg.SelfHostedRunner.StrictLabels = true
+			rule.SetConfig(&cfg)
+			if err := rule.VisitJobPre(node); err != nil {
+				t.Fatal(err)
+			}
+			errs := rule.Errs()
+			if len(errs) != len(tc.errs) {
+				t.Fatalf("%d error(s) wanted but got %d: %v", len(tc.errs), len(errs), errs)
+			}
+			for i, want := range tc.errs {
+				if !strings.Contains(errs[i].Error(), want) {
+					t.Fatalf("%q not contained in %q", want, errs[i].Error())
+				}
+			}
+		})
 	}
 }

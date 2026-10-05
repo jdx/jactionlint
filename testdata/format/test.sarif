@@ -175,6 +175,21 @@
               "helpUri": "https://github.com/rhysd/actionlint/blob/main/docs/checks.md"
             },
             {
+              "id": "parallel-steps",
+              "name": "ParallelSteps",
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "description": "Checks \"wait\"/\"cancel\" references to background steps and steps forbidden inside a \"parallel\" group",
+                "queryURI": "https://github.com/rhysd/actionlint/blob/main/docs/checks.md"
+              },
+              "fullDescription": {
+                "text": "Checks \"wait\"/\"cancel\" references to background steps and steps forbidden inside a \"parallel\" group"
+              },
+              "helpUri": "https://github.com/rhysd/actionlint/blob/main/docs/checks.md"
+            },
+            {
               "id": "permissions",
               "name": "Permissions",
               "defaultConfiguration": {
@@ -186,6 +201,21 @@
               },
               "fullDescription": {
                 "text": "Checks for permissions configuration in \"permissions:\". Permission names and permission scopes are checked"
+              },
+              "helpUri": "https://github.com/rhysd/actionlint/blob/main/docs/checks.md"
+            },
+            {
+              "id": "run-policy",
+              "name": "RunPolicy",
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "description": "Checks opt-in policies for scripts in \"run:\" (\"require-shell\" and \"max-run-lines\" in the config)",
+                "queryURI": "https://github.com/rhysd/actionlint/blob/main/docs/checks.md"
+              },
+              "fullDescription": {
+                "text": "Checks opt-in policies for scripts in \"run:\" (\"require-shell\" and \"max-run-lines\" in the config)"
               },
               "helpUri": "https://github.com/rhysd/actionlint/blob/main/docs/checks.md"
             },
@@ -231,6 +261,21 @@
               },
               "fullDescription": {
                 "text": "Checks for GitHub Actions workflow syntax"
+              },
+              "helpUri": "https://github.com/rhysd/actionlint/blob/main/docs/checks.md"
+            },
+            {
+              "id": "timeout-check",
+              "name": "TimeoutCheck",
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "description": "Checks that timeout-minutes is set at jobs and does not exceed the configured maximum (opt-in by config)",
+                "queryURI": "https://github.com/rhysd/actionlint/blob/main/docs/checks.md"
+              },
+              "fullDescription": {
+                "text": "Checks that timeout-minutes is set at jobs and does not exceed the configured maximum (opt-in by config)"
               },
               "helpUri": "https://github.com/rhysd/actionlint/blob/main/docs/checks.md"
             },
@@ -304,7 +349,7 @@
         {
           "ruleId": "syntax-check",
           "message": {
-            "text": "unexpected key \"with\" for step to run shell command. expected one of \"continue-on-error\", \"env\", \"id\", \"if\", \"name\", \"run\", \"shell\", \"timeout-minutes\", \"working-directory\""
+            "text": "unexpected key \"with\" for step to run shell command. expected one of \"background\", \"continue-on-error\", \"env\", \"id\", \"if\", \"name\", \"run\", \"shell\", \"timeout-minutes\", \"working-directory\""
           },
           "locations": [
             {
