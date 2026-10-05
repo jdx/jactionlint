@@ -70,7 +70,10 @@ export default defineConfig({
       `(function () {
   var p = location.pathname;
   if (p !== "/" && p !== "/index.html") return;
-  if (location.hash.length > 1 || /[?&][su]=/.test(location.search)) {
+  // Only a permalink moves to the playground, not a heading anchor such as /#install. A permalink is
+  // base64 of a zlib stream, which always starts with "e" (the 0x78 zlib header) and never contains "-".
+  var permalink = /^#e[A-Za-z0-9+\/%]{15,}={0,2}$/.test(location.hash);
+  if (permalink || /[?&][su]=/.test(location.search)) {
     location.replace("/playground" + location.search + location.hash);
   }
 })();`,

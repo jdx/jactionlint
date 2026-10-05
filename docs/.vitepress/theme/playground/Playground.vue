@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
-import { useData, withBase } from "vitepress";
+import { useData, useRouter, withBase } from "vitepress";
 import { decodeSource, encodeSource } from "./codec";
 import { defaultSource } from "./sample";
 import { getRemoteSource, linkifyMessage } from "./remote";
@@ -131,6 +131,19 @@ function onBeforeUnload(e: BeforeUnloadEvent) {
   if (contentChanged) e.preventDefault();
 }
 
+// beforeunload does not run when VitePress navigates on the client (nav links, sidebar, search), so guard
+// route changes too. A hash-only change on this page is a permalink being loaded and is not a navigation.
+const router = useRouter();
+let previousBeforeRouteChange: typeof router.onBeforeRouteChange;
+function onBeforeRouteChange(to: string) {
+  const target = new URL(to, window.location.href);
+  const samePage = target.pathname === window.location.pathname;
+  if (!samePage && contentChanged && !window.confirm("Changes you made may not be saved. Leave this page?")) {
+    return false;
+  }
+  return previousBeforeRouteChange?.(to);
+}
+
 function goTo(e: LintError) {
   editor?.goTo(e.line, e.column);
 }
@@ -162,6 +175,8 @@ onMounted(async () => {
 
   window.addEventListener("beforeunload", onBeforeUnload);
   window.addEventListener("hashchange", onHashChange);
+  previousBeforeRouteChange = router.onBeforeRouteChange;
+  router.onBeforeRouteChange = onBeforeRouteChange;
 
   try {
     if (typeof (window as any).Go === "undefined") {
@@ -184,6 +199,7 @@ onBeforeUnmount(() => {
   window.clearTimeout(debounceId);
   window.removeEventListener("beforeunload", onBeforeUnload);
   window.removeEventListener("hashchange", onHashChange);
+  router.onBeforeRouteChange = previousBeforeRouteChange;
   hooks.getSource = () => "";
   hooks.onCheckCompleted = () => {};
   hooks.showError = () => {};

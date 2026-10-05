@@ -9,8 +9,12 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { encodeSource } from "../.vitepress/theme/playground/codec";
 import { wasmDir } from "./helpers";
 
+// A stand-in for the VitePress router: the component installs its route change guard on it
+const router = vi.hoisted(() => ({ onBeforeRouteChange: undefined as ((to: string) => unknown) | undefined }));
+
 vi.mock("vitepress", () => ({
   useData: () => ({ isDark: ref(false) }),
+  useRouter: () => router,
   withBase: (s: string) => s,
 }));
 
@@ -46,6 +50,18 @@ describe("Playground component", () => {
   });
 
   afterAll(() => app?.unmount());
+
+  it("installs a guard for client-side route changes that lets a pristine page navigate", async () => {
+    await until(() => typeof router.onBeforeRouteChange === "function", "the route guard");
+    // The permalink was just loaded, so nothing is unsaved and navigation is not blocked or confirmed
+    const confirm = vi.fn(() => false);
+    const original = window.confirm;
+    window.confirm = confirm;
+    expect(typeof router.onBeforeRouteChange).toBe("function");
+    expect(router.onBeforeRouteChange?.("/install")).toBeUndefined();
+    expect(confirm).not.toHaveBeenCalled();
+    window.confirm = original;
+  });
 
   it("loads the source from the permalink and lists the errors", async () => {
     await until(() => root.querySelector(".jal-errors") !== null, "lint results");
