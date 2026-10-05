@@ -3,8 +3,8 @@ References
 
 This document describes links to resources related to actionlint and GitHub Actions.
 
-- Repository: https://github.com/rhysd/actionlint
-- Playground: https://rhysd.github.io/actionlint/
+- Repository: https://github.com/jdx/jactionlint
+- Playground: https://jactionlint.jdx.dev/
 - GitHub Actions official documentations
   - Workflow syntax: https://docs.github.com/en/actions/writing-workflows/workflow-syntax-for-github-actions
   - Expression syntax: https://docs.github.com/en/actions/writing-workflows/choosing-what-your-workflow-does/evaluate-expressions-in-workflows-and-actions

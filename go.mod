@@ -1,4 +1,4 @@
-module github.com/rhysd/actionlint
+module github.com/jdx/jactionlint
 
 go 1.25.0
 

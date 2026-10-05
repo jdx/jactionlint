@@ -58,6 +58,11 @@
           "section": "Continuous Integration",
           "hidden": true
         }
+      ],
+      "extra-files": [
+        ".pre-commit-hooks.yaml",
+        "docs/usage.md",
+        "playground/index.html"
       ]
     }
   }

@@ -2,7 +2,7 @@
 
 package actionlint_fuzz
 
-import "github.com/rhysd/actionlint"
+import "github.com/jdx/jactionlint"
 
 func parseWorkflowPanicFree(data []byte) *actionlint.Workflow {
 	// Avoid Parse() panicking. It panics when go-yaml panics

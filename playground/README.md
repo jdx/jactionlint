@@ -1,7 +1,7 @@
 Playground for actionlint
 =========================
 
-This is a development directory for [actionlint playground](https://rhysd.github.io/actionlint/).
+This is a development directory for [actionlint playground](https://jactionlint.jdx.dev/).
 
 The playground is built with HTML/CSS/TypeScript/Wasm. All dependencies are defined in `package.json` and managed by `npm`.
 Tasks for development are defined in [`Makefile`](./Makefile).

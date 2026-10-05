@@ -14,7 +14,7 @@ It's helpful to check if a similar patch has been rejected in the past before su
 
 To report a bug, please submit a new ticket on GitHub. It's helpful to search similar tickets before making it.
 
-https://github.com/rhysd/actionlint/issues/new
+https://github.com/jdx/jactionlint/issues/new
 
 Providing a reproducible workflow content is much appreciated. If only a small snippet of workflow is provided or no
 input is provided at all, such issue tickets may get lower priority because they are occasionally time consuming to
@@ -24,7 +24,7 @@ investigate.
 
 Thank you for taking your time to improve this project. To send a patch, please submit a new pull request on GitHub.
 
-https://github.com/rhysd/actionlint/pulls
+https://github.com/jdx/jactionlint/pulls
 
 Before submitting your PR, please ensure the following points:
 
@@ -65,11 +65,11 @@ around linking libc. `mise run build` does this by default.
 
 ## Testing
 
-[![CI](https://github.com/rhysd/actionlint/actions/workflows/ci.yaml/badge.svg)](https://github.com/rhysd/actionlint/actions/workflows/ci.yaml)
-[![Generate](https://github.com/rhysd/actionlint/actions/workflows/generate.yaml/badge.svg)](https://github.com/rhysd/actionlint/actions/workflows/generate.yaml)
-[![Problem Matchers](https://github.com/rhysd/actionlint/actions/workflows/matcher.yaml/badge.svg)](https://github.com/rhysd/actionlint/actions/workflows/matcher.yaml)
-[![Download script](https://github.com/rhysd/actionlint/actions/workflows/download.yaml/badge.svg)](https://github.com/rhysd/actionlint/actions/workflows/download.yaml)
-[![Release](https://github.com/rhysd/actionlint/actions/workflows/release.yaml/badge.svg)](https://github.com/rhysd/actionlint/actions/workflows/release.yaml)
+[![CI](https://github.com/jdx/jactionlint/actions/workflows/ci.yaml/badge.svg)](https://github.com/jdx/jactionlint/actions/workflows/ci.yaml)
+[![Generate](https://github.com/jdx/jactionlint/actions/workflows/generate.yaml/badge.svg)](https://github.com/jdx/jactionlint/actions/workflows/generate.yaml)
+[![Problem Matchers](https://github.com/jdx/jactionlint/actions/workflows/matcher.yaml/badge.svg)](https://github.com/jdx/jactionlint/actions/workflows/matcher.yaml)
+[![Download script](https://github.com/jdx/jactionlint/actions/workflows/download.yaml/badge.svg)](https://github.com/jdx/jactionlint/actions/workflows/download.yaml)
+[![Release](https://github.com/jdx/jactionlint/actions/workflows/release.yaml/badge.svg)](https://github.com/jdx/jactionlint/actions/workflows/release.yaml)
 
 Run the following command at the root of this repository.
 
@@ -159,24 +159,21 @@ mise run fuzz FuzzParse
 
 ## Make a new release
 
-When releasing v1.2.3 as example:
+Releases are automated with [release-please](https://github.com/googleapis/release-please) (see
+[`release-please.yaml`](.github/workflows/release-please.yaml) and [`release-please-config.json`](./release-please-config.json)).
+Pull request titles follow [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`, `security:`, ...) and are
+checked by CI, because squash-merged titles become the release notes.
 
-1. Ensure all changes were already pushed to remote by checking `git push origin master` outputs `Everything up-to-date`
-2. Run `bash ./scripts/bump-version.bash 1.2.3`
-3. Wait until [the CI release job](.github/workflows/release.yaml) completes successfully:
-   - GoReleaser builds release binaries and make pre-release at GitHub and updates [Homebrew formula](./HomebrewFormula/actionlint.rb)
-   - The CI job also updates version string in `./scripts/download-actionlint.bash`
-4. Open the pre-release at [release page](https://github.com/rhysd/actionlint/releases) with browser
-5. Write up release notes, uncheck pre-release checkbox and publish the new release
-6. Run `make CHANGELOG.md` to update [CHANGELOG.md](./CHANGELOG.md) and make a commit for the change. This step requires
-   [changelog-from-release](https://github.com/rhysd/changelog-from-release).
-7. Run `git pull` to merge upstream changes to local `main` branch and run `git push origin main`
-8. The playground is deployed by the Pages workflow when `main` changes; check that it ran after the release
-
-> [!NOTE]
-> If you see workflow failure at releasing a new winget package, check the [fork repository](https://github.com/rhysd/winget-pkgs)
-> is up-to-date. If it is outdated, click 'Sync fork' button to update it to the latest. And re-run the failed job
-> again.
+1. Merge pull requests into `main`. release-please opens or updates a release pull request that bumps the version in
+   [`.release-please-manifest.json`](./.release-please-manifest.json), the version strings marked with `x-release-please-version`
+   (`.pre-commit-hooks.yaml`, `docs/usage.md`, `playground/index.html`) and [CHANGELOG.md](./CHANGELOG.md).
+2. Merge the release pull request. release-please tags `vX.Y.Z` and creates the GitHub release. The release notes are then
+   rewritten by [communique](https://github.com/jdx/communique) and a sponsor section is appended.
+3. The tag starts [the release workflow](.github/workflows/release.yaml):
+   - GoReleaser builds the release binaries, attaches them to the release and updates the Homebrew cask in `./Casks`
+   - The container image is pushed to `ghcr.io/jdx/jactionlint`
+   - The job also updates the version string in `./scripts/download-actionlint.bash`
+4. The playground is deployed by the [Pages workflow](.github/workflows/pages.yaml) when `main` changes.
 
 ## How to generate the manual
 
@@ -223,7 +220,7 @@ automatically with `go generate`. The command runs [`generate-popular-actions`](
 The script also can detect new major releases of popular actions on GitHub by giving `-d` flag.
 
 The [`generate`](.github/workflows/generate.yaml) CI workflow weekly runs to detect new major releases and update
-`popular_actions.go`. Runs can be found [here](https://github.com/rhysd/actionlint/actions/workflows/generate.yaml).
+`popular_actions.go`. Runs can be found [here](https://github.com/jdx/jactionlint/actions/workflows/generate.yaml).
 
 ### Maintain `all_webhooks.go`
 

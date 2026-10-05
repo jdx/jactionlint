@@ -80,7 +80,7 @@ test.yaml:12:9: unexpected key "Shell" for step to run shell command. expected o
    |         ^~~~~~
 ```
 
-[Playground](https://rhysd.github.io/actionlint/#eNo8jEEOAiEMRfdzin8Bwp5reAIYqqCEEtrGeHsDcVy1zXuv3AOGSTmenCQcgJLomsC0Lm5xS9bVXIuLbZTpHq39vG1eK/Dm+ar94XKddCrPT4AfUYtX9rnO7YnSkCtxuwedhVGoNf6/uq0zIEUp3wEAtPsxjA==)
+[Playground](https://jactionlint.jdx.dev/#eNo8jEEOAiEMRfdzin8Bwp5reAIYqqCEEtrGeHsDcVy1zXuv3AOGSTmenCQcgJLomsC0Lm5xS9bVXIuLbZTpHq39vG1eK/Dm+ar94XKddCrPT4AfUYtX9rnO7YnSkCtxuwedhVGoNf6/uq0zIEUp3wEAtPsxjA==)
 
 [Workflow syntax][syntax-doc] defines what keys can be defined in which mapping object. When unknown key is defined, it makes
 the workflow run fail.
@@ -122,7 +122,7 @@ test.yaml:8:9: key "VERSION_NAME" is duplicated in "matrix" section. previously 
   |         ^~~~~~~~~~~~~
 ```
 
-[Playground](https://rhysd.github.io/actionlint/#eNo8zLEKwkAQhOE+TzFdmljEcjuLFBZGULgmSDhl8SLJbbjdHPr2Ihqr4eeDkUiYFw3FQ65KBWCs9llALXnj++tbwOQtDc+1gMxJB4l99BMTulxXyNvLn11zOu+Pbd/uDg2hc3UF92M1nnU92iAtkcC3ICgDj6OU7wEANm8osg==)
+[Playground](https://jactionlint.jdx.dev/#eNo8zLEKwkAQhOE+TzFdmljEcjuLFBZGULgmSDhl8SLJbbjdHPr2Ihqr4eeDkUiYFw3FQ65KBWCs9llALXnj++tbwOQtDc+1gMxJB4l99BMTulxXyNvLn11zOu+Pbd/uDg2hc3UF92M1nnU92iAtkcC3ICgDj6OU7wEANm8osg==)
 
 Some mappings must include specific keys. For example, job mappings must include `runs-on:` and `steps:`.
 
@@ -150,7 +150,7 @@ test.yaml:2:6: "jobs" section should not be empty. please remove this section if
   |      ^
 ```
 
-[Playground](https://rhysd.github.io/actionlint/#eNrKz7NSKCgtzuDKyk8qtgIMACULBOo=)
+[Playground](https://jactionlint.jdx.dev/#eNrKz7NSKCgtzuDKyk8qtgIMACULBOo=)
 
 Some mappings and sequences should not be empty. For example, `steps:` must include at least one step.
 
@@ -195,7 +195,7 @@ test.yaml:13:26: expecting a single ${{...}} expression or float number literal,
    |                          ^~~
 ```
 
-[Playground](https://rhysd.github.io/actionlint/#eNo0zEEKAjEMheH9nOJdoDIKbnKbDKQ6kmlLk6DeXqp1Fd5P+GohtLD78qib0QK4mI8LmHd2ub1/C8i8a8psTqg5z3jwKzXurCpKOJ+u396jWBp0bFE8kvJgpyrN/mQanwRTkYbLus4M+H5IDU/HXsLFCP6smOMzAGy5NWY=)
+[Playground](https://jactionlint.jdx.dev/#eNo0zEEKAjEMheH9nOJdoDIKbnKbDKQ6kmlLk6DeXqp1Fd5P+GohtLD78qib0QK4mI8LmHd2ub1/C8i8a8psTqg5z3jwKzXurCpKOJ+u396jWBp0bFE8kvJgpyrN/mQanwRTkYbLus4M+H5IDU/HXsLFCP6smOMzAGy5NWY=)
 
 Some mapping values are restricted to some constant strings. Several mapping values expect boolean value like `true` or
 `false`. And some mapping values expect integer or floating number values.
@@ -245,7 +245,7 @@ test.yaml:13:38: unexpected end of input while parsing object property dereferen
    |                                      ^~~
 ```
 
-[Playground](https://rhysd.github.io/actionlint/#eNp0zUGKwzAMheF9TvEwA85kJgnZ5gBd9BaJEXVaY4VK7ib47kXtOisJ/g8e5xl7kdjceZW5AZRE7QLPkqW3XtaStfRpsfZJorTLVwG9yRkUIsP/HAdcpJTYoVZ/Rib8YToBzoDyVTi3cZF42RJJ67tuTBwe/h/2hiVEGv0vanVnI7dNY1kHelHWwcbeAwDH30Qz)
+[Playground](https://jactionlint.jdx.dev/#eNp0zUGKwzAMheF9TvEwA85kJgnZ5gBd9BaJEXVaY4VK7ib47kXtOisJ/g8e5xl7kdjceZW5AZRE7QLPkqW3XtaStfRpsfZJorTLVwG9yRkUIsP/HAdcpJTYoVZ/Rib8YToBzoDyVTi3cZF42RJJ67tuTBwe/h/2hiVEGv0vanVnI7dNY1kHelHWwcbeAwDH30Qz)
 
 actionlint lexes and parses expression in `${{ }}` following [the expression syntax document][expr-doc]. It can detect
 many syntax errors like invalid characters, missing parentheses, unexpected end of input, ...
@@ -313,7 +313,7 @@ test.yaml:13:20: object, array, and null values should not be evaluated in templ
    |                    ^~~
 ```
 
-[Playground](https://rhysd.github.io/actionlint/#eNp8yzEKwzAMheE9p3hDIVNMZ1+ldIiDqB2KZCwppYTcvbidm+kN//eEI6prHlZJGgfASK0v0Jx16t2Ts/n0nHv7JjWq+lPA1GUELVkwXvYdxNvtesdxjP/EKikswjYXphZEz+yjWPYUGlXRYtLeQV5M7exCvPX8GQCnCkLw)
+[Playground](https://jactionlint.jdx.dev/#eNp8yzEKwzAMheE9p3hDIVNMZ1+ldIiDqB2KZCwppYTcvbidm+kN//eEI6prHlZJGgfASK0v0Jx16t2Ts/n0nHv7JjWq+lPA1GUELVkwXvYdxNvtesdxjP/EKikswjYXphZEz+yjWPYUGlXRYtLeQV5M7exCvPX8GQCnCkLw)
 
 Type checks for expression syntax in `${{ }}` are done by semantics checker. Note that actual type checks by GitHub Actions
 runtime is loose.
@@ -369,7 +369,7 @@ test.yaml:19:14: type of expression at "env" must be object but found type strin
    |              ^~~
 ```
 
-[Playground](https://rhysd.github.io/actionlint/#eNqckD8LgzAUxHc/xSGCU/oBAh10EDqluHUqKsE/tIkkL6VF8t1LULHi1inckbv3e08rjtHZLhp0bXkEkLQUXsCSqUi2n1kBz4pM/14VINXrbsn0qt08gCEthDjnWZke3evlJtJdga4H2dC+oBCCI8/KoxnyEQAYpywL7K52ihx7VIF7wZajXQtZ+Mkhm04jTgoh4t/pHMk0LXudNhp4/198vga8/w4AgQRZVA==)
+[Playground](https://jactionlint.jdx.dev/#eNqckD8LgzAUxHc/xSGCU/oBAh10EDqluHUqKsE/tIkkL6VF8t1LULHi1inckbv3e08rjtHZLhp0bXkEkLQUXsCSqUi2n1kBz4pM/14VINXrbsn0qt08gCEthDjnWZke3evlJtJdga4H2dC+oBCCI8/KoxnyEQAYpywL7K52ihx7VIF7wZajXQtZ+Mkhm04jTgoh4t/pHMk0LXudNhp4/198vga8/w4AgQRZVA==)
 
 In above example, environment variables mapping is expanded at `env:` section. actionlint checks type of the expanded value.
 
@@ -424,7 +424,7 @@ test.yaml:15:51: 2nd argument of function call is not assignable. "object" canno
    |                                                   ^~~~~~~~~~~~~
 ```
 
-[Playground](https://rhysd.github.io/actionlint/#eNqckEFKxjAQhfc9xVCEqKQ5QC/iUpI6mGo6UzoTK5TcXWJB/OFvF11l8b7v5TFMPcxZYvPBQfoGQFG0vgBLJulqnkMmzV3yNfuNRHGWnQLoKtkDDpHBPGwbZPokXul1YFL8VijFHKHvo8YcHH4hqRyAbQVF/aIvo8ZHEzEltrDykt6MBZPYmicopT115Y58zbI3q0876gX8SHJh9J/6/zOXfMAk7tmRn9CCQYqeBpyQdK/7GQBh6o/Y)
+[Playground](https://jactionlint.jdx.dev/#eNqckEFKxjAQhfc9xVCEqKQ5QC/iUpI6mGo6UzoTK5TcXWJB/OFvF11l8b7v5TFMPcxZYvPBQfoGQFG0vgBLJulqnkMmzV3yNfuNRHGWnQLoKtkDDpHBPGwbZPokXul1YFL8VijFHKHvo8YcHH4hqRyAbQVF/aIvo8ZHEzEltrDykt6MBZPYmicopT115Y58zbI3q0876gX8SHJh9J/6/zOXfMAk7tmRn9CCQYqeBpyQdK/7GQBh6o/Y)
 
 [Contexts][contexts-doc] and [built-in functions][funcs-doc] are strongly typed. Typos in property access of contexts and
 function names can be checked. And invalid function calls like wrong number of arguments or type mismatch at parameter also
@@ -483,7 +483,7 @@ test.yaml:14:31: broken JSON string is passed to fromJSON() at offset 23: unexpe
    |                               ^~~~~~~~~~~~~~~~~~~~~~~~~~~
 ```
 
-[Playground](https://rhysd.github.io/actionlint/#eNqMj0FL9DAQhu/7K95v+CAtZMVdb/kJHvSgt0Uk7aY20k5KJnGFkP8ure5R8DJzmPeZhzewwZJl3O3eQydmByQnad1AzCz7NfC/FAwxzPdPjw+NKnTxTGad53CR/WRXhDRNnvMnGcpd5pSn66Gq9qRm26sX1Lo9luQW+XYA+9Vj4PoxgDZTiLNNjSq3tRyq0jhoHDXuWtRKf4PK8cr9Bj2PXuAFFrK43tsJXbTcj/9+soAfDPrAyXqWZmsvgRt1otl6Jk3RTc6KI01n90Gq1XjzaczdTXTDK9vZtV8DAMITaRA=)
+[Playground](https://jactionlint.jdx.dev/#eNqMj0FL9DAQhu/7K95v+CAtZMVdb/kJHvSgt0Uk7aY20k5KJnGFkP8ure5R8DJzmPeZhzewwZJl3O3eQydmByQnad1AzCz7NfC/FAwxzPdPjw+NKnTxTGad53CR/WRXhDRNnvMnGcpd5pSn66Gq9qRm26sX1Lo9luQW+XYA+9Vj4PoxgDZTiLNNjSq3tRyq0jhoHDXuWtRKf4PK8cr9Bj2PXuAFFrK43tsJXbTcj/9+soAfDPrAyXqWZmsvgRt1otl6Jk3RTc6KI01n90Gq1XjzaczdTXTDK9vZtV8DAMITaRA=)
 
 GitHub Actions does not provide the syntax to create an array or object constant. It [is popular](https://github.com/search?q=fromJSON%28%27+lang%3Ayaml&type=code)
 to create such constants via `fromJSON()`.
@@ -531,7 +531,7 @@ test.yaml:22:24: property "get_value" is not defined in object type {} [expressi
    |                        ^~~~~~~~~~~~~~~~~~~~~~~~~~~~
 ```
 
-[Playground](https://rhysd.github.io/actionlint/#eNqskDFrhEAQhXt/xWMRrPQHLMQiTZIqKbQWNWs0mB1xZtKI/z3sxgQODo7jrprifd88eOQtFuUx+aSObQKIYwkXWNVzHnLt1IvmcxuyGJHKosK/HDAQWWTptoHFLVx8OGm+21ldcYCFb78c9j2LQoT+3Dz0WLh+pCtenHpmIHqItEFZwqRPL9Vz/di81tVbXZnDAKZ3i//Hd+w/6/Xk+1l5In9YJKNbL0572zg/AwAkVZJl)
+[Playground](https://jactionlint.jdx.dev/#eNqskDFrhEAQhXt/xWMRrPQHLMQiTZIqKbQWNWs0mB1xZtKI/z3sxgQODo7jrprifd88eOQtFuUx+aSObQKIYwkXWNVzHnLt1IvmcxuyGJHKosK/HDAQWWTptoHFLVx8OGm+21ldcYCFb78c9j2LQoT+3Dz0WLh+pCtenHpmIHqItEFZwqRPL9Vz/di81tVbXZnDAKZ3i//Hd+w/6/Xk+1l5In9YJKNbL0572zg/AwAkVZJl)
 
 Outputs of step can be accessed via `steps.<step_id>` objects. The `steps` context is dynamic:
 
@@ -579,7 +579,7 @@ test.yaml:18:23: property "cache_hit" is not defined in object type {cache-hit: 
    |                       ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 ```
 
-[Playground](https://rhysd.github.io/actionlint/#eNqkjsFKxDAQhu99iv8grBbaXjzNyZOvIdk4OLElCc6MIsu+uyRd6lUwlzDzfT//lEyorjIM7+WsNADGau0HPjzr1AQ/ezafttBYR2pcdbeAqZkEjlJwd7nscI4hCs/FrbrdpkmS4Xo9Yq6shBAtlaxLV54+H28YSK+Evjw2X8mEjglY+Zt6pQSV57Sx3p/GcRnnrcT19PDb1V4NJoR5qSGu4Y31v9f/Mfayx34GAIltbNw=)
+[Playground](https://jactionlint.jdx.dev/#eNqkjsFKxDAQhu99iv8grBbaXjzNyZOvIdk4OLElCc6MIsu+uyRd6lUwlzDzfT//lEyorjIM7+WsNADGau0HPjzr1AQ/ezafttBYR2pcdbeAqZkEjlJwd7nscI4hCs/FrbrdpkmS4Xo9Yq6shBAtlaxLV54+H28YSK+Evjw2X8mEjglY+Zt6pQSV57Sx3p/GcRnnrcT19PDb1V4NJoR5qSGu4Y31v9f/Mfayx34GAIltbNw=)
 
 In the above example, [actions/cache][actions-cache] action sets `cache-hit` output so that the following steps can know
 whether the cache was hit or not. At line 8, the cache action is not run yet. So `cache` property does not exist in the
@@ -701,7 +701,7 @@ test.yaml:34:24: property "os" is not defined in object type {} [expression]
    |                        ^~~~~~~~~
 ```
 
-[Playground](https://rhysd.github.io/actionlint/#eNqMUk1v6yAQvOdXzOFJJFJsKU+xIiG9XxK9A7FxQmsDYiFplfLfK+JQ58NVe0K7zCyzMxjNYQMdZi9mR3wGeEk+nQB5J7zcvw8V0Avv1FuuAEMc27AL2oeiE4m3xEnpxpzoWv//wmrTSI7tar3EqhrbVtSvYi/HmUABLXrJwVpj2E0fMNYro0XH4V2QU5SdcN9RWtHRyFG67kLz+O5F46q6m6Btz7Epq3J9abugqUie/Tmfr4aUhhDj1TFpKQ8tEphD1gcDdgO3nfCtcT1iZD9BB3vKRh6f0R83OgdmCuRRF3tCpTVxlI7Uwx6XiylGTgkT0pLziBHzbPW/CVC+Q4yLyZ217bMkKAJZWatWyWbUotrh+dpoL5SmeRZt+yXYpqzYYkgh/bu//D6su0/6+6QGAz8HAKxO5N4=)
+[Playground](https://jactionlint.jdx.dev/#eNqMUk1v6yAQvOdXzOFJJFJsKU+xIiG9XxK9A7FxQmsDYiFplfLfK+JQ58NVe0K7zCyzMxjNYQMdZi9mR3wGeEk+nQB5J7zcvw8V0Avv1FuuAEMc27AL2oeiE4m3xEnpxpzoWv//wmrTSI7tar3EqhrbVtSvYi/HmUABLXrJwVpj2E0fMNYro0XH4V2QU5SdcN9RWtHRyFG67kLz+O5F46q6m6Btz7Epq3J9abugqUie/Tmfr4aUhhDj1TFpKQ8tEphD1gcDdgO3nfCtcT1iZD9BB3vKRh6f0R83OgdmCuRRF3tCpTVxlI7Uwx6XiylGTgkT0pLziBHzbPW/CVC+Q4yLyZ217bMkKAJZWatWyWbUotrh+dpoL5SmeRZt+yXYpqzYYkgh/bu//D6su0/6+6QGAz8HAKxO5N4=)
 
 Types of `matrix` context are contextually checked by the semantics checker. Type of matrix values in `matrix:` section
 is deduced from element values of its array. When the matrix value is an array of objects, objects' properties are checked
@@ -792,7 +792,7 @@ test.yaml:33:24: property "build" is not defined in object type {} [expression]
    |                        ^~~~~~~~~~~~~~~~~~~~~~~~~
 ```
 
-[Playground](https://rhysd.github.io/actionlint/#eNqkkUFOxDAMRfdzir9A6ob2ALkKQqglhnRU4qh2xGLUuyNnMqmAESBmUamu7f/+dzk6pCzhcORJ3AGYo+i4LPYKcNaUVc5F65F36IZh6MrnNUfpTSZPOWrul1FJtLREKbXl3iYd6DkwuqoE4TfSMMdX00orpXGlq+jau51sKvZ8Rn8buzudEIm8DJU8VEOX2mPbbHPK8+LPpDLv8FDD3V9MP14LZHt6c5pC36PgfdaA3Xt10ry3H4htwxg9/hzzhwN9hbww/75klp+OPNVJ1kCr+/8dduFykebFKjXGxwDMHOsV)
+[Playground](https://jactionlint.jdx.dev/#eNqkkUFOxDAMRfdzir9A6ob2ALkKQqglhnRU4qh2xGLUuyNnMqmAESBmUamu7f/+dzk6pCzhcORJ3AGYo+i4LPYKcNaUVc5F65F36IZh6MrnNUfpTSZPOWrul1FJtLREKbXl3iYd6DkwuqoE4TfSMMdX00orpXGlq+jau51sKvZ8Rn8buzudEIm8DJU8VEOX2mPbbHPK8+LPpDLv8FDD3V9MP14LZHt6c5pC36PgfdaA3Xt10ry3H4htwxg9/hzzhwN9hbww/75klp+OPNVJ1kCr+/8dduFykebFKjXGxwDMHOsV)
 
 Job dependencies can be defined at [`needs:`][needs-doc]. A job runs after all jobs defined in `needs:` are done.
 Outputs from the jobs can be accessed only from jobs following them via [`needs` context][needs-context-doc].
@@ -836,7 +836,7 @@ test.yaml:16:17: "bool" value cannot be compared to "number" value with ">" oper
    |                 ^~~~~~~~~~~~~~
 ```
 
-[Playground](https://rhysd.github.io/actionlint/#eNpsj81KwDAQhO99ihGEnFo8eQjUV5Gmbtto3C3NxiIl7y7pH4jednc+ZmaFbQWssnwMQdbXvguhHADPc9J4zID6T5Kk1wro90wWTiRQx1X1Lm5nleIJLYljLWyRXGJNdeiKtktRab6d60JaUD8JTImntwdzx/jB4nHbMHqdkmvoi1jRtjC/Ghvk/J/d2Ro+QkUQhMe/1sejzcW+4PkJOf8MAEdGU1w=)
+[Playground](https://jactionlint.jdx.dev/#eNpsj81KwDAQhO99ihGEnFo8eQjUV5Gmbtto3C3NxiIl7y7pH4jednc+ZmaFbQWssnwMQdbXvguhHADPc9J4zID6T5Kk1wro90wWTiRQx1X1Lm5nleIJLYljLWyRXGJNdeiKtktRab6d60JaUD8JTImntwdzx/jB4nHbMHqdkmvoi1jRtjC/Ghvk/J/d2Ro+QkUQhMe/1sejzcW+4PkJOf8MAEdGU1w=)
 
 Expressions in `${{ }}` placeholders support `==`, `!=`, `>`, `>=`, `<`, `<=` comparison operators. Arbitrary types of operands
 can be compared. When different type values are compared, they are implicitly converted to numbers before the comparison. Please
@@ -1080,7 +1080,7 @@ test.yaml:22:31: object filter extracts potentially untrusted properties "github
    |                               ^~~~~~~~~~~~~~~~~~~~
 ```
 
-[Playground](https://rhysd.github.io/actionlint/#eNqMkUFrGzEQhe/+FY+lYKd0t8dShUIOLaUNJIHkFkKQ5YmlWqvZakYOJfi/F+0aE7cYclpm5+l7T0/J9mRwR6IzTgZDifEx0+9Sf8x+8VLMDFASrV8glyRtFZZlSVraaOtuXInSIJMKaDGBb3JIOlKxp0KDRtrLRqABOc+Yv3t5wTqoL8uOtpS0ex2mG49ht5sfHIqQGFingZN8FLWRLrafD+TnoN4cJiDTwK3yhpJBtRJymVS6u+vLb1fY7V5JR1Y75LYnEbsmg7dlw7MVuMhCqxMpJ0YrLodBL7afTqadFAaOk3CkLvJ68X9Dnuzq0XHfB+1sUc+5q73Xms7+eYnvpKhKSiqn2lf+eXt9tTiyeN8tefXn7Kj5ifiVIdyT+pDWY344T25TJ9mE4dgkPOEeTTVxnNSGJIvTfe6vMtb6AfP728sfNw/zmqHBFzSaCzV4OId6SlP8pjo253gKfwcAqP/kRg==)
+[Playground](https://jactionlint.jdx.dev/#eNqMkUFrGzEQhe/+FY+lYKd0t8dShUIOLaUNJIHkFkKQ5YmlWqvZakYOJfi/F+0aE7cYclpm5+l7T0/J9mRwR6IzTgZDifEx0+9Sf8x+8VLMDFASrV8glyRtFZZlSVraaOtuXInSIJMKaDGBb3JIOlKxp0KDRtrLRqABOc+Yv3t5wTqoL8uOtpS0ex2mG49ht5sfHIqQGFingZN8FLWRLrafD+TnoN4cJiDTwK3yhpJBtRJymVS6u+vLb1fY7V5JR1Y75LYnEbsmg7dlw7MVuMhCqxMpJ0YrLodBL7afTqadFAaOk3CkLvJ68X9Dnuzq0XHfB+1sUc+5q73Xms7+eYnvpKhKSiqn2lf+eXt9tTiyeN8tefXn7Kj5ifiVIdyT+pDWY344T25TJ9mE4dgkPOEeTTVxnNSGJIvTfe6vMtb6AfP728sfNw/zmqHBFzSaCzV4OId6SlP8pjo253gKfwcAqP/kRg==)
 
 Since `${{ }}` placeholders are evaluated and replaced directly by GitHub Actions runtime, you need to use them carefully in
 inline scripts at `run:`. For example, if we have step as follows,
@@ -1183,7 +1183,7 @@ test.yaml:3:3: cyclic dependencies in "needs" job configurations are detected. d
   |   ^~~~~~~~
 ```
 
-[Playground](https://rhysd.github.io/actionlint/#eNqkjjEOwyAMRXdO8TcmLsBVqg7QWEoqZBC2719BvWTOZvn5v+/OGcPkDN9eJQdgTBpl0hoBJjok41Xtasd7r6axpJWyaqyWWlES3UiUhvyDQFqXGfQ5O6JLYwAuFi2t3f3OHzS4djXsZ+9+pw/8Wxp/AwC/J1vk)
+[Playground](https://jactionlint.jdx.dev/#eNqkjjEOwyAMRXdO8TcmLsBVqg7QWEoqZBC2719BvWTOZvn5v+/OGcPkDN9eJQdgTBpl0hoBJjok41Xtasd7r6axpJWyaqyWWlES3UiUhvyDQFqXGfQ5O6JLYwAuFi2t3f3OHzS4djXsZ+9+pw/8Wxp/AwC/J1vk)
 
 Job dependencies can be defined at [`needs:`][needs-doc]. If cyclic dependencies exist, jobs never start to run. actionlint
 detects cyclic dependencies in `needs:` sections of jobs and reports it as an error.
@@ -1220,7 +1220,7 @@ test.yaml:8:3: job "bar" needs job "unknown" which does not exist in this workfl
   |   ^~~~
 ```
 
-[Playground](https://rhysd.github.io/actionlint/#eNqkjDsOAjEMRPucYrptyAXcwRFoEUUMRuEjexXb4vooS0VNNdLMvGdKWNN7eRg7FeBmNgNQkasTTtzGDof98by1I9XrhJJTI+urhXhsk4es/mWBOp8EuXTD0u9LAbiNX3PqU+2t/4k/AwB6DTh7)
+[Playground](https://jactionlint.jdx.dev/#eNqkjDsOAjEMRPucYrptyAXcwRFoEUUMRuEjexXb4vooS0VNNdLMvGdKWNN7eRg7FeBmNgNQkasTTtzGDof98by1I9XrhJJTI+urhXhsk4es/mWBOp8EuXTD0u9LAbiNX3PqU+2t/4k/AwB6DTh7)
 
 <a id="check-matrix-values"></a>
 ## Matrix values
@@ -1262,7 +1262,7 @@ test.yaml:12:13: "platform" in "exclude" section does not exist in matrix. avail
    |             ^~~~~~~~~
 ```
 
-[Playground](https://rhysd.github.io/actionlint/#eNpskMGOhCAQRO9+RR32KER298SvmD2gsuNMlDY0JE6M/z4h4jgmHggpqHrpanIaU+S+eFDDugCC5ZBugIM3wd6emwJGE/x93hXgqLMatapKqO8S6jedv/c3sUYdm+hCFINJ2BKjaYmzOpx2bofY2YMMiExXPx+PG/OEvIpUp8g0mPBPfrwK+uhYpA18LUuuJ4mxrrm/nXgfSiSzhm17gpTyNQBUwlNB)
+[Playground](https://jactionlint.jdx.dev/#eNpskMGOhCAQRO9+RR32KER298SvmD2gsuNMlDY0JE6M/z4h4jgmHggpqHrpanIaU+S+eFDDugCC5ZBugIM3wd6emwJGE/x93hXgqLMatapKqO8S6jedv/c3sUYdm+hCFINJ2BKjaYmzOpx2bofY2YMMiExXPx+PG/OEvIpUp8g0mPBPfrwK+uhYpA18LUuuJ4mxrrm/nXgfSiSzhm17gpTyNQBUwlNB)
 
 [`matrix:`][matrix-doc] defines combinations of multiple values. Nested `include:` and `exclude:` can add/remove specific
 combination of matrix values. actionlint checks
@@ -1324,7 +1324,7 @@ test.yaml:15:3: unknown Webhook event "pullreq". see https://docs.github.com/en/
    |   ^~~~~~~~
 ```
 
-[Playground](https://rhysd.github.io/actionlint/#eNpcjkGuwyAMRPecYtaRIHvfhuT7h1QIU2wq9fYVJJt2NbLf6NlSyAG1axoJbC2WPRH+ReZcoyWlGavJ+rX251Gk8S89VTvrpbN3ZSXsjaPxnwMaZ47KN42HEl5LWMIyv8i58ZOce8g2BcZqV7X1ol4KoW+9WPc5DjaRGtf7HOBHk8B7EoQQPgMAdVRCRg==)
+[Playground](https://jactionlint.jdx.dev/#eNpcjkGuwyAMRPecYtaRIHvfhuT7h1QIU2wq9fYVJJt2NbLf6NlSyAG1axoJbC2WPRH+ReZcoyWlGavJ+rX251Gk8S89VTvrpbN3ZSXsjaPxnwMaZ47KN42HEl5LWMIyv8i58ZOce8g2BcZqV7X1ol4KoW+9WPc5DjaRGtf7HOBHk8B7EoQQPgMAdVRCRg==)
 
 At `on:`, Webhook events can be specified to trigger the workflow. [Webhook event documentation][webhook-doc] defines
 which Webhook events are available and what types can be specified at `types:` for each event.
@@ -1440,7 +1440,7 @@ test.yaml:39:24: property "massage" is not defined in object type {age: string; 
    |                        ^~~~~~~~~~~~~~~~~~~~~~~~~~~
 ```
 
-[Playground](https://rhysd.github.io/actionlint/#eNqMkcFOwzAMhu97Cmvi2j5Ar5y5cUMIOa3XmrZ2VTsd07R3R+0CEwpM3KzPn538iUq1Azjq3B8GPb41bBN63a0QgGWKbtcagJuvCsBPE1Xg9OEJ9SxZu+6Ua0pQcKS7AoBOzip2swAKeMYRf4An7m8jDR0wDl7BY6eBEx7JDNvsNPOZpU1woTmoZU5QHQgl338iS/CXzRLHQHM+5ESy271r2DI5mV8n5yhWqFQQQxSPxYBrb2uZ0/T9AsVqVkB1p7B/OJ/Th5QjbgHhctn/ZZIsL8lOUV//qWN7X23ZuxhKWki8zC/0OQCbKqYK)
+[Playground](https://jactionlint.jdx.dev/#eNqMkcFOwzAMhu97Cmvi2j5Ar5y5cUMIOa3XmrZ2VTsd07R3R+0CEwpM3KzPn538iUq1Azjq3B8GPb41bBN63a0QgGWKbtcagJuvCsBPE1Xg9OEJ9SxZu+6Ua0pQcKS7AoBOzip2swAKeMYRf4An7m8jDR0wDl7BY6eBEx7JDNvsNPOZpU1woTmoZU5QHQgl338iS/CXzRLHQHM+5ESy271r2DI5mV8n5yhWqFQQQxSPxYBrb2uZ0/T9AsVqVkB1p7B/OJ/Th5QjbgHhctn/ZZIsL8lOUV//qWN7X23ZuxhKWki8zC/0OQCbKqYK)
 
 [`workflow_dispatch`][workflow-dispatch-event] is an event to trigger a workflow manually. The event can have parameters called
 'inputs'. Each input has its name, description, default value, and [input type][workflow-dispatch-input-type-announce].
@@ -1549,7 +1549,7 @@ test.yaml:14:9: '.' and '..' are not allowed in glob path. note: filter pattern 
    |         ^~~~~~~~~~~~~
 ```
 
-[Playground](https://rhysd.github.io/actionlint/#eNpMjMGqAyEMRfd+xd0J76FDl/VXSgs6OJVSEtGk9PPL6MZVODmHyxQMULWX8wKpRdpL7pMAB/s4mJ0dLPG5ms/fv13odnWX+3zUKGUp/XYwbyk2L18x5sVpSMldZtSUumMK0KQk6t7xdEN1yXWZakoBeS8M7/1vADXfMEo=)
+[Playground](https://jactionlint.jdx.dev/#eNpMjMGqAyEMRfd+xd0J76FDl/VXSgs6OJVSEtGk9PPL6MZVODmHyxQMULWX8wKpRdpL7pMAB/s4mJ0dLPG5ms/fv13odnWX+3zUKGUp/XYwbyk2L18x5sVpSMldZtSUumMK0KQk6t7xdEN1yXWZakoBeS8M7/1vADXfMEo=)
 
 For filtering branches, tags and paths in Webhook events, [glob syntax][filter-pattern-doc] is available.
 actionlint validates glob patterns `branches:`, `branches-ignore:`, `tags:`, `tags-ignore:`, `paths:`, `paths-ignore:` in a
@@ -1604,7 +1604,7 @@ test.yaml:9:17: invalid timezone "Asia/Somewhere" in schedule event. it must be 
   |                 ^~~~~~~~~~~~~~~~
 ```
 
-[Playground](https://rhysd.github.io/actionlint/#eNpkzU0KAjEMBeB9T/F2hUJbQdxk5xk8wUwNdGSmkaZF8PRSf0BxF94X3pNCBtCU+dxXHjfgkaoUgt3BxT0cnP3N3Sf/l3iA+xagLRvfpTDBHnWZ4kk2vmWubI25yKxkgMbaXtu1F/Wjqs+9tO7XadiTtPFV6d3qxyeBUxaEEB4DAMYnMuQ=)
+[Playground](https://jactionlint.jdx.dev/#eNpkzU0KAjEMBeB9T/F2hUJbQdxk5xk8wUwNdGSmkaZF8PRSf0BxF94X3pNCBtCU+dxXHjfgkaoUgt3BxT0cnP3N3Sf/l3iA+xagLRvfpTDBHnWZ4kk2vmWubI25yKxkgMbaXtu1F/Wjqs+9tO7XadiTtPFV6d3qxyeBUxaEEB4DAMYnMuQ=)
 
 To trigger a workflow in specific interval, [scheduled event][schedule-event-doc] can be defined in [POSIX CRON syntax][cron-syntax].
 
@@ -1666,7 +1666,7 @@ test.yaml:23:14: label "macos-10.13" is unknown. available labels are "windows-l
    |              ^~~~~~~~~~~
 ```
 
-[Playground](https://rhysd.github.io/actionlint/#eNqEj8GqwyAQRfd+xV28ZZSXNmThr5QubGqTlESDo5AS8u9FNBSh0JVcZ+ZyjjUSS6CBPe2NJAO8Jh9fgLxTXvevlIBZeTeuRwJcMEa7TwY4ZtVZ4pOKLcVgGk1Yvw0upKcHHyx5fa/SWoW1ba7FlnJz2xQ//RJYpiAeLf62LSOKRIZ9zx56oQOTxwMJ3Q0WQgiWjU+yLEse9b+ozz873gMASPlVEA==)
+[Playground](https://jactionlint.jdx.dev/#eNqEj8GqwyAQRfd+xV28ZZSXNmThr5QubGqTlESDo5AS8u9FNBSh0JVcZ+ZyjjUSS6CBPe2NJAO8Jh9fgLxTXvevlIBZeTeuRwJcMEa7TwY4ZtVZ4pOKLcVgGk1Yvw0upKcHHyx5fa/SWoW1ba7FlnJz2xQ//RJYpiAeLf62LSOKRIZ9zx56oQOTxwMJ3Q0WQgiWjU+yLEse9b+ozz873gMASPlVEA==)
 
 GitHub Actions provides two kinds of job runners, [GitHub-hosted runner][gh-hosted-runner] and [self-hosted runner][self-hosted-runner].
 Each runner has one or more labels. GitHub Actions runtime finds a proper runner based on label(s) specified at `runs-on:`
@@ -1702,7 +1702,7 @@ test.yaml:4:30: label "windows-latest" conflicts with label "ubuntu-latest" defi
   |                              ^~~~~~~~~~~~~~~
 ```
 
-[Playground](https://rhysd.github.io/actionlint/#eNosi0EKgDAMBO99xT7A9gH9iniwWqgiSTEJ/b5EPS3LzDBldJMWTi6SA6BV1Be4jSQ6n60YqcVrdThhHLTzkP8vryxau3wdEL3NqFtjpJSeAQBe4h8M)
+[Playground](https://jactionlint.jdx.dev/#eNosi0EKgDAMBO99xT7A9gH9iniwWqgiSTEJ/b5EPS3LzDBldJMWTi6SA6BV1Be4jSQ6n60YqcVrdThhHLTzkP8vryxau3wdEL3NqFtjpJSeAQBe4h8M)
 
 In most cases, this is a misunderstanding that a matrix combination can be specified at `runs-on:` directly. It should use
 `matrix:` and expand it with `${{ }}` at `runs-on:` to run the workflow on multiple runners.
@@ -1749,7 +1749,7 @@ test.yaml:13:15: specifying action ".github/my-actions/do-something" in invalid 
    |               ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 ```
 
-[Playground](https://rhysd.github.io/actionlint/#eNpczbEOwyAMBNA9X+EtE0XqyNRfAWIBTbGj2K7Uv69olYXppHsnHVOAw6QuT04SFgBF0ZEAp5G44ZaM1NwrDvuRKB7yXwE4MEEJELM2JvG5Yt7ZdOKrfrzvk6wb5x3P4H3rsWBYJ7+VptWS7x93fWzshDtqbVS+AwCoTjwo)
+[Playground](https://jactionlint.jdx.dev/#eNpczbEOwyAMBNA9X+EtE0XqyNRfAWIBTbGj2K7Uv69olYXppHsnHVOAw6QuT04SFgBF0ZEAp5G44ZaM1NwrDvuRKB7yXwE4MEEJELM2JvG5Yt7ZdOKrfrzvk6wb5x3P4H3rsWBYJ7+VptWS7x93fWzshDtqbVS+AwCoTjwo)
 
 Action needs to be specified in a format defined in [the document][action-uses-doc]. There are 3 types of actions:
 
@@ -1860,7 +1860,7 @@ test.yaml:9:11: input "keys" is not defined in action "actions/cache@v4". availa
   |           ^~~~~
 ```
 
-[Playground](https://rhysd.github.io/actionlint/#eNqEjrHKwkAQhPs8xRQ/5DeQpLG6ysr32ByLFy/eHdlbRWLeXRIliI3VsvN9MBODQVJxRXGOnZgCyCx5ucCoQepF0E5D1nqgha1IMid5WUANFRYDsrmPQVpL1vHhun9j4NZnZ7YP8HwXg8dHAvxNExyJO/YDy39ZVW3VDNH6cod5/mmuld9qouwMmjaR9XRi2eaOGgwu5Pk5APtlRBU=)
+[Playground](https://jactionlint.jdx.dev/#eNqEjrHKwkAQhPs8xRQ/5DeQpLG6ysr32ByLFy/eHdlbRWLeXRIliI3VsvN9MBODQVJxRXGOnZgCyCx5ucCoQepF0E5D1nqgha1IMid5WUANFRYDsrmPQVpL1vHhun9j4NZnZ7YP8HwXg8dHAvxNExyJO/YDy39ZVW3VDNH6cod5/mmuld9qouwMmjaR9XRi2eaOGgwu5Pk5APtlRBU=)
 
 actionlint checks inputs of many popular actions such as `actions/checkout@v4`. It checks
 
@@ -1902,7 +1902,7 @@ test.yaml:8:15: the runner of "actions/checkout@v3" action is too old to run on 
   |               ^~~~~~~~~~~~~~~~~~~
 ```
 
-[Playground](https://rhysd.github.io/actionlint/#eNokyjEOxCAMRNGeU8wF0BbbUe1VAFlik8hGGTvnj0iqX/xnWjCDI6XNGksCXOirwBnKvEC0UI981PWeRZfJVwEZQWFB7f435acP6buF/67vPQB0iR3O)
+[Playground](https://jactionlint.jdx.dev/#eNokyjEOxCAMRNGeU8wF0BbbUe1VAFlik8hGGTvnj0iqX/xnWjCDI6XNGksCXOirwBnKvEC0UI981PWeRZfJVwEZQWFB7f435acP6buF/67vPQB0iR3O)
 
 In addition to the checks for inputs of actions described in [the previous section](#check-popular-action-inputs), actionlint
 reports an error when a popular action is 'outdated'. An action is outdated when the runner used by the action is no longer
@@ -1971,7 +1971,7 @@ test.yaml:27:16: shell name "sh" is invalid on Windows. available names are "bas
    |                ^~
 ```
 
-[Playground](https://rhysd.github.io/actionlint/#eNqkkMHKgzAQhO8+xdw8Cf85bxN1Jf6s2eBmsVD67mWtlOKp2Nsk85F8jOSAYpqaf+k1NADP2W4egNWydg5Yb7lax7GS1r3SSkVfFNA5GUBDErSJmKU9GkD9HDBGTd/TRTZa99wASxxOOkscRD9tRpqicX0L+QfnN6dZ0yX1ttDKuP89vNnmPMqmJ6Hj9peBrs3zHAA+f36k)
+[Playground](https://jactionlint.jdx.dev/#eNqkkMHKgzAQhO8+xdw8Cf85bxN1Jf6s2eBmsVD67mWtlOKp2Nsk85F8jOSAYpqaf+k1NADP2W4egNWydg5Yb7lax7GS1r3SSkVfFNA5GUBDErSJmKU9GkD9HDBGTd/TRTZa99wASxxOOkscRD9tRpqicX0L+QfnN6dZ0yX1ttDKuP89vNnmPMqmJ6Hj9peBrs3zHAA+f36k)
 
 Available shells for runners are defined in [the documentation][shell-doc]. actionlint checks shell names at `shell:`
 configuration are properly using the available shells.
@@ -2014,7 +2014,7 @@ test.yaml:12:3: key "TEST" is duplicated in "jobs" section. previously defined a
    |   ^~~~~
 ```
 
-[Playground](https://rhysd.github.io/actionlint/#eNrKz7NSKCgtzuDKyk8qtuJSUChJLS4B0QoKRaV5xbog+dKk0rySUt2cRJAcWKq4JLWgGKJKQUEXpNJKITU5I19BPSM1JydfHSqjoJCZYgVWHJ+Zgk11UmUqqtrgENeAeE8XLgWFENfgEJq4AzAAioFDag==)
+[Playground](https://jactionlint.jdx.dev/#eNrKz7NSKCgtzuDKyk8qtuJSUChJLS4B0QoKRaV5xbog+dKk0rySUt2cRJAcWKq4JLWgGKJKQUEXpNJKITU5I19BPSM1JydfHSqjoJCZYgVWHJ+Zgk11UmUqqtrgENeAeE8XLgWFENfgEJq4AzAAioFDag==)
 
 Job IDs and step IDs in each jobs must be unique. IDs are compared in case-insensitive. actionlint checks all job IDs
 and step IDs, and reports errors when some IDs duplicate.
@@ -2059,7 +2059,7 @@ test.yaml:17:21: "password" section in "redis" service should be specified via s
    |                     ^~~~
 ```
 
-[Playground](https://rhysd.github.io/actionlint/#eNp0kLFuxSAMRff3Fd6Y0rfzNzxy1VCBjWxo+vkVNKVLOmGd48tFCHuq3Y7Hh7zMP4garI2TSDvbNnx/dW59y2G4qaJwC4mhP5tEqYR3eHL4CqVmvEUpTzkZ+pzGXWtRsYNbCtl+k0TdoBwK/JwWrsHsFN39nCY26GeKWFnFnuzvousRky54W/lv6X1tQ13hbfyLJ8RDyB3IWdz3AFJLXcM=)
+[Playground](https://jactionlint.jdx.dev/#eNp0kLFuxSAMRff3Fd6Y0rfzNzxy1VCBjWxo+vkVNKVLOmGd48tFCHuq3Y7Hh7zMP4garI2TSDvbNnx/dW59y2G4qaJwC4mhP5tEqYR3eHL4CqVmvEUpTzkZ+pzGXWtRsYNbCtl+k0TdoBwK/JwWrsHsFN39nCY26GeKWFnFnuzvousRky54W/lv6X1tQ13hbfyLJ8RDyB3IWdz3AFJLXcM=)
 
 [Credentials for container][credentials-doc] can be put in `container:` configuration. Password should be put in secrets
 and the value should be expanded with `${{ }}` syntax at `password:`. actionlint checks hardcoded credentials, and reports
@@ -2095,7 +2095,7 @@ test.yaml:7:7: environment variable name "FOO BAR" is invalid. '&', '=' and spac
   |       ^~~
 ```
 
-[Playground](https://rhysd.github.io/actionlint/#eNrKz7NSKCgtzuDKyk8qtuJSUChJLS4B0QoKRaV5xbog+dKk0rySUt2cRJAcWCo1rwyiRkHBzd/f1skxyEohLT8fIaSAIlRcklpQDNOgCzLYSiE1OSNfQT0jNScnXx0wAPhYJMc=)
+[Playground](https://jactionlint.jdx.dev/#eNrKz7NSKCgtzuDKyk8qtuJSUChJLS4B0QoKRaV5xbog+dKk0rySUt2cRJAcWCo1rwyiRkHBzd/f1skxyEohLT8fIaSAIlRcklpQDNOgCzLYSiE1OSNfQT0jNScnXx0wAPhYJMc=)
 
 `=` must not be included in environment variable names. And `&` and spaces should not be included in them. In almost all
 cases they are mistakes, and they may cause some issues on using them in shell since they have special meaning in shell syntax.
@@ -2148,7 +2148,7 @@ test.yaml:15:15: "write" is invalid as permission of scope "models". available v
    |               ^~~~~
 ```
 
-[Playground](https://rhysd.github.io/actionlint/#eNpMjdENwyAMBf+Z4i3AAmwDxBK0BCMeVtevSJUqX5bu7LP2gGEszg2ZZyWrdgZ8Zl3i3EsTgwOWcO0JTOv0+8iS9WW+xe0u9QxcAMhF8vuu/VAlTRgwJR4xtRufekjjc5VLxj/k9+MAyUVRpDX9DgAfnji8)
+[Playground](https://jactionlint.jdx.dev/#eNpMjdENwyAMBf+Z4i3AAmwDxBK0BCMeVtevSJUqX5bu7LP2gGEszg2ZZyWrdgZ8Zl3i3EsTgwOWcO0JTOv0+8iS9WW+xe0u9QxcAMhF8vuu/VAlTRgwJR4xtRufekjjc5VLxj/k9+MAyUVRpDX9DgAfnji8)
 
 Permissions of `GITHUB_TOKEN` token can be configured at workflow-level or job-level by [`permissions:` section][perm-config-doc].
 Each permission scopes have their access levels. The default levels and available levels are described in
@@ -2226,7 +2226,7 @@ test.yaml:25:18: input "path" of workflow_call event has the default value "", b
    |                  ^~
 ```
 
-[Playground](https://rhysd.github.io/actionlint/#eNp8kctu8yAQhff/U4yiX8oqiXpZ8Qxd9KKuK4zHxSlmyDAojSLevcJ2IsuNu4NvZg6HOeTVP4Aj8Vfj6PhhtHMFALQ+JInDGSAaix1ebgA1RsNtkJa8gre+CNTA++vTpKXRyYkCKxLiFcspoIIo3PrPEVqKon7P4bfugsOtoe6v6UAsC8aeiWXR1lrd3T88rmfSPnUV8ggPCfm0oP1SanPxQYOqPRq52NNil+xpsXMFxkNqGWsFwglvuF7f3sWeqj6smlTfwMnHTXkkVclL2jgtGAdPUTBcg92UTgVoLMHq//k85r4dAoec1W43wSWqAieo7B9ynpLyr5xXPwMAtTmuwA==)
+[Playground](https://jactionlint.jdx.dev/#eNp8kctu8yAQhff/U4yiX8oqiXpZ8Qxd9KKuK4zHxSlmyDAojSLevcJ2IsuNu4NvZg6HOeTVP4Aj8Vfj6PhhtHMFALQ+JInDGSAaix1ebgA1RsNtkJa8gre+CNTA++vTpKXRyYkCKxLiFcspoIIo3PrPEVqKon7P4bfugsOtoe6v6UAsC8aeiWXR1lrd3T88rmfSPnUV8ggPCfm0oP1SanPxQYOqPRq52NNil+xpsXMFxkNqGWsFwglvuF7f3sWeqj6smlTfwMnHTXkkVclL2jgtGAdPUTBcg92UTgVoLMHq//k85r4dAoec1W43wSWqAieo7B9ynpLyr5xXPwMAtTmuwA==)
 
 Unlike inputs of action, inputs of a workflow must specify their types. actionlint validates input types and checks the default
 values are correctly typed. For more details, see [the official document][create-reusable-workflow-doc].
@@ -2278,7 +2278,7 @@ test.yaml:19:11: could not read reusable workflow file for "./.github/workflows/
    |           ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 ```
 
-[Playground](https://rhysd.github.io/actionlint/#eNqEzjFywyAQBdBep9gLIEZJKqpcBTQrgYJYhl1CcnsPYuxxZVdQ/P/2UzKQK/vpIMdmAjjILf0FqIxsgFrCogtm0tmK10K6UfnZIrX5/4zfv8sVLjWx6lh1NUlV0QqyDO/j2Zv1vAfx1T0Y1mu4qNOGNBqfo9GC+PED2IgMOFteXwNgwcz3kupJA7h6Ao8x0uC/3g1KJAr/AktIe592GwBtJVzI)
+[Playground](https://jactionlint.jdx.dev/#eNqEzjFywyAQBdBep9gLIEZJKqpcBTQrgYJYhl1CcnsPYuxxZVdQ/P/2UzKQK/vpIMdmAjjILf0FqIxsgFrCogtm0tmK10K6UfnZIrX5/4zfv8sVLjWx6lh1NUlV0QqyDO/j2Zv1vAfx1T0Y1mu4qNOGNBqfo9GC+PED2IgMOFteXwNgwcz3kupJA7h6Ao8x0uC/3g1KJAr/AktIe592GwBtJVzI)
 
 When calling an external workflow, [only specific keys are available][reusable-workflow-call-keys] at job configuration.
 For example, `secrets:` is not available when running steps in a normal job. And `runs-on:` is not available when calling
@@ -2334,7 +2334,7 @@ test.yaml:23:22: property "credentials" is not defined in object type {actions_r
    |                      ^~~~~~~~~~~~~~~~~~~
 ```
 
-[Playground](https://rhysd.github.io/actionlint/#eNp8UL1q80AQ7PUUU3ygSuIjuLo+VUIC+amNdNqEi897Yu82Rph792CdIpkU7pbZ+dnZwKYCTkEOHz6c9rbz/gIAjkdNscyAiv8dgYGiFTcmF9ignoIK3l8e63WfppEMYhLHnwvo1R6mPeuxJ7lpNBNRiH8dCzqDkazQdp4VGoiT625fudHqqvoK/axPFFNRiXJsLmztlZM2d7v2/67EJRrXsAbcHcnglXjA0KVujRRlA6vi8e98Xj7YqjjkjGa4Bq//gZxXB+LvrQHw9vxw/2Rm4dK43TpE5PwzAKvehKY=)
+[Playground](https://jactionlint.jdx.dev/#eNp8UL1q80AQ7PUUU3ygSuIjuLo+VUIC+amNdNqEi897Yu82Rph792CdIpkU7pbZ+dnZwKYCTkEOHz6c9rbz/gIAjkdNscyAiv8dgYGiFTcmF9ignoIK3l8e63WfppEMYhLHnwvo1R6mPeuxJ7lpNBNRiH8dCzqDkazQdp4VGoiT625fudHqqvoK/axPFFNRiXJsLmztlZM2d7v2/67EJRrXsAbcHcnglXjA0KVujRRlA6vi8e98Xj7YqjjkjGa4Bq//gZxXB+LvrQHw9vxw/2Rm4dK43TpE5PwzAKvehKY=)
 
 Inputs of reusable workflow calls are set to `inputs.*` properties following the definitions at `on.workflow_call.inputs`.
 And in a job of a reusable workflow, `secrets.*` are passed from caller of the workflow so it is set following the definitions at
@@ -2422,7 +2422,7 @@ test.yaml:7:20: property "imagetag" is not defined in object type {image_tag: st
   |                    ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 ```
 
-[Playground](https://rhysd.github.io/actionlint/#eNp0j8FuwyAQRO/5ipHVK/TOuf9hEWdLaShY7JIcovx7tcZGqqocGT3mzZbsTsC91OtnKvd58SlpAJQmaxPuDyD++EDmRpVjyUcIXIiXGlfRENNHWa5UO4udnQZ786mRw9vjge9yZhsomz+1dnfaLRUf8HyeFFXfP7qPqC2zUXk7tyzNJC/E8vKCWXxwmHQDC606QjQb6m7tozfi+G5U5WDfOzmPOstf48R4cdgbfwcA2ORuYw==)
+[Playground](https://jactionlint.jdx.dev/#eNp0j8FuwyAQRO/5ipHVK/TOuf9hEWdLaShY7JIcovx7tcZGqqocGT3mzZbsTsC91OtnKvd58SlpAJQmaxPuDyD++EDmRpVjyUcIXIiXGlfRENNHWa5UO4udnQZ786mRw9vjge9yZhsomz+1dnfaLRUf8HyeFFXfP7qPqC2zUXk7tyzNJC/E8vKCWXxwmHQDC606QjQb6m7tozfi+G5U5WDfOzmPOstf48R4cdgbfwcA2ORuYw==)
 
 Outputs of a reusable workflow can be defined at `on.workflow_call.outputs` as described in [the document][reusable-workflow-outputs].
 The `jobs` context is available to define an output value to refer the outputs of jobs in the workflow. actionlint checks
@@ -2638,7 +2638,7 @@ test.yaml:17:3: invalid job ID "2d-game". job ID must start with a letter or _ a
    |   ^~~~~~~~
 ```
 
-[Playground](https://rhysd.github.io/actionlint/#eNqkzTEOgzAMheGdU7yNyUilG3OXHgOKaUBpHooTuH6VNjdgtPzp/QwD9myuaTZONjTAQspx6/ruXi4g5mBSWJ5ySFn8mNTS72VJd/srQIocoC9HtBsnPB841+RwaLSVoa0OWOfKFkbUMXHqPeVk9LNcCJO7lVI/y3v86NWl7wCDIlSH)
+[Playground](https://jactionlint.jdx.dev/#eNqkzTEOgzAMheGdU7yNyUilG3OXHgOKaUBpHooTuH6VNjdgtPzp/QwD9myuaTZONjTAQspx6/ruXi4g5mBSWJ5ySFn8mNTS72VJd/srQIocoC9HtBsnPB841+RwaLSVoa0OWOfKFkbUMXHqPeVk9LNcCJO7lVI/y3v86NWl7wCDIlSH)
 
 IDs must start with a letter or `_` and contain only alphanumeric characters, `-` or `_`. actionlint checks the naming
 convention, and reports invalid IDs as errors.
@@ -2710,7 +2710,7 @@ test.yaml:32:33: calling function "success" is not allowed here. "success" is on
    |                                 ^~~~~~~~~
 ```
 
-[Playground](https://rhysd.github.io/actionlint/#eNp8j01q60AQhPdzilo88MtCOoA2IYGELAyG+ASS3LKUjGdE/8QxRncPI1uWCDiroaa+7qqOoUBv0jq3o6Y0r1I4gC2kB5CWvC/w73wGha98+/ayXmMYnPuI1UgqiV5R5VJpf7oo4FAqd9+TAnYdU62RT/MXkI2r9522VuXHyJ+Nj8cU8BthC4E4Vzr0k80WJEv9rbKglvkylRmt5S1XdE69dxOA9DGBr5vNDD0/vU+IKPW3xdly4q+pe8ELO5UE1W3Eamt1TSKPIysX8f8Bw7C60V1TzM7PAHL9fcg=)
+[Playground](https://jactionlint.jdx.dev/#eNp8j01q60AQhPdzilo88MtCOoA2IYGELAyG+ASS3LKUjGdE/8QxRncPI1uWCDiroaa+7qqOoUBv0jq3o6Y0r1I4gC2kB5CWvC/w73wGha98+/ayXmMYnPuI1UgqiV5R5VJpf7oo4FAqd9+TAnYdU62RT/MXkI2r9522VuXHyJ+Nj8cU8BthC4E4Vzr0k80WJEv9rbKglvkylRmt5S1XdE69dxOA9DGBr5vNDD0/vU+IKPW3xdly4q+pe8ELO5UE1W3Eamt1TSKPIysX8f8Bw7C60V1TzM7PAHL9fcg=)
 
 Some contexts are only available in some places. For example, `env` context is not available at `jobs.<job_id>.env`, but it is
 available at `jobs.<job_id>.steps.env`.
@@ -2760,7 +2760,7 @@ test.yaml:8:14: workflow command "set-output" was deprecated. use `echo "{name}=
   |              ^~~~
 ```
 
-[Playground](https://rhysd.github.io/actionlint/#eNpsyjGOgzAQRuGeU/yyVqLyBUaCYpvdrVgpUEc2GUIi4kH2TM4fOWmpXvE+SYTdyto0d4mFGkC5aC2QLRVfgUVLan4L9b1XUd7LRwG+SgLPq6AlKqxeTHdTpPDgbhEhiiG3B9wtIl0M2aHv4b5+/sbf6fs8TOP/NLojT3ThaFeiEyt0ZQyzyhwUz5BvIW7sXgMAzI0+6A==)
+[Playground](https://jactionlint.jdx.dev/#eNpsyjGOgzAQRuGeU/yyVqLyBUaCYpvdrVgpUEc2GUIi4kH2TM4fOWmpXvE+SYTdyto0d4mFGkC5aC2QLRVfgUVLan4L9b1XUd7LRwG+SgLPq6AlKqxeTHdTpPDgbhEhiiG3B9wtIl0M2aHv4b5+/sbf6fs8TOP/NLojT3ThaFeiEyt0ZQyzyhwUz5BvIW7sXgMAzI0+6A==)
 
 GitHub deprecated the following workflow commands.
 
@@ -2830,7 +2830,7 @@ test.yaml:29:13: if: condition "${{ github.event_name == 'push' }} && ${{ github
    |             ^~~
 ```
 
-[Playground](https://rhysd.github.io/actionlint/#eNq0zz1OxDAQBeA+p3hYyK7CASxtw484ATVyYEKM1vZqZ0yz+O7Iy18iohBAVFH03nwzTtFil3lomsfUsW0AIZb6BfY5clsLuctRcrt1NTtGLLTj1xbQ1qYF3Q0J6vLq/Ob6BKeHAx68DLk7oyeKchtdIJSi3mYA31v0bss0o5iLFIIXeD4eR/dmMjaPbzYwtW1Qys/N548/LNl/g//jcPU9CrWGhSQE5+OUX5K1fo/31H+GY+QXG1e8R+tx6+tylPIyANrl1qA=)
+[Playground](https://jactionlint.jdx.dev/#eNq0zz1OxDAQBeA+p3hYyK7CASxtw484ATVyYEKM1vZqZ0yz+O7Iy18iohBAVFH03nwzTtFil3lomsfUsW0AIZb6BfY5clsLuctRcrt1NTtGLLTj1xbQ1qYF3Q0J6vLq/Ob6BKeHAx68DLk7oyeKchtdIJSi3mYA31v0bss0o5iLFIIXeD4eR/dmMjaPbzYwtW1Qys/N548/LNl/g//jcPU9CrWGhSQE5+OUX5K1fo/31H+GY+QXG1e8R+tx6+tylPIyANrl1qA=)
 
 actionlint reports constant conditions at `if:` like `if: true` as error because they are usually leftover debug code like
 `#if 0` in C. `if: true` should be removed because it doesn't affect the workflow behavior. `if: false` should be replaced with
@@ -2909,27 +2909,27 @@ Output:
 <!-- Skip update output -->
 
 ```
-test.yaml:8:15: description is required in metadata of "My action" action at "/Users/rhysd/.go/src/github.com/rhysd/actionlint/.github/actions/my-invalid-action/action.yml" [action]
+test.yaml:8:15: description is required in metadata of "My action" action at "/Users/jdx/src/github.com/jdx/jactionlint/.github/actions/my-invalid-action/action.yml" [action]
   |
 8 |       - uses: ./.github/actions/my-invalid-action
   |               ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-test.yaml:8:15: incorrect icon name "dog" at branding.icon in metadata of "My action" action at "/Users/rhysd/.go/src/github.com/rhysd/actionlint/.github/actions/my-invalid-action/action.yml". see the official document to know the exhaustive list of supported icons: https://docs.github.com/en/actions/creating-actions/metadata-syntax-for-github-actions#brandingicon [action]
+test.yaml:8:15: incorrect icon name "dog" at branding.icon in metadata of "My action" action at "/Users/jdx/src/github.com/jdx/jactionlint/.github/actions/my-invalid-action/action.yml". see the official document to know the exhaustive list of supported icons: https://docs.github.com/en/actions/creating-actions/metadata-syntax-for-github-actions#brandingicon [action]
   |
 8 |       - uses: ./.github/actions/my-invalid-action
   |               ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-test.yaml:8:15: incorrect color "gray-white" at branding.icon in metadata of "My action" action at "/Users/rhysd/.go/src/github.com/rhysd/actionlint/.github/actions/my-invalid-action/action.yml". see the official document to know the exhaustive list of supported colors: https://docs.github.com/en/actions/creating-actions/metadata-syntax-for-github-actions#brandingcolor [action]
+test.yaml:8:15: incorrect color "gray-white" at branding.icon in metadata of "My action" action at "/Users/jdx/src/github.com/jdx/jactionlint/.github/actions/my-invalid-action/action.yml". see the official document to know the exhaustive list of supported colors: https://docs.github.com/en/actions/creating-actions/metadata-syntax-for-github-actions#brandingcolor [action]
   |
 8 |       - uses: ./.github/actions/my-invalid-action
   |               ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-test.yaml:8:15: invalid runner name "node16" at runs.using in "My action" action defined at "/Users/rhysd/.go/src/github.com/rhysd/actionlint/.github/actions/my-invalid-action". valid runners are "composite", "docker", "node20", and "node24". see https://docs.github.com/en/actions/creating-actions/metadata-syntax-for-github-actions#runs [action]
+test.yaml:8:15: invalid runner name "node16" at runs.using in "My action" action defined at "/Users/jdx/src/github.com/jdx/jactionlint/.github/actions/my-invalid-action". valid runners are "composite", "docker", "node20", and "node24". see https://docs.github.com/en/actions/creating-actions/metadata-syntax-for-github-actions#runs [action]
   |
 8 |       - uses: ./.github/actions/my-invalid-action
   |               ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-test.yaml:8:15: file "this-file-does-not-exist.js" does not exist in "/Users/rhysd/.go/src/github.com/rhysd/actionlint/.github/actions/my-invalid-action". it is specified at "main" key in "runs" section in "My action" action [action]
+test.yaml:8:15: file "this-file-does-not-exist.js" does not exist in "/Users/jdx/src/github.com/jdx/jactionlint/.github/actions/my-invalid-action". it is specified at "main" key in "runs" section in "My action" action [action]
   |
 8 |       - uses: ./.github/actions/my-invalid-action
   |               ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-test.yaml:8:15: "env" is not allowed in "runs" section because "My action" is a JavaScript action. the action is defined at "/Users/rhysd/.go/src/github.com/rhysd/actionlint/.github/actions/my-invalid-action" [action]
+test.yaml:8:15: "env" is not allowed in "runs" section because "My action" is a JavaScript action. the action is defined at "/Users/jdx/src/github.com/jdx/jactionlint/.github/actions/my-invalid-action" [action]
   |
 8 |       - uses: ./.github/actions/my-invalid-action
   |               ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -2983,7 +2983,7 @@ test.yaml:9:11: avoid using deprecated input "fail_on_error" in action "reviewdo
   |           ^~~~~~~~~~~~~~
 ```
 
-[Playground](https://rhysd.github.io/actionlint/#eNo8yksKwkAQhOF9TlEXGMTtrLxJmGhrWobu0I/k+jJGXBXF96tUbOnr9NbF6wQEeYwFLMXL8FxSIktvw77kQZufFVCQTl5htDMdD31d2j1YpZzTWeK2X38xcHCs9f+AZ+M+q8xkplYRlvQZAIfnLew=)
+[Playground](https://jactionlint.jdx.dev/#eNo8yksKwkAQhOF9TlEXGMTtrLxJmGhrWobu0I/k+jJGXBXF96tUbOnr9NbF6wQEeYwFLMXL8FxSIktvw77kQZufFVCQTl5htDMdD31d2j1YpZzTWeK2X38xcHCs9f+AZ+M+q8xkplYRlvQZAIfnLew=)
 
 Action inputs can be deprecated by setting [`deprecationMessage`][dep-msg]. When deprecated inputs are used in a
 workflow, actionlint reports the usage as error.
@@ -3097,7 +3097,7 @@ test.yaml:13:11: unexpected key "email" for "credentials" section. expected one 
    |           ^~~~~~
 ```
 
-[Playground](https://rhysd.github.io/actionlint/#eNp8kM1KxDAUhfd9irNyIaS6zmoewTeQTHNpI703JSdxxreXMLUUBVfhOz/kcLN5bI3LMHzkK/0AVGHtL0Apn2kSPgiwOdn9B4CkYRa/q2vovcObikSxmsJKj6cTHQmgUYoFFQ/9ch1cp1NgC+Qtl+jxdiFvryWeTNGQVg+Vi9yDbquMU9bdLxIT/wx9qP8Nff49tDSj6ydq12a1uVOZVbbjD9eTHuNLzO/MKnVJNo9cvgcAl3xngQ==)
+[Playground](https://jactionlint.jdx.dev/#eNp8kM1KxDAUhfd9irNyIaS6zmoewTeQTHNpI703JSdxxreXMLUUBVfhOz/kcLN5bI3LMHzkK/0AVGHtL0Apn2kSPgiwOdn9B4CkYRa/q2vovcObikSxmsJKj6cTHQmgUYoFFQ/9ch1cp1NgC+Qtl+jxdiFvryWeTNGQVg+Vi9yDbquMU9bdLxIT/wx9qP8Nff49tDSj6ydq12a1uVOZVbbjD9eTHuNLzO/MKnVJNo9cvgcAl3xngQ==)
 
 actionlint also checks usage of anchors and aliases. In the following example actionlint reports recursive aliases and unused
 anchors as error.
@@ -3150,7 +3150,7 @@ test.yaml:22:14: recursive alias "recursive" is found. anchor was declared at li
    |              ^~~~~~~~~~
 ```
 
-[Playground](https://rhysd.github.io/actionlint/#eNpsj8FqwzAQRO/+ijkUHwp27/qZothLomKvxI7kFEL+vYjGwiE5mRm/p92N6pAKL133E090HZCFuX4Bim1hEv4nQM9Bf/cAhNWfxT3axVev/ZtMZtEc/EKH/pAaARSKqV/F4eN2A2UyyRxri/v9wCVPXqPNz9ze7qwV5VCvKaeiuQyHhZgltSOGSjqMX3O86hL9PPLSholuDp+v6zappLdK/07pTaZiDJs0+PEK4yrfnCyk/Dq9WX8DAAHceU8=)
+[Playground](https://jactionlint.jdx.dev/#eNpsj8FqwzAQRO/+ijkUHwp27/qZothLomKvxI7kFEL+vYjGwiE5mRm/p92N6pAKL133E090HZCFuX4Bim1hEv4nQM9Bf/cAhNWfxT3axVev/ZtMZtEc/EKH/pAaARSKqV/F4eN2A2UyyRxri/v9wCVPXqPNz9ze7qwV5VCvKaeiuQyHhZgltSOGSjqMX3O86hL9PPLSholuDp+v6zappLdK/07pTaZiDJs0+PEK4yrfnCyk/Dq9WX8DAAHceU8=)
 
 actionlint checks dangling aliases as syntax error. Note that the error position is currently incorrect as the below output
 indicates. This issue is due to go-yaml library and the [fix](https://github.com/yaml/go-yaml/pull/191) will be included at the
@@ -3176,14 +3176,14 @@ Output:
 test.yaml:0:0: could not parse as YAML: yaml: unknown anchor 'credentials' referenced [syntax-check]
 ```
 
-[Playground](https://rhysd.github.io/actionlint/#eNosyjEOwjAMheE9p3gzUsqe26TEUkGRXeXZcH1k6PQP/2facAaPUl62sxXAhZ4FVihrgthDPers+X6LLif/CqgpG7b7sI9O62PjcS1A9N1weywZov7sk98BAKp1Iic=)
+[Playground](https://jactionlint.jdx.dev/#eNosyjEOwjAMheE9p3gzUsqe26TEUkGRXeXZcH1k6PQP/2facAaPUl62sxXAhZ4FVihrgthDPers+X6LLif/CqgpG7b7sI9O62PjcS1A9N1weywZov7sk98BAKp1Iic=)
 
 ---
 
 [Installation](install.md) | [Usage](usage.md) | [Configuration](config.md) | [Go API](api.md) | [References](reference.md)
 
 [yamllint]: https://github.com/adrienverge/yamllint
-[issue-form]: https://github.com/rhysd/actionlint/issues/new
+[issue-form]: https://github.com/jdx/jactionlint/issues/new
 [syntax-doc]: https://docs.github.com/en/actions/learn-github-actions/workflow-syntax-for-github-actions
 [filter-pattern-doc]: https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions#filter-pattern-cheat-sheet
 [shellcheck]: https://github.com/koalaman/shellcheck
@@ -3215,10 +3215,10 @@ test.yaml:0:0: could not parse as YAML: yaml: unknown anchor 'credentials' refer
 [actions-cache]: https://github.com/actions/cache
 [permissions-doc]: https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#permissions
 [perm-config-doc]: https://docs.github.com/en/actions/learn-github-actions/workflow-syntax-for-github-actions#permissions
-[generate-webhook-events]: https://github.com/rhysd/actionlint/tree/main/scripts/generate-webhook-events
-[generate-popular-actions]: https://github.com/rhysd/actionlint/tree/main/scripts/generate-popular-actions
-[issue-25]: https://github.com/rhysd/actionlint/issues/25
-[issue-40]: https://github.com/rhysd/actionlint/issues/40
+[generate-webhook-events]: https://github.com/jdx/jactionlint/tree/main/scripts/generate-webhook-events
+[generate-popular-actions]: https://github.com/jdx/jactionlint/tree/main/scripts/generate-popular-actions
+[issue-25]: https://github.com/jdx/jactionlint/issues/25
+[issue-40]: https://github.com/jdx/jactionlint/issues/40
 [security-doc]: https://docs.github.com/en/actions/reference/security/secure-use
 [reusable-workflow-doc]: https://docs.github.com/en/actions/learn-github-actions/reusing-workflows
 [create-reusable-workflow-doc]: https://docs.github.com/en/actions/learn-github-actions/reusing-workflows#creating-a-reusable-workflow

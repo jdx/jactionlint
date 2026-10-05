@@ -2,7 +2,7 @@
 Package actionlint is the implementation of actionlint linter. It's a static checker for GitHub
 Actions workflow files.
 
-https://github.com/rhysd/actionlint
+https://github.com/jdx/jactionlint
 
 actionlint is a command line tool but it also provides Go API for Go programs. It includes a
 workflow file parser built on top of yaml/go-yaml, lexer/parser/checker for expressions embedded by
@@ -26,22 +26,24 @@ Minimum supported Go version is written in go.mod file in this library. That sai
 are actually not tested on CI. Last two major Go versions are recommended because they're tested on
 CI. For example, when the latest Go version is v1.22, v1.21 and v1.22 are nice to use.
 
-https://github.com/rhysd/actionlint/blob/main/go.mod
+https://github.com/jdx/jactionlint/blob/main/go.mod
 
 # Other documentations
 
 All documentations for actionlint can be found in the following page.
 
-https://github.com/rhysd/actionlint/tree/main/docs
+https://github.com/jdx/jactionlint/tree/main/docs
 
 # License
 
 This library is provided under the MIT license.
 
 > Copyright (c) 2021 rhysd
+>
+> Copyright (c) 2026 jdx
 
 Full text can be found in the following page.
 
-https://github.com/rhysd/actionlint/blob/main/LICENSE.txt
+https://github.com/jdx/jactionlint/blob/main/LICENSE.txt
 */
 package actionlint

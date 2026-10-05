@@ -90,7 +90,7 @@ Install `actionlint` command by downloading [the released binary][releases] or b
 or run via Docker container.
 
 ```sh
-go install github.com/rhysd/actionlint/cmd/actionlint@latest
+go install github.com/jdx/jactionlint/cmd/actionlint@latest
 ```
 
 Basically all you need to do is run the `actionlint` command in your repository. actionlint automatically detects workflows and
@@ -128,23 +128,23 @@ See the [contribution guide](./CONTRIBUTING.md) for more details.
 
 actionlint is distributed under [the MIT license](./LICENSE.txt).
 
-[ci-badge]: https://github.com/rhysd/actionlint/actions/workflows/ci.yaml/badge.svg
-[ci]: https://github.com/rhysd/actionlint/actions/workflows/ci.yaml
-[apidoc-badge]: https://pkg.go.dev/badge/github.com/rhysd/actionlint.svg
-[apidoc]: https://pkg.go.dev/github.com/rhysd/actionlint
+[ci-badge]: https://github.com/jdx/jactionlint/actions/workflows/ci.yaml/badge.svg
+[ci]: https://github.com/jdx/jactionlint/actions/workflows/ci.yaml
+[apidoc-badge]: https://pkg.go.dev/badge/github.com/jdx/jactionlint.svg
+[apidoc]: https://pkg.go.dev/github.com/jdx/jactionlint
 [repo]: https://github.com/jdx/jactionlint
 [upstream]: https://github.com/rhysd/actionlint
-[playground]: https://rhysd.github.io/actionlint/
+[playground]: https://jactionlint.jdx.dev/
 [shellcheck]: https://github.com/koalaman/shellcheck
 [pyflakes]: https://github.com/PyCQA/pyflakes
 [syntax-doc]: https://docs.github.com/en/actions/reference/workflow-syntax-for-github-actions
 [filter-pattern-doc]: https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions#filter-pattern-cheat-sheet
 [script-injection-doc]: https://docs.github.com/en/actions/reference/security/secure-use#good-practices-for-mitigating-script-injection-attacks
-[releases]: https://github.com/rhysd/actionlint/releases
-[checks]: https://github.com/rhysd/actionlint/blob/v1.7.12/docs/checks.md
-[install]: https://github.com/rhysd/actionlint/blob/v1.7.12/docs/install.md
-[usage]: https://github.com/rhysd/actionlint/blob/v1.7.12/docs/usage.md
-[config]: https://github.com/rhysd/actionlint/blob/v1.7.12/docs/config.md
-[api]: https://github.com/rhysd/actionlint/blob/v1.7.12/docs/api.md
-[refs]: https://github.com/rhysd/actionlint/blob/v1.7.12/docs/reference.md
-[issue-form]: https://github.com/rhysd/actionlint/issues/new
+[releases]: https://github.com/jdx/jactionlint/releases
+[checks]: https://github.com/jdx/jactionlint/blob/main/docs/checks.md
+[install]: https://github.com/jdx/jactionlint/blob/main/docs/install.md
+[usage]: https://github.com/jdx/jactionlint/blob/main/docs/usage.md
+[config]: https://github.com/jdx/jactionlint/blob/main/docs/config.md
+[api]: https://github.com/jdx/jactionlint/blob/main/docs/api.md
+[refs]: https://github.com/jdx/jactionlint/blob/main/docs/reference.md
+[issue-form]: https://github.com/jdx/jactionlint/issues/new
