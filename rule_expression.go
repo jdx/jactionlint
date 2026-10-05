@@ -856,7 +856,64 @@ func (rule *RuleExpression) checkSemanticsOfExprNode(expr ExprNode, line, col in
 		rule.exprError(err, line, col)
 	}
 
+	if rule.config != nil && rule.config.CheckFalsyTernary {
+		rule.checkFalsyTernary(expr, line, col)
+	}
+
 	return ty, len(errs) == 0
+}
+
+// checkFalsyTernary reports `cond && <falsy literal> || other`. The `a && b || c` idiom works as a ternary
+// operator only when `b` is truthy. When `b` is a literal which is always falsy (`”`, `0`, `false`, `null`),
+// the expression always evaluates to `c`. (rhysd/actionlint#440)
+func (rule *RuleExpression) checkFalsyTernary(expr ExprNode, line, col int) {
+	VisitExprNode(expr, func(n, _ ExprNode, entering bool) {
+		if !entering {
+			return
+		}
+		or, ok := n.(*LogicalOpNode)
+		if !ok || or.Kind != LogicalOpNodeKindOr {
+			return
+		}
+		and, ok := or.Left.(*LogicalOpNode)
+		if !ok || and.Kind != LogicalOpNodeKindAnd {
+			return
+		}
+		// `a && b && c` may be parsed as `a && (b && c)`. The last operand decides the value when all are truthy.
+		last := and.Right
+		for {
+			a, ok := last.(*LogicalOpNode)
+			if !ok || a.Kind != LogicalOpNodeKindAnd {
+				break
+			}
+			last = a.Right
+		}
+		if !isFalsyLiteral(last) {
+			return
+		}
+		tok := last.Token()
+		rule.Errorf(
+			convertExprLineColToPos(tok.Line, tok.Column, line, col),
+			"value %q after && is always falsy so the expression always evaluates to the value after ||. \"a && b || c\" works as a ternary only when b is truthy",
+			tok.Value,
+		)
+	})
+}
+
+func isFalsyLiteral(n ExprNode) bool {
+	switch n := n.(type) {
+	case *NullNode:
+		return true
+	case *BoolNode:
+		return !n.Value
+	case *IntNode:
+		return n.Value == 0
+	case *FloatNode:
+		return n.Value == 0
+	case *StringNode:
+		return n.Value == ""
+	}
+	return false
 }
 
 func (rule *RuleExpression) checkSemantics(src string, line, col int, checkUntrusted bool, workflowKey string) (ExprType, int, bool) {

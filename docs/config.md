@@ -71,6 +71,10 @@ timeout-minutes:
 require-commit-hash: true
 # Require explicit permissions at workflow-level or job-level
 require-permissions: true
+# Require `if:` conditions to be wrapped in `${{ }}`
+require-expression-wrapping: true
+# Report `cond && '' || other` where the value after `&&` is always falsy
+check-falsy-ternary: true
 
 # Require every 'run:' step to set a shell explicitly with 'shell:' (or 'defaults.run.shell'). (default: false)
 require-shell: true
@@ -130,6 +134,11 @@ max-run-lines: 30
 - `require-permissions`: Optional lint to require an explicit `permissions:` at workflow-level or job-level. Defaults to `false`
   (disabled). When `true`, every job not covered by a workflow-level `permissions:` and lacking its own is reported.
   `permissions: {}` counts as explicit. See [the check document](checks.md#check-permissions) for more details.
+- `require-expression-wrapping`: Optional lint to require `if:` conditions (of jobs and steps) to be wrapped in `${{ }}`
+  explicitly, though GitHub Actions makes the placeholder optional there. Defaults to `false` (disabled).
+  See [the check document](checks.md#check-require-expression-wrapping) for more details.
+- `check-falsy-ternary`: Optional lint to report `cond && b || c` when `b` is a literal which is always falsy (`''`, `0`,
+  `false`, `null`). Defaults to `false` (disabled). See [the check document](checks.md#check-falsy-ternary) for more details.
 
 ## Configuration file location and priority
 

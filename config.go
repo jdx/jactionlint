@@ -104,6 +104,11 @@ type Config struct {
 	// RequirePermissions reports jobs which are not covered by an explicit "permissions:" at workflow-level
 	// or job-level. This is opt-in and disabled by default.
 	RequirePermissions bool `yaml:"require-permissions"`
+	// RequireExpressionWrapping requires `if:` conditions to be wrapped in `${{ }}` explicitly.
+	RequireExpressionWrapping bool `yaml:"require-expression-wrapping"`
+	// CheckFalsyTernary reports `cond && falsy-literal || other` where the value after `&&` is a
+	// literal which is always falsy so the whole expression always evaluates to the value after `||`.
+	CheckFalsyTernary bool `yaml:"check-falsy-ternary"`
 	// RequireShell requires every "run:" step to have an explicit shell, set by "shell:" of the step or by
 	// "defaults.run.shell" of the job or the workflow.
 	RequireShell bool `yaml:"require-shell"`

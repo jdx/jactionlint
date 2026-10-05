@@ -42,6 +42,9 @@ func (rule *RuleIfCond) checkIfCond(n *String) {
 	if s >= 0 && e >= 0 {
 		rule.checkPlaceholder(n, s, e)
 	} else {
+		if cfg := rule.Config(); cfg != nil && cfg.RequireExpressionWrapping && strings.TrimSpace(n.Value) != "" {
+			rule.Errorf(n.Pos, "if: condition %q must be wrapped in ${{ }} because \"require-expression-wrapping\" is enabled", n.Value)
+		}
 		rule.checkExpression(n.Pos, n.Value)
 	}
 }
