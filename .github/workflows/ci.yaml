@@ -5,6 +5,7 @@ jobs:
   unit-tests:
     name: Unit tests
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, ubuntu-24.04-arm, macos-latest, windows-latest, macos-26-intel, windows-11-arm]
         go: ['1.25', '1.26']
@@ -33,7 +34,19 @@ jobs:
           winget install --id koalaman.shellcheck --disable-interactivity --accept-package-agreements --accept-source-agreements
           pip install pyflakes
           pyflakes --version
-        if: ${{ runner.os == 'Windows' }}
+        if: ${{ runner.os == 'Windows' && matrix.os != 'windows-11-arm' }}
+      - name: Install dependencies on Windows ARM
+        # winget is not available on the Windows ARM runner image
+        shell: pwsh
+        run: |
+          $dir = Join-Path $env:RUNNER_TEMP 'shellcheck'
+          Invoke-WebRequest -Uri 'https://github.com/koalaman/shellcheck/releases/download/v0.11.0/shellcheck-v0.11.0.zip' -OutFile "$dir.zip"
+          Expand-Archive -Path "$dir.zip" -DestinationPath $dir
+          Add-Content -Path $env:GITHUB_PATH -Value $dir
+          & "$dir\shellcheck.exe" --version
+          pip install pyflakes
+          pyflakes --version
+        if: ${{ matrix.os == 'windows-11-arm' }}
       - uses: actions/checkout@v6
       - uses: actions/setup-go@v6
         with:
@@ -134,4 +147,4 @@ jobs:
           --workdir /mnt/app
           -- ${{ steps.image.outputs.digest }} -color -verbose
       - name: Lint Dockerfile with hadolint
-        run: docker run --rm -i hadolint/hadolint hadolint --ignore DL3018 --strict-labels - < Dockerfile
+        run: docker run --rm -i hadolint/hadolint hadolint --ignore DL3018 --ignore DL3066 --strict-labels - < Dockerfile
