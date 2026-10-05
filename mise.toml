@@ -42,7 +42,7 @@ description = "Run benchmarks"
 run = "go test -bench Lint -benchmem"
 
 [tasks."lint:wasm"]
-description = "Run staticcheck on the playground, which is built for wasm"
+description = "Run staticcheck on the playground wasm entry point (GOOS=js)"
 env = { GOOS = "js", GOARCH = "wasm" }
 run = "staticcheck ./playground"
 
@@ -80,13 +80,36 @@ run = [
   "./jactionlint -format '{% raw %}{{json .}}{% endraw %}' ./testdata/err/one_error.yaml > ./scripts/generate-jactionlint-matcher/test/want.json || true",
 ]
 
-[tasks.pages]
-description = "Build the playground into ./playground-dist, the site deployed to GitHub Pages"
-run = "bash ./scripts/build-pages.bash"
-
 [tasks.clean]
 description = "Remove build outputs"
 run = [
   "rm -f ./jactionlint ./jactionlint.exe ./coverage.out ./coverage.html ./jactionlint_fuzz-fuzz.zip ./man/jactionlint.1 ./man/jactionlint.1.html ./jactionlint-workflow-ast",
-  "rm -rf ./corpus ./crashers ./playground-dist",
+  "rm -rf ./corpus ./crashers ./docs/public/playground ./docs/.vitepress/dist ./docs/.vitepress/cache",
 ]
+
+[tasks."docs:wasm"]
+description = "Build the playground WebAssembly (docs/public/playground/main.wasm and wasm_exec.js)"
+run = "bash ./scripts/build-wasm.bash"
+
+[tasks."docs:dev"]
+description = "Run the documentation site (VitePress) with live reload"
+depends = ["docs:wasm"]
+dir = "docs"
+run = "npm install && exec npm run docs:dev"
+
+[tasks."docs:build"]
+description = "Build the documentation site (VitePress) into docs/.vitepress/dist; fails on dead links"
+depends = ["docs:wasm"]
+dir = "docs"
+run = "npm ci && npm run docs:build"
+
+[tasks."docs:preview"]
+description = "Serve the built documentation site"
+dir = "docs"
+run = "npm run docs:preview"
+
+[tasks."docs:test"]
+description = "Test the playground: permalink codec and the real wasm against the links in docs/checks.md"
+depends = ["docs:wasm"]
+dir = "docs"
+run = "npm ci && npm test"

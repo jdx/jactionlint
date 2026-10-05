@@ -3,12 +3,13 @@ on:
   push:
     branches: [main]
     paths:
+      - 'docs/**'
       - 'playground/**'
       - '*.go'
       - 'go.mod'
       - 'go.sum'
       - 'mise.toml'
-      - 'scripts/build-pages.bash'
+      - 'scripts/build-wasm.bash'
       - '.github/workflows/pages.yaml'
   workflow_dispatch:
 
@@ -27,12 +28,18 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          # Needed for the "last updated" dates
+          fetch-depth: 0
           persist-credentials: false
       - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
-      - run: mise run pages
+      # Builds the playground wasm, installs the npm dependencies and runs `vitepress build`
+      - run: mise run docs:build
+        env:
+          # For the GitHub star count in the nav bar (the build works without it)
+          GITHUB_TOKEN: ${{ github.token }}
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
-          path: ./playground-dist
+          path: ./docs/.vitepress/dist
   deploy:
     name: Deploy to GitHub Pages
     needs: build

@@ -166,7 +166,7 @@ checked by CI, because squash-merged titles become the release notes.
 
 1. Merge pull requests into `main`. release-please opens or updates a release pull request that bumps the version in
    [`.release-please-manifest.json`](./.release-please-manifest.json), the version strings marked with `x-release-please-version`
-   (`.pre-commit-hooks.yaml`, `docs/usage.md`, `playground/index.html`) and [CHANGELOG.md](./CHANGELOG.md).
+   (`.pre-commit-hooks.yaml`, `docs/usage.md`, `docs/.vitepress/version.ts`) and [CHANGELOG.md](./CHANGELOG.md).
 2. Merge the release pull request. release-please tags `vX.Y.Z` and creates the GitHub release as a **draft**.
    Releases are immutable once published (assets and the tag cannot change), so the assets must be uploaded to the
    draft before it is published.
@@ -183,7 +183,7 @@ checked by CI, because squash-merged titles become the release notes.
    GoReleaser replaces assets already uploaded to the draft and the packslip bundle is uploaded with `--clobber`.
    The Homebrew cask commit lands on `main` before the release is published, so after a failed run it can point at a
    release that is still a draft until the re-run succeeds.
-4. The playground is deployed by the [Pages workflow](.github/workflows/pages.yaml) when `main` changes.
+4. The documentation site, including the playground, is deployed by the [Pages workflow](.github/workflows/pages.yaml) when `main` changes.
 
 ## How to generate the manual
 
@@ -201,23 +201,43 @@ mise run man
 
 ## How to develop playground
 
-Visit [`playground/README.md`](./playground/README.md).
+The playground is a page of the [documentation site](./docs) (VitePress) at https://jactionlint.jdx.dev/playground.
+It runs jactionlint compiled to WebAssembly in the browser.
 
-## How to deploy playground
-
-The playground is deployed to https://jactionlint.jdx.dev/ by the [Pages workflow](./.github/workflows/pages.yaml) whenever
-the playground or the Go sources change on `main`. It can also be run by hand from the Actions tab (`workflow_dispatch`).
-
-To build the same site locally in `./playground-dist`:
+- [`playground/main.go`](./playground/main.go) is the Go entry point of the wasm module. It is built with `GOOS=js GOARCH=wasm`
+  and talks to the page through a few functions on `window`.
+- [`docs/.vitepress/theme/playground/`](./docs/.vitepress/theme/playground) is the page: a Vue component
+  (`Playground.vue`) with a [CodeMirror 6](https://codemirror.net/) editor (`editor.ts`), the glue to the wasm module
+  (`wasm.ts`) and the permalink encoding (`codec.ts`).
+- `docs/public/playground/main.wasm` and `wasm_exec.js` (Go's JavaScript runtime) are build outputs and not committed.
 
 ```sh
-mise run pages
+mise run docs:wasm     # build main.wasm and copy wasm_exec.js to docs/public/playground/
+mise run docs:dev      # build the wasm and serve the site with live reload
+mise run docs:test     # unit tests, the real wasm against the permalinks in docs/checks.md, a smoke test of the component
+mise run lint:wasm     # staticcheck of ./playground with GOOS=js
 ```
 
-This installs dependencies, builds `main.wasm` and copies all assets to `./playground-dist`.
-`wasm-opt` is not applied: it needs about 27 GB of memory for `main.wasm` (more than a GitHub-hosted runner has) and only
+Rebuild the wasm with `mise run docs:wasm` after changing Go code; the dev server does not do it for you.
+
+Permalinks are `https://jactionlint.jdx.dev/#<base64 of zlib-deflated source>`. The format must stay compatible because
+[docs/checks.md](./docs/checks.md) and external links use it (the site redirects `/#...` to `/playground#...`).
+
+## How to deploy the site and the playground
+
+The site, including the playground, is deployed to https://jactionlint.jdx.dev/ by the [Pages workflow](./.github/workflows/pages.yaml)
+whenever the docs, the Go sources or the playground change on `main`. It can also be run by hand from the Actions tab
+(`workflow_dispatch`). The custom domain is configured in the repository's Pages settings, not by a `CNAME` file.
+
+To build the same site locally in `docs/.vitepress/dist`:
+
+```sh
+mise run docs:build
+mise run docs:preview
+```
+
+`wasm-opt` is not applied to `main.wasm`: it needs about 27 GB of memory (more than a GitHub-hosted runner has) and only
 shrinks the file by about 2% after compression.
-Serve it with any static file server to check it, for example `cd playground-dist && python3 -m http.server 1234`.
 
 ## Maintain auto-generated sources
 

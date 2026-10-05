@@ -1,7 +1,7 @@
 Configuration
 =============
 
-This document describes how to configure [jactionlint](..) behavior.
+This document describes how to configure [jactionlint](https://github.com/jdx/jactionlint) behavior.
 
 Note that configuration file is optional. The author tries to keep configuration file as minimal as possible not to
 bother users to configure behavior of jactionlint. Running jactionlint without configuration file would work fine in most

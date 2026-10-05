@@ -1,7 +1,7 @@
 All checks done by jactionlint
 =============================
 
-This document describes all checks done by [jactionlint](..) with example inputs, outputs, and playground links.
+This document describes all checks done by [jactionlint](https://github.com/jdx/jactionlint) with example inputs, outputs, and playground links.
 
 List of checks:
 
@@ -1487,7 +1487,7 @@ jactionlint validates the Webhook configurations:
 | `tags`            | `push`                                                                       |
 | `tags-ignore`     | `push`                                                                       |
 
-The table of available Webhooks and their types are defined in [`all_webhooks.go`](../all_webhooks.go). It is generated
+The table of available Webhooks and their types are defined in [`all_webhooks.go`](https://github.com/jdx/jactionlint/blob/main/all_webhooks.go). It is generated
 by [a script][generate-webhook-events] and kept to the latest by CI workflow triggered weekly.
 
 <a id="check-workflow-dispatch-events"></a>
@@ -2108,7 +2108,7 @@ can check popular actions without fetching any `action.yml` of the actions from 
 Note that it only supports the case of specifying major versions like `actions/checkout@v4`. Fixing version of action like
 `actions/checkout@v4.0.1` and using the HEAD of action like `actions/checkout@main` are not supported for now.
 
-So far, jactionlint supports more than 100 popular actions The data set is embedded at [`popular_actions.go`](../popular_actions.go)
+So far, jactionlint supports more than 100 popular actions The data set is embedded at [`popular_actions.go`](https://github.com/jdx/jactionlint/blob/main/popular_actions.go)
 and were automatically collected by [a script][generate-popular-actions]. If you want more checks for other actions, please
 make a request [as an issue][issue-form].
 
