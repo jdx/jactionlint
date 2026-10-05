@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"syscall"
 
 	"github.com/bmatcuk/doublestar/v4"
 	"go.yaml.in/yaml/v4"
@@ -78,12 +79,19 @@ type Config struct {
 	// listed here as undefined config variables.
 	// https://docs.github.com/en/actions/learn-github-actions/variables
 	ConfigVariables []string `yaml:"config-variables"`
+	// ConfigSecrets is names of secrets used in the checked workflows. When this value is nil,
+	// property names of `secrets` context will not be checked. Otherwise actionlint will report a name which is not
+	// listed here as undefined secrets.
+	// https://docs.github.com/en/actions/security-guides/using-secrets-in-github-actions
+	ConfigSecrets []string `yaml:"config-secrets"`
 	// Paths is a "paths" mapping in the configuration file. The keys are glob patterns to match file paths.
 	// And the values are corresponding configurations applied to the file paths.
 	Paths map[string]PathConfig `yaml:"paths"`
 	// TimeoutMinutes is a configuration for the "timeout-check" rule, which checks "timeout-minutes" of jobs.
 	// The rule is disabled by default.
 	TimeoutMinutes TimeoutMinutesConfig `yaml:"timeout-minutes"`
+	// Requires action and docker versions to use a commit hash instead of version/branch.
+	RequireCommitHash bool `yaml:"require-commit-hash"`
 }
 
 // PathConfigs returns a list of all PathConfig values matching to the given file path. The path must
@@ -153,6 +161,36 @@ func loadRepoConfig(root string) (*Config, error) {
 	return nil, nil
 }
 
+// loadGlobalConfig reads the user-global config file from
+// $XDG_CONFIG_HOME/actionlint/actionlint.yaml (or actionlint.yml), falling back
+// to $HOME/.config/actionlint/ when $XDG_CONFIG_HOME is unset. It returns the
+// loaded config and its file path, or (nil, "", nil) when no config file exists.
+func loadGlobalConfig() (*Config, string, error) {
+	// The XDG Base Directory spec says relative paths in $XDG_CONFIG_HOME are invalid and must be
+	// ignored. Otherwise a config file in an arbitrary working directory could be picked up.
+	dir := os.Getenv("XDG_CONFIG_HOME")
+	if dir == "" || !filepath.IsAbs(dir) {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return nil, "", nil
+		}
+		dir = filepath.Join(home, ".config")
+	}
+	for _, f := range []string{"actionlint.yaml", "actionlint.yml"} {
+		p := filepath.Join(dir, "actionlint", f)
+		c, err := ReadConfigFile(p)
+		switch {
+		case errors.Is(err, os.ErrNotExist), errors.Is(err, syscall.ENOTDIR):
+			continue
+		case err != nil:
+			return nil, "", fmt.Errorf("could not parse global config file %q: %w", p, err)
+		default:
+			return c, p, nil
+		}
+	}
+	return nil, "", nil
+}
+
 func writeDefaultConfigFile(path string) error {
 	b := []byte(`self-hosted-runner:
   # Labels of self-hosted runner in array of strings.
@@ -162,6 +200,10 @@ func writeDefaultConfigFile(path string) error {
 # organization. ` + "`null`" + ` means disabling configuration variables check.
 # Empty array means no configuration variable is allowed.
 config-variables: null
+
+# Secrets in array of strings defined in your repository or organization.
+# ` + "`null`" + ` means disabling secrets check. Empty array means no secret is allowed.
+config-secrets: null
 
 # Configuration for file paths. The keys are glob patterns to match to file
 # paths relative to the repository root. The values are the configurations for

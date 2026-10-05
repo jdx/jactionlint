@@ -1850,6 +1850,26 @@ Note that actionlint does not report any error when a directory for a local acti
 a common case where the action is managed in a separate repository and the action directory is cloned at running the workflow.
 (See [#25][issue-25] and [#40][issue-40] for more details).
 
+### Require pinning to a commit hash (opt-in)
+
+By default, actionlint accepts any ref (tag, branch, or SHA) for actions at `uses:`. Since tags and branches are mutable,
+pinning to a full commit hash is recommended to mitigate supply chain attacks. This check is **disabled by default**. To
+enable it, set `require-commit-hash: true` in [the configuration file](config.md):
+
+```yaml
+require-commit-hash: true
+```
+
+When enabled, actionlint reports the following at `uses:`:
+
+- an action hosted on GitHub (`owner/repo@ref`, `owner/repo/path@ref`) whose ref is not a full-length 40-digit hexadecimal
+  commit SHA (abbreviated SHAs, tags and branches are reported)
+- a Docker action (`docker://image`) which is not pinned by digest, i.e. `docker://image@sha256:{64 hex digits}`
+- a reusable workflow call (`owner/repo/.github/workflows/x.yml@ref`) whose ref is not a full-length commit SHA
+
+Local actions and workflows (`./path`, `$/path`) are not reported because they always run at the commit of the workflow itself.
+`uses:` values containing `${{ }}` expressions are skipped since they cannot be checked statically.
+
 <a id="check-local-action-inputs"></a>
 ## Local action inputs validation at `with:`
 

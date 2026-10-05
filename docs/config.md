@@ -28,6 +28,12 @@ config-variables:
   - JOB_NAME
   - ENVIRONMENT_STAGE
 
+# Secrets in array of strings defined in your repository or organization.
+config-secrets:
+  - DEPLOY_TOKEN
+  - API_KEY
+  - ACCESS_TOKEN
+
 # Path-specific configurations.
 paths:
   # Glob pattern relative to the repository root for matching files. The path separator is always '/'.
@@ -49,6 +55,9 @@ timeout-minutes:
   required: true
   # Maximum allowed value of 'timeout-minutes' in minutes.
   max: 60
+
+# Require actions to be pinned to commit hashes instead of tags/branches
+require-commit-hash: true
 ```
 
 - `self-hosted-runner`: Configuration for your self-hosted runner environment.
@@ -56,6 +65,10 @@ timeout-minutes:
     is available.
 - `config-variables`: [Configuration variables][vars]. When an array is set, actionlint will check `vars` properties strictly.
   An empty array means no variable is allowed. The default value `null` disables the check.
+- `config-secrets`: [Secrets][secrets]. When an array is set, actionlint will check `secrets` properties strictly against the
+  list. An empty array means no secret is allowed. The default value `null` disables the check. `GITHUB_TOKEN` is always allowed. Note: this check only applies
+  when secrets are not explicitly declared in the workflow (e.g. via `secrets:` in `on.workflow_call`), since declared secrets
+  are already checked by their type.
 - `paths`: Configurations for specific file path patterns. This is a mapping from a glob pattern and the corresponding
   configuration.
   - `{glob}`: A file path glob pattern to apply the configuration. The path separator is always '/'. It is matched to the
@@ -71,6 +84,31 @@ timeout-minutes:
   - `max`: The maximum allowed value of `timeout-minutes` in minutes. A job with a larger value is reported. This is
     checked even when `required` is `false`. `0` (the default) means no limit. A negative value is a configuration error.
     Values given by expressions `${{ }}` are not checked.
+- `require-commit-hash`: Optional lint to require actions to be pinned to commit hashes instead of tags/branches. Defaults to `false`
+  (disabled). When `true`, `uses:` of GitHub-hosted actions and reusable workflows must have a full-length 40-digit commit SHA ref,
+  and Docker actions must be pinned by digest (`docker://image@sha256:...`). Local actions (`./`, `$/`) are exempt.
+  See [the check document](checks.md#check-action-format) for more details.
+
+## Configuration file location and priority
+
+actionlint looks for a configuration file in the following order and uses the **first** one found. Configurations
+are not merged:
+
+1. The file passed via the `-config-file` command line option.
+2. `actionlint.yaml` (or `actionlint.yml`) in the repository's `.github` directory. actionlint locates the project by
+   searching upwards from the linted file's directory.
+3. The user-global configuration at `$XDG_CONFIG_HOME/actionlint/actionlint.yaml` (or `actionlint.yml`). When
+   `$XDG_CONFIG_HOME` is not set, `$HOME/.config/actionlint/actionlint.yaml` is used instead, following the
+   [XDG Base Directory specification][xdg].
+
+The user-global configuration is useful for personal or organization-wide defaults shared across many repositories
+(for example via dotfiles), or for CI base images that need a baseline configuration without injecting a config file
+into every checkout. A repository's own `.github/actionlint.yaml` always takes precedence over the global configuration,
+so per-repository settings are never overridden by the global defaults.
+
+`$XDG_CONFIG_HOME` must be an absolute path. A relative path is ignored as the specification requires. `$HOME/.config`
+is used on all platforms including Windows and macOS (`%USERPROFILE%\.config` on Windows). The global
+configuration is not used when `-config-file` is given.
 
 ## Generate the initial configuration
 
@@ -86,7 +124,9 @@ vim .github/actionlint.yaml
 
 [Checks](checks.md) | [Installation](install.md) | [Usage](usage.md) | [Go API](api.md) | [References](reference.md)
 
+[xdg]: https://specifications.freedesktop.org/basedir-spec/latest/
 [Super-Linter]: https://github.com/super-linter/super-linter
 [pat]: https://pkg.go.dev/path#Match
 [vars]: https://docs.github.com/en/actions/learn-github-actions/variables
+[secrets]: https://docs.github.com/en/actions/security-guides/using-secrets-in-github-actions
 [doublestar]: https://github.com/bmatcuk/doublestar
