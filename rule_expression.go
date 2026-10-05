@@ -1029,6 +1029,7 @@ func (rule *RuleExpression) checkWorkflowCallOutputs(outputs map[string]*Workflo
 		}
 		props[n] = NewStrictObjectType(map[string]ExprType{
 			"outputs": o,
+			"result":  StringType{},
 		})
 	}
 	rule.jobsTy = NewStrictObjectType(props)
