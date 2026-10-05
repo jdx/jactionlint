@@ -1,7 +1,7 @@
 Usage
 =====
 
-This document describes how to use [jactionlint](..).
+This document describes how to use [jactionlint](https://github.com/jdx/jactionlint).
 
 ## `jactionlint` command
 
@@ -115,9 +115,9 @@ Basically it is more recommended to use [Problem Matchers](#problem-matchers) or
 [The Static Analysis Results Interchange Format (SARIF)][sarif] is a standardized format for the results of static analysis tools.
 
 Since this practical format is much more complex than the above examples, the template is not written here. Please read
-[the template file in test data](../testdata/format/sarif_template.txt).
+[the template file in test data](https://github.com/jdx/jactionlint/blob/main/testdata/format/sarif_template.txt).
 
-Outputs are also too large to be written here. Please read [the output example in test data](../testdata/format/test.sarif).
+Outputs are also too large to be written here. Please read [the output example in test data](https://github.com/jdx/jactionlint/blob/main/testdata/format/test.sarif).
 
 #### Formatting syntax
 

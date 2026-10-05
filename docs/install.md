@@ -1,7 +1,7 @@
 Installation
 ============
 
-This document describes how to install [jactionlint](../docs) from jactionlint, the fork in
+This document describes how to install [jactionlint](https://github.com/jdx/jactionlint) from jactionlint, the fork in
 [jdx/jactionlint][repo].
 
 > [!NOTE]
@@ -69,7 +69,7 @@ gh attestation verify -R jdx/jactionlint jactionlint_1.7.12_linux_amd64.tar.gz
 <a id="download-script"></a>
 ## Download script
 
-To install `jactionlint` executable with one command, [the download script](../scripts/download-jactionlint.bash) is available.
+To install `jactionlint` executable with one command, [the download script](https://github.com/jdx/jactionlint/blob/main/scripts/download-jactionlint.bash) is available.
 It downloads the latest version of jactionlint (`jactionlint.exe` on Windows and `jactionlint` on other OSes) to the current
 directory automatically. This is a recommended way if you install jactionlint in some shell script.
 
