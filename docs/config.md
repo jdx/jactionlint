@@ -31,6 +31,14 @@ config-variables:
   - JOB_NAME
   - ENVIRONMENT_STAGE
 
+# Actions (or reusable workflows) which must be used in every workflow. Opt-in; disabled by default.
+required-actions:
+  # Any version of the action is accepted when 'version' is omitted.
+  - action: actions/checkout
+  # 'version' is the exact ref after '@'. Tags, branches and commit SHAs are compared as-is.
+  - action: github/codeql-action/init
+    version: v3
+
 # Secrets in array of strings defined in your repository or organization.
 config-secrets:
   - DEPLOY_TOKEN
@@ -87,6 +95,15 @@ max-run-lines: 30
   check and negative values are rejected. See [the check](checks.md#check-run-policy). The default is `0`.
 - `config-variables`: [Configuration variables][vars]. When an array is set, actionlint will check `vars` properties strictly.
   An empty array means no variable is allowed. The default value `null` disables the check.
+- `required-actions`: List of actions which must be used in each checked workflow. This check is disabled unless the list
+  is non-empty. A missing action is reported once per workflow at the position of its first job.
+  - `action`: Name of the action like `actions/checkout`, without `@version`. A sub-path is part of the name
+    (`github/codeql-action/init`). Case-insensitive. Reusable workflow calls (`jobs.<id>.uses`) are also matched.
+  - `version`: Optional ref (tag, branch or commit SHA) compared exactly. The requirement is satisfied when at least one
+    use of the action has this version. When omitted any version is accepted.
+
+  Local actions (`./...` and `$/...`) and Docker images (`docker://...`) never match. Only workflow files are checked; the steps of
+  composite action files (`action.yml`) are not.
 - `config-secrets`: [Secrets][secrets]. When an array is set, actionlint will check `secrets` properties strictly against the
   list. An empty array means no secret is allowed. The default value `null` disables the check. `GITHUB_TOKEN` is always allowed. Note: this check only applies
   when secrets are not explicitly declared in the workflow (e.g. via `secrets:` in `on.workflow_call`), since declared secrets

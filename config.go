@@ -91,6 +91,11 @@ type Config struct {
 	// Paths is a "paths" mapping in the configuration file. The keys are glob patterns to match file paths.
 	// And the values are corresponding configurations applied to the file paths.
 	Paths map[string]PathConfig `yaml:"paths"`
+
+	// RequiredActions is a "required-actions" list in the configuration file. Each item is an action (or
+	// reusable workflow) which must be used at least once in every checked workflow. The check is disabled
+	// when the list is empty.
+	RequiredActions []RequiredActionRule `yaml:"required-actions"`
 	// TimeoutMinutes is a configuration for the "timeout-check" rule, which checks "timeout-minutes" of jobs.
 	// The rule is disabled by default.
 	TimeoutMinutes TimeoutMinutesConfig `yaml:"timeout-minutes"`
@@ -135,6 +140,14 @@ func ParseConfig(b []byte) (*Config, error) {
 	for pat := range c.Paths {
 		if !doublestar.ValidatePattern(pat) {
 			return nil, fmt.Errorf("invalid glob pattern %q in \"paths\"", pat)
+		}
+	}
+	for i, r := range c.RequiredActions {
+		if r.Action == "" {
+			return nil, fmt.Errorf("\"action\" is required in \"required-actions\" item at index %d", i)
+		}
+		if strings.Contains(r.Action, "@") || strings.HasPrefix(r.Action, "./") || strings.HasPrefix(r.Action, selfRepositoryUsesPrefix) || strings.HasPrefix(r.Action, "docker://") || !strings.Contains(r.Action, "/") {
+			return nil, fmt.Errorf("invalid action %q in \"required-actions\": it must be like \"owner/repo\" without \"@version\"; put the version in \"version\"", r.Action)
 		}
 	}
 	if c.MaxRunLines < 0 {
