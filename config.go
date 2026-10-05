@@ -112,6 +112,9 @@ type Config struct {
 	// RequirePermissions reports jobs which are not covered by an explicit "permissions:" at workflow-level
 	// or job-level. This is opt-in and disabled by default.
 	RequirePermissions bool `yaml:"require-permissions"`
+	// RequireCheckoutBeforeLocalAction reports a local action (`uses: ./path`) which is used in a job before any
+	// step that checks out the repository.
+	RequireCheckoutBeforeLocalAction bool `yaml:"require-checkout-before-local-action"`
 	// RequireExpressionWrapping requires `if:` conditions to be wrapped in `${{ }}` explicitly.
 	RequireExpressionWrapping bool `yaml:"require-expression-wrapping"`
 	// CheckFalsyTernary reports `cond && falsy-literal || other` where the value after `&&` is a

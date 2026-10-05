@@ -77,6 +77,8 @@ timeout-minutes:
 require-commit-hash: true
 # Require explicit permissions at workflow-level or job-level
 require-permissions: true
+# Report local actions used before any checkout step in the same job
+require-checkout-before-local-action: true
 # Require `if:` conditions to be wrapped in `${{ }}`
 require-expression-wrapping: true
 # Report `cond && '' || other` where the value after `&&` is always falsy
@@ -152,6 +154,9 @@ max-run-lines: 30
 - `require-permissions`: Optional lint to require an explicit `permissions:` at workflow-level or job-level. Defaults to `false`
   (disabled). When `true`, every job not covered by a workflow-level `permissions:` and lacking its own is reported.
   `permissions: {}` counts as explicit. See [the check document](checks.md#check-permissions) for more details.
+- `require-checkout-before-local-action`: Optional lint to report a local action (`uses: ./path`) used in a job before any step that
+  checks out the repository. Defaults to `false` (disabled). See [the check document](checks.md#check-local-action-checkout) for
+  what counts as a checkout and known limitations.
 - `require-expression-wrapping`: Optional lint to require `if:` conditions (of jobs and steps) to be wrapped in `${{ }}`
   explicitly, though GitHub Actions makes the placeholder optional there. Defaults to `false` (disabled).
   See [the check document](checks.md#check-require-expression-wrapping) for more details.

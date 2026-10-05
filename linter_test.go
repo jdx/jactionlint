@@ -223,6 +223,9 @@ func TestLinterLintError(t *testing.T) {
 				if strings.HasSuffix(testName, "_require_permissions") {
 					l.defaultConfig.RequirePermissions = true
 				}
+				if strings.HasSuffix(testName, "_checkout") {
+					l.defaultConfig.RequireCheckoutBeforeLocalAction = true
+				}
 
 				errs, err := l.Lint("test.yaml", b, proj)
 				if err != nil {
@@ -271,7 +274,7 @@ func TestLinterLintAllErrorWorkflowsAtOnce(t *testing.T) {
 	}
 
 	// Opt-in lints are enabled so that every example (e.g. "*_security.yaml") causes an error
-	l.defaultConfig = &Config{RequireCommitHash: true}
+	l.defaultConfig = &Config{RequireCommitHash: true, RequireCheckoutBeforeLocalAction: true}
 
 	errs, err := l.LintFiles(files, proj)
 	if err != nil {

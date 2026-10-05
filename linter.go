@@ -585,6 +585,7 @@ func (l *Linter) check(
 			NewRuleJobNeeds(),
 			NewRuleParallelSteps(),
 			NewRuleAction(localActions),
+			NewRuleLocalActionCheckout(),
 			NewRuleEnvVar(),
 			NewRuleID(),
 			NewRuleGlob(),
