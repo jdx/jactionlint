@@ -1,4 +1,4 @@
-package actionlint
+package jactionlint
 
 import (
 	"fmt"
@@ -155,7 +155,7 @@ func (outputs *ReusableWorkflowMetadataOutputs) UnmarshalYAML(n *yaml.Node) erro
 
 // ReusableWorkflowMetadata is metadata to validate local reusable workflows. This struct does not
 // contain all metadata from YAML file. It only contains metadata which is necessary to validate
-// reusable workflow files by actionlint.
+// reusable workflow files by jactionlint.
 type ReusableWorkflowMetadata struct {
 	Inputs  ReusableWorkflowMetadataInputs  `yaml:"inputs"`
 	Outputs ReusableWorkflowMetadataOutputs `yaml:"outputs"`

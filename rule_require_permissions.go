@@ -1,4 +1,4 @@
-package actionlint
+package jactionlint
 
 // RuleRequirePermissions is an opt-in rule checker which requires explicit `permissions:` configuration
 // so that the GITHUB_TOKEN does not silently fall back to the repository/organization default (which

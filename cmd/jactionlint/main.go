@@ -9,7 +9,7 @@ import (
 )
 
 func main() {
-	cmd := actionlint.Command{
+	cmd := jactionlint.Command{
 		Stdin:  os.Stdin,
 		Stdout: os.Stdout,
 		Stderr: os.Stderr,

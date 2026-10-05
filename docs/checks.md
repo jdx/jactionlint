@@ -1,7 +1,7 @@
-All checks done by actionlint
+All checks done by jactionlint
 =============================
 
-This document describes all checks done by [actionlint](..) with example inputs, outputs, and playground links.
+This document describes all checks done by [jactionlint](..) with example inputs, outputs, and playground links.
 
 List of checks:
 
@@ -49,7 +49,7 @@ List of checks:
 - [Deprecated inputs usage](#deprecated-inputs-usage)
 - [YAML anchors](#yaml-anchors)
 
-Note that actionlint focuses on catching mistakes in workflow files. If you want some general code style checks, please consider
+Note that jactionlint focuses on catching mistakes in workflow files. If you want some general code style checks, please consider
 using a general YAML checker like [yamllint][].
 
 <a id="check-unexpected-keys"></a>
@@ -90,7 +90,7 @@ test.yaml:12:9: unexpected key "Shell" for step to run shell command. expected o
 [Workflow syntax][syntax-doc] defines what keys can be defined in which mapping object. When unknown key is defined, it makes
 the workflow run fail.
 
-actionlint can detect unexpected keys while parsing workflow syntax and report them as an error.
+jactionlint can detect unexpected keys while parsing workflow syntax and report them as an error.
 
 Key names are basically case-sensitive (though some specific key names are case-insensitive). This check is useful to catch
 case-sensitivity mistakes.
@@ -134,7 +134,7 @@ Some mappings must include specific keys. For example, job mappings must include
 And duplicate keys are not allowed. In workflow syntax, comparing some keys is **case-insensitive**. For example, the job ID
 `test` in lower case and the job ID `TEST` in upper case are not able to exist in the same workflow.
 
-actionlint checks these missing required keys and duplicate keys while parsing, and reports an error.
+jactionlint checks these missing required keys and duplicate keys while parsing, and reports an error.
 
 <a id="check-empty-mapping"></a>
 ## Unexpected empty mappings
@@ -159,7 +159,7 @@ test.yaml:2:6: "jobs" section should not be empty. please remove this section if
 
 Some mappings and sequences should not be empty. For example, `steps:` must include at least one step.
 
-actionlint checks such mappings and sequences are not empty while parsing, and reports the empty mappings and sequences as an
+jactionlint checks such mappings and sequences are not empty while parsing, and reports the empty mappings and sequences as an
 error.
 
 <a id="check-mapping-values"></a>
@@ -205,7 +205,7 @@ test.yaml:13:26: expecting a single ${{...}} expression or float number literal,
 Some mapping values are restricted to some constant strings. Several mapping values expect boolean value like `true` or
 `false`. And some mapping values expect integer or floating number values.
 
-actionlint checks such constant strings are used properly while parsing and reports an error when an unexpected value is
+jactionlint checks such constant strings are used properly while parsing and reports an error when an unexpected value is
 specified.
 
 <a id="check-syntax-expression"></a>
@@ -252,13 +252,13 @@ test.yaml:13:38: unexpected end of input while parsing object property dereferen
 
 [Playground](https://jactionlint.jdx.dev/#eNp0zUGKwzAMheF9TvEwA85kJgnZ5gBd9BaJEXVaY4VK7ib47kXtOisJ/g8e5xl7kdjceZW5AZRE7QLPkqW3XtaStfRpsfZJorTLVwG9yRkUIsP/HAdcpJTYoVZ/Rib8YToBzoDyVTi3cZF42RJJ67tuTBwe/h/2hiVEGv0vanVnI7dNY1kHelHWwcbeAwDH30Qz)
 
-actionlint lexes and parses expression in `${{ }}` following [the expression syntax document][expr-doc]. It can detect
+jactionlint lexes and parses expression in `${{ }}` following [the expression syntax document][expr-doc]. It can detect
 many syntax errors like invalid characters, missing parentheses, unexpected end of input, ...
 
 <a id="check-type-check-expression"></a>
 ## Type checks for expression syntax in `${{ }}`
 
-actionlint checks types of expressions in `${{ }}` placeholders of templates. The following types are supported by the type
+jactionlint checks types of expressions in `${{ }}` placeholders of templates. The following types are supported by the type
 checker.
 
 | Type          | Description                                                                                | Notation                 |
@@ -273,7 +273,7 @@ checker.
 | Strict object | Object whose properties are strictly typed                                                 | `{prop1: T1, prop2: T2}` |
 | Map object    | Object who has specific type values like `env` context                                     | `{string => T}`          |
 
-Type check by actionlint is stricter than GitHub Actions runtime.
+Type check by jactionlint is stricter than GitHub Actions runtime.
 
 - Only `any` and `number` are allowed to be converted to string implicitly
 - Implicit conversion to `number` is not allowed
@@ -325,7 +325,7 @@ runtime is loose.
 
 Any object value can be assigned into string value as string `'Object'`. `echo '${{ env }}'` will be replaced with
 `echo 'Object'`. And an array can also be converted into `'Array'` string. Such loose conversions are bugs in almost all cases.
-actionlint checks types more strictly. actionlint checks values evaluated at `${{ }}` are not object (replaced with string
+jactionlint checks types more strictly. jactionlint checks values evaluated at `${{ }}` are not object (replaced with string
 `'Object'`), array (replaced with string `'Array'`), nor null (replaced with string `''`). If you want to check a content of
 object or array, use `toJSON()` function.
 
@@ -376,7 +376,7 @@ test.yaml:19:14: type of expression at "env" must be object but found type strin
 
 [Playground](https://jactionlint.jdx.dev/#eNqckD8LgzAUxHc/xSGCU/oBAh10EDqluHUqKsE/tIkkL6VF8t1LULHi1inckbv3e08rjtHZLhp0bXkEkLQUXsCSqUi2n1kBz4pM/14VINXrbsn0qt08gCEthDjnWZke3evlJtJdga4H2dC+oBCCI8/KoxnyEQAYpywL7K52ihx7VIF7wZajXQtZ+Mkhm04jTgoh4t/pHMk0LXudNhp4/198vga8/w4AgQRZVA==)
 
-In above example, environment variables mapping is expanded at `env:` section. actionlint checks type of the expanded value.
+In above example, environment variables mapping is expanded at `env:` section. jactionlint checks type of the expanded value.
 
 <a id="check-contexts-and-builtin-func"></a>
 ## Contexts and built-in functions
@@ -443,7 +443,7 @@ The semantics checker can properly handle that
 
 Note that context names and function names are case-insensitive. For example, `toJSON` and `toJson` are the same function.
 
-In addition, actionlint performs special checks on some built-in functions.
+In addition, jactionlint performs special checks on some built-in functions.
 
 - `format()`: Checks placeholders in the first parameter which represents the format string.
 - `fromJSON()`: Checks the JSON string is valid and the return value is strongly typed.
@@ -544,7 +544,7 @@ Outputs of step can be accessed via `steps.<step_id>` objects. The `steps` conte
 - Outputs of steps only in the job can be accessed. It cannot access steps across jobs
 
 It is a common mistake to access the wrong step outputs since people often forget to fix placeholders on copying&pasting
-steps. actionlint can catch invalid accesses to step outputs and reports them as errors.
+steps. jactionlint can catch invalid accesses to step outputs and reports them as errors.
 
 When the outputs are set by popular actions, the outputs object is more strictly typed.
 
@@ -590,7 +590,7 @@ In the above example, [actions/cache][actions-cache] action sets `cache-hit` out
 whether the cache was hit or not. At line 8, the cache action is not run yet. So `cache` property does not exist in the
 `steps` context yet. On running the step whose ID is `cache`, `steps.cache` object is typed as
 `{outputs: {cache-hit: any}, conclusion: string, outcome: string}`. At line 18, the expression has a typo in the output
-name. actionlint can check it because properties of `steps.cache.outputs` are typed.
+name. jactionlint can check it because properties of `steps.cache.outputs` are typed.
 
 This strict typing for outputs is also applied to local actions. Let's say we have the following local action.
 
@@ -645,7 +645,7 @@ test.yaml:15:23: property "some-value" is not defined in object type {some_value
 <!-- Skip playground link -->
 
 The 'My action with output' action defines one output `some_value`. The property is typed at `steps.my_action.outputs` object
-so that actionlint can check incorrect property accesses like a typo in the output name.
+so that jactionlint can check incorrect property accesses like a typo in the output name.
 
 <a id="check-contextual-matrix-object"></a>
 ## Contextual typing for `matrix` object
@@ -802,7 +802,7 @@ test.yaml:33:24: property "build" is not defined in object type {} [expression]
 Job dependencies can be defined at [`needs:`][needs-doc]. A job runs after all jobs defined in `needs:` are done.
 Outputs from the jobs can be accessed only from jobs following them via [`needs` context][needs-context-doc].
 
-actionlint defines a type of `needs` variable contextually by looking at each job's `outputs:` section and `needs:` section.
+jactionlint defines a type of `needs` variable contextually by looking at each job's `outputs:` section and `needs:` section.
 
 <a id="check-comparison-types"></a>
 ## Strict type checks for comparison operators
@@ -852,9 +852,9 @@ However, comparisons between some types are actually meaningless:
 - Objects and arrays are converted to `NaN`. Comparing an object or an array with other type is always evaluated to false.
 - Comparing booleans, null, objects, and arrays with `>`, `>=`, `<`, `<=` makes no sense.
 
-actionlint checks operands of comparison operators and reports errors in these cases.
+jactionlint checks operands of comparison operators and reports errors in these cases.
 
-There are some additional surprising behaviors, but actionlint allows them not to cause false positives as much as possible.
+There are some additional surprising behaviors, but jactionlint allows them not to cause false positives as much as possible.
 
 - `0 == null`, `'0' == null`, `false == null` are true since they are implicitly converted to `0 == 0`
 - `'0' == false` and `0 == false` are true due to the same reason as above
@@ -898,10 +898,10 @@ test.yaml:14:9: shellcheck reported issue in this script: SC2086:info:1:6: Doubl
 
 <!-- Skip playground link -->
 
-[shellcheck][] is a famous linter for ShellScript. actionlint runs shellcheck for scripts at `run:` step in a workflow.
+[shellcheck][] is a famous linter for ShellScript. jactionlint runs shellcheck for scripts at `run:` step in a workflow.
 For installing shellcheck, see [the official installation document][shellcheck-install].
 
-actionlint detects which shell is used to run the scripts following [the documentation][shell-doc]. On Linux or macOS the
+jactionlint detects which shell is used to run the scripts following [the documentation][shell-doc]. On Linux or macOS the
 default shell is `bash`, and on Windows it is `pwsh`. Shell can be configured by `shell:` configuration at a workflow
 level or job level. Each step can configure shell to run scripts by `shell:`.
 
@@ -910,21 +910,21 @@ line 1, column 6. Note that the location is relative to the script of the `run:`
 The reported source line is the line within the script when `run:` uses a literal block (`|`, `|-`, `|+`) and no `${{ }}`
 in the script spans multiple lines. Otherwise, the position of `run:` is reported.
 
-actionlint remembers the default shell and checks what OS the job runs on. Only when the shell is `bash` or `sh`, actionlint
+jactionlint remembers the default shell and checks what OS the job runs on. Only when the shell is `bash` or `sh`, jactionlint
 applies shellcheck to scripts.
 
-By default, actionlint checks if `shellcheck` command exists in your system and uses it when it is found. The `-shellcheck`
-option on running `actionlint` command specifies the executable path of shellcheck. Setting empty string by `shellcheck=`
+By default, jactionlint checks if `shellcheck` command exists in your system and uses it when it is found. The `-shellcheck`
+option on running `jactionlint` command specifies the executable path of shellcheck. Setting empty string by `shellcheck=`
 disables shellcheck integration explicitly.
 
 Since both `${{ }}` expression syntax and ShellScript's variable access `$FOO` use `$`, the remaining `${{ }}` confuses
-shellcheck. To avoid it, actionlint replaces `${{ }}` with underscores. For example `echo '${{ matrix.os }}'` is replaced
+shellcheck. To avoid it, jactionlint replaces `${{ }}` with underscores. For example `echo '${{ matrix.os }}'` is replaced
 with `echo '________________'`.
 
 Some shellcheck rules conflict with the `${{ }}` expression syntax. To avoid errors due to the syntax, [SC1091][], [SC2050][],
 [SC2194][], [SC2154][], [SC2157][], [SC2043][] are disabled.
 
-When what shell is used cannot be determined statically, actionlint assumes `shell: bash` optimistically. For example,
+When what shell is used cannot be determined statically, jactionlint assumes `shell: bash` optimistically. For example,
 
 ```yaml
 strategy:
@@ -937,7 +937,7 @@ steps:
     if: ${{ matrix.os == 'windows-latest' }}
 ```
 
-The 'Show file content' script is only run by `pwsh` due to `matrix.os == 'windows-latest'` guard. However, actionlint does not
+The 'Show file content' script is only run by `pwsh` due to `matrix.os == 'windows-latest'` guard. However, jactionlint does not
 know that. It checks the script with shellcheck and it'd probably cause a false-positive (due to file separator). This kind of
 false positives can be avoided by showing the shell name explicitly. It is also better in terms of maintenance of the workflow.
 
@@ -954,16 +954,16 @@ From command line:
 
 ```sh
 # Enable some optional rules
-SHELLCHECK_OPTS='--enable=avoid-nullary-conditions' actionlint
+SHELLCHECK_OPTS='--enable=avoid-nullary-conditions' jactionlint
 
 # Disable some rules
-SHELLCHECK_OPTS='--exclude=SC2129' actionlint
+SHELLCHECK_OPTS='--exclude=SC2129' jactionlint
 ```
 
 On GitHub Actions:
 
 ```yaml
-- run: actionlint
+- run: jactionlint
   env:
     SHELLCHECK_OPTS: --exclude=SC2129
 ```
@@ -1026,15 +1026,15 @@ Python script can be written in `run:` when `shell: python` is configured.
 on finding mistakes (not a code style issue) and tries to make false positives as minimal as possible. Install pyflakes
 by `pip install pyflakes`.
 
-actionlint runs pyflakes for scripts at `run:` steps in a workflow and reports errors found by pyflakes. actionlint detects
+jactionlint runs pyflakes for scripts at `run:` steps in a workflow and reports errors found by pyflakes. jactionlint detects
 Python scripts in a workflow by checking `shell: python` at each step and `defaults:` configurations at workflows and jobs.
 
-By default, actionlint checks if `pyflakes` command exists in your system and uses it when found. The `-pyflakes` option
-of `actionlint` command allows to specify the executable path of pyflakes. Setting empty string by `pyflakes=` disables
+By default, jactionlint checks if `pyflakes` command exists in your system and uses it when found. The `-pyflakes` option
+of `jactionlint` command allows to specify the executable path of pyflakes. Setting empty string by `pyflakes=` disables
 pyflakes integration explicitly.
 
 Since both `${{ }}` expression syntax is invalid as Python, remaining `${{ }}` might confuse pyflakes. To avoid it,
-actionlint replaces `${{ }}` with underscores. For example `print('${{ matrix.os }}')` is replaced with
+jactionlint replaces `${{ }}` with underscores. For example `print('${{ matrix.os }}')` is replaced with
 `print('________________')`.
 
 <a id="untrusted-inputs"></a>
@@ -1106,8 +1106,8 @@ inputs via environment variables. See [the official document][security-doc] for 
     TITLE: ${{github.event.issue.title}}
 ```
 
-actionlint recognizes the following inputs as potentially untrusted and checks your inline scripts at `run:`. When they are used
-directly in a script, actionlint will report it as an error.
+jactionlint recognizes the following inputs as potentially untrusted and checks your inline scripts at `run:`. When they are used
+directly in a script, jactionlint will report it as an error.
 
 - `github.event.issue.title`
 - `github.event.issue.body`
@@ -1145,7 +1145,7 @@ directly in a script, actionlint will report it as an error.
 - `github.event.workflow_run.head_repository.owner.login`
 - `github.head_ref`
 
-Not only direct access to the untrusted properties, actionlint also detects those properties indirectly accessed via
+Not only direct access to the untrusted properties, jactionlint also detects those properties indirectly accessed via
 [object filter syntax][object-filter-syntax]. For example, `github.event.*.body` collects all `body` properties in child objects
 of `github.event` as array. Those properties include untrusted inputs like `github.event.comment.body`,
 `github.event.pull_request.body`, ...
@@ -1164,13 +1164,13 @@ Instead, you should store the JSON string in an environment variable:
 ```
 
 The following functions return a boolean value so it is not possible to inject anything as the result of the returned value.
-actionlint does not report an error even if untrusted inputs are passed to these function calls.
+jactionlint does not report an error even if untrusted inputs are passed to these function calls.
 
 - `contains()`
 - `startswith()`
 - `endswith()`
 
-At last, the popular action [actions/github-script][github-script] has the same issue in its `script` input. actionlint also
+At last, the popular action [actions/github-script][github-script] has the same issue in its `script` input. jactionlint also
 checks the input.
 
 <a id="check-job-deps"></a>
@@ -1209,10 +1209,10 @@ test.yaml:3:3: cyclic dependencies in "needs" job configurations are detected. d
 
 [Playground](https://jactionlint.jdx.dev/#eNqkjjEOwyAMRXdO8TcmLsBVqg7QWEoqZBC2719BvWTOZvn5v+/OGcPkDN9eJQdgTBpl0hoBJjok41Xtasd7r6axpJWyaqyWWlES3UiUhvyDQFqXGfQ5O6JLYwAuFi2t3f3OHzS4djXsZ+9+pw/8Wxp/AwC/J1vk)
 
-Job dependencies can be defined at [`needs:`][needs-doc]. If cyclic dependencies exist, jobs never start to run. actionlint
+Job dependencies can be defined at [`needs:`][needs-doc]. If cyclic dependencies exist, jobs never start to run. jactionlint
 detects cyclic dependencies in `needs:` sections of jobs and reports it as an error.
 
-actionlint also detects undefined jobs and duplicate jobs in `needs:` section.
+jactionlint also detects undefined jobs and duplicate jobs in `needs:` section.
 
 Example input:
 
@@ -1403,7 +1403,7 @@ test.yaml:12:13: "platform" in "exclude" section does not exist in matrix. avail
 [Playground](https://jactionlint.jdx.dev/#eNpskMGOhCAQRO9+RR32KER298SvmD2gsuNMlDY0JE6M/z4h4jgmHggpqHrpanIaU+S+eFDDugCC5ZBugIM3wd6emwJGE/x93hXgqLMatapKqO8S6jedv/c3sUYdm+hCFINJ2BKjaYmzOpx2bofY2YMMiExXPx+PG/OEvIpUp8g0mPBPfrwK+uhYpA18LUuuJ4mxrrm/nXgfSiSzhm17gpTyNQBUwlNB)
 
 [`matrix:`][matrix-doc] defines combinations of multiple values. Nested `include:` and `exclude:` can add/remove specific
-combination of matrix values. actionlint checks
+combination of matrix values. jactionlint checks
 
 - values in `exclude:` appear in `matrix:` (`include:` is processed after `exclude:`, so values added only by `include:` cannot be excluded)
 - duplicate variations of matrix values
@@ -1467,7 +1467,7 @@ test.yaml:15:3: unknown Webhook event "pullreq". see https://docs.github.com/en/
 At `on:`, Webhook events can be specified to trigger the workflow. [Webhook event documentation][webhook-doc] defines
 which Webhook events are available and what types can be specified at `types:` for each event.
 
-actionlint validates the Webhook configurations:
+jactionlint validates the Webhook configurations:
 
 - Webhook event name
 - types for Webhook event
@@ -1583,7 +1583,7 @@ test.yaml:39:24: property "massage" is not defined in object type {age: string; 
 [`workflow_dispatch`][workflow-dispatch-event] is an event to trigger a workflow manually. The event can have parameters called
 'inputs'. Each input has its name, description, default value, and [input type][workflow-dispatch-input-type-announce].
 
-actionlint checks several mistakes around `workflow_dispatch` configuration.
+jactionlint checks several mistakes around `workflow_dispatch` configuration.
 
 - Input type must be one of 'choice', 'string', 'number', 'boolean', 'environment'
 - `options:` must be set for 'choice' input type
@@ -1690,7 +1690,7 @@ test.yaml:14:9: '.' and '..' are not allowed in glob path. note: filter pattern 
 [Playground](https://jactionlint.jdx.dev/#eNpMjMGqAyEMRfd+xd0J76FDl/VXSgs6OJVSEtGk9PPL6MZVODmHyxQMULWX8wKpRdpL7pMAB/s4mJ0dLPG5ms/fv13odnWX+3zUKGUp/XYwbyk2L18x5sVpSMldZtSUumMK0KQk6t7xdEN1yXWZakoBeS8M7/1vADXfMEo=)
 
 For filtering branches, tags and paths in Webhook events, [glob syntax][filter-pattern-doc] is available.
-actionlint validates glob patterns `branches:`, `branches-ignore:`, `tags:`, `tags-ignore:`, `paths:`, `paths-ignore:` in a
+jactionlint validates glob patterns `branches:`, `branches-ignore:`, `tags:`, `tags-ignore:`, `paths:`, `paths-ignore:` in a
 workflow. It checks:
 
 - syntax errors like missing closing brackets for character range `[..]`
@@ -1746,13 +1746,13 @@ test.yaml:9:17: invalid timezone "Asia/Somewhere" in schedule event. it must be 
 
 To trigger a workflow in specific interval, [scheduled event][schedule-event-doc] can be defined in [POSIX CRON syntax][cron-syntax].
 
-actionlint checks the CRON syntax and frequency of running a job. [The official document][schedule-event-doc] says:
+jactionlint checks the CRON syntax and frequency of running a job. [The official document][schedule-event-doc] says:
 
 > The shortest interval you can run scheduled workflows is once every 5 minutes.
 
-When the job is run more frequently than once every 5 minutes, actionlint reports it as an error.
+When the job is run more frequently than once every 5 minutes, jactionlint reports it as an error.
 
-actionlint also checks the `timezone` configuration [is a valid IANA timezone string][schedule-item-doc].
+jactionlint also checks the `timezone` configuration [is a valid IANA timezone string][schedule-item-doc].
 
 <a id="check-runner-labels"></a>
 ## Runner labels
@@ -1774,7 +1774,7 @@ jobs:
           - [self-hosted, linux, x64]
           # OK: Single preset label for self-hosted runner
           - arm64
-          # ERROR: Unknown label "gpu". Custom label must be defined in actionlint.yaml config file
+          # ERROR: Unknown label "gpu". Custom label must be defined in jactionlint.yaml config file
           - gpu
     runs-on: ${{ matrix.runner }}
     steps:
@@ -1790,15 +1790,15 @@ jobs:
 Output:
 
 ```
-test.yaml:10:13: label "linux-latest" is unknown. available labels are "windows-latest", "windows-latest-8-cores", "windows-2025", "windows-2025-vs2026", "windows-2022", "windows-11-arm", "windows-11-vs2026-arm", "ubuntu-slim", "ubuntu-latest", "ubuntu-latest-4-cores", "ubuntu-latest-8-cores", "ubuntu-latest-16-cores", "ubuntu-26.04", "ubuntu-26.04-arm", "ubuntu-24.04", "ubuntu-24.04-arm", "ubuntu-22.04", "ubuntu-22.04-arm", "macos-latest", "macos-latest-xlarge", "macos-latest-large", "macos-26-intel", "macos-26-xlarge", "macos-26-large", "macos-26", "macos-15-intel", "macos-15-xlarge", "macos-15-large", "macos-15", "macos-14-xlarge", "macos-14-large", "macos-14", "xcode-27", "xcode-27-xlarge", "self-hosted", "x64", "arm", "arm64", "linux", "macos", "windows". if it is a custom label for self-hosted runner, set list of labels in actionlint.yaml config file [runner-label]
+test.yaml:10:13: label "linux-latest" is unknown. available labels are "windows-latest", "windows-latest-8-cores", "windows-2025", "windows-2025-vs2026", "windows-2022", "windows-11-arm", "windows-11-vs2026-arm", "ubuntu-slim", "ubuntu-latest", "ubuntu-latest-4-cores", "ubuntu-latest-8-cores", "ubuntu-latest-16-cores", "ubuntu-26.04", "ubuntu-26.04-arm", "ubuntu-24.04", "ubuntu-24.04-arm", "ubuntu-22.04", "ubuntu-22.04-arm", "macos-latest", "macos-latest-xlarge", "macos-latest-large", "macos-26-intel", "macos-26-xlarge", "macos-26-large", "macos-26", "macos-15-intel", "macos-15-xlarge", "macos-15-large", "macos-15", "macos-14-xlarge", "macos-14-large", "macos-14", "xcode-27", "xcode-27-xlarge", "self-hosted", "x64", "arm", "arm64", "linux", "macos", "windows". if it is a custom label for self-hosted runner, set list of labels in jactionlint.yaml config file [runner-label]
    |
 10 |           - linux-latest
    |             ^~~~~~~~~~~~
-test.yaml:16:13: label "gpu" is unknown. available labels are "windows-latest", "windows-latest-8-cores", "windows-2025", "windows-2025-vs2026", "windows-2022", "windows-11-arm", "windows-11-vs2026-arm", "ubuntu-slim", "ubuntu-latest", "ubuntu-latest-4-cores", "ubuntu-latest-8-cores", "ubuntu-latest-16-cores", "ubuntu-26.04", "ubuntu-26.04-arm", "ubuntu-24.04", "ubuntu-24.04-arm", "ubuntu-22.04", "ubuntu-22.04-arm", "macos-latest", "macos-latest-xlarge", "macos-latest-large", "macos-26-intel", "macos-26-xlarge", "macos-26-large", "macos-26", "macos-15-intel", "macos-15-xlarge", "macos-15-large", "macos-15", "macos-14-xlarge", "macos-14-large", "macos-14", "xcode-27", "xcode-27-xlarge", "self-hosted", "x64", "arm", "arm64", "linux", "macos", "windows". if it is a custom label for self-hosted runner, set list of labels in actionlint.yaml config file [runner-label]
+test.yaml:16:13: label "gpu" is unknown. available labels are "windows-latest", "windows-latest-8-cores", "windows-2025", "windows-2025-vs2026", "windows-2022", "windows-11-arm", "windows-11-vs2026-arm", "ubuntu-slim", "ubuntu-latest", "ubuntu-latest-4-cores", "ubuntu-latest-8-cores", "ubuntu-latest-16-cores", "ubuntu-26.04", "ubuntu-26.04-arm", "ubuntu-24.04", "ubuntu-24.04-arm", "ubuntu-22.04", "ubuntu-22.04-arm", "macos-latest", "macos-latest-xlarge", "macos-latest-large", "macos-26-intel", "macos-26-xlarge", "macos-26-large", "macos-26", "macos-15-intel", "macos-15-xlarge", "macos-15-large", "macos-15", "macos-14-xlarge", "macos-14-large", "macos-14", "xcode-27", "xcode-27-xlarge", "self-hosted", "x64", "arm", "arm64", "linux", "macos", "windows". if it is a custom label for self-hosted runner, set list of labels in jactionlint.yaml config file [runner-label]
    |
 16 |           - gpu
    |             ^~~
-test.yaml:23:14: label "macos-10.13" is unknown. available labels are "windows-latest", "windows-latest-8-cores", "windows-2025", "windows-2025-vs2026", "windows-2022", "windows-11-arm", "windows-11-vs2026-arm", "ubuntu-slim", "ubuntu-latest", "ubuntu-latest-4-cores", "ubuntu-latest-8-cores", "ubuntu-latest-16-cores", "ubuntu-26.04", "ubuntu-26.04-arm", "ubuntu-24.04", "ubuntu-24.04-arm", "ubuntu-22.04", "ubuntu-22.04-arm", "macos-latest", "macos-latest-xlarge", "macos-latest-large", "macos-26-intel", "macos-26-xlarge", "macos-26-large", "macos-26", "macos-15-intel", "macos-15-xlarge", "macos-15-large", "macos-15", "macos-14-xlarge", "macos-14-large", "macos-14", "xcode-27", "xcode-27-xlarge", "self-hosted", "x64", "arm", "arm64", "linux", "macos", "windows". if it is a custom label for self-hosted runner, set list of labels in actionlint.yaml config file [runner-label]
+test.yaml:23:14: label "macos-10.13" is unknown. available labels are "windows-latest", "windows-latest-8-cores", "windows-2025", "windows-2025-vs2026", "windows-2022", "windows-11-arm", "windows-11-vs2026-arm", "ubuntu-slim", "ubuntu-latest", "ubuntu-latest-4-cores", "ubuntu-latest-8-cores", "ubuntu-latest-16-cores", "ubuntu-26.04", "ubuntu-26.04-arm", "ubuntu-24.04", "ubuntu-24.04-arm", "ubuntu-22.04", "ubuntu-22.04-arm", "macos-latest", "macos-latest-xlarge", "macos-latest-large", "macos-26-intel", "macos-26-xlarge", "macos-26-large", "macos-26", "macos-15-intel", "macos-15-xlarge", "macos-15-large", "macos-15", "macos-14-xlarge", "macos-14-large", "macos-14", "xcode-27", "xcode-27-xlarge", "self-hosted", "x64", "arm", "arm64", "linux", "macos", "windows". if it is a custom label for self-hosted runner, set list of labels in jactionlint.yaml config file [runner-label]
    |
 23 |     runs-on: macos-10.13
    |              ^~~~~~~~~~~
@@ -1810,13 +1810,13 @@ GitHub Actions provides two kinds of job runners, [GitHub-hosted runner][gh-host
 Each runner has one or more labels. GitHub Actions runtime finds a proper runner based on label(s) specified at `runs-on:`
 to run the job. So specifying proper labels at `runs-on:` is important.
 
-actionlint checks proper label is used at `runs-on:` configuration. Even if an expression is used in the section like
-`runs-on: ${{ matrix.foo }}`, actionlint parses the expression and resolves the possible values, then validates the values.
+jactionlint checks proper label is used at `runs-on:` configuration. Even if an expression is used in the section like
+`runs-on: ${{ matrix.foo }}`, jactionlint parses the expression and resolves the possible values, then validates the values.
 
-When you define some custom labels for your self-hosted runner, actionlint does not know the labels. Please set the label
-names in [`actionlint.yaml` configuration file](config.md) to let actionlint know them.
+When you define some custom labels for your self-hosted runner, jactionlint does not know the labels. Please set the label
+names in [`jactionlint.yaml` configuration file](config.md) to let jactionlint know them.
 
-In addition to checking label values, actionlint checks combinations of labels. `runs-on:` section can be an array that contains
+In addition to checking label values, jactionlint checks combinations of labels. `runs-on:` section can be an array that contains
 multiple labels. In this case, a runner which has all the labels will be selected. However, those labels combinations can have
 conflicts.
 
@@ -1896,19 +1896,19 @@ Action needs to be specified in a format defined in [the document][action-uses-d
 - self-repository action: `$/path/to/my-action`
 - Docker action: `docker://image:tag`
 
-actionlint checks values at `uses:` sections follow one of these formats.
+jactionlint checks values at `uses:` sections follow one of these formats.
 
 The self-repository form resolves against the repository running the workflow at the exact commit running it, so it
-needs no checkout and takes no `@ref`. It is accepted everywhere the workspace-relative `./` form is, and actionlint
+needs no checkout and takes no `@ref`. It is accepted everywhere the workspace-relative `./` form is, and jactionlint
 resolves both to the same path in the repository.
 
-Note that actionlint does not report any error when a directory for a local action does not exist in the repository because it is
+Note that jactionlint does not report any error when a directory for a local action does not exist in the repository because it is
 a common case where the action is managed in a separate repository and the action directory is cloned at running the workflow.
 (See [#25][issue-25] and [#40][issue-40] for more details).
 
 ### Require pinning to a commit hash (opt-in)
 
-By default, actionlint accepts any ref (tag, branch, or SHA) for actions at `uses:`. Since tags and branches are mutable,
+By default, jactionlint accepts any ref (tag, branch, or SHA) for actions at `uses:`. Since tags and branches are mutable,
 pinning to a full commit hash is recommended to mitigate supply chain attacks. This check is **disabled by default**. To
 enable it, set `require-commit-hash: true` in [the configuration file](config.md):
 
@@ -1916,7 +1916,7 @@ enable it, set `require-commit-hash: true` in [the configuration file](config.md
 require-commit-hash: true
 ```
 
-When enabled, actionlint reports the following at `uses:`:
+When enabled, jactionlint reports the following at `uses:`:
 
 - an action hosted on GitHub (`owner/repo@ref`, `owner/repo/path@ref`) whose ref is not a full-length 40-digit hexadecimal
   commit SHA (abbreviated SHAs, tags and branches are reported)
@@ -1931,7 +1931,7 @@ Local actions and workflows (`./path`, `$/path`) are not reported because they a
 
 A local action (`uses: ./.github/actions/foo`) is loaded from the workspace of the runner. When the repository has not been
 checked out yet, the step fails at runtime with "Can't find 'action.yml'". This check reports the first local action of a job
-which is not preceded by a checkout step in the same job. It is **disabled by default** since actionlint cannot know how your
+which is not preceded by a checkout step in the same job. It is **disabled by default** since jactionlint cannot know how your
 runner prepares the workspace. To enable it, set `require-checkout-before-local-action: true` in
 [the configuration file](config.md):
 
@@ -1988,7 +1988,7 @@ Other keys are not affected because they always need `${{ }}` to evaluate an exp
 check-falsy-ternary: true
 ```
 
-When enabled, actionlint reports the idiom when `b` is a literal which is always falsy: `''`, `0`, `false` or `null`.
+When enabled, jactionlint reports the idiom when `b` is a literal which is always falsy: `''`, `0`, `false` or `null`.
 Non-literal values (e.g. `github.sha`) are not reported because whether they are falsy is unknown statically.
 
 ```yaml
@@ -2057,7 +2057,7 @@ test.yaml:13:11: input "additions" is not defined in action "My action" defined 
 
 <!-- Skip playground link -->
 
-When an action in the same repository is run in `uses:` of `step:` (with either the `./` or the `$/` form), actionlint
+When an action in the same repository is run in `uses:` of `step:` (with either the `./` or the `$/` form), jactionlint
 reads the `action.yml` file in that action's directory and validates inputs at `with:` in the workflow are correct.
 Missing required inputs and unexpected inputs can be detected.
 
@@ -2097,18 +2097,18 @@ test.yaml:9:11: input "keys" is not defined in action "actions/cache@v4". availa
 
 [Playground](https://jactionlint.jdx.dev/#eNqEjrHKwkAQhPs8xRQ/5DeQpLG6ysr32ByLFy/eHdlbRWLeXRIliI3VsvN9MBODQVJxRXGOnZgCyCx5ucCoQepF0E5D1nqgha1IMid5WUANFRYDsrmPQVpL1vHhun9j4NZnZ7YP8HwXg8dHAvxNExyJO/YDy39ZVW3VDNH6cod5/mmuld9qouwMmjaR9XRi2eaOGgwu5Pk5APtlRBU=)
 
-actionlint checks inputs of many popular actions such as `actions/checkout@v4`. It checks
+jactionlint checks inputs of many popular actions such as `actions/checkout@v4`. It checks
 
 - some input is required by the action but it is not set at `with:`
 - input set at `with:` is not defined in the action (this commonly occurs by a typo)
 
-this is done by checking `with:` section items with a small database collected at building `actionlint` binary. actionlint
+this is done by checking `with:` section items with a small database collected at building `jactionlint` binary. jactionlint
 can check popular actions without fetching any `action.yml` of the actions from the remote so that it can run efficiently.
 
 Note that it only supports the case of specifying major versions like `actions/checkout@v4`. Fixing version of action like
 `actions/checkout@v4.0.1` and using the HEAD of action like `actions/checkout@main` are not supported for now.
 
-So far, actionlint supports more than 100 popular actions The data set is embedded at [`popular_actions.go`](../popular_actions.go)
+So far, jactionlint supports more than 100 popular actions The data set is embedded at [`popular_actions.go`](../popular_actions.go)
 and were automatically collected by [a script][generate-popular-actions]. If you want more checks for other actions, please
 make a request [as an issue][issue-form].
 
@@ -2139,12 +2139,12 @@ test.yaml:8:15: the runner of "actions/checkout@v3" action is too old to run on 
 
 [Playground](https://jactionlint.jdx.dev/#eNokyjEOxCAMRNGeU8wF0BbbUe1VAFlik8hGGTvnj0iqX/xnWjCDI6XNGksCXOirwBnKvEC0UI981PWeRZfJVwEZQWFB7f435acP6buF/67vPQB0iR3O)
 
-In addition to the checks for inputs of actions described in [the previous section](#check-popular-action-inputs), actionlint
+In addition to the checks for inputs of actions described in [the previous section](#check-popular-action-inputs), jactionlint
 reports an error when a popular action is 'outdated'. An action is outdated when the runner used by the action is no longer
 supported by GitHub Actions runtime. For example, `node12` is no longer available so any actions can not use `node12` runner.
 
 Note that this check doesn't report that the action version is up-to-date. For example, even if you use `actions/checkout@v4` and
-newer version `actions/checkout@v5` is available, actionlint reports no error as long as `actions/checkout@v4` is not outdated.
+newer version `actions/checkout@v5` is available, jactionlint reports no error as long as `actions/checkout@v4` is not outdated.
 If you want to keep actions used by your workflows up-to-date, consider to use [Dependabot][dependabot-doc].
 
 <a id="check-shell-names"></a>
@@ -2208,7 +2208,7 @@ test.yaml:27:16: shell name "sh" is invalid on Windows. available names are "bas
 
 [Playground](https://jactionlint.jdx.dev/#eNqkkMHKgzAQhO8+xdw8Cf85bxN1Jf6s2eBmsVD67mWtlOKp2Nsk85F8jOSAYpqaf+k1NADP2W4egNWydg5Yb7lax7GS1r3SSkVfFNA5GUBDErSJmKU9GkD9HDBGTd/TRTZa99wASxxOOkscRD9tRpqicX0L+QfnN6dZ0yX1ttDKuP89vNnmPMqmJ6Hj9peBrs3zHAA+f36k)
 
-Available shells for runners are defined in [the documentation][shell-doc]. actionlint checks shell names at `shell:`
+Available shells for runners are defined in [the documentation][shell-doc]. jactionlint checks shell names at `shell:`
 configuration are properly using the available shells.
 
 <a id="check-run-policy"></a>
@@ -2314,7 +2314,7 @@ test.yaml:12:3: key "TEST" is duplicated in "jobs" section. previously defined a
 
 [Playground](https://jactionlint.jdx.dev/#eNrKz7NSKCgtzuDKyk8qtuJSUChJLS4B0QoKRaV5xbog+dKk0rySUt2cRJAcWKq4JLWgGKJKQUEXpNJKITU5I19BPSM1JydfHSqjoJCZYgVWHJ+Zgk11UmUqqtrgENeAeE8XLgWFENfgEJq4AzAAioFDag==)
 
-Job IDs and step IDs in each jobs must be unique. IDs are compared in case-insensitive. actionlint checks all job IDs
+Job IDs and step IDs in each jobs must be unique. IDs are compared in case-insensitive. jactionlint checks all job IDs
 and step IDs, and reports errors when some IDs duplicate.
 
 <a id="check-hardcoded-credentials"></a>
@@ -2360,7 +2360,7 @@ test.yaml:17:21: "password" section in "redis" service should be specified via s
 [Playground](https://jactionlint.jdx.dev/#eNp0kLFuxSAMRff3Fd6Y0rfzNzxy1VCBjWxo+vkVNKVLOmGd48tFCHuq3Y7Hh7zMP4garI2TSDvbNnx/dW59y2G4qaJwC4mhP5tEqYR3eHL4CqVmvEUpTzkZ+pzGXWtRsYNbCtl+k0TdoBwK/JwWrsHsFN39nCY26GeKWFnFnuzvousRky54W/lv6X1tQ13hbfyLJ8RDyB3IWdz3AFJLXcM=)
 
 [Credentials for container][credentials-doc] can be put in `container:` configuration. Password should be put in secrets
-and the value should be expanded with `${{ }}` syntax at `password:`. actionlint checks hardcoded credentials, and reports
+and the value should be expanded with `${{ }}` syntax at `password:`. jactionlint checks hardcoded credentials, and reports
 them as an error.
 
 <a id="check-env-var-names"></a>
@@ -2398,7 +2398,7 @@ test.yaml:7:7: environment variable name "FOO BAR" is invalid. '&', '=' and spac
 `=` must not be included in environment variable names. And `&` and spaces should not be included in them. In almost all
 cases they are mistakes, and they may cause some issues on using them in shell since they have special meaning in shell syntax.
 
-actionlint checks environment variable names are correct in `env:` configuration.
+jactionlint checks environment variable names are correct in `env:` configuration.
 
 <a id="permissions"></a>
 <a id="check-permissions"></a>
@@ -2453,7 +2453,7 @@ Permissions of `GITHUB_TOKEN` token can be configured at workflow-level or job-l
 Each permission scopes have their access levels. The default levels and available levels are described in
 [the document][permissions-doc].
 
-actionlint checks permission scopes and access levels in a workflow are correct.
+jactionlint checks permission scopes and access levels in a workflow are correct.
 
 ### Require explicit permissions (opt-in)
 
@@ -2465,7 +2465,7 @@ To enable it, set `require-permissions: true` in [the configuration file](config
 require-permissions: true
 ```
 
-When enabled, actionlint reports every job that is not covered by `permissions:`, i.e. the workflow has no top-level
+When enabled, jactionlint reports every job that is not covered by `permissions:`, i.e. the workflow has no top-level
 `permissions:` and the job has no `permissions:` of its own. Either of them is enough, and `permissions: {}` (no permissions)
 counts as explicit. Jobs which call reusable workflows (`uses:`) are checked in the same way because the caller limits the
 permissions of the callee. The error is reported at the job so that it is easy to see which jobs need a fix.
@@ -2475,7 +2475,7 @@ permissions of the callee. The error is reported at the job so that it is easy t
 
 [Reusable workflows][reusable-workflow-doc] is a feature to call a workflow from another workflow.
 
-actionlint does several checks for both workflow calls (caller) and reusable workflows (callee):
+jactionlint does several checks for both workflow calls (caller) and reusable workflows (callee):
 
 - syntax of workflow calls and reusable workflows
 - type checks for inputs (respecting `type:` field of each input) in both workflow calls and reusable workflows
@@ -2542,7 +2542,7 @@ test.yaml:25:18: input "path" of workflow_call event has the default value "", b
 
 [Playground](https://jactionlint.jdx.dev/#eNp8kctu8yAQhff/U4yiX8oqiXpZ8Qxd9KKuK4zHxSlmyDAojSLevcJ2IsuNu4NvZg6HOeTVP4Aj8Vfj6PhhtHMFALQ+JInDGSAaix1ebgA1RsNtkJa8gre+CNTA++vTpKXRyYkCKxLiFcspoIIo3PrPEVqKon7P4bfugsOtoe6v6UAsC8aeiWXR1lrd3T88rmfSPnUV8ggPCfm0oP1SanPxQYOqPRq52NNil+xpsXMFxkNqGWsFwglvuF7f3sWeqj6smlTfwMnHTXkkVclL2jgtGAdPUTBcg92UTgVoLMHq//k85r4dAoec1W43wSWqAieo7B9ynpLyr5xXPwMAtTmuwA==)
 
-Unlike inputs of action, inputs of a workflow must specify their types. actionlint validates input types and checks the default
+Unlike inputs of action, inputs of a workflow must specify their types. jactionlint validates input types and checks the default
 values are correctly typed. For more details, see [the official document][create-reusable-workflow-doc].
 
 ### Check workflow call syntax
@@ -2596,15 +2596,15 @@ test.yaml:19:11: could not read reusable workflow file for "./.github/workflows/
 
 When calling an external workflow, [only specific keys are available][reusable-workflow-call-keys] at job configuration.
 For example, `secrets:` is not available when running steps in a normal job. And `runs-on:` is not available when calling
-a reusable workflow since the called workflow determines which OS is used. actionlint checks such keys are used correctly
+a reusable workflow since the called workflow determines which OS is used. jactionlint checks such keys are used correctly
 to call a reusable workflow or to run steps in a normal job.
 
 And the workflow syntax at `uses:` must follow one of the formats `owner/repo/path/to/workflow.yml@ref`,
 `./path/to/workflow.yml`, or `$/path/to/workflow.yml` as described in
-[the official document][create-reusable-workflow-doc]. actionlint checks if the value follows the format.
+[the official document][create-reusable-workflow-doc]. jactionlint checks if the value follows the format.
 
-actionlint also validates the called workflow file is actually existing when it is in the same repository (starting
-with `./` or `$/`). actionlint reports an error when it does not exist.
+jactionlint also validates the called workflow file is actually existing when it is in the same repository (starting
+with `./` or `$/`). jactionlint reports an error when it does not exist.
 
 ### Check types of `inputs.*` and `secrets.*` in reusable workflow
 
@@ -2655,7 +2655,7 @@ Inputs of reusable workflow calls are set to `inputs.*` properties following the
 And in a job of a reusable workflow, `secrets.*` are passed from caller of the workflow so it is set following the definitions at
 `on.workflow_call.secrets`. See [the official document][create-reusable-workflow-doc] for more details.
 
-actionlint contextually defines types of `inputs` and `secrets` contexts looking at `workflow_call` event. Keys of `inputs` only
+jactionlint contextually defines types of `inputs` and `secrets` contexts looking at `workflow_call` event. Keys of `inputs` only
 allow keys at `on.workflow_call.inputs` and their values are typed based on `on.workflow_call.inputs.<input_name>.type`. Type of
 `secrets` is also strictly typed following `on.workflow_call.secrets`.
 
@@ -2669,8 +2669,8 @@ jobs:
     secrets: inherit
 ```
 
-This means that actionlint cannot know whether the workflow inherits secrets or not when checking a reusable workflow.
-To solve this issue, actionlint assumes that
+This means that jactionlint cannot know whether the workflow inherits secrets or not when checking a reusable workflow.
+To solve this issue, jactionlint assumes that
 
 - when `secrets:` is omitted in a reusable workflow, the workflow inherits secrets from a caller
 - when `secrets:` exists in a reusable workflow, the workflow inherits no other secret
@@ -2740,7 +2740,7 @@ test.yaml:7:20: property "imagetag" is not defined in object type {image_tag: st
 [Playground](https://jactionlint.jdx.dev/#eNp0j8FuwyAQRO/5ipHVK/TOuf9hEWdLaShY7JIcovx7tcZGqqocGT3mzZbsTsC91OtnKvd58SlpAJQmaxPuDyD++EDmRpVjyUcIXIiXGlfRENNHWa5UO4udnQZ786mRw9vjge9yZhsomz+1dnfaLRUf8HyeFFXfP7qPqC2zUXk7tyzNJC/E8vKCWXxwmHQDC606QjQb6m7tozfi+G5U5WDfOzmPOstf48R4cdgbfwcA2ORuYw==)
 
 Outputs of a reusable workflow can be defined at `on.workflow_call.outputs` as described in [the document][reusable-workflow-outputs].
-The `jobs` context is available to define an output value to refer the outputs of jobs in the workflow. actionlint checks
+The `jobs` context is available to define an output value to refer the outputs of jobs in the workflow. jactionlint checks
 the context is used correctly.
 
 ### Check inputs and secrets in workflow call
@@ -2834,11 +2834,11 @@ test.yaml:24:16: input "message" is typed as string by reusable workflow "./.git
 <!-- Skip playground link -->
 
 Reusable workflows can define required/optional inputs and secrets. When they are missing or some undefined input is used in a
-workflow call, actionlint reports an error.
+workflow call, jactionlint reports an error.
 
 And reusable workflows must define types of their inputs by `type:` field. Workflow calls pass constants (`input: 42`) or
-expressions (`inputs: ${{ ... }}`) to the inputs or secrets. actionlint checks types of values passed to inputs in workflow call.
-When a type of input doesn't match to its definition, actionlint reports an error.
+expressions (`inputs: ${{ ... }}`) to the inputs or secrets. jactionlint checks types of values passed to inputs in workflow call.
+When a type of input doesn't match to its definition, jactionlint reports an error.
 
 Note that this check only works with a reusable workflow in the same repository (it starts with `./` or `$/`).
 
@@ -2896,11 +2896,11 @@ test.yaml:13:24: property "tag" is not defined in object type {version: string} 
 <!-- Skip playground link -->
 
 Outputs of workflow call are set to the job's outputs object. They can be accessed by downstream jobs specified with `needs:`.
-What outputs are set is defined in the reusable workflow. actionlint types outputs objects from workflow calls and check the
+What outputs are set is defined in the reusable workflow. jactionlint types outputs objects from workflow calls and check the
 object types in downstream jobs.
 
-In the above example, `get-build-info.yaml` has one output `version`. actionlint types the outputs object of workflow call job
-as `{version: string}`. In the downstream job, actionlint can report an error at undefined key `tag` in the object.
+In the above example, `get-build-info.yaml` has one output `version`. jactionlint types the outputs object of workflow call job
+as `{version: string}`. In the downstream job, jactionlint can report an error at undefined key `tag` in the object.
 
 Note that this check only works with a reusable workflow in the same repository (starting with `./` or `$/`).
 
@@ -2951,20 +2951,20 @@ test.yaml:7:11: nested job "snapshot" of "./.github/workflows/reusable.yaml" req
 
 GitHub validates `permissions:` at workflow load time. Every scope a job in the called workflow declares must also be
 granted by the calling job, otherwise the run fails with `startup_failure` and no jobs run, so any `if: failure()`
-notification job cannot fire. actionlint compares each called job's effective `permissions:` (its own or, when absent,
+notification job cannot fire. jactionlint compares each called job's effective `permissions:` (its own or, when absent,
 the workflow-level block) against the caller's effective grant (the calling job's `permissions:` or, when absent, the
 workflow-level block) and reports each missing scope.
 
 The check ignores `if:` on called jobs because GitHub evaluates permissions before any condition runs.
 
-When the caller has no `permissions:` block at the workflow level and none on the calling job, actionlint assumes
+When the caller has no `permissions:` block at the workflow level and none on the calling job, jactionlint assumes
 GitHub's restricted default token (only `contents: read` and `packages: read` are granted). This default can be
 overridden via the [`assume-default-permissions` configuration](./config.md); set it to `permissive` if your
 repository's "Workflow permissions" setting grants read + write to everything by default. Even under `permissive`,
 `id-token` is still treated as `none` because OIDC tokens always require an explicit opt-in.
 
 When the caller workflow is itself a reusable workflow (`on.workflow_call`) without any `permissions:` block, the check is
-skipped: such a workflow inherits the token permissions of its own caller, which actionlint cannot see.
+skipped: such a workflow inherits the token permissions of its own caller, which jactionlint cannot see.
 
 Note that this check only works with local reusable workflows (starting with `./` or `$/`).
 
@@ -3019,7 +3019,7 @@ test.yaml:17:3: invalid job ID "2d-game". job ID must start with a letter or _ a
 
 [Playground](https://jactionlint.jdx.dev/#eNqkzTEOgzAMheGdU7yNyUilG3OXHgOKaUBpHooTuH6VNjdgtPzp/QwD9myuaTZONjTAQspx6/ruXi4g5mBSWJ5ySFn8mNTS72VJd/srQIocoC9HtBsnPB841+RwaLSVoa0OWOfKFkbUMXHqPeVk9LNcCJO7lVI/y3v86NWl7wCDIlSH)
 
-IDs must start with a letter or `_` and contain only alphanumeric characters, `-` or `_`. actionlint checks the naming
+IDs must start with a letter or `_` and contain only alphanumeric characters, `-` or `_`. jactionlint checks the naming
 convention, and reports invalid IDs as errors.
 
 <a id="ctx-spfunc-availability"></a>
@@ -3107,7 +3107,7 @@ are special.
 [The official contexts document][availability-doc] describes which contexts and special functions are available at which workflow
 keys.
 
-actionlint checks if these contexts and special functions are used correctly. It reports an error when it finds that some context
+jactionlint checks if these contexts and special functions are used correctly. It reports an error when it finds that some context
 or special function is not available in your workflow.
 
 <a id="#check-deprecated-workflow-commands"></a>
@@ -3148,7 +3148,7 @@ GitHub deprecated the following workflow commands.
 - [`set-env`][deprecate-set-env-add-path]
 - [`add-path`][deprecate-set-env-add-path]
 
-actionlint detects these commands are used in `run:` and reports them as errors suggesting alternatives. See
+jactionlint detects these commands are used in `run:` and reports them as errors suggesting alternatives. See
 [the official document][workflow-commands-doc] for the comprehensive list of workflow commands to know the usage.
 
 <a id="if-cond-constant"></a>
@@ -3211,7 +3211,7 @@ test.yaml:29:13: if: condition "${{ github.event_name == 'push' }} && ${{ github
 
 [Playground](https://jactionlint.jdx.dev/#eNq0zz1OxDAQBeA+p3hYyK7CASxtw484ATVyYEKM1vZqZ0yz+O7Iy18iohBAVFH03nwzTtFil3lomsfUsW0AIZb6BfY5clsLuctRcrt1NTtGLLTj1xbQ1qYF3Q0J6vLq/Ob6BKeHAx68DLk7oyeKchtdIJSi3mYA31v0bss0o5iLFIIXeD4eR/dmMjaPbzYwtW1Qys/N548/LNl/g//jcPU9CrWGhSQE5+OUX5K1fo/31H+GY+QXG1e8R+tx6+tylPIyANrl1qA=)
 
-actionlint reports constant conditions at `if:` like `if: true` as error because they are usually leftover debug code like
+jactionlint reports constant conditions at `if:` like `if: true` as error because they are usually leftover debug code like
 `#if 0` in C. `if: true` should be removed because it doesn't affect the workflow behavior. `if: false` should be replaced with
 commenting out because it is more obvious (or simply remove the step or job if not needed).
 
@@ -3241,7 +3241,7 @@ if: |
   false
 ```
 
-actionlint also checks extra characters around `${{ }}` in `if:` which unexpectedly make the conditions true.
+jactionlint also checks extra characters around `${{ }}` in `if:` which unexpectedly make the conditions true.
 
 <a id="action-metadata-syntax"></a>
 ## Action metadata syntax validation
@@ -3280,7 +3280,7 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      # actionlint checks an action when it is actually used in a workflow
+      # jactionlint checks an action when it is actually used in a workflow
       - uses: ./.github/actions/my-invalid-action
 ```
 
@@ -3318,7 +3318,7 @@ test.yaml:8:15: "env" is not allowed in "runs" section because "My action" is a 
 
 All actions require a metadata file `action.yml` or `action.yaml`. The syntax is defined in [the official document][action-metadata-doc].
 
-actionlint checks metadata files used in workflows and reports errors when they are not following the syntax.
+jactionlint checks metadata files used in workflows and reports errors when they are not following the syntax.
 
 - `name:`, `description:`, `runs:` sections are required
 - Runner name at `using:` is one of `composite`, `docker`, `node20`
@@ -3331,7 +3331,7 @@ actionlint checks metadata files used in workflows and reports errors when they 
 - Icon color at `color:` in `branding:` section is correct. Supported icon colors are white, yellow, blue, green, orange, red,
   purple, or gray-dark.
 
-actionlint checks action metadata files which are used by workflows. Currently, it is not supported to specify `action.yml`
+jactionlint checks action metadata files which are used by workflows. Currently, it is not supported to specify `action.yml`
 directly via command line arguments.
 
 Note that `steps` in Composite action's metadata is not checked at this point. It will be supported in the future.
@@ -3365,9 +3365,9 @@ test.yaml:9:11: avoid using deprecated input "fail_on_error" in action "reviewdo
 [Playground](https://jactionlint.jdx.dev/#eNo8yksKwkAQhOF9TlEXGMTtrLxJmGhrWobu0I/k+jJGXBXF96tUbOnr9NbF6wQEeYwFLMXL8FxSIktvw77kQZufFVCQTl5htDMdD31d2j1YpZzTWeK2X38xcHCs9f+AZ+M+q8xkplYRlvQZAIfnLew=)
 
 Action inputs can be deprecated by setting [`deprecationMessage`][dep-msg]. When deprecated inputs are used in a
-workflow, actionlint reports the usage as error.
+workflow, jactionlint reports the usage as error.
 
-actionlint also checks local actions. In addition to the usage of deprecated inputs, it checks the input definitions in
+jactionlint also checks local actions. In addition to the usage of deprecated inputs, it checks the input definitions in
 the action metadata `action.yml` or `action.yaml`.
 
 Example action metadata:
@@ -3428,11 +3428,11 @@ them.
 <a id="yaml-anchors"></a>
 ## YAML anchors
 
-GitHub Actions [supports][anochor-support-announce] YAML [anchor and alias nodes][yaml-anchor-spec]. actionlint checks them in
+GitHub Actions [supports][anochor-support-announce] YAML [anchor and alias nodes][yaml-anchor-spec]. jactionlint checks them in
 workflows.
 
-actionlint detects errors under YAML anchors. When an alias node references an erroneous anchor, actionlint checks them as if the
-alias node is replaced with the anchor node. This means that one anchor node may be checked multiple times and actionlint may
+jactionlint detects errors under YAML anchors. When an alias node references an erroneous anchor, jactionlint checks them as if the
+alias node is replaced with the anchor node. This means that one anchor node may be checked multiple times and jactionlint may
 report multiple similar errors at the same source location.
 
 Example input:
@@ -3478,7 +3478,7 @@ test.yaml:13:11: unexpected key "email" for "credentials" section. expected one 
 
 [Playground](https://jactionlint.jdx.dev/#eNp8kM1KxDAUhfd9irNyIaS6zmoewTeQTHNpI703JSdxxreXMLUUBVfhOz/kcLN5bI3LMHzkK/0AVGHtL0Apn2kSPgiwOdn9B4CkYRa/q2vovcObikSxmsJKj6cTHQmgUYoFFQ/9ch1cp1NgC+Qtl+jxdiFvryWeTNGQVg+Vi9yDbquMU9bdLxIT/wx9qP8Nff49tDSj6ydq12a1uVOZVbbjD9eTHuNLzO/MKnVJNo9cvgcAl3xngQ==)
 
-actionlint also checks usage of anchors and aliases. In the following example actionlint reports recursive aliases and unused
+jactionlint also checks usage of anchors and aliases. In the following example jactionlint reports recursive aliases and unused
 anchors as error.
 
 Example input:
@@ -3531,7 +3531,7 @@ test.yaml:22:14: recursive alias "recursive" is found. anchor was declared at li
 
 [Playground](https://jactionlint.jdx.dev/#eNpsj8FqwzAQRO/+ijkUHwp27/qZothLomKvxI7kFEL+vYjGwiE5mRm/p92N6pAKL133E090HZCFuX4Bim1hEv4nQM9Bf/cAhNWfxT3axVev/ZtMZtEc/EKH/pAaARSKqV/F4eN2A2UyyRxri/v9wCVPXqPNz9ze7qwV5VCvKaeiuQyHhZgltSOGSjqMX3O86hL9PPLSholuDp+v6zappLdK/07pTaZiDJs0+PEK4yrfnCyk/Dq9WX8DAAHceU8=)
 
-actionlint checks dangling aliases as syntax error. Note that the error position is currently incorrect as the below output
+jactionlint checks dangling aliases as syntax error. Note that the error position is currently incorrect as the below output
 indicates. This issue is due to go-yaml library and the [fix](https://github.com/yaml/go-yaml/pull/191) will be included at the
 next release of the library.
 

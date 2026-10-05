@@ -1,7 +1,7 @@
 Installation
 ============
 
-This document describes how to install [actionlint](../docs) from jdx's actionlint, the fork in
+This document describes how to install [jactionlint](../docs) from jactionlint, the fork in
 [jdx/jactionlint][repo].
 
 > [!NOTE]
@@ -14,7 +14,7 @@ This document describes how to install [actionlint](../docs) from jdx's actionli
 
 ```sh
 mise use -g github:jdx/jactionlint@latest
-actionlint -version
+jactionlint -version
 ```
 
 ## macOS
@@ -22,15 +22,15 @@ actionlint -version
 ### Homebrew
 
 This repository provides a Homebrew cask, which is automatically updated on new releases. Tap the repository and install
-the `actionlint` package with `--cask` option.
+the `jactionlint` package with `--cask` option.
 
 ```sh
 brew tap jdx/jactionlint https://github.com/jdx/jactionlint
-brew install --cask jdx/jactionlint/actionlint
+brew install --cask jdx/jactionlint/jactionlint
 ```
 
 > [!WARNING]
-> Since the `actionlint` executable is unsigned, macOS displays a warning and tries to move it to the Trash. To allow it to run,
+> Since the `jactionlint` executable is unsigned, macOS displays a warning and tries to move it to the Trash. To allow it to run,
 > go to 'Settings -> Privacy & Security' and grant the permission.
 
 ## Prebuilt binaries
@@ -55,44 +55,44 @@ To install these binaries [`gh`][gh] command is useful. The following command is
 
 ```sh
 gh release download --repo jdx/jactionlint --pattern '*_linux_amd64.tar.gz' v1.7.12
-tar xf actionlint_1.7.12_linux_amd64.tar.gz
-./actionlint -version
+tar xf jactionlint_1.7.12_linux_amd64.tar.gz
+./jactionlint -version
 ```
 
 Optionally you can verify the [attestation][attestations] of the downloaded artifact. This is highly recommended in terms of
 security.
 
 ```sh
-gh attestation verify -R jdx/jactionlint actionlint_1.7.12_linux_amd64.tar.gz
+gh attestation verify -R jdx/jactionlint jactionlint_1.7.12_linux_amd64.tar.gz
 ```
 
 <a id="download-script"></a>
 ## Download script
 
-To install `actionlint` executable with one command, [the download script](../scripts/download-actionlint.bash) is available.
-It downloads the latest version of actionlint (`actionlint.exe` on Windows and `actionlint` on other OSes) to the current
-directory automatically. This is a recommended way if you install actionlint in some shell script.
+To install `jactionlint` executable with one command, [the download script](../scripts/download-jactionlint.bash) is available.
+It downloads the latest version of jactionlint (`jactionlint.exe` on Windows and `jactionlint` on other OSes) to the current
+directory automatically. This is a recommended way if you install jactionlint in some shell script.
 
 ```sh
-bash <(curl https://raw.githubusercontent.com/jdx/jactionlint/main/scripts/download-actionlint.bash)
+bash <(curl https://raw.githubusercontent.com/jdx/jactionlint/main/scripts/download-jactionlint.bash)
 ```
 
-When you need to install specific version of actionlint, please give the version to the 1st command line argument. The following
+When you need to install specific version of jactionlint, please give the version to the 1st command line argument. The following
 example installs v1.6.17.
 
 ```sh
-bash <(curl https://raw.githubusercontent.com/jdx/jactionlint/main/scripts/download-actionlint.bash) 1.6.17
+bash <(curl https://raw.githubusercontent.com/jdx/jactionlint/main/scripts/download-jactionlint.bash) 1.6.17
 ```
 
-This script downloads `actionlint` (or `actionlint.exe` on Windows) binary to the current working directory. When you need to put
+This script downloads `jactionlint` (or `jactionlint.exe` on Windows) binary to the current working directory. When you need to put
 the downloaded binary to some other directory, please give the directory path to the 2nd command line argument. The following
 example installs the latest version to `/usr/bin`.
 
 ```sh
-bash <(curl https://raw.githubusercontent.com/jdx/jactionlint/main/scripts/download-actionlint.bash) latest /usr/bin
+bash <(curl https://raw.githubusercontent.com/jdx/jactionlint/main/scripts/download-jactionlint.bash) latest /usr/bin
 ```
 
-For the usage of actionlint on GitHub Actions, see [the usage document](usage.md#on-github-actions).
+For the usage of jactionlint on GitHub Actions, see [the usage document](usage.md#on-github-actions).
 
 ## Docker image
 
@@ -101,14 +101,14 @@ The image is published to the GitHub Container Registry as `ghcr.io/jdx/jactionl
 
 ## Build from source
 
-Recent [Go][] toolchain is necessary to build actionlint from source. Last two major versions of Go are supported.
+Recent [Go][] toolchain is necessary to build jactionlint from source. Last two major versions of Go are supported.
 
 ```sh
 # Install the latest stable version
-go install github.com/jdx/jactionlint/cmd/actionlint@latest
+go install github.com/jdx/jactionlint/cmd/jactionlint@latest
 
 # Install the head of the main branch
-go install github.com/jdx/jactionlint/cmd/actionlint@main
+go install github.com/jdx/jactionlint/cmd/jactionlint@main
 ```
 
 ---

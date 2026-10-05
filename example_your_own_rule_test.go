@@ -1,4 +1,4 @@
-package actionlint_test
+package jactionlint_test
 
 import (
 	"fmt"
@@ -11,11 +11,11 @@ import (
 // A rule type to check every steps have their names.
 type RuleStepName struct {
 	// Embedding RuleBase struct implements the minimal Rule interface.
-	actionlint.RuleBase
+	jactionlint.RuleBase
 }
 
 // Reimplement methods in RuleBase. Visit* methods are called on checking workflows.
-func (r *RuleStepName) VisitStep(n *actionlint.Step) error {
+func (r *RuleStepName) VisitStep(n *jactionlint.Step) error {
 	// Implement your own check
 	if n.Name == nil {
 		// RuleBase provides methods to report errors. See RuleBase.Error and RuleBase.Errorf.
@@ -26,7 +26,7 @@ func (r *RuleStepName) VisitStep(n *actionlint.Step) error {
 
 func NewRuleStepName() *RuleStepName {
 	return &RuleStepName{
-		RuleBase: actionlint.NewRuleBase("step-name", "Checks every step has their own name"),
+		RuleBase: jactionlint.NewRuleBase("step-name", "Checks every step has their own name"),
 	}
 }
 
@@ -34,14 +34,14 @@ func ExampleLinter_yourOwnRule() {
 	// The function set at OnRulesCreated is called after rule instances are created. You can
 	// add/remove some rules and return the modified slice. This function is called on linting
 	// each workflow files.
-	o := &actionlint.LinterOptions{
-		OnRulesCreated: func(rules []actionlint.Rule) []actionlint.Rule {
+	o := &jactionlint.LinterOptions{
+		OnRulesCreated: func(rules []jactionlint.Rule) []jactionlint.Rule {
 			rules = append(rules, NewRuleStepName())
 			return rules
 		},
 	}
 
-	l, err := actionlint.NewLinter(io.Discard, o)
+	l, err := jactionlint.NewLinter(io.Discard, o)
 	if err != nil {
 		panic(err)
 	}
@@ -60,6 +60,6 @@ func ExampleLinter_yourOwnRule() {
 	//    |
 	// 14 |       - uses: actions/checkout@v4
 	//    |         ^~~~~
-	fmt.Println(len(errs), "lint errors found by actionlint")
-	// Output: 1 lint errors found by actionlint
+	fmt.Println(len(errs), "lint errors found by jactionlint")
+	// Output: 1 lint errors found by jactionlint
 }

@@ -1,15 +1,20 @@
 Configuration
 =============
 
-This document describes how to configure [actionlint](..) behavior.
+This document describes how to configure [jactionlint](..) behavior.
 
 Note that configuration file is optional. The author tries to keep configuration file as minimal as possible not to
-bother users to configure behavior of actionlint. Running actionlint without configuration file would work fine in most
+bother users to configure behavior of jactionlint. Running jactionlint without configuration file would work fine in most
 cases.
 
 ## Configuration file
 
-Configuration file `actionlint.yaml` or `actionlint.yml` can be put in `.github` directory.
+Configuration file `jactionlint.yaml` or `jactionlint.yml` can be put in `.github` directory.
+
+> [!NOTE]
+> The file names used by the original actionlint (`.github/actionlint.yaml` and `.github/actionlint.yml`) are also accepted, so
+> an existing configuration keeps working. When both exist, `jactionlint.yaml` is used first. `jactionlint -init-config`
+> generates `.github/jactionlint.yaml`.
 
 Note: If you're using [Super-Linter][], the file should be placed in a different directory. Please check the project's document.
 
@@ -107,7 +112,7 @@ max-run-lines: 30
   (`bash --noprofile --norc -eo pipefail {0}`). See [the check](checks.md#check-run-policy). The default is `false`.
 - `max-run-lines`: Maximum number of non-blank lines allowed in a `run:` script. Longer scripts are reported. `0` disables the
   check and negative values are rejected. See [the check](checks.md#check-run-policy). The default is `0`.
-- `config-variables`: [Configuration variables][vars]. When an array is set, actionlint will check `vars` properties strictly.
+- `config-variables`: [Configuration variables][vars]. When an array is set, jactionlint will check `vars` properties strictly.
   An empty array means no variable is allowed. The default value `null` disables the check.
 - `required-actions`: List of actions which must be used in each checked workflow. This check is disabled unless the list
   is non-empty. A missing action is reported once per workflow at the position of its first job.
@@ -121,14 +126,14 @@ max-run-lines: 30
 - `assume-default-permissions`: Controls how the caller/callee permissions check for local reusable workflow calls
   treats a caller workflow that has no `permissions:` block at the workflow level *and* no `permissions:` block on
   the calling job. This mirrors the repository-level "Workflow permissions" setting (Settings → Actions → General),
-  which actionlint cannot read from the workflow file. Set to `restricted` (the default) to assume GitHub's
+  which jactionlint cannot read from the workflow file. Set to `restricted` (the default) to assume GitHub's
   restricted default token (`contents: read` and `packages: read`, everything else `none`). Set to `permissive` to
   assume the permissive default (write on every scope). Even under `permissive`, `id-token` is still treated as
   `none` because OIDC tokens always require an explicit opt-in regardless of the repo-level Workflow permissions
   setting. Note: this only affects callers with no `permissions:` block anywhere. Once a caller declares any
   `permissions:` block — even `permissions: {}` — the check always runs against that explicit block, because
   GitHub treats any scope omitted from an explicit block as `none`.
-- `config-secrets`: [Secrets][secrets]. When an array is set, actionlint will check `secrets` properties strictly against the
+- `config-secrets`: [Secrets][secrets]. When an array is set, jactionlint will check `secrets` properties strictly against the
   list. An empty array means no secret is allowed. The default value `null` disables the check. `GITHUB_TOKEN` is always allowed. Note: this check only applies
   when secrets are not explicitly declared in the workflow (e.g. via `secrets:` in `on.workflow_call`), since declared secrets
   are already checked by their type.
@@ -170,19 +175,21 @@ max-run-lines: 30
 
 ## Configuration file location and priority
 
-actionlint looks for a configuration file in the following order and uses the **first** one found. Configurations
+jactionlint looks for a configuration file in the following order and uses the **first** one found. Configurations
 are not merged:
 
 1. The file passed via the `-config-file` command line option.
-2. `actionlint.yaml` (or `actionlint.yml`) in the repository's `.github` directory. actionlint locates the project by
+2. `jactionlint.yaml` (or `jactionlint.yml`) in the repository's `.github` directory, then `actionlint.yaml` (or
+   `actionlint.yml`) in the same directory as used by the original actionlint. jactionlint locates the project by
    searching upwards from the linted file's directory.
-3. The user-global configuration at `$XDG_CONFIG_HOME/actionlint/actionlint.yaml` (or `actionlint.yml`). When
-   `$XDG_CONFIG_HOME` is not set, `$HOME/.config/actionlint/actionlint.yaml` is used instead, following the
-   [XDG Base Directory specification][xdg].
+3. The user-global configuration at `$XDG_CONFIG_HOME/jactionlint/jactionlint.yaml` (or `jactionlint.yml`). When
+   `$XDG_CONFIG_HOME` is not set, `$HOME/.config/jactionlint/jactionlint.yaml` is used instead, following the
+   [XDG Base Directory specification][xdg]. The location used by the original actionlint
+   (`$XDG_CONFIG_HOME/actionlint/actionlint.yaml`) is checked after it.
 
 The user-global configuration is useful for personal or organization-wide defaults shared across many repositories
 (for example via dotfiles), or for CI base images that need a baseline configuration without injecting a config file
-into every checkout. A repository's own `.github/actionlint.yaml` always takes precedence over the global configuration,
+into every checkout. A repository's own `.github/jactionlint.yaml` always takes precedence over the global configuration,
 so per-repository settings are never overridden by the global defaults.
 
 `$XDG_CONFIG_HOME` must be an absolute path. A relative path is ignored as the specification requires. `$HOME/.config`
@@ -191,12 +198,12 @@ configuration is not used when `-config-file` is given.
 
 ## Generate the initial configuration
 
-You don't need to write the first configuration file by your hand. `actionlint` command can generate a default configuration
+You don't need to write the first configuration file by your hand. `jactionlint` command can generate a default configuration
 with `-init-config` flag.
 
 ```sh
-actionlint -init-config
-vim .github/actionlint.yaml
+jactionlint -init-config
+vim .github/jactionlint.yaml
 ```
 
 ---

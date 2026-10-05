@@ -1,29 +1,29 @@
 Usage
 =====
 
-This document describes how to use [actionlint](..).
+This document describes how to use [jactionlint](..).
 
-## `actionlint` command
+## `jactionlint` command
 
-With no argument, actionlint finds all workflow files in the current repository and checks them.
-
-```sh
-actionlint
-```
-
-When paths to YAML workflow files are given as arguments, actionlint checks them.
+With no argument, jactionlint finds all workflow files in the current repository and checks them.
 
 ```sh
-actionlint path/to/workflow1.yaml path/to/workflow2.yaml
+jactionlint
 ```
 
-When `-` argument is given, actionlint reads inputs from stdin and checks it as workflow source.
+When paths to YAML workflow files are given as arguments, jactionlint checks them.
 
 ```sh
-cat path/to/workflow.yaml | actionlint -
+jactionlint path/to/workflow1.yaml path/to/workflow2.yaml
 ```
 
-To know all flags and options, see an output of `actionlint -h` or [the online command manual][cmd-manual].
+When `-` argument is given, jactionlint reads inputs from stdin and checks it as workflow source.
+
+```sh
+cat path/to/workflow.yaml | jactionlint -
+```
+
+To know all flags and options, see an output of `jactionlint -h` or [the online command manual][cmd-manual].
 
 ### Ignore some errors
 
@@ -31,15 +31,15 @@ To ignore some errors, `-ignore` option offers to filter errors by messages usin
 The regular expression syntax is the same as [RE2][re2].
 
 ```sh
-actionlint -ignore 'label ".+" is unknown' -ignore '".+" is potentially untrusted'
+jactionlint -ignore 'label ".+" is unknown' -ignore '".+" is potentially untrusted'
 ```
 
 `-shellcheck` and `-pyflakes` specifies file paths of executables. Setting empty string to them disables `shellcheck` and
-`pyflakes` rules. As a bonus, disabling them makes actionlint much faster Since these external linter integrations spawn many
+`pyflakes` rules. As a bonus, disabling them makes jactionlint much faster Since these external linter integrations spawn many
 processes.
 
 ```sh
-actionlint -shellcheck= -pyflakes=
+jactionlint -shellcheck= -pyflakes=
 ```
 
 <a id="format"></a>
@@ -52,7 +52,7 @@ Before explaining the formatting details, let's see some examples.
 #### Example: Serialized into JSON
 
 ```sh
-actionlint -format '{{json .}}'
+jactionlint -format '{{json .}}'
 ```
 
 Output:
@@ -64,7 +64,7 @@ Output:
 #### Example: Markdown
 
 ````sh
-actionlint -format '{{range $err := .}}### Error at line {{$err.Line}}, col {{$err.Column}} of `{{$err.Filepath}}`\n\n{{$err.Message}}\n\n```\n{{$err.Snippet}}\n```\n\n{{end}}'
+jactionlint -format '{{range $err := .}}### Error at line {{$err.Line}}, col {{$err.Column}} of `{{$err.Filepath}}`\n\n{{$err.Message}}\n\n```\n{{$err.Snippet}}\n```\n\n{{end}}'
 ````
 
 Output:
@@ -83,7 +83,7 @@ property "platform" is not defined in object type {os: string}
 #### Example: Serialized in [JSON Lines][jsonl]
 
 ```sh
-actionlint -format '{{range $err := .}}{{json $err}}{{end}}'
+jactionlint -format '{{range $err := .}}{{json $err}}{{end}}'
 ```
 
 Output:
@@ -97,7 +97,7 @@ Output:
 #### Example: [Error annotation][ga-annotate-error] on GitHub Actions
 
 ````sh
-actionlint -format '{{range $err := .}}::error file={{$err.Filepath}},line={{$err.Line}},col={{$err.Column}}::{{$err.Message}}%0A```%0A{{replace $err.Snippet "\\n" "%0A"}}%0A```\n{{end}}' -ignore 'SC2016:'
+jactionlint -format '{{range $err := .}}::error file={{$err.Filepath}},line={{$err.Line}},col={{$err.Column}}::{{$err.Message}}%0A```%0A{{replace $err.Snippet "\\n" "%0A"}}%0A```\n{{end}}' -ignore 'SC2016:'
 ````
 
 Output:
@@ -143,7 +143,7 @@ The error object has the following fields.
 | `{{$err.EndColumn}}` | Column number of the error's end position (1-based)   | `23`                                                             |
 
 Functions called in `{{ }}` placeholder are template actions. There are many actions defined by Go standard library. In addition,
-there are a few custom actions defined by actionlint. Most useful action would be `json` as we already used it in the above JSON
+there are a few custom actions defined by jactionlint. Most useful action would be `json` as we already used it in the above JSON
 example. List of all custom actions are as follows:
 
 | Action           | Description                                                                      | Example usage                             |
@@ -152,7 +152,7 @@ example. List of all custom actions are as follows:
 | `replace x y z`  | Replace string `y` with `z` in `x`                                               | `{{replace $err.Filepath "\\" "/"}}`      |
 | `toPascalCase x` | Convert `x` into PascalCase (e.g. 'foo-bar' to 'FooBar')                         | `{{toPascalCase $err.Kind}}`              |
 | `allKinds`       | Return an array of kind objects. The kind object is explained in the below table | `{{range $ = allKinds}}{{$.Name}}{{end}}` |
-| `getVersion`     | Return the version of actionlint as string                                       | `{{getVersion}}`                          |
+| `getVersion`     | Return the version of jactionlint as string                                       | `{{getVersion}}`                          |
 
 The kind object returned from `allKinds` action has the following fields.
 
@@ -180,7 +180,7 @@ Note that special characters escaped with backslash like `\n` in the format stri
 
 ### Exit status
 
-`actionlint` command exits with one of the following exit statuses.
+`jactionlint` command exits with one of the following exit statuses.
 
 | Status | Description                                             |
 |--------|---------------------------------------------------------|
@@ -190,13 +190,13 @@ Note that special characters escaped with backslash like `\n` in the format stri
 | `3`    | The command failed due to some fatal error              |
 
 <a id="on-github-actions"></a>
-## Use actionlint on GitHub Actions
+## Use jactionlint on GitHub Actions
 
-Preparing `actionlint` executable with the download script is recommended. See [the instruction](install.md#download-script) for
+Preparing `jactionlint` executable with the download script is recommended. See [the instruction](install.md#download-script) for
 more details. It sets an absolute file path of downloaded executable to `executable` output in order to use the executable in the
 following steps easily.
 
-Here is an example of simple workflow to run actionlint on GitHub Actions. Please ensure `shell: bash` since the default
+Here is an example of simple workflow to run jactionlint on GitHub Actions. Please ensure `shell: bash` since the default
 shell for Windows runners is `pwsh`.
 
 ```yaml
@@ -204,16 +204,16 @@ name: Lint GitHub Actions workflows
 on: [push, pull_request]
 
 jobs:
-  actionlint:
+  jactionlint:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - name: Download actionlint
-        id: get_actionlint
-        run: bash <(curl https://raw.githubusercontent.com/jdx/jactionlint/main/scripts/download-actionlint.bash)
+      - name: Download jactionlint
+        id: get_jactionlint
+        run: bash <(curl https://raw.githubusercontent.com/jdx/jactionlint/main/scripts/download-jactionlint.bash)
         shell: bash
       - name: Check workflow files
-        run: ${{ steps.get_actionlint.outputs.executable }} -color
+        run: ${{ steps.get_jactionlint.outputs.executable }} -color
         shell: bash
 ```
 
@@ -222,28 +222,28 @@ Or simply download the executable and run it in one step:
 ```yaml
 - name: Check workflow files
   run: |
-    bash <(curl https://raw.githubusercontent.com/jdx/jactionlint/main/scripts/download-actionlint.bash)
-    ./actionlint -color
+    bash <(curl https://raw.githubusercontent.com/jdx/jactionlint/main/scripts/download-jactionlint.bash)
+    ./jactionlint -color
   shell: bash
 ```
 
-The download script allows to specify the version of actionlint and the download directory. Try to give `--help` argument
+The download script allows to specify the version of jactionlint and the download directory. Try to give `--help` argument
 to the script for more usage details.
 
 If you want to enable [shellcheck integration](checks.md#check-shellcheck-integ), install `shellcheck` command. Note that
 shellcheck is [pre-installed on Ubuntu worker][preinstall-ubuntu].
 
-If you want to [annotate errors][ga-annotate-error] from actionlint on GitHub, consider using
+If you want to [annotate errors][ga-annotate-error] from jactionlint on GitHub, consider using
 [Problem Matchers](#problem-matchers).
 
-If you prefer Docker image to running a downloaded executable, using [actionlint Docker image](#docker) is another option.
+If you prefer Docker image to running a downloaded executable, using [jactionlint Docker image](#docker) is another option.
 
 ```yaml
 name: Lint GitHub Actions workflows
 on: [push, pull_request]
 
 jobs:
-  actionlint:
+  jactionlint:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -255,7 +255,7 @@ jobs:
 
 ## Online playground
 
-Thanks to WebAssembly, actionlint playground is available on your browser. It never sends any data to outside your browser.
+Thanks to WebAssembly, jactionlint playground is available on your browser. It never sends any data to outside your browser.
 
 https://jactionlint.jdx.dev/
 
@@ -266,13 +266,13 @@ table moves a cursor to position of the error in the code editor.
 <a id="docker"></a>
 ## [Docker][docker] image
 
-[Official Docker image][docker-image] is available. The image contains `actionlint` executable and all dependencies (shellcheck
+[Official Docker image][docker-image] is available. The image contains `jactionlint` executable and all dependencies (shellcheck
 and pyflakes).
 
 Available tags are:
 
-- `actionlint:latest`: Latest stable version of actionlint. This image is recommended.
-- `actionlint:{version}`: Specific version of actionlint. (e.g. `actionlint:1.7.12`) <!-- x-release-please-version -->
+- `jactionlint:latest`: Latest stable version of jactionlint. This image is recommended.
+- `jactionlint:{version}`: Specific version of jactionlint. (e.g. `jactionlint:1.7.12`) <!-- x-release-please-version -->
 
 Just run the image with `docker run`:
 
@@ -280,14 +280,14 @@ Just run the image with `docker run`:
 docker run --rm ghcr.io/jdx/jactionlint:latest -version
 ```
 
-To check all workflows in your repository, mount your repository's root directory as a volume and run actionlint in the mounted
+To check all workflows in your repository, mount your repository's root directory as a volume and run jactionlint in the mounted
 directory. When you are at a root directory of your repository:
 
 ```sh
 docker run --rm -v $(pwd):/repo --workdir /repo ghcr.io/jdx/jactionlint:latest -color
 ```
 
-To check a file with actionlint in a Docker container, pass the file content via stdin and use `-` argument:
+To check a file with jactionlint in a Docker container, pass the file content via stdin and use `-` argument:
 
 ```sh
 cat /path/to/workflow.yml | docker run --rm -i ghcr.io/jdx/jactionlint:latest -color -
@@ -299,7 +299,7 @@ Or mount the workflows directory and pass the paths as arguments:
 docker run --rm -v /path/to/workflows:/workflows ghcr.io/jdx/jactionlint:latest -color /workflows/ci.yml
 ```
 
-## Using actionlint from Go program
+## Using jactionlint from Go program
 
 Go APIs are available. See [the Go API document](api.md) for more details.
 
@@ -310,7 +310,7 @@ Go APIs are available. See [the Go API document](api.md) for more details.
 ### reviewdog
 
 [reviewdog][] is an automated review tool for various code hosting services. It officially [supports actionlint][reviewdog-actionlint].
-You can check errors from actionlint easily with inline review comments at pull request review.
+You can check errors from jactionlint easily with inline review comments at pull request review.
 
 The usage is easy. Run `reviewdog/action-actionlint` action in your workflow as follows.
 
@@ -318,7 +318,7 @@ The usage is easy. Run `reviewdog/action-actionlint` action in your workflow as 
 name: reviewdog
 on: [pull_request]
 jobs:
-  actionlint:
+  jactionlint:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -330,16 +330,16 @@ jobs:
 
 [Problem Matchers][problem-matchers] is a feature to extract GitHub Actions annotations from terminal outputs of linters.
 
-Copy [actionlint-matcher.json][actionlint-matcher] to `.github/actionlint-matcher.json` in your repository.
+Copy [jactionlint-matcher.json][jactionlint-matcher] to `.github/jactionlint-matcher.json` in your repository.
 
-Then enable the matcher using `add-matcher` command before running `actionlint` in the step of your workflow.
+Then enable the matcher using `add-matcher` command before running `jactionlint` in the step of your workflow.
 
 ```yaml
 - name: Check workflow files
   run: |
-    echo "::add-matcher::.github/actionlint-matcher.json"
-    bash <(curl https://raw.githubusercontent.com/jdx/jactionlint/main/scripts/download-actionlint.bash)
-    ./actionlint -color
+    echo "::add-matcher::.github/jactionlint-matcher.json"
+    bash <(curl https://raw.githubusercontent.com/jdx/jactionlint/main/scripts/download-jactionlint.bash)
+    ./jactionlint -color
   shell: bash
 ```
 
@@ -349,21 +349,21 @@ When you change your workflow and the changed line causes a new error, CI will a
 
 ### super-linter
 
-[super-linter][] is a Bash script for a simple combination of various linters, provided by GitHub. It has support for actionlint.
-Running super-linter in your repository automatically runs actionlint.
+[super-linter][] is a Bash script for a simple combination of various linters, provided by GitHub. It has support for jactionlint.
+Running super-linter in your repository automatically runs jactionlint.
 
 To ignore some errors, please add `-ignore` option by using [`GITHUB_ACTIONS_COMMAND_ARGS` environment variable][super-linter-env-var].
 Please see [super-linter/super-linter#1852](https://github.com/super-linter/super-linter/issues/1852) for the discussion.
 
 ### MegaLinter
 
-[MegaLinter][] is a linters aggregator for CI, embedding linters for many languages and formats. It has support for actionlint
-out of the box. Running MegaLinter in your repository automatically runs actionlint on your workflow files. Please see
-[the actionlint page of MegaLinter documentation][megalinter-actionlint] for more details.
+[MegaLinter][] is a linters aggregator for CI, embedding linters for many languages and formats. It has support for jactionlint
+out of the box. Running MegaLinter in your repository automatically runs jactionlint on your workflow files. Please see
+[the jactionlint page of MegaLinter documentation][megalinter-actionlint] for more details.
 
 ### pre-commit
 
-[pre-commit][] is a framework for managing and maintaining multi-language Git pre-commit hooks. actionlint is available as a
+[pre-commit][] is a framework for managing and maintaining multi-language Git pre-commit hooks. jactionlint is available as a
 pre-commit hook to check workflow files in `.github/workflows/` directory.
 
 Add this to your `.pre-commit-config.yaml` in your repository:
@@ -374,21 +374,21 @@ repos:
   - repo: https://github.com/jdx/jactionlint
     rev: v1.7.12  # x-release-please-version
     hooks:
-      - id: actionlint
+      - id: jactionlint
 ```
 
-As alternatives to `actionlint` hook, `actionlint-docker` or `actionlint-system` hooks are available.
+As alternatives to `jactionlint` hook, `jactionlint-docker` or `jactionlint-system` hooks are available.
 
 | Hook ID | Explanation |
 |-|-|
-| `actionlint` | Automatically installs `actionlint` command in isolated `$GOPATH` directory using [Go toolchain][go-install]. |
-| `actionlint-docker` | Automatically pulls [the actionlint Docker image](#docker). |
-| `actionlint-system` | Uses system-installed `actionlint` command. The command is necessary to be [installed manually](install.md). |
+| `jactionlint` | Automatically installs `jactionlint` command in isolated `$GOPATH` directory using [Go toolchain][go-install]. |
+| `jactionlint-docker` | Automatically pulls [the jactionlint Docker image](#docker). |
+| `jactionlint-system` | Uses system-installed `jactionlint` command. The command is necessary to be [installed manually](install.md). |
 
 ### VS Code
 
 [Linter extension][vsc-extension] for [VS Code][vscode] is available. The extension automatically detects `.github/workflows`
-directory, runs `actionlint` command, and reports errors in the code editor while editing workflow files.
+directory, runs `jactionlint` command, and reports errors in the code editor while editing workflow files.
 
 ### Emacs
 
@@ -398,17 +398,17 @@ Their respective repositories are [flycheck-actionlint][emacs-flycheck-extension
 
 ### Vim and Neovim
 
-[nvim-lint][] supports actionlint on Neovim. The plugin automatically and asynchronously runs actionlint and notifies errors
+[nvim-lint][] supports jactionlint on Neovim. The plugin automatically and asynchronously runs jactionlint and notifies errors
 on the fly when you edit GitHub Actions CI workflows. Please read the plugin's documentation for more details.
 
-[ALE][vim-ale] supports actionlint on Vim and Neovim. Similar to nvim-lint, The plugin automatically and asynchronously runs
-actionlint and notifies errors on the fly when you edit GitHub Actions CI workflows. Please read the plugin's documentation for
+[ALE][vim-ale] supports jactionlint on Vim and Neovim. Similar to nvim-lint, The plugin automatically and asynchronously runs
+jactionlint and notifies errors on the fly when you edit GitHub Actions CI workflows. Please read the plugin's documentation for
 more details.
 
 ### Pulsar Edit
 
 A [Linter package][pulsar-linter] for [Pulsar Edit][pulsar] is available. The package automatically detects a `workflows`
-directory, executes the `actionlint` command on any detected GitHub Actions files within the directory, and reports returned
+directory, executes the `jactionlint` command on any detected GitHub Actions files within the directory, and reports returned
 information in the code editor display tab while editing workflow files.
 
 ### Nova
@@ -439,7 +439,7 @@ or modify `.trunk/trunk.yaml` in your repository to contain:
 ```yaml
 lint:
   enabled:
-    - actionlint@1.7.12
+    - jactionlint@1.7.12
 ```
 
 Then just run:
@@ -470,7 +470,7 @@ You can also see actionlint issues inline in VS Code via the [Trunk VS Code exte
 [super-linter-env-var]: https://github.com/super-linter/super-linter#environment-variables
 [megalinter]: https://megalinter.io/
 [megalinter-actionlint]: https://megalinter.io/latest/descriptors/action_actionlint/
-[actionlint-matcher]: https://raw.githubusercontent.com/jdx/jactionlint/main/.github/actionlint-matcher.json
+[jactionlint-matcher]: https://raw.githubusercontent.com/jdx/jactionlint/main/.github/jactionlint-matcher.json
 [preinstall-ubuntu]: https://github.com/actions/runner-images/blob/main/images/ubuntu/Ubuntu2404-Readme.md
 [pre-commit]: https://pre-commit.com
 [go-install]: https://go.dev/doc/install

@@ -60,7 +60,7 @@ jobs:
           GH_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN }}
         run: |
           body=$(gh release view "$TAG" --json body --jq .body)
-          if grep -qiE '^##.*Sponsor jdx.s actionlint' <<<"$body"; then
+          if grep -qiE '^##.*Sponsor jdx.s jactionlint' <<<"$body"; then
             echo "Sponsor section already present in $TAG release notes; skipping append."
             exit 0
           fi
@@ -68,11 +68,11 @@ jobs:
             printf '%s\n' "$body"
             cat <<'EOF'
 
-          ## 💚 Sponsor jdx's actionlint
+          ## 💚 Sponsor jactionlint
 
-          jdx's actionlint is a fork of [rhysd/actionlint](https://github.com/rhysd/actionlint), maintained by [@jdx](https://github.com/jdx), an open source developer at [**entire.io**](https://entire.io/), the title sponsor of his open source work.
+          jactionlint is a fork of [rhysd/actionlint](https://github.com/rhysd/actionlint), maintained by [@jdx](https://github.com/jdx), an open source developer at [**entire.io**](https://entire.io/), the title sponsor of his open source work.
 
-          If actionlint has a place in your development workflow, please consider becoming an [individual or company sponsor](https://jdx.dev/sponsors.html). Your support funds ongoing development and helps keep actionlint fast, free, and independent.
+          If jactionlint has a place in your development workflow, please consider becoming an [individual or company sponsor](https://jdx.dev/sponsors.html). Your support funds ongoing development and helps keep jactionlint fast, free, and independent.
           EOF
           } > "$RUNNER_TEMP/release-notes.md"
           gh release edit "$TAG" --notes-file "$RUNNER_TEMP/release-notes.md"

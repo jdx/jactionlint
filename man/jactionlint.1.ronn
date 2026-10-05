@@ -1,16 +1,16 @@
-actionlint(1) -- static checker for GitHub Actions workflow files
+jactionlint(1) -- static checker for GitHub Actions workflow files
 =================================================================
 
 ## SYNOPSIS
 
-`actionlint` [<flags>] <br>
-`actionlint` [<flags>] <file>...<br>
-`actionlint` [<flags>] -<br>
+`jactionlint` [<flags>] <br>
+`jactionlint` [<flags>] <file>...<br>
+`jactionlint` [<flags>] -<br>
 
 
 ## DESCRIPTION
 
-**actionlint** is a linter for GitHub Actions workflow files.
+**jactionlint** is a linter for GitHub Actions workflow files.
 
 Features:
 
@@ -27,24 +27,24 @@ Features:
 
 ## USAGE
 
-To check all workflow files in the current repository, just run **actionlint** without arguments.
+To check all workflow files in the current repository, just run **jactionlint** without arguments.
 It automatically finds the nearest `.github/workflows` directory:
 
-    $ actionlint
+    $ jactionlint
 
 To check specific workflow files, pass the file paths as arguments:
 
-    $ actionlint file1.yaml file2.yaml
+    $ jactionlint file1.yaml file2.yaml
 
 To check a content which is not saved in file yet (e.g. output from some command), pass **-**
 argument. It reads stdin and checks it as workflow file:
 
-    $ actionlint -
+    $ jactionlint -
 
 To serialize errors into JSON, use **-format** option. It allows to format error messages flexibly
 with Go template syntax.
 
-    $ actionlint -format '{{json .}}'
+    $ jactionlint -format '{{json .}}'
 
 
 ## FLAGS
@@ -67,7 +67,7 @@ with Go template syntax.
     example, `-ignore A -ignore B` ignores errors whose message includes "A" OR "B".
 
   * `-init-config`:
-    Generate default config file at `.github/actionlint.yaml` in current project
+    Generate default config file at `.github/jactionlint.yaml` in current project
 
   * `-no-color`:
     Disable colorful output
@@ -104,7 +104,7 @@ Documents for more details are available online.
 
 https://github.com/jdx/jactionlint/blob/main/docs/checks.md
 
-Full list of all checks done by actionlint with example inputs, outputs, and playground links.
+Full list of all checks done by jactionlint with example inputs, outputs, and playground links.
 
 ### Installation
 
@@ -117,20 +117,20 @@ image, a download script (for CI) are available.
 
 https://github.com/jdx/jactionlint/blob/main/docs/usage.md
 
-How to use `actionlint` command locally or on GitHub Actions, the online playground, an official
+How to use `jactionlint` command locally or on GitHub Actions, the online playground, an official
 Docker image, and integrations with reviewdog, Problem Matchers, super-linter, pre-commit.
 
 ### Configuration
 
 https://github.com/jdx/jactionlint/blob/main/docs/config.md
 
-How to configure actionlint behavior by the configuration file `actionlint.yaml`.
+How to configure jactionlint behavior by the configuration file `jactionlint.yaml`.
 
 ### Go API
 
 https://github.com/jdx/jactionlint/blob/main/docs/api.md
 
-How to use actionlint as Go library.
+How to use jactionlint as Go library.
 
 ### References
 
@@ -142,13 +142,13 @@ Links to resources.
 
 Please try the download script.
 
-https://github.com/jdx/jactionlint/blob/main/scripts/download-actionlint.bash
+https://github.com/jdx/jactionlint/blob/main/scripts/download-jactionlint.bash
 
-It downloads the latest version of actionlint executable to the current directory automatically.
+It downloads the latest version of jactionlint executable to the current directory automatically.
 On GitHub Actions environment, it sets a file path to executable to`executable` output for using
 the executable in the following steps easily.
 
-Here is an example of simple workflow to run actionlint on GitHub Actions. Please ensure `shell: bash`
+Here is an example of simple workflow to run jactionlint on GitHub Actions. Please ensure `shell: bash`
 since the default shell for Windows runners is `pwsh`.
 
 ```
@@ -156,16 +156,16 @@ name: Lint GitHub Actions workflows
 on: [push, pull_request]
 
 jobs:
-  actionlint:
+  jactionlint:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Download actionlint
-        id: get_actionlint
-        run: bash <(curl https://raw.githubusercontent.com/jdx/jactionlint/main/scripts/download-actionlint.bash)
+      - name: Download jactionlint
+        id: get_jactionlint
+        run: bash <(curl https://raw.githubusercontent.com/jdx/jactionlint/main/scripts/download-jactionlint.bash)
         shell: bash
       - name: Check workflow files
-        run: ${{ steps.get_actionlint.outputs.executable }} -color
+        run: ${{ steps.get_jactionlint.outputs.executable }} -color
         shell: bash
 ```
 
@@ -174,15 +174,15 @@ or simply run
 ```yaml
 - name: Check workflow files
   run: |
-    bash <(curl https://raw.githubusercontent.com/jdx/jactionlint/main/scripts/download-actionlint.bash)
-    ./actionlint -color
+    bash <(curl https://raw.githubusercontent.com/jdx/jactionlint/main/scripts/download-jactionlint.bash)
+    ./jactionlint -color
   shell: bash
 ```
 
 
 ## EXIT STATUS
 
-`actionlint` command exits with one of the following exit statuses.
+`jactionlint` command exits with one of the following exit statuses.
 
   - **0**: It ran successfully and no problem was found.
   - **1**: It ran successfully and some problem was found.
@@ -192,7 +192,7 @@ or simply run
 
 ## PLAYGROUND
 
-Thanks to WebAssembly, actionlint playground is available on your browser. It never sends any data
+Thanks to WebAssembly, jactionlint playground is available on your browser. It never sends any data
 to outside of the browser.
 
 https://jactionlint.jdx.dev/
@@ -213,7 +213,7 @@ https://github.com/jdx/jactionlint/issues
 
 ## COPYRIGHT
 
-**actionlint** is licensed under the MIT License: `Copyright (c) 2021 rhysd, Copyright (c) 2026 jdx`
+**jactionlint** is licensed under the MIT License: `Copyright (c) 2021 rhysd, Copyright (c) 2026 jdx`
 
 https://github.com/jdx/jactionlint/blob/main/LICENSE.txt
 

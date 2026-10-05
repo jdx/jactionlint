@@ -1,4 +1,4 @@
-package actionlint
+package jactionlint
 
 import (
 	"bufio"
@@ -22,7 +22,7 @@ var (
 	gray   = color.New(color.FgHiBlack)
 )
 
-// Error represents an error detected by actionlint rules
+// Error represents an error detected by jactionlint rules
 type Error struct {
 	// Message is an error message.
 	Message string

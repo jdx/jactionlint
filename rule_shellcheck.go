@@ -1,4 +1,4 @@
-package actionlint
+package jactionlint
 
 import (
 	"encoding/json"
@@ -243,7 +243,7 @@ func (rule *RuleShellcheck) runShellcheck(srcAst *String, shell string, pos *Pos
 		// possible easily. YAML has multiple block styles with '|', '>', '|+', '>+', '|-', '>-'. Some
 		// of them remove indentation and/or blank lines. So restoring source position in block string
 		// is not possible. Sourcemap is necessary to do it.
-		// Instead, actionlint shows position of 'run:' as position of error. And separately show
+		// Instead, jactionlint shows position of 'run:' as position of error. And separately show
 		// location in script which is reported by shellcheck in error message.
 		for _, err := range errs {
 			// Consider the first line is setup for running shell which was implicitly added for better check

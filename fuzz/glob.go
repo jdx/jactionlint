@@ -1,13 +1,13 @@
 //go:build gofuzz
 
-package actionlint_fuzz
+package jactionlint_fuzz
 
 import (
 	"github.com/jdx/jactionlint"
 )
 
 func FuzzGlobGitRef(data []byte) int {
-	errs := actionlint.ValidateRefGlob(string(data))
+	errs := jactionlint.ValidateRefGlob(string(data))
 	if len(errs) > 0 {
 		return 0
 	}
@@ -15,7 +15,7 @@ func FuzzGlobGitRef(data []byte) int {
 }
 
 func FuzzGlobFilePath(data []byte) int {
-	errs := actionlint.ValidatePathGlob(string(data))
+	errs := jactionlint.ValidatePathGlob(string(data))
 	if len(errs) > 0 {
 		return 0
 	}

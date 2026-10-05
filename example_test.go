@@ -1,4 +1,4 @@
-package actionlint_test
+package jactionlint_test
 
 import (
 	"bytes"
@@ -11,13 +11,13 @@ import (
 
 func ExampleLinter() {
 	// Specify linter options
-	o := &actionlint.LinterOptions{
+	o := &jactionlint.LinterOptions{
 		IgnorePatterns: []string{`'label ".+" is unknown'`},
 		// Other options...
 	}
 
 	// Create Linter instance which outputs errors to stdout
-	l, err := actionlint.NewLinter(os.Stdout, o)
+	l, err := jactionlint.NewLinter(os.Stdout, o)
 	if err != nil {
 		panic(err)
 	}
@@ -26,7 +26,7 @@ func ExampleLinter() {
 	f := filepath.Join("testdata", "examples", "main.yaml")
 
 	// First return value is an array of lint errors found in the workflow files. The second return
-	// value is an error of actionlint itself. This call outputs the lint errors to stdout. Use
+	// value is an error of jactionlint itself. This call outputs the lint errors to stdout. Use
 	// io.Discard to prevent the output.
 	//
 	// There are several methods to run linter.
@@ -41,12 +41,12 @@ func ExampleLinter() {
 		panic(err)
 	}
 
-	fmt.Println(len(errs), "lint errors found by actionlint")
+	fmt.Println(len(errs), "lint errors found by jactionlint")
 }
 
 func ExampleErrorFormatter() {
 	// Errors returned from Linter methods
-	errs := []*actionlint.Error{
+	errs := []*jactionlint.Error{
 		{
 			Message:  "error message 1",
 			Filepath: "foo.yaml",
@@ -64,7 +64,7 @@ func ExampleErrorFormatter() {
 	}
 
 	// Create ErrorFormatter instance with template
-	f, err := actionlint.NewErrorFormatter(`{{range $ := .}}{{$.Filepath}}:{{$.Line}}:{{$.Column}}: {{$.Message}}\n{{end}}`)
+	f, err := jactionlint.NewErrorFormatter(`{{range $ := .}}{{$.Filepath}}:{{$.Line}}:{{$.Column}}: {{$.Message}}\n{{end}}`)
 	if err != nil {
 		// Some error happened while creating the formatter (e.g. syntax error)
 		panic(err)
@@ -94,7 +94,7 @@ func ExampleCommand() {
 	var output bytes.Buffer
 
 	// Create command instance populating stdin/stdout/stderr
-	cmd := actionlint.Command{
+	cmd := jactionlint.Command{
 		Stdin:  os.Stdin,
 		Stdout: &output,
 		Stderr: &output,
@@ -102,12 +102,12 @@ func ExampleCommand() {
 
 	// Run the command end-to-end. Note that given args should contain program name
 	workflow := filepath.Join(".github", "workflows", "release.yaml")
-	status := cmd.Main([]string{"actionlint", "-shellcheck=", "-pyflakes=", workflow})
+	status := cmd.Main([]string{"jactionlint", "-shellcheck=", "-pyflakes=", workflow})
 
 	fmt.Println("Exited with status", status)
 	// Output: Exited with status 0
 
 	if status != 0 {
-		panic("actionlint command failed: " + output.String())
+		panic("jactionlint command failed: " + output.String())
 	}
 }

@@ -17,7 +17,7 @@ func fail(err error, when string) {
 	window.Call("showError", err.Error()+" on "+when)
 }
 
-func encodeErrorAsMap(err *actionlint.Error) map[string]interface{} {
+func encodeErrorAsMap(err *jactionlint.Error) map[string]interface{} {
 	obj := make(map[string]interface{}, 4)
 	obj["message"] = err.Message
 	obj["line"] = err.Line
@@ -27,8 +27,8 @@ func encodeErrorAsMap(err *actionlint.Error) map[string]interface{} {
 }
 
 func lint(source string) interface{} {
-	opts := actionlint.LinterOptions{}
-	linter, err := actionlint.NewLinter(io.Discard, &opts)
+	opts := jactionlint.LinterOptions{}
+	linter, err := jactionlint.NewLinter(io.Discard, &opts)
 	if err != nil {
 		fail(err, "creating linter instance")
 		return nil

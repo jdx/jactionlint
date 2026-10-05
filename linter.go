@@ -1,4 +1,4 @@
-package actionlint
+package jactionlint
 
 import (
 	"context"
@@ -28,7 +28,7 @@ const (
 	// LogLevelNone does not output any log output.
 	LogLevelNone LogLevel = 0
 	// LogLevelVerbose shows verbose log output. This is equivalent to specifying -verbose option
-	// to actionlint command.
+	// to jactionlint command.
 	LogLevelVerbose = 1
 	// LogLevelDebug shows all log output including debug information.
 	LogLevelDebug = 2
@@ -75,8 +75,8 @@ type LinterOptions struct {
 	// messages. When an error is matched, the error is ignored.
 	IgnorePatterns []string
 	// ConfigFile is a path to config file. Empty string means no config file path is given. In
-	// the case, actionlint will try to read config from the repository's .github/actionlint.yaml,
-	// then from $XDG_CONFIG_HOME/actionlint/actionlint.yaml ($HOME/.config when unset).
+	// the case, jactionlint will try to read config from the repository's .github/jactionlint.yaml,
+	// then from $XDG_CONFIG_HOME/jactionlint/jactionlint.yaml ($HOME/.config when unset).
 	ConfigFile string
 	// Format is a custom template to format error messages. It must follow Go Template format and
 	// contain at least one {{ }} placeholder. https://pkg.go.dev/text/template
@@ -152,7 +152,7 @@ func NewLinter(out io.Writer, opts *LinterOptions) (*Linter, error) {
 	}
 
 	// Load the user-global config as a fallback for projects which have no
-	// .github/actionlint.yaml. The -config-file option takes precedence over it.
+	// .github/jactionlint.yaml. The -config-file option takes precedence over it.
 	var globalCfg *Config
 	var globalCfgPath string
 	if opts.ConfigFile == "" {
@@ -240,7 +240,7 @@ func (l *Linter) debugWriter() io.Writer {
 	return l.logOut
 }
 
-// GenerateDefaultConfig generates default config file at ".github/actionlint.yaml" in the project
+// GenerateDefaultConfig generates default config file at ".github/jactionlint.yaml" in the project
 // which the given directory path belongs to. When the directory path is empty, the current directory
 // will be used instead.
 func (l *Linter) GenerateDefaultConfig(dir string) error {
@@ -248,7 +248,7 @@ func (l *Linter) GenerateDefaultConfig(dir string) error {
 		dir = l.cwd
 	}
 
-	l.log("Generating default actionlint.yaml in repository:", dir)
+	l.log("Generating default jactionlint.yaml in repository:", dir)
 
 	proj, err := l.projects.At(dir)
 	if err != nil {
@@ -259,14 +259,14 @@ func (l *Linter) GenerateDefaultConfig(dir string) error {
 	}
 
 	d := filepath.Join(proj.RootDir(), ".github")
-	for _, f := range []string{"actionlint.yaml", "actionlint.yml"} {
+	for _, f := range configFileNames {
 		p := filepath.Join(d, f)
 		if _, err := os.Stat(p); err == nil {
 			return fmt.Errorf("config file already exists at %q", p)
 		}
 	}
 
-	p := filepath.Join(d, "actionlint.yaml")
+	p := filepath.Join(d, "jactionlint.yaml")
 	if err := writeDefaultConfigFile(p); err != nil {
 		return err
 	}

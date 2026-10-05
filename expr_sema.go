@@ -1,4 +1,4 @@
-package actionlint
+package jactionlint
 
 import (
 	"encoding/json"
@@ -522,7 +522,7 @@ func (sema *ExprSemanticsChecker) UpdateJobs(ty *ObjectType) {
 //
 // If this method is not called before checks, ExprSemanticsChecker considers any contexts are
 // available by default.
-// Available contexts for workflow keys can be obtained from actionlint.ContextAvailability.
+// Available contexts for workflow keys can be obtained from jactionlint.ContextAvailability.
 func (sema *ExprSemanticsChecker) SetContextAvailability(avail []string) {
 	sema.availableContexts = avail
 }
@@ -559,10 +559,10 @@ func (sema *ExprSemanticsChecker) checkAvailableContext(n *VariableNode) {
 // Elements of 'avail' parameter must be in lower case to check function names in case-insensitive.
 //
 // If this method is not called before checks, ExprSemanticsChecker considers no special function is
-// allowed by default. Allowed functions can be obtained from actionlint.SpecialFunctionNames global
+// allowed by default. Allowed functions can be obtained from jactionlint.SpecialFunctionNames global
 // constant.
 //
-// Available function names for workflow keys can be obtained from actionlint.ContextAvailability.
+// Available function names for workflow keys can be obtained from jactionlint.ContextAvailability.
 func (sema *ExprSemanticsChecker) SetSpecialFunctionAvailability(avail []string) {
 	sema.availableSpecialFuncs = avail
 }
@@ -703,7 +703,7 @@ func (sema *ExprSemanticsChecker) checkConfigVariables(n *ObjectDerefNode) {
 	if len(sema.configVars) == 0 {
 		sema.errorf(
 			n,
-			"no configuration variable is allowed since the variables list is empty in actionlint.yaml. you may forget adding the variable %q to the list",
+			"no configuration variable is allowed since the variables list is empty in jactionlint.yaml. you may forget adding the variable %q to the list",
 			n.Property,
 		)
 		return
@@ -717,7 +717,7 @@ func (sema *ExprSemanticsChecker) checkConfigVariables(n *ObjectDerefNode) {
 
 	sema.errorf(
 		n,
-		"undefined configuration variable %q. defined configuration variables in actionlint.yaml are %s",
+		"undefined configuration variable %q. defined configuration variables in jactionlint.yaml are %s",
 		n.Property,
 		sortedQuotes(sema.configVars),
 	)
@@ -734,7 +734,7 @@ func (sema *ExprSemanticsChecker) checkConfigSecrets(n *ObjectDerefNode) {
 	if len(sema.configSecrets) == 0 {
 		sema.errorf(
 			n,
-			"no secret is allowed since the secrets list is empty in actionlint.yaml. you may forget adding the secret %q to the list",
+			"no secret is allowed since the secrets list is empty in jactionlint.yaml. you may forget adding the secret %q to the list",
 			n.Property,
 		)
 		return
@@ -748,7 +748,7 @@ func (sema *ExprSemanticsChecker) checkConfigSecrets(n *ObjectDerefNode) {
 
 	sema.errorf(
 		n,
-		"undefined secret %q. defined secrets in actionlint.yaml are %s",
+		"undefined secret %q. defined secrets in jactionlint.yaml are %s",
 		n.Property,
 		sortedQuotes(sema.configSecrets),
 	)

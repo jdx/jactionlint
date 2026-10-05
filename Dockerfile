@@ -6,14 +6,14 @@ WORKDIR /go/src/app
 COPY go.* *.go ./
 COPY cmd cmd/
 ENV CGO_ENABLED=0
-ARG ACTIONLINT_VER=
-RUN go build -v -ldflags "-s -w -X github.com/jdx/jactionlint.version=${ACTIONLINT_VER}" ./cmd/actionlint
+ARG JACTIONLINT_VER=
+RUN go build -v -ldflags "-s -w -X github.com/jdx/jactionlint.version=${JACTIONLINT_VER}" ./cmd/jactionlint
 
 FROM koalaman/shellcheck-alpine:stable AS shellcheck
 
 FROM alpine:${ALPINE_VER}
-COPY --from=builder /go/src/app/actionlint /usr/local/bin/
+COPY --from=builder /go/src/app/jactionlint /usr/local/bin/
 COPY --from=shellcheck /bin/shellcheck /usr/local/bin/shellcheck
 RUN apk add --no-cache py3-pyflakes
 USER guest
-ENTRYPOINT ["/usr/local/bin/actionlint"]
+ENTRYPOINT ["/usr/local/bin/jactionlint"]

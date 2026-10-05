@@ -4,7 +4,7 @@ import "package://github.com/jdx/hk/releases/download/v2.4.0/hk@2.4.0#/Builtins.
 local fast = new Mapping<String, Step> {
     // Same files and plain gofmt (no -s) as the CI lint job used to check
     ["go_fmt"] {
-        glob = List("*.go", "cmd/actionlint/*.go", "scripts/*/*.go", "playground/*.go")
+        glob = List("*.go", "cmd/jactionlint/*.go", "scripts/*/*.go", "playground/*.go")
         check_list_files = """
             FILES=$(gofmt -l {{files}})
             if [ -n "$FILES" ]; then
@@ -20,10 +20,10 @@ local fast = new Mapping<String, Step> {
         glob = List("scripts/*.bash", "playground/*.bash")
         check = "shellcheck {{files}}"
     }
-    // Dog fooding: lint our own workflows with the actionlint in this tree
-    ["actionlint"] {
+    // Dog fooding: lint our own workflows with the jactionlint in this tree
+    ["jactionlint"] {
         glob = List(".github/workflows/*.yaml", ".github/workflows/*.yml")
-        check = "go run ./cmd/actionlint -color {{files}}"
+        check = "go run ./cmd/jactionlint -color {{files}}"
     }
 }
 

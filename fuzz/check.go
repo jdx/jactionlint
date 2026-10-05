@@ -1,13 +1,13 @@
 //go:build gofuzz
 
-package actionlint_fuzz
+package jactionlint_fuzz
 
 import "github.com/jdx/jactionlint"
 
-func parseWorkflowPanicFree(data []byte) *actionlint.Workflow {
+func parseWorkflowPanicFree(data []byte) *jactionlint.Workflow {
 	// Avoid Parse() panicking. It panics when go-yaml panics
 	defer func() { recover() }()
-	w, _ := actionlint.Parse(data)
+	w, _ := jactionlint.Parse(data)
 	return w
 }
 
@@ -17,28 +17,28 @@ func FuzzCheck(data []byte) int {
 		return 0
 	}
 
-	ac := actionlint.NewLocalActionsCache(nil, nil)
-	wc := actionlint.NewLocalReusableWorkflowCache(nil, "", nil)
+	ac := jactionlint.NewLocalActionsCache(nil, nil)
+	wc := jactionlint.NewLocalReusableWorkflowCache(nil, "", nil)
 
-	rules := []actionlint.Rule{
-		actionlint.NewRuleMatrix(),
-		actionlint.NewRuleCredentials(),
-		actionlint.NewRuleShellName(),
-		actionlint.NewRuleRunnerLabel(),
-		actionlint.NewRuleEvents(),
-		actionlint.NewRuleGlob(),
-		actionlint.NewRuleJobNeeds(),
-		actionlint.NewRuleAction(ac),
-		actionlint.NewRuleEnvVar(),
-		actionlint.NewRuleID(),
-		actionlint.NewRuleExpression(ac, wc),
-		actionlint.NewRuleWorkflowCall("test.yaml", wc),
-		actionlint.NewRulePermissions(),
-		actionlint.NewRuleDeprecatedCommands(),
-		actionlint.NewRuleIfCond(),
+	rules := []jactionlint.Rule{
+		jactionlint.NewRuleMatrix(),
+		jactionlint.NewRuleCredentials(),
+		jactionlint.NewRuleShellName(),
+		jactionlint.NewRuleRunnerLabel(),
+		jactionlint.NewRuleEvents(),
+		jactionlint.NewRuleGlob(),
+		jactionlint.NewRuleJobNeeds(),
+		jactionlint.NewRuleAction(ac),
+		jactionlint.NewRuleEnvVar(),
+		jactionlint.NewRuleID(),
+		jactionlint.NewRuleExpression(ac, wc),
+		jactionlint.NewRuleWorkflowCall("test.yaml", wc),
+		jactionlint.NewRulePermissions(),
+		jactionlint.NewRuleDeprecatedCommands(),
+		jactionlint.NewRuleIfCond(),
 	}
 
-	v := actionlint.NewVisitor()
+	v := jactionlint.NewVisitor()
 	for _, rule := range rules {
 		v.AddPass(rule)
 	}

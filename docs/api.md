@@ -2,9 +2,9 @@ Go API
 ======
 [![API Document][api-badge]][apidoc]
 
-This document describes how to use [actionlint](..) as Go library.
+This document describes how to use [jactionlint](..) as Go library.
 
-actionlint can be used from Go programs by importing the module.
+jactionlint can be used from Go programs by importing the module.
 
 ```go
 import "github.com/jdx/jactionlint"
@@ -15,12 +15,12 @@ a workflow file parser built on top of `yaml/go-yaml` library, expression `${{ }
 
 Followings are unexhaustive list of interesting APIs.
 
-- `Command` struct represents entire `actionlint` command. `Command.Main` takes command line arguments and runs command
+- `Command` struct represents entire `jactionlint` command. `Command.Main` takes command line arguments and runs command
   until the end and returns exit status.
-- `Linter` manages linter lifecycle and applies checks to given files. If you want to run actionlint checks in your
+- `Linter` manages linter lifecycle and applies checks to given files. If you want to run jactionlint checks in your
   program, please use this struct.
 - `Project` and `Projects` detect a project (Git repository) in a given directory path and find configuration in it.
-- `Config` represents structure of `actionlint.yaml` config file. It can be decoded by [yaml/go-yaml][go-yaml] library.
+- `Config` represents structure of `jactionlint.yaml` config file. It can be decoded by [yaml/go-yaml][go-yaml] library.
 - `Workflow`, `Job`, `Step`, ... are nodes of workflow syntax tree. `Workflow` is a root node.
 - `Parse()` parses given contents into a workflow syntax tree. It tries to find syntax errors as much as possible and
   returns found errors as slice.
@@ -48,7 +48,7 @@ Followings are unexhaustive list of interesting APIs.
 
 ## Library versioning
 
-The version of this repository is for command line tool `actionlint`. So it does not represent the version of the library.
+The version of this repository is for command line tool `jactionlint`. So it does not represent the version of the library.
 It means that the library does not follow semantic versioning and any patch version bump may introduce some breaking changes.
 
 ## Go version compatibility

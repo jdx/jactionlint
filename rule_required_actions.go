@@ -1,5 +1,5 @@
-// Package actionlint provides linting functionality for GitHub Actions workflows.
-package actionlint
+// Package jactionlint provides linting functionality for GitHub Actions workflows.
+package jactionlint
 
 import (
 	"slices"

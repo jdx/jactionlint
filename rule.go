@@ -1,4 +1,4 @@
-package actionlint
+package jactionlint
 
 import (
 	"fmt"
@@ -84,13 +84,13 @@ func (r *RuleBase) EnableDebug(out io.Writer) {
 	r.dbg = out
 }
 
-// SetConfig populates user configuration of actionlint to the rule. When no config is set, rules
+// SetConfig populates user configuration of jactionlint to the rule. When no config is set, rules
 // should behave as if the default configuration is set.
 func (r *RuleBase) SetConfig(cfg *Config) {
 	r.config = cfg
 }
 
-// Config returns the user configuration of actionlint. When no config was set to this rule by SetConfig,
+// Config returns the user configuration of jactionlint. When no config was set to this rule by SetConfig,
 // this method returns nil.
 func (r *RuleBase) Config() *Config {
 	return r.config
