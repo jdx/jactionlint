@@ -1,0 +1,25 @@
+on: push
+jobs:
+  # A checkout in a parallel group does not help the steps running concurrently in the same group
+  sibling:
+    runs-on: ubuntu-latest
+    steps:
+      - parallel:
+          - uses: actions/checkout@v4
+          - uses: ./local-action
+  # The group waits for all its steps at the end so a later step can use the checkout
+  after-group:
+    runs-on: ubuntu-latest
+    steps:
+      - parallel:
+          - uses: actions/checkout@v4
+          - run: echo hello
+      - uses: ./local-action
+  # An earlier checkout is visible to every step of a following group
+  before-group:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - parallel:
+          - uses: ./local-action
+          - uses: ./other-action

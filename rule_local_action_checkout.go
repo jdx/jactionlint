@@ -17,6 +17,7 @@ type RuleLocalActionCheckout struct {
 	RuleBase
 	checkedOut bool
 	reported   bool
+	handled    map[*Step]bool
 }
 
 // NewRuleLocalActionCheckout creates a new RuleLocalActionCheckout instance.
@@ -33,43 +34,70 @@ func NewRuleLocalActionCheckout() *RuleLocalActionCheckout {
 func (rule *RuleLocalActionCheckout) VisitJobPre(n *Job) error {
 	rule.checkedOut = false
 	rule.reported = false
+	rule.handled = nil
 	return nil
 }
 
 // VisitStep is callback when visiting Step node.
 func (rule *RuleLocalActionCheckout) VisitStep(n *Step) error {
+	if rule.handled[n] {
+		// Already checked as a part of the enclosing `parallel` group
+		return nil
+	}
 	if rule.checkedOut || rule.reported {
 		return nil
 	}
 	if cfg := rule.Config(); cfg == nil || !cfg.RequireCheckoutBeforeLocalAction {
 		return nil
 	}
+	if rule.checkStep(n, false) {
+		rule.checkedOut = true
+	}
+	return nil
+}
 
+// checkStep checks the step and reports whether it checks out the repository. 'checkedOut' is whether the
+// repository was already checked out before the step starts. Steps in a `parallel` group run concurrently so each of
+// them sees the state at the start of the group. A checkout in the group is only available after the group.
+func (rule *RuleLocalActionCheckout) checkStep(n *Step, checkedOut bool) bool {
 	switch e := n.Exec.(type) {
 	case *ExecRun:
-		if e.Run != nil && checkoutCommandRegex.MatchString(e.Run.Value) {
-			rule.checkedOut = true
-		}
+		return e.Run != nil && checkoutCommandRegex.MatchString(e.Run.Value)
 	case *ExecAction:
 		if e.Uses == nil {
-			return nil
+			return false
 		}
 		spec := e.Uses.Value
 		// "$/path" is resolved by the runner without a checkout so it is not subject to this check
 		if strings.HasPrefix(spec, "./") {
-			rule.reported = true
-			rule.Errorf(
-				e.Uses.Pos,
-				"local action %q is used before any checkout step in this job. the repository is not on the runner yet so the action cannot be found. add \"actions/checkout\" before this step or use \"$/\" syntax. this is reported because \"require-checkout-before-local-action\" is enabled",
-				spec,
-			)
-			return nil
+			if !checkedOut && !rule.reported {
+				rule.reported = true
+				rule.Errorf(
+					e.Uses.Pos,
+					"local action %q is used before any checkout step in this job. the repository is not on the runner yet so the action cannot be found. add \"actions/checkout\" before this step or use \"$/\" syntax. this is reported because \"require-checkout-before-local-action\" is enabled",
+					spec,
+				)
+			}
+			return false
 		}
-		if isCheckoutActionSpec(spec) {
-			rule.checkedOut = true
+		return isCheckoutActionSpec(spec)
+	case *ExecParallel:
+		if rule.handled == nil {
+			rule.handled = map[*Step]bool{}
 		}
+		any := false
+		for _, c := range e.Steps {
+			if c == nil {
+				continue
+			}
+			rule.handled[c] = true
+			if rule.checkStep(c, checkedOut) {
+				any = true
+			}
+		}
+		return any
 	}
-	return nil
+	return false
 }
 
 // isCheckoutActionSpec returns whether the `uses:` value looks like an action to check out a repository such as
