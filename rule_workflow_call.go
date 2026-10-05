@@ -2,6 +2,8 @@ package actionlint
 
 import (
 	"fmt"
+	"slices"
+	"strconv"
 	"strings"
 )
 
@@ -11,6 +13,8 @@ type RuleWorkflowCall struct {
 	workflowCallEventPos *Pos
 	workflowPath         string
 	cache                *LocalReusableWorkflowCache
+	workflow             *Workflow
+	curJob               *Job
 }
 
 // NewRuleWorkflowCall creates a new RuleWorkflowCall instance. 'workflowPath' is a file path to
@@ -29,12 +33,13 @@ func NewRuleWorkflowCall(workflowPath string, cache *LocalReusableWorkflowCache)
 
 // VisitWorkflowPre is callback when visiting Workflow node before visiting its children.
 func (rule *RuleWorkflowCall) VisitWorkflowPre(n *Workflow) error {
+	rule.workflow = n
 	for _, e := range n.On {
 		if e, ok := e.(*WorkflowCallEvent); ok {
 			rule.workflowCallEventPos = e.Pos
 			// Register this reusable workflow in cache so that it does not need to parse this workflow
 			// file again when this workflow is called by other workflows.
-			rule.cache.WriteWorkflowCallEvent(rule.workflowPath, e)
+			rule.cache.WriteWorkflowCallEventFromWorkflow(rule.workflowPath, e, n)
 			break
 		}
 	}
@@ -43,6 +48,7 @@ func (rule *RuleWorkflowCall) VisitWorkflowPre(n *Workflow) error {
 
 // VisitJobPre is callback when visiting Job node before visiting its children.
 func (rule *RuleWorkflowCall) VisitJobPre(n *Job) error {
+	rule.curJob = n
 	if n.WorkflowCall == nil {
 		return nil
 	}
@@ -152,7 +158,125 @@ func (rule *RuleWorkflowCall) checkWorkflowCallUsesLocal(call *WorkflowCall) {
 		}
 	}
 
+	// Validate permissions
+	rule.checkWorkflowCallPermissions(call, m)
+
 	rule.Debug("Validated reusable workflow %q", u.Value)
+}
+
+// checkWorkflowCallPermissions compares each callee job's effective `permissions:` requirement
+// against the caller job's effective grant. Emits an error per missing scope. The check ignores
+// `if:` on callee jobs because GitHub validates permissions at workflow load time regardless of
+// the runtime gate.
+func (rule *RuleWorkflowCall) checkWorkflowCallPermissions(call *WorkflowCall, m *ReusableWorkflowMetadata) {
+	if len(m.JobPermissions) == 0 {
+		return
+	}
+
+	cfg := rule.Config()
+	mode := AssumeDefaultPermissionsRestricted
+	if cfg != nil && cfg.AssumeDefaultPermissions != nil {
+		mode = *cfg.AssumeDefaultPermissions
+	}
+
+	// Caller's effective permissions: job-level wins over workflow-level. A nil callerPerm means
+	// the caller declared no `permissions:` anywhere; per-scope levels then come from
+	// silentDefaultLevel rather than the explicit-block "absent = none" rule.
+	var callerPerm *ReusableWorkflowPermissions
+	if rule.curJob != nil && rule.curJob.Permissions != nil {
+		callerPerm = convertASTPermissions(rule.curJob.Permissions)
+	} else if rule.workflow != nil && rule.workflow.Permissions != nil {
+		callerPerm = convertASTPermissions(rule.workflow.Permissions)
+	} else if rule.workflowCallEventPos != nil {
+		// The caller is itself a reusable workflow without any `permissions:`. GitHub then hands it the
+		// token permissions of its own (unknown) upstream caller, not the repository default, so there
+		// is nothing reliable to compare against.
+		rule.Debug("Skip permissions check since the caller is a reusable workflow without permissions")
+		return
+	}
+
+	callerLevel := func(scope string) int {
+		if callerPerm == nil {
+			return silentDefaultLevel(mode, scope)
+		}
+		return effectiveLevel(callerPerm, scope)
+	}
+
+	// Iterate callee jobs in a stable order so error messages are deterministic.
+	ids := make([]string, 0, len(m.JobPermissions))
+	for id := range m.JobPermissions {
+		ids = append(ids, id)
+	}
+	slices.Sort(ids)
+
+	u := call.Uses
+	for _, id := range ids {
+		jp := m.JobPermissions[id]
+		if jp == nil {
+			continue
+		}
+		required := requiredScopeLevels(jp)
+
+		scopes := make([]string, 0, len(required))
+		for s := range required {
+			scopes = append(scopes, s)
+		}
+		slices.Sort(scopes)
+		// Report all insufficient scopes of a job in one error to avoid flooding the output
+		// (e.g. a callee with `read-all` called by a caller granting a single scope).
+		var wants, haves []string
+		for _, scope := range scopes {
+			want := required[scope]
+			have := callerLevel(scope)
+			if have < want {
+				wants = append(wants, strconv.Quote(scope+": "+permissionLevelName(want)))
+				haves = append(haves, strconv.Quote(scope+": "+permissionLevelName(have)))
+			}
+		}
+		if len(wants) > 0 {
+			rule.Errorf(
+				u.Pos,
+				"nested job %q of %q requires %s but the calling job grants %s",
+				id, u.Value,
+				strings.Join(wants, ", "),
+				strings.Join(haves, ", "),
+			)
+		}
+	}
+}
+
+// requiredScopeLevels returns the scopes the callee actually requires (level > none), mapped to
+// the minimum permission level the caller must grant. Both `read-all`/`write-all` and per-scope
+// values are clamped to what each scope actually allows (e.g. `id-token: read` collapses to
+// `none` because id-token only supports write).
+func requiredScopeLevels(jp *ReusableWorkflowPermissions) map[string]int {
+	required := map[string]int{}
+	if jp.All != "" {
+		level := permLevelNone
+		switch jp.All {
+		case "write-all":
+			level = permLevelWrite
+		case "read-all":
+			level = permLevelRead
+		}
+		if level > permLevelNone {
+			for scope := range allPermissionScopes {
+				if l := clampLevelForScope(scope, level); l > permLevelNone {
+					required[scope] = l
+				}
+			}
+		}
+		return required
+	}
+	for scope, val := range jp.Scopes {
+		if _, ok := allPermissionScopes[scope]; !ok {
+			continue
+		}
+		if l := clampLevelForScope(scope, permissionLevel(val)); l > permLevelNone {
+			required[scope] = l
+		}
+	}
+	return required
 }
 
 // Parse ./{path}/{filename} or $/{path}/{filename}
