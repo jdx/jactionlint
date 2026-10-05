@@ -1,0 +1,24 @@
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      # ERROR: not pinned to commit hash
+      - uses: actions/checkout@main
+      # ERROR: abbreviated hash
+      - uses: actions/checkout@db41740
+      # ERROR: docker image pinned by tag only
+      - uses: 'docker://image:latest'
+      # ERROR: docker image without tag
+      - uses: docker://image
+      # OK: pinned to commit hash
+      - uses: actions/checkout@db41740e12847bb616a339b75eb9414e711417df
+      - uses: actions/checkout/sub/dir@db41740e12847bb616a339b75eb9414e711417df
+      # OK: docker image pinned to digest
+      - uses: docker://image@sha256:3235326357dfb65f1781dbc4df3b834546d8bf914e82cce58e6e6b676e23ce8f
+      # OK: local actions are not subject to the check
+      - uses: ./
+  reusable-bad:
+    uses: owner/repo/.github/workflows/ci.yml@v1
+  reusable-good:
+    uses: owner/repo/.github/workflows/ci.yml@db41740e12847bb616a339b75eb9414e711417df
