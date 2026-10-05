@@ -81,3 +81,11 @@
   width: auto;
   min-width: 36px;
 }
+
+/* The shared banner (banner.css) uses black text on --vp-c-brand-1. Black on the light theme's teal is 3.8:1,
+   below WCAG AA (4.5:1) for this text size, so use white there (5.5:1). The dark theme's lighter brand colour
+   keeps black (10.9:1). banner.css stays identical to the other jdx.dev sites. */
+html:not(.dark) .jdx-banner,
+html:not(.dark) .jdx-banner a {
+  color: #fff;
+}
