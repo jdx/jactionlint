@@ -21,6 +21,7 @@ List of checks:
 - [Script injection by potentially untrusted inputs](#untrusted-inputs)
 - [Job dependencies validation](#check-job-deps)
 - [Parallel steps](#check-parallel-step-refs)
+- [Timeout minutes of jobs (opt-in)](#check-timeout-minutes)
 - [Matrix values](#check-matrix-values)
 - [Webhook events validation](#check-webhook-events)
 - [Workflow dispatch event validation](#check-workflow-dispatch-events)
@@ -903,6 +904,8 @@ level or job level. Each step can configure shell to run scripts by `shell:`.
 
 In the above example output, `SC2086:info:1:6:` means that shellcheck reported SC2086 rule violation and the location is at
 line 1, column 6. Note that the location is relative to the script of the `run:` section.
+The reported source line is the line within the script when `run:` uses a literal block (`|`, `|-`, `|+`) and no `${{ }}`
+in the script spans multiple lines. Otherwise, the position of `run:` is reported.
 
 actionlint remembers the default shell and checks what OS the job runs on. Only when the shell is `bash` or `sh`, actionlint
 applies shellcheck to scripts.
@@ -1120,6 +1123,23 @@ directly in a script, actionlint will report it as an error.
 - `github.event.pull_request.head.ref`
 - `github.event.pull_request.head.label`
 - `github.event.pull_request.head.repo.default_branch`
+- `github.event.pull_request.head.repo.description`
+- `github.event.discussion.title`
+- `github.event.discussion.body`
+- `github.event.head_commit.committer.email`
+- `github.event.head_commit.committer.name`
+- `github.event.commits.*.committer.email`
+- `github.event.commits.*.committer.name`
+- `github.event.workflow_run.head_branch`
+- `github.event.workflow_run.display_title`
+- `github.event.workflow_run.head_commit.message`
+- `github.event.workflow_run.head_commit.author.email`
+- `github.event.workflow_run.head_commit.author.name`
+- `github.event.workflow_run.head_commit.committer.email`
+- `github.event.workflow_run.head_commit.committer.name`
+- `github.event.workflow_run.pull_requests.*.head.ref`
+- `github.event.workflow_run.head_repository.description`
+- `github.event.workflow_run.head_repository.owner.login`
 - `github.head_ref`
 
 Not only direct access to the untrusted properties, actionlint also detects those properties indirectly accessed via
@@ -1253,6 +1273,56 @@ test.yaml:11:17: "serverr" is not the ID of a preceding background step. "wait" 
 
 [Playground](https://rhysd.github.io/actionlint/#eNpczssNAjEMBND7VjG3nNKA26CCJGuxwOKs/KF+FD4R4mTJz6NxF8IRti3XXo0WwNl8TEBDLA+PGuKR9zLsReZ82PsKyJByZ8LJizqM9cH6IeCy0v9KQwjcto5kI5Km1NJuZ+0hK8E1eBb8RMYPlqa0Io33b4c+BwCanjvx)
 
+<a id="check-timeout-minutes"></a>
+## Timeout minutes of jobs (opt-in)
+
+Example input:
+
+```yaml
+on: push
+jobs:
+  no-timeout:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo hello
+  too-long:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - run: echo hello
+```
+
+Output:
+<!-- Skip update output -->
+```
+test.yaml:3:3: "timeout-minutes" is not set at this job. Set it to avoid wasting runner minutes when the job hangs [timeout-check]
+  |
+3 |   no-timeout:
+  |   ^~~~~~~~~~~
+test.yaml:9:22: "timeout-minutes" is 120, which is greater than the maximum 60 minutes allowed by the configuration [timeout-check]
+  |
+9 |     timeout-minutes: 120
+  |                      ^~~
+```
+
+<!-- Skip playground link -->
+
+This check is disabled by default. The output above is from the following `timeout-minutes` section of the
+[configuration file](config.md):
+
+```yaml
+timeout-minutes:
+  required: true
+  max: 60
+```
+
+- `required: true` reports jobs which do not set [`timeout-minutes`][timeout-minutes-doc]. Without it, a hanging job runs until
+  the default timeout of 360 minutes. Jobs calling a reusable workflow are not checked since they do not support it.
+- `max` reports jobs whose `timeout-minutes` is larger than the value. It works without `required`. Values given by
+  expressions `${{ }}` are not checked.
+
+[timeout-minutes-doc]: https://docs.github.com/en/actions/writing-workflows/workflow-syntax-for-github-actions#jobsjob_idtimeout-minutes
+
 <a id="check-matrix-values"></a>
 ## Matrix values
 
@@ -1298,7 +1368,7 @@ test.yaml:12:13: "platform" in "exclude" section does not exist in matrix. avail
 [`matrix:`][matrix-doc] defines combinations of multiple values. Nested `include:` and `exclude:` can add/remove specific
 combination of matrix values. actionlint checks
 
-- values in `exclude:` appear in `matrix:` or `include:`
+- values in `exclude:` appear in `matrix:` (`include:` is processed after `exclude:`, so values added only by `include:` cannot be excluded)
 - duplicate variations of matrix values
 
 <a id="check-webhook-events"></a>

@@ -1,0 +1,7 @@
+test.yaml:8:9: shellcheck reported issue in this script: SC2086:info:2:6: Double quote to prevent globbing and word splitting [shellcheck]
+test.yaml:9:9: shellcheck reported issue in this script: SC2086:info:3:26: Double quote to prevent globbing and word splitting [shellcheck]
+test.yaml:12:9: shellcheck reported issue in this script: SC2086:info:2:6: Double quote to prevent globbing and word splitting [shellcheck]
+test.yaml:13:9: shellcheck reported issue in this script: SC2086:info:1:6: Double quote to prevent globbing and word splitting [shellcheck]
+test.yaml:14:9: shellcheck reported issue in this script: SC2086:info:1:6: Double quote to prevent globbing and word splitting [shellcheck]
+test.yaml:16:9: shellcheck reported issue in this script: SC2086:info:2:6: Double quote to prevent globbing and word splitting [shellcheck]
+test.yaml:21:9: shellcheck reported issue in this script: SC2086:info:1:6: Double quote to prevent globbing and word splitting [shellcheck]

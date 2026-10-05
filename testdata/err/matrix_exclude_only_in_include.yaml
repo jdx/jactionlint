@@ -1,0 +1,34 @@
+on: push
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        os: [ubuntu-latest]
+        php: [3, 4]
+        exclude:
+          # OK: Value exists in matrix
+          - os: ubuntu-latest
+            php: 3
+          # ERROR: "include" is processed after "exclude" so 2 is unknown
+          - os: ubuntu-latest
+            php: 2
+          # ERROR: macos-latest is only added by "include"
+          - os: macos-latest
+        include:
+          - os: macos-latest
+            php: 2
+    steps:
+      - run: echo ${{ matrix.os }} ${{ matrix.php }}
+  include_only:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        # ERROR: "exclude" cannot remove anything from "include" combinations
+        include:
+          - os: ubuntu-latest
+        exclude:
+          - os: ubuntu-latest
+    steps:
+      - run: echo ${{ matrix.os }}

@@ -21,6 +21,9 @@ self-hosted-runner:
     - linux.2xlarge
     - windows-latest-xl
     - linux-multi-gpu
+  # When true, only the labels listed above are accepted at 'runs-on:'. Built-in labels such as 'ubuntu-latest' and
+  # 'self-hosted' are reported unless listed. (default: false)
+  strict-labels: false
 
 # Configuration variables in array of strings defined in your repository or organization.
 config-variables:
@@ -56,6 +59,14 @@ paths:
     ignore:
       # Ignore errors from the old runner check. This may be useful for (outdated) self-hosted runner environment.
       - 'the runner of ".+" action is too old to run on GitHub Actions'
+
+# Configuration for the opt-in check of 'timeout-minutes' at jobs.
+timeout-minutes:
+  # Require every job to set 'timeout-minutes'.
+  required: true
+  # Maximum allowed value of 'timeout-minutes' in minutes.
+  max: 60
+
 # Require actions to be pinned to commit hashes instead of tags/branches
 require-commit-hash: true
 ```
@@ -63,6 +74,12 @@ require-commit-hash: true
 - `self-hosted-runner`: Configuration for your self-hosted runner environment.
   - `labels`: Label names added to your self-hosted runners as list of pattern. Glob syntax supported by [`path.Match`][pat]
     is available.
+  - `strict-labels`: When `true`, the [runner label check](checks.md#check-runner-labels) accepts only the labels listed in
+    `labels` (glob patterns supported). The built-in labels (GitHub-hosted runner labels such as `ubuntu-latest` and the preset
+    self-hosted labels such as `self-hosted`, `linux`, and `x64`) are reported as errors unless they are listed in `labels`.
+    This is useful when all jobs must run on your own runners, or when your runners (e.g. Actions Runner Controller runner
+    sets) do not have the default `self-hosted` label. Label conflict checks still apply to listed built-in labels. The default
+    is `false`.
 - `config-variables`: [Configuration variables][vars]. When an array is set, actionlint will check `vars` properties strictly.
   An empty array means no variable is allowed. The default value `null` disables the check.
 - `required-actions`: List of actions which must be used in each checked workflow. This check is disabled unless the list
@@ -86,6 +103,13 @@ require-commit-hash: true
     - `ignore`: The configuration to ignore (filter) the errors by the error messages. This is an array of regular
       expressions. When one of the patterns matches the error message, the error will be ignored. It's similar to the
       `-ignore` command line option.
+- `timeout-minutes`: Configuration for the [timeout check](checks.md#check-timeout-minutes). The check is disabled by
+  default. It is enabled by setting `required: true` and/or `max`.
+  - `required`: When `true`, every job must set `timeout-minutes`. Jobs calling a reusable workflow (`uses:`) are not
+    checked since they do not support `timeout-minutes`. The default is `false`.
+  - `max`: The maximum allowed value of `timeout-minutes` in minutes. A job with a larger value is reported. This is
+    checked even when `required` is `false`. `0` (the default) means no limit. A negative value is a configuration error.
+    Values given by expressions `${{ }}` are not checked.
 - `require-commit-hash`: Optional lint to require actions to be pinned to commit hashes instead of tags/branches. Defaults to `false`
   (disabled). When `true`, `uses:` of GitHub-hosted actions and reusable workflows must have a full-length 40-digit commit SHA ref,
   and Docker actions must be pinned by digest (`docker://image@sha256:...`). Local actions (`./`, `$/`) are exempt.
