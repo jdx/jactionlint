@@ -1,4 +1,4 @@
-package actionlint
+package jactionlint
 
 import (
 	"os"
@@ -7,9 +7,9 @@ import (
 	"testing"
 )
 
-// Create `.git` directory since actionlint finds the directory to detect the repository root.
-// Without creating this directory, this test case will fail when `actionlint/.git` directory
-// doesn't exist. When cloning actionlint repository with Git, it never happens. However, when
+// Create `.git` directory since jactionlint finds the directory to detect the repository root.
+// Without creating this directory, this test case will fail when `jactionlint/.git` directory
+// doesn't exist. When cloning jactionlint repository with Git, it never happens. However, when
 // downloading sources tarball from github.com, it doesn't contain `.git` directory so it
 // happens. Please see #307 for more details.
 func testEnsureDotGitDir(dir string) {

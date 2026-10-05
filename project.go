@@ -1,4 +1,4 @@
-package actionlint
+package jactionlint
 
 import (
 	"os"
@@ -39,7 +39,7 @@ func findProject(path string) (*Project, error) {
 }
 
 // NewProject creates a new instance with a file path to the root directory of the repository.
-// This function returns an error when failing to parse an actionlint config file in the repository.
+// This function returns an error when failing to parse an jactionlint config file in the repository.
 func NewProject(root string) (*Project, error) {
 	c, err := loadRepoConfig(root)
 	if err != nil {
@@ -81,7 +81,7 @@ func isPathInDir(dir, path string) bool {
 }
 
 // Config returns config object of the GitHub project repository. The config file was read from
-// ".github/actionlint.yaml" or ".github/actionlint.yml" when this Project instance was created.
+// ".github/jactionlint.yaml" or ".github/jactionlint.yml" when this Project instance was created.
 // When no config was found, this method returns nil.
 func (p *Project) Config() *Config {
 	// Note: Calling this method must be thread safe (#333)

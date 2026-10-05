@@ -17,7 +17,7 @@ jobs:
         with:
           ruby-version: '3.3'
       - run: gem install ronn
-      - run: ronn ./man/actionlint.1.ronn
+      - run: ronn ./man/jactionlint.1.ronn
       - uses: actions/setup-go@v6
         with:
           go-version: '1.27'
@@ -32,23 +32,23 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - uses: actions/attest-build-provenance@v4
         with:
-          subject-checksums: ${{ format('./dist/actionlint_{0}_checksums.txt', env.VERSION) }}
+          subject-checksums: ${{ format('./dist/jactionlint_{0}_checksums.txt', env.VERSION) }}
       - name: Post-release download check
-        run: bash ./scripts/download-actionlint.bash "$VERSION"
+        run: bash ./scripts/download-jactionlint.bash "$VERSION"
       - name: Clone nested repository to make version bump commit
         uses: actions/checkout@v6
         with:
-          path: ./tmp-actionlint-for-update-ver
+          path: ./tmp-jactionlint-for-update-ver
           ref: main
           fetch-depth: 0
       - name: Update version in download script
         run: |
           set -x
-          cd ./tmp-actionlint-for-update-ver
-          sed -i -E "s/version=\"[0-9]+\\.[0-9]+\\.[0-9]+\"/version=\"${VERSION}\"/" ./scripts/download-actionlint.bash
+          cd ./tmp-jactionlint-for-update-ver
+          sed -i -E "s/version=\"[0-9]+\\.[0-9]+\\.[0-9]+\"/version=\"${VERSION}\"/" ./scripts/download-jactionlint.bash
           git diff
-          git add ./scripts/download-actionlint.bash
-          git -c user.email='41898282+github-actions[bot]@users.noreply.github.com' -c user.name='github-actions[bot]' commit -m "update version to $VERSION in download-actionlint.bash"
+          git add ./scripts/download-jactionlint.bash
+          git -c user.email='41898282+github-actions[bot]@users.noreply.github.com' -c user.name='github-actions[bot]' commit -m "update version to $VERSION in download-jactionlint.bash"
           git log -n 1
           git push
   docker:
@@ -79,7 +79,7 @@ jobs:
           platforms: linux/amd64,linux/arm64
           build-args: |
             GOLANG_VER=1.27
-            ACTIONLINT_VER=${{ steps.tag.outputs.name }}
+            JACTIONLINT_VER=${{ steps.tag.outputs.name }}
           push: true
           tags: |
             ghcr.io/jdx/jactionlint:${{ steps.tag.outputs.name }}

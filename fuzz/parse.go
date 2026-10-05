@@ -1,6 +1,6 @@
 //go:build gofuzz
 
-package actionlint_fuzz
+package jactionlint_fuzz
 
 import (
 	"github.com/jdx/jactionlint"
@@ -24,7 +24,7 @@ func FuzzParse(data []byte) int {
 		return 0
 	}
 
-	if _, errs := actionlint.Parse(data); len(errs) > 0 {
+	if _, errs := jactionlint.Parse(data); len(errs) > 0 {
 		return 0
 	}
 

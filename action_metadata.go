@@ -1,4 +1,4 @@
-package actionlint
+package jactionlint
 
 import (
 	"errors"
@@ -165,7 +165,7 @@ type ActionMetadata struct {
 	// Inputs is "inputs" field of action.yaml.
 	Inputs ActionMetadataInputs `yaml:"inputs" json:"inputs"`
 	// Outputs is "outputs" field of action.yaml. Key is name of output. Description is omitted
-	// since actionlint does not use it.
+	// since jactionlint does not use it.
 	Outputs ActionMetadataOutputs `yaml:"outputs" json:"outputs"`
 	// SkipInputs is flag to specify behavior of inputs check. When it is true, inputs for this
 	// action will not be checked.
@@ -281,7 +281,7 @@ func (c *LocalActionsCache) FindMetadata(spec string) (*ActionMetadata, bool, er
 			if len(les.Errors) == 1 {
 				// *yaml.LoadError.Error() renders the verbose "go-yaml load error in constructor
 				// at L4.C9: ..." form. Build the message from Mark and Message instead to keep
-				// the "line 4: ..." shape actionlint has always reported.
+				// the "line 4: ..." shape jactionlint has always reported.
 				e := les.Errors[0]
 				m = fmt.Sprintf("line %d: %s", e.Mark.Line, e.Message)
 			} else {

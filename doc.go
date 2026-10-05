@@ -1,17 +1,17 @@
 /*
-Package actionlint is the implementation of actionlint linter. It's a static checker for GitHub
+Package jactionlint is the implementation of jactionlint linter. It's a static checker for GitHub
 Actions workflow files.
 
 https://github.com/jdx/jactionlint
 
-actionlint is a command line tool but it also provides Go API for Go programs. It includes a
+jactionlint is a command line tool but it also provides Go API for Go programs. It includes a
 workflow file parser built on top of yaml/go-yaml, lexer/parser/checker for expressions embedded by
 ${{ }} placeholder, popular actions data, available contexts information, etc.
 
 To run the linter, Linter is the struct which manages the entire linter lifecycle. Please see the
 first example.
 
-actionlint also provides the flexibility to add your own rules by implementing Rule interface.
+jactionlint also provides the flexibility to add your own rules by implementing Rule interface.
 Please read the YourOwnRule example.
 
 # Library versioning
@@ -30,7 +30,7 @@ https://github.com/jdx/jactionlint/blob/main/go.mod
 
 # Other documentations
 
-All documentations for actionlint can be found in the following page.
+All documentations for jactionlint can be found in the following page.
 
 https://github.com/jdx/jactionlint/tree/main/docs
 
@@ -46,4 +46,4 @@ Full text can be found in the following page.
 
 https://github.com/jdx/jactionlint/blob/main/LICENSE.txt
 */
-package actionlint
+package jactionlint

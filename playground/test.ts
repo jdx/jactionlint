@@ -85,7 +85,7 @@ jobs:
         assert.equal(err.kind, 'syntax-check', `kind is unexpected: ${json}`);
     });
 
-    it('reports some errors by running actionlint with runActionlint', async function () {
+    it('reports some errors by running jactionlint with runActionlint', async function () {
         assert.ok(window.runActionlint);
         results.reset();
 
@@ -111,7 +111,7 @@ jobs:
         assert.equal(err.kind, 'events', `kind is unexpected: ${json}`);
     });
 
-    it('reports no error by running actionlint with runActionlint', async function () {
+    it('reports no error by running jactionlint with runActionlint', async function () {
         assert.ok(window.runActionlint);
         results.reset();
 

@@ -17,7 +17,7 @@ GitHub Actions limits contexts and functions in certain places. For example:
 - limited workflow keys can access `secrets` context
 - `jobs.<job_id>.if` and `jobs.<job_id>.steps.if` can use `always()` function.
 
-To check these limitations by actionlint, we maintain a table to map workflow keys to available contexts and special functions.
+To check these limitations by jactionlint, we maintain a table to map workflow keys to available contexts and special functions.
 
 ## Usage
 

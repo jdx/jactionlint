@@ -4,41 +4,45 @@ set -e -o pipefail
 
 function usage() {
     echo 'USAGE:' >&2
-    echo '  bash download-actionlint.bash [[VERSION] DIR]' >&2
+    echo '  bash download-jactionlint.bash [[VERSION] DIR]' >&2
     echo >&2
-    echo 'This script downloads actionlint binary from the following release page. curl' >&2
+    echo 'This script downloads jactionlint binary from the following release page. curl' >&2
     echo 'command is required as dependency' >&2
     echo 'https://github.com/jdx/jactionlint/releases' >&2
     echo >&2
-    echo 'ACTIONLINT_REPO:' >&2
+    echo 'JACTIONLINT_REPO:' >&2
     echo '  Environment variable. GitHub repository to download from. The default is' >&2
     echo '  "jdx/jactionlint".' >&2
+    echo >&2
+    echo 'JACTIONLINT_NAME:' >&2
+    echo '  Environment variable. Name of the executable and the prefix of the archive file' >&2
+    echo '  name in the releases. The default is "jactionlint".' >&2
     echo >&2
     echo 'DIR:' >&2
     echo '  Directory to put the downloaded binary (e.g. /path/to/dir). When this value is' >&2
     echo '  omitted, the binary will be put in the current directory.' >&2
     echo >&2
     echo 'VERSION:' >&2
-    echo '   Version of actionlint to download. Version must be a specific version' >&2
+    echo '   Version of jactionlint to download. Version must be a specific version' >&2
     echo '   "{major}.{minor}.{patch}" such as "1.6.9" or "latest". When "latest" is' >&2
     echo '   specified or this argument is omitted, the latest version will be selected.' >&2
     echo >&2
     echo 'EXAMPLE:' >&2
     echo '  - Download the latest binary to the current directory' >&2
     echo >&2
-    echo '      $ bash download-actionlint.bash' >&2
+    echo '      $ bash download-jactionlint.bash' >&2
     echo >&2
     echo '  - Download the latest binary to /usr/bin' >&2
     echo >&2
-    echo '      $ bash download-actionlint.bash latest /usr/bin' >&2
+    echo '      $ bash download-jactionlint.bash latest /usr/bin' >&2
     echo >&2
     echo '  - Download version 1.6.9 to the current directory' >&2
     echo >&2
-    echo '      $ bash download-actionlint.bash 1.6.9' >&2
+    echo '      $ bash download-jactionlint.bash 1.6.9' >&2
     echo >&2
     echo '  - Download version 1.6.9 to /usr/bin' >&2
     echo >&2
-    echo '      $ bash download-actionlint.bash 1.6.9 /usr/bin' >&2
+    echo '      $ bash download-jactionlint.bash 1.6.9 /usr/bin' >&2
 }
 
 if [[ "$1" == "-h" || "$1" == "--help" ]]; then
@@ -46,7 +50,8 @@ if [[ "$1" == "-h" || "$1" == "--help" ]]; then
     exit
 fi
 
-repo="${ACTIONLINT_REPO:-jdx/jactionlint}"
+repo="${JACTIONLINT_REPO:-jdx/jactionlint}"
+name="${JACTIONLINT_NAME:-jactionlint}"
 
 # Default value is updated manually on release
 version="1.7.12"
@@ -75,7 +80,7 @@ if [ -n "$2" ]; then
     fi
 fi
 
-echo "Start downloading actionlint v${version} to ${target_dir}"
+echo "Start downloading jactionlint v${version} to ${target_dir}"
 
 case "$OSTYPE" in
     linux-*)
@@ -115,21 +120,21 @@ esac
 
 echo "Detected OS=${os} ext=${ext} arch=${arch}"
 
-# https://github.com/jdx/jactionlint/releases/download/v1.0.0/actionlint_1.0.0_linux_386.tar.gz
-file="actionlint_${version}_${os}_${arch}.${ext}"
+# https://github.com/jdx/jactionlint/releases/download/v1.0.0/jactionlint_1.0.0_linux_386.tar.gz
+file="${name}_${version}_${os}_${arch}.${ext}"
 url="https://github.com/${repo}/releases/download/v${version}/${file}"
 
 echo "Downloading ${url} with curl"
 
 if [[ "$os" == "windows" ]]; then
-    tempdir="$(mktemp -d actionlint.XXXXXXXXXXXXXXXX)"
+    tempdir="$(mktemp -d "${name}.XXXXXXXXXXXXXXXX")"
     curl -L -o "$tempdir/tmp.zip" "${url}"
-    unzip "$tempdir/tmp.zip" actionlint.exe -d "$target_dir"
+    unzip "$tempdir/tmp.zip" "${name}.exe" -d "$target_dir"
     rm -r "$tempdir"
-    exe="$target_dir/actionlint.exe"
+    exe="$target_dir/${name}.exe"
 else
-    curl -L "${url}" | tar xvz -C "$target_dir" actionlint
-    exe="$target_dir/actionlint"
+    curl -L "${url}" | tar xvz -C "$target_dir" "$name"
+    exe="$target_dir/${name}"
 fi
 
 echo "Downloaded and unarchived executable: ${exe}"

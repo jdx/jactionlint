@@ -1,4 +1,4 @@
-package actionlint
+package jactionlint
 
 import (
 	"flag"
@@ -33,28 +33,28 @@ func printUsageHeader(out io.Writer) {
 		b = "v" + v
 	}
 
-	fmt.Fprintf(out, `Usage: actionlint [FLAGS] [FILES...] [-]
+	fmt.Fprintf(out, `Usage: jactionlint [FLAGS] [FILES...] [-]
 
-  actionlint is a linter for GitHub Actions workflow files.
+  jactionlint is a linter for GitHub Actions workflow files.
 
-  To check all YAML files in current repository, just run actionlint without
+  To check all YAML files in current repository, just run jactionlint without
   arguments. It automatically finds the nearest '.github/workflows' directory:
 
-    $ actionlint
+    $ jactionlint
 
   To check specific files, pass the file paths as arguments:
 
-    $ actionlint file1.yaml file2.yaml
+    $ jactionlint file1.yaml file2.yaml
 
   To check content which is not saved in file yet (e.g. output from some
   command), pass - argument. It reads stdin and checks it as workflow file:
 
-    $ actionlint -
+    $ jactionlint -
 
   To serialize errors into JSON, use -format option. It allows to format error
   messages flexibly with Go template syntax.
 
-    $ actionlint -format '{{json .}}'
+    $ jactionlint -format '{{json .}}'
 
 Documents:
 
@@ -73,13 +73,13 @@ func getCommandVersion() string {
 
 	info, ok := debug.ReadBuildInfo()
 	if !ok || info.Main.Version == "" {
-		return "unknown" // Reaches only when actionlint package is built outside module
+		return "unknown" // Reaches only when jactionlint package is built outside module
 	}
 
 	return info.Main.Version
 }
 
-// Command represents entire actionlint command. Given stdin/stdout/stderr are used for input/output.
+// Command represents entire jactionlint command. Given stdin/stdout/stderr are used for input/output.
 type Command struct {
 	// Stdin is a reader to read input from stdin
 	Stdin io.Reader
@@ -120,7 +120,7 @@ func (i *ignorePatternFlags) Set(v string) error {
 	return nil
 }
 
-// Main is main function of actionlint. It takes command line arguments as string slice and returns
+// Main is main function of jactionlint. It takes command line arguments as string slice and returns
 // exit status. The args should be entire arguments including the program name, usually given via
 // os.Args.
 func (cmd *Command) Main(args []string) int {
@@ -139,7 +139,7 @@ func (cmd *Command) Main(args []string) int {
 	flags.BoolVar(&opts.Oneline, "oneline", false, "Use one line per one error. Useful for reading error messages from programs")
 	flags.StringVar(&opts.Format, "format", "", "Custom template to format error messages in Go template syntax. See the usage documentation for more details")
 	flags.StringVar(&opts.ConfigFile, "config-file", "", "File path to config file")
-	flags.BoolVar(&initConfig, "init-config", false, "Generate default config file at .github/actionlint.yaml in current project")
+	flags.BoolVar(&initConfig, "init-config", false, "Generate default config file at .github/jactionlint.yaml in current project")
 	flags.BoolVar(&noColor, "no-color", false, "Disable colorful output")
 	flags.BoolVar(&color, "color", false, "Always enable colorful output. This is useful to force colorful outputs")
 	flags.BoolVar(&opts.Verbose, "verbose", false, "Enable verbose output")

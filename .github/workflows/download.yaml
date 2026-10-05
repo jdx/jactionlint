@@ -3,12 +3,12 @@ on:
   push:
     branches: [main]
     paths:
-      - scripts/download-actionlint.bash
-      - scripts/test-download-actionlint.bash
+      - scripts/download-jactionlint.bash
+      - scripts/test-download-jactionlint.bash
   pull_request:
     paths:
-      - scripts/download-actionlint.bash
-      - scripts/test-download-actionlint.bash
+      - scripts/download-jactionlint.bash
+      - scripts/test-download-jactionlint.bash
   workflow_dispatch:
 
 jobs:
@@ -20,5 +20,5 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v6
-      - run: ./scripts/test-download-actionlint.bash
+      - run: ./scripts/test-download-jactionlint.bash
         shell: bash

@@ -150,7 +150,7 @@ jobs:
         }
 
         if (e.origin === 'paste') {
-            startActionlint(); // When pasting some code, apply actionlint instantly
+            startActionlint(); // When pasting some code, apply jactionlint instantly
             return;
         }
 

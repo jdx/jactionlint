@@ -1,4 +1,4 @@
-package actionlint
+package jactionlint
 
 import (
 	"reflect"
@@ -27,13 +27,13 @@ func TestSplitIgnoreList(t *testing.T) {
 
 func TestParseInlineIgnoresRange(t *testing.T) {
 	src := "a:\r\n" + // 1
-		"  # actionlint ignore=x\r\n" + // 2
+		"  # jactionlint ignore=x\r\n" + // 2
 		"  - run: |\r\n" + // 3
 		"      line\r\n" + // 4
 		"\r\n" + // 5
 		"      line\r\n" + // 6
 		"  - run: y\r\n" + // 7
-		"  # actionlint ignore=z\r\n" + // 8
+		"  # jactionlint ignore=z\r\n" + // 8
 		"b: 1\r\n" // 9
 	ignores, errs := parseInlineIgnores([]byte(src))
 	if len(errs) != 0 {
@@ -55,7 +55,7 @@ func TestParseInlineIgnoresSameIndentSequence(t *testing.T) {
 	// Items of a sequence may sit at the same column as the key which holds it.
 	src := "jobs:\n" + // 1
 		"  t:\n" + // 2
-		"    # actionlint ignore=x\n" + // 3
+		"    # jactionlint ignore=x\n" + // 3
 		"    steps:\n" + // 4
 		"    - run: a\n" + // 5
 		"    - run: |\n" + // 6
@@ -71,13 +71,13 @@ func TestParseInlineIgnoresSameIndentSequence(t *testing.T) {
 
 	// When the target is a sequence item, its siblings are not covered.
 	src = "steps:\n" + // 1
-		"- # actionlint ignore=x\n" + // 2 (not an own-line comment: ignored)
+		"- # jactionlint ignore=x\n" + // 2 (not an own-line comment: ignored)
 		"  run: a\n" // 3
 	if ignores, _ = parseInlineIgnores([]byte(src)); len(ignores) != 0 {
 		t.Errorf("trailing comment must not create an ignore: %v", ignores)
 	}
 	src = "steps:\n" + // 1
-		"  # actionlint ignore=x\n" + // 2
+		"  # jactionlint ignore=x\n" + // 2
 		"  - run: a\n" + // 3
 		"  - run: b\n" // 4
 	ignores, _ = parseInlineIgnores([]byte(src))
@@ -87,7 +87,7 @@ func TestParseInlineIgnoresSameIndentSequence(t *testing.T) {
 }
 
 func TestParseInlineIgnoresCommentInsideBlock(t *testing.T) {
-	src := "# actionlint ignore=x\n" + // 1
+	src := "# jactionlint ignore=x\n" + // 1
 		"a:\n" + // 2
 		"  b: 1\n" + // 3
 		"# a comment at column 0\n" + // 4
@@ -103,7 +103,45 @@ func TestParseInlineIgnoresCommentInsideBlock(t *testing.T) {
 }
 
 func TestParseInlineIgnoresNoPanic(t *testing.T) {
-	for _, s := range []string{"", "# actionlint ignore=", "# actionlint ignore=,,", "# actionlint ignore=a", "\n\n# actionlint ignore=a\n"} {
+	for _, s := range []string{"", "# jactionlint ignore=", "# jactionlint ignore=,,", "# jactionlint ignore=a", "\n\n# jactionlint ignore=a\n"} {
 		parseInlineIgnores([]byte(s))
+	}
+}
+
+func TestParseInlineIgnoresAcceptsBothNames(t *testing.T) {
+	// "actionlint" is the name used by the original actionlint
+	src := "a:\n" + // 1
+		"  # actionlint ignore=x\n" + // 2
+		"  b: 1\n" + // 3
+		"  # jactionlint ignore=y\n" + // 4
+		"  c: 2\n" // 5
+	ignores, errs := parseInlineIgnores([]byte(src))
+	if len(errs) != 0 {
+		t.Fatal(errs)
+	}
+	if len(ignores) != 2 {
+		t.Fatalf("want 2 ignores but have %d", len(ignores))
+	}
+	if ignores[0].start != 3 || ignores[1].start != 5 {
+		t.Errorf("unexpected ranges: %d-%d and %d-%d", ignores[0].start, ignores[0].end, ignores[1].start, ignores[1].end)
+	}
+}
+
+func TestParseInlineIgnoresInvalidPatternColumn(t *testing.T) {
+	tests := []struct {
+		comment string
+		col     int
+	}{
+		{"# jactionlint ignore=(", 3},
+		{"# actionlint ignore=(", 3},
+	}
+	for _, tc := range tests {
+		_, errs := parseInlineIgnores([]byte(tc.comment + "\nb: 1\n"))
+		if len(errs) != 1 {
+			t.Fatalf("%q: want 1 error but have %v", tc.comment, errs)
+		}
+		if errs[0].Column != tc.col {
+			t.Errorf("%q: want column %d but have %d", tc.comment, tc.col, errs[0].Column)
+		}
 	}
 }

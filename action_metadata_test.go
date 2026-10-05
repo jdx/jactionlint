@@ -1,4 +1,4 @@
-package actionlint
+package jactionlint
 
 import (
 	"bytes"
@@ -656,7 +656,7 @@ inputs: "foo"`,
 			input: `name: Test
 inputs:
   input1: "foo"`,
-			want: "into actionlint.actionInputMetadata",
+			want: "into jactionlint.actionInputMetadata",
 		},
 		{
 			what: "invalid outputs",

@@ -1,4 +1,4 @@
-package actionlint
+package jactionlint
 
 import (
 	"os"
@@ -371,12 +371,12 @@ func TestConfigParseStrictLabels(t *testing.T) {
 func TestConfigLoadGlobalConfigOK(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", dir)
-	confDir := filepath.Join(dir, "actionlint")
+	confDir := filepath.Join(dir, "jactionlint")
 	if err := os.MkdirAll(confDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
 	body := "self-hosted-runner:\n  labels:\n    - foo\n    - bar\n"
-	want := filepath.Join(confDir, "actionlint.yaml")
+	want := filepath.Join(confDir, "jactionlint.yaml")
 	if err := os.WriteFile(want, []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -399,14 +399,14 @@ func TestConfigLoadGlobalConfigOK(t *testing.T) {
 func TestConfigLoadGlobalConfigPrefersYamlOverYml(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", dir)
-	confDir := filepath.Join(dir, "actionlint")
+	confDir := filepath.Join(dir, "jactionlint")
 	if err := os.MkdirAll(confDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(confDir, "actionlint.yaml"), []byte("self-hosted-runner:\n  labels:\n    - yaml\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(confDir, "jactionlint.yaml"), []byte("self-hosted-runner:\n  labels:\n    - yaml\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(confDir, "actionlint.yml"), []byte("self-hosted-runner:\n  labels:\n    - yml\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(confDir, "jactionlint.yml"), []byte("self-hosted-runner:\n  labels:\n    - yml\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -417,7 +417,7 @@ func TestConfigLoadGlobalConfigPrefersYamlOverYml(t *testing.T) {
 	if c == nil {
 		t.Fatal("global config was not loaded")
 	}
-	if want := filepath.Join(confDir, "actionlint.yaml"); p != want {
+	if want := filepath.Join(confDir, "jactionlint.yaml"); p != want {
 		t.Fatalf("wanted config path %q but have %q", want, p)
 	}
 	if diff := cmp.Diff(c.SelfHostedRunner.Labels, []string{"yaml"}); diff != "" {
@@ -428,11 +428,11 @@ func TestConfigLoadGlobalConfigPrefersYamlOverYml(t *testing.T) {
 func TestConfigLoadGlobalConfigYmlExtension(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", dir)
-	confDir := filepath.Join(dir, "actionlint")
+	confDir := filepath.Join(dir, "jactionlint")
 	if err := os.MkdirAll(confDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	want := filepath.Join(confDir, "actionlint.yml")
+	want := filepath.Join(confDir, "jactionlint.yml")
 	if err := os.WriteFile(want, []byte("self-hosted-runner:\n  labels:\n    - only-yml\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -463,11 +463,11 @@ func TestConfigLoadGlobalConfigNotFound(t *testing.T) {
 func TestConfigLoadGlobalConfigParseError(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", dir)
-	confDir := filepath.Join(dir, "actionlint")
+	confDir := filepath.Join(dir, "jactionlint")
 	if err := os.MkdirAll(confDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(confDir, "actionlint.yaml"), []byte("this: [is not: valid\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(confDir, "jactionlint.yaml"), []byte("this: [is not: valid\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -486,11 +486,11 @@ func TestConfigLoadGlobalConfigHomeDirFallback(t *testing.T) {
 	t.Setenv("HOME", home)
 	// os.UserHomeDir reads %USERPROFILE% instead of $HOME on Windows.
 	t.Setenv("USERPROFILE", home)
-	confDir := filepath.Join(home, ".config", "actionlint")
+	confDir := filepath.Join(home, ".config", "jactionlint")
 	if err := os.MkdirAll(confDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	want := filepath.Join(confDir, "actionlint.yaml")
+	want := filepath.Join(confDir, "jactionlint.yaml")
 	if err := os.WriteFile(want, []byte("self-hosted-runner:\n  labels:\n    - home\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -522,10 +522,10 @@ func TestConfigLoadGlobalConfigIgnoresRelativeXDGConfigHome(t *testing.T) {
 		t.Skip("cannot make relative path")
 	}
 	// A config in the relative directory must not be loaded
-	if err := os.MkdirAll(filepath.Join(rel, "actionlint"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(rel, "jactionlint"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(rel, "actionlint", "actionlint.yaml"), []byte("self-hosted-runner:\n  labels: [rel]\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(rel, "jactionlint", "jactionlint.yaml"), []byte("self-hosted-runner:\n  labels: [rel]\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	c, p, err := loadGlobalConfig()
@@ -546,5 +546,95 @@ func TestConfigLoadGlobalConfigNotADirectory(t *testing.T) {
 	c, _, err := loadGlobalConfig()
 	if err != nil || c != nil {
 		t.Fatalf("wanted no config and no error: %v %v", c, err)
+	}
+}
+
+func TestConfigLoadRepoConfigNames(t *testing.T) {
+	tests := []struct {
+		name  string
+		files []string // files created under .github in this order, each containing its own name as a label
+		want  string   // label of the config which should be loaded. empty means no config
+	}{
+		{"new yaml", []string{"jactionlint.yaml"}, "jactionlint.yaml"},
+		{"new yml", []string{"jactionlint.yml"}, "jactionlint.yml"},
+		{"old yaml", []string{"actionlint.yaml"}, "actionlint.yaml"},
+		{"old yml", []string{"actionlint.yml"}, "actionlint.yml"},
+		{"new name wins over old name", []string{"actionlint.yaml", "jactionlint.yaml"}, "jactionlint.yaml"},
+		{"yaml wins over yml", []string{"jactionlint.yml", "jactionlint.yaml"}, "jactionlint.yaml"},
+		{"old yaml wins over old yml", []string{"actionlint.yml", "actionlint.yaml"}, "actionlint.yaml"},
+		{"no config", nil, ""},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			root := t.TempDir()
+			dir := filepath.Join(root, ".github")
+			if err := os.MkdirAll(dir, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			for _, f := range tc.files {
+				body := "self-hosted-runner:\n  labels:\n    - " + f + "\n"
+				if err := os.WriteFile(filepath.Join(dir, f), []byte(body), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			c, err := loadRepoConfig(root)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if tc.want == "" {
+				if c != nil {
+					t.Fatalf("config was loaded unexpectedly: %v", c)
+				}
+				return
+			}
+			if c == nil {
+				t.Fatal("config was not loaded")
+			}
+			if diff := cmp.Diff(c.SelfHostedRunner.Labels, []string{tc.want}); diff != "" {
+				t.Fatal(diff)
+			}
+		})
+	}
+}
+
+func TestConfigLoadGlobalConfigOldDirectory(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", dir)
+
+	// Only the location used by the original actionlint exists
+	oldDir := filepath.Join(dir, "actionlint")
+	if err := os.MkdirAll(oldDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	oldFile := filepath.Join(oldDir, "actionlint.yaml")
+	if err := os.WriteFile(oldFile, []byte("self-hosted-runner:\n  labels:\n    - old\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	c, p, err := loadGlobalConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c == nil || p != oldFile {
+		t.Fatalf("old config was not loaded: config=%v path=%q", c, p)
+	}
+
+	// Once the new location exists it takes precedence
+	newDir := filepath.Join(dir, "jactionlint")
+	if err := os.MkdirAll(newDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	newFile := filepath.Join(newDir, "jactionlint.yaml")
+	if err := os.WriteFile(newFile, []byte("self-hosted-runner:\n  labels:\n    - new\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	c, p, err = loadGlobalConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c == nil || p != newFile {
+		t.Fatalf("new config was not preferred: config=%v path=%q", c, p)
+	}
+	if diff := cmp.Diff(c.SelfHostedRunner.Labels, []string{"new"}); diff != "" {
+		t.Fatal(diff)
 	}
 }

@@ -10,9 +10,9 @@ uv = "latest"
 "go:golang.org/x/vuln/cmd/govulncheck" = "latest"
 
 [tasks.build]
-description = "Build the actionlint executable without cgo"
+description = "Build the jactionlint executable without cgo"
 env = { CGO_ENABLED = "0" }
-run = "go build ./cmd/actionlint"
+run = "go build ./cmd/jactionlint"
 
 [tasks.generate]
 description = "Regenerate popular_actions.go, all_webhooks.go and availability.go (fetches data from GitHub)"
@@ -58,26 +58,26 @@ run = "hk fix --all"
 description = "Run go-fuzz. Usage: mise run fuzz [FuzzParse]"
 run = [
   "go run github.com/dvyukov/go-fuzz/go-fuzz-build@latest ./fuzz",
-  "go run github.com/dvyukov/go-fuzz/go-fuzz@latest -bin ./actionlint_fuzz-fuzz.zip -func {{arg(name=\"func\", default=\"FuzzParse\")}}",
+  "go run github.com/dvyukov/go-fuzz/go-fuzz@latest -bin ./jactionlint_fuzz-fuzz.zip -func {{arg(name=\"func\", default=\"FuzzParse\")}}",
 ]
 
 [tasks.man]
-description = "Generate the man page man/actionlint.1 with ronn"
+description = "Generate the man page man/jactionlint.1 with ronn"
 tools = { ruby = "3.3" }
 run = "bash ./scripts/build-man.bash"
 
 [tasks.matcher]
-description = "Generate .github/actionlint-matcher.json"
+description = "Generate .github/jactionlint-matcher.json"
 tools = { node = "lts" }
-run = "node ./scripts/generate-actionlint-matcher/main.mjs .github/actionlint-matcher.json"
+run = "node ./scripts/generate-jactionlint-matcher/main.mjs .github/jactionlint-matcher.json"
 
 [tasks."matcher:fixtures"]
-description = "Update the test data of generate-actionlint-matcher after the default error format changes"
+description = "Update the test data of generate-jactionlint-matcher after the default error format changes"
 depends = ["build"]
 run = [
-  "./actionlint -color ./testdata/err/one_error.yaml > ./scripts/generate-actionlint-matcher/test/escape.txt || true",
-  "./actionlint -no-color ./testdata/err/one_error.yaml > ./scripts/generate-actionlint-matcher/test/no_escape.txt || true",
-  "./actionlint -format '{% raw %}{{json .}}{% endraw %}' ./testdata/err/one_error.yaml > ./scripts/generate-actionlint-matcher/test/want.json || true",
+  "./jactionlint -color ./testdata/err/one_error.yaml > ./scripts/generate-jactionlint-matcher/test/escape.txt || true",
+  "./jactionlint -no-color ./testdata/err/one_error.yaml > ./scripts/generate-jactionlint-matcher/test/no_escape.txt || true",
+  "./jactionlint -format '{% raw %}{{json .}}{% endraw %}' ./testdata/err/one_error.yaml > ./scripts/generate-jactionlint-matcher/test/want.json || true",
 ]
 
 [tasks.pages]
@@ -87,6 +87,6 @@ run = "bash ./scripts/build-pages.bash"
 [tasks.clean]
 description = "Remove build outputs"
 run = [
-  "rm -f ./actionlint ./actionlint.exe ./coverage.out ./coverage.html ./actionlint_fuzz-fuzz.zip ./man/actionlint.1 ./man/actionlint.1.html ./actionlint-workflow-ast",
+  "rm -f ./jactionlint ./jactionlint.exe ./coverage.out ./coverage.html ./jactionlint_fuzz-fuzz.zip ./man/jactionlint.1 ./man/jactionlint.1.html ./jactionlint-workflow-ast",
   "rm -rf ./corpus ./crashers ./playground-dist",
 ]

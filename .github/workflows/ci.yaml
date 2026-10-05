@@ -22,16 +22,16 @@ jobs:
       - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
       - run: go test -v -race ./...
       # Check build without CGO
-      - run: go build ./cmd/actionlint
+      - run: go build ./cmd/jactionlint
         env:
           # Note: -race requires cgo
           CGO_ENABLED: 0
       # Set -race for catching data races on dog fooding (#333)
-      - run: go build -race ./cmd/actionlint
+      - run: go build -race ./cmd/jactionlint
       - name: Dog fooding 🐶
         run: |
-          echo "::add-matcher::.github/actionlint-matcher.json"
-          ./actionlint -color
+          echo "::add-matcher::.github/jactionlint-matcher.json"
+          ./jactionlint -color
   wasm:
     name: Wasm
     runs-on: ubuntu-latest

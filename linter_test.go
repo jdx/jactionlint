@@ -1,4 +1,4 @@
-package actionlint
+package jactionlint
 
 import (
 	"bufio"
@@ -22,7 +22,7 @@ import (
 func TestMain(m *testing.M) {
 	// Point $XDG_CONFIG_HOME at an empty directory so that tests do not pick up
 	// a user-global config file on the machine running them.
-	dir, err := os.MkdirTemp("", "actionlint-test-xdg-config")
+	dir, err := os.MkdirTemp("", "jactionlint-test-xdg-config")
 	if err != nil {
 		panic(err)
 	}
@@ -351,9 +351,13 @@ func TestLinterLintProject(t *testing.T) {
 			opts := LinterOptions{
 				WorkingDir: repo,
 			}
-			cfg := filepath.Join(repo, "actionlint.yaml")
-			if _, err := os.Stat(cfg); err == nil {
-				opts.ConfigFile = cfg
+			// Both the name of this project and the name used by actionlint are accepted
+			for _, n := range []string{"jactionlint.yaml", "actionlint.yaml"} {
+				cfg := filepath.Join(repo, n)
+				if _, err := os.Stat(cfg); err == nil {
+					opts.ConfigFile = cfg
+					break
+				}
 			}
 			linter, err := NewLinter(io.Discard, &opts)
 			if err != nil {
@@ -1021,5 +1025,47 @@ jobs:
 	}
 	if !found {
 		t.Fatalf("label should remain unknown since -config-file takes priority over global config but got: %v", errs)
+	}
+}
+
+func TestLinterGenerateDefaultConfigNewNameAndConflicts(t *testing.T) {
+	// A new project gets the config file under the name of this project
+	root := t.TempDir()
+	testEnsureDotGitDir(root)
+	if err := os.MkdirAll(filepath.Join(root, ".github", "workflows"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	out := &bytes.Buffer{}
+	l, err := NewLinter(out, &LinterOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := l.GenerateDefaultConfig(root); err != nil {
+		t.Fatal(err)
+	}
+	want := filepath.Join(root, ".github", "jactionlint.yaml")
+	if _, err := os.Stat(want); err != nil {
+		t.Fatalf("default config was not generated at %q: %v", want, err)
+	}
+
+	// Config files under the old names are also treated as existing
+	for _, n := range []string{"jactionlint.yaml", "jactionlint.yml", "actionlint.yaml", "actionlint.yml"} {
+		root := t.TempDir()
+		testEnsureDotGitDir(root)
+		dir := filepath.Join(root, ".github")
+		if err := os.MkdirAll(filepath.Join(dir, "workflows"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, n), []byte("{}\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		l, err := NewLinter(io.Discard, &LinterOptions{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		err = l.GenerateDefaultConfig(root)
+		if err == nil || !strings.Contains(err.Error(), "config file already exists at") {
+			t.Errorf("%s: unexpected result: %v", n, err)
+		}
 	}
 }

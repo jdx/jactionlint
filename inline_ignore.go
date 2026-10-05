@@ -1,4 +1,4 @@
-package actionlint
+package jactionlint
 
 import (
 	"bytes"
@@ -8,8 +8,8 @@ import (
 )
 
 // inlineIgnoreRe matches a whole-line comment which suppresses errors such as
-// `# actionlint ignore=<pattern>[,<pattern>...]`.
-var inlineIgnoreRe = regexp.MustCompile(`^\s*#\s*actionlint\s+ignore=(.*)$`)
+// `# jactionlint ignore=<pattern>[,<pattern>...]`. `# actionlint ignore=...` is also accepted.
+var inlineIgnoreRe = regexp.MustCompile(`^\s*#\s*j?actionlint\s+ignore=(.*)$`)
 
 // inlineIgnore is one set of ignore patterns which is effective for errors reported in the line
 // range [start, end] (1-based, inclusive).
@@ -49,7 +49,7 @@ func isCommentOrBlank(line string) (comment bool, blank bool) {
 	return strings.HasPrefix(t, "#"), t == ""
 }
 
-// parseInlineIgnores scans the source for `# actionlint ignore=...` comments. A comment must be
+// parseInlineIgnores scans the source for `# jactionlint ignore=...` comments. A comment must be
 // placed on its own line. It applies to the next YAML line which is not a comment nor blank and to
 // the lines nested under it. When the line starts a sequence item ("- "), the whole item is the
 // target. Multiple comment lines can be stacked. Invalid patterns are reported as errors.
@@ -75,7 +75,11 @@ func parseInlineIgnores(src []byte) ([]inlineIgnore, []*Error) {
 			if m == nil {
 				continue
 			}
-			col := strings.Index(line, "actionlint") + 1
+			col := strings.Index(line, "jactionlint")
+			if col < 0 {
+				col = strings.Index(line, "actionlint")
+			}
+			col++
 			for _, p := range splitIgnoreList(m[1]) {
 				p = strings.TrimSpace(p)
 				if p == "" {

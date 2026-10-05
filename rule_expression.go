@@ -1,4 +1,4 @@
-package actionlint
+package jactionlint
 
 import (
 	"strconv"
@@ -1132,7 +1132,7 @@ func convertExprLineColToPos(line, col, lineBase, colBase int) *Pos {
 }
 
 func typeOfActionOutputs(meta *ActionMetadata) *ObjectType {
-	// Some action sets outputs dynamically. Such outputs are not defined in action.yml. actionlint
+	// Some action sets outputs dynamically. Such outputs are not defined in action.yml. jactionlint
 	// cannot check such outputs statically so it allows any props (#18)
 	if meta.SkipOutputs {
 		return NewEmptyObjectType()

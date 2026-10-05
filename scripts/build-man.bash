@@ -15,7 +15,7 @@ export GEM_HOME="$gem_home"
 echo 'Installing ronn-ng (the maintained fork of ronn)'
 gem install --no-document ronn-ng
 
-echo 'Generating man/actionlint.1'
+echo 'Generating man/jactionlint.1'
 # Only roff. Generating HTML fails inside ronn on current Ruby (undefined method `strip' for an Array).
 # Run through the current ruby; the wrapper script in $GEM_HOME/bin expects a ruby next to it.
-ruby -e 'load Gem.bin_path("ronn-ng", "ronn")' -- --roff ./man/actionlint.1.ronn
+ruby -e 'load Gem.bin_path("ronn-ng", "ronn")' -- --roff ./man/jactionlint.1.ronn

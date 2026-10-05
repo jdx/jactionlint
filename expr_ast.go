@@ -1,4 +1,4 @@
-package actionlint
+package jactionlint
 
 // ExprNode is a node of expression syntax tree. To know the syntax, see
 // https://docs.github.com/en/actions/learn-github-actions/expressions

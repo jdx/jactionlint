@@ -1,23 +1,23 @@
 ---
-- id: actionlint
+- id: jactionlint
   name: Lint GitHub Actions workflow files
-  description: Runs actionlint to lint GitHub Actions workflow files
+  description: Runs jactionlint to lint GitHub Actions workflow files
   language: golang
   types: ["yaml"]
   files: ^\.github/workflows/
-  entry: actionlint
+  entry: jactionlint
   minimum_pre_commit_version: 3.0.0
-- id: actionlint-docker
+- id: jactionlint-docker
   name: Lint GitHub Actions workflow files
-  description: Runs actionlint Docker image to lint GitHub Actions workflow files
+  description: Runs jactionlint Docker image to lint GitHub Actions workflow files
   language: docker_image
   types: ["yaml"]
   files: ^\.github/workflows/
   entry: ghcr.io/jdx/jactionlint:1.7.12  # x-release-please-version
-- id: actionlint-system
+- id: jactionlint-system
   name: Lint GitHub Actions workflow files
-  description: Runs system-installed actionlint to lint GitHub Actions workflow files
+  description: Runs system-installed jactionlint to lint GitHub Actions workflow files
   language: system
   types: ["yaml"]
   files: ^\.github/workflows/
-  entry: actionlint
+  entry: jactionlint

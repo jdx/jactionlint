@@ -1,4 +1,4 @@
-package actionlint
+package jactionlint
 
 import (
 	"strings"

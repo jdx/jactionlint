@@ -16,7 +16,7 @@ regexp = regexp.replace('K', KIND);
 const object = {
     problemMatcher: [
         {
-            owner: 'actionlint',
+            owner: 'jactionlint',
             pattern: [
                 {
                     regexp,

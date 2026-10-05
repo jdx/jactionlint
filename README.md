@@ -1,9 +1,9 @@
-jdx's actionlint
+jactionlint
 ================
 [![CI Status][ci-badge]][ci]
 [![API Document][apidoc-badge]][apidoc]
 
-[jdx's actionlint][repo] is a static checker for GitHub Actions workflow files and an actively maintained fork of
+[jactionlint][repo] is a static checker for GitHub Actions workflow files and an actively maintained fork of
 [rhysd/actionlint][upstream], with upstream pull requests and fixes merged here. [Try it online!][playground]
 
 Features:
@@ -18,9 +18,9 @@ Features:
 - **Other several useful checks**; [glob syntax][filter-pattern-doc] validation, dependencies check for `needs:`,
   runner label validation, cron syntax validation, ...
 
-See the [full list][checks] of checks done by actionlint.
+See the [full list][checks] of checks done by jactionlint.
 
-<img src="https://github.com/rhysd/ss/blob/master/actionlint/main.gif?raw=true" alt="actionlint reports 7 errors" width="806" height="492"/>
+<img src="https://github.com/rhysd/ss/blob/master/actionlint/main.gif?raw=true" alt="jactionlint reports 7 errors" width="806" height="492"/>
 
 **Example of broken workflow:**
 
@@ -50,7 +50,7 @@ jobs:
       - run: npm install && npm test
 ```
 
-**actionlint reports 7 errors:**
+**jactionlint reports 7 errors:**
 
 ```
 test.yaml:3:5: unexpected key "branch" for "push" section. expected one of "branches", "branches-ignore", "paths", "paths-ignore", "tags", "tags-ignore", "types", "workflows" [syntax-check]
@@ -61,7 +61,7 @@ test.yaml:5:11: character '\' is invalid for branch and tag names. only special 
   |
 5 |       - 'v\d+'
   |           ^~~~
-test.yaml:10:28: label "linux-latest" is unknown. available labels are "windows-latest", "windows-latest-8-cores", "windows-2025", "windows-2025-vs2026", windows-2022", "windows-11-arm", "windows-11-vs2026-arm", "ubuntu-slim", "ubuntu-latest", "ubuntu-latest-4-cores", "ubuntu-latest-8-cores", "ubuntu-latest-16-cores", "ubuntu-26.04", "ubuntu-26.04-arm", "ubuntu-24.04", "ubuntu-24.04-arm", "ubuntu-22.04", "ubuntu-22.04-arm", "macos-latest", "macos-latest-xlarge", "macos-latest-large", "macos-26-intel", "macos-26-xlarge", "macos-26-large", "macos-26", "macos-15-intel", "macos-15-xlarge", "macos-15-large", "macos-15", "macos-14-xlarge", "macos-14-large", "macos-14", "xcode-27", "xcode-27-xlarge", "self-hosted", "x64", "arm", "arm64", "linux", "macos", "windows". if it is a custom label for self-hosted runner, set list of labels in actionlint.yaml config file [runner-label]
+test.yaml:10:28: label "linux-latest" is unknown. available labels are "windows-latest", "windows-latest-8-cores", "windows-2025", "windows-2025-vs2026", windows-2022", "windows-11-arm", "windows-11-vs2026-arm", "ubuntu-slim", "ubuntu-latest", "ubuntu-latest-4-cores", "ubuntu-latest-8-cores", "ubuntu-latest-16-cores", "ubuntu-26.04", "ubuntu-26.04-arm", "ubuntu-24.04", "ubuntu-24.04-arm", "ubuntu-22.04", "ubuntu-22.04-arm", "macos-latest", "macos-latest-xlarge", "macos-latest-large", "macos-26-intel", "macos-26-xlarge", "macos-26-large", "macos-26", "macos-15-intel", "macos-15-xlarge", "macos-15-large", "macos-15", "macos-14-xlarge", "macos-14-large", "macos-14", "xcode-27", "xcode-27-xlarge", "self-hosted", "x64", "arm", "arm64", "linux", "macos", "windows". if it is a custom label for self-hosted runner, set list of labels in jactionlint.yaml config file [runner-label]
    |
 10 |         os: [macos-latest, linux-latest]
    |                            ^~~~~~~~~~~~~
@@ -85,36 +85,36 @@ test.yaml:22:17: receiver of object dereference "permissions" must be type of ob
 
 ## Quick start
 
-Install `actionlint` command by downloading [the released binary][releases] or by Homebrew or by `go install`. See
+Install `jactionlint` command by downloading [the released binary][releases] or by Homebrew or by `go install`. See
 [the installation document][install] for more details like how to manage the command with several package managers
 or run via Docker container.
 
 ```sh
-go install github.com/jdx/jactionlint/cmd/actionlint@latest
+go install github.com/jdx/jactionlint/cmd/jactionlint@latest
 ```
 
-Basically all you need to do is run the `actionlint` command in your repository. actionlint automatically detects workflows and
-checks errors. actionlint focuses on finding out mistakes. It tries to catch errors as much as possible and make false positives
+Basically all you need to do is run the `jactionlint` command in your repository. jactionlint automatically detects workflows and
+checks errors. jactionlint focuses on finding out mistakes. It tries to catch errors as much as possible and make false positives
 as minimal as possible.
 
 ```sh
-actionlint
+jactionlint
 ```
 
-Another option to try actionlint is [the online playground][playground]. Your browser can run actionlint through WebAssembly.
+Another option to try jactionlint is [the online playground][playground]. Your browser can run jactionlint through WebAssembly.
 
 See [the usage document][usage] for more details.
 
 ## Documents
 
-- [Checks][checks]: Full list of all checks done by actionlint with example inputs, outputs, and playground links.
+- [Checks][checks]: Full list of all checks done by jactionlint with example inputs, outputs, and playground links.
 - [Installation][install]: Installation instructions. Prebuilt binaries, a Docker image, building from source, a download script
   (for CI), supports by several package managers are available.
-- [Usage][usage]: How to use `actionlint` command locally or on GitHub Actions, the online playground, an official Docker image,
+- [Usage][usage]: How to use `jactionlint` command locally or on GitHub Actions, the online playground, an official Docker image,
   and integrations with reviewdog, Problem Matchers, super-linter, pre-commit, VS Code.
-- [Configuration][config]: How to configure actionlint behavior. Currently, the labels of self-hosted runners, the configuration
+- [Configuration][config]: How to configure jactionlint behavior. Currently, the labels of self-hosted runners, the configuration
   variables, and ignore patterns of errors for each file paths can be set.
-- [Go API][api]: How to use actionlint as Go library.
+- [Go API][api]: How to use jactionlint as Go library.
 - [References][refs]: Links to resources.
 
 ## Bug reporting
@@ -126,7 +126,7 @@ See the [contribution guide](./CONTRIBUTING.md) for more details.
 
 ## License
 
-actionlint is distributed under [the MIT license](./LICENSE.txt).
+jactionlint is distributed under [the MIT license](./LICENSE.txt).
 
 [ci-badge]: https://github.com/jdx/jactionlint/actions/workflows/ci.yaml/badge.svg
 [ci]: https://github.com/jdx/jactionlint/actions/workflows/ci.yaml

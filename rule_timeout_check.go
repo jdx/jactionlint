@@ -1,4 +1,4 @@
-package actionlint
+package jactionlint
 
 // RuleTimeoutCheck is a rule to check "timeout-minutes" of jobs. It is opt-in and configured by the
 // "timeout-minutes" section of the configuration file.

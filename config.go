@@ -1,4 +1,4 @@
-package actionlint
+package jactionlint
 
 import (
 	"errors"
@@ -66,7 +66,7 @@ type TimeoutMinutesConfig struct {
 	Max float64 `yaml:"max"`
 }
 
-// Config is configuration of actionlint. This struct instance is parsed from "actionlint.yaml"
+// Config is configuration of jactionlint. This struct instance is parsed from "jactionlint.yaml"
 // file usually put in ".github" directory.
 type Config struct {
 	// SelfHostedRunner is configuration for self-hosted runner.
@@ -79,12 +79,12 @@ type Config struct {
 		StrictLabels bool `yaml:"strict-labels"`
 	} `yaml:"self-hosted-runner"`
 	// ConfigVariables is names of configuration variables used in the checked workflows. When this value is nil,
-	// property names of `vars` context will not be checked. Otherwise actionlint will report a name which is not
+	// property names of `vars` context will not be checked. Otherwise jactionlint will report a name which is not
 	// listed here as undefined config variables.
 	// https://docs.github.com/en/actions/learn-github-actions/variables
 	ConfigVariables []string `yaml:"config-variables"`
 	// ConfigSecrets is names of secrets used in the checked workflows. When this value is nil,
-	// property names of `secrets` context will not be checked. Otherwise actionlint will report a name which is not
+	// property names of `secrets` context will not be checked. Otherwise jactionlint will report a name which is not
 	// listed here as undefined secrets.
 	// https://docs.github.com/en/actions/security-guides/using-secrets-in-github-actions
 	ConfigSecrets []string `yaml:"config-secrets"`
@@ -146,7 +146,7 @@ func (cfg *Config) PathConfigs(path string) []PathConfig {
 	return ret
 }
 
-// ParseConfig parses the given bytes as an actionlint config file. When deserializing the YAML file
+// ParseConfig parses the given bytes as an jactionlint config file. When deserializing the YAML file
 // or the config validation fails, this function returns an error.
 func ParseConfig(b []byte) (*Config, error) {
 	var c Config
@@ -183,7 +183,7 @@ func ParseConfig(b []byte) (*Config, error) {
 	return &c, nil
 }
 
-// ReadConfigFile reads actionlint config file (actionlint.yaml) from the given file path.
+// ReadConfigFile reads jactionlint config file (jactionlint.yaml) from the given file path.
 func ReadConfigFile(path string) (*Config, error) {
 	b, err := os.ReadFile(path)
 	if err != nil {
@@ -196,10 +196,25 @@ func ReadConfigFile(path string) (*Config, error) {
 	return c, nil
 }
 
-// loadRepoConfig reads config file from the repository's .github/actionlint.yml or
-// .github/actionlint.yaml.
+// configFileNames are the names of config files in order of precedence. The "actionlint" names
+// are the ones used by the original actionlint and are still accepted.
+var configFileNames = []string{"jactionlint.yaml", "jactionlint.yml", "actionlint.yaml", "actionlint.yml"}
+
+// globalConfigDirs are the directory names under $XDG_CONFIG_HOME in order of precedence together with
+// the config file names looked up in each of them.
+var globalConfigDirs = []struct {
+	dir   string
+	files []string
+}{
+	{"jactionlint", []string{"jactionlint.yaml", "jactionlint.yml"}},
+	{"actionlint", []string{"actionlint.yaml", "actionlint.yml"}},
+}
+
+// loadRepoConfig reads config file from the repository's .github/jactionlint.yaml or
+// .github/jactionlint.yml. The names used by actionlint (.github/actionlint.yaml and
+// .github/actionlint.yml) are also accepted.
 func loadRepoConfig(root string) (*Config, error) {
-	for _, f := range []string{"actionlint.yaml", "actionlint.yml"} {
+	for _, f := range configFileNames {
 		p := filepath.Join(root, ".github", f)
 		c, err := ReadConfigFile(p)
 		switch {
@@ -215,9 +230,10 @@ func loadRepoConfig(root string) (*Config, error) {
 }
 
 // loadGlobalConfig reads the user-global config file from
-// $XDG_CONFIG_HOME/actionlint/actionlint.yaml (or actionlint.yml), falling back
-// to $HOME/.config/actionlint/ when $XDG_CONFIG_HOME is unset. It returns the
-// loaded config and its file path, or (nil, "", nil) when no config file exists.
+// $XDG_CONFIG_HOME/jactionlint/jactionlint.yaml (or jactionlint.yml), falling back
+// to $HOME/.config/jactionlint/ when $XDG_CONFIG_HOME is unset. The location used by actionlint
+// ($XDG_CONFIG_HOME/actionlint/actionlint.yaml) is also accepted. It returns the loaded config and
+// its file path, or (nil, "", nil) when no config file exists.
 func loadGlobalConfig() (*Config, string, error) {
 	// The XDG Base Directory spec says relative paths in $XDG_CONFIG_HOME are invalid and must be
 	// ignored. Otherwise a config file in an arbitrary working directory could be picked up.
@@ -229,16 +245,18 @@ func loadGlobalConfig() (*Config, string, error) {
 		}
 		dir = filepath.Join(home, ".config")
 	}
-	for _, f := range []string{"actionlint.yaml", "actionlint.yml"} {
-		p := filepath.Join(dir, "actionlint", f)
-		c, err := ReadConfigFile(p)
-		switch {
-		case errors.Is(err, os.ErrNotExist), errors.Is(err, syscall.ENOTDIR):
-			continue
-		case err != nil:
-			return nil, "", fmt.Errorf("could not parse global config file %q: %w", p, err)
-		default:
-			return c, p, nil
+	for _, d := range globalConfigDirs {
+		for _, f := range d.files {
+			p := filepath.Join(dir, d.dir, f)
+			c, err := ReadConfigFile(p)
+			switch {
+			case errors.Is(err, os.ErrNotExist), errors.Is(err, syscall.ENOTDIR):
+				continue
+			case err != nil:
+				return nil, "", fmt.Errorf("could not parse global config file %q: %w", p, err)
+			default:
+				return c, p, nil
+			}
 		}
 	}
 	return nil, "", nil
