@@ -42,6 +42,8 @@ paths:
     ignore:
       # Ignore errors from the old runner check. This may be useful for (outdated) self-hosted runner environment.
       - 'the runner of ".+" action is too old to run on GitHub Actions'
+# Require actions to be pinned to commit hashes instead of tags/branches
+require-commit-hash: true
 ```
 
 - `self-hosted-runner`: Configuration for your self-hosted runner environment.
@@ -57,6 +59,10 @@ paths:
     - `ignore`: The configuration to ignore (filter) the errors by the error messages. This is an array of regular
       expressions. When one of the patterns matches the error message, the error will be ignored. It's similar to the
       `-ignore` command line option.
+- `require-commit-hash`: Optional lint to require actions to be pinned to commit hashes instead of tags/branches. Defaults to `false`
+  (disabled). When `true`, `uses:` of GitHub-hosted actions and reusable workflows must have a full-length 40-digit commit SHA ref,
+  and Docker actions must be pinned by digest (`docker://image@sha256:...`). Local actions (`./`, `$/`) are exempt.
+  See [the check document](checks.md#check-action-format) for more details.
 
 ## Configuration file location and priority
 

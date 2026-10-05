@@ -217,6 +217,10 @@ func TestLinterLintError(t *testing.T) {
 
 				l.defaultConfig = &Config{}
 
+				if strings.HasSuffix(testName, "_security") {
+					l.defaultConfig.RequireCommitHash = true
+				}
+
 				errs, err := l.Lint("test.yaml", b, proj)
 				if err != nil {
 					t.Fatal(err)
@@ -263,7 +267,8 @@ func TestLinterLintAllErrorWorkflowsAtOnce(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	l.defaultConfig = &Config{}
+	// Opt-in lints are enabled so that every example (e.g. "*_security.yaml") causes an error
+	l.defaultConfig = &Config{RequireCommitHash: true}
 
 	errs, err := l.LintFiles(files, proj)
 	if err != nil {
