@@ -287,6 +287,13 @@ var BrandingIcons = map[string]struct{}{
 	"zoom-out":           {},
 }
 
+// commitHashRegex matches a full-length (40 hex digits) Git commit SHA. Abbreviated hashes are rejected because
+// they can be ambiguous and are not accepted as a ref by GitHub Actions.
+var commitHashRegex = regexp.MustCompile("(?i)^[0-9a-f]{40}$")
+
+// dockerDigestRegex matches an image reference pinned by a content digest: "...@sha256:{64 hex digits}".
+var dockerDigestRegex = regexp.MustCompile("(?i)@sha256:[0-9a-f]{64}$")
+
 // https://docs.github.com/en/actions/creating-actions/metadata-syntax-for-github-actions#runsimage
 func isImageOnDockerRegistry(image string) bool {
 	return strings.HasPrefix(image, "docker://") ||
@@ -370,6 +377,10 @@ func (rule *RuleAction) checkRepoAction(spec string, exec *ExecAction) {
 
 	if owner == "" || repo == "" || ref == "" {
 		rule.invalidActionFormat(exec.Uses.Pos, spec, "owner and repo and ref should not be empty")
+	}
+
+	if rule.config != nil && rule.config.RequireCommitHash && !commitHashRegex.MatchString(ref) {
+		rule.Errorf(exec.Uses.Pos, "action %q must be pinned to a full-length commit SHA like \"{owner}/{repo}@{sha}\" because \"require-commit-hash\" is enabled", spec)
 	}
 
 	meta, ok := PopularActions[spec]
@@ -513,6 +524,7 @@ func (rule *RuleAction) checkLocalActionRuns(meta *ActionMetadata, pos *Pos) {
 
 // https://docs.github.com/en/actions/learn-github-actions/workflow-syntax-for-github-actions#example-using-the-github-packages-container-registry
 func (rule *RuleAction) checkDockerAction(uri string, exec *ExecAction) {
+	fullURI := uri
 	tag := ""
 	tagExists := false
 	if idx := strings.IndexRune(uri[len("docker://"):], ':'); idx != -1 {
@@ -536,6 +548,10 @@ func (rule *RuleAction) checkDockerAction(uri string, exec *ExecAction) {
 
 	if tagExists && tag == "" {
 		rule.Errorf(exec.Uses.Pos, "tag of Docker action should not be empty: %q", uri)
+	}
+
+	if rule.config != nil && rule.config.RequireCommitHash && !dockerDigestRegex.MatchString(fullURI) {
+		rule.Errorf(exec.Uses.Pos, "docker image must be pinned to a digest like \"docker://{image}@sha256:{digest}\" because \"require-commit-hash\" is enabled: %q", fullURI)
 	}
 }
 
