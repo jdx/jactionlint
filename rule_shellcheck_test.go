@@ -197,3 +197,24 @@ func TestRuleShellcheckDetectShell(t *testing.T) {
 		})
 	}
 }
+
+func TestRuleShellcheckHasMultilineExpression(t *testing.T) {
+	tests := []struct {
+		src  string
+		want bool
+	}{
+		{"", false},
+		{"echo hello", false},
+		{"echo ${{ github.sha }}", false},
+		{"echo ${{ github.sha", false},
+		{"echo ${{\n github.sha }}", true},
+		{"echo ${{ a }}\necho ${{ b }}", false},
+		{"echo ${{ a }}\necho ${{ b\n}}", true},
+		{"${{ a }}\n${{ b }}\n", false},
+	}
+	for _, tc := range tests {
+		if got := hasMultilineExpression(tc.src); got != tc.want {
+			t.Errorf("hasMultilineExpression(%q) = %v, want %v", tc.src, got, tc.want)
+		}
+	}
+}
