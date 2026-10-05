@@ -1726,9 +1726,6 @@ jobs:
       - uses: 'docker://image:'
       # ERROR: local action must start with './'
       - uses: .github/my-actions/do-something
-      # Optional when `require-commit-hash: true` is set in .github/actionlint.yaml:
-      # ERROR: not pinned to commit hash
-      - uses: actions/checkout@main
 ```
 
 Output:
@@ -1750,10 +1747,6 @@ test.yaml:13:15: specifying action ".github/my-actions/do-something" in invalid 
    |
 13 |       - uses: .github/my-actions/do-something
    |               ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-test.yaml:16:15: specifying action "actions/checkout@main" in invalid format because action versions must be pinned to a SHA hash. available formats are "{owner}/{repo}@{sha}" or "{owner}/{repo}/{path}@{sha}" [action]
-   |
-16 |       - uses: actions/checkout@main
-   |               ^~~~~~~~~~~~~~~~~~~~~
 ```
 
 [Playground](https://rhysd.github.io/actionlint/#eNpczbEOwyAMBNA9X+EtE0XqyNRfAWIBTbGj2K7Uv69olYXppHsnHVOAw6QuT04SFgBF0ZEAp5G44ZaM1NwrDvuRKB7yXwE4MEEJELM2JvG5Yt7ZdOKrfrzvk6wb5x3P4H3rsWBYJ7+VptWS7x93fWzshDtqbVS+AwCoTjwo)
@@ -1774,6 +1767,26 @@ resolves both to the same path in the repository.
 Note that actionlint does not report any error when a directory for a local action does not exist in the repository because it is
 a common case where the action is managed in a separate repository and the action directory is cloned at running the workflow.
 (See [#25][issue-25] and [#40][issue-40] for more details).
+
+### Require pinning to a commit hash (opt-in)
+
+By default, actionlint accepts any ref (tag, branch, or SHA) for actions at `uses:`. Since tags and branches are mutable,
+pinning to a full commit hash is recommended to mitigate supply chain attacks. This check is **disabled by default**. To
+enable it, set `require-commit-hash: true` in [the configuration file](config.md):
+
+```yaml
+require-commit-hash: true
+```
+
+When enabled, actionlint reports the following at `uses:`:
+
+- an action hosted on GitHub (`owner/repo@ref`, `owner/repo/path@ref`) whose ref is not a full-length 40-digit hexadecimal
+  commit SHA (abbreviated SHAs, tags and branches are reported)
+- a Docker action (`docker://image`) which is not pinned by digest, i.e. `docker://image@sha256:{64 hex digits}`
+- a reusable workflow call (`owner/repo/.github/workflows/x.yml@ref`) whose ref is not a full-length commit SHA
+
+Local actions and workflows (`./path`, `$/path`) are not reported because they always run at the commit of the workflow itself.
+`uses:` values containing `${{ }}` expressions are skipped since they cannot be checked statically.
 
 <a id="check-local-action-inputs"></a>
 ## Local action inputs validation at `with:`
