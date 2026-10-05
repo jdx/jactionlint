@@ -7,6 +7,9 @@ release:
   use_existing_draft: true
   draft: true
   prerelease: false
+  # A failed run leaves the archives on the draft. Replace them when the workflow is re-run instead of failing on
+  # the "asset already exists" error. This only works while the release is a draft (published ones are immutable).
+  replace_existing_artifacts: true
 
 before:
   hooks:

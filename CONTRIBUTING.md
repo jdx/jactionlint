@@ -179,7 +179,10 @@ checked by CI, because squash-merged titles become the release notes.
    - The job also updates the version string in `./scripts/download-jactionlint.bash`
    - After the release is published its notes are rewritten by [communique](https://github.com/jdx/communique) and a
      sponsor section is appended (the notes stay editable on an immutable release)
-   If the workflow fails the release stays a draft, so it is safe to fix the problem and re-run the workflow.
+   If the workflow fails the release stays a draft, so it is safe to fix the problem and re-run the workflow:
+   GoReleaser replaces assets already uploaded to the draft and the packslip bundle is uploaded with `--clobber`.
+   The Homebrew cask commit lands on `main` before the release is published, so after a failed run it can point at a
+   release that is still a draft until the re-run succeeds.
 4. The playground is deployed by the [Pages workflow](.github/workflows/pages.yaml) when `main` changes.
 
 ## How to generate the manual
