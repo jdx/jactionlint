@@ -42,6 +42,13 @@ paths:
     ignore:
       # Ignore errors from the old runner check. This may be useful for (outdated) self-hosted runner environment.
       - 'the runner of ".+" action is too old to run on GitHub Actions'
+
+# Configuration for the opt-in check of 'timeout-minutes' at jobs.
+timeout-minutes:
+  # Require every job to set 'timeout-minutes'.
+  required: true
+  # Maximum allowed value of 'timeout-minutes' in minutes.
+  max: 60
 ```
 
 - `self-hosted-runner`: Configuration for your self-hosted runner environment.
@@ -57,6 +64,13 @@ paths:
     - `ignore`: The configuration to ignore (filter) the errors by the error messages. This is an array of regular
       expressions. When one of the patterns matches the error message, the error will be ignored. It's similar to the
       `-ignore` command line option.
+- `timeout-minutes`: Configuration for the [timeout check](checks.md#check-timeout-minutes). The check is disabled by
+  default. It is enabled by setting `required: true` and/or `max`.
+  - `required`: When `true`, every job must set `timeout-minutes`. Jobs calling a reusable workflow (`uses:`) are not
+    checked since they do not support `timeout-minutes`. The default is `false`.
+  - `max`: The maximum allowed value of `timeout-minutes` in minutes. A job with a larger value is reported. This is
+    checked even when `required` is `false`. `0` (the default) means no limit. A negative value is a configuration error.
+    Values given by expressions `${{ }}` are not checked.
 
 ## Generate the initial configuration
 
