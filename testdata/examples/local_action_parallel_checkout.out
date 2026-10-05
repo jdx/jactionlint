@@ -1,0 +1,1 @@
+test.yaml:9:19: local action "./local-action" is used before any checkout step in this job. the repository is not on the runner yet so the action cannot be found. add "actions/checkout" before this step or use "$/" syntax. this is reported because "require-checkout-before-local-action" is enabled [local-action-checkout]

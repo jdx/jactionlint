@@ -1,0 +1,64 @@
+on: push
+jobs:
+  no-checkout:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo hello
+      # ERROR: repository is not checked out yet
+      - uses: ./.github/actions/foo
+      # Reported only once per job
+      - uses: ./.github/actions/bar
+      - uses: actions/checkout@v4
+  after-checkout:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/foo
+  checkout-in-subdirectory:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: repo
+      - uses: ./repo/.github/actions/foo
+  other-checkout-action:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: Actions/Checkout/sub@main
+      - uses: ./.github/actions/foo
+  git-clone:
+    runs-on: ubuntu-latest
+    steps:
+      - run: git clone https://github.com/owner/repo .
+      - uses: ./
+  gh-clone:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          echo cloning
+          gh repo clone owner/repo
+      - uses: ./
+  self-repository-syntax:
+    runs-on: ubuntu-latest
+    steps:
+      # OK: "$/" does not need a checkout
+      - uses: $/.github/actions/foo
+  checkout-after-local-action:
+    runs-on: ubuntu-latest
+    steps:
+      # ERROR: checkout comes later
+      - uses: ./
+      - uses: actions/checkout@v4
+  unrelated-steps:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "git is great, see the documentation"
+      - uses: docker://alpine:3
+      - uses: actions/setup-node@v4
+      # ERROR: nothing above checks out
+      - uses: ./.github/actions/foo
+  other-job-checkout-does-not-count:
+    runs-on: ubuntu-latest
+    steps:
+      # ERROR: each job has its own workspace
+      - uses: ./.github/actions/foo
