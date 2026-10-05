@@ -75,7 +75,7 @@ test.yaml:6:5: unexpected key "default" for "job" section. expected one of "cach
   |
 6 |     default:
   |     ^~~~~~~~
-test.yaml:12:9: unexpected key "Shell" for step to run shell command. expected one of "continue-on-error", "env", "id", "if", "name", "run", "shell", "timeout-minutes", "working-directory" [syntax-check]
+test.yaml:12:9: unexpected key "Shell" for step to run shell command. expected one of "background", "continue-on-error", "env", "id", "if", "name", "run", "shell", "timeout-minutes", "working-directory" [syntax-check]
    |
 12 |         Shell: bash
    |         ^~~~~~
@@ -1251,7 +1251,7 @@ test.yaml:11:17: "serverr" is not the ID of a preceding background step. "wait" 
    |                 ^~~~~~~
 ```
 
-[Playground](https://rhysd.github.io/actionlint/#eNpczssNAjEMBND7VjG3nNKA26CCJGuxwOKs/KF+FD4R4mTJz6NxF8IRti3XXo0WwNl8TEBDLA+PGuKR9zLsReZ82PsKyJByZ8LJizqM9cH6IeCy0v9KQwjcto5kI5Km1NJuZ+0hK8E1eBb8RMYPlqa0Io33b4c+AwAA//+anjvx)
+[Playground](https://rhysd.github.io/actionlint/#eNpczssNAjEMBND7VjG3nNKA26CCJGuxwOKs/KF+FD4R4mTJz6NxF8IRti3XXo0WwNl8TEBDLA+PGuKR9zLsReZ82PsKyJByZ8LJizqM9cH6IeCy0v9KQwjcto5kI5Km1NJuZ+0hK8E1eBb8RMYPlqa0Io33b4c+BwCanjvx)
 
 <a id="check-matrix-values"></a>
 ## Matrix values
