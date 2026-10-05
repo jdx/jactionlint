@@ -10,11 +10,22 @@ This document describes how to install [jactionlint](../docs) from jactionlint, 
 
 ## mise
 
-[mise][mise] can install the binaries from the GitHub releases of this repository:
+[mise][mise] is the recommended way to install jactionlint. It is in the mise registry, so the short name works:
+
+```sh
+mise use -g jactionlint
+jactionlint -version
+```
+
+`mise use jactionlint` without `-g` adds it to the `mise.toml` of the current project, so everyone working on the
+project (and CI, for example with [`jdx/mise-action`](https://github.com/jdx/mise-action)) uses the same version.
+`mise upgrade jactionlint` updates it.
+
+The short name needs a mise version whose registry includes jactionlint. With an older mise, update mise or name the
+backend explicitly. This installs the same binaries from the GitHub releases of this repository:
 
 ```sh
 mise use -g github:jdx/jactionlint@latest
-jactionlint -version
 ```
 
 ## macOS
