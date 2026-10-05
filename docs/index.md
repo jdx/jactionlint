@@ -26,22 +26,22 @@ features:
     details: Checks workflow files for unexpected or missing keys following the workflow syntax.
     link: /checks#check-unexpected-keys
   - title: Strong type check for expressions
-    details: Catches access to not existing properties, type mismatches and other semantic errors in ${{ }} expressions.
+    details: 'Catches access to not existing properties, type mismatches and other semantic errors in <code>${{ }}</code> expressions.'
     link: /checks#check-type-check-expression
   - title: Actions usage check
-    details: Checks that inputs at withKeys and outputs in steps.id.outputs are correct.
+    details: 'Checks that inputs at <code>with:</code> and outputs in <code>steps.{id}.outputs</code> are correct.'
     link: /checks#check-action-format
   - title: Reusable workflow check
     details: Checks inputs, outputs and secrets of reusable workflows and workflow calls.
     link: /checks
   - title: shellcheck and pyflakes
-    details: Integrates with shellcheck and pyflakes for scripts at run keys.
+    details: 'Integrates with shellcheck and pyflakes for scripts at <code>run:</code>.'
     link: /checks#check-shellcheck-integ
   - title: Security checks
     details: Detects script injection by untrusted inputs and hard-coded credentials.
     link: /checks#untrusted-inputs
   - title: Other useful checks
-    details: Glob syntax validation, dependencies check for needs, runner label validation, cron syntax validation and more.
+    details: 'Glob syntax validation, dependencies check for <code>needs:</code>, runner label validation, cron syntax validation and more.'
     link: /checks
 ---
 
