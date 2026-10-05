@@ -1,0 +1,23 @@
+on: push
+jobs:
+  missing:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo hello
+  ok:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - run: echo hello
+  too-long:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - run: echo hello
+  expression:
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ fromJSON('999') }}
+    steps:
+      - run: echo hello
+  reusable:
+    uses: ./.github/workflows/reusable.yaml

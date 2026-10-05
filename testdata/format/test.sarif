@@ -205,6 +205,21 @@
               "helpUri": "https://github.com/rhysd/actionlint/blob/main/docs/checks.md"
             },
             {
+              "id": "run-policy",
+              "name": "RunPolicy",
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "description": "Checks opt-in policies for scripts in \"run:\" (\"require-shell\" and \"max-run-lines\" in the config)",
+                "queryURI": "https://github.com/rhysd/actionlint/blob/main/docs/checks.md"
+              },
+              "fullDescription": {
+                "text": "Checks opt-in policies for scripts in \"run:\" (\"require-shell\" and \"max-run-lines\" in the config)"
+              },
+              "helpUri": "https://github.com/rhysd/actionlint/blob/main/docs/checks.md"
+            },
+            {
               "id": "runner-label",
               "name": "RunnerLabel",
               "defaultConfiguration": {
@@ -246,6 +261,21 @@
               },
               "fullDescription": {
                 "text": "Checks for GitHub Actions workflow syntax"
+              },
+              "helpUri": "https://github.com/rhysd/actionlint/blob/main/docs/checks.md"
+            },
+            {
+              "id": "timeout-check",
+              "name": "TimeoutCheck",
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "description": "Checks that timeout-minutes is set at jobs and does not exceed the configured maximum (opt-in by config)",
+                "queryURI": "https://github.com/rhysd/actionlint/blob/main/docs/checks.md"
+              },
+              "fullDescription": {
+                "text": "Checks that timeout-minutes is set at jobs and does not exceed the configured maximum (opt-in by config)"
               },
               "helpUri": "https://github.com/rhysd/actionlint/blob/main/docs/checks.md"
             },

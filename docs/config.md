@@ -51,8 +51,22 @@ paths:
     ignore:
       # Ignore errors from the old runner check. This may be useful for (outdated) self-hosted runner environment.
       - 'the runner of ".+" action is too old to run on GitHub Actions'
+
+# Configuration for the opt-in check of 'timeout-minutes' at jobs.
+timeout-minutes:
+  # Require every job to set 'timeout-minutes'.
+  required: true
+  # Maximum allowed value of 'timeout-minutes' in minutes.
+  max: 60
+
 # Require actions to be pinned to commit hashes instead of tags/branches
 require-commit-hash: true
+
+# Require every 'run:' step to set a shell explicitly with 'shell:' (or 'defaults.run.shell'). (default: false)
+require-shell: true
+
+# Maximum number of non-blank lines allowed in a 'run:' script. 0 disables the check. (default: 0)
+max-run-lines: 30
 ```
 
 - `self-hosted-runner`: Configuration for your self-hosted runner environment.
@@ -64,6 +78,11 @@ require-commit-hash: true
     This is useful when all jobs must run on your own runners, or when your runners (e.g. Actions Runner Controller runner
     sets) do not have the default `self-hosted` label. Label conflict checks still apply to listed built-in labels. The default
     is `false`.
+- `require-shell`: When `true`, every `run:` step must have an explicit shell by `shell:` of the step or `defaults.run.shell` of
+  the job or the workflow. When omitted, GitHub Actions runs `bash -e {0}` on Linux/macOS, which differs from `shell: bash`
+  (`bash --noprofile --norc -eo pipefail {0}`). See [the check](checks.md#check-run-policy). The default is `false`.
+- `max-run-lines`: Maximum number of non-blank lines allowed in a `run:` script. Longer scripts are reported. `0` disables the
+  check and negative values are rejected. See [the check](checks.md#check-run-policy). The default is `0`.
 - `config-variables`: [Configuration variables][vars]. When an array is set, actionlint will check `vars` properties strictly.
   An empty array means no variable is allowed. The default value `null` disables the check.
 - `config-secrets`: [Secrets][secrets]. When an array is set, actionlint will check `secrets` properties strictly against the
@@ -78,6 +97,13 @@ require-commit-hash: true
     - `ignore`: The configuration to ignore (filter) the errors by the error messages. This is an array of regular
       expressions. When one of the patterns matches the error message, the error will be ignored. It's similar to the
       `-ignore` command line option.
+- `timeout-minutes`: Configuration for the [timeout check](checks.md#check-timeout-minutes). The check is disabled by
+  default. It is enabled by setting `required: true` and/or `max`.
+  - `required`: When `true`, every job must set `timeout-minutes`. Jobs calling a reusable workflow (`uses:`) are not
+    checked since they do not support `timeout-minutes`. The default is `false`.
+  - `max`: The maximum allowed value of `timeout-minutes` in minutes. A job with a larger value is reported. This is
+    checked even when `required` is `false`. `0` (the default) means no limit. A negative value is a configuration error.
+    Values given by expressions `${{ }}` are not checked.
 - `require-commit-hash`: Optional lint to require actions to be pinned to commit hashes instead of tags/branches. Defaults to `false`
   (disabled). When `true`, `uses:` of GitHub-hosted actions and reusable workflows must have a full-length 40-digit commit SHA ref,
   and Docker actions must be pinned by digest (`docker://image@sha256:...`). Local actions (`./`, `$/`) are exempt.
