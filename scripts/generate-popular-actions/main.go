@@ -91,11 +91,13 @@ type gen struct {
 	stderr      io.Writer
 	log         *log.Logger
 	rawRegistry []byte
+	// transport is used for HTTP requests. nil means http.DefaultTransport. Tests replace it.
+	transport http.RoundTripper
 }
 
 func newGen(stdout, stderr, dbgout io.Writer) *gen {
 	l := log.New(dbgout, "", log.LstdFlags)
-	return &gen{stdout, stderr, l, defaultPopularActionsJSON}
+	return &gen{stdout, stderr, l, defaultPopularActionsJSON, nil}
 }
 
 func (g *gen) registry() ([]*registry, error) {
@@ -129,7 +131,7 @@ func (g *gen) fetchRemote() (map[string]*actionlint.ActionMetadata, error) {
 
 	for i := 0; i <= 4; i++ {
 		go func(ret chan<- *fetched, reqs <-chan *request, done <-chan struct{}) {
-			var c http.Client
+			c := http.Client{Transport: g.transport}
 			for {
 				select {
 				case req := <-reqs:
@@ -384,7 +386,7 @@ func (g *gen) detectNewReleaseURLs() ([]string, error) {
 
 	for i := 0; i < 4; i++ {
 		go func(ret chan<- string, errs chan<- error, reqs <-chan *registry, done <-chan struct{}) {
-			var c http.Client
+			c := http.Client{Transport: g.transport}
 			for {
 				select {
 				case r := <-reqs:

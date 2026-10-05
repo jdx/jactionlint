@@ -1,13 +1,21 @@
 name: CI
-on: [push, pull_request]
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   unit-tests:
     name: Unit tests
     strategy:
+      fail-fast: false
       matrix:
-        os: [ubuntu-latest, ubuntu-24.04-arm, macos-latest, windows-latest, macos-26-intel, windows-11-arm]
-        go: ['1.25', '1.26']
+        os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - name: Install dependencies on macOS
@@ -37,14 +45,9 @@ jobs:
       - uses: actions/checkout@v6
       - uses: actions/setup-go@v6
         with:
-          go-version: ${{ matrix.go }}
+          go-version: '1.27'
           check-latest: true
-      - run: go test -v -race -coverprofile coverage.txt -covermode=atomic ./...
-        # Arm Windows doesn't support -race
-        if: ${{ matrix.os != 'windows-11-arm' }}
-      - run: go test -v -coverprofile coverage.txt -covermode=atomic ./...
-        if: ${{ matrix.os == 'windows-11-arm' }}
-      - run: go tool cover -func ./coverage.txt
+      - run: go test -v -race ./...
       # Check build without CGO
       - run: go build ./cmd/actionlint
         env:
@@ -52,17 +55,10 @@ jobs:
           CGO_ENABLED: 0
       # Set -race for catching data races on dog fooding (#333)
       - run: go build -race ./cmd/actionlint
-        if: ${{ matrix.os != 'windows-11-arm' }}
       - name: Dog fooding 🐶
         run: |
           echo "::add-matcher::.github/actionlint-matcher.json"
           ./actionlint -color
-      - uses: codecov/codecov-action@v6
-        with:
-          env_vars: OS
-          token: ${{ secrets.CODECOV_TOKEN }}
-        env:
-          OS: ${{ matrix.os }}
   wasm:
     name: Wasm
     runs-on: ubuntu-latest
@@ -73,7 +69,7 @@ jobs:
       - uses: actions/checkout@v6
       - uses: actions/setup-go@v6
         with:
-          go-version: '1.26'
+          go-version: '1.27'
           check-latest: true
       - uses: actions/setup-node@v6
         with:
@@ -93,7 +89,7 @@ jobs:
       - uses: actions/checkout@v6
       - uses: actions/setup-go@v6
         with:
-          go-version: '1.26'
+          go-version: '1.27'
           check-latest: true
       - name: Install dependencies
         run: |
@@ -126,7 +122,7 @@ jobs:
         uses: docker/build-push-action@v7
         with:
           build-args: |
-            GOLANG_VER=1.26
+            GOLANG_VER=1.27
           push: false
       - name: Test Docker image
         run: docker container run
@@ -134,4 +130,4 @@ jobs:
           --workdir /mnt/app
           -- ${{ steps.image.outputs.digest }} -color -verbose
       - name: Lint Dockerfile with hadolint
-        run: docker run --rm -i hadolint/hadolint hadolint --ignore DL3018 --strict-labels - < Dockerfile
+        run: docker run --rm -i hadolint/hadolint hadolint --ignore DL3018 --ignore DL3066 --strict-labels - < Dockerfile

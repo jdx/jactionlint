@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -467,7 +468,18 @@ func TestDetectErrorBadRequest(t *testing.T) {
 	stdout := io.Discard
 	stderr := &bytes.Buffer{}
 	f := filepath.Join("testdata", "registry", "empty_slug.json")
-	status := newGen(stdout, stderr, io.Discard).run([]string{"test", "-d", "-r", f})
+	g := newGen(stdout, stderr, io.Discard)
+	// Do not depend on how raw.githubusercontent.com responds to a malformed URL; it now redirects
+	// instead of replying 400.
+	g.transport = roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusBadRequest,
+			Status:     "400 Bad Request",
+			Body:       http.NoBody,
+			Request:    req,
+		}, nil
+	})
+	status := g.run([]string{"test", "-d", "-r", f})
 	if status != 1 {
 		t.Fatal("exit status is not 1:", status)
 	}
@@ -562,4 +574,10 @@ func TestActionBuildSpec(t *testing.T) {
 	if have != want {
 		t.Errorf("Wanted %q but have %q", want, have)
 	}
+}
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
 }
