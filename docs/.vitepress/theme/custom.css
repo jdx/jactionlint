@@ -64,3 +64,20 @@
 .home-section .language-text pre {
   font-size: 0.8em;
 }
+
+.VPSocialLinks .star-count {
+  font: 10px var(--vp-font-family-mono);
+  color: var(--vp-c-text-2);
+  margin-left: 5px;
+  white-space: nowrap;
+}
+
+.VPSocialLinks .star-glyph {
+  margin-right: 2px;
+  color: var(--vp-c-brand-1);
+}
+
+.VPSocialLinks a[href*="github.com/jdx/jactionlint"] {
+  width: auto;
+  min-width: 36px;
+}

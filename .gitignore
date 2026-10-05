@@ -11,7 +11,8 @@
 /crashers
 /man/jactionlint.1
 /man/jactionlint.1.html
-/playground-dist
+/docs/public/playground/main.wasm
+/docs/public/playground/wasm_exec.js
 /jactionlint-workflow-ast
 /.idea
 /coverage.out
