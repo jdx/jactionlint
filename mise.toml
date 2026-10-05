@@ -88,5 +88,20 @@ run = "bash ./scripts/build-pages.bash"
 description = "Remove build outputs"
 run = [
   "rm -f ./jactionlint ./jactionlint.exe ./coverage.out ./coverage.html ./jactionlint_fuzz-fuzz.zip ./man/jactionlint.1 ./man/jactionlint.1.html ./jactionlint-workflow-ast",
-  "rm -rf ./corpus ./crashers ./playground-dist",
+  "rm -rf ./corpus ./crashers ./playground-dist ./docs/.vitepress/dist ./docs/.vitepress/cache",
 ]
+
+[tasks."docs:dev"]
+description = "Run the documentation site (VitePress) with live reload"
+dir = "docs"
+run = "npm install && exec npm run docs:dev"
+
+[tasks."docs:build"]
+description = "Build the documentation site (VitePress) into docs/.vitepress/dist; fails on dead links"
+dir = "docs"
+run = "npm ci && npm run docs:build"
+
+[tasks."docs:preview"]
+description = "Serve the built documentation site"
+dir = "docs"
+run = "npm run docs:preview"

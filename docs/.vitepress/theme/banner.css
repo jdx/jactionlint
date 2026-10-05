@@ -1,0 +1,61 @@
+.jdx-banner {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 1001;
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  justify-content: center;
+  padding: 0.5rem 3.25rem 0.5rem 2.75rem;
+  background: var(--vp-c-brand-1, #ff71ce);
+  color: #000;
+  font-size: 0.9rem;
+  line-height: 1.4;
+  text-align: center;
+  min-height: 2.75rem;
+}
+.jdx-banner a {
+  color: #000;
+  text-decoration: underline;
+  font-weight: 600;
+}
+.jdx-banner button {
+  position: absolute;
+  right: 0.5rem;
+  top: 50%;
+  transform: translateY(-50%);
+  background: transparent;
+  border: 0;
+  color: inherit;
+  font-size: 1.25rem;
+  cursor: pointer;
+  line-height: 1;
+  display: grid;
+  place-items: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0;
+  opacity: 0.7;
+}
+.jdx-banner button:hover {
+  opacity: 1;
+}
+@media (max-width: 640px) {
+  .jdx-banner {
+    flex-direction: column;
+    gap: 0.125rem;
+    font-size: 0.8rem;
+    padding: 0.5rem max(2.75rem, 44px);
+    line-height: 1.3;
+    text-wrap: balance;
+  }
+  .jdx-banner button {
+    top: 50%;
+    right: 0;
+    transform: translateY(-50%);
+  }
+}
