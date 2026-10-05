@@ -1,0 +1,21 @@
+on:
+  push:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      # actionlint ignore=undefined variable
+      - run: echo '${{ foo }}'
+      # ERROR: a pattern which does not match is not ignored
+      # actionlint ignore=this does not match
+      - run: echo '${{ bar }}'
+      # ERROR: the comment applies only to the next step
+      - run: echo '${{ baz }}'
+      # ERROR: trailing comments are not supported
+      - run: echo '${{ qux }}' # actionlint ignore=undefined variable
+      # ERROR: invalid regular expression
+      # actionlint ignore=undefined variable (
+      - run: echo '${{ quux }}'
+      # ERROR: nothing to apply to
+      # actionlint ignore=undefined variable
