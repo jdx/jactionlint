@@ -452,3 +452,45 @@ func TestConfigLoadGlobalConfigHomeDirFallback(t *testing.T) {
 		t.Fatalf("wanted config path %q but have %q", want, p)
 	}
 }
+
+func TestConfigLoadGlobalConfigIgnoresRelativeXDGConfigHome(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	rel := t.TempDir()
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r, err := filepath.Rel(wd, rel); err == nil {
+		t.Setenv("XDG_CONFIG_HOME", r)
+	} else {
+		t.Skip("cannot make relative path")
+	}
+	// A config in the relative directory must not be loaded
+	if err := os.MkdirAll(filepath.Join(rel, "actionlint"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(rel, "actionlint", "actionlint.yaml"), []byte("self-hosted-runner:\n  labels: [rel]\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	c, p, err := loadGlobalConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c != nil || p != "" {
+		t.Fatalf("relative XDG_CONFIG_HOME must be ignored but loaded %q", p)
+	}
+}
+
+func TestConfigLoadGlobalConfigNotADirectory(t *testing.T) {
+	f := filepath.Join(t.TempDir(), "file")
+	if err := os.WriteFile(f, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("XDG_CONFIG_HOME", f)
+	c, _, err := loadGlobalConfig()
+	if err != nil || c != nil {
+		t.Fatalf("wanted no config and no error: %v %v", c, err)
+	}
+}

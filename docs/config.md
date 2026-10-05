@@ -75,6 +75,10 @@ The user-global configuration is useful for personal or organization-wide defaul
 into every checkout. A repository's own `.github/actionlint.yaml` always takes precedence over the global configuration,
 so per-repository settings are never overridden by the global defaults.
 
+`$XDG_CONFIG_HOME` must be an absolute path. A relative path is ignored as the specification requires. `$HOME/.config`
+is used on all platforms including Windows and macOS (`%USERPROFILE%\.config` on Windows). The global
+configuration is not used when `-config-file` is given.
+
 ## Generate the initial configuration
 
 You don't need to write the first configuration file by your hand. `actionlint` command can generate a default configuration
