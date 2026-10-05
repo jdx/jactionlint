@@ -1,0 +1,25 @@
+[tools]
+go = "1.26"
+shellcheck = "latest"
+uv = "latest"
+"pipx:pyflakes" = "latest"
+"go:honnef.co/go/tools/cmd/staticcheck" = "latest"
+"go:golang.org/x/vuln/cmd/govulncheck" = "latest"
+
+[tasks.build]
+description = "Build the actionlint executable"
+run = "go build ./cmd/actionlint"
+
+[tasks.test]
+description = "Run all tests"
+run = "go test ./..."
+
+[tasks.lint]
+description = "Run vet, staticcheck, govulncheck and the docs check"
+run = [
+  "go vet ./...",
+  "staticcheck ./ ./scripts/... ./cmd/...",
+  "govulncheck ./...",
+  "GOOS=js GOARCH=wasm staticcheck ./playground",
+  "go run ./scripts/check-checks -quiet ./docs/checks.md",
+]
