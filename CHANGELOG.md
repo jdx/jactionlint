@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.8.1](https://github.com/jdx/jactionlint/compare/v1.8.0...v1.8.1) (2026-10-05)
+
+
+### Bug Fixes
+
+* **release:** publish releases as drafts until their assets are uploaded ([4b72b9a](https://github.com/jdx/jactionlint/commit/4b72b9a64a6d7c0d3a3b56a71d405fded13d3bc1))
+
 ## [1.8.0](https://github.com/jdx/jactionlint/compare/v1.7.12...v1.8.0) (2026-10-05)
 
 
