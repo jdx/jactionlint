@@ -30,6 +30,12 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # GoReleaser publishes the draft release after uploading the assets. This makes sure it is published and
+      # does nothing when it already is. Published releases are immutable so this must come after the upload.
+      - name: Publish the release
+        run: gh release edit "$GITHUB_REF_NAME" --draft=false --repo "$GITHUB_REPOSITORY"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - uses: actions/attest-build-provenance@v4
         with:
           subject-checksums: ${{ format('./dist/jactionlint_{0}_checksums.txt', env.VERSION) }}
@@ -84,3 +90,48 @@ jobs:
           tags: |
             ghcr.io/jdx/jactionlint:${{ steps.tag.outputs.name }}
             ghcr.io/jdx/jactionlint:latest
+  # Release notes can still be edited after the release is published (assets and the tag cannot).
+  enhance-release:
+    name: Enhance release notes
+    needs: binaries
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      TAG: ${{ github.ref_name }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        with:
+          cache: false
+          mise_toml: |
+            [tools]
+            communique = "latest"
+      - run: communique generate "$TAG" --github-release
+        env:
+          GITHUB_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      - name: Append sponsor blurb
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN }}
+        run: |
+          body=$(gh release view "$TAG" --json body --jq .body)
+          if grep -qiE '^##.*Sponsor jdx.s jactionlint' <<<"$body"; then
+            echo "Sponsor section already present in $TAG release notes; skipping append."
+            exit 0
+          fi
+          {
+            printf '%s\n' "$body"
+            cat <<'EOF'
+
+          ## 💚 Sponsor jactionlint
+
+          jactionlint is a fork of [rhysd/actionlint](https://github.com/rhysd/actionlint), maintained by [@jdx](https://github.com/jdx), an open source developer at [**entire.io**](https://entire.io/), the title sponsor of his open source work.
+
+          If jactionlint has a place in your development workflow, please consider becoming an [individual or company sponsor](https://jdx.dev/sponsors.html). Your support funds ongoing development and helps keep jactionlint fast, free, and independent.
+          EOF
+          } > "$RUNNER_TEMP/release-notes.md"
+          gh release edit "$TAG" --notes-file "$RUNNER_TEMP/release-notes.md"

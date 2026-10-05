@@ -21,7 +21,9 @@ jobs:
       tag: ${{ steps.release-please.outputs.tag_name }}
     steps:
       # Opens/updates the release PR from conventional commits. Merging it tags
-      # vX.Y.Z and creates the GitHub release, which triggers release.yaml.
+      # vX.Y.Z and creates a DRAFT GitHub release (see release-please-config.json). The tag push triggers
+      # release.yaml, which uploads the assets to the draft and publishes it. Releases are immutable once
+      # published so assets can only be uploaded while it is a draft.
       # A PAT is required: tags pushed with GITHUB_TOKEN do not trigger workflows.
       - name: Run release-please
         id: release-please
@@ -30,49 +32,3 @@ jobs:
           token: ${{ secrets.RELEASE_PLZ_TOKEN }}
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
-
-  enhance-release:
-    name: Enhance release notes
-    needs: release-please
-    if: ${{ needs.release-please.outputs.release_created == 'true' }}
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    env:
-      TAG: ${{ needs.release-please.outputs.tag }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-      - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
-        with:
-          cache: false
-          mise_toml: |
-            [tools]
-            communique = "latest"
-      - run: communique generate "$TAG" --github-release
-        env:
-          GITHUB_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-      - name: Append sponsor blurb
-        env:
-          GH_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN }}
-        run: |
-          body=$(gh release view "$TAG" --json body --jq .body)
-          if grep -qiE '^##.*Sponsor jdx.s jactionlint' <<<"$body"; then
-            echo "Sponsor section already present in $TAG release notes; skipping append."
-            exit 0
-          fi
-          {
-            printf '%s\n' "$body"
-            cat <<'EOF'
-
-          ## 💚 Sponsor jactionlint
-
-          jactionlint is a fork of [rhysd/actionlint](https://github.com/rhysd/actionlint), maintained by [@jdx](https://github.com/jdx), an open source developer at [**entire.io**](https://entire.io/), the title sponsor of his open source work.
-
-          If jactionlint has a place in your development workflow, please consider becoming an [individual or company sponsor](https://jdx.dev/sponsors.html). Your support funds ongoing development and helps keep jactionlint fast, free, and independent.
-          EOF
-          } > "$RUNNER_TEMP/release-notes.md"
-          gh release edit "$TAG" --notes-file "$RUNNER_TEMP/release-notes.md"

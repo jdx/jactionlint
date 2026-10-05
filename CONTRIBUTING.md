@@ -167,12 +167,17 @@ checked by CI, because squash-merged titles become the release notes.
 1. Merge pull requests into `main`. release-please opens or updates a release pull request that bumps the version in
    [`.release-please-manifest.json`](./.release-please-manifest.json), the version strings marked with `x-release-please-version`
    (`.pre-commit-hooks.yaml`, `docs/usage.md`, `playground/index.html`) and [CHANGELOG.md](./CHANGELOG.md).
-2. Merge the release pull request. release-please tags `vX.Y.Z` and creates the GitHub release. The release notes are then
-   rewritten by [communique](https://github.com/jdx/communique) and a sponsor section is appended.
+2. Merge the release pull request. release-please tags `vX.Y.Z` and creates the GitHub release as a **draft**.
+   Releases are immutable once published (assets and the tag cannot change), so the assets must be uploaded to the
+   draft before it is published.
 3. The tag starts [the release workflow](.github/workflows/release.yaml):
-   - GoReleaser builds the release binaries, attaches them to the release and updates the Homebrew cask in `./Casks`
+   - GoReleaser builds the release binaries, attaches them to the draft release, publishes it and updates the Homebrew
+     cask in `./Casks`
    - The container image is pushed to `ghcr.io/jdx/jactionlint`
    - The job also updates the version string in `./scripts/download-jactionlint.bash`
+   - After the release is published its notes are rewritten by [communique](https://github.com/jdx/communique) and a
+     sponsor section is appended (the notes stay editable on an immutable release)
+   If the workflow fails the release stays a draft, so it is safe to fix the problem and re-run the workflow.
 4. The playground is deployed by the [Pages workflow](.github/workflows/pages.yaml) when `main` changes.
 
 ## How to generate the manual

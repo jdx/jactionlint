@@ -1,8 +1,11 @@
 version: 2
 
 release:
+  # release-please creates the release as a draft (and the tag). Releases are immutable once published, so the
+  # assets must be uploaded to that draft. GoReleaser publishes it after the upload.
+  use_existing_draft: true
   draft: false
-  prerelease: true
+  prerelease: false
 
 before:
   hooks:
