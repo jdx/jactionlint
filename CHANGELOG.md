@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.8.2](https://github.com/jdx/jactionlint/compare/v1.8.1...v1.8.2) (2026-10-05)
+
+
+### Bug Fixes
+
+* **release:** skip the crashing ronn HTML step and use the PAT for pushes to main ([36f9ada](https://github.com/jdx/jactionlint/commit/36f9ada9972c3f33c39b950dfcf83909e2bfdaa9))
+
 ## [1.8.1](https://github.com/jdx/jactionlint/compare/v1.8.0...v1.8.1) (2026-10-05)
 
 
