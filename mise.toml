@@ -1,5 +1,6 @@
 [tools]
-go = "1.26"
+go = "1.27"
+node = "lts"
 shellcheck = "latest"
 uv = "latest"
 "pipx:pyflakes" = "latest"
