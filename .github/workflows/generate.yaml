@@ -15,7 +15,7 @@ on:
 
 jobs:
   go-generate:
-    if: ${{ github.repository == 'rhysd/actionlint' }}
+    if: ${{ github.repository == 'jdx/jactionlint' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -46,7 +46,7 @@ jobs:
           title: 'Update generated files by CI'
           body: |
             This PR updates some generated files to the latest by running `go generate`.
-            This PR was created by [this workflow run](https://github.com/rhysd/actionlint/actions/runs/${{ github.run_id }}) automatically.
-            List of workflow runs is [here](https://github.com/rhysd/actionlint/actions/workflows/generate.yaml).
-          assignees: rhysd
+            This PR was created by [this workflow run](https://github.com/jdx/jactionlint/actions/runs/${{ github.run_id }}) automatically.
+            List of workflow runs is [here](https://github.com/jdx/jactionlint/actions/workflows/generate.yaml).
+          assignees: jdx
         if: ${{ steps.diff.outputs.pr == 'true' }}

@@ -144,7 +144,7 @@ func TestFetchError(t *testing.T) {
 		url  string
 		want string
 	}{
-		{"not found", "https://raw.githubusercontent.com/rhysd/actionlint/main/this-file-does-not-exist.txt", "request was not successful"},
+		{"not found", "https://raw.githubusercontent.com/jdx/jactionlint/main/this-file-does-not-exist.txt", "request was not successful"},
 		{"invalid url", "foo://bar", "could not fetch"},
 	}
 

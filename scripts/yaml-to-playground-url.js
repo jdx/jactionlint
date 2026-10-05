@@ -16,4 +16,4 @@ const lines = stdin.split('\n').filter(l => !re.test(l)); // remove comment line
 const src = lines.join('\n');
 const compressed = pako.deflate(new TextEncoder().encode(src));
 const b64 = Buffer.from(compressed).toString('base64');
-console.log(`https://rhysd.github.io/actionlint#${b64}`);
+console.log(`https://jactionlint.jdx.dev#${b64}`);

@@ -8,7 +8,11 @@ function usage() {
     echo >&2
     echo 'This script downloads actionlint binary from the following release page. curl' >&2
     echo 'command is required as dependency' >&2
-    echo 'https://github.com/rhysd/actionlint/releases' >&2
+    echo 'https://github.com/jdx/jactionlint/releases' >&2
+    echo >&2
+    echo 'ACTIONLINT_REPO:' >&2
+    echo '  Environment variable. GitHub repository to download from. The default is' >&2
+    echo '  "jdx/jactionlint".' >&2
     echo >&2
     echo 'DIR:' >&2
     echo '  Directory to put the downloaded binary (e.g. /path/to/dir). When this value is' >&2
@@ -41,6 +45,8 @@ if [[ "$1" == "-h" || "$1" == "--help" ]]; then
     usage
     exit
 fi
+
+repo="${ACTIONLINT_REPO:-jdx/jactionlint}"
 
 # Default value is updated manually on release
 version="1.7.12"
@@ -109,9 +115,9 @@ esac
 
 echo "Detected OS=${os} ext=${ext} arch=${arch}"
 
-# https://github.com/rhysd/actionlint/releases/download/v1.0.0/actionlint_1.0.0_linux_386.tar.gz
+# https://github.com/jdx/jactionlint/releases/download/v1.0.0/actionlint_1.0.0_linux_386.tar.gz
 file="actionlint_${version}_${os}_${arch}.${ext}"
-url="https://github.com/rhysd/actionlint/releases/download/v${version}/${file}"
+url="https://github.com/${repo}/releases/download/v${version}/${file}"
 
 echo "Downloading ${url} with curl"
 
