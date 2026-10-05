@@ -77,6 +77,10 @@ timeout-minutes:
 require-commit-hash: true
 # Require explicit permissions at workflow-level or job-level
 require-permissions: true
+# Require `if:` conditions to be wrapped in `${{ }}`
+require-expression-wrapping: true
+# Report `cond && '' || other` where the value after `&&` is always falsy
+check-falsy-ternary: true
 # Report workflow names at 'on.workflow_run.workflows' which do not exist in the repository
 check-workflow-run-names: true
 
@@ -148,6 +152,11 @@ max-run-lines: 30
 - `require-permissions`: Optional lint to require an explicit `permissions:` at workflow-level or job-level. Defaults to `false`
   (disabled). When `true`, every job not covered by a workflow-level `permissions:` and lacking its own is reported.
   `permissions: {}` counts as explicit. See [the check document](checks.md#check-permissions) for more details.
+- `require-expression-wrapping`: Optional lint to require `if:` conditions (of jobs and steps) to be wrapped in `${{ }}`
+  explicitly, though GitHub Actions makes the placeholder optional there. Defaults to `false` (disabled).
+  See [the check document](checks.md#check-require-expression-wrapping) for more details.
+- `check-falsy-ternary`: Optional lint to report `cond && b || c` when `b` is a literal which is always falsy (`''`, `0`,
+  `false`, `null`). Defaults to `false` (disabled). See [the check document](checks.md#check-falsy-ternary) for more details.
 - `check-workflow-run-names`: Optional lint to check that each workflow name at `on.workflow_run.workflows` exists in the
   repository. Defaults to `false` (disabled). A workflow is identified by its `name:`, or by its file path (like
   `.github/workflows/ci.yaml`) when it has no name; the comparison is case-insensitive. Names containing `${{ }}` or glob

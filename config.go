@@ -112,6 +112,11 @@ type Config struct {
 	// RequirePermissions reports jobs which are not covered by an explicit "permissions:" at workflow-level
 	// or job-level. This is opt-in and disabled by default.
 	RequirePermissions bool `yaml:"require-permissions"`
+	// RequireExpressionWrapping requires `if:` conditions to be wrapped in `${{ }}` explicitly.
+	RequireExpressionWrapping bool `yaml:"require-expression-wrapping"`
+	// CheckFalsyTernary reports `cond && falsy-literal || other` where the value after `&&` is a
+	// literal which is always falsy so the whole expression always evaluates to the value after `||`.
+	CheckFalsyTernary bool `yaml:"check-falsy-ternary"`
 	// CheckWorkflowRunNames enables the opt-in "workflow-run" rule, which reports workflow names at
 	// 'on.workflow_run.workflows' not found in the repository.
 	CheckWorkflowRunNames bool `yaml:"check-workflow-run-names"`

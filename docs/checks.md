@@ -1925,6 +1925,40 @@ When enabled, actionlint reports the following at `uses:`:
 Local actions and workflows (`./path`, `$/path`) are not reported because they always run at the commit of the workflow itself.
 `uses:` values containing `${{ }}` expressions are skipped since they cannot be checked statically.
 
+### Require `${{ }}` in `if:` conditions (opt-in)
+<a id="check-require-expression-wrapping"></a>
+
+GitHub Actions allows omitting `${{ }}` in `if:` conditions of jobs and steps. Some projects prefer to always write it so
+that it is obvious an expression is used. This check is **disabled by default**. To enable it, set
+`require-expression-wrapping: true` in [the configuration file](config.md):
+
+```yaml
+require-expression-wrapping: true
+```
+
+When enabled, `if: github.ref == 'refs/heads/main'` is reported and `if: ${{ github.ref == 'refs/heads/main' }}` is accepted.
+Other keys are not affected because they always need `${{ }}` to evaluate an expression.
+
+### Falsy value in the `a && b || c` ternary idiom (opt-in)
+<a id="check-falsy-ternary"></a>
+
+`cond && b || c` is commonly used as a ternary operator, but it works only when `b` is truthy. Otherwise the result is always
+`c`. This check is **disabled by default**. To enable it, set `check-falsy-ternary: true` in
+[the configuration file](config.md):
+
+```yaml
+check-falsy-ternary: true
+```
+
+When enabled, actionlint reports the idiom when `b` is a literal which is always falsy: `''`, `0`, `false` or `null`.
+Non-literal values (e.g. `github.sha`) are not reported because whether they are falsy is unknown statically.
+
+```yaml
+env:
+  # Always evaluated to 'staging-' regardless of the condition
+  PREFIX: ${{ env.DEPLOY == 'true' && '' || 'staging-' }}
+```
+
 <a id="check-local-action-inputs"></a>
 ## Local action inputs validation at `with:`
 
