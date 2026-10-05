@@ -1931,7 +1931,7 @@ Local actions and workflows (`./path`, `$/path`) are not reported because they a
 
 A local action (`uses: ./.github/actions/foo`) is loaded from the workspace of the runner. When the repository has not been
 checked out yet, the step fails at runtime with "Can't find 'action.yml'". This check reports the first local action of a job
-which is not preceded by a checkout step in the same job. It is **disabled by default** since actionlint cannot know how your
+which is not preceded by a checkout step in the same job. It is **disabled by default** since jactionlint cannot know how your
 runner prepares the workspace. To enable it, set `require-checkout-before-local-action: true` in
 [the configuration file](config.md):
 
@@ -1988,7 +1988,7 @@ Other keys are not affected because they always need `${{ }}` to evaluate an exp
 check-falsy-ternary: true
 ```
 
-When enabled, actionlint reports the idiom when `b` is a literal which is always falsy: `''`, `0`, `false` or `null`.
+When enabled, jactionlint reports the idiom when `b` is a literal which is always falsy: `''`, `0`, `false` or `null`.
 Non-literal values (e.g. `github.sha`) are not reported because whether they are falsy is unknown statically.
 
 ```yaml
