@@ -1,0 +1,17 @@
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo a
+        id: a
+        background: ${{ undefined_ctx.x }}
+      - run: echo b
+        background: ${{ github.event }}
+      - wait: ${{ undefined_ctx.x }}
+      - wait: [a, "${{ unknown_ctx.x }}"]
+      - cancel: ${{ undefined_ctx.x }}
+      - cancel: ${{ github.event }}
+      - wait-all: yes please
+      - wait-all: [true]
+      - wait-all: {a: b}

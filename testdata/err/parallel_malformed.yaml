@@ -11,7 +11,7 @@ jobs:
         wait: y
       - cancel:
       - cancel: [a]
-      - cancel: ${{ matrix.x }}
+      - cancel: ${{ github.event_name }}
       - parallel:
       - parallel: x
       - parallel: [1, {run: x}]
@@ -20,7 +20,7 @@ jobs:
               - run: a
       - background: maybe
         run: a
-      - background: ${{ github.x }}
+      - background: ${{ github.event_name == 'push' }}
         id: q
         run: a
       - wait: q
