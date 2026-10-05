@@ -38,6 +38,5 @@ npm run lint
 
 ## Deployment
 
-Deployment is automated by [`deploy.bash`](./deploy.bash). See [CONTRIBUTING.md](../CONTRIBUTING.md) for more details.
-To optimize `main.wasm`, `wasm-opt` command is required. Install [Binaryen](https://github.com/WebAssembly/binaryen) in
-advance.
+Deployment to GitHub Pages is automated by the [Pages workflow](../.github/workflows/pages.yaml). `mise run pages` builds
+the same site into `./playground-dist` locally. See [CONTRIBUTING.md](../CONTRIBUTING.md) for more details.

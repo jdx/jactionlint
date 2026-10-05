@@ -62,9 +62,9 @@ run = [
 ]
 
 [tasks.man]
-description = "Generate the man page (man/actionlint.1 and .html) with ronn"
-tools = { ruby = "latest", "gem:ronn" = "latest" }
-run = "ronn man/actionlint.1.ronn"
+description = "Generate the man page man/actionlint.1 with ronn"
+tools = { ruby = "3.3" }
+run = "bash ./scripts/build-man.bash"
 
 [tasks.matcher]
 description = "Generate .github/actionlint-matcher.json"
@@ -80,9 +80,14 @@ run = [
   "./actionlint -format '{% raw %}{{json .}}{% endraw %}' ./testdata/err/one_error.yaml > ./scripts/generate-actionlint-matcher/test/want.json || true",
 ]
 
+[tasks.pages]
+description = "Build the playground into ./playground-dist, the site deployed to GitHub Pages"
+tools = { "aqua:WebAssembly/binaryen" = "latest" }
+run = "bash ./scripts/build-pages.bash"
+
 [tasks.clean]
 description = "Remove build outputs"
 run = [
   "rm -f ./actionlint ./actionlint.exe ./coverage.out ./coverage.html ./actionlint_fuzz-fuzz.zip ./man/actionlint.1 ./man/actionlint.1.html ./actionlint-workflow-ast",
-  "rm -rf ./corpus ./crashers",
+  "rm -rf ./corpus ./crashers ./playground-dist",
 ]
