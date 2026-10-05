@@ -37,6 +37,7 @@ jobs:
         if: ${{ runner.os == 'Windows' && matrix.os != 'windows-11-arm' }}
       - name: Install dependencies on Windows ARM
         # winget is not available on the Windows ARM runner image
+        shell: pwsh
         run: |
           $dir = Join-Path $env:RUNNER_TEMP 'shellcheck'
           Invoke-WebRequest -Uri 'https://github.com/koalaman/shellcheck/releases/download/v0.11.0/shellcheck-v0.11.0.zip' -OutFile "$dir.zip"
