@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"syscall"
 
 	"github.com/bmatcuk/doublestar/v4"
 	"go.yaml.in/yaml/v4"
@@ -134,6 +135,36 @@ func loadRepoConfig(root string) (*Config, error) {
 		}
 	}
 	return nil, nil
+}
+
+// loadGlobalConfig reads the user-global config file from
+// $XDG_CONFIG_HOME/actionlint/actionlint.yaml (or actionlint.yml), falling back
+// to $HOME/.config/actionlint/ when $XDG_CONFIG_HOME is unset. It returns the
+// loaded config and its file path, or (nil, "", nil) when no config file exists.
+func loadGlobalConfig() (*Config, string, error) {
+	// The XDG Base Directory spec says relative paths in $XDG_CONFIG_HOME are invalid and must be
+	// ignored. Otherwise a config file in an arbitrary working directory could be picked up.
+	dir := os.Getenv("XDG_CONFIG_HOME")
+	if dir == "" || !filepath.IsAbs(dir) {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return nil, "", nil
+		}
+		dir = filepath.Join(home, ".config")
+	}
+	for _, f := range []string{"actionlint.yaml", "actionlint.yml"} {
+		p := filepath.Join(dir, "actionlint", f)
+		c, err := ReadConfigFile(p)
+		switch {
+		case errors.Is(err, os.ErrNotExist), errors.Is(err, syscall.ENOTDIR):
+			continue
+		case err != nil:
+			return nil, "", fmt.Errorf("could not parse global config file %q: %w", p, err)
+		default:
+			return c, p, nil
+		}
+	}
+	return nil, "", nil
 }
 
 func writeDefaultConfigFile(path string) error {
