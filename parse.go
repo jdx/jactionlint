@@ -1240,9 +1240,10 @@ func (p *parser) parseStepExecWait(entries []workflowMappingEntry) *ExecWait {
 			waitGiven = true
 			ret.Names = p.parseStringOrStringSequence("wait", e.val, false, false)
 		case "wait-all":
-			// 'wait-all' waits for all background steps and takes no arguments.
-			if e.val.Tag != "!!null" {
-				p.error(e.val, "\"wait-all\" step takes no arguments")
+			// 'wait-all' waits for all background steps and takes no arguments. The official schema
+			// types the value as null or boolean, so both `wait-all:` and `wait-all: true` are valid.
+			if e.val.Kind != yaml.ScalarNode || (e.val.Tag != "!!null" && e.val.Tag != "!!bool") {
+				p.errorf(e.val, "\"wait-all\" takes no arguments. it must be empty or a boolean value (e.g. \"wait-all:\" or \"wait-all: true\") but found %s node with %q tag", nodeKindName(e.val.Kind), e.val.Tag)
 			}
 			ret.All = true
 			ret.AllPos = e.key.Pos
@@ -1307,7 +1308,7 @@ func (p *parser) parseStepExecParallel(entries []workflowMappingEntry) *ExecPara
 	for _, e := range entries {
 		switch e.id {
 		case "parallel":
-			ret.Steps = p.parseSteps(e.val)
+			ret.Steps = p.parseSteps("parallel", e.val)
 		case "id", "if", "name", "env", "continue-on-error", "timeout-minutes":
 			// do nothing
 		default:
@@ -1327,7 +1328,7 @@ func (p *parser) parseStepExecParallel(entries []workflowMappingEntry) *ExecPara
 }
 
 // https://docs.github.com/en/actions/learn-github-actions/workflow-syntax-for-github-actions#jobsjob_idsteps
-func (p *parser) parseStep(n *yaml.Node) *Step {
+func (p *parser) parseStep(sec string, n *yaml.Node) *Step {
 	ret := &Step{Pos: posAt(n)}
 
 	const (
@@ -1341,7 +1342,7 @@ func (p *parser) parseStep(n *yaml.Node) *Step {
 	)
 
 	kind := isUnknown
-	entries := slices.Collect(p.parseMappingAt("element of \"steps\" section", n, false, true))
+	entries := slices.Collect(p.parseMappingAt(fmt.Sprintf("element of %q section", sec), n, false, true))
 	for _, e := range entries {
 		switch e.id {
 		case "id":
@@ -1396,15 +1397,15 @@ func (p *parser) parseStep(n *yaml.Node) *Step {
 }
 
 // https://docs.github.com/en/actions/learn-github-actions/workflow-syntax-for-github-actions#jobsjob_idsteps
-func (p *parser) parseSteps(n *yaml.Node) []*Step {
-	if ok := p.checkSequence("steps", n, false); !ok {
+func (p *parser) parseSteps(sec string, n *yaml.Node) []*Step {
+	if ok := p.checkSequence(sec, n, false); !ok {
 		return nil
 	}
 
 	ret := make([]*Step, 0, len(n.Content))
 
 	for _, c := range n.Content {
-		if s := p.parseStep(c); s != nil {
+		if s := p.parseStep(sec, c); s != nil {
 			ret = append(ret, s)
 		}
 	}
@@ -1528,7 +1529,7 @@ func (p *parser) parseJob(id *String, n *yaml.Node) *Job {
 		case "if":
 			ret.If = p.parseString(v, false)
 		case "steps":
-			ret.Steps = p.parseSteps(v)
+			ret.Steps = p.parseSteps("steps", v)
 			stepsOnlyKey = k
 		case "timeout-minutes":
 			ret.TimeoutMinutes = p.parseTimeoutMinutes(v)

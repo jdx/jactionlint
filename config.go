@@ -101,6 +101,12 @@ type Config struct {
 	TimeoutMinutes TimeoutMinutesConfig `yaml:"timeout-minutes"`
 	// Requires action and docker versions to use a commit hash instead of version/branch.
 	RequireCommitHash bool `yaml:"require-commit-hash"`
+	// RequireShell requires every "run:" step to have an explicit shell, set by "shell:" of the step or by
+	// "defaults.run.shell" of the job or the workflow.
+	RequireShell bool `yaml:"require-shell"`
+	// MaxRunLines is the maximum number of non-blank lines allowed in a "run:" script. Zero (the default)
+	// disables the check.
+	MaxRunLines int `yaml:"max-run-lines"`
 }
 
 // PathConfigs returns a list of all PathConfig values matching to the given file path. The path must
@@ -140,6 +146,9 @@ func ParseConfig(b []byte) (*Config, error) {
 		if strings.Contains(r.Action, "@") || strings.HasPrefix(r.Action, "./") || strings.HasPrefix(r.Action, selfRepositoryUsesPrefix) || strings.HasPrefix(r.Action, "docker://") || !strings.Contains(r.Action, "/") {
 			return nil, fmt.Errorf("invalid action %q in \"required-actions\": it must be like \"owner/repo\" without \"@version\"; put the version in \"version\"", r.Action)
 		}
+	}
+	if c.MaxRunLines < 0 {
+		return nil, fmt.Errorf("\"max-run-lines\" must not be negative but got %d", c.MaxRunLines)
 	}
 	if m := c.TimeoutMinutes.Max; math.IsNaN(m) || math.IsInf(m, 0) || m < 0 {
 		return nil, fmt.Errorf("\"max\" in \"timeout-minutes\" must be a non-negative number, but got %v", m)
