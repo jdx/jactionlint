@@ -85,13 +85,21 @@ test.yaml:22:17: receiver of object dereference "permissions" must be type of ob
 
 ## Quick start
 
-Install `jactionlint` command by downloading [the released binary][releases] or by Homebrew or by `go install`. See
-[the installation document][install] for more details like how to manage the command with several package managers
-or run via Docker container.
+Install `jactionlint` command with [mise][mise] (recommended), by downloading [the released binary][releases], by Homebrew or by
+`go install`. See [the installation document][install] for more details like how to manage the command with several package
+managers or run via Docker container.
 
 ```sh
+# With mise
+mise use -g jactionlint
+
+# Or with Go
 go install github.com/jdx/jactionlint/cmd/jactionlint@latest
 ```
+
+`mise use jactionlint` without `-g` adds it to the `mise.toml` of the current project, so everyone working on the project (and
+CI, for example with [`jdx/mise-action`](https://github.com/jdx/mise-action)) uses the same version. `mise upgrade jactionlint`
+updates it.
 
 Basically all you need to do is run the `jactionlint` command in your repository. jactionlint automatically detects workflows and
 checks errors. jactionlint focuses on finding out mistakes. It tries to catch errors as much as possible and make false positives
@@ -108,8 +116,8 @@ See [the usage document][usage] for more details.
 ## Documents
 
 - [Checks][checks]: Full list of all checks done by jactionlint with example inputs, outputs, and playground links.
-- [Installation][install]: Installation instructions. Prebuilt binaries, a Docker image, building from source, a download script
-  (for CI), supports by several package managers are available.
+- [Installation][install]: Installation instructions. mise (recommended), prebuilt binaries, a Docker image, building from source, a
+  download script (for CI), supports by several package managers are available.
 - [Usage][usage]: How to use `jactionlint` command locally or on GitHub Actions, the online playground, an official Docker image,
   and integrations with reviewdog, Problem Matchers, super-linter, pre-commit, VS Code.
 - [Configuration][config]: How to configure jactionlint behavior. Currently, the labels of self-hosted runners, the configuration
@@ -133,6 +141,7 @@ jactionlint is distributed under [the MIT license](./LICENSE.txt).
 [apidoc-badge]: https://pkg.go.dev/badge/github.com/jdx/jactionlint.svg
 [apidoc]: https://pkg.go.dev/github.com/jdx/jactionlint
 [repo]: https://github.com/jdx/jactionlint
+[mise]: https://mise.jdx.dev/
 [upstream]: https://github.com/rhysd/actionlint
 [playground]: https://jactionlint.jdx.dev/
 [shellcheck]: https://github.com/koalaman/shellcheck

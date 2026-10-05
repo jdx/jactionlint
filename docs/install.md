@@ -10,12 +10,16 @@ This document describes how to install [jactionlint](https://github.com/jdx/jact
 
 ## mise
 
-[mise][mise] can install the binaries from the GitHub releases of this repository:
+[mise][mise] is the recommended way to install jactionlint:
 
 ```sh
-mise use -g github:jdx/jactionlint@latest
+mise use -g jactionlint
 jactionlint -version
 ```
+
+`mise use jactionlint` without `-g` adds it to the `mise.toml` of the current project, so everyone working on the
+project (and CI, for example with [`jdx/mise-action`](https://github.com/jdx/mise-action)) uses the same version.
+`mise upgrade jactionlint` updates it.
 
 ## macOS
 
