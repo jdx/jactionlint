@@ -1,4 +1,6 @@
 import { defineConfig } from "vitepress";
+import { generateLlms } from "./llms.ts";
+import { sidebar } from "./sidebar.ts";
 
 const siteUrl = "https://jactionlint.jdx.dev";
 const siteDescription =
@@ -63,11 +65,13 @@ export default defineConfig({
     [
       "script",
       {},
-      // The playground used to live at the site root and checks.md links to it
-      // as /#<state>. Keep those links working.
+      // The playground used to live at the site root; permalinks (docs/checks.md has many) look like
+      // /#<state> and the old ?s=<source> / ?u=<url> parameters were also supported. Keep them working.
       `(function () {
-  if ((location.pathname === "/" || location.pathname === "/index.html") && location.hash.length > 1) {
-    location.replace("/playground" + location.hash);
+  var p = location.pathname;
+  if (p !== "/" && p !== "/index.html") return;
+  if (location.hash.length > 1 || /[?&][su]=/.test(location.search)) {
+    location.replace("/playground" + location.search + location.hash);
   }
 })();`,
     ],
@@ -90,6 +94,10 @@ export default defineConfig({
     ["meta", { name: "twitter:image", content: `${siteUrl}/og.png` }],
     ["meta", { name: "twitter:image:alt", content: socialTitle }],
   ],
+
+  buildEnd({ srcDir, outDir }) {
+    generateLlms(srcDir, outDir);
+  },
 
   transformHead({ pageData, title, description }) {
     const url = new URL(
@@ -129,28 +137,7 @@ export default defineConfig({
       { text: "Playground", link: "/playground" },
     ],
 
-    sidebar: [
-      {
-        text: "Guide",
-        items: [
-          { text: "Installation", link: "/install" },
-          { text: "Usage", link: "/usage" },
-          { text: "Configuration", link: "/config" },
-        ],
-      },
-      {
-        text: "Reference",
-        items: [
-          { text: "Checks", link: "/checks" },
-          { text: "Go API", link: "/api" },
-          { text: "References", link: "/reference" },
-        ],
-      },
-      {
-        text: "Playground",
-        items: [{ text: "Online playground", link: "/playground" }],
-      },
-    ],
+    sidebar,
 
     socialLinks: [
       { icon: "github", link: "https://github.com/jdx/jactionlint" },
