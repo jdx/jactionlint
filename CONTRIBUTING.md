@@ -120,11 +120,22 @@ staticcheck ./...
 govulncheck ./...
 ```
 
-These lints can be run with other checks by the following command.
+These lints can be run with other checks (gofmt, `go vet`, shellcheck for the scripts, `docs/checks.md` and the workflows
+in this repository) by [hk](https://hk.jdx.dev/), the same way CI does.
 
 ```sh
-make lint
+mise install    # installs Go, shellcheck, pyflakes, staticcheck, govulncheck, hk, ...
+hk check --all  # or: mise run lint
+hk fix --all    # fix what can be fixed
 ```
+
+To run the fast checks before every commit and everything plus the tests before every push, install the git hooks once.
+
+```sh
+hk install
+```
+
+`make lint` still works if you have the tools installed yourself.
 
 ## Fuzzing
 

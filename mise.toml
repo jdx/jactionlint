@@ -1,6 +1,8 @@
 [tools]
 go = "1.27"
 node = "lts"
+hk = "latest"
+pkl = "latest"
 shellcheck = "latest"
 uv = "latest"
 "pipx:pyflakes" = "latest"
@@ -16,11 +18,9 @@ description = "Run all tests"
 run = "go test ./..."
 
 [tasks.lint]
-description = "Run vet, staticcheck, govulncheck and the docs check"
-run = [
-  "go vet ./...",
-  "staticcheck ./ ./scripts/... ./cmd/...",
-  "govulncheck ./...",
-  "GOOS=js GOARCH=wasm staticcheck ./playground",
-  "go run ./scripts/check-checks -quiet ./docs/checks.md",
-]
+description = "Run all checks (what CI runs): gofmt, vet, staticcheck, govulncheck, shellcheck, docs and workflow checks"
+run = "hk check --all"
+
+[tasks.lint-fix]
+description = "Run all checks and fix what can be fixed"
+run = "hk fix --all"
