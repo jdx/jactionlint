@@ -1,4 +1,6 @@
 context = "jdx's actionlint is a static checker for GitHub Actions workflow files, maintained as a fork of rhysd/actionlint. It validates workflow syntax, ${{ }} expressions, action inputs and outputs, reusable workflows, runner labels and security issues, and integrates shellcheck and pyflakes for run scripts."
 
+system_extra = "Do not include a 'Sponsor jdx's actionlint' section, sponsorship blurb, or any funding callout in the generated notes. A sponsor section is appended by a separate CI step; emitting one here causes a duplicate."
+
 [defaults]
 emoji = false
