@@ -1,0 +1,3 @@
+test.yaml:16:18: value "2" in "exclude" does not match in matrix "php" combinations. possible values are "3", "4" [matrix]
+test.yaml:18:17: value "macos-latest" in "exclude" does not match in matrix "os" combinations. possible values are "ubuntu-latest" [matrix]
+test.yaml:27:7: "exclude" section exists but no matrix variation exists [matrix]
