@@ -23,6 +23,10 @@ func TestRuleRunnerLabelCheckLabels(t *testing.T) {
 			labels: []string{"windows-latest"},
 		},
 		{
+			what:   "simple GH-hosted Windows 11 VS 2026 Arm runner label",
+			labels: []string{"windows-11-vs2026-arm"},
+		},
+		{
 			what:   "simple GH-hosted macOS runner label",
 			labels: []string{"macos-14"},
 		},
@@ -269,6 +273,11 @@ func TestRuleRunnerLabelCheckLabels(t *testing.T) {
 			errs:   []string{`label "windows-11-arm" conflicts with label "windows-2025"`},
 		},
 		{
+			what:   "Windows 11 Arm image labels conflict",
+			labels: []string{"windows-11-arm", "windows-11-vs2026-arm"},
+			errs:   []string{`label "windows-11-vs2026-arm" conflicts with label "windows-11-arm"`},
+		},
+		{
 			what:   "macOS XL and normal labels conflict",
 			labels: []string{"macos-26-xlarge", "macos-26"},
 			errs:   []string{`label "macos-26" conflicts with label "macos-26-xlarge"`},
@@ -304,7 +313,7 @@ func TestRuleRunnerLabelCheckLabels(t *testing.T) {
 				n := &String{"os", false, pos}
 				row := make([]RawYAMLValue, 0, len(tc.matrix))
 				for _, m := range tc.matrix {
-					row = append(row, &RawYAMLString{m, pos})
+					row = append(row, &RawYAMLString{m, false, pos})
 				}
 				st := &Strategy{
 					Matrix: &Matrix{
