@@ -22,6 +22,7 @@ List of checks:
 - [Job dependencies validation](#check-job-deps)
 - [Parallel steps](#check-parallel-step-refs)
 - [Timeout minutes of jobs (opt-in)](#check-timeout-minutes)
+- [Workflow names of `workflow_run` event (opt-in)](#check-workflow-run-names)
 - [Matrix values](#check-matrix-values)
 - [Webhook events validation](#check-webhook-events)
 - [Workflow dispatch event validation](#check-workflow-dispatch-events)
@@ -1323,6 +1324,40 @@ timeout-minutes:
   expressions `${{ }}` are not checked.
 
 [timeout-minutes-doc]: https://docs.github.com/en/actions/writing-workflows/workflow-syntax-for-github-actions#jobsjob_idtimeout-minutes
+
+<a id="check-workflow-run-names"></a>
+## Workflow names of `workflow_run` event (opt-in)
+
+Example input:
+
+```yaml
+on:
+  workflow_run:
+    # ERROR: No workflow named "Biuld" exists in the repository
+    workflows: [Biuld]
+    types: [completed]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo hello
+```
+
+Output:
+<!-- Skip update output -->
+```
+test.yaml:4:17: workflow "Biuld" specified at "workflows" of "workflow_run" event is not found in the repository. a workflow is specified by its "name:" or its file path when it has no name [workflow-run]
+  |
+4 |     workflows: [Biuld]
+  |                 ^~~~~
+```
+
+<!-- Skip playground link -->
+
+This check is disabled by default. Enable it with `check-workflow-run-names: true` in the [configuration file](config.md).
+Each name at `on.workflow_run.workflows` is compared (case-insensitively) with the `name:` of every workflow file in
+`.github/workflows` (or its file path when it has no `name:`). The check is skipped for names with `${{ }}` or glob
+characters, and entirely when a workflow file cannot be parsed or has a dynamic `name:`.
 
 <a id="check-matrix-values"></a>
 ## Matrix values

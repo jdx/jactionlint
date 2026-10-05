@@ -71,6 +71,8 @@ timeout-minutes:
 require-commit-hash: true
 # Require explicit permissions at workflow-level or job-level
 require-permissions: true
+# Report workflow names at 'on.workflow_run.workflows' which do not exist in the repository
+check-workflow-run-names: true
 
 # Require every 'run:' step to set a shell explicitly with 'shell:' (or 'defaults.run.shell'). (default: false)
 require-shell: true
@@ -130,6 +132,11 @@ max-run-lines: 30
 - `require-permissions`: Optional lint to require an explicit `permissions:` at workflow-level or job-level. Defaults to `false`
   (disabled). When `true`, every job not covered by a workflow-level `permissions:` and lacking its own is reported.
   `permissions: {}` counts as explicit. See [the check document](checks.md#check-permissions) for more details.
+- `check-workflow-run-names`: Optional lint to check that each workflow name at `on.workflow_run.workflows` exists in the
+  repository. Defaults to `false` (disabled). A workflow is identified by its `name:`, or by its file path (like
+  `.github/workflows/ci.yaml`) when it has no name; the comparison is case-insensitive. Names containing `${{ }}` or glob
+  characters are skipped, and the check is skipped entirely when a workflow file in the repository cannot be parsed or has a
+  dynamic `name:`. See [the check document](checks.md#check-workflow-run-names) for more details.
 
 ## Configuration file location and priority
 

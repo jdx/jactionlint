@@ -581,6 +581,7 @@ func (l *Linter) check(
 			NewRuleRunPolicy(),
 			NewRuleRunnerLabel(),
 			NewRuleEvents(),
+			NewRuleWorkflowRun(project),
 			NewRuleJobNeeds(),
 			NewRuleParallelSteps(),
 			NewRuleAction(localActions),
