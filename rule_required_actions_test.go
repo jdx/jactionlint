@@ -74,6 +74,7 @@ func TestParseActionRef(t *testing.T) {
 			wantVersion: "",
 		},
 		{name: "local action", input: "./.github/actions/foo@v1"},
+		{name: "self-repository action", input: "$/.github/actions/foo@v1"},
 		{name: "empty version", input: "actions/checkout@"},
 		{name: "empty name", input: "/foo@v1"},
 		{name: "subpath", input: "github/codeql-action/init@v3", wantName: "github/codeql-action/init", wantVersion: "v3"},
@@ -245,6 +246,14 @@ jobs:
       - uses: github/codeql-action/init@v3
   call:
     uses: org/repo/.github/workflows/ci.yml@main
+  par:
+    runs-on: ubuntu-latest
+    steps:
+      - parallel:
+          - uses: parallel/only@v1
+          - parallel:
+              - uses: nested/only@v2
+      - uses: $/local-action@v1
 `
 	tests := []struct {
 		name string
@@ -256,6 +265,8 @@ jobs:
 		{"case insensitive", []RequiredActionRule{{Action: "actions/setup-node", Version: "v2"}}, nil},
 		{"subpath", []RequiredActionRule{{Action: "github/codeql-action/init", Version: "v3"}}, nil},
 		{"base repo does not match subpath", []RequiredActionRule{{Action: "github/codeql-action"}}, []string{`:3:3: required action "github/codeql-action" is not used in this workflow [required-actions]`}},
+		{"action used only in a parallel group", []RequiredActionRule{{Action: "parallel/only", Version: "v1"}}, nil},
+		{"action used only in a nested parallel group", []RequiredActionRule{{Action: "nested/only", Version: "v2"}}, nil},
 		{"reusable workflow", []RequiredActionRule{{Action: "org/repo/.github/workflows/ci.yml", Version: "main"}}, nil},
 		{"mismatch lists all versions", []RequiredActionRule{{Action: "actions/checkout", Version: "v2"}}, []string{`:3:3: action "actions/checkout" must use version "v2" but found "v3", "v4" [required-actions]`}},
 	}
@@ -293,6 +304,7 @@ func TestParseConfigRequiredActions(t *testing.T) {
 		"required-actions:\n  - action: checkout\n",
 		"required-actions:\n  - action: actions/checkout@v4\n",
 		"required-actions:\n  - action: ./foo\n",
+		"required-actions:\n  - action: $/foo\n",
 	} {
 		if _, err := ParseConfig([]byte(bad)); err == nil {
 			t.Errorf("expected error for %q", bad)

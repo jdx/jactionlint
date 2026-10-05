@@ -71,14 +71,7 @@ func (rule *RuleRequiredActions) VisitWorkflowPre(workflow *Workflow) error {
 		if job.WorkflowCall != nil {
 			add(job.WorkflowCall.Uses)
 		}
-		for _, step := range job.Steps {
-			if step == nil {
-				continue
-			}
-			if exec, ok := step.Exec.(*ExecAction); ok && exec != nil {
-				add(exec.Uses)
-			}
-		}
+		visitSteps(job.Steps, add)
 	}
 	if pos == nil {
 		pos = &Pos{Line: 1, Col: 1}
@@ -117,11 +110,31 @@ func quoteJoin(vs []string) string {
 	return strings.Join(qs, ", ")
 }
 
+// visitSteps calls add for the `uses:` of every action step, including steps nested in `parallel:`
+// groups.
+func visitSteps(steps []*Step, add func(*String)) {
+	for _, step := range steps {
+		if step == nil {
+			continue
+		}
+		switch e := step.Exec.(type) {
+		case *ExecAction:
+			if e != nil {
+				add(e.Uses)
+			}
+		case *ExecParallel:
+			if e != nil {
+				visitSteps(e.Steps, add)
+			}
+		}
+	}
+}
+
 // parseActionRef extracts the action name and version from a GitHub Action reference.
 // Returns empty strings for local actions, Docker images or malformed strings.
 // Example: "actions/checkout@v3" returns ("actions/checkout", "v3")
 func parseActionRef(uses string) (name string, version string) {
-	if strings.HasPrefix(uses, "./") || strings.HasPrefix(uses, "docker://") {
+	if _, local := canonLocalUsesSpec(uses); local || strings.HasPrefix(uses, "docker://") {
 		return "", ""
 	}
 	name, version, ok := strings.Cut(uses, "@")

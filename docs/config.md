@@ -64,7 +64,7 @@ paths:
   - `version`: Optional ref (tag, branch or commit SHA) compared exactly. The requirement is satisfied when at least one
     use of the action has this version. When omitted any version is accepted.
 
-  Local actions (`./...`) and Docker images (`docker://...`) never match. Only workflow files are checked; the steps of
+  Local actions (`./...` and `$/...`) and Docker images (`docker://...`) never match. Only workflow files are checked; the steps of
   composite action files (`action.yml`) are not.
 - `paths`: Configurations for specific file path patterns. This is a mapping from a glob pattern and the corresponding
   configuration.

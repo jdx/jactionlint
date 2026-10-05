@@ -111,7 +111,7 @@ func ParseConfig(b []byte) (*Config, error) {
 		if r.Action == "" {
 			return nil, fmt.Errorf("\"action\" is required in \"required-actions\" item at index %d", i)
 		}
-		if strings.Contains(r.Action, "@") || strings.HasPrefix(r.Action, "./") || strings.HasPrefix(r.Action, "docker://") || !strings.Contains(r.Action, "/") {
+		if strings.Contains(r.Action, "@") || strings.HasPrefix(r.Action, "./") || strings.HasPrefix(r.Action, selfRepositoryUsesPrefix) || strings.HasPrefix(r.Action, "docker://") || !strings.Contains(r.Action, "/") {
 			return nil, fmt.Errorf("invalid action %q in \"required-actions\": it must be like \"owner/repo\" without \"@version\"; put the version in \"version\"", r.Action)
 		}
 	}
