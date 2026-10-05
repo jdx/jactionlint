@@ -35,6 +35,51 @@ func BenchmarkParseWorkflow(b *testing.B) {
 	}
 }
 
+func TestParseContainerVolumesAndPorts(t *testing.T) {
+	src := `on: push
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    container:
+      image: node:18
+      volumes:
+        - /a:/b
+      ports:
+        - 80
+    services:
+      redis:
+        image: redis
+        ports:
+          - 6379
+        volumes:
+          - /c:/d
+          - /e:/f
+    steps:
+      - run: echo
+`
+	w, errs := Parse([]byte(src))
+	if len(errs) > 0 {
+		t.Fatal(errs)
+	}
+	j := w.Jobs["test"]
+	check := func(what string, got []*String, want ...string) {
+		t.Helper()
+		if len(got) != len(want) {
+			t.Fatalf("%s: wanted %v but got %d elements", what, want, len(got))
+		}
+		for i, w := range want {
+			if got[i].Value != w {
+				t.Errorf("%s[%d]: wanted %q but got %q", what, i, w, got[i].Value)
+			}
+		}
+	}
+	check("container.volumes", j.Container.Volumes, "/a:/b")
+	check("container.ports", j.Container.Ports, "80")
+	r := j.Services.Value["redis"].Container
+	check("service.volumes", r.Volumes, "/c:/d", "/e:/f")
+	check("service.ports", r.Ports, "6379")
+}
+
 func BenchmarkParseTestData(b *testing.B) {
 	type bench struct {
 		name   string
