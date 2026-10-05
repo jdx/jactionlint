@@ -304,7 +304,7 @@ func (rule *RuleRunnerLabel) tryToGetLabelsInMatrix(label *String, m *Matrix) []
 		if row, ok := m.Rows[prop]; ok {
 			for _, v := range row.Values {
 				if s, ok := v.(*RawYAMLString); ok && !ContainsExpression(s.Value) {
-					labels = append(labels, &String{s.Value, false, s.Pos(), false})
+					labels = append(labels, &String{Value: s.Value, Pos: s.Pos()})
 				}
 			}
 		}
@@ -315,7 +315,7 @@ func (rule *RuleRunnerLabel) tryToGetLabelsInMatrix(label *String, m *Matrix) []
 			if combi.Assigns != nil {
 				if assign, ok := combi.Assigns[prop]; ok {
 					if s, ok := assign.Value.(*RawYAMLString); ok && !ContainsExpression(s.Value) {
-						labels = append(labels, &String{s.Value, false, s.Pos(), false})
+						labels = append(labels, &String{Value: s.Value, Pos: s.Pos()})
 					}
 				}
 			}
