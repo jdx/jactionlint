@@ -10,13 +10,20 @@ fi
 
 set -x
 
-# This repository has not published releases of its own that include the old versions below, so the
-# script is tested against the releases of the original repository. The script works the same way for
-# any repository.
-export JACTIONLINT_REPO=rhysd/actionlint
-# The executable and the archives of the original releases are named "actionlint"
-export JACTIONLINT_NAME=actionlint
-bin=actionlint
+# Releases of this repository have its own default version ("No arguments", which the release workflow bumps on
+# every release) and "latest". The old versions below only exist in the releases of the original repository, and
+# so do not exist here. The script works the same way for any repository.
+use_own_releases() {
+    export JACTIONLINT_REPO=jdx/jactionlint
+    export JACTIONLINT_NAME=jactionlint
+    bin=jactionlint
+}
+use_original_releases() {
+    export JACTIONLINT_REPO=rhysd/actionlint
+    # The executable and the archives of the original releases are named "actionlint"
+    export JACTIONLINT_NAME=actionlint
+    bin=actionlint
+}
 
 script="$(pwd)/scripts/download-jactionlint.bash"
 temp_dir="$(mktemp -d)"
@@ -27,6 +34,7 @@ pushd "$temp_dir"
 set -e
 
 # No arguments
+use_own_releases
 out="$(bash "$script")"
 if [ -n "$GITHUB_ACTION" ]; then
     if [[ "$out" != *"executable="* ]]; then
@@ -41,6 +49,7 @@ fi
 rm -f ./"${bin}"
 
 # Specify only version
+use_original_releases
 bash "$script" '1.6.12'
 out="$(./"${bin}" -version | head -n 1)"
 if [[ "$out" != '1.6.12' ]]; then
@@ -50,6 +59,7 @@ fi
 rm -f ./"${bin}"
 
 # Specify only a download directory
+use_own_releases
 mkdir ./test1
 bash "$script" latest ./test1
 out="$(./test1/"${bin}" -version)"
@@ -60,6 +70,7 @@ fi
 rm -rf ./test1
 
 # Specify both version and a download directory
+use_original_releases
 mkdir ./test2
 bash "$script" '1.6.12' ./test2
 out="$(./test2/"${bin}" -version | head -n 1)"
@@ -70,6 +81,7 @@ fi
 rm -rf ./test2
 
 # Error cases
+use_own_releases
 set +e
 
 fails=0
