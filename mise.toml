@@ -10,12 +10,36 @@ uv = "latest"
 "go:golang.org/x/vuln/cmd/govulncheck" = "latest"
 
 [tasks.build]
-description = "Build the actionlint executable"
+description = "Build the actionlint executable without cgo"
+env = { CGO_ENABLED = "0" }
 run = "go build ./cmd/actionlint"
+
+[tasks.generate]
+description = "Regenerate popular_actions.go, all_webhooks.go and availability.go (fetches data from GitHub)"
+run = "go generate"
 
 [tasks.test]
 description = "Run all tests"
-run = "go test ./..."
+run = "go test -race ./..."
+# -race needs cgo, which is hard to set up on Windows
+run_windows = "go test ./..."
+
+[tasks.cov]
+description = "Generate coverage.html and print the coverage per function"
+run = [
+  "go test -race -coverprofile=coverage.out -covermode=atomic ./...",
+  "go tool cover -html=coverage.out -o coverage.html",
+  "go tool cover -func=coverage.out",
+]
+run_windows = [
+  "go test -coverprofile=coverage.out -covermode=atomic ./...",
+  "go tool cover -html=coverage.out -o coverage.html",
+  "go tool cover -func=coverage.out",
+]
+
+[tasks.bench]
+description = "Run benchmarks"
+run = "go test -bench Lint -benchmem"
 
 [tasks.lint]
 description = "Run all checks (what CI runs): gofmt, vet, staticcheck, govulncheck, shellcheck, docs and workflow checks"
@@ -24,3 +48,36 @@ run = "hk check --all"
 [tasks.lint-fix]
 description = "Run all checks and fix what can be fixed"
 run = "hk fix --all"
+
+[tasks.fuzz]
+description = "Run go-fuzz. Usage: mise run fuzz [FuzzParse]"
+run = [
+  "go run github.com/dvyukov/go-fuzz/go-fuzz-build@latest ./fuzz",
+  "go run github.com/dvyukov/go-fuzz/go-fuzz@latest -bin ./actionlint_fuzz-fuzz.zip -func {{arg(name=\"func\", default=\"FuzzParse\")}}",
+]
+
+[tasks.man]
+description = "Generate the man page (man/actionlint.1 and .html) with ronn"
+tools = { ruby = "latest", "gem:ronn" = "latest" }
+run = "ronn man/actionlint.1.ronn"
+
+[tasks.matcher]
+description = "Generate .github/actionlint-matcher.json"
+tools = { node = "lts" }
+run = "node ./scripts/generate-actionlint-matcher/main.mjs .github/actionlint-matcher.json"
+
+[tasks."matcher:fixtures"]
+description = "Update the test data of generate-actionlint-matcher after the default error format changes"
+depends = ["build"]
+run = [
+  "./actionlint -color ./testdata/err/one_error.yaml > ./scripts/generate-actionlint-matcher/test/escape.txt || true",
+  "./actionlint -no-color ./testdata/err/one_error.yaml > ./scripts/generate-actionlint-matcher/test/no_escape.txt || true",
+  "./actionlint -format '{% raw %}{{json .}}{% endraw %}' ./testdata/err/one_error.yaml > ./scripts/generate-actionlint-matcher/test/want.json || true",
+]
+
+[tasks.clean]
+description = "Remove build outputs"
+run = [
+  "rm -f ./actionlint ./actionlint.exe ./coverage.out ./coverage.html ./actionlint_fuzz-fuzz.zip ./man/actionlint.1 ./man/actionlint.1.html ./actionlint-workflow-ast",
+  "rm -rf ./corpus ./crashers",
+]
