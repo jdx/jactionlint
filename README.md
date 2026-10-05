@@ -97,6 +97,10 @@ mise use -g jactionlint
 go install github.com/jdx/jactionlint/cmd/jactionlint@latest
 ```
 
+`mise use jactionlint` without `-g` adds it to the `mise.toml` of the current project, so everyone working on the project (and
+CI, for example with [`jdx/mise-action`](https://github.com/jdx/mise-action)) uses the same version. `mise upgrade jactionlint`
+updates it.
+
 Basically all you need to do is run the `jactionlint` command in your repository. jactionlint automatically detects workflows and
 checks errors. jactionlint focuses on finding out mistakes. It tries to catch errors as much as possible and make false positives
 as minimal as possible.
