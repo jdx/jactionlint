@@ -16,13 +16,42 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
+    outputs:
+      release_created: ${{ steps.release-please.outputs.release_created }}
+      tag: ${{ steps.release-please.outputs.tag_name }}
     steps:
       # Opens/updates the release PR from conventional commits. Merging it tags
       # vX.Y.Z and creates the GitHub release, which triggers release.yaml.
       # A PAT is required: tags pushed with GITHUB_TOKEN do not trigger workflows.
       - name: Run release-please
+        id: release-please
         uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
         with:
           token: ${{ secrets.RELEASE_PLZ_TOKEN }}
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+
+  enhance-release:
+    name: Enhance release notes
+    needs: release-please
+    if: ${{ needs.release-please.outputs.release_created == 'true' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      TAG: ${{ needs.release-please.outputs.tag }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        with:
+          cache: false
+          mise_toml: |
+            [tools]
+            communique = "latest"
+      - run: communique generate "$TAG" --github-release
+        env:
+          GITHUB_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}

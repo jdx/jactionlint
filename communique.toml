@@ -1,0 +1,4 @@
+context = "jdx's actionlint is a static checker for GitHub Actions workflow files, maintained as a fork of rhysd/actionlint. It validates workflow syntax, ${{ }} expressions, action inputs and outputs, reusable workflows, runner labels and security issues, and integrates shellcheck and pyflakes for run scripts."
+
+[defaults]
+emoji = false
