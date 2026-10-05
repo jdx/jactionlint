@@ -3,7 +3,6 @@ package actionlint
 import (
 	"encoding/json"
 	"fmt"
-	"os"
 	"strings"
 	"sync"
 )
@@ -161,6 +160,24 @@ func sanitizeExpressionsInScript(src string) string {
 	}
 }
 
+// hasMultilineExpression returns true when some ${{ }} placeholder in the script contains a newline.
+func hasMultilineExpression(src string) bool {
+	for {
+		s := strings.Index(src, "${{")
+		if s == -1 {
+			return false
+		}
+		e := strings.Index(src[s:], "}}")
+		if e == -1 {
+			return false
+		}
+		if strings.Contains(src[s:s+e], "\n") {
+			return true
+		}
+		src = src[s+e+2:]
+	}
+}
+
 func (rule *RuleShellcheck) runShellcheck(srcAst *String, shell string, pos *Pos) {
 	var sh string
 	if shell == "bash" || shell == "sh" {
@@ -203,6 +220,8 @@ func (rule *RuleShellcheck) runShellcheck(srcAst *String, shell string, pos *Pos
 	}
 	script := fmt.Sprintf("%s\n%s\n", setup, src)
 
+	mapLines := srcAst.Literal && srcAst.Pos != nil && !hasMultilineExpression(srcAst.Value)
+
 	rule.cmd.run(args, script, func(stdout []byte, err error) error {
 		if err != nil {
 			rule.Debug("Command %s %s failed: %v", rule.cmd.exe, args, err)
@@ -216,8 +235,6 @@ func (rule *RuleShellcheck) runShellcheck(srcAst *String, shell string, pos *Pos
 		if len(errs) == 0 {
 			return nil
 		}
-
-		rule.EnableDebug(os.Stdout)
 
 		// Synchronize rule.Errorf calls
 		rule.mu.Lock()
@@ -233,11 +250,14 @@ func (rule *RuleShellcheck) runShellcheck(srcAst *String, shell string, pos *Pos
 			line := err.Line - 1
 			msg := strings.TrimSuffix(err.Message, ".") // Trim period aligning style of error message
 
-			var errorLocation Pos
-			if srcAst.Literal {
-				errorLocation = Pos{line + srcAst.Pos.Line, err.Column + srcAst.Pos.Col - 4}
-			} else {
-				errorLocation = *pos
+			// Optimistically map the line in the script to the line in the source. This is only
+			// reliable for literal block scalars ('|', '|-', '|+') where lines are preserved as-is, and
+			// when no ${{ }} spans multiple lines (sanitizing replaces newlines in them). The column is not
+			// restorable because the indentation is stripped by the YAML parser, so the column of 'run:'
+			// is used.
+			errorLocation := *pos
+			if mapLines && line >= 1 {
+				errorLocation.Line = srcAst.Pos.Line + line
 			}
 			rule.Errorf(&errorLocation, "shellcheck reported issue in this script: SC%d:%s:%d:%d: %s", err.Code, err.Level, line, err.Column, msg)
 		}
