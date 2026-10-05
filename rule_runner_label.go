@@ -209,6 +209,29 @@ func (rule *RuleRunnerLabel) checkLabel(l *String, m *Matrix) {
 
 func (rule *RuleRunnerLabel) verifyRunnerLabel(label *String) runnerOSCompat {
 	l := label.Value
+	known := rule.getKnownLabels()
+
+	if rule.isStrict() {
+		// Only the labels listed in the config are allowed. Built-in labels are accepted only when listed.
+		for _, k := range known {
+			m, err := path.Match(k, l)
+			if err != nil {
+				rule.Errorf(label.Pos, "label pattern %q is an invalid glob. kindly check list of labels in actionlint.yaml config file: %v", k, err)
+				return compatInvalid
+			}
+			if m {
+				return defaultRunnerOSCompats[strings.ToLower(l)] // compatInvalid when not a built-in label
+			}
+		}
+		rule.Errorf(
+			label.Pos,
+			"label %q is not allowed. only the labels listed in \"self-hosted-runner.labels\" of actionlint.yaml config file are allowed because \"self-hosted-runner.strict-labels\" is enabled. allowed labels are %s",
+			label.Value,
+			quotesAll(known),
+		)
+		return compatInvalid
+	}
+
 	if c, ok := defaultRunnerOSCompats[strings.ToLower(l)]; ok {
 		return c
 	}
@@ -219,7 +242,6 @@ func (rule *RuleRunnerLabel) verifyRunnerLabel(label *String) runnerOSCompat {
 		}
 	}
 
-	known := rule.getKnownLabels()
 	for _, k := range known {
 		m, err := path.Match(k, l)
 		if err != nil {
@@ -344,4 +366,8 @@ func (rule *RuleRunnerLabel) getKnownLabels() []string {
 		return nil
 	}
 	return rule.config.SelfHostedRunner.Labels
+}
+
+func (rule *RuleRunnerLabel) isStrict() bool {
+	return rule.config != nil && rule.config.SelfHostedRunner.StrictLabels
 }
