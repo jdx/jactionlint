@@ -589,6 +589,7 @@ func (l *Linter) check(
 			NewRuleGlob(),
 			NewRulePermissions(),
 			NewRuleTimeoutCheck(),
+			NewRuleRequirePermissions(),
 			NewRuleWorkflowCall(path, localReusableWorkflows),
 			NewRuleExpression(localActions, localReusableWorkflows),
 			NewRuleDeprecatedCommands(),

@@ -1,0 +1,20 @@
+on: push
+
+jobs:
+  no-perms:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo hello
+  has-perms:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - run: echo hello
+  empty-perms:
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - run: echo hello
+  call-no-perms:
+    uses: owner/repo/.github/workflows/x.yml@v1
