@@ -1272,7 +1272,7 @@ test.yaml:11:17: "serverr" is not the ID of a preceding background step. "wait" 
    |                 ^~~~~~~
 ```
 
-[Playground](https://rhysd.github.io/actionlint/#eNpczssNAjEMBND7VjG3nNKA26CCJGuxwOKs/KF+FD4R4mTJz6NxF8IRti3XXo0WwNl8TEBDLA+PGuKR9zLsReZ82PsKyJByZ8LJizqM9cH6IeCy0v9KQwjcto5kI5Km1NJuZ+0hK8E1eBb8RMYPlqa0Io33b4c+BwCanjvx)
+[Playground](https://jactionlint.jdx.dev/#eNpczssNAjEMBND7VjG3nNKA26CCJGuxwOKs/KF+FD4R4mTJz6NxF8IRti3XXo0WwNl8TEBDLA+PGuKR9zLsReZ82PsKyJByZ8LJizqM9cH6IeCy0v9KQwjcto5kI5Km1NJuZ+0hK8E1eBb8RMYPlqa0Io33b4c+BwCanjvx)
 
 <a id="check-timeout-minutes"></a>
 ## Timeout minutes of jobs (opt-in)
