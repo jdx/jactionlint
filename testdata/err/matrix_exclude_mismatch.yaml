@@ -20,10 +20,10 @@ jobs:
           - os: {'runner': {'name': 'ubuntu-latest'}}
           # ERROR: Unknown value
           - os: {'runner': 'windows-latest'}
-          # ERROR: Type mismatch in key added by `include`
+          # ERROR: Key added only by `include` (processed after `exclude`)
           - os: {'runner': 'ubuntu-latest'}
             gui: ['gnome']
-          # ERROR: Unknown value in key added by `include`
+          # ERROR: Key added only by `include` (processed after `exclude`)
           - os: {'runner': 'ubuntu-latest'}
             gui: 'kde'
     runs-on: ${{ matrix.os.runner }}
@@ -44,10 +44,10 @@ jobs:
           - os: ['ubuntu', '22.04']
           # ERROR: Type mismatch at second element
           - os: ['ubuntu', {'version': '22.04'}]
-          # ERROR: Type mismatch in key added by `include`
+          # ERROR: Key added only by `include` (processed after `exclude`)
           - os: ['ubuntu', 'latest']
             gui: [{'name': 'gnome'}]
-          # ERROR: Unknown value in key added by `include`
+          # ERROR: Key added only by `include` (processed after `exclude`)
           - os: ['ubuntu', 'latest']
             gui: ['gnome', 'x11']
     runs-on: ${{ matrix.os[0] }}-${{ matrix.os[1] }}

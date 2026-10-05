@@ -1,0 +1,15 @@
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+
+          echo 'hello'
+          echo '${{ toJSON(github.event.issue.body) }}'
+          echo '${{ unknown.prop }}'
+      - run: |-
+          echo ${{ foo.bar }}
+      - run: |
+          echo ${{
+            baz.qux }}

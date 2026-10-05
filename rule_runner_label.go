@@ -11,6 +11,7 @@ const (
 	compatInvalid                   = 0
 	compatUbuntu2204 runnerOSCompat = 1 << iota
 	compatUbuntu2404
+	compatUbuntu2604
 	compatMacOS140
 	compatMacOS140L
 	compatMacOS140XL
@@ -22,6 +23,8 @@ const (
 	compatMacOS260Intel
 	compatMacOS260L
 	compatMacOS260XL
+	compatXcode27
+	compatXcode27XL
 	compatWindows2022
 	compatWindows2025
 	compatWindows2025VS2026
@@ -43,6 +46,8 @@ var allGitHubHostedRunnerLabels = []string{
 	"ubuntu-latest-4-cores",
 	"ubuntu-latest-8-cores",
 	"ubuntu-latest-16-cores",
+	"ubuntu-26.04",
+	"ubuntu-26.04-arm",
 	"ubuntu-24.04",
 	"ubuntu-24.04-arm",
 	"ubuntu-22.04",
@@ -61,6 +66,8 @@ var allGitHubHostedRunnerLabels = []string{
 	"macos-14-xlarge",
 	"macos-14-large",
 	"macos-14",
+	"xcode-27",
+	"xcode-27-xlarge",
 }
 
 // https://docs.github.com/en/actions/hosting-your-own-runners/using-self-hosted-runners-in-a-workflow#using-default-labels-to-route-jobs
@@ -84,6 +91,8 @@ var defaultRunnerOSCompats = map[string]runnerOSCompat{
 	"ubuntu-latest-4-cores":  compatUbuntu2404,
 	"ubuntu-latest-8-cores":  compatUbuntu2404,
 	"ubuntu-latest-16-cores": compatUbuntu2404,
+	"ubuntu-26.04":           compatUbuntu2604,
+	"ubuntu-26.04-arm":       compatUbuntu2604,
 	"ubuntu-24.04":           compatUbuntu2404,
 	"ubuntu-24.04-arm":       compatUbuntu2404,
 	"ubuntu-22.04":           compatUbuntu2204,
@@ -102,6 +111,8 @@ var defaultRunnerOSCompats = map[string]runnerOSCompat{
 	"macos-14-xlarge":        compatMacOS140XL,
 	"macos-14-large":         compatMacOS140L,
 	"macos-14":               compatMacOS140,
+	"xcode-27":               compatXcode27,
+	"xcode-27-xlarge":        compatXcode27XL,
 	"windows-latest":         compatWindows2022,
 	"windows-latest-8-cores": compatWindows2022,
 	"windows-2025":           compatWindows2025,
@@ -109,8 +120,8 @@ var defaultRunnerOSCompats = map[string]runnerOSCompat{
 	"windows-2022":           compatWindows2022,
 	"windows-11-arm":         compatWindows11Arm,
 	"windows-11-vs2026-arm":  compatWindows11VS2026Arm,
-	"linux":                  compatUbuntu2404 | compatUbuntu2204, // Note: "linux" does not always indicate Ubuntu. It might be Fedora or Arch or ...
-	"macos":                  compatMacOS260 | compatMacOS260Intel | compatMacOS260L | compatMacOS260XL | compatMacOS150 | compatMacOS150Intel | compatMacOS150L | compatMacOS150XL | compatMacOS140 | compatMacOS140L | compatMacOS140XL,
+	"linux":                  compatUbuntu2604 | compatUbuntu2404 | compatUbuntu2204, // Note: "linux" does not always indicate Ubuntu. It might be Fedora or Arch or ...
+	"macos":                  compatMacOS260 | compatMacOS260Intel | compatMacOS260L | compatMacOS260XL | compatXcode27 | compatXcode27XL | compatMacOS150 | compatMacOS150Intel | compatMacOS150L | compatMacOS150XL | compatMacOS140 | compatMacOS140L | compatMacOS140XL,
 	"windows":                compatWindows2025VS2026 | compatWindows2025 | compatWindows2022 | compatWindows11Arm | compatWindows11VS2026Arm,
 }
 
@@ -198,6 +209,29 @@ func (rule *RuleRunnerLabel) checkLabel(l *String, m *Matrix) {
 
 func (rule *RuleRunnerLabel) verifyRunnerLabel(label *String) runnerOSCompat {
 	l := label.Value
+	known := rule.getKnownLabels()
+
+	if rule.isStrict() {
+		// Only the labels listed in the config are allowed. Built-in labels are accepted only when listed.
+		for _, k := range known {
+			m, err := path.Match(k, l)
+			if err != nil {
+				rule.Errorf(label.Pos, "label pattern %q is an invalid glob. kindly check list of labels in actionlint.yaml config file: %v", k, err)
+				return compatInvalid
+			}
+			if m {
+				return defaultRunnerOSCompats[strings.ToLower(l)] // compatInvalid when not a built-in label
+			}
+		}
+		rule.Errorf(
+			label.Pos,
+			"label %q is not allowed. only the labels listed in \"self-hosted-runner.labels\" of actionlint.yaml config file are allowed because \"self-hosted-runner.strict-labels\" is enabled. allowed labels are %s",
+			label.Value,
+			quotesAll(known),
+		)
+		return compatInvalid
+	}
+
 	if c, ok := defaultRunnerOSCompats[strings.ToLower(l)]; ok {
 		return c
 	}
@@ -208,7 +242,6 @@ func (rule *RuleRunnerLabel) verifyRunnerLabel(label *String) runnerOSCompat {
 		}
 	}
 
-	known := rule.getKnownLabels()
 	for _, k := range known {
 		m, err := path.Match(k, l)
 		if err != nil {
@@ -271,7 +304,7 @@ func (rule *RuleRunnerLabel) tryToGetLabelsInMatrix(label *String, m *Matrix) []
 		if row, ok := m.Rows[prop]; ok {
 			for _, v := range row.Values {
 				if s, ok := v.(*RawYAMLString); ok && !ContainsExpression(s.Value) {
-					labels = append(labels, &String{s.Value, false, s.Pos()})
+					labels = append(labels, &String{Value: s.Value, Pos: s.Pos()})
 				}
 			}
 		}
@@ -282,7 +315,7 @@ func (rule *RuleRunnerLabel) tryToGetLabelsInMatrix(label *String, m *Matrix) []
 			if combi.Assigns != nil {
 				if assign, ok := combi.Assigns[prop]; ok {
 					if s, ok := assign.Value.(*RawYAMLString); ok && !ContainsExpression(s.Value) {
-						labels = append(labels, &String{s.Value, false, s.Pos()})
+						labels = append(labels, &String{Value: s.Value, Pos: s.Pos()})
 					}
 				}
 			}
@@ -333,4 +366,8 @@ func (rule *RuleRunnerLabel) getKnownLabels() []string {
 		return nil
 	}
 	return rule.config.SelfHostedRunner.Labels
+}
+
+func (rule *RuleRunnerLabel) isStrict() bool {
+	return rule.config != nil && rule.config.SelfHostedRunner.StrictLabels
 }

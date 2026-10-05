@@ -1,0 +1,5 @@
+test.yaml:7:15: action "actions/checkout@main" must be pinned to a full-length commit SHA like "{owner}/{repo}@{sha}" because "require-commit-hash" is enabled [action]
+test.yaml:9:15: action "actions/checkout@db41740" must be pinned to a full-length commit SHA like "{owner}/{repo}@{sha}" because "require-commit-hash" is enabled [action]
+test.yaml:11:15: docker image must be pinned to a digest like "docker://{image}@sha256:{digest}" because "require-commit-hash" is enabled: "docker://image:latest" [action]
+test.yaml:13:15: docker image must be pinned to a digest like "docker://{image}@sha256:{digest}" because "require-commit-hash" is enabled: "docker://image" [action]
+test.yaml:22:11: reusable workflow call "owner/repo/.github/workflows/ci.yml@v1" must be pinned to a full-length commit SHA like "owner/repo/path/to/workflow.yml@{sha}" because "require-commit-hash" is enabled [workflow-call]

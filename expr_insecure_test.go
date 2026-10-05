@@ -27,7 +27,24 @@ var testAllUntrustedInputs = []string{
 	"github.event.pull_request.head.repo.default_branch",
 	"github.event.discussion.title",
 	"github.event.discussion.body",
+	"github.event.workflow_run.head_branch",
+	"github.event.workflow_run.head_repository.owner.login",
 	"github.head_ref",
+
+	// Not in the security lab article but also controlled by the author of a pull request or a commit
+	"github.event.pull_request.head.repo.description",
+	"github.event.head_commit.committer.email",
+	"github.event.head_commit.committer.name",
+	"github.event.commits.*.committer.email",
+	"github.event.commits.*.committer.name",
+	"github.event.workflow_run.display_title",
+	"github.event.workflow_run.head_commit.message",
+	"github.event.workflow_run.head_commit.author.email",
+	"github.event.workflow_run.head_commit.author.name",
+	"github.event.workflow_run.head_commit.committer.email",
+	"github.event.workflow_run.head_commit.committer.name",
+	"github.event.workflow_run.pull_requests.*.head.ref",
+	"github.event.workflow_run.head_repository.description",
 }
 
 func TestExprInsecureBuiltinUntrustedInputs(t *testing.T) {
