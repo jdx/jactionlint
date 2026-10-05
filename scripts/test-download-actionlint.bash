@@ -10,6 +10,11 @@ fi
 
 set -x
 
+# This repository has not published releases of its own that include the old versions below, so the
+# script is tested against the releases of the original repository. The script works the same way for
+# any repository.
+export ACTIONLINT_REPO=rhysd/actionlint
+
 script="$(pwd)/scripts/download-actionlint.bash"
 temp_dir="$(mktemp -d)"
 trap 'popd && rm -rf $temp_dir' EXIT
