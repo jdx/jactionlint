@@ -400,6 +400,8 @@ type Concurrency struct {
 	Group *String
 	// CancelInProgress is a flag that shows if canceling this workflow cancels other jobs in progress.
 	CancelInProgress *Bool
+	// Queue is the queue strategy for pending workflow runs. Valid values are "single" (default) and "max".
+	Queue *String
 	// Pos is a position in source.
 	Pos *Pos
 }
@@ -608,7 +610,11 @@ type RawYAMLString struct {
 
 	// Value is string representation of the scalar node.
 	Value string
-	pos   *Pos
+	// StringTag is true when the YAML parser resolved the scalar with the `!!str` tag; that is,
+	// the value was quoted, written as a block scalar, or explicitly tagged. Such a scalar is a
+	// string even when its value looks like a number, a boolean, or null.
+	StringTag bool
+	pos       *Pos
 }
 
 // Kind returns kind of raw YAML value.

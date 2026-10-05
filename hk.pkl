@@ -31,7 +31,7 @@ local slow = new Mapping<String, Step> {
     // ./... is not usable here because ./playground/node_modules contains Go packages
     ["staticcheck"] {
         glob = "**/*.go"
-        check = "staticcheck ./ ./scripts/... ./cmd/... && GOOS=js GOARCH=wasm staticcheck ./playground"
+        check = "staticcheck ./ ./scripts/... ./cmd/... && mise run lint:wasm"
     }
     ["go_vuln_check"] = Builtins.go_vuln_check
     ["checks_doc"] {

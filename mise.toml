@@ -17,6 +17,11 @@ run = "go build ./cmd/actionlint"
 description = "Run all tests"
 run = "go test ./..."
 
+[tasks."lint:wasm"]
+description = "Run staticcheck on the playground, which is built for wasm"
+env = { GOOS = "js", GOARCH = "wasm" }
+run = "staticcheck ./playground"
+
 [tasks.lint]
 description = "Run all checks (what CI runs): gofmt, vet, staticcheck, govulncheck, shellcheck, docs and workflow checks"
 run = "hk check --all"
