@@ -96,6 +96,14 @@ type Config struct {
 	// reusable workflow) which must be used at least once in every checked workflow. The check is disabled
 	// when the list is empty.
 	RequiredActions []RequiredActionRule `yaml:"required-actions"`
+	// AssumeDefaultPermissions controls how the workflow-call permission check treats a caller that
+	// has no `permissions:` block at the workflow level and none on the calling job. "restricted"
+	// (default) assumes GitHub's restricted default token (contents/packages: read, everything else:
+	// none). "permissive" assumes write on every scope except `id-token`, which always requires an
+	// explicit opt-in regardless of the repo-level Workflow permissions setting. Only affects callers
+	// with no permissions block anywhere; once any permissions block is declared, the check always
+	// runs against it.
+	AssumeDefaultPermissions *string `yaml:"assume-default-permissions"`
 	// TimeoutMinutes is a configuration for the "timeout-check" rule, which checks "timeout-minutes" of jobs.
 	// The rule is disabled by default.
 	TimeoutMinutes TimeoutMinutesConfig `yaml:"timeout-minutes"`
@@ -107,6 +115,14 @@ type Config struct {
 	// RequireCheckoutBeforeLocalAction reports a local action (`uses: ./path`) which is used in a job before any
 	// step that checks out the repository.
 	RequireCheckoutBeforeLocalAction bool `yaml:"require-checkout-before-local-action"`
+	// RequireExpressionWrapping requires `if:` conditions to be wrapped in `${{ }}` explicitly.
+	RequireExpressionWrapping bool `yaml:"require-expression-wrapping"`
+	// CheckFalsyTernary reports `cond && falsy-literal || other` where the value after `&&` is a
+	// literal which is always falsy so the whole expression always evaluates to the value after `||`.
+	CheckFalsyTernary bool `yaml:"check-falsy-ternary"`
+	// CheckWorkflowRunNames enables the opt-in "workflow-run" rule, which reports workflow names at
+	// 'on.workflow_run.workflows' not found in the repository.
+	CheckWorkflowRunNames bool `yaml:"check-workflow-run-names"`
 	// RequireShell requires every "run:" step to have an explicit shell, set by "shell:" of the step or by
 	// "defaults.run.shell" of the job or the workflow.
 	RequireShell bool `yaml:"require-shell"`
@@ -114,6 +130,12 @@ type Config struct {
 	// disables the check.
 	MaxRunLines int `yaml:"max-run-lines"`
 }
+
+// AssumeDefaultPermissionsRestricted is the config value enabling the restricted-default assumption.
+const AssumeDefaultPermissionsRestricted = "restricted"
+
+// AssumeDefaultPermissionsPermissive is the config value enabling the permissive-default assumption.
+const AssumeDefaultPermissionsPermissive = "permissive"
 
 // PathConfigs returns a list of all PathConfig values matching to the given file path. The path must
 // be relative to the root of the project.
@@ -151,6 +173,13 @@ func ParseConfig(b []byte) (*Config, error) {
 		}
 		if strings.Contains(r.Action, "@") || strings.HasPrefix(r.Action, "./") || strings.HasPrefix(r.Action, selfRepositoryUsesPrefix) || strings.HasPrefix(r.Action, "docker://") || !strings.Contains(r.Action, "/") {
 			return nil, fmt.Errorf("invalid action %q in \"required-actions\": it must be like \"owner/repo\" without \"@version\"; put the version in \"version\"", r.Action)
+		}
+	}
+	if c.AssumeDefaultPermissions != nil {
+		switch *c.AssumeDefaultPermissions {
+		case AssumeDefaultPermissionsRestricted, AssumeDefaultPermissionsPermissive:
+		default:
+			return nil, fmt.Errorf("invalid value %q for \"assume-default-permissions\". available values are %q and %q", *c.AssumeDefaultPermissions, AssumeDefaultPermissionsRestricted, AssumeDefaultPermissionsPermissive)
 		}
 	}
 	if c.MaxRunLines < 0 {
@@ -248,6 +277,12 @@ paths:
 #  .github/workflows/**/*.yml:
 #    ignore: []
 
+# Controls what permissions are assumed for a caller workflow that declares no
+# "permissions:" block at all when checking reusable workflow calls. Set to
+# "restricted" (the default) to assume GitHub's restricted default token. Set to
+# "permissive" to assume write on every scope except "id-token" (which always
+# requires an explicit opt-in).
+#assume-default-permissions: restricted
 # Configuration for the "timeout-check" rule, which is disabled by default.
 # "required" set to true requires every job to set "timeout-minutes".
 # "max" is the maximum allowed value of "timeout-minutes" in minutes (0 means no limit).

@@ -31,8 +31,4 @@ for f in "${files[@]}"; do
     cp -R "./playground/${f}" "${dist}/${f}"
 done
 
-echo "Applying wasm-opt to ${dist}/main.wasm"
-wasm-opt -O -o "${dist}/opt.wasm" "${dist}/main.wasm" --enable-bulk-memory --enable-nontrapping-float-to-int --enable-sign-ext
-mv "${dist}/opt.wasm" "${dist}/main.wasm"
-
 echo "Done. The site is in ${dist}"

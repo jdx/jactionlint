@@ -405,3 +405,255 @@ func TestRuleWorkflowCallCheckReusableWorkflowCall(t *testing.T) {
 		})
 	}
 }
+
+func TestRuleWorkflowCallCheckPermissions(t *testing.T) {
+	scopes := func(kv ...string) *ReusableWorkflowPermissions {
+		p := &ReusableWorkflowPermissions{Scopes: map[string]string{}}
+		for i := 0; i+1 < len(kv); i += 2 {
+			p.Scopes[kv[i]] = kv[i+1]
+		}
+		return p
+	}
+	all := func(v string) *ReusableWorkflowPermissions {
+		return &ReusableWorkflowPermissions{All: v}
+	}
+
+	mkPerm := func(p *ReusableWorkflowPermissions) *Permissions {
+		if p == nil {
+			return nil
+		}
+		ap := &Permissions{Pos: &Pos{}}
+		if p.All != "" {
+			ap.All = &String{Value: p.All, Pos: &Pos{}}
+			return ap
+		}
+		ap.Scopes = map[string]*PermissionScope{}
+		for k, v := range p.Scopes {
+			ap.Scopes[k] = &PermissionScope{
+				Name:  &String{Value: k, Pos: &Pos{}},
+				Value: &String{Value: v, Pos: &Pos{}},
+			}
+		}
+		return ap
+	}
+
+	type caseDef struct {
+		what       string
+		callerJob  *ReusableWorkflowPermissions
+		callerWf   *ReusableWorkflowPermissions
+		calleePerm *ReusableWorkflowPermissions
+		ifCond     string
+		cfgMode    string
+		wantErr    string
+		// callerReusable makes the caller workflow a reusable workflow (on.workflow_call) too.
+		callerReusable bool
+	}
+
+	tests := []caseDef{
+		{
+			what:       "caller job grants required write",
+			callerJob:  scopes("pull-requests", "write"),
+			calleePerm: scopes("pull-requests", "write"),
+		},
+		{
+			what:       "caller job grants only read but write required",
+			callerJob:  scopes("pull-requests", "read"),
+			calleePerm: scopes("pull-requests", "write"),
+			wantErr:    `requires "pull-requests: write" but the calling job grants "pull-requests: read"`,
+		},
+		{
+			what:       "caller job silent, workflow grants required",
+			callerWf:   scopes("pull-requests", "write"),
+			calleePerm: scopes("pull-requests", "write"),
+		},
+		{
+			what:       "caller silent, default restricted, required write",
+			calleePerm: scopes("pull-requests", "write"),
+			wantErr:    `requires "pull-requests: write" but the calling job grants "pull-requests: none"`,
+		},
+		{
+			what:       "caller silent, default permissive grants pull-requests",
+			calleePerm: scopes("pull-requests", "write"),
+			cfgMode:    AssumeDefaultPermissionsPermissive,
+		},
+		{
+			what:       "caller silent, default permissive still denies id-token",
+			calleePerm: scopes("id-token", "write"),
+			cfgMode:    AssumeDefaultPermissionsPermissive,
+			wantErr:    `requires "id-token: write" but the calling job grants "id-token: none"`,
+		},
+		{
+			what:       "caller silent, default restricted denies id-token",
+			calleePerm: scopes("id-token", "write"),
+			wantErr:    `requires "id-token: write" but the calling job grants "id-token: none"`,
+		},
+		{
+			what:       "caller declares empty, callee requires contents:read",
+			callerJob:  scopes(),
+			calleePerm: scopes("contents", "read"),
+			wantErr:    `requires "contents: read" but the calling job grants "contents: none"`,
+		},
+		{
+			what:       "caller read-all, callee requires id-token: write",
+			callerJob:  all("read-all"),
+			calleePerm: scopes("id-token", "write"),
+			wantErr:    `requires "id-token: write" but the calling job grants "id-token: none"`,
+		},
+		{
+			what:       "caller write-all covers everything",
+			callerJob:  all("write-all"),
+			calleePerm: scopes("contents", "write", "id-token", "write", "pull-requests", "write"),
+		},
+		{
+			what:       "callee declares no permissions inherits caller",
+			callerJob:  nil,
+			callerWf:   nil,
+			calleePerm: nil,
+		},
+		{
+			what:       "contents:read under restricted default ok",
+			calleePerm: scopes("contents", "read"),
+		},
+		{
+			what:       "packages:read under restricted default ok",
+			calleePerm: scopes("packages", "read"),
+		},
+		{
+			what:       "packages:write under restricted default flagged",
+			calleePerm: scopes("packages", "write"),
+			wantErr:    `requires "packages: write" but the calling job grants "packages: read"`,
+		},
+		{
+			// `if:` on the calling job does not affect the check — GitHub validates
+			// permissions before runtime conditions are evaluated.
+			what:       "caller if: does not suppress the check",
+			calleePerm: scopes("pull-requests", "write"),
+			ifCond:     "github.event_name == 'pull_request'",
+			wantErr:    `requires "pull-requests: write" but the calling job grants "pull-requests: none"`,
+		},
+		{
+			what:       "callee write-all flagged when caller missing scopes",
+			callerJob:  scopes("contents", "write"),
+			calleePerm: all("write-all"),
+			wantErr:    `"pull-requests: write"`,
+		},
+		{
+			// id-token: read is invalid per GitHub; clamping should drop it to none,
+			// so a silent caller is not flagged.
+			what:       "callee id-token:read clamps to none and is ignored",
+			calleePerm: scopes("id-token", "read"),
+		},
+		{
+			what:       "callee declares unknown scope is ignored",
+			calleePerm: scopes("not-a-scope", "write"),
+		},
+		{
+			// All insufficient scopes of one callee job are reported in a single error.
+			what:       "multiple insufficient scopes are aggregated",
+			callerJob:  scopes("contents", "read"),
+			calleePerm: scopes("contents", "write", "issues", "write"),
+			wantErr:    `requires "contents: write", "issues: write" but the calling job grants "contents: read", "issues: none"`,
+		},
+		{
+			what:       "caller permissions {} grants nothing",
+			callerJob:  scopes(),
+			calleePerm: scopes("contents", "read"),
+			wantErr:    `requires "contents: read" but the calling job grants "contents: none"`,
+		},
+		{
+			what:       "callee permissions {} requires nothing",
+			callerJob:  scopes(),
+			calleePerm: scopes(),
+		},
+		{
+			what:       "caller write satisfies callee read",
+			callerJob:  scopes("issues", "write"),
+			calleePerm: scopes("issues", "read"),
+		},
+		{
+			// A reusable workflow without permissions inherits the token of its unknown upstream caller.
+			what:           "caller is a reusable workflow without permissions is not checked",
+			calleePerm:     scopes("pull-requests", "write"),
+			callerReusable: true,
+		},
+		{
+			what:           "caller is a reusable workflow with explicit permissions is checked",
+			callerWf:       scopes("contents", "read"),
+			calleePerm:     scopes("pull-requests", "write"),
+			callerReusable: true,
+			wantErr:        `requires "pull-requests: write" but the calling job grants "pull-requests: none"`,
+		},
+		{
+			what:       "caller workflow-level grants required, callee write-all",
+			callerWf:   all("write-all"),
+			calleePerm: all("write-all"),
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.what, func(t *testing.T) {
+			cache := NewLocalReusableWorkflowCache(&Project{"testdata", nil}, "testdata", nil)
+			spec := "./callee.yaml"
+			cache.writeCache(spec, &ReusableWorkflowMetadata{
+				JobPermissions: map[string]*ReusableWorkflowPermissions{
+					"needs-pr": tc.calleePerm,
+				},
+			})
+
+			r := NewRuleWorkflowCall("caller.yaml", cache)
+			if tc.cfgMode != "" {
+				mode := tc.cfgMode
+				r.SetConfig(&Config{AssumeDefaultPermissions: &mode})
+			}
+
+			on := []Event{&WebhookEvent{Hook: &String{Value: "push", Pos: &Pos{}}}}
+			if tc.callerReusable {
+				on = []Event{&WorkflowCallEvent{Pos: &Pos{}}}
+			}
+			w := &Workflow{
+				On:          on,
+				Permissions: mkPerm(tc.callerWf),
+			}
+			if err := r.VisitWorkflowPre(w); err != nil {
+				t.Fatal(err)
+			}
+
+			j := &Job{
+				WorkflowCall: &WorkflowCall{
+					Uses:    &String{Value: spec, Pos: &Pos{}},
+					Inputs:  map[string]*WorkflowCallInput{},
+					Secrets: map[string]*WorkflowCallSecret{},
+				},
+				Permissions: mkPerm(tc.callerJob),
+			}
+			if tc.ifCond != "" {
+				j.If = &String{Value: tc.ifCond, Pos: &Pos{}}
+			}
+
+			if err := r.VisitJobPre(j); err != nil {
+				t.Fatal(err)
+			}
+
+			errs := r.Errs()
+			if tc.wantErr == "" {
+				if len(errs) > 0 {
+					t.Fatalf("unexpected errors: %v", errs)
+				}
+				return
+			}
+			if len(errs) == 0 {
+				t.Fatalf("expected error containing %q but got none", tc.wantErr)
+			}
+			found := false
+			for _, e := range errs {
+				if strings.Contains(e.Error(), tc.wantErr) {
+					found = true
+					break
+				}
+			}
+			if !found {
+				t.Fatalf("expected error containing %q but got: %v", tc.wantErr, errs)
+			}
+		})
+	}
+}

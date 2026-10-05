@@ -82,7 +82,6 @@ run = [
 
 [tasks.pages]
 description = "Build the playground into ./playground-dist, the site deployed to GitHub Pages"
-tools = { "aqua:WebAssembly/binaryen" = "latest" }
 run = "bash ./scripts/build-pages.bash"
 
 [tasks.clean]

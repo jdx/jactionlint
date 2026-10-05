@@ -22,6 +22,7 @@ List of checks:
 - [Job dependencies validation](#check-job-deps)
 - [Parallel steps](#check-parallel-step-refs)
 - [Timeout minutes of jobs (opt-in)](#check-timeout-minutes)
+- [Workflow names of `workflow_run` event (opt-in)](#check-workflow-run-names)
 - [Matrix values](#check-matrix-values)
 - [Webhook events validation](#check-webhook-events)
 - [Workflow dispatch event validation](#check-workflow-dispatch-events)
@@ -1325,6 +1326,40 @@ timeout-minutes:
 
 [timeout-minutes-doc]: https://docs.github.com/en/actions/writing-workflows/workflow-syntax-for-github-actions#jobsjob_idtimeout-minutes
 
+<a id="check-workflow-run-names"></a>
+## Workflow names of `workflow_run` event (opt-in)
+
+Example input:
+
+```yaml
+on:
+  workflow_run:
+    # ERROR: No workflow named "Biuld" exists in the repository
+    workflows: [Biuld]
+    types: [completed]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo hello
+```
+
+Output:
+<!-- Skip update output -->
+```
+test.yaml:4:17: workflow "Biuld" specified at "workflows" of "workflow_run" event is not found in the repository. a workflow is specified by its "name:" or its file path when it has no name [workflow-run]
+  |
+4 |     workflows: [Biuld]
+  |                 ^~~~~
+```
+
+<!-- Skip playground link -->
+
+This check is disabled by default. Enable it with `check-workflow-run-names: true` in the [configuration file](config.md).
+Each name at `on.workflow_run.workflows` is compared (case-insensitively) with the `name:` of every workflow file in
+`.github/workflows` (or its file path when it has no `name:`). The check is skipped for names with `${{ }}` or glob
+characters, and entirely when a workflow file cannot be parsed or has a dynamic `name:`.
+
 <a id="check-matrix-values"></a>
 ## Matrix values
 
@@ -1928,6 +1963,39 @@ Known limitations (use `ignore` in the configuration file when they matter):
 - A step which generates the action directory without checking out the repository is reported.
 - `uses: $/path` (self-repository syntax) is never reported since it does not need a checkout. `uses:` of reusable workflows and
   composite action files are not checked.
+### Require `${{ }}` in `if:` conditions (opt-in)
+<a id="check-require-expression-wrapping"></a>
+
+GitHub Actions allows omitting `${{ }}` in `if:` conditions of jobs and steps. Some projects prefer to always write it so
+that it is obvious an expression is used. This check is **disabled by default**. To enable it, set
+`require-expression-wrapping: true` in [the configuration file](config.md):
+
+```yaml
+require-expression-wrapping: true
+```
+
+When enabled, `if: github.ref == 'refs/heads/main'` is reported and `if: ${{ github.ref == 'refs/heads/main' }}` is accepted.
+Other keys are not affected because they always need `${{ }}` to evaluate an expression.
+
+### Falsy value in the `a && b || c` ternary idiom (opt-in)
+<a id="check-falsy-ternary"></a>
+
+`cond && b || c` is commonly used as a ternary operator, but it works only when `b` is truthy. Otherwise the result is always
+`c`. This check is **disabled by default**. To enable it, set `check-falsy-ternary: true` in
+[the configuration file](config.md):
+
+```yaml
+check-falsy-ternary: true
+```
+
+When enabled, actionlint reports the idiom when `b` is a literal which is always falsy: `''`, `0`, `false` or `null`.
+Non-literal values (e.g. `github.sha`) are not reported because whether they are falsy is unknown statically.
+
+```yaml
+env:
+  # Always evaluated to 'staging-' regardless of the condition
+  PREFIX: ${{ env.DEPLOY == 'true' && '' || 'staging-' }}
+```
 
 <a id="check-local-action-inputs"></a>
 ## Local action inputs validation at `with:`
@@ -2835,6 +2903,70 @@ In the above example, `get-build-info.yaml` has one output `version`. actionlint
 as `{version: string}`. In the downstream job, actionlint can report an error at undefined key `tag` in the object.
 
 Note that this check only works with a reusable workflow in the same repository (starting with `./` or `$/`).
+
+### Check caller/callee permissions in workflow call
+
+Example reusable workflow:
+
+```yaml
+# .github/workflows/reusable.yaml
+on:
+  workflow_call:
+
+jobs:
+  snapshot:
+    # Note: GitHub validates permissions at workflow load time, regardless of `if:`.
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - run: echo snapshot
+```
+
+Example input:
+
+```yaml
+on:
+  push:
+    branches: [main]
+
+jobs:
+  # ERROR: Caller does not grant pull-requests: write but the called job requires it.
+  caller:
+    uses: ./.github/workflows/reusable.yaml
+```
+
+Output:
+<!-- Skip update output -->
+
+```
+test.yaml:7:11: nested job "snapshot" of "./.github/workflows/reusable.yaml" requires "pull-requests: write" but the calling job grants "pull-requests: none" [workflow-call]
+  |
+7 |     uses: ./.github/workflows/reusable.yaml
+  |           ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+```
+
+<!-- Skip playground link -->
+
+GitHub validates `permissions:` at workflow load time. Every scope a job in the called workflow declares must also be
+granted by the calling job, otherwise the run fails with `startup_failure` and no jobs run, so any `if: failure()`
+notification job cannot fire. actionlint compares each called job's effective `permissions:` (its own or, when absent,
+the workflow-level block) against the caller's effective grant (the calling job's `permissions:` or, when absent, the
+workflow-level block) and reports each missing scope.
+
+The check ignores `if:` on called jobs because GitHub evaluates permissions before any condition runs.
+
+When the caller has no `permissions:` block at the workflow level and none on the calling job, actionlint assumes
+GitHub's restricted default token (only `contents: read` and `packages: read` are granted). This default can be
+overridden via the [`assume-default-permissions` configuration](./config.md); set it to `permissive` if your
+repository's "Workflow permissions" setting grants read + write to everything by default. Even under `permissive`,
+`id-token` is still treated as `none` because OIDC tokens always require an explicit opt-in.
+
+When the caller workflow is itself a reusable workflow (`on.workflow_call`) without any `permissions:` block, the check is
+skipped: such a workflow inherits the token permissions of its own caller, which actionlint cannot see.
+
+Note that this check only works with local reusable workflows (starting with `./` or `$/`).
 
 <a id="id-naming-convention"></a>
 ## ID naming convention

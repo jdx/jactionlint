@@ -38,6 +38,12 @@ required-actions:
   # 'version' is the exact ref after '@'. Tags, branches and commit SHAs are compared as-is.
   - action: github/codeql-action/init
     version: v3
+# Controls what permissions are assumed for a caller workflow that declares no
+# "permissions:" block at all when checking caller/callee permissions for local
+# reusable workflow calls. "restricted" (default) assumes GitHub's restricted
+# default token. "permissive" assumes write on every scope except "id-token",
+# which always requires an explicit opt-in regardless of repo settings.
+assume-default-permissions: restricted
 
 # Secrets in array of strings defined in your repository or organization.
 config-secrets:
@@ -73,6 +79,12 @@ require-commit-hash: true
 require-permissions: true
 # Report local actions used before any checkout step in the same job
 require-checkout-before-local-action: true
+# Require `if:` conditions to be wrapped in `${{ }}`
+require-expression-wrapping: true
+# Report `cond && '' || other` where the value after `&&` is always falsy
+check-falsy-ternary: true
+# Report workflow names at 'on.workflow_run.workflows' which do not exist in the repository
+check-workflow-run-names: true
 
 # Require every 'run:' step to set a shell explicitly with 'shell:' (or 'defaults.run.shell'). (default: false)
 require-shell: true
@@ -106,6 +118,16 @@ max-run-lines: 30
 
   Local actions (`./...` and `$/...`) and Docker images (`docker://...`) never match. Only workflow files are checked; the steps of
   composite action files (`action.yml`) are not.
+- `assume-default-permissions`: Controls how the caller/callee permissions check for local reusable workflow calls
+  treats a caller workflow that has no `permissions:` block at the workflow level *and* no `permissions:` block on
+  the calling job. This mirrors the repository-level "Workflow permissions" setting (Settings → Actions → General),
+  which actionlint cannot read from the workflow file. Set to `restricted` (the default) to assume GitHub's
+  restricted default token (`contents: read` and `packages: read`, everything else `none`). Set to `permissive` to
+  assume the permissive default (write on every scope). Even under `permissive`, `id-token` is still treated as
+  `none` because OIDC tokens always require an explicit opt-in regardless of the repo-level Workflow permissions
+  setting. Note: this only affects callers with no `permissions:` block anywhere. Once a caller declares any
+  `permissions:` block — even `permissions: {}` — the check always runs against that explicit block, because
+  GitHub treats any scope omitted from an explicit block as `none`.
 - `config-secrets`: [Secrets][secrets]. When an array is set, actionlint will check `secrets` properties strictly against the
   list. An empty array means no secret is allowed. The default value `null` disables the check. `GITHUB_TOKEN` is always allowed. Note: this check only applies
   when secrets are not explicitly declared in the workflow (e.g. via `secrets:` in `on.workflow_call`), since declared secrets
@@ -135,6 +157,16 @@ max-run-lines: 30
 - `require-checkout-before-local-action`: Optional lint to report a local action (`uses: ./path`) used in a job before any step that
   checks out the repository. Defaults to `false` (disabled). See [the check document](checks.md#check-local-action-checkout) for
   what counts as a checkout and known limitations.
+- `require-expression-wrapping`: Optional lint to require `if:` conditions (of jobs and steps) to be wrapped in `${{ }}`
+  explicitly, though GitHub Actions makes the placeholder optional there. Defaults to `false` (disabled).
+  See [the check document](checks.md#check-require-expression-wrapping) for more details.
+- `check-falsy-ternary`: Optional lint to report `cond && b || c` when `b` is a literal which is always falsy (`''`, `0`,
+  `false`, `null`). Defaults to `false` (disabled). See [the check document](checks.md#check-falsy-ternary) for more details.
+- `check-workflow-run-names`: Optional lint to check that each workflow name at `on.workflow_run.workflows` exists in the
+  repository. Defaults to `false` (disabled). A workflow is identified by its `name:`, or by its file path (like
+  `.github/workflows/ci.yaml`) when it has no name; the comparison is case-insensitive. Names containing `${{ }}` or glob
+  characters are skipped, and the check is skipped entirely when a workflow file in the repository cannot be parsed or has a
+  dynamic `name:`. See [the check document](checks.md#check-workflow-run-names) for more details.
 
 ## Configuration file location and priority
 

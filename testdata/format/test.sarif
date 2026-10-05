@@ -323,6 +323,21 @@
                 "text": "Checks for reusable workflow calls. Inputs and outputs of called reusable workflow are checked"
               },
               "helpUri": "https://github.com/rhysd/actionlint/blob/main/docs/checks.md"
+            },
+            {
+              "id": "workflow-run",
+              "name": "WorkflowRun",
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "description": "Checks workflow names at \"workflows:\" of \"workflow_run\" event exist in the repository",
+                "queryURI": "https://github.com/rhysd/actionlint/blob/main/docs/checks.md"
+              },
+              "fullDescription": {
+                "text": "Checks workflow names at \"workflows:\" of \"workflow_run\" event exist in the repository"
+              },
+              "helpUri": "https://github.com/rhysd/actionlint/blob/main/docs/checks.md"
             }
           ]
         }
