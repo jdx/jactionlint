@@ -21,6 +21,7 @@ List of checks:
 - [Script injection by potentially untrusted inputs](#untrusted-inputs)
 - [Job dependencies validation](#check-job-deps)
 - [Parallel steps](#check-parallel-step-refs)
+- [Timeout minutes of jobs (opt-in)](#check-timeout-minutes)
 - [Matrix values](#check-matrix-values)
 - [Webhook events validation](#check-webhook-events)
 - [Workflow dispatch event validation](#check-workflow-dispatch-events)
@@ -1272,6 +1273,56 @@ test.yaml:11:17: "serverr" is not the ID of a preceding background step. "wait" 
 ```
 
 [Playground](https://rhysd.github.io/actionlint/#eNpczssNAjEMBND7VjG3nNKA26CCJGuxwOKs/KF+FD4R4mTJz6NxF8IRti3XXo0WwNl8TEBDLA+PGuKR9zLsReZ82PsKyJByZ8LJizqM9cH6IeCy0v9KQwjcto5kI5Km1NJuZ+0hK8E1eBb8RMYPlqa0Io33b4c+BwCanjvx)
+
+<a id="check-timeout-minutes"></a>
+## Timeout minutes of jobs (opt-in)
+
+Example input:
+
+```yaml
+on: push
+jobs:
+  no-timeout:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo hello
+  too-long:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - run: echo hello
+```
+
+Output:
+<!-- Skip update output -->
+```
+test.yaml:3:3: "timeout-minutes" is not set at this job. Set it to avoid wasting runner minutes when the job hangs [timeout-check]
+  |
+3 |   no-timeout:
+  |   ^~~~~~~~~~~
+test.yaml:9:22: "timeout-minutes" is 120, which is greater than the maximum 60 minutes allowed by the configuration [timeout-check]
+  |
+9 |     timeout-minutes: 120
+  |                      ^~~
+```
+
+<!-- Skip playground link -->
+
+This check is disabled by default. The output above is from the following `timeout-minutes` section of the
+[configuration file](config.md):
+
+```yaml
+timeout-minutes:
+  required: true
+  max: 60
+```
+
+- `required: true` reports jobs which do not set [`timeout-minutes`][timeout-minutes-doc]. Without it, a hanging job runs until
+  the default timeout of 360 minutes. Jobs calling a reusable workflow are not checked since they do not support it.
+- `max` reports jobs whose `timeout-minutes` is larger than the value. It works without `required`. Values given by
+  expressions `${{ }}` are not checked.
+
+[timeout-minutes-doc]: https://docs.github.com/en/actions/writing-workflows/workflow-syntax-for-github-actions#jobsjob_idtimeout-minutes
 
 <a id="check-matrix-values"></a>
 ## Matrix values
