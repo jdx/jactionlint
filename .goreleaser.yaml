@@ -1,11 +1,15 @@
 version: 2
 
 release:
-  # release-please creates the release as a draft (and the tag). Releases are immutable once published, so the
-  # assets must be uploaded to that draft. GoReleaser publishes it after the upload.
+  # release-please creates the release as a draft (and the tag). Releases are immutable once published, so every
+  # asset must be uploaded to that draft first. GoReleaser uploads the archives and leaves it a draft so that the
+  # packslip bundle can be added too. release.yaml publishes it afterwards.
   use_existing_draft: true
-  draft: false
+  draft: true
   prerelease: false
+  # A failed run leaves the archives on the draft. Replace them when the workflow is re-run instead of failing on
+  # the "asset already exists" error. This only works while the release is a draft (published ones are immutable).
+  replace_existing_artifacts: true
 
 before:
   hooks:
