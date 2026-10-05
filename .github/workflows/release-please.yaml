@@ -1,0 +1,28 @@
+name: Release Please
+
+permissions: {}
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  release-please:
+    name: Release
+    runs-on: ubuntu-latest
+    if: ${{ github.repository_owner == 'jdx' }}
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      # Opens/updates the release PR from conventional commits. Merging it tags
+      # vX.Y.Z and creates the GitHub release, which triggers release.yaml.
+      # A PAT is required: tags pushed with GITHUB_TOKEN do not trigger workflows.
+      - name: Run release-please
+        uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+        with:
+          token: ${{ secrets.RELEASE_PLZ_TOKEN }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
