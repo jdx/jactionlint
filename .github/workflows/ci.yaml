@@ -18,47 +18,8 @@ jobs:
         os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - name: Install dependencies on macOS
-        run: |
-          set -x
-          brew install --quiet shellcheck python3 pipx
-          # https://pipx.pypa.io/stable/installation/
-          pipx ensurepath
-          pipx install pyflakes
-          shellcheck --version
-          pyflakes --version
-        if: ${{ runner.os == 'macOS' }}
-      - name: Install dependencies on Linux
-        run: |
-          set -x
-          sudo apt-get install -y shellcheck
-          pip install pyflakes
-          shellcheck --version
-          pyflakes --version
-        if: ${{ runner.os == 'Linux' }}
-      - name: Install dependencies on Windows
-        run: |
-          winget install --id koalaman.shellcheck --disable-interactivity --accept-package-agreements --accept-source-agreements
-          pip install pyflakes
-          pyflakes --version
-        if: ${{ runner.os == 'Windows' && matrix.os != 'windows-11-arm' }}
-      - name: Install dependencies on Windows ARM
-        # winget is not available on the Windows ARM runner image
-        shell: pwsh
-        run: |
-          $dir = Join-Path $env:RUNNER_TEMP 'shellcheck'
-          Invoke-WebRequest -Uri 'https://github.com/koalaman/shellcheck/releases/download/v0.11.0/shellcheck-v0.11.0.zip' -OutFile "$dir.zip"
-          Expand-Archive -Path "$dir.zip" -DestinationPath $dir
-          Add-Content -Path $env:GITHUB_PATH -Value $dir
-          & "$dir\shellcheck.exe" --version
-          pip install pyflakes
-          pyflakes --version
-        if: ${{ matrix.os == 'windows-11-arm' }}
       - uses: actions/checkout@v6
-      - uses: actions/setup-go@v6
-        with:
-          go-version: '1.27'
-          check-latest: true
+      - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
       - run: go test -v -race ./...
       # Check build without CGO
       - run: go build ./cmd/actionlint
@@ -79,15 +40,7 @@ jobs:
         working-directory: ./playground
     steps:
       - uses: actions/checkout@v6
-      - uses: actions/setup-go@v6
-        with:
-          go-version: '1.27'
-          check-latest: true
-      - uses: actions/setup-node@v6
-        with:
-          node-version: "lts/*"
-          cache: npm
-          cache-dependency-path: ./playground/package-lock.json
+      - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
       - name: Build playground
         run: make build
       - name: Lint playground
@@ -99,16 +52,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: actions/setup-go@v6
-        with:
-          go-version: '1.27'
-          check-latest: true
-      - name: Install dependencies
-        run: |
-          sudo apt-get install -y shellcheck
-          pip install pyflakes
-          shellcheck --version
-          pyflakes --version
+      - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
       - name: Check Go sources are formatted
         run: |
           diffs="$(gofmt -d ./*.go ./cmd/actionlint/*.go ./scripts/*/*.go ./playground/*.go)"
@@ -116,11 +60,6 @@ jobs:
             echo "$diffs" >&2
             exit 1
           fi
-      - name: Install staticcheck and govulncheck
-        run: |
-          go install honnef.co/go/tools/cmd/staticcheck@latest
-          go install golang.org/x/vuln/cmd/govulncheck@latest
-          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
       - run: make lint SKIP_GO_GENERATE=true
       - name: Lint bash scripts
         run: shellcheck ./scripts/*.bash ./playground/*.bash

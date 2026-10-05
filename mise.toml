@@ -1,0 +1,39 @@
+[tools]
+go = "1.27"
+node = "lts"
+shellcheck = "latest"
+uv = "latest"
+"pipx:pyflakes" = "latest"
+"go:honnef.co/go/tools/cmd/staticcheck" = "latest"
+"go:golang.org/x/vuln/cmd/govulncheck" = "latest"
+
+[tasks.build]
+description = "Build the actionlint executable"
+run = "go build ./cmd/actionlint"
+
+[tasks.test]
+description = "Run all tests"
+run = "go test ./..."
+
+[tasks."lint:wasm"]
+description = "Run staticcheck on the playground, which is built for wasm"
+env = { GOOS = "js", GOARCH = "wasm" }
+run = "staticcheck ./playground"
+
+[tasks.lint]
+description = "Run vet, staticcheck, govulncheck and the docs check"
+run = [
+  "go vet ./...",
+  # ./... is not usable here because ./playground/node_modules contains Go packages
+  "staticcheck ./ ./scripts/... ./cmd/...",
+  "govulncheck ./...",
+  "mise run lint:wasm",
+  "go run ./scripts/check-checks -quiet ./docs/checks.md",
+]
+# check-checks does not support Windows
+run_windows = [
+  "go vet ./...",
+  "staticcheck ./ ./scripts/... ./cmd/...",
+  "govulncheck ./...",
+  "mise run lint:wasm",
+]
