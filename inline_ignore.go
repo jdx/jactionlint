@@ -102,13 +102,19 @@ func parseInlineIgnores(src []byte) ([]inlineIgnore, []*Error) {
 		// This line is the target. Compute the indentation which the nested lines must exceed.
 		indent := len(line) - len(strings.TrimLeft(line, " \t"))
 		threshold := indent // for a sequence item, this makes the whole item the target
+		// YAML allows the items of a sequence to sit at the same column as the key holding it:
+		//   key:
+		//   - a
+		// When the target is a key, such items belong to it.
+		isKey := !isSequenceItem(line)
 		end := i + 1
 		for j := i + 1; j < len(lines); j++ {
-			if _, b := isCommentOrBlank(lines[j]); b {
+			// Comments are skipped like blank lines so that a comment does not cut a nested block short
+			if c, b := isCommentOrBlank(lines[j]); b || c {
 				continue
 			}
 			ind := len(lines[j]) - len(strings.TrimLeft(lines[j], " \t"))
-			if ind <= threshold {
+			if ind < threshold || (ind == threshold && !(isKey && isSequenceItem(lines[j]))) {
 				break
 			}
 			end = j + 1
@@ -136,4 +142,10 @@ Loop:
 		filtered = append(filtered, err)
 	}
 	return filtered
+}
+
+// isSequenceItem returns true when the line is a block sequence item ("- ..." or a bare "-").
+func isSequenceItem(line string) bool {
+	t := strings.TrimLeft(line, " \t")
+	return t == "-" || strings.HasPrefix(t, "- ") || strings.HasPrefix(t, "-\t")
 }
