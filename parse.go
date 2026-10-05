@@ -34,10 +34,47 @@ func posAt(n *yaml.Node) *Pos {
 	return &Pos{n.Line, n.Column}
 }
 
-func newString(n *yaml.Node) *String {
+func (p *parser) newString(n *yaml.Node) *String {
 	quoted := n.Style&(yaml.DoubleQuotedStyle|yaml.SingleQuotedStyle) != 0
 	literal := n.Style == yaml.LiteralStyle
-	return &String{n.Value, quoted, posAt(n), literal}
+	s := &String{Value: n.Value, Quoted: quoted, Pos: posAt(n), Literal: literal}
+	if literal {
+		s.Indent = p.literalIndent(n)
+	}
+	return s
+}
+
+// literalIndent detects the indentation stripped from a literal block scalar. It returns 0 when
+// it cannot be determined reliably (no source, explicit indentation indicator, etc.).
+func (p *parser) literalIndent(n *yaml.Node) int {
+	if p.lines == nil || n.Line < 1 || n.Line > len(p.lines) {
+		return 0
+	}
+	// The header must be a block scalar header like `|`, `|-`, `|+`. A digit means explicit
+	// indentation indicator, which is relative to the parent node. Not supported.
+	hdr := p.lines[n.Line-1]
+	if n.Column < 1 || n.Column > len(hdr) || hdr[n.Column-1] != '|' {
+		return 0
+	}
+	for _, c := range hdr[n.Column:] {
+		if c >= '1' && c <= '9' {
+			return 0
+		}
+		if c == '#' || c == ' ' {
+			break
+		}
+	}
+	for _, l := range p.lines[n.Line:] {
+		i := 0
+		for i < len(l) && l[i] == ' ' {
+			i++
+		}
+		if i == len(l) || l[i] == '\r' {
+			continue // blank line
+		}
+		return i
+	}
+	return 0
 }
 
 // workflowMappingEntry represents a key-value entry in YAML mapping.
@@ -70,6 +107,8 @@ func (l *delayedSprintf) String() string {
 
 type parser struct {
 	errors []*Error
+	// lines are the lines of the source. This is nil when the source is not available.
+	lines []string
 }
 
 func (p *parser) error(n *yaml.Node, m string) {
@@ -190,7 +229,7 @@ func (p *parser) parseExpression(n *yaml.Node, expecting string) *String {
 		p.missingExpression(n, expecting)
 		return nil
 	}
-	return newString(n)
+	return p.newString(n)
 }
 
 func (p *parser) mayParseExpression(n *yaml.Node) *String {
@@ -200,14 +239,14 @@ func (p *parser) mayParseExpression(n *yaml.Node) *String {
 	if !isExprAssigned(n.Value) {
 		return nil
 	}
-	return newString(n)
+	return p.newString(n)
 }
 
 func (p *parser) parseString(n *yaml.Node, allowEmpty bool) *String {
 	if !p.checkString(n, allowEmpty) {
-		return &String{"", false, posAt(n), false}
+		return &String{Pos: posAt(n)}
 	}
-	return newString(n)
+	return p.newString(n)
 }
 
 func (p *parser) parseStringSequence(sec string, n *yaml.Node, allowEmpty bool, allowElemEmpty bool) []*String {
@@ -1770,7 +1809,7 @@ func Parse(b []byte) (*Workflow, []*Error) {
 	// Uncomment for checking YAML tree
 	// dumpYAML(&n, 0)
 
-	p := &parser{}
+	p := &parser{lines: strings.Split(string(b), "\n")}
 	w := p.parse(&n)
 
 	return w, p.errors

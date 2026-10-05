@@ -324,7 +324,7 @@ func TestRuleRunnerLabelCheckLabels(t *testing.T) {
 			pos := &Pos{}
 			labels := make([]*String, 0, len(tc.labels))
 			for _, l := range tc.labels {
-				labels = append(labels, &String{l, false, pos, false})
+				labels = append(labels, &String{Value: l, Pos: pos})
 			}
 			node := &Job{
 				RunsOn: &Runner{
@@ -333,7 +333,7 @@ func TestRuleRunnerLabelCheckLabels(t *testing.T) {
 			}
 
 			if tc.matrix != nil {
-				n := &String{"os", false, pos, false}
+				n := &String{Value: "os", Pos: pos}
 				row := make([]RawYAMLValue, 0, len(tc.matrix))
 				for _, m := range tc.matrix {
 					row = append(row, &RawYAMLString{m, false, pos})
@@ -459,7 +459,7 @@ func TestRuleRunnerLabelStrictLabels(t *testing.T) {
 			pos := &Pos{}
 			labels := make([]*String, 0, len(tc.labels))
 			for _, l := range tc.labels {
-				labels = append(labels, &String{l, false, pos, false})
+				labels = append(labels, &String{Value: l, Pos: pos})
 			}
 			node := &Job{RunsOn: &Runner{Labels: labels}}
 			rule := NewRuleRunnerLabel()

@@ -61,6 +61,8 @@ timeout-minutes:
 
 # Require actions to be pinned to commit hashes instead of tags/branches
 require-commit-hash: true
+# Require explicit permissions at workflow-level or job-level
+require-permissions: true
 
 # Require every 'run:' step to set a shell explicitly with 'shell:' (or 'defaults.run.shell'). (default: false)
 require-shell: true
@@ -108,6 +110,9 @@ max-run-lines: 30
   (disabled). When `true`, `uses:` of GitHub-hosted actions and reusable workflows must have a full-length 40-digit commit SHA ref,
   and Docker actions must be pinned by digest (`docker://image@sha256:...`). Local actions (`./`, `$/`) are exempt.
   See [the check document](checks.md#check-action-format) for more details.
+- `require-permissions`: Optional lint to require an explicit `permissions:` at workflow-level or job-level. Defaults to `false`
+  (disabled). When `true`, every job not covered by a workflow-level `permissions:` and lacking its own is reported.
+  `permissions: {}` counts as explicit. See [the check document](checks.md#check-permissions) for more details.
 
 ## Configuration file location and priority
 
