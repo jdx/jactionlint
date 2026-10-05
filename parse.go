@@ -1,6 +1,7 @@
 package actionlint
 
 import (
+	"errors"
 	"fmt"
 	"iter"
 	"math"
@@ -756,6 +757,19 @@ func (p *parser) parsePermissions(pos *Pos, n *yaml.Node) *Permissions {
 	return ret
 }
 
+// https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#cache-mode
+func (p *parser) parseCacheMode(n *yaml.Node) *String {
+	mode := p.parseString(n, false)
+	if mode.Value != "" {
+		switch mode.Value {
+		case "read", "write", "write-only", "none":
+		default:
+			p.errorf(n, "%q is invalid for cache-mode. available values are \"read\", \"write\", \"write-only\", \"none\"", mode.Value)
+		}
+	}
+	return mode
+}
+
 // https://docs.github.com/en/actions/learn-github-actions/workflow-syntax-for-github-actions#env
 func (p *parser) parseEnv(n *yaml.Node) *Env {
 	if n.Kind == yaml.ScalarNode {
@@ -1076,7 +1090,7 @@ func (p *parser) parseContainer(sec string, pos *Pos, n *yaml.Node) *Container {
 		case "ports":
 			ret.Ports = p.parseStringSequence("ports", e.val, true, false)
 		case "volumes":
-			ret.Ports = p.parseStringSequence("volumes", e.val, true, false)
+			ret.Volumes = p.parseStringSequence("volumes", e.val, true, false)
 		case "options":
 			ret.Options = p.parseString(e.val, true)
 		case "command":
@@ -1376,6 +1390,8 @@ func (p *parser) parseJob(id *String, n *yaml.Node) *Job {
 			stepsOnlyKey = k
 		case "permissions":
 			ret.Permissions = p.parsePermissions(k.Pos, v)
+		case "cache-mode":
+			ret.CacheMode = p.parseCacheMode(v)
 		case "environment":
 			ret.Environment = p.parseEnvironment(k.Pos, v)
 			stepsOnlyKey = k
@@ -1408,6 +1424,7 @@ func (p *parser) parseJob(id *String, n *yaml.Node) *Job {
 			stepsOnlyKey = k
 		case "services":
 			ret.Services = p.parseServices(v)
+			stepsOnlyKey = k
 		case "uses":
 			call.Uses = p.parseString(v, false)
 			callOnlyKey = k
@@ -1447,6 +1464,7 @@ func (p *parser) parseJob(id *String, n *yaml.Node) *Job {
 				"needs",
 				"runs-on",
 				"permissions",
+				"cache-mode",
 				"environment",
 				"concurrency",
 				"outputs",
@@ -1471,7 +1489,7 @@ func (p *parser) parseJob(id *String, n *yaml.Node) *Job {
 		if stepsOnlyKey != nil {
 			p.errorfAt(
 				stepsOnlyKey.Pos,
-				"when a reusable workflow is called with \"uses\", %q is not available. only following keys are allowed: \"name\", \"uses\", \"with\", \"secrets\", \"needs\", \"if\", and \"permissions\" in job %q",
+				"when a reusable workflow is called with \"uses\", %q is not available. only following keys are allowed: \"name\", \"uses\", \"with\", \"secrets\", \"needs\", \"if\", \"permissions\", and \"cache-mode\" in job %q",
 				stepsOnlyKey.Value,
 				id.Value,
 			)
@@ -1535,6 +1553,8 @@ func (p *parser) parse(n *yaml.Node) *Workflow {
 			w.On = p.parseEvents(v)
 		case "permissions":
 			w.Permissions = p.parsePermissions(k.Pos, v)
+		case "cache-mode":
+			w.CacheMode = p.parseCacheMode(v)
 		case "env":
 			w.Env = p.parseEnv(v)
 		case "defaults":
@@ -1551,6 +1571,7 @@ func (p *parser) parse(n *yaml.Node) *Workflow {
 				"run-name",
 				"on",
 				"permissions",
+				"cache-mode",
 				"env",
 				"defaults",
 				"concurrency",
@@ -1577,13 +1598,20 @@ func (p *parser) parse(n *yaml.Node) *Workflow {
 // }
 
 func handleYAMLUnmarshalError(err error) []*Error {
-	if te, ok := err.(*yaml.TypeError); ok {
-		errs := make([]*Error, 0, len(te.Errors))
-		for _, e := range te.Errors {
+	// go-yaml v4.0.0-rc.5 replaced *yaml.TypeError and *yaml.ParserError with *yaml.LoadErrors
+	// and *yaml.LoadError. Both carry the source position in their Mark field.
+	//
+	// *yaml.LoadErrors must be checked before *yaml.LoadError. LoadErrors implements a custom
+	// As method which unwraps to its first element, so checking the singular type first would
+	// collapse a multiple-errors result into a single error.
+	var les *yaml.LoadErrors
+	if errors.As(err, &les) {
+		errs := make([]*Error, 0, len(les.Errors))
+		for _, e := range les.Errors {
 			errs = append(errs, &Error{
-				Message: fmt.Sprintf("could not parse as YAML: %s", e.Err.Error()),
-				Line:    e.Line,
-				Column:  e.Column,
+				Message: fmt.Sprintf("could not parse as YAML: %s", e.Message),
+				Line:    e.Mark.Line,
+				Column:  e.Mark.Column,
 				Kind:    "syntax-check",
 			})
 		}
@@ -1593,14 +1621,15 @@ func handleYAMLUnmarshalError(err error) []*Error {
 	var m string
 	var l int
 	var c int
-	if pe, ok := err.(*yaml.ParserError); ok {
-		l = pe.Line
-		c = pe.Column
-		m = pe.Message
+	var le *yaml.LoadError
+	if errors.As(err, &le) {
+		l = le.Mark.Line
+		c = le.Mark.Column
+		m = le.Message
 	} else {
 		m = err.Error() // Fallback. I believe this line should be unreachable
 	}
-	return []*Error{&Error{
+	return []*Error{{
 		Message: fmt.Sprintf("could not parse as YAML: %s", m),
 		Kind:    "syntax-check",
 		Line:    l,

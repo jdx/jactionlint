@@ -63,7 +63,7 @@ func TestConfigParseError(t *testing.T) {
 	}{
 		{
 			in:   `self-hosted-runner: 42`,
-			want: `cannot unmarshal`,
+			want: `cannot construct`,
 		},
 		{
 			in: `
@@ -80,6 +80,30 @@ paths:
     ignore: ['(foo']
 `,
 			want: `invalid regular expression "(foo" in "ignore"`,
+		},
+		{
+			in: `
+paths:
+  foo:
+    ignore: [{}]
+`,
+			want: `"ignore" items must be strings`,
+		},
+		{
+			in: `
+paths:
+  foo:
+    ignore: [[foo]]
+`,
+			want: `"ignore" items must be strings`,
+		},
+		{
+			in: `
+paths:
+  foo:
+    ignore: [42]
+`,
+			want: `"ignore" items must be strings`,
 		},
 		{
 			in: `
