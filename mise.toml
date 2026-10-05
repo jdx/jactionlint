@@ -1,6 +1,8 @@
 [tools]
 go = "1.27"
 node = "lts"
+hk = "latest"
+pkl = "latest"
 shellcheck = "latest"
 uv = "latest"
 "pipx:pyflakes" = "latest"
@@ -21,19 +23,9 @@ env = { GOOS = "js", GOARCH = "wasm" }
 run = "staticcheck ./playground"
 
 [tasks.lint]
-description = "Run vet, staticcheck, govulncheck and the docs check"
-run = [
-  "go vet ./...",
-  # ./... is not usable here because ./playground/node_modules contains Go packages
-  "staticcheck ./ ./scripts/... ./cmd/...",
-  "govulncheck ./...",
-  "mise run lint:wasm",
-  "go run ./scripts/check-checks -quiet ./docs/checks.md",
-]
-# check-checks does not support Windows
-run_windows = [
-  "go vet ./...",
-  "staticcheck ./ ./scripts/... ./cmd/...",
-  "govulncheck ./...",
-  "mise run lint:wasm",
-]
+description = "Run all checks (what CI runs): gofmt, vet, staticcheck, govulncheck, shellcheck, docs and workflow checks"
+run = "hk check --all"
+
+[tasks.lint-fix]
+description = "Run all checks and fix what can be fixed"
+run = "hk fix --all"

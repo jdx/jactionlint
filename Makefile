@@ -1,4 +1,4 @@
-SRCS := $(filter-out %_test.go, $(wildcard *.go cmd/actionlint/*.go)) go.mod go.sum .git-hooks/.timestamp
+SRCS := $(filter-out %_test.go, $(wildcard *.go cmd/actionlint/*.go)) go.mod go.sum
 TESTS := $(filter %_test.go, $(wildcard *.go))
 TOOL := $(filter %_test.go, $(wildcard scripts/*/*.go))
 TESTDATA := $(wildcard \
@@ -106,11 +106,5 @@ CHANGELOG.md: .bumptimestamp
 c clean:
 	rm -f ./$(TARGET) ./.testtimestamp ./.linttimestamp ./actionlint_fuzz-fuzz.zip ./man/actionlint.1 ./man/actionlint.1.html ./actionlint-workflow-ast
 	rm -rf ./corpus ./crashers
-
-.git-hooks/.timestamp: .git-hooks/pre-push
-ifneq ($(OS),Windows_NT)
-	[ -z "${CI}" ] && git config core.hooksPath .git-hooks || true
-endif
-	$(TOUCH) .git-hooks/.timestamp
 
 .PHONY: all test clean build lint fuzz man bench cov b t c l
