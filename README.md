@@ -1,9 +1,10 @@
-actionlint
-==========
+jdx's actionlint
+================
 [![CI Status][ci-badge]][ci]
 [![API Document][apidoc-badge]][apidoc]
 
-[actionlint][repo] is a static checker for GitHub Actions workflow files. [Try it online!][playground]
+[jdx's actionlint][repo] is a static checker for GitHub Actions workflow files and an actively maintained fork of
+[rhysd/actionlint][upstream], with upstream pull requests and fixes merged here. [Try it online!][playground]
 
 Features:
 
@@ -131,7 +132,8 @@ actionlint is distributed under [the MIT license](./LICENSE.txt).
 [ci]: https://github.com/rhysd/actionlint/actions/workflows/ci.yaml
 [apidoc-badge]: https://pkg.go.dev/badge/github.com/rhysd/actionlint.svg
 [apidoc]: https://pkg.go.dev/github.com/rhysd/actionlint
-[repo]: https://github.com/rhysd/actionlint
+[repo]: https://github.com/jdx/jactionlint
+[upstream]: https://github.com/rhysd/actionlint
 [playground]: https://rhysd.github.io/actionlint/
 [shellcheck]: https://github.com/koalaman/shellcheck
 [pyflakes]: https://github.com/PyCQA/pyflakes
