@@ -41,6 +41,10 @@ func NewRuleRequiredActions(required []RequiredActionRule) *RuleRequiredActions 
 	}
 }
 
+// dynamicVersion marks a use whose ref contains an expression (e.g. `actions/checkout@${{ inputs.ref }}`).
+// It is unknown until runtime so it satisfies any required version.
+const dynamicVersion = "\x00dynamic"
+
 // VisitWorkflowPre analyzes the workflow to ensure all required actions are present
 // with correct versions. It reports errors for missing or mismatched versions.
 func (rule *RuleRequiredActions) VisitWorkflowPre(workflow *Workflow) error {
@@ -54,6 +58,19 @@ func (rule *RuleRequiredActions) VisitWorkflowPre(workflow *Workflow) error {
 	var pos *Pos
 	add := func(uses *String) {
 		if uses == nil {
+			return
+		}
+		if ContainsExpression(uses.Value) {
+			// The ref is only known at runtime, so the action counts as used with an unknown version. When the
+			// action name itself is dynamic nothing can be said about it.
+			name, _, _ := strings.Cut(uses.Value, "@")
+			if ContainsExpression(name) {
+				return
+			}
+			if name, _ = parseActionRef(name + "@x"); name != "" {
+				k := strings.ToLower(name)
+				found[k] = append(found[k], dynamicVersion)
+			}
 			return
 		}
 		if name, ver := parseActionRef(uses.Value); name != "" {
@@ -87,7 +104,7 @@ func (rule *RuleRequiredActions) VisitWorkflowPre(workflow *Workflow) error {
 			}
 			continue
 		}
-		if req.Version == "" || slices.Contains(vers, req.Version) {
+		if req.Version == "" || slices.Contains(vers, req.Version) || slices.Contains(vers, dynamicVersion) {
 			continue
 		}
 		rule.Errorf(pos, "action %q must use version %q but found %s", req.Action, req.Version, quoteJoin(vers))
@@ -100,6 +117,9 @@ func quoteJoin(vs []string) string {
 	seen := map[string]struct{}{}
 	var qs []string
 	for _, v := range vs {
+		if v == dynamicVersion {
+			continue
+		}
 		if _, ok := seen[v]; ok {
 			continue
 		}

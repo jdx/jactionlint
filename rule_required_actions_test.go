@@ -254,6 +254,11 @@ jobs:
           - parallel:
               - uses: nested/only@v2
       - uses: $/local-action@v1
+  dyn:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: dyn/ref@${{ inputs.ref }}
+      - uses: ${{ inputs.action }}@v1
 `
 	tests := []struct {
 		name string
@@ -267,6 +272,8 @@ jobs:
 		{"base repo does not match subpath", []RequiredActionRule{{Action: "github/codeql-action"}}, []string{`:3:3: required action "github/codeql-action" is not used in this workflow [required-actions]`}},
 		{"action used only in a parallel group", []RequiredActionRule{{Action: "parallel/only", Version: "v1"}}, nil},
 		{"action used only in a nested parallel group", []RequiredActionRule{{Action: "nested/only", Version: "v2"}}, nil},
+		{"dynamic ref satisfies any required version", []RequiredActionRule{{Action: "dyn/ref", Version: "v9"}}, nil},
+		{"dynamic action name is not matched", []RequiredActionRule{{Action: "inputs/action"}}, []string{`:3:3: required action "inputs/action" is not used in this workflow [required-actions]`}},
 		{"reusable workflow", []RequiredActionRule{{Action: "org/repo/.github/workflows/ci.yml", Version: "main"}}, nil},
 		{"mismatch lists all versions", []RequiredActionRule{{Action: "actions/checkout", Version: "v2"}}, []string{`:3:3: action "actions/checkout" must use version "v2" but found "v3", "v4" [required-actions]`}},
 	}
