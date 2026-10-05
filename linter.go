@@ -578,6 +578,7 @@ func (l *Linter) check(
 			NewRuleMatrix(),
 			NewRuleCredentials(),
 			NewRuleShellName(),
+			NewRuleRunPolicy(),
 			NewRuleRunnerLabel(),
 			NewRuleEvents(),
 			NewRuleJobNeeds(),

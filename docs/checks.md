@@ -32,6 +32,7 @@ List of checks:
 - [Popular action inputs validation at `with:`](#check-popular-action-inputs)
 - [Outdated popular actions detection at `uses:`](#detect-outdated-popular-actions)
 - [Shell name validation at `shell:`](#check-shell-names)
+- [Run script policy (opt-in)](#check-run-policy)
 - [Job ID and step ID uniqueness](#check-job-step-ids)
 - [Hardcoded credentials](#check-hardcoded-credentials)
 - [Environment variable names](#check-env-var-names)
@@ -2051,6 +2052,69 @@ test.yaml:27:16: shell name "sh" is invalid on Windows. available names are "bas
 
 Available shells for runners are defined in [the documentation][shell-doc]. actionlint checks shell names at `shell:`
 configuration are properly using the available shells.
+
+<a id="check-run-policy"></a>
+## Run script policy (opt-in)
+
+These checks are disabled by default. Enable them in [the config file](config.md).
+
+```yaml
+require-shell: true
+max-run-lines: 3
+```
+
+Example input:
+
+```yaml
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      # ERROR: shell is not set
+      - run: echo hello
+      # OK: shell is set explicitly
+      - run: echo hello
+        shell: bash
+      # ERROR: the script is too long
+      - run: |
+          echo 1
+          echo 2
+          echo 3
+          echo 4
+        shell: bash
+  defaults:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      # OK: the shell is set by 'defaults.run.shell'
+      - run: echo hello
+```
+
+Output:
+<!-- Skip update output -->
+
+```
+test.yaml:7:9: shell is not set explicitly. set "shell:" at the step or "defaults.run.shell" because "require-shell" is enabled [run-policy]
+  |
+7 |       - run: echo hello
+  |         ^~~~
+test.yaml:12:14: script in "run:" has 4 lines but at most 3 lines are allowed because "max-run-lines" is set. consider moving it to a script file or an action [run-policy]
+   |
+12 |       - run: |
+   |              ^
+```
+
+<!-- Skip playground link -->
+
+`require-shell` accepts `shell:` of the step, `defaults.run.shell` of the job, and `defaults.run.shell` of the workflow. When
+the shell is omitted, GitHub Actions runs `bash -e {0}` while `shell: bash` runs `bash --noprofile --norc -eo pipefail {0}`
+so the behavior differs (for example, a failure in the middle of a pipe is not detected). Note that composite actions always
+need `shell:` so they are not affected.
+
+`max-run-lines` counts non-blank lines in a `run:` script. Comment lines are counted.
 
 <a id="check-job-step-ids"></a>
 ## Job ID and step ID uniqueness

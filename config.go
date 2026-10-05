@@ -82,6 +82,12 @@ type Config struct {
 	Paths map[string]PathConfig `yaml:"paths"`
 	// Requires action and docker versions to use a commit hash instead of version/branch.
 	RequireCommitHash bool `yaml:"require-commit-hash"`
+	// RequireShell requires every "run:" step to have an explicit shell, set by "shell:" of the step or by
+	// "defaults.run.shell" of the job or the workflow.
+	RequireShell bool `yaml:"require-shell"`
+	// MaxRunLines is the maximum number of non-blank lines allowed in a "run:" script. Zero (the default)
+	// disables the check.
+	MaxRunLines int `yaml:"max-run-lines"`
 }
 
 // PathConfigs returns a list of all PathConfig values matching to the given file path. The path must
@@ -113,6 +119,9 @@ func ParseConfig(b []byte) (*Config, error) {
 		if !doublestar.ValidatePattern(pat) {
 			return nil, fmt.Errorf("invalid glob pattern %q in \"paths\"", pat)
 		}
+	}
+	if c.MaxRunLines < 0 {
+		return nil, fmt.Errorf("\"max-run-lines\" must not be negative but got %d", c.MaxRunLines)
 	}
 	return &c, nil
 }
