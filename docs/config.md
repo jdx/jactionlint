@@ -28,6 +28,14 @@ config-variables:
   - JOB_NAME
   - ENVIRONMENT_STAGE
 
+# Actions (or reusable workflows) which must be used in every workflow. Opt-in; disabled by default.
+required-actions:
+  # Any version of the action is accepted when 'version' is omitted.
+  - action: actions/checkout
+  # 'version' is the exact ref after '@'. Tags, branches and commit SHAs are compared as-is.
+  - action: github/codeql-action/init
+    version: v3
+
 # Path-specific configurations.
 paths:
   # Glob pattern relative to the repository root for matching files. The path separator is always '/'.
@@ -49,6 +57,15 @@ paths:
     is available.
 - `config-variables`: [Configuration variables][vars]. When an array is set, actionlint will check `vars` properties strictly.
   An empty array means no variable is allowed. The default value `null` disables the check.
+- `required-actions`: List of actions which must be used in each checked workflow. This check is disabled unless the list
+  is non-empty. A missing action is reported once per workflow at the position of its first job.
+  - `action`: Name of the action like `actions/checkout`, without `@version`. A sub-path is part of the name
+    (`github/codeql-action/init`). Case-insensitive. Reusable workflow calls (`jobs.<id>.uses`) are also matched.
+  - `version`: Optional ref (tag, branch or commit SHA) compared exactly. The requirement is satisfied when at least one
+    use of the action has this version. When omitted any version is accepted.
+
+  Local actions (`./...`) and Docker images (`docker://...`) never match. Only workflow files are checked; the steps of
+  composite action files (`action.yml`) are not.
 - `paths`: Configurations for specific file path patterns. This is a mapping from a glob pattern and the corresponding
   configuration.
   - `{glob}`: A file path glob pattern to apply the configuration. The path separator is always '/'. It is matched to the

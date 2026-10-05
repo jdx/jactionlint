@@ -1,6 +1,8 @@
 package actionlint
 
 import (
+	"io"
+	"strings"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -71,6 +73,11 @@ func TestParseActionRef(t *testing.T) {
 			wantName:    "",
 			wantVersion: "",
 		},
+		{name: "local action", input: "./.github/actions/foo@v1"},
+		{name: "empty version", input: "actions/checkout@"},
+		{name: "empty name", input: "/foo@v1"},
+		{name: "subpath", input: "github/codeql-action/init@v3", wantName: "github/codeql-action/init", wantVersion: "v3"},
+		{name: "at sign in version", input: "a/b@c@d", wantName: "a/b", wantVersion: "c@d"},
 		{
 			name:        "no version",
 			input:       "actions/checkout",
@@ -142,7 +149,7 @@ func TestRuleRequiredActions(t *testing.T) {
 			workflow:    &Workflow{Jobs: map[string]*Job{"build": {Steps: []*Step{{Exec: &ExecAction{Uses: &String{Value: "actions/setup-node@v2"}}}}}}},
 			wantNilRule: false,
 			wantErrs:    1,
-			wantMsg:     `:1:1: required action "actions/checkout" (version "") is not used in this workflow [required-actions]`,
+			wantMsg:     `:1:1: required action "actions/checkout" is not used in this workflow [required-actions]`,
 		},
 		{
 			name:        "SingleRequiredAction_WrongVersion",
@@ -150,7 +157,7 @@ func TestRuleRequiredActions(t *testing.T) {
 			workflow:    &Workflow{Jobs: map[string]*Job{"build": {Steps: []*Step{{Exec: &ExecAction{Uses: &String{Value: "actions/checkout@v2"}}}}}}},
 			wantNilRule: false,
 			wantErrs:    1,
-			wantMsg:     `:1:1: action "actions/checkout" must use version "v3" but found version "v2" [required-actions]`,
+			wantMsg:     `:1:1: action "actions/checkout" must use version "v3" but found "v2" [required-actions]`,
 		},
 		{
 			name:        "MultipleRequiredActions_Present",
@@ -173,7 +180,7 @@ func TestRuleRequiredActions(t *testing.T) {
 			workflow:    &Workflow{Jobs: map[string]*Job{"build": {Steps: []*Step{{Exec: &ExecAction{Uses: &String{Value: "actions/checkout@v2"}}}, {Exec: &ExecAction{Uses: &String{Value: "actions/setup-node@v2"}}}}}}},
 			wantNilRule: false,
 			wantErrs:    1,
-			wantMsg:     `:1:1: action "actions/checkout" must use version "v3" but found version "v2" [required-actions]`,
+			wantMsg:     `:1:1: action "actions/checkout" must use version "v3" but found "v2" [required-actions]`,
 		},
 	}
 
@@ -201,5 +208,116 @@ func TestRuleRequiredActions(t *testing.T) {
 				t.Errorf("error message mismatch\ngot:  %q\nwant: %q", errs[0].Error(), tt.wantMsg)
 			}
 		})
+	}
+}
+
+func lintRequired(t *testing.T, src string, req []RequiredActionRule) []string {
+	t.Helper()
+	w, errs := Parse([]byte(src))
+	if len(errs) > 0 || w == nil {
+		t.Fatalf("parse error: %v", errs)
+	}
+	r := NewRuleRequiredActions(req)
+	if err := r.VisitWorkflowPre(w); err != nil {
+		t.Fatal(err)
+	}
+	var msgs []string
+	for _, e := range r.Errs() {
+		msgs = append(msgs, e.Error())
+	}
+	return msgs
+}
+
+func TestRuleRequiredActionsParsedWorkflow(t *testing.T) {
+	src := `on: push
+jobs:
+  zzz:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: Actions/Setup-Node@v2
+      - uses: ./local
+      - uses: docker://alpine:3
+  aaa:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: github/codeql-action/init@v3
+  call:
+    uses: org/repo/.github/workflows/ci.yml@main
+`
+	tests := []struct {
+		name string
+		req  []RequiredActionRule
+		want []string
+	}{
+		{"any matching use satisfies", []RequiredActionRule{{Action: "actions/checkout", Version: "v4"}}, nil},
+		{"no version constraint", []RequiredActionRule{{Action: "actions/checkout"}}, nil},
+		{"case insensitive", []RequiredActionRule{{Action: "actions/setup-node", Version: "v2"}}, nil},
+		{"subpath", []RequiredActionRule{{Action: "github/codeql-action/init", Version: "v3"}}, nil},
+		{"base repo does not match subpath", []RequiredActionRule{{Action: "github/codeql-action"}}, []string{`:3:3: required action "github/codeql-action" is not used in this workflow [required-actions]`}},
+		{"reusable workflow", []RequiredActionRule{{Action: "org/repo/.github/workflows/ci.yml", Version: "main"}}, nil},
+		{"mismatch lists all versions", []RequiredActionRule{{Action: "actions/checkout", Version: "v2"}}, []string{`:3:3: action "actions/checkout" must use version "v2" but found "v3", "v4" [required-actions]`}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := lintRequired(t, src, tc.req)
+			if diff := cmp.Diff(tc.want, got); diff != "" {
+				t.Fatal(diff)
+			}
+		})
+	}
+}
+
+func TestRuleRequiredActionsPosIsDeterministic(t *testing.T) {
+	src := "on: push\njobs:\n  b:\n    runs-on: x\n    steps:\n      - run: a\n  a:\n    runs-on: x\n    steps:\n      - run: a\n"
+	for i := 0; i < 20; i++ {
+		got := lintRequired(t, src, []RequiredActionRule{{Action: "a/b"}})
+		if len(got) != 1 || !strings.HasPrefix(got[0], ":3:3:") {
+			t.Fatalf("unexpected: %v", got)
+		}
+	}
+}
+
+func TestParseConfigRequiredActions(t *testing.T) {
+	c, err := ParseConfig([]byte("required-actions:\n  - action: actions/checkout\n    version: v4\n  - action: a/b\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []RequiredActionRule{{Action: "actions/checkout", Version: "v4"}, {Action: "a/b"}}
+	if diff := cmp.Diff(want, c.RequiredActions); diff != "" {
+		t.Fatal(diff)
+	}
+	for _, bad := range []string{
+		"required-actions:\n  - version: v1\n",
+		"required-actions:\n  - action: checkout\n",
+		"required-actions:\n  - action: actions/checkout@v4\n",
+		"required-actions:\n  - action: ./foo\n",
+	} {
+		if _, err := ParseConfig([]byte(bad)); err == nil {
+			t.Errorf("expected error for %q", bad)
+		}
+	}
+}
+
+func TestLinterRequiredActionsOptIn(t *testing.T) {
+	src := []byte("on: push\njobs:\n  t:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo\n")
+	run := func(cfg *Config) int {
+		l, err := NewLinter(io.Discard, &LinterOptions{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		l.defaultConfig = cfg
+		errs, err := l.Lint("a.yaml", src, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return len(errs)
+	}
+	if n := run(&Config{}); n != 0 {
+		t.Errorf("rule must be opt-in, got %d errors", n)
+	}
+	if n := run(&Config{RequiredActions: []RequiredActionRule{{Action: "actions/checkout"}}}); n != 1 {
+		t.Errorf("expected 1 error, got %d", n)
 	}
 }
