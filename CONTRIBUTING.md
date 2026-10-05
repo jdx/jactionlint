@@ -69,7 +69,6 @@ around linking libc. `make build` does this by default.
 [![Problem Matchers](https://github.com/rhysd/actionlint/actions/workflows/matcher.yaml/badge.svg)](https://github.com/rhysd/actionlint/actions/workflows/matcher.yaml)
 [![Download script](https://github.com/rhysd/actionlint/actions/workflows/download.yaml/badge.svg)](https://github.com/rhysd/actionlint/actions/workflows/download.yaml)
 [![Release](https://github.com/rhysd/actionlint/actions/workflows/release.yaml/badge.svg)](https://github.com/rhysd/actionlint/actions/workflows/release.yaml)
-[![Codecov](https://codecov.io/gh/rhysd/actionlint/graph/badge.svg?token=CgcOo0m9oW)](https://codecov.io/gh/rhysd/actionlint)
 
 Run the following command at the root of this repository.
 
