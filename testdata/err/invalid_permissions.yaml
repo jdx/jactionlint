@@ -5,8 +5,10 @@ permissions:
   unknown: bar
   id-token: read
   models: write
+  vulnerability-alerts: write
   pages: READ
   CHECKS: none
+  code-quality: executable
 
 jobs:
   test_job:
@@ -16,7 +18,9 @@ jobs:
       unknown: bar
       id-token: read
       models: write
+      vulnerability-alerts: write
       pages: READ
       CHECKS: none
+      code-quality: executable
     steps:
       - run: echo hello
