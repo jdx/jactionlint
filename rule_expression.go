@@ -19,6 +19,7 @@ type typedExpr struct {
 // - https://docs.github.com/en/actions/learn-github-actions/expressions
 type RuleExpression struct {
 	RuleBase
+	literalIndent    int // indentation stripped from the literal block being checked (0 if unknown)
 	matrixTy         *ObjectType
 	stepsTy          *ObjectType
 	needsTy          *ObjectType
@@ -396,7 +397,7 @@ func (rule *RuleExpression) checkOneExpression(s *String, what, workflowKey stri
 		return nil
 	}
 
-	ts, ok := rule.checkExprsIn(s.Value, s.Pos, s.Quoted, false, workflowKey)
+	ts, ok := rule.checkExprsIn(s.Value, s.Pos, s.Quoted, s.Indent, false, workflowKey)
 	if !ok {
 		return nil
 	}
@@ -689,7 +690,7 @@ func (rule *RuleExpression) checkString(str *String, workflowKey string) []typed
 		return nil
 	}
 
-	ts, ok := rule.checkExprsIn(str.Value, str.Pos, str.Quoted, false, workflowKey)
+	ts, ok := rule.checkExprsIn(str.Value, str.Pos, str.Quoted, str.Indent, false, workflowKey)
 	if !ok {
 		return nil
 	}
@@ -703,7 +704,7 @@ func (rule *RuleExpression) checkScriptString(str *String, workflowKey string) {
 		return
 	}
 
-	ts, ok := rule.checkExprsIn(str.Value, str.Pos, str.Quoted, true, workflowKey)
+	ts, ok := rule.checkExprsIn(str.Value, str.Pos, str.Quoted, str.Indent, true, workflowKey)
 	if !ok {
 		return
 	}
@@ -743,13 +744,19 @@ func (rule *RuleExpression) checkFloat(f *Float, workflowKey string) {
 	rule.checkNumberExpression(f.Expression, "float number value", workflowKey)
 }
 
-func (rule *RuleExpression) checkExprsIn(s string, pos *Pos, quoted, checkUntrusted bool, workflowKey string) ([]typedExpr, bool) {
-	// TODO: Line number is not correct when the string contains newlines.
-
+func (rule *RuleExpression) checkExprsIn(s string, pos *Pos, quoted bool, indent int, checkUntrusted bool, workflowKey string) ([]typedExpr, bool) {
+	// When indent is positive, the string is a literal block scalar whose content lines start at the
+	// line after pos with the indentation stripped by the YAML parser. In that case positions are
+	// mapped back to the source. Otherwise (e.g. plain multi-line strings) the line of the string
+	// start is used and the column is just an offset from it.
 	line, col := pos.Line, pos.Col
 	if quoted {
 		col++ // when the string is quoted like 'foo' or "foo", column should be incremented
 	}
+	// Errors on the 2nd or later line of a multi-line expression need the stripped indentation
+	rule.literalIndent = indent
+	defer func() { rule.literalIndent = 0 }()
+	full := s
 	offset := 0
 	ts := []typedExpr{}
 	for {
@@ -761,16 +768,22 @@ func (rule *RuleExpression) checkExprsIn(s string, pos *Pos, quoted, checkUntrus
 		start := idx + 3 // 3 means removing "${{"
 		s = s[start:]
 		offset += start
-		col := col + offset
+		l, c := line, col+offset
+		if indent > 0 {
+			before := full[:offset]
+			nl := strings.Count(before, "\n")
+			l = pos.Line + 1 + nl
+			c = indent + 1 + offset - (strings.LastIndexByte(before, '\n') + 1)
+		}
 
-		ty, offsetAfter, ok := rule.checkSemantics(s, line, col, checkUntrusted, workflowKey)
+		ty, offsetAfter, ok := rule.checkSemantics(s, l, c, checkUntrusted, workflowKey)
 		if !ok {
 			return nil, false
 		}
 		if ty == nil || offsetAfter == 0 {
 			return nil, true
 		}
-		ts = append(ts, typedExpr{ty, Pos{line, col - 3}})
+		ts = append(ts, typedExpr{ty, Pos{l, c - 3}})
 
 		s = s[offsetAfter:]
 		offset += offsetAfter
@@ -781,6 +794,10 @@ func (rule *RuleExpression) checkExprsIn(s string, pos *Pos, quoted, checkUntrus
 
 func (rule *RuleExpression) exprError(err *ExprError, lineBase, colBase int) {
 	pos := convertExprLineColToPos(err.Line, err.Column, lineBase, colBase)
+	if err.Line > 1 && rule.literalIndent > 0 {
+		// The column is relative to the start of the line in the literal block
+		pos.Col = rule.literalIndent + err.Column
+	}
 	rule.Error(pos, err.Message)
 }
 
@@ -1066,7 +1083,7 @@ func (rule *RuleExpression) checkRawYAMLValue(v RawYAMLValue) ExprType {
 }
 
 func (rule *RuleExpression) checkRawYAMLString(y *RawYAMLString) ExprType {
-	ts, ok := rule.checkExprsIn(y.Value, y.Pos(), false, false, "jobs.<job_id>.strategy")
+	ts, ok := rule.checkExprsIn(y.Value, y.Pos(), false, 0, false, "jobs.<job_id>.strategy")
 
 	if isExprAssigned(y.Value) {
 		if !ok || len(ts) != 1 {

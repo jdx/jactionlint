@@ -42,6 +42,10 @@ type String struct {
 	Pos *Pos
 	// If string is a literal block which preserves newlines and indentation. Helpful for error messages
 	Literal bool
+	// Indent is the number of spaces which the YAML parser stripped from each content line of a
+	// literal block. 0 means unknown (or not a literal block). When set, positions in the value
+	// can be mapped back to the source.
+	Indent int
 }
 
 // ContainsExpression checks if the given string contains a ${{ }} placeholder or not. This function
