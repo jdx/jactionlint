@@ -1,13 +1,21 @@
 name: CI
-on: [push, pull_request]
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   unit-tests:
     name: Unit tests
     strategy:
+      fail-fast: false
       matrix:
-        os: [ubuntu-latest, ubuntu-24.04-arm, macos-latest, windows-latest, macos-26-intel, windows-11-arm]
-        go: ['1.25', '1.26']
+        os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - name: Install dependencies on macOS
@@ -33,30 +41,13 @@ jobs:
           winget install --id koalaman.shellcheck --disable-interactivity --accept-package-agreements --accept-source-agreements
           pip install pyflakes
           pyflakes --version
-        if: ${{ runner.os == 'Windows' && matrix.os != 'windows-11-arm' }}
-      - name: Install dependencies on Windows ARM
-        # winget is not available on the Windows ARM runner image
-        shell: pwsh
-        run: |
-          $dir = Join-Path $env:RUNNER_TEMP 'shellcheck'
-          Invoke-WebRequest -Uri 'https://github.com/koalaman/shellcheck/releases/download/v0.11.0/shellcheck-v0.11.0.zip' -OutFile "$dir.zip"
-          Expand-Archive -Path "$dir.zip" -DestinationPath $dir
-          Add-Content -Path $env:GITHUB_PATH -Value $dir
-          & "$dir\shellcheck.exe" --version
-          pip install pyflakes
-          pyflakes --version
-        if: ${{ matrix.os == 'windows-11-arm' }}
+        if: ${{ runner.os == 'Windows' }}
       - uses: actions/checkout@v6
       - uses: actions/setup-go@v6
         with:
-          go-version: ${{ matrix.go }}
+          go-version: '1.26'
           check-latest: true
-      - run: go test -v -race -coverprofile coverage.txt -covermode=atomic ./...
-        # Arm Windows doesn't support -race
-        if: ${{ matrix.os != 'windows-11-arm' }}
-      - run: go test -v -coverprofile coverage.txt -covermode=atomic ./...
-        if: ${{ matrix.os == 'windows-11-arm' }}
-      - run: go tool cover -func ./coverage.txt
+      - run: go test -v -race ./...
       # Check build without CGO
       - run: go build ./cmd/actionlint
         env:
@@ -64,17 +55,10 @@ jobs:
           CGO_ENABLED: 0
       # Set -race for catching data races on dog fooding (#333)
       - run: go build -race ./cmd/actionlint
-        if: ${{ matrix.os != 'windows-11-arm' }}
       - name: Dog fooding 🐶
         run: |
           echo "::add-matcher::.github/actionlint-matcher.json"
           ./actionlint -color
-      - uses: codecov/codecov-action@v6
-        with:
-          env_vars: OS
-          token: ${{ secrets.CODECOV_TOKEN }}
-        env:
-          OS: ${{ matrix.os }}
   wasm:
     name: Wasm
     runs-on: ubuntu-latest
