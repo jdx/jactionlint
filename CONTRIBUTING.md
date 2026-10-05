@@ -171,8 +171,10 @@ checked by CI, because squash-merged titles become the release notes.
    Releases are immutable once published (assets and the tag cannot change), so the assets must be uploaded to the
    draft before it is published.
 3. The tag starts [the release workflow](.github/workflows/release.yaml):
-   - GoReleaser builds the release binaries, attaches them to the draft release, publishes it and updates the Homebrew
-     cask in `./Casks`
+   - GoReleaser builds the release binaries, attaches them to the draft release and updates the Homebrew cask in
+     `./Casks`
+   - A signed [packslip](https://packslip.dev) bundle for the archives is attached to the draft, then the release is
+     published
    - The container image is pushed to `ghcr.io/jdx/jactionlint`
    - The job also updates the version string in `./scripts/download-jactionlint.bash`
    - After the release is published its notes are rewritten by [communique](https://github.com/jdx/communique) and a

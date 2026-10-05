@@ -34,8 +34,15 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Used to push the Homebrew cask commit to the protected main branch (see .goreleaser.yaml)
           RELEASE_PLZ_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN }}
-      # GoReleaser publishes the draft release after uploading the assets. This makes sure it is published and
-      # does nothing when it already is. Published releases are immutable so this must come after the upload.
+      # Sign a packslip (https://packslip.dev) for the archives and upload the bundle (packslip.sigstore.json) to the
+      # draft release. This lets mise install jactionlint with the packslip backend. Releases are immutable once
+      # published so this has to happen before the release is published below.
+      - uses: jdx/packslip@v1
+        with:
+          artifacts: dist/jactionlint_*.tar.gz dist/jactionlint_*.zip
+          bin: jactionlint
+      # GoReleaser leaves the release as a draft (see .goreleaser.yaml) so that every asset, including the packslip
+      # bundle, is on it before it is published. Published releases are immutable. This is idempotent.
       - name: Publish the release
         run: gh release edit "$GITHUB_REF_NAME" --draft=false --repo "$GITHUB_REPOSITORY"
         env:

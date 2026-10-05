@@ -1,10 +1,11 @@
 version: 2
 
 release:
-  # release-please creates the release as a draft (and the tag). Releases are immutable once published, so the
-  # assets must be uploaded to that draft. GoReleaser publishes it after the upload.
+  # release-please creates the release as a draft (and the tag). Releases are immutable once published, so every
+  # asset must be uploaded to that draft first. GoReleaser uploads the archives and leaves it a draft so that the
+  # packslip bundle can be added too. release.yaml publishes it afterwards.
   use_existing_draft: true
-  draft: false
+  draft: true
   prerelease: false
 
 before:
