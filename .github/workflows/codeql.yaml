@@ -31,30 +31,20 @@ jobs:
         run: |
           set -x
           go build -v ./cmd/jactionlint
-          GOOS=js GOARCH=wasm go build -v -o ./playground/main.wasm ./playground
+          GOOS=js GOARCH=wasm go build -v -o ./docs/public/playground/main.wasm ./playground
       - uses: github/codeql-action/analyze@v4
         with:
           category: "/language:go"
   analyze-ts:
     name: Analyze TypeScript
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ./playground
     steps:
       - uses: actions/checkout@v6
-      - uses: actions/setup-node@v6
-        with:
-          node-version: "lts/*"
-          cache: npm
-          cache-dependency-path: ./playground/package-lock.json
       - uses: github/codeql-action/init@v4
         with:
           config-file: ./.github/codeql/codeql-config.yaml
           languages: javascript-typescript
-          source-root: ./playground
-      - name: Build playground
-        run: make build
+          source-root: ./docs
       - uses: github/codeql-action/analyze@v4
         with:
           category: "/language:javascript-typescript"

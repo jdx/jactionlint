@@ -64,7 +64,7 @@
       "extra-files": [
         ".pre-commit-hooks.yaml",
         "docs/usage.md",
-        "playground/index.html"
+        "docs/.vitepress/version.ts"
       ]
     }
   }

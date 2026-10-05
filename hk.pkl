@@ -17,7 +17,7 @@ local fast = new Mapping<String, Step> {
     ["go_vet"] = Builtins.go_vet
     // Only our own scripts; testdata contains intentionally broken shell scripts
     ["shellcheck"] {
-        glob = List("scripts/*.bash", "playground/*.bash")
+        glob = "scripts/*.bash"
         check = "shellcheck {{files}}"
     }
     // Dog fooding: lint our own workflows with the jactionlint in this tree
@@ -28,7 +28,7 @@ local fast = new Mapping<String, Step> {
 }
 
 local slow = new Mapping<String, Step> {
-    // ./... is not usable here because ./playground/node_modules contains Go packages
+    // ./... is not usable here because docs/node_modules may contain Go packages
     ["staticcheck"] {
         glob = "**/*.go"
         check = "staticcheck ./ ./scripts/... ./cmd/... && mise run lint:wasm"

@@ -35,18 +35,12 @@ jobs:
   wasm:
     name: Wasm
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ./playground
     steps:
       - uses: actions/checkout@v6
       - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
-      - name: Build playground
-        run: make build
-      - name: Lint playground
-        run: npm run lint
-      - name: Run tests for wasm
-        run: npm test
+      # Builds main.wasm, then runs the playground tests against it (the permalinks in docs/checks.md etc.)
+      - name: Test playground
+        run: mise run docs:test
   lint:
     name: Lint
     runs-on: ubuntu-latest
