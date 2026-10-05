@@ -62,8 +62,22 @@ func (p *Project) WorkflowsDir() string {
 // Knows returns true when the project knows the given file. When a file is included in the
 // project's directory, the project knows the file.
 func (p *Project) Knows(path string) bool {
-	// TODO: strings.HasPrefix is not perfect to check file path
-	return strings.HasPrefix(absPath(path), p.root)
+	return isPathInDir(p.root, absPath(path))
+}
+
+// isPathInDir returns true when the path is the directory itself or is located under the directory.
+// Both paths must be absolute. Unlike a string prefix check, a sibling directory sharing the same
+// name prefix (e.g. "/work/repo-other" for "/work/repo") is not regarded as a descendant. It uses
+// OS-specific path separators so it works on Windows too.
+func isPathInDir(dir, path string) bool {
+	rel, err := filepath.Rel(dir, path)
+	if err != nil {
+		return false // Different volumes on Windows, etc.
+	}
+	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return false
+	}
+	return !filepath.IsAbs(rel)
 }
 
 // Config returns config object of the GitHub project repository. The config file was read from
