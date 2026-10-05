@@ -17,7 +17,9 @@ jobs:
         with:
           ruby-version: '3.3'
       - run: gem install ronn
-      - run: ronn ./man/jactionlint.1.ronn
+      # Only the roff page is shipped. Generating the HTML page crashes with the current mustache gem
+      # (undefined method `strip' for an instance of Array) so it is skipped with --roff.
+      - run: ronn --roff ./man/jactionlint.1.ronn
       - uses: actions/setup-go@v6
         with:
           go-version: '1.27'
@@ -30,6 +32,8 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Used to push the Homebrew cask commit to the protected main branch (see .goreleaser.yaml)
+          RELEASE_PLZ_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN }}
       # GoReleaser publishes the draft release after uploading the assets. This makes sure it is published and
       # does nothing when it already is. Published releases are immutable so this must come after the upload.
       - name: Publish the release
@@ -47,6 +51,8 @@ jobs:
           path: ./tmp-jactionlint-for-update-ver
           ref: main
           fetch-depth: 0
+          # main is protected: pushing the version bump commit needs the PAT, GITHUB_TOKEN cannot bypass it
+          token: ${{ secrets.RELEASE_PLZ_TOKEN }}
       - name: Update version in download script
         run: |
           set -x

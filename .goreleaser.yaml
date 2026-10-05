@@ -67,6 +67,8 @@ homebrew_casks:
     repository:
       owner: jdx
       name: jactionlint
+      # The cask is committed to the protected main branch, which GITHUB_TOKEN cannot bypass
+      token: "{{ .Env.RELEASE_PLZ_TOKEN }}"
     commit_author:
       name: 'github-actions[bot]'
       email: '41898282+github-actions[bot]@users.noreply.github.com'
