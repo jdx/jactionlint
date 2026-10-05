@@ -15,12 +15,25 @@ run = "go build ./cmd/actionlint"
 description = "Run all tests"
 run = "go test ./..."
 
+[tasks."lint:wasm"]
+description = "Run staticcheck on the playground, which is built for wasm"
+env = { GOOS = "js", GOARCH = "wasm" }
+run = "staticcheck ./playground"
+
 [tasks.lint]
 description = "Run vet, staticcheck, govulncheck and the docs check"
 run = [
   "go vet ./...",
+  # ./... is not usable here because ./playground/node_modules contains Go packages
   "staticcheck ./ ./scripts/... ./cmd/...",
   "govulncheck ./...",
-  "GOOS=js GOARCH=wasm staticcheck ./playground",
+  "mise run lint:wasm",
   "go run ./scripts/check-checks -quiet ./docs/checks.md",
+]
+# check-checks does not support Windows
+run_windows = [
+  "go vet ./...",
+  "staticcheck ./ ./scripts/... ./cmd/...",
+  "govulncheck ./...",
+  "mise run lint:wasm",
 ]
