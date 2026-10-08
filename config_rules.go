@@ -326,12 +326,13 @@ func (c *Config) applyLegacy(l *legacyConfig) error {
 var (
 	configTopKeys = []string{
 		"profile", "extends", "rules", "online",
-		"self-hosted-runner", "config-variables", "config-secrets", "paths", "required-actions", "assume-default-permissions",
+		"self-hosted-runner", "config-variables", "config-secrets", "paths", "required-actions", "assume-default-permissions", "fix",
 		// Deprecated keys which are translated into rules
 		"timeout-minutes", "require-commit-hash", "require-permissions", "require-checkout-before-local-action",
 		"require-expression-wrapping", "check-falsy-ternary", "check-workflow-run-names", "require-shell", "max-run-lines",
 	}
 	selfHostedRunnerKeys   = []string{"labels", "strict-labels"}
+	fixConfigKeys          = []string{"rules"}
 	pathConfigKeys         = []string{"ignore"}
 	requiredActionKeys     = []string{"action", "version"}
 	legacyTimeoutMinutesKy = []string{"required", "max"}
@@ -390,6 +391,18 @@ func validateConfigKeys(root *yaml.Node) error {
 		switch k.Value {
 		case "self-hosted-runner":
 			err = checkKeys(v, "\"self-hosted-runner\"", selfHostedRunnerKeys)
+		case "fix":
+			if err = checkKeys(v, "\"fix\"", fixConfigKeys); err != nil {
+				break
+			}
+			_, fvals := mappingPairs(v)
+			for _, fv := range fvals {
+				for _, id := range fv.Content {
+					if _, ok := ruleIndex[id.Value]; !ok {
+						return fmt.Errorf("unknown rule ID %q in \"fix.rules\" at line:%d,col:%d%s", id.Value, id.Line, id.Column, suggestRuleID(id.Value))
+					}
+				}
+			}
 		case "timeout-minutes":
 			err = checkKeys(v, "\"timeout-minutes\"", legacyTimeoutMinutesKy)
 		case "paths":
@@ -441,6 +454,12 @@ func presentKeys(root *yaml.Node) map[string]bool {
 	keys, vals := mappingPairs(n)
 	for i, k := range keys {
 		ret[k.Value] = true
+		if k.Value == "fix" {
+			nk, _ := mappingPairs(vals[i])
+			for _, c := range nk {
+				ret["fix."+c.Value] = true
+			}
+		}
 		if k.Value == "self-hosted-runner" {
 			nk, _ := mappingPairs(vals[i])
 			for _, c := range nk {

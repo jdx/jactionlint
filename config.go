@@ -206,6 +206,9 @@ type Config struct {
 	// runs against it.
 	AssumeDefaultPermissions *string `yaml:"assume-default-permissions"`
 
+	// Fix configures "jactionlint -fix".
+	Fix FixConfig `yaml:"fix"`
+
 	// Path is the path of the file which the config was read from. It is empty when the config was
 	// parsed from bytes.
 	Path string `yaml:"-"`
@@ -217,6 +220,13 @@ type Config struct {
 	// present records which keys were written explicitly so that merging with the files listed in
 	// "extends" can tell a missing key from a zero value.
 	present map[string]bool
+}
+
+// FixConfig is the "fix" mapping of the config file.
+type FixConfig struct {
+	// Rules restricts -fix to the fixes of the rules with these IDs. The -rules flag overrides it. When
+	// the list is empty, the fixes of all rules are applied.
+	Rules []string `yaml:"rules"`
 }
 
 // AssumeDefaultPermissionsRestricted is the config value enabling the restricted-default assumption.
@@ -411,6 +421,9 @@ func (c *Config) merge(over *Config) {
 	}
 	if over.present["assume-default-permissions"] {
 		c.AssumeDefaultPermissions = over.AssumeDefaultPermissions
+	}
+	if over.present["fix.rules"] {
+		c.Fix.Rules = over.Fix.Rules
 	}
 	c.Deprecations = append(c.Deprecations, over.Deprecations...)
 	for k := range over.present {
