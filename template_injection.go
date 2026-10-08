@@ -515,6 +515,13 @@ func (c *tiContext) classify(sp *exprSpan) tiClass {
 		r := &refs[i]
 		switch m, leaf := matchUntrusted(r.Path); m {
 		case untrustedLeaf:
+			for _, seg := range r.Path {
+				if seg == "*" {
+					// A filter like github.event.* only reaches a leaf among its matches. That is
+					// not a finding of its own.
+					return tiClass{Tier: tiDirect}
+				}
+			}
 			return tiClass{Tier: tiDirect, Ref: r}
 		case untrustedSubtree:
 			return tiClass{Tier: tiSubtree, Ref: r, Source: leaf}
