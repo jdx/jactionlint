@@ -81,7 +81,7 @@ func (c *Command) Flag(names ...string) *Flag {
 			if f.Name == n {
 				return f
 			}
-			if len(n) == 2 && n[0] == '-' && n[1] != '-' && len(f.Name) > 2 && f.Name[0] == '-' && f.Name[1] != '-' && f.Value == nil && strings.Contains(f.Name[1:], n[1:]) {
+			if len(n) == 2 && n[0] == '-' && n[1] != '-' && len(f.Name) > 2 && f.Name[0] == '-' && f.Name[1] != '-' && strings.Contains(f.Name[1:], n[1:]) {
 				return f
 			}
 		}
@@ -94,7 +94,11 @@ func (c *Command) FlagValues(names ...string) []*Word {
 	var out []*Word
 	for _, f := range c.Flags {
 		for _, n := range names {
-			if f.Name == n && f.Value != nil {
+			if f.Value == nil {
+				continue
+			}
+			// A cluster ending in a flag which takes a value (-qr req.txt) has the value of that last flag.
+			if f.Name == n || (len(n) == 2 && n[0] == '-' && n[1] != '-' && len(f.Name) > 2 && f.Name[0] == '-' && f.Name[1] != '-' && f.Name[len(f.Name)-1] == n[1]) {
 				out = append(out, f.Value)
 			}
 		}

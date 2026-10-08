@@ -76,7 +76,8 @@ func publishOf(c *Command) *Publish {
 	default:
 		return nil
 	}
-	p.DryRun = c.HasFlag("--dry-run", "-n", "--no-publish")
+	// Only the long flag: `-n` is --notes for gh and --no-interaction for poetry, so it does not mean a dry run.
+	p.DryRun = c.HasFlag("--dry-run")
 	return p
 }
 

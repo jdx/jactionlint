@@ -20,7 +20,7 @@ var toolValueFlags = map[string]map[string]bool{
 	"npm": set(`--prefix --registry --tag -w --workspace --cache --loglevel --userconfig --globalconfig --omit --include
 		--save-prefix --otp --fetch-retries --fetch-timeout --scope --before --min-release-age --install-strategy
 		--package -c --call --node-options --tag-version-prefix --access --auth-type --audit-level --cafile --ca --cert
-		--key --proxy --https-proxy --noproxy --script-shell`),
+		--key --proxy --https-proxy --noproxy --script-shell --location`),
 	"npx":      set(`--package -p -c --call --registry --cache --userconfig --prefix --node-options`),
 	"pnpm":     set(`--filter -F -C --dir --reporter --registry --store-dir --virtual-store-dir --lockfile-dir --modules-dir --tag --workspace-concurrency --network-concurrency --loglevel --config --otp --access --publish-branch --package -p --cpu --os --libc --pnpmfile --global-dir --global-bin-dir --prefix --fetch-timeout --fetch-retries`),
 	"pnpm-dlx": set(`--package -p --registry`),

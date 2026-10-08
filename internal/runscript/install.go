@@ -419,7 +419,7 @@ func (in *Install) node(c *Command) bool {
 		global, pos = true, pos[1:]
 	}
 	in.Global = global
-	in.Locked = c.HasFlag("--frozen-lockfile", "--immutable", "--ci", "--prefer-frozen-lockfile=false") && !c.HasFlag("--no-frozen-lockfile")
+	in.Locked = c.HasFlag("--frozen-lockfile", "--immutable", "--ci") && !c.HasFlag("--no-frozen-lockfile")
 	if len(pos) == 0 {
 		switch c.Tool {
 		case "yarn": // `yarn` installs

@@ -637,7 +637,9 @@ func TestPublishes(t *testing.T) {
 		{"npm publish --provenance", "npm", "publish", "package", false, ""},
 		{"npm publish --dry-run --registry=https://r", "npm", "publish", "package", true, "https://r"},
 		{"npm pack", "", "", "", false, ""},
-		{"pnpm publish -n", "pnpm", "publish", "package", true, ""},
+		{"pnpm publish --dry-run", "pnpm", "publish", "package", true, ""},
+		{"poetry publish -n", "poetry", "publish", "package", false, ""},
+		{"gh release create v1 -n notes", "gh", "release create", "release", false, ""},
 		{"yarn npm publish", "yarn", "npm publish", "package", false, ""},
 		{"yarn publish", "yarn", "publish", "package", false, ""},
 		{"bun publish", "bun", "publish", "package", false, ""},
@@ -789,5 +791,56 @@ func TestCRLF(t *testing.T) {
 	s := mustAnalyze(t, "echo a >> $GITHUB_ENV\r\nnpm i x\r\n")
 	if len(s.WritesTo("GITHUB_ENV")) != 1 || s.Commands[1].Installs() == nil {
 		t.Error("CRLF script not understood")
+	}
+}
+
+func TestFlagClusterEndingInValueFlag(t *testing.T) {
+	c := mustAnalyze(t, `pip install -qr req.txt pkg`).Commands[0]
+	for _, n := range []string{"-q", "-r"} {
+		if !c.HasFlag(n) {
+			t.Errorf("-qr has no %s", n)
+		}
+	}
+	if vs := c.FlagValues("-r"); len(vs) != 1 || vs[0].Value != "req.txt" {
+		t.Errorf("value of -r in -qr req.txt: %v", vs)
+	}
+	if vs := c.FlagValues("-q"); len(vs) != 0 {
+		t.Errorf("-q takes no value but has %v", vs)
+	}
+	if got := c.Positional; len(got) != 2 || got[0].Value != "install" || got[1].Value != "pkg" {
+		t.Errorf("positional arguments %v", got)
+	}
+	// `sh -ec "..."`: the script is the value of -c
+	c = mustAnalyze(t, `bash -ec 'echo hi'`).Commands[0]
+	if !c.HasFlag("-e") || !c.HasFlag("-c") {
+		t.Errorf("bash -ec has -e and -c: %v", c.Flags)
+	}
+}
+
+func TestNodeInstallFlags(t *testing.T) {
+	for _, tc := range []struct {
+		script string
+		global bool
+		locked bool
+	}{
+		{"npm install --location global typescript", true, false},
+		{"npm install --location=global typescript", true, false},
+		{"npm install --location project typescript", false, false},
+		{"pnpm install --prefer-frozen-lockfile=false", false, false},
+		{"pnpm install --frozen-lockfile", false, true},
+	} {
+		in := mustAnalyze(t, tc.script).Commands[0].Installs()
+		if in == nil {
+			t.Errorf("%q is not an install", tc.script)
+			continue
+		}
+		if in.Global != tc.global || in.Locked != tc.locked {
+			t.Errorf("%q: global=%v locked=%v, want global=%v locked=%v", tc.script, in.Global, in.Locked, tc.global, tc.locked)
+		}
+		if tc.global {
+			if len(in.Packages) != 1 || in.Packages[0].Name != "typescript" {
+				t.Errorf("%q: packages %v, want only typescript", tc.script, in.Packages)
+			}
+		}
 	}
 }
