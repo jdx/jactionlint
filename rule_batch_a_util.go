@@ -181,10 +181,13 @@ func workflowExprSites(w *Workflow, f func(site exprSite)) {
 	emitRaw = func(j *Job, v RawYAMLValue) {
 		switch v := v.(type) {
 		case *RawYAMLString:
-			if v != nil && v.pos != nil {
-				// The parser does not record whether the scalar was quoted. A scalar with the string tag
-				// is nearly always a quoted one, so assume it.
-				emit(j, &String{Value: v.Value, Quoted: v.StringTag, Pos: v.pos}, false)
+			if v == nil {
+				return
+			}
+			if v.str != nil {
+				emit(j, v.str, false)
+			} else if v.pos != nil {
+				emit(j, &String{Value: v.Value, Pos: v.pos}, false)
 			}
 		case *RawYAMLArray:
 			if v != nil {
