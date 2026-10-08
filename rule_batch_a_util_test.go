@@ -164,3 +164,48 @@ func TestWorkflowExprSitesVisitEveryExpression(t *testing.T) {
 		t.Fatalf("workflowExprSites does not visit %d expression(s):\n%s", len(missing), strings.Join(lines, "\n"))
 	}
 }
+
+// A finding in a matrix value points at the secret whether the value is plain, quoted, a block
+// scalar or an item of a flow sequence.
+func TestMatrixExprPositions(t *testing.T) {
+	src := "on: push\n" + // 1
+		"jobs:\n" + // 2
+		"  a:\n" + // 3
+		"    runs-on: ubuntu-latest\n" + // 4
+		"    strategy:\n" + // 5
+		"      matrix:\n" + // 6
+		"        plain:\n" + // 7
+		"          - ${{ secrets.PLAIN }}\n" + // 8
+		"        double:\n" + // 9
+		"          - \"${{ secrets.DOUBLE }}\"\n" + // 10
+		"        single:\n" + // 11
+		"          - '${{ secrets.SINGLE }}'\n" + // 12
+		"        block:\n" + // 13
+		"          - |\n" + // 14
+		"            x ${{ secrets.BLOCK }}\n" + // 15
+		"        flow: ['${{ secrets.FLOW }}', \"${{ secrets.FLOWQ }}\"]\n" + // 16
+		"        include:\n" + // 17
+		"          - k: ${{ secrets.INC }}\n" + // 18
+		"            q: \"${{ secrets.INCQ }}\"\n" + // 19
+		"        exclude:\n" + // 20
+		"          - k: '${{ secrets.EXC }}'\n" + // 21
+		"    steps:\n" + // 22
+		"      - run: echo\n" // 23
+	lines := strings.Split(src, "\n")
+	cfg := mustParseConfig(t, "rules:\n  secrets-outside-env: error\n")
+	errs := errsWithID(lintFileWithConfig(t, cfg, "ci.yaml", src), "secrets-outside-env")
+	got := map[string][2]int{}
+	for _, e := range errs {
+		m := regexp.MustCompile(`secret "([A-Z]+)"`).FindStringSubmatch(e.Message)
+		if m == nil {
+			t.Fatalf("unexpected message %q", e.Message)
+		}
+		got[m[1]] = [2]int{e.Line, e.Column}
+	}
+	for name, line := range map[string]int{"PLAIN": 8, "DOUBLE": 10, "SINGLE": 12, "BLOCK": 15, "FLOW": 16, "FLOWQ": 16, "INC": 18, "INCQ": 19, "EXC": 21} {
+		want := [2]int{line, strings.Index(lines[line-1], "secrets."+name) + 1}
+		if g, ok := got[name]; !ok || g != want {
+			t.Errorf("%s: want line:col %v but got %v (reported: %v)", name, want, g, ok)
+		}
+	}
+}
