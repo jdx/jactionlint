@@ -180,9 +180,16 @@ type RuleEnv struct {
 	shellcheck             string
 	pyflakes               string
 	proc                   *concurrentProcess
+	src                    []byte
 
 	log  func(args ...interface{})
 	name string // the factory being run
+}
+
+// Source returns the content of the file being linted. A rule which attaches a Fix needs it to turn
+// the positions of the syntax tree into byte offsets. The slice must not be modified.
+func (e *RuleEnv) Source() []byte {
+	return e.src
 }
 
 // Skip reports with the debug log that the rule being created is disabled for the reason. A factory

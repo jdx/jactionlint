@@ -1,6 +1,9 @@
 package jactionlint
 
-import "testing"
+import (
+	"os"
+	"testing"
+)
 
 // ruleSwitch returns a config which sets the rule to error or turns it off.
 func ruleSwitch(id string, enabled bool) *Config {
@@ -60,5 +63,25 @@ func withFixtureRules(c *Config) *Config {
 			c.Rules[id] = RuleConfig{Level: SeverityOff}
 		}
 	}
+	turnOffBatchDRules(c)
 	return c
+}
+
+// fixtureConfigFile reads the configuration which is put next to a fixture in testdata (the fixture
+// "x.yaml" has "x.config") and returns it with the fixture rules turned off like fixtureConfig. It
+// returns nil when the fixture has no configuration file.
+func fixtureConfigFile(t testing.TB, path string) *Config {
+	t.Helper()
+	b, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		t.Fatal(err)
+	}
+	c, err := ParseConfig(b)
+	if err != nil {
+		t.Fatalf("invalid configuration %q: %v", path, err)
+	}
+	return withFixtureRules(c)
 }
