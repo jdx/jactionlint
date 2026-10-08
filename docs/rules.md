@@ -25,6 +25,7 @@ rules:
 
 | ID | Group | Default level | Profile |
 | --- | --- | --- | --- |
+| [action-syntax](#action-syntax) | correctness | error | default |
 | [anonymous-definition](#anonymous-definition) | policy | warn | strict |
 | [archived-uses](#archived-uses) | security | warn | only with `-online` |
 | [artipacked](#artipacked) | security | warn | strict |
@@ -128,6 +129,15 @@ rules:
 | [workflow-run-names](#workflow-run-names) | correctness | error | default |
 | [workflow-syntax](#workflow-syntax) | correctness | error | default |
 | [yaml-syntax](#yaml-syntax) | correctness | error | default |
+
+## action-syntax
+
+The action metadata does not follow the syntax of action.yml.
+
+- Group: correctness
+- Default level: error
+- Profile: default
+- Details and examples: [checks](./checks.md#check-composite-action-syntax)
 
 ## anonymous-definition
 

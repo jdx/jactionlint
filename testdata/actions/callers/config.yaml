@@ -1,0 +1,5 @@
+rules:
+  cache-poisoning: warn
+  bot-conditions: warn
+  unpinned-uses: off
+  template-injection-expansion: warn

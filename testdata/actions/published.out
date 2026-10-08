@@ -1,0 +1,5 @@
+action.yml:13:16: property "nope" is not defined in object type {run: {conclusion: string; outcome: string; outputs: {string => string}}} [expression]
+action.yml:17:13: action "actions/checkout@v4" must be pinned to a full-length commit SHA like "{owner}/{repo}@{sha}" because the "unpinned-uses" rule is enabled [action]
+action.yml:18:13: action "actions/cache@v4" must be pinned to a full-length commit SHA like "{owner}/{repo}@{sha}" because the "unpinned-uses" rule is enabled [action]
+action.yml:25:21: context "secrets" is not allowed in a composite action because secrets are not passed to it. declare an input and let the workflow pass the secret with "with:". available contexts are "env", "github", "inputs", "job", "matrix", "needs", "runner", "steps", "strategy", "vars". see https://docs.github.com/en/actions/learn-github-actions/contexts#context-availability for more details [expression]
+action.yml:29:7: "shell" is required for a "run" step of a composite action, which has no default shell. for example, add "shell: bash" [syntax-check]

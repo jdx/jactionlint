@@ -1,6 +1,7 @@
 package jactionlint
 
 import (
+	"fmt"
 	"regexp"
 	"slices"
 	"strconv"
@@ -180,22 +181,43 @@ func NewRuleCachePoisoning() *RuleCachePoisoning {
 	}
 }
 
+// releaseTrigger tells how the events publish a release ("runs on the release event" or "runs on
+// pushed tags"), or returns "" when they do not.
+func releaseTrigger(events []Event) string {
+	why := ""
+	for _, e := range events {
+		if ev, ok := e.(*WebhookEvent); ok {
+			if e.EventName() == "release" {
+				return "runs on the release event"
+			}
+			if e.EventName() == "push" && !ev.Tags.IsEmpty() {
+				why = "runs on pushed tags"
+			}
+		}
+	}
+	return why
+}
+
 // VisitWorkflowPre is callback when visiting Workflow node before visiting its children.
 func (rule *RuleCachePoisoning) VisitWorkflowPre(n *Workflow) error {
 	rule.wf = n
 	rule.releaseWhy, rule.privileged = "", ""
 	for _, e := range n.On {
-		name := e.EventName()
-		if slices.Contains(privilegedTriggers, name) && rule.privileged == "" {
+		if name := e.EventName(); slices.Contains(privilegedTriggers, name) && rule.privileged == "" {
 			rule.privileged = name
 		}
-		switch ev := e.(type) {
-		case *WebhookEvent:
-			if name == "release" {
-				rule.releaseWhy = "the workflow runs on the release event"
-			}
-			if name == "push" && !ev.Tags.IsEmpty() && rule.releaseWhy == "" {
-				rule.releaseWhy = "the workflow runs on pushed tags"
+	}
+	if n.Action == nil {
+		if r := releaseTrigger(n.On); r != "" {
+			rule.releaseWhy = "the workflow " + r
+		}
+	} else if c := n.Action.Callers; c.Known() {
+		// The action runs in the context of the workflow which calls it. A caller which releases is enough:
+		// a cache restored there ends up in the published artifacts.
+		for _, cl := range c.Callers {
+			if r := releaseTrigger(cl.Events); r != "" {
+				rule.releaseWhy = fmt.Sprintf("%s %s and calls this action", cl.describe(), r)
+				break
 			}
 		}
 	}
@@ -263,8 +285,8 @@ func (rule *RuleCachePoisoning) VisitJobPre(n *Job) error {
 		rule.ReportIDf(
 			"cache-poisoning",
 			a.Uses.Pos,
-			"%s restores a cache although %s, so a poisoned cache entry can end up in the published artifacts. %s, or set \"cache-mode: none\" on the job",
-			name, why, hint,
+			"%s restores a cache although %s, so a poisoned cache entry can end up in the published artifacts. %s, or set \"cache-mode: none\" on the job%s",
+			name, why, hint, callerJob(rule.wf),
 		)
 	}
 	return nil
@@ -320,4 +342,12 @@ func init() {
 	registerRuleFactory("cache-poisoning", func(env *RuleEnv) []Rule {
 		return []Rule{NewRuleCachePoisoning()}
 	})
+}
+
+// callerJob completes "on the job" for the metadata of an action, which has no job of its own.
+func callerJob(w *Workflow) string {
+	if w.Action != nil {
+		return " that calls this action"
+	}
+	return ""
 }

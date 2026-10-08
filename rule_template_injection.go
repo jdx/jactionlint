@@ -70,6 +70,7 @@ func (rule *RuleTemplateInjection) VisitStep(n *Step) error {
 			}
 			pos := sp.TokPos(cl.Ref.Node.Token())
 			fix := plan[sp.Start]
+			before := len(rule.errs)
 			switch cl.Tier {
 			case tiDirect:
 				rule.ReportIDf("template-injection", pos, "%q is potentially untrusted. avoid using it directly in inline scripts. instead, pass it through an environment variable. see https://docs.github.com/en/actions/reference/security/secure-use#good-practices-for-mitigating-script-injection-attacks for more details", cl.Ref.Display(sp.Src))
@@ -84,6 +85,11 @@ func (rule *RuleTemplateInjection) VisitStep(n *Step) error {
 			}
 			if fix != nil {
 				rule.errs[len(rule.errs)-1].Fix = fix
+			}
+			if note := rule.wf.callerWarning(); note != "" {
+				for _, e := range rule.errs[before:] {
+					e.Message += ". " + note
+				}
 			}
 		}
 	}

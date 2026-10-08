@@ -27,7 +27,10 @@ Features:
 
 ## USAGE
 
-To check all workflow files in the current repository, just run **jactionlint** without arguments.
+To check all workflow files in the current repository, just run **jactionlint** without arguments. The composite
+actions of the repository (**action.yml** in the root, under **.github/actions** and the directories which a local
+**uses: ./path** refers to) and **.github/dependabot.yml** are checked as well. A file named **action.yml** or
+**action.yaml** is the metadata of an action wherever it is, except under **.github/workflows**.
 It automatically finds the nearest `.github/workflows` directory:
 
     $ jactionlint

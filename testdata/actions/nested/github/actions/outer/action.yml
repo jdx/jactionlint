@@ -1,0 +1,15 @@
+name: outer
+description: Calls inner, which calls outer again
+inputs:
+  flavor:
+    description: flavor
+    default: debug
+runs:
+  using: composite
+  steps:
+    - uses: ./.github/actions/inner
+      with:
+        flavor: ${{ inputs.flavor }}
+    - uses: ./.github/actions/outer
+      with:
+        flavor: ${{ inputs.undeclared }}

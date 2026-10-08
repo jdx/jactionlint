@@ -51,8 +51,11 @@ var botNamePrefixes = []string{"dependabot", "renovate", "github-actions", "copi
 
 // VisitWorkflowPre is callback when visiting Workflow node before visiting its children.
 func (rule *RuleBotConditions) VisitWorkflowPre(n *Workflow) error {
-	rule.prOnly = len(n.On) > 0
-	for _, e := range n.On {
+	// For the metadata of an action the events are those of the workflows which call it; none are known
+	// when no local workflow calls it, which makes the suggestions that need a pull request unavailable.
+	events := n.TriggerEvents()
+	rule.prOnly = len(events) > 0
+	for _, e := range events {
 		name := strings.ToLower(e.EventName())
 		if name != "pull_request" && name != "pull_request_target" {
 			rule.prOnly = false

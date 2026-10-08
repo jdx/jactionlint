@@ -190,6 +190,7 @@ type RuleEnv struct {
 	pyflakes               string
 	proc                   *concurrentProcess
 	online                 *onlineSession // nil unless the online checks are on
+	action                 bool           // the file is the metadata of an action (action.yml), see actionRuleScope
 
 	log  func(args ...interface{})
 	name string // the factory being run
@@ -266,6 +267,9 @@ func newBuiltinRules(env *RuleEnv, log func(args ...interface{})) []Rule {
 	rules := make([]Rule, 0, len(ruleFactories))
 	for _, f := range ruleFactories {
 		env.name = f.name
+		if env.action && !runsOnActions(f.name) {
+			continue
+		}
 		rules = append(rules, f.new(env)...)
 	}
 	return rules

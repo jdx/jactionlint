@@ -1,0 +1,15 @@
+name: Build
+description: Builds the project
+inputs:
+  token:
+    description: Token to publish with
+    required: true
+runs:
+  using: composite
+  steps:
+    # ERROR: Secrets are not passed to composite actions. Declare an input instead
+    - run: ./publish.sh "${{ secrets.PUBLISH_TOKEN }}"
+      shell: bash
+    # ERROR: The input "tokan" is not declared
+    - run: ./build.sh "${{ inputs.tokan }}"
+      shell: bash

@@ -3,7 +3,7 @@
   "audits": {
     "anonymous-definition": {
       "coverage": "full",
-      "notes": "Workflows only. zizmor also checks action.yml, which jactionlint does not lint.",
+      "notes": "Workflows only. zizmor also reports action.yml, where the rule does not apply: GitHub requires its name.",
       "jactionlint": [{ "rule": "anonymous-definition" }]
     },
     "concurrency-limits": {
@@ -18,7 +18,7 @@
     },
     "insecure-commands": {
       "coverage": "partial",
-      "notes": "Workflow, job and step env, when the value is true. action.yml and container env are not checked.",
+      "notes": "Workflow, job and step env, when the value is true. Step env of composite actions is checked; container env is not.",
       "jactionlint": [{ "rule": "insecure-commands" }]
     },
     "overprovisioned-secrets": {
