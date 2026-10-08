@@ -1,0 +1,14 @@
+on: push
+
+jobs:
+  local:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      - uses: $/.github/actions/setup
+      - uses: $/
+      - uses: owner/repo/.github/actions/other@v1
+  call:
+    uses: $/.github/workflows/reusable.yml
+  call-other:
+    uses: owner/repo/.github/workflows/reusable.yml@v1

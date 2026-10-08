@@ -25,6 +25,8 @@ rules:
 
 | ID | Group | Default level | Profile |
 | --- | --- | --- | --- |
+| [artipacked](#artipacked) | security | warn | strict |
+| [cache-poisoning](#cache-poisoning) | security | warn | strict |
 | [conflicting-runner-labels](#conflicting-runner-labels) | correctness | error | default |
 | [constant-condition](#constant-condition) | correctness | error | default |
 | [context-availability](#context-availability) | correctness | error | default |
@@ -36,8 +38,10 @@ rules:
 | [duplicate-job-needs](#duplicate-job-needs) | correctness | error | default |
 | [duplicate-key](#duplicate-key) | correctness | error | default |
 | [duplicate-step-id](#duplicate-step-id) | correctness | error | default |
+| [excessive-permissions](#excessive-permissions) | security | warn | strict |
 | [expression-syntax](#expression-syntax) | correctness | error | default |
 | [expression-type](#expression-type) | correctness | error | default |
+| [github-app](#github-app) | security | warn | strict |
 | [hardcoded-container-credentials](#hardcoded-container-credentials) | security | error | default |
 | [if-always-true](#if-always-true) | correctness | error | default |
 | [invalid-activity-type](#invalid-activity-type) | correctness | error | default |
@@ -76,17 +80,20 @@ rules:
 | [require-expression-wrapping](#require-expression-wrapping) | style | error | all |
 | [require-shell](#require-shell) | style | error | all |
 | [required-actions](#required-actions) | policy | error | only when configured |
+| [self-repository](#self-repository) | security | info | strict |
 | [shellcheck](#shellcheck) | correctness | error | default |
 | [template-injection](#template-injection) | security | error | default |
 | [timeout-too-long](#timeout-too-long) | policy | error | only when configured |
 | [undefined-function](#undefined-function) | correctness | error | default |
 | [undefined-job-needs](#undefined-job-needs) | correctness | error | default |
 | [undefined-property](#undefined-property) | correctness | error | default |
+| [undocumented-permissions](#undocumented-permissions) | policy | info | all |
 | [unknown-action-input](#unknown-action-input) | correctness | error | default |
 | [unknown-event](#unknown-event) | correctness | error | default |
 | [unknown-runner-label](#unknown-runner-label) | correctness | error | default |
 | [unknown-workflow-input](#unknown-workflow-input) | correctness | error | default |
 | [unknown-workflow-secret](#unknown-workflow-secret) | correctness | error | default |
+| [unpinned-images](#unpinned-images) | security | warn | strict |
 | [unpinned-uses](#unpinned-uses) | policy | error | strict |
 | [unsound-ternary](#unsound-ternary) | correctness | error | default |
 | [unused-anchor](#unused-anchor) | correctness | error | default |
@@ -96,6 +103,25 @@ rules:
 | [workflow-run-names](#workflow-run-names) | correctness | error | default |
 | [workflow-syntax](#workflow-syntax) | correctness | error | default |
 | [yaml-syntax](#yaml-syntax) | correctness | error | default |
+
+## artipacked
+
+actions/checkout persists the GITHUB_TOKEN credential in the git config.
+
+- Group: security
+- Default level: warn
+- Profile: strict
+- Fixable: yes
+- Details and examples: [checks](./checks.md#check-artipacked)
+
+## cache-poisoning
+
+A cache is restored in a release job or written by a privileged trigger.
+
+- Group: security
+- Default level: warn
+- Profile: strict
+- Details and examples: [checks](./checks.md#check-cache-poisoning)
 
 ## conflicting-runner-labels
 
@@ -196,6 +222,16 @@ A step ID is not unique within its job.
 - Profile: default
 - Details and examples: [checks](./checks.md#check-job-step-ids)
 
+## excessive-permissions
+
+The GITHUB_TOKEN gets write access that is broader than needed.
+
+- Group: security
+- Default level: warn
+- Profile: strict
+- Option `require-workflow-permissions` (bool, default false): Also report a workflow which has no top-level permissions, even when its jobs set their own.
+- Details and examples: [checks](./checks.md#check-excessive-permissions)
+
 ## expression-syntax
 
 A ${{ }} expression has a syntax error.
@@ -213,6 +249,15 @@ A ${{ }} expression has a type error.
 - Default level: error
 - Profile: default
 - Details and examples: [checks](./checks.md#check-type-check-expression)
+
+## github-app
+
+A GitHub App token is issued with more access or a longer life than needed.
+
+- Group: security
+- Default level: warn
+- Profile: strict
+- Details and examples: [checks](./checks.md#check-github-app)
 
 ## hardcoded-container-credentials
 
@@ -555,6 +600,16 @@ An action listed in required-actions is not used by a workflow.
 - Default level: error
 - Profile: only when configured
 
+## self-repository
+
+A local action or workflow is referenced as ./path instead of $/path.
+
+- Group: security
+- Default level: info
+- Profile: strict
+- Fixable: yes
+- Details and examples: [checks](./checks.md#check-self-repository)
+
 ## shellcheck
 
 shellcheck reported an issue in a shell script.
@@ -610,6 +665,16 @@ An undefined variable or property is accessed in an expression.
 - Profile: default
 - Details and examples: [checks](./checks.md#check-contexts-and-builtin-func)
 
+## undocumented-permissions
+
+A permission scope above read has no comment explaining it.
+
+- Group: policy
+- Default level: info
+- Profile: all
+- Option `include-read` (bool, default false): Also require a comment for scopes granted with read, except contents: read.
+- Details and examples: [checks](./checks.md#check-undocumented-permissions)
+
 ## unknown-action-input
 
 An input which the action does not define is specified.
@@ -655,6 +720,16 @@ A secret which the reusable workflow does not define is passed.
 - Profile: default
 - Details and examples: [checks](./checks.md#check-reusable-workflows)
 
+## unpinned-images
+
+A container or service image is not pinned by a digest.
+
+- Group: security
+- Default level: warn
+- Profile: strict
+- Option `require-digest` (bool, default true): Report images pinned by a tag other than latest too. Turn it off to report only images without a tag or with the latest tag.
+- Details and examples: [checks](./checks.md#check-unpinned-images)
+
 ## unpinned-uses
 
 An action, reusable workflow or Docker image is not pinned to a commit SHA or digest.
@@ -662,6 +737,7 @@ An action, reusable workflow or Docker image is not pinned to a commit SHA or di
 - Group: policy
 - Default level: error
 - Profile: strict
+- Option `policies` (string-map, default empty): How strongly to pin the actions matching a pattern: hash-pin (full commit SHA, the default for everything), ref-pin (any tag, branch or SHA) or any. The most specific pattern wins. Patterns are "*", "owner/*", "owner/repo" and "owner/repo/path". Docker images follow the "*" policy.
 - Details and examples: [checks](./checks.md#check-action-format)
 
 ## unsound-ternary

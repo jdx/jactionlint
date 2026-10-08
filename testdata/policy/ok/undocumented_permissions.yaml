@@ -1,0 +1,14 @@
+on: push
+
+permissions:
+  contents: write # push the release tag
+  # Read the pull request that a push belongs to
+  pull-requests: read
+  packages: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    permissions: read-all
+    steps:
+      - run: echo hello

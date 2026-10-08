@@ -66,15 +66,8 @@ func (rule *RuleWorkflowCall) VisitJobPre(n *Job) error {
 	}
 
 	if ref.isRepoWorkflowCall() {
-		if rule.Config().RuleEnabled("unpinned-uses") {
-			if ref.RefKind != RefFullSHA {
-				rule.ReportIDf(
-					"unpinned-uses",
-					u.Pos,
-					"reusable workflow call %q must be pinned to a full-length commit SHA like \"owner/repo/path/to/workflow.yml@{sha}\" because the \"unpinned-uses\" rule is enabled",
-					u.Value,
-				)
-			}
+		if msg := unpinnedUsesMessage(rule.Config(), ref, true); msg != "" {
+			rule.ReportID("unpinned-uses", u.Pos, msg)
 		}
 		return nil
 	}

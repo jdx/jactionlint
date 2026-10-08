@@ -1,0 +1,2 @@
+test.yaml:9:16: image "postgres" of service "db" has no tag, so the registry decides which image is pulled ("latest"). pin it to a digest like "postgres@sha256:{digest}" [unpinned-images]
+test.yaml:11:16: image "redis:latest" of service "cache" uses the tag "latest", which changes whenever the registry is updated. pin it to a digest like "redis@sha256:{digest}" [unpinned-images]

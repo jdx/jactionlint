@@ -371,7 +371,7 @@ paths:
 }
 
 func TestConfigRulesAffectLinting(t *testing.T) {
-	src := "on: push\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - run: echo ${{ github.event.issue.title }}\n"
+	src := "on: push\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n        with:\n          persist-credentials: false\n      - run: echo ${{ github.event.issue.title }}\n"
 
 	tests := []struct {
 		what string

@@ -1,0 +1,1 @@
+test.yaml:3:14: "write-all" gives the GITHUB_TOKEN write access to every scope for the whole workflow. list only the scopes which are needed and set the others to "read" or "none" [excessive-permissions]

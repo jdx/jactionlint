@@ -1,0 +1,15 @@
+on: push
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    container: node:20
+    services:
+      db:
+        image: postgres
+      cache:
+        image: redis:latest
+      queue:
+        image: rabbitmq:3.13
+    steps:
+      - run: echo hello
