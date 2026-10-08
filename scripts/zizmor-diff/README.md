@@ -17,7 +17,8 @@ false positive rate of about zero on the corpus, and this script produces the nu
 
 - Go
 - [mise](https://mise.jdx.dev/), which runs the pinned zizmor (`mise x zizmor@1.30.1 -- zizmor`)
-- the repositories of the corpus checked out locally. Nothing is fetched from the network (`zizmor --offline`)
+- the repositories of the corpus checked out locally. Nothing is fetched from the network (`zizmor --offline`), unless
+  you pass `--online`
 
 ## Usage
 
@@ -44,6 +45,7 @@ go run ./scripts/zizmor-diff \
 | `--jactionlint-config FILE` | config used instead of each repository's own (`-config-file`) |
 | `--jactionlint-arg ARG` | extra jactionlint argument, for example `-profile` and `strict` later. Repeatable |
 | `--zizmor CMD` | command that runs zizmor. Default `mise x zizmor@1.30.1 -- zizmor` |
+| `--online` | compare the online audits (`impostor-commit`, `known-vulnerable-actions`, ...): jactionlint runs with `-online` and zizmor without `--offline`. Needs `GITHUB_TOKEN` or `GH_TOKEN` in the environment and makes GitHub API requests |
 | `--mapping FILE` | audit mapping instead of the embedded `mapping.json` |
 | `--line-tolerance N` | lines of distance allowed between matching findings. Default 0 |
 | `--jobs N` | repositories analyzed in parallel. Default 4 |
