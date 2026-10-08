@@ -1,0 +1,14 @@
+version: 2
+updates:
+  - package-ecosystem: deno
+    directory: /
+    schedule:
+      interval: weekly
+  - package-ecosystem: nix
+    directory: /
+    schedule:
+      interval: weekly
+  - package-ecosystem: sbt
+    directory: /
+    schedule:
+      interval: weekly
