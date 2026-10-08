@@ -1,0 +1,3 @@
+cmd 1:1 name="gh" tool=gh
+  flags -R="jdx/communique"
+  pos "pr" "ready" "$PR_NUMBER"[var:PR_NUMBER quoted]

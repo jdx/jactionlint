@@ -1,0 +1,12 @@
+cmd 1:1 name="echo"
+  pos "A=1"
+cmd 2:1 name="pip" tool=pip
+  pos "install" "requests==1"
+  install tool=pip eco=pypi verb=install run=false global=false locked=false manifest=false reqs=0
+    pkg "requests==1" name="requests" ver="==1" kind=registry pinned=true dyn=false local=false
+cmd 3:1 name="npm" tool=npm
+  pos "i" "foo"
+  install tool=npm eco=npm verb=i run=false global=false locked=false manifest=false reqs=0
+    pkg "foo" name="foo" ver="" kind=registry pinned=false dyn=false local=false
+redirect 1:10 op=">>" fd="" target="$GITHUB_ENV"[var:GITHUB_ENV] append=true write=true
+writes GITHUB_ENV at 1:10 append=true producers=1 exprs=[]

@@ -1,0 +1,90 @@
+expr 13:12 "inputs.url"
+cmd 1:1 name="curl" tool=curl pipe=1/2
+  flags -fsSL
+  pos "https://example.com/install.sh"
+cmd 1:45 name="sh" tool=sh pipe=2/2
+cmd 2:1 name="curl" tool=curl pipe=1/2
+  flags -sSf
+  pos "https://sh.rustup.rs"
+cmd 2:34 name="sh" tool=sh pipe=2/2
+  flags -s
+  pos "-y"
+cmd 3:1 name="wget" tool=wget pipe=1/2
+  flags -qO-
+  pos "https://example.com/install.sh"
+cmd 3:44 name="bash" tool=bash wrappers=sudo pipe=2/2
+cmd 4:1 name="curl" tool=curl pipe=1/2
+  flags --proto="=https"[quoted] --tlsv1.2 -sSf -H="Accept: x"[quoted] -o="/dev/null"
+  pos "https://a.example"
+cmd 4:86 name="bash" tool=bash pipe=2/2
+  flags -s
+cmd 5:1 name="bash" tool=bash
+  pos "<(curl -fsSL https://example.com/install.sh)"[subst]
+cmd 5:8 name="curl" tool=curl
+  flags -fsSL
+  pos "https://example.com/install.sh"
+cmd 6:1 name="sh" tool=sh
+  flags -c="$(curl -fsSL https://example.com/install.sh)"[subst quoted]
+cmd 6:10 name="curl" tool=curl
+  flags -fsSL
+  pos "https://example.com/install.sh"
+cmd 7:1 name="eval" tool=eval
+  pos "$(curl -fsSL https://example.com/env.sh)"[subst quoted]
+cmd 7:9 name="curl" tool=curl
+  flags -fsSL
+  pos "https://example.com/env.sh"
+cmd 8:1 name="source" tool=source
+  pos "<(curl -s https://example.com/env.sh)"[subst]
+cmd 8:10 name="curl" tool=curl
+  flags -s
+  pos "https://example.com/env.sh"
+cmd 9:1 name="curl" tool=curl
+  flags -fsSL -o="install.sh"
+  pos "https://example.com/install.sh"
+cmd 9:60 name="sh" tool=sh
+  pos "install.sh"
+cmd 10:1 name="curl" tool=curl pipe=1/2
+  flags -fsSL
+  pos "https://example.com/data.json"
+cmd 10:44 name="jq" pipe=2/2
+  pos "."
+cmd 11:1 name="curl" tool=curl pipe=1/2
+  flags -fsSL
+  pos "https://example.com/x.sh"
+cmd 11:39 name="bash" tool=bash pipe=2/2
+  pos "script.sh"
+cmd 12:1 name="curl" tool=curl pipe=1/2
+  flags -fsSL
+  pos "http://insecure.example.com/x.sh"
+cmd 12:47 name="sh" tool=sh pipe=2/2
+cmd 13:1 name="curl" tool=curl pipe=1/2
+  flags -fsSL
+  pos "${{ inputs.url }}"[expr whole-expr]
+cmd 13:32 name="sh" tool=sh pipe=2/2
+cmd 14:1 name="curl" tool=curl pipe=1/3
+  flags -fsSL
+  pos "https://example.com/a"
+cmd 14:36 name="tee" tool=tee pipe=2/3
+  pos "out"
+cmd 14:46 name="sh" tool=sh pipe=3/3
+pipeline 1:1 stages=2 negated=false
+pipeline 2:1 stages=2 negated=false
+pipeline 3:1 stages=2 negated=false
+pipeline 4:1 stages=2 negated=false
+pipeline 10:1 stages=2 negated=false
+pipeline 11:1 stages=2 negated=false
+pipeline 12:1 stages=2 negated=false
+pipeline 13:1 stages=2 negated=false
+pipeline 14:1 stages=3 negated=false
+redirect 14:40 op="tee" fd="" target="out" append=false write=true tee
+shellpipe form=pipe downloader="curl" shell="sh" url="https://example.com/install.sh"
+shellpipe form=pipe downloader="curl" shell="sh" url="https://sh.rustup.rs"
+shellpipe form=pipe downloader="wget" shell="bash" url="https://example.com/install.sh"
+shellpipe form=pipe downloader="curl" shell="bash" url="https://a.example"
+shellpipe form=subst downloader="curl" shell="bash" url="https://example.com/install.sh"
+shellpipe form=subst downloader="curl" shell="sh" url="https://example.com/install.sh"
+shellpipe form=subst downloader="curl" shell="eval" url="https://example.com/env.sh"
+shellpipe form=subst downloader="curl" shell="source" url="https://example.com/env.sh"
+shellpipe form=pipe downloader="curl" shell="sh" url="http://insecure.example.com/x.sh"
+shellpipe form=pipe downloader="curl" shell="sh" url="${{ inputs.url }}"[expr whole-expr]
+shellpipe form=pipe downloader="curl" shell="sh" url="https://example.com/a"

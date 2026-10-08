@@ -1,0 +1,7 @@
+artipacked
+cache-poisoning
+excessive-permissions
+github-app
+self-repository
+undocumented-permissions
+unpinned-images

@@ -1,0 +1,34 @@
+on: push
+
+jobs:
+  paths:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout/./sub@v4
+      - uses: actions/checkout/sub/../other@v4
+      - uses: actions/checkout/a//b@v4
+      - uses: ./.github/actions/../actions/test
+      - uses: ./.github/./actions/test
+      # Not obfuscated
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+      - uses: ./
+      - uses: ./.github/actions/test
+      - uses: ./../other-checkout/action
+
+  expressions:
+    runs-on: ubuntu-latest
+    env:
+      REPO: ${{ format('{0}/{1}', 'octocat', 'hello-world') }}
+      ROUND_TRIP: ${{ fromJSON(toJSON('[1]')) }}
+      CONSTANT: ${{ 'literal' }}
+      NAME: build${{ '' }}
+      COMPUTED: ${{ vars[format('NAME_{0}', github.run_id)] }}
+      DYNAMIC: ${{ vars[github.job] }}
+      MIXED: ${{ format('{0}-{1}', 'a', github.sha) }}
+      LITERAL_INDEX: ${{ github['sha'] }}
+      CONTEXT_ROUND_TRIP: ${{ fromJSON(toJSON(github.event)) }}
+    steps:
+      - run: echo ok
+        # Constant conditions are reported by constant-condition
+        if: ${{ true }}

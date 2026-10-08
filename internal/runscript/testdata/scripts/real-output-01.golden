@@ -1,0 +1,6 @@
+cmd 1:1 name="echo"
+  pos "sha=$(git rev-parse HEAD)"[subst quoted]
+cmd 1:13 name="git"
+  pos "rev-parse" "HEAD"
+redirect 1:34 op=">>" fd="" target="$GITHUB_OUTPUT"[var:GITHUB_OUTPUT quoted] append=true write=true
+writes GITHUB_OUTPUT at 1:34 append=true producers=1 exprs=[]

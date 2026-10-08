@@ -5,7 +5,8 @@ This document describes how to use [jactionlint](https://github.com/jdx/jactionl
 
 ## `jactionlint` command
 
-With no argument, jactionlint finds all workflow files in the current repository and checks them.
+With no argument, jactionlint finds all workflow files in the current repository and checks them. It checks the Dependabot
+configuration `.github/dependabot.yml` (or `.github/dependabot.yaml`) of the repository as well.
 
 ```sh
 jactionlint
@@ -21,6 +22,15 @@ When `-` argument is given, jactionlint reads inputs from stdin and checks it as
 
 ```sh
 cat path/to/workflow.yaml | jactionlint -
+```
+
+The Dependabot configuration is recognized by its path: a file named `dependabot.yml` or `dependabot.yaml` in a `.github`
+directory. Give it as an argument or use `-stdin-filename` to check it. Workflow rules are not applied to it. See
+[the check of its syntax](checks.md#check-dependabot-syntax).
+
+```sh
+jactionlint .github/dependabot.yml
+cat dependabot.yml | jactionlint -stdin-filename .github/dependabot.yml -
 ```
 
 To know all flags and options, see an output of `jactionlint -h` or [the online command manual][cmd-manual].

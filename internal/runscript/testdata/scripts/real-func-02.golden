@@ -1,0 +1,38 @@
+cmd 1:1 name="set"
+  flags -euo
+  pos "pipefail"
+cmd 4:3 name="local"
+  assign file="withdrawals/.github/packslip/$1"[var:1 quoted]
+cmd 7:3 name="["
+  flags -f
+  pos "$file"[var:file quoted] "]"
+cmd 7:23 name="echo"
+  pos "$file is missing"[var:file quoted]
+cmd 7:52 name="exit"
+  pos "1"
+cmd 8:3 name="grep"
+  flags -Ev
+  pos "^[[:space:]]*(#|$)"[quoted] "$file"[var:file quoted]
+cmd 8:44 name="["
+  flags -eq
+  pos "$?"[var:?] "1" "]"
+cmd 10:23 name="openssl"
+  flags -hex
+  pos "rand" "16"
+cmd 12:3 name="echo"
+  pos "yank<<$delimiter"[var:delimiter quoted]
+cmd 13:3 name="entries"
+  pos "yanked"
+cmd 14:3 name="echo"
+  pos "$delimiter"[var:delimiter quoted]
+cmd 15:3 name="echo"
+  pos "security<<$delimiter"[var:delimiter quoted]
+cmd 16:3 name="entries"
+  pos "security"
+cmd 17:3 name="echo"
+  pos "$delimiter"[var:delimiter quoted]
+redirect 7:47 op=">&" fd="" target="2" append=false write=false
+redirect 18:3 op=">>" fd="" target="$GITHUB_OUTPUT"[var:GITHUB_OUTPUT quoted] append=true write=true group inner=6
+assignment 4:9 file value="withdrawals/.github/packslip/$1"[var:1 quoted] append=false array=false
+assignment 10:1 delimiter value="packslip_$(openssl rand -hex 16)"[subst quoted] append=false array=false
+writes GITHUB_OUTPUT at 18:3 append=true producers=6 exprs=[]

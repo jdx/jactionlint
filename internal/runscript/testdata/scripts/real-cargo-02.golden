@@ -1,0 +1,8 @@
+cmd 1:1 name="cargo" tool=cargo
+  flags --locked --release -p="pacvamp" -p="pacvamp-repo"
+  pos "build"
+cmd 2:1 name="cargo" tool=cargo
+  flags --version="=1.0.0"[quoted] --locked --root="target/packslip-cli"
+  pos "install" "packslip"
+  install tool=cargo eco=crates verb=install run=false global=false locked=true manifest=false reqs=0
+    pkg "packslip" name="packslip" ver="=1.0.0" kind=registry pinned=true dyn=false local=false

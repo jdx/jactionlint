@@ -1,0 +1,13 @@
+on: push
+
+permissions:
+  contents: read
+  packages: read
+  pull-requests: read # review comments
+  issues: write
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo hello

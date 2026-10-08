@@ -1,0 +1,9 @@
+cmd 1:1 name="cd"
+  pos "/tmp/packages"
+cmd 4:1 name="cat"
+cmd 15:3 name="echo"
+  pos "Uploading $changes_file to PPA..."[var:changes_file quoted]
+cmd 16:3 name="dput"
+  pos "mise-ppa" "$changes_file"[var:changes_file quoted]
+redirect 4:5 op=">" fd="" target="~/.dput.cf"[glob] append=false write=true
+redirect 4:18 op="<<" fd="" target="EOF" append=false write=false heredoc(delim="EOF" quoted=false tabs=false exprs=0 lines=6)

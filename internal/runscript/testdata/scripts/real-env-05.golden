@@ -1,0 +1,7 @@
+cmd 1:1 name="cargo" tool=cargo
+  flags --locked --release -p="mbx"
+  pos "build"
+cmd 2:1 name="echo"
+  pos "MBX_BENCH_BINARY=$PWD/target/release/mbx"[var:PWD quoted]
+redirect 2:49 op=">>" fd="" target="$GITHUB_ENV"[var:GITHUB_ENV quoted] append=true write=true
+writes GITHUB_ENV at 2:49 append=true producers=1 exprs=[]

@@ -1,0 +1,11 @@
+on: push
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: docker://alpine
+      - uses: docker://alpine:latest
+      - uses: docker://alpine:3.20
+      - uses: docker://ghcr.io/owner/image:1.0@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+      - uses: owner/repo@v1

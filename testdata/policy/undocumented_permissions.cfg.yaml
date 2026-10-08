@@ -1,0 +1,2 @@
+rules:
+  undocumented-permissions: error
