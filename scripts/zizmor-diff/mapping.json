@@ -3,8 +3,12 @@
   "audits": {
     "template-injection": {
       "coverage": "partial",
-      "notes": "jactionlint reports untrusted contexts in expressions. zizmor also covers env indirection, github-script and more contexts.",
-      "jactionlint": [{ "rule": "expression", "message_contains": "potentially untrusted" }]
+      "notes": "Placeholders in run:, github-script and the code inputs of some well-known actions: attacker controlled contexts and objects holding them (template-injection), env variables set from them, and every other non-constant expansion (template-injection-expansion).",
+      "jactionlint": [
+        { "rule": "expression", "message_contains": "potentially untrusted" },
+        { "rule": "template-injection" },
+        { "rule": "template-injection-expansion" }
+      ]
     },
     "hardcoded-container-credentials": {
       "coverage": "full",
@@ -38,6 +42,11 @@
       "coverage": "partial",
       "notes": "required-actions enforces a required set of actions. zizmor's allow and deny lists are the inverse and are not covered yet.",
       "jactionlint": [{ "rule": "required-actions" }]
+    },
+    "unsound-condition": {
+      "coverage": "full",
+      "notes": "if-always-true reports every condition with characters around ${{ }}, which includes the trailing newline of a block scalar.",
+      "jactionlint": [{ "rule": "if-always-true" }]
     }
   }
 }

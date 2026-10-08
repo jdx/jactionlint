@@ -300,7 +300,7 @@ func TestMarkdown(t *testing.T) {
 	out := b.String()
 	for _, want := range []string{
 		"## Mapped audits",
-		"| template-injection | partial | `expression` | 1 | 1 | 0 | 1 |",
+		"| template-injection | partial | `expression`, `template-injection`, `template-injection-expansion` | 1 | 1 | 0 | 1 |",
 		"| excessive-permissions | partial | `require-permissions` | 2 | 1 | 1 | 1 |",
 		"| **total** |",
 		"## jactionlint only",

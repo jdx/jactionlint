@@ -53,14 +53,14 @@ How to read the table:
 | `self-repository` | `self-repository` | 3 / B | strict | not yet assessed |
 | `stale-action-refs` | `stale-action-refs` | 3 / G | online | not yet assessed |
 | `superfluous-actions` | `superfluous-actions` | 3 / D | strict | not yet assessed |
-| `template-injection` | `template-injection` | 3 / C | default | not yet assessed |
+| `template-injection` | `template-injection` (default), `template-injection-expansion` (strict), `template-injection-trusted` (all) | 3 / C | default, strict, all | partial: attacker controlled contexts, objects holding them and env variables set from them in `run:`, github-script and the code inputs of well-known actions, every expression of a script (default). Every other expansion is `template-injection-expansion` (free text) or `template-injection-trusted` (values like `github.repository`), which together are zizmor's pedantic persona. See [batch C](#batch-c-measurements) for the numbers. Not covered: `action.yml`, knowledge about the outputs of popular actions, severity by trigger (the level is per rule ID). `-fix` moves a simple reference into `env:` for bash and sh |
 | `typosquat-uses` | `typosquat-uses` | 3 / A | strict | not yet assessed |
 | `undocumented-permissions` | `undocumented-permissions` | 3 / B (needs YAML comments, Phase 2) | strict | not yet assessed |
 | `unpinned-images` | `unpinned-images` | 3 / B | strict | not yet assessed |
 | `unpinned-tools` | `unpinned-tools` | 3 / D | strict | not yet assessed |
 | `unpinned-uses` | `unpinned-uses` | 3 / B | strict | not yet assessed |
 | `unredacted-secrets` | `unredacted-secrets` | 3 / A | strict | not yet assessed |
-| `unsound-condition` | `unsound-condition` | 3 / C | default | not yet assessed |
+| `unsound-condition` | `if-always-true` (existing) | 3 / C | default | full for workflows: `if-always-true` reports every `if:` with characters around `${{ }}`, a block scalar's trailing newline included. Matches all 5 zizmor findings of the corpus. No new rule. Composite action steps are not checked yet |
 | `unsound-contains` | `unsound-contains` | 3 / A | default | not yet assessed |
 | `unsound-ternary` | `unsound-ternary` | 3 / C | default | not yet assessed |
 | `use-trusted-publishing` | `use-trusted-publishing` | 3 / D | strict | not yet assessed |

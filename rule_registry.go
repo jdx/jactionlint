@@ -180,6 +180,7 @@ type RuleEnv struct {
 	shellcheck             string
 	pyflakes               string
 	proc                   *concurrentProcess
+	src                    []byte // the content of the file being linted
 
 	log  func(args ...interface{})
 	name string // the factory being run

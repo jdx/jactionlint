@@ -48,6 +48,7 @@ List of checks:
 - [Action metadata syntax validation](#action-metadata-syntax)
 - [Deprecated inputs usage](#deprecated-inputs-usage)
 - [YAML anchors](#yaml-anchors)
+- [Expansions in scripts (opt-in)](#check-template-injection-expansion)
 
 Note that jactionlint focuses on catching mistakes in workflow files. If you want some general code style checks, please consider
 using a general YAML checker like [yamllint][].
@@ -1172,6 +1173,89 @@ jactionlint does not report an error even if untrusted inputs are passed to thes
 
 At last, the popular action [actions/github-script][github-script] has the same issue in its `script` input. jactionlint also
 checks the input.
+
+### Untrusted inputs through objects, environment variables and action inputs
+
+The rule `template-injection` does not stop at the properties above. It reports the same risk when it is less direct:
+
+- every `${{ }}` of a script is checked, not only the first one;
+- an object which holds untrusted properties, like `toJSON(github.event)`, is reported because the script gets the title and the
+  body of the issue as a part of the JSON;
+- an environment variable which is set from an untrusted input, like `env.TITLE` below, is reported when it is expanded with
+  `${{ env.TITLE }}`. Reading it as a variable of the shell (`"$TITLE"`) is the fix, and it is what the environment variable is for;
+- inputs of well-known actions which run their value as code are checked like `run:` and the `script` of github-script:
+  `command` of nick-fields/retry, `inlineScript` of azure/cli and azure/powershell, `script` of appleboy/ssh-action,
+  `run` and `options` of addnab/docker-run-action, and a few more. They are listed in `codeExecInputs` of
+  [template_injection.go](https://github.com/jdx/jactionlint/blob/main/template_injection.go).
+
+Example input:
+
+```yaml
+on: issue_comment
+
+env:
+  TITLE: ${{ github.event.issue.title }}
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      # ERROR: The environment variable holds an untrusted input, so expanding it has the same effect
+      - run: echo '${{ env.TITLE }}'
+      # ERROR: Every untrusted expression of a script is reported
+      - run: |
+          echo '${{ github.head_ref }}'
+          echo '${{ github.event.comment.body }}'
+      # ERROR: The object has untrusted properties
+      - run: echo '${{ toJSON(github.event) }}'
+      # ERROR: This input of the action is run as code
+      - uses: nick-fields/retry@v3
+        with:
+          command: echo ${{ github.head_ref }}
+      # OK: The shell expands the variable
+      - run: echo "$TITLE"
+```
+
+Output:
+
+```
+test.yaml:11:24: environment variable "env.TITLE" holds the potentially untrusted input "github.event.issue.title". expanding it with ${{ }} in an inline script is as dangerous as using the input directly. instead, read it as a variable of the shell [expression]
+   |
+11 |       - run: echo '${{ env.TITLE }}'
+   |                        ^~~~~~~~~
+test.yaml:14:21: "github.head_ref" is potentially untrusted. avoid using it directly in inline scripts. instead, pass it through an environment variable. see https://docs.github.com/en/actions/reference/security/secure-use#good-practices-for-mitigating-script-injection-attacks for more details [expression]
+   |
+14 |           echo '${{ github.head_ref }}'
+   |                     ^~~~~~~~~~~~~~~
+test.yaml:15:21: "github.event.comment.body" is potentially untrusted. avoid using it directly in inline scripts. instead, pass it through an environment variable. see https://docs.github.com/en/actions/reference/security/secure-use#good-practices-for-mitigating-script-injection-attacks for more details [expression]
+   |
+15 |           echo '${{ github.event.comment.body }}'
+   |                     ^~~~~~~~~~~~~~~~~~~~~~~~~
+test.yaml:17:31: "github.event" includes potentially untrusted properties such as "github.event.comment.body". avoid expanding it in inline scripts. instead, pass the properties you need through environment variables [expression]
+   |
+17 |       - run: echo '${{ toJSON(github.event) }}'
+   |                               ^~~~~~~~~~~~~
+test.yaml:21:29: "github.head_ref" is potentially untrusted. avoid using it directly in inline scripts. instead, pass it through an environment variable. see https://docs.github.com/en/actions/reference/security/secure-use#good-practices-for-mitigating-script-injection-attacks for more details [expression]
+   |
+21 |           command: echo ${{ github.head_ref }}
+   |                             ^~~~~~~~~~~~~~~
+```
+
+[Playground](https://jactionlint.jdx.dev/#eNpskL1OAzEQhHs/xSiKFCjOFHSuaChACArSR/ez4QyXNbpdH4rCvTvyxcqPODfWar/xzDiwgxeJtKnDbkesxhAPzgDrp/XLo8PycMCH1zZWlgZitRNt1WtHGEdjPkMliVcSTTfQR5YiPRyryBqLrky7aSVK33KkgCKRDlS3AavkQzzYyRbjuLqGfvOYzlmQg7VUNpuetheyWe5YIBe1VWj2/43OIg3P72+vN5fa2ys+CokD+/qr2HrqGrnrSfv9w3B/CvHjtXWnCUjeJTfZZr7CTJ7FcvqWxd8A3hV//w==)
+
+`-fix` fixes the findings in `run:` scripts of bash and sh when it can show that the fix does the same: the `${{ }}` is in double
+quotes or single quotes, and the script has no here-document, command substitution or comment around it. The expression is replaced
+with a shell variable (the `GITHUB_*` and `RUNNER_*` variables which the runner sets already, like `$GITHUB_HEAD_REF`, or a new one
+in the `env:` of the step):
+
+```yaml
+- run: echo "title is ${TITLE}"
+  env:
+    TITLE: ${{ github.event.issue.title }}
+```
+
+When the expression is not in quotes, quoting it changes how the shell splits words and expands globs, so the fix needs
+`-fix=unsafe`. Scripts of other shells (PowerShell, cmd, Python) are not fixed.
 
 <a id="check-job-deps"></a>
 ## Job dependencies validation
@@ -3221,6 +3305,9 @@ test.yaml:29:13: if: condition "${{ github.event_name == 'push' }} && ${{ github
 
 [Playground](https://jactionlint.jdx.dev/#eNq0zz1OxDAQBeA+p3hYyK7CASxtw484ATVyYEKM1vZqZ0yz+O7Iy18iohBAVFH03nwzTtFil3lomsfUsW0AIZb6BfY5clsLuctRcrt1NTtGLLTj1xbQ1qYF3Q0J6vLq/Ob6BKeHAx68DLk7oyeKchtdIJSi3mYA31v0bss0o5iLFIIXeD4eR/dmMjaPbzYwtW1Qys/N548/LNl/g//jcPU9CrWGhSQE5+OUX5K1fo/31H+GY+QXG1e8R+tx6+tylPIyANrl1qA=)
 
+The conditions with characters around `${{ }}` (a trailing newline of a block scalar included) are reported by the rule
+`if-always-true`. It is the audit `unsound-condition` of zizmor.
+
 jactionlint reports constant conditions at `if:` like `if: true` as error because they are usually leftover debug code like
 `#if 0` in C. `if: true` should be removed because it doesn't affect the workflow behavior. `if: false` should be replaced with
 commenting out because it is more obvious (or simply remove the step or job if not needed).
@@ -3571,6 +3658,73 @@ test.yaml:9:14: could not parse as YAML: unknown anchor 'credentials' referenced
 [Playground](https://jactionlint.jdx.dev/#eNosyjEOwjAMheE9p3gzUsqe26TEUkGRXeXZcH1k6PQP/2facAaPUl62sxXAhZ4FVihrgthDPers+X6LLif/CqgpG7b7sI9O62PjcS1A9N1weywZov7sk98BAKp1Iic=)
 
 ---
+
+<a id="check-template-injection-expansion"></a>
+## Expansions in scripts (opt-in)
+
+The rule `template-injection` reports the contexts that an attacker controls. Every other `${{ }}` in a `run:` script, in
+the `script` of github-script and in the inputs listed above is also a risk: the value is pasted into the source of the script
+before it runs, so a value with quotes, `$(...)` or a newline changes the script. These rules report them:
+
+| Rule | Reports | Profile | Level |
+| --- | --- | --- | --- |
+| `template-injection-expansion` | Values that are free text: `inputs.*` of type `string`, `steps.*.outputs.*`, `needs.*.outputs.*`, `matrix.*` with values from `fromJSON`, `env.*` set from an expression and `github.ref_name` | `strict` | warn |
+| `template-injection-trusted` | Values that an attacker cannot control: `github.repository`, `github.sha`, `runner.*`, `secrets.*`, `vars.*`, boolean, number and choice inputs, a matrix whose values are written in the workflow, enumerations like `needs.*.result`, and expressions which only test a context | `all` | info |
+
+`template-injection-trusted` is the "everything is a code smell" view of the pedantic persona of zizmor. A value that cannot be
+attacked still breaks when somebody later changes it to something that can. Both rules fix as the previous section describes.
+
+Example input:
+
+```yaml
+on: workflow_dispatch
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - id: version
+        run: echo "tag=v1" >> "$GITHUB_OUTPUT"
+      # The value of a step output is part of the script
+      - run: ./release.sh '${{ steps.version.outputs.tag }}'
+      # An environment variable is not
+      - run: ./release.sh "$TAG"
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+      # The value cannot be controlled by an attacker, but it is still a ${{ }} in a script
+      - run: echo "Building ${{ github.repository }}"
+```
+
+Output:
+
+The output is with `template-injection-expansion` and `template-injection-trusted` enabled.
+
+<!-- Skip update output -->
+```
+test.yaml:10:32: warning: "steps.version.outputs.tag" is expanded with ${{ }} into an inline script, so a value with shell syntax changes what the script does. instead, pass it through an environment variable and read it as a variable of the shell [expression]
+   |
+10 |       - run: ./release.sh '${{ steps.version.outputs.tag }}'
+   |                                ^~~~~~~~~~~~~~~~~~~~~~~~~
+test.yaml:16:33: info: "github.repository" is expanded with ${{ }} into an inline script. its value is not controlled by an attacker, but an expansion in a script is easy to get wrong when the script changes. instead, read it as a variable of the shell [expression]
+   |
+16 |       - run: echo "Building ${{ github.repository }}"
+   |                                 ^~~~~~~~~~~~~~~~~
+```
+
+<!-- Skip playground link -->
+
+To enable them, use the `strict` or `all` profile or set them in [the configuration file](config.md):
+
+```yaml
+rules:
+  template-injection-expansion: warn
+  template-injection-trusted: info
+```
+
+What is considered free text is a decision about the value, not the syntax. A boolean input, a matrix of literals and the `result` of
+a job cannot hold anything but a few words, and a `string` input can hold anything. When you know that a value is safe, set the
+level of the rule to `off` or ignore the line, for example with `# jactionlint ignore=template-injection-expansion`.
+
 
 [Installation](install.md) | [Usage](usage.md) | [Configuration](config.md) | [Go API](api.md) | [References](reference.md)
 

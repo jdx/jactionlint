@@ -78,6 +78,8 @@ rules:
 | [required-actions](#required-actions) | policy | error | only when configured |
 | [shellcheck](#shellcheck) | correctness | error | default |
 | [template-injection](#template-injection) | security | error | default |
+| [template-injection-expansion](#template-injection-expansion) | security | warn | strict |
+| [template-injection-trusted](#template-injection-trusted) | style | info | all |
 | [timeout-too-long](#timeout-too-long) | policy | error | only when configured |
 | [undefined-function](#undefined-function) | correctness | error | default |
 | [undefined-job-needs](#undefined-job-needs) | correctness | error | default |
@@ -571,7 +573,28 @@ A potentially untrusted input is expanded in a script.
 - Group: security
 - Default level: error
 - Profile: default
+- Fixable: yes
 - Details and examples: [checks](./checks.md#untrusted-inputs)
+
+## template-injection-expansion
+
+A ${{ }} expansion in a script is not an environment variable.
+
+- Group: security
+- Default level: warn
+- Profile: strict
+- Fixable: yes
+- Details and examples: [checks](./checks.md#check-template-injection-expansion)
+
+## template-injection-trusted
+
+A ${{ }} expansion in a script is of a value that an attacker cannot control.
+
+- Group: style
+- Default level: info
+- Profile: all
+- Fixable: yes
+- Details and examples: [checks](./checks.md#check-template-injection-expansion)
 
 ## timeout-too-long
 

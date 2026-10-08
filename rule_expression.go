@@ -30,6 +30,15 @@ type RuleExpression struct {
 	workflow         *Workflow
 	localActions     *LocalActionsCache
 	localWorkflows   *LocalReusableWorkflowCache
+
+	// The following fields let a template-injection finding carry a fix (see template_injection.go).
+	src       *sourceIndex
+	curJob    *Job
+	curStep   *Step
+	scriptRun *ExecRun // the step when the script being checked is its run: script
+	scriptStr *String  // the script being checked
+	fixPlan   map[int]*Fix
+	planned   bool
 }
 
 // NewRuleExpression creates new RuleExpression instance.
@@ -201,6 +210,7 @@ func (rule *RuleExpression) VisitWorkflowPost(n *Workflow) error {
 
 // VisitJobPre is callback when visiting Job node before visiting its children.
 func (rule *RuleExpression) VisitJobPre(n *Job) error {
+	rule.curJob = n
 	// Type of needs must be resolved before resolving type of matrix because `needs` context can
 	// be used in matrix configuration.
 	rule.needsTy = rule.calcNeedsType(n)
@@ -273,6 +283,7 @@ func (rule *RuleExpression) VisitJobPre(n *Job) error {
 
 // VisitJobPost is callback when visiting Job node after visiting its children
 func (rule *RuleExpression) VisitJobPost(n *Job) error {
+	rule.curJob = nil
 	// 'environment' and 'outputs' sections are evaluated after all steps are run
 	if n.Environment != nil {
 		rule.checkString(n.Environment.Name, "jobs.<job_id>.environment")
@@ -297,19 +308,23 @@ const stepParallelKey = "jobs.<job_id>.steps.continue-on-error"
 
 // VisitStep is callback when visiting Step node.
 func (rule *RuleExpression) VisitStep(n *Step) error {
+	rule.curStep = n
+	defer func() { rule.curStep = nil }()
 	rule.checkString(n.Name, "jobs.<job_id>.steps.name")
 	rule.checkIfCondition(n.If, "jobs.<job_id>.steps.if")
 
 	var spec *String
 	switch e := n.Exec.(type) {
 	case *ExecRun:
+		rule.scriptRun = e
 		rule.checkScriptString(e.Run, "jobs.<job_id>.steps.run")
+		rule.scriptRun = nil
 		rule.checkString(e.Shell, "")
 		rule.checkString(e.WorkingDirectory, "jobs.<job_id>.steps.working-directory")
 	case *ExecAction:
 		rule.checkString(e.Uses, "")
 		for n, i := range e.Inputs {
-			if e.Uses != nil && strings.HasPrefix(e.Uses.Value, "actions/github-script@") && n == "script" {
+			if e.Uses != nil && isCodeExecInput(e.Uses.Value, n) {
 				rule.checkScriptString(i.Value, "jobs.<job_id>.steps.with")
 			} else {
 				rule.checkString(i.Value, "jobs.<job_id>.steps.with")
@@ -717,6 +732,8 @@ func (rule *RuleExpression) checkScriptString(str *String, workflowKey string) {
 		return
 	}
 
+	rule.scriptStr, rule.fixPlan, rule.planned = str, nil, false
+	defer func() { rule.scriptStr, rule.fixPlan, rule.planned = nil, nil, false }()
 	ts, ok := rule.checkExprsIn(str.Value, str.Pos, str.Quoted, str.Indent, true, workflowKey)
 	if !ok {
 		return
@@ -789,7 +806,9 @@ func (rule *RuleExpression) checkExprsIn(s string, pos *Pos, quoted bool, indent
 			c = indent + 1 + offset - (strings.LastIndexByte(before, '\n') + 1)
 		}
 
+		nerrs := len(rule.errs)
 		ty, offsetAfter, ok := rule.checkSemantics(s, l, c, checkUntrusted, workflowKey)
+		rule.attachTemplateInjectionFix(nerrs, offset-len("${{"))
 		if !ok {
 			return nil, false
 		}
@@ -803,6 +822,32 @@ func (rule *RuleExpression) checkExprsIn(s string, pos *Pos, quoted bool, indent
 	}
 
 	return ts, true
+}
+
+// attachTemplateInjectionFix puts the fix of the expansion which starts at the offset of the script on
+// the template injection findings reported since the nth error.
+func (rule *RuleExpression) attachTemplateInjectionFix(nerrs, start int) {
+	if rule.scriptStr == nil || rule.scriptRun == nil || rule.src == nil {
+		return
+	}
+	for _, e := range rule.errs[nerrs:] {
+		if e.ID != "template-injection" {
+			continue
+		}
+		if !rule.planned {
+			rule.planned = true
+			rule.fixPlan = planTemplateInjectionFixes(tiFixInput{
+				idx: rule.src,
+				ctx: tiContext{wf: rule.workflow, job: rule.curJob, step: rule.curStep},
+				cfg: rule.config,
+				str: rule.scriptStr,
+				run: rule.scriptRun,
+			})
+		}
+		if f := rule.fixPlan[start]; f != nil {
+			e.Fix = f
+		}
+	}
 }
 
 // exprPos converts a position in an expression to a position in the source. When the expression is in a
@@ -858,15 +903,21 @@ func (rule *RuleExpression) checkSemanticsOfExprNode(expr ExprNode, line, col in
 	}
 
 	ty, errs := c.Check(expr)
+	ok := true
 	for _, err := range errs {
 		rule.exprError(err, line, col)
+		// A potentially untrusted input is a finding about the script, not an error of the expression.
+		// The other expressions of the script are still checked.
+		if err.ID != "template-injection" {
+			ok = false
+		}
 	}
 
 	if rule.config.RuleEnabled("unsound-ternary") {
 		rule.checkFalsyTernary(expr, line, col)
 	}
 
-	return ty, len(errs) == 0
+	return ty, ok
 }
 
 // checkFalsyTernary reports `cond && <falsy literal> || other`. The `a && b || c` idiom works as a ternary
@@ -1215,6 +1266,10 @@ func init() {
 		RuleInfo{ID: "workflow-input-type", Group: RuleGroupCorrectness, Summary: "The type of a value passed to a reusable workflow does not match its input.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-reusable-workflows"},
 	)
 	registerRuleFactory("expression", func(env *RuleEnv) []Rule {
-		return []Rule{NewRuleExpression(env.localActions, env.localReusableWorkflows)}
+		r := NewRuleExpression(env.localActions, env.localReusableWorkflows)
+		if env.src != nil {
+			r.src = newSourceIndex(env.src)
+		}
+		return []Rule{r, NewRuleTemplateInjection(env.src)}
 	})
 }
