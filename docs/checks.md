@@ -49,6 +49,7 @@ List of checks:
 - [Deprecated inputs usage](#deprecated-inputs-usage)
 - [YAML anchors](#yaml-anchors)
 - [Expansions in scripts (opt-in)](#check-template-injection-expansion)
+- [Bots trusted by `github.actor` (opt-in)](#check-bot-conditions)
 - [Obfuscated paths and expressions (opt-in)](#check-obfuscation)
 
 Note that jactionlint focuses on catching mistakes in workflow files. If you want some general code style checks, please consider
@@ -3725,6 +3726,51 @@ rules:
 What is considered free text is a decision about the value, not the syntax. A boolean input, a matrix of literals and the `result` of
 a job cannot hold anything but a few words, and a `string` input can hold anything. When you know that a value is safe, set the
 level of the rule to `off` or ignore the line, for example with `# jactionlint ignore=template-injection-expansion`.
+
+<a id="check-bot-conditions"></a>
+## Bots trusted by `github.actor` (opt-in)
+
+Workflows trust bots like Dependabot with a condition such as `github.actor == 'dependabot[bot]'`. But `github.actor` is the
+account of the last event, not the author of the pull request. An attacker can build a pull request whose last commit event is
+made by the bot while the rest of the branch is theirs, and the condition passes. This is the rule `bot-conditions`. It is enabled
+by the `strict` profile. It reports `github.actor`, `github.triggering_actor`, `github.actor_id` and `github.event.sender.*`
+compared with a bot account (a name with `[bot]`, or the ID of Dependabot, Renovate and github-actions) with `==`, `contains()`,
+`startsWith()` and `endsWith()`. A negative check like `github.actor != 'dependabot[bot]'` is not reported since it only skips what
+the condition guards.
+
+Example input:
+
+```yaml
+on: pull_request_target
+
+jobs:
+  automerge:
+    runs-on: ubuntu-latest
+    # The last actor is not necessarily the author of the pull request
+    if: github.actor == 'dependabot[bot]'
+    steps:
+      - run: gh pr merge --auto --merge "$PR_URL"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+```
+
+Output:
+
+<!-- Skip update output -->
+```
+test.yaml:7:9: warning: "github.actor" holds the account of the last event and not the author of the change, so it can be spoofed and comparing it with the bot "dependabot[bot]" does not prove that the bot made the change. check the author of the pull request instead, e.g. "github.event.pull_request.user.login" [bot-conditions]
+  |
+7 |     if: github.actor == 'dependabot[bot]'
+  |         ^~~~~~~~~~~~
+```
+
+<!-- Skip playground link -->
+
+Use `github.event.pull_request.user.login` (or `.id`), the author of the pull request. When the workflow runs on `pull_request` or
+`pull_request_target` only, `-fix=unsafe` makes the change. It is unsafe because the condition is true for a pull request of the bot
+that somebody else pushed to, where it used to be false. The GitHub documentation also recommends not auto-merging from
+`pull_request_target`.
 
 <a id="check-obfuscation"></a>
 ## Obfuscated paths and expressions (opt-in)

@@ -1,0 +1,46 @@
+on:
+  pull_request_target:
+
+jobs:
+  spoofable:
+    runs-on: ubuntu-latest
+    # The last actor of a pull request is not its author
+    if: github.actor == 'dependabot[bot]'
+    steps:
+      - run: echo 1
+        if: ${{ github.triggering_actor == 'renovate[bot]' && github.event_name == 'pull_request_target' }}
+      - run: echo 2
+        if: github.event.sender.login == 'github-actions[bot]'
+      - run: echo 3
+        if: contains(fromJSON('["dependabot[bot]", "renovate[bot]"]'), github.actor)
+      - run: echo 4
+        if: endsWith(github.actor, '[bot]')
+      - run: echo 5
+        if: github.actor_id == 49699333
+      - run: echo 6
+        if: github.event.sender.id == '29139614'
+      - run: echo 7
+        if: |
+          github.event_name == 'pull_request_target' &&
+          github.actor == 'dependabot[bot]'
+      - run: echo 8
+        # Reported once for the condition
+        if: github.actor == 'dependabot[bot]' || github.actor == 'renovate[bot]'
+
+  not-reported:
+    runs-on: ubuntu-latest
+    steps:
+      # The author of the pull request
+      - run: echo 1
+        if: github.event.pull_request.user.login == 'dependabot[bot]'
+      # Not a bot
+      - run: echo 2
+        if: github.actor == 'octocat'
+      # Excluding bots only skips a step
+      - run: echo 3
+        if: github.actor != 'dependabot[bot]'
+      - run: echo 4
+        if: ${{ !contains(github.actor, '[bot]') }}
+      # Other uses of the actor
+      - run: echo 5
+        if: github.actor == github.repository_owner

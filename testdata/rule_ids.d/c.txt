@@ -1,3 +1,4 @@
 template-injection-expansion
 template-injection-trusted
 obfuscation
+bot-conditions

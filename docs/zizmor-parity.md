@@ -27,7 +27,7 @@ How to read the table:
 | `anonymous-definition` | `anonymous-definition` | 3 / A | strict | not yet assessed |
 | `archived-uses` | `archived-uses` | 3 / G | online | not yet assessed |
 | `artipacked` | `artipacked` | 3 / B | strict | not yet assessed |
-| `bot-conditions` | `bot-conditions` | 3 / C | strict | not yet assessed |
+| `bot-conditions` | `bot-conditions` | 3 / C | strict | partial: `github.actor`, `github.triggering_actor`, `github.actor_id` and `github.event.sender.*` compared with a bot (`==`, `contains()`, `startsWith()`, `endsWith()`) in job and step `if:`. `!=` and negated tests are not reported, as in zizmor. Measured, see [batch C](#batch-c-measurements). `-fix=unsafe` only for workflows with `pull_request`/`pull_request_target` events. Bot names without `[bot]` are known by ID and prefix only. No composite actions yet |
 | `cache-poisoning` | `cache-poisoning` | 3 / B | strict | not yet assessed |
 | `concurrency-limits` | `concurrency-limits` | 3 / A | strict | not yet assessed |
 | `dangerous-triggers` | `dangerous-triggers` | 3 / A | default | not yet assessed |
