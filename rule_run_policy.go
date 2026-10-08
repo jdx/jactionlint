@@ -54,15 +54,12 @@ func (rule *RuleRunPolicy) VisitJobPost(n *Job) error {
 // VisitStep is callback when visiting Step node.
 func (rule *RuleRunPolicy) VisitStep(n *Step) error {
 	cfg := rule.Config()
-	if cfg == nil {
-		return nil
-	}
 	run, ok := n.Exec.(*ExecRun)
 	if !ok || run.Run == nil {
 		return nil
 	}
 
-	if cfg.RequireShell && run.Shell == nil && rule.jobShell == nil && rule.workflowShell == nil {
+	if cfg.RuleEnabled("require-shell") && run.Shell == nil && rule.jobShell == nil && rule.workflowShell == nil {
 		rule.ReportID(
 			"require-shell",
 			run.RunPos,
@@ -70,7 +67,8 @@ func (rule *RuleRunPolicy) VisitStep(n *Step) error {
 		)
 	}
 
-	if max := cfg.MaxRunLines; max > 0 {
+	if m, ok := cfg.ruleOptionNumber("max-run-lines", "max"); ok && cfg.RuleEnabled("max-run-lines") && m > 0 {
+		max := int(m)
 		if lines := countScriptLines(run.Run.Value); lines > max {
 			rule.ReportIDf(
 				"max-run-lines",

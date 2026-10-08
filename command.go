@@ -89,7 +89,7 @@ type Command struct {
 	Stderr io.Writer
 }
 
-func (cmd *Command) runLinter(args []string, opts *LinterOptions, initConfig bool) ([]*Error, error) {
+func (cmd *Command) runLinter(args []string, opts *LinterOptions, initConfig, migrateConfig bool) ([]*Error, error) {
 	l, err := NewLinter(cmd.Stdout, opts)
 	if err != nil {
 		return nil, err
@@ -97,6 +97,9 @@ func (cmd *Command) runLinter(args []string, opts *LinterOptions, initConfig boo
 
 	if initConfig {
 		return nil, l.GenerateDefaultConfig("")
+	}
+	if migrateConfig {
+		return nil, l.MigrateConfig("")
 	}
 
 	if len(args) == 0 {
@@ -128,6 +131,7 @@ func (cmd *Command) Main(args []string) int {
 	var opts LinterOptions
 	var ignorePats ignorePatternFlags
 	var initConfig bool
+	var migrateConfig bool
 	var noColor bool
 	var color bool
 
@@ -140,6 +144,7 @@ func (cmd *Command) Main(args []string) int {
 	flags.StringVar(&opts.Format, "format", "", "Custom template to format error messages in Go template syntax. See the usage documentation for more details")
 	flags.StringVar(&opts.ConfigFile, "config-file", "", "File path to config file")
 	flags.BoolVar(&initConfig, "init-config", false, "Generate default config file at .github/jactionlint.yaml in current project")
+	flags.BoolVar(&migrateConfig, "migrate-config", false, "Rewrite the deprecated keys of the config file (.github/jactionlint.yaml or the file of -config-file) into the \"rules\" mapping")
 	flags.BoolVar(&noColor, "no-color", false, "Disable colorful output")
 	flags.BoolVar(&color, "color", false, "Always enable colorful output. This is useful to force colorful outputs")
 	flags.BoolVar(&opts.Verbose, "verbose", false, "Enable verbose output")
@@ -181,7 +186,7 @@ func (cmd *Command) Main(args []string) int {
 		opts.Color = ColorOptionKindNever
 	}
 
-	errs, err := cmd.runLinter(flags.Args(), &opts, initConfig)
+	errs, err := cmd.runLinter(flags.Args(), &opts, initConfig, migrateConfig)
 	if err != nil {
 		fmt.Fprintln(cmd.Stderr, err.Error())
 		return ExitStatusFailure

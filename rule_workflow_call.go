@@ -64,13 +64,13 @@ func (rule *RuleWorkflowCall) VisitJobPre(n *Job) error {
 	}
 
 	if isWorkflowCallUsesRepoFormat(u.Value) {
-		if cfg := rule.Config(); cfg != nil && cfg.RequireCommitHash {
+		if rule.Config().RuleEnabled("unpinned-uses") {
 			ref := u.Value[strings.LastIndexByte(u.Value, '@')+1:]
 			if !commitHashRegex.MatchString(ref) {
 				rule.ReportIDf(
 					"unpinned-uses",
 					u.Pos,
-					"reusable workflow call %q must be pinned to a full-length commit SHA like \"owner/repo/path/to/workflow.yml@{sha}\" because \"require-commit-hash\" is enabled",
+					"reusable workflow call %q must be pinned to a full-length commit SHA like \"owner/repo/path/to/workflow.yml@{sha}\" because the \"unpinned-uses\" rule is enabled",
 					u.Value,
 				)
 			}

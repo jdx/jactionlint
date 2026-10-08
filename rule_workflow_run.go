@@ -95,7 +95,7 @@ func NewRuleWorkflowRun(project *Project) *RuleWorkflowRun {
 
 // VisitWorkflowPre is callback when visiting Workflow node before visiting its children.
 func (rule *RuleWorkflowRun) VisitWorkflowPre(n *Workflow) error {
-	if rule.project == nil || rule.Config() == nil || !rule.Config().CheckWorkflowRunNames {
+	if rule.project == nil || !rule.Config().RuleEnabled("workflow-run-names") {
 		return nil
 	}
 	for _, e := range n.On {

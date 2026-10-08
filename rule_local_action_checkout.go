@@ -47,7 +47,7 @@ func (rule *RuleLocalActionCheckout) VisitStep(n *Step) error {
 	if rule.checkedOut || rule.reported {
 		return nil
 	}
-	if cfg := rule.Config(); cfg == nil || !cfg.RequireCheckoutBeforeLocalAction {
+	if !rule.Config().RuleEnabled("local-action-checkout") {
 		return nil
 	}
 	if rule.checkStep(n, false) {
@@ -75,7 +75,7 @@ func (rule *RuleLocalActionCheckout) checkStep(n *Step, checkedOut bool) bool {
 				rule.ReportIDf(
 					"local-action-checkout",
 					e.Uses.Pos,
-					"local action %q is used before any checkout step in this job. the repository is not on the runner yet so the action cannot be found. add \"actions/checkout\" before this step or use \"$/\" syntax. this is reported because \"require-checkout-before-local-action\" is enabled",
+					"local action %q is used before any checkout step in this job. the repository is not on the runner yet so the action cannot be found. add \"actions/checkout\" before this step or use \"$/\" syntax. this is reported because the \"local-action-checkout\" rule is enabled",
 					spec,
 				)
 			}

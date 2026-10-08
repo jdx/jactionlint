@@ -85,7 +85,7 @@ func parseInlineIgnores(src []byte) ([]inlineIgnore, []*Error) {
 				if p == "" {
 					continue
 				}
-				r, err := regexp.Compile(p)
+				r, err := ParseIgnorePattern(p)
 				if err != nil {
 					errs = append(errs, &Error{
 						Message: fmt.Sprintf("invalid regular expression %q in inline ignore comment: %s", p, err.Error()),

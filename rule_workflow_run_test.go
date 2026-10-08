@@ -97,7 +97,7 @@ func TestRuleWorkflowRunNames(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			proj := &Project{root: root, config: &Config{CheckWorkflowRunNames: true}}
+			proj := &Project{root: root, config: &Config{}}
 			errs, err := l.Lint(filepath.Join(dir, "caller.yml"), []byte(src), proj)
 			if err != nil {
 				t.Fatal(err)
@@ -123,7 +123,7 @@ func TestRuleWorkflowRunNames(t *testing.T) {
 	}
 }
 
-func TestRuleWorkflowRunDisabledByDefault(t *testing.T) {
+func TestRuleWorkflowRunEnabledByDefaultAndCanBeTurnedOff(t *testing.T) {
 	root := t.TempDir()
 	dir := filepath.Join(root, ".github", "workflows")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -138,14 +138,22 @@ func TestRuleWorkflowRunDisabledByDefault(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if len(errs) != 1 || errs[0].ID != "workflow-run-names" {
+		t.Fatalf("the rule must be enabled by default: %v", errs)
+	}
+
+	errs, err = l.Lint(filepath.Join(dir, "caller.yml"), []byte(src), &Project{root: root, config: ruleSwitch("workflow-run-names", false)})
+	if err != nil {
+		t.Fatal(err)
+	}
 	if len(errs) != 0 {
-		t.Fatal(errs)
+		t.Fatalf("the rule must be turned off by the config: %v", errs)
 	}
 }
 
 func TestRuleWorkflowRunNoProject(t *testing.T) {
 	r := NewRuleWorkflowRun(nil)
-	r.SetConfig(&Config{CheckWorkflowRunNames: true})
+	r.SetConfig(&Config{})
 	w := &Workflow{On: []Event{&WebhookEvent{
 		Hook:      &String{Value: "workflow_run"},
 		Workflows: []*String{{Value: "x", Pos: &Pos{}}},

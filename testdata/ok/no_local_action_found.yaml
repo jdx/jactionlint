@@ -3,6 +3,7 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
       - uses: ./.github/action-does-not-exist
         with:
           foo: aaa

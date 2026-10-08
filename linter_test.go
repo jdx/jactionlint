@@ -215,16 +215,16 @@ func TestLinterLintError(t *testing.T) {
 					t.Fatal(err)
 				}
 
-				l.defaultConfig = &Config{}
+				l.defaultConfig = fixtureConfig()
 
 				if strings.HasSuffix(testName, "_security") {
-					l.defaultConfig.RequireCommitHash = true
+					l.defaultConfig = fixtureConfig("unpinned-uses")
 				}
 				if strings.HasSuffix(testName, "_require_permissions") {
-					l.defaultConfig.RequirePermissions = true
+					l.defaultConfig = fixtureConfig("missing-permissions")
 				}
 				if strings.HasSuffix(testName, "_checkout") {
-					l.defaultConfig.RequireCheckoutBeforeLocalAction = true
+					l.defaultConfig = fixtureConfig("local-action-checkout")
 				}
 
 				errs, err := l.Lint("test.yaml", b, proj)
@@ -274,7 +274,7 @@ func TestLinterLintAllErrorWorkflowsAtOnce(t *testing.T) {
 	}
 
 	// Opt-in lints are enabled so that every example (e.g. "*_security.yaml") causes an error
-	l.defaultConfig = &Config{RequireCommitHash: true, RequireCheckoutBeforeLocalAction: true}
+	l.defaultConfig = fixtureConfig("unpinned-uses", "local-action-checkout")
 
 	errs, err := l.LintFiles(files, proj)
 	if err != nil {
@@ -366,6 +366,14 @@ func TestLinterLintProject(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			// Keep the golden files focused on one check at a time
+			cfg := &Config{}
+			if opts.ConfigFile != "" {
+				if cfg, err = ReadConfigFile(opts.ConfigFile); err != nil {
+					t.Fatal(err)
+				}
+			}
+			linter.defaultConfig = withFixtureRules(cfg)
 
 			proj := &Project{root: repo}
 			errs, err := linter.LintDir(filepath.Join(repo, "workflows"), proj)

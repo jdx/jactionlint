@@ -3,10 +3,10 @@ package jactionlint
 import (
 	"errors"
 	"fmt"
-	"math"
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"syscall"
 
@@ -14,14 +14,54 @@ import (
 	"go.yaml.in/yaml/v4"
 )
 
-// IgnorePatterns is a list of regular expressions. These patterns are used for filtering errors by
-// matching the error messages.
-type IgnorePatterns []*regexp.Regexp
+// IgnorePattern is one pattern of an "ignore" list. It is either a rule ID such as
+// "unpinned-uses", which ignores every error with the ID, or a regular expression matched against
+// the error messages.
+type IgnorePattern struct {
+	// ID is the rule ID to ignore. It is empty when the pattern is a regular expression.
+	ID string
+	// Regexp is the regular expression to match error messages. It is nil when the pattern is a rule ID.
+	Regexp *regexp.Regexp
+}
+
+// ParseIgnorePattern parses a pattern of -ignore, "paths.*.ignore" and inline ignore comments. When the
+// pattern is exactly the ID of a rule listed in Rules, it ignores the errors of that rule. Otherwise it
+// is compiled as a regular expression which is matched against the error messages.
+func ParseIgnorePattern(s string) (IgnorePattern, error) {
+	if _, ok := LookupRule(s); ok {
+		return IgnorePattern{ID: s}, nil
+	}
+	r, err := regexp.Compile(s)
+	if err != nil {
+		return IgnorePattern{}, err
+	}
+	return IgnorePattern{Regexp: r}, nil
+}
+
+// String returns the source of the pattern.
+func (p IgnorePattern) String() string {
+	if p.Regexp != nil {
+		return p.Regexp.String()
+	}
+	return p.ID
+}
+
+// Match returns whether the pattern matches the error.
+func (p IgnorePattern) Match(err *Error) bool {
+	if p.Regexp != nil {
+		return p.Regexp.MatchString(err.Message)
+	}
+	return p.ID != "" && p.ID == err.ID
+}
+
+// IgnorePatterns is a list of patterns. These patterns are used for filtering errors by matching the
+// rule IDs or the error messages.
+type IgnorePatterns []IgnorePattern
 
 // Match returns whether the given error should be ignored due to the "ignore" configuration.
 func (pats IgnorePatterns) Match(err *Error) bool {
-	for _, r := range pats {
-		if r.MatchString(err.Message) {
+	for _, p := range pats {
+		if p.Match(err) {
 			return true
 		}
 	}
@@ -33,12 +73,12 @@ func (pats *IgnorePatterns) UnmarshalYAML(n *yaml.Node) error {
 	if n.Kind != yaml.SequenceNode {
 		return fmt.Errorf("yaml: \"ignore\" must be a sequence node at line:%d,col:%d", n.Line, n.Column)
 	}
-	rs := make([]*regexp.Regexp, 0, len(n.Content))
+	rs := make([]IgnorePattern, 0, len(n.Content))
 	for _, p := range n.Content {
 		if p.Kind != yaml.ScalarNode || (p.Tag != "" && p.Tag != "!!str") {
 			return fmt.Errorf("yaml: \"ignore\" items must be strings at line:%d,col:%d", p.Line, p.Column)
 		}
-		r, err := regexp.Compile(p.Value)
+		r, err := ParseIgnorePattern(p.Value)
 		if err != nil {
 			return fmt.Errorf("invalid regular expression %q in \"ignore\" at line%d,col:%d: %w", p.Value, n.Line, n.Column, err)
 		}
@@ -56,19 +96,77 @@ type PathConfig struct {
 	Ignore IgnorePatterns `yaml:"ignore"`
 }
 
-// TimeoutMinutesConfig is a configuration for the "timeout-check" rule. The rule is opt-in; it does nothing
-// unless "required" is true or "max" is set. This is for the "timeout-minutes" mapping in the configuration file.
-type TimeoutMinutesConfig struct {
-	// Required is whether every job (except for jobs calling a reusable workflow, which do not support
-	// "timeout-minutes") must set "timeout-minutes".
-	Required bool `yaml:"required"`
-	// Max is the maximum allowed value of "timeout-minutes" of a job. Zero means no upper limit.
-	Max float64 `yaml:"max"`
+// RuleConfig is the configuration of one rule in the "rules" mapping of the configuration file. It
+// is either a level (`unpinned-uses: warn`) or a mapping with the level and the options of the rule
+// (`max-run-lines: {level: warn, max: 80}`). A mapping without "level" enables the rule at its
+// default level.
+type RuleConfig struct {
+	// Level is the severity of the findings of the rule. SeverityOff disables the rule.
+	Level Severity
+	// Options are the options of the rule. The values are int or float64 depending on RuleOption.Kind.
+	Options map[string]any
+
+	levelSet bool
+}
+
+// UnmarshalYAML implements yaml.Unmarshaler.
+func (rc *RuleConfig) UnmarshalYAML(n *yaml.Node) error {
+	switch n.Kind {
+	case yaml.ScalarNode:
+		switch n.Value {
+		case "true":
+			*rc = RuleConfig{} // The default level is filled in later
+			return nil
+		case "false":
+			*rc = RuleConfig{Level: SeverityOff, levelSet: true}
+			return nil
+		}
+		lv, err := ParseSeverity(n.Value)
+		if err != nil {
+			return fmt.Errorf("%w at line:%d,col:%d", err, n.Line, n.Column)
+		}
+		*rc = RuleConfig{Level: lv, levelSet: true}
+		return nil
+	case yaml.MappingNode:
+		out := RuleConfig{}
+		for i := 0; i+1 < len(n.Content); i += 2 {
+			k, v := n.Content[i], n.Content[i+1]
+			if k.Value == "level" {
+				lv, err := ParseSeverity(v.Value)
+				if v.Kind != yaml.ScalarNode || err != nil {
+					return fmt.Errorf("\"level\" must be one of \"off\", \"info\", \"warn\" and \"error\" at line:%d,col:%d", v.Line, v.Column)
+				}
+				out.Level, out.levelSet = lv, true
+				continue
+			}
+			var val any
+			if err := v.Decode(&val); err != nil {
+				return err
+			}
+			if out.Options == nil {
+				out.Options = map[string]any{}
+			}
+			out.Options[k.Value] = val
+		}
+		*rc = out
+		return nil
+	}
+	return fmt.Errorf("a rule must be configured with a level or a mapping at line:%d,col:%d", n.Line, n.Column)
 }
 
 // Config is configuration of jactionlint. This struct instance is parsed from "jactionlint.yaml"
 // file usually put in ".github" directory.
 type Config struct {
+	// Profile selects the set of rules which are enabled by default: "default", "strict" or "all". The
+	// empty value means ProfileDefault. See Rules for which rules each profile enables.
+	Profile Profile `yaml:"profile"`
+	// Extends is a list of config files to inherit from. Relative paths are resolved from the directory
+	// of the config file listing them. Later files win over earlier ones, and the config file itself
+	// wins over all of them. ReadConfigFile loads them and merges them into the returned Config.
+	Extends []string `yaml:"extends"`
+	// Rules sets the level and the options of each rule by rule ID. A rule not listed here follows the
+	// profile.
+	Rules map[string]RuleConfig `yaml:"rules"`
 	// SelfHostedRunner is configuration for self-hosted runner.
 	SelfHostedRunner struct {
 		// Labels is label names for self-hosted runner.
@@ -104,31 +202,18 @@ type Config struct {
 	// with no permissions block anywhere; once any permissions block is declared, the check always
 	// runs against it.
 	AssumeDefaultPermissions *string `yaml:"assume-default-permissions"`
-	// TimeoutMinutes is a configuration for the "timeout-check" rule, which checks "timeout-minutes" of jobs.
-	// The rule is disabled by default.
-	TimeoutMinutes TimeoutMinutesConfig `yaml:"timeout-minutes"`
-	// Requires action and docker versions to use a commit hash instead of version/branch.
-	RequireCommitHash bool `yaml:"require-commit-hash"`
-	// RequirePermissions reports jobs which are not covered by an explicit "permissions:" at workflow-level
-	// or job-level. This is opt-in and disabled by default.
-	RequirePermissions bool `yaml:"require-permissions"`
-	// RequireCheckoutBeforeLocalAction reports a local action (`uses: ./path`) which is used in a job before any
-	// step that checks out the repository.
-	RequireCheckoutBeforeLocalAction bool `yaml:"require-checkout-before-local-action"`
-	// RequireExpressionWrapping requires `if:` conditions to be wrapped in `${{ }}` explicitly.
-	RequireExpressionWrapping bool `yaml:"require-expression-wrapping"`
-	// CheckFalsyTernary reports `cond && falsy-literal || other` where the value after `&&` is a
-	// literal which is always falsy so the whole expression always evaluates to the value after `||`.
-	CheckFalsyTernary bool `yaml:"check-falsy-ternary"`
-	// CheckWorkflowRunNames enables the opt-in "workflow-run" rule, which reports workflow names at
-	// 'on.workflow_run.workflows' not found in the repository.
-	CheckWorkflowRunNames bool `yaml:"check-workflow-run-names"`
-	// RequireShell requires every "run:" step to have an explicit shell, set by "shell:" of the step or by
-	// "defaults.run.shell" of the job or the workflow.
-	RequireShell bool `yaml:"require-shell"`
-	// MaxRunLines is the maximum number of non-blank lines allowed in a "run:" script. Zero (the default)
-	// disables the check.
-	MaxRunLines int `yaml:"max-run-lines"`
+
+	// Path is the path of the file which the config was read from. It is empty when the config was
+	// parsed from bytes.
+	Path string `yaml:"-"`
+	// Deprecations are messages about deprecated keys the config file uses, for example the old
+	// "require-shell: true" which is replaced by the "rules" mapping. The config still works.
+	// "jactionlint -migrate-config" rewrites the file.
+	Deprecations []string `yaml:"-"`
+
+	// present records which keys were written explicitly so that merging with the files listed in
+	// "extends" can tell a missing key from a zero value.
+	present map[string]bool
 }
 
 // AssumeDefaultPermissionsRestricted is the config value enabling the restricted-default assumption.
@@ -155,12 +240,49 @@ func (cfg *Config) PathConfigs(path string) []PathConfig {
 }
 
 // ParseConfig parses the given bytes as an jactionlint config file. When deserializing the YAML file
-// or the config validation fails, this function returns an error.
+// or the config validation fails, this function returns an error. Unknown keys are errors too, with
+// a suggestion when the key looks like a typo of a known one. The "extends" key needs the path of the
+// file to find the files to inherit from so it is an error here; use ReadConfigFile.
 func ParseConfig(b []byte) (*Config, error) {
-	var c Config
-	if err := yaml.Unmarshal(b, &c); err != nil {
+	c, err := parseConfig(b)
+	if err != nil {
+		return nil, err
+	}
+	if len(c.Extends) > 0 {
+		return nil, errors.New("\"extends\" can be used only in a config file. use ReadConfigFile to read it")
+	}
+	return c, nil
+}
+
+// parseConfig parses one config file without resolving "extends".
+func parseConfig(b []byte) (*Config, error) {
+	var root yaml.Node
+	if err := yaml.Unmarshal(b, &root); err != nil {
 		msg := strings.ReplaceAll(err.Error(), "\n", " ")
 		return nil, errors.New(msg)
+	}
+	if err := validateConfigKeys(&root); err != nil {
+		return nil, err
+	}
+
+	var c Config
+	var legacy legacyConfig
+	if root.Kind != 0 {
+		if err := root.Decode(&c); err != nil {
+			msg := strings.ReplaceAll(err.Error(), "\n", " ")
+			return nil, errors.New(msg)
+		}
+		if err := root.Decode(&legacy); err != nil {
+			msg := strings.ReplaceAll(err.Error(), "\n", " ")
+			return nil, errors.New(msg)
+		}
+	}
+	c.present = presentKeys(&root)
+
+	if c.Profile != "" {
+		if _, err := ParseProfile(string(c.Profile)); err != nil {
+			return nil, fmt.Errorf("%w in \"profile\"", err)
+		}
 	}
 	for pat := range c.Paths {
 		if !doublestar.ValidatePattern(pat) {
@@ -182,26 +304,112 @@ func ParseConfig(b []byte) (*Config, error) {
 			return nil, fmt.Errorf("invalid value %q for \"assume-default-permissions\". available values are %q and %q", *c.AssumeDefaultPermissions, AssumeDefaultPermissionsRestricted, AssumeDefaultPermissionsPermissive)
 		}
 	}
-	if c.MaxRunLines < 0 {
-		return nil, fmt.Errorf("\"max-run-lines\" must not be negative but got %d", c.MaxRunLines)
+	if err := c.normalizeRules(); err != nil {
+		return nil, err
 	}
-	if m := c.TimeoutMinutes.Max; math.IsNaN(m) || math.IsInf(m, 0) || m < 0 {
-		return nil, fmt.Errorf("\"max\" in \"timeout-minutes\" must be a non-negative number, but got %v", m)
+	if err := c.applyLegacy(&legacy); err != nil {
+		return nil, err
 	}
 	return &c, nil
 }
 
-// ReadConfigFile reads jactionlint config file (jactionlint.yaml) from the given file path.
+// ReadConfigFile reads jactionlint config file (jactionlint.yaml) from the given file path. The
+// files listed in "extends" are read too and merged into the returned config.
 func ReadConfigFile(path string) (*Config, error) {
+	return readConfigFile(path, nil)
+}
+
+// maxExtendsDepth limits how deep "extends" chains can be.
+const maxExtendsDepth = 10
+
+func readConfigFile(path string, stack []string) (*Config, error) {
 	b, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("could not read config file %q: %w", path, err)
 	}
-	c, err := ParseConfig(b)
+	c, err := parseConfig(b)
 	if err != nil {
 		return nil, fmt.Errorf("could not parse config file %q: %w", path, err)
 	}
-	return c, nil
+	c.Path = path
+	for i, d := range c.Deprecations {
+		c.Deprecations[i] = fmt.Sprintf("config file %q: %s", path, d)
+	}
+
+	if len(c.Extends) == 0 {
+		return c, nil
+	}
+
+	abs := absPath(path)
+	if slices.Contains(stack, abs) {
+		return nil, fmt.Errorf("could not parse config file %q: \"extends\" makes a cycle: %s", path, strings.Join(append(slices.Clone(stack), abs), " -> "))
+	}
+	if len(stack) >= maxExtendsDepth {
+		return nil, fmt.Errorf("could not parse config file %q: \"extends\" is nested more than %d levels", path, maxExtendsDepth)
+	}
+	stack = append(slices.Clone(stack), abs)
+
+	merged := &Config{}
+	for _, e := range c.Extends {
+		p := e
+		if !filepath.IsAbs(p) {
+			p = filepath.Join(filepath.Dir(path), p)
+		}
+		base, err := readConfigFile(p, stack)
+		if err != nil {
+			return nil, fmt.Errorf("could not load %q listed in \"extends\" of config file %q: %w", e, path, err)
+		}
+		merged.merge(base)
+	}
+	merged.merge(c)
+	merged.Path = path
+	merged.Extends = c.Extends
+	return merged, nil
+}
+
+// merge applies the explicitly written settings of over on top of c. Mappings (rules, paths) are
+// merged by key and everything else is replaced.
+func (c *Config) merge(over *Config) {
+	if c.present == nil {
+		c.present = map[string]bool{}
+	}
+	if over.present["profile"] {
+		c.Profile = over.Profile
+	}
+	if len(over.Rules) > 0 && c.Rules == nil {
+		c.Rules = map[string]RuleConfig{}
+	}
+	for id, rc := range over.Rules {
+		c.Rules[id] = rc
+	}
+	if over.present["self-hosted-runner.labels"] {
+		c.SelfHostedRunner.Labels = over.SelfHostedRunner.Labels
+	}
+	if over.present["self-hosted-runner.strict-labels"] {
+		c.SelfHostedRunner.StrictLabels = over.SelfHostedRunner.StrictLabels
+	}
+	if over.present["config-variables"] {
+		c.ConfigVariables = over.ConfigVariables
+	}
+	if over.present["config-secrets"] {
+		c.ConfigSecrets = over.ConfigSecrets
+	}
+	if len(over.Paths) > 0 && c.Paths == nil {
+		c.Paths = map[string]PathConfig{}
+	}
+	for p, pc := range over.Paths {
+		c.Paths[p] = pc
+	}
+	if over.present["required-actions"] {
+		c.RequiredActions = over.RequiredActions
+	}
+	if over.present["assume-default-permissions"] {
+		c.AssumeDefaultPermissions = over.AssumeDefaultPermissions
+	}
+	c.Deprecations = append(c.Deprecations, over.Deprecations...)
+	for k := range over.present {
+		c.present[k] = true
+	}
 }
 
 // configFileNames are the names of config files in order of precedence. The "actionlint" names
@@ -271,7 +479,27 @@ func loadGlobalConfig() (*Config, string, error) {
 }
 
 func writeDefaultConfigFile(path string) error {
-	b := []byte(`self-hosted-runner:
+	b := []byte(`# Rules are enabled by profile. "default" has the correctness checks and the
+# checks with (almost) no false positives. "strict" adds the security posture and
+# policy checks such as pinning actions to a commit SHA. "all" adds the style
+# checks. See https://jactionlint.jdx.dev/rules for all rule IDs.
+#profile: default
+
+# Set the level of a rule by its ID: "error" (fails the run), "warn", "info" or
+# "off". A rule with options takes a mapping.
+rules:
+#  unpinned-uses: error
+#  require-shell: off
+#  max-run-lines:
+#    level: warn
+#    max: 80
+
+# Config files to inherit from. Relative paths are resolved from this file. Later
+# files win and this file wins over all of them.
+#extends:
+#  - ../shared/jactionlint.yaml
+
+self-hosted-runner:
   # Labels of self-hosted runner in array of strings.
   labels: []
 
@@ -289,11 +517,12 @@ config-secrets: null
 # the file paths. Note that the path separator is always '/'.
 # The following configurations are available.
 #
-# "ignore" is an array of regular expression patterns. Matched error messages
-# are ignored. This is similar to the "-ignore" command line option.
+# "ignore" is an array of rule IDs or regular expression patterns. Errors of the
+# rules and errors with matched messages are ignored. This is similar to the
+# "-ignore" command line option.
 paths:
 #  .github/workflows/**/*.yml:
-#    ignore: []
+#    ignore: [unpinned-uses, 'some message']
 
 # Controls what permissions are assumed for a caller workflow that declares no
 # "permissions:" block at all when checking reusable workflow calls. Set to
@@ -301,12 +530,6 @@ paths:
 # "permissive" to assume write on every scope except "id-token" (which always
 # requires an explicit opt-in).
 #assume-default-permissions: restricted
-# Configuration for the "timeout-check" rule, which is disabled by default.
-# "required" set to true requires every job to set "timeout-minutes".
-# "max" is the maximum allowed value of "timeout-minutes" in minutes (0 means no limit).
-#timeout-minutes:
-#  required: false
-#  max: 60
 `)
 	if err := os.WriteFile(path, b, 0644); err != nil {
 		return fmt.Errorf("could not write default configuration file at %q: %w", path, err)

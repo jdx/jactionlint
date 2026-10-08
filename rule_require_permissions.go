@@ -23,8 +23,7 @@ func NewRuleRequirePermissions() *RuleRequirePermissions {
 }
 
 func (rule *RuleRequirePermissions) enabled() bool {
-	cfg := rule.Config()
-	return cfg != nil && cfg.RequirePermissions
+	return rule.Config().RuleEnabled("missing-permissions")
 }
 
 // VisitWorkflowPre is callback when visiting Workflow node before visiting its children.
@@ -41,7 +40,7 @@ func (rule *RuleRequirePermissions) VisitJobPre(n *Job) error {
 	rule.ReportIDf(
 		"missing-permissions",
 		n.Pos,
-		"neither the workflow nor this job sets \"permissions:\" so the GITHUB_TOKEN gets the default permissions of the repository. set \"permissions:\" at workflow-level or job-level (use \"permissions: {}\" for no permissions) because \"require-permissions\" is enabled",
+		"neither the workflow nor this job sets \"permissions:\" so the GITHUB_TOKEN gets the default permissions of the repository. set \"permissions:\" at workflow-level or job-level (use \"permissions: {}\" for no permissions) because the \"missing-permissions\" rule is enabled",
 	)
 	return nil
 }

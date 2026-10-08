@@ -379,8 +379,8 @@ func (rule *RuleAction) checkRepoAction(spec string, exec *ExecAction) {
 		rule.invalidActionFormat(exec.Uses.Pos, spec, "owner and repo and ref should not be empty")
 	}
 
-	if rule.config != nil && rule.config.RequireCommitHash && !commitHashRegex.MatchString(ref) {
-		rule.ReportIDf("unpinned-uses", exec.Uses.Pos, "action %q must be pinned to a full-length commit SHA like \"{owner}/{repo}@{sha}\" because \"require-commit-hash\" is enabled", spec)
+	if rule.config.RuleEnabled("unpinned-uses") && !commitHashRegex.MatchString(ref) {
+		rule.ReportIDf("unpinned-uses", exec.Uses.Pos, "action %q must be pinned to a full-length commit SHA like \"{owner}/{repo}@{sha}\" because the \"unpinned-uses\" rule is enabled", spec)
 	}
 
 	meta, ok := PopularActions[spec]
@@ -552,8 +552,8 @@ func (rule *RuleAction) checkDockerAction(uri string, exec *ExecAction) {
 		rule.ReportIDf("invalid-uses", exec.Uses.Pos, "tag of Docker action should not be empty: %q", uri)
 	}
 
-	if rule.config != nil && rule.config.RequireCommitHash && !dockerDigestRegex.MatchString(fullURI) {
-		rule.ReportIDf("unpinned-uses", exec.Uses.Pos, "docker image must be pinned to a digest like \"docker://{image}@sha256:{digest}\" because \"require-commit-hash\" is enabled: %q", fullURI)
+	if rule.config.RuleEnabled("unpinned-uses") && !dockerDigestRegex.MatchString(fullURI) {
+		rule.ReportIDf("unpinned-uses", exec.Uses.Pos, "docker image must be pinned to a digest like \"docker://{image}@sha256:{digest}\" because the \"unpinned-uses\" rule is enabled: %q", fullURI)
 	}
 }
 

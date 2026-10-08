@@ -8,11 +8,11 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"regexp"
 	"runtime"
 	"slices"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/fatih/color"
@@ -111,6 +111,8 @@ type Linter struct {
 	errFmt         *ErrorFormatter
 	cwd            string
 	onRulesCreated func([]Rule) []Rule
+	configFile     string
+	warned         sync.Map // *Config -> struct{}: configs whose deprecations were already reported
 }
 
 // NewLinter creates a new Linter instance.
@@ -163,9 +165,9 @@ func NewLinter(out io.Writer, opts *LinterOptions) (*Linter, error) {
 		globalCfg, globalCfgPath = c, p
 	}
 
-	ignore := make([]*regexp.Regexp, 0, len(opts.IgnorePatterns))
+	ignore := make(IgnorePatterns, 0, len(opts.IgnorePatterns))
 	for _, s := range opts.IgnorePatterns {
-		r, err := regexp.Compile(s)
+		r, err := ParseIgnorePattern(s)
 		if err != nil {
 			return nil, fmt.Errorf("invalid regular expression for ignore pattern %q: %s", s, err.Error())
 		}
@@ -208,6 +210,8 @@ func NewLinter(out io.Writer, opts *LinterOptions) (*Linter, error) {
 		formatter,
 		cwd,
 		opts.OnRulesCreated,
+		opts.ConfigFile,
+		sync.Map{},
 	}
 
 	l.debug("Create a Linter instance with option %#v", opts)
@@ -560,6 +564,7 @@ func (l *Linter) check(
 	}
 	if cfg != nil {
 		l.debug("Config: %#v", cfg)
+		l.warnDeprecations(cfg)
 	} else {
 		l.debug("No config was found")
 	}
@@ -622,13 +627,13 @@ func (l *Linter) check(
 		}
 	}
 
-	all = l.annotateErrors(all, content)
+	all = l.annotateErrors(all, content, cfg)
 
 	all = l.filterErrors(all, cfg.PathConfigs(path))
 
 	inlineIgnores, ignoreErrs := parseInlineIgnores(content)
 	all = l.filterInlineIgnores(all, inlineIgnores)
-	all = append(all, l.annotateErrors(ignoreErrs, content)...)
+	all = append(all, l.annotateErrors(ignoreErrs, content, cfg)...)
 
 	for _, err := range all {
 		err.Filepath = path // Populate filename in the error
@@ -680,20 +685,40 @@ func (l *Linter) printErrors(errs []*Error, src []byte) {
 	}
 }
 
+// warnDeprecations reports the deprecated keys of the config to the log output. It reports each
+// config only once even if many files are linted with it.
+func (l *Linter) warnDeprecations(cfg *Config) {
+	if len(cfg.Deprecations) == 0 {
+		return
+	}
+	if _, loaded := l.warned.LoadOrStore(cfg, struct{}{}); loaded {
+		return
+	}
+	for _, d := range cfg.Deprecations {
+		fmt.Fprintln(l.logOut, "warning:", d)
+	}
+}
+
 // annotateErrors fills the fields of the errors which are derived from the diagnostic ID: the
-// severity, the documentation URL and the end position of the region.
-func (l *Linter) annotateErrors(errs []*Error, src []byte) []*Error {
+// severity, the documentation URL and the end position of the region. Errors of rules which the
+// config turns off are removed.
+func (l *Linter) annotateErrors(errs []*Error, src []byte, cfg *Config) []*Error {
 	lines := sourceLines(src)
+	kept := errs[:0]
 	for _, err := range errs {
 		if err.ID == "" {
 			err.ID = err.Kind
 		}
-		err.Severity = SeverityError
-		if info, ok := LookupRule(err.ID); ok {
-			err.Severity = info.DefaultLevel
+		err.Severity = cfg.RuleLevel(err.ID)
+		if err.Severity == SeverityOff {
+			l.debug("Error %q is dropped because rule %q is off", err.Message, err.ID)
+			continue
+		}
+		if info, ok := ruleIndex[err.ID]; ok {
 			err.DocURL = info.DocURL()
 		}
 		err.fillRegion(lines)
+		kept = append(kept, err)
 	}
-	return errs
+	return kept
 }

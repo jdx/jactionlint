@@ -20,7 +20,12 @@ func NewRuleTimeoutCheck() *RuleTimeoutCheck {
 // VisitJobPre is callback when visiting Job node before visiting its children.
 func (rule *RuleTimeoutCheck) VisitJobPre(n *Job) error {
 	cfg := rule.Config()
-	if cfg == nil || (!cfg.TimeoutMinutes.Required && cfg.TimeoutMinutes.Max <= 0) {
+	required := cfg.RuleEnabled("missing-timeout")
+	maxMinutes := 0.0
+	if cfg.RuleEnabled("timeout-too-long") {
+		maxMinutes, _ = cfg.ruleOptionNumber("timeout-too-long", "max")
+	}
+	if !required && maxMinutes <= 0 {
 		return nil
 	}
 
@@ -30,15 +35,15 @@ func (rule *RuleTimeoutCheck) VisitJobPre(n *Job) error {
 	}
 
 	if n.TimeoutMinutes == nil {
-		if cfg.TimeoutMinutes.Required {
+		if required {
 			rule.ReportID("missing-timeout", n.Pos, "\"timeout-minutes\" is not set at this job. Set it to avoid wasting runner minutes when the job hangs")
 		}
 		return nil
 	}
 
 	// The value is not known when it is an expression
-	if n.TimeoutMinutes.Expression == nil && cfg.TimeoutMinutes.Max > 0 && n.TimeoutMinutes.Value > cfg.TimeoutMinutes.Max {
-		rule.ReportIDf("timeout-too-long", n.TimeoutMinutes.Pos, "\"timeout-minutes\" is %v, which is greater than the maximum %v minutes allowed by the configuration", n.TimeoutMinutes.Value, cfg.TimeoutMinutes.Max)
+	if n.TimeoutMinutes.Expression == nil && maxMinutes > 0 && n.TimeoutMinutes.Value > maxMinutes {
+		rule.ReportIDf("timeout-too-long", n.TimeoutMinutes.Pos, "\"timeout-minutes\" is %v, which is greater than the maximum %v minutes allowed by the configuration", n.TimeoutMinutes.Value, maxMinutes)
 	}
 	return nil
 }

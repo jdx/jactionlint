@@ -862,7 +862,7 @@ func (rule *RuleExpression) checkSemanticsOfExprNode(expr ExprNode, line, col in
 		rule.exprError(err, line, col)
 	}
 
-	if rule.config != nil && rule.config.CheckFalsyTernary {
+	if rule.config.RuleEnabled("unsound-ternary") {
 		rule.checkFalsyTernary(expr, line, col)
 	}
 
