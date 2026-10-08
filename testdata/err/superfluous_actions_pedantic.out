@@ -1,0 +1,5 @@
+test.yaml:6:15: action "peter-evans/create-pull-request@v7" is superfluous: the runner already has the tools to do this. use `gh pr create` in a script step [superfluous-actions-pedantic]
+test.yaml:7:15: action "peter-evans/create-or-update-comment@v4" is superfluous: the runner already has the tools to do this. use `gh pr comment` or `gh issue comment` in a script step [superfluous-actions-pedantic]
+test.yaml:8:15: action "dtolnay/rust-toolchain@stable" is superfluous: the runner already has the tools to do this. use `rustup` in a script step [superfluous-actions-pedantic]
+test.yaml:11:15: action "stefanzweifel/git-auto-commit-action@v5" is superfluous: the runner already has the tools to do this. use `git add`, `git commit` and `git push` in a script step [superfluous-actions-pedantic]
+test.yaml:12:15: action "EndBug/add-and-commit@v9" is superfluous: the runner already has the tools to do this. use `git add`, `git commit` and `git push` in a script step [superfluous-actions-pedantic]
