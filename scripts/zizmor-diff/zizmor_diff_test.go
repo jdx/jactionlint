@@ -115,7 +115,7 @@ func TestParseZizmor(t *testing.T) {
 		".github/workflows/ci.yml:12:template-injection",
 		".github/workflows/ci.yml:8:excessive-permissions",
 		".github/workflows/other.yml:3:excessive-permissions",
-		".github/workflows/ci.yml:1:anonymous-definition",
+		".github/workflows/ci.yml:1:future-audit",
 		".github/dependabot.yml:4:dependabot-cooldown",
 	}
 	if diff := cmp.Diff(want, s); diff != "" {
@@ -249,7 +249,7 @@ func TestBuild(t *testing.T) {
 	for _, a := range rep.Unmapped {
 		unmapped = append(unmapped, a.Audit)
 	}
-	if diff := cmp.Diff([]string{"anonymous-definition"}, unmapped); diff != "" {
+	if diff := cmp.Diff([]string{"future-audit"}, unmapped); diff != "" {
 		t.Errorf("unmapped (dependabot is out of scope): %s", diff)
 	}
 
@@ -306,7 +306,7 @@ func TestMarkdown(t *testing.T) {
 		"## jactionlint only",
 		"| runner-label | 1 | `r/.github/workflows/ci.yml:9` |",
 		"## Unmapped zizmor audits",
-		"| anonymous-definition | 1 | 1 |",
+		"| future-audit | 1 | 1 |",
 		"skipped: directory not found",
 		"zizmor failed: exit 1: boom \\| bang",
 		"| r | 4 | 3 | 2 | 1 |",

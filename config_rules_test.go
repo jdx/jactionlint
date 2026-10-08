@@ -390,7 +390,10 @@ func TestConfigRulesAffectLinting(t *testing.T) {
 			errs := lintWithConfig(t, mustParseConfig(t, tc.cfg), src)
 			var got []Severity
 			for _, e := range errs {
-				got = append(got, e.Severity)
+				switch e.ID {
+				case "template-injection", "unpinned-uses", "missing-permissions", "missing-timeout":
+					got = append(got, e.Severity)
+				}
 			}
 			if diff := cmp.Diff(tc.want, got); diff != "" {
 				t.Errorf("severities (-want +got): %s\n%v", diff, errs)

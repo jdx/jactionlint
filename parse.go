@@ -876,6 +876,7 @@ func (p *parser) parseConcurrency(pos *Pos, n *yaml.Node) *Concurrency {
 
 	if n.Kind == yaml.ScalarNode {
 		ret.Group = p.parseString(n, false)
+		ret.Bare = true
 		return ret
 	}
 
@@ -1613,6 +1614,7 @@ func (p *parser) parseJob(id *String, n *yaml.Node) *Job {
 				// https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions#onworkflow_callsecretsinherit
 				if e.val.Value == "inherit" {
 					call.InheritSecrets = true
+					call.InheritSecretsPos = posAt(e.val)
 				} else {
 					p.errorf(e.val, "expected mapping node for secrets or \"inherit\" string node but found %q node", e.val.Value)
 				}
