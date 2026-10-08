@@ -59,7 +59,7 @@ func (rule *RuleJobNeeds) VisitJobPre(n *Job) error {
 	for _, j := range n.Needs {
 		id := strings.ToLower(j.Value)
 		if contains(needs, id) {
-			rule.Errorf(j.Pos, "job ID %q duplicates in \"needs\" section. note that job ID is case insensitive", j.Value)
+			rule.ReportIDf("duplicate-job-needs", j.Pos, "job ID %q duplicates in \"needs\" section. note that job ID is case insensitive", j.Value)
 			continue
 		}
 		if id != "" {
@@ -74,7 +74,7 @@ func (rule *RuleJobNeeds) VisitJobPre(n *Job) error {
 		return nil
 	}
 	if prev, ok := rule.nodes[id]; ok {
-		rule.Errorf(n.Pos, "job ID %q duplicates. previously defined at %s. note that job ID is case insensitive", n.ID.Value, prev.pos.String())
+		rule.ReportIDf("duplicate-job-id", n.Pos, "job ID %q duplicates. previously defined at %s. note that job ID is case insensitive", n.ID.Value, prev.pos.String())
 	}
 
 	rule.nodes[id] = &jobNode{
@@ -96,7 +96,7 @@ func (rule *RuleJobNeeds) VisitWorkflowPost(n *Workflow) error {
 		for _, dep := range node.needs {
 			n, ok := rule.nodes[dep]
 			if !ok {
-				rule.Errorf(node.pos, "job %q needs job %q which does not exist in this workflow", id, dep)
+				rule.ReportIDf("undefined-job-needs", node.pos, "job %q needs job %q which does not exist in this workflow", id, dep)
 				valid = false
 				continue
 			}
@@ -135,7 +135,7 @@ func (rule *RuleJobNeeds) VisitWorkflowPost(n *Workflow) error {
 			}
 		}
 
-		rule.Error(start.pos, msg.String())
+		rule.ReportID("cyclic-job-needs", start.pos, msg.String())
 	}
 
 	return nil

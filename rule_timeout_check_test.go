@@ -38,22 +38,22 @@ func TestRuleTimeoutCheck(t *testing.T) {
 		{"default config is opt-in", &Config{}, nil},
 		{
 			"required",
-			&Config{TimeoutMinutes: TimeoutMinutesConfig{Required: true}},
+			mustParseConfig(t, "rules:\n  missing-timeout: error\n"),
 			[]string{`"timeout-minutes" is not set at this job`},
 		},
 		{
 			"required with max",
-			&Config{TimeoutMinutes: TimeoutMinutesConfig{Required: true, Max: 30}},
+			mustParseConfig(t, "rules:\n  missing-timeout: error\n  timeout-too-long: {max: 30}\n"),
 			[]string{`"timeout-minutes" is not set at this job`, `"timeout-minutes" is 45, which is greater than the maximum 30 minutes`},
 		},
 		{
 			"max only does not require the key",
-			&Config{TimeoutMinutes: TimeoutMinutesConfig{Max: 30}},
+			mustParseConfig(t, "rules:\n  timeout-too-long: {max: 30}\n"),
 			[]string{`"timeout-minutes" is 45, which is greater than the maximum 30 minutes`},
 		},
 		{
 			"max equal to value is allowed",
-			&Config{TimeoutMinutes: TimeoutMinutesConfig{Max: 45}},
+			mustParseConfig(t, "rules:\n  timeout-too-long: {max: 45}\n"),
 			nil,
 		},
 	}
@@ -81,7 +81,7 @@ func TestRuleTimeoutCheckErrorPositions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	errs := lintTimeoutCheck(t, string(data), &Config{TimeoutMinutes: TimeoutMinutesConfig{Required: true, Max: 30}})
+	errs := lintTimeoutCheck(t, string(data), mustParseConfig(t, "rules:\n  missing-timeout: error\n  timeout-too-long: {max: 30}\n"))
 	if len(errs) != 2 {
 		t.Fatal(errs)
 	}
@@ -94,12 +94,12 @@ func TestRuleTimeoutCheckErrorPositions(t *testing.T) {
 }
 
 func TestConfigTimeoutMinutes(t *testing.T) {
-	c, err := ParseConfig([]byte("timeout-minutes:\n  required: true\n  max: 60\n"))
-	if err != nil {
-		t.Fatal(err)
+	c := mustParseConfig(t, "timeout-minutes:\n  required: true\n  max: 60\n")
+	if m, ok := c.ruleOptionNumber("timeout-too-long", "max"); !c.RuleEnabled("missing-timeout") || !c.RuleEnabled("timeout-too-long") || !ok || m != 60 {
+		t.Fatalf("not translated: %+v", c.Rules)
 	}
-	if !c.TimeoutMinutes.Required || c.TimeoutMinutes.Max != 60 {
-		t.Fatalf("%+v", c.TimeoutMinutes)
+	if len(c.Deprecations) != 1 {
+		t.Fatalf("want a deprecation: %v", c.Deprecations)
 	}
 	for _, in := range []string{
 		"timeout-minutes:\n  max: -1\n",

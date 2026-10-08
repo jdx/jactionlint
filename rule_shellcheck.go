@@ -259,7 +259,7 @@ func (rule *RuleShellcheck) runShellcheck(srcAst *String, shell string, pos *Pos
 			if mapLines && line >= 1 {
 				errorLocation.Line = srcAst.Pos.Line + line
 			}
-			rule.Errorf(&errorLocation, "shellcheck reported issue in this script: SC%d:%s:%d:%d: %s", err.Code, err.Level, line, err.Column, msg)
+			rule.ReportIDf("shellcheck", &errorLocation, "shellcheck reported issue in this script: SC%d:%s:%d:%d: %s", err.Code, err.Level, line, err.Column, msg)
 		}
 
 		return nil

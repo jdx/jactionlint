@@ -165,7 +165,7 @@ func (rule *RulePyflakes) parseNextError(stdout []byte, pos *Pos) ([]byte, error
 
 	// This method needs to be thread-safe since concurrentProcess.run calls its callback in a different goroutine.
 	rule.mu.Lock()
-	rule.Errorf(pos, "pyflakes reported issue in this script: %s", msg)
+	rule.ReportIDf("pyflakes", pos, "pyflakes reported issue in this script: %s", msg)
 	rule.mu.Unlock()
 
 	return b, nil

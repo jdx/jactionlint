@@ -5,7 +5,7 @@ package jactionlint_fuzz
 import (
 	"unicode/utf8"
 
-	"github.com/jdx/jactionlint"
+	"github.com/jdx/jactionlint/v2"
 )
 
 func FuzzExprParse(data []byte) int {

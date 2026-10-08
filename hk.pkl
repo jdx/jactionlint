@@ -20,10 +20,16 @@ local fast = new Mapping<String, Step> {
         glob = "scripts/*.bash"
         check = "shellcheck {{files}}"
     }
-    // Dog fooding: lint our own workflows with the jactionlint in this tree
+    // Dog fooding: lint our own workflows with the jactionlint in this tree. This is the step shape which
+    // hk needs to show the diagnostics with rule IDs (diagnostic_format = "sarif") and to apply the fixes
+    // of jactionlint as a patch (check_diff). Findings without a fix fall back to `jactionlint -fix`.
     ["jactionlint"] {
         glob = List(".github/workflows/*.yaml", ".github/workflows/*.yml")
-        check = "go run ./cmd/jactionlint -color {{files}}"
+        batch = true
+        diagnostic_format = "sarif"
+        check = "go run ./cmd/jactionlint -format sarif {{files}}"
+        check_diff = "hk util sarif-diff -- go run ./cmd/jactionlint -format sarif {{files}}"
+        fix = "go run ./cmd/jactionlint -fix {{files}}"
     }
 }
 

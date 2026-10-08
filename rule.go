@@ -40,16 +40,37 @@ func (r *RuleBase) VisitWorkflowPre(node *Workflow) error { return nil }
 func (r *RuleBase) VisitWorkflowPost(node *Workflow) error { return nil }
 
 // Error creates a new error from the source position and the error message and stores it in the
-// rule instance. The errors can be accessed by Errs method.
+// rule instance. The errors can be accessed by Errs method. The ID of the error is the name of the
+// rule. Rules which should be configurable per diagnostic report with ReportID instead.
 func (r *RuleBase) Error(pos *Pos, msg string) {
-	err := errorAt(pos, r.name, msg)
-	r.errs = append(r.errs, err)
+	r.ReportID(r.name, pos, msg)
 }
 
 // Errorf reports a new error with the source position and the formatted error message and stores it
-// in the rule instance. The errors can be accessed by Errs method.
+// in the rule instance. The errors can be accessed by Errs method. The ID of the error is the name
+// of the rule.
 func (r *RuleBase) Errorf(pos *Pos, format string, args ...interface{}) {
-	err := errorfAt(pos, r.name, format, args...)
+	r.ReportIDf(r.name, pos, format, args...)
+}
+
+// ReportID reports a new error with the stable diagnostic ID, the source position and the error
+// message and stores it in the rule instance. One rule can report several IDs. IDs of the
+// built-in rules are listed in Rules. The errors can be accessed by Errs method.
+func (r *RuleBase) ReportID(id string, pos *Pos, msg string) {
+	r.errs = append(r.errs, errorAt(pos, r.name, id, msg))
+}
+
+// ReportIDf is like ReportID but takes a format string and its arguments.
+func (r *RuleBase) ReportIDf(id string, pos *Pos, format string, args ...interface{}) {
+	r.errs = append(r.errs, errorfAt(pos, r.name, id, format, args...))
+}
+
+// ReportRange is like ReportID but also tells where the problematic region ends. The end position
+// is exclusive: it is the position just after the last character of the region.
+func (r *RuleBase) ReportRange(id string, pos *Pos, end *Pos, msg string) {
+	err := errorAt(pos, r.name, id, msg)
+	err.EndLine = end.Line
+	err.EndColumn = end.Col
 	r.errs = append(r.errs, err)
 }
 

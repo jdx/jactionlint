@@ -15,8 +15,16 @@ export const sidebar: SidebarItem[] = [
     text: "Reference",
     items: [
       { text: "Checks", link: "/checks" },
+      { text: "Rules", link: "/rules" },
       { text: "Go API", link: "/api" },
       { text: "References", link: "/reference" },
+    ],
+  },
+  {
+    text: "v2 roadmap",
+    items: [
+      { text: "v2 migration (planned)", link: "/v2-migration" },
+      { text: "zizmor parity", link: "/zizmor-parity" },
     ],
   },
   {

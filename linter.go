@@ -8,11 +8,11 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"regexp"
 	"runtime"
 	"slices"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/fatih/color"
@@ -61,8 +61,12 @@ type LinterOptions struct {
 	// Color is option for colorizing error outputs. See ColorOptionKind document for each enum values.
 	Color ColorOptionKind
 	// Oneline is flag if one line output is enabled. When enabling it, one error is output per one
-	// line. It is useful when reading outputs from programs.
+	// line. It is useful when reading outputs from programs. It is the same as setting Format to
+	// "oneline" and it only affects the text format.
 	Oneline bool
+	// ShowRuleIDs makes the text format show the stable rule ID such as "unpinned-uses" at the end of
+	// each error instead of the kind such as "action".
+	ShowRuleIDs bool
 	// Shellcheck is executable for running shellcheck external command. It can be command name like
 	// "shellcheck" or file path like "/path/to/shellcheck", "path/to/shellcheck". When this value
 	// is empty, shellcheck won't run to check scripts in workflow file.
@@ -78,8 +82,10 @@ type LinterOptions struct {
 	// the case, jactionlint will try to read config from the repository's .github/jactionlint.yaml,
 	// then from $XDG_CONFIG_HOME/jactionlint/jactionlint.yaml ($HOME/.config when unset).
 	ConfigFile string
-	// Format is a custom template to format error messages. It must follow Go Template format and
-	// contain at least one {{ }} placeholder. https://pkg.go.dev/text/template
+	// Format selects the output format. It is one of "text" (the default when empty), "oneline", "json",
+	// "jsonl", "sarif", "gcc" and "github", or a custom template to format error messages. A template
+	// must follow Go Template format and contain at least one {{ }} placeholder. When the format is
+	// not a native one, it is regarded as a template. https://pkg.go.dev/text/template
 	Format string
 	// StdinFileName is a file name when reading input from stdin. When this value is empty, "<stdin>"
 	// is used as the default value.
@@ -87,6 +93,9 @@ type LinterOptions struct {
 	// WorkingDir is a file path to the current working directory. When this value is empty, os.Getwd
 	// will be used to get a working directory.
 	WorkingDir string
+	// MinSeverity hides the errors less severe than it. The zero value shows every error. For example
+	// SeverityWarning hides the errors of info level.
+	MinSeverity Severity
 	// OnRulesCreated is a hook to add or remove the check rules. This function is called on checking
 	// every workflow files. Rules created by Linter instance are passed to the argument and the
 	// function should return the modified rules.
@@ -101,7 +110,7 @@ type Linter struct {
 	out            io.Writer
 	logOut         io.Writer
 	logLevel       LogLevel
-	oneline        bool
+	printer        printer
 	shellcheck     string
 	pyflakes       string
 	ignorePats     IgnorePatterns
@@ -111,6 +120,11 @@ type Linter struct {
 	errFmt         *ErrorFormatter
 	cwd            string
 	onRulesCreated func([]Rule) []Rule
+	configFile     string
+	minSeverity    Severity
+	warned         sync.Map // *Config -> struct{}: configs whose deprecations were already reported
+	notesMu        sync.Mutex
+	notes          []string // deprecation warnings found while linting
 }
 
 // NewLinter creates a new Linter instance.
@@ -163,9 +177,9 @@ func NewLinter(out io.Writer, opts *LinterOptions) (*Linter, error) {
 		globalCfg, globalCfgPath = c, p
 	}
 
-	ignore := make([]*regexp.Regexp, 0, len(opts.IgnorePatterns))
+	ignore := make(IgnorePatterns, 0, len(opts.IgnorePatterns))
 	for _, s := range opts.IgnorePatterns {
-		r, err := regexp.Compile(s)
+		r, err := ParseIgnorePattern(s)
 		if err != nil {
 			return nil, fmt.Errorf("invalid regular expression for ignore pattern %q: %s", s, err.Error())
 		}
@@ -173,12 +187,16 @@ func NewLinter(out io.Writer, opts *LinterOptions) (*Linter, error) {
 	}
 
 	var formatter *ErrorFormatter
-	if opts.Format != "" {
+	if isTemplateFormat(opts.Format) {
 		f, err := NewErrorFormatter(opts.Format)
 		if err != nil {
 			return nil, err
 		}
 		formatter = f
+	}
+	prn, err := newPrinter(opts.Format, opts.Oneline, opts.ShowRuleIDs, formatter)
+	if err != nil {
+		return nil, err
 	}
 
 	cwd := "."
@@ -194,20 +212,22 @@ func NewLinter(out io.Writer, opts *LinterOptions) (*Linter, error) {
 	}
 
 	l := &Linter{
-		NewProjects(),
-		out,
-		lout,
-		level,
-		opts.Oneline,
-		opts.Shellcheck,
-		opts.Pyflakes,
-		ignore,
-		stdin,
-		cfg,
-		globalCfg,
-		formatter,
-		cwd,
-		opts.OnRulesCreated,
+		projects:       NewProjects(),
+		out:            out,
+		logOut:         lout,
+		logLevel:       level,
+		printer:        prn,
+		shellcheck:     opts.Shellcheck,
+		pyflakes:       opts.Pyflakes,
+		ignorePats:     ignore,
+		stdin:          stdin,
+		defaultConfig:  cfg,
+		globalConfig:   globalCfg,
+		errFmt:         formatter,
+		cwd:            cwd,
+		onRulesCreated: opts.OnRulesCreated,
+		configFile:     opts.ConfigFile,
+		minSeverity:    opts.MinSeverity,
 	}
 
 	l.debug("Create a Linter instance with option %#v", opts)
@@ -299,8 +319,8 @@ func (l *Linter) LintRepository(dir string) ([]*Error, error) {
 	return l.LintDir(wd, p)
 }
 
-// LintDir lints all YAML workflow files in the given directory recursively.
-func (l *Linter) LintDir(dir string, project *Project) ([]*Error, error) {
+// collectWorkflowFiles returns the paths of all YAML files in the directory recursively in sorted order.
+func collectWorkflowFiles(dir string) ([]string, error) {
 	files := []string{}
 	if err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
@@ -320,10 +340,19 @@ func (l *Linter) LintDir(dir string, project *Project) ([]*Error, error) {
 	if len(files) == 0 {
 		return nil, fmt.Errorf("no YAML file was found in %q", dir)
 	}
-	l.log("Collected", len(files), "YAML files")
 
 	// To make output deterministic, sort order of file paths
 	sort.Strings(files)
+	return files, nil
+}
+
+// LintDir lints all YAML workflow files in the given directory recursively.
+func (l *Linter) LintDir(dir string, project *Project) ([]*Error, error) {
+	files, err := collectWorkflowFiles(dir)
+	if err != nil {
+		return nil, err
+	}
+	l.log("Collected", len(files), "YAML files")
 
 	return l.LintFiles(files, project)
 }
@@ -340,6 +369,32 @@ func (l *Linter) LintFiles(filepaths []string, project *Project) ([]*Error, erro
 		return l.LintFile(filepaths[0], project)
 	}
 
+	results, err := l.lintFilesQuietly(filepaths, project)
+	if err != nil {
+		return nil, err
+	}
+
+	total := 0
+	for _, r := range results {
+		total += len(r.errs)
+	}
+	all := make([]*Error, 0, total)
+	for _, r := range results {
+		all = append(all, r.errs...)
+	}
+	if err := l.printer.print(l.out, results, l.notifications()); err != nil {
+		return nil, err
+	}
+
+	l.log("Found", total, "errors in", n, "files")
+
+	return all, nil
+}
+
+// lintFilesQuietly lints the files in parallel and returns the results without printing them. The
+// results are in the order of the file paths.
+func (l *Linter) lintFilesQuietly(filepaths []string, project *Project) ([]fileResult, error) {
+	n := len(filepaths)
 	l.log("Linting", n, "files")
 
 	cwd := l.cwd
@@ -351,15 +406,9 @@ func (l *Linter) LintFiles(filepaths []string, project *Project) ([]*Error, erro
 	acf := NewLocalActionsCacheFactory(dbg)
 	rwcf := NewLocalReusableWorkflowCacheFactory(cwd, dbg)
 
-	type workspace struct {
-		path string
-		errs []*Error
-		src  []byte
-	}
-
-	ws := make([]workspace, 0, len(filepaths))
+	ws := make([]fileResult, 0, len(filepaths))
 	for _, p := range filepaths {
-		ws = append(ws, workspace{path: p})
+		ws = append(ws, fileResult{file: p, path: p})
 	}
 
 	eg := errgroup.Group{}
@@ -415,35 +464,7 @@ func (l *Linter) LintFiles(filepaths []string, project *Project) ([]*Error, erro
 	// called safely.
 	proc.wait()
 
-	total := 0
-	for i := range ws {
-		total += len(ws[i].errs)
-	}
-
-	all := make([]*Error, 0, total)
-	if l.errFmt != nil {
-		temp := make([]*ErrorTemplateFields, 0, total)
-		for i := range ws {
-			w := &ws[i]
-			for _, err := range w.errs {
-				temp = append(temp, err.GetTemplateFields(w.src))
-			}
-			all = append(all, w.errs...)
-		}
-		if err := l.errFmt.Print(l.out, temp); err != nil {
-			return nil, err
-		}
-	} else {
-		for i := range ws {
-			w := &ws[i]
-			l.printErrors(w.errs, w.src)
-			all = append(all, w.errs...)
-		}
-	}
-
-	l.log("Found", total, "errors in", n, "files")
-
-	return all, nil
+	return ws, nil
 }
 
 // LintFile lints one YAML workflow file and outputs the errors to given writer. The project
@@ -462,6 +483,7 @@ func (l *Linter) LintFile(path string, project *Project) ([]*Error, error) {
 		return nil, fmt.Errorf("could not read %q: %w", path, err)
 	}
 
+	origPath := path
 	if l.cwd != "" {
 		if r, err := filepath.Rel(l.cwd, path); err == nil {
 			path = r
@@ -478,12 +500,10 @@ func (l *Linter) LintFile(path string, project *Project) ([]*Error, error) {
 		return nil, err
 	}
 
-	if l.errFmt != nil {
-		l.errFmt.PrintErrors(l.out, errs, src)
-	} else {
-		l.printErrors(errs, src)
+	if err := l.printer.print(l.out, []fileResult{{file: origPath, path: path, src: src, errs: errs}}, l.notifications()); err != nil {
+		return nil, err
 	}
-	return errs, err
+	return errs, nil
 }
 
 // LintStdin lints the content read from STDIN. The stdin parameter is a reader to read from STDIN,
@@ -520,10 +540,8 @@ func (l *Linter) Lint(path string, content []byte, project *Project) ([]*Error, 
 	if err != nil {
 		return nil, err
 	}
-	if l.errFmt != nil {
-		l.errFmt.PrintErrors(l.out, errs, content)
-	} else {
-		l.printErrors(errs, content)
+	if err := l.printer.print(l.out, []fileResult{{file: path, path: path, src: content, errs: errs}}, l.notifications()); err != nil {
+		return nil, err
 	}
 	return errs, nil
 }
@@ -560,6 +578,7 @@ func (l *Linter) check(
 	}
 	if cfg != nil {
 		l.debug("Config: %#v", cfg)
+		l.warnDeprecations(cfg)
 	} else {
 		l.debug("No config was found")
 	}
@@ -574,55 +593,16 @@ func (l *Linter) check(
 	if w != nil {
 		dbg := l.debugWriter()
 
-		rules := []Rule{
-			NewRuleMatrix(),
-			NewRuleCredentials(),
-			NewRuleShellName(),
-			NewRuleRunPolicy(),
-			NewRuleRunnerLabel(),
-			NewRuleEvents(),
-			NewRuleWorkflowRun(project),
-			NewRuleJobNeeds(),
-			NewRuleParallelSteps(),
-			NewRuleAction(localActions),
-			NewRuleLocalActionCheckout(),
-			NewRuleEnvVar(),
-			NewRuleID(),
-			NewRuleGlob(),
-			NewRulePermissions(),
-			NewRuleTimeoutCheck(),
-			NewRuleRequirePermissions(),
-			NewRuleWorkflowCall(path, localReusableWorkflows),
-			NewRuleExpression(localActions, localReusableWorkflows),
-			NewRuleDeprecatedCommands(),
-			NewRuleIfCond(),
-		}
-
-		// Only add required actions rule if config exists and has required actions
-		if cfg != nil && len(cfg.RequiredActions) > 0 {
-			rules = append(rules, NewRuleRequiredActions(cfg.RequiredActions))
-		}
-
-		if l.shellcheck != "" {
-			r, err := NewRuleShellcheck(l.shellcheck, proc)
-			if err == nil {
-				rules = append(rules, r)
-			} else {
-				l.log("Rule \"shellcheck\" was disabled:", err)
-			}
-		} else {
-			l.log("Rule \"shellcheck\" was disabled since shellcheck command name was empty")
-		}
-		if l.pyflakes != "" {
-			r, err := NewRulePyflakes(l.pyflakes, proc)
-			if err == nil {
-				rules = append(rules, r)
-			} else {
-				l.log("Rule \"pyflakes\" was disabled:", err)
-			}
-		} else {
-			l.log("Rule \"pyflakes\" was disabled since pyflakes command name was empty")
-		}
+		rules := newBuiltinRules(&ruleContext{
+			path:                   path,
+			project:                project,
+			localActions:           localActions,
+			localReusableWorkflows: localReusableWorkflows,
+			config:                 cfg,
+			shellcheck:             l.shellcheck,
+			pyflakes:               l.pyflakes,
+			proc:                   proc,
+		}, l.log)
 		if l.onRulesCreated != nil {
 			rules = l.onRulesCreated(rules)
 		}
@@ -661,11 +641,26 @@ func (l *Linter) check(
 		}
 	}
 
-	all = l.filterErrors(all, cfg.PathConfigs(path))
+	all = l.annotateErrors(all, content, cfg)
 
-	inlineIgnores, ignoreErrs := parseInlineIgnores(content)
+	// Inline ignores are applied first so that every pattern sees all errors, which tells whether it
+	// is used. The order of the filters does not change which errors remain.
+	inlineIgnores, orphans, ignoreErrs := parseInlineIgnoresWithOrphans(content)
 	all = l.filterInlineIgnores(all, inlineIgnores)
-	all = append(all, ignoreErrs...)
+	all = append(all, l.annotateErrors(unusedInlineIgnores(inlineIgnores, orphans, cfg), content, cfg)...)
+
+	all = l.filterErrors(all, cfg.PathConfigs(path))
+	all = append(all, l.annotateErrors(ignoreErrs, content, cfg)...)
+
+	if l.minSeverity > SeverityInfo {
+		kept := all[:0]
+		for _, err := range all {
+			if err.Severity >= l.minSeverity {
+				kept = append(kept, err)
+			}
+		}
+		all = kept
+	}
 
 	for _, err := range all {
 		err.Filepath = path // Populate filename in the error
@@ -708,11 +703,56 @@ Loop:
 	return filtered
 }
 
-func (l *Linter) printErrors(errs []*Error, src []byte) {
-	if l.oneline {
-		src = nil
+// warnDeprecations reports the deprecated keys of the config to the log output. It reports each
+// config only once even if many files are linted with it.
+func (l *Linter) warnDeprecations(cfg *Config) {
+	if len(cfg.Deprecations) == 0 {
+		return
 	}
+	if _, loaded := l.warned.LoadOrStore(cfg, struct{}{}); loaded {
+		return
+	}
+	l.notesMu.Lock()
+	l.notes = append(l.notes, cfg.Deprecations...)
+	l.notesMu.Unlock()
+	if structured(l.printer) {
+		return // The warnings are in the output document
+	}
+	for _, d := range cfg.Deprecations {
+		fmt.Fprintln(l.logOut, "warning:", d)
+	}
+}
+
+// notifications returns the warnings about the run itself (the deprecated keys of the configs which were
+// used) in sorted order so that the output does not depend on the order files were checked in.
+func (l *Linter) notifications() []string {
+	l.notesMu.Lock()
+	defer l.notesMu.Unlock()
+	ret := slices.Clone(l.notes)
+	slices.Sort(ret)
+	return slices.Compact(ret)
+}
+
+// annotateErrors fills the fields of the errors which are derived from the diagnostic ID: the
+// severity, the documentation URL and the end position of the region. Errors of rules which the
+// config turns off are removed.
+func (l *Linter) annotateErrors(errs []*Error, src []byte, cfg *Config) []*Error {
+	lines := sourceLines(src)
+	kept := errs[:0]
 	for _, err := range errs {
-		err.PrettyPrint(l.out, src)
+		if err.ID == "" {
+			err.ID = err.Kind
+		}
+		err.Severity = cfg.RuleLevel(err.ID)
+		if err.Severity == SeverityOff {
+			l.debug("Error %q is dropped because rule %q is off", err.Message, err.ID)
+			continue
+		}
+		if info, ok := ruleIndex[err.ID]; ok {
+			err.DocURL = info.DocURL()
+		}
+		err.fillRegion(lines)
+		kept = append(kept, err)
 	}
+	return kept
 }

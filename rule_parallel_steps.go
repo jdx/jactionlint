@@ -78,7 +78,7 @@ func (rule *RuleParallelSteps) checkParallelChildren(steps []*Step) {
 	for _, s := range steps {
 		rule.inParallel[s] = struct{}{}
 		if s.Background != nil {
-			rule.Errorf(s.Background.Pos, "\"background\" is not allowed for a step inside a \"parallel\" group because the group's steps already run in the background")
+			rule.ReportIDf("invalid-parallel-step", s.Background.Pos, "\"background\" is not allowed for a step inside a \"parallel\" group because the group's steps already run in the background")
 		}
 		switch e := s.Exec.(type) {
 		case *ExecWait:
@@ -86,11 +86,11 @@ func (rule *RuleParallelSteps) checkParallelChildren(steps []*Step) {
 			if e.All {
 				kind = "wait-all"
 			}
-			rule.Errorf(s.Pos, "%q step is not allowed inside a \"parallel\" group", kind)
+			rule.ReportIDf("invalid-parallel-step", s.Pos, "%q step is not allowed inside a \"parallel\" group", kind)
 		case *ExecCancel:
-			rule.Errorf(s.Pos, "\"cancel\" step is not allowed inside a \"parallel\" group")
+			rule.ReportIDf("invalid-parallel-step", s.Pos, "\"cancel\" step is not allowed inside a \"parallel\" group")
 		case *ExecParallel:
-			rule.Errorf(s.Pos, "\"parallel\" step cannot be nested in another \"parallel\" step")
+			rule.ReportIDf("invalid-parallel-step", s.Pos, "\"parallel\" step cannot be nested in another \"parallel\" step")
 		}
 	}
 }
@@ -102,7 +102,8 @@ func (rule *RuleParallelSteps) checkRef(ref *String) {
 		return
 	}
 	if _, ok := rule.background[strings.ToLower(ref.Value)]; !ok {
-		rule.Errorf(
+		rule.ReportIDf(
+			"invalid-parallel-step",
 			ref.Pos,
 			"%q is not the ID of a preceding background step. \"wait\" and \"cancel\" steps can only refer to an earlier step that has \"background: true\"",
 			ref.Value,

@@ -13,6 +13,8 @@ type ExprError struct {
 	Line int
 	// Column is column number position which caused the error. Note that this value is 1-based.
 	Column int
+	// ID is the stable ID of the diagnostic such as "expression-syntax" or "undefined-property".
+	ID string
 }
 
 func (e *ExprError) Error() string {

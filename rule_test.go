@@ -37,12 +37,14 @@ func TestRuleBaseErrorfAndErrs(t *testing.T) {
 			Line:    1,
 			Column:  2,
 			Kind:    "dummy name",
+			ID:      "dummy name",
 		},
 		{
 			Message: "this is test 2",
 			Line:    3,
 			Column:  4,
 			Kind:    "dummy name",
+			ID:      "dummy name",
 		},
 	}
 	if diff := cmp.Diff(errs, want); diff != "" {

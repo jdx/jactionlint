@@ -39,6 +39,6 @@ func (rule *RuleCredentials) checkContainer(where string, n *Container) {
 
 	p := n.Credentials.Password
 	if !p.IsExpressionAssigned() {
-		rule.Errorf(p.Pos, "\"password\" section in %s should be specified via secrets. do not put password value directly", where)
+		rule.ReportIDf("hardcoded-container-credentials", p.Pos, "\"password\" section in %s should be specified via secrets. do not put password value directly", where)
 	}
 }

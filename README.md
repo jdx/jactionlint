@@ -94,7 +94,7 @@ managers or run via Docker container.
 mise use -g jactionlint
 
 # Or with Go
-go install github.com/jdx/jactionlint/cmd/jactionlint@latest
+go install github.com/jdx/jactionlint/v2/cmd/jactionlint@latest
 ```
 
 `mise use jactionlint` without `-g` adds it to the `mise.toml` of the current project, so everyone working on the project (and
@@ -102,8 +102,10 @@ CI, for example with [`jdx/mise-action`](https://github.com/jdx/mise-action)) us
 updates it.
 
 Basically all you need to do is run the `jactionlint` command in your repository. jactionlint automatically detects workflows and
-checks errors. jactionlint focuses on finding out mistakes. It tries to catch errors as much as possible and make false positives
-as minimal as possible.
+checks errors. jactionlint organizes its checks in three tiers: correctness (workflows that are broken), security (workflows that are
+exploitable or weaken the supply chain) and policy (project conventions, opt-in). Correctness and high-confidence security
+checks are on by default and aim for as few false positives as possible. Policy checks are never enabled unless you ask
+for them. See [the contributing guide](CONTRIBUTING.md) for how new checks are accepted.
 
 ```sh
 jactionlint
@@ -138,8 +140,8 @@ jactionlint is distributed under [the MIT license](./LICENSE.txt).
 
 [ci-badge]: https://github.com/jdx/jactionlint/actions/workflows/ci.yaml/badge.svg
 [ci]: https://github.com/jdx/jactionlint/actions/workflows/ci.yaml
-[apidoc-badge]: https://pkg.go.dev/badge/github.com/jdx/jactionlint.svg
-[apidoc]: https://pkg.go.dev/github.com/jdx/jactionlint
+[apidoc-badge]: https://pkg.go.dev/badge/github.com/jdx/jactionlint/v2.svg
+[apidoc]: https://pkg.go.dev/github.com/jdx/jactionlint/v2
 [repo]: https://github.com/jdx/jactionlint
 [mise]: https://mise.jdx.dev/
 [upstream]: https://github.com/rhysd/actionlint

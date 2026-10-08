@@ -41,9 +41,10 @@ argument. It reads stdin and checks it as workflow file:
 
     $ jactionlint -
 
-To serialize errors into JSON, use **-format** option. It allows to format error messages flexibly
-with Go template syntax.
+To serialize errors, use **-format** option. **json**, **jsonl**, **sarif**, **gcc** and **github**
+are available. A custom Go template can be given too:
 
+    $ jactionlint -format sarif
     $ jactionlint -format '{{json .}}'
 
 
@@ -58,22 +59,39 @@ with Go template syntax.
   * `-debug`:
     Enable debug output (for development)
 
+  * `-fix`, `-fix=unsafe`:
+    Apply the automatic fixes to the files and report what remains. `-fix=unsafe` also applies the
+    fixes which may change the behavior of the workflow. Exits with 1 when an error remains.
+
   * `-format` <FORMAT>:
-    Custom template to format error messages in Go template syntax. See the usage documentation
+    Output format: `text` (default), `oneline`, `json`, `jsonl`, `sarif`, `gcc` or `github`. A custom
+    template in Go template syntax which has `{{ }}` is also accepted. See the usage documentation
     for more details.
 
   * `-ignore` <PATTERN>:
-    Regular expression matching to error messages you want to ignore. This flag is repeatable. For
-    example, `-ignore A -ignore B` ignores errors whose message includes "A" OR "B".
+    Rule ID (e.g. `unpinned-uses`) or regular expression matching to error messages you want to
+    ignore. This flag is repeatable. For example, `-ignore A -ignore B` ignores errors whose message
+    includes "A" OR "B".
 
   * `-init-config`:
     Generate default config file at `.github/jactionlint.yaml` in current project
+
+  * `-migrate-config`:
+    Rewrite the deprecated keys of the config file (`.github/jactionlint.yaml` or the file of
+    `-config-file`) into the `rules` mapping
+
+  * `-min-severity` <LEVEL>:
+    Hide the errors less severe than this level: `info` (default), `warn` or `error`
 
   * `-no-color`:
     Disable colorful output
 
   * `-oneline`:
     Use one line per one error. Useful for reading error messages from programs
+
+  * `-rule-ids`:
+    Show the stable rule ID such as `unpinned-uses` at the end of each error in the text format
+    instead of the kind
 
   * `-pyflakes` <EXECUTABLE>:
     Command name or file path of "pyflakes" external command. If empty, pyflakes integration will be
@@ -82,6 +100,10 @@ with Go template syntax.
   * `-shellcheck` <EXECUTABLE>:
     Command name or file path of "shellcheck" external command. If empty, shellcheck integration will
     be disabled (default "shellcheck")
+
+  * `-strict-exit`:
+    Exit with status 1 also when only errors of `warn` or `info` level are found. By default only
+    errors of `error` level make the exit status 1
 
   * `-verbose`:
     Enable verbose output
@@ -105,6 +127,12 @@ Documents for more details are available online.
 https://github.com/jdx/jactionlint/blob/main/docs/checks.md
 
 Full list of all checks done by jactionlint with example inputs, outputs, and playground links.
+
+### Rules
+
+https://github.com/jdx/jactionlint/blob/main/docs/rules.md
+
+Reference of all rule IDs with their group, default level and profile.
 
 ### Installation
 
@@ -185,7 +213,8 @@ or simply run
 `jactionlint` command exits with one of the following exit statuses.
 
   - **0**: It ran successfully and no problem was found.
-  - **1**: It ran successfully and some problem was found.
+  - **1**: It ran successfully and some problem was found. Only errors of `error` level count unless
+    `-strict-exit` is given.
   - **2**: It failed due to invalid command line option.
   - **3**: It failed due to some fatal error.
 

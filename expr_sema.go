@@ -399,22 +399,28 @@ func NewExprSemanticsChecker(checkUntrustedInput bool, configVars []string, conf
 	return c
 }
 
-func errorAtExpr(e ExprNode, msg string) *ExprError {
+func errorAtExpr(id string, e ExprNode, msg string) *ExprError {
 	t := e.Token()
 	return &ExprError{
 		Message: msg,
 		Offset:  t.Offset,
 		Line:    t.Line,
 		Column:  t.Column,
+		ID:      id,
 	}
 }
 
-func errorfAtExpr(e ExprNode, format string, args ...interface{}) *ExprError {
-	return errorAtExpr(e, fmt.Sprintf(format, args...))
+func errorfAtExpr(id string, e ExprNode, format string, args ...interface{}) *ExprError {
+	return errorAtExpr(id, e, fmt.Sprintf(format, args...))
 }
 
+// errorf reports a type error of the expression.
 func (sema *ExprSemanticsChecker) errorf(e ExprNode, format string, args ...interface{}) {
-	sema.errs = append(sema.errs, errorfAtExpr(e, format, args...))
+	sema.errorfID("expression-type", e, format, args...)
+}
+
+func (sema *ExprSemanticsChecker) errorfID(id string, e ExprNode, format string, args ...interface{}) {
+	sema.errs = append(sema.errs, errorfAtExpr(id, e, format, args...))
 }
 
 func (sema *ExprSemanticsChecker) ensureVarsCopied() {
@@ -544,7 +550,8 @@ func (sema *ExprSemanticsChecker) checkAvailableContext(n *VariableNode) {
 	default:
 		notes = "available contexts are " + quotes(sema.availableContexts)
 	}
-	sema.errorf(
+	sema.errorfID(
+		"context-availability",
 		n,
 		"context %q is not allowed here. %s. see https://docs.github.com/en/actions/learn-github-actions/contexts#context-availability for more details",
 		n.Name,
@@ -581,7 +588,8 @@ func (sema *ExprSemanticsChecker) checkSpecialFunctionAvailability(n *FuncCallNo
 		}
 	}
 
-	sema.errorf(
+	sema.errorfID(
+		"context-availability",
 		n,
 		"calling function %q is not allowed here. %q is only available in %s. see https://docs.github.com/en/actions/learn-github-actions/contexts#context-availability for more details",
 		n.Callee,
@@ -609,7 +617,7 @@ func (sema *ExprSemanticsChecker) checkVariable(n *VariableNode) ExprType {
 		for n := range sema.vars {
 			ss = append(ss, n)
 		}
-		sema.errorf(n, "undefined variable %q. available variables are %s", n.Token().Value, sortedQuotes(ss))
+		sema.errorfID("undefined-property", n, "undefined variable %q. available variables are %s", n.Token().Value, sortedQuotes(ss))
 		return AnyType{}
 	}
 
@@ -635,7 +643,7 @@ func (sema *ExprSemanticsChecker) checkObjectDeref(n *ObjectDerefNode) ExprType 
 			return ty.Mapped
 		}
 		if ty.IsStrict() {
-			sema.errorf(n, "property %q is not defined in object type %s", n.Property, ty.String())
+			sema.errorfID("undefined-property", n, "property %q is not defined in object type %s", n.Property, ty.String())
 		}
 		return AnyType{}
 	case *ArrayType:
@@ -655,7 +663,7 @@ func (sema *ExprSemanticsChecker) checkObjectDeref(n *ObjectDerefNode) ExprType 
 			} else if et.Mapped != nil {
 				elem = et.Mapped
 			} else if et.IsStrict() {
-				sema.errorf(n, "property %q is not defined in object type %s as element of filtered array", n.Property, et.String())
+				sema.errorfID("undefined-property", n, "property %q is not defined in object type %s as element of filtered array", n.Property, et.String())
 			}
 			return &ArrayType{elem, true}
 		default:
@@ -676,7 +684,8 @@ func (sema *ExprSemanticsChecker) checkObjectDeref(n *ObjectDerefNode) ExprType 
 func (sema *ExprSemanticsChecker) checkConfigVariables(n *ObjectDerefNode) {
 	// https://docs.github.com/en/actions/learn-github-actions/variables#naming-conventions-for-configuration-variables
 	if strings.HasPrefix(n.Property, "github_") {
-		sema.errorf(
+		sema.errorfID(
+			"undefined-property",
 			n,
 			"configuration variable name %q must not start with the GITHUB_ prefix (case insensitive). note: see the convention at https://docs.github.com/en/actions/learn-github-actions/variables#naming-conventions-for-configuration-variables",
 			n.Property,
@@ -689,7 +698,8 @@ func (sema *ExprSemanticsChecker) checkConfigVariables(n *ObjectDerefNode) {
 		if '0' <= r && r <= '9' || 'a' <= r && r <= 'z' || r == '_' {
 			continue
 		}
-		sema.errorf(
+		sema.errorfID(
+			"undefined-property",
 			n,
 			"configuration variable name %q can only contain alphabets, decimal numbers, and '_'. note: see the convention at https://docs.github.com/en/actions/learn-github-actions/variables#naming-conventions-for-configuration-variables",
 			n.Property,
@@ -701,7 +711,8 @@ func (sema *ExprSemanticsChecker) checkConfigVariables(n *ObjectDerefNode) {
 		return
 	}
 	if len(sema.configVars) == 0 {
-		sema.errorf(
+		sema.errorfID(
+			"undefined-property",
 			n,
 			"no configuration variable is allowed since the variables list is empty in jactionlint.yaml. you may forget adding the variable %q to the list",
 			n.Property,
@@ -715,7 +726,8 @@ func (sema *ExprSemanticsChecker) checkConfigVariables(n *ObjectDerefNode) {
 		}
 	}
 
-	sema.errorf(
+	sema.errorfID(
+		"undefined-property",
 		n,
 		"undefined configuration variable %q. defined configuration variables in jactionlint.yaml are %s",
 		n.Property,
@@ -732,7 +744,8 @@ func (sema *ExprSemanticsChecker) checkConfigSecrets(n *ObjectDerefNode) {
 		return
 	}
 	if len(sema.configSecrets) == 0 {
-		sema.errorf(
+		sema.errorfID(
+			"undefined-property",
 			n,
 			"no secret is allowed since the secrets list is empty in jactionlint.yaml. you may forget adding the secret %q to the list",
 			n.Property,
@@ -746,7 +759,8 @@ func (sema *ExprSemanticsChecker) checkConfigSecrets(n *ObjectDerefNode) {
 		}
 	}
 
-	sema.errorf(
+	sema.errorfID(
+		"undefined-property",
 		n,
 		"undefined secret %q. defined secrets in jactionlint.yaml are %s",
 		n.Property,
@@ -829,7 +843,7 @@ func (sema *ExprSemanticsChecker) checkIndexAccess(n *IndexAccessNode) ExprType 
 					return ty.Mapped
 				}
 				if ty.IsStrict() {
-					sema.errorf(n, "property %q is not defined in object type %s", lit.Value, ty.String())
+					sema.errorfID("undefined-property", n, "property %q is not defined in object type %s", lit.Value, ty.String())
 				}
 			}
 			if ty.Mapped != nil {
@@ -854,6 +868,7 @@ func checkFuncSignature(n *FuncCallNode, sig *FuncSignature, args []ExprType) *E
 			atLeast = "at least "
 		}
 		return errorfAtExpr(
+			"invalid-function-call",
 			n,
 			"number of arguments is wrong. function %q takes %s%d parameters but %d arguments are given",
 			sig.String(),
@@ -867,6 +882,7 @@ func checkFuncSignature(n *FuncCallNode, sig *FuncSignature, args []ExprType) *E
 		p, a := sig.Params[i], args[i]
 		if !p.Assignable(a) {
 			return errorfAtExpr(
+				"invalid-function-call",
 				n.Args[i],
 				"%s argument of function call is not assignable. %q cannot be assigned to %q. called function type is %q",
 				ordinal(i+1),
@@ -885,6 +901,7 @@ func checkFuncSignature(n *FuncCallNode, sig *FuncSignature, args []ExprType) *E
 		for i, a := range rest {
 			if !p.Assignable(a) {
 				return errorfAtExpr(
+					"invalid-function-call",
 					n.Args[lp+i],
 					"%s argument of function call is not assignable. %q cannot be assigned to %q. called function type is %q",
 					ordinal(lp+i+1),
@@ -915,14 +932,14 @@ func (sema *ExprSemanticsChecker) checkBuiltinFuncCall(n *FuncCallNode, sig *Fun
 
 		for i := 0; i < l; i++ {
 			if _, ok := holders[i]; !ok {
-				sema.errorf(n, "format string %q does not contain placeholder {%d}. remove argument which is unused in the format string", lit.Value, i)
+				sema.errorfID("invalid-function-call", n, "format string %q does not contain placeholder {%d}. remove argument which is unused in the format string", lit.Value, i)
 				continue
 			}
 			delete(holders, i) // forget it to check unused placeholders
 		}
 
 		for i := range holders {
-			sema.errorf(n, "format string %q contains placeholder {%d} but only %d arguments are given to format", lit.Value, i, l)
+			sema.errorfID("invalid-function-call", n, "format string %q contains placeholder {%d} but only %d arguments are given to format", lit.Value, i, l)
 		}
 	case "fromjson":
 		lit, ok := n.Args[0].(*StringNode)
@@ -935,11 +952,11 @@ func (sema *ExprSemanticsChecker) checkBuiltinFuncCall(n *FuncCallNode, sig *Fun
 			return typeOfJSONValue(v)
 		}
 		if s, ok := err.(*json.SyntaxError); ok {
-			sema.errorf(lit, "broken JSON string is passed to fromJSON() at offset %d: %s", s.Offset, s)
+			sema.errorfID("invalid-function-call", lit, "broken JSON string is passed to fromJSON() at offset %d: %s", s.Offset, s)
 		}
 	case "case":
 		if len(n.Args)%2 == 0 {
-			sema.errorf(n, "case() requires an odd number of arguments (pred/value pairs + default) but got %d", len(n.Args))
+			sema.errorfID("invalid-function-call", n, "case() requires an odd number of arguments (pred/value pairs + default) but got %d", len(n.Args))
 		}
 	}
 
@@ -955,7 +972,7 @@ func (sema *ExprSemanticsChecker) checkFuncCall(n *FuncCallNode) ExprType {
 		for n := range sema.funcs {
 			ss = append(ss, n)
 		}
-		sema.errorf(n, "undefined function %q. available functions are %s", n.Callee, sortedQuotes(ss))
+		sema.errorfID("undefined-function", n, "undefined function %q. available functions are %s", n.Callee, sortedQuotes(ss))
 		return AnyType{}
 	}
 
