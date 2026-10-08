@@ -88,17 +88,47 @@ registry (see [Rules and rule IDs](#rules-and-rule-ids)).
 
 ## Rules and rule IDs
 
-Every diagnostic has a stable kebab-case ID such as `unpinned-uses`. IDs are registered in `rule_registry.go` with their group,
-summary, default level, profile and options, and a rule reports one with `ReportID`. IDs are part of the public interface: they
-are written in configuration files, ignore comments and CI annotations, so they are never renamed or removed.
+Every diagnostic has a stable kebab-case ID such as `unpinned-uses`. A rule reports one with `ReportID`. IDs are part of the
+public interface: they are written in configuration files, ignore comments and CI annotations, so they are never renamed or
+removed.
 
-- Add a `RuleInfo` to `ruleRegistry` (keep it sorted by ID), add the ID to `testdata/rule_ids.txt`, and run
-  `go run ./scripts/generate-rules-doc` to update `docs/rules.md`. Tests fail when a reported ID is not registered, a registered
-  ID is never reported, an ID of the snapshot disappears, or `docs/rules.md` is outdated.
-- A new check needs an example in `testdata/examples` and a section in `docs/checks.md` (`go run ./scripts/check-checks -fix
-  ./docs/checks.md` updates its output).
-- Rules with an automatic fix set `Error.Fix` (byte-range edits). Only safe fixes appear in the SARIF output and are applied by
-  `-fix`; mark risky ones `Unsafe`.
+### Adding a rule
+
+A rule is self-contained: it registers itself from an `init` function in its own file, so adding one does not edit a shared Go
+file (`linter.go` and `rule_registry.go` stay untouched). A rule needs these files:
+
+1. `rule_<name>.go`: the rule (embed `RuleBase`, create it with `NewRuleBase`, report with `ReportID`) and at the end of the file:
+
+   ```go
+   func init() {
+       // One RuleInfo per ID the rule can report. Registering an ID twice panics.
+       registerRules(RuleInfo{
+           ID: "my-rule", Group: RuleGroupPolicy, Summary: "A one-line description ending with a period.",
+           DefaultLevel: SeverityWarning, Profile: ProfileStrict, DocsAnchor: "check-my-rule",
+       })
+       // How to create the rule for one file. Return nil when it is not needed (e.g. its config is empty),
+       // or call env.Skip(reason) to log why it is disabled. env has the config, project, caches and
+       // the shellcheck/pyflakes processes. Rules run in a deterministic order (by name).
+       registerRuleFactory("my-rule", func(env *RuleEnv) []Rule { return []Rule{NewRuleMyRule()} })
+   }
+   ```
+
+2. `rule_<name>_test.go` and golden files: an input in `testdata/err/<name>.yaml` with its expected output in
+   `testdata/err/<name>.out` (and `testdata/ok/` for inputs which must stay clean).
+3. A section with an `<a id="check-my-rule"></a>` anchor in `docs/checks.md` and an example in `testdata/examples`
+   (`go run ./scripts/check-checks -fix ./docs/checks.md` writes the outputs).
+4. The new IDs recorded in the snapshot: `mise run rule-ids <batch-name>` (this runs
+   `go test -run TestRuleIDsAreStable -update-rule-ids=<batch-name> .`) which writes the IDs missing from every file to
+   `testdata/rule_ids.d/<batch-name>.txt`. Give each batch of rules its own name so parallel work never touches the same file.
+   The test fails when a listed ID is no longer registered.
+5. `mise run rules-doc` regenerates `docs/rules.md`, which is generated from the registry and sorted by ID. `hk check --all`
+   (and so CI) fails when it is stale (`mise run rules-doc:check` checks only that).
+
+Tests also fail when a reported ID is not registered, a registered ID is never reported, or an anchor does not exist in
+`docs/checks.md`. Before pushing run `go build ./...`, `go vet ./...`, `go test -race ./...` and `hk check --all`.
+
+Rules with an automatic fix set `Error.Fix` (byte-range edits). Only safe fixes appear in the SARIF output and are applied by
+`-fix`; mark risky ones `Unsafe`.
 
 Since jactionlint doesn't use any cgo features, setting `CGO_ENABLED=0` environment variable is recommended to avoid troubles
 around linking libc. `mise run build` does this by default.

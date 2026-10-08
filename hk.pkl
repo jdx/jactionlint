@@ -40,6 +40,12 @@ local slow = new Mapping<String, Step> {
         check = "staticcheck ./ ./scripts/... ./cmd/... && mise run lint:wasm"
     }
     ["go_vuln_check"] = Builtins.go_vuln_check
+    ["rules_doc"] {
+        glob = List("docs/rules.md", "scripts/generate-rules-doc/**", "*.go")
+        check = "go run ./scripts/generate-rules-doc -check"
+        fix = "go run ./scripts/generate-rules-doc"
+        exclusive = true
+    }
     ["checks_doc"] {
         glob = List("docs/checks.md", "scripts/check-checks/**", "*.go")
         check = "go run ./scripts/check-checks -quiet ./docs/checks.md"
