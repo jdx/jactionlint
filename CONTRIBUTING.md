@@ -7,7 +7,7 @@ one of them:
 | --------------- | -------------------------------------------------------------------------------------- | -------------------------------------- |
 | **Correctness** | Workflows that are broken or do not do what they say: syntax, types, bad inputs, etc.  | Yes                                    |
 | **Security**    | Workflows that are exploitable or weaken the supply chain: injection, unpinned actions | High-confidence checks only            |
-| **Policy**      | Project conventions: required `timeout-minutes`, explicit `shell:`, run script length  | No. Opt-in through a profile or config |
+| **Policy**      | Project conventions: explicit `shell:`, run script length, `permissions:` set          | No, except `missing-timeout`. Opt-in through a profile or config |
 
 The tier decides the default, not the importance of the check. A policy check is welcome, but it never turns on for
 someone who did not ask for it. See [the configuration document](docs/config.md) for how checks are enabled today, and

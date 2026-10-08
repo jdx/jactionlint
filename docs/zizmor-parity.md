@@ -33,7 +33,7 @@ How to read the table:
 | `dangerous-triggers` | `dangerous-triggers` | 3 / A | default | not yet assessed |
 | `dependabot-cooldown` | `dependabot-cooldown` | 3 / E | strict | not yet assessed |
 | `dependabot-execution` | `dependabot-execution` | 3 / E | strict | not yet assessed |
-| `excessive-permissions` | `excessive-permissions` | 3 / B | strict | not yet assessed |
+| `excessive-permissions` | `excessive-permissions` | 3 / B | strict | partial: `missing-permissions` (strict) covers the case of no `permissions:` block ([measured](#measured-missing-permissions-and-missing-timeout)); write scopes and `read-all`/`write-all` are not covered yet |
 | `forbidden-uses` | `forbidden-uses` | 3 / A | opt-in (allow/deny config) | not yet assessed |
 | `github-app` | `github-app` | 3 / B and E | strict | not yet assessed |
 | `github-env` | `github-env` | 3 / D | default | not yet assessed |
@@ -67,3 +67,22 @@ How to read the table:
 
 See [CONTRIBUTING.md](https://github.com/jdx/jactionlint/blob/main/CONTRIBUTING.md#policy-for-jactionlints-features) for the
 criteria a rule must meet before it is added.
+
+## Measured: missing-permissions and missing-timeout
+
+Batch F measured two existing rules on the local corpus: the checkouts of 35 repositories under `~/src` (the "main" numbers) and
+all 955 distinct workflow files of the 139 worktrees there (the "all" numbers). The zizmor numbers are from
+`zizmor --offline --persona pedantic` 1.30.1 through `scripts/zizmor-diff`.
+
+| Rule | Profile | Findings (main / all) | Overlap with zizmor | Only jactionlint | Only zizmor |
+| --- | --- | --: | --- | --- | --- |
+| `missing-timeout` | default | 270 / 1010, in 27 of 35 repositories | none: zizmor 1.30.1 has no audit for it | all of them are jobs without `timeout-minutes` and without `uses:`; a separate count of such jobs in the YAML gives the same 1010, so there are no false positives by that definition | not applicable |
+| `missing-permissions` | strict | 74 / 372, in 14 of 35 repositories | 74 of 74 are `excessive-permissions` findings of zizmor at the same job line | none | 45 are zizmor's workflow-level (line 1) report of the same missing block; 54 are `contents: write`, `id-token: write` and other write scopes at the workflow level, which `missing-permissions` does not look at |
+
+`missing-timeout` is in the default profile because the user asked for it, not because it passed the false-positive bar in the
+sense of the other default rules: it has no false positives, but it is noisy for a repository that never set the key (270
+findings in 27 of the 35 repositories). `jactionlint -fix` clears all of them. `missing-permissions` stays in `strict`.
+
+The fixers were measured on the 955 files: `jactionlint -fix` adds exactly 1010 `timeout-minutes: 30` lines and 28 `permissions:` blocks
+(the safe ones) and changes no other line (`diff -r` shows added lines only); `-fix=unsafe` adds 137 blocks; after either run
+the rules report nothing that has a fix, and a second run changes nothing.

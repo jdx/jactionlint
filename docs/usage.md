@@ -280,7 +280,16 @@ jactionlint -fix .github/workflows/ci.yaml
 ```
 
 Fixes arrive with the rules that can fix their findings mechanically. The errors of the rules without a fix are only reported.
-`-fix` cannot be used with stdin.
+`-fix` cannot be used with stdin. These rules have a fix today:
+
+| Rule                  | What `-fix` does                                                                                                             | Safe                                                              |
+| --------------------- | ---------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| `missing-timeout`     | Adds `timeout-minutes: 30` to the job after `runs-on:` ([`default-minutes`](config.md#rules) changes the number).            | Yes                                                               |
+| `missing-permissions` | Adds `permissions:` with `contents: read` to the workflow after the `on:` block.                                             | Only when nothing shows that a job needs the token, else `unsafe` |
+| `unused-ignore`       | Removes the ignore comment, or only its patterns which did nothing when the comment has others.                              | Yes                                                               |
+
+A finding in a shape the fix does not understand (a job written as `job: {runs-on: ...}`, a job with a YAML anchor, a file with
+a bare carriage return) is reported without a fix. See [the checks document](checks.md#check-timeout-minutes) for the details.
 
 <a id="hk"></a>
 ### hk
@@ -308,6 +317,11 @@ runs when a finding has no fix. Add this step to `hk.pkl`:
   deprecation warnings of the configuration are put in `invocations[].toolConfigurationNotifications` of the log instead of
   stderr in this format.
 - To use the `strict` profile, set `profile: strict` in `.github/jactionlint.yaml`.
+- `missing-timeout` is in the default profile, so the first `hk check` on a repository whose jobs have no `timeout-minutes` fails
+  on every job. Its fix is safe and is in the SARIF log, so `hk fix` adds `timeout-minutes: 30` without running
+  `jactionlint -fix`. `missing-permissions` (`strict`) is only in the log when the fix is safe; otherwise hk runs
+  `jactionlint -fix`, which leaves the unsafe fix alone and still reports the finding, and you decide whether to run
+  `jactionlint -fix=unsafe`.
 
 <a id="on-github-actions"></a>
 ## Use jactionlint on GitHub Actions

@@ -67,7 +67,7 @@ rules:
 | [merge-key](#merge-key) | correctness | error | default |
 | [missing-action-input](#missing-action-input) | correctness | error | default |
 | [missing-permissions](#missing-permissions) | policy | error | strict |
-| [missing-timeout](#missing-timeout) | policy | error | strict |
+| [missing-timeout](#missing-timeout) | policy | error | default |
 | [missing-workflow-input](#missing-workflow-input) | correctness | error | default |
 | [missing-workflow-secret](#missing-workflow-secret) | correctness | error | default |
 | [outdated-action-runner](#outdated-action-runner) | correctness | error | default |
@@ -473,6 +473,7 @@ Neither the workflow nor the job sets permissions:.
 - Group: policy
 - Default level: error
 - Profile: strict
+- Fixable: yes
 - Details and examples: [checks](./checks.md#permissions)
 
 ## missing-timeout
@@ -481,7 +482,9 @@ A job does not set timeout-minutes.
 
 - Group: policy
 - Default level: error
-- Profile: strict
+- Profile: default
+- Fixable: yes
+- Option `default-minutes` (int, default 30): The timeout-minutes which -fix adds to a job. It is lowered to the max of timeout-too-long when that is smaller.
 - Details and examples: [checks](./checks.md#check-timeout-minutes)
 
 ## missing-workflow-input

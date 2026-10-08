@@ -6,7 +6,7 @@ This document describes how to configure [jactionlint](https://github.com/jdx/ja
 Note that configuration file is optional. Running jactionlint without configuration file works fine in most cases:
 correctness checks and high-confidence security checks are on by default. A configuration file is for the things that only
 you can know (your self-hosted runner labels, your ignore patterns) and for opting in to the policy tier (for example
-`require-permissions` or `timeout-minutes`), which is never enabled by default. See
+`require-permissions` or `require-shell`), which is not enabled by default (`missing-timeout` is the one policy check that is). See
 [the policy for new checks](https://github.com/jdx/jactionlint/blob/main/CONTRIBUTING.md#policy-for-jactionlints-features)
 for the three tiers.
 
@@ -157,8 +157,8 @@ A profile is a named set of [rules](rules.md) which are enabled together. `profi
 
 | Profile   | Enables                                                                                                                                                                                     |
 | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `default` | All the correctness checks, the security errors with (almost) no false positives, and the bug detectors `unsound-ternary`, `workflow-run-names` and `local-action-checkout`. Used when `profile` is omitted. |
-| `strict`  | `default` plus the posture and policy checks: `unpinned-uses`, `missing-permissions`, `missing-timeout` and `unused-ignore`.                                                                |
+| `default` | All the correctness checks, the security errors with (almost) no false positives, the bug detectors `unsound-ternary`, `workflow-run-names` and `local-action-checkout`, and the policy check `missing-timeout`. Used when `profile` is omitted. |
+| `strict`  | `default` plus the posture and policy checks: `unpinned-uses`, `missing-permissions` and `unused-ignore`.                                                                |
 | `all`     | `strict` plus the style checks: `require-shell`, `require-expression-wrapping` and `max-run-lines`.                                                                                         |
 
 The profile of each rule is in [the list of rules](rules.md). Some rules belong to no profile and run only when the
@@ -189,10 +189,11 @@ rules:
     max: 60
 ```
 
-| Rule               | Option | Description                                                                                                                                     |
-| ------------------ | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| `max-run-lines`    | `max`  | Maximum number of non-blank lines in a `run:` script. Default `100` when the rule is enabled by the `all` profile.                              |
-| `timeout-too-long` | `max`  | Maximum allowed `timeout-minutes` of a job in minutes. Values given by `${{ }}` are not checked. The rule does nothing without `max`.           |
+| Rule               | Option            | Description                                                                                                                              |
+| ------------------ | ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `max-run-lines`    | `max`             | Maximum number of non-blank lines in a `run:` script. Default `100` when the rule is enabled by the `all` profile.                       |
+| `missing-timeout`  | `default-minutes` | The `timeout-minutes` which `-fix` adds to a job without one. Default `30`. Lowered to `max` of `timeout-too-long` when that is smaller. |
+| `timeout-too-long` | `max`             | Maximum allowed `timeout-minutes` of a job in minutes. Values given by `${{ }}` are not checked. The rule does nothing without `max`.    |
 
 ## Extending config files
 
