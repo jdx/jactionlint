@@ -21,6 +21,13 @@ export const sidebar: SidebarItem[] = [
     ],
   },
   {
+    text: "v2 roadmap",
+    items: [
+      { text: "v2 migration (planned)", link: "/v2-migration" },
+      { text: "zizmor parity", link: "/zizmor-parity" },
+    ],
+  },
+  {
     text: "Playground",
     items: [{ text: "Online playground", link: "/playground" }],
   },

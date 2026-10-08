@@ -102,8 +102,10 @@ CI, for example with [`jdx/mise-action`](https://github.com/jdx/mise-action)) us
 updates it.
 
 Basically all you need to do is run the `jactionlint` command in your repository. jactionlint automatically detects workflows and
-checks errors. jactionlint focuses on finding out mistakes. It tries to catch errors as much as possible and make false positives
-as minimal as possible.
+checks errors. jactionlint organizes its checks in three tiers: correctness (workflows that are broken), security (workflows that are
+exploitable or weaken the supply chain) and policy (project conventions, opt-in). Correctness and high-confidence security
+checks are on by default and aim for as few false positives as possible. Policy checks are never enabled unless you ask
+for them. See [the contributing guide](CONTRIBUTING.md) for how new checks are accepted.
 
 ```sh
 jactionlint

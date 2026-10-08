@@ -3,9 +3,12 @@ Configuration
 
 This document describes how to configure [jactionlint](https://github.com/jdx/jactionlint) behavior.
 
-Note that configuration file is optional. The author tries to keep configuration file as minimal as possible not to
-bother users to configure behavior of jactionlint. Running jactionlint without configuration file would work fine in most
-cases.
+Note that configuration file is optional. Running jactionlint without configuration file works fine in most cases:
+correctness checks and high-confidence security checks are on by default. A configuration file is for the things that only
+you can know (your self-hosted runner labels, your ignore patterns) and for opting in to the policy tier (for example
+`require-permissions` or `timeout-minutes`), which is never enabled by default. See
+[the policy for new checks](https://github.com/jdx/jactionlint/blob/main/CONTRIBUTING.md#policy-for-jactionlints-features)
+for the three tiers.
 
 ## Configuration file
 
