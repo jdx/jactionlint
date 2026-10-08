@@ -675,6 +675,9 @@ type RawYAMLString struct {
 	// string even when its value looks like a number, a boolean, or null.
 	StringTag bool
 	pos       *Pos
+	// str is the scalar as the parser reads every other string, with its quoting and indentation.
+	// It is nil for a value which was not made by the parser.
+	str *String
 }
 
 // Kind returns kind of raw YAML value.

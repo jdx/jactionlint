@@ -336,7 +336,7 @@ func TestRuleRunnerLabelCheckLabels(t *testing.T) {
 				n := &String{Value: "os", Pos: pos}
 				row := make([]RawYAMLValue, 0, len(tc.matrix))
 				for _, m := range tc.matrix {
-					row = append(row, &RawYAMLString{m, false, pos})
+					row = append(row, &RawYAMLString{Value: m, pos: pos})
 				}
 				st := &Strategy{
 					Matrix: &Matrix{
