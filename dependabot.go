@@ -228,3 +228,9 @@ func (l *Linter) checkDependabot(path string, content []byte, project *Project, 
 
 	return l.finishCheck(path, content, all, cfg, start), nil
 }
+
+func init() {
+	registerRules(
+		RuleInfo{ID: dependabotSyntaxID, Group: RuleGroupCorrectness, Summary: "The Dependabot configuration does not follow the syntax of dependabot.yml.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-dependabot-syntax"},
+	)
+}

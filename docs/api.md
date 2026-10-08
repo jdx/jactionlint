@@ -33,6 +33,14 @@ Followings are unexhaustive list of interesting APIs.
 - `Workflow`, `Job`, `Step`, ... are nodes of workflow syntax tree. `Workflow` is a root node.
 - `Parse()` parses given contents into a workflow syntax tree. It tries to find syntax errors as much as possible and
   returns found errors as slice.
+- `ParseUses()` parses the value of a `uses:` key, for steps and for reusable workflow calls, into a `UsesRef`: its `Kind`
+  (`UsesAction`, `UsesReusableWorkflow`, `UsesDocker`, `UsesLocal`, `UsesInvalid`), owner, repo, subpath, ref and `RefKind`
+  (`RefFullSHA`, `RefShortSHA`, `RefSemverTag`, `RefOther`, `RefDigest`, `RefNone`), and Docker image, tag and digest.
+  `UsesRef.IsPinned()`, `SameRepo()` and `CanonicalName()` help rules that compare references.
+- `Workflow.Comments` is the `CommentIndex` of the YAML comments of the file. A rule looks a node up by the line of its
+  `Pos`: `Inline()` is the trailing comment, `Before()` and `After()` are the comment blocks directly above and below
+  (a blank line ends a block), and `Documented()` tells whether a line has either. `NewCommentIndex()` builds an index
+  from any YAML source.
 - `Pass` is a visitor to traverse a workflow syntax tree. Multiple passes can be applied at single pass using `Visitor`.
 - `Rule` is an interface for rule checkers and `RuleBase` is a base struct to implement a rule checker. `RuleBase.ReportID()`
   reports an error with the stable ID of the diagnostic. `RuleBase.Error()` reports it with the name of the rule as the ID.

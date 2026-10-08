@@ -15,7 +15,9 @@ How to read the table:
   parsed, B permissions and pinning, C expression analysis, D run-script analysis, E `dependabot.yml`, G online checks.
   Online checks only run with the opt-in `-online` flag and never in the playground.
 - **Profile** is the profile the rule is proposed for (`default`, `strict` or `all`, see [the v2 migration](v2-migration.md)).
-  It is not final until the false-positive review of the corpus.
+  It is not final until the false-positive review of the corpus. Two rows use an activation mode instead of a profile:
+  `online` rules run only with the opt-in `-online` flag, whatever the profile, and `opt-in (allow/deny config)` rules do
+  nothing until you configure an allow or deny list.
 - **Parity** will become `full`, `partial` or `not planned` once the differential corpus test exists. Until then every
   row says `not yet assessed`.
 

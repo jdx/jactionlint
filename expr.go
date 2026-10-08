@@ -24,3 +24,9 @@ func (e *ExprError) Error() string {
 func (e *ExprError) String() string {
 	return e.Error()
 }
+
+func init() {
+	registerRules(
+		RuleInfo{ID: "expression-syntax", Group: RuleGroupCorrectness, Summary: "A ${{ }} expression has a syntax error.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-syntax-expression"},
+	)
+}

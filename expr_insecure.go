@@ -388,3 +388,9 @@ func (u *UntrustedInputChecker) Init() {
 	u.safeCalls = 0
 	u.reset()
 }
+
+func init() {
+	registerRules(
+		RuleInfo{ID: "template-injection", Group: RuleGroupSecurity, Summary: "A potentially untrusted input is expanded in a script.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "untrusted-inputs"},
+	)
+}

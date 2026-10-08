@@ -1044,6 +1044,9 @@ type Workflow struct {
 	Concurrency *Concurrency
 	// Jobs is mappings from job ID to the job object. Keys are in lower case since they are case-insensitive.
 	Jobs map[string]*Job
+	// Comments holds the YAML comments of the source file. Look a node up by the line of its Pos.
+	// It is never nil for a workflow returned by Parse.
+	Comments *CommentIndex
 }
 
 // FindWorkflowCallEvent returns workflow_call event node if exists

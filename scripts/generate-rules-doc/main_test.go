@@ -58,3 +58,22 @@ func TestRunWritesFile(t *testing.T) {
 		t.Error("writing to a missing directory must be an error")
 	}
 }
+
+func TestRunCheck(t *testing.T) {
+	dst := filepath.Join(t.TempDir(), "rules.md")
+	if err := run([]string{"-check", dst}, nil); err == nil {
+		t.Error("a missing file must fail the check")
+	}
+	if err := run([]string{dst}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := run([]string{"-check", dst}, nil); err != nil {
+		t.Errorf("a generated file must pass the check: %v", err)
+	}
+	if err := os.WriteFile(dst, []byte("stale\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := run([]string{"-check", dst}, nil); err == nil {
+		t.Error("a stale file must fail the check")
+	}
+}
