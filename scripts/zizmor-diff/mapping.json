@@ -4,35 +4,45 @@
     "template-injection": {
       "coverage": "partial",
       "notes": "jactionlint reports untrusted contexts in expressions. zizmor also covers env indirection, github-script and more contexts.",
-      "jactionlint": [{ "rule": "expression", "message_contains": "potentially untrusted" }]
+      "jactionlint": [
+        { "rule": "template-injection" },
+        { "rule": "expression", "message_contains": "potentially untrusted" }
+      ]
     },
     "hardcoded-container-credentials": {
       "coverage": "full",
-      "notes": "The credentials rule reports a literal password in container or services credentials.",
-      "jactionlint": [{ "rule": "credentials" }]
+      "notes": "The hardcoded-container-credentials rule reports a literal password in container or services credentials.",
+      "jactionlint": [{ "rule": "hardcoded-container-credentials" }, { "rule": "credentials" }]
     },
     "excessive-permissions": {
       "coverage": "partial",
-      "notes": "Only the opt-in require-permissions check (no permissions block at all). Broad write scopes are not reported yet.",
-      "jactionlint": [{ "rule": "require-permissions" }]
+      "notes": "Only the opt-in missing-permissions check (no permissions block at all). Broad write scopes are not reported yet.",
+      "jactionlint": [{ "rule": "missing-permissions" }, { "rule": "require-permissions" }]
     },
     "unpinned-uses": {
       "coverage": "partial",
-      "notes": "Only the opt-in require-commit-hash check, for actions and for reusable workflows.",
+      "notes": "Only the opt-in unpinned-uses check (require-commit-hash in v1), for actions and for reusable workflows.",
       "jactionlint": [
+        { "rule": "unpinned-uses", "message_contains": "must be pinned to a full-length commit SHA" },
         { "rule": "action", "message_contains": "must be pinned to a full-length commit SHA" },
         { "rule": "workflow-call", "message_contains": "must be pinned to a full-length commit SHA" }
       ]
     },
     "unpinned-images": {
       "coverage": "partial",
-      "notes": "Only docker:// action references under require-commit-hash. container: and services: images are not checked yet.",
-      "jactionlint": [{ "rule": "action", "message_contains": "docker image must be pinned to a digest" }]
+      "notes": "Only docker:// action references under unpinned-uses. container: and services: images are not checked yet.",
+      "jactionlint": [
+        { "rule": "unpinned-uses", "message_contains": "docker image must be pinned to a digest" },
+        { "rule": "action", "message_contains": "docker image must be pinned to a digest" }
+      ]
     },
     "unsound-ternary": {
       "coverage": "partial",
       "notes": "jactionlint reports the falsy ternary idiom. zizmor 1.30.1 has no audit of this name, so this entry stays inert until a matching audit exists.",
-      "jactionlint": [{ "rule": "expression", "message_contains": "always falsy" }]
+      "jactionlint": [
+        { "rule": "unsound-ternary" },
+        { "rule": "expression", "message_contains": "always falsy" }
+      ]
     },
     "forbidden-uses": {
       "coverage": "partial",
