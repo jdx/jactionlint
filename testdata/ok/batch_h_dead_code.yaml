@@ -1,0 +1,45 @@
+# Every output and input is read, in the forms real workflows use
+on:
+  workflow_call:
+    inputs:
+      tag:
+        type: string
+      channel:
+        type: string
+    outputs:
+      version:
+        value: ${{ jobs.build.outputs.version }}
+  workflow_dispatch:
+    inputs:
+      dry-run:
+        type: boolean
+      note:
+        type: string
+
+run-name: Release ${{ inputs.tag }} (${{ github.event.inputs.note }})
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      matrix: ${{ steps.v.outputs.matrix }}
+      flag: ${{ steps.v.outputs.flag }}
+      everything: ${{ steps.v.outputs.everything }}
+    steps:
+      - id: v
+        run: echo "version=1" >> "$GITHUB_OUTPUT"
+  test:
+    needs: build
+    if: needs.build.outputs.flag == 'yes' && !inputs.dry-run
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        include: ${{ fromJSON(needs.build.outputs.matrix) }}
+    steps:
+      - run: echo ${{ inputs['channel'] }}
+  all:
+    needs: [build, test]
+    runs-on: ubuntu-24.04
+    steps:
+      - run: echo '${{ toJSON(needs.build.outputs) }}'
