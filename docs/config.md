@@ -144,6 +144,9 @@ extends:
       matches it. It's similar to the `-ignore` command line option.
 - `online`: Turns on the [online checks](usage.md#online-checks) for the files this configuration applies to, like the `-online`
   flag does for the whole run. They query the GitHub API. The default is `false`: nothing uses the network.
+- `fix`: Configuration of [`-fix`](usage.md#fix-errors-automatically).
+  - `rules`: A list of [rule IDs](rules.md). `-fix` applies only the fixes of these rules, like `-fix -rules a,b` on the command
+    line (which overrides it). The default, an empty list, applies the fixes of every rule. Unknown IDs are errors.
 - `profile`, `rules` and `extends`: See [Profiles](#profiles), [Rules](#rules) and [Extending config files](#extending-config-files).
 
 Unknown keys are errors. jactionlint reports the key with its position and suggests the closest known key when it looks

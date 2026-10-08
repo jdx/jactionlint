@@ -287,7 +287,52 @@ Only the fixes which do not change the behavior of the workflow are applied; `-f
 ```sh
 jactionlint -fix
 jactionlint -fix .github/workflows/ci.yaml
+jactionlint -fix -rules missing-timeout,artipacked   # only the fixes of these rules
+jactionlint -diff                                    # show the changes as a unified diff, write nothing
 ```
+
+When it is done `-fix` says what it changed, per rule, on stderr:
+
+```
+Fixed 12 problem(s) in 3 file(s)
+  missing-timeout: 8
+  artipacked: 4
+```
+
+- **`-rules <id>[,<id>...]`** restricts `-fix` (and `-diff`) to the fixes of the listed rules; the other findings are still
+  reported. The same list can be set with [`fix.rules`](config.md#configuration-file) in the configuration file. An unknown ID is
+  an error.
+- **`-diff`** computes the fixes like `-fix` (safe ones, or `-diff -fix=unsafe`) but writes nothing. The unified diff is on
+  stdout, so `jactionlint -diff | patch -p1` applies it, and the remaining errors are on stderr. The exit status is `1` when there is a
+  diff or an error remains.
+- **Several fixes in one run.** Fixing happens in memory and the file is written once, atomically (a temporary file in the same
+  directory is renamed over it), with its permission bits, its line breaks (CRLF stays CRLF) and a symbolic link kept. A file that
+  changed on disk while it was being fixed is not overwritten.
+
+#### How fixing converges and what it checks
+
+Each pass lints the text, chooses fixes that do not overlap, applies them and lints the result again, until no fix is left.
+
+- **Overlapping fixes.** When the edits of two fixes overlap, exactly one is applied in the pass and the other is dropped for the
+  pass; its finding is reported again in the next pass against the new text, or is gone. The winner does not depend on the order of
+  the findings: safe fixes come before unsafe ones, then rules in this order (`template-injection`,
+  `insecure-commands`, `artipacked`, `bot-conditions`, `unpinned-uses`, `self-repository`, `obfuscation`, `missing-permissions`,
+  `missing-timeout`, `anonymous-definition`, any other rule, `unused-ignore`), then by position. Fixes that remove a security
+  problem from the code come first, and the removal of an unused ignore comment last.
+- **Every pass is checked.** The result of a pass must be valid YAML, and the parsed document must equal the document before it
+  except where the edits are: a key or item that appears, disappears or changes away from every edit, or a value that changes its type
+  (`'true'` becoming `true`), makes the pass fail. Comments, the order of keys and the quoting style do not count. The fixes are then
+  tried one by one: the one that breaks the file is **refused**, the rest are applied, and the run exits with status `3` after printing
+  which rule it was (`error: .github/workflows/ci.yaml: the fix at line 12 would damage the file: ... (rules: template-injection)`).
+  That rule is not fixed again in that file.
+  This is a guard against bugs in fixers, not a proof: it cannot tell that an edit put a wrong value in the right place, a difference next
+  to an edit is accepted, anchors are compared only by the aliases that use them, and line breaks other than LF, CRLF and CR make the
+  positions approximate.
+- **No endless loops.** If the text of a pass comes back (two rules undo each other) or fixes remain after 10 passes, the file is not
+  written with them: it stays as it was before the fixes that kept repeating, and the run exits with status `3` naming the rules.
+- **Text is escaped for where it goes.** A fix that inserts text into a scalar escapes it for how the scalar is written: a backslash or
+  quote in a double quoted scalar, a quote in a single quoted one, indentation in a block scalar, and an environment variable
+  value that is not a plain-safe string is quoted. A fix that cannot represent its text in the place offers no fix.
 
 Fixes arrive with the rules that can fix their findings mechanically. The errors of the rules without a fix are only reported.
 `-fix` cannot be used with stdin. These rules have a fix today:

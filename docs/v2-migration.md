@@ -40,6 +40,12 @@ afterwards. `-format sarif` will carry the same fixes (rule ID, level, start and
 patch derived from the SARIF fixes, falling back to `jactionlint -fix` when some findings have no fix. Unsafe fixes are
 never part of the SARIF output and need an explicit `-fix=unsafe`.
 
+`-fix` also restricts to some rules (`-rules` or the `fix.rules` config key), shows a unified diff instead of writing
+(`-diff`), reports what it changed per rule, writes each file once and atomically, and checks every pass: the result must be valid
+YAML that differs from the original only where the edits are, fixes of different rules that overlap are resolved in a documented order,
+and fixes that never settle are reported as an error naming the rules instead of looping. A fix that breaks the file is refused and
+exits with status `3`. See [Fix errors automatically](usage.md#fix-errors-automatically).
+
 ## Related
 
 - [zizmor parity](zizmor-parity.md): the per-audit tracking of planned security and policy rules.

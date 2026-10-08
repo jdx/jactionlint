@@ -59,9 +59,16 @@ are available. A custom Go template can be given too:
   * `-debug`:
     Enable debug output (for development)
 
+  * `-diff`:
+    Print the changes `-fix` would make as a unified diff on stdout and do not write the files. Implies
+    `-fix`. The errors which remain are printed on stderr. Exits with 1 when there is a diff or an error
+    remains.
+
   * `-fix`, `-fix=unsafe`:
     Apply the automatic fixes to the files and report what remains. `-fix=unsafe` also applies the
-    fixes which may change the behavior of the workflow. Exits with 1 when an error remains.
+    fixes which may change the behavior of the workflow. Every pass is checked: the result must be valid
+    YAML which differs from the original only where the edits are, or the fix is refused and the exit
+    status is 3. Exits with 1 when an error remains.
 
   * `-format` <FORMAT>:
     Output format: `text` (default), `oneline`, `json`, `jsonl`, `sarif`, `gcc` or `github`. A custom
@@ -103,6 +110,10 @@ are available. A custom Go template can be given too:
   * `-rule-ids`:
     Show the stable rule ID such as `unpinned-uses` at the end of each error in the text format
     instead of the kind
+
+  * `-rules` <ID>[,<ID>...]:
+    With `-fix` or `-diff`, apply only the fixes of these rule IDs. The `fix.rules` key of the
+    configuration file does the same.
 
   * `-pyflakes` <EXECUTABLE>:
     Command name or file path of "pyflakes" external command. If empty, pyflakes integration will be

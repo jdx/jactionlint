@@ -1,0 +1,9 @@
+# The configuration the fix corpus test runs with. It turns on as many rules with a fixer as possible
+# so that the run exercises them. Fixes that need a number only exist when it is configured, and these
+# numbers are for the test only.
+profile: all
+rules:
+  missing-timeout:
+    default-minutes: 30
+  missing-permissions: error
+  unused-ignore: error
