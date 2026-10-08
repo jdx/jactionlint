@@ -628,6 +628,7 @@ func (l *Linter) check(
 			shellcheck:             l.shellcheck,
 			pyflakes:               l.pyflakes,
 			proc:                   proc,
+			src:                    content,
 		}, l.log)
 		if l.onRulesCreated != nil {
 			rules = l.onRulesCreated(rules)
