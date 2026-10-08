@@ -462,6 +462,8 @@ func TestCachePoisoningActions(t *testing.T) {
 		{"setup-go opt out", "      - uses: actions/setup-go@v5\n        with:\n          cache: false\n", 0},
 		{"setup-uv default", "      - uses: astral-sh/setup-uv@v6\n", 1},
 		{"setup-uv opt out", "      - uses: astral-sh/setup-uv@v6\n        with:\n          enable-cache: false\n", 0},
+		{"setup-uv conditional on github.ref", "      - uses: astral-sh/setup-uv@v6\n        with:\n          enable-cache: ${{ github.ref == 'refs/heads/main' }}\n", 0},
+		{"setup-uv conditional on github.ref_name", "      - uses: astral-sh/setup-uv@v6\n        with:\n          enable-cache: ${{ github.ref_name == 'main' }}\n", 0},
 		{"setup-uv conditional", "      - uses: astral-sh/setup-uv@v6\n        with:\n          enable-cache: ${{ github.event_name != 'release' }}\n", 0},
 		{"rust-cache", "      - uses: Swatinem/rust-cache@v2\n", 1},
 		{"rust-cache pinned by sha", "      - uses: swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2\n", 1},
