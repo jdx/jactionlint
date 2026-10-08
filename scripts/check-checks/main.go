@@ -17,10 +17,29 @@ import (
 	"github.com/jdx/jactionlint/v2"
 )
 
+// exampleConfig is the configuration the examples are linted with. Every example is a minimal
+// workflow showing one check, and most of them have jobs without timeout-minutes, which the
+// default profile reports. Turning that off keeps the outputs about the check being explained.
+const exampleConfig = "rules:\n  missing-timeout: off\n"
+
 func Actionlint(src []byte) ([]byte, error) {
 	var out bytes.Buffer
 
+	cfg, err := os.CreateTemp("", "jactionlint-example-*.yaml")
+	if err != nil {
+		return nil, err
+	}
+	defer os.Remove(cfg.Name())
+	_, err = cfg.WriteString(exampleConfig)
+	if cerr := cfg.Close(); err == nil {
+		err = cerr
+	}
+	if err != nil {
+		return nil, err
+	}
+
 	opts := &jactionlint.LinterOptions{
+		ConfigFile:    cfg.Name(),
 		StdinFileName: "test.yaml",
 		Shellcheck:    "shellcheck",
 		Pyflakes:      "pyflakes",

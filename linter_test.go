@@ -80,8 +80,7 @@ func TestLinterLintOK(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			config := Config{}
-			linter.defaultConfig = &config
+			linter.defaultConfig = withoutMissingTimeout(&Config{})
 
 			t.Log("Linting workflow file", f)
 			errs, err := linter.LintFile(f, proj)
@@ -310,7 +309,7 @@ func TestLintFindProjectFromPath(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		l.defaultConfig = &Config{}
+		l.defaultConfig = withoutMissingTimeout(&Config{})
 		errs, err := l.Lint(path, b, nil)
 		if err != nil {
 			t.Fatal(err)
@@ -418,7 +417,7 @@ func TestLinterFormatErrorMessageOK(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			l.defaultConfig = &Config{}
+			l.defaultConfig = withoutMissingTimeout(&Config{})
 			errs, err := l.LintFile(infile, proj)
 			if err != nil {
 				t.Fatal(err)
@@ -468,7 +467,7 @@ func TestLinterFormatErrorMessageInSARIF(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	l.defaultConfig = &Config{}
+	l.defaultConfig = withoutMissingTimeout(&Config{})
 	errs, err := l.LintFile(file, proj)
 	if err != nil {
 		t.Fatal(err)
@@ -607,7 +606,7 @@ func TestLinterAddCustomRuleOnRulesCreatedHook(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	l.defaultConfig = &Config{}
+	l.defaultConfig = withoutMissingTimeout(&Config{})
 
 	{
 		w := `on: push
@@ -670,7 +669,7 @@ func TestLinterRemoveRuleOnRulesCreatedHook(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	l.defaultConfig = &Config{}
+	l.defaultConfig = withoutMissingTimeout(&Config{})
 
 	f := filepath.Join("testdata", "err", "invalid_runner_labels.yaml")
 	errs, err := l.LintFile(f, nil)
@@ -839,7 +838,7 @@ func BenchmarkLintWorkflowFiles(b *testing.B) {
 				if err != nil {
 					b.Fatal(err)
 				}
-				l.defaultConfig = &Config{}
+				l.defaultConfig = withoutMissingTimeout(&Config{})
 
 				errs, err := l.LintFiles(bm.files, proj)
 				if err != nil {
@@ -886,7 +885,7 @@ func BenchmarkLintWorkflowContent(b *testing.B) {
 				if err != nil {
 					b.Fatal(err)
 				}
-				l.defaultConfig = &Config{}
+				l.defaultConfig = withoutMissingTimeout(&Config{})
 				errs, err := l.Lint(f, content, proj)
 				if err != nil {
 					b.Fatal(err)
@@ -925,7 +924,7 @@ func BenchmarkExamplesLintFiles(b *testing.B) {
 		if err != nil {
 			b.Fatal(err)
 		}
-		l.defaultConfig = &Config{}
+		l.defaultConfig = withoutMissingTimeout(&Config{})
 
 		errs, err := l.LintFiles(files, proj)
 		if err != nil {
@@ -1020,7 +1019,7 @@ jobs:
 	}
 	// The config from -config-file lists no labels, so the label must remain
 	// unknown even though the global config lists it
-	linter.defaultConfig = &Config{}
+	linter.defaultConfig = withoutMissingTimeout(&Config{})
 	linter.globalConfig = &Config{}
 	linter.globalConfig.SelfHostedRunner.Labels = []string{"my-custom-runner"}
 

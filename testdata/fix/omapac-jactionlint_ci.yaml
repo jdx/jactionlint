@@ -1,0 +1,149 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -D warnings
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: jdx/mise-action@v3
+        with:
+          install_args: --locked hk mr-boxington shellcheck shfmt taplo usage
+      - uses: $/.github/actions/mbx
+      - name: Run non-compiling linters
+        run: mise run lint
+        env:
+          HK_SKIP_STEPS: cargo-clippy
+      - name: Delegate cgroup controllers for kernel enforcement tests
+        run: |
+          sudo mkdir /sys/fs/cgroup/pacvamp-ci /sys/fs/cgroup/pacvamp-ci/supervisor
+          echo '+cpu +memory +pids' | sudo tee /sys/fs/cgroup/pacvamp-ci/cgroup.subtree_control
+          sudo chown "$(id -u):$(id -g)" /sys/fs/cgroup/pacvamp-ci /sys/fs/cgroup/pacvamp-ci/cgroup.procs /sys/fs/cgroup/pacvamp-ci/cgroup.subtree_control /sys/fs/cgroup/pacvamp-ci/supervisor /sys/fs/cgroup/pacvamp-ci/supervisor/cgroup.procs
+      - parallel:
+          - name: Test and check generated CLI docs
+            run: |
+              # Bootstrap this test shell into the delegated subtree; all test
+              # children inherit it. Never grant writes to the host root cgroup.
+              sudo sh -c 'printf "%s\n" "$1" > /sys/fs/cgroup/pacvamp-ci/supervisor/cgroup.procs' _ "$$"
+              mbx test --workspace --all-features
+              mise run render:check
+            env:
+              PACVAMP_REQUIRE_JAIL: "1"
+              PACVAMP_TEST_CGROUP_ROOT: /sys/fs/cgroup/pacvamp-ci
+          - name: Clippy
+            run: mbx clippy --workspace --all-features --all-targets -- -D warnings
+            env:
+              CARGO_TARGET_DIR: ${{ runner.temp }}/cargo-clippy
+
+  arch-rust:
+    name: arch-rust
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      CARGO_HOME: /tmp/arch-cargo
+    container:
+      image: archlinux:base-devel
+      options: --privileged
+    steps:
+      - name: Install the Arch toolchain and test dependencies
+        run: pacman -Syu --noconfirm --needed rust git cmake openssl
+      - uses: actions/checkout@v5
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: arch-rust
+      - name: Run the complete Rust suite with real pacman installed
+        # Fixtures exercise sudo elevation and permission failures as a normal user.
+        run: |
+          useradd --create-home pacvamp-test
+          mkdir -p "$CARGO_HOME"
+          chown -R pacvamp-test:pacvamp-test "$GITHUB_WORKSPACE" "$CARGO_HOME"
+          runuser -u pacvamp-test -- cargo test --locked --workspace --all-features
+        env:
+          PACVAMP_REQUIRE_JAIL: "1"
+
+  arch-e2e:
+    name: arch-e2e
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: jdx/mise-action@v3
+        with:
+          install_args: --locked mr-boxington
+      - uses: $/.github/actions/mbx
+      - run: mbx build --locked --workspace --all-features
+      - name: Allow nested build namespaces on the disposable runner
+        # Ubuntu's host AppArmor restriction also applies inside privileged
+        # Docker containers. The clean-image fixture runs bwrap as non-root.
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+      - name: Test real Arch package transactions and jailed builds
+        run: bash e2e/run_all_tests
+        env:
+          PACVAMP_E2E_CONTAINER: "1"
+
+  # Single fan-in gate, so branch protection can require one stable check and
+  # skipped jobs cannot silently satisfy the required status.
+  final:
+    permissions: {}
+    needs:
+      - ci
+      - arch-e2e
+      - arch-rust
+      - vm-e2e
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    # Run on success or upstream failure but skip when the workflow is cancelled
+    # — `always()` would override `cancel-in-progress` and waste a runner.
+    if: ${{ !cancelled() }}
+    steps:
+      - name: Check job results
+        if: |
+          needs.ci.result != 'success' ||
+          needs.arch-e2e.result != 'success' ||
+          needs.arch-rust.result != 'success' ||
+          needs.vm-e2e.result != 'success'
+        run: exit 1
+      - run: echo "All CI jobs completed successfully"
+  vm-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: sudo apt-get update && sudo apt-get install -y qemu-system-x86 libarchive-tools e2fsprogs
+      - run: cargo build --locked --workspace --all-features
+      - name: Boot Arch and exercise package lifecycle across two boots
+        run: bash harness/vm/run
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: vm-acceptance-results
+          path: target/vm-results

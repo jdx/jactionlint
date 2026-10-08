@@ -647,7 +647,9 @@ func (l *Linter) check(
 	// is used. The order of the filters does not change which errors remain.
 	inlineIgnores, orphans, ignoreErrs := parseInlineIgnoresWithOrphans(content)
 	all = l.filterInlineIgnores(all, inlineIgnores)
-	all = append(all, l.annotateErrors(unusedInlineIgnores(inlineIgnores, orphans, cfg), content, cfg)...)
+	unused := unusedInlineIgnores(inlineIgnores, orphans, cfg)
+	dropFixesChangingYAML(content, unused)
+	all = append(all, l.annotateErrors(unused, content, cfg)...)
 
 	all = l.filterErrors(all, cfg.PathConfigs(path))
 	all = append(all, l.annotateErrors(ignoreErrs, content, cfg)...)

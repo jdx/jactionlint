@@ -20,7 +20,7 @@ func lintIDs(t *testing.T, opts *LinterOptions, cfg *Config, src string) []strin
 	if err != nil {
 		t.Fatal(err)
 	}
-	l.defaultConfig = cfg
+	l.defaultConfig = withoutMissingTimeout(cfg)
 	errs, err := l.Lint("test.yaml", []byte(src), nil)
 	if err != nil {
 		t.Fatal(err)
@@ -248,11 +248,11 @@ func TestCommandExitStatusBySeverity(t *testing.T) {
 		}
 		return p
 	}
-	errorCfg := write("error.yaml", "")
-	warnCfg := write("warn.yaml", "rules:\n  template-injection: warn\n  undefined-property: warn\n")
-	infoCfg := write("info.yaml", "rules:\n  template-injection: info\n  undefined-property: info\n")
-	mixedCfg := write("mixed.yaml", "rules:\n  template-injection: warn\n")
-	offCfg := write("off.yaml", "rules:\n  template-injection: off\n  undefined-property: off\n")
+	errorCfg := write("error.yaml", "rules:\n  missing-timeout: off\n")
+	warnCfg := write("warn.yaml", "rules:\n  missing-timeout: off\n  template-injection: warn\n  undefined-property: warn\n")
+	infoCfg := write("info.yaml", "rules:\n  missing-timeout: off\n  template-injection: info\n  undefined-property: info\n")
+	mixedCfg := write("mixed.yaml", "rules:\n  missing-timeout: off\n  template-injection: warn\n")
+	offCfg := write("off.yaml", "rules:\n  missing-timeout: off\n  template-injection: off\n  undefined-property: off\n")
 
 	tests := []struct {
 		name string

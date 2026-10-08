@@ -1825,6 +1825,7 @@ func Parse(b []byte) (*Workflow, []*Error) {
 	p := &parser{lines: strings.Split(string(b), "\n")}
 	w := p.parse(&n)
 	w.Comments = NewCommentIndex(b)
+	w.Source = b
 
 	return w, p.errors
 }

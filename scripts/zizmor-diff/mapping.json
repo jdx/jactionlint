@@ -13,8 +13,8 @@
     },
     "excessive-permissions": {
       "coverage": "partial",
-      "notes": "Only the opt-in require-permissions check (no permissions block at all). Broad write scopes are not reported yet.",
-      "jactionlint": [{ "rule": "require-permissions" }]
+      "notes": "Only the opt-in missing-permissions check (no permissions block at all). Broad write scopes are not reported yet.",
+      "jactionlint": [{ "rule": "missing-permissions" }, { "rule": "require-permissions" }]
     },
     "unpinned-uses": {
       "coverage": "partial",

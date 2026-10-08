@@ -359,7 +359,7 @@ func TestCommandFix(t *testing.T) {
 		code := cmd.Main(append([]string{"jactionlint", "-no-color", "-config-file", filepath.Join(root, "jactionlint.yaml")}, args...))
 		return code, stdout.String(), stderr.String()
 	}
-	if err := os.WriteFile(filepath.Join(root, "jactionlint.yaml"), []byte("rules:\n  local-action-checkout: off\n  unsound-ternary: off\n  workflow-run-names: off\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(root, "jactionlint.yaml"), []byte("rules:\n  local-action-checkout: off\n  unsound-ternary: off\n  workflow-run-names: off\n  missing-timeout: off\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
