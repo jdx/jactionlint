@@ -303,8 +303,10 @@ runs when a finding has no fix. Add this step to `hk.pkl`:
 - Only the fixes which are safe, valid and do not conflict with each other are in the SARIF log. A finding which cannot be fixed
   stays without a fix so hk runs `jactionlint -fix` and still reports it.
 - The log uses `columnKind: unicodeCodePoints` and file URIs relative to the directory where jactionlint ran.
-- The exit status is `0` for a clean run and `1` when errors were found. Other statuses are failures. Logs and warnings go to
-  stderr, and nothing but the SARIF log is on stdout.
+- The exit status is `0` for a clean run and `1` when errors were found. Other statuses are failures. Nothing but the SARIF log is
+  on stdout, and nothing is on stderr unless `-verbose` or `-debug` is given, because hk parses both together. The
+  deprecation warnings of the configuration are put in `invocations[].toolConfigurationNotifications` of the log instead of
+  stderr in this format.
 - To use the `strict` profile, set `profile: strict` in `.github/jactionlint.yaml`.
 
 <a id="on-github-actions"></a>

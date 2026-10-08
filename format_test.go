@@ -202,7 +202,7 @@ func TestGitHubFormat(t *testing.T) {
 	err := githubPrinter{}.print(&b, []fileResult{{errs: []*Error{{
 		Filepath: "a,b:c%.yaml", Line: 1, Column: 2, EndLine: 1, EndColumn: 3, ID: "x:y", Severity: SeverityError,
 		Message: "100%\nnext\r",
-	}}}})
+	}}}}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -371,7 +371,8 @@ func TestSARIFFormat(t *testing.T) {
 }
 
 func TestSARIFFormatHasNoOutputBesidesTheLog(t *testing.T) {
-	// A deprecated key is a warning in the log writer, never in the output
+	// hk parses stdout and stderr together so nothing may be written to stderr in this format. A deprecated key
+	// is reported in the log of the SARIF document instead.
 	dir := t.TempDir()
 	p := filepath.Join(dir, "c.yaml")
 	if err := os.WriteFile(p, []byte("require-shell: true\n"), 0o644); err != nil {
@@ -379,16 +380,44 @@ func TestSARIFFormatHasNoOutputBesidesTheLog(t *testing.T) {
 	}
 	var stdout, stderr bytes.Buffer
 	cmd := &Command{Stdin: strings.NewReader(""), Stdout: &stdout, Stderr: &stderr}
-	code := cmd.Main([]string{"jactionlint", "-format", "sarif", "-config-file", p, formatTestFile})
+	code := cmd.Main([]string{"jactionlint", "-format", "sarif", "-config-file", p, formatTestFile, formatTestFile})
 	if code != ExitStatusSuccessProblemFound {
 		t.Errorf("exit status %d", code)
+	}
+	if stderr.Len() != 0 {
+		t.Errorf("stderr must be empty but got %q", stderr.String())
 	}
 	var doc sarifDoc
 	if err := json.Unmarshal(stdout.Bytes(), &doc); err != nil {
 		t.Fatalf("stdout must be only the SARIF log: %v\n%s", err, stdout.String())
 	}
-	if !strings.Contains(stderr.String(), "deprecated") {
-		t.Errorf("the warning must be on stderr: %q", stderr.String())
+	inv := sarifRunOf(t, stdout.String())["invocations"].([]any)
+	if len(inv) != 1 || inv[0].(sarifDoc)["executionSuccessful"] != true {
+		t.Fatalf("unexpected invocations: %v", inv)
+	}
+	notes := inv[0].(sarifDoc)["toolConfigurationNotifications"].([]any)
+	if len(notes) != 1 || notes[0].(sarifDoc)["level"] != "warning" ||
+		!strings.Contains(notes[0].(sarifDoc)["message"].(sarifDoc)["text"].(string), `"require-shell" is deprecated`) {
+		t.Errorf("the deprecation must be in the document once: %v", notes)
+	}
+
+	// Other formats keep writing the warning to stderr
+	stdout.Reset()
+	stderr.Reset()
+	cmd.Main([]string{"jactionlint", "-format", "json", "-config-file", p, formatTestFile})
+	if !strings.Contains(stderr.String(), `"require-shell" is deprecated`) {
+		t.Errorf("stderr: %q", stderr.String())
+	}
+	var arr []any
+	if err := json.Unmarshal(stdout.Bytes(), &arr); err != nil {
+		t.Fatalf("stdout must be only the JSON: %v", err)
+	}
+
+	// Without deprecations the document has no invocation
+	stdout.Reset()
+	cmd.Main([]string{"jactionlint", "-format", "sarif", formatTestFile})
+	if _, ok := sarifRunOf(t, stdout.String())["invocations"]; ok {
+		t.Error("invocations must be omitted when there is nothing to tell")
 	}
 }
 
@@ -397,7 +426,7 @@ func TestSARIFOrdersFilesByPath(t *testing.T) {
 	err := sarifPrinter{}.print(&b, []fileResult{
 		{path: "b.yaml", errs: []*Error{{Filepath: "b.yaml", Line: 1, Column: 1, ID: "invalid-glob", Severity: SeverityError, Message: "b"}}},
 		{path: "a.yaml", errs: []*Error{{Filepath: "a.yaml", Line: 1, Column: 1, ID: "invalid-glob", Severity: SeverityError, Message: "a"}}},
-	})
+	}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

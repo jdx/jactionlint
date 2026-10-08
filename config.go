@@ -224,15 +224,15 @@ const AssumeDefaultPermissionsPermissive = "permissive"
 
 // PathConfigs returns a list of all PathConfig values matching to the given file path. The path must
 // be relative to the root of the project.
-func (cfg *Config) PathConfigs(path string) []PathConfig {
+func (c *Config) PathConfigs(path string) []PathConfig {
 	path = filepath.ToSlash(path)
 
 	var ret []PathConfig
-	if cfg != nil {
-		for p, c := range cfg.Paths {
+	if c != nil {
+		for p, pc := range c.Paths {
 			// Glob patterns were validated in `ParseConfig()`
 			if doublestar.MatchUnvalidated(p, path) {
-				ret = append(ret, c)
+				ret = append(ret, pc)
 			}
 		}
 	}

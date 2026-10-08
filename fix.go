@@ -159,7 +159,7 @@ func (l *Linter) FixFiles(filepaths []string, project *Project, mode FixMode) (*
 	for _, r := range results {
 		res.Errors = append(res.Errors, r.errs...)
 	}
-	if err := l.printer.print(l.out, results); err != nil {
+	if err := l.printer.print(l.out, results, l.notifications()); err != nil {
 		return nil, err
 	}
 	if res.Applied > 0 {

@@ -47,7 +47,18 @@ type fileResult struct {
 
 // printer prints the results of linting.
 type printer interface {
-	print(w io.Writer, results []fileResult) error
+	// print prints the results. The notes are messages about the run itself, e.g. deprecation warnings
+	// of the configuration. Formats which have a place for them print them there. The other formats
+	// ignore them because the linter has already written them to the log.
+	print(w io.Writer, results []fileResult, notes []string) error
+}
+
+// structured reports whether the printer makes a document which other tools parse. For such a format the
+// log must stay free of the messages which the document carries, since tools like hk parse stdout and
+// stderr together.
+func structured(p printer) bool {
+	_, ok := p.(sarifPrinter)
+	return ok
 }
 
 // newPrinter creates the printer for the format. A format with "{{" is a Go template.
@@ -85,7 +96,7 @@ type textPrinter struct {
 	oneline, showIDs bool
 }
 
-func (p textPrinter) print(w io.Writer, results []fileResult) error {
+func (p textPrinter) print(w io.Writer, results []fileResult, _ []string) error {
 	for _, r := range results {
 		src := r.src
 		if p.oneline {
@@ -104,7 +115,7 @@ type templatePrinter struct {
 	f *ErrorFormatter
 }
 
-func (p templatePrinter) print(w io.Writer, results []fileResult) error {
+func (p templatePrinter) print(w io.Writer, results []fileResult, _ []string) error {
 	var fields []*ErrorTemplateFields
 	for _, r := range results {
 		for _, e := range r.errs {
@@ -136,13 +147,13 @@ func encodeJSON(w io.Writer, v any) error {
 
 type jsonPrinter struct{}
 
-func (jsonPrinter) print(w io.Writer, results []fileResult) error {
+func (jsonPrinter) print(w io.Writer, results []fileResult, _ []string) error {
 	return encodeJSON(w, allTemplateFields(results))
 }
 
 type jsonlPrinter struct{}
 
-func (jsonlPrinter) print(w io.Writer, results []fileResult) error {
+func (jsonlPrinter) print(w io.Writer, results []fileResult, _ []string) error {
 	for _, f := range allTemplateFields(results) {
 		if err := encodeJSON(w, f); err != nil {
 			return err
@@ -155,7 +166,7 @@ func (jsonlPrinter) print(w io.Writer, results []fileResult) error {
 
 type gccPrinter struct{}
 
-func (gccPrinter) print(w io.Writer, results []fileResult) error {
+func (gccPrinter) print(w io.Writer, results []fileResult, _ []string) error {
 	for _, r := range results {
 		for _, e := range r.errs {
 			fmt.Fprintf(w, "%s:%d:%d: %s: %s [%s]\n", e.Filepath, e.Line, e.Column, e.Severity.gccName(), e.Message, e.ID)
@@ -181,7 +192,7 @@ var (
 	githubPropertyEscaper = strings.NewReplacer("%", "%25", "\r", "%0D", "\n", "%0A", ":", "%3A", ",", "%2C")
 )
 
-func (githubPrinter) print(w io.Writer, results []fileResult) error {
+func (githubPrinter) print(w io.Writer, results []fileResult, _ []string) error {
 	for _, r := range results {
 		for _, e := range r.errs {
 			cmd := "error"
@@ -288,12 +299,23 @@ type sarifDriver struct {
 	Rules           []sarifRule `json:"rules"`
 }
 
+type sarifNotification struct {
+	Level   string       `json:"level"`
+	Message sarifMessage `json:"message"`
+}
+
+type sarifInvocation struct {
+	ExecutionSuccessful            bool                `json:"executionSuccessful"`
+	ToolConfigurationNotifications []sarifNotification `json:"toolConfigurationNotifications,omitempty"`
+}
+
 type sarifRun struct {
 	Tool struct {
 		Driver sarifDriver `json:"driver"`
 	} `json:"tool"`
-	ColumnKind string        `json:"columnKind"`
-	Results    []sarifResult `json:"results"`
+	Invocations []sarifInvocation `json:"invocations,omitempty"`
+	ColumnKind  string            `json:"columnKind"`
+	Results     []sarifResult     `json:"results"`
 }
 
 type sarifLog struct {
@@ -405,12 +427,19 @@ func sarifFixes(e *Error, src []byte, accepted *[]TextEdit) []sarifFix {
 	return []sarifFix{{Description: sarifMessage{desc}, ArtifactChanges: []sarifArtifactChange{change}}}
 }
 
-func (sarifPrinter) print(w io.Writer, results []fileResult) error {
+func (sarifPrinter) print(w io.Writer, results []fileResult, notes []string) error {
 	// Files are sorted so that the log does not depend on the order of the arguments
 	results = slices.Clone(results)
 	slices.SortStableFunc(results, func(a, b fileResult) int { return strings.Compare(a.path, b.path) })
 
 	run := sarifRun{ColumnKind: "unicodeCodePoints", Results: []sarifResult{}}
+	if len(notes) > 0 {
+		inv := sarifInvocation{ExecutionSuccessful: true}
+		for _, n := range notes {
+			inv.ToolConfigurationNotifications = append(inv.ToolConfigurationNotifications, sarifNotification{"warning", sarifMessage{n}})
+		}
+		run.Invocations = []sarifInvocation{inv}
+	}
 	d := &run.Tool.Driver
 	d.Name = "jactionlint"
 	d.Version = getCommandVersion()

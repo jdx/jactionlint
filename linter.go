@@ -123,6 +123,8 @@ type Linter struct {
 	configFile     string
 	minSeverity    Severity
 	warned         sync.Map // *Config -> struct{}: configs whose deprecations were already reported
+	notesMu        sync.Mutex
+	notes          []string // deprecation warnings found while linting
 }
 
 // NewLinter creates a new Linter instance.
@@ -210,23 +212,22 @@ func NewLinter(out io.Writer, opts *LinterOptions) (*Linter, error) {
 	}
 
 	l := &Linter{
-		NewProjects(),
-		out,
-		lout,
-		level,
-		prn,
-		opts.Shellcheck,
-		opts.Pyflakes,
-		ignore,
-		stdin,
-		cfg,
-		globalCfg,
-		formatter,
-		cwd,
-		opts.OnRulesCreated,
-		opts.ConfigFile,
-		opts.MinSeverity,
-		sync.Map{},
+		projects:       NewProjects(),
+		out:            out,
+		logOut:         lout,
+		logLevel:       level,
+		printer:        prn,
+		shellcheck:     opts.Shellcheck,
+		pyflakes:       opts.Pyflakes,
+		ignorePats:     ignore,
+		stdin:          stdin,
+		defaultConfig:  cfg,
+		globalConfig:   globalCfg,
+		errFmt:         formatter,
+		cwd:            cwd,
+		onRulesCreated: opts.OnRulesCreated,
+		configFile:     opts.ConfigFile,
+		minSeverity:    opts.MinSeverity,
 	}
 
 	l.debug("Create a Linter instance with option %#v", opts)
@@ -381,7 +382,7 @@ func (l *Linter) LintFiles(filepaths []string, project *Project) ([]*Error, erro
 	for _, r := range results {
 		all = append(all, r.errs...)
 	}
-	if err := l.printer.print(l.out, results); err != nil {
+	if err := l.printer.print(l.out, results, l.notifications()); err != nil {
 		return nil, err
 	}
 
@@ -499,7 +500,7 @@ func (l *Linter) LintFile(path string, project *Project) ([]*Error, error) {
 		return nil, err
 	}
 
-	if err := l.printer.print(l.out, []fileResult{{file: origPath, path: path, src: src, errs: errs}}); err != nil {
+	if err := l.printer.print(l.out, []fileResult{{file: origPath, path: path, src: src, errs: errs}}, l.notifications()); err != nil {
 		return nil, err
 	}
 	return errs, nil
@@ -539,7 +540,7 @@ func (l *Linter) Lint(path string, content []byte, project *Project) ([]*Error, 
 	if err != nil {
 		return nil, err
 	}
-	if err := l.printer.print(l.out, []fileResult{{file: path, path: path, src: content, errs: errs}}); err != nil {
+	if err := l.printer.print(l.out, []fileResult{{file: path, path: path, src: content, errs: errs}}, l.notifications()); err != nil {
 		return nil, err
 	}
 	return errs, nil
@@ -711,9 +712,25 @@ func (l *Linter) warnDeprecations(cfg *Config) {
 	if _, loaded := l.warned.LoadOrStore(cfg, struct{}{}); loaded {
 		return
 	}
+	l.notesMu.Lock()
+	l.notes = append(l.notes, cfg.Deprecations...)
+	l.notesMu.Unlock()
+	if structured(l.printer) {
+		return // The warnings are in the output document
+	}
 	for _, d := range cfg.Deprecations {
 		fmt.Fprintln(l.logOut, "warning:", d)
 	}
+}
+
+// notifications returns the warnings about the run itself (the deprecated keys of the configs which were
+// used) in sorted order so that the output does not depend on the order files were checked in.
+func (l *Linter) notifications() []string {
+	l.notesMu.Lock()
+	defer l.notesMu.Unlock()
+	ret := slices.Clone(l.notes)
+	slices.Sort(ret)
+	return slices.Compact(ret)
 }
 
 // annotateErrors fills the fields of the errors which are derived from the diagnostic ID: the

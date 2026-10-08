@@ -224,7 +224,7 @@ anything.
 ## Deprecated keys
 
 The following keys were replaced by `rules`. They still work for now: jactionlint translates them into rules and prints a
-deprecation warning to stderr once per config file. `jactionlint -migrate-config` rewrites the file (keeping the comments
+deprecation warning to stderr once per config file (in `-format sarif` it is in the log's `toolConfigurationNotifications`). `jactionlint -migrate-config` rewrites the file (keeping the comments
 and the other keys) into the `rules` mapping.
 
 | Deprecated key                                      | Replacement                                                                     |
