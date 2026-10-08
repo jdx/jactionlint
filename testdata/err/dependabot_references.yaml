@@ -1,0 +1,37 @@
+version: 2
+registries:
+  npm-github:
+    type: npm-registry
+    url: https://npm.pkg.github.com
+    token: ${{ secrets.NPM_TOKEN }}
+updates:
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: weekly
+    registries:
+      - npm-github
+      # ERROR: not defined in registries
+      - npm-gitlab
+      - "*"
+  # ERROR: the same ecosystem and directory
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: daily
+  # a different target branch is not a duplicate
+  - package-ecosystem: npm
+    directory: "/"
+    target-branch: next
+    schedule:
+      interval: daily
+  - package-ecosystem: pip
+    directories: ["/a", "/b"]
+    multi-ecosystem-group: everything
+    schedule:
+      interval: weekly
+  # ERROR: the group is not defined
+  - package-ecosystem: cargo
+    directory: "/"
+    multi-ecosystem-group: nothing
+    patterns: ["*"]

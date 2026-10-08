@@ -109,12 +109,18 @@ type parser struct {
 	errors []*Error
 	// lines are the lines of the source. This is nil when the source is not available.
 	lines []string
+	// syntaxID is the ID of the syntax errors. It is "workflow-syntax" when empty.
+	syntaxID string
 }
 
 // syntaxCheckKind is the kind of the errors which the parser reports.
 const syntaxCheckKind = "syntax-check"
 
 func (p *parser) error(n *yaml.Node, m string) {
+	if p.syntaxID != "" {
+		p.errorID(p.syntaxID, n, m)
+		return
+	}
 	p.errorID("workflow-syntax", n, m)
 }
 
@@ -123,6 +129,10 @@ func (p *parser) errorID(id string, n *yaml.Node, m string) {
 }
 
 func (p *parser) errorAt(pos *Pos, m string) {
+	if p.syntaxID != "" {
+		p.errorIDAt(p.syntaxID, pos, m)
+		return
+	}
 	p.errorIDAt("workflow-syntax", pos, m)
 }
 
@@ -1824,6 +1834,18 @@ func Parse(b []byte) (*Workflow, []*Error) {
 
 	p := &parser{lines: strings.Split(string(b), "\n")}
 	w := p.parse(&n)
+	w.Comments = NewCommentIndex(b)
 
 	return w, p.errors
+}
+
+func init() {
+	registerRules(
+		RuleInfo{ID: "duplicate-key", Group: RuleGroupCorrectness, Summary: "A key is defined more than once in a mapping.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-missing-required-duplicate-keys"},
+		RuleInfo{ID: "merge-key", Group: RuleGroupCorrectness, Summary: "The YAML merge key << is used, which GitHub Actions does not support.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "yaml-anchors"},
+		RuleInfo{ID: "recursive-alias", Group: RuleGroupCorrectness, Summary: "A YAML alias refers to itself.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "yaml-anchors"},
+		RuleInfo{ID: "unused-anchor", Group: RuleGroupCorrectness, Summary: "A YAML anchor is defined but never used.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "yaml-anchors"},
+		RuleInfo{ID: "workflow-syntax", Group: RuleGroupCorrectness, Summary: "The workflow does not follow the syntax of GitHub Actions workflows.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-unexpected-keys"},
+		RuleInfo{ID: "yaml-syntax", Group: RuleGroupCorrectness, Summary: "The file is not valid YAML.", DefaultLevel: SeverityError, Profile: ProfileDefault},
+	)
 }

@@ -58,15 +58,16 @@ func (rule *RuleWorkflowCall) VisitJobPre(n *Job) error {
 		return nil
 	}
 
-	if isWorkflowCallUsesLocalFormat(u.Value) {
+	ref := ParseUses(u.Value)
+
+	if ref.isLocalWorkflowCall() {
 		rule.checkWorkflowCallUsesLocal(n.WorkflowCall)
 		return nil
 	}
 
-	if isWorkflowCallUsesRepoFormat(u.Value) {
+	if ref.isRepoWorkflowCall() {
 		if rule.Config().RuleEnabled("unpinned-uses") {
-			ref := u.Value[strings.LastIndexByte(u.Value, '@')+1:]
-			if !commitHashRegex.MatchString(ref) {
+			if ref.RefKind != RefFullSHA {
 				rule.ReportIDf(
 					"unpinned-uses",
 					u.Pos,
@@ -282,50 +283,17 @@ func requiredScopeLevels(jp *ReusableWorkflowPermissions) map[string]int {
 	return required
 }
 
-// Parse ./{path}/{filename} or $/{path}/{filename}
-// https://docs.github.com/en/actions/learn-github-actions/reusing-workflows#calling-a-reusable-workflow
-func isWorkflowCallUsesLocalFormat(u string) bool {
-	u, ok := canonLocalUsesSpec(u)
-	if !ok {
-		return false
-	}
-	u = strings.TrimPrefix(u, "./")
-
-	// Cannot container a ref
-	idx := strings.IndexRune(u, '@')
-	if idx > 0 {
-		return false
-	}
-
-	return len(u) > 0
-}
-
-// Parse {owner}/{repo}/{path to workflow.yml}@{ref}
-// https://docs.github.com/en/actions/learn-github-actions/reusing-workflows#calling-a-reusable-workflow
-func isWorkflowCallUsesRepoFormat(u string) bool {
-	// Repo reference must start with owner. Without the second check, "$/path/to/x.yml@ref" parses
-	// as owner "$" and is accepted as a repo reference.
-	if strings.HasPrefix(u, ".") || strings.HasPrefix(u, selfRepositoryUsesPrefix) {
-		return false
-	}
-
-	idx := strings.IndexRune(u, '/')
-	if idx <= 0 {
-		return false
-	}
-	u = u[idx+1:] // Eat owner
-
-	idx = strings.IndexRune(u, '/')
-	if idx <= 0 {
-		return false
-	}
-	u = u[idx+1:] // Eat repo
-
-	idx = strings.IndexRune(u, '@')
-	if idx <= 0 {
-		return false
-	}
-	u = u[idx+1:] // Eat workflow path
-
-	return len(u) > 0
+func init() {
+	registerRules(
+		RuleInfo{ID: "invalid-local-workflow", Group: RuleGroupCorrectness, Summary: "A local reusable workflow cannot be loaded or is invalid.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-reusable-workflows"},
+		RuleInfo{ID: "invalid-workflow-call", Group: RuleGroupCorrectness, Summary: "A reusable workflow call does not follow the format of a reusable workflow.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-reusable-workflows"},
+		RuleInfo{ID: "missing-workflow-input", Group: RuleGroupCorrectness, Summary: "A required input of a reusable workflow is not specified.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-reusable-workflows"},
+		RuleInfo{ID: "missing-workflow-secret", Group: RuleGroupCorrectness, Summary: "A required secret of a reusable workflow is not passed.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-reusable-workflows"},
+		RuleInfo{ID: "unknown-workflow-input", Group: RuleGroupCorrectness, Summary: "An input which the reusable workflow does not define is specified.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-reusable-workflows"},
+		RuleInfo{ID: "unknown-workflow-secret", Group: RuleGroupCorrectness, Summary: "A secret which the reusable workflow does not define is passed.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-reusable-workflows"},
+		RuleInfo{ID: "workflow-call-permissions", Group: RuleGroupCorrectness, Summary: "A caller job grants fewer permissions than a reusable workflow requires.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-reusable-workflows"},
+	)
+	registerRuleFactory("workflow-call", func(env *RuleEnv) []Rule {
+		return []Rule{NewRuleWorkflowCall(env.path, env.localReusableWorkflows)}
+	})
 }

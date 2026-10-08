@@ -52,6 +52,9 @@ func TestLinterLintOK(t *testing.T) {
 			continue
 		}
 		n := e.Name()
+		if strings.HasPrefix(n, dependabotFixturePrefix) {
+			continue // Dependabot configurations are checked by TestDependabotFixtures
+		}
 		if strings.HasSuffix(n, ".yaml") || strings.HasSuffix(n, ".yml") {
 			fs = append(fs, filepath.Join(dir, n))
 		}
@@ -109,6 +112,9 @@ func testFindAllWorkflowsInDir(subdir string) (string, []string, error) {
 			continue
 		}
 		n := info.Name()
+		if strings.HasPrefix(n, dependabotFixturePrefix) {
+			continue // Dependabot configurations are checked by TestDependabotFixtures
+		}
 		if strings.HasSuffix(n, ".yaml") || strings.HasSuffix(n, ".yml") {
 			fs = append(fs, filepath.Join(dir, n))
 		}

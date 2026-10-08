@@ -1,0 +1,9 @@
+# "docker://" without an image is a Docker reference, not a malformed {owner}/{repo} action
+on: push
+jobs:
+  t:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: docker://
+      - uses: docker://:tag
+      - uses: docker://@sha256:abc

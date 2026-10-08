@@ -72,3 +72,14 @@ func (rule *RuleIfCond) checkExpression(pos *Pos, input string) {
 		}
 	}
 }
+
+func init() {
+	registerRules(
+		RuleInfo{ID: "constant-condition", Group: RuleGroupCorrectness, Summary: "An if: condition is a constant expression.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "if-cond-constant"},
+		RuleInfo{ID: "if-always-true", Group: RuleGroupCorrectness, Summary: "An if: condition is always true because of the characters around ${{ }}.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "if-cond-constant"},
+		RuleInfo{ID: "require-expression-wrapping", Group: RuleGroupStyle, Summary: "An if: condition is not wrapped in ${{ }}.", DefaultLevel: SeverityError, Profile: ProfileAll, DocsAnchor: "check-require-expression-wrapping"},
+	)
+	registerRuleFactory("if-cond", func(env *RuleEnv) []Rule {
+		return []Rule{NewRuleIfCond()}
+	})
+}

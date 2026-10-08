@@ -1,0 +1,18 @@
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+      # ERROR: "dayy" is a typo of "day"
+      dayy: monday
+    # ERROR: "label" is a typo of "labels"
+    label: [dependencies]
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      # ERROR: "hourly" is not a valid interval
+      interval: hourly
+  # ERROR: schedule is missing
+  - package-ecosystem: cargo
+    directory: "/"

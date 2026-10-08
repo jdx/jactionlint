@@ -24,7 +24,7 @@ local fast = new Mapping<String, Step> {
     // hk needs to show the diagnostics with rule IDs (diagnostic_format = "sarif") and to apply the fixes
     // of jactionlint as a patch (check_diff). Findings without a fix fall back to `jactionlint -fix`.
     ["jactionlint"] {
-        glob = List(".github/workflows/*.yaml", ".github/workflows/*.yml")
+        glob = List(".github/workflows/*.yaml", ".github/workflows/*.yml", ".github/dependabot.y*ml")
         batch = true
         diagnostic_format = "sarif"
         check = "go run ./cmd/jactionlint -format sarif {{files}}"
@@ -40,6 +40,12 @@ local slow = new Mapping<String, Step> {
         check = "staticcheck ./ ./scripts/... ./cmd/... && mise run lint:wasm"
     }
     ["go_vuln_check"] = Builtins.go_vuln_check
+    ["rules_doc"] {
+        glob = List("docs/rules.md", "scripts/generate-rules-doc/**", "*.go")
+        check = "go run ./scripts/generate-rules-doc -check"
+        fix = "go run ./scripts/generate-rules-doc"
+        exclusive = true
+    }
     ["checks_doc"] {
         glob = List("docs/checks.md", "scripts/check-checks/**", "*.go")
         check = "go run ./scripts/check-checks -quiet ./docs/checks.md"

@@ -48,6 +48,7 @@ List of checks:
 - [Action metadata syntax validation](#action-metadata-syntax)
 - [Deprecated inputs usage](#deprecated-inputs-usage)
 - [YAML anchors](#yaml-anchors)
+- [Dependabot configuration syntax](#check-dependabot-syntax)
 
 Note that jactionlint focuses on catching mistakes in workflow files. If you want some general code style checks, please consider
 using a general YAML checker like [yamllint][].
@@ -3570,6 +3571,70 @@ test.yaml:9:14: could not parse as YAML: unknown anchor 'credentials' referenced
 
 [Playground](https://jactionlint.jdx.dev/#eNosyjEOwjAMheE9p3gzUsqe26TEUkGRXeXZcH1k6PQP/2facAaPUl62sxXAhZ4FVihrgthDPers+X6LLif/CqgpG7b7sI9O62PjcS1A9N1weywZov7sk98BAKp1Iic=)
 
+<a id="check-dependabot-syntax"></a>
+## Dependabot configuration syntax
+
+jactionlint checks the Dependabot configuration file `.github/dependabot.yml` (or `.github/dependabot.yaml`) of the repository
+together with the workflows. It is checked when the repository is linted without file arguments, and when the file is given
+explicitly (`jactionlint .github/dependabot.yml`) or with `-stdin-filename .github/dependabot.yml`. The file is recognized by its
+path only. The rules for workflows are not applied to it, and `.github/workflows/dependabot.yml` is still a workflow.
+
+The syntax is [the version 2 of the options reference][dependabot-options-doc]. Like for workflows, jactionlint reports unknown
+keys, missing required keys, values of wrong types and values which are not one of the accepted ones (package ecosystems,
+schedule intervals and days, update types, registry types, etc.). It also reports `registries` and `multi-ecosystem-group` names
+which are not defined, and `updates` items for the same package ecosystem, directory and target branch. All of them are reported with
+the rule ID `dependabot-syntax`, which can be turned off, ignored by `paths:` in [the configuration](config.md) or with
+[ignore comments](usage.md) like the other rules.
+
+Registries accept more keys than the common ones (`url`, `username`, `password`, `key`, `token`, `replaces-base`) depending on
+their types, and new ones are added over time (e.g. for OIDC). jactionlint accepts any scalar value for them.
+
+Example input:
+
+```yaml
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+      # ERROR: "dayy" is a typo of "day"
+      dayy: monday
+    # ERROR: "label" is a typo of "labels"
+    label: [dependencies]
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      # ERROR: "hourly" is not a valid interval
+      interval: hourly
+  # ERROR: schedule is missing
+  - package-ecosystem: cargo
+    directory: "/"
+```
+
+Output:
+
+```
+.github/dependabot.yml:8:7: unexpected key "dayy" for "schedule" section. expected one of "cronjob", "day", "interval", "time", "timezone" [syntax-check]
+  |
+8 |       dayy: monday
+  |       ^~~~~
+.github/dependabot.yml:10:5: unexpected key "label" for "updates" section. expected one of "allow", "assignees", "commit-message", "cooldown", "directories", "directory", "exclude-paths", "groups", "ignore", "insecure-external-code-execution", "labels", "milestone", "multi-ecosystem-group", "open-pull-requests-limit", "package-ecosystem", "patterns", "pull-request-branch-name", "rebase-strategy", "registries", "reviewers", "schedule", "target-branch", "vendor", "versioning-strategy" [syntax-check]
+   |
+10 |     label: [dependencies]
+   |     ^~~~~~
+.github/dependabot.yml:15:17: schedule interval "hourly" is invalid. expected one of "daily", "weekly", "monthly", "quarterly", "semiannually", "yearly", "cron" [syntax-check]
+   |
+15 |       interval: hourly
+   |                 ^~~~~~
+.github/dependabot.yml:17:5: "schedule" key is missing in "updates" item [syntax-check]
+   |
+17 |   - package-ecosystem: cargo
+   |     ^~~~~~~~~~~~~~~~~~
+```
+
+<!-- Skip playground link -->
+
 ---
 
 [Installation](install.md) | [Usage](usage.md) | [Configuration](config.md) | [Go API](api.md) | [References](reference.md)
@@ -3632,3 +3697,4 @@ test.yaml:9:14: could not parse as YAML: unknown anchor 'credentials' referenced
 [dep-msg]: https://docs.github.com/en/actions/reference/workflows-and-actions/metadata-syntax#inputsinput_iddeprecationmessage
 [anochor-support-announce]: https://github.blog/changelog/2025-09-18-actions-yaml-anchors-and-non-public-workflow-templates/
 [yaml-anchor-spec]: https://yaml.org/spec/1.2.2/#71-alias-nodes
+[dependabot-options-doc]: https://docs.github.com/en/code-security/dependabot/working-with-dependabot/dependabot-options-reference
