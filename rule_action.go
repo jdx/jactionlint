@@ -287,13 +287,6 @@ var BrandingIcons = map[string]struct{}{
 	"zoom-out":           {},
 }
 
-// commitHashRegex matches a full-length (40 hex digits) Git commit SHA. Abbreviated hashes are rejected because
-// they can be ambiguous and are not accepted as a ref by GitHub Actions.
-var commitHashRegex = regexp.MustCompile("(?i)^[0-9a-f]{40}$")
-
-// dockerDigestRegex matches an image reference pinned by a content digest: "...@sha256:{64 hex digits}".
-var dockerDigestRegex = regexp.MustCompile("(?i)@sha256:[0-9a-f]{64}$")
-
 // https://docs.github.com/en/actions/creating-actions/metadata-syntax-for-github-actions#runsimage
 func isImageOnDockerRegistry(image string) bool {
 	return strings.HasPrefix(image, "docker://") ||
@@ -334,52 +327,31 @@ func (rule *RuleAction) VisitStep(n *Step) error {
 	}
 
 	spec := e.Uses.Value
+	ref := ParseUses(spec)
 
-	if _, ok := canonLocalUsesSpec(spec); ok {
+	switch ref.Kind {
+	case UsesLocal:
 		// Relative to repository root
 		rule.checkLocalAction(spec, e)
-		return nil
+	case UsesDocker:
+		rule.checkDockerAction(ref, e)
+	default:
+		rule.checkRepoAction(ref, e)
 	}
-
-	if strings.HasPrefix(spec, "docker://") {
-		rule.checkDockerAction(spec, e)
-		return nil
-	}
-
-	rule.checkRepoAction(spec, e)
 	return nil
 }
 
-// Parse {owner}/{repo}@{ref} or {owner}/{repo}/{path}@{ref}
-func (rule *RuleAction) checkRepoAction(spec string, exec *ExecAction) {
-	s := spec
-	idx := strings.IndexRune(s, '@')
-	if idx == -1 {
-		rule.invalidActionFormat(exec.Uses.Pos, spec, "ref is missing")
-		return
-	}
-	ref := s[idx+1:]
-	s = s[:idx] // remove {ref}
-
-	idx = strings.IndexRune(s, '/')
-	if idx == -1 {
-		rule.invalidActionFormat(exec.Uses.Pos, spec, "owner is missing")
-		return
+// Check {owner}/{repo}@{ref} or {owner}/{repo}/{path}@{ref}
+func (rule *RuleAction) checkRepoAction(ref *UsesRef, exec *ExecAction) {
+	spec := ref.Raw
+	if ref.Kind == UsesInvalid {
+		rule.invalidActionFormat(exec.Uses.Pos, spec, ref.Problem)
+		if ref.Problem != usesProblemEmptyPart {
+			return
+		}
 	}
 
-	owner := s[:idx]
-	s = s[idx+1:] // eat {owner}
-
-	repo := s
-	if idx := strings.IndexRune(s, '/'); idx >= 0 {
-		repo = s[:idx]
-	}
-
-	if owner == "" || repo == "" || ref == "" {
-		rule.invalidActionFormat(exec.Uses.Pos, spec, "owner and repo and ref should not be empty")
-	}
-
-	if rule.config.RuleEnabled("unpinned-uses") && !commitHashRegex.MatchString(ref) {
+	if rule.config.RuleEnabled("unpinned-uses") && ref.RefKind != RefFullSHA {
 		rule.ReportIDf("unpinned-uses", exec.Uses.Pos, "action %q must be pinned to a full-length commit SHA like \"{owner}/{repo}@{sha}\" because the \"unpinned-uses\" rule is enabled", spec)
 	}
 
@@ -524,18 +496,8 @@ func (rule *RuleAction) checkLocalActionRuns(meta *ActionMetadata, pos *Pos) {
 }
 
 // https://docs.github.com/en/actions/learn-github-actions/workflow-syntax-for-github-actions#example-using-the-github-packages-container-registry
-func (rule *RuleAction) checkDockerAction(uri string, exec *ExecAction) {
-	fullURI := uri
-	tag := ""
-	tagExists := false
-	if idx := strings.IndexRune(uri[len("docker://"):], ':'); idx != -1 {
-		idx += len("docker://")
-		if idx < len(uri) {
-			tag = uri[idx+1:]
-			uri = uri[:idx]
-			tagExists = true
-		}
-	}
+func (rule *RuleAction) checkDockerAction(ref *UsesRef, exec *ExecAction) {
+	uri := "docker://" + ref.Image
 
 	if _, err := url.Parse(uri); err != nil {
 		rule.ReportIDf(
@@ -544,16 +506,16 @@ func (rule *RuleAction) checkDockerAction(uri string, exec *ExecAction) {
 			"URI for Docker container %q is invalid: %s (tag=%s)",
 			uri,
 			err.Error(),
-			tag,
+			ref.Tag,
 		)
 	}
 
-	if tagExists && tag == "" {
+	if ref.HasTag && ref.Tag == "" {
 		rule.ReportIDf("invalid-uses", exec.Uses.Pos, "tag of Docker action should not be empty: %q", uri)
 	}
 
-	if rule.config.RuleEnabled("unpinned-uses") && !dockerDigestRegex.MatchString(fullURI) {
-		rule.ReportIDf("unpinned-uses", exec.Uses.Pos, "docker image must be pinned to a digest like \"docker://{image}@sha256:{digest}\" because the \"unpinned-uses\" rule is enabled: %q", fullURI)
+	if rule.config.RuleEnabled("unpinned-uses") && ref.RefKind != RefDigest {
+		rule.ReportIDf("unpinned-uses", exec.Uses.Pos, "docker image must be pinned to a digest like \"docker://{image}@sha256:{digest}\" because the \"unpinned-uses\" rule is enabled: %q", ref.Raw)
 	}
 }
 
