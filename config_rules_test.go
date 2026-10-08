@@ -1,6 +1,7 @@
 package jactionlint
 
 import (
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -423,7 +424,7 @@ func TestLinterReportsDeprecatedConfigKeysOnce(t *testing.T) {
 	if n := strings.Count(out, "is deprecated"); n != 1 {
 		t.Errorf("the deprecation must be reported once but got %d times: %q", n, out)
 	}
-	if !strings.Contains(out, "warning:") || !strings.Contains(out, cfgPath) || !strings.Contains(out, `"require-shell"`) {
+	if !strings.Contains(out, "warning:") || !strings.Contains(out, fmt.Sprintf("%q", cfgPath)) || !strings.Contains(out, `"require-shell"`) {
 		t.Errorf("unexpected warning: %q", out)
 	}
 }
