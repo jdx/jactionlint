@@ -1,0 +1,8 @@
+.github/dependabot.yml:1:1: "version" key is missing in Dependabot configuration [syntax-check]
+.github/dependabot.yml:3:5: "package-ecosystem" key is missing in "updates" item [syntax-check]
+.github/dependabot.yml:7:5: "directory" or "directories" key is missing in "updates" item [syntax-check]
+.github/dependabot.yml:11:5: "schedule" key is missing in "updates" item [syntax-check]
+.github/dependabot.yml:17:7: "interval" key is missing in "schedule" section [syntax-check]
+.github/dependabot.yml:22:7: "cronjob" key is missing in "schedule" section whose interval is "cron" [syntax-check]
+.github/dependabot.yml:25:9: "dependency-name" key is missing in "ignore" section [syntax-check]
+.github/dependabot.yml:28:9: "allow" item should not be empty. please remove this section if it's unnecessary [syntax-check]

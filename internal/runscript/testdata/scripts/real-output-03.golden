@@ -1,0 +1,6 @@
+cmd 1:1 name="echo"
+  pos "mode=$(python3 scripts/release-candidate.py mode)"[subst quoted]
+cmd 1:14 name="python3"
+  pos "scripts/release-candidate.py" "mode"
+redirect 1:58 op=">>" fd="" target="$GITHUB_OUTPUT"[var:GITHUB_OUTPUT quoted] append=true write=true
+writes GITHUB_OUTPUT at 1:58 append=true producers=1 exprs=[]

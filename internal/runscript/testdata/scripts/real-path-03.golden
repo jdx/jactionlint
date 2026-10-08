@@ -1,0 +1,7 @@
+cmd 1:1 name="mkdir"
+  flags -p
+  pos "$HOME/bin"[var:HOME quoted]
+cmd 1:25 name="echo"
+  pos "$HOME/bin"[var:HOME quoted]
+redirect 1:42 op=">>" fd="" target="$GITHUB_PATH"[var:GITHUB_PATH quoted] append=true write=true
+writes GITHUB_PATH at 1:42 append=true producers=1 exprs=[]

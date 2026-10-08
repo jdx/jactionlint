@@ -1,0 +1,39 @@
+version: 3
+updates:
+  - package-ecosystem: npmm
+    directory: "/"
+    schedule:
+      interval: hourly
+      day: funday
+      time: "9:00"
+      timezone: Mars/Olympus
+    open-pull-requests-limit: "5"
+    milestone: -1
+    vendor: "yes"
+    rebase-strategy: always
+    insecure-external-code-execution: maybe
+    versioning-strategy: newest
+    labels: dependencies
+    commit-message:
+      include: package
+    pull-request-branch-name:
+      separator: ":"
+    cooldown:
+      default-days: 120
+      semver-major-days: 3.5
+    ignore:
+      - dependency-name: lodash
+        update-types: ["major"]
+    allow:
+      - dependency-type: transitive
+    groups:
+      deps:
+        applies-to: updates
+        update-types: ["version-update:semver-major"]
+        group-by: name
+        dependency-type: all
+registries:
+  npm-github:
+    type: npm
+    url: https://npm.pkg.github.com
+enable-beta-ecosystems: 1

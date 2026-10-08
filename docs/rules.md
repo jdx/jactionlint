@@ -33,6 +33,7 @@ rules:
 | [cron-too-frequent](#cron-too-frequent) | correctness | error | default |
 | [cyclic-job-needs](#cyclic-job-needs) | correctness | error | default |
 | [dangerous-triggers](#dangerous-triggers) | security | warn | strict |
+| [dependabot-syntax](#dependabot-syntax) | correctness | error | default |
 | [deprecated-action-input](#deprecated-action-input) | correctness | error | default |
 | [deprecated-commands](#deprecated-commands) | correctness | error | default |
 | [duplicate-job-id](#duplicate-job-id) | correctness | error | default |
@@ -181,6 +182,15 @@ A workflow uses pull_request_target, workflow_run or issue_comment.
 - Default level: warn
 - Profile: strict
 - Details and examples: [checks](./checks.md#check-dangerous-triggers)
+
+## dependabot-syntax
+
+The Dependabot configuration does not follow the syntax of dependabot.yml.
+
+- Group: correctness
+- Default level: error
+- Profile: default
+- Details and examples: [checks](./checks.md#check-dependabot-syntax)
 
 ## deprecated-action-input
 

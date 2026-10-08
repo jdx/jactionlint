@@ -1,0 +1,30 @@
+expr 5:9 "github.event.pull_request.title"
+cmd 2:1 name="echo"
+  pos "A=1"
+cmd 4:3 name="echo"
+  pos "MULTI<<EOF"[quoted]
+cmd 5:3 name="echo"
+  pos "${{ github.event.pull_request.title }}"[expr quoted]
+cmd 6:3 name="echo"
+  pos "EOF"[quoted]
+cmd 8:3 name="echo"
+  pos "B=2"
+cmd 9:4 name="true"
+cmd 9:15 name="echo"
+  pos "C=3"
+cmd 10:18 name="echo"
+  pos "I=$i"[var:i quoted]
+cmd 11:1 name="" wrappers=exec
+redirect 2:10 op=">>" fd="" target="$F"[var:F quoted] append=true write=true
+redirect 7:3 op=">>" fd="" target="$GITHUB_ENV"[var:GITHUB_ENV quoted] append=true write=true group inner=3
+redirect 8:14 op=">>" fd="" target="$GITHUB_PATH"[var:GITHUB_PATH] append=true write=true group inner=1
+redirect 9:28 op=">>" fd="" target="$GITHUB_ENV"[var:GITHUB_ENV] append=true write=true group inner=2
+redirect 10:36 op=">>" fd="" target="$GITHUB_OUTPUT"[var:GITHUB_OUTPUT quoted] append=true write=true group inner=1
+redirect 11:6 op=">>" fd="" target="$GITHUB_ENV"[var:GITHUB_ENV] append=true write=true
+assignment 1:1 F value="$GITHUB_ENV"[var:GITHUB_ENV] append=false array=false
+writes GITHUB_ENV at 2:10 append=true producers=1 exprs=[]
+writes GITHUB_ENV at 7:3 append=true producers=3 exprs=["github.event.pull_request.title"]
+writes GITHUB_ENV at 9:28 append=true producers=2 exprs=[]
+writes GITHUB_ENV at 11:6 append=true producers=1 exprs=[]
+writes GITHUB_PATH at 8:14 append=true producers=1 exprs=[]
+writes GITHUB_OUTPUT at 10:36 append=true producers=1 exprs=[]

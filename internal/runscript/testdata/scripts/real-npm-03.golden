@@ -1,0 +1,3 @@
+cmd 5:1 name="codesign"
+  flags --sign --options --timestamp --prefix
+  pos "$IDENTITY"[var:IDENTITY quoted] "runtime" "dev.jdx." "$BIN_DIR/aube"[var:BIN_DIR quoted]

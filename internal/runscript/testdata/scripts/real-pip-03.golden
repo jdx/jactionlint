@@ -1,0 +1,7 @@
+cmd 1:1 name="dnf"
+  flags -y
+  pos "update"
+cmd 7:1 name="dnf"
+  flags -y
+  pos "install" "rpm-build" "rpmdevtools" "copr-cli" "git" "rust" "cargo" "gcc" "openssl-devel" "pkgconf-pkg-config" "tar" "gzip" "gh"
+cmd 8:1 name="rpmdev-setuptree"

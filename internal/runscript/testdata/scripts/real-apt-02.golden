@@ -1,0 +1,7 @@
+cmd 1:1 name="apt-get" tool=apt wrappers=sudo
+  pos "update"
+cmd 1:24 name="apt-get" tool=apt wrappers=sudo
+  flags -y
+  pos "install" "mold"
+  install tool=apt eco=apt verb=install run=false global=false locked=false manifest=false reqs=0
+    pkg "mold" name="mold" ver="" kind=registry pinned=false dyn=false local=false

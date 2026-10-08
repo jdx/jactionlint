@@ -1,0 +1,14 @@
+version: 2
+updates:
+  # ERROR: an updates item must be a mapping
+  - npm
+  - package-ecosystem: [npm]
+    directory: {path: "/"}
+    schedule: weekly
+    allow: node
+    ignore:
+      - dependency-name: foo
+        versions: 1.x
+    registries: 1
+    groups:
+      - name

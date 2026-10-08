@@ -109,12 +109,18 @@ type parser struct {
 	errors []*Error
 	// lines are the lines of the source. This is nil when the source is not available.
 	lines []string
+	// syntaxID is the ID of the syntax errors. It is "workflow-syntax" when empty.
+	syntaxID string
 }
 
 // syntaxCheckKind is the kind of the errors which the parser reports.
 const syntaxCheckKind = "syntax-check"
 
 func (p *parser) error(n *yaml.Node, m string) {
+	if p.syntaxID != "" {
+		p.errorID(p.syntaxID, n, m)
+		return
+	}
 	p.errorID("workflow-syntax", n, m)
 }
 
@@ -123,6 +129,10 @@ func (p *parser) errorID(id string, n *yaml.Node, m string) {
 }
 
 func (p *parser) errorAt(pos *Pos, m string) {
+	if p.syntaxID != "" {
+		p.errorIDAt(p.syntaxID, pos, m)
+		return
+	}
 	p.errorIDAt("workflow-syntax", pos, m)
 }
 

@@ -1,0 +1,12 @@
+cmd 1:1 name="curl" tool=curl pipe=1/2
+  flags -fsSL
+  pos "https://mise.run"
+cmd 1:31 name="sh" tool=sh pipe=2/2
+cmd 2:1 name="echo"
+  pos "$HOME/.local/bin"[var:HOME quoted]
+cmd 3:1 name="mise"
+  flags --version
+pipeline 1:1 stages=2 negated=false
+redirect 2:25 op=">>" fd="" target="$GITHUB_PATH"[var:GITHUB_PATH quoted] append=true write=true
+writes GITHUB_PATH at 2:25 append=true producers=1 exprs=[]
+shellpipe form=pipe downloader="curl" shell="sh" url="https://mise.run"

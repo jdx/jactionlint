@@ -1,0 +1,5 @@
+expr 1:14 "matrix.crates"
+expr 2:10 "matrix.version"
+cmd 2:3 name="cargo" tool=cargo
+  flags --locked -p="$crate"[var:crate quoted] --all-features
+  pos "+${{ matrix.version }}"[expr] "check"
