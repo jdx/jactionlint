@@ -30,6 +30,7 @@ rules:
 | [context-availability](#context-availability) | correctness | error | default |
 | [cron-too-frequent](#cron-too-frequent) | correctness | error | default |
 | [cyclic-job-needs](#cyclic-job-needs) | correctness | error | default |
+| [dependabot-syntax](#dependabot-syntax) | correctness | error | default |
 | [deprecated-action-input](#deprecated-action-input) | correctness | error | default |
 | [deprecated-commands](#deprecated-commands) | correctness | error | default |
 | [duplicate-job-id](#duplicate-job-id) | correctness | error | default |
@@ -141,6 +142,15 @@ Jobs depend on each other in a cycle.
 - Default level: error
 - Profile: default
 - Details and examples: [checks](./checks.md#check-job-deps)
+
+## dependabot-syntax
+
+The Dependabot configuration does not follow the syntax of dependabot.yml.
+
+- Group: correctness
+- Default level: error
+- Profile: default
+- Details and examples: [checks](./checks.md#check-dependabot-syntax)
 
 ## deprecated-action-input
 

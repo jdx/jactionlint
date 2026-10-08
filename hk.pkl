@@ -24,7 +24,7 @@ local fast = new Mapping<String, Step> {
     // hk needs to show the diagnostics with rule IDs (diagnostic_format = "sarif") and to apply the fixes
     // of jactionlint as a patch (check_diff). Findings without a fix fall back to `jactionlint -fix`.
     ["jactionlint"] {
-        glob = List(".github/workflows/*.yaml", ".github/workflows/*.yml")
+        glob = List(".github/workflows/*.yaml", ".github/workflows/*.yml", ".github/dependabot.y*ml")
         batch = true
         diagnostic_format = "sarif"
         check = "go run ./cmd/jactionlint -format sarif {{files}}"

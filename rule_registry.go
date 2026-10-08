@@ -123,6 +123,7 @@ var ruleRegistry = []RuleInfo{
 	{ID: "context-availability", Group: RuleGroupCorrectness, Summary: "A context or special function is used where it is not available.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "ctx-spfunc-availability"},
 	{ID: "cron-too-frequent", Group: RuleGroupCorrectness, Summary: "A scheduled job runs more often than once every 5 minutes.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-cron-syntax-and-timezone"},
 	{ID: "cyclic-job-needs", Group: RuleGroupCorrectness, Summary: "Jobs depend on each other in a cycle.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-job-deps"},
+	{ID: "dependabot-syntax", Group: RuleGroupCorrectness, Summary: "The Dependabot configuration does not follow the syntax of dependabot.yml.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-dependabot-syntax"},
 	{ID: "deprecated-action-input", Group: RuleGroupCorrectness, Summary: "A deprecated input of an action is used.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "deprecated-inputs-usage"},
 	{ID: "deprecated-commands", Group: RuleGroupCorrectness, Summary: "A deprecated workflow command such as ::set-output is used.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-deprecated-workflow-commands"},
 	{ID: "duplicate-job-id", Group: RuleGroupCorrectness, Summary: "A job ID is defined more than once.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-job-deps"},
