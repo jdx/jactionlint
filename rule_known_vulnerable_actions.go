@@ -66,18 +66,32 @@ func (r *RuleKnownVulnerableActions) VisitWorkflowPost(*Workflow) error {
 	return nil
 }
 
-// affectedBy returns the vulnerability of the advisory which covers the version of the action.
+// affectedBy returns the vulnerability of the advisory which covers the version of the action. An advisory
+// names a package as "owner/repo" for the whole repository or as "owner/repo/subpath" for one action of it.
+// For an action in a subdirectory the entries of its own package are the more specific ones: when the
+// advisory has any, only they decide (with their ranges and patched versions), otherwise the entries
+// of the repository do, because a repository wide advisory covers every action in it. An advisory
+// of one subdirectory never applies to the repository itself or to another subdirectory.
 func affectedBy(a GitHubAdvisory, ref *UsesRef, v advisoryVersion) (GitHubVulnerability, bool) {
 	name := strings.ToLower(ref.Owner + "/" + ref.Repo)
 	full := name
 	if ref.Subpath != "" && ref.Kind == UsesAction {
 		full += "/" + strings.ToLower(strings.TrimRight(ref.Subpath, "/"))
 	}
-	for _, vuln := range a.Vulnerabilities {
-		p := strings.ToLower(vuln.Package)
-		if p != name && p != full {
-			continue
+	candidates := func(pkg string) []GitHubVulnerability {
+		var ret []GitHubVulnerability
+		for _, vuln := range a.Vulnerabilities {
+			if strings.ToLower(vuln.Package) == pkg {
+				ret = append(ret, vuln)
+			}
 		}
+		return ret
+	}
+	vulns := candidates(full)
+	if len(vulns) == 0 && full != name {
+		vulns = candidates(name)
+	}
+	for _, vuln := range vulns {
 		rng, err := parseVersionRange(vuln.VulnerableRange)
 		if err != nil {
 			continue // A range which is not understood is not guessed at

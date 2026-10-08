@@ -611,3 +611,59 @@ func TestUnusedIgnoreOfOnlineRules(t *testing.T) {
 		t.Errorf("online: the rule ran and found nothing to ignore: %v", lineIDsOf(errs))
 	}
 }
+
+func TestAffectedByPrefersThePackageOfTheSubdirectory(t *testing.T) {
+	adv := func(vs ...GitHubVulnerability) GitHubAdvisory {
+		return GitHubAdvisory{ID: "GHSA-test", Vulnerabilities: vs}
+	}
+	root := GitHubVulnerability{Package: "o/r", VulnerableRange: "< 2.0.0", FirstPatched: "2.0.0"}
+	sub := GitHubVulnerability{Package: "o/r/sub", VulnerableRange: "< 1.5.0", FirstPatched: "1.5.0"}
+	other := GitHubVulnerability{Package: "o/r/other", VulnerableRange: "< 9.0.0", FirstPatched: "9.0.0"}
+	ver := func(s string) advisoryVersion {
+		v, ok := parseAdvisoryVersion(s)
+		if !ok {
+			t.Fatalf("version %q", s)
+		}
+		return v
+	}
+	tests := []struct {
+		name        string
+		a           GitHubAdvisory
+		uses        string
+		version     string
+		wantFound   bool
+		wantPatched string
+	}{
+		{"root advisory, subdirectory action: the root ranges apply", adv(root), "o/r/sub@v1", "1.9.0", true, "2.0.0"},
+		{"root advisory, subdirectory action, patched", adv(root), "o/r/sub@v1", "2.1.0", false, ""},
+		{"root advisory, root action", adv(root), "o/r@v1", "1.9.0", true, "2.0.0"},
+		{"subdirectory advisory, root action: not affected", adv(sub), "o/r@v1", "1.0.0", false, ""},
+		{"subdirectory advisory, another subdirectory: not affected", adv(sub), "o/r/else@v1", "1.0.0", false, ""},
+		{"subdirectory advisory, its action", adv(sub), "o/r/sub@v1", "1.0.0", true, "1.5.0"},
+		{"both listed: the subdirectory ranges and patched version win", adv(root, sub), "o/r/sub@v1", "1.0.0", true, "1.5.0"},
+		{"both listed, order does not matter", adv(sub, root), "o/r/sub@v1", "1.0.0", true, "1.5.0"},
+		{"both listed: patched for the subdirectory although the root range still covers it", adv(root, sub), "o/r/sub@v1", "1.7.0", false, ""},
+		{"both listed, root action uses the root entry", adv(sub, root), "o/r@v1", "1.7.0", true, "2.0.0"},
+		{"the entry of another subdirectory does not hide the root entry", adv(other, root), "o/r/sub@v1", "1.9.0", true, "2.0.0"},
+		{"package names are compared without case", adv(GitHubVulnerability{Package: "O/R/Sub", VulnerableRange: "< 3", FirstPatched: "3"}), "o/r/sub@v1", "1.0.0", true, "3"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			ref := ParseUses(tc.uses)
+			got, found := affectedBy(tc.a, ref, ver(tc.version))
+			if found != tc.wantFound || got.FirstPatched != tc.wantPatched {
+				t.Errorf("affectedBy = %+v, %v; want found=%v patched=%q", got, found, tc.wantFound, tc.wantPatched)
+			}
+		})
+	}
+
+	// Two advisories for the same action are reported on their own
+	a1 := GitHubAdvisory{ID: "GHSA-1", Vulnerabilities: []GitHubVulnerability{root}}
+	a2 := GitHubAdvisory{ID: "GHSA-2", Vulnerabilities: []GitHubVulnerability{sub, root}}
+	ref := ParseUses("o/r/sub@v1")
+	v1, f1 := affectedBy(a1, ref, ver("1.7.0"))
+	v2, f2 := affectedBy(a2, ref, ver("1.7.0"))
+	if !f1 || v1.FirstPatched != "2.0.0" || f2 {
+		t.Errorf("GHSA-1 = %+v %v, GHSA-2 = %+v %v", v1, f1, v2, f2)
+	}
+}
