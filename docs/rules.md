@@ -66,6 +66,8 @@ rules:
 | [matrix-invalid-exclude](#matrix-invalid-exclude) | correctness | error | default |
 | [max-run-lines](#max-run-lines) | style | error | all |
 | [merge-key](#merge-key) | correctness | error | default |
+| [misfeature](#misfeature) | security | warn | strict |
+| [misfeature-custom-shell](#misfeature-custom-shell) | style | info | all |
 | [missing-action-input](#missing-action-input) | correctness | error | default |
 | [missing-permissions](#missing-permissions) | policy | error | strict |
 | [missing-timeout](#missing-timeout) | policy | error | strict |
@@ -470,6 +472,24 @@ The YAML merge key << is used, which GitHub Actions does not support.
 - Default level: error
 - Profile: default
 - Details and examples: [checks](./checks.md#yaml-anchors)
+
+## misfeature
+
+A misfeature of GitHub Actions is used: the pip-install input of setup-python or the cmd shell.
+
+- Group: security
+- Default level: warn
+- Profile: strict
+- Details and examples: [checks](./checks.md#check-misfeature)
+
+## misfeature-custom-shell
+
+A shell which GitHub does not document is used.
+
+- Group: style
+- Default level: info
+- Profile: all
+- Details and examples: [checks](./checks.md#check-misfeature)
 
 ## missing-action-input
 

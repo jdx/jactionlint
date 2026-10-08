@@ -42,7 +42,7 @@ How to read the table:
 | `insecure-commands` | `insecure-commands` | 3 / A | default | not yet assessed |
 | `insecure-url-scheme` | `insecure-url-scheme` (where applicable to dependabot.yml) | 3 / E | strict | not yet assessed |
 | `known-vulnerable-actions` | `known-vulnerable-actions` | 3 / G | online | not yet assessed |
-| `misfeature` | `misfeature` | 3 / C | strict | not yet assessed |
+| `misfeature` | `misfeature`, `misfeature-custom-shell` | 3 / C | strict, all | partial: `pip-install` of setup-python and `shell: cmd` (`misfeature`, 18 of 18 zizmor findings of the corpus). Shells that are not well known are `misfeature-custom-shell` (`all`, info), which zizmor reports in the auditor persona only and which is not compared. No composite actions yet |
 | `obfuscation` | `obfuscation` | 3 / C | strict | partial: redundant segments at `uses:`, constant expressions and `format()` of literals outside `if:`, `fromJSON(toJSON(x))` and computed indices. All zizmor findings of the corpus are reported (see [batch C](#batch-c-measurements)). Constants in `if:` are `constant-condition`; `fromJSON(toJSON(context))` is deliberately not reported; the `uses:` fix is unsafe. No composite actions yet |
 | `overprovisioned-secrets` | `overprovisioned-secrets` | 3 / A | strict | not yet assessed |
 | `ref-confusion` | `ref-confusion` | 3 / G | online | not yet assessed |

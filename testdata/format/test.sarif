@@ -205,6 +205,21 @@
               "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
             },
             {
+              "id": "misfeature",
+              "name": "Misfeature",
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "description": "Checks for usages of GitHub Actions features which are considered misfeatures",
+                "queryURI": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+              },
+              "fullDescription": {
+                "text": "Checks for usages of GitHub Actions features which are considered misfeatures"
+              },
+              "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+            },
+            {
               "id": "obfuscation",
               "name": "Obfuscation",
               "defaultConfiguration": {

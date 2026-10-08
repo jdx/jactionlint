@@ -53,6 +53,11 @@
       "notes": "Redundant path segments at uses:, fromJSON(toJSON(x)) and format() with literal arguments.",
       "jactionlint": [{ "rule": "obfuscation" }]
     },
+    "misfeature": {
+      "coverage": "partial",
+      "notes": "The pip-install input of setup-python and the cmd shell. Shells that are not well known are the separate misfeature-custom-shell rule, which zizmor reports in the auditor persona only.",
+      "jactionlint": [{ "rule": "misfeature" }]
+    },
     "unsound-condition": {
       "coverage": "full",
       "notes": "if-always-true reports every condition with characters around ${{ }}, which includes the trailing newline of a block scalar.",

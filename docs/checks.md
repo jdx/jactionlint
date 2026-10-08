@@ -51,6 +51,7 @@ List of checks:
 - [Expansions in scripts (opt-in)](#check-template-injection-expansion)
 - [Bots trusted by `github.actor` (opt-in)](#check-bot-conditions)
 - [Obfuscated paths and expressions (opt-in)](#check-obfuscation)
+- [Misfeatures (opt-in)](#check-misfeature)
 
 Note that jactionlint focuses on catching mistakes in workflow files. If you want some general code style checks, please consider
 using a general YAML checker like [yamllint][].
@@ -3829,6 +3830,52 @@ test.yaml:12:29: warning: the index is computed, which hides which property is r
 
 `-fix=unsafe` rewrites the paths of `uses:`. It is unsafe because the plain path is expected, but not guaranteed, to name the same
 action.
+
+<a id="check-misfeature"></a>
+## Misfeatures (opt-in)
+
+Some features of GitHub Actions are best avoided. The rule `misfeature` is enabled by the `strict` profile and reports
+
+- the `pip-install` input of actions/setup-python. It installs packages into the global Python environment, which is hard to audit
+  and can break the resolution of dependencies. Create a virtual environment in a `run:` step instead;
+- the Windows `cmd` shell (`shell: cmd`). It has no formal grammar, so a script cannot be analyzed reliably, and it has not been the
+  default shell of Windows runners since 2019.
+
+The rule `misfeature-custom-shell` is enabled by the `all` profile. It reports a shell that GitHub does not document (`bash`, `pwsh`,
+`powershell`, `python`, `sh` and `cmd`), like `shell: perl {0}`. Such a shell may not exist on every runner and its scripts cannot be
+analyzed. The shell names which GitHub does not accept at all are reported by the correctness check [shell names](#check-shell-names).
+
+Example input:
+
+```yaml
+on: push
+
+jobs:
+  test:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/setup-python@v6
+        with:
+          pip-install: .[dev]
+      - run: echo hello
+        shell: cmd
+```
+
+Output:
+
+<!-- Skip update output -->
+```
+test.yaml:9:11: warning: "pip-install" of actions/setup-python installs packages into the global Python environment, which is hard to audit and can break the resolution of dependencies. create a virtual environment and install the packages in a "run:" step instead [misfeature]
+  |
+9 |           pip-install: .[dev]
+  |           ^~~~~~~~~~~~
+test.yaml:11:16: warning: shell "cmd" is the Windows cmd shell, which has no formal grammar so scripts cannot be analyzed reliably, and it has not been the default shell of Windows runners since 2019. use "pwsh", "bash" or another shell instead [misfeature]
+   |
+11 |         shell: cmd
+   |                ^~~
+```
+
+<!-- Skip playground link -->
 
 
 [Installation](install.md) | [Usage](usage.md) | [Configuration](config.md) | [Go API](api.md) | [References](reference.md)
