@@ -219,7 +219,7 @@ func realMain(args []string, stdout, stderr io.Writer) int {
 		return fail(err)
 	}
 	jlCmd := []string{*jl}
-	if strings.ContainsRune(*jl, filepath.Separator) {
+	if strings.ContainsAny(*jl, "/"+string(filepath.Separator)) {
 		// The tool runs inside each repository, so a relative path would stop resolving.
 		if jlCmd[0], err = filepath.Abs(*jl); err != nil {
 			return fail(err)

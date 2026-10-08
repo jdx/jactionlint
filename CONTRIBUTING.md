@@ -28,7 +28,8 @@ A patch that adds a check (or a feature request for one) is accepted when all of
   projects, not only the contributor's own) and every finding was reviewed. Please include the corpus and the numbers in
   the pull request description.
 - **Default-on only with ~zero false positives.** A check is enabled by default only if the corpus review shows
-  essentially no false positives. Anything noisier must be opt-in, in the policy tier.
+  essentially no false positives. Anything noisier must be opt-in. The tier does not depend on the false-positive
+  rate: it follows what the check detects, so a noisy security check is still a security check, just not on by default.
 - **Configuration is acceptable when it is the point of the check.** Policy checks may need options (for example, an
   allow list of actions). Correctness checks should not require configuration to be useful.
 
