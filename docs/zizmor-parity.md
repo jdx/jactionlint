@@ -65,5 +65,13 @@ How to read the table:
 | `unsound-ternary` | `unsound-ternary` | 3 / C | default | not yet assessed |
 | `use-trusted-publishing` | `use-trusted-publishing` | 3 / D | strict | not yet assessed |
 
+## Beyond zizmor
+
+Rules of jactionlint which zizmor has no audit for:
+
+| Rule | Profile | What it finds |
+| --- | --- | --- |
+| `pipeline-without-pipefail` | default | A failure of a command in a pipeline of a `run:` script is hidden because the default shell (`bash -e {0}`) and `shell: sh` do not enable pipefail. |
+
 See [CONTRIBUTING.md](https://github.com/jdx/jactionlint/blob/main/CONTRIBUTING.md#policy-for-jactionlints-features) for the
 criteria a rule must meet before it is added.

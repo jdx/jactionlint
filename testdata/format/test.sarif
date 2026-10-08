@@ -220,6 +220,21 @@
               "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
             },
             {
+              "id": "pipeline-without-pipefail",
+              "name": "PipelineWithoutPipefail",
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "description": "Checks that failures of commands in pipelines in \"run:\" are not hidden by a shell without pipefail",
+                "queryURI": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+              },
+              "fullDescription": {
+                "text": "Checks that failures of commands in pipelines in \"run:\" are not hidden by a shell without pipefail"
+              },
+              "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+            },
+            {
               "id": "require-permissions",
               "name": "RequirePermissions",
               "defaultConfiguration": {

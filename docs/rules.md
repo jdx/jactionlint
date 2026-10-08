@@ -72,6 +72,7 @@ rules:
 | [missing-workflow-input](#missing-workflow-input) | correctness | error | default |
 | [missing-workflow-secret](#missing-workflow-secret) | correctness | error | default |
 | [outdated-action-runner](#outdated-action-runner) | correctness | error | default |
+| [pipeline-without-pipefail](#pipeline-without-pipefail) | correctness | error | default |
 | [pyflakes](#pyflakes) | correctness | error | default |
 | [recursive-alias](#recursive-alias) | correctness | error | default |
 | [require-expression-wrapping](#require-expression-wrapping) | style | error | all |
@@ -520,6 +521,16 @@ An action runs on a runtime which GitHub Actions no longer supports.
 - Default level: error
 - Profile: default
 - Details and examples: [checks](./checks.md#detect-outdated-popular-actions)
+
+## pipeline-without-pipefail
+
+A failing command in a pipeline of a run: script is hidden because the shell does not enable pipefail.
+
+- Group: correctness
+- Default level: error
+- Profile: default
+- Fixable: yes
+- Details and examples: [checks](./checks.md#check-pipeline-without-pipefail)
 
 ## pyflakes
 

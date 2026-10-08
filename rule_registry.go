@@ -173,6 +173,7 @@ func (r *RuleInfo) option(name string) (RuleOption, bool) {
 // one file. A factory registered with registerRuleFactory receives it.
 type RuleEnv struct {
 	path                   string
+	src                    []byte // the source of the file being linted
 	project                *Project
 	localActions           *LocalActionsCache
 	localReusableWorkflows *LocalReusableWorkflowCache

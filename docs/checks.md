@@ -49,6 +49,7 @@ List of checks:
 - [Deprecated inputs usage](#deprecated-inputs-usage)
 - [YAML anchors](#yaml-anchors)
 - [Dependabot configuration syntax](#check-dependabot-syntax)
+- [Pipelines that hide failures](#check-pipeline-without-pipefail)
 
 Note that jactionlint focuses on catching mistakes in workflow files. If you want some general code style checks, please consider
 using a general YAML checker like [yamllint][].
@@ -3634,6 +3635,84 @@ Output:
 ```
 
 <!-- Skip playground link -->
+
+<a id="check-pipeline-without-pipefail"></a>
+## Pipelines that hide failures
+
+The default shell of a `run:` step on Linux and macOS runs `bash -e {0}`, and `shell: sh` runs `sh -e {0}`. Neither enables
+`pipefail`, so the exit status of `cmd1 | cmd2` is the one of `cmd2` alone. When `cmd1` fails, the step still succeeds
+and the broken output is silently passed on. An explicit `shell: bash` runs `bash --noprofile --norc -eo pipefail {0}`, which
+does not have this problem. This is the rule `pipeline-without-pipefail`. It is enabled by the default profile. To turn it
+off, set it in [the configuration file](config.md):
+
+```yaml
+rules:
+  pipeline-without-pipefail: off
+```
+
+Example input:
+
+```yaml
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      # ERROR: when curl fails, sh runs an empty script and the step succeeds
+      - run: curl -fsSL https://example.com/install.sh | sh
+      - run: |
+          # ERROR: a failure of 'make' is hidden by 'tee'
+          make 2>&1 | tee build.log
+          # OK: the pipeline is the condition of 'if'
+          if make | grep -q ready; then echo ready; fi
+      - run: |
+          set -o pipefail
+          # OK: pipefail is on
+          make 2>&1 | tee build.log
+      # OK: 'shell: bash' enables pipefail
+      - shell: bash
+        run: make 2>&1 | tee build.log
+```
+
+Output:
+
+```
+test.yaml:7:14: failure of "curl" is hidden in the pipeline "curl -fsSL https://example.com/install.sh | sh" because the default shell runs "bash -e {0}" without pipefail. add "set -o pipefail" before the pipeline or use "shell: bash", which runs with pipefail [pipeline-without-pipefail]
+  |
+7 |       - run: curl -fsSL https://example.com/install.sh | sh
+  |              ^~~~
+test.yaml:10:11: failure of "make" is hidden in the pipeline "make 2>&1 | tee build.log" because the default shell runs "bash -e {0}" without pipefail. add "set -o pipefail" before the pipeline or use "shell: bash", which runs with pipefail [pipeline-without-pipefail]
+   |
+10 |           make 2>&1 | tee build.log
+   |           ^~~~
+```
+
+<!-- Skip playground link -->
+
+jactionlint reports a pipeline when all of the following hold:
+
+- The shell has no pipefail: the default shell on a runner which is known to be Linux or macOS (the default shell of Windows
+  is `pwsh`, so jobs on Windows runners, and jobs whose runner is not known from `runs-on:`, are skipped), `shell: sh`, or a
+  custom `bash`/`sh` template with errexit and without `pipefail`. The shell of the step, of `defaults.run.shell` of the job and
+  of the workflow are considered.
+- The script does not turn it on before the pipeline with `set -o pipefail`, `set -eo pipefail`, `set -euxo pipefail`,
+  `set -o errexit -o pipefail` or `SHELLOPTS=pipefail` (and does not turn it off again with `set +o pipefail`).
+- A stage in front of the last one is a command whose failure matters. `echo`, `printf`, `true`, `yes`, `cat` of a here
+  document or here string, and similar commands which cannot meaningfully fail do not count. Filters such as `grep`, `sed`, `awk`,
+  `sort` and `tail` do not count in the middle of a pipeline either, because a failure of what feeds them is reported at that command.
+- The status of the pipeline is not tested by the script: it is not negated with `!`, not the condition of `if`, `elif`, `while`
+  or `until`, and not an operand of `&&` or `||`.
+- No later stage stops reading early. `head`, `grep -q`, `grep -m`, `read`, `sed ... q` and `awk ... exit` end the pipeline
+  before the producer is done, which kills it with SIGPIPE. With `pipefail` such a pipeline fails although nothing went wrong,
+  so such pipelines are not reported.
+
+Add `set -o pipefail` before the pipeline or use `shell: bash`. `shell: sh` has no `pipefail` in dash (the `sh` of Ubuntu),
+so use `shell: bash` there. Be aware that turning `pipefail` on makes hidden failures fail the step, and that `grep` without a
+match exits with 1, so check pipelines like `cmd | grep pattern | wc -l` when you enable it.
+
+`-fix=unsafe` inserts `set -o pipefail` as the first line of a `run: |` script (default shell and custom bash templates only).
+The fix is unsafe because failures which used to be ignored now fail the step. There is no fix for a script on a single line,
+for `shell: sh` and for shells which are not bash.
 
 ---
 
