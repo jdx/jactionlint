@@ -372,3 +372,17 @@ the code blocks after `Output:` and the `Playground` links. This script should b
 
 Please see [the readme of the script](./scripts/check-checks/README.md) for the usage and knowing the details of the
 document format that this script assumes.
+
+The output block is what the CLI prints with the default profile and no configuration file, and so is the playground. The
+playground tests (`mise run docs:test`) decode every permalink in the document, lint it with the real wasm build and
+compare the findings (message, `warning: `/`info: ` prefix and kind) with the output block above it. So:
+
+- A rule which is on by default: write the example, run the script and keep both the generated output and the playground
+  link. The output must be what the playground prints, so an example for one rule must not trigger another default-on rule
+  (give a job `runs-on`, pin `uses:` and so on).
+- A rule which is off by default (opt-in): the playground cannot enable it. Put `<!-- Skip update output -->` after
+  `Output:` and `<!-- Skip playground link -->` instead of the link, write the output by hand, and show the `rules:` section of
+  the configuration file that produces it right after the example. A Go test (`TestPolicyDocsExamples` for the policy rules) lints
+  the example with that configuration and compares the output, so the hand-written output cannot go stale.
+
+The tests count the permalinks in the document themselves, so there is no number to update when a section is added.

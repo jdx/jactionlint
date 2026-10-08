@@ -145,11 +145,62 @@ type exprSite struct {
 	Cond bool
 }
 
-// workflowExprSites calls f for every string of the workflow which can hold expressions.
+// workflowExprSites calls f for every string of the workflow which can hold an expression. It
+// visits every field of the AST which the parser reads as a string, a boolean, a number or a
+// matrix value, so a rule which looks at expressions does not miss one in "strategy:", the timeouts
+// or "continue-on-error:". TestWorkflowExprSitesVisitEveryExpression keeps it in sync with ast.go.
 func workflowExprSites(w *Workflow, f func(site exprSite)) {
 	emit := func(j *Job, s *String, cond bool) {
 		if s != nil {
 			f(exprSite{Job: j, Str: s, Cond: cond})
+		}
+	}
+	emitAll := func(j *Job, ss []*String) {
+		for _, s := range ss {
+			emit(j, s, false)
+		}
+	}
+	// The expression of a boolean or a number which is written as "${{ }}"
+	emitBool := func(j *Job, b *Bool) {
+		if b != nil {
+			emit(j, b.Expression, false)
+		}
+	}
+	emitInt := func(j *Job, i *Int) {
+		if i != nil {
+			emit(j, i.Expression, false)
+		}
+	}
+	emitFloat := func(j *Job, x *Float) {
+		if x != nil {
+			emit(j, x.Expression, false)
+		}
+	}
+	// A value of a matrix is any YAML value
+	var emitRaw func(j *Job, v RawYAMLValue)
+	emitRaw = func(j *Job, v RawYAMLValue) {
+		switch v := v.(type) {
+		case *RawYAMLString:
+			if v == nil {
+				return
+			}
+			if v.str != nil {
+				emit(j, v.str, false)
+			} else if v.pos != nil {
+				emit(j, &String{Value: v.Value, Pos: v.pos}, false)
+			}
+		case *RawYAMLArray:
+			if v != nil {
+				for _, e := range v.Elems {
+					emitRaw(j, e)
+				}
+			}
+		case *RawYAMLObject:
+			if v != nil {
+				for _, e := range v.Props {
+					emitRaw(j, e)
+				}
+			}
 		}
 	}
 	env := func(j *Job, e *Env) {
@@ -170,6 +221,8 @@ func workflowExprSites(w *Workflow, f func(site exprSite)) {
 	conc := func(j *Job, c *Concurrency) {
 		if c != nil {
 			emit(j, c.Group, false)
+			emit(j, c.Queue, false)
+			emitBool(j, c.CancelInProgress)
 		}
 	}
 	container := func(j *Job, c *Container) {
@@ -183,14 +236,46 @@ func workflowExprSites(w *Workflow, f func(site exprSite)) {
 			emit(j, c.Credentials.Password, false)
 		}
 		env(j, c.Env)
+		emitAll(j, c.Ports)
+		emitAll(j, c.Volumes)
 		emit(j, c.Options, false)
+		emit(j, c.Command, false)
+		emit(j, c.Entrypoint, false)
+	}
+	combinations := func(j *Job, cs *MatrixCombinations) {
+		if cs == nil {
+			return
+		}
+		emit(j, cs.Expression, false)
+		for _, c := range cs.Combinations {
+			if c == nil {
+				continue
+			}
+			emit(j, c.Expression, false)
+			for _, a := range c.Assigns {
+				if a != nil {
+					emitRaw(j, a.Value)
+				}
+			}
+		}
 	}
 
 	emit(nil, w.Name, false)
 	emit(nil, w.RunName, false)
+	emit(nil, w.CacheMode, false)
 	env(nil, w.Env)
 	defaults(nil, w.Defaults)
 	conc(nil, w.Concurrency)
+	for _, e := range w.On {
+		// The value of an output of a reusable workflow is an expression
+		if c, ok := e.(*WorkflowCallEvent); ok && c != nil {
+			for _, o := range c.Outputs {
+				if o != nil {
+					emit(nil, o.Value, false)
+				}
+			}
+		}
+	}
 
 	for _, j := range w.Jobs {
 		if j == nil {
@@ -198,12 +283,11 @@ func workflowExprSites(w *Workflow, f func(site exprSite)) {
 		}
 		emit(j, j.Name, false)
 		emit(j, j.If, true)
+		emit(j, j.CacheMode, false)
 		if j.RunsOn != nil {
 			emit(j, j.RunsOn.LabelsExpr, false)
 			emit(j, j.RunsOn.Group, false)
-			for _, l := range j.RunsOn.Labels {
-				emit(j, l, false)
-			}
+			emitAll(j, j.RunsOn.Labels)
 		}
 		env(j, j.Env)
 		defaults(j, j.Defaults)
@@ -211,10 +295,15 @@ func workflowExprSites(w *Workflow, f func(site exprSite)) {
 		if j.Environment != nil {
 			emit(j, j.Environment.Name, false)
 			emit(j, j.Environment.URL, false)
+			emitBool(j, j.Environment.Deployment)
 		}
 		for _, o := range j.Outputs {
-			emit(j, o.Value, false)
+			if o != nil {
+				emit(j, o.Value, false)
+			}
 		}
+		emitFloat(j, j.TimeoutMinutes)
+		emitBool(j, j.ContinueOnError)
 		container(j, j.Container)
 		if j.Services != nil {
 			emit(j, j.Services.Expression, false)
@@ -224,22 +313,49 @@ func workflowExprSites(w *Workflow, f func(site exprSite)) {
 				}
 			}
 		}
-		if j.Strategy != nil && j.Strategy.Matrix != nil {
-			emit(j, j.Strategy.Matrix.Expression, false)
+		if st := j.Strategy; st != nil {
+			emitBool(j, st.FailFast)
+			emitInt(j, st.MaxParallel)
+			if m := st.Matrix; m != nil {
+				emit(j, m.Expression, false)
+				for _, r := range m.Rows {
+					if r == nil {
+						continue
+					}
+					emit(j, r.Expression, false)
+					for _, v := range r.Values {
+						emitRaw(j, v)
+					}
+				}
+				combinations(j, m.Include)
+				combinations(j, m.Exclude)
+			}
 		}
 		if c := j.WorkflowCall; c != nil {
 			emit(j, c.Uses, false)
 			for _, i := range c.Inputs {
-				emit(j, i.Value, false)
+				if i != nil {
+					emit(j, i.Value, false)
+				}
 			}
 			for _, s := range c.Secrets {
-				emit(j, s.Value, false)
+				if s != nil {
+					emit(j, s.Value, false)
+				}
 			}
+		}
+		if sn := j.Snapshot; sn != nil {
+			emit(j, sn.ImageName, false)
+			emit(j, sn.Version, false)
+			emit(j, sn.If, true)
 		}
 		walkSteps(j.Steps, func(s *Step) {
 			emit(j, s.Name, false)
 			emit(j, s.If, true)
 			env(j, s.Env)
+			emitBool(j, s.ContinueOnError)
+			emitFloat(j, s.TimeoutMinutes)
+			emitBool(j, s.Background)
 			switch e := s.Exec.(type) {
 			case *ExecRun:
 				emit(j, e.Run, false)
@@ -248,8 +364,12 @@ func workflowExprSites(w *Workflow, f func(site exprSite)) {
 			case *ExecAction:
 				emit(j, e.Uses, false)
 				for _, in := range e.Inputs {
-					emit(j, in.Value, false)
+					if in != nil {
+						emit(j, in.Value, false)
+					}
 				}
+				emit(j, e.Entrypoint, false)
+				emit(j, e.Args, false)
 			}
 		})
 	}

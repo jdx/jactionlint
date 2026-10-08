@@ -463,7 +463,8 @@ type tiTier int
 const (
 	// tiNone is an expression which is not worth a finding.
 	tiNone tiTier = iota
-	// tiDirect is an attacker controlled property. The expression rule reports it.
+	// tiDirect is an attacker controlled property. The expression rule reports it, unless the class
+	// has a Ref: the property was found by matchUntrusted only, which ignores the case.
 	tiDirect
 	// tiSubtree is an object which holds attacker controlled properties, e.g. toJSON(github.event).
 	tiSubtree
@@ -484,7 +485,7 @@ type tiClass struct {
 	Source string
 }
 
-// ID returns the rule ID of the finding. tiDirect and tiNone have none that this rule reports.
+// ID returns the rule ID of the finding. tiNone has none.
 func (t tiTier) ID() string {
 	switch t {
 	case tiDirect, tiSubtree, tiEnv:
@@ -514,6 +515,13 @@ func (c *tiContext) classify(sp *exprSpan) tiClass {
 		r := &refs[i]
 		switch m, leaf := matchUntrusted(r.Path); m {
 		case untrustedLeaf:
+			for _, seg := range r.Path {
+				if seg == "*" {
+					// A filter like github.event.* only reaches a leaf among its matches. That is
+					// not a finding of its own.
+					return tiClass{Tier: tiDirect}
+				}
+			}
 			return tiClass{Tier: tiDirect, Ref: r}
 		case untrustedSubtree:
 			return tiClass{Tier: tiSubtree, Ref: r, Source: leaf}

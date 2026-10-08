@@ -49,9 +49,8 @@ var cacheActions = []cacheAction{
 		return true, "remove this step or set \"lookup-only: true\""
 	}},
 	{"actions/setup-node", func(a *ExecAction, u *UsesRef) (bool, string) {
-		if v, ok := a.input("package-manager-cache"); ok && isFalseLiteral(v) {
-			return false, ""
-		}
+		// "package-manager-cache: false" only turns off the automatic caching of v5. An explicit "cache"
+		// input still restores a cache.
 		_, ok := inputEnabled(a, "cache")
 		return ok, "remove the \"cache\" input"
 	}},
