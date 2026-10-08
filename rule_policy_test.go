@@ -474,6 +474,16 @@ func TestCachePoisoningActions(t *testing.T) {
 		{"docker cache-from gha", "      - uses: docker/build-push-action@v6\n        with:\n          cache-from: type=gha\n", 1},
 		{"docker without cache", "      - uses: docker/build-push-action@v6\n", 0},
 		{"unrelated action", "      - uses: actions/checkout@v4\n", 0},
+		// Only the inputs which switch the caching count as a condition on the trigger
+		{"github.ref in the key of the cache", "      - uses: actions/cache@v4\n        with:\n          path: x\n          key: ${{ github.ref }}-${{ hashFiles('a') }}\n          restore-keys: ${{ github.ref_name }}-\n", 1},
+		{"github.ref in node-version", "      - uses: actions/setup-node@v4\n        with:\n          node-version: ${{ github.ref == 'refs/heads/main' && '22' || '20' }}\n          cache: npm\n", 1},
+		{"refs/tags in the path of the cache", "      - uses: actions/cache@v4\n        with:\n          path: ${{ github.event_name }}/refs/tags\n          key: y\n", 1},
+		{"github.event_name in the python version", "      - uses: actions/setup-python@v5\n        with:\n          python-version: ${{ github.event_name == 'release' && '3.12' || '3.11' }}\n          cache: pip\n", 1},
+		{"github.ref in the cache key of rust-cache", "      - uses: Swatinem/rust-cache@v2\n        with:\n          shared-key: ${{ github.ref }}\n", 1},
+		{"enable-cache decided by the ref", "      - uses: astral-sh/setup-uv@v6\n        with:\n          python-version: ${{ github.ref_name }}\n          enable-cache: ${{ github.ref == 'refs/heads/main' }}\n", 0},
+		{"setup-node cache decided by the event", "      - uses: actions/setup-node@v4\n        with:\n          cache: ${{ github.event_name == 'push' && 'npm' || '' }}\n", 0},
+		{"step if on the event", "      - uses: actions/cache@v4\n        if: github.event_name == 'push'\n        with:\n          path: x\n          key: y\n", 0},
+		{"bundler-cache decided by the ref", "      - uses: ruby/setup-ruby@v1\n        with:\n          bundler-cache: ${{ github.ref == 'refs/heads/main' }}\n", 0},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
