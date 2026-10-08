@@ -142,6 +142,8 @@ extends:
     - `ignore`: The configuration to ignore (filter) the errors. This is an array of [rule IDs](rules.md) and regular
       expressions. A rule ID ignores all the errors of the rule. A regular expression ignores the errors whose message
       matches it. It's similar to the `-ignore` command line option.
+- `online`: Turns on the [online checks](usage.md#online-checks) for the files this configuration applies to, like the `-online`
+  flag does for the whole run. They query the GitHub API. The default is `false`: nothing uses the network.
 - `profile`, `rules` and `extends`: See [Profiles](#profiles), [Rules](#rules) and [Extending config files](#extending-config-files).
 
 Unknown keys are errors. jactionlint reports the key with its position and suggests the closest known key when it looks
@@ -163,7 +165,8 @@ A profile is a named set of [rules](rules.md) which are enabled together. `profi
 
 The profile of each rule is in [the list of rules](rules.md). Some rules belong to no profile and run only when the
 configuration turns them on: `required-actions` (when the `required-actions` list is not empty) and `timeout-too-long` (when
-`max` is set).
+`max` is set). The [online rules](usage.md#online-checks) do not follow a profile either: they run, at their own level, when
+the online checks are on.
 
 ## Rules
 
@@ -193,6 +196,8 @@ rules:
 | ------------------ | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------- |
 | `max-run-lines`    | `max`  | Maximum number of non-blank lines in a `run:` script. Default `100` when the rule is enabled by the `all` profile.                              |
 | `timeout-too-long` | `max`  | Maximum allowed `timeout-minutes` of a job in minutes. Values given by `${{ }}` are not checked. The rule does nothing without `max`.           |
+| `impostor-commit`  | `max-branches` | How many branches of an action repository a pinned commit is compared with before giving up without a verdict. Default `1000`; without a token at most 100 are compared. |
+| `known-vulnerable-actions` | `allow` | List of advisory IDs (`GHSA-...`) which are not reported: `allow: [GHSA-mrrh-fwg8-r2c3]`. Default none. |
 
 ## Extending config files
 

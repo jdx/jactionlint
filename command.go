@@ -1,13 +1,17 @@
 package jactionlint
 
 import (
+	"context"
 	"errors"
 	"flag"
 	"fmt"
 	"io"
+	"os"
+	"os/signal"
 	"regexp"
 	"runtime"
 	"runtime/debug"
+	"time"
 )
 
 // These variables might be modified by ldflags on building release binaries by GoReleaser. Do not modify manually
@@ -162,6 +166,7 @@ func (cmd *Command) Main(args []string) int {
 	var color bool
 	var minSeverity string
 	var strictExit bool
+	var onlineTTL time.Duration
 
 	flags := flag.NewFlagSet(args[0], flag.ContinueOnError)
 	flags.SetOutput(cmd.Stderr)
@@ -177,6 +182,8 @@ func (cmd *Command) Main(args []string) int {
 	flags.BoolVar(&initConfig, "init-config", false, "Generate default config file at .github/jactionlint.yaml in current project")
 	flags.Var(&fix, "fix", "Apply the safe automatic fixes to the files and report what remains. -fix=unsafe also applies the fixes which may change the behavior of the workflow. The files are rewritten in place")
 	flags.BoolVar(&migrateConfig, "migrate-config", false, "Rewrite the deprecated keys of the config file (.github/jactionlint.yaml or the file of -config-file) into the \"rules\" mapping")
+	flags.BoolVar(&opts.Online, "online", false, "Enable the checks which query the GitHub API (impostor-commit, known-vulnerable-actions, ref-confusion, stale-action-refs, archived-uses, ref-version-mismatch). The token is read from GITHUB_TOKEN or GH_TOKEN. Nothing uses the network without this flag")
+	flags.DurationVar(&onlineTTL, "online-cache-ttl", time.Hour, "How long -online uses an answer of the GitHub API from the cache in $XDG_CACHE_HOME/jactionlint without asking GitHub whether it changed. 0 checks every answer")
 	flags.BoolVar(&noColor, "no-color", false, "Disable colorful output")
 	flags.BoolVar(&color, "color", false, "Always enable colorful output. This is useful to force colorful outputs")
 	flags.BoolVar(&opts.Verbose, "verbose", false, "Enable verbose output")
@@ -217,6 +224,17 @@ func (cmd *Command) Main(args []string) int {
 	opts.IgnorePatterns = ignorePats
 	opts.OnRulesCreated = cmd.onRulesCreated
 	opts.LogWriter = cmd.Stderr
+	if onlineTTL <= 0 {
+		opts.OnlineCacheTTL = -1
+	} else {
+		opts.OnlineCacheTTL = onlineTTL
+	}
+	if opts.Online {
+		// Stop the lookups, instead of killing the process in the middle of a cache write, on Ctrl-C
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+		defer stop()
+		opts.Context = ctx
+	}
 
 	if color {
 		opts.Color = ColorOptionKindAlways

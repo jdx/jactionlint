@@ -82,6 +82,9 @@ func TestLinterLintOK(t *testing.T) {
 
 			config := Config{}
 			linter.defaultConfig = &config
+			if strings.HasSuffix(strings.TrimSuffix(filepath.Base(f), filepath.Ext(f)), "_online") {
+				linter.online = onlineSettings{enabled: true, client: onlineFixtureClient(t)}
+			}
 
 			t.Log("Linting workflow file", f)
 			errs, err := linter.LintFile(f, proj)
@@ -217,6 +220,9 @@ func TestLinterLintError(t *testing.T) {
 
 				l.defaultConfig = fixtureConfig()
 
+				if strings.HasSuffix(testName, "_online") {
+					l.online = onlineSettings{enabled: true, client: onlineFixtureClient(t)}
+				}
 				if strings.HasSuffix(testName, "_security") {
 					l.defaultConfig = fixtureConfig("unpinned-uses")
 				}
@@ -262,6 +268,8 @@ func TestLinterLintAllErrorWorkflowsAtOnce(t *testing.T) {
 		panic(err)
 	}
 	files = append(files, fs...)
+	// The examples of the online checks need the GitHub fixtures. TestLinterLintError runs them.
+	files = slices.DeleteFunc(files, func(f string) bool { return strings.HasSuffix(strings.TrimSuffix(f, filepath.Ext(f)), "_online") })
 
 	o := LinterOptions{
 		Shellcheck: shellcheck,

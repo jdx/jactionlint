@@ -48,6 +48,12 @@ List of checks:
 - [Action metadata syntax validation](#action-metadata-syntax)
 - [Deprecated inputs usage](#deprecated-inputs-usage)
 - [YAML anchors](#yaml-anchors)
+- [Impostor commits (online)](#check-impostor-commit)
+- [Known vulnerable actions (online)](#check-known-vulnerable-actions)
+- [Ref confusion (online)](#check-ref-confusion)
+- [Stale action refs (online)](#check-stale-action-refs)
+- [Archived repositories (online)](#check-archived-uses)
+- [Version comments of pinned actions (online)](#check-ref-version-mismatch)
 
 Note that jactionlint focuses on catching mistakes in workflow files. If you want some general code style checks, please consider
 using a general YAML checker like [yamllint][].
@@ -3569,6 +3575,262 @@ test.yaml:9:14: could not parse as YAML: unknown anchor 'credentials' referenced
 ```
 
 [Playground](https://jactionlint.jdx.dev/#eNosyjEOwjAMheE9p3gzUsqe26TEUkGRXeXZcH1k6PQP/2facAaPUl62sxXAhZ4FVihrgthDPers+X6LLif/CqgpG7b7sI9O62PjcS1A9N1weywZov7sk98BAKp1Iic=)
+
+<a id="check-impostor-commit"></a>
+## Impostor commits (online)
+
+The checks in this section and the five that follow query the GitHub API, so they run only when you ask for it with
+`jactionlint -online` or `online: true` in [the configuration](config.md#online-checks). Nothing in jactionlint uses the network
+otherwise. How the token, the cache and the rate limit work is in [the usage document](usage.md#online-checks). The online
+checks are not available in the playground, so their examples have no playground link.
+
+GitHub stores a repository and all its forks as one network of commits. A commit which exists only in a fork (or only in an
+unmerged pull request) can therefore be written as `owner/repo@<sha>` of the parent repository, and a workflow pinned this way
+looks as safe as any other hash-pinned action while it runs code that was never part of the repository. This is the rule
+`impostor-commit`, the same as the [zizmor audit][zizmor-impostor-commit] of that name.
+
+The rule accepts a commit when a tag of the repository points to it, or it is an ancestor of the head of the default branch or of
+one of the other branches. The `max-branches` option (default `1000`) bounds how many branches are compared. With a token the
+branches are compared 100 at a time in one GraphQL request; without one each branch costs a request and at most 100 are
+compared. When the repository has more branches than that and none has the commit, the rule says nothing: it reports only what it
+could verify. A commit that is in the history of a tag only (for example of a deleted release branch) is reported.
+
+Example input:
+
+```yaml
+# requires -online
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      # OK: the commit is tagged v4.2.2
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      # ERROR: the commit is only in a pull request from a fork
+      - uses: actions/checkout@2f547d07f23dec7f4a96fc091165260dcbe59529
+```
+
+Output:
+
+```
+test.yaml:10:15: action "actions/checkout@2f547d07f23dec7f4a96fc091165260dcbe59529" is pinned to commit 2f547d07f23d, which is on no branch or tag of actions/checkout. it can come from a fork of the repository, where anyone can create a commit that looks like part of it (an impostor commit). pin a commit from the history of actions/checkout instead [impostor-commit]
+   |
+10 |       - uses: actions/checkout@2f547d07f23dec7f4a96fc091165260dcbe59529
+   |               ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+test.yaml:10:15: info: action "actions/checkout@2f547d07f23dec7f4a96fc091165260dcbe59529" is pinned to commit 2f547d07f23d, which no tag of actions/checkout points to. the commit may contain changes that no release documents. pin the commit of a tagged release instead [stale-action-refs]
+   |
+10 |       - uses: actions/checkout@2f547d07f23dec7f4a96fc091165260dcbe59529
+   |               ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+```
+
+<!-- Skip playground link -->
+
+The same commit is also reported by `stale-action-refs`, because no tag points to it. To accept a finding, ignore it by rule ID
+(`jactionlint -ignore impostor-commit`) or lower its level in the configuration. The fix is to pin a commit of the action's own
+history, preferably the one of a release tag.
+
+<a id="check-known-vulnerable-actions"></a>
+## Known vulnerable actions (online)
+
+GitHub publishes security advisories for actions, such as the leak of secrets through `tj-actions/changed-files`. The rule
+`known-vulnerable-actions` looks the advisories of the GitHub Actions ecosystem up for every action and reusable workflow, works
+out which version the workflow runs, and reports it when an advisory covers that version. This is the same as the
+[zizmor audit][zizmor-known-vulnerable-actions] of that name.
+
+The version comes from the ref: a version tag such as `v45.0.2` is the version. For `v45`, or a commit SHA, the rule takes the most
+specific version tag on the same commit. A branch has no version and is never reported. The finding names the first patched
+version when there is one.
+
+Example input:
+
+```yaml
+# requires -online
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      # ERROR: v45 is version 45.0.2, which an advisory covers
+      - uses: tj-actions/changed-files@v45
+      # OK: 46.0.1 contains the fix
+      - uses: tj-actions/changed-files@2f7c5bfce28377bc069a65ba478de0a74aa0ca32 # v46.0.1
+```
+
+Output:
+
+```
+test.yaml:8:15: action "tj-actions/changed-files@v45" (version 45.0.2) is affected by GHSA-mrrh-fwg8-r2c3 (high severity, https://github.com/advisories/GHSA-mrrh-fwg8-r2c3): tj-actions changed-files through 45.0.7 allows remote attackers to discover secrets by reading actions logs. upgrade to 46.0.1 or later. to accept the risk add "GHSA-mrrh-fwg8-r2c3" to the "allow" option of this rule [known-vulnerable-actions]
+  |
+8 |       - uses: tj-actions/changed-files@v45
+  |               ^~~~~~~~~~~~~~~~~~~~~~~~~~~~
+```
+
+<!-- Skip playground link -->
+
+Do not accept a finding unless you know the vulnerability does not apply to how you use the action. The `allow` option lists the
+advisory IDs to ignore, and the level of the rule is set like any other:
+
+```yaml
+rules:
+  known-vulnerable-actions:
+    level: error
+    allow:
+      - GHSA-mrrh-fwg8-r2c3
+```
+
+<a id="check-ref-confusion"></a>
+## Ref confusion (online)
+
+`uses: owner/repo@v1` does not say whether `v1` is a branch or a tag. When the repository has both, anyone who can push the second
+one can change what every workflow using the first runs, with no change to those workflows. The rule `ref-confusion` reports
+an action whose ref is both a branch and a tag of its repository. It is the same as the [zizmor audit][zizmor-ref-confusion].
+The fix is to pin the action to a full-length commit SHA.
+
+Example input:
+
+```yaml
+# requires -online
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      # ERROR: v1 is a branch and a tag of this repository
+      - uses: example/confusing@v1
+      # OK: v2 is only a tag
+      - uses: example/confusing@v2
+```
+
+Output:
+
+```
+test.yaml:8:15: warning: ref "v1" of action "example/confusing@v1" is both a branch and a tag of example/confusing, so it is ambiguous what runs and whoever controls the other ref can change it. pin the action to a full-length commit SHA [ref-confusion]
+  |
+8 |       - uses: example/confusing@v1
+  |               ^~~~~~~~~~~~~~~~~~~~
+```
+
+<!-- Skip playground link -->
+
+Refs which are commit SHAs are never ambiguous and are not looked up.
+
+<a id="check-stale-action-refs"></a>
+## Stale action refs (online)
+
+An action pinned to a commit SHA that no tag points to runs a snapshot between two releases. It may contain bugs, or fixes of
+vulnerabilities, which were never documented because changelogs describe releases. The rule `stale-action-refs` reports hash-pinned
+actions whose commit is not the commit of any tag. It is the same as the [zizmor audit][zizmor-stale-action-refs] and, like it, is
+informational: some repositories release from a rolling branch, where the finding does not apply.
+
+Example input:
+
+```yaml
+# requires -online
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      # OK: tagged v4.2.2
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      # INFO: no tag points to this commit
+      - uses: actions/setup-node@3235b876344d2a9aa001b8d1453c930bba69e610
+```
+
+Output:
+
+```
+test.yaml:10:15: info: action "actions/setup-node@3235b876344d2a9aa001b8d1453c930bba69e610" is pinned to commit 3235b876344d, which no tag of actions/setup-node points to. the commit may contain changes that no release documents. pin the commit of a tagged release instead [stale-action-refs]
+   |
+10 |       - uses: actions/setup-node@3235b876344d2a9aa001b8d1453c930bba69e610
+   |               ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+```
+
+<!-- Skip playground link -->
+
+When the repository has more tags than jactionlint reads (1000), the rule reports nothing for a commit it did not find.
+
+<a id="check-archived-uses"></a>
+## Archived repositories (online)
+
+An archived repository is read-only: nobody fixes the vulnerabilities of the action, or of the dependencies bundled with it. The
+rule `archived-uses` reports actions and reusable workflows which live in an archived repository. It is the same as the
+[zizmor audit][zizmor-archived-uses]. Replace the action with a maintained one, or with the commands it wraps in a `run:` step (many
+actions are thin wrappers around the `gh` CLI, which is on the GitHub-hosted runners).
+
+Example input:
+
+```yaml
+# requires -online
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      # ERROR: the repository is archived
+      - uses: example/archived-action@v1
+      # OK
+      - uses: actions/checkout@v4
+```
+
+Output:
+
+```
+test.yaml:8:15: warning: action "example/archived-action@v1" is in the archived repository example/archived-action, which is read-only and no longer maintained, so problems in it will not be fixed. replace it with a maintained alternative, or run the commands yourself in a "run:" step [archived-uses]
+  |
+8 |       - uses: example/archived-action@v1
+  |               ^~~~~~~~~~~~~~~~~~~~~~~~~~
+```
+
+<!-- Skip playground link -->
+
+<a id="check-ref-version-mismatch"></a>
+## Version comments of pinned actions (online)
+
+Dependabot and Renovate keep a hash-pinned action up to date by reading the version in the comment after it
+(`uses: actions/checkout@<sha> # v4.2.2`). When the commit is changed by hand and the comment is not, the comment lies, and the tools
+may skip it. The rule `ref-version-mismatch` reads the version of the comment and reports it when the commit is not the one of that tag.
+It is the same as the [zizmor audit][zizmor-ref-version-mismatch], except that it does not report a pinned action
+without a version comment.
+
+A comment gives a version when it starts with one (`v4.2.2`, `4.2.2`, `v4`, `tag=v4.2.2`), as the bots write it; other
+comments are left alone. The comment matches
+when a tag with that version points to the pinned commit; the `v` prefix does not matter. A less specific
+version is not enough: `# v4` on the commit of `v4.2.2` is reported when the tag `v4` points to another commit, because the
+comment no longer describes what is pinned.
+
+Example input:
+
+```yaml
+# requires -online
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      # OK: the commit is v4.2.2
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      # ERROR: the commit is v4.2.2, not v3.0.0
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v3.0.0
+```
+
+Output:
+
+```
+test.yaml:10:15: warning: the version comment "# v3.0.0" does not match the commit pinned in action "actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683": tag "v3.0.0" points to commit a12a3943b4bd, but the pinned commit is tagged "v4.2.2". update the comment, or pin the commit of the version you mean [ref-version-mismatch]
+   |
+10 |       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v3.0.0
+   |               ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+```
+
+<!-- Skip playground link -->
+
+[zizmor-impostor-commit]: https://docs.zizmor.sh/audits/#impostor-commit
+[zizmor-known-vulnerable-actions]: https://docs.zizmor.sh/audits/#known-vulnerable-actions
+[zizmor-ref-confusion]: https://docs.zizmor.sh/audits/#ref-confusion
+[zizmor-stale-action-refs]: https://docs.zizmor.sh/audits/#stale-action-refs
+[zizmor-archived-uses]: https://docs.zizmor.sh/audits/#archived-uses
+[zizmor-ref-version-mismatch]: https://docs.zizmor.sh/audits/#ref-version-mismatch
 
 ---
 

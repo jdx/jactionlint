@@ -125,6 +125,13 @@ file (`linter.go` and `rule_registry.go` stay untouched). A rule needs these fil
 5. `mise run rules-doc` regenerates `docs/rules.md`, which is generated from the registry and sorted by ID. `hk check --all`
    (and so CI) fails when it is stale (`mise run rules-doc:check` checks only that).
 
+An online rule (`Online: true` in its `RuleInfo`, enabled only by `-online`) takes the `onlineSession` from the `RuleEnv` in its
+factory and returns nothing when it is nil. It never talks to the network in tests: the golden files named `*_online` in
+`testdata/err` and `testdata/examples` are linted with the answers recorded in `testdata/online/github.json`, served by
+`NewFixtureGitHubClient`, and a lookup that is not in the file fails the test. Add the repositories your rule needs to the file;
+`NewRecordingGitHubClient` records the answers of the real client in the same format (trim the tag lists by hand). A docs example
+of an online rule starts with the line `# requires -online` so that `scripts/check-checks` uses the same fixtures.
+
 Tests also fail when a reported ID is not registered, a registered ID is never reported, or an anchor does not exist in
 `docs/checks.md`. Before pushing run `go build ./...`, `go vet ./...`, `go test -race ./...` and `hk check --all`.
 

@@ -61,6 +61,8 @@ const (
 	RuleOptionInt RuleOptionKind = "int"
 	// RuleOptionNumber is an option taking a non-negative number.
 	RuleOptionNumber RuleOptionKind = "number"
+	// RuleOptionStringList is an option taking a list of strings.
+	RuleOptionStringList RuleOptionKind = "string-list"
 )
 
 // RuleOption describes one option which can be given to a rule in the "rules" mapping of the
@@ -180,6 +182,7 @@ type RuleEnv struct {
 	shellcheck             string
 	pyflakes               string
 	proc                   *concurrentProcess
+	online                 *onlineSession // nil unless the online checks are on
 
 	log  func(args ...interface{})
 	name string // the factory being run

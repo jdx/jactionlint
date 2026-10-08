@@ -27,6 +27,11 @@ func (c *Config) RuleLevel(id string) Severity {
 	if c != nil && id == "required-actions" && len(c.RequiredActions) > 0 {
 		return info.DefaultLevel
 	}
+	if info.Online {
+		// Online rules do not follow the profile. They exist only when the online checks are on
+		// (-online or "online: true"), and then run at their own level.
+		return info.DefaultLevel
+	}
 	if info.Profile != "" && c.profile().Includes(info.Profile) {
 		return info.DefaultLevel
 	}
@@ -62,6 +67,18 @@ func (c *Config) RuleOption(id, name string) (any, bool) {
 		}
 	}
 	return nil, false
+}
+
+// RuleOptionStrings returns the value of a list option of the rule: the one written in "rules", or else
+// the default of the option. The boolean is false when the option has neither. It can be called on
+// a nil Config.
+func (c *Config) RuleOptionStrings(id, name string) ([]string, bool) {
+	v, ok := c.RuleOption(id, name)
+	if !ok {
+		return nil, false
+	}
+	l, ok := v.([]string)
+	return l, ok
 }
 
 // ruleOptionNumber returns the value of a numeric option as float64.
@@ -123,6 +140,20 @@ func normalizeOption(opt RuleOption, v any) (any, error) {
 			return int(v), nil
 		}
 		return nil, fmt.Errorf("it must be a non-negative integer")
+	case RuleOptionStringList:
+		l, ok := v.([]any)
+		if !ok {
+			return nil, fmt.Errorf("it must be a list of strings")
+		}
+		ret := make([]string, 0, len(l))
+		for _, e := range l {
+			s, ok := e.(string)
+			if !ok {
+				return nil, fmt.Errorf("it must be a list of strings")
+			}
+			ret = append(ret, s)
+		}
+		return ret, nil
 	case RuleOptionNumber:
 		var f float64
 		switch v := v.(type) {
@@ -259,7 +290,7 @@ func (c *Config) applyLegacy(l *legacyConfig) error {
 
 var (
 	configTopKeys = []string{
-		"profile", "extends", "rules",
+		"profile", "extends", "rules", "online",
 		"self-hosted-runner", "config-variables", "config-secrets", "paths", "required-actions", "assume-default-permissions",
 		// Deprecated keys which are translated into rules
 		"timeout-minutes", "require-commit-hash", "require-permissions", "require-checkout-before-local-action",

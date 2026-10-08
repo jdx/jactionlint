@@ -25,6 +25,7 @@ rules:
 
 | ID | Group | Default level | Profile |
 | --- | --- | --- | --- |
+| [archived-uses](#archived-uses) | security | warn | only with `-online` |
 | [conflicting-runner-labels](#conflicting-runner-labels) | correctness | error | default |
 | [constant-condition](#constant-condition) | correctness | error | default |
 | [context-availability](#context-availability) | correctness | error | default |
@@ -40,6 +41,7 @@ rules:
 | [expression-type](#expression-type) | correctness | error | default |
 | [hardcoded-container-credentials](#hardcoded-container-credentials) | security | error | default |
 | [if-always-true](#if-always-true) | correctness | error | default |
+| [impostor-commit](#impostor-commit) | security | error | only with `-online` |
 | [invalid-activity-type](#invalid-activity-type) | correctness | error | default |
 | [invalid-cron](#invalid-cron) | correctness | error | default |
 | [invalid-env-var-name](#invalid-env-var-name) | correctness | error | default |
@@ -60,6 +62,7 @@ rules:
 | [invalid-workflow-call](#invalid-workflow-call) | correctness | error | default |
 | [invalid-workflow-call-input](#invalid-workflow-call-input) | correctness | error | default |
 | [invalid-workflow-dispatch-input](#invalid-workflow-dispatch-input) | correctness | error | default |
+| [known-vulnerable-actions](#known-vulnerable-actions) | security | error | only with `-online` |
 | [local-action-checkout](#local-action-checkout) | correctness | error | default |
 | [matrix-duplicate-value](#matrix-duplicate-value) | correctness | error | default |
 | [matrix-invalid-exclude](#matrix-invalid-exclude) | correctness | error | default |
@@ -73,10 +76,13 @@ rules:
 | [outdated-action-runner](#outdated-action-runner) | correctness | error | default |
 | [pyflakes](#pyflakes) | correctness | error | default |
 | [recursive-alias](#recursive-alias) | correctness | error | default |
+| [ref-confusion](#ref-confusion) | security | warn | only with `-online` |
+| [ref-version-mismatch](#ref-version-mismatch) | security | warn | only with `-online` |
 | [require-expression-wrapping](#require-expression-wrapping) | style | error | all |
 | [require-shell](#require-shell) | style | error | all |
 | [required-actions](#required-actions) | policy | error | only when configured |
 | [shellcheck](#shellcheck) | correctness | error | default |
+| [stale-action-refs](#stale-action-refs) | security | info | only with `-online` |
 | [template-injection](#template-injection) | security | error | default |
 | [timeout-too-long](#timeout-too-long) | policy | error | only when configured |
 | [undefined-function](#undefined-function) | correctness | error | default |
@@ -96,6 +102,16 @@ rules:
 | [workflow-run-names](#workflow-run-names) | correctness | error | default |
 | [workflow-syntax](#workflow-syntax) | correctness | error | default |
 | [yaml-syntax](#yaml-syntax) | correctness | error | default |
+
+## archived-uses
+
+An action or reusable workflow is in an archived repository.
+
+- Group: security
+- Default level: warn
+- Profile: only with `-online`
+- Needs network access: yes (only with `-online`)
+- Details and examples: [checks](./checks.md#check-archived-uses)
 
 ## conflicting-runner-labels
 
@@ -231,6 +247,17 @@ An if: condition is always true because of the characters around ${{ }}.
 - Default level: error
 - Profile: default
 - Details and examples: [checks](./checks.md#if-cond-constant)
+
+## impostor-commit
+
+A hash-pinned action uses a commit which is not part of the repository's own history (it exists only in a fork).
+
+- Group: security
+- Default level: error
+- Profile: only with `-online`
+- Needs network access: yes (only with `-online`)
+- Option `max-branches` (int, default 1000): How many branches of the action repository a commit is compared with before giving up without a verdict. Without a token each branch costs a request, so at most 100 are compared.
+- Details and examples: [checks](./checks.md#check-impostor-commit)
 
 ## invalid-activity-type
 
@@ -411,6 +438,17 @@ An input of the workflow_dispatch event is invalid.
 - Profile: default
 - Details and examples: [checks](./checks.md#check-workflow-dispatch-events)
 
+## known-vulnerable-actions
+
+An action version is affected by a published GitHub security advisory.
+
+- Group: security
+- Default level: error
+- Profile: only with `-online`
+- Needs network access: yes (only with `-online`)
+- Option `allow` (string-list, empty by default): Advisory IDs (GHSA-...) which are not reported.
+- Details and examples: [checks](./checks.md#check-known-vulnerable-actions)
+
 ## local-action-checkout
 
 A local action is used before any step checks out the repository.
@@ -529,6 +567,26 @@ A YAML alias refers to itself.
 - Profile: default
 - Details and examples: [checks](./checks.md#yaml-anchors)
 
+## ref-confusion
+
+The ref of an action is both a branch and a tag of its repository.
+
+- Group: security
+- Default level: warn
+- Profile: only with `-online`
+- Needs network access: yes (only with `-online`)
+- Details and examples: [checks](./checks.md#check-ref-confusion)
+
+## ref-version-mismatch
+
+The version comment of a hash-pinned action does not match the pinned commit.
+
+- Group: security
+- Default level: warn
+- Profile: only with `-online`
+- Needs network access: yes (only with `-online`)
+- Details and examples: [checks](./checks.md#check-ref-version-mismatch)
+
 ## require-expression-wrapping
 
 An if: condition is not wrapped in ${{ }}.
@@ -563,6 +621,16 @@ shellcheck reported an issue in a shell script.
 - Default level: error
 - Profile: default
 - Details and examples: [checks](./checks.md#check-shellcheck-integ)
+
+## stale-action-refs
+
+A hash-pinned action uses a commit which no tag of the repository points to.
+
+- Group: security
+- Default level: info
+- Profile: only with `-online`
+- Needs network access: yes (only with `-online`)
+- Details and examples: [checks](./checks.md#check-stale-action-refs)
 
 ## template-injection
 

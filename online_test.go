@@ -1,0 +1,469 @@
+package jactionlint
+
+import (
+	"bytes"
+	"context"
+	"errors"
+	"fmt"
+	"io"
+	"net"
+	"strings"
+	"sync"
+	"sync/atomic"
+	"testing"
+)
+
+// countingClient wraps a GitHubClient and counts the calls.
+type countingClient struct {
+	GitHubClient
+	n atomic.Int32
+}
+
+func (c *countingClient) Repository(ctx context.Context, o, r string) (*GitHubRepo, error) {
+	c.n.Add(1)
+	return c.GitHubClient.Repository(ctx, o, r)
+}
+func (c *countingClient) Tags(ctx context.Context, o, r string) (*GitHubTagList, error) {
+	c.n.Add(1)
+	return c.GitHubClient.Tags(ctx, o, r)
+}
+func (c *countingClient) ResolveRef(ctx context.Context, o, r string, ns GitHubRefNamespace, name string) (string, bool, error) {
+	c.n.Add(1)
+	return c.GitHubClient.ResolveRef(ctx, o, r, ns, name)
+}
+func (c *countingClient) Branches(ctx context.Context, o, r string, l int) (*GitHubBranchList, error) {
+	c.n.Add(1)
+	return c.GitHubClient.Branches(ctx, o, r, l)
+}
+func (c *countingClient) Compare(ctx context.Context, o, r, b, h string) (GitHubCompareStatus, error) {
+	c.n.Add(1)
+	return c.GitHubClient.Compare(ctx, o, r, b, h)
+}
+func (c *countingClient) Advisories(ctx context.Context, o, r string) ([]GitHubAdvisory, error) {
+	c.n.Add(1)
+	return c.GitHubClient.Advisories(ctx, o, r)
+}
+
+// failingClient fails every call with the error.
+type failingClient struct {
+	err error
+	n   atomic.Int32
+}
+
+func (c *failingClient) Repository(context.Context, string, string) (*GitHubRepo, error) {
+	c.n.Add(1)
+	return nil, c.err
+}
+func (c *failingClient) Tags(context.Context, string, string) (*GitHubTagList, error) {
+	c.n.Add(1)
+	return nil, c.err
+}
+func (c *failingClient) ResolveRef(context.Context, string, string, GitHubRefNamespace, string) (string, bool, error) {
+	c.n.Add(1)
+	return "", false, c.err
+}
+func (c *failingClient) Branches(context.Context, string, string, int) (*GitHubBranchList, error) {
+	c.n.Add(1)
+	return nil, c.err
+}
+func (c *failingClient) Compare(context.Context, string, string, string, string) (GitHubCompareStatus, error) {
+	c.n.Add(1)
+	return "", c.err
+}
+func (c *failingClient) Advisories(context.Context, string, string) ([]GitHubAdvisory, error) {
+	c.n.Add(1)
+	return nil, c.err
+}
+
+// lintOnline lints the workflow with the online checks served by the client and returns the errors.
+func lintOnline(t *testing.T, client GitHubClient, cfg *Config, src string) ([]*Error, *Linter) {
+	t.Helper()
+	var out bytes.Buffer
+	l, err := NewLinter(&out, &LinterOptions{Online: true, GitHubClient: client, LogWriter: io.Discard})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg == nil {
+		cfg = &Config{}
+	}
+	l.defaultConfig = cfg
+	errs, err := l.Lint("test.yaml", []byte(src), &Project{root: t.TempDir()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return errs, l
+}
+
+func workflowWith(steps ...string) string {
+	var b strings.Builder
+	b.WriteString("on: push\njobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n")
+	for _, s := range steps {
+		b.WriteString("      - " + s + "\n")
+	}
+	return b.String()
+}
+
+func idsOf(errs []*Error) []string {
+	var ret []string
+	for _, e := range errs {
+		ret = append(ret, fmt.Sprintf("%d:%s", e.Line, e.ID))
+	}
+	return ret
+}
+
+func TestSessionAsksOncePerRepository(t *testing.T) {
+	c := &countingClient{GitHubClient: onlineFixtureClient(t)}
+	src := workflowWith(
+		"uses: actions/checkout@v4",
+		"uses: actions/checkout@v4",
+		"uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2",
+		"uses: Actions/Checkout@v4", // GitHub is case-insensitive
+	)
+	// Every file of a run shares the session
+	_, l := lintOnline(t, c, nil, src)
+	first := c.n.Load()
+	if first == 0 {
+		t.Fatal("the online rules asked nothing")
+	}
+	if _, err := l.Lint("other.yaml", []byte(src), &Project{root: t.TempDir()}); err != nil {
+		t.Fatal(err)
+	}
+	if got := c.n.Load(); got != first {
+		t.Errorf("a second file of the same run asked again: %d calls then %d", first, got)
+	}
+	// The repository, its tags, the refs, no advisory lookups beyond one: nowhere near one request per use
+	if first > 5 {
+		t.Errorf("%d requests for one repository", first)
+	}
+}
+
+func TestOnlineRulesNeedTheFlag(t *testing.T) {
+	c := &failingClient{err: errors.New("the network must not be used")}
+	var out bytes.Buffer
+	l, err := NewLinter(&out, &LinterOptions{GitHubClient: c, LogWriter: io.Discard}) // Online is false
+	if err != nil {
+		t.Fatal(err)
+	}
+	l.defaultConfig = &Config{Profile: ProfileAll}
+	src := workflowWith("uses: actions/checkout@v4", "uses: actions/checkout@2f547d07f23dec7f4a96fc091165260dcbe59529 # v1")
+	if _, err := l.Lint("test.yaml", []byte(src), &Project{root: t.TempDir()}); err != nil {
+		t.Fatal(err)
+	}
+	if c.n.Load() != 0 {
+		t.Errorf("the client was used %d times without Online", c.n.Load())
+	}
+}
+
+func TestOnlineConfigKey(t *testing.T) {
+	cfg, err := ParseConfig([]byte("online: true\n"))
+	if err != nil || !cfg.Online {
+		t.Fatalf("online: true was not parsed: %+v, %v", cfg, err)
+	}
+	c := &countingClient{GitHubClient: onlineFixtureClient(t)}
+	var out bytes.Buffer
+	l, err := NewLinter(&out, &LinterOptions{GitHubClient: c, LogWriter: io.Discard}) // No Online option
+	if err != nil {
+		t.Fatal(err)
+	}
+	l.defaultConfig = cfg
+	errs, err := l.Lint("test.yaml", []byte(workflowWith("uses: actions/checkout@2f547d07f23dec7f4a96fc091165260dcbe59529")), &Project{root: t.TempDir()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := idsOf(errs); len(got) != 2 || got[0] != "6:impostor-commit" {
+		t.Errorf("the config key should turn the online checks on: %v", got)
+	}
+
+	cfg, err = ParseConfig([]byte("online: false\n"))
+	if err != nil || cfg.Online {
+		t.Fatalf("online: false: %+v, %v", cfg, err)
+	}
+	if _, err := ParseConfig([]byte("online: sometimes\n")); err == nil {
+		t.Error("online takes a boolean")
+	}
+}
+
+func TestOnlineRulesFollowRuleLevels(t *testing.T) {
+	c := onlineFixtureClient(t)
+	src := workflowWith("uses: actions/checkout@2f547d07f23dec7f4a96fc091165260dcbe59529")
+	cfg := &Config{Rules: map[string]RuleConfig{"stale-action-refs": {Level: SeverityOff, levelSet: true}, "impostor-commit": {Level: SeverityWarning, levelSet: true}}}
+	errs, _ := lintOnline(t, c, cfg, src)
+	if len(errs) != 1 || errs[0].ID != "impostor-commit" || errs[0].Severity != SeverityWarning {
+		t.Errorf("want only impostor-commit as a warning: %v", idsOf(errs))
+	}
+	// Profiles do not matter for online rules
+	for _, p := range []Profile{ProfileDefault, ProfileStrict, ProfileAll} {
+		errs, _ := lintOnline(t, c, &Config{Profile: p}, src)
+		var online []*Error
+		for _, e := range errs {
+			if e.ID == "impostor-commit" || e.ID == "stale-action-refs" {
+				online = append(online, e)
+			}
+		}
+		if len(online) != 2 {
+			t.Errorf("profile %s: want both online findings but got %v", p, idsOf(errs))
+		}
+	}
+}
+
+func TestKnownVulnerableActionsAllowOption(t *testing.T) {
+	src := workflowWith("uses: tj-actions/changed-files@v44")
+	cfg, err := ParseConfig([]byte("rules:\n  known-vulnerable-actions:\n    allow: [GHSA-mrrh-fwg8-r2c3]\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if errs, _ := lintOnline(t, onlineFixtureClient(t), cfg, src); len(errs) != 0 {
+		t.Errorf("the advisory is allowed: %v", errs)
+	}
+	if errs, _ := lintOnline(t, onlineFixtureClient(t), nil, src); len(errs) != 1 {
+		t.Errorf("want the advisory reported: %v", errs)
+	}
+	for _, bad := range []string{"allow: GHSA-1", "allow: [1, 2]", "allow: {a: b}"} {
+		if _, err := ParseConfig([]byte("rules:\n  known-vulnerable-actions:\n    " + bad + "\n")); err == nil || !strings.Contains(err.Error(), "list of strings") {
+			t.Errorf("%q should be refused: %v", bad, err)
+		}
+	}
+}
+
+func TestImpostorCommitMaxBranches(t *testing.T) {
+	src := workflowWith("uses: actions/checkout@2f547d07f23dec7f4a96fc091165260dcbe59529")
+	cfg, err := ParseConfig([]byte("rules:\n  stale-action-refs: off\n  impostor-commit:\n    max-branches: 1\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The fixture has two branches, the default one and releases/v1. With a limit of one branch the verdict is unknown.
+	if errs, _ := lintOnline(t, onlineFixtureClient(t), cfg, src); len(errs) != 0 {
+		t.Errorf("without all branches there is no verdict: %v", idsOf(errs))
+	}
+	cfg, _ = ParseConfig([]byte("rules:\n  stale-action-refs: off\n  impostor-commit:\n    max-branches: 2\n"))
+	if errs, _ := lintOnline(t, onlineFixtureClient(t), cfg, src); len(errs) != 1 {
+		t.Errorf("with all branches the commit is an impostor: %v", idsOf(errs))
+	}
+}
+
+func TestOnlineSkipsWhatItCannotJudge(t *testing.T) {
+	c := onlineFixtureClient(t)
+	src := workflowWith(
+		"uses: ./local",
+		"uses: docker://alpine:3.19",
+		"uses: actions/checkout@${{ matrix.ref }}",
+		"uses: actions/checkout", // No ref
+		"uses: ../../x/y@v1",
+		"uses: a b/c@v1",
+		"uses: example/forgotten@v1",
+		"uses: actions/checkout@abc1234", // Short SHA
+	)
+	errs, _ := lintOnline(t, c, nil, src)
+	for _, e := range errs {
+		switch e.ID {
+		case "impostor-commit", "known-vulnerable-actions", "ref-confusion", "stale-action-refs", "archived-uses", "ref-version-mismatch":
+			t.Errorf("unexpected finding %s: %s", e.ID, e.Message)
+		}
+	}
+}
+
+func TestSessionStopsAndWarnsOnce(t *testing.T) {
+	tests := []struct {
+		name   string
+		err    error
+		callsN int32 // requests until the session stopped
+	}{
+		{"rate limit", &GitHubRateLimitError{}, 1},
+		{"network", &net.DNSError{Err: "no such host", Name: "api.github.com"}, 1},
+		{"canceled", context.Canceled, 1},
+		{"server errors", &GitHubStatusError{Status: 502}, maxConsecutiveGitHubFailures},
+		{"unauthorized", &GitHubStatusError{Status: 401}, 1},
+		{"unknown error", errors.New("boom"), maxConsecutiveGitHubFailures},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			c := &failingClient{err: tc.err}
+			var warnings []string
+			s := newOnlineSession(context.Background(), c, func(m string) { warnings = append(warnings, m) })
+			for i := 0; i < 20; i++ {
+				s.Repository("o", fmt.Sprintf("r%d", i))
+			}
+			if got := c.n.Load(); got != tc.callsN {
+				t.Errorf("the client was called %d times. want %d", got, tc.callsN)
+			}
+			if len(warnings) != 1 || !strings.Contains(warnings[0], "stopped") {
+				t.Errorf("want one warning but got %q", warnings)
+			}
+			if s.stopped() == nil {
+				t.Error("the session should be stopped")
+			}
+		})
+	}
+}
+
+func TestSessionToleratesNotFoundAndRecovers(t *testing.T) {
+	c := &failingClient{err: fmt.Errorf("x: %w", ErrGitHubNotFound)}
+	var warnings []string
+	s := newOnlineSession(context.Background(), c, func(m string) { warnings = append(warnings, m) })
+	for i := 0; i < 10; i++ {
+		if _, err := s.Repository("o", fmt.Sprintf("r%d", i)); !errors.Is(err, ErrGitHubNotFound) {
+			t.Fatal(err)
+		}
+	}
+	if len(warnings) != 0 || s.stopped() != nil {
+		t.Errorf("missing repositories are normal: %q", warnings)
+	}
+
+	// Two failures and a success: the failures do not add up
+	var n atomic.Int32
+	mixed := &flakyClient{GitHubClient: onlineFixtureClient(t), fail: func() bool { return n.Add(1)%3 != 0 }}
+	s = newOnlineSession(context.Background(), mixed, func(m string) { warnings = append(warnings, m) })
+	for i := 0; i < 9; i++ {
+		s.Tags("actions", fmt.Sprintf("checkout%d", i)) // Different repositories: no memoization
+	}
+	if len(warnings) != 0 || s.stopped() != nil {
+		t.Errorf("failures separated by successes must not stop the session: %q", warnings)
+	}
+}
+
+type flakyClient struct {
+	GitHubClient
+	fail func() bool
+}
+
+func (c *flakyClient) Tags(ctx context.Context, o, r string) (*GitHubTagList, error) {
+	if c.fail() {
+		return nil, &GitHubStatusError{Status: 500}
+	}
+	return c.GitHubClient.Tags(ctx, "actions", "checkout")
+}
+
+func TestSessionStopsWhenContextIsCanceled(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	c := &countingClient{GitHubClient: onlineFixtureClient(t)}
+	var warnings []string
+	s := newOnlineSession(ctx, c, func(m string) { warnings = append(warnings, m) })
+	if _, err := s.Repository("actions", "checkout"); err != nil {
+		t.Fatal(err)
+	}
+	cancel()
+	if _, err := s.Repository("actions", "setup-node"); err == nil {
+		t.Error("a canceled session must not answer")
+	}
+	if c.n.Load() != 1 || len(warnings) != 1 {
+		t.Errorf("calls: %d, warnings: %q", c.n.Load(), warnings)
+	}
+}
+
+func TestSessionIsSafeForConcurrentUse(t *testing.T) {
+	c := &countingClient{GitHubClient: onlineFixtureClient(t)}
+	s := newOnlineSession(context.Background(), c, nil)
+	var wg sync.WaitGroup
+	for i := 0; i < 50; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			s.Repository("actions", "checkout")
+			s.Tags("actions", "checkout")
+			s.TagCommit("actions", "checkout", "v4")
+			s.BranchCommit("actions", "checkout", "main")
+			s.Advisories("actions", "checkout")
+		}()
+	}
+	wg.Wait()
+	// Repository, tags, the ref of the branch and the advisories. The tag came from the list.
+	if got := c.n.Load(); got != 4 {
+		t.Errorf("want 4 calls but got %d", got)
+	}
+}
+
+func TestTagCommitFallsBackToTheRefWhenTheListIsTruncated(t *testing.T) {
+	fx := []byte(`{"repos":{"o/r":{"tags":{"tags":[{"name":"v1","sha":"` + strings.Repeat("a", 40) + `"}],"truncated":true},
+	  "refs":{"tags/v0":{"sha":"` + strings.Repeat("b", 40) + `","found":true},"tags/nope":{"found":false}}}}}`)
+	c, err := NewFixtureGitHubClient(fx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := newOnlineSession(context.Background(), c, nil)
+	if sha, ok, err := s.TagCommit("o", "r", "v1"); err != nil || !ok || sha != strings.Repeat("a", 40) {
+		t.Errorf("v1: %q, %v, %v", sha, ok, err)
+	}
+	if sha, ok, err := s.TagCommit("o", "r", "v0"); err != nil || !ok || sha != strings.Repeat("b", 40) {
+		t.Errorf("v0: %q, %v, %v", sha, ok, err)
+	}
+	if _, ok, err := s.TagCommit("o", "r", "nope"); err != nil || ok {
+		t.Errorf("nope: %v, %v", ok, err)
+	}
+}
+
+func TestStaleActionRefsIsSilentWhenTagsAreTruncated(t *testing.T) {
+	fx := `{"repos":{"o/r":{"repo":{"default_branch":"main"},"tags":{"tags":[],"truncated":true}}}}`
+	c, _ := NewFixtureGitHubClient([]byte(fx))
+	errs, _ := lintOnline(t, c, &Config{Rules: map[string]RuleConfig{"impostor-commit": {Level: SeverityOff, levelSet: true}, "known-vulnerable-actions": {Level: SeverityOff, levelSet: true}}},
+		workflowWith("uses: o/r@"+strings.Repeat("c", 40)))
+	for _, e := range errs {
+		t.Errorf("unexpected %s: %s", e.ID, e.Message)
+	}
+}
+
+func TestVersionOf(t *testing.T) {
+	s := newOnlineSession(context.Background(), onlineFixtureClient(t), nil)
+	tests := []struct {
+		spec string
+		want string // "" when there is no version
+	}{
+		{"tj-actions/changed-files@v45.0.7", "45.0.7"},
+		{"tj-actions/changed-files@v45", "45.0.2"}, // The most specific tag of the commit
+		{"tj-actions/changed-files@48d8f15b2aaa3d255ca5af3eba4870f807ce6b3c", "45.0.2"},
+		{"tj-actions/changed-files@v46", "46"},
+		{"tj-actions/changed-files@main", ""},
+		{"tj-actions/changed-files@" + strings.Repeat("e", 40), ""},
+		{"actions/checkout@v4", "4"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.spec, func(t *testing.T) {
+			v, ok, err := s.versionOf(ParseUses(tc.spec))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := v.String(); (tc.want == "") == ok || (ok && got != tc.want) {
+				t.Errorf("versionOf = %q, %v. want %q", got, ok, tc.want)
+			}
+		})
+	}
+}
+
+func TestCommentVersion(t *testing.T) {
+	tests := []struct {
+		in   string
+		want string
+		ok   bool
+	}{
+		{"v4.2.2", "v4.2.2", true},
+		{" 4.2.2 ", "4.2.2", true},
+		{"tag=v4", "v4", true},
+		{"v1.2.3 (bumped by a bot)", "v1.2.3", true},
+		{"v4.2.2-rc.1", "v4.2.2-rc.1", true},
+		{"pinned for ci", "", false},
+		{"see issue #12", "", false},
+		{"keep in sync with v4", "", false}, // The version is not what the comment is about
+		{"zizmor: ignore[cache-poisoning] v2", "", false},
+		{"Tag: v4", "v4", true},
+		{"version=1.2", "1.2", true},
+		{"", "", false},
+		{"v", "", false},
+		{"version: 3", "3", true},
+	}
+	for _, tc := range tests {
+		got, ok := commentVersion(tc.in)
+		if got != tc.want || ok != tc.ok {
+			t.Errorf("commentVersion(%q) = %q, %v. want %q, %v", tc.in, got, ok, tc.want, tc.ok)
+		}
+	}
+}
+
+func FuzzCommentVersion(f *testing.F) {
+	for _, s := range []string{"v4.2.2", "tag=v4", "", "(((", "v1.2.3-"} {
+		f.Add(s)
+	}
+	f.Fuzz(func(t *testing.T, s string) {
+		if v, ok := commentVersion(s); ok && v == "" {
+			t.Errorf("an empty version for %q", s)
+		}
+	})
+}

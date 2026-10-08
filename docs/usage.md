@@ -282,6 +282,42 @@ jactionlint -fix .github/workflows/ci.yaml
 Fixes arrive with the rules that can fix their findings mechanically. The errors of the rules without a fix are only reported.
 `-fix` cannot be used with stdin.
 
+<a id="online-checks"></a>
+### Online checks
+
+Six checks need to ask GitHub about the actions a workflow uses, so they are off unless you give `-online` (or set `online: true` in
+[the configuration](config.md#configuration-file)). **Without it jactionlint never uses the network.**
+
+| Rule | What it finds |
+| --- | --- |
+| [`impostor-commit`](checks.md#check-impostor-commit) | A hash-pinned action whose commit is on no branch or tag of the repository: it comes from a fork |
+| [`known-vulnerable-actions`](checks.md#check-known-vulnerable-actions) | An action version covered by a GitHub security advisory |
+| [`ref-confusion`](checks.md#check-ref-confusion) | A ref which is both a branch and a tag |
+| [`stale-action-refs`](checks.md#check-stale-action-refs) | A pinned commit that no tag points to |
+| [`archived-uses`](checks.md#check-archived-uses) | An action in an archived repository |
+| [`ref-version-mismatch`](checks.md#check-ref-version-mismatch) | A `# v1.2.3` comment that does not match the pinned commit |
+
+```sh
+export GITHUB_TOKEN=$(gh auth token)   # or GH_TOKEN
+jactionlint -online
+```
+
+- **Token.** `GITHUB_TOKEN` or `GH_TOKEN` is used when set. Without one the requests are unauthenticated, which works but GitHub
+  allows only 60 an hour; jactionlint says so once. A token that GitHub rejects is dropped with a warning and the run goes on
+  without it. `GITHUB_API_URL` selects a GitHub Enterprise Server.
+- **Cache.** Answers are kept in `$XDG_CACHE_HOME/jactionlint` (`~/.cache/jactionlint`), at most 32 MiB, shared safely by parallel
+  processes. An answer is used for an hour (`-online-cache-ttl`), then asked for again with its ETag, which costs no rate limit
+  when it did not change. `-online-cache-ttl=0` checks every answer.
+- **Few requests.** Every repository, tag and commit is asked for once per run however often it is used, and the checks share what
+  they learn. The number of requests grows with the number of different actions, not steps.
+- **Rate limit and failures.** When GitHub refuses (rate limit), is unreachable, or fails repeatedly, the online checks stop for the
+  rest of the run with one warning on stderr (in the SARIF log with `-format sarif`) and the findings that needed
+  GitHub are missing. Nothing is retried and the exit status does not change. Interrupting with Ctrl-C stops the lookups.
+- **Levels.** The online rules do not belong to a profile; `-online` turns them on at their own level (`impostor-commit` and
+  `known-vulnerable-actions` are errors, `ref-confusion`, `archived-uses` and `ref-version-mismatch` warnings, `stale-action-refs` is
+  informational). Set a level or `off` in `rules` as for any rule.
+- **Not in the playground.** The WebAssembly build has no network access, so `-online` is an error there.
+
 <a id="hk"></a>
 ### hk
 
@@ -308,6 +344,22 @@ runs when a finding has no fix. Add this step to `hk.pkl`:
   deprecation warnings of the configuration are put in `invocations[].toolConfigurationNotifications` of the log instead of
   stderr in this format.
 - To use the `strict` profile, set `profile: strict` in `.github/jactionlint.yaml`.
+- To add the [online checks](#online-checks) put the flag in the commands. A second step keeps them apart from the offline checks, so
+  you can run it on demand or in CI, where a token is at hand:
+
+  ```pkl
+  ["jactionlint-online"] {
+      glob = List(".github/workflows/*.yml", ".github/workflows/*.yaml")
+      batch = true
+      diagnostic_format = "sarif"
+      check = "jactionlint -online -format sarif {{files}}"
+      check_diff = "hk util sarif-diff -- jactionlint -online -format sarif {{files}}"
+      fix = "jactionlint -online -fix {{files}}"
+  }
+  ```
+
+  The batches run in parallel and share the cache. Without a reachable GitHub the step prints one warning in the SARIF log and
+  reports what it could check. Keep the online step out of the `pre-commit` hook unless a token is always set.
 
 <a id="on-github-actions"></a>
 ## Use jactionlint on GitHub Actions

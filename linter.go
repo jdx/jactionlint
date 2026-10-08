@@ -96,6 +96,25 @@ type LinterOptions struct {
 	// MinSeverity hides the errors less severe than it. The zero value shows every error. For example
 	// SeverityWarning hides the errors of info level.
 	MinSeverity Severity
+	// Online turns on the rules which query the GitHub API: impostor-commit, known-vulnerable-actions,
+	// ref-confusion, stale-action-refs, archived-uses and ref-version-mismatch. Nothing reaches the network when it is false. The token is
+	// read from $GITHUB_TOKEN or $GH_TOKEN; without one the API allows very few requests. When the
+	// API cannot be used (rate limit, no network) the online rules stop with one warning. It
+	// is an error in builds without network access such as the WebAssembly one, unless
+	// GitHubClient is set. The "online" key of the configuration file turns it on for the files it
+	// applies to.
+	Online bool
+	// GitHubClient replaces the built-in client of the GitHub API, which sends REST requests and caches
+	// the answers in $XDG_CACHE_HOME/jactionlint. It is used by tests (see NewFixtureGitHubClient)
+	// and implies nothing by itself: the online rules need Online or the "online" configuration.
+	GitHubClient GitHubClient
+	// OnlineCacheTTL is how long the built-in client uses a cached answer without asking GitHub
+	// whether it changed. Zero means one hour. A negative value revalidates every answer (which
+	// costs no rate limit when nothing changed).
+	OnlineCacheTTL time.Duration
+	// Context stops the online lookups when it is canceled, for example on interruption. Nil means
+	// context.Background.
+	Context context.Context
 	// OnRulesCreated is a hook to add or remove the check rules. This function is called on checking
 	// every workflow files. Rules created by Linter instance are passed to the argument and the
 	// function should return the modified rules.
@@ -122,6 +141,7 @@ type Linter struct {
 	onRulesCreated func([]Rule) []Rule
 	configFile     string
 	minSeverity    Severity
+	online         onlineSettings
 	warned         sync.Map // *Config -> struct{}: configs whose deprecations were already reported
 	notesMu        sync.Mutex
 	notes          []string // deprecation warnings found while linting
@@ -228,6 +248,10 @@ func NewLinter(out io.Writer, opts *LinterOptions) (*Linter, error) {
 		onRulesCreated: opts.OnRulesCreated,
 		configFile:     opts.ConfigFile,
 		minSeverity:    opts.MinSeverity,
+		online:         onlineSettings{enabled: opts.Online, client: opts.GitHubClient, ttl: opts.OnlineCacheTTL, ctx: opts.Context},
+	}
+	if opts.Online && opts.GitHubClient == nil && !onlineSupported {
+		return nil, errOnlineUnsupported
 	}
 
 	l.debug("Create a Linter instance with option %#v", opts)
@@ -593,7 +617,12 @@ func (l *Linter) check(
 	if w != nil {
 		dbg := l.debugWriter()
 
+		sess, err := l.onlineSession(cfg)
+		if err != nil {
+			return nil, err
+		}
 		rules := newBuiltinRules(&RuleEnv{
+			online:                 sess,
 			path:                   path,
 			project:                project,
 			localActions:           localActions,

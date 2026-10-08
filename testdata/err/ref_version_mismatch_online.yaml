@@ -1,0 +1,25 @@
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      # OK: the comment names the tag of the commit
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      # OK: the major version tag points to the same commit
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      # OK: the "v" prefix does not matter
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # 4.2.2
+      # OK: the version is found among other words
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # tag=v4.2.2 (updated by bot)
+      # ERROR: v4 has moved on to another commit
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+      # ERROR: v3 points to another commit
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v3
+      # ERROR: the commit is v4.2.2, not v3.0.0
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v3.0.0
+      # ERROR: no tag v4.9.9 exists
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.9.9
+      # OK: a comment without a version is left alone
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # keep in sync with the docs
+      # OK: no comment (the missing comment is not reported)
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
