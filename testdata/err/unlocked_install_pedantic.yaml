@@ -1,0 +1,34 @@
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      # Installs from a manifest which are not bound to the lock file
+      - run: npm install
+      - run: npm i --no-fund
+      - run: yarn
+      - run: yarn install
+      - run: bun install
+      - run: pnpm install --no-frozen-lockfile
+      - run: pnpm install --frozen-lockfile=false
+      - run: pip install -r requirements.txt
+      - run: pip3 install --no-cache-dir -r requirements/dev.txt -r requirements/test.txt
+      - run: uv pip install -r requirements.txt
+      - run: python -m pip install -rrequirements.txt
+      # Bound to the lock file, hashes or constraints
+      - run: npm ci
+      - run: npm install --package-lock-only
+      - run: npm install lodash
+      - run: yarn install --immutable
+      - run: yarn install --frozen-lockfile
+      - run: bun install --frozen-lockfile
+      - run: bun ci
+      - run: pnpm install
+      - run: pnpm install --frozen-lockfile
+      - run: pip install --require-hashes -r requirements.txt
+      - run: pip install -r requirements.txt -c constraints.txt
+      - run: pip install .
+      - run: pip install -e .
+      - run: uv sync
+      - run: uv pip install --require-hashes -r requirements.txt
+      - run: npm install -g typescript
