@@ -38,6 +38,12 @@ List of checks:
 - [Run script policy (opt-in)](#check-run-policy)
 - [Job ID and step ID uniqueness](#check-job-step-ids)
 - [Hardcoded credentials](#check-hardcoded-credentials)
+- [Dangerous writes to `GITHUB_ENV` and `GITHUB_PATH`](#check-github-env)
+- [Packages installed by name](#check-adhoc-packages)
+- [Tools installed without an exact version](#check-unpinned-tools)
+- [Publishing with long-lived credentials](#check-use-trusted-publishing)
+- [Superfluous actions](#check-superfluous-actions)
+- [Installs without a lock file](#check-unlocked-install)
 - [Environment variable names](#check-env-var-names)
 - [Permissions](#permissions)
 - [Reusable workflows](#check-reusable-workflows)
@@ -2372,6 +2378,353 @@ test.yaml:17:21: "password" section in "redis" service should be specified via s
 [Credentials for container][credentials-doc] can be put in `container:` configuration. Password should be put in secrets
 and the value should be expanded with `${{ }}` syntax at `password:`. jactionlint checks hardcoded credentials, and reports
 them as an error.
+
+<a id="check-github-env"></a>
+## Dangerous writes to `GITHUB_ENV` and `GITHUB_PATH`
+
+Example input:
+
+```yaml
+on:
+  pull_request_target:
+    types: [opened]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "VERSION=$(cat version.txt)" >> "$GITHUB_ENV"
+      - run: echo "TITLE=$TITLE" >> "$GITHUB_ENV"
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+```
+
+Output:
+
+```
+test.yaml:8:48: a value that is not a literal is written to $GITHUB_ENV in a workflow triggered by "pull_request_target", which runs with secrets and a write token for events that may come from a fork. an attacker who controls the value can set LD_PRELOAD or NODE_OPTIONS (a newline adds another variable) and run code in the next steps. write only literal values and values computed from trusted sources, or pass state with $GITHUB_OUTPUT [github-env]
+  |
+8 |       - run: echo "VERSION=$(cat version.txt)" >> "$GITHUB_ENV"
+  |                                                ^~
+test.yaml:9:34: untrusted input from the variable TITLE (github.event.pull_request.title) is written to $GITHUB_ENV. an attacker who controls the value can set LD_PRELOAD or NODE_OPTIONS (a newline adds another variable) and run code in the next steps. do not write input that an outsider controls to $GITHUB_ENV; validate it first or pass it to the next step with $GITHUB_OUTPUT [github-env-untrusted-input]
+  |
+9 |       - run: echo "TITLE=$TITLE" >> "$GITHUB_ENV"
+  |                                  ^~
+```
+
+[Playground](https://jactionlint.jdx.dev/#eNp0z8FKw0AQBuB7n+In5KCH5AEW2oMQNCAVNPYiEpJ2aCPL7LozE5TSd5ckIB7saZj5v/8wgd0KiOZ9m+jTSLTVLh1JpzOg35HE4S1EYjq8rz5CL1PS2+APC0nGUgR2sN5YrfCdkugciVKURQHFJB1ofwrIdtXzS/20Xec3+04xUpIhcKlfepths0GW39fNw+tdW2132X/9pm4eq3U+j6sNgHh0vwswc4f8fMZx0JP1JY3EWv59v9RBPeFy+RkA2itTFQ==)
+
+What a step writes to the file `$GITHUB_ENV` becomes the environment of every later step of the job, and a directory written to
+`$GITHUB_PATH` is searched for executables first. If an attacker controls what is written, they can run code in the next
+steps: a value with a newline sets another variable, and `LD_PRELOAD` or `NODE_OPTIONS` load code of their choice, while a
+directory in front of the `PATH` can shadow a program such as `ssh`. See
+[Keeping your GitHub Actions and workflows secure: preventing pwn requests](https://securitylab.github.com/resources/github-actions-preventing-pwn-requests/).
+
+There are two rules, both in the `default` profile:
+
+- `github-env` reports a write of something that is not a literal in a workflow started by `pull_request_target` or
+  `workflow_run`. These run with secrets and a write token while the event may come from a fork, so anything computed from the
+  checked out code, its artifacts or the event is suspect. Values that the workflow author or GitHub decide are accepted:
+  literals, the `HOME` and `RUNNER_*` variables, `github.sha`, `github.run_id`, `github.event.pull_request.head.sha`, the
+  `runner`, `matrix`, `vars` and `secrets` contexts, command substitutions of `mktemp`, `date`, `pwd`, `uname` and the like with
+  such arguments, and variables of `env:` or of the script that are set to such values.
+- `github-env-untrusted-input` reports a write of input that an outsider controls, whatever the trigger: an expression such
+  as `github.event.issue.title` or `github.head_ref`, or an environment variable that was set to one (as `TITLE` is in the
+  example above; a template injection check does not see that one).
+
+`echo "VERSION=1.0" >> "$GITHUB_ENV"` and `echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"` are fine. Use `$GITHUB_OUTPUT` to pass
+state between steps (`echo "version=$(cat version.txt)" >> "$GITHUB_OUTPUT"` is not reported) and validate or avoid the value
+otherwise. The rules understand `>>` and `>`, `tee`, groups (`{ ...; } >> "$GITHUB_ENV"`), here documents and a file name held
+in another variable. Scripts of `bash` and `sh` are parsed; for `pwsh`, `powershell` and `cmd` the rules look at the lines that
+mention `$env:GITHUB_ENV` or `%GITHUB_ENV%` together with a redirection or `Out-File`, `Add-Content`, `Set-Content` and
+`Tee-Object`.
+
+To turn a rule off, put `github-env: off` in the `rules` section of the [configuration file](config.md) or write
+`# jactionlint ignore=github-env` after a reason.
+
+<a id="check-adhoc-packages"></a>
+## Packages installed by name
+
+Example input:
+
+```yaml
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - run: npm install eslint@9.0.0
+      - run: gem install rake
+```
+
+Output:
+
+```
+test.yaml:6:14: warning: command "npm install" installs a package outside of a lock file: its version and its dependencies are resolved anew on every run. add the package to package.json and commit the package-lock.json and install with `npm ci` [adhoc-packages]
+  |
+6 |       - run: npm install eslint@9.0.0
+  |              ^~~
+test.yaml:7:14: warning: command "gem install" installs a package outside of a lock file: its version and its dependencies are resolved anew on every run. add the package to a Gemfile and commit the Gemfile.lock and install with `bundle install` [adhoc-packages]
+  |
+7 |       - run: gem install rake
+  |              ^~~
+```
+
+[Playground](https://jactionlint.jdx.dev/#eNpUyjEOAjEMRNF+TzEXyGpbUnGVrGRBwDhRxr4/MhSI6hf/DauYwfv2GCfrBrjQs8AKY8kfZ5hH0Zbvs+gy+VVASVlh84Vu9KYKoXbz62U/9uNf3eSnVnvKewDexCcZ)
+
+The rule `adhoc-packages` (in the `default` profile) reports a `run:` script that installs a package by name with `npm`, `yarn`,
+`pnpm`, `bun`, `gem` or `bundle add`. Such a package is usually not pinned, so the newest release (and so a compromised one)
+is picked up. Even with `eslint@9.0.0` the dependencies of the package are resolved anew on every run. Commands like
+`yarn add` and `bundle add` change the lock file of the run instead of using it.
+
+Add the package to a manifest that produces a lock file (`package.json`, a `Gemfile`), commit the lock file and install with
+a command that follows it: `npm ci`, `yarn install --immutable`, `pnpm install --frozen-lockfile`, `bun ci` or
+`bundle install`. Installing from a manifest (`npm install`, `npm ci`), from the checkout (`npm install .`) and from a gem file
+(`gem install ./pkg.gem`) is not reported. See [unlocked installs](#check-unlocked-install) for the lock file.
+
+Installing a tool for the workflow itself, such as `pip install` and `cargo install`, is covered by
+[unpinned tools](#check-unpinned-tools). The rule is the audit `adhoc-packages` of zizmor, which does not look at `pip`.
+
+<a id="check-unpinned-tools"></a>
+## Tools installed without an exact version
+
+Example input:
+
+```yaml
+on: push
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: aquasecurity/setup-trivy@e6c2c5e321ed9123bda567646e2f96565e34abe1 # v0.2.4
+```
+
+Output:
+
+```
+test.yaml:6:15: warning: action "aquasecurity/setup-trivy@e6c2c5e321ed9123bda567646e2f96565e34abe1" installs the newest version of its tool because the input "version" is not set. set "version" to an exact version [unpinned-tools]
+  |
+6 |       - uses: aquasecurity/setup-trivy@e6c2c5e321ed9123bda567646e2f96565e34abe1 # v0.2.4
+  |               ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+```
+
+[Playground](https://jactionlint.jdx.dev/#eNokyjGugzAMgOGdU1h6c3glEFdk6lWc4KpUVUhjG4nbV7TTP3z/ViJUk0f33JLEDkAylbMAzYq40y1ZUXMvUhb9kihX+V0ADkxYItDbSDhbW/X4F1arTtu6HzfG7HPg0Q+8zIMf00IBrzgh+/uMAQOPEyUe4A/2S+/76TMAq3QtNQ==)
+
+Pinning an action to a commit does not pin the tool that the action downloads. Some actions install the newest release of their
+tool unless they are told which one to use. The rule `unpinned-tools` (in the `default` profile) reports a step that uses one
+of these actions (`aquasecurity/setup-trivy`, `1password/load-secrets-action`, `extractions/setup-just` and
+`extractions/setup-crate`, the ones zizmor knows) and does not set the input that selects the version, or sets it to
+`latest` (`*` for the last two). Set the input to an exact version. A value that is an expression is not judged.
+
+The rule `unpinned-tools-pedantic` (in the `strict` profile, enabled by `profile: strict` or `rules: {unpinned-tools-pedantic: warn}`)
+reports more:
+
+Example input:
+
+```yaml
+on: push
+jobs:
+  tools:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
+      - run: pip install requests black==24.3.0
+      - run: go install golang.org/x/tools/cmd/stringer@latest
+```
+
+Output:
+<!-- Skip update output -->
+```
+test.yaml:6:15: warning: action "hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd" installs the newest version of its tool because the input "terraform_version" is not set. set "terraform_version" to an exact version [unpinned-tools-pedantic]
+  |
+6 |       - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
+  |               ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+test.yaml:7:14: warning: tool "requests" is installed without an exact version, so every run may fetch a different release. pin it with `==`, for example `tool==1.2.3` [unpinned-tools-pedantic]
+  |
+7 |       - run: pip install requests black==24.3.0
+  |              ^~~
+test.yaml:8:14: warning: tool "golang.org/x/tools/cmd/stringer@latest" is installed without an exact version, so every run may fetch a different release. pin it with a version, for example `tool@v1.2.3` [unpinned-tools-pedantic]
+  |
+8 |       - run: go install golang.org/x/tools/cmd/stringer@latest
+  |              ^~
+```
+
+<!-- Skip playground link -->
+
+- further actions that use the newest version of their tool by default: `hashicorp/setup-terraform`, `azure/setup-kubectl`
+  and `azure/setup-helm` (the table is `floatingToolActions` in `rule_unpinned_tools.go`, with the source of each entry);
+- `run:` scripts that install or run a tool without an exact version: `pip install`, `pipx install` and `pipx run`,
+  `uv tool install`, `uv pip install` and `uvx`, `cargo install` and `cargo binstall`, `go install`, `npm install -g`,
+  `npx --yes`, `pnpm dlx` and `yarn dlx`. One finding names all the tools of a command. Pin them with `==`, `--version`,
+  `@v1.2.3` or `@1.2.3` according to the tool. Packages from a path, requirements files (`pip install -r`) and `npx tsc`,
+  which runs the program of the project, are not reported. There is no fix since the version to use is the decision of the
+  author.
+
+Installs of the packages of a project are the business of the lock file, see [unlocked installs](#check-unlocked-install).
+zizmor 1.30.1 only has the first rule, and only for the four actions above.
+
+<a id="check-use-trusted-publishing"></a>
+## Publishing with long-lived credentials
+
+Example input:
+
+```yaml
+on:
+  release:
+    types: [published]
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - run: twine upload dist/*
+        env:
+          TWINE_PASSWORD: ${{ secrets.PYPI_TOKEN }}
+      - uses: pypa/gh-action-pypi-publish@76f52bc884231f62b9a034ebfe128415bbaabdfc # v1.12.4
+        with:
+          password: ${{ secrets.PYPI_TOKEN }}
+```
+
+Output:
+
+```
+test.yaml:8:14: warning: "twine upload" publishes to PyPI with the long-lived credential TWINE_PASSWORD. prefer trusted publishing with pypa/gh-action-pypi-publish and the permission "id-token: write" [use-trusted-publishing]
+  |
+8 |       - run: twine upload dist/*
+  |              ^~~~~
+test.yaml:13:21: warning: action "pypa/gh-action-pypi-publish@76f52bc884231f62b9a034ebfe128415bbaabdfc" publishes to PyPI but is given a password (input "password") instead of using trusted publishing. prefer trusted publishing with pypa/gh-action-pypi-publish and the permission "id-token: write" [use-trusted-publishing]
+   |
+13 |           password: ${{ secrets.PYPI_TOKEN }}
+   |                     ^~~
+```
+
+[Playground](https://jactionlint.jdx.dev/#eNp8jsFKw0AQQO/9igE9CduaNK1xTwr2UIQ22EIRkbKbTMxK2F0ysw2h9N8lNgRP3mbmPZjnrJwANFijIuxHAO48koQPH3RtqMLic/LtNPVwOF29JlgSzkoIOlgOolaMxL+IGD1dLQDRmxK4NRYh+NqpAgpDPLsbBAC0JzkuAPvDerM6Zs+73WH79iLh9nwGwrxBpmn2nq2P++3ragOXy/ghUJ/sO69mX5VQORtnhe+8EUPy08OyXMQ6T9MknkflMtaP6n6eoC4xitMkWmitlC7KHG7gFE2jeJqMQa3h6m+eV0Sta4p/wn4GAGw+ZHU=)
+
+PyPI, crates.io, RubyGems, npm and NuGet support [trusted publishing](https://docs.pypi.org/trusted-publishers/): the registry
+trusts the OIDC token that GitHub issues for the workflow run, so no API token has to be stored as a secret, and a stolen
+token cannot publish. The rule `use-trusted-publishing` (in the `default` profile) reports
+
+- a `run:` script that publishes to the public registry: `twine upload`, `uv publish`, `poetry|flit|hatch|pdm publish`,
+  `cargo publish`, `npm|pnpm|yarn|bun publish`, `gem push`, `dotnet nuget push` and `nuget push`, also behind `sudo`,
+  `uvx`, `pipx run`, `uv run`, `bundle exec` and `python -m`. The message names the long-lived credential when the step,
+  its job or the workflow sets one of the usual environment variables (`TWINE_PASSWORD`, `NODE_AUTH_TOKEN`,
+  `CARGO_REGISTRY_TOKEN`, `GEM_HOST_API_KEY`, ...);
+- the actions `pypa/gh-action-pypi-publish` with `password`, `rubygems/configure-rubygems-credentials` with `api-token`,
+  `rubygems/release-gem` with `setup-trusted-publisher: false` and `actions/setup-node` with an npm registry and
+  `always-auth: true`.
+
+A job that grants `id-token: write` (itself or through the workflow) is accepted, since it can use trusted publishing, and so
+are dry runs and publishing to a registry of your own (`--registry`, `--repository-url`). Configure the trusted publisher at the
+registry once, then use `pypa/gh-action-pypi-publish`, `rubygems/release-gem`, `rust-lang/crates-io-auth-action`, `NuGet/login`
+or `npm publish` with that permission.
+
+<a id="check-superfluous-actions"></a>
+## Superfluous actions
+
+Example input:
+
+```yaml
+on: push
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: softprops/action-gh-release@c95fe1489396fe8a9eb87c0abf8aa5b2ef267fda # v2.2.1
+        with:
+          files: dist/*
+```
+
+Output:
+
+```
+test.yaml:6:15: warning: action "softprops/action-gh-release@c95fe1489396fe8a9eb87c0abf8aa5b2ef267fda" is superfluous: the runner already has the tools to do this. use `gh release create` in a script step [superfluous-actions]
+  |
+6 |       - uses: softprops/action-gh-release@c95fe1489396fe8a9eb87c0abf8aa5b2ef267fda # v2.2.1
+  |               ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+```
+
+[Playground](https://jactionlint.jdx.dev/#eNo8jcGOgzAMRO98haW9rRRYsgWSnPorDjglFUoi7LS/X9Gi3mY0T29yclAqr809e3YNwE4bIdMRAfaaWB1I9TVJVRsKsbwnFir8oQAUVCZ2wDlI2XPhDmeJOanbqk7hdbZDoP5i7L8dAxm05M00/6EPBnHwmoIep7Ag/MBDt7rtTzfAM8rqvg0gxO04WyJL9/saALZkOPY=)
+
+Some actions only run a command that the runner image already has. The action is a dependency that can be compromised, with
+nothing gained. The rule `superfluous-actions` (in the `default` profile) reports the ones with a simple replacement: the release
+actions (`softprops/action-gh-release`, `ncipollo/release-action`, `elgohr/Github-Release-Action`,
+`svenstaro/upload-release-action` and the archived `actions/create-release` and `actions/upload-release-asset`), which
+`gh release` replaces, `dacbd/create-issue-action`, `actions-ecosystem/action-add-labels` and `action-remove-labels` (`gh issue`,
+`gh pr`), `addnab/docker-run-action` (`docker run`) and `sergeysova/jq-action` (`jq`).
+
+The rule `superfluous-actions-pedantic` (in the `strict` profile) reports the ones whose replacement takes several commands or
+misses a feature: `peter-evans/create-pull-request`, `peter-evans/create-or-update-comment`, `dtolnay/rust-toolchain`,
+`stefanzweifel/git-auto-commit-action` and `EndBug/add-and-commit`. Each entry of the table `superfluousActions` in
+`rule_superfluous_actions.go` names its source (the audit of zizmor, or the README of the archived action).
+
+<a id="check-unlocked-install"></a>
+## Installs without a lock file
+
+Example input:
+
+```yaml
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - run: cargo install cargo-nextest
+```
+
+Output:
+
+```
+test.yaml:6:14: warning: "cargo install" without --locked builds with the newest dependencies that match the crate instead of the ones in its Cargo.lock, so a new release of any dependency reaches the workflow. add --locked [unlocked-install]
+  |
+6 |       - run: cargo install cargo-nextest
+  |              ^~~~~
+```
+
+[Playground](https://jactionlint.jdx.dev/#eNoky90JwCAMxPF3p7gFsoDbaJF+IFG8BDp+SX0K4fe/oRnTeaVnVOYEWKPFBZYrJdyrq7n0EvYTrU3uCpAoM46yzoFbaaX3/Ym2NzbfAESiIIE=)
+
+An install that does not use a lock file resolves the dependencies anew on every run, so a new release of any transitive
+dependency, a compromised one included, reaches the workflow. The rule `unlocked-install` (in the `default` profile) reports
+`cargo install` without `--locked` (or `--frozen`): the crate was published with a `Cargo.lock`, and `--locked` builds with it.
+
+The rule is fixable. `jactionlint -fix=unsafe` inserts `--locked`. The fix is **unsafe** because the build can fail where it
+succeeded, for example when the lock file of the crate is out of date. It is only offered when the position of `install` in the
+file is known for sure.
+
+The rule `unlocked-install-pedantic` (in the `strict` profile) reports installs from a manifest that the lock file does not bind:
+
+Example input:
+
+```yaml
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - run: npm install
+      - run: pip install -r requirements.txt
+```
+
+Output:
+<!-- Skip update output -->
+```
+test.yaml:6:14: warning: "npm install" resolves the dependencies again and may update the package-lock.json instead of failing when it is out of date. use `npm ci` [unlocked-install-pedantic]
+  |
+6 |       - run: npm install
+  |              ^~~
+test.yaml:7:14: warning: "pip install -r requirements.txt" installs a requirements file without hashes or constraints, so the transitive dependencies are resolved anew on every run. use a lock file with hashes (`pip-compile --generate-hashes`) and pass --require-hashes, or pin them with -c [unlocked-install-pedantic]
+  |
+7 |       - run: pip install -r requirements.txt
+  |              ^~~
+```
+
+<!-- Skip playground link -->
+
+- `npm install` without a package: use `npm ci`, which fails when `package-lock.json` is out of date;
+- `yarn` and `yarn install` without `--immutable` (`--frozen-lockfile` in Yarn 1), `bun install` without `--frozen-lockfile`
+  (or use `bun ci`), and `pnpm install --no-frozen-lockfile`. pnpm freezes the lock file in CI by default, so plain
+  `pnpm install` is not reported. Yarn 2+ does so too, so for Yarn the flag makes it explicit;
+- `pip install -r` (also `uv pip install -r`) without `--require-hashes` or a constraints file `-c`.
+
+Installing named packages is covered by [adhoc packages](#check-adhoc-packages) and [unpinned tools](#check-unpinned-tools).
+These rules have no equivalent in zizmor.
 
 <a id="check-env-var-names"></a>
 ## Environment variable names

@@ -25,6 +25,7 @@ rules:
 
 | ID | Group | Default level | Profile |
 | --- | --- | --- | --- |
+| [adhoc-packages](#adhoc-packages) | security | warn | default |
 | [conflicting-runner-labels](#conflicting-runner-labels) | correctness | error | default |
 | [constant-condition](#constant-condition) | correctness | error | default |
 | [context-availability](#context-availability) | correctness | error | default |
@@ -39,6 +40,8 @@ rules:
 | [duplicate-step-id](#duplicate-step-id) | correctness | error | default |
 | [expression-syntax](#expression-syntax) | correctness | error | default |
 | [expression-type](#expression-type) | correctness | error | default |
+| [github-env](#github-env) | security | error | default |
+| [github-env-untrusted-input](#github-env-untrusted-input) | security | error | default |
 | [hardcoded-container-credentials](#hardcoded-container-credentials) | security | error | default |
 | [if-always-true](#if-always-true) | correctness | error | default |
 | [invalid-activity-type](#invalid-activity-type) | correctness | error | default |
@@ -78,6 +81,8 @@ rules:
 | [require-shell](#require-shell) | style | error | all |
 | [required-actions](#required-actions) | policy | error | only when configured |
 | [shellcheck](#shellcheck) | correctness | error | default |
+| [superfluous-actions](#superfluous-actions) | security | warn | default |
+| [superfluous-actions-pedantic](#superfluous-actions-pedantic) | policy | warn | strict |
 | [template-injection](#template-injection) | security | error | default |
 | [timeout-too-long](#timeout-too-long) | policy | error | only when configured |
 | [undefined-function](#undefined-function) | correctness | error | default |
@@ -88,15 +93,29 @@ rules:
 | [unknown-runner-label](#unknown-runner-label) | correctness | error | default |
 | [unknown-workflow-input](#unknown-workflow-input) | correctness | error | default |
 | [unknown-workflow-secret](#unknown-workflow-secret) | correctness | error | default |
+| [unlocked-install](#unlocked-install) | security | warn | default |
+| [unlocked-install-pedantic](#unlocked-install-pedantic) | policy | warn | strict |
+| [unpinned-tools](#unpinned-tools) | security | warn | default |
+| [unpinned-tools-pedantic](#unpinned-tools-pedantic) | policy | warn | strict |
 | [unpinned-uses](#unpinned-uses) | policy | error | strict |
 | [unsound-ternary](#unsound-ternary) | correctness | error | default |
 | [unused-anchor](#unused-anchor) | correctness | error | default |
 | [unused-ignore](#unused-ignore) | policy | error | strict |
+| [use-trusted-publishing](#use-trusted-publishing) | security | warn | default |
 | [workflow-call-permissions](#workflow-call-permissions) | correctness | error | default |
 | [workflow-input-type](#workflow-input-type) | correctness | error | default |
 | [workflow-run-names](#workflow-run-names) | correctness | error | default |
 | [workflow-syntax](#workflow-syntax) | correctness | error | default |
 | [yaml-syntax](#yaml-syntax) | correctness | error | default |
+
+## adhoc-packages
+
+A package is installed by name with npm, yarn, pnpm, bun, gem or bundle add outside of a lock file.
+
+- Group: security
+- Default level: warn
+- Profile: default
+- Details and examples: [checks](./checks.md#check-adhoc-packages)
 
 ## conflicting-runner-labels
 
@@ -223,6 +242,24 @@ A ${{ }} expression has a type error.
 - Default level: error
 - Profile: default
 - Details and examples: [checks](./checks.md#check-type-check-expression)
+
+## github-env
+
+A value that is not a literal is written to GITHUB_ENV or GITHUB_PATH in a workflow triggered by pull_request_target or workflow_run.
+
+- Group: security
+- Default level: error
+- Profile: default
+- Details and examples: [checks](./checks.md#check-github-env)
+
+## github-env-untrusted-input
+
+Input that an outsider controls is written to GITHUB_ENV or GITHUB_PATH.
+
+- Group: security
+- Default level: error
+- Profile: default
+- Details and examples: [checks](./checks.md#check-github-env)
 
 ## hardcoded-container-credentials
 
@@ -574,6 +611,24 @@ shellcheck reported an issue in a shell script.
 - Profile: default
 - Details and examples: [checks](./checks.md#check-shellcheck-integ)
 
+## superfluous-actions
+
+An action does what a tool of the runner image does as well, such as gh release create.
+
+- Group: security
+- Default level: warn
+- Profile: default
+- Details and examples: [checks](./checks.md#check-superfluous-actions)
+
+## superfluous-actions-pedantic
+
+An action does what a few commands of the runner image do, such as git commit and push or gh pr create.
+
+- Group: policy
+- Default level: warn
+- Profile: strict
+- Details and examples: [checks](./checks.md#check-superfluous-actions)
+
 ## template-injection
 
 A potentially untrusted input is expanded in a script.
@@ -665,6 +720,43 @@ A secret which the reusable workflow does not define is passed.
 - Profile: default
 - Details and examples: [checks](./checks.md#check-reusable-workflows)
 
+## unlocked-install
+
+cargo install runs without --locked.
+
+- Group: security
+- Default level: warn
+- Profile: default
+- Fixable: yes
+- Details and examples: [checks](./checks.md#check-unlocked-install)
+
+## unlocked-install-pedantic
+
+An install from a manifest is not bound to its lock file: npm install, yarn or bun install without a frozen lock file, pip install -r without hashes.
+
+- Group: policy
+- Default level: warn
+- Profile: strict
+- Details and examples: [checks](./checks.md#check-unlocked-install)
+
+## unpinned-tools
+
+An action installs the newest version of its tool because no version is set or it is latest.
+
+- Group: security
+- Default level: warn
+- Profile: default
+- Details and examples: [checks](./checks.md#check-unpinned-tools)
+
+## unpinned-tools-pedantic
+
+A tool is installed or run without an exact version by a run: script or by further actions.
+
+- Group: policy
+- Default level: warn
+- Profile: strict
+- Details and examples: [checks](./checks.md#check-unpinned-tools)
+
 ## unpinned-uses
 
 An action, reusable workflow or Docker image is not pinned to a commit SHA or digest.
@@ -699,6 +791,15 @@ An inline ignore comment did not suppress anything.
 - Group: policy
 - Default level: error
 - Profile: strict
+
+## use-trusted-publishing
+
+A package is published with a long-lived credential although the registry supports trusted publishing.
+
+- Group: security
+- Default level: warn
+- Profile: default
+- Details and examples: [checks](./checks.md#check-use-trusted-publishing)
 
 ## workflow-call-permissions
 

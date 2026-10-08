@@ -23,7 +23,7 @@ How to read the table:
 
 | zizmor audit | Planned ID | Phase / batch | Profile | Parity |
 | --- | --- | --- | --- | --- |
-| `adhoc-packages` | `adhoc-packages` | 3 / D | strict | not yet assessed |
+| `adhoc-packages` | `adhoc-packages` | 3 / D (exists) | default | partial: 7 of the 10 findings of zizmor on the corpus. The 3 others are 2 installs of local tarballs (`npm install ../pkg/*.tgz`), which jactionlint does not call ad hoc, and a position difference in a folded block. jactionlint reports installs behind `sudo` that zizmor misses. No `pwsh` scripts. See [the check](checks.md#check-adhoc-packages) |
 | `anonymous-definition` | `anonymous-definition` | 3 / A | strict | not yet assessed |
 | `archived-uses` | `archived-uses` | 3 / G | online | not yet assessed |
 | `artipacked` | `artipacked` | 3 / B | strict | not yet assessed |
@@ -36,7 +36,7 @@ How to read the table:
 | `excessive-permissions` | `excessive-permissions` | 3 / B | strict | not yet assessed |
 | `forbidden-uses` | `forbidden-uses` | 3 / A | opt-in (allow/deny config) | not yet assessed |
 | `github-app` | `github-app` | 3 / B and E | strict | not yet assessed |
-| `github-env` | `github-env` | 3 / D | default | not yet assessed |
+| `github-env` | `github-env`, `github-env-untrusted-input` | 3 / D (exists) | default | partial: zizmor and jactionlint both have no finding on the corpus. jactionlint accepts values of trusted contexts (`github.sha`, `runner.*`) and `mktemp`/`date` substitutions that zizmor reports in `pull_request_target` and `workflow_run` workflows, and reports untrusted input under every trigger. `pwsh` and `cmd` are matched line by line. See [the check](checks.md#check-github-env) |
 | `hardcoded-container-credentials` | existing check, [Hardcoded credentials](checks.md#check-hardcoded-credentials); ID assigned in Phase 1 | exists today, ID in Phase 1 | default | not yet assessed |
 | `impostor-commit` | `impostor-commit` | 3 / G | online | not yet assessed |
 | `insecure-commands` | `insecure-commands` | 3 / A | default | not yet assessed |
@@ -52,18 +52,28 @@ How to read the table:
 | `self-hosted-runner` | `self-hosted-runner` | 3 / A | all (info) | not yet assessed |
 | `self-repository` | `self-repository` | 3 / B | strict | not yet assessed |
 | `stale-action-refs` | `stale-action-refs` | 3 / G | online | not yet assessed |
-| `superfluous-actions` | `superfluous-actions` | 3 / D | strict | not yet assessed |
+| `superfluous-actions` | `superfluous-actions`, `superfluous-actions-pedantic` | 3 / D (exists) | default and strict | full: the same 40 findings as zizmor on the corpus, split like its personas (7 regular in `default`, 33 pedantic in `strict`). jactionlint adds the archived `actions/create-release` and `actions/upload-release-asset`. See [the check](checks.md#check-superfluous-actions) |
 | `template-injection` | `template-injection` | 3 / C | default | not yet assessed |
 | `typosquat-uses` | `typosquat-uses` | 3 / A | strict | not yet assessed |
 | `undocumented-permissions` | `undocumented-permissions` | 3 / B (needs YAML comments, Phase 2) | strict | not yet assessed |
 | `unpinned-images` | `unpinned-images` | 3 / B | strict | not yet assessed |
-| `unpinned-tools` | `unpinned-tools` | 3 / D | strict | not yet assessed |
+| `unpinned-tools` | `unpinned-tools`, `unpinned-tools-pedantic` | 3 / D (exists) | default and strict | full for the 4 actions zizmor knows (no finding on the corpus in either tool). An input that is an expression is not reported, zizmor reports it with low confidence. See [the check](checks.md#check-unpinned-tools) |
 | `unpinned-uses` | `unpinned-uses` | 3 / B | strict | not yet assessed |
 | `unredacted-secrets` | `unredacted-secrets` | 3 / A | strict | not yet assessed |
 | `unsound-condition` | `unsound-condition` | 3 / C | default | not yet assessed |
 | `unsound-contains` | `unsound-contains` | 3 / A | default | not yet assessed |
 | `unsound-ternary` | `unsound-ternary` | 3 / C | default | not yet assessed |
-| `use-trusted-publishing` | `use-trusted-publishing` | 3 / D | strict | not yet assessed |
+| `use-trusted-publishing` | `use-trusted-publishing` | 3 / D (exists) | default | partial: 2 of the 4 findings of zizmor on the corpus. The 2 others are in reusable workflows without `permissions:`, which jactionlint skips because the caller may grant `id-token: write`. No `pwsh` scripts and no `npm run publish`. See [the check](checks.md#check-use-trusted-publishing) |
+
+## Beyond zizmor
+
+Rules of jactionlint which zizmor 1.30.1 has no audit for:
+
+| ID | Profile | What it reports |
+| --- | --- | --- |
+| `unlocked-install` | default | `cargo install` without `--locked`. Fixable (unsafe). See [the check](checks.md#check-unlocked-install) |
+| `unlocked-install-pedantic` | strict | `npm install` instead of `npm ci`, `yarn` and `bun install` without a frozen lock file, `pnpm install --no-frozen-lockfile`, `pip install -r` without hashes or constraints |
+| `unpinned-tools-pedantic` | strict | `run:` scripts that install or run a tool without an exact version (`pip`, `pipx`, `uv tool`, `uvx`, `cargo install`, `go install`, `npm install -g`, `npx --yes`, `pnpm dlx`), and the actions `hashicorp/setup-terraform`, `azure/setup-kubectl` and `azure/setup-helm` |
 
 See [CONTRIBUTING.md](https://github.com/jdx/jactionlint/blob/main/CONTRIBUTING.md#policy-for-jactionlints-features) for the
 criteria a rule must meet before it is added.
