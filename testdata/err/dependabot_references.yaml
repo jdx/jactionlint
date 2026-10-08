@@ -28,6 +28,7 @@ updates:
   - package-ecosystem: pip
     directories: ["/a", "/b"]
     multi-ecosystem-group: everything
+    patterns: ["*"]
     schedule:
       interval: weekly
   # ERROR: the group is not defined

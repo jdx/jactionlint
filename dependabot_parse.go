@@ -19,10 +19,10 @@ const dependabotSyntaxID = "dependabot-syntax"
 // https://docs.github.com/en/code-security/dependabot/working-with-dependabot/dependabot-options-reference
 var (
 	dependabotEcosystems = []string{
-		"bazel", "bun", "bundler", "cargo", "composer", "conda", "devcontainers", "docker", "docker-compose",
+		"bazel", "bun", "bundler", "cargo", "composer", "conda", "deno", "devcontainers", "docker", "docker-compose",
 		"dotnet-sdk", "elm", "github-actions", "gitsubmodule", "gomod", "gradle", "helm", "julia", "maven",
-		"mix", "npm", "nuget", "opentofu", "pip", "pre-commit", "pub", "rust-toolchain", "swift", "terraform",
-		"uv", "vcpkg",
+		"mix", "nix", "npm", "nuget", "opentofu", "pip", "pre-commit", "pub", "rust-toolchain", "sbt", "swift",
+		"terraform", "uv", "vcpkg",
 	}
 	dependabotIntervals     = []string{"daily", "weekly", "monthly", "quarterly", "semiannually", "yearly", "cron"}
 	dependabotDays          = []string{"monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"}
@@ -299,8 +299,12 @@ func (p *parser) parseDependabotUpdate(n *yaml.Node) *DependabotUpdate {
 	if p.notMapping(`"updates" item`, n) {
 		return u
 	}
+	// Keys are tracked by name, not by the parsed value. A key with a value of a wrong type was reported
+	// when it was parsed and must not be reported again as missing.
+	seen := map[string]*String{}
 	for e := range p.parseSectionMapping("updates", n, false, true) {
 		k, v := e.key, e.val
+		seen[e.id] = k
 		switch e.id {
 		case "package-ecosystem":
 			u.PackageEcosystem = p.parseDependabotEnum(v, "package ecosystem", dependabotEcosystems)
@@ -359,14 +363,20 @@ func (p *parser) parseDependabotUpdate(n *yaml.Node) *DependabotUpdate {
 		}
 	}
 
-	if u.PackageEcosystem == nil {
+	if seen["package-ecosystem"] == nil {
 		p.missingDependabotKey(n, "package-ecosystem", `"updates" item`)
 	}
-	if u.Directory == nil && u.Directories == nil {
+	switch dir, dirs := seen["directory"], seen["directories"]; {
+	case dir == nil && dirs == nil:
 		p.errorf(n, `"directory" or "directories" key is missing in "updates" item`)
+	case dir != nil && dirs != nil:
+		p.errorAt(dirs.Pos, `"directory" and "directories" cannot be set at the same time in "updates" item. use only one of them`)
 	}
-	if u.Schedule == nil && u.MultiEcosystemGroup == nil {
+	if seen["schedule"] == nil && seen["multi-ecosystem-group"] == nil {
 		p.missingDependabotKey(n, "schedule", `"updates" item`)
+	}
+	if seen["multi-ecosystem-group"] != nil && seen["patterns"] == nil {
+		p.errorf(n, `"patterns" key is missing in "updates" item which sets "multi-ecosystem-group". Dependabot requires "patterns" to join a multi-ecosystem group`)
 	}
 	return u
 }
