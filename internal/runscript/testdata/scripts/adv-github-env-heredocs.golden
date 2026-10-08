@@ -1,0 +1,31 @@
+expr 2:7 "github.event.issue.title"
+expr 6:7 "steps.x.outputs.y"
+expr 11:27 "inputs.b"
+expr 13:3 "matrix.c"
+cmd 1:1 name="cat"
+cmd 3:9 name="date"
+cmd 5:1 name="cat"
+cmd 8:1 name="cat"
+cmd 11:1 name="tee" tool=tee
+  flags -a
+  pos "$GITHUB_ENV"[var:GITHUB_ENV]
+cmd 12:1 name="cat" pipe=1/2
+cmd 12:13 name="tee" tool=tee pipe=2/2
+  flags -a
+  pos "$GITHUB_ENV"[var:GITHUB_ENV]
+pipeline 12:1 stages=2 negated=false
+redirect 1:5 op="<<" fd="" target="EOF" append=false write=false heredoc(delim="EOF" quoted=false tabs=false exprs=1 lines=2)
+redirect 1:11 op=">>" fd="" target="$GITHUB_ENV"[var:GITHUB_ENV] append=true write=true
+redirect 5:5 op="<<-" fd="" target="EOF"[quoted] append=false write=false heredoc(delim="EOF" quoted=true tabs=true exprs=1 lines=1)
+redirect 5:14 op=">>" fd="" target="$GITHUB_OUTPUT"[var:GITHUB_OUTPUT quoted] append=true write=true
+redirect 8:5 op=">>" fd="" target="$GITHUB_ENV"[var:GITHUB_ENV] append=true write=true
+redirect 8:20 op="<<" fd="" target="EOT" append=false write=false heredoc(delim="EOT" quoted=false tabs=false exprs=0 lines=1)
+redirect 11:8 op="tee" fd="" target="$GITHUB_ENV"[var:GITHUB_ENV] append=true write=true tee
+redirect 11:20 op="<<<" fd="" target="B=${{ inputs.b }}"[expr quoted] append=false write=false
+redirect 12:5 op="<<" fd="" target="EOF" append=false write=false heredoc(delim="EOF" quoted=false tabs=false exprs=1 lines=1)
+redirect 12:20 op="tee" fd="" target="$GITHUB_ENV"[var:GITHUB_ENV] append=true write=true tee
+writes GITHUB_ENV at 1:11 append=true producers=1 exprs=["github.event.issue.title"]
+writes GITHUB_ENV at 8:5 append=true producers=1 exprs=[]
+writes GITHUB_ENV at 11:8 append=true producers=1 exprs=["inputs.b"]
+writes GITHUB_ENV at 12:20 append=true producers=2 exprs=["matrix.c"]
+writes GITHUB_OUTPUT at 5:14 append=true producers=1 exprs=["steps.x.outputs.y"]

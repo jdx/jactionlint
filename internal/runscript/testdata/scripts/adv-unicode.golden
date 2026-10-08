@@ -1,0 +1,13 @@
+expr 3:11 "matrix.名前"
+cmd 1:1 name="echo"
+  pos "héllo wörld ✓"[quoted]
+cmd 2:1 name="pip" tool=pip
+  pos "install" "ünïcode==1.0"
+  install tool=pip eco=pypi verb=install run=false global=false locked=false manifest=false reqs=0
+    pkg "ünïcode==1.0" name="ünïcode==1.0" ver="" kind=dynamic pinned=false dyn=false local=false
+cmd 3:1 name="echo"
+  pos "日本語 ${{ matrix.名前 }}"[expr quoted]
+redirect 1:22 op=">>" fd="" target="$GITHUB_ENV"[var:GITHUB_ENV] append=true write=true
+redirect 3:29 op=">>" fd="" target="$GITHUB_OUTPUT"[var:GITHUB_OUTPUT quoted] append=true write=true
+writes GITHUB_ENV at 1:22 append=true producers=1 exprs=[]
+writes GITHUB_OUTPUT at 3:29 append=true producers=1 exprs=["matrix.名前"]

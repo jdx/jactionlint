@@ -1,0 +1,25 @@
+cmd 1:1 name="set"
+  flags -euo
+  pos "pipefail"
+cmd 4:1 name="rm"
+  flags -rf
+  pos "$STAGE"[var:STAGE quoted]
+cmd 5:1 name="mkdir"
+  flags -p
+  pos "$STAGE"[var:STAGE quoted]
+cmd 6:1 name="cp"
+  flags -R
+  pos "npm/smoke-package/." "$STAGE/"[var:STAGE quoted]
+cmd 7:1 name="node"
+  pos "-" "$STAGE/package.json"[var:STAGE quoted] "$VERSION"[var:VERSION quoted]
+cmd 14:1 name="echo"
+  pos "version=$VERSION"[var:VERSION quoted]
+cmd 15:1 name="echo"
+  pos "stage=$STAGE"[var:STAGE quoted]
+redirect 7:41 op="<<" fd="" target="NODE"[quoted] append=false write=false heredoc(delim="NODE" quoted=true tabs=false exprs=0 lines=5)
+redirect 14:25 op=">>" fd="" target="$GITHUB_OUTPUT"[var:GITHUB_OUTPUT quoted] append=true write=true
+redirect 15:21 op=">>" fd="" target="$GITHUB_OUTPUT"[var:GITHUB_OUTPUT quoted] append=true write=true
+assignment 2:1 VERSION value="0.0.0-smoke.${RUN_ID}.${RUN_ATTEMPT}"[var:RUN_ID,RUN_ATTEMPT quoted] append=false array=false
+assignment 3:1 STAGE value="$RUNNER_TEMP/aube-publish-smoke"[var:RUNNER_TEMP quoted] append=false array=false
+writes GITHUB_OUTPUT at 14:25 append=true producers=1 exprs=[]
+writes GITHUB_OUTPUT at 15:21 append=true producers=1 exprs=[]

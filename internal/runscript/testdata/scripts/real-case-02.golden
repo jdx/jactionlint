@@ -1,0 +1,4 @@
+cmd 5:1 name="node"
+  pos "scripts/retire-legacy-downloads-direct.js" "${args[@]}"[var:args quoted]
+assignment 2:35 args value=<nil> append=false array=true
+assignment 3:6 args value=<nil> append=false array=true

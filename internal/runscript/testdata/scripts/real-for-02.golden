@@ -1,0 +1,2 @@
+cmd 2:3 name="package-binary.sh"
+  pos "installers/repository-installer-$arch"[var:arch quoted] "$arch"[var:arch quoted] "packages"

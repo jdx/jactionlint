@@ -1,0 +1,6 @@
+expr 1:11 "matrix.platform.platform"
+cmd 2:1 name="echo"
+  pos "PLATFORM_PAIR=${platform//\\//-}"[var:platform quoted]
+redirect 2:40 op=">>" fd="" target="$GITHUB_ENV"[var:GITHUB_ENV quoted] append=true write=true
+assignment 1:1 platform value="${{ matrix.platform.platform }}"[expr quoted] append=false array=false
+writes GITHUB_ENV at 2:40 append=true producers=1 exprs=[]

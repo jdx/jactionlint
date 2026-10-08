@@ -1,0 +1,93 @@
+cmd 1:1 name="apt-get" tool=apt wrappers=sudo
+  pos "update"
+cmd 2:1 name="apt-get" tool=apt wrappers=sudo
+  flags -y
+  pos "install" "libssl-dev" "pkg-config"
+  install tool=apt eco=apt verb=install run=false global=false locked=false manifest=false reqs=0
+    pkg "libssl-dev" name="libssl-dev" ver="" kind=registry pinned=false dyn=false local=false
+    pkg "pkg-config" name="pkg-config" ver="" kind=registry pinned=false dyn=false local=false
+cmd 3:1 name="apt-get" tool=apt
+  flags -y --no-install-recommends -o="Dpkg::Options::=--force-confnew"
+  pos "install" "curl=7.88.1-10" "git"
+  install tool=apt eco=apt verb=install run=false global=false locked=false manifest=false reqs=0
+    pkg "curl=7.88.1-10" name="curl" ver="7.88.1-10" kind=registry pinned=true dyn=false local=false
+    pkg "git" name="git" ver="" kind=registry pinned=false dyn=false local=false
+cmd 4:1 name="apt" tool=apt
+  pos "install" "./local.deb"
+  install tool=apt eco=apt verb=install run=false global=false locked=false manifest=false reqs=0
+    pkg "./local.deb" name="./local.deb" ver="" kind=path pinned=false dyn=false local=true
+cmd 5:1 name="apt" tool=apt wrappers=sudo
+  flags -t="bookworm-backports"
+  pos "install" "foo"
+  install tool=apt eco=apt verb=install run=false global=false locked=false manifest=false reqs=0
+    pkg "foo" name="foo" ver="" kind=registry pinned=false dyn=false local=false
+cmd 6:1 name="apt-get" tool=apt
+  flags -y
+  pos "remove" "foo"
+cmd 7:1 name="brew" tool=brew
+  pos "install" "jq"
+  install tool=brew eco=brew verb=install run=false global=false locked=false manifest=false reqs=0
+    pkg "jq" name="jq" ver="" kind=registry pinned=false dyn=false local=false
+cmd 8:1 name="brew" tool=brew
+  flags --cask
+  pos "install" "docker"
+  install tool=brew eco=brew verb=install run=false global=false locked=false manifest=false reqs=0
+    pkg "docker" name="docker" ver="" kind=registry pinned=false dyn=false local=false
+cmd 9:1 name="brew" tool=brew
+  pos "install" "python@3.12" "node"
+  install tool=brew eco=brew verb=install run=false global=false locked=false manifest=false reqs=0
+    pkg "python@3.12" name="python" ver="3.12" kind=registry pinned=true dyn=false local=false
+    pkg "node" name="node" ver="" kind=registry pinned=false dyn=false local=false
+cmd 10:1 name="brew" tool=brew
+  pos "install" "./local.rb"
+  install tool=brew eco=brew verb=install run=false global=false locked=false manifest=false reqs=0
+    pkg "./local.rb" name="./local.rb" ver="" kind=path pinned=false dyn=false local=true
+cmd 11:1 name="brew" tool=brew
+  pos "update"
+cmd 11:16 name="brew" tool=brew
+  pos "upgrade"
+cmd 12:1 name="uv" tool=uv
+  flags --system
+  pos "pip" "install" "requests==2.0" "flask"
+  install tool=uv eco=pypi verb=install run=false global=false locked=false manifest=false reqs=0
+    pkg "requests==2.0" name="requests" ver="==2.0" kind=registry pinned=true dyn=false local=false
+    pkg "flask" name="flask" ver="" kind=registry pinned=false dyn=false local=false
+cmd 13:1 name="uv" tool=uv
+  pos "tool" "install" "ruff==0.4.0"
+  install tool=uv eco=pypi verb=install run=false global=false locked=false manifest=false reqs=0
+    pkg "ruff==0.4.0" name="ruff" ver="==0.4.0" kind=registry pinned=true dyn=false local=false
+cmd 14:1 name="uv" tool=uv
+  flags --from="git+https://github.com/o/r@v1"[quoted]
+  pos "tool" "install" "tool"
+  install tool=uv eco=pypi verb=install run=false global=false locked=false manifest=false reqs=0
+    pkg "git+https://github.com/o/r@v1" name="" ver="git+https://github.com/o/r@v1" kind=git pinned=true dyn=false local=false
+cmd 15:1 name="uvx" tool=uvx
+  pos "ruff" "check" "."
+  install tool=uvx eco=pypi verb=run run=true global=false locked=false manifest=false reqs=0
+    pkg "ruff" name="ruff" ver="" kind=registry pinned=false dyn=false local=false
+cmd 16:1 name="uv" tool=uv
+  pos "add" "pytest"
+  install tool=uv eco=pypi verb=add run=false global=false locked=false manifest=false reqs=0
+    pkg "pytest" name="pytest" ver="" kind=registry pinned=false dyn=false local=false
+cmd 17:1 name="uv" tool=uv
+  flags --locked
+  pos "sync"
+  install tool=uv eco=pypi verb=sync run=false global=false locked=true manifest=true reqs=0
+cmd 18:1 name="pipx" tool=pipx
+  pos "install" "black"
+  install tool=pipx eco=pypi verb=install run=false global=false locked=false manifest=false reqs=0
+    pkg "black" name="black" ver="" kind=registry pinned=false dyn=false local=false
+cmd 19:1 name="pipx" tool=pipx
+  pos "install" "black==24.1.0"[quoted]
+  install tool=pipx eco=pypi verb=install run=false global=false locked=false manifest=false reqs=0
+    pkg "black==24.1.0" name="black" ver="==24.1.0" kind=registry pinned=true dyn=false local=false
+cmd 20:1 name="pipx" tool=pipx
+  flags --spec="ruff==0.1.0"
+  pos "run" "ruff" "check"
+  install tool=pipx eco=pypi verb=run run=true global=false locked=false manifest=false reqs=0
+    pkg "ruff==0.1.0" name="ruff" ver="==0.1.0" kind=registry pinned=true dyn=false local=false
+cmd 21:1 name="pipx" tool=pipx
+  flags --python="python3.12"
+  pos "install" "poetry"
+  install tool=pipx eco=pypi verb=install run=false global=false locked=false manifest=false reqs=0
+    pkg "poetry" name="poetry" ver="" kind=registry pinned=false dyn=false local=false

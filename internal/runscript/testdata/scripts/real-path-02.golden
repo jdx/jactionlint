@@ -1,0 +1,7 @@
+cmd 1:1 name="npm" tool=npm
+  pos "ci"
+  install tool=npm eco=npm verb=ci run=false global=false locked=true manifest=true reqs=0
+cmd 2:1 name="echo"
+  pos "$PWD/node_modules/.bin"[var:PWD quoted]
+redirect 2:31 op=">>" fd="" target="$GITHUB_PATH"[var:GITHUB_PATH quoted] append=true write=true
+writes GITHUB_PATH at 2:31 append=true producers=1 exprs=[]

@@ -1,0 +1,8 @@
+cmd 1:1 name="mise"
+  pos "install" "github:kunobi-ninja/kache@latest"
+cmd 2:1 name="echo"
+  pos "KACHE_INSTALL_DIR=$(mise where github:kunobi-ninja/kache@latest)"[subst quoted]
+cmd 2:27 name="mise"
+  pos "where" "github:kunobi-ninja/kache@latest"
+redirect 3:3 op=">>" fd="" target="$GITHUB_ENV"[var:GITHUB_ENV quoted] append=true write=true
+writes GITHUB_ENV at 3:3 append=true producers=1 exprs=[]

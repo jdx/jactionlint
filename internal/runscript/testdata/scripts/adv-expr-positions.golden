@@ -1,0 +1,25 @@
+expr 1:6 "matrix.a"
+expr 2:7 "matrix.b"
+expr 2:23 "matrix.c"
+expr 2:49 "matrix.d"
+expr 3:1 "matrix.tool"
+expr 4:6 "matrix.flag"
+expr 5:12 "matrix.v"
+expr 6:6 "github.event.head_commit.message"
+expr 9:6 "format('{0}}}', github.ref)"
+cmd 1:1 name="echo"
+  pos "${{ matrix.a }}"[expr whole-expr]
+cmd 2:1 name="echo"
+  pos "${{ matrix.b }}-${{ matrix.c }}"[expr quoted] "literal ${{ matrix.d }}"[expr quoted]
+cmd 3:1 name=""
+  flags --flag
+cmd 4:1 name="tool"
+  pos "${{ matrix.flag }}"[expr whole-expr] "value"
+cmd 5:1 name="tool"
+  flags --opt="${{ matrix.v }}"[expr]
+cmd 6:1 name="echo"
+  pos "${{\n  github.event.head_commit.message\n}}"[expr whole-expr] "done"
+cmd 9:1 name="echo"
+  pos "${{ format('{0}}}', github.ref) }}"[expr whole-expr] "after"
+cmd 10:1 name="echo"
+  pos "${{ \"unterminated"[quoted]

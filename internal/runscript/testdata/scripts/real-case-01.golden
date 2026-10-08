@@ -1,0 +1,7 @@
+cmd 1:1 name="set"
+  flags -euo
+  pos "pipefail"
+cmd 5:5 name="echo"
+  pos "::error::Unsupported mode: $MODE"[var:MODE quoted]
+cmd 6:5 name="exit"
+  pos "1"

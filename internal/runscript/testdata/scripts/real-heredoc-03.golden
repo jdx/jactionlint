@@ -1,0 +1,26 @@
+cmd 1:10 name="gpg" pipe=1/4
+  flags --list-secret-keys --with-colons
+cmd 1:49 name="grep" pipe=2/4
+  pos "^sec:"[quoted]
+cmd 1:64 name="cut" pipe=3/4
+  flags -d: -f5
+cmd 1:78 name="head" pipe=4/4
+  flags -1
+cmd 2:4 name="["
+  flags -z
+  pos "$KEY_ID"[var:KEY_ID quoted] "]"
+cmd 3:3 name="echo"
+  pos "Error: No GPG key found"[quoted]
+cmd 4:3 name="exit"
+  pos "1"
+cmd 6:1 name="echo"
+  pos "Using GPG key: $KEY_ID"[var:KEY_ID quoted]
+cmd 7:1 name="echo"
+  pos "DEBSIGN_KEYID=$KEY_ID"[var:KEY_ID quoted]
+cmd 9:1 name="cat"
+pipeline 1:10 stages=4 negated=false
+redirect 7:30 op=">>" fd="" target="$GITHUB_ENV"[var:GITHUB_ENV quoted] append=true write=true
+redirect 9:5 op=">" fd="" target="~/.devscripts"[glob] append=false write=true
+redirect 9:21 op="<<" fd="" target="EOF" append=false write=false heredoc(delim="EOF" quoted=false tabs=false exprs=0 lines=4)
+assignment 1:1 KEY_ID value="$(gpg --list-secret-keys --with-colons | grep '^sec:' | cut -d: -f5 | head -1)"[subst] append=false array=false
+writes GITHUB_ENV at 7:30 append=true producers=1 exprs=[]

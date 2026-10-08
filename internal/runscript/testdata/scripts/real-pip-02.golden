@@ -1,0 +1,7 @@
+cmd 1:1 name="python3"
+  flags -m
+  pos "venv" "$RUNNER_TEMP/copr-cli"[var:RUNNER_TEMP quoted]
+cmd 3:1 name=""
+  pos "install" "copr-cli==2.5" "rich==14.2.0"
+cmd 4:1 name=""
+  flags --version
