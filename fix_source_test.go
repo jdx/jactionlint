@@ -136,3 +136,31 @@ func TestFixesInAnIndentedCRLFFile(t *testing.T) {
 		t.Errorf("a line break which is not CRLF was added: %q", out)
 	}
 }
+
+func TestFixesLeaveUnicodeLineBreaksAlone(t *testing.T) {
+	for _, br := range []string{"\u0085", "\u2028", "\u2029"} {
+		src := "on: push\njobs:\n  a:\n    runs-on: ubuntu-latest\n    name: x" + br + "y\n    steps:\n      - run: echo\n"
+		if newSrcDoc([]byte(src)) != nil {
+			t.Errorf("%q: the source has a line break which the helpers count differently from the parser", br)
+		}
+		out, n, _ := fixWith(t, []byte(src), fixerConfig(t, ""), FixModeUnsafe)
+		if n != 0 || string(out) != src {
+			t.Errorf("%q: the file must not be changed: %d fixes\n%q", br, n, out)
+		}
+	}
+}
+
+func TestPermissionsFixIsUnsafeWithContainers(t *testing.T) {
+	for _, extra := range []string{"    container: ghcr.io/o/private:1\n", "    services:\n      db:\n        image: ghcr.io/o/db:1\n"} {
+		src := "on: push\njobs:\n  a:\n    runs-on: ubuntu-latest\n" + extra + "    steps:\n      - uses: actions/checkout@v4\n"
+		w, _ := Parse([]byte(src))
+		if f := fixMissingPermissions(w); f == nil || !f.Unsafe {
+			t.Errorf("a workflow with %q must get an unsafe fix: %+v", extra, f)
+		}
+	}
+	src := "on: push\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n"
+	w, _ := Parse([]byte(src))
+	if f := fixMissingPermissions(w); f == nil || f.Unsafe {
+		t.Errorf("a plain read-only workflow keeps its safe fix: %+v", f)
+	}
+}

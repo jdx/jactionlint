@@ -40,6 +40,10 @@ type srcDoc struct {
 // newSrcDoc splits the source into lines. It returns nil when the source has a line break other
 // than "\n" and "\r\n", which the YAML parser counts differently from the helpers.
 func newSrcDoc(src []byte) *srcDoc {
+	// NEL, LS and PS are line breaks for the YAML parser too
+	if bytes.Contains(src, []byte("\u0085")) || bytes.Contains(src, []byte("\u2028")) || bytes.Contains(src, []byte("\u2029")) {
+		return nil
+	}
 	d := &srcDoc{src: src}
 	start := 0
 	for start < len(src) {
