@@ -90,6 +90,7 @@ rules:
 | [unpinned-uses](#unpinned-uses) | policy | error | strict |
 | [unsound-ternary](#unsound-ternary) | correctness | error | default |
 | [unused-anchor](#unused-anchor) | correctness | error | default |
+| [unused-ignore](#unused-ignore) | policy | error | strict |
 | [workflow-call-permissions](#workflow-call-permissions) | correctness | error | default |
 | [workflow-input-type](#workflow-input-type) | correctness | error | default |
 | [workflow-run-names](#workflow-run-names) | correctness | error | default |
@@ -680,6 +681,14 @@ A YAML anchor is defined but never used.
 - Default level: error
 - Profile: default
 - Details and examples: [checks](./checks.md#yaml-anchors)
+
+## unused-ignore
+
+An inline ignore comment did not suppress anything.
+
+- Group: policy
+- Default level: error
+- Profile: strict
 
 ## workflow-call-permissions
 

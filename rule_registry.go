@@ -183,6 +183,7 @@ var ruleRegistry = []RuleInfo{
 	{ID: "unpinned-uses", Group: RuleGroupPolicy, Summary: "An action, reusable workflow or Docker image is not pinned to a commit SHA or digest.", DefaultLevel: SeverityError, Profile: ProfileStrict, DocsAnchor: "check-action-format"},
 	{ID: "unsound-ternary", Group: RuleGroupCorrectness, Summary: "The a && b || c idiom has a falsy b so it always evaluates to c.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-falsy-ternary"},
 	{ID: "unused-anchor", Group: RuleGroupCorrectness, Summary: "A YAML anchor is defined but never used.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "yaml-anchors"},
+	{ID: "unused-ignore", Group: RuleGroupPolicy, Summary: "An inline ignore comment did not suppress anything.", DefaultLevel: SeverityError, Profile: ProfileStrict},
 	{ID: "workflow-call-permissions", Group: RuleGroupCorrectness, Summary: "A caller job grants fewer permissions than a reusable workflow requires.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-reusable-workflows"},
 	{ID: "workflow-input-type", Group: RuleGroupCorrectness, Summary: "The type of a value passed to a reusable workflow does not match its input.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-reusable-workflows"},
 	{ID: "workflow-run-names", Group: RuleGroupCorrectness, Summary: "A workflow_run event refers to a workflow which does not exist in the repository.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-workflow-run-names"},

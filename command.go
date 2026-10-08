@@ -134,10 +134,14 @@ func (cmd *Command) Main(args []string) int {
 	var migrateConfig bool
 	var noColor bool
 	var color bool
+	var minSeverity string
+	var strictExit bool
 
 	flags := flag.NewFlagSet(args[0], flag.ContinueOnError)
 	flags.SetOutput(cmd.Stderr)
-	flags.Var(&ignorePats, "ignore", "Regular expression matching to error messages you want to ignore. This flag is repeatable")
+	flags.Var(&ignorePats, "ignore", "Rule ID (e.g. unpinned-uses) or regular expression matching to error messages you want to ignore. This flag is repeatable")
+	flags.StringVar(&minSeverity, "min-severity", "info", "Hide the errors less severe than this level: info, warn or error")
+	flags.BoolVar(&strictExit, "strict-exit", false, "Exit with status 1 also when only errors of warn or info level are found. By default only errors of error level make the exit status 1")
 	flags.StringVar(&opts.Shellcheck, "shellcheck", "shellcheck", "Command name or file path of \"shellcheck\" external command. If empty, shellcheck integration will be disabled")
 	flags.StringVar(&opts.Pyflakes, "pyflakes", "pyflakes", "Command name or file path of \"pyflakes\" external command. If empty, pyflakes integration will be disabled")
 	flags.BoolVar(&opts.Oneline, "oneline", false, "Use one line per one error. Useful for reading error messages from programs")
@@ -176,6 +180,12 @@ func (cmd *Command) Main(args []string) int {
 		return ExitStatusSuccessNoProblem
 	}
 
+	sev, err := ParseSeverity(minSeverity)
+	if err != nil || sev == SeverityOff {
+		fmt.Fprintf(cmd.Stderr, "invalid value %q for -min-severity. available values are \"info\", \"warn\" and \"error\"\n", minSeverity)
+		return ExitStatusInvalidCommandOption
+	}
+	opts.MinSeverity = sev
 	opts.IgnorePatterns = ignorePats
 	opts.LogWriter = cmd.Stderr
 
@@ -191,9 +201,16 @@ func (cmd *Command) Main(args []string) int {
 		fmt.Fprintln(cmd.Stderr, err.Error())
 		return ExitStatusFailure
 	}
-	if len(errs) > 0 {
-		return ExitStatusSuccessProblemFound // Linter found some issues, yay!
-	}
+	return exitStatusOf(errs, strictExit)
+}
 
+// exitStatusOf returns the exit status for the errors found. Only errors of error level make the
+// status 1 unless strict is true, which counts every error.
+func exitStatusOf(errs []*Error, strict bool) int {
+	for _, e := range errs {
+		if strict || e.Severity >= SeverityError {
+			return ExitStatusSuccessProblemFound // Linter found some issues, yay!
+		}
+	}
 	return ExitStatusSuccessNoProblem
 }

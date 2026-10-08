@@ -63,6 +63,7 @@ unknown-workflow-secret
 unpinned-uses
 unsound-ternary
 unused-anchor
+unused-ignore
 workflow-call-permissions
 workflow-input-type
 workflow-run-names

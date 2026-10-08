@@ -5,17 +5,27 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"unicode/utf8"
 )
 
 // inlineIgnoreRe matches a whole-line comment which suppresses errors such as
 // `# jactionlint ignore=<pattern>[,<pattern>...]`. `# actionlint ignore=...` is also accepted.
 var inlineIgnoreRe = regexp.MustCompile(`^\s*#\s*j?actionlint\s+ignore=(.*)$`)
 
+// inlineIgnoreEntry is one pattern of an inline ignore comment.
+type inlineIgnoreEntry struct {
+	pat IgnorePattern
+	// line and col are the position of the pattern in the comment.
+	line, col int
+	// used is whether the pattern suppressed any error.
+	used bool
+}
+
 // inlineIgnore is one set of ignore patterns which is effective for errors reported in the line
 // range [start, end] (1-based, inclusive).
 type inlineIgnore struct {
 	start, end int
-	pats       IgnorePatterns
+	entries    []*inlineIgnoreEntry
 }
 
 // splitIgnoreList splits comma-separated patterns. Commas inside (), [] and {} or escaped with a
@@ -54,8 +64,15 @@ func isCommentOrBlank(line string) (comment bool, blank bool) {
 // the lines nested under it. When the line starts a sequence item ("- "), the whole item is the
 // target. Multiple comment lines can be stacked. Invalid patterns are reported as errors.
 func parseInlineIgnores(src []byte) ([]inlineIgnore, []*Error) {
+	ignores, _, errs := parseInlineIgnoresWithOrphans(src)
+	return ignores, errs
+}
+
+// parseInlineIgnoresWithOrphans is like parseInlineIgnores but also returns the patterns of the
+// comments which have nothing to apply to (e.g. a comment at the end of the file).
+func parseInlineIgnoresWithOrphans(src []byte) ([]inlineIgnore, []*inlineIgnoreEntry, []*Error) {
 	if !bytes.Contains(src, []byte("actionlint")) {
-		return nil, nil
+		return nil, nil, nil
 	}
 	lines := strings.Split(string(src), "\n")
 	for i, l := range lines {
@@ -64,7 +81,7 @@ func parseInlineIgnores(src []byte) ([]inlineIgnore, []*Error) {
 
 	var ret []inlineIgnore
 	var errs []*Error
-	var pending IgnorePatterns
+	var pending []*inlineIgnoreEntry
 	for i, line := range lines {
 		comment, blank := isCommentOrBlank(line)
 		if blank {
@@ -80,11 +97,17 @@ func parseInlineIgnores(src []byte) ([]inlineIgnore, []*Error) {
 				col = strings.Index(line, "actionlint")
 			}
 			col++
+			// Patterns are located after "ignore="
+			from := strings.Index(line, "ignore=") + len("ignore=")
 			for _, p := range splitIgnoreList(m[1]) {
+				raw := p
 				p = strings.TrimSpace(p)
 				if p == "" {
+					from += len(raw) + 1
 					continue
 				}
+				patCol := utf8.RuneCountInString(line[:from]) + 1 + utf8.RuneCountInString(raw[:len(raw)-len(strings.TrimLeft(raw, " \t"))])
+				from += len(raw) + 1
 				r, err := ParseIgnorePattern(p)
 				if err != nil {
 					errs = append(errs, &Error{
@@ -96,7 +119,7 @@ func parseInlineIgnores(src []byte) ([]inlineIgnore, []*Error) {
 					})
 					continue
 				}
-				pending = append(pending, r)
+				pending = append(pending, &inlineIgnoreEntry{pat: r, line: i + 1, col: patCol})
 			}
 			continue
 		}
@@ -127,26 +150,67 @@ func parseInlineIgnores(src []byte) ([]inlineIgnore, []*Error) {
 		ret = append(ret, inlineIgnore{i + 1, end, pending})
 		pending = nil
 	}
-	return ret, errs
+	return ret, pending, errs
 }
 
-// filterInlineIgnores removes errors suppressed by inline ignore comments.
+// filterInlineIgnores removes errors suppressed by inline ignore comments and marks the patterns which
+// suppressed any error as used.
 func (l *Linter) filterInlineIgnores(errs []*Error, ignores []inlineIgnore) []*Error {
 	if len(ignores) == 0 {
 		return errs
 	}
 	filtered := make([]*Error, 0, len(errs))
-Loop:
 	for _, err := range errs {
+		ignored := false
 		for _, ig := range ignores {
-			if ig.start <= err.Line && err.Line <= ig.end && ig.pats.Match(err) {
-				l.debug("Error %q is ignored due to the inline ignore comment", err.Message)
-				continue Loop
+			if err.Line < ig.start || ig.end < err.Line {
+				continue
 			}
+			for _, e := range ig.entries {
+				if e.pat.Match(err) {
+					e.used = true
+					ignored = true
+				}
+			}
+		}
+		if ignored {
+			l.debug("Error %q is ignored due to the inline ignore comment", err.Message)
+			continue
 		}
 		filtered = append(filtered, err)
 	}
 	return filtered
+}
+
+// unusedInlineIgnores returns an error for each pattern of the inline ignore comments which did not
+// suppress any error. A pattern for a rule which is off is not reported because the rule could not
+// report anything.
+func unusedInlineIgnores(ignores []inlineIgnore, orphans []*inlineIgnoreEntry, cfg *Config) []*Error {
+	var errs []*Error
+	report := func(e *inlineIgnoreEntry, what string) {
+		if e.used {
+			return
+		}
+		if e.pat.ID != "" && !cfg.RuleEnabled(e.pat.ID) {
+			return
+		}
+		errs = append(errs, &Error{
+			Message: fmt.Sprintf("ignore pattern %q %s. remove it", e.pat.String(), what),
+			Line:    e.line,
+			Column:  e.col,
+			Kind:    "ignore",
+			ID:      "unused-ignore",
+		})
+	}
+	for _, ig := range ignores {
+		for _, e := range ig.entries {
+			report(e, "did not suppress any error")
+		}
+	}
+	for _, e := range orphans {
+		report(e, "is not followed by any line to apply to")
+	}
+	return errs
 }
 
 // isSequenceItem returns true when the line is a block sequence item ("- ..." or a bare "-").

@@ -87,6 +87,9 @@ type LinterOptions struct {
 	// WorkingDir is a file path to the current working directory. When this value is empty, os.Getwd
 	// will be used to get a working directory.
 	WorkingDir string
+	// MinSeverity hides the errors less severe than it. The zero value shows every error. For example
+	// SeverityWarning hides the errors of info level.
+	MinSeverity Severity
 	// OnRulesCreated is a hook to add or remove the check rules. This function is called on checking
 	// every workflow files. Rules created by Linter instance are passed to the argument and the
 	// function should return the modified rules.
@@ -112,6 +115,7 @@ type Linter struct {
 	cwd            string
 	onRulesCreated func([]Rule) []Rule
 	configFile     string
+	minSeverity    Severity
 	warned         sync.Map // *Config -> struct{}: configs whose deprecations were already reported
 }
 
@@ -211,6 +215,7 @@ func NewLinter(out io.Writer, opts *LinterOptions) (*Linter, error) {
 		cwd,
 		opts.OnRulesCreated,
 		opts.ConfigFile,
+		opts.MinSeverity,
 		sync.Map{},
 	}
 
@@ -629,11 +634,24 @@ func (l *Linter) check(
 
 	all = l.annotateErrors(all, content, cfg)
 
-	all = l.filterErrors(all, cfg.PathConfigs(path))
-
-	inlineIgnores, ignoreErrs := parseInlineIgnores(content)
+	// Inline ignores are applied first so that every pattern sees all errors, which tells whether it
+	// is used. The order of the filters does not change which errors remain.
+	inlineIgnores, orphans, ignoreErrs := parseInlineIgnoresWithOrphans(content)
 	all = l.filterInlineIgnores(all, inlineIgnores)
+	all = append(all, l.annotateErrors(unusedInlineIgnores(inlineIgnores, orphans, cfg), content, cfg)...)
+
+	all = l.filterErrors(all, cfg.PathConfigs(path))
 	all = append(all, l.annotateErrors(ignoreErrs, content, cfg)...)
+
+	if l.minSeverity > SeverityInfo {
+		kept := all[:0]
+		for _, err := range all {
+			if err.Severity >= l.minSeverity {
+				kept = append(kept, err)
+			}
+		}
+		all = kept
+	}
 
 	for _, err := range all {
 		err.Filepath = path // Populate filename in the error
