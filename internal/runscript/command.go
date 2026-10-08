@@ -41,6 +41,11 @@ type Command struct {
 	// Pipeline is the pipeline the command is a stage of, nil if it is not in one. Stage is the index.
 	Pipeline *Pipeline
 	Stage    int
+	// Tested is whether the script handles the exit status of the command, so a failure does not stop it under
+	// `set -e`: the command is in the condition of `if`, `elif`, `while` or `until`, is negated with `!`, or
+	// is the operand of `&&` or `||` that is not the last one (`cmd || true`). It is also set for the commands of
+	// a `{ }` group or `( )` subshell in such a place.
+	Tested bool
 	// Decl is true for declaration builtins: export, declare, local, readonly, typeset. Their assignments are in
 	// Assigns.
 	Decl bool
@@ -130,13 +135,14 @@ type builder struct {
 	sub  string
 	cmds map[syntax.Command]*Command
 	// pipes whose chain is already collected by the outermost BinaryCmd; negated pipelines
-	seenPipe map[*syntax.BinaryCmd]bool
-	negated  map[*syntax.BinaryCmd]bool
-	tested   map[*syntax.BinaryCmd]bool // pipelines whose status is tested, see Pipeline.Tested
-	pending  []pendingPipeline
-	groups   []groupRedirect
-	done     map[syntax.Node]bool
-	sorted   []*Command // commands by offset
+	seenPipe    map[*syntax.BinaryCmd]bool
+	negated     map[*syntax.BinaryCmd]bool
+	tested      map[*syntax.BinaryCmd]bool // pipelines whose status is tested, see Pipeline.Tested
+	testedCalls map[*syntax.CallExpr]bool  // commands whose status is tested, see Command.Tested
+	pending     []pendingPipeline
+	groups      []groupRedirect
+	done        map[syntax.Node]bool
+	sorted      []*Command // commands by offset
 }
 
 func (b *builder) src(start, end int) string {
@@ -150,11 +156,15 @@ func (b *builder) build(f *syntax.File) {
 	b.seenPipe = map[*syntax.BinaryCmd]bool{}
 	b.negated = map[*syntax.BinaryCmd]bool{}
 	b.tested = map[*syntax.BinaryCmd]bool{}
+	b.testedCalls = map[*syntax.CallExpr]bool{}
 	b.done = map[syntax.Node]bool{}
 	s := b.s
 	syntax.Walk(f, func(n syntax.Node) bool {
 		switch n := n.(type) {
 		case *syntax.Stmt:
+			if n.Negated {
+				b.markTested(n)
+			}
 			b.stmt(n)
 		case *syntax.CallExpr:
 			b.call(n)
@@ -166,7 +176,7 @@ func (b *builder) build(f *syntax.File) {
 			b.markTested(n.Cond...)
 		case *syntax.BinaryCmd:
 			if n.Op == syntax.AndStmt || n.Op == syntax.OrStmt {
-				b.markTested(n.X, n.Y)
+				b.markTested(n.X)
 			}
 			if (n.Op == syntax.Pipe || n.Op == syntax.PipeAll) && !b.seenPipe[n] {
 				b.pipeline(n)
@@ -174,6 +184,11 @@ func (b *builder) build(f *syntax.File) {
 		}
 		return true
 	})
+	for n, c := range b.cmds {
+		if call, ok := n.(*syntax.CallExpr); ok && b.testedCalls[call] {
+			c.Tested = true
+		}
+	}
 	b.sorted = slices.Clone(s.Commands)
 	slices.SortStableFunc(b.sorted, func(x, y *Command) int { return x.Offset - y.Offset })
 	// link substitution commands to the words they are in

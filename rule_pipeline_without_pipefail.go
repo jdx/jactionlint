@@ -27,10 +27,13 @@ import (
 //     again with `set +o pipefail`.
 //   - a stage in front of the last one is a command whose failure matters. Commands which cannot meaningfully fail
 //     do not count (see pipefailNoFail, e.g. echo and printf, cat without a file, true and yes), and neither do
-//     filters in the middle of a pipeline (see pipefailFilters, e.g. grep, sed and sort: they exit non-zero for
-//     "no match", and the failure of what feeds them is reported at that command).
-//   - the pipeline is not a test: it is not negated with `!`, and it is not the condition of `if`, `elif`, `while`
-//     or `until` and not an operand of `&&` or `||`, where the script handles the status itself.
+//     filters in the middle of a pipeline (see pipefailFilters, e.g. sed and sort: the failure of what feeds them
+//     is reported at that command). Neither do grep, rg and diff anywhere: their non-zero status is an answer
+//     ("no match", "files differ"), and pipefail would turn an expected "no match" into a failed step.
+//   - the script does not handle the status itself: the pipeline is not negated with `!`, not the condition of `if`,
+//     `elif`, `while` or `until` and not an operand of `&&` or `||` other than the last one of a list, where `set -e`
+//     does not stop the script either. The commands of the first stages are held to the same rule, so
+//     `{ git notes show || true; cat note; } | sort` does not blame `git`.
 //   - no later stage stops reading early: `head`, `grep -q`, `grep -m`, `read`, `sed ...q` or `awk ... exit` make the
 //     producer die with SIGPIPE. Pipefail would then make a working pipeline fail, so enabling it is not a fix.
 //     Such pipelines are not reported at all.
@@ -354,6 +357,13 @@ var pipefailNoFail = map[string]bool{
 	"uname": true, "whoami": true, "hostname": true, "seq": true, "id": true, "printenv": true, "env": true, "[": true, "test": true,
 }
 
+// pipefailAnswers are commands which use a non-zero status as an answer ("no match", "files differ"), not as a
+// failure. They are never blamed as the producer of a pipeline: `grep -c x file | cut` would fail for a file without
+// a match once pipefail is on.
+var pipefailAnswers = map[string]bool{
+	"grep": true, "egrep": true, "fgrep": true, "rg": true, "diff": true, "cmp": true,
+}
+
 // pipefailFilters are the commands which only transform their input. In the middle of a pipeline they are not
 // reported: they signal "no match" with a non-zero status, and a failure of the producer is reported at the producer.
 var pipefailFilters = map[string]bool{
@@ -370,8 +380,8 @@ func hiddenFailure(p *runscript.Pipeline) *runscript.Command {
 			break
 		}
 		for _, c := range st.Commands {
-			if c.Name == "" && c.NameWord == nil {
-				continue // only assignments
+			if (c.Name == "" && c.NameWord == nil) || c.Tested {
+				continue // only assignments, or the script handles the failure itself (`cmd || true`)
 			}
 			if failureMatters(c, i) {
 				found = c
@@ -396,7 +406,7 @@ func hiddenFailure(p *runscript.Pipeline) *runscript.Command {
 // failureMatters returns whether a failure of the command in the stage of the pipeline is worth reporting.
 func failureMatters(c *runscript.Command, stage int) bool {
 	switch {
-	case pipefailNoFail[c.Name]:
+	case pipefailNoFail[c.Name], pipefailAnswers[c.Name]:
 		return false
 	case c.Name == "cat" && len(c.Positional) == 0:
 		return false // copies a here document, a here string or the output of the previous stage

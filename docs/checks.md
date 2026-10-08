@@ -3698,10 +3698,13 @@ jactionlint reports a pipeline when all of the following hold:
 - The script does not turn it on before the pipeline with `set -o pipefail`, `set -eo pipefail`, `set -euxo pipefail`,
   `set -o errexit -o pipefail` or `SHELLOPTS=pipefail` (and does not turn it off again with `set +o pipefail`).
 - A stage in front of the last one is a command whose failure matters. `echo`, `printf`, `true`, `yes`, `cat` of a here
-  document or here string, and similar commands which cannot meaningfully fail do not count. Filters such as `grep`, `sed`, `awk`,
-  `sort` and `tail` do not count in the middle of a pipeline either, because a failure of what feeds them is reported at that command.
-- The status of the pipeline is not tested by the script: it is not negated with `!`, not the condition of `if`, `elif`, `while`
-  or `until`, and not an operand of `&&` or `||`.
+  document or here string, and similar commands which cannot meaningfully fail do not count. Filters such as `sed`, `awk`,
+  `sort` and `tail` do not count in the middle of a pipeline either, because a failure of what feeds them is reported at that
+  command. `grep`, `rg` and `diff` never count: their non-zero status means "no match" or "files differ", and `pipefail` would
+  turn that expected answer into a failed step.
+- The script does not handle the status of the pipeline itself: it is not negated with `!`, not the condition of `if`, `elif`,
+  `while` or `until`, and not an operand of `&&` or `||` other than the last one of a list (`cmd | grep x || true`). A command
+  followed by `|| true` in the first stage (`{ git show || true; cat note; } | sort`) is not blamed either.
 - No later stage stops reading early. `head`, `grep -q`, `grep -m`, `read`, `sed ... q` and `awk ... exit` end the pipeline
   before the producer is done, which kills it with SIGPIPE. With `pipefail` such a pipeline fails although nothing went wrong,
   so such pipelines are not reported.

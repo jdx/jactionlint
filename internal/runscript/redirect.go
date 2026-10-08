@@ -224,7 +224,8 @@ type Pipeline struct {
 	Stages  []*Stage
 	Negated bool
 	// Tested is whether the script looks at the exit status of the pipeline: it is the condition of `if`,
-	// `elif`, `while` or `until`, or an operand of `&&` or `||`. A failure is then not hidden but handled.
+	// `elif`, `while` or `until`, or an operand of `&&` or `||` which is not the last of the list. A failure is
+	// then not hidden but handled.
 	Tested bool
 }
 
@@ -392,14 +393,27 @@ func (s *Script) WritesTo(varNames ...string) []*Write {
 	return out
 }
 
-// markTested records the pipelines among the statements as tested.
+// markTested records that the script handles the exit status of the statements: the pipelines and commands in
+// them are Tested. It follows the places where the shell ignores `set -e`: the operands of `&&` and `||` (all but
+// the last one of the list, which the caller selects), and the commands of groups and subshells there.
 func (b *builder) markTested(stmts ...*syntax.Stmt) {
 	for _, st := range stmts {
 		if st == nil {
 			continue
 		}
-		if c, ok := st.Cmd.(*syntax.BinaryCmd); ok && isPipe(c.Op) {
-			b.tested[c] = true
+		switch c := st.Cmd.(type) {
+		case *syntax.BinaryCmd:
+			if isPipe(c.Op) {
+				b.tested[c] = true
+			} else {
+				b.markTested(c.X, c.Y)
+			}
+		case *syntax.CallExpr:
+			b.testedCalls[c] = true
+		case *syntax.Block:
+			b.markTested(c.Stmts...)
+		case *syntax.Subshell:
+			b.markTested(c.Stmts...)
 		}
 	}
 }

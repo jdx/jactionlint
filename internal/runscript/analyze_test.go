@@ -904,10 +904,11 @@ func TestPipelineTested(t *testing.T) {
 		{"while a | b; do c; done", []bool{true}},
 		{"until a | b; do c; done", []bool{true}},
 		{"a | b || true", []bool{true}},
-		{"c && a | b", []bool{true}},
-		{"a | b && c | d", []bool{true, true}},
+		{"c && a | b", []bool{false}},
+		{"c && a | b && d", []bool{true}},
+		{"a | b && c | d", []bool{true, false}},
 		{"if x; then a | b; fi", []bool{false}},
-		{"! a | b", []bool{false}},
+		{"! a | b", []bool{true}},
 		{"for i in 1; do a | b; done", []bool{false}},
 	} {
 		s := mustAnalyze(t, tc.src)
@@ -919,4 +920,41 @@ func TestPipelineTested(t *testing.T) {
 			t.Errorf("%q: Tested = %v, want %v", tc.src, got, tc.want)
 		}
 	}
+}
+
+func TestCommandTested(t *testing.T) {
+	for _, tc := range []struct {
+		src  string
+		want map[string]bool // Tested by command name; every other command is not tested
+	}{
+		{"a", nil},
+		{"a || b", map[string]bool{"a": true}},
+		{"a && b", map[string]bool{"a": true}},
+		{"a && b || c", map[string]bool{"a": true, "b": true}},
+		{"if a; then b; fi", map[string]bool{"a": true}},
+		{"while a; do b; done", map[string]bool{"a": true}},
+		{"! a", map[string]bool{"a": true}},
+		{"{ a; b; } || c", map[string]bool{"a": true, "b": true}},
+		{"( a; b ) && c", map[string]bool{"a": true, "b": true}},
+		{"{ a || true; b; } | c", map[string]bool{"a": true}},
+		{"for i in 1; do a; done", nil},
+	} {
+		s := mustAnalyze(t, tc.src)
+		got := map[string]bool{}
+		for _, c := range s.Commands {
+			if c.Tested {
+				got[c.Name] = true
+			}
+		}
+		if !reflect.DeepEqual(got, map[string]bool(nilToEmpty(tc.want))) {
+			t.Errorf("%q: tested commands = %v, want %v", tc.src, got, tc.want)
+		}
+	}
+}
+
+func nilToEmpty(m map[string]bool) map[string]bool {
+	if m == nil {
+		return map[string]bool{}
+	}
+	return m
 }
