@@ -329,11 +329,13 @@ func (rule *RuleAction) VisitStep(n *Step) error {
 	spec := e.Uses.Value
 	ref := ParseUses(spec)
 
-	switch ref.Kind {
-	case UsesLocal:
+	switch {
+	case ref.Kind == UsesLocal:
 		// Relative to repository root
 		rule.checkLocalAction(spec, e)
-	case UsesDocker:
+	case ref.Kind == UsesDocker || strings.HasPrefix(spec, "docker://"):
+		// ParseUses reports "docker://" without an image as invalid. It is still a Docker reference and
+		// was never reported as a malformed repository action.
 		rule.checkDockerAction(ref, e)
 	default:
 		rule.checkRepoAction(ref, e)
