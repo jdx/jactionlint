@@ -36,6 +36,10 @@ var nativeFormats = []string{FormatText, FormatOneline, FormatJSON, FormatJSONL,
 
 // fileResult is the result of linting one file.
 type fileResult struct {
+	// file is the path of the file as it was given to the linter. It is empty for content which did
+	// not come from a file.
+	file string
+	// path is the path shown in the errors: relative to the working directory when possible.
 	path string
 	src  []byte
 	errs []*Error

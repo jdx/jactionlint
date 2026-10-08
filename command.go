@@ -1,6 +1,7 @@
 package jactionlint
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -92,9 +93,12 @@ type Command struct {
 	Stdout io.Writer
 	// Stderr is a writer to write output to stderr
 	Stderr io.Writer
+
+	// onRulesCreated is passed to LinterOptions.OnRulesCreated. Tests use it to add rules with fixes.
+	onRulesCreated func([]Rule) []Rule
 }
 
-func (cmd *Command) runLinter(args []string, opts *LinterOptions, initConfig, migrateConfig bool) ([]*Error, error) {
+func (cmd *Command) runLinter(args []string, opts *LinterOptions, initConfig, migrateConfig bool, fix FixMode) ([]*Error, error) {
 	l, err := NewLinter(cmd.Stdout, opts)
 	if err != nil {
 		return nil, err
@@ -105,6 +109,22 @@ func (cmd *Command) runLinter(args []string, opts *LinterOptions, initConfig, mi
 	}
 	if migrateConfig {
 		return nil, l.MigrateConfig("")
+	}
+
+	if fix != 0 {
+		if len(args) == 1 && args[0] == "-" {
+			return nil, errors.New("-fix cannot be used with stdin because the fixed file would not be saved")
+		}
+		var res *FixResult
+		if len(args) == 0 {
+			res, err = l.FixRepository("", fix)
+		} else {
+			res, err = l.FixFiles(args, nil, fix)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return res.Errors, nil
 	}
 
 	if len(args) == 0 {
@@ -136,6 +156,7 @@ func (cmd *Command) Main(args []string) int {
 	var opts LinterOptions
 	var ignorePats ignorePatternFlags
 	var initConfig bool
+	var fix fixFlag
 	var migrateConfig bool
 	var noColor bool
 	var color bool
@@ -154,6 +175,7 @@ func (cmd *Command) Main(args []string) int {
 	flags.BoolVar(&opts.ShowRuleIDs, "rule-ids", false, "Show the stable rule ID such as unpinned-uses at the end of each error in the text format instead of the kind. The ID is used in the rules of the config file and in -ignore")
 	flags.StringVar(&opts.ConfigFile, "config-file", "", "File path to config file")
 	flags.BoolVar(&initConfig, "init-config", false, "Generate default config file at .github/jactionlint.yaml in current project")
+	flags.Var(&fix, "fix", "Apply the safe automatic fixes to the files and report what remains. -fix=unsafe also applies the fixes which may change the behavior of the workflow. The files are rewritten in place")
 	flags.BoolVar(&migrateConfig, "migrate-config", false, "Rewrite the deprecated keys of the config file (.github/jactionlint.yaml or the file of -config-file) into the \"rules\" mapping")
 	flags.BoolVar(&noColor, "no-color", false, "Disable colorful output")
 	flags.BoolVar(&color, "color", false, "Always enable colorful output. This is useful to force colorful outputs")
@@ -193,6 +215,7 @@ func (cmd *Command) Main(args []string) int {
 	}
 	opts.MinSeverity = sev
 	opts.IgnorePatterns = ignorePats
+	opts.OnRulesCreated = cmd.onRulesCreated
 	opts.LogWriter = cmd.Stderr
 
 	if color {
@@ -202,7 +225,7 @@ func (cmd *Command) Main(args []string) int {
 		opts.Color = ColorOptionKindNever
 	}
 
-	errs, err := cmd.runLinter(flags.Args(), &opts, initConfig, migrateConfig)
+	errs, err := cmd.runLinter(flags.Args(), &opts, initConfig, migrateConfig, fix.mode)
 	if err != nil {
 		fmt.Fprintln(cmd.Stderr, err.Error())
 		return ExitStatusFailure

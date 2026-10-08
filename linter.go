@@ -318,8 +318,8 @@ func (l *Linter) LintRepository(dir string) ([]*Error, error) {
 	return l.LintDir(wd, p)
 }
 
-// LintDir lints all YAML workflow files in the given directory recursively.
-func (l *Linter) LintDir(dir string, project *Project) ([]*Error, error) {
+// collectWorkflowFiles returns the paths of all YAML files in the directory recursively in sorted order.
+func collectWorkflowFiles(dir string) ([]string, error) {
 	files := []string{}
 	if err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
@@ -339,10 +339,19 @@ func (l *Linter) LintDir(dir string, project *Project) ([]*Error, error) {
 	if len(files) == 0 {
 		return nil, fmt.Errorf("no YAML file was found in %q", dir)
 	}
-	l.log("Collected", len(files), "YAML files")
 
 	// To make output deterministic, sort order of file paths
 	sort.Strings(files)
+	return files, nil
+}
+
+// LintDir lints all YAML workflow files in the given directory recursively.
+func (l *Linter) LintDir(dir string, project *Project) ([]*Error, error) {
+	files, err := collectWorkflowFiles(dir)
+	if err != nil {
+		return nil, err
+	}
+	l.log("Collected", len(files), "YAML files")
 
 	return l.LintFiles(files, project)
 }
@@ -359,6 +368,32 @@ func (l *Linter) LintFiles(filepaths []string, project *Project) ([]*Error, erro
 		return l.LintFile(filepaths[0], project)
 	}
 
+	results, err := l.lintFilesQuietly(filepaths, project)
+	if err != nil {
+		return nil, err
+	}
+
+	total := 0
+	for _, r := range results {
+		total += len(r.errs)
+	}
+	all := make([]*Error, 0, total)
+	for _, r := range results {
+		all = append(all, r.errs...)
+	}
+	if err := l.printer.print(l.out, results); err != nil {
+		return nil, err
+	}
+
+	l.log("Found", total, "errors in", n, "files")
+
+	return all, nil
+}
+
+// lintFilesQuietly lints the files in parallel and returns the results without printing them. The
+// results are in the order of the file paths.
+func (l *Linter) lintFilesQuietly(filepaths []string, project *Project) ([]fileResult, error) {
+	n := len(filepaths)
 	l.log("Linting", n, "files")
 
 	cwd := l.cwd
@@ -370,15 +405,9 @@ func (l *Linter) LintFiles(filepaths []string, project *Project) ([]*Error, erro
 	acf := NewLocalActionsCacheFactory(dbg)
 	rwcf := NewLocalReusableWorkflowCacheFactory(cwd, dbg)
 
-	type workspace struct {
-		path string
-		errs []*Error
-		src  []byte
-	}
-
-	ws := make([]workspace, 0, len(filepaths))
+	ws := make([]fileResult, 0, len(filepaths))
 	for _, p := range filepaths {
-		ws = append(ws, workspace{path: p})
+		ws = append(ws, fileResult{file: p, path: p})
 	}
 
 	eg := errgroup.Group{}
@@ -434,25 +463,7 @@ func (l *Linter) LintFiles(filepaths []string, project *Project) ([]*Error, erro
 	// called safely.
 	proc.wait()
 
-	total := 0
-	for i := range ws {
-		total += len(ws[i].errs)
-	}
-
-	all := make([]*Error, 0, total)
-	results := make([]fileResult, 0, len(ws))
-	for i := range ws {
-		w := &ws[i]
-		results = append(results, fileResult{w.path, w.src, w.errs})
-		all = append(all, w.errs...)
-	}
-	if err := l.printer.print(l.out, results); err != nil {
-		return nil, err
-	}
-
-	l.log("Found", total, "errors in", n, "files")
-
-	return all, nil
+	return ws, nil
 }
 
 // LintFile lints one YAML workflow file and outputs the errors to given writer. The project
@@ -471,6 +482,7 @@ func (l *Linter) LintFile(path string, project *Project) ([]*Error, error) {
 		return nil, fmt.Errorf("could not read %q: %w", path, err)
 	}
 
+	origPath := path
 	if l.cwd != "" {
 		if r, err := filepath.Rel(l.cwd, path); err == nil {
 			path = r
@@ -487,7 +499,7 @@ func (l *Linter) LintFile(path string, project *Project) ([]*Error, error) {
 		return nil, err
 	}
 
-	if err := l.printer.print(l.out, []fileResult{{path, src, errs}}); err != nil {
+	if err := l.printer.print(l.out, []fileResult{{file: origPath, path: path, src: src, errs: errs}}); err != nil {
 		return nil, err
 	}
 	return errs, nil
@@ -527,7 +539,7 @@ func (l *Linter) Lint(path string, content []byte, project *Project) ([]*Error, 
 	if err != nil {
 		return nil, err
 	}
-	if err := l.printer.print(l.out, []fileResult{{path, content, errs}}); err != nil {
+	if err := l.printer.print(l.out, []fileResult{{file: path, path: path, src: content, errs: errs}}); err != nil {
 		return nil, err
 	}
 	return errs, nil
