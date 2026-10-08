@@ -30,6 +30,14 @@ A `migrate` command is planned to rewrite an existing configuration file:
 jactionlint -migrate-config
 ```
 
+## Planned: autofix and hk
+
+v2 plans an autofix mode, `jactionlint -fix [files]`, which applies only safe, mechanical fixes, is idempotent and re-lints
+afterwards. `-format sarif` will carry the same fixes (rule ID, level, start and end positions, replacements), so
+[hk](https://hk.jdx.dev) can use jactionlint as a fixer: `hk check` shows diagnostics with rule IDs, and `hk fix` applies the
+patch derived from the SARIF fixes, falling back to `jactionlint -fix` when some findings have no fix. Unsafe fixes are
+never part of the SARIF output and need an explicit `-fix=unsafe`.
+
 ## Related
 
 - [zizmor parity](zizmor-parity.md): the per-audit tracking of planned security and policy rules.
