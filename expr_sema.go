@@ -1208,3 +1208,12 @@ func (sema *ExprSemanticsChecker) IsConstant(expr ExprNode) bool {
 		panic("unreachable")
 	}
 }
+
+func init() {
+	registerRules(
+		RuleInfo{ID: "context-availability", Group: RuleGroupCorrectness, Summary: "A context or special function is used where it is not available.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "ctx-spfunc-availability"},
+		RuleInfo{ID: "invalid-function-call", Group: RuleGroupCorrectness, Summary: "A built-in function is called with wrong arguments.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-contexts-and-builtin-func"},
+		RuleInfo{ID: "undefined-function", Group: RuleGroupCorrectness, Summary: "An undefined function is called in an expression.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-contexts-and-builtin-func"},
+		RuleInfo{ID: "undefined-property", Group: RuleGroupCorrectness, Summary: "An undefined variable or property is accessed in an expression.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-contexts-and-builtin-func"},
+	)
+}

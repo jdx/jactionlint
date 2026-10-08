@@ -42,3 +42,12 @@ func (rule *RuleCredentials) checkContainer(where string, n *Container) {
 		rule.ReportIDf("hardcoded-container-credentials", p.Pos, "\"password\" section in %s should be specified via secrets. do not put password value directly", where)
 	}
 }
+
+func init() {
+	registerRules(
+		RuleInfo{ID: "hardcoded-container-credentials", Group: RuleGroupSecurity, Summary: "A password for a container registry is written directly in the workflow.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-hardcoded-credentials"},
+	)
+	registerRuleFactory("credentials", func(env *RuleEnv) []Rule {
+		return []Rule{NewRuleCredentials()}
+	})
+}

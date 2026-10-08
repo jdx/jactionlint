@@ -1,9 +1,9 @@
 package jactionlint
 
 import (
-	"errors"
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 )
 
@@ -115,93 +115,34 @@ func RuleDocURL(id string) string {
 	return "https://jactionlint.jdx.dev/rules#" + id
 }
 
-// ruleRegistry is every rule ID jactionlint reports. Keep it sorted by ID. TestRuleIDsAreStable
+// ruleRegistry is every rule ID jactionlint reports, sorted by ID. Rules add themselves from an init
+// function in their own file with registerRules; nothing else lists them. TestRuleIDsAreStable
 // guards the IDs: an ID must never be removed or renamed once released.
-var ruleRegistry = []RuleInfo{
-	{ID: "conflicting-runner-labels", Group: RuleGroupCorrectness, Summary: "The runner labels of a job conflict with each other.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-runner-labels"},
-	{ID: "constant-condition", Group: RuleGroupCorrectness, Summary: "An if: condition is a constant expression.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "if-cond-constant"},
-	{ID: "context-availability", Group: RuleGroupCorrectness, Summary: "A context or special function is used where it is not available.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "ctx-spfunc-availability"},
-	{ID: "cron-too-frequent", Group: RuleGroupCorrectness, Summary: "A scheduled job runs more often than once every 5 minutes.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-cron-syntax-and-timezone"},
-	{ID: "cyclic-job-needs", Group: RuleGroupCorrectness, Summary: "Jobs depend on each other in a cycle.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-job-deps"},
-	{ID: "deprecated-action-input", Group: RuleGroupCorrectness, Summary: "A deprecated input of an action is used.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "deprecated-inputs-usage"},
-	{ID: "deprecated-commands", Group: RuleGroupCorrectness, Summary: "A deprecated workflow command such as ::set-output is used.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-deprecated-workflow-commands"},
-	{ID: "duplicate-job-id", Group: RuleGroupCorrectness, Summary: "A job ID is defined more than once.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-job-deps"},
-	{ID: "duplicate-job-needs", Group: RuleGroupCorrectness, Summary: "A job ID is listed more than once in needs.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-job-deps"},
-	{ID: "duplicate-key", Group: RuleGroupCorrectness, Summary: "A key is defined more than once in a mapping.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-missing-required-duplicate-keys"},
-	{ID: "duplicate-step-id", Group: RuleGroupCorrectness, Summary: "A step ID is not unique within its job.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-job-step-ids"},
-	{ID: "expression-syntax", Group: RuleGroupCorrectness, Summary: "A ${{ }} expression has a syntax error.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-syntax-expression"},
-	{ID: "expression-type", Group: RuleGroupCorrectness, Summary: "A ${{ }} expression has a type error.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-type-check-expression"},
-	{ID: "hardcoded-container-credentials", Group: RuleGroupSecurity, Summary: "A password for a container registry is written directly in the workflow.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-hardcoded-credentials"},
-	{ID: "if-always-true", Group: RuleGroupCorrectness, Summary: "An if: condition is always true because of the characters around ${{ }}.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "if-cond-constant"},
-	{ID: "invalid-activity-type", Group: RuleGroupCorrectness, Summary: "An activity type is not available for the Webhook event.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-webhook-events"},
-	{ID: "invalid-cron", Group: RuleGroupCorrectness, Summary: "A cron schedule has an invalid format.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-cron-syntax-and-timezone"},
-	{ID: "invalid-env-var-name", Group: RuleGroupCorrectness, Summary: "An environment variable name contains characters which are not allowed.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-env-var-names"},
-	{ID: "invalid-event-config", Group: RuleGroupCorrectness, Summary: "An event is configured with options it does not support.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-webhook-events"},
-	{ID: "invalid-event-filter", Group: RuleGroupCorrectness, Summary: "An event filter is not available for the event or conflicts with another filter.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-webhook-events"},
-	{ID: "invalid-function-call", Group: RuleGroupCorrectness, Summary: "A built-in function is called with wrong arguments.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-contexts-and-builtin-func"},
-	{ID: "invalid-glob", Group: RuleGroupCorrectness, Summary: "A glob filter pattern is invalid.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-glob-pattern"},
-	{ID: "invalid-id", Group: RuleGroupCorrectness, Summary: "A job or step ID does not follow the naming convention.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "id-naming-convention"},
-	{ID: "invalid-ignore-comment", Group: RuleGroupCorrectness, Summary: "An inline ignore comment is invalid.", DefaultLevel: SeverityError, Profile: ProfileDefault},
-	{ID: "invalid-label-pattern", Group: RuleGroupCorrectness, Summary: "A runner label pattern in the configuration is not a valid glob.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-runner-labels"},
-	{ID: "invalid-local-action", Group: RuleGroupCorrectness, Summary: "A local action cannot be loaded or its metadata is invalid.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "action-metadata-syntax"},
-	{ID: "invalid-local-workflow", Group: RuleGroupCorrectness, Summary: "A local reusable workflow cannot be loaded or is invalid.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-reusable-workflows"},
-	{ID: "invalid-parallel-step", Group: RuleGroupCorrectness, Summary: "A step is not allowed inside a parallel group or refers to a wrong step.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-parallel-step-refs"},
-	{ID: "invalid-permissions", Group: RuleGroupCorrectness, Summary: "A permission scope or its value is invalid.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-permissions"},
-	{ID: "invalid-shell-name", Group: RuleGroupCorrectness, Summary: "A shell name is not available on the runner.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-shell-names"},
-	{ID: "invalid-timezone", Group: RuleGroupCorrectness, Summary: "A timezone of a schedule is not a valid IANA timezone name.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-cron-syntax-and-timezone"},
-	{ID: "invalid-uses", Group: RuleGroupCorrectness, Summary: "A uses: value does not follow the format of an action or a Docker image.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-action-format"},
-	{ID: "invalid-workflow-call", Group: RuleGroupCorrectness, Summary: "A reusable workflow call does not follow the format of a reusable workflow.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-reusable-workflows"},
-	{ID: "invalid-workflow-call-input", Group: RuleGroupCorrectness, Summary: "An input of the workflow_call event is invalid.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-reusable-workflows"},
-	{ID: "invalid-workflow-dispatch-input", Group: RuleGroupCorrectness, Summary: "An input of the workflow_dispatch event is invalid.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-workflow-dispatch-events"},
-	{ID: "local-action-checkout", Group: RuleGroupCorrectness, Summary: "A local action is used before any step checks out the repository.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-local-action-checkout"},
-	{ID: "matrix-duplicate-value", Group: RuleGroupCorrectness, Summary: "A matrix has a duplicate value.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-matrix-values"},
-	{ID: "matrix-invalid-exclude", Group: RuleGroupCorrectness, Summary: "An exclude entry of a matrix does not match the matrix.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-matrix-values"},
-	{ID: "max-run-lines", Group: RuleGroupStyle, Summary: "A run: script has more lines than allowed.", DefaultLevel: SeverityError, Profile: ProfileAll, DocsAnchor: "check-run-policy", Options: []RuleOption{{Name: "max", Kind: RuleOptionInt, Default: DefaultMaxRunLines, Summary: "The maximum number of non-blank lines of a run: script."}}},
-	{ID: "merge-key", Group: RuleGroupCorrectness, Summary: "The YAML merge key << is used, which GitHub Actions does not support.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "yaml-anchors"},
-	{ID: "missing-action-input", Group: RuleGroupCorrectness, Summary: "A required input of an action is not specified.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-local-action-inputs"},
-	{ID: "missing-permissions", Group: RuleGroupPolicy, Summary: "Neither the workflow nor the job sets permissions:.", DefaultLevel: SeverityError, Profile: ProfileStrict, DocsAnchor: "permissions"},
-	{ID: "missing-timeout", Group: RuleGroupPolicy, Summary: "A job does not set timeout-minutes.", DefaultLevel: SeverityError, Profile: ProfileStrict, DocsAnchor: "check-timeout-minutes"},
-	{ID: "missing-workflow-input", Group: RuleGroupCorrectness, Summary: "A required input of a reusable workflow is not specified.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-reusable-workflows"},
-	{ID: "missing-workflow-secret", Group: RuleGroupCorrectness, Summary: "A required secret of a reusable workflow is not passed.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-reusable-workflows"},
-	{ID: "outdated-action-runner", Group: RuleGroupCorrectness, Summary: "An action runs on a runtime which GitHub Actions no longer supports.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "detect-outdated-popular-actions"},
-	{ID: "pyflakes", Group: RuleGroupCorrectness, Summary: "pyflakes reported an issue in a Python script.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-pyflakes-integ"},
-	{ID: "recursive-alias", Group: RuleGroupCorrectness, Summary: "A YAML alias refers to itself.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "yaml-anchors"},
-	{ID: "require-expression-wrapping", Group: RuleGroupStyle, Summary: "An if: condition is not wrapped in ${{ }}.", DefaultLevel: SeverityError, Profile: ProfileAll, DocsAnchor: "check-require-expression-wrapping"},
-	{ID: "require-shell", Group: RuleGroupStyle, Summary: "A run: step does not set the shell explicitly.", DefaultLevel: SeverityError, Profile: ProfileAll, DocsAnchor: "check-run-policy"},
-	{ID: "required-actions", Group: RuleGroupPolicy, Summary: "An action listed in required-actions is not used by a workflow.", DefaultLevel: SeverityError},
-	{ID: "shellcheck", Group: RuleGroupCorrectness, Summary: "shellcheck reported an issue in a shell script.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-shellcheck-integ"},
-	{ID: "template-injection", Group: RuleGroupSecurity, Summary: "A potentially untrusted input is expanded in a script.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "untrusted-inputs"},
-	{ID: "timeout-too-long", Group: RuleGroupPolicy, Summary: "timeout-minutes of a job exceeds the configured maximum.", DefaultLevel: SeverityError, DocsAnchor: "check-timeout-minutes", Options: []RuleOption{{Name: "max", Kind: RuleOptionNumber, Summary: "The maximum allowed timeout-minutes. The rule does nothing without it."}}},
-	{ID: "undefined-function", Group: RuleGroupCorrectness, Summary: "An undefined function is called in an expression.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-contexts-and-builtin-func"},
-	{ID: "undefined-job-needs", Group: RuleGroupCorrectness, Summary: "A job needs a job which does not exist.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-job-deps"},
-	{ID: "undefined-property", Group: RuleGroupCorrectness, Summary: "An undefined variable or property is accessed in an expression.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-contexts-and-builtin-func"},
-	{ID: "unknown-action-input", Group: RuleGroupCorrectness, Summary: "An input which the action does not define is specified.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-local-action-inputs"},
-	{ID: "unknown-event", Group: RuleGroupCorrectness, Summary: "An unknown Webhook event is used.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-webhook-events"},
-	{ID: "unknown-runner-label", Group: RuleGroupCorrectness, Summary: "A runner label is unknown.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-runner-labels"},
-	{ID: "unknown-workflow-input", Group: RuleGroupCorrectness, Summary: "An input which the reusable workflow does not define is specified.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-reusable-workflows"},
-	{ID: "unknown-workflow-secret", Group: RuleGroupCorrectness, Summary: "A secret which the reusable workflow does not define is passed.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-reusable-workflows"},
-	{ID: "unpinned-uses", Group: RuleGroupPolicy, Summary: "An action, reusable workflow or Docker image is not pinned to a commit SHA or digest.", DefaultLevel: SeverityError, Profile: ProfileStrict, DocsAnchor: "check-action-format"},
-	{ID: "unsound-ternary", Group: RuleGroupCorrectness, Summary: "The a && b || c idiom has a falsy b so it always evaluates to c.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-falsy-ternary"},
-	{ID: "unused-anchor", Group: RuleGroupCorrectness, Summary: "A YAML anchor is defined but never used.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "yaml-anchors"},
-	{ID: "unused-ignore", Group: RuleGroupPolicy, Summary: "An inline ignore comment did not suppress anything.", DefaultLevel: SeverityError, Profile: ProfileStrict},
-	{ID: "workflow-call-permissions", Group: RuleGroupCorrectness, Summary: "A caller job grants fewer permissions than a reusable workflow requires.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-reusable-workflows"},
-	{ID: "workflow-input-type", Group: RuleGroupCorrectness, Summary: "The type of a value passed to a reusable workflow does not match its input.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-reusable-workflows"},
-	{ID: "workflow-run-names", Group: RuleGroupCorrectness, Summary: "A workflow_run event refers to a workflow which does not exist in the repository.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-workflow-run-names"},
-	{ID: "workflow-syntax", Group: RuleGroupCorrectness, Summary: "The workflow does not follow the syntax of GitHub Actions workflows.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-unexpected-keys"},
-	{ID: "yaml-syntax", Group: RuleGroupCorrectness, Summary: "The file is not valid YAML.", DefaultLevel: SeverityError, Profile: ProfileDefault},
+var ruleRegistry []RuleInfo
+
+// ruleIndex looks up a RuleInfo by ID. It is filled by registerRules.
+var ruleIndex = map[string]*RuleInfo{}
+
+// registerRules adds rules to the registry. It is meant to be called from init functions and panics
+// when a rule ID is registered twice, so a mistake is found by any test run.
+func registerRules(infos ...RuleInfo) {
+	for _, info := range infos {
+		if info.ID == "" {
+			panic("jactionlint: rule with empty ID is registered")
+		}
+		if _, ok := ruleIndex[info.ID]; ok {
+			panic("jactionlint: rule ID " + strconv.Quote(info.ID) + " is registered twice")
+		}
+		i, _ := slices.BinarySearchFunc(ruleRegistry, info.ID, func(r RuleInfo, id string) int { return strings.Compare(r.ID, id) })
+		ruleRegistry = slices.Insert(ruleRegistry, i, info)
+		p := info
+		ruleIndex[info.ID] = &p
+	}
 }
 
 // DefaultMaxRunLines is the maximum number of lines of a run: script which the max-run-lines rule
 // allows when it is enabled by a profile without the "max" option.
 const DefaultMaxRunLines = 100
-
-var ruleIndex = func() map[string]*RuleInfo {
-	m := make(map[string]*RuleInfo, len(ruleRegistry))
-	for i := range ruleRegistry {
-		m[ruleRegistry[i].ID] = &ruleRegistry[i]
-	}
-	return m
-}()
 
 // Rules returns the metadata of all rules sorted by ID. The returned slice is a copy.
 func Rules() []RuleInfo {
@@ -228,9 +169,9 @@ func (r *RuleInfo) option(name string) (RuleOption, bool) {
 	return RuleOption{}, false
 }
 
-// ruleContext is what the constructors of the built-in rules need to create rule instances while
-// linting one file.
-type ruleContext struct {
+// RuleEnv is what the constructors of the built-in rules need to create rule instances while linting
+// one file. A factory registered with registerRuleFactory receives it.
+type RuleEnv struct {
 	path                   string
 	project                *Project
 	localActions           *LocalActionsCache
@@ -239,82 +180,77 @@ type ruleContext struct {
 	shellcheck             string
 	pyflakes               string
 	proc                   *concurrentProcess
+
+	log  func(args ...interface{})
+	name string // the factory being run
 }
 
-// ruleFactory creates one rule implementation. A factory returns nil when the rule is not needed
-// for the file (e.g. its configuration is empty).
+// Skip reports with the debug log that the rule being created is disabled for the reason. A factory
+// calls it and returns nil when the rule cannot be created (e.g. an external command is missing).
+func (e *RuleEnv) Skip(reason string) {
+	if e.log != nil {
+		e.log("Rule \"" + e.name + "\" was disabled: " + reason)
+	}
+}
+
 type ruleFactory struct {
-	// kind is the name of the rule. Errors of the rule have it as Error.Kind.
-	kind string
-	new  func(ctx *ruleContext) (Rule, error)
+	// name is the name of the rule. Errors of the rule have it as Error.Kind.
+	name string
+	// new creates the rule instances for one file. It returns nothing when the rule is not needed for
+	// the file (e.g. its configuration is empty).
+	new func(env *RuleEnv) []Rule
 }
 
-func plainRule(kind string, f func(ctx *ruleContext) Rule) ruleFactory {
-	return ruleFactory{kind, func(ctx *ruleContext) (Rule, error) { return f(ctx), nil }}
+// legacyRuleOrder is the order the rules which existed before self-registration are applied in. The
+// order decides which of two errors at the same position comes first, so it is frozen to keep the
+// output stable. Rules which are not listed run after them, sorted by name. New rules must not be
+// added here.
+var legacyRuleOrder = []string{
+	"matrix", "credentials", "shell-name", "run-policy", "runner-label", "events", "workflow-run",
+	"job-needs", "parallel-steps", "action", "local-action-checkout", "env-var", "id", "glob",
+	"permissions", "timeout-check", "require-permissions", "workflow-call", "expression",
+	"deprecated-commands", "if-cond", "required-actions", "shellcheck", "pyflakes",
 }
 
-// ruleFactories is the list of all built-in rules in the order they are applied. The IDs which each
-// rule can report are in ruleRegistry.
-var ruleFactories = []ruleFactory{
-	plainRule("matrix", func(*ruleContext) Rule { return NewRuleMatrix() }),
-	plainRule("credentials", func(*ruleContext) Rule { return NewRuleCredentials() }),
-	plainRule("shell-name", func(*ruleContext) Rule { return NewRuleShellName() }),
-	plainRule("run-policy", func(*ruleContext) Rule { return NewRuleRunPolicy() }),
-	plainRule("runner-label", func(*ruleContext) Rule { return NewRuleRunnerLabel() }),
-	plainRule("events", func(*ruleContext) Rule { return NewRuleEvents() }),
-	plainRule("workflow-run", func(ctx *ruleContext) Rule { return NewRuleWorkflowRun(ctx.project) }),
-	plainRule("job-needs", func(*ruleContext) Rule { return NewRuleJobNeeds() }),
-	plainRule("parallel-steps", func(*ruleContext) Rule { return NewRuleParallelSteps() }),
-	plainRule("action", func(ctx *ruleContext) Rule { return NewRuleAction(ctx.localActions) }),
-	plainRule("local-action-checkout", func(*ruleContext) Rule { return NewRuleLocalActionCheckout() }),
-	plainRule("env-var", func(*ruleContext) Rule { return NewRuleEnvVar() }),
-	plainRule("id", func(*ruleContext) Rule { return NewRuleID() }),
-	plainRule("glob", func(*ruleContext) Rule { return NewRuleGlob() }),
-	plainRule("permissions", func(*ruleContext) Rule { return NewRulePermissions() }),
-	plainRule("timeout-check", func(*ruleContext) Rule { return NewRuleTimeoutCheck() }),
-	plainRule("require-permissions", func(*ruleContext) Rule { return NewRuleRequirePermissions() }),
-	plainRule("workflow-call", func(ctx *ruleContext) Rule {
-		return NewRuleWorkflowCall(ctx.path, ctx.localReusableWorkflows)
-	}),
-	plainRule("expression", func(ctx *ruleContext) Rule {
-		return NewRuleExpression(ctx.localActions, ctx.localReusableWorkflows)
-	}),
-	plainRule("deprecated-commands", func(*ruleContext) Rule { return NewRuleDeprecatedCommands() }),
-	plainRule("if-cond", func(*ruleContext) Rule { return NewRuleIfCond() }),
-	{"required-actions", func(ctx *ruleContext) (Rule, error) {
-		// Only add the rule if the config has required actions
-		if ctx.config == nil || len(ctx.config.RequiredActions) == 0 {
-			return nil, nil
+func ruleFactoryRank(name string) int {
+	if i := slices.Index(legacyRuleOrder, name); i >= 0 {
+		return i
+	}
+	return len(legacyRuleOrder)
+}
+
+// ruleFactories is the list of all built-in rules in the order they are applied. Rules add themselves
+// from an init function in their own file with registerRuleFactory.
+var ruleFactories []ruleFactory
+
+// registerRuleFactory registers the constructor of a rule implementation. It is meant to be called
+// from init functions. Rules are applied in a deterministic order (see legacyRuleOrder, then by
+// name) which does not depend on the order of the files. It panics when the name is registered
+// twice. The IDs which the rule reports are registered separately with registerRules.
+func registerRuleFactory(name string, f func(env *RuleEnv) []Rule) {
+	for _, r := range ruleFactories {
+		if r.name == name {
+			panic("jactionlint: rule factory " + strconv.Quote(name) + " is registered twice")
 		}
-		return NewRuleRequiredActions(ctx.config.RequiredActions), nil
-	}},
-	{"shellcheck", func(ctx *ruleContext) (Rule, error) {
-		if ctx.shellcheck == "" {
-			return nil, errors.New("shellcheck command name was empty")
+	}
+	nf := ruleFactory{name, f}
+	i, _ := slices.BinarySearchFunc(ruleFactories, nf, func(a, b ruleFactory) int {
+		if c := ruleFactoryRank(a.name) - ruleFactoryRank(b.name); c != 0 {
+			return c
 		}
-		return NewRuleShellcheck(ctx.shellcheck, ctx.proc)
-	}},
-	{"pyflakes", func(ctx *ruleContext) (Rule, error) {
-		if ctx.pyflakes == "" {
-			return nil, errors.New("pyflakes command name was empty")
-		}
-		return NewRulePyflakes(ctx.pyflakes, ctx.proc)
-	}},
+		return strings.Compare(a.name, b.name)
+	})
+	ruleFactories = slices.Insert(ruleFactories, i, nf)
 }
 
 // newBuiltinRules creates the built-in rules for linting one file. Rules which cannot be created
 // (e.g. because an external command is missing) are skipped after reporting the reason with log.
-func newBuiltinRules(ctx *ruleContext, log func(args ...interface{})) []Rule {
+func newBuiltinRules(env *RuleEnv, log func(args ...interface{})) []Rule {
+	env.log = log
 	rules := make([]Rule, 0, len(ruleFactories))
 	for _, f := range ruleFactories {
-		r, err := f.new(ctx)
-		if err != nil {
-			log("Rule \"" + f.kind + "\" was disabled: " + err.Error())
-			continue
-		}
-		if r != nil {
-			rules = append(rules, r)
-		}
+		env.name = f.name
+		rules = append(rules, f.new(env)...)
 	}
 	return rules
 }

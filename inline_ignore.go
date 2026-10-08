@@ -218,3 +218,10 @@ func isSequenceItem(line string) bool {
 	t := strings.TrimLeft(line, " \t")
 	return t == "-" || strings.HasPrefix(t, "- ") || strings.HasPrefix(t, "-\t")
 }
+
+func init() {
+	registerRules(
+		RuleInfo{ID: "invalid-ignore-comment", Group: RuleGroupCorrectness, Summary: "An inline ignore comment is invalid.", DefaultLevel: SeverityError, Profile: ProfileDefault},
+		RuleInfo{ID: "unused-ignore", Group: RuleGroupPolicy, Summary: "An inline ignore comment did not suppress anything.", DefaultLevel: SeverityError, Profile: ProfileStrict},
+	)
+}

@@ -329,3 +329,18 @@ func isWorkflowCallUsesRepoFormat(u string) bool {
 
 	return len(u) > 0
 }
+
+func init() {
+	registerRules(
+		RuleInfo{ID: "invalid-local-workflow", Group: RuleGroupCorrectness, Summary: "A local reusable workflow cannot be loaded or is invalid.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-reusable-workflows"},
+		RuleInfo{ID: "invalid-workflow-call", Group: RuleGroupCorrectness, Summary: "A reusable workflow call does not follow the format of a reusable workflow.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-reusable-workflows"},
+		RuleInfo{ID: "missing-workflow-input", Group: RuleGroupCorrectness, Summary: "A required input of a reusable workflow is not specified.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-reusable-workflows"},
+		RuleInfo{ID: "missing-workflow-secret", Group: RuleGroupCorrectness, Summary: "A required secret of a reusable workflow is not passed.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-reusable-workflows"},
+		RuleInfo{ID: "unknown-workflow-input", Group: RuleGroupCorrectness, Summary: "An input which the reusable workflow does not define is specified.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-reusable-workflows"},
+		RuleInfo{ID: "unknown-workflow-secret", Group: RuleGroupCorrectness, Summary: "A secret which the reusable workflow does not define is passed.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-reusable-workflows"},
+		RuleInfo{ID: "workflow-call-permissions", Group: RuleGroupCorrectness, Summary: "A caller job grants fewer permissions than a reusable workflow requires.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-reusable-workflows"},
+	)
+	registerRuleFactory("workflow-call", func(env *RuleEnv) []Rule {
+		return []Rule{NewRuleWorkflowCall(env.path, env.localReusableWorkflows)}
+	})
+}

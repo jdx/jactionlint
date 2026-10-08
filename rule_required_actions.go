@@ -163,3 +163,16 @@ func parseActionRef(uses string) (name string, version string) {
 	}
 	return name, version
 }
+
+func init() {
+	registerRules(
+		RuleInfo{ID: "required-actions", Group: RuleGroupPolicy, Summary: "An action listed in required-actions is not used by a workflow.", DefaultLevel: SeverityError},
+	)
+	registerRuleFactory("required-actions", func(env *RuleEnv) []Rule {
+		// Only add the rule if the config has required actions
+		if env.config == nil || len(env.config.RequiredActions) == 0 {
+			return nil
+		}
+		return []Rule{NewRuleRequiredActions(env.config.RequiredActions)}
+	})
+}

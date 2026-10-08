@@ -57,3 +57,12 @@ func (rule *RuleDeprecatedCommands) VisitStep(n *Step) error {
 	}
 	return nil
 }
+
+func init() {
+	registerRules(
+		RuleInfo{ID: "deprecated-commands", Group: RuleGroupCorrectness, Summary: "A deprecated workflow command such as ::set-output is used.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-deprecated-workflow-commands"},
+	)
+	registerRuleFactory("deprecated-commands", func(env *RuleEnv) []Rule {
+		return []Rule{NewRuleDeprecatedCommands()}
+	})
+}

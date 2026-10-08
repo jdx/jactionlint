@@ -187,3 +187,15 @@ func detectCyclicNode(v *jobNode) *edge {
 	v.status = nodeStatusFinished
 	return nil
 }
+
+func init() {
+	registerRules(
+		RuleInfo{ID: "cyclic-job-needs", Group: RuleGroupCorrectness, Summary: "Jobs depend on each other in a cycle.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-job-deps"},
+		RuleInfo{ID: "duplicate-job-id", Group: RuleGroupCorrectness, Summary: "A job ID is defined more than once.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-job-deps"},
+		RuleInfo{ID: "duplicate-job-needs", Group: RuleGroupCorrectness, Summary: "A job ID is listed more than once in needs.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-job-deps"},
+		RuleInfo{ID: "undefined-job-needs", Group: RuleGroupCorrectness, Summary: "A job needs a job which does not exist.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-job-deps"},
+	)
+	registerRuleFactory("job-needs", func(env *RuleEnv) []Rule {
+		return []Rule{NewRuleJobNeeds()}
+	})
+}
