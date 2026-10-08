@@ -147,6 +147,11 @@ func TestDefaultMapping(t *testing.T) {
 			t.Errorf("audit %q is not mapped", name)
 		}
 	}
+	// required-actions is the inverse check: its findings are not zizmor's forbidden-uses findings
+	fu := m.Audits["forbidden-uses"]
+	if len(fu.Jactionlint) != 1 || fu.Jactionlint[0].Rule != "forbidden-uses" || fu.covers(Finding{Rule: "required-actions"}) {
+		t.Errorf("forbidden-uses is mapped to %+v", fu.Jactionlint)
+	}
 	if m.Audits["hardcoded-container-credentials"].Coverage != "full" {
 		t.Error("hardcoded-container-credentials should be full")
 	}

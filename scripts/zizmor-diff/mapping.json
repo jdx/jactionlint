@@ -100,9 +100,9 @@
       ]
     },
     "forbidden-uses": {
-      "coverage": "full",
-      "notes": "allow and deny lists of repository patterns (rules.forbidden-uses.allow and deny). required-actions is the separate inverse check.",
-      "jactionlint": [{ "rule": "forbidden-uses" }, { "rule": "required-actions" }]
+      "coverage": "partial",
+      "notes": "allow and deny lists of repository patterns (rules.forbidden-uses.allow and deny); not measured against zizmor yet. required-actions is the separate inverse check and does not cover these findings.",
+      "jactionlint": [{ "rule": "forbidden-uses" }]
     }
   }
 }
