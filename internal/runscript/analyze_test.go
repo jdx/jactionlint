@@ -847,16 +847,19 @@ func TestNodeInstallFlags(t *testing.T) {
 
 func TestRefPinned(t *testing.T) {
 	for ref, want := range map[string]bool{
-		"0123abcd":       true,
-		"v1.2.3":         true,
-		"1.2.3-rc.1":     true,
-		"v2.0":           true,
-		"v1":             false, // moving major tag
-		"2024-release":   false,
-		"v1-nightly":     false,
-		"main":           false,
-		"release/v1.2.3": false,
-		"1.0-nightly":    true, // looks like a version, so it is taken as one
+		"0123abcd":        true,
+		"v1.2.3":          true,
+		"1.2.3-rc.1":      true,
+		"v2.0":            true,
+		"v1":              false, // moving major tag
+		"2024-release":    false,
+		"v1-nightly":      false,
+		"main":            false,
+		"release/v1.2.3":  false,
+		"1.0-nightly":     true, // looks like a version, so it is taken as one
+		"1.2.3-alpha-1":   true,
+		"v1.2.3-rc.1+b.5": true,
+		"1.2.3+build.5":   true,
 	} {
 		if have := refPinned(ref); have != want {
 			t.Errorf("refPinned(%q) = %v, want %v", ref, have, want)

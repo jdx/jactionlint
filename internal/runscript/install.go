@@ -78,7 +78,7 @@ var (
 	reHex        = regexp.MustCompile(`^[0-9a-fA-F]{7,64}$`)
 	// A version tag has at least a minor version. "v1" is a moving major tag, and "2024-release" or
 	// "v1-nightly" are names, not versions.
-	reTagLike = regexp.MustCompile(`^v?\d+(\.\d+)+([-+][0-9A-Za-z.]+)?$`)
+	reTagLike = regexp.MustCompile(`^v?\d+(\.\d+)+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$`)
 	rePyName  = regexp.MustCompile(`^([A-Za-z0-9][A-Za-z0-9._-]*)(\[[^\]]*\])?\s*(.*)$`)
 	reDigest  = regexp.MustCompile(`(sha256|sha384|sha512)[=:]|@sha256:`)
 )
