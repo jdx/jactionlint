@@ -312,7 +312,7 @@ func (p *parser) parseBool(n *yaml.Node) *Bool {
 	}
 
 	return &Bool{
-		Value: n.Value == "true",
+		Value: strings.EqualFold(n.Value, "true"),
 		Pos:   posAt(n),
 	}
 }
