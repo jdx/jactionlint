@@ -1,0 +1,11 @@
+on:
+  pull_request_target:
+    types: [opened]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "VERSION=$(cat version.txt)" >> "$GITHUB_ENV"
+      - run: echo "TITLE=$TITLE" >> "$GITHUB_ENV"
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
