@@ -65,11 +65,13 @@ func fixMissingPermissions(w *Workflow) *Fix {
 		return nil
 	}
 	line = end
+	// The new key goes at the indentation of the other keys of the root mapping
+	pad := strings.Repeat(" ", indent)
 	unit := strings.Repeat(" ", d.indentUnit())
 	return &Fix{
 		Description: "Add permissions: contents: read",
 		Unsafe:      !onlyReadsRepository(w),
-		Edits:       []TextEdit{d.insertAfterLine(line, "permissions:", unit+"contents: read")},
+		Edits:       []TextEdit{d.insertAfterLine(line, pad+"permissions:", pad+unit+"contents: read")},
 	}
 }
 

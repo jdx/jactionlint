@@ -134,3 +134,14 @@ func TestObfuscationOfExpressions(t *testing.T) {
 		})
 	}
 }
+
+// The constant conditions of if: belong to constant-condition.
+func TestObfuscationLeavesConstantIfToConstantCondition(t *testing.T) {
+	cfg := mustParseConfig(t, "rules:\n  obfuscation: warn\n")
+	for _, cond := range []string{"format('{0}', 'a')", "${{ format('{0}', 'a') }}"} {
+		src := "on: push\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo\n        if: " + cond + "\n"
+		if got := errsWithID(lintWithConfig(t, cfg, src), "obfuscation"); len(got) != 0 {
+			t.Errorf("%s: want no obfuscation finding but got %v", cond, got)
+		}
+	}
+}
