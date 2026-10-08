@@ -41,7 +41,7 @@ How to read the table:
 | `hardcoded-container-credentials` | existing check, [Hardcoded credentials](checks.md#check-hardcoded-credentials); ID assigned in Phase 1 | exists today, ID in Phase 1 | default | not yet assessed |
 | `impostor-commit` | `impostor-commit` | 3 / G | online | partial: same findings on the corpus; a repository with more than 1000 branches gives no verdict (100 without a token); see [online audits](#online-audits) |
 | `insecure-commands` | `insecure-commands` | 3 / A | default | partial: workflow, job and step `env` (not action.yml); fixable (unsafe) |
-| `insecure-url-scheme` | `insecure-url-scheme` (where applicable to dependabot.yml) | 3 / E | strict | not yet assessed |
+| `insecure-url-scheme` | `insecure-url-scheme` | 3 / K | default | none to compare: zizmor 1.30.1 applies it to the `repo:` URLs of `.pre-commit-config.yaml` only, which jactionlint does not lint. jactionlint's rule is a different one with the same ID: `http://`, `ftp://` and `git://` locations in `run:` scripts and `with:` inputs. [batch K measurements](#batch-k-measurements) |
 | `known-vulnerable-actions` | `known-vulnerable-actions` | 3 / G | online | partial: same findings on the corpus; branch refs are not judged; see [online audits](#online-audits) |
 | `misfeature` | `misfeature`, `misfeature-custom-shell` | 3 / C | strict, all | partial: `pip-install` of setup-python and `shell: cmd` (`misfeature`, 18 of 18 zizmor findings of the corpus). Shells that are not well known are `misfeature-custom-shell` (`all`, info), which zizmor reports in the auditor persona only and which is not compared. No composite actions yet |
 | `obfuscation` | `obfuscation` | 3 / C | strict | partial: redundant segments at `uses:`, constant expressions and `format()` of literals outside `if:`, `fromJSON(toJSON(x))` and computed indices. All zizmor findings of the corpus are reported (see [batch C](#batch-c-measurements)). Constants in `if:` are `constant-condition`; `fromJSON(toJSON(context))` is deliberately not reported; the `uses:` fix is unsafe. No composite actions yet |
@@ -65,6 +65,19 @@ How to read the table:
 | `unsound-contains` | `unsound-contains` | 3 / A | default | full on the synthetic cases; 0 findings on the corpus |
 | `unsound-ternary` | `unsound-ternary` | 3 / C | default | not yet assessed |
 | `use-trusted-publishing` | `use-trusted-publishing` | 3 / D | strict | not yet assessed |
+
+## Beyond zizmor
+
+These rules have no equivalent audit in zizmor 1.30.1. They are rules of jactionlint's own, so they are not part of the parity
+table above, and the differential harness (`scripts/zizmor-diff`) has no mapping for them. A finding of one of them is always
+"only jactionlint" in its report.
+
+| Rule | Profile | Level | What it finds | Closest zizmor audit |
+| --- | --- | --- | --- | --- |
+| [`unverified-download`](checks.md#check-unverified-download) | default | error | a download piped into a shell or an interpreter, a downloaded file made executable and run without a checksum or signature check, and TLS verification turned off for a download | none; the idea is zizmor [#711](https://github.com/zizmorcore/zizmor/issues/711) |
+| [`insecure-ssh-keyscan`](checks.md#check-insecure-ssh-keyscan) | default | error | `ssh-keyscan` output written to a `known_hosts` file | none; the idea is zizmor [#2012](https://github.com/zizmorcore/zizmor/issues/2012) |
+| [`checkout-static-credentials`](checks.md#check-checkout-static-credentials) | default | error | `actions/checkout` given an `ssh-key` or a literal `token` (and, with `secret-tokens`, a token from a secret other than `GITHUB_TOKEN`) | none; the idea is zizmor [#1118](https://github.com/zizmorcore/zizmor/issues/1118) |
+| [`insecure-url-scheme`](checks.md#check-insecure-url-scheme) | default | error | `http://`, `ftp://` and `git://` locations in `run:` downloads and in `with:` inputs | `insecure-url-scheme`, which only checks `repo:` URLs of `.pre-commit-config.yaml` |
 
 ## Batch B corpus measurements
 
@@ -283,3 +296,27 @@ in `default`.
 Behaviors of zizmor that were found only by this comparison, and are now reproduced: job names count for `anonymous-definition`;
 `concurrency-limits` skips workflows that only call reusable workflows; `secrets-outside-env` skips `workflow_call` workflows;
 `self-hosted-runner` reports the label only; `dangerous-triggers` exempts `actions/labeler` for `pull_request_target`.
+
+## Batch K measurements
+
+Batch K (downloads and credentials) was run over the workflows of the jdx repositories under `~/src` (146 distinct sets of
+workflows, 826 distinct files, many of them worktrees of the same repositories) and 1794 distinct workflow files of open source Go
+modules and other repositories. zizmor 1.30.1 (`--offline --persona pedantic`) was run over the first set too: it has no audit
+that overlaps with these rules (its `insecure-url-scheme` looks at `.pre-commit-config.yaml` only), so there is nothing to
+compare and no zizmor-only finding. All numbers are findings with the rules at their defaults, every finding was read.
+
+| Rule | jdx repositories (distinct) | other repositories | judged true | judged false |
+| --- | --: | --: | --: | --: |
+| `unverified-download` | 8 (`mise.run \| sh` 4, `setup.deb.sh \| bash`, a pinned `yq` and a `hugo.deb` without a checksum) | 29 (installer scripts piped into a shell, `releases/latest` binaries, `.deb` files installed without a checksum) | all | 0 |
+| `insecure-ssh-keyscan` | 0 | 2 (both `ssh-keyscan >> ~/.ssh/known_hosts`) | all | 0 |
+| `insecure-url-scheme` | 0 | 0 | n/a | n/a |
+| `checkout-static-credentials`, default | 0 | 0 | n/a | n/a |
+| `checkout-static-credentials`, `secret-tokens: true` | 12 (the `token:` of the release-plz and release workflows) | 0 | all, as designed | 0 |
+
+`checkout-static-credentials` reports a token from a secret only with `secret-tokens`: every one of the 12 distinct findings is a
+release workflow that has to push with a personal access token so that the push starts other workflows, which is deliberate. They are
+correct findings of the rule, but a profile that reports them for everybody would be noise for workflows that have no alternative
+besides a GitHub App, so that part is behind the option and `ssh-key` is not.
+
+jactionlint-only means all of them here. Gaps: archives that are downloaded, extracted and run, `go install` or `npx` of a remote
+package, `ssh -o StrictHostKeyChecking=no`, and a download whose verification is in another step are not reported.

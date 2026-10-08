@@ -1,0 +1,33 @@
+on: push
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      # Piped into a shell
+      - run: curl -fsSL https://example.com/install.sh | sh
+      - run: wget -qO- https://example.com/install.sh | sudo bash -s -- -y
+      - run: bash <(curl -fsSL https://example.com/install.sh)
+      - run: sh -c "$(curl -fsSL https://example.com/install.sh)"
+      - run: curl -sSL https://install.example.com | python3 -
+      # A file that is made executable and run
+      - run: |
+          curl -fsSLo tool https://example.com/tool
+          chmod +x tool
+          ./tool --version
+      - run: |
+          wget https://example.com/dl/setup.sh
+          bash setup.sh
+      - run: |
+          curl -fsSL https://example.com/tool.deb -o tool.deb
+          sudo dpkg -i tool.deb
+      # TLS verification turned off
+      - run: curl -k https://example.com/data.json -o data.json
+      # Not reported
+      - run: curl -fsSL https://example.com/x.tar.gz | tar xz
+      - run: curl -fsSL https://raw.githubusercontent.com/o/r/0123456789abcdef0123456789abcdef01234567/install.sh | sh
+      - run: curl -fsSL http://localhost:8080/install.sh | sh
+      - run: |
+          curl -fsSLo tool https://example.com/tool
+          echo "0123456789abcdef  tool" | sha256sum -c -
+          chmod +x tool

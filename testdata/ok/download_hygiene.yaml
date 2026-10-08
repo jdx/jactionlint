@@ -1,0 +1,39 @@
+# None of this is reported by unverified-download, insecure-ssh-keyscan, insecure-url-scheme or
+# checkout-static-credentials
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.RELEASE_PAT }}
+      - run: curl -fsSL https://example.com/x.tar.gz | tar xz
+      - run: curl -fsSL https://example.com/x.json | jq .
+      - run: curl -fsSL https://example.com/x | bash script.sh
+      - run: curl -fsSL https://raw.githubusercontent.com/o/r/0123456789abcdef0123456789abcdef01234567/install.sh | sh
+      - run: |
+          curl -fsSLo tool https://example.com/tool
+          curl -fsSLo tool.sha256 https://example.com/tool.sha256
+          sha256sum -c tool.sha256
+          chmod +x tool
+          ./tool
+      - run: |
+          curl -fsSLo tool https://example.com/tool
+          cosign verify-blob --signature tool.sig tool
+          sudo install -m 755 tool /usr/local/bin/tool
+      - run: |
+          ssh-keyscan example.com > keys
+          ssh-keygen -lf keys
+          cat keys >> ~/.ssh/known_hosts
+      - run: curl http://localhost:8080/health
+      - run: curl http://postgres:5432/
+      - run: Write-Host "curl https://example.com | sh"
+        shell: pwsh
+  windows:
+    runs-on: windows-latest
+    steps:
+      - run: curl http://example.com/x | sh

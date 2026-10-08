@@ -1,0 +1,21 @@
+on: push
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - run: curl -fsSL http://example.com/install.sh -o install.sh
+      - run: wget ftp://ftp.example.com/pub/tool.tar.gz
+      - run: git clone git://github.com/octo/repo
+      - run: pip install --index-url http://pypi.example.com/simple pkg
+      - uses: octo/repo@v1
+        with:
+          mirror: http://mirror.example.com/downloads
+      # Not reported
+      - run: curl -fsSL https://example.com/install.sh -o install.sh
+      - run: curl http://localhost:8080/health
+      - run: curl http://127.0.0.1:3000/ http://db:5432
+      - run: curl -x http://proxy.example.com:3128 https://example.com
+      - run: curl http://$HOST/x
+      - run: git config --global url."https://github.com/".insteadOf git://github.com/
+      - run: echo "see http://example.com/docs"

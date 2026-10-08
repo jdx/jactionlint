@@ -1,0 +1,6 @@
+on: push
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - run: ssh-keyscan deploy.example.com >> ~/.ssh/known_hosts
