@@ -257,7 +257,7 @@ func (rule *RuleCachePoisoning) VisitJobPre(n *Job) error {
 			continue
 		}
 		reads, hint := cacheActions[i].reads(a, ref)
-		if !reads || stepCacheIsConditional(s, a) {
+		if !reads || stepCacheIsConditional(s, a, name) {
 			continue
 		}
 		rule.ReportIDf(
@@ -270,14 +270,49 @@ func (rule *RuleCachePoisoning) VisitJobPre(n *Job) error {
 	return nil
 }
 
-// stepCacheIsConditional reports whether the step or the cache setting depends on the trigger, which
-// is how a workflow caches outside of releases only.
-func stepCacheIsConditional(s *Step, a *ExecAction) bool {
+// cacheGateInputs lists, for the actions of cacheActions, the inputs which decide whether the action uses
+// the cache at all. Only an expression in one of these can make the caching conditional on the trigger.
+// Everything else (key, restore-keys, versions, paths) is ignored: a release workflow often has github.ref
+// in a key or in node-version without the cache being off.
+//
+// Sources: the action.yml of each action. actions/cache and actions/cache/restore have none: their only
+// switch is the step's own "if:".
+//   - actions/setup-node, setup-python, setup-java, setup-dotnet, setup-go: "cache"
+//     (setup-node also "package-manager-cache", which turns the automatic caching of v5 off)
+//   - ruby/setup-ruby: "bundler-cache"
+//   - astral-sh/setup-uv: "enable-cache"
+//   - swatinem/rust-cache: "lookup-only" (its "save-if" only decides about saving, not about restoring)
+//   - jdx/mise-action: "cache"
+//   - gradle/actions/setup-gradle, gradle/gradle-build-action: "cache-disabled" ("cache-read-only" still
+//     restores)
+//   - docker/build-push-action: "cache-from"
+var cacheGateInputs = map[string][]string{
+	"actions/setup-node":                        {"cache", "package-manager-cache"},
+	"actions/setup-python":                      {"cache"},
+	"actions/setup-java":                        {"cache"},
+	"actions/setup-dotnet":                      {"cache"},
+	"actions/setup-go":                          {"cache"},
+	"ruby/setup-ruby":                           {"bundler-cache"},
+	"astral-sh/setup-uv":                        {"enable-cache"},
+	"swatinem/rust-cache":                       {"lookup-only"},
+	"jdx/mise-action":                           {"cache"},
+	"gradle/actions/setup-gradle":               {"cache-disabled"},
+	"gradle/gradle-build-action":                {"cache-disabled"},
+	"docker/build-push-action":                  {"cache-from"},
+	"actions/cache":                             nil,
+	"actions/cache/restore":                     nil,
+	"hendrikmuhs/ccache-action":                 nil,
+	"determinatesystems/magic-nix-cache-action": nil,
+}
+
+// stepCacheIsConditional reports whether the step or an input which controls the caching of the action
+// depends on the trigger, which is how a workflow caches outside of releases only.
+func stepCacheIsConditional(s *Step, a *ExecAction, name string) bool {
 	if s.If != nil && looksAtTrigger(s.If.Value) {
 		return true
 	}
-	for _, in := range a.Inputs {
-		if in != nil && in.Value != nil && cacheDisabledByExpression(in.Value.Value) {
+	for _, in := range cacheGateInputs[name] {
+		if v, ok := a.input(in); ok && cacheDisabledByExpression(v) {
 			return true
 		}
 	}
