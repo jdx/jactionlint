@@ -11,6 +11,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 )
 
 // countingClient wraps a GitHubClient and counts the calls.
@@ -262,62 +263,181 @@ func TestOnlineSkipsWhatItCannotJudge(t *testing.T) {
 	}
 }
 
-func TestSessionStopsAndWarnsOnce(t *testing.T) {
+func TestSessionSkipsFailedLookupsAndWarnsOncePerKind(t *testing.T) {
 	tests := []struct {
-		name   string
-		err    error
-		callsN int32 // requests until the session stopped
+		name    string
+		err     error
+		wantMsg string
+		// blocks is whether the session stops asking after the failures (the API cannot answer)
+		blocks bool
+		calls  int32
 	}{
-		{"rate limit", &GitHubRateLimitError{}, 1},
-		{"network", &net.DNSError{Err: "no such host", Name: "api.github.com"}, 1},
-		{"canceled", context.Canceled, 1},
-		{"server errors", &GitHubStatusError{Status: 502}, maxConsecutiveGitHubFailures},
-		{"unauthorized", &GitHubStatusError{Status: 401}, 1},
-		{"unknown error", errors.New("boom"), maxConsecutiveGitHubFailures},
+		{"server errors", &GitHubStatusError{Status: 502}, "502", true, maxConsecutiveGitHubFailures},
+		{"forbidden", &GitHubStatusError{Status: 403, Message: "blocked"}, "403", false, 20},
+		{"timeout", &net.OpError{Op: "dial", Err: timeoutErr{}}, "did not answer in time", true, maxConsecutiveGitHubFailures},
+		{"dns", &net.DNSError{Err: "no such host", Name: "api.github.com"}, "no such host", true, 1},
+		{"unauthorized", &GitHubStatusError{Status: 401}, "rejected the token", true, 1},
+		{"rate limit", &GitHubRateLimitError{Reset: time.Now().Add(time.Hour)}, "rate limit", true, 1},
+		{"not found", fmt.Errorf("x: %w", ErrGitHubNotFound), "not found on GitHub", false, 20},
+		{"not cached", fmt.Errorf("x: %w", ErrGitHubNotCached), "no cached answer", false, 20},
+		{"unknown error", errors.New("boom"), "boom", true, maxConsecutiveGitHubFailures},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			c := &failingClient{err: tc.err}
-			var warnings []string
+			var warnings, details []string
 			s := newOnlineSession(context.Background(), c, func(m string) { warnings = append(warnings, m) })
+			s.detail = func(f string, a ...any) { details = append(details, fmt.Sprintf(f, a...)) }
 			for i := 0; i < 20; i++ {
 				s.Repository("o", fmt.Sprintf("r%d", i))
 			}
-			if got := c.n.Load(); got != tc.callsN {
-				t.Errorf("the client was called %d times. want %d", got, tc.callsN)
+			if got := c.n.Load(); got != tc.calls {
+				t.Errorf("the client was called %d times. want %d", got, tc.calls)
 			}
-			if len(warnings) != 1 || !strings.Contains(warnings[0], "stopped") {
-				t.Errorf("want one warning but got %q", warnings)
+			if len(warnings) != 1 || !strings.Contains(warnings[0], tc.wantMsg) {
+				t.Errorf("want one warning containing %q but got %q", tc.wantMsg, warnings)
 			}
-			if s.stopped() == nil {
-				t.Error("the session should be stopped")
+			if got := s.skippedLookups(); got != 20 {
+				t.Errorf("every lookup of the 20 is skipped and counted. got %d", got)
+			}
+			if len(details) != 20 {
+				t.Errorf("-verbose names every skipped lookup: got %d lines", len(details))
+			}
+			if (s.blockedErr() != nil) != tc.blocks {
+				t.Errorf("blocked = %v. want %v", s.blockedErr() != nil, tc.blocks)
+			}
+			if s.stopped() != nil {
+				t.Error("a failed lookup does not stop the run")
 			}
 		})
 	}
 }
 
-func TestSessionToleratesNotFoundAndRecovers(t *testing.T) {
-	c := &failingClient{err: fmt.Errorf("x: %w", ErrGitHubNotFound)}
+type timeoutErr struct{}
+
+func (timeoutErr) Error() string   { return "i/o timeout" }
+func (timeoutErr) Timeout() bool   { return true }
+func (timeoutErr) Temporary() bool { return true }
+
+func TestSessionCanceledStops(t *testing.T) {
+	c := &failingClient{err: context.Canceled}
 	var warnings []string
 	s := newOnlineSession(context.Background(), c, func(m string) { warnings = append(warnings, m) })
-	for i := 0; i < 10; i++ {
-		if _, err := s.Repository("o", fmt.Sprintf("r%d", i)); !errors.Is(err, ErrGitHubNotFound) {
-			t.Fatal(err)
+	for i := 0; i < 5; i++ {
+		s.Repository("o", fmt.Sprintf("r%d", i))
+	}
+	if c.n.Load() != 1 || len(warnings) != 1 || !strings.Contains(warnings[0], "stopped") || s.stopped() == nil {
+		t.Errorf("calls %d, warnings %q", c.n.Load(), warnings)
+	}
+}
+
+func TestSessionOneFailureDoesNotHideTheOthers(t *testing.T) {
+	// The repository "bad" fails in every way a single repository can; the others are answered
+	for _, bad := range []error{
+		fmt.Errorf("x: %w", ErrGitHubNotFound),
+		&GitHubStatusError{Status: 403},
+		&GitHubStatusError{Status: 500},
+		&net.OpError{Op: "read", Err: timeoutErr{}},
+	} {
+		good := onlineFixtureClient(t)
+		c := &selectiveClient{GitHubClient: good, failFor: "bad", err: bad}
+		var warnings []string
+		s := newOnlineSession(context.Background(), c, func(m string) { warnings = append(warnings, m) })
+		if _, err := s.Repository("o", "bad"); err == nil {
+			t.Fatal("the bad lookup must fail")
+		}
+		for i := 0; i < 5; i++ {
+			if _, err := s.Repository("actions", "checkout"); err != nil {
+				t.Errorf("%v: a good lookup after a failed one must work: %v", bad, err)
+			}
+			s.Tags("actions", "checkout")
+		}
+		if len(warnings) != 1 {
+			t.Errorf("%v: want one warning but got %q", bad, warnings)
+		}
+		if s.skippedLookups() != 1 {
+			t.Errorf("%v: want one skipped lookup but got %d", bad, s.skippedLookups())
 		}
 	}
-	if len(warnings) != 0 || s.stopped() != nil {
-		t.Errorf("missing repositories are normal: %q", warnings)
-	}
+}
 
+type selectiveClient struct {
+	GitHubClient
+	failFor string
+	err     error
+}
+
+func (c *selectiveClient) Repository(ctx context.Context, o, r string) (*GitHubRepo, error) {
+	if r == c.failFor {
+		return nil, c.err
+	}
+	return c.GitHubClient.Repository(ctx, o, r)
+}
+
+func TestSessionRateLimitBlocksUntilReset(t *testing.T) {
+	reset := time.Now().Add(50 * time.Millisecond)
+	c := &failingClient{err: &GitHubRateLimitError{Reset: reset}}
+	s := newOnlineSession(context.Background(), c, nil)
+	s.Repository("o", "a")
+	s.Repository("o", "b")
+	if c.n.Load() != 1 {
+		t.Fatalf("the session must not ask while the limit holds: %d calls", c.n.Load())
+	}
+	time.Sleep(80 * time.Millisecond)
+	s.Repository("o", "c")
+	if c.n.Load() != 2 {
+		t.Errorf("the session should ask again after the reset: %d calls", c.n.Load())
+	}
+}
+
+func TestSessionAllowAndDenyLists(t *testing.T) {
+	c := &countingClient{GitHubClient: onlineFixtureClient(t)}
+	var warnings []string
+	s := newOnlineSession(context.Background(), c, func(m string) { warnings = append(warnings, m) })
+	s.allow = []string{"actions/*", "Docker/Login-Action"}
+	s.deny = []string{"actions/setup-*"}
+	for _, tc := range []struct {
+		owner, repo string
+		want        bool
+	}{
+		{"actions", "checkout", true},
+		{"Actions", "Checkout", true},
+		{"actions", "setup-node", false}, // deny wins
+		{"mycorp", "private-action", false},
+	} {
+		_, err := s.Repository(tc.owner, tc.repo)
+		if excluded := errors.Is(err, errOnlineExcluded); excluded == tc.want {
+			t.Errorf("%s/%s: excluded = %v", tc.owner, tc.repo, excluded)
+		}
+	}
+	if !s.allows("docker", "login-action") || s.allows("docker", "other") {
+		t.Error("patterns match case-insensitively and exactly")
+	}
+	if len(warnings) != 0 || s.skippedLookups() != 0 {
+		t.Errorf("an excluded lookup is not a failure: %q, %d", warnings, s.skippedLookups())
+	}
+	if _, _, err := s.TagCommit("mycorp", "x", "v1"); !errors.Is(err, errOnlineExcluded) {
+		t.Errorf("TagCommit: %v", err)
+	}
+	if _, err := s.Advisories("mycorp", "x", ""); !errors.Is(err, errOnlineExcluded) {
+		t.Errorf("Advisories: %v", err)
+	}
+}
+
+func TestSessionRecoversBetweenFailures(t *testing.T) {
 	// Two failures and a success: the failures do not add up
+	var warnings []string
 	var n atomic.Int32
 	mixed := &flakyClient{GitHubClient: onlineFixtureClient(t), fail: func() bool { return n.Add(1)%3 != 0 }}
-	s = newOnlineSession(context.Background(), mixed, func(m string) { warnings = append(warnings, m) })
+	s := newOnlineSession(context.Background(), mixed, func(m string) { warnings = append(warnings, m) })
 	for i := 0; i < 9; i++ {
 		s.Tags("actions", fmt.Sprintf("checkout%d", i)) // Different repositories: no memoization
 	}
-	if len(warnings) != 0 || s.stopped() != nil {
+	if len(warnings) != 1 || s.blockedErr() != nil {
 		t.Errorf("failures separated by successes must not stop the session: %q", warnings)
+	}
+	if s.skippedLookups() != 6 {
+		t.Errorf("six of nine lookups failed: %d", s.skippedLookups())
 	}
 }
 

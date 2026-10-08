@@ -167,6 +167,12 @@ type Config struct {
 	// Online turns on the online checks (see LinterOptions.Online) for the files this configuration
 	// applies to, like the -online flag does for the whole run. They query the GitHub API.
 	Online bool `yaml:"online"`
+	// OnlineOptions tunes the online checks: the mode ("cache" for offline use from the disk cache,
+	// "strict" to fail when a lookup is skipped), the API URL of GitHub Enterprise Server, where the
+	// token comes from, which repositories may be looked up, and the cache and retry behavior. A mode
+	// of "cache" or "strict" turns the online checks on. They apply to the whole run: the first file
+	// checked decides.
+	OnlineOptions OnlineOptions `yaml:"online-options"`
 	// Rules sets the level and the options of each rule by rule ID. A rule not listed here follows the
 	// profile.
 	Rules map[string]RuleConfig `yaml:"rules"`
@@ -217,6 +223,11 @@ type Config struct {
 	// present records which keys were written explicitly so that merging with the files listed in
 	// "extends" can tell a missing key from a zero value.
 	present map[string]bool
+	// userOwned is true for a config the user chose (the user-global file, -config-file or
+	// LinterOptions.Config) and false for the file of a repository, which anyone who can open a pull
+	// request controls. Only a user-owned config may point the online checks at a host which receives
+	// the token.
+	userOwned bool
 }
 
 // AssumeDefaultPermissionsRestricted is the config value enabling the restricted-default assumption.
@@ -307,6 +318,9 @@ func parseConfig(b []byte) (*Config, error) {
 			return nil, fmt.Errorf("invalid value %q for \"assume-default-permissions\". available values are %q and %q", *c.AssumeDefaultPermissions, AssumeDefaultPermissionsRestricted, AssumeDefaultPermissionsPermissive)
 		}
 	}
+	if err := c.OnlineOptions.validate(); err != nil {
+		return nil, fmt.Errorf("%w in \"online-options\"", err)
+	}
 	if err := c.normalizeRules(); err != nil {
 		return nil, err
 	}
@@ -387,6 +401,9 @@ func (c *Config) merge(over *Config) {
 	}
 	if over.present["online"] {
 		c.Online = over.Online
+	}
+	if over.present["online-options"] {
+		c.OnlineOptions = c.OnlineOptions.overlay(over.OnlineOptions)
 	}
 	if over.present["self-hosted-runner.labels"] {
 		c.SelfHostedRunner.Labels = over.SelfHostedRunner.Labels

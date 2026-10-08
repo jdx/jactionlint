@@ -9,12 +9,15 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math/rand/v2"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 )
 
@@ -22,25 +25,38 @@ const (
 	defaultGitHubAPIURL = "https://api.github.com"
 	// gitHubRequestTimeout bounds one request.
 	gitHubRequestTimeout = 20 * time.Second
-	// maxGitHubInFlight bounds the requests running at once. GitHub throttles bursts ("secondary rate
-	// limit") before the primary limit is reached.
-	maxGitHubInFlight = 6
 	// maxGitHubPages bounds how many pages of a list are read.
 	maxGitHubPages = 10
 	// maxGitHubBodyBytes bounds how much of an answer is read.
 	maxGitHubBodyBytes = 16 << 20
 	// maxTagDerefs bounds how many tag objects are followed to reach a commit.
 	maxTagDerefs = 5
+	// maxRateLimitWaits bounds how often one request waits for a primary rate limit to reset.
+	maxRateLimitWaits = 2
+	// backoffBase and backoffCap bound the exponential backoff between retries.
+	backoffBase = 500 * time.Millisecond
+	backoffCap  = 8 * time.Second
+	// unknownLimitWait is how long a rate limit of unknown length is assumed to last: GitHub asks
+	// to wait at least a minute when a secondary rate limit says nothing else.
+	unknownLimitWait = time.Minute
+	// maxAPIMessageBytes bounds the text of an API error message that is shown.
+	maxAPIMessageBytes = 200
 )
 
-// httpGitHubClient is the GitHubClient which talks to the GitHub REST API. It authenticates with
-// $GITHUB_TOKEN or $GH_TOKEN when one is set (unauthenticated requests work with a much lower rate
-// limit), reads $GITHUB_API_URL for GitHub Enterprise Server, and keeps answers in a diskCache:
-// an answer younger than the TTL is used as is, an older one is revalidated with its ETag (a 304
-// answer does not count against the rate limit of an authenticated client).
+// httpGitHubClient is the GitHubClient which talks to the GitHub REST API. It
 //
-// It never retries. After the API reports that the rate limit is reached, later requests fail
-// without a network call (answers in the cache, even expired ones, are still used).
+//   - authenticates with the token it is given (see tokenDiscovery) and sends it only to its own API
+//     host, never over plain http except to the loopback address, and never prints it,
+//   - keeps answers in a diskCache: an answer younger than the TTL is used as is, an older one is
+//     revalidated with its ETag (a 304 answer does not count against the rate limit of an
+//     authenticated client). Answers are keyed by API host and token, but a public answer fetched
+//     without a token is also used by a client with one,
+//   - reads X-RateLimit-* and Retry-After. A rate limit which resets within MaxWait is waited for;
+//     one which resets later makes the requests fail at once (without a network call) with an
+//     error naming the reset time. Answers in the cache, even expired ones, are still used,
+//   - retries server errors (500, 502, 503, 504), secondary rate limits and a request which timed out once
+//     with exponential backoff and jitter, a bounded number of times,
+//   - in the offline mode never uses the network: only cached answers are returned.
 type httpGitHubClient struct {
 	base   *url.URL
 	hc     *http.Client
@@ -52,6 +68,17 @@ type httpGitHubClient struct {
 	// graphql overrides the URL of the GraphQL API.
 	graphql string
 
+	offline     bool
+	retries     int
+	maxWait     time.Duration
+	tokenSource string
+	red         redactor
+
+	// Replaced by the tests to avoid real waiting.
+	now    func() time.Time
+	sleep  func(ctx context.Context, d time.Duration) error
+	jitter func(d time.Duration) time.Duration
+
 	mu          sync.Mutex
 	token       string
 	limit       *GitHubRateLimitError // set once the limit is reached
@@ -62,12 +89,22 @@ type httpGitHubClient struct {
 type httpGitHubOptions struct {
 	// Token is the access token. Empty means unauthenticated.
 	Token string
+	// TokenSource says where the token came from (a variable name or a file), for messages.
+	TokenSource string
 	// BaseURL is the URL of the API.
 	BaseURL string
 	// CacheDir is the directory of the cache. Empty disables caching.
 	CacheDir string
 	// TTL is how long cached answers are used without revalidation.
 	TTL time.Duration
+	// Offline makes the client answer from the cache only.
+	Offline bool
+	// Retries is how often a retryable failure is repeated. Nil means defaultOnlineRetries.
+	Retries *int
+	// MaxWait is the longest wait for a rate limit. Nil means defaultOnlineMaxWait.
+	MaxWait *time.Duration
+	// Concurrency is the number of requests in flight at most. Zero means defaultOnlineInFlight.
+	Concurrency int
 	// HTTPClient is used instead of the default one when set.
 	HTTPClient *http.Client
 	// Notify receives notices such as "no token set".
@@ -83,19 +120,89 @@ func newHTTPGitHubClient(o httpGitHubOptions) (*httpGitHubClient, error) {
 	if o.BaseURL == "" {
 		o.BaseURL = defaultGitHubAPIURL
 	}
-	base, err := url.Parse(strings.TrimRight(o.BaseURL, "/"))
-	if err != nil || (base.Scheme != "https" && base.Scheme != "http") || base.Host == "" {
-		return nil, fmt.Errorf("invalid GitHub API URL %q", o.BaseURL)
+	base, err := parseAPIURL(o.BaseURL)
+	if err != nil {
+		return nil, err
 	}
-	hc := o.HTTPClient
-	if hc == nil {
-		hc = &http.Client{Timeout: gitHubRequestTimeout}
+	hc := &http.Client{Timeout: gitHubRequestTimeout}
+	if o.HTTPClient != nil {
+		cp := *o.HTTPClient
+		hc = &cp
 	}
-	c := &httpGitHubClient{base: base, hc: hc, ttl: o.TTL, token: o.Token, notify: o.Notify, debug: o.Debug, graphql: o.GraphQLURL, sem: make(chan struct{}, maxGitHubInFlight)}
+	// Never follow a redirect to another host or to plain http: the token would follow it
+	prev := hc.CheckRedirect
+	hc.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+		if req.URL.Host != base.Host || (base.Scheme == "https" && req.URL.Scheme != "https") {
+			return errors.New("refusing to follow a redirect to another host")
+		}
+		if prev != nil {
+			return prev(req, via)
+		}
+		if len(via) >= 10 {
+			return errors.New("stopped after 10 redirects")
+		}
+		return nil
+	}
+	conc := o.Concurrency
+	if conc <= 0 {
+		conc = defaultOnlineInFlight
+	}
+	c := &httpGitHubClient{
+		base: base, hc: hc, ttl: o.TTL, token: o.Token, tokenSource: o.TokenSource, notify: o.Notify, debug: o.Debug,
+		sem: make(chan struct{}, min(conc, maxOnlineInFlight)), offline: o.Offline,
+		retries: defaultOnlineRetries, maxWait: defaultOnlineMaxWait,
+		now: time.Now, sleep: sleepContext, jitter: jitterBackoff,
+	}
+	if o.Retries != nil {
+		c.retries = max(*o.Retries, 0)
+	}
+	if o.MaxWait != nil {
+		c.maxWait = max(*o.MaxWait, 0)
+	}
+	c.red.add(o.Token)
+	if c.token != "" && !tokenIsSafeToSend(base) {
+		c.token = ""
+		c.noticef("not sending the token to %s because it is not https", base.Host)
+	}
+	if o.GraphQLURL != "" {
+		if gu, err := url.Parse(o.GraphQLURL); err == nil && gu.Host == base.Host && gu.Scheme == base.Scheme && gu.User == nil {
+			c.graphql = o.GraphQLURL
+		} else {
+			c.noticef("ignoring GITHUB_GRAPHQL_URL: it is not on the host of the REST API (%s)", base.Host)
+		}
+	}
 	if o.CacheDir != "" {
 		c.cache = newDiskCache(o.CacheDir, 0)
 	}
 	return c, nil
+}
+
+func sleepContext(ctx context.Context, d time.Duration) error {
+	if d <= 0 {
+		return ctx.Err()
+	}
+	t := time.NewTimer(d)
+	defer t.Stop()
+	select {
+	case <-t.C:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+// jitterBackoff returns a random duration in [d/2, d].
+func jitterBackoff(d time.Duration) time.Duration {
+	if d <= 1 {
+		return d
+	}
+	return d/2 + time.Duration(rand.Int64N(int64(d/2)+1))
+}
+
+// backoff is the wait before retry number attempt+1: 0.5s, 1s, 2s, ... up to 8s, with jitter.
+func (c *httpGitHubClient) backoff(attempt int) time.Duration {
+	d := backoffBase << min(attempt, 10)
+	return c.jitter(min(d, backoffCap))
 }
 
 // githubTokenFromEnv returns the token for the GitHub API from the environment.
@@ -108,21 +215,77 @@ func githubTokenFromEnv() string {
 	return ""
 }
 
-// newDefaultGitHubClient creates the client used by the jactionlint command: the token and API URL
-// come from the environment and the cache is in the user cache directory.
-func newDefaultGitHubClient(ttl time.Duration, notify func(string), debug func(string, ...any)) (GitHubClient, error) {
-	if ttl < 0 {
-
+// newDefaultGitHubClient creates the client used by the jactionlint command: the API URL and the token
+// come from the options and the environment and the cache is in the user cache directory.
+func newDefaultGitHubClient(o defaultClientOptions) (GitHubClient, error) {
+	apiURL := o.Options.APIURL
+	trusted := o.OptionsTrusted
+	if apiURL == "" {
+		apiURL = onlineAPIDefaults(os.Getenv)
+		trusted = true // The environment is the user's
 	}
-	return newHTTPGitHubClient(httpGitHubOptions{
-		Token:      githubTokenFromEnv(),
-		BaseURL:    os.Getenv("GITHUB_API_URL"),
-		GraphQLURL: os.Getenv("GITHUB_GRAPHQL_URL"),
-		CacheDir:   defaultGitHubCacheDir(),
-		TTL:        ttl,
-		Notify:     notify,
-		Debug:      debug,
-	})
+	base, err := parseAPIURL(orDefault(apiURL, defaultGitHubAPIURL))
+	if err != nil {
+		return nil, err
+	}
+	co := httpGitHubOptions{
+		BaseURL:     base.String(),
+		GraphQLURL:  os.Getenv("GITHUB_GRAPHQL_URL"),
+		CacheDir:    defaultGitHubCacheDir(),
+		TTL:         o.TTL,
+		Offline:     o.Options.Mode.Offline(),
+		Retries:     o.Options.Retries,
+		MaxWait:     o.Options.MaxRateLimitWait,
+		Concurrency: o.Options.Concurrency,
+		Notify:      o.Notify,
+		Debug:       o.Debug,
+	}
+	if !trusted {
+		// A repository chose the host: the GraphQL variable is the user's but only valid for its own host
+		co.GraphQLURL = ""
+	}
+	ctx := o.Context
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	useGH := o.Options.GitHubCLI == nil || *o.Options.GitHubCLI
+	d := tokenDiscovery{
+		host: base.Host, dotCom: base.Host == "api.github.com", trusted: trusted,
+		tokenEnv: o.Options.TokenEnv, tokenFile: o.Options.TokenFile, useGH: useGH,
+		getenv: os.Getenv, readFile: readTokenFileLimited, runGH: runGHAuthToken,
+	}
+	if d.dotCom {
+		d.host = "github.com"
+	}
+	tok, notices := d.discover(ctx)
+	for _, n := range notices {
+		if o.Notify != nil {
+			o.Notify(n)
+		}
+	}
+	co.Token, co.TokenSource = tok.token, tok.source
+	if o.Verbose != nil {
+		if tok.token != "" {
+			o.Verbose("online: using the token from %s for %s", tok.source, base.Host)
+		} else {
+			o.Verbose("online: no token for %s", base.Host)
+		}
+	}
+	return newHTTPGitHubClient(co)
+}
+
+func orDefault(s, def string) string {
+	if s == "" {
+		return def
+	}
+	return s
+}
+
+// httpResponse is one answer, read completely.
+type httpResponse struct {
+	status int
+	header http.Header
+	body   []byte
 }
 
 // httpAnswer is the answer of one request.
@@ -141,7 +304,7 @@ func (c *httpGitHubClient) currentToken() string {
 func (c *httpGitHubClient) rateLimited() *GitHubRateLimitError {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if c.limit != nil && !c.limit.Reset.IsZero() && time.Now().After(c.limit.Reset) {
+	if c.limit != nil && !c.limit.Reset.IsZero() && c.now().After(c.limit.Reset) {
 		c.limit = nil // The window has passed
 	}
 	return c.limit
@@ -150,13 +313,36 @@ func (c *httpGitHubClient) rateLimited() *GitHubRateLimitError {
 func (c *httpGitHubClient) setRateLimited(reset time.Time, authenticated bool) *GitHubRateLimitError {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.limit = &GitHubRateLimitError{Reset: reset, Authenticated: authenticated}
+	c.limit = &GitHubRateLimitError{Reset: reset, Authenticated: authenticated, now: c.now}
 	return c.limit
 }
 
 // answerFromEntry converts a cache entry to an answer.
 func answerFromEntry(e *cacheEntry) *httpAnswer {
 	return &httpAnswer{status: e.Status, body: e.Body, link: e.Link}
+}
+
+// scope tells apart the cached answers of different API hosts and credentials: private repositories
+// answer differently to different tokens.
+func (c *httpGitHubClient) scope(token string) string {
+	if token == "" {
+		return c.base.Host + "|anonymous"
+	}
+	return c.base.Host + "|token:" + cacheKey("token", token)
+}
+
+// lookup finds the cached answer of a request. A public answer fetched without a token (status 200)
+// also serves a client with a token, since a token cannot make public data differ; a cached "not
+// found" does not, because the token may see more.
+func (c *httpGitHubClient) lookup(u, token string) (entry *cacheEntry, key string) {
+	key = cacheKey(c.scope(token), u)
+	if entry = c.cache.get(key, u); entry != nil || token == "" {
+		return entry, key
+	}
+	if e := c.cache.get(cacheKey(c.scope(""), u), u); e != nil && e.Status == http.StatusOK {
+		return e, key
+	}
+	return nil, key
 }
 
 // get fetches an API URL (a path relative to the API, or an absolute URL of the same host).
@@ -167,26 +353,30 @@ func (c *httpGitHubClient) get(ctx context.Context, target string) (*httpAnswer,
 	}
 	pu, err := url.Parse(u)
 	if err != nil || pu.Host != c.base.Host || pu.Scheme != c.base.Scheme {
-		return nil, fmt.Errorf("refusing to request %q: not an URL of the GitHub API", target)
+		return nil, fmt.Errorf("refusing to request %q: not an URL of the GitHub API", c.red.redact(strings.SplitN(target, "?", 2)[0]))
 	}
 
 	token := c.currentToken()
-	scope := "anonymous"
-	if token != "" {
-		h := cacheKey("token", token)
-		scope = "token:" + h
-	}
-	key := cacheKey(scope, u)
-	entry := c.cache.get(key, u)
-	if entry != nil && c.ttl > 0 && time.Since(entry.Fetched) < c.ttl {
+	entry, key := c.lookup(u, token)
+	if entry != nil && (c.offline || (c.ttl > 0 && c.now().Sub(entry.Fetched) < c.ttl)) {
 		c.logf("GET %s: from the cache", target)
 		return answerFromEntry(entry), nil
 	}
+	if c.offline {
+		return nil, fmt.Errorf("%s: %w", strings.SplitN(target, "?", 2)[0], ErrGitHubNotCached)
+	}
 	if rl := c.rateLimited(); rl != nil {
-		if entry != nil {
-			return answerFromEntry(entry), nil // Stale data is better than none
+		wait := rl.Reset.Sub(c.now())
+		if rl.Reset.IsZero() || wait > c.maxWait {
+			if entry != nil {
+				return answerFromEntry(entry), nil // Stale data is better than none
+			}
+			return nil, rl
 		}
-		return nil, rl
+		c.logf("rate limit reached: waiting %s", wait.Round(time.Millisecond))
+		if err := c.sleep(ctx, wait+time.Second); err != nil {
+			return nil, err
+		}
 	}
 
 	select {
@@ -203,9 +393,8 @@ func (c *httpGitHubClient) get(ctx context.Context, target string) (*httpAnswer,
 	return ans, err
 }
 
-// do sends one request. retryAnon is true on the single repeat without the token after the token was
-// rejected.
-func (c *httpGitHubClient) do(ctx context.Context, u, token string, entry *cacheEntry, key string, retryAnon bool) (*httpAnswer, error) {
+// send sends one request and reads the whole answer.
+func (c *httpGitHubClient) send(ctx context.Context, u, token string, entry *cacheEntry) (*httpResponse, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
 		return nil, err
@@ -215,56 +404,163 @@ func (c *httpGitHubClient) do(ctx context.Context, u, token string, entry *cache
 	req.Header.Set("User-Agent", "jactionlint/"+getCommandVersion())
 	if token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
-	} else {
-		c.noticeAnonymous()
+	} else if c.currentToken() == "" {
+		c.noticeAnonymous() // Not when only this request goes without the token
 	}
 	if entry != nil && entry.ETag != "" && entry.Status == http.StatusOK {
 		req.Header.Set("If-None-Match", entry.ETag)
 	}
+	return c.roundTrip(req)
+}
 
+func (c *httpGitHubClient) roundTrip(req *http.Request) (*httpResponse, error) {
 	resp, err := c.hc.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("could not reach the GitHub API: %w", err)
+		return nil, c.wrapTransport(err)
 	}
 	defer resp.Body.Close()
 	body, err := io.ReadAll(io.LimitReader(resp.Body, maxGitHubBodyBytes+1))
 	if err != nil {
-		return nil, fmt.Errorf("could not read the answer of the GitHub API: %w", err)
+		return nil, c.wrapTransport(fmt.Errorf("could not read the answer: %w", err))
 	}
 	if len(body) > maxGitHubBodyBytes {
-		return nil, fmt.Errorf("the answer of the GitHub API for %s is too big", resp.Request.URL.Path)
+		return nil, &redactedError{msg: fmt.Sprintf("the answer of the GitHub API for %s is too big", resp.Request.URL.Path)}
 	}
+	return &httpResponse{status: resp.StatusCode, header: resp.Header, body: body}, nil
+}
 
-	c.noteRateLimit(resp, token != "")
-	c.logf("GET %s: %d (rate limit remaining: %s)", u, resp.StatusCode, resp.Header.Get("X-RateLimit-Remaining"))
+// wrapTransport makes the error of a request printable: the text is redacted and says what was
+// tried. The cause stays in the chain so that callers can tell a timeout from a failed DNS lookup.
+func (c *httpGitHubClient) wrapTransport(err error) error {
+	return &redactedError{msg: c.red.redact("could not reach the GitHub API: " + err.Error()), err: err}
+}
 
-	switch st := resp.StatusCode; {
-	case st == http.StatusNotModified && entry != nil:
-		entry.Fetched = time.Now()
-		c.cache.put(key, entry)
-		return answerFromEntry(entry), nil
-	case st == http.StatusOK:
-		e := &cacheEntry{URL: u, ETag: resp.Header.Get("ETag"), Fetched: time.Now(), Status: st, Link: resp.Header.Get("Link"), Body: body}
-		c.cache.put(key, e)
-		return answerFromEntry(e), nil
-	case st == http.StatusNotFound || st == http.StatusGone || st == http.StatusUnavailableForLegalReasons || st == http.StatusUnprocessableEntity:
-		// Remember that it does not exist for the TTL so that the same lookup is not repeated
-		c.cache.put(key, &cacheEntry{URL: u, Fetched: time.Now(), Status: st})
-		return &httpAnswer{status: st}, nil
-	case st == http.StatusUnauthorized && token != "" && !retryAnon:
-		c.dropToken()
-		return c.do(ctx, u, "", nil, cacheKey("anonymous", u), true)
-	case st == http.StatusForbidden || st == http.StatusTooManyRequests:
-		if rl := c.limitFromAnswer(resp, body, token != ""); rl != nil {
-			return nil, rl
+// retryableTransport reports whether a failed request may work when repeated: a timeout or a connection
+// which was cut. A name that does not resolve, a refused connection or a refused redirect will not
+// change in a second.
+func retryableTransport(err error) bool {
+	var dns *net.DNSError
+	switch {
+	case errors.As(err, &dns):
+		return dns.IsTimeout || dns.IsTemporary
+	case errors.Is(err, context.Canceled), errors.Is(err, syscall.ECONNREFUSED):
+		return false
+	case errors.Is(err, io.EOF), errors.Is(err, io.ErrUnexpectedEOF), errors.Is(err, syscall.ECONNRESET):
+		return true
+	}
+	var ne net.Error
+	return errors.As(err, &ne) && ne.Timeout()
+}
+
+// do sends a request and repeats it as the answer calls for. retryAnon is true on the single repeat
+// without the token after the token was rejected.
+func (c *httpGitHubClient) do(ctx context.Context, u, token string, entry *cacheEntry, key string, retryAnon bool) (*httpAnswer, error) {
+	limitWaits := 0
+	for attempt := 0; ; attempt++ {
+		res, err := c.send(ctx, u, token, entry)
+		if err != nil {
+			// A timeout is repeated once: a second timeout means the server is not answering
+			if attempt < min(c.retries, 1) && retryableTransport(err) && ctx.Err() == nil {
+				d := c.backoff(attempt)
+				c.logf("GET %s: %v. trying again in %s", u, err, d.Round(time.Millisecond))
+				if serr := c.sleep(ctx, d); serr != nil {
+					return nil, serr
+				}
+				continue
+			}
+			return nil, err
 		}
+
+		c.noteRateLimit(res, token != "")
+		c.logf("GET %s: %d (rate limit remaining: %s)", u, res.status, res.header.Get("X-RateLimit-Remaining"))
+
+		switch st := res.status; {
+		case st == http.StatusNotModified && entry != nil:
+			entry.Fetched = c.now()
+			c.cache.put(key, entry)
+			return answerFromEntry(entry), nil
+		case st == http.StatusOK:
+			e := &cacheEntry{URL: u, ETag: res.header.Get("ETag"), Fetched: c.now(), Status: st, Link: res.header.Get("Link"), Body: res.body}
+			c.cache.put(key, e)
+			return answerFromEntry(e), nil
+		case st == http.StatusNotFound || st == http.StatusGone || st == http.StatusUnavailableForLegalReasons || st == http.StatusUnprocessableEntity:
+			// Remember that it does not exist for the TTL so that the same lookup is not repeated
+			c.cache.put(key, &cacheEntry{URL: u, Fetched: c.now(), Status: st})
+			return &httpAnswer{status: st}, nil
+		case st == http.StatusUnauthorized && token != "" && !retryAnon:
+			c.dropToken()
+			return c.do(ctx, u, "", nil, cacheKey(c.scope(""), u), true)
+		case st == http.StatusForbidden || st == http.StatusTooManyRequests:
+			li := c.limitInfo(res)
+			if li.kind == limitNone {
+				// A token which may not read this repository (a fine-grained token or an app token
+				// scoped to other repositories) is refused even for public data: ask without it
+				// once. The token is kept for the other requests.
+				if st == http.StatusForbidden && token != "" && !retryAnon {
+					if ans, err := c.do(ctx, u, "", nil, cacheKey(c.scope(""), u), true); err == nil && ans.status == http.StatusOK {
+						return ans, nil
+					}
+				}
+				break
+			}
+			wait, ok := c.limitWait(li, attempt)
+			if ok && li.kind == limitPrimary {
+				ok = limitWaits < maxRateLimitWaits
+				limitWaits++
+			}
+			if ok && li.kind == limitSecondary {
+				ok = attempt < c.retries
+			}
+			if ok {
+				c.logf("GET %s: rate limited. trying again in %s", u, wait.Round(time.Millisecond))
+				if serr := c.sleep(ctx, wait); serr != nil {
+					return nil, serr
+				}
+				if li.kind == limitPrimary {
+					attempt-- // Waiting for a reset is not a retry
+				}
+				continue
+			}
+			reset := li.reset
+			if reset.IsZero() {
+				reset = c.now().Add(unknownLimitWait)
+			}
+			return nil, c.setRateLimited(reset, token != "")
+		case st == http.StatusInternalServerError || st == http.StatusBadGateway || st == http.StatusServiceUnavailable || st == http.StatusGatewayTimeout:
+			if attempt < c.retries {
+				d := c.backoff(attempt)
+				if ra, ok := parseRetryAfter(res.header.Get("Retry-After"), c.now()); ok && ra <= c.maxWait {
+					d = ra
+				}
+				c.logf("GET %s: %d. trying again in %s", u, st, d.Round(time.Millisecond))
+				if serr := c.sleep(ctx, d); serr != nil {
+					return nil, serr
+				}
+				continue
+			}
+		}
+		return nil, c.statusError(res)
 	}
-	return nil, &GitHubStatusError{Status: resp.StatusCode, Message: apiMessage(body)}
+}
+
+// statusError describes a failed answer. What the API said is redacted and cut short.
+func (c *httpGitHubClient) statusError(res *httpResponse) error {
+	msg := c.red.redact(apiMessage(res.body))
+	if len(msg) > maxAPIMessageBytes {
+		msg = msg[:maxAPIMessageBytes] + "..."
+	}
+	return &GitHubStatusError{Status: res.status, Message: msg}
 }
 
 func (c *httpGitHubClient) logf(format string, args ...any) {
 	if c.debug != nil {
-		c.debug(format, args...)
+		c.debug("%s", c.red.redact(fmt.Sprintf(format, args...)))
+	}
+}
+
+func (c *httpGitHubClient) noticef(format string, args ...any) {
+	if c.notify != nil {
+		c.notify(c.red.redact(fmt.Sprintf(format, args...)))
 	}
 }
 
@@ -273,8 +569,8 @@ func (c *httpGitHubClient) noticeAnonymous() {
 	first := !c.noticedAnon
 	c.noticedAnon = true
 	c.mu.Unlock()
-	if first && c.notify != nil {
-		c.notify("no GITHUB_TOKEN or GH_TOKEN is set so the online checks use unauthenticated requests, which GitHub limits to 60 per hour. set a token to raise the limit")
+	if first {
+		c.noticef("no token found (GITHUB_TOKEN, GH_TOKEN, -online-token-file or gh auth login) so the online checks use unauthenticated requests, which GitHub limits to 60 per hour. set a token to raise the limit")
 	}
 }
 
@@ -284,38 +580,101 @@ func (c *httpGitHubClient) dropToken() {
 	c.token = ""
 	c.noticedAnon = true // Not "no token is set": it was, and was refused
 	c.mu.Unlock()
-	if had && c.notify != nil {
-		c.notify("the token in GITHUB_TOKEN or GH_TOKEN was rejected by the GitHub API (401). continuing without it")
+	if had {
+		src := c.tokenSource
+		if src == "" {
+			src = "the environment"
+		}
+		c.noticef("the token from %s was rejected by the GitHub API (401). continuing without it", src)
 	}
 }
 
 // noteRateLimit remembers that the limit is used up when the answer says so, so that no request is
 // wasted afterwards.
-func (c *httpGitHubClient) noteRateLimit(resp *http.Response, authenticated bool) {
-	if resp.Header.Get("X-RateLimit-Remaining") != "0" {
+func (c *httpGitHubClient) noteRateLimit(res *httpResponse, authenticated bool) {
+	if res.header.Get("X-RateLimit-Remaining") != "0" {
 		return
 	}
-	if reset := parseResetHeader(resp.Header.Get("X-RateLimit-Reset")); !reset.IsZero() && time.Now().Before(reset) {
+	if reset := parseResetHeader(res.header.Get("X-RateLimit-Reset")); !reset.IsZero() && c.now().Before(reset) {
 		c.setRateLimited(reset, authenticated)
 	}
 }
 
-// limitFromAnswer returns the rate limit error when a 403 or 429 answer is about the rate limit. Other
-// 403 answers (a blocked repository, a missing scope) are ordinary failures.
-func (c *httpGitHubClient) limitFromAnswer(resp *http.Response, body []byte, authenticated bool) *GitHubRateLimitError {
-	retryAfter := resp.Header.Get("Retry-After")
-	msg := strings.ToLower(apiMessage(body))
-	if resp.Header.Get("X-RateLimit-Remaining") != "0" && retryAfter == "" && resp.StatusCode != http.StatusTooManyRequests && !strings.Contains(msg, "rate limit") {
-		return nil
+type limitKind int
+
+const (
+	limitNone limitKind = iota
+	// limitPrimary is the hourly quota. The answer says when it resets.
+	limitPrimary
+	// limitSecondary is the throttle on bursts. Retry-After says how long to wait, if anything.
+	limitSecondary
+)
+
+type limitDetails struct {
+	kind limitKind
+	// reset is when the limit ends. It is zero when unknown.
+	reset time.Time
+	// retryAfter is the wait the server asked for. It is zero when it said nothing.
+	retryAfter time.Duration
+}
+
+// limitInfo tells whether a 403 or 429 answer is about a rate limit. Other 403 answers (a blocked
+// repository, a missing scope) are ordinary failures.
+func (c *httpGitHubClient) limitInfo(res *httpResponse) limitDetails {
+	now := c.now()
+	ra, hasRA := parseRetryAfter(res.header.Get("Retry-After"), now)
+	msg := strings.ToLower(apiMessage(res.body))
+	remaining0 := res.header.Get("X-RateLimit-Remaining") == "0"
+	secondary := strings.Contains(msg, "secondary rate limit") || strings.Contains(msg, "abuse")
+	switch {
+	case !remaining0 && !hasRA && res.status != http.StatusTooManyRequests && !strings.Contains(msg, "rate limit") && !secondary:
+		return limitDetails{}
+	case hasRA || secondary || (res.status == http.StatusTooManyRequests && !remaining0):
+		d := limitDetails{kind: limitSecondary, retryAfter: ra}
+		if hasRA {
+			d.reset = now.Add(ra)
+		}
+		return d
 	}
-	reset := parseResetHeader(resp.Header.Get("X-RateLimit-Reset"))
-	if n, err := strconv.Atoi(retryAfter); err == nil && n >= 0 {
-		reset = time.Now().Add(time.Duration(n) * time.Second)
+	d := limitDetails{kind: limitPrimary, reset: parseResetHeader(res.header.Get("X-RateLimit-Reset"))}
+	if !d.reset.IsZero() && now.After(d.reset) {
+		d.reset = time.Time{}
 	}
-	if reset.IsZero() || time.Now().After(reset) {
-		reset = time.Now().Add(time.Minute) // Unknown: do not ask again for a minute
+	return d
+}
+
+// limitWait returns how long to wait before trying again, and whether to do it at all: the wait must
+// not exceed the maximum. A secondary limit that gave no time is retried with the exponential backoff.
+func (c *httpGitHubClient) limitWait(li limitDetails, attempt int) (time.Duration, bool) {
+	switch li.kind {
+	case limitSecondary:
+		if li.retryAfter > 0 {
+			return li.retryAfter + c.jitter(time.Second), li.retryAfter <= c.maxWait
+		}
+		return c.backoff(attempt), true
+	case limitPrimary:
+		if li.reset.IsZero() {
+			return 0, false
+		}
+		wait := li.reset.Sub(c.now())
+		return max(wait, 0) + time.Second, wait <= c.maxWait
 	}
-	return c.setRateLimited(reset, authenticated)
+	return 0, false
+}
+
+// parseRetryAfter parses the Retry-After header: seconds or an HTTP date.
+func parseRetryAfter(v string, now time.Time) (time.Duration, bool) {
+	v = strings.TrimSpace(v)
+	if v == "" {
+		return 0, false
+	}
+	if n, err := strconv.Atoi(v); err == nil && n >= 0 {
+		return time.Duration(n) * time.Second, true
+	}
+	if t, err := http.ParseTime(v); err == nil {
+		return max(t.Sub(now), 0), true
+	}
+	return 0, false
 }
 
 func parseResetHeader(v string) time.Time {
@@ -599,7 +958,7 @@ const branchScanQuery = `query($owner:String!,$name:String!,$sha:String!,$after:
 // is kept in the cache for the TTL like the answers of the REST API (a POST has no ETag).
 func (c *httpGitHubClient) CommitOnAnyBranch(ctx context.Context, owner, repo, sha string, limit int) (GitHubBranchScan, error) {
 	token := c.currentToken()
-	if token == "" {
+	if token == "" && !c.offline {
 		return GitHubBranchScan{}, ErrGitHubBranchScanUnavailable
 	}
 	if !reSafeRepoPart.MatchString(owner) || !reSafeRepoPart.MatchString(repo) || len(sha) != 40 {
@@ -608,13 +967,16 @@ func (c *httpGitHubClient) CommitOnAnyBranch(ctx context.Context, owner, repo, s
 	limit = max(limit, 1)
 	// The answer is cached like a GET under a name that cannot be a URL of the REST API
 	name := fmt.Sprintf("graphql:branch-scan:%s/%s@%s:%d", strings.ToLower(owner), strings.ToLower(repo), strings.ToLower(sha), limit)
-	key := cacheKey("token:"+cacheKey("token", token), name)
-	if e := c.cache.get(key, name); e != nil && c.ttl > 0 && time.Since(e.Fetched) < c.ttl {
+	key := cacheKey(c.scope(token), name)
+	if e := c.cache.get(key, name); e != nil && (c.offline || (c.ttl > 0 && c.now().Sub(e.Fetched) < c.ttl)) {
 		var scan GitHubBranchScan
 		if json.Unmarshal(e.Body, &scan) == nil {
 			c.logf("GraphQL %s: from the cache", name)
 			return scan, nil
 		}
+	}
+	if c.offline {
+		return GitHubBranchScan{}, ErrGitHubBranchScanUnavailable // Compared one by one from the cache
 	}
 	if rl := c.rateLimited(); rl != nil {
 		return GitHubBranchScan{}, rl
@@ -689,43 +1051,41 @@ func (c *httpGitHubClient) CommitOnAnyBranch(ctx context.Context, owner, repo, s
 	return scan, nil
 }
 
-// postGraphQL sends a GraphQL query.
+// postGraphQL sends a GraphQL query. The token goes only to the GraphQL URL, which is on the host of
+// the REST API.
 func (c *httpGitHubClient) postGraphQL(ctx context.Context, token, query string, vars map[string]any, out any) error {
 	body, err := json.Marshal(map[string]any{"query": query, "variables": vars})
 	if err != nil {
 		return err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.graphqlURL(), bytes.NewReader(body))
+	gu := c.graphqlURL()
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, gu, bytes.NewReader(body))
 	if err != nil {
 		return err
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("User-Agent", "jactionlint/"+getCommandVersion())
-	resp, err := c.hc.Do(req)
+	res, err := c.roundTrip(req)
 	if err != nil {
-		return fmt.Errorf("could not reach the GitHub API: %w", err)
+		return err
 	}
-	defer resp.Body.Close()
-	data, err := io.ReadAll(io.LimitReader(resp.Body, maxGitHubBodyBytes+1))
-	if err != nil {
-		return fmt.Errorf("could not read the answer of the GitHub API: %w", err)
-	}
-	if len(data) > maxGitHubBodyBytes {
-		return errors.New("the answer of the GitHub GraphQL API is too big")
-	}
-	c.noteRateLimit(resp, true)
-	c.logf("POST %s: %d (rate limit remaining: %s)", c.graphqlURL(), resp.StatusCode, resp.Header.Get("X-RateLimit-Remaining"))
-	switch resp.StatusCode {
+	c.noteRateLimit(res, true)
+	c.logf("POST %s: %d (rate limit remaining: %s)", gu, res.status, res.header.Get("X-RateLimit-Remaining"))
+	switch res.status {
 	case http.StatusOK:
-		return json.Unmarshal(data, out)
+		return json.Unmarshal(res.body, out)
 	case http.StatusUnauthorized:
 		c.dropToken()
 		return ErrGitHubBranchScanUnavailable // GraphQL needs a token. The REST API does not
 	case http.StatusForbidden, http.StatusTooManyRequests:
-		if rl := c.limitFromAnswer(resp, data, true); rl != nil {
-			return rl
+		if li := c.limitInfo(res); li.kind != limitNone {
+			reset := li.reset
+			if reset.IsZero() {
+				reset = c.now().Add(unknownLimitWait)
+			}
+			return c.setRateLimited(reset, true)
 		}
 	}
-	return &GitHubStatusError{Status: resp.StatusCode, Message: apiMessage(data)}
+	return c.statusError(res)
 }

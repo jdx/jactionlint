@@ -28,6 +28,14 @@ type fakeGitHub struct {
 	handlers map[string]http.HandlerFunc
 	hits     map[string]int // by path and query
 	auth     []string       // Authorization headers seen
+	sleeps   []time.Duration
+}
+
+// sleptFor returns the waits the clients of the server asked for. The tests never really wait.
+func (f *fakeGitHub) sleptFor() []time.Duration {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]time.Duration(nil), f.sleeps...)
 }
 
 func newFakeGitHub(t *testing.T) *fakeGitHub {
@@ -94,6 +102,13 @@ func (f *fakeGitHub) client(opts httpGitHubOptions) *httpGitHubClient {
 	c, err := newHTTPGitHubClient(opts)
 	if err != nil {
 		f.t.Fatal(err)
+	}
+	c.jitter = func(d time.Duration) time.Duration { return d }
+	c.sleep = func(ctx context.Context, d time.Duration) error {
+		f.mu.Lock()
+		f.sleeps = append(f.sleeps, d)
+		f.mu.Unlock()
+		return ctx.Err()
 	}
 	return c
 }
@@ -316,8 +331,19 @@ func TestHTTPClientServerErrorIsAnError(t *testing.T) {
 	if !errors.As(err, &se) || se.Status != 502 {
 		t.Errorf("want a status error but got %v", err)
 	}
-	if n := f.count("/repos/o/r"); n != 1 {
-		t.Errorf("a failed request must not be retried but got %d requests", n)
+	if n := f.count("/repos/o/r"); n != 3 {
+		t.Errorf("a server error is retried twice but got %d requests", n)
+	}
+	if got := f.sleptFor(); !reflect.DeepEqual(got, []time.Duration{500 * time.Millisecond, time.Second}) {
+		t.Errorf("want an exponential backoff but waited %v", got)
+	}
+
+	zero := 0
+	c = f.client(httpGitHubOptions{Retries: &zero, CacheDir: t.TempDir()})
+	before := f.count("/repos/o/r")
+	c.Repository(context.Background(), "o", "r")
+	if n := f.count("/repos/o/r") - before; n != 1 {
+		t.Errorf("retries: 0 sends one request but got %d", n)
 	}
 }
 
@@ -549,7 +575,7 @@ func TestHTTPClientLimitsRequestsInFlight(t *testing.T) {
 	c := f.client(httpGitHubOptions{CacheDir: filepath.Join(t.TempDir(), "none")})
 	c.cache = nil // Every call must reach the server
 	var wg sync.WaitGroup
-	for i := 0; i < 4*maxGitHubInFlight; i++ {
+	for i := 0; i < 4*defaultOnlineInFlight; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -557,8 +583,8 @@ func TestHTTPClientLimitsRequestsInFlight(t *testing.T) {
 		}()
 	}
 	wg.Wait()
-	if p := peak.Load(); p > maxGitHubInFlight {
-		t.Errorf("%d requests ran at once. the limit is %d", p, maxGitHubInFlight)
+	if p := peak.Load(); p > defaultOnlineInFlight {
+		t.Errorf("%d requests ran at once. the limit is %d", p, defaultOnlineInFlight)
 	}
 }
 
@@ -844,9 +870,15 @@ func TestGraphQLURL(t *testing.T) {
 			t.Errorf("%s: %s. want %s", base, got, want)
 		}
 	}
-	c, _ := newHTTPGitHubClient(httpGitHubOptions{GraphQLURL: "https://x/graphql"})
-	if c.graphqlURL() != "https://x/graphql" {
+	c, _ := newHTTPGitHubClient(httpGitHubOptions{GraphQLURL: "https://api.github.com/x/graphql"})
+	if c.graphqlURL() != "https://api.github.com/x/graphql" {
 		t.Error("the explicit URL wins")
+	}
+	// The token is sent to the GraphQL URL, so it must be on the host of the REST API
+	var notices []string
+	c, _ = newHTTPGitHubClient(httpGitHubOptions{GraphQLURL: "https://evil.example.com/graphql", Notify: func(m string) { notices = append(notices, m) }})
+	if c.graphqlURL() != "https://api.github.com/graphql" || len(notices) != 1 {
+		t.Errorf("a GraphQL URL on another host must be ignored: %s %q", c.graphqlURL(), notices)
 	}
 }
 

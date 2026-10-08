@@ -325,13 +325,14 @@ func (c *Config) applyLegacy(l *legacyConfig) error {
 
 var (
 	configTopKeys = []string{
-		"profile", "extends", "rules", "online",
+		"profile", "extends", "rules", "online", "online-options",
 		"self-hosted-runner", "config-variables", "config-secrets", "paths", "required-actions", "assume-default-permissions",
 		// Deprecated keys which are translated into rules
 		"timeout-minutes", "require-commit-hash", "require-permissions", "require-checkout-before-local-action",
 		"require-expression-wrapping", "check-falsy-ternary", "check-workflow-run-names", "require-shell", "max-run-lines",
 	}
 	selfHostedRunnerKeys   = []string{"labels", "strict-labels"}
+	onlineOptionsKeys      = []string{"mode", "api-url", "token-env", "token-file", "allow", "deny", "cache-ttl", "max-rate-limit-wait", "retries", "concurrency", "gh-cli"}
 	pathConfigKeys         = []string{"ignore"}
 	requiredActionKeys     = []string{"action", "version"}
 	legacyTimeoutMinutesKy = []string{"required", "max"}
@@ -390,6 +391,8 @@ func validateConfigKeys(root *yaml.Node) error {
 		switch k.Value {
 		case "self-hosted-runner":
 			err = checkKeys(v, "\"self-hosted-runner\"", selfHostedRunnerKeys)
+		case "online-options":
+			err = checkKeys(v, "\"online-options\"", onlineOptionsKeys)
 		case "timeout-minutes":
 			err = checkKeys(v, "\"timeout-minutes\"", legacyTimeoutMinutesKy)
 		case "paths":
