@@ -65,7 +65,7 @@ func TestParseJactionlint(t *testing.T) {
 	}
 	want := []string{
 		".github/workflows/ci.yml:12:expression",
-		".github/workflows/ci.yml:8:require-permissions",
+		".github/workflows/ci.yml:8:missing-permissions",
 		".github/workflows/ci.yml:9:runner-label",
 	}
 	if diff := cmp.Diff(want, rules); diff != "" {
@@ -301,7 +301,7 @@ func TestMarkdown(t *testing.T) {
 	for _, want := range []string{
 		"## Mapped audits",
 		"| template-injection | partial | `expression` | 1 | 1 | 0 | 1 |",
-		"| excessive-permissions | partial | `require-permissions` | 2 | 1 | 1 | 1 |",
+		"| excessive-permissions | partial | `excessive-permissions`, `missing-permissions` | 2 | 1 | 1 | 1 |",
 		"| **total** |",
 		"## jactionlint only",
 		"| runner-label | 1 | `r/.github/workflows/ci.yml:9` |",
