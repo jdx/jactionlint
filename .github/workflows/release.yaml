@@ -148,3 +148,16 @@ jobs:
           EOF
           } > "$RUNNER_TEMP/release-notes.md"
           gh release edit "$TAG" --notes-file "$RUNNER_TEMP/release-notes.md"
+
+  comment-release-fixes:
+    needs: binaries
+    if: ${{ !cancelled() && needs.binaries.result == 'success' }}
+    permissions:
+      contents: read
+      pull-requests: read
+      issues: write
+      discussions: write
+    uses: jdx/workflows/.github/workflows/comment-release-fixes.yml@652dd92c36927734924fcfe25d7a6bae33c06efc
+    with:
+      tag: ${{ github.ref_name }}
+      marker_prefix: jactionlint-fixed-in
