@@ -362,7 +362,7 @@ func TestSessionIsSafeForConcurrentUse(t *testing.T) {
 			s.Tags("actions", "checkout")
 			s.TagCommit("actions", "checkout", "v4")
 			s.BranchCommit("actions", "checkout", "main")
-			s.Advisories("actions", "checkout")
+			s.Advisories("actions", "checkout", "")
 		}()
 	}
 	wg.Wait()
@@ -466,4 +466,58 @@ func FuzzCommentVersion(f *testing.F) {
 			t.Errorf("an empty version for %q", s)
 		}
 	})
+}
+
+// With more tags than were read, the commit may be a tagged release whose branch is gone. There is no
+// verdict then, as stale-action-refs does, unless a branch has the commit.
+func TestImpostorCommitIsSilentWhenTagsAreTruncated(t *testing.T) {
+	sha := strings.Repeat("c", 40)
+	head := strings.Repeat("a", 40)
+	fx := func(truncated bool, compare string) string {
+		return `{"repos":{"o/r":{"repo":{"default_branch":"main"},
+		  "tags":{"tags":[],"truncated":` + fmt.Sprint(truncated) + `},
+		  "branches":{"branches":[{"name":"main","sha":"` + head + `"}]},
+		  "refs":{"heads/main":{"sha":"` + head + `","found":true}},
+		  "compare":{"` + head + `...` + sha + `":"` + compare + `"}}}}`
+	}
+	cfg := &Config{Rules: map[string]RuleConfig{"stale-action-refs": {Level: SeverityOff, levelSet: true}, "known-vulnerable-actions": {Level: SeverityOff, levelSet: true}}}
+	run := func(truncated bool, compare string) []*Error {
+		c, err := NewFixtureGitHubClient([]byte(fx(truncated, compare)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		errs, _ := lintOnline(t, c, cfg, workflowWith("uses: o/r@"+sha))
+		return errs
+	}
+	if errs := run(false, "diverged"); len(errs) != 1 || errs[0].ID != "impostor-commit" {
+		t.Fatalf("with all the tags read the commit is an impostor: %v", lineIDsOf(errs))
+	}
+	if errs := run(true, "diverged"); len(errs) != 0 {
+		t.Errorf("the tag list is truncated, so there is no verdict: %v", lineIDsOf(errs))
+	}
+	// A commit that a branch has is the repository's own whatever the tags say
+	if errs := run(true, "behind"); len(errs) != 0 {
+		t.Errorf("the commit is on the default branch: %v", lineIDsOf(errs))
+	}
+}
+
+// GitHub publishes the advisories of an action in a subdirectory under the full package name, so the
+// lookup of the repository alone finds nothing for them.
+func TestKnownVulnerableActionsFindsAdvisoriesOfASubdirectory(t *testing.T) {
+	adv := `{"id":"GHSA-sub","summary":"setup-gradle leaks","severity":"high","url":"https://github.com/advisories/GHSA-sub",
+	  "vulnerabilities":[{"package":"gradle/actions/setup-gradle","range":"< 4.2.0","first_patched":"4.2.0"}]}`
+	fx := `{"repos":{"gradle/actions":{"repo":{"default_branch":"main"},
+	  "advisories":{"list":[],"packages":{"gradle/actions/setup-gradle":[` + adv + `]}}}}}`
+	c, err := NewFixtureGitHubClient([]byte(fx))
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg := &Config{Rules: map[string]RuleConfig{"stale-action-refs": {Level: SeverityOff, levelSet: true}}}
+	errs, _ := lintOnline(t, c, cfg, workflowWith("uses: gradle/actions/setup-gradle@v4.1.0", "uses: gradle/actions/wrapper-validation@v4.1.0"))
+	if got := lineIDsOf(errs); len(got) != 1 || got[0] != "6:known-vulnerable-actions" {
+		t.Fatalf("want the advisory for the first step only: %v", got)
+	}
+	if !strings.Contains(errs[0].Message, "GHSA-sub") {
+		t.Errorf("unexpected message %q", errs[0].Message)
+	}
 }

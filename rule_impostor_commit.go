@@ -77,10 +77,18 @@ func (s *onlineSession) commitOrigin(owner, repo, sha string, limit int) (commit
 }
 
 func (s *onlineSession) findCommitOrigin(owner, repo, sha string, limit int) (commitOrigin, error) {
-	if idx, err := s.Tags(owner, repo); err != nil {
+	idx, err := s.Tags(owner, repo)
+	if err != nil {
 		return originUnknown, err
-	} else if len(idx.bySHA[sha]) > 0 {
+	}
+	if len(idx.bySHA[sha]) > 0 {
 		return originOwn, nil
+	}
+	// With more tags than were read, the commit may be a tagged release whose branch is deleted. That is
+	// not an impostor, so only a branch can prove the commit is the repository's own then.
+	verdict := originImpostor
+	if idx.truncated {
+		verdict = originUnknown
 	}
 
 	info, err := s.Repository(owner, repo)
@@ -125,7 +133,7 @@ func (s *onlineSession) findCommitOrigin(owner, repo, sha string, limit int) (co
 		case err == nil && scan.Found:
 			return originOwn, nil
 		case err == nil && scan.Complete:
-			return originImpostor, nil
+			return verdict, nil
 		case err == nil:
 			return originUnknown, nil
 		}
@@ -174,7 +182,7 @@ func (s *onlineSession) findCommitOrigin(owner, repo, sha string, limit int) (co
 	if branches.Truncated {
 		return originUnknown, nil
 	}
-	return originImpostor, nil
+	return verdict, nil
 }
 
 func init() {
