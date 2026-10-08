@@ -67,3 +67,62 @@ How to read the table:
 
 See [CONTRIBUTING.md](https://github.com/jdx/jactionlint/blob/main/CONTRIBUTING.md#policy-for-jactionlints-features) for the
 criteria a rule must meet before it is added.
+
+## Batch C measurements
+
+<a id="batch-c-measurements"></a>
+
+The rules of batch C (`template-injection` and its tiers, `bot-conditions`, `obfuscation`, `misfeature`, `unsound-condition`) were
+compared with zizmor 1.30.1 (`--offline --persona pedantic`) with the differential harness of `scripts/zizmor-diff`. Two corpora:
+
+- **jdx**: 35 workflow repositories of the author (Rust, Go and TypeScript projects that already pass zizmor's regular persona).
+- **OSS**: 1,424 third-party repositories found on disk (Go modules, crates, npm packages and a set of large projects such as
+  cilium, airflow, cpython, renovate and deno).
+
+A finding is matched when both tools report the same file and line. Counts are lines of `.github/workflows` (a line with several
+findings counts once on the zizmor side, so jactionlint's own count of findings can be higher).
+
+| Rule | Corpus | zizmor lines | jactionlint findings | Same line | Only jactionlint | Only zizmor |
+| --- | --- | --: | --: | --: | --: | --: |
+| `template-injection` | jdx | 213 | 0 | 0 | 0 | 213 |
+| `template-injection` | OSS | 7,056 | 7 | 6 | 0 | 7,050 |
+| `template-injection` + `-expansion` | jdx | 213 | 62 | 57 | 1 | 156 |
+| `template-injection` + `-expansion` | OSS | 7,056 | 2,056 | 1,874 | 85 | 5,182 |
+| `template-injection` + `-expansion` + `-trusted` | jdx | 213 | 247 | 213 | 11 | 0 |
+| `template-injection` + `-expansion` + `-trusted` | OSS | 7,056 | 8,441 | 7,056 | 639 | 0 |
+| `bot-conditions` | jdx | 0 | 2 | 0 | 2 | 0 |
+| `bot-conditions` | OSS | 13 | 13 | 13 | 0 | 0 |
+| `obfuscation` | jdx | 8 | 10 | 8 | 2 | 0 |
+| `obfuscation` | OSS | 14 | 16 | 14 | 2 | 0 |
+| `misfeature` | jdx | 0 | 0 | 0 | 0 | 0 |
+| `misfeature` | OSS | 18 | 18 | 18 | 0 | 0 |
+| `unsound-condition` (`if-always-true`) | jdx | 0 | 0 | 0 | 0 | 0 |
+| `unsound-condition` (`if-always-true`) | OSS | 5 | 5 | 5 | 0 | 0 |
+
+How to read the template injection rows:
+
+- **zizmor-only in the first rows** is not a miss: the pedantic persona of zizmor reports every expansion in a script, which is what
+  the `-expansion` and `-trusted` tiers are for. The last row of each corpus is the comparison with the whole of zizmor.
+- **Only jactionlint** (`-trusted` and `-expansion` rows) is not a false positive of a security finding. The lines are of
+  four kinds: `matrix.*` whose values are literals and `needs.*.result` (`-trusted`; zizmor treats them as safe and does not report
+  them in the pedantic persona), values of `matrix.*` that come from `fromJSON`, `env.*` set from `$GITHUB_ENV` and `steps.*.outputs.*`
+  of actions that zizmor knows to return safe values (`-expansion`; jactionlint does not have that knowledge), and
+  `github.ref_name`/`github.event.inputs.*` (`-expansion`).
+- **The default rule** (`template-injection`): all 7 findings in the OSS corpus are true positives. They are on 6 lines, and zizmor reports all of
+  the 6 lines. There is no finding in the jdx corpus. No false positive was seen. Before this batch the rule stopped at the first untrusted expression of a script; the rule now reports every
+  expression and the new findings that came from this (objects like `toJSON(github)`, env variables set from untrusted input,
+  and the code inputs of actions) are true positives in the sample.
+- zizmor's *regular* persona is not what the numbers compare: the corpus was too clean to say how the default rule compares with
+  zizmor's high-confidence findings.
+
+Rows of other rules:
+
+- **`bot-conditions`**, jdx: both findings are `github.event.sender.id == 29139614` (the ID of Renovate), which zizmor does not know.
+  It is the same spoofable property as `github.actor`, so they are true positives.
+- **`obfuscation`**: the two extra findings (in both corpora) are `if: vars[matrix.var_name] != 'off'`. zizmor reports the same
+  construct only inside `${{ }}`. `fromJSON(toJSON(matrix.container))` (Homebrew) is not reported by either tool. The constant
+  expressions in `if:` that zizmor reports (`${{ false }}`) are reported by `constant-condition` and `if-always-true`.
+- **`misfeature`** and **`unsound-condition`** match exactly.
+
+Known differences that are not measured: the position of a finding in a double-quoted multi-line YAML string is the first line, and
+composite actions (`action.yml`) are not analyzed at all.
