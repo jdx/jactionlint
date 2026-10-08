@@ -1,0 +1,3 @@
+test.yaml:8:15: no "permission-*" input is set, so the token gets every permission granted to the GitHub App. request only what the job needs, for instance "permission-contents: read" [github-app]
+test.yaml:17:18: "owner" without "repositories" issues a token with access to every repository of the owner where the app is installed. list the repositories the token is for in "repositories" [github-app]
+test.yaml:19:30: "skip-token-revoke: true" keeps the GitHub App token valid after the job ends. remove it so that the token is revoked in the post step [github-app]

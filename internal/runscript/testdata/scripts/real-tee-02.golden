@@ -1,0 +1,10 @@
+cmd 1:1 name="set"
+  flags -o
+  pos "pipefail"
+cmd 2:1 name="tak" pipe=1/2
+  pos "detect"
+cmd 2:29 name="tee" tool=tee pipe=2/2
+  flags -a
+  pos "$GITHUB_STEP_SUMMARY"[var:GITHUB_STEP_SUMMARY quoted]
+pipeline 2:1 stages=2 negated=false
+redirect 2:36 op="tee" fd="" target="$GITHUB_STEP_SUMMARY"[var:GITHUB_STEP_SUMMARY quoted] append=true write=true tee

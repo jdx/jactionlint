@@ -16,7 +16,7 @@ const (
 )
 
 func unpinnedConfig() *Config {
-	return &Config{Rules: map[string]RuleConfig{"unpinned-uses": {Level: SeverityError, levelSet: true}}}
+	return withoutMissingTimeout(&Config{Rules: map[string]RuleConfig{"unpinned-uses": {Level: SeverityError, levelSet: true}}})
 }
 
 func TestPinFixes(t *testing.T) {
@@ -60,7 +60,7 @@ func TestPinFixes(t *testing.T) {
 				if tc.want == "" && strings.Contains(tc.step, "{") {
 					return // Not reported at all
 				}
-				t.Fatalf("no unpinned-uses error: %v", idsOf(errs))
+				t.Fatalf("no unpinned-uses error: %v", lineIDsOf(errs))
 			}
 			if tc.want == "" {
 				if e.Fix != nil {

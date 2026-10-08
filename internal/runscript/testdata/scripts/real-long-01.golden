@@ -1,0 +1,172 @@
+cmd 1:1 name="git"
+  pos "add" "*aube-lock.yaml"[quoted]
+cmd 2:7 name="read"
+  assign IFS=<nil>
+  flags -r
+  pos "path"
+cmd 3:6 name="["
+  flags -n
+  pos "$path"[var:path quoted] "]"
+cmd 4:5 name="git"
+  pos "add" "$path"[var:path quoted]
+cmd 7:4 name="git"
+  flags --cached --quiet
+  pos "diff"
+cmd 8:3 name="echo"
+  pos "dependency artifacts already up to date"[quoted]
+cmd 9:3 name="exit"
+  pos "0"
+cmd 11:1 name="git"
+  pos "config" "user.name" "github-actions[bot]"[quoted]
+cmd 12:1 name="git"
+  pos "config" "user.email" "41898282+github-actions[bot]@users.noreply.github.com"[quoted]
+cmd 15:18 name="git"
+  flags --cached --name-only
+  pos "diff"
+cmd 19:9 name="git"
+  pos "rev-parse" "HEAD"
+cmd 20:1 name="git"
+  flags -m
+  pos "commit" "chore(deps): regenerate dependency artifacts"[quoted]
+cmd 29:7 name="true"
+cmd 33:6 name="git"
+  flags --force-with-lease="refs/heads/${BRANCH}:${base}"[var:BRANCH,base quoted]
+  pos "push" "$push_url"[var:push_url quoted] "HEAD:${BRANCH}"[var:BRANCH quoted]
+cmd 34:5 name="exit"
+  pos "0"
+cmd 39:8 name="git"
+  flags --quiet
+  pos "fetch" "$push_url"[var:push_url quoted] "$BRANCH"[var:BRANCH quoted]
+cmd 40:5 name="echo"
+  pos "::error::could not fetch ${BRANCH} to see why the push was rejected; not retrying (the branch may have been deleted)"[var:BRANCH quoted]
+cmd 41:5 name="exit"
+  pos "1"
+cmd 45:13 name="git"
+  flags --verify --quiet
+  pos "rev-parse" "FETCH_HEAD^{commit}"[quoted]
+cmd 45:69 name="true"
+cmd 46:6 name="["
+  flags -z
+  pos "$remote"[var:remote quoted] "]"
+cmd 47:5 name="echo"
+  pos "::error::fetched ${BRANCH} but could not resolve its tip"[var:BRANCH quoted]
+cmd 48:5 name="exit"
+  pos "1"
+cmd 50:6 name="["
+  pos "$remote"[var:remote quoted] "=" "$base"[var:base quoted] "]"
+cmd 53:8 name="["
+  flags -gt
+  pos "$retries"[var:retries quoted] "3" "]"
+cmd 54:7 name="echo"
+  pos "::error::could not push regenerated dependency artifacts to ${BRANCH} after ${retries} attempts"[var:BRANCH,retries quoted]
+cmd 55:7 name="exit"
+  pos "1"
+cmd 57:5 name="echo"
+  pos "push failed but ${BRANCH} has not moved; retrying (attempt ${retries})"[var:BRANCH,retries quoted]
+cmd 58:5 name="sleep"
+  pos "$((retries * 5))"[subst quoted]
+cmd 59:5 name="continue"
+cmd 65:17 name="git"
+  flags -1 --format="%an <%ae>"[quoted]
+  pos "log" "$remote"[var:remote quoted]
+cmd 73:6 name="["
+  flags -n
+  pos "$changed_paths"[var:changed_paths quoted] "]"
+cmd 75:11 name="read"
+  assign IFS=<nil>
+  flags -r
+  pos "changed"
+cmd 76:7 name="["
+  flags -n
+  pos "$changed"[var:changed quoted] "]"
+cmd 76:28 name="continue"
+cmd 77:12 name="git"
+  flags --quiet
+  pos "diff" "$remote"[var:remote quoted] "HEAD" "$changed"[var:changed quoted]
+cmd 79:9 name="break"
+cmd 82:8 name="["
+  pos "$already_there"[var:already_there quoted] "=" "true" "]"
+cmd 83:7 name="echo"
+  pos "::notice::${BRANCH} already carries these artifacts (pushed by ${tip_author}); nothing to do"[var:BRANCH,tip_author quoted]
+cmd 84:7 name="exit"
+  pos "0"
+cmd 89:3 name="git"
+  flags --quiet
+  pos "diff" "$base"[var:base quoted] "$remote"[var:remote quoted] "*package.json"[quoted]
+cmd 90:6 name="["
+  flags -gt
+  pos "$config_changed"[var:config_changed quoted] "1" "]"
+cmd 92:8 name="["
+  flags -gt
+  pos "$retries"[var:retries quoted] "3" "]"
+cmd 93:7 name="echo"
+  pos "::error::could not compare ${base} with ${remote} after ${retries} attempts"[var:base,remote,retries quoted]
+cmd 94:7 name="exit"
+  pos "1"
+cmd 96:5 name="echo"
+  pos "could not compare ${base} with ${remote}; retrying (attempt ${retries})"[var:base,remote,retries quoted]
+cmd 97:5 name="sleep"
+  pos "$((retries * 5))"[subst quoted]
+cmd 98:5 name="continue"
+cmd 100:6 name="["
+  flags -eq
+  pos "$config_changed"[var:config_changed quoted] "1" "]"
+cmd 106:8 name="["
+  pos "$moved_by"[var:moved_by quoted] "=" "renovate" "]"
+cmd 107:7 name="echo"
+  pos "::notice::${BRANCH} moved and its dependency config changed; the run for that push regenerates these artifacts, so this one stops here"[var:BRANCH quoted]
+cmd 108:7 name="exit"
+  pos "0"
+cmd 110:5 name="echo"
+  pos "::error::${BRANCH} moved and its dependency config changed, but not by renovate[bot] (tip: ${tip_author}), so no run will regenerate these artifacts; rerun this workflow once the branch settles"[var:BRANCH,tip_author quoted]
+cmd 111:5 name="exit"
+  pos "1"
+cmd 115:3 name="echo"
+  pos "${BRANCH} moved without touching the dependency config; rebasing onto ${remote}"[var:BRANCH,remote quoted]
+cmd 119:8 name="git"
+  flags --onto
+  pos "rebase" "$remote"[var:remote quoted] "$base"[var:base quoted]
+cmd 120:5 name="git"
+  flags --abort
+  pos "rebase"
+cmd 120:27 name="true"
+cmd 121:8 name="["
+  pos "$moved_by"[var:moved_by quoted] "!=" "foreign" "]"
+cmd 122:7 name="echo"
+  pos "::notice::rebase onto ${remote} conflicted; ${tip_author} already regenerated these artifacts, so this run stops here"[var:remote,tip_author quoted]
+cmd 123:7 name="exit"
+  pos "0"
+cmd 125:5 name="echo"
+  pos "::error::rebase onto ${remote} conflicted and ${BRANCH} was moved by ${tip_author}, so no run will regenerate these artifacts"[var:remote,BRANCH,tip_author quoted]
+cmd 126:5 name="exit"
+  pos "1"
+cmd 129:6 name="["
+  flags -gt
+  pos "$recoveries"[var:recoveries quoted] "3" "]"
+cmd 130:5 name="echo"
+  pos "::error::${BRANCH} moved again after ${recoveries} rebases; giving up rather than fighting it"[var:BRANCH,recoveries quoted]
+cmd 131:5 name="exit"
+  pos "1"
+redirect 6:6 op="<<<" fd="" target="$POST_UPDATE_PATHS"[var:POST_UPDATE_PATHS quoted] append=false write=false group inner=3
+redirect 65:59 op=">" fd="2" target="/dev/null" append=false write=true
+redirect 81:10 op="<<<" fd="" target="$changed_paths"[var:changed_paths quoted] append=false write=false group inner=5
+assignment 2:7 IFS value=<nil> append=false array=false
+assignment 15:1 changed_paths value="$(git diff --cached --name-only)"[subst quoted] append=false array=false
+assignment 19:1 base value="$(git rev-parse HEAD)"[subst quoted] append=false array=false
+assignment 24:1 push_url value="https://x-access-token:${PUSH_TOKEN}@github.com/${REPO}.git"[var:PUSH_TOKEN,REPO quoted] append=false array=false
+assignment 27:1 retries value="0" append=false array=false
+assignment 28:1 recoveries value="0" append=false array=false
+assignment 45:3 remote value="$(git rev-parse --verify --quiet \"FETCH_HEAD^{commit}\" || true)"[subst quoted] append=false array=false
+assignment 52:5 retries value="$((retries + 1))"[subst] append=false array=false
+assignment 65:3 tip_author value="$(git log -1 --format='%an <%ae>' \"$remote\" 2>/dev/null)"[subst quoted] append=false array=false
+assignment 67:24 moved_by value="renovate" append=false array=false
+assignment 68:30 moved_by value="sibling" append=false array=false
+assignment 69:8 moved_by value="foreign" append=false array=false
+assignment 74:5 already_there value="true" append=false array=false
+assignment 75:11 IFS value=<nil> append=false array=false
+assignment 78:9 already_there value="false" append=false array=false
+assignment 88:3 config_changed value="0" append=false array=false
+assignment 89:60 config_changed value="$?"[var:?] append=false array=false
+assignment 91:5 retries value="$((retries + 1))"[subst] append=false array=false
+assignment 128:3 recoveries value="$((recoveries + 1))"[subst] append=false array=false
+assignment 133:3 base value="$remote"[var:remote quoted] append=false array=false

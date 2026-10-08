@@ -1,0 +1,4 @@
+expr 1:41 "matrix.target"
+cmd 1:1 name="cargo" tool=cargo
+  flags --release --locked --target="${{ matrix.target }}"[expr whole-expr]
+  pos "build"

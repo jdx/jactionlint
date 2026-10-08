@@ -859,7 +859,7 @@ func TestImpostorCommitUsesTheBranchScanner(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			c := &scanningClient{FixtureGitHubClient: onlineFixtureClient(t), scan: tc.scan, err: tc.err}
 			errs, _ := lintOnline(t, c, cfg, src)
-			if got := idsOf(errs); !reflect.DeepEqual(got, tc.want) {
+			if got := lineIDsOf(errs); !reflect.DeepEqual(got, tc.want) {
 				t.Errorf("got %v. want %v", got, tc.want)
 			}
 			if c.n.Load() != 1 {

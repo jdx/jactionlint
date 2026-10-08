@@ -1,0 +1,3 @@
+rules:
+  misfeature: warn
+  misfeature-custom-shell: info

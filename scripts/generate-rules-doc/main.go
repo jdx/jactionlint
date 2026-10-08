@@ -84,10 +84,12 @@ rules:
 			fmt.Fprintf(&b, "- Fixable: %s\n", yesNo(r.Fixable))
 		}
 		for _, o := range r.Options {
-			def := "no default; the rule does nothing without it"
-			if o.Default != nil {
+			def := "no default"
+			if m, ok := o.Default.(map[string]string); ok && len(m) == 0 {
+				def = "default empty"
+			} else if o.Default != nil {
 				def = fmt.Sprintf("default %v", o.Default)
-			} else if o.Kind == jactionlint.RuleOptionStringList {
+			} else if o.Kind == jactionlint.RuleOptionStrings {
 				def = "empty by default"
 			}
 			fmt.Fprintf(&b, "- Option `%s` (%s, %s): %s\n", o.Name, o.Kind, def, o.Summary)

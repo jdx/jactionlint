@@ -1,6 +1,6 @@
 module github.com/jdx/jactionlint/v2
 
-go 1.25.0
+go 1.26.0
 
 require (
 	github.com/bmatcuk/doublestar/v4 v4.10.0
@@ -14,7 +14,8 @@ require (
 	go.yaml.in/yaml/v4 v4.0.0-rc.6
 	golang.org/x/net v0.55.0
 	golang.org/x/sync v0.20.0
-	golang.org/x/sys v0.45.0
+	golang.org/x/sys v0.47.0
+	mvdan.cc/sh/v3 v3.14.1
 )
 
 require (

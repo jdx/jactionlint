@@ -1,0 +1,17 @@
+on: push
+jobs:
+  self-hosted:
+    runs-on: [self-hosted, linux]
+    steps:
+      - run: echo
+  matrix:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, self-hosted]
+    steps:
+      - run: echo
+  hosted:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo

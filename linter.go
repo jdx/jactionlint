@@ -121,6 +121,9 @@ type LinterOptions struct {
 	// function should return the modified rules.
 	// Note that syntax errors may be reported even if this function returns nil or an empty slice.
 	OnRulesCreated func([]Rule) []Rule
+	// OnDependabotRulesCreated is like OnRulesCreated but for the rules which check Dependabot
+	// configuration files (.github/dependabot.yml).
+	OnDependabotRulesCreated func([]DependabotRule) []DependabotRule
 	// More options will come here
 }
 
@@ -140,6 +143,7 @@ type Linter struct {
 	errFmt         *ErrorFormatter
 	cwd            string
 	onRulesCreated func([]Rule) []Rule
+	onDependabot   func([]DependabotRule) []DependabotRule
 	configFile     string
 	minSeverity    Severity
 	online         onlineSettings
@@ -247,6 +251,7 @@ func NewLinter(out io.Writer, opts *LinterOptions) (*Linter, error) {
 		errFmt:         formatter,
 		cwd:            cwd,
 		onRulesCreated: opts.OnRulesCreated,
+		onDependabot:   opts.OnDependabotRulesCreated,
 		configFile:     opts.ConfigFile,
 		minSeverity:    opts.MinSeverity,
 		online:         onlineSettings{enabled: opts.Online, client: opts.GitHubClient, ttl: opts.OnlineCacheTTL, ctx: opts.Context},
@@ -329,7 +334,7 @@ func (l *Linter) LintRepository(dir string) ([]*Error, error) {
 		dir = l.cwd
 	}
 
-	l.log("Linting all workflow files in repository:", dir)
+	l.log("Linting all workflow files and Dependabot configuration in repository:", dir)
 
 	p, err := l.projects.At(dir)
 	if err != nil {
@@ -340,12 +345,33 @@ func (l *Linter) LintRepository(dir string) ([]*Error, error) {
 	}
 
 	l.log("Detected project:", p.RootDir())
-	wd := p.WorkflowsDir()
-	return l.LintDir(wd, p)
+	files, err := walkWorkflowFiles(p.WorkflowsDir())
+	if err != nil {
+		return nil, err
+	}
+	files = append(files, p.DependabotFiles()...)
+	if len(files) == 0 {
+		return nil, fmt.Errorf("no YAML file was found in %q", p.WorkflowsDir())
+	}
+	l.log("Collected", len(files), "YAML files")
+	return l.LintFiles(files, p)
 }
 
 // collectWorkflowFiles returns the paths of all YAML files in the directory recursively in sorted order.
+// It is an error that the directory has no YAML file.
 func collectWorkflowFiles(dir string) ([]string, error) {
+	files, err := walkWorkflowFiles(dir)
+	if err != nil {
+		return nil, err
+	}
+	if len(files) == 0 {
+		return nil, fmt.Errorf("no YAML file was found in %q", dir)
+	}
+	return files, nil
+}
+
+// walkWorkflowFiles returns the paths of all YAML files in the directory recursively in sorted order.
+func walkWorkflowFiles(dir string) ([]string, error) {
 	files := []string{}
 	if err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
@@ -360,10 +386,6 @@ func collectWorkflowFiles(dir string) ([]string, error) {
 		return nil
 	}); err != nil {
 		return nil, fmt.Errorf("could not read files in %q: %w", dir, err)
-	}
-
-	if len(files) == 0 {
-		return nil, fmt.Errorf("no YAML file was found in %q", dir)
 	}
 
 	// To make output deterministic, sort order of file paths
@@ -608,6 +630,10 @@ func (l *Linter) check(
 		l.debug("No config was found")
 	}
 
+	if l.isDependabotFile(path) {
+		return l.checkDependabot(path, content, project, cfg, start)
+	}
+
 	w, all := Parse(content)
 
 	if l.logLevel >= LogLevelVerbose {
@@ -625,6 +651,7 @@ func (l *Linter) check(
 		rules := newBuiltinRules(&RuleEnv{
 			online:                 sess,
 			path:                   path,
+			src:                    content,
 			project:                project,
 			localActions:           localActions,
 			localReusableWorkflows: localReusableWorkflows,
@@ -671,17 +698,26 @@ func (l *Linter) check(
 		}
 	}
 
+	return l.finishCheck(path, content, all, cfg, start, w != nil), nil
+}
+
+// finishCheck post-processes the errors found in one file: it fills the fields derived from the
+// rule IDs, applies the ignores and the minimum severity, and sorts the errors. isWorkflow tells that
+// the file is a workflow, for which the online pin fixes are attached.
+func (l *Linter) finishCheck(path string, content []byte, all []*Error, cfg *Config, start time.Time, isWorkflow bool) []*Error {
 	all = l.annotateErrors(all, content, cfg)
 
 	// Inline ignores are applied first so that every pattern sees all errors, which tells whether it
 	// is used. The order of the filters does not change which errors remain.
 	inlineIgnores, orphans, ignoreErrs := parseInlineIgnoresWithOrphans(content)
 	all = l.filterInlineIgnores(all, inlineIgnores)
-	all = append(all, l.annotateErrors(unusedInlineIgnores(inlineIgnores, orphans, cfg), content, cfg)...)
+	unused := unusedInlineIgnores(inlineIgnores, orphans, cfg)
+	dropFixesChangingYAML(content, unused)
+	all = append(all, l.annotateErrors(unused, content, cfg)...)
 
 	all = l.filterErrors(all, cfg.PathConfigs(path))
 	all = append(all, l.annotateErrors(ignoreErrs, content, cfg)...)
-	if w != nil {
+	if isWorkflow {
 		if sess, _ := l.onlineSession(cfg); sess != nil {
 			l.attachPinFixes(sess, content, all)
 		}
@@ -709,7 +745,7 @@ func (l *Linter) check(
 		l.log("Found total", len(all), "errors in", elapsed.Milliseconds(), "ms for", path)
 	}
 
-	return all, nil
+	return all
 }
 
 func (l *Linter) filterErrors(errs []*Error, cfgs []PathConfig) []*Error {

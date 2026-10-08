@@ -96,6 +96,16 @@ func (c *Config) ruleOptionNumber(id, name string) (float64, bool) {
 	return 0, false
 }
 
+// ruleOptionStrings returns the value of an option which is a list of strings.
+func (c *Config) ruleOptionStrings(id, name string) []string {
+	v, ok := c.RuleOption(id, name)
+	if !ok {
+		return nil
+	}
+	ss, _ := v.([]string)
+	return ss
+}
+
 // normalizeRules validates the "rules" mapping against the registry and fills in the default level of
 // the rules which are configured with options only.
 func (c *Config) normalizeRules() error {
@@ -114,6 +124,9 @@ func (c *Config) normalizeRules() error {
 				return fmt.Errorf("unknown option %q for rule %q in \"rules\"%s", name, id, suggestOption(name, info))
 			}
 			nv, err := normalizeOption(opt, v)
+			if err == nil && opt.Validate != nil {
+				err = opt.Validate(nv)
+			}
 			if err != nil {
 				return fmt.Errorf("invalid value %v for option %q of rule %q in \"rules\": %w", v, name, id, err)
 			}
@@ -140,20 +153,6 @@ func normalizeOption(opt RuleOption, v any) (any, error) {
 			return int(v), nil
 		}
 		return nil, fmt.Errorf("it must be a non-negative integer")
-	case RuleOptionStringList:
-		l, ok := v.([]any)
-		if !ok {
-			return nil, fmt.Errorf("it must be a list of strings")
-		}
-		ret := make([]string, 0, len(l))
-		for _, e := range l {
-			s, ok := e.(string)
-			if !ok {
-				return nil, fmt.Errorf("it must be a list of strings")
-			}
-			ret = append(ret, s)
-		}
-		return ret, nil
 	case RuleOptionNumber:
 		var f float64
 		switch v := v.(type) {
@@ -172,6 +171,42 @@ func normalizeOption(opt RuleOption, v any) (any, error) {
 			return nil, fmt.Errorf("it must be a non-negative number")
 		}
 		return f, nil
+	case RuleOptionBool:
+		if b, ok := v.(bool); ok {
+			return b, nil
+		}
+		return nil, fmt.Errorf("it must be true or false")
+	case RuleOptionStringMap:
+		m, ok := v.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("it must be a mapping")
+		}
+		ret := make(map[string]string, len(m))
+		for k, e := range m {
+			s, ok := e.(string)
+			if !ok {
+				return nil, fmt.Errorf("the value of %q must be a string", k)
+			}
+			ret[k] = s
+		}
+		return ret, nil
+	case RuleOptionStrings:
+		items, ok := v.([]any)
+		if !ok {
+			if ss, ok := v.([]string); ok {
+				return slices.Clone(ss), nil
+			}
+			return nil, fmt.Errorf("it must be a list of strings")
+		}
+		ss := make([]string, 0, len(items))
+		for _, it := range items {
+			s, ok := it.(string)
+			if !ok {
+				return nil, fmt.Errorf("it must be a list of strings")
+			}
+			ss = append(ss, s)
+		}
+		return ss, nil
 	}
 	return nil, fmt.Errorf("unsupported option kind %q", opt.Kind)
 }
@@ -489,4 +524,24 @@ func editDistance(a, b string) int {
 		}
 	}
 	return d[len(ra)][len(rb)]
+}
+
+// ruleOptionBool returns the value of a boolean option.
+func (c *Config) ruleOptionBool(id, name string) (bool, bool) {
+	v, ok := c.RuleOption(id, name)
+	if !ok {
+		return false, false
+	}
+	b, ok := v.(bool)
+	return b, ok
+}
+
+// ruleOptionStringMap returns the value of a string mapping option. The result must not be modified.
+func (c *Config) ruleOptionStringMap(id, name string) (map[string]string, bool) {
+	v, ok := c.RuleOption(id, name)
+	if !ok {
+		return nil, false
+	}
+	m, ok := v.(map[string]string)
+	return m, ok
 }

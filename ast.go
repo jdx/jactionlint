@@ -408,6 +408,9 @@ type Concurrency struct {
 	CancelInProgress *Bool
 	// Queue is the queue strategy for pending workflow runs. Valid values are "single" (default) and "max".
 	Queue *String
+	// Bare is true when the concurrency is written as a plain group name (`concurrency: my-group`)
+	// instead of a mapping. This form cannot cancel runs in progress.
+	Bare bool
 	// Pos is a position in source.
 	Pos *Pos
 }
@@ -941,6 +944,9 @@ type WorkflowCall struct {
 	// InheritSecrets is true when 'secrets: inherit' is specified. In this case, Secrets must be empty.
 	// https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions#onworkflow_callsecretsinherit
 	InheritSecrets bool
+	// InheritSecretsPos is the position of the 'secrets: inherit' value. It is nil unless
+	// InheritSecrets is true.
+	InheritSecretsPos *Pos
 }
 
 // Snapshot is a struct to represent image snapshot at jobs.<job_id>.snapshot.
@@ -1047,6 +1053,9 @@ type Workflow struct {
 	// Comments holds the YAML comments of the source file. Look a node up by the line of its Pos.
 	// It is never nil for a workflow returned by Parse.
 	Comments *CommentIndex
+	// Source is the content of the source file. Rules which offer a fix (Error.Fix) read it to turn
+	// positions into byte offsets. It is never nil for a workflow returned by Parse. Do not modify it.
+	Source []byte
 }
 
 // FindWorkflowCallEvent returns workflow_call event node if exists

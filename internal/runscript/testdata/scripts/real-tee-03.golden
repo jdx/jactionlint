@@ -1,0 +1,12 @@
+cmd 1:1 name="docker"
+  pos "buildx" "imagetools" "inspect" "$IMAGE"[var:IMAGE quoted]
+cmd 2:1 name="docker" pipe=1/3
+  flags --rm --entrypoint --version
+  pos "run" "/usr/local/bin/mise" "$IMAGE"[var:IMAGE quoted]
+cmd 2:71 name="tee" tool=tee pipe=2/3
+  pos "/dev/stderr"
+cmd 2:89 name="grep" pipe=3/3
+  flags -F
+  pos "$VERSION"[var:VERSION quoted]
+pipeline 2:1 stages=3 negated=false
+redirect 2:75 op="tee" fd="" target="/dev/stderr" append=false write=true tee

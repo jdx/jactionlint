@@ -1,0 +1,23 @@
+on: issue_comment
+
+env:
+  TITLE: ${{ github.event.issue.title }}
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      # ERROR: The environment variable holds an untrusted input, so expanding it has the same effect
+      - run: echo '${{ env.TITLE }}'
+      # ERROR: Every untrusted expression of a script is reported
+      - run: |
+          echo '${{ github.head_ref }}'
+          echo '${{ github.event.comment.body }}'
+      # ERROR: The object has untrusted properties
+      - run: echo '${{ toJSON(github.event) }}'
+      # ERROR: This input of the action is run as code
+      - uses: nick-fields/retry@v3
+        with:
+          command: echo ${{ github.head_ref }}
+      # OK: The shell expands the variable
+      - run: echo "$TITLE"

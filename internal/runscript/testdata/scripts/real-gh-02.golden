@@ -1,0 +1,4 @@
+cmd 1:1 name="gh" tool=gh
+  flags --clobber
+  pos "release" "upload" "$TAG"[var:TAG quoted] "$ARCHIVE"[var:ARCHIVE quoted]
+  publish tool=gh verb="release upload" kind=release dry=false registry=<nil>

@@ -1,0 +1,12 @@
+anonymous-definition
+concurrency-limits
+dangerous-triggers
+forbidden-uses
+insecure-commands
+overprovisioned-secrets
+secrets-inherit
+secrets-outside-env
+self-hosted-runner
+typosquat-uses
+unredacted-secrets
+unsound-contains

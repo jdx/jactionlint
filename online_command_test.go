@@ -40,10 +40,14 @@ func onlineProject(t *testing.T, workflow string, config string) (root, wf strin
 	if err := os.WriteFile(wf, []byte(workflow), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if config != "" {
-		if err := os.WriteFile(filepath.Join(root, ".github", "jactionlint.yaml"), []byte(config), 0o644); err != nil {
-			t.Fatal(err)
-		}
+	// The workflows of the tests do not set timeout-minutes, which the default profile reports
+	if config == "" {
+		config = "rules:\n  missing-timeout: off\n"
+	} else if strings.HasPrefix(config, "rules:\n") {
+		config = "rules:\n  missing-timeout: off\n" + strings.TrimPrefix(config, "rules:\n")
+	}
+	if err := os.WriteFile(filepath.Join(root, ".github", "jactionlint.yaml"), []byte(config), 0o644); err != nil {
+		t.Fatal(err)
 	}
 	return root, wf
 }

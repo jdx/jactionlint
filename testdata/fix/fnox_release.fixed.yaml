@@ -1,0 +1,196 @@
+name: release
+
+permissions: {}
+
+on:
+  push:
+    tags:
+      - v[0-9]+.*
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version (without leading v)"
+        required: true
+        type: string
+
+env:
+  CARGO_TERM_COLOR: always
+  GITHUB_TOKEN: ${{ secrets.FNOX_GH_TOKEN }}
+
+jobs:
+  build-binaries:
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: aarch64-apple-darwin
+            os: macos-latest
+            build-tool: cargo
+          - target: x86_64-apple-darwin
+            os: macos-latest
+            build-tool: cargo
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            build-tool: cross
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-latest
+            build-tool: cross
+          - target: x86_64-unknown-linux-musl
+            os: ubuntu-latest
+            build-tool: cross
+          - target: aarch64-unknown-linux-musl
+            os: ubuntu-latest
+            build-tool: cross
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+            build-tool: cargo
+          - target: aarch64-pc-windows-msvc
+            os: windows-latest
+            build-tool: cargo
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          token: ${{ secrets.FNOX_GH_TOKEN }}
+          persist-credentials: false
+      - if: matrix.os == 'macos-latest'
+        uses: apple-actions/import-codesign-certs@5142e029c445c10ffc7149d172e540235a065466 # v7
+        with:
+          p12-file-base64: ${{ secrets.CERTIFICATES_P12 }}
+          p12-password: ${{ secrets.CERTIFICATES_P12_PASS }}
+      - uses: taiki-e/upload-rust-binary-action@f0d45ae91ee7b8ee928de7a9d04d893a08bcbec6 # v1
+        with:
+          bin: fnox
+          target: ${{ matrix.target }}
+          build-tool: ${{ matrix.build-tool }}
+          token: ${{ secrets.FNOX_GH_TOKEN }}
+          codesign: "Developer ID Application: Jeffrey Dickey (4993Y37DX6)"
+          codesign_prefix: dev.jdx.
+          dry-run: true # Always dry-run to just build without uploading
+      - name: Upload binary artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: binary-${{ matrix.target }}
+          path: |
+            fnox-*.tar.gz
+            fnox-*.tar.xz
+            fnox-*.zip
+          retention-days: 1
+
+  create-release:
+    needs: [build-binaries]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.FNOX_GH_TOKEN }}
+          persist-credentials: false
+      - name: Extract release notes from CHANGELOG.md
+        run: |
+          awk '/^## \[/{if(found) exit; found=1} found{print}' CHANGELOG.md > release-notes.md
+      - name: Download all artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          path: artifacts
+      - name: Prepare release assets
+        run: |
+          mkdir -p release-assets
+          find artifacts/binary-* -type f \( -name "*.tar.gz" -o -name "*.tar.xz" -o -name "*.zip" \) -exec mv {} release-assets/ \;
+          ls -la release-assets/
+      - name: Create release with all assets
+        run: |
+          if [[ -n "${INPUTS_VERSION}" ]]; then
+            TAG_NAME="v${INPUTS_VERSION}"
+          else
+            TAG_NAME="${GITHUB_REF_NAME}"
+          fi
+          gh release create "$TAG_NAME" \
+            --title "$TAG_NAME" \
+            --notes-file release-notes.md \
+            --draft \
+            release-assets/*
+        env:
+          INPUTS_VERSION: ${{ inputs.version }}
+
+  enhance-release:
+    needs: [create-release]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
+        with:
+          experimental: true
+          cache: false
+      - run: mise trust --all
+      - name: Enhance release notes with communique
+        run: |
+          if [[ -n "${INPUTS_VERSION}" ]]; then
+            TAG_NAME="v${INPUTS_VERSION}"
+          else
+            TAG_NAME="${GITHUB_REF_NAME}"
+          fi
+          communique generate "$TAG_NAME" --github-release
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          INPUTS_VERSION: ${{ inputs.version }}
+      - name: Append jdx.dev sponsor blurb
+        env:
+          GH_TOKEN: ${{ secrets.FNOX_GH_TOKEN }}
+          INPUTS_VERSION: ${{ inputs.version }}
+        run: |
+          if [[ -n "${INPUTS_VERSION}" ]]; then
+            TAG_NAME="v${INPUTS_VERSION}"
+          else
+            TAG_NAME="${GITHUB_REF_NAME}"
+          fi
+          # Strip any pre-existing "Sponsor fnox" section from the body so the
+          # canonical block we append below isn't duplicated. Matches headings
+          # like "## Sponsor fnox" or "## 💚 Sponsor fnox" and drops everything
+          # through the next top-level heading.
+          gh release view "$TAG_NAME" --json body --jq .body \
+            | awk '
+                /^## .*Sponsor fnox[[:space:]]*$/ { skip=1; next }
+                skip && /^## / { skip=0; print; next }
+                !skip { print }
+              ' > /tmp/release-notes.md
+          cat >> /tmp/release-notes.md <<'EOF'
+
+          ## 💚 Sponsor fnox
+
+          fnox is maintained by [@jdx](https://github.com/jdx), an open source developer for [**entire.io**](https://entire.io), the title sponsor of the [jdx.dev](https://jdx.dev) open source tools including [mise](https://mise.jdx.dev/), [aube](https://aube.jdx.dev/), hk, and more. Keeping fnox secure, maintained, and free is funded by sponsors.
+
+          If fnox is handling secrets or config for you or your team, please consider [sponsoring at jdx.dev](https://jdx.dev/sponsors.html). Sponsorships are what let fnox stay independent and the project keep moving.
+          EOF
+          gh release edit "$TAG_NAME" --notes-file /tmp/release-notes.md
+
+  publish-release:
+    needs: [enhance-release]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    steps:
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.FNOX_GH_TOKEN }}
+          INPUTS_VERSION: ${{ inputs.version }}
+        run: |
+          if [[ -n "${INPUTS_VERSION}" ]]; then
+            TAG_NAME="v${INPUTS_VERSION}"
+          else
+            TAG_NAME="${GITHUB_REF_NAME}"
+          fi
+          gh release edit "$TAG_NAME" --repo "${{ github.repository }}" --draft=false

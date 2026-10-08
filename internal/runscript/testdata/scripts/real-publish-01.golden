@@ -1,0 +1,2 @@
+cmd 1:1 name="python3"
+  pos "scripts/release-candidate.py" "publish"

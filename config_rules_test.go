@@ -371,7 +371,7 @@ paths:
 }
 
 func TestConfigRulesAffectLinting(t *testing.T) {
-	src := "on: push\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - run: echo ${{ github.event.issue.title }}\n"
+	src := "on: push\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n        with:\n          persist-credentials: false\n      - run: echo ${{ github.event.issue.title }}\n"
 
 	tests := []struct {
 		what string
@@ -390,7 +390,10 @@ func TestConfigRulesAffectLinting(t *testing.T) {
 			errs := lintWithConfig(t, mustParseConfig(t, tc.cfg), src)
 			var got []Severity
 			for _, e := range errs {
-				got = append(got, e.Severity)
+				switch e.ID {
+				case "template-injection", "unpinned-uses", "missing-permissions", "missing-timeout":
+					got = append(got, e.Severity)
+				}
 			}
 			if diff := cmp.Diff(tc.want, got); diff != "" {
 				t.Errorf("severities (-want +got): %s\n%v", diff, errs)
@@ -410,7 +413,7 @@ func TestLinterReportsDeprecatedConfigKeysOnce(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	src := []byte("on: push\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo\n")
+	src := []byte("on: push\njobs:\n  j:\n    runs-on: ubuntu-latest\n    timeout-minutes: 5\n    steps:\n      - run: echo\n")
 	for i := 0; i < 3; i++ {
 		errs, err := l.Lint("test.yaml", src, nil)
 		if err != nil {

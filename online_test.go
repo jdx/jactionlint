@@ -86,7 +86,7 @@ func lintOnline(t *testing.T, client GitHubClient, cfg *Config, src string) ([]*
 	if cfg == nil {
 		cfg = &Config{}
 	}
-	l.defaultConfig = cfg
+	l.defaultConfig = withoutMissingTimeout(cfg)
 	errs, err := l.Lint("test.yaml", []byte(src), &Project{root: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
@@ -103,7 +103,7 @@ func workflowWith(steps ...string) string {
 	return b.String()
 }
 
-func idsOf(errs []*Error) []string {
+func lineIDsOf(errs []*Error) []string {
 	var ret []string
 	for _, e := range errs {
 		ret = append(ret, fmt.Sprintf("%d:%s", e.Line, e.ID))
@@ -165,12 +165,12 @@ func TestOnlineConfigKey(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	l.defaultConfig = cfg
+	l.defaultConfig = withoutMissingTimeout(cfg)
 	errs, err := l.Lint("test.yaml", []byte(workflowWith("uses: actions/checkout@2f547d07f23dec7f4a96fc091165260dcbe59529")), &Project{root: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := idsOf(errs); len(got) != 2 || got[0] != "6:impostor-commit" {
+	if got := lineIDsOf(errs); len(got) != 2 || got[0] != "6:impostor-commit" {
 		t.Errorf("the config key should turn the online checks on: %v", got)
 	}
 
@@ -189,7 +189,7 @@ func TestOnlineRulesFollowRuleLevels(t *testing.T) {
 	cfg := &Config{Rules: map[string]RuleConfig{"stale-action-refs": {Level: SeverityOff, levelSet: true}, "impostor-commit": {Level: SeverityWarning, levelSet: true}}}
 	errs, _ := lintOnline(t, c, cfg, src)
 	if len(errs) != 1 || errs[0].ID != "impostor-commit" || errs[0].Severity != SeverityWarning {
-		t.Errorf("want only impostor-commit as a warning: %v", idsOf(errs))
+		t.Errorf("want only impostor-commit as a warning: %v", lineIDsOf(errs))
 	}
 	// Profiles do not matter for online rules
 	for _, p := range []Profile{ProfileDefault, ProfileStrict, ProfileAll} {
@@ -201,7 +201,7 @@ func TestOnlineRulesFollowRuleLevels(t *testing.T) {
 			}
 		}
 		if len(online) != 2 {
-			t.Errorf("profile %s: want both online findings but got %v", p, idsOf(errs))
+			t.Errorf("profile %s: want both online findings but got %v", p, lineIDsOf(errs))
 		}
 	}
 }
@@ -233,11 +233,11 @@ func TestImpostorCommitMaxBranches(t *testing.T) {
 	}
 	// The fixture has two branches, the default one and releases/v1. With a limit of one branch the verdict is unknown.
 	if errs, _ := lintOnline(t, onlineFixtureClient(t), cfg, src); len(errs) != 0 {
-		t.Errorf("without all branches there is no verdict: %v", idsOf(errs))
+		t.Errorf("without all branches there is no verdict: %v", lineIDsOf(errs))
 	}
 	cfg, _ = ParseConfig([]byte("rules:\n  stale-action-refs: off\n  impostor-commit:\n    max-branches: 2\n"))
 	if errs, _ := lintOnline(t, onlineFixtureClient(t), cfg, src); len(errs) != 1 {
-		t.Errorf("with all branches the commit is an impostor: %v", idsOf(errs))
+		t.Errorf("with all branches the commit is an impostor: %v", lineIDsOf(errs))
 	}
 }
 

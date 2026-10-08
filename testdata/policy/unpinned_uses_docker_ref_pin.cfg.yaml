@@ -1,0 +1,5 @@
+rules:
+  unpinned-uses:
+    level: error
+    policies:
+      "*": ref-pin

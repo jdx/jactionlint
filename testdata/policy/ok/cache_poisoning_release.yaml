@@ -1,0 +1,17 @@
+on:
+  release:
+    types: [published]
+
+cache-mode: none
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo publish
+  other:
+    runs-on: ubuntu-latest
+    cache-mode: none
+    steps:
+      - uses: jdx/mise-action@v3

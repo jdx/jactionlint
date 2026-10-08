@@ -1,0 +1,31 @@
+cmd 3:3 name="local"
+  assign package="$1"[var:1]
+  assign name=<nil>
+cmd 4:10 name="tar" pipe=1/2
+  flags -xOf
+  pos "$package"[var:package quoted] "package/package.json"
+cmd 4:53 name="jq" pipe=2/2
+  flags -r
+  pos ".name"
+cmd 5:6 name="npm" tool=npm
+  pos "view" "${name}@${version}"[var:name,version quoted] "version"
+cmd 6:5 name="echo"
+  pos "${name}@${version} is already published"[var:name,version quoted]
+cmd 7:5 name="return"
+cmd 9:3 name="npm" tool=npm
+  flags --access="public" --provenance --tag="$tag"[var:tag quoted]
+  pos "publish" "$package"[var:package quoted]
+  publish tool=npm verb="publish" kind=package dry=false registry=<nil>
+cmd 13:96 name="publish_package"
+  pos "$package"[var:package quoted]
+cmd 14:1 name="publish_package"
+  pos "./packages/jdxcode-aube-ffi-${version}.tgz"[var:version quoted]
+pipeline 4:10 stages=2 negated=false
+redirect 5:44 op=">" fd="" target="/dev/null" append=false write=true
+redirect 5:55 op=">&" fd="2" target="1" append=false write=false
+assignment 1:1 version value="${RELEASE_TAG#v}"[var:RELEASE_TAG] append=false array=false
+assignment 1:27 tag value="latest" append=false array=false
+assignment 1:66 tag value="next" append=false array=false
+assignment 3:9 package value="$1"[var:1] append=false array=false
+assignment 3:20 name value=<nil> append=false array=false
+assignment 4:3 name value="$(tar -xOf \"$package\" package/package.json | jq -r .name)"[subst] append=false array=false

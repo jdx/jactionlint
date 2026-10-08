@@ -1,0 +1,26 @@
+cmd 1:1 name="set"
+  flags -e
+cmd 4:10 name="curl" tool=curl
+  flags -sS -o="/dev/null" -w="%{http_code}"[quoted] --retry="5" --retry-delay="5" --retry-all-errors
+  pos "https://usage.sh$1"[var:1 quoted]
+cmd 5:48 name="echo"
+  pos "000"
+cmd 6:3 name="echo"
+  pos "$1 -> $code (want $2)"[var:1,code,2 quoted]
+cmd 7:3 name="["
+  pos "$code"[var:code quoted] "=" "$2"[var:2 quoted] "]"
+cmd 9:1 name="check"
+  pos "/" "200"
+cmd 10:1 name="check"
+  pos "/gh/jdx/tak" "200"
+cmd 11:1 name="check"
+  pos "/gh/nope-xyz-999/nope" "404"
+cmd 12:1 name="["
+  pos "$fail"[var:fail quoted] "=" "0"[quoted] "]"
+cmd 12:24 name="echo"
+  pos "::error::smoke test failed"[quoted]
+cmd 12:59 name="exit"
+  pos "1"
+assignment 2:1 fail value="0" append=false array=false
+assignment 4:3 code value="$(curl -sS -o /dev/null -w '%{http_code}' --retry 5 --retry-delay 5 \\\n    --retry-all-errors \"https://usage.sh$1\" || echo 000)"[subst] append=false array=false
+assignment 7:25 fail value="1" append=false array=false

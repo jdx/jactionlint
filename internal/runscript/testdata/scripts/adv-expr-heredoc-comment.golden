@@ -1,0 +1,7 @@
+expr 1:16 "secrets.TOKEN"
+expr 3:1 "github.event.comment.body"
+expr 5:10 "inputs.y"
+cmd 2:1 name="cat"
+cmd 5:1 name="echo"
+  pos "x"
+redirect 2:5 op="<<" fd="" target="EOF" append=false write=false heredoc(delim="EOF" quoted=false tabs=false exprs=1 lines=1)

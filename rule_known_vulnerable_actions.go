@@ -143,7 +143,7 @@ func init() {
 		RuleInfo{
 			ID: "known-vulnerable-actions", Group: RuleGroupSecurity, Summary: "An action version is affected by a published GitHub security advisory.",
 			DefaultLevel: SeverityError, Online: true, DocsAnchor: "check-known-vulnerable-actions",
-			Options: []RuleOption{{Name: "allow", Kind: RuleOptionStringList, Summary: "Advisory IDs (GHSA-...) which are not reported."}},
+			Options: []RuleOption{{Name: "allow", Kind: RuleOptionStrings, Summary: "Advisory IDs (GHSA-...) which are not reported."}},
 		},
 	)
 	registerRuleFactory("known-vulnerable-actions", func(env *RuleEnv) []Rule {

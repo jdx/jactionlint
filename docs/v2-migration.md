@@ -20,6 +20,7 @@ with stable rule IDs, severities and profiles. These changes are breaking, which
 | `-format` changes | Built-in formats `text` (default), `oneline`, `json`, `jsonl`, `sarif`, `gcc` and `github`. Go templates keep working. `allKinds` still works and `allRules` is added to list every rule ID. SARIF output carries rule metadata, levels and fixes. | planned |
 | Online checks, `-online` | New, opt-in: six checks that query the GitHub API (impostor commits, known vulnerable actions, ref confusion, stale refs, archived repositories, version comments) and `-online -fix` pinning tags to commits. Nothing changes unless you pass the flag. See [the usage document](usage.md#online-checks). | planned |
 | Config booleans become `rules:` | Options such as `require-permissions` become entries in a `rules:` map (`<id>: off\|info\|warn\|error`), together with a `profile:` (`default`, `strict` or `all`) and `extends:` for shared config. | planned |
+| `missing-timeout` is on by default | A job without `timeout-minutes` is now reported by the default profile. It used to be opt-in. Set `rules.missing-timeout.default-minutes` and run `jactionlint -fix` to add that `timeout-minutes` to every job (there is no built-in number, so without the option the finding has no fix), or set `rules: {missing-timeout: off}` to keep the old behavior. A config that has the old `timeout-minutes:` key keeps its old meaning. | planned |
 
 ## Config migration
 

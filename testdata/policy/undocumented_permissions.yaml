@@ -1,0 +1,27 @@
+on: push
+
+permissions:
+  contents: write
+  # Needed to comment on the release pull request
+  pull-requests: write
+  issues: write # close stale issues
+  packages: read
+  checks: none
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    permissions:
+      # jactionlint ignore=excessive-permissions
+      id-token: write
+      attestations: write
+      # one comment
+
+      deployments: write
+    steps:
+      - run: echo hello
+  flow:
+    runs-on: ubuntu-latest
+    permissions: {statuses: write} # report build status
+    steps:
+      - run: echo hello

@@ -1,0 +1,76 @@
+version: 2
+enable-beta-ecosystems: true
+registries:
+  npm-github:
+    type: npm-registry
+    url: https://npm.pkg.github.com
+    token: ${{secrets.NPM_TOKEN}}
+    replaces-base: true
+  maven-oidc:
+    type: maven-repository
+    url: https://example.com/maven
+    tenant-id: 1234
+    client-id: abcd
+updates:
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:30"
+      timezone: Asia/Tokyo
+    open-pull-requests-limit: 10
+    labels: []
+    assignees: [octocat]
+    reviewers: [octocat]
+    milestone: 4
+    target-branch: develop
+    vendor: false
+    rebase-strategy: disabled
+    insecure-external-code-execution: deny
+    versioning-strategy: increase-if-necessary
+    registries:
+      - npm-github
+    commit-message:
+      prefix: "deps"
+      prefix-development: "deps-dev"
+      include: scope
+    pull-request-branch-name:
+      separator: "-"
+    cooldown:
+      default-days: 7
+      semver-major-days: 30
+      semver-minor-days: 14
+      semver-patch-days: 3
+      include: ["*"]
+      exclude: ["lodash"]
+    allow:
+      - dependency-type: direct
+      - dependency-name: "react*"
+    ignore:
+      - dependency-name: "left-pad"
+        versions: ["1.x", ">= 2.0.0"]
+        update-types: ["version-update:semver-major"]
+    groups:
+      production:
+        applies-to: version-updates
+        dependency-type: production
+        patterns: ["*"]
+        exclude-patterns: ["react*"]
+        update-types: ["minor", "patch"]
+      by-name:
+        group-by: dependency-name
+  - package-ecosystem: maven
+    directories:
+      - "/service-a"
+      - "/service-b"
+    exclude-paths: ["/service-b/legacy"]
+    registries: "*"
+    schedule:
+      interval: cron
+      cronjob: "0 9 * * 1"
+  - package-ecosystem: npm
+    directory: "/"
+    target-branch: release
+    schedule:
+      interval: monthly

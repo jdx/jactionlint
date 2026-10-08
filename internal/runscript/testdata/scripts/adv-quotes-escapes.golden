@@ -1,0 +1,18 @@
+cmd 1:1 name="pip" tool=pip
+  pos "install" "pkg==1.0"[quoted] "pkg2==2.0"[quoted] "pkg3==3.0" "pkg4==4.0"[quoted]
+  install tool=pip eco=pypi verb=install run=false global=false locked=false manifest=false reqs=0
+    pkg "pkg==1.0" name="pkg" ver="==1.0" kind=registry pinned=true dyn=false local=false
+    pkg "pkg2==2.0" name="pkg2" ver="==2.0" kind=registry pinned=true dyn=false local=false
+    pkg "pkg3==3.0" name="pkg3" ver="==3.0" kind=registry pinned=true dyn=false local=false
+    pkg "pkg4==4.0" name="pkg4" ver="==4.0" kind=registry pinned=true dyn=false local=false
+cmd 2:1 name="echo"
+  pos "$GITHUB_ENV"[quoted]
+cmd 3:1 name="echo"
+  pos "continued"
+cmd 6:1 name="echo"
+  pos "ansi\\nquoted"[quoted]
+redirect 2:21 op=">>" fd="" target="$GITHUB_ENV" append=true write=true
+redirect 4:13 op=">>" fd="" target="$GITHUB_ENV"[var:GITHUB_ENV quoted] append=true write=true
+redirect 6:22 op=">>" fd="" target="$GITHUB_ENV"[var:GITHUB_ENV] append=true write=true
+writes GITHUB_ENV at 4:13 append=true producers=1 exprs=[]
+writes GITHUB_ENV at 6:22 append=true producers=1 exprs=[]
