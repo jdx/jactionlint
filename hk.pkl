@@ -31,9 +31,9 @@ local slow = new Mapping<String, Step> {
     // ./... is not usable here because docs/node_modules may contain Go packages
     ["staticcheck"] {
         glob = "**/*.go"
-        // staticcheck 0.8.1 cannot read the export data of the go1.27.2 toolchain that go.mod selects (it
-        // fails with "export data version 5 is greater than maximum supported version 4"), so it runs on
-        // the installed Go. govulncheck and the builds use the toolchain from go.mod.
+        // staticcheck cannot read the export data of the go1.27.2 toolchain that go.mod selects (it fails
+        // with "export data version 5 is greater than maximum supported version 4"), so it runs on the Go
+        // installed by mise, which mise.toml pins to 1.27.1. govulncheck and the builds use go.mod's.
         check = "GOTOOLCHAIN=local staticcheck ./ ./scripts/... ./cmd/... && mise run lint:wasm"
     }
     ["go_vuln_check"] = Builtins.go_vuln_check

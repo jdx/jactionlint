@@ -1,5 +1,9 @@
 [tools]
-go = "1.27"
+# Pinned to 1.27.1 on purpose: staticcheck (0.8.1 and current master) cannot read the export data of go1.27.2
+# ("export data version 5 is greater than maximum supported version 4"). It runs on this Go with
+# GOTOOLCHAIN=local, while go.mod's `toolchain go1.27.2` supplies the fixed standard library to builds,
+# tests and govulncheck. Unpin once staticcheck supports the new export data.
+go = "1.27.1"
 node = "lts"
 hk = "latest"
 pkl = "latest"
