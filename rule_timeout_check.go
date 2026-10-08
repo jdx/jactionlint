@@ -13,10 +13,6 @@ type RuleTimeoutCheck struct {
 	src *srcDoc
 }
 
-// defaultTimeoutMinutes is the timeout-minutes which -fix adds to a job when
-// "default-minutes" of the missing-timeout rule is not configured.
-const defaultTimeoutMinutes = 30
-
 // NewRuleTimeoutCheck creates a new RuleTimeoutCheck instance.
 func NewRuleTimeoutCheck() *RuleTimeoutCheck {
 	return &RuleTimeoutCheck{
@@ -33,20 +29,23 @@ func (rule *RuleTimeoutCheck) VisitWorkflowPre(n *Workflow) error {
 	return nil
 }
 
-// fixMinutes is the timeout-minutes to add to a job. The default is lowered to the maximum so that
-// the fix does not cause a timeout-too-long finding.
-func (rule *RuleTimeoutCheck) fixMinutes() int {
+// fixMinutes is the timeout-minutes to add to a job. There is deliberately no built-in number: the
+// fix is only offered when "default-minutes" of the missing-timeout rule is configured. The value is
+// lowered to the maximum of timeout-too-long, when that is set, so that the fix does not cause a
+// timeout-too-long finding.
+func (rule *RuleTimeoutCheck) fixMinutes() (int, bool) {
 	cfg := rule.Config()
-	minutes := defaultTimeoutMinutes
-	if v, ok := cfg.ruleOptionNumber("missing-timeout", "default-minutes"); ok && v >= 1 {
-		minutes = int(v)
+	v, ok := cfg.ruleOptionNumber("missing-timeout", "default-minutes")
+	if !ok || v < 1 {
+		return 0, false
 	}
+	minutes := int(v)
 	if cfg.RuleEnabled("timeout-too-long") {
 		if max, ok := cfg.ruleOptionNumber("timeout-too-long", "max"); ok && max >= 1 && float64(minutes) > max {
 			minutes = int(max)
 		}
 	}
-	return minutes
+	return minutes, true
 }
 
 // fixMissing makes the fix adding "timeout-minutes" to the job. It returns nil when the job is not
@@ -59,7 +58,10 @@ func (rule *RuleTimeoutCheck) fixMissing(n *Job) *Fix {
 	if !ok {
 		return nil
 	}
-	minutes := rule.fixMinutes()
+	minutes, ok := rule.fixMinutes()
+	if !ok {
+		return nil
+	}
 	return &Fix{
 		Description: fmt.Sprintf("Add timeout-minutes: %d", minutes),
 		Edits:       []TextEdit{rule.src.insertAfterLine(site.after, fmt.Sprintf("%stimeout-minutes: %d", strings.Repeat(" ", site.bodyIndent), minutes))},
@@ -100,7 +102,7 @@ func (rule *RuleTimeoutCheck) VisitJobPre(n *Job) error {
 
 func init() {
 	registerRules(
-		RuleInfo{ID: "missing-timeout", Group: RuleGroupPolicy, Summary: "A job does not set timeout-minutes.", DefaultLevel: SeverityError, Profile: ProfileDefault, Fixable: true, DocsAnchor: "check-timeout-minutes", Options: []RuleOption{{Name: "default-minutes", Kind: RuleOptionInt, Default: defaultTimeoutMinutes, Summary: "The timeout-minutes which -fix adds to a job. It is lowered to the max of timeout-too-long when that is smaller."}}},
+		RuleInfo{ID: "missing-timeout", Group: RuleGroupPolicy, Summary: "A job does not set timeout-minutes.", DefaultLevel: SeverityError, Profile: ProfileDefault, Fixable: true, DocsAnchor: "check-timeout-minutes", Options: []RuleOption{{Name: "default-minutes", Kind: RuleOptionInt, Summary: "The timeout-minutes which -fix adds to a job. There is no default: the rule has no fix unless this is set. It is lowered to the max of timeout-too-long when that is smaller."}}},
 		RuleInfo{ID: "timeout-too-long", Group: RuleGroupPolicy, Summary: "timeout-minutes of a job exceeds the configured maximum.", DefaultLevel: SeverityError, DocsAnchor: "check-timeout-minutes", Options: []RuleOption{{Name: "max", Kind: RuleOptionNumber, Summary: "The maximum allowed timeout-minutes. The rule does nothing without it."}}},
 	)
 	registerRuleFactory("timeout-check", func(env *RuleEnv) []Rule {

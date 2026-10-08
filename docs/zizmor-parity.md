@@ -134,7 +134,7 @@ all 955 distinct workflow files of the 139 worktrees there (the "all" numbers). 
 sense of the other default rules: it has no false positives, but it is noisy for a repository that never set the key (270
 findings in 27 of the 35 repositories). `jactionlint -fix` clears all of them. `missing-permissions` stays in `strict`.
 
-The fixers were measured on the 955 files: `jactionlint -fix` adds exactly 1010 `timeout-minutes: 30` lines and 28 `permissions:` blocks
+The fixers were measured on the 955 files: `jactionlint -fix` (with `default-minutes: 30` configured for the measurement) adds exactly 1010 `timeout-minutes: 30` lines and 28 `permissions:` blocks
 (the safe ones) and changes no other line (`diff -r` shows added lines only); `-fix=unsafe` adds 137 blocks; after either run
 the rules report nothing that has a fix, and a second run changes nothing.
 ## Batch C measurements

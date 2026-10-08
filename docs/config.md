@@ -192,7 +192,7 @@ rules:
 | Rule               | Option            | Description                                                                                                                              |
 | ------------------ | ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
 | `max-run-lines`    | `max`             | Maximum number of non-blank lines in a `run:` script. Default `100` when the rule is enabled by the `all` profile.                       |
-| `missing-timeout`  | `default-minutes` | The `timeout-minutes` which `-fix` adds to a job without one. Default `30`. Lowered to `max` of `timeout-too-long` when that is smaller. |
+| `missing-timeout`  | `default-minutes` | The `timeout-minutes` which `-fix` adds to a job without one. There is no default: without it the rule has no fix. Lowered to `max` of `timeout-too-long` when that is smaller. |
 | `timeout-too-long` | `max`             | Maximum allowed `timeout-minutes` of a job in minutes. Values given by `${{ }}` are not checked. The rule does nothing without `max`.    |
 | `forbidden-uses`      | `allow` | List of patterns of the only actions and reusable workflows that may be used, e.g. `actions/*`. See [forbidden actions](checks.md#check-forbidden-uses). |
 | `forbidden-uses`      | `deny`  | List of patterns of actions and reusable workflows that must not be used. The rule does nothing without `allow` or `deny`.                      |

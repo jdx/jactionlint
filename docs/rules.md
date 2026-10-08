@@ -323,8 +323,8 @@ An action or reusable workflow is not allowed or is denied by the configuration.
 - Group: policy
 - Default level: error
 - Profile: only when configured
-- Option `allow` (strings, no default; the rule does nothing without it): Patterns of the only actions and reusable workflows which may be used, e.g. "actions/*". The rule does nothing without allow or deny.
-- Option `deny` (strings, no default; the rule does nothing without it): Patterns of actions and reusable workflows which must not be used.
+- Option `allow` (strings, no default): Patterns of the only actions and reusable workflows which may be used, e.g. "actions/*". The rule does nothing without allow or deny.
+- Option `deny` (strings, no default): Patterns of actions and reusable workflows which must not be used.
 - Details and examples: [checks](./checks.md#check-forbidden-uses)
 
 ## github-app
@@ -634,7 +634,7 @@ A job does not set timeout-minutes.
 - Default level: error
 - Profile: default
 - Fixable: yes
-- Option `default-minutes` (int, default 30): The timeout-minutes which -fix adds to a job. It is lowered to the max of timeout-too-long when that is smaller.
+- Option `default-minutes` (int, no default): The timeout-minutes which -fix adds to a job. There is no default: the rule has no fix unless this is set. It is lowered to the max of timeout-too-long when that is smaller.
 - Details and examples: [checks](./checks.md#check-timeout-minutes)
 
 ## missing-workflow-input
@@ -743,7 +743,7 @@ A job uses a secret but has no environment.
 - Group: security
 - Default level: warn
 - Profile: all
-- Option `allow` (strings, no default; the rule does nothing without it): Names of secrets which may be used outside of an environment. GITHUB_TOKEN is always allowed.
+- Option `allow` (strings, no default): Names of secrets which may be used outside of an environment. GITHUB_TOKEN is always allowed.
 - Details and examples: [checks](./checks.md#check-secrets-outside-env)
 
 ## self-hosted-runner
@@ -811,7 +811,7 @@ timeout-minutes of a job exceeds the configured maximum.
 - Group: policy
 - Default level: error
 - Profile: only when configured
-- Option `max` (number, no default; the rule does nothing without it): The maximum allowed timeout-minutes. The rule does nothing without it.
+- Option `max` (number, no default): The maximum allowed timeout-minutes. The rule does nothing without it.
 - Details and examples: [checks](./checks.md#check-timeout-minutes)
 
 ## typosquat-uses
@@ -821,7 +821,7 @@ An action is one typo away from a popular action of another owner.
 - Group: security
 - Default level: warn
 - Profile: strict
-- Option `allow` (strings, no default; the rule does nothing without it): Slugs (owner/repo) of actions which are never reported, e.g. a legitimate fork.
+- Option `allow` (strings, no default): Slugs (owner/repo) of actions which are never reported, e.g. a legitimate fork.
 - Details and examples: [checks](./checks.md#check-typosquat-uses)
 
 ## undefined-function

@@ -22,7 +22,7 @@ var fixerIDs = []string{"missing-timeout", "missing-permissions", "unused-ignore
 
 func fixerConfig(t *testing.T, extra string) *Config {
 	t.Helper()
-	return mustParseConfig(t, "rules:\n  missing-permissions: error\n  unused-ignore: error\n"+extra)
+	return mustParseConfig(t, "rules:\n  missing-permissions: error\n  missing-timeout:\n    default-minutes: 30\n  unused-ignore: error\n"+extra)
 }
 
 // fixWith lints the source and applies the fixes of fixerIDs until nothing changes, like FixFiles does. It
@@ -219,11 +219,10 @@ func TestFixTimeoutOptions(t *testing.T) {
 		cfg  string
 		want string
 	}{
-		{"default is 30", "", "    timeout-minutes: 30\n"},
 		{"default-minutes", "  missing-timeout:\n    default-minutes: 12\n", "    timeout-minutes: 12\n"},
 		{"lowered to the maximum", "  missing-timeout:\n    default-minutes: 45\n  timeout-too-long:\n    max: 20\n", "    timeout-minutes: 20\n"},
 		{"the maximum is not a limit for a smaller default", "  missing-timeout:\n    default-minutes: 5\n  timeout-too-long:\n    max: 20\n", "    timeout-minutes: 5\n"},
-		{"a fractional maximum is rounded down", "  timeout-too-long:\n    max: 20.5\n", "    timeout-minutes: 20\n"},
+		{"a fractional maximum is rounded down", "  missing-timeout:\n    default-minutes: 45\n  timeout-too-long:\n    max: 20.5\n", "    timeout-minutes: 20\n"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.what, func(t *testing.T) {
@@ -249,6 +248,23 @@ func TestFixTimeoutOptions(t *testing.T) {
 	for _, bad := range []string{"-1", "1.5", "abc"} {
 		if _, err := ParseConfig([]byte("rules:\n  missing-timeout:\n    default-minutes: " + bad + "\n")); err == nil {
 			t.Errorf("default-minutes: %s must be rejected", bad)
+		}
+	}
+}
+
+func TestNoFixForMissingTimeoutWithoutDefaultMinutes(t *testing.T) {
+	src := []byte("on: push\npermissions: {}\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo\n")
+	for _, rules := range []string{"", "  timeout-too-long:\n    max: 20\n"} {
+		cfg := mustParseConfig(t, "rules:\n"+rules+"  unused-ignore: error\n")
+		out, n, left := fixWith(t, src, cfg, FixModeUnsafe)
+		if n != 0 || string(out) != string(src) {
+			t.Errorf("%q: the file must not be changed without default-minutes: %d fixes\n%s", rules, n, out)
+		}
+		if len(left) != 1 || left[0].ID != "missing-timeout" || left[0].Fix != nil {
+			t.Errorf("%q: want one missing-timeout finding without a fix, got %v", rules, left)
+		}
+		if !strings.Contains(left[0].Message, "timeout-minutes") {
+			t.Errorf("%q: the message must tell to set timeout-minutes: %q", rules, left[0].Message)
 		}
 	}
 }
@@ -334,7 +350,7 @@ func FuzzFixers(f *testing.F) {
 	f.Add([]byte("on: push\njobs:\n  a:\n    runs-on: x\n    steps: []\n"))
 	f.Add([]byte("on: push\r\njobs:\r\n  a: {runs-on: x}\r\n"))
 	f.Add([]byte("jobs:\n a:\n  runs-on: |\n   x\n # c\n"))
-	cfg := mustParseConfig(f, "rules:\n  missing-permissions: error\n  unused-ignore: error\n")
+	cfg := mustParseConfig(f, "rules:\n  missing-permissions: error\n  missing-timeout:\n    default-minutes: 30\n  unused-ignore: error\n")
 	f.Fuzz(func(t *testing.T, src []byte) {
 		var in any
 		valid := yaml.Unmarshal(src, &in) == nil

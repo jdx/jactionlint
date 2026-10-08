@@ -411,7 +411,7 @@ func TestCommandFix(t *testing.T) {
 	}
 
 	// Only warnings remain: exit status 0
-	if err := os.WriteFile(filepath.Join(root, "jactionlint.yaml"), []byte("rules:\n  undefined-property: warn\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(root, "jactionlint.yaml"), []byte("rules:\n  undefined-property: warn\n  missing-timeout: off\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	code, stdout, _ = run(nil, "-fix", path)

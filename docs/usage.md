@@ -294,7 +294,7 @@ Fixes arrive with the rules that can fix their findings mechanically. The errors
 
 | Rule                  | What `-fix` does                                                                                                             | Safe                                                              |
 | --------------------- | ---------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
-| `missing-timeout`     | Adds `timeout-minutes: 30` to the job after `runs-on:` ([`default-minutes`](config.md#rules) changes the number).            | Yes                                                               |
+| `missing-timeout`     | Adds `timeout-minutes: N` to the job after `runs-on:`, only when [`default-minutes`](config.md#rules) sets `N`.            | Yes                                                               |
 | `missing-permissions` | Adds `permissions:` with `contents: read` to the workflow after the `on:` block.                                             | Only when nothing shows that a job needs the token, else `unsafe` |
 | `unused-ignore`       | Removes the ignore comment, or only its patterns which did nothing when the comment has others.                              | Yes                                                               |
 
@@ -328,8 +328,8 @@ runs when a finding has no fix. Add this step to `hk.pkl`:
   stderr in this format.
 - To use the `strict` profile, set `profile: strict` in `.github/jactionlint.yaml`.
 - `missing-timeout` is in the default profile, so the first `hk check` on a repository whose jobs have no `timeout-minutes` fails
-  on every job. Its fix is safe and is in the SARIF log, so `hk fix` adds `timeout-minutes: 30` without running
-  `jactionlint -fix`. `missing-permissions` (`strict`) is only in the log when the fix is safe; otherwise hk runs
+  on every job. Its fix exists only when `rules.missing-timeout.default-minutes` is set (there is no built-in
+  number). The fix is safe and is in the SARIF log, so `hk fix` adds the timeout without running `jactionlint -fix`. `missing-permissions` (`strict`) is only in the log when the fix is safe; otherwise hk runs
   `jactionlint -fix`, which leaves the unsafe fix alone and still reports the finding, and you decide whether to run
   `jactionlint -fix=unsafe`.
 

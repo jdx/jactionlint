@@ -1432,16 +1432,19 @@ hangs. Turn it off with `missing-timeout: off` in `rules`, or ignore one job wit
 
 #### Fixing missing timeouts
 
-`jactionlint -fix` adds `timeout-minutes: 30` to every job which has none. It is a safe fix: a job which is cancelled after
-30 minutes is the only way it can change a workflow, and one which really needs longer sets its own value. The line goes right
-after `runs-on:` (or after `name:`, or as the first key of the job when it has neither), with the indentation of the job's other
-keys and the line endings of the file. Change the number with the `default-minutes` option:
+jactionlint has no built-in number of minutes, because the right limit depends on your jobs. The finding tells you to set
+`timeout-minutes`, and `jactionlint -fix` adds it only when you configure the number with the `default-minutes` option:
 
 ```yaml
 rules:
   missing-timeout:
     default-minutes: 15
 ```
+
+Then `-fix` adds `timeout-minutes: 15` to every job which has none. It is a safe fix: a job which is cancelled after that time
+is the only way it can change a workflow, and one which really needs longer sets its own value. The line goes right after
+`runs-on:` (or after `name:`, or as the first key of the job when it has neither), with the indentation of the job's other keys
+and the line endings of the file. Without `default-minutes` the finding has no fix.
 
 When `timeout-too-long` has a `max` smaller than `default-minutes`, the fix uses `max` so the result stays clean. Jobs calling a
 reusable workflow are skipped since they do not support `timeout-minutes`. A job written in the flow style (`job: {runs-on: ...}`)
