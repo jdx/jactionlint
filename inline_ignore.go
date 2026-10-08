@@ -212,13 +212,13 @@ func (l *Linter) filterInlineIgnores(errs []*Error, ignores []inlineIgnore) []*E
 }
 
 // unusedInlineIgnores returns an error for each pattern of the inline ignore comments which did not
-// suppress any error. A pattern for a rule which is off is not reported because the rule could not
-// report anything.
-func unusedInlineIgnores(ignores []inlineIgnore, orphans []*inlineIgnoreEntry, cfg *Config) []*Error {
+// suppress any error. A pattern for a rule which is off, or an online rule while the online checks are
+// off (online), is not reported because the rule could not report anything.
+func unusedInlineIgnores(ignores []inlineIgnore, orphans []*inlineIgnoreEntry, cfg *Config, online bool) []*Error {
 	var errs []*Error
 	// stale tells whether the pattern is reported: it did nothing and could have done something
 	stale := func(e *inlineIgnoreEntry) bool {
-		return !e.used && (e.pat.ID == "" || cfg.RuleEnabled(e.pat.ID))
+		return !e.used && (e.pat.ID == "" || cfg.RuleRuns(e.pat.ID, online))
 	}
 	report := func(e *inlineIgnoreEntry, what string) {
 		if !stale(e) {

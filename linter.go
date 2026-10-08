@@ -717,7 +717,7 @@ func (l *Linter) finishCheck(path string, content []byte, all []*Error, cfg *Con
 	// is used. The order of the filters does not change which errors remain.
 	inlineIgnores, orphans, ignoreErrs := parseInlineIgnoresWithOrphans(content)
 	all = l.filterInlineIgnores(all, inlineIgnores)
-	unused := unusedInlineIgnores(inlineIgnores, orphans, cfg)
+	unused := unusedInlineIgnores(inlineIgnores, orphans, cfg, l.online.enabled || (cfg != nil && cfg.Online))
 	dropFixesChangingYAML(content, unused)
 	all = append(all, l.annotateErrors(unused, content, cfg)...)
 

@@ -43,6 +43,16 @@ func (c *Config) RuleEnabled(id string) bool {
 	return c.RuleLevel(id) != SeverityOff
 }
 
+// RuleRuns reports whether the rule runs in a run where the online checks are on or off: an online rule
+// needs online mode as well as a level which is not off. Use it where a consumer asks whether a rule could
+// have reported something (unused-ignore); RuleEnabled only looks at the level.
+func (c *Config) RuleRuns(id string, online bool) bool {
+	if info, ok := ruleIndex[id]; ok && info.Online && !online {
+		return false
+	}
+	return c.RuleEnabled(id)
+}
+
 func (c *Config) profile() Profile {
 	if c == nil || c.Profile == "" {
 		return ProfileDefault

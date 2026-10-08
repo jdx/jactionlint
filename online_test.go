@@ -588,3 +588,26 @@ func TestRefVersionMismatchIsSilentWhenTheTagLookupFails(t *testing.T) {
 		t.Errorf("unexpected %s: %s", e.ID, e.Message)
 	}
 }
+
+// An ignore for an online rule is not unused while the online checks are off: the rule did not run.
+func TestUnusedIgnoreOfOnlineRules(t *testing.T) {
+	src := "on: push\njobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      # jactionlint ignore=impostor-commit\n      - uses: actions/checkout@v4\n"
+	cfg := mustParseConfig(t, "profile: strict\nrules:\n  unused-ignore: error\n  missing-timeout: off\n  stale-action-refs: off\n")
+	unused := func(errs []*Error) int { return len(errsWithID(errs, "unused-ignore")) }
+
+	l, err := NewLinter(io.Discard, &LinterOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	l.defaultConfig = cfg
+	errs, err := l.Lint("test.yaml", []byte(src), &Project{root: t.TempDir()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := unused(errs); got != 0 {
+		t.Errorf("offline: the online rule could not report, so the ignore is not unused: %v", lineIDsOf(errs))
+	}
+	if errs, _ := lintOnline(t, onlineFixtureClient(t), cfg, src); unused(errs) != 1 {
+		t.Errorf("online: the rule ran and found nothing to ignore: %v", lineIDsOf(errs))
+	}
+}
