@@ -1,0 +1,23 @@
+cmd 1:1 name="mkdir"
+  pos "npm-smoke"
+cmd 2:1 name="cd"
+  pos "npm-smoke"
+cmd 3:1 name="npm" tool=npm
+  flags --yes
+  pos "init"
+cmd 4:1 name="npm" tool=npm
+  flags --force --ignore-scripts --no-package-lock
+  pos "install" "../packages/*.tgz"[glob]
+  install tool=npm eco=npm verb=install run=false global=false locked=false manifest=false reqs=0
+    pkg "../packages/*.tgz" name="../packages/*.tgz" ver="" kind=path pinned=false dyn=false local=true
+cmd 5:1 name="node"
+  flags -e
+  pos "const ffi=require('@jdxcode/aube-ffi'); require('fs').accessSync(ffi.libraryPath); require('fs').accessSync(ffi.headerPath)"[quoted]
+cmd 6:1 name="cp"
+  pos "$GITHUB_WORKSPACE/crates/aube-ffi/npm/typecheck.ts"[var:GITHUB_WORKSPACE quoted] "."
+cmd 7:1 name="npx" tool=npx
+  flags --yes --package="typescript@5.9.3" --strict --noEmit --lib --module --moduleResolution
+  pos "tsc" "ES2022,DOM" "NodeNext" "NodeNext" "typecheck.ts"
+  install tool=npx eco=npm verb=run run=true global=false locked=false manifest=false reqs=0
+    pkg "typescript@5.9.3" name="typescript" ver="5.9.3" kind=registry pinned=true dyn=false local=false
+redirect 3:16 op=">" fd="" target="/dev/null" append=false write=true

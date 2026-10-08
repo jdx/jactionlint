@@ -1,0 +1,4 @@
+rules:
+  excessive-permissions:
+    level: error
+    require-workflow-permissions: true

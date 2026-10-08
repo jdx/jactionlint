@@ -109,12 +109,18 @@ type parser struct {
 	errors []*Error
 	// lines are the lines of the source. This is nil when the source is not available.
 	lines []string
+	// syntaxID is the ID of the syntax errors. It is "workflow-syntax" when empty.
+	syntaxID string
 }
 
 // syntaxCheckKind is the kind of the errors which the parser reports.
 const syntaxCheckKind = "syntax-check"
 
 func (p *parser) error(n *yaml.Node, m string) {
+	if p.syntaxID != "" {
+		p.errorID(p.syntaxID, n, m)
+		return
+	}
 	p.errorID("workflow-syntax", n, m)
 }
 
@@ -123,6 +129,10 @@ func (p *parser) errorID(id string, n *yaml.Node, m string) {
 }
 
 func (p *parser) errorAt(pos *Pos, m string) {
+	if p.syntaxID != "" {
+		p.errorIDAt(p.syntaxID, pos, m)
+		return
+	}
 	p.errorIDAt("workflow-syntax", pos, m)
 }
 
@@ -876,6 +886,7 @@ func (p *parser) parseConcurrency(pos *Pos, n *yaml.Node) *Concurrency {
 
 	if n.Kind == yaml.ScalarNode {
 		ret.Group = p.parseString(n, false)
+		ret.Bare = true
 		return ret
 	}
 
@@ -1613,6 +1624,7 @@ func (p *parser) parseJob(id *String, n *yaml.Node) *Job {
 				// https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions#onworkflow_callsecretsinherit
 				if e.val.Value == "inherit" {
 					call.InheritSecrets = true
+					call.InheritSecretsPos = posAt(e.val)
 				} else {
 					p.errorf(e.val, "expected mapping node for secrets or \"inherit\" string node but found %q node", e.val.Value)
 				}

@@ -1,0 +1,7 @@
+cmd 1:1 name="apt-get" tool=apt wrappers=sudo
+  pos "update"
+cmd 2:1 name="apt-get" tool=apt wrappers=sudo
+  flags -y
+  pos "install" "musl-tools"
+  install tool=apt eco=apt verb=install run=false global=false locked=false manifest=false reqs=0
+    pkg "musl-tools" name="musl-tools" ver="" kind=registry pinned=false dyn=false local=false

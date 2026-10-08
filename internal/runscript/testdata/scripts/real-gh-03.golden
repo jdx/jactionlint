@@ -1,0 +1,3 @@
+cmd 1:1 name="gh" tool=gh
+  flags --draft="false"
+  pos "release" "edit" "$GITHUB_REF_NAME"[var:GITHUB_REF_NAME quoted]

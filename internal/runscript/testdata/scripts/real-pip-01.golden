@@ -1,0 +1,10 @@
+cmd 1:1 name="python3"
+  flags -m
+  pos "venv" "$RUNNER_TEMP/venv"[var:RUNNER_TEMP quoted]
+cmd 2:1 name=""
+  flags --quiet
+  pos "install" "pyyaml"
+cmd 3:1 name="echo"
+  pos "$RUNNER_TEMP/venv/bin"[var:RUNNER_TEMP quoted]
+redirect 3:30 op=">>" fd="" target="$GITHUB_PATH"[var:GITHUB_PATH quoted] append=true write=true
+writes GITHUB_PATH at 3:30 append=true producers=1 exprs=[]

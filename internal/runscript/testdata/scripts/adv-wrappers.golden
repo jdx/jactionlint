@@ -1,0 +1,33 @@
+cmd 1:1 name="pip" tool=pip wrappers=sudo,env
+  pos "install" "foo"
+  install tool=pip eco=pypi verb=install run=false global=false locked=false manifest=false reqs=0
+    pkg "foo" name="foo" ver="" kind=registry pinned=false dyn=false local=false
+cmd 2:1 name="npm" tool=npm wrappers=env
+  pos "install" "bar"
+  install tool=npm eco=npm verb=install run=false global=false locked=false manifest=false reqs=0
+    pkg "bar" name="bar" ver="" kind=registry pinned=false dyn=false local=false
+cmd 3:1 name="npm" tool=npm wrappers=command
+  pos "install" "baz"
+  install tool=npm eco=npm verb=install run=false global=false locked=false manifest=false reqs=0
+    pkg "baz" name="baz" ver="" kind=registry pinned=false dyn=false local=false
+cmd 4:6 name="cargo" tool=cargo
+  pos "install" "qux"
+  install tool=cargo eco=crates verb=install run=false global=false locked=false manifest=false reqs=0
+    pkg "qux" name="qux" ver="" kind=registry pinned=false dyn=false local=false
+cmd 5:1 name="go" tool=go wrappers=nohup,timeout
+  pos "install" "a/b@latest"
+  install tool=go eco=go verb=install run=false global=false locked=false manifest=false reqs=0
+    pkg "a/b@latest" name="a/b" ver="latest" kind=module pinned=false dyn=false local=false
+cmd 6:1 name="pip3" tool=pip
+  pos "install" "abs"
+  install tool=pip eco=pypi verb=install run=false global=false locked=false manifest=false reqs=0
+    pkg "abs" name="abs" ver="" kind=registry pinned=false dyn=false local=false
+cmd 7:1 name="pip" tool=pip
+  assign PIP_NO_CACHE_DIR="1"
+  pos "install" "prefix"
+  install tool=pip eco=pypi verb=install run=false global=false locked=false manifest=false reqs=0
+    pkg "prefix" name="prefix" ver="" kind=registry pinned=false dyn=false local=false
+cmd 8:1 name="" wrappers=command
+cmd 9:3 name="npm" tool=npm
+  pos "view" "foo"
+assignment 7:1 PIP_NO_CACHE_DIR value="1" append=false array=false

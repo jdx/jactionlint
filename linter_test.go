@@ -52,6 +52,9 @@ func TestLinterLintOK(t *testing.T) {
 			continue
 		}
 		n := e.Name()
+		if strings.HasPrefix(n, dependabotFixturePrefix) {
+			continue // Dependabot configurations are checked by TestDependabotFixtures
+		}
 		if strings.HasSuffix(n, ".yaml") || strings.HasSuffix(n, ".yml") {
 			fs = append(fs, filepath.Join(dir, n))
 		}
@@ -109,6 +112,9 @@ func testFindAllWorkflowsInDir(subdir string) (string, []string, error) {
 			continue
 		}
 		n := info.Name()
+		if strings.HasPrefix(n, dependabotFixturePrefix) {
+			continue // Dependabot configurations are checked by TestDependabotFixtures
+		}
 		if strings.HasSuffix(n, ".yaml") || strings.HasSuffix(n, ".yml") {
 			fs = append(fs, filepath.Join(dir, n))
 		}
@@ -226,6 +232,10 @@ func TestLinterLintError(t *testing.T) {
 				if strings.HasSuffix(testName, "_checkout") {
 					l.defaultConfig = fixtureConfig("local-action-checkout")
 				}
+				// A fixture can have the configuration it needs in a file next to it
+				if cfg := fixtureConfigFile(t, base+".config"); cfg != nil {
+					l.defaultConfig = cfg
+				}
 
 				errs, err := l.Lint("test.yaml", b, proj)
 				if err != nil {
@@ -284,6 +294,9 @@ func TestLinterLintAllErrorWorkflowsAtOnce(t *testing.T) {
 	// Check each example workflow file caused at least one error
 CheckFiles:
 	for _, f := range files {
+		if fixtureConfigFile(t, strings.TrimSuffix(f, filepath.Ext(f))+".config") != nil {
+			continue // Needs its own configuration, which is not applied here
+		}
 		for _, e := range errs {
 			if e.Filepath == f {
 				continue CheckFiles
@@ -468,7 +481,7 @@ func TestLinterFormatErrorMessageInSARIF(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	l.defaultConfig = &Config{}
+	l.defaultConfig = withFixtureRules(&Config{})
 	errs, err := l.LintFile(file, proj)
 	if err != nil {
 		t.Fatal(err)

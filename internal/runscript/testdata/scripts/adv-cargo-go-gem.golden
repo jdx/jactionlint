@@ -1,0 +1,104 @@
+cmd 1:1 name="cargo" tool=cargo
+  pos "install" "ripgrep"
+  install tool=cargo eco=crates verb=install run=false global=false locked=false manifest=false reqs=0
+    pkg "ripgrep" name="ripgrep" ver="" kind=registry pinned=false dyn=false local=false
+cmd 2:1 name="cargo" tool=cargo
+  flags --locked --version="14.1.0"
+  pos "install" "ripgrep"
+  install tool=cargo eco=crates verb=install run=false global=false locked=true manifest=false reqs=0
+    pkg "ripgrep" name="ripgrep" ver="14.1.0" kind=registry pinned=true dyn=false local=false
+cmd 3:1 name="cargo" tool=cargo
+  flags --locked
+  pos "install" "cargo-nextest"
+  install tool=cargo eco=crates verb=install run=false global=false locked=true manifest=false reqs=0
+    pkg "cargo-nextest" name="cargo-nextest" ver="" kind=registry pinned=false dyn=false local=false
+cmd 4:1 name="cargo" tool=cargo
+  flags --git="https://github.com/o/r" --rev="0123456789abcdef0123456789abcdef01234567"
+  pos "install"
+  install tool=cargo eco=crates verb=install run=false global=false locked=false manifest=false reqs=0
+    pkg "https://github.com/o/r" name="https://github.com/o/r" ver="" kind=git pinned=true dyn=false local=false
+cmd 5:1 name="cargo" tool=cargo
+  flags --git="https://github.com/o/r" --branch="main"
+  pos "install" "tool"
+  install tool=cargo eco=crates verb=install run=false global=false locked=false manifest=false reqs=0
+    pkg "tool" name="tool" ver="" kind=git pinned=false dyn=false local=false
+cmd 6:1 name="cargo" tool=cargo
+  flags --path="." --force
+  pos "install"
+  install tool=cargo eco=crates verb=install run=false global=false locked=false manifest=false reqs=0
+    pkg "." name="." ver="" kind=path pinned=false dyn=false local=true
+cmd 7:1 name="cargo" tool=cargo
+  pos "install" "cargo-edit@0.12.2"
+  install tool=cargo eco=crates verb=install run=false global=false locked=false manifest=false reqs=0
+    pkg "cargo-edit@0.12.2" name="cargo-edit" ver="0.12.2" kind=registry pinned=true dyn=false local=false
+cmd 8:1 name="cargo" tool=cargo
+  flags --version="=1.2.3"[quoted]
+  pos "install" "foo"
+  install tool=cargo eco=crates verb=install run=false global=false locked=false manifest=false reqs=0
+    pkg "foo" name="foo" ver="=1.2.3" kind=registry pinned=true dyn=false local=false
+cmd 9:1 name="cargo" tool=cargo
+  flags -y
+  pos "binstall" "cargo-deny@0.14.0" "cargo-audit"
+  install tool=cargo eco=crates verb=binstall run=false global=false locked=false manifest=false reqs=0
+    pkg "cargo-deny@0.14.0" name="cargo-deny" ver="0.14.0" kind=registry pinned=true dyn=false local=false
+    pkg "cargo-audit" name="cargo-audit" ver="" kind=registry pinned=false dyn=false local=false
+cmd 10:1 name="cargo-binstall" tool=cargo
+  flags --no-confirm
+  pos "binstall" "just"
+  install tool=cargo eco=crates verb=binstall run=false global=false locked=false manifest=false reqs=0
+    pkg "just" name="just" ver="" kind=registry pinned=false dyn=false local=false
+cmd 11:1 name="cargo" tool=cargo
+  flags --version
+cmd 11:20 name="rustc"
+  flags --version
+cmd 12:1 name="go" tool=go
+  pos "install" "golang.org/x/tools/cmd/goimports@latest"
+  install tool=go eco=go verb=install run=false global=false locked=false manifest=false reqs=0
+    pkg "golang.org/x/tools/cmd/goimports@latest" name="golang.org/x/tools/cmd/goimports" ver="latest" kind=module pinned=false dyn=false local=false
+cmd 13:1 name="go" tool=go
+  pos "install" "honnef.co/go/tools/cmd/staticcheck@v0.5.1"
+  install tool=go eco=go verb=install run=false global=false locked=false manifest=false reqs=0
+    pkg "honnef.co/go/tools/cmd/staticcheck@v0.5.1" name="honnef.co/go/tools/cmd/staticcheck" ver="v0.5.1" kind=module pinned=true dyn=false local=false
+cmd 14:1 name="go" tool=go
+  pos "install" "github.com/o/r/cmd/x@0123456789ab"
+  install tool=go eco=go verb=install run=false global=false locked=false manifest=false reqs=0
+    pkg "github.com/o/r/cmd/x@0123456789ab" name="github.com/o/r/cmd/x" ver="0123456789ab" kind=module pinned=true dyn=false local=false
+cmd 15:1 name="go" tool=go
+  pos "install" "github.com/o/r@master"
+  install tool=go eco=go verb=install run=false global=false locked=false manifest=false reqs=0
+    pkg "github.com/o/r@master" name="github.com/o/r" ver="master" kind=module pinned=false dyn=false local=false
+cmd 16:1 name="go" tool=go
+  pos "install" "./cmd/foo" "./..."
+  install tool=go eco=go verb=install run=false global=false locked=false manifest=false reqs=0
+    pkg "./cmd/foo" name="./cmd/foo" ver="" kind=path pinned=false dyn=false local=true
+    pkg "./..." name="./..." ver="" kind=path pinned=false dyn=false local=true
+cmd 17:1 name="go" tool=go
+  flags -u
+  pos "get" "github.com/o/r"
+  install tool=go eco=go verb=get run=false global=false locked=false manifest=false reqs=0
+    pkg "github.com/o/r" name="github.com/o/r" ver="" kind=module pinned=false dyn=false local=false
+cmd 18:1 name="go" tool=go
+  pos "version"
+cmd 19:1 name="gem" tool=gem
+  pos "install" "bundler"
+  install tool=gem eco=rubygems verb=install run=false global=false locked=false manifest=false reqs=0
+    pkg "bundler" name="bundler" ver="" kind=registry pinned=false dyn=false local=false
+cmd 20:1 name="gem" tool=gem
+  flags -v="2.5.3"
+  pos "install" "bundler"
+  install tool=gem eco=rubygems verb=install run=false global=false locked=false manifest=false reqs=0
+    pkg "bundler" name="bundler" ver="2.5.3" kind=registry pinned=true dyn=false local=false
+cmd 21:1 name="gem" tool=gem
+  flags --version="~> 13.0"[quoted]
+  pos "install" "rake"
+  install tool=gem eco=rubygems verb=install run=false global=false locked=false manifest=false reqs=0
+    pkg "rake" name="rake" ver="~> 13.0" kind=registry pinned=false dyn=false local=false
+cmd 22:1 name="gem" tool=gem
+  pos "install" "foo:1.2.3" "bar" "./local.gem"
+  install tool=gem eco=rubygems verb=install run=false global=false locked=false manifest=false reqs=0
+    pkg "foo:1.2.3" name="foo" ver="1.2.3" kind=registry pinned=true dyn=false local=false
+    pkg "bar" name="bar" ver="" kind=registry pinned=false dyn=false local=false
+    pkg "./local.gem" name="./local.gem" ver="" kind=path pinned=false dyn=false local=true
+cmd 23:1 name="gem" tool=gem
+  pos "push" "pkg-1.0.gem"
+  publish tool=gem verb="push" kind=package dry=false registry=<nil>

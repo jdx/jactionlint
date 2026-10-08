@@ -1,0 +1,25 @@
+expr 3:7 "steps.a.outputs.b"
+cmd 1:1 name="echo"
+  pos "$(echo \"$(echo \"$(echo \"$(date)\")\")\")"[subst quoted]
+cmd 1:9 name="echo"
+  pos "$(echo \"$(echo \"$(date)\")\")"[subst quoted]
+cmd 1:17 name="echo"
+  pos "$(echo \"$(date)\")"[subst quoted]
+cmd 1:25 name="echo"
+  pos "$(date)"[subst quoted]
+cmd 1:33 name="date"
+cmd 2:5 name="curl" tool=curl pipe=1/2
+  flags -s
+  pos "https://example.com"
+cmd 2:35 name="bash" tool=bash pipe=2/2
+cmd 3:1 name="echo"
+  pos "${{ steps.a.outputs.b }}$(pip install nested-pip)"[expr subst quoted]
+cmd 3:33 name="pip" tool=pip
+  pos "install" "nested-pip"
+  install tool=pip eco=pypi verb=install run=false global=false locked=false manifest=false reqs=0
+    pkg "nested-pip" name="nested-pip" ver="" kind=registry pinned=false dyn=false local=false
+pipeline 2:5 stages=2 negated=false
+redirect 1:46 op=">>" fd="" target="$GITHUB_ENV"[var:GITHUB_ENV] append=true write=true
+assignment 2:1 x value="$(curl -s https://example.com | bash)"[subst] append=false array=false
+writes GITHUB_ENV at 1:46 append=true producers=1 exprs=[]
+shellpipe form=pipe downloader="curl" shell="bash" url="https://example.com"

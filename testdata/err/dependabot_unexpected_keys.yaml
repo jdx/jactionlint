@@ -1,0 +1,21 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: weekly
+      # ERROR: "dayy" is a typo of "day"
+      dayy: monday
+    # ERROR: "label" is a typo of "labels"
+    label: [dependencies]
+    cooldown:
+      default-days: 3
+      # ERROR: unknown key in cooldown
+      semver-days: 5
+    groups:
+      all:
+        patterns: ["*"]
+        # ERROR: unknown key in a group
+        pattern: ["*"]
+# ERROR: unknown top-level key
+update-schedule: daily

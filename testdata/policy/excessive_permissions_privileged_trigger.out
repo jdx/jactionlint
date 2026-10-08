@@ -1,0 +1,1 @@
+test.yaml:6:3: "pull-requests: write" is granted to every job of the workflow, which lets any of them create and modify pull requests, comments and reviews, and the workflow runs on "pull_request_target" which people without write access can trigger. set "permissions: {}" at the workflow level and grant "pull-requests: write" only to the job which needs it [excessive-permissions]

@@ -957,7 +957,7 @@ func envInsertion(in tiFixInput, vars []string) (TextEdit, bool) {
 	}
 	indent := strings.Repeat(" ", kp.Col-1)
 	last := kp.Line
-	for l := kp.Line + 1; l <= len(idx.starts); l++ {
+	for l := kp.Line + 1; l <= len(idx.lineStarts); l++ {
 		line := idx.src[idx.lineStart(l):idx.lineEnd(l)]
 		trimmed := strings.TrimLeft(string(line), " ")
 		if trimmed == "" {
@@ -972,7 +972,7 @@ func envInsertion(in tiFixInput, vars []string) (TextEdit, bool) {
 	for _, v := range vars {
 		text += indent + "  " + v + nl
 	}
-	if last < len(idx.starts) {
+	if last < len(idx.lineStarts) {
 		// Insert at the start of the next line
 		at := idx.lineStart(last + 1)
 		return TextEdit{at, at, text}, true

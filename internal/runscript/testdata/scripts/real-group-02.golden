@@ -1,0 +1,10 @@
+cmd 1:10 name="cat"
+  pos "/tmp/tak-out/status"
+cmd 2:1 name="test"
+  flags -eq
+  pos "$status"[var:status quoted] "0"
+cmd 2:27 name="echo"
+  pos "::error::instruction-count comparison failed to run"[quoted]
+cmd 2:87 name="exit"
+  pos "$status"[var:status quoted]
+assignment 1:1 status value="$(cat /tmp/tak-out/status)"[subst] append=false array=false

@@ -1,0 +1,6 @@
+cmd 1:1 name="dirname"
+  pos "$(mise which cargo)"[subst quoted]
+cmd 1:12 name="mise"
+  pos "which" "cargo"
+redirect 1:31 op=">>" fd="" target="$GITHUB_PATH"[var:GITHUB_PATH quoted] append=true write=true
+writes GITHUB_PATH at 1:31 append=true producers=1 exprs=[]

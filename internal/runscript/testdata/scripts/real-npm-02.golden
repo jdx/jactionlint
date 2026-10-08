@@ -1,0 +1,22 @@
+cmd 1:1 name="apt-get" tool=apt wrappers=sudo
+  flags -q
+  pos "update"
+cmd 2:1 name="apt-get" tool=apt wrappers=sudo
+  flags -y -q
+  pos "install" "ffmpeg"
+  install tool=apt eco=apt verb=install run=false global=false locked=false manifest=false reqs=0
+    pkg "ffmpeg" name="ffmpeg" ver="" kind=registry pinned=false dyn=false local=false
+cmd 3:2 name="cd"
+  pos "docs"
+cmd 3:13 name="aube" tool=aube
+  pos "install"
+  install tool=aube eco=npm verb=install run=false global=false locked=false manifest=true reqs=0
+cmd 3:29 name="aube" tool=aube
+  flags --with-deps
+  pos "exec" "playwright-core" "install" "chromium-headless-shell"
+cmd 4:1 name="echo"
+  pos "SHOWREEL_REQUIRE_CHROMIUM=1"[quoted]
+cmd 5:1 name="mise"
+  pos "run" "render:showreel"
+redirect 4:36 op=">>" fd="" target="$GITHUB_ENV"[var:GITHUB_ENV quoted] append=true write=true
+writes GITHUB_ENV at 4:36 append=true producers=1 exprs=[]

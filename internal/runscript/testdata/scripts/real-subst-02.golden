@@ -1,0 +1,5 @@
+cmd 1:1 name=""
+  assign RUSTUP_TOOLCHAIN="nightly"
+cmd 1:29 name="cat"
+  pos "build-test-binary"
+assignment 1:1 RUSTUP_TOOLCHAIN value="nightly" append=false array=false

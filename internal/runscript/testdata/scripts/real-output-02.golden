@@ -1,0 +1,7 @@
+cmd 1:1 name="echo"
+  pos "tag=v$(jq -r .version package.json)"[subst quoted]
+cmd 1:14 name="jq"
+  flags -r
+  pos ".version" "package.json"
+redirect 1:44 op=">>" fd="" target="$GITHUB_OUTPUT"[var:GITHUB_OUTPUT quoted] append=true write=true
+writes GITHUB_OUTPUT at 1:44 append=true producers=1 exprs=[]

@@ -136,55 +136,9 @@ func parseWholeExpr(value string) (ExprNode, string, int, bool) {
 	return node, trimmed, lead, true
 }
 
-// sourceIndex converts positions to byte offsets of a source file.
-type sourceIndex struct {
-	src    []byte
-	starts []int // offsets of the line starts
-}
-
-func newSourceIndex(src []byte) *sourceIndex {
-	x := &sourceIndex{src: src, starts: []int{0}}
-	for i, b := range src {
-		if b == '\n' {
-			x.starts = append(x.starts, i+1)
-		}
-	}
-	return x
-}
-
-// offset converts a 1-based line and a 1-based column counted in characters to a byte offset.
-func (x *sourceIndex) offset(line, col int) (int, bool) {
-	if x == nil || line < 1 || line > len(x.starts) || col < 1 {
-		return 0, false
-	}
-	off := x.starts[line-1]
-	end := x.lineEnd(line)
-	for c := 1; c < col; c++ {
-		if off >= end {
-			return 0, false
-		}
-		_, n := utf8.DecodeRune(x.src[off:end])
-		off += n
-	}
-	return off, true
-}
-
-// lineEnd returns the offset of the line terminator of the line (or the length of the source for the
-// last line). A "\r" before the "\n" is not included.
-func (x *sourceIndex) lineEnd(line int) int {
-	end := len(x.src)
-	if line < len(x.starts) {
-		end = x.starts[line] - 1
-	}
-	if end > x.starts[line-1] && x.src[end-1] == '\r' {
-		end--
-	}
-	return end
-}
-
 // lineStart returns the offset of the first byte of the line.
 func (x *sourceIndex) lineStart(line int) int {
-	return x.starts[line-1]
+	return x.lineStarts[line-1]
 }
 
 // valueOffset converts a byte offset in the value of the string to a byte offset in the source. The
@@ -197,10 +151,10 @@ func (x *sourceIndex) valueOffset(s *String, off int) (int, bool) {
 	if s.Literal && s.Indent > 0 {
 		before := s.Value[:off]
 		line := s.Pos.Line + 1 + strings.Count(before, "\n")
-		if line > len(x.starts) {
+		if line > len(x.lineStarts) {
 			return 0, false
 		}
-		return x.starts[line-1] + s.Indent + off - (strings.LastIndexByte(before, '\n') + 1), true
+		return x.lineStarts[line-1] + s.Indent + off - (strings.LastIndexByte(before, '\n') + 1), true
 	}
 	if base, indent, ok := x.foldedBlockBase(s); ok {
 		return x.walkFolded(s, base, off, indent)
@@ -283,11 +237,11 @@ func (x *sourceIndex) foldedBlockBase(s *String) (base, indent int, ok bool) {
 	if !ok || hdr >= len(x.src) || x.src[hdr] != '>' || s.Quoted {
 		return 0, 0, false
 	}
-	for l := s.Pos.Line + 1; l <= len(x.starts); l++ {
-		line := x.src[x.starts[l-1]:x.lineEnd(l)]
+	for l := s.Pos.Line + 1; l <= len(x.lineStarts); l++ {
+		line := x.src[x.lineStarts[l-1]:x.lineEnd(l)]
 		n := len(line) - len(strings.TrimLeft(string(line), " "))
 		if n < len(line) {
-			return x.starts[l-1] + n, n, true
+			return x.lineStarts[l-1] + n, n, true
 		}
 	}
 	return 0, 0, false
@@ -313,8 +267,8 @@ func (x *sourceIndex) multiline(s *String) bool {
 
 // lineCol converts a byte offset to a 1-based line and a column counted in characters.
 func (x *sourceIndex) lineCol(off int) (int, int) {
-	line := sort.Search(len(x.starts), func(i int) bool { return x.starts[i] > off })
-	return line, utf8.RuneCount(x.src[x.starts[line-1]:off]) + 1
+	line := sort.Search(len(x.lineStarts), func(i int) bool { return x.lineStarts[i] > off })
+	return line, utf8.RuneCount(x.src[x.lineStarts[line-1]:off]) + 1
 }
 
 // matches reports whether the source at the offset starts with the text.

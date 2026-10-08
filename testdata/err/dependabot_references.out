@@ -1,0 +1,4 @@
+.github/dependabot.yml:15:9: registry "npm-gitlab" is not defined in "registries" section [syntax-check]
+.github/dependabot.yml:19:16: update for package ecosystem "npm" and directory "/" is duplicated. previously defined at line:9,col:16 [syntax-check]
+.github/dependabot.yml:30:28: multi-ecosystem group "everything" is not defined in "multi-ecosystem-groups" section [syntax-check]
+.github/dependabot.yml:37:28: multi-ecosystem group "nothing" is not defined in "multi-ecosystem-groups" section [syntax-check]

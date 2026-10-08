@@ -1,0 +1,9 @@
+cmd 1:1 name="cd"
+  pos "docs"
+cmd 2:1 name="aube" tool=aube
+  pos "install"
+  install tool=aube eco=npm verb=install run=false global=false locked=false manifest=true reqs=0
+cmd 3:1 name="aube" tool=aube
+  pos "run" "docs:build"
+cmd 4:1 name="touch"
+  pos ".vitepress/dist/.nojekyll"

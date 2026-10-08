@@ -76,7 +76,9 @@ rules:
 		}
 		for _, o := range r.Options {
 			def := "no default; the rule does nothing without it"
-			if o.Default != nil {
+			if m, ok := o.Default.(map[string]string); ok && len(m) == 0 {
+				def = "default empty"
+			} else if o.Default != nil {
 				def = fmt.Sprintf("default %v", o.Default)
 			}
 			fmt.Fprintf(&b, "- Option `%s` (%s, %s): %s\n", o.Name, o.Kind, def, o.Summary)

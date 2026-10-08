@@ -1,0 +1,6 @@
+cmd 1:1 name="chown" wrappers=sudo
+  pos "$(id -u):$(id -g)"[subst quoted] "$MBX_CACHE_DIR"[var:MBX_CACHE_DIR quoted]
+cmd 1:15 name="id"
+  flags -u
+cmd 1:24 name="id"
+  flags -g
