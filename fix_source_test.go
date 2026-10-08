@@ -139,19 +139,31 @@ func TestFixesInAnIndentedCRLFFile(t *testing.T) {
 
 func TestFixesLeaveUnicodeLineBreaksAlone(t *testing.T) {
 	for _, br := range []string{"\u0085", "\u2028", "\u2029"} {
-		src := "on: push\njobs:\n  a:\n    runs-on: ubuntu-latest\n    name: x" + br + "y\n    steps:\n      - run: echo\n"
-		if newSrcDoc([]byte(src)) != nil {
-			t.Errorf("%q: the source has a line break which the helpers count differently from the parser", br)
-		}
-		out, n, _ := fixWith(t, []byte(src), fixerConfig(t, ""), FixModeUnsafe)
-		if n != 0 || string(out) != src {
-			t.Errorf("%q: the file must not be changed: %d fixes\n%q", br, n, out)
+		for name, body := range map[string]string{
+			"plain scalar":  "    name: x" + br + "y\n",
+			"comment":       "    # a" + br + "b\n    name: x\n",
+			"quoted string": "    name: \"x" + br + "y\"\n",
+		} {
+			src := "on: push\njobs:\n  a:\n    runs-on: ubuntu-latest\n" + body + "    steps:\n      - run: echo\n"
+			if newSrcDoc([]byte(src)) != nil || newSourceIndex([]byte(src)).valid {
+				t.Errorf("%q in a %s: the helpers must refuse the document", br, name)
+			}
+			out, n, _ := fixWith(t, []byte(src), fixerConfig(t, ""), FixModeUnsafe)
+			if n != 0 || string(out) != src {
+				t.Errorf("%q in a %s: the file must not be changed: %d fixes\n%q", br, name, n, out)
+			}
 		}
 	}
 }
 
 func TestPermissionsFixIsUnsafeWithContainers(t *testing.T) {
-	for _, extra := range []string{"    container: ghcr.io/o/private:1\n", "    services:\n      db:\n        image: ghcr.io/o/db:1\n"} {
+	for _, extra := range []string{
+		"    container: ghcr.io/o/private:1\n",
+		"    container: ubuntu:24.04\n",
+		"    container:\n      image: example.com/o/i:1\n      credentials:\n        username: u\n        password: ${{ secrets.P }}\n",
+		"    services:\n      db:\n        image: ghcr.io/o/db:1\n",
+		"    services:\n      db:\n        image: postgres:16\n",
+	} {
 		src := "on: push\njobs:\n  a:\n    runs-on: ubuntu-latest\n" + extra + "    steps:\n      - uses: actions/checkout@v4\n"
 		w, _ := Parse([]byte(src))
 		if f := fixMissingPermissions(w); f == nil || !f.Unsafe {
