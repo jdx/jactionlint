@@ -43,7 +43,8 @@ run = "go test -bench Lint -benchmem"
 
 [tasks."lint:wasm"]
 description = "Run staticcheck on the playground wasm entry point (GOOS=js)"
-env = { GOOS = "js", GOARCH = "wasm" }
+# GOTOOLCHAIN=local: staticcheck cannot read the export data of the go.mod toolchain (see hk.pkl)
+env = { GOOS = "js", GOARCH = "wasm", GOTOOLCHAIN = "local" }
 run = "staticcheck ./playground"
 
 [tasks.lint]
