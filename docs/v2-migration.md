@@ -23,6 +23,7 @@ with stable rule IDs, severities and profiles. These changes are breaking, which
 ## Config migration
 
 The old boolean options keep working for one minor release of v2 and map onto rule IDs, printing a deprecation warning.
+`timeout-minutes: {max: N}` maps to `timeout-too-long` only: `missing-timeout` stays as the profile sets it. Only a written `required: true` or `required: false` turns `missing-timeout` on or off.
 A `migrate` command is planned to rewrite an existing configuration file:
 
 ```sh
