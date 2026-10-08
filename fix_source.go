@@ -3,6 +3,8 @@ package jactionlint
 import (
 	"bytes"
 	"strings"
+
+	"go.yaml.in/yaml/v4"
 )
 
 // This file has the helpers fixers use to turn a position in the syntax tree into a byte offset of
@@ -27,6 +29,12 @@ type srcLine struct {
 type srcDoc struct {
 	src   []byte
 	lines []srcLine
+
+	// starts holds the 0-based lines on which a node of the block structure starts. Lines which are not
+	// in it continue a node: the rest of a multi-line scalar, the closing bracket of a flow collection.
+	// It is nil until blockStarts is called and stays nil if the source does not parse.
+	starts   map[int]bool
+	startsOK bool
 }
 
 // newSrcDoc splits the source into lines. It returns nil when the source has a line break other
@@ -141,27 +149,70 @@ func (d *srcDoc) keyLine(i int, name string) (indent int, inline string, ok bool
 	return indent, rest, true
 }
 
+// blockStarts returns the lines on which a node of the block structure starts, found with the YAML
+// parser. A node inside a flow collection ("[a, b]", "{a: 1}") does not count: the collection is
+// one node. It returns false when the source does not parse.
+func (d *srcDoc) blockStarts() (map[int]bool, bool) {
+	if d.startsOK {
+		return d.starts, d.starts != nil
+	}
+	d.startsOK = true
+	var root yaml.Node
+	if err := yaml.Unmarshal(d.src, &root); err != nil {
+		return nil, false
+	}
+	starts := map[int]bool{}
+	var walk func(n *yaml.Node)
+	walk = func(n *yaml.Node) {
+		if n == nil {
+			return
+		}
+		if n.Kind != yaml.DocumentNode && n.Line > 0 {
+			starts[n.Line-1] = true
+		}
+		if n.Style&yaml.FlowStyle != 0 {
+			return
+		}
+		for _, c := range n.Content {
+			walk(c)
+		}
+	}
+	walk(&root)
+	d.starts = starts
+	return starts, true
+}
+
 // entryEnd returns the last content line of the block mapping entry which starts at the line i. The
 // entry has the indent and the text inline after the colon. Blank and comment lines after the entry
 // are not part of it.
+//
+// The entry goes on until the next line on which a node of the block structure starts with no more
+// indentation than the key. The lines between are the value, whatever they look like: the rest of a
+// multi-line plain or quoted scalar and the closing bracket of a flow collection can be indented as
+// little as the key. It returns false when the extent cannot be determined, so that a fixer offers no
+// fix rather than insert a line inside a value.
 func (d *srcDoc) entryEnd(i, indent int, inline string) (int, bool) {
 	if strings.HasPrefix(inline, "|") || strings.HasPrefix(inline, ">") {
 		return 0, false // the lines which look like comments may belong to the scalar
 	}
+	starts, ok := d.blockStarts()
+	if !ok || !starts[i] {
+		return 0, false // does not parse, or the line is not where the parser says the entry starts
+	}
 	last := i
 	for j := i + 1; j < len(d.lines); j++ {
-		if d.kind(j) != lineContent {
-			continue
+		if starts[j] {
+			ind, ok := d.indent(j)
+			if !ok && ind <= indent {
+				return 0, false
+			}
+			if ind < indent || (ind == indent && !(inline == "" && isSequenceItem(d.text(j)))) {
+				break
+			}
 		}
-		ind, ok := d.indent(j)
-		if !ok && ind <= indent {
-			return 0, false
-		}
-		if ind > indent || (ind == indent && inline == "" && isSequenceItem(d.text(j))) {
+		if d.kind(j) == lineContent {
 			last = j
-			continue
 		}
-		break
 	}
 	return last, true
 }
