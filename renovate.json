@@ -1,15 +1,13 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": ["config:recommended"],
-  "schedule": ["before 6am on monday"],
+  "extends": ["local>jdx/renovate-config"],
+  "postUpdateOptions": ["gomodTidy"],
   "packageRules": [
     {
-      "matchManagers": ["github-actions"],
-      "groupName": "github-actions"
-    },
-    {
+      "description": "The go directive in go.mod is the minimum Go version for library users, not the toolchain; bump it by hand",
       "matchManagers": ["gomod"],
-      "groupName": "go modules"
+      "matchDepTypes": ["golang"],
+      "enabled": false
     }
   ]
 }
