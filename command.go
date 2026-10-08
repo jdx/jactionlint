@@ -182,7 +182,7 @@ func (cmd *Command) Main(args []string) int {
 	flags.BoolVar(&initConfig, "init-config", false, "Generate default config file at .github/jactionlint.yaml in current project")
 	flags.Var(&fix, "fix", "Apply the safe automatic fixes to the files and report what remains. -fix=unsafe also applies the fixes which may change the behavior of the workflow. The files are rewritten in place")
 	flags.BoolVar(&migrateConfig, "migrate-config", false, "Rewrite the deprecated keys of the config file (.github/jactionlint.yaml or the file of -config-file) into the \"rules\" mapping")
-	flags.BoolVar(&opts.Online, "online", false, "Enable the checks which query the GitHub API (impostor-commit, known-vulnerable-actions, ref-confusion, stale-action-refs, archived-uses, ref-version-mismatch). The token is read from GITHUB_TOKEN or GH_TOKEN. Nothing uses the network without this flag")
+	flags.BoolVar(&opts.Online, "online", false, "Enable the checks which query the GitHub API (impostor-commit, known-vulnerable-actions, ref-confusion, stale-action-refs, archived-uses, ref-version-mismatch) and let -fix pin tags to commit SHAs. The token is read from GITHUB_TOKEN or GH_TOKEN. Nothing uses the network without this flag")
 	flags.DurationVar(&onlineTTL, "online-cache-ttl", time.Hour, "How long -online uses an answer of the GitHub API from the cache in $XDG_CACHE_HOME/jactionlint without asking GitHub whether it changed. 0 checks every answer")
 	flags.BoolVar(&noColor, "no-color", false, "Disable colorful output")
 	flags.BoolVar(&color, "color", false, "Always enable colorful output. This is useful to force colorful outputs")

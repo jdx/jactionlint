@@ -318,6 +318,25 @@ jactionlint -online
   informational). Set a level or `off` in `rules` as for any rule.
 - **Not in the playground.** The WebAssembly build has no network access, so `-online` is an error there.
 
+#### Pin tags to commits with `-online -fix`
+
+With the online checks, `-fix` can repair `unpinned-uses` findings (a rule of the `strict` profile) by replacing a tag with the commit
+it points to and naming the tag in a comment, the format Dependabot and Renovate keep up to date:
+
+```yaml
+- uses: actions/checkout@v4
+# becomes
+- uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+```
+
+The fix is applied by plain `-fix` because it keeps the code the same: it is offered only when the ref is the name of a tag
+(annotated tags are followed to the commit) and no branch has the same name. A branch, an unknown tag, an abbreviated SHA, a Docker
+image or a line with a comment that does not name the ref is left to you.
+
+```sh
+jactionlint -online -fix
+```
+
 <a id="hk"></a>
 ### hk
 

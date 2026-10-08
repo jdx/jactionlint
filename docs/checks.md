@@ -3825,6 +3825,8 @@ test.yaml:10:15: warning: the version comment "# v3.0.0" does not match the comm
 
 <!-- Skip playground link -->
 
+The `-online -fix` option can pin tags to commits and add this comment for you, see [the usage document](usage.md#online-checks).
+
 [zizmor-impostor-commit]: https://docs.zizmor.sh/audits/#impostor-commit
 [zizmor-known-vulnerable-actions]: https://docs.zizmor.sh/audits/#known-vulnerable-actions
 [zizmor-ref-confusion]: https://docs.zizmor.sh/audits/#ref-confusion

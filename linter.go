@@ -97,7 +97,8 @@ type LinterOptions struct {
 	// SeverityWarning hides the errors of info level.
 	MinSeverity Severity
 	// Online turns on the rules which query the GitHub API: impostor-commit, known-vulnerable-actions,
-	// ref-confusion, stale-action-refs, archived-uses and ref-version-mismatch. Nothing reaches the network when it is false. The token is
+	// ref-confusion, stale-action-refs, archived-uses and ref-version-mismatch (and the pinning
+	// fix of unpinned-uses, see Error.Fix). Nothing reaches the network when it is false. The token is
 	// read from $GITHUB_TOKEN or $GH_TOKEN; without one the API allows very few requests. When the
 	// API cannot be used (rate limit, no network) the online rules stop with one warning. It
 	// is an error in builds without network access such as the WebAssembly one, unless
@@ -680,6 +681,11 @@ func (l *Linter) check(
 
 	all = l.filterErrors(all, cfg.PathConfigs(path))
 	all = append(all, l.annotateErrors(ignoreErrs, content, cfg)...)
+	if w != nil {
+		if sess, _ := l.onlineSession(cfg); sess != nil {
+			l.attachPinFixes(sess, content, all)
+		}
+	}
 
 	if l.minSeverity > SeverityInfo {
 		kept := all[:0]
