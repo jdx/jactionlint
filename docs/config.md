@@ -144,6 +144,26 @@ extends:
       matches it. It's similar to the `-ignore` command line option.
 - `online`: Turns on the [online checks](usage.md#online-checks) for the files this configuration applies to, like the `-online`
   flag does for the whole run. They query the GitHub API. The default is `false`: nothing uses the network.
+- <a id="online-options"></a>`online-options`: Tunes the online checks. Every key is optional. They apply to the whole run, decided by the first
+  file checked, and the command line flags win over them. A `mode` of `cache` or `strict` also turns the online checks on.
+  See [the usage document](usage.md#online-checks) for what each does.
+  - `mode`: `cache` (never use the network, answer from the cache), `strict` (a skipped lookup makes the exit status 3) or
+    `cache,strict`. Same as `-online=MODE`.
+  - `api-url`: The REST API of a GitHub Enterprise Server such as `https://ghe.example.com/api/v3`. Same as `-online-api-url`.
+    **A token is not sent to a host named here when the file is a repository's `.github/jactionlint.yaml`**, only when it is your
+    user-global config or the file of `-config-file`.
+  - `token-env`, `token-file`: The variable and the file which hold the token, read before `GITHUB_TOKEN` and `GH_TOKEN`.
+  - `allow`, `deny`: Patterns `owner/repo` with `*` wildcards (`mycorp/*`, `*/setup-*`; case does not matter) of the repositories
+    which may or may not be looked up. `deny` wins.
+  - `cache-ttl` (default `1h`), `max-rate-limit-wait` (default `30s`; `0s` never waits), `retries` (default `2`),
+    `concurrency` (default `6`, at most `32`) and `gh-cli` (default `true`: ask `gh auth token` when no variable or file has a token).
+
+  ```yaml
+  online: true
+  online-options:
+    deny: ["mycorp/*"]   # internal actions GitHub cannot answer for
+    max-rate-limit-wait: 10s
+  ```
 - `profile`, `rules` and `extends`: See [Profiles](#profiles), [Rules](#rules) and [Extending config files](#extending-config-files).
 
 Unknown keys are errors. jactionlint reports the key with its position and suggests the closest known key when it looks

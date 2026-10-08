@@ -45,7 +45,10 @@ Followings are unexhaustive list of interesting APIs.
   on). They talk to GitHub through the `GitHubClient` interface; the built-in client sends REST requests with a token from the
   environment and caches the answers. Set `LinterOptions.GitHubClient` to serve your own, for example
   `NewFixtureGitHubClient()` with answers recorded by `NewRecordingGitHubClient()`, so that tests need no network. Without
-  `Online` no client is ever called, and the WebAssembly build has no built-in client.
+  `Online` no client is ever called, and the WebAssembly build has no built-in client. `LinterOptions.OnlineOptions` sets the
+  mode (`OnlineModeCache` answers from the cache only, `OnlineModeStrict` makes `Linter.OnlineFailed()` true when a lookup was
+  skipped), the API URL, the token source, the allow and deny lists and the retry behavior; `Linter.OnlineSkipped()` is the
+  number of lookups that failed and were skipped. A failed lookup never makes a `Lint` call fail.
 - `Pass` is a visitor to traverse a workflow syntax tree. Multiple passes can be applied at single pass using `Visitor`.
 - `Rule` is an interface for rule checkers and `RuleBase` is a base struct to implement a rule checker. `RuleBase.ReportID()`
   reports an error with the stable ID of the diagnostic. `RuleBase.Error()` reports it with the name of the rule as the ID.

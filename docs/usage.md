@@ -321,17 +321,43 @@ export GITHUB_TOKEN=$(gh auth token)   # or GH_TOKEN
 jactionlint -online
 ```
 
-- **Token.** `GITHUB_TOKEN` or `GH_TOKEN` is used when set. Without one the requests are unauthenticated, which works but GitHub
-  allows only 60 an hour; jactionlint says so once. A token that GitHub rejects is dropped with a warning and the run goes on
-  without it. `GITHUB_API_URL` selects a GitHub Enterprise Server.
+- **A failed lookup does not fail the run.** When GitHub answers 404 (a private action, or one that does not exist), 403, a server
+  error, or does not answer in time, or the DNS lookup fails, that lookup is skipped and the other actions are checked as usual.
+  jactionlint prints **one warning per kind of failure** (on stderr, or in the SARIF notifications with `-format sarif`) and the
+  exit status does not change. `-verbose` lists every skipped lookup. `-online=strict` turns a skipped lookup into exit status 3,
+  for a pipeline where a check that could not run must not pass silently.
+- **Token.** The first of these is used: the variable named by `-online-token-env`, the file named by `-online-token-file`,
+  `GITHUB_TOKEN`, `GH_TOKEN` (for a GitHub Enterprise Server `GITHUB_ENTERPRISE_TOKEN` and `GH_ENTERPRISE_TOKEN` come first), and
+  finally the output of `gh auth token --hostname HOST` when `gh` is installed (set `gh-cli: false` in
+  [`online-options`](config.md#online-options) to never run it). Without a token the requests are unauthenticated, which works but
+  GitHub allows only 60 an hour; jactionlint says so once. `-verbose` says which source supplied the token, never the token. A token
+  that GitHub rejects (401) is dropped with a warning and the run goes on without it; one that cannot read a repository (403) is
+  tried again without it for that repository.
+- **The token never leaves the API host.** It is sent to the host of the API only, over https (plain http only to localhost), and
+  a redirect to another host is refused. It is replaced by `[redacted]` in `-debug` output, warnings and errors, even when a server
+  echoes it. A host named by the `online-options` of a *repository's* `.github/jactionlint.yaml` gets **no token**, because a pull
+  request could otherwise send your token to any server: name the host with `-online-api-url`, `GITHUB_API_URL`, your own
+  `-config-file` or your user-global config.
+- **GitHub Enterprise Server.** The API is `-online-api-url`, else `$GITHUB_API_URL` (set by GitHub Actions), else derived from
+  `$GITHUB_SERVER_URL` or `$GH_HOST` (`https://HOST/api/v3`, or `https://api.NAME.ghe.com` for data residency), else
+  `api.github.com`. Answers are cached per host.
+- **Rate limits.** `X-RateLimit-*` and `Retry-After` are read. A limit which resets within 30 seconds (`-online-max-wait`) is waited
+  for; one which resets later skips the remaining lookups with a message naming the reset time, and answers in the cache are still
+  used. Server errors (500, 502, 503, 504), a secondary rate limit and a request which timed out once are repeated with
+  exponential backoff and jitter, at most twice (`retries`).
+- **Skip private or internal actions.** `-online-deny 'mycorp/*'` (repeatable, or `deny:` in `online-options`) never asks
+  about matching repositories, `-online-allow 'actions/*'` asks only about matching ones. They are not failures and not warned about.
 - **Cache.** Answers are kept in `$XDG_CACHE_HOME/jactionlint` (`~/.cache/jactionlint`), at most 32 MiB, shared safely by parallel
-  processes. An answer is used for an hour (`-online-cache-ttl`), then asked for again with its ETag, which costs no rate limit
-  when it did not change. `-online-cache-ttl=0` checks every answer.
+  processes, keyed by API host and token. An answer is used for an hour (`-online-cache-ttl`, `cache-ttl`), then asked for again with
+  its ETag, which costs no rate limit when it did not change. `-online-cache-ttl=0` checks every answer. A public answer fetched
+  without a token also serves a run with one, so the `GITHUB_TOKEN` of a CI job, which changes every run, does not empty the
+  cache.
+- **Offline.** `-online=cache` never uses the network: it answers from the cache whatever the age of the answers, and a lookup with
+  nothing cached is skipped with one warning (run once with `-online` to fill the cache). `-online=cache,strict` fails on such a
+  lookup. Good for a laptop on a plane or a sandboxed CI job that restores the cache directory.
 - **Few requests.** Every repository, tag and commit is asked for once per run however often it is used, and the checks share what
-  they learn. The number of requests grows with the number of different actions, not steps.
-- **Rate limit and failures.** When GitHub refuses (rate limit), is unreachable, or fails repeatedly, the online checks stop for the
-  rest of the run with one warning on stderr (in the SARIF log with `-format sarif`) and the findings that needed
-  GitHub are missing. Nothing is retried and the exit status does not change. Interrupting with Ctrl-C stops the lookups.
+  they learn. At most six requests are in flight (`concurrency`). The number of requests grows with the number of different
+  actions, not steps. Interrupting with Ctrl-C stops the lookups.
 - **Levels.** The online rules do not belong to a profile; `-online` turns them on at their own level (`impostor-commit` and
   `known-vulnerable-actions` are errors, `ref-confusion`, `archived-uses` and `ref-version-mismatch` warnings, `stale-action-refs` is
   informational). Set a level or `off` in `rules` as for any rule.
