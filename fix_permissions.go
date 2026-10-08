@@ -77,6 +77,13 @@ func fixMissingPermissions(w *Workflow) *Fix {
 
 // onlyReadsRepository reports whether the jobs which have no "permissions:" look like they work with
 // the "contents: read" permission. It is a heuristic and errs on the side of saying no.
+//
+// What it looks at: the text of the file for the token and the GitHub API (tokenUseRe); a job that calls a
+// reusable workflow; a job with container: or services:, whatever the image and the credentials, because
+// GitHub pulls an image of ghcr.io with the GITHUB_TOKEN without the file naming it and "contents: read"
+// removes "packages: read"; and every action, which has to be one of readOnlyActions. Not looked at:
+// "docker login" in a script uses the token by name (tokenUseRe sees it), and an action which reads
+// another repository takes a token input (named in the file).
 func onlyReadsRepository(w *Workflow) bool {
 	if tokenUseRe.Match(w.Source) {
 		return false
