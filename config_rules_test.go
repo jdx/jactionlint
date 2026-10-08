@@ -476,7 +476,7 @@ func TestInitConfigIsValidAndMigrationFree(t *testing.T) {
 		t.Errorf("the generated config must not change the behavior: %+v", c)
 	}
 	b, _ := os.ReadFile(f)
-	for _, want := range []string{"profile:", "rules:", "extends:", "paths:", "ignore:"} {
+	for _, want := range []string{"profile:", "rules:", "extends:", "paths:", "ignore:", "ignores:"} {
 		if !strings.Contains(string(b), want) {
 			t.Errorf("generated config does not mention %q", want)
 		}
@@ -484,7 +484,7 @@ func TestInitConfigIsValidAndMigrationFree(t *testing.T) {
 	// Every commented example must be valid when uncommented
 	var uncommented []string
 	for _, l := range strings.Split(string(b), "\n") {
-		if strings.HasPrefix(l, "#") && (strings.HasPrefix(l, "#  ") || strings.HasPrefix(l, "#profile") || strings.HasPrefix(l, "#extends") || strings.HasPrefix(l, "#assume")) {
+		if strings.HasPrefix(l, "#") && (strings.HasPrefix(l, "#  ") || strings.HasPrefix(l, "#profile") || strings.HasPrefix(l, "#extends") || strings.HasPrefix(l, "#ignores") || strings.HasPrefix(l, "#assume")) {
 			uncommented = append(uncommented, strings.TrimPrefix(l, "#"))
 		} else {
 			uncommented = append(uncommented, l)

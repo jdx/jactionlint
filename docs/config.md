@@ -77,6 +77,14 @@ paths:
       # Ignore errors from the old runner check. This may be useful for (outdated) self-hosted runner environment.
       - 'the runner of ".+" action is too old to run on GitHub Actions'
 
+# Durable ignores: accept findings by rule and by where they are, not by line.
+ignores:
+  - rule: unpinned-uses
+    uses: actions/checkout
+    file: .github/workflows/release.yaml
+    reason: pinned by an organization ruleset
+    expires: 2027-06-30
+
 # Profile: the set of rules which are enabled. 'default', 'strict' or 'all'. (default: default)
 profile: strict
 
@@ -142,6 +150,7 @@ extends:
     - `ignore`: The configuration to ignore (filter) the errors. This is an array of [rule IDs](rules.md) and regular
       expressions. A rule ID ignores all the errors of the rule. A regular expression ignores the errors whose message
       matches it. It's similar to the `-ignore` command line option.
+- `ignores`: Findings to accept, matched by rule and by where they are. See [Durable ignores](#durable-ignores).
 - `online`: Turns on the [online checks](usage.md#online-checks) for the files this configuration applies to, like the `-online`
   flag does for the whole run. They query the GitHub API. The default is `false`: nothing uses the network.
 - `profile`, `rules` and `extends`: See [Profiles](#profiles), [Rules](#rules) and [Extending config files](#extending-config-files).
@@ -234,6 +243,73 @@ regular expression matched to the error messages. See [the usage document](usage
 The [`unused-ignore`](rules.md#unused-ignore) rule (in the `strict` profile) reports ignore comments which did not suppress
 anything.
 
+## Durable ignores
+
+An ignore comment (`# jactionlint ignore=...`) lives on the line it covers, so a tool that rewrites the line takes it along: when
+Renovate or Dependabot bumps `uses: actions/checkout@<sha> # v4.1.0`, the trailing comment is replaced with the new version and
+the ignore is gone. The `ignores` list of the config file does not have this problem. An entry says which rule to ignore and
+describes the place by what the workflow says, not by its position:
+
+```yaml
+ignores:
+  - rule: unpinned-uses            # a rule ID, or a list of IDs: [unpinned-uses, artipacked]
+    uses: actions/checkout         # the action, whatever its ref is
+    file: .github/workflows/*.yaml # optional glob
+    job: release                   # optional job ID
+    step: checkout                 # optional step id or name
+    reason: pinned by an organization ruleset
+    expires: 2027-06-30
+```
+
+| Key       | Meaning                                                                                                                                      |
+| --------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `rule`    | Required. A [rule ID](rules.md) or a list of them. An unknown ID is an error.                                                                |
+| `file`    | A glob matched to the path relative to the project root (and to the path as printed). `**` crosses directories. The separator is always `/`. |
+| `job`     | The ID of the job (its key under `jobs`). Matches findings anywhere in the job, including its steps.                                         |
+| `step`    | The `id` or the `name` of the step, compared as written. Matches findings anywhere in the step.                                              |
+| `uses`    | The `uses:` value of the step, or of the job when it calls a reusable workflow. See below.                                                   |
+| `reason`  | Why the finding is accepted. It is free text for the readers of the file and appears in the messages about the entry.                        |
+| `expires` | `YYYY-MM-DD`. The entry suppresses through the end of that day (UTC) and stops after it.                                                     |
+
+An entry needs at least one of `file`, `uses`, `job` and `step`; to turn a rule off everywhere, use `rules`. All the keys an
+entry sets must match. Entries are not combined: two entries are two independent reasons to ignore.
+
+`uses` takes one of three forms:
+
+- A name pattern like the ones of [`forbidden-uses`](checks.md#check-forbidden-uses): `actions/checkout` (the root action of the
+  repository), `actions/*` (every action of the owner, including the ones in directories), `owner/repo/*`, `owner/repo/sub`.
+  Names are case-insensitive. Without `@ref` any ref matches, so the entry keeps working when a tool changes the tag or SHA;
+  with `@ref` (`actions/checkout@v4`) only that exact ref matches.
+- A glob with `*` for values which are not repository references: `docker://alpine*`, `./.github/actions/*`.
+- A regular expression between slashes, matched to the whole `uses:` value (not anchored unless you write `^` or `$`):
+  `/^actions\/(checkout|cache)@/`. The syntax is [RE2][re2].
+
+How a finding gets its attributes: jactionlint finds the job and the step whose YAML block contains the line of the finding, the
+same blocks an [ignore comment](usage.md#ignore-some-errors) covers. A finding on the `uses:` line of a step belongs to that
+step and job; a finding on the `jobs.<id>` line or on the job's `runs-on` belongs to the job and to no step; a finding about the
+workflow as a whole (`permissions`, `on`) belongs to neither, so only `rule` and `file` can match it. When the structure is
+ambiguous, for example two steps in one flow-style line (`steps: [{uses: a}, {uses: b}]`), the step is unknown and an entry that
+asks for `step` or `uses` does not match. An ignore never suppresses on a guess.
+
+### Expiry and unused entries
+
+- On the day after `expires` the entry stops suppressing: the findings it hid come back, and the entry itself is reported as
+  [`expired-ignore`](rules.md#expired-ignore) (an error, in the `default` profile) at its position in the config file, with
+  its `reason`. Either fix the findings or renew the date.
+- During the last 14 days the entry still works and is reported as `expired-ignore` with level `info`, so you are warned before the
+  findings come back.
+- An entry which suppressed nothing is reported as [`unused-ignore`](rules.md#unused-ignore) (the same rule as the unused ignore
+  comments, so it is in the `strict` profile) at its position in the config file. Because a pre-commit hook lints only the
+  changed files, an entry is called unused only when every file it could apply to was linted in the run. A run that lints a single
+  file never reports an entry that also applies to others.
+
+Entries of config files listed in `extends` are added to the entries of the file that extends them (extended files first), and a
+finding about an entry is reported in the file that contains it.
+
+`LinterOptions.Now` replaces the clock used for the expiry, for tests. In the Go API, `Config.Ignores` holds the entries as
+`ConfigIgnore` values, and `ConfigIgnore.Snippet` renders one as YAML for tools that write entries (for instance a migration
+of `# zizmor: ignore[...]` comments).
+
 ## Deprecated keys
 
 The following keys were replaced by `rules`. They still work for now: jactionlint translates them into rules and prints a
@@ -305,3 +381,4 @@ jactionlint -migrate-config
 [vars]: https://docs.github.com/en/actions/learn-github-actions/variables
 [secrets]: https://docs.github.com/en/actions/security-guides/using-secrets-in-github-actions
 [doublestar]: https://github.com/bmatcuk/doublestar
+[re2]: https://golang.org/s/re2syntax

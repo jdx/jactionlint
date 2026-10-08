@@ -120,6 +120,9 @@ type LinterOptions struct {
 	// Context stops the online lookups when it is canceled, for example on interruption. Nil means
 	// context.Background.
 	Context context.Context
+	// Now returns the current time. It is used to decide whether an entry of "ignores" in the config
+	// file has expired. Nil means time.Now. It is for tests.
+	Now func() time.Time
 	// OnRulesCreated is a hook to add or remove the check rules. This function is called on checking
 	// every workflow files. Rules created by Linter instance are passed to the argument and the
 	// function should return the modified rules.
@@ -133,14 +136,18 @@ type LinterOptions struct {
 
 // Linter is struct to lint workflow files.
 type Linter struct {
-	projects       *Projects
-	out            io.Writer
-	logOut         io.Writer
-	logLevel       LogLevel
-	printer        printer
-	shellcheck     string
-	pyflakes       string
-	ignorePats     IgnorePatterns
+	projects   *Projects
+	out        io.Writer
+	logOut     io.Writer
+	logLevel   LogLevel
+	printer    printer
+	shellcheck string
+	pyflakes   string
+	ignorePats IgnorePatterns
+	// now returns the current time. It is time.Now unless LinterOptions.Now is set.
+	now func() time.Time
+	// ignoreRun is the state of the config "ignores" in the current run.
+	ignoreRun      ignoreRun
 	stdin          string
 	defaultConfig  *Config
 	globalConfig   *Config
@@ -251,6 +258,7 @@ func NewLinter(out io.Writer, opts *LinterOptions) (*Linter, error) {
 		shellcheck:     opts.Shellcheck,
 		pyflakes:       opts.Pyflakes,
 		ignorePats:     ignore,
+		now:            opts.Now,
 		stdin:          stdin,
 		defaultConfig:  cfg,
 		globalConfig:   globalCfg,
@@ -435,6 +443,11 @@ func (l *Linter) LintFiles(filepaths []string, project *Project) ([]*Error, erro
 	for _, r := range results {
 		all = append(all, r.errs...)
 	}
+	results = l.finishIgnoreRun(results)
+	for _, r := range results[n:] {
+		total += len(r.errs)
+		all = append(all, r.errs...)
+	}
 	if err := l.printer.print(l.out, results, l.notifications()); err != nil {
 		return nil, err
 	}
@@ -553,7 +566,11 @@ func (l *Linter) LintFile(path string, project *Project) ([]*Error, error) {
 		return nil, err
 	}
 
-	if err := l.printer.print(l.out, []fileResult{{file: origPath, path: path, src: src, errs: errs}}, l.notifications()); err != nil {
+	results := l.finishIgnoreRun([]fileResult{{file: origPath, path: path, src: src, errs: errs}})
+	for _, r := range results[1:] {
+		errs = append(errs, r.errs...)
+	}
+	if err := l.printer.print(l.out, results, l.notifications()); err != nil {
 		return nil, err
 	}
 	return errs, nil
@@ -593,7 +610,11 @@ func (l *Linter) Lint(path string, content []byte, project *Project) ([]*Error, 
 	if err != nil {
 		return nil, err
 	}
-	if err := l.printer.print(l.out, []fileResult{{file: path, path: path, src: content, errs: errs}}, l.notifications()); err != nil {
+	results := l.finishIgnoreRun([]fileResult{{file: path, path: path, src: content, errs: errs}})
+	for _, r := range results[1:] {
+		errs = append(errs, r.errs...)
+	}
+	if err := l.printer.print(l.out, results, l.notifications()); err != nil {
 		return nil, err
 	}
 	return errs, nil
@@ -704,19 +725,28 @@ func (l *Linter) check(
 		}
 	}
 
-	return l.finishCheck(path, content, all, cfg, start, w != nil), nil
+	return l.finishCheck(path, content, all, cfg, start, w != nil, &ignoreContext{project: project, scopes: newScopeIndex(w, content)}), nil
 }
 
 // finishCheck post-processes the errors found in one file: it fills the fields derived from the
 // rule IDs, applies the ignores and the minimum severity, and sorts the errors. isWorkflow tells that
 // the file is a workflow, for which the online pin fixes are attached.
-func (l *Linter) finishCheck(path string, content []byte, all []*Error, cfg *Config, start time.Time, isWorkflow bool) []*Error {
+func (l *Linter) finishCheck(path string, content []byte, all []*Error, cfg *Config, start time.Time, isWorkflow bool, ic *ignoreContext) []*Error {
 	all = l.annotateErrors(all, content, cfg)
+
+	// The ignores of the config file are matched first, without removing anything, so that the inline
+	// ignores see every error as well and neither is reported as unused for covering the same error.
+	var cfgHit map[*Error]bool
+	if ic != nil {
+		l.trackIgnoreConfig(cfg, ic.project, path)
+		cfgHit = l.matchConfigIgnores(all, cfg, ic.project, path, ic.scopes)
+	}
 
 	// Inline ignores are applied first so that every pattern sees all errors, which tells whether it
 	// is used. The order of the filters does not change which errors remain.
 	inlineIgnores, orphans, ignoreErrs := parseInlineIgnoresWithOrphans(content)
 	all = l.filterInlineIgnores(all, inlineIgnores)
+	all = dropIgnored(all, cfgHit)
 	unused := unusedInlineIgnores(inlineIgnores, orphans, cfg)
 	dropFixesChangingYAML(content, unused)
 	all = append(all, l.annotateErrors(unused, content, cfg)...)

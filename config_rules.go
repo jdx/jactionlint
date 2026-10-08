@@ -326,7 +326,7 @@ func (c *Config) applyLegacy(l *legacyConfig) error {
 var (
 	configTopKeys = []string{
 		"profile", "extends", "rules", "online",
-		"self-hosted-runner", "config-variables", "config-secrets", "paths", "required-actions", "assume-default-permissions",
+		"self-hosted-runner", "config-variables", "config-secrets", "paths", "ignores", "required-actions", "assume-default-permissions",
 		// Deprecated keys which are translated into rules
 		"timeout-minutes", "require-commit-hash", "require-permissions", "require-checkout-before-local-action",
 		"require-expression-wrapping", "check-falsy-ternary", "check-workflow-run-names", "require-shell", "max-run-lines",
@@ -397,6 +397,14 @@ func validateConfigKeys(root *yaml.Node) error {
 			for _, pc := range pcs {
 				if err = checkKeys(pc, "\"paths\"", pathConfigKeys); err != nil {
 					break
+				}
+			}
+		case "ignores":
+			if v.Kind == yaml.SequenceNode {
+				for _, item := range v.Content {
+					if err = checkKeys(item, "\"ignores\"", configIgnoreKeys); err != nil {
+						break
+					}
 				}
 			}
 		case "required-actions":
