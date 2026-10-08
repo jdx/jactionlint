@@ -73,6 +73,7 @@ rules:
 | [invalid-workflow-call](#invalid-workflow-call) | correctness | error | default |
 | [invalid-workflow-call-input](#invalid-workflow-call-input) | correctness | error | default |
 | [invalid-workflow-dispatch-input](#invalid-workflow-dispatch-input) | correctness | error | default |
+| [invisible-characters](#invisible-characters) | security | error | default |
 | [known-vulnerable-actions](#known-vulnerable-actions) | security | error | only with `-online` |
 | [local-action-checkout](#local-action-checkout) | correctness | error | default |
 | [matrix-duplicate-value](#matrix-duplicate-value) | correctness | error | default |
@@ -120,6 +121,7 @@ rules:
 | [unpinned-uses](#unpinned-uses) | policy | error | strict |
 | [unredacted-secrets](#unredacted-secrets) | security | warn | strict |
 | [unsound-contains](#unsound-contains) | security | warn | default |
+| [unsound-prefix-match](#unsound-prefix-match) | security | error | default |
 | [unsound-ternary](#unsound-ternary) | correctness | error | default |
 | [unused-anchor](#unused-anchor) | correctness | error | default |
 | [unused-ignore](#unused-ignore) | policy | error | strict |
@@ -570,6 +572,16 @@ An input of the workflow_dispatch event is invalid.
 - Profile: default
 - Details and examples: [checks](./checks.md#check-workflow-dispatch-events)
 
+## invisible-characters
+
+A file contains an invisible or bidirectional control character which hides what the text says.
+
+- Group: security
+- Default level: error
+- Profile: default
+- Fixable: yes
+- Details and examples: [checks](./checks.md#check-invisible-characters)
+
 ## known-vulnerable-actions
 
 An action version is affected by a published GitHub security advisory.
@@ -1011,6 +1023,16 @@ A condition uses contains() on a string literal, which also matches substrings.
 - Default level: warn
 - Profile: default
 - Details and examples: [checks](./checks.md#check-unsound-contains)
+
+## unsound-prefix-match
+
+An account, an owner or a repository is identified by a prefix, a suffix or a part of its name.
+
+- Group: security
+- Default level: error
+- Profile: default
+- Option `refs` (bool, default false): Also check the names of branches and tags (github.ref, github.head_ref, ...). A prefix test of a ref is often meant, so this is noisy.
+- Details and examples: [checks](./checks.md#check-unsound-prefix-match)
 
 ## unsound-ternary
 

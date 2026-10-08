@@ -283,3 +283,26 @@ in `default`.
 Behaviors of zizmor that were found only by this comparison, and are now reproduced: job names count for `anonymous-definition`;
 `concurrency-limits` skips workflows that only call reusable workflows; `secrets-outside-env` skips `workflow_call` workflows;
 `self-hosted-runner` reports the label only; `dangerous-triggers` exempts `actions/labeler` for `pull_request_target`.
+
+## Beyond zizmor
+
+Rules of jactionlint that zizmor 1.30.1 does not have. Both were checked against zizmor with `--offline --persona pedantic` on a
+fixture of each: it reports nothing for them.
+
+| Rule | Profile | What it adds |
+| --- | --- | --- |
+| `invisible-characters` | default | invisible and bidirectional control characters ([zizmor#914](https://github.com/zizmorcore/zizmor/issues/914)), in workflows and in `dependabot.yml`, also in a file that does not parse. Safe `-fix` |
+| `unsound-prefix-match` | default | `startsWith()`, `endsWith()` and `contains()` on the name of an account or a repository ([zizmor#1533](https://github.com/zizmorcore/zizmor/issues/1533)). `unsound-contains` is the sibling for a literal haystack |
+
+## Batch L measurements
+
+Both rules were run (default profile, `-shellcheck= -pyflakes=`) over two corpora of unique files (by content hash): the 1020
+workflows and Dependabot configurations of every checkout under `~/src` (the `*-jactionlint` worktrees, other worktrees and
+repositories), and 1315 files of third party repositories (the Go module cache checkouts in the scratchpad corpus). zizmor has no
+equivalent audit, so there is nothing to match against; the numbers are findings and reviewed false positives.
+
+| Rule | jdx corpus | OSS corpus | Judgement |
+| --- | --- | --- | --- |
+| `invisible-characters` | 0 | 0 | An independent scan of the raw bytes (every format, control, variation selector and filler character) finds such characters in 30 files, and all of them are `U+FE0F` after `ℹ`, `✏`, `⚠` or `🌡` (emoji, mostly in CodeQL templates and comments). The first version of the rule reported `ℹ️` (the information symbol is a letter for Unicode, not a symbol), which the corpus found; it is fixed and tested. No true positive exists in the corpus, so the detection is covered by the unit tests and fixtures only |
+| `unsound-prefix-match` | 0 | 1 | `GOOS: ${{ contains(github.repository, 'windows_exporter') && 'windows' || '' }}`: a real partial match, but it selects a build setting and not a credential. The first version reported it. The rule now reports an expression outside `if:` only when it selects a secret, `github.token` or a self-hosted runner, so this is a non-report. No condition in 2335 files tests a name by a prefix, a suffix or a part (the `endsWith(.., '[bot]')` and `!contains(github.actor, '[bot]')` tests are not reported on purpose) |
+| `unsound-prefix-match` option `refs` | not run | not run | opt-in, so not measured; a prefix test of a ref is usually meant |

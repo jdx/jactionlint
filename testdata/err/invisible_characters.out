@@ -1,0 +1,5 @@
+test.yaml:1:9: invisible character U+202E RIGHT-TO-LEFT OVERRIDE in a comment: it changes the order in which the text around it is displayed, so the code can run differently from how it reads. remove it [invisible-characters]
+test.yaml:7:31: invisible character U+200B ZERO WIDTH SPACE in a uses: reference: it is not shown by editors or by the diff view of GitHub, so it can hide what the text really is. remove it [invisible-characters]
+test.yaml:8:32: invisible character U+2066 LEFT-TO-RIGHT ISOLATE in a run: script: it changes the order in which the text around it is displayed, so the code can run differently from how it reads. remove it [invisible-characters]
+test.yaml:8:45: invisible character U+202E RIGHT-TO-LEFT OVERRIDE in a comment: it changes the order in which the text around it is displayed, so the code can run differently from how it reads. remove it [invisible-characters]
+test.yaml:12:46: invisible character U+200B ZERO WIDTH SPACE in a run: script: it is not shown by editors or by the diff view of GitHub, so it can hide what the text really is. remove it [invisible-characters]
