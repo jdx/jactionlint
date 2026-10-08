@@ -88,6 +88,11 @@ func onlyReadsRepository(w *Workflow) bool {
 		if j.WorkflowCall != nil {
 			return false
 		}
+		if j.Container != nil || j.Services != nil {
+			// GitHub pulls the images with the GITHUB_TOKEN when they are in ghcr.io, without the file saying so
+			// and "contents: read" removes "packages: read"
+			return false
+		}
 		for _, s := range j.Steps {
 			a, ok := s.Exec.(*ExecAction)
 			if !ok || a.Uses == nil {
