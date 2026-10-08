@@ -87,10 +87,12 @@ func newHTTPGitHubClient(o httpGitHubOptions) (*httpGitHubClient, error) {
 	if err != nil || (base.Scheme != "https" && base.Scheme != "http") || base.Host == "" {
 		return nil, fmt.Errorf("invalid GitHub API URL %q", o.BaseURL)
 	}
-	hc := o.HTTPClient
-	if hc == nil {
-		hc = &http.Client{Timeout: gitHubRequestTimeout}
+	hc := &http.Client{Timeout: gitHubRequestTimeout}
+	if o.HTTPClient != nil {
+		cp := *o.HTTPClient // Not modified: the caller may use it for something else
+		hc = &cp
 	}
+	hc.CheckRedirect = authRedirectPolicy(hc.CheckRedirect)
 	c := &httpGitHubClient{base: base, hc: hc, ttl: o.TTL, token: o.Token, notify: o.Notify, debug: o.Debug, graphql: o.GraphQLURL, sem: make(chan struct{}, maxGitHubInFlight)}
 	if o.CacheDir != "" {
 		c.cache = newDiskCache(o.CacheDir, 0)
@@ -166,8 +168,11 @@ func (c *httpGitHubClient) get(ctx context.Context, target string) (*httpAnswer,
 		u = c.base.String() + target
 	}
 	pu, err := url.Parse(u)
-	if err != nil || pu.Host != c.base.Host || pu.Scheme != c.base.Scheme {
+	if err != nil || !sameOrigin(pu, c.base) {
 		return nil, fmt.Errorf("refusing to request %q: not an URL of the GitHub API", target)
+	}
+	if err := c.checkAPIPath(pu); err != nil {
+		return nil, fmt.Errorf("refusing to request %q: %w", target, err)
 	}
 
 	token := c.currentToken()
@@ -391,23 +396,86 @@ func (c *httpGitHubClient) getPages(ctx context.Context, target string, maxPages
 	return false, nil
 }
 
-func repoPath(owner, repo string) string {
-	return "/repos/" + url.PathEscape(owner) + "/" + url.PathEscape(repo)
-}
+// errInvalidGitHubName is returned instead of a request for a name which is not a plain GitHub name.
+var errInvalidGitHubName = errors.New("not a valid GitHub name")
 
-// escapeRefName escapes a ref name for a URL path. Slashes are kept: "feature/x" is two segments.
-func escapeRefName(name string) string {
-	segs := strings.Split(name, "/")
+// repoURL is the only place which builds the path of a repository request. The owner and the repository
+// are validated here, every segment is escaped on its own and joined with "/", so what a workflow
+// contains can never add, remove or change a segment of the path. The tail segments are passed
+// as they are (not split) and need to have been validated: ref names with validGitRefName, which
+// is why they go through refSegments.
+func repoURL(owner, repo string, tail ...string) (string, error) {
+	if !validGitHubOwner(owner) || !validGitHubRepo(repo) {
+		return "", fmt.Errorf("%w: %q/%q", errInvalidGitHubName, owner, repo)
+	}
+	segs := append([]string{"repos", owner, repo}, tail...)
 	for i, s := range segs {
+		if s == "" || s == "." || s == ".." {
+			return "", fmt.Errorf("%w: empty or dot path segment", errInvalidGitHubName)
+		}
 		segs[i] = url.PathEscape(s)
 	}
-	return strings.Join(segs, "/")
+	return "/" + strings.Join(segs, "/"), nil
+}
+
+// refSegments validates a ref name and splits it in the segments it is made of ("feature/x" is two).
+func refSegments(name string) ([]string, error) {
+	if !validGitRefName(name) {
+		return nil, fmt.Errorf("%w: ref %q", errInvalidGitHubName, name)
+	}
+	return strings.Split(name, "/"), nil
+}
+
+// checkAPIPath refuses a URL whose path is not below the path of the API or has a dot segment, however
+// it is escaped. It is the last line of defense for every request, whoever built the URL.
+func (c *httpGitHubClient) checkAPIPath(u *url.URL) error {
+	prefix := strings.TrimRight(c.base.EscapedPath(), "/") + "/"
+	if !strings.HasPrefix(u.EscapedPath(), prefix) {
+		return fmt.Errorf("path %q is not below %q", u.EscapedPath(), prefix)
+	}
+	for _, seg := range strings.Split(u.EscapedPath(), "/") {
+		d, err := url.PathUnescape(seg)
+		if err != nil || d == "." || d == ".." || strings.ContainsAny(d, "/\\") {
+			return fmt.Errorf("path %q has a segment which changes the path", u.EscapedPath())
+		}
+	}
+	return nil
+}
+
+// sameOrigin reports whether two URLs have the same scheme and host.
+func sameOrigin(a, b *url.URL) bool {
+	return strings.EqualFold(a.Scheme, b.Scheme) && strings.EqualFold(a.Host, b.Host)
+}
+
+// authRedirectPolicy wraps the redirect policy of a client. A request which carries the token is never
+// redirected to another origin (the token would go with it, or the request would silently run
+// without it), and the header is dropped from the redirected request of any other kind as well.
+func authRedirectPolicy(next func(req *http.Request, via []*http.Request) error) func(req *http.Request, via []*http.Request) error {
+	return func(req *http.Request, via []*http.Request) error {
+		if len(via) > 0 && !sameOrigin(req.URL, via[0].URL) {
+			if via[0].Header.Get("Authorization") != "" {
+				return fmt.Errorf("refusing to follow a redirect of an authenticated request to %s", req.URL.Host)
+			}
+			req.Header.Del("Authorization")
+		}
+		if next != nil {
+			return next(req, via)
+		}
+		if len(via) >= 10 {
+			return errors.New("stopped after 10 redirects")
+		}
+		return nil
+	}
 }
 
 // Repository implements GitHubClient.
 func (c *httpGitHubClient) Repository(ctx context.Context, owner, repo string) (*GitHubRepo, error) {
 	var r GitHubRepo
-	if _, err := c.getJSON(ctx, repoPath(owner, repo), &r); err != nil {
+	path, err := repoURL(owner, repo)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := c.getJSON(ctx, path, &r); err != nil {
 		return nil, err
 	}
 	return &r, nil
@@ -416,7 +484,11 @@ func (c *httpGitHubClient) Repository(ctx context.Context, owner, repo string) (
 // Tags implements GitHubClient.
 func (c *httpGitHubClient) Tags(ctx context.Context, owner, repo string) (*GitHubTagList, error) {
 	l := &GitHubTagList{}
-	truncated, err := c.getPages(ctx, repoPath(owner, repo)+"/tags?per_page=100", maxGitHubPages, func(body []byte) error {
+	path, err := repoURL(owner, repo, "tags")
+	if err != nil {
+		return nil, err
+	}
+	truncated, err := c.getPages(ctx, path+"?per_page=100", maxGitHubPages, func(body []byte) error {
 		var tags []struct {
 			Name   string `json:"name"`
 			Commit struct {
@@ -448,7 +520,15 @@ type gitObject struct {
 // ResolveRef implements GitHubClient.
 func (c *httpGitHubClient) ResolveRef(ctx context.Context, owner, repo string, ns GitHubRefNamespace, name string) (string, bool, error) {
 	var ref gitObject
-	_, err := c.getJSON(ctx, repoPath(owner, repo)+"/git/ref/"+string(ns)+"/"+escapeRefName(name), &ref)
+	segs, err := refSegments(name)
+	if err != nil {
+		return "", false, err
+	}
+	path, err := repoURL(owner, repo, append([]string{"git", "ref", string(ns)}, segs...)...)
+	if err != nil {
+		return "", false, err
+	}
+	_, err = c.getJSON(ctx, path, &ref)
 	if errors.Is(err, ErrGitHubNotFound) {
 		return "", false, nil
 	}
@@ -459,7 +539,11 @@ func (c *httpGitHubClient) ResolveRef(ctx context.Context, owner, repo string, n
 	for i := 0; ref.Object.Type == "tag" && i < maxTagDerefs; i++ {
 		sha := ref.Object.SHA
 		ref = gitObject{}
-		if _, err := c.getJSON(ctx, repoPath(owner, repo)+"/git/tags/"+url.PathEscape(sha), &ref); err != nil {
+		tagPath, err := repoURL(owner, repo, "git", "tags", sha)
+		if err != nil { // The SHA comes from the API; it is escaped and checked for dot segments like the rest
+			return "", false, err
+		}
+		if _, err := c.getJSON(ctx, tagPath, &ref); err != nil {
 			return "", false, err
 		}
 	}
@@ -475,7 +559,11 @@ func (c *httpGitHubClient) Branches(ctx context.Context, owner, repo string, lim
 	limit = max(limit, 1)
 	perPage := min(limit, 100)
 	pages := (limit + perPage - 1) / perPage
-	truncated, err := c.getPages(ctx, repoPath(owner, repo)+"/branches?per_page="+strconv.Itoa(perPage), min(pages, maxGitHubPages), func(body []byte) error {
+	path, err := repoURL(owner, repo, "branches")
+	if err != nil {
+		return nil, err
+	}
+	truncated, err := c.getPages(ctx, path+"?per_page="+strconv.Itoa(perPage), min(pages, maxGitHubPages), func(body []byte) error {
 		var bs []struct {
 			Name   string `json:"name"`
 			Commit struct {
@@ -505,7 +593,15 @@ func (c *httpGitHubClient) Compare(ctx context.Context, owner, repo, base, head 
 	var r struct {
 		Status string `json:"status"`
 	}
-	if _, err := c.getJSON(ctx, repoPath(owner, repo)+"/compare/"+url.PathEscape(base)+"..."+url.PathEscape(head)+"?per_page=1", &r); err != nil {
+	if !validGitRefName(base) || !validGitRefName(head) {
+		return "", fmt.Errorf("%w: compare %q...%q", errInvalidGitHubName, base, head)
+	}
+	// "base...head" is one path segment, in which '/' of a branch name is escaped
+	path, err := repoURL(owner, repo, "compare", base+"..."+head)
+	if err != nil {
+		return "", err
+	}
+	if _, err := c.getJSON(ctx, path+"?per_page=1", &r); err != nil {
 		return "", err
 	}
 	s := GitHubCompareStatus(r.Status)
@@ -602,7 +698,7 @@ func (c *httpGitHubClient) CommitOnAnyBranch(ctx context.Context, owner, repo, s
 	if token == "" {
 		return GitHubBranchScan{}, ErrGitHubBranchScanUnavailable
 	}
-	if !reSafeRepoPart.MatchString(owner) || !reSafeRepoPart.MatchString(repo) || len(sha) != 40 {
+	if !validGitHubOwner(owner) || !validGitHubRepo(repo) || len(sha) != 40 || !validGitSHA(sha) {
 		return GitHubBranchScan{}, ErrGitHubBranchScanUnavailable
 	}
 	limit = max(limit, 1)
