@@ -25,6 +25,7 @@ rules:
 
 | ID | Group | Default level | Profile |
 | --- | --- | --- | --- |
+| [agentic-actions](#agentic-actions) | security | error | default |
 | [anonymous-definition](#anonymous-definition) | policy | warn | strict |
 | [archived-uses](#archived-uses) | security | warn | only with `-online` |
 | [artipacked](#artipacked) | security | warn | strict |
@@ -128,6 +129,16 @@ rules:
 | [workflow-run-names](#workflow-run-names) | correctness | error | default |
 | [workflow-syntax](#workflow-syntax) | correctness | error | default |
 | [yaml-syntax](#yaml-syntax) | correctness | error | default |
+
+## agentic-actions
+
+An AI agent action can be steered by outsiders, runs on code of a pull request, or has its safeguards turned off.
+
+- Group: security
+- Default level: error
+- Profile: default
+- Option `any-trigger` (bool, default false): Also report the unsafe settings of an agent (tools that allow any command, permission checks switched off) in a workflow that no outsider can trigger.
+- Details and examples: [checks](./checks.md#check-agentic-actions)
 
 ## anonymous-definition
 
@@ -844,7 +855,7 @@ A hash-pinned action uses a commit which no tag of the repository points to.
 
 ## template-injection
 
-A potentially untrusted input is expanded in a script.
+A potentially untrusted input is expanded in a script, a container option or the prompt of an AI agent.
 
 - Group: security
 - Default level: error

@@ -1,0 +1,14 @@
+on: push
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      # ERROR: the option any-trigger reports the unsafe settings of an agent on every trigger
+      - uses: anthropics/claude-code-action@v1
+        with:
+          claude_args: --dangerously-skip-permissions
+      # OK: the gate is only a problem when outsiders can reach the agent
+      - uses: openai/codex-action@v1
+        with:
+          allow-users: '*'

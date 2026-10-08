@@ -25,6 +25,21 @@
               "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
             },
             {
+              "id": "agentic-actions",
+              "name": "AgenticActions",
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "description": "Checks for AI agent actions which outsiders can steer or whose safeguards are off",
+                "queryURI": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+              },
+              "fullDescription": {
+                "text": "Checks for AI agent actions which outsiders can steer or whose safeguards are off"
+              },
+              "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+            },
+            {
               "id": "artipacked",
               "name": "Artipacked",
               "defaultConfiguration": {
