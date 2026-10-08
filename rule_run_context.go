@@ -115,12 +115,23 @@ func (c *runContext) script(run *ExecRun) (*runscript.Script, runscript.Origin) 
 // job overrides the workflow. It returns false when the variable is not set in the workflow file or when an
 // `env:` is given as an expression.
 func (c *runContext) envValue(step *Step, name string) (*String, bool) {
+	return c.lookupEnv(step, name, true)
+}
+
+// envContextValue is like envValue for a name read through the `env` context of an expression, whose property
+// names are case-insensitive.
+func (c *runContext) envContextValue(step *Step, name string) (*String, bool) {
+	return c.lookupEnv(step, name, false)
+}
+
+func (c *runContext) lookupEnv(step *Step, name string, exact bool) (*String, bool) {
 	key := strings.ToLower(name)
 	for _, env := range []*Env{step.Env, c.jobEnv(), c.workflowEnv()} {
 		if env == nil || env.Vars == nil {
 			continue
 		}
-		if v, ok := env.Vars[key]; ok && v != nil && v.Value != nil {
+		// Names are case-sensitive except on Windows
+		if v, ok := env.Vars[key]; ok && v != nil && v.Value != nil && (!exact || v.Name == nil || v.Name.Value == name || c.windowsRunner()) {
 			return v.Value, true
 		}
 	}

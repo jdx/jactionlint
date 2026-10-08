@@ -252,7 +252,7 @@ func (rule *RuleGitHubEnv) judgeExprList(exprs []string, depth int) data {
 	d := data{}
 	for _, e := range exprs {
 		if name, ok := envContextVar(e); ok && depth <= 3 {
-			if v, ok := rule.envValue(rule.step, name); ok {
+			if v, ok := rule.envContextValue(rule.step, name); ok {
 				ed := rule.judgeExprList(exprsIn(v.Value), depth+1)
 				if ed.kind == dataUntrusted && ed.via == "" {
 					ed.via = name
