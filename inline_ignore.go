@@ -92,6 +92,7 @@ func parseInlineIgnores(src []byte) ([]inlineIgnore, []*Error) {
 						Line:    i + 1,
 						Column:  col,
 						Kind:    "syntax-check",
+						ID:      "invalid-ignore-comment",
 					})
 					continue
 				}

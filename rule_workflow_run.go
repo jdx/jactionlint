@@ -115,7 +115,8 @@ func (rule *RuleWorkflowRun) VisitWorkflowPre(n *Workflow) error {
 				return nil
 			}
 			if _, found := rule.names.names[strings.ToLower(name.Value)]; !found {
-				rule.Errorf(
+				rule.ReportIDf(
+					"workflow-run-names",
 					name.Pos,
 					"workflow %q specified at \"workflows\" of \"workflow_run\" event is not found in the repository. a workflow is specified by its \"name:\" or its file path when it has no name",
 					name.Value,

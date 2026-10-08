@@ -13,6 +13,7 @@ func errorAtToken(t *Token, msg string) *ExprError {
 		Offset:  t.Offset,
 		Line:    t.Line,
 		Column:  t.Column,
+		ID:      "expression-syntax",
 	}
 }
 

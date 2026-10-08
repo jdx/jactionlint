@@ -574,55 +574,16 @@ func (l *Linter) check(
 	if w != nil {
 		dbg := l.debugWriter()
 
-		rules := []Rule{
-			NewRuleMatrix(),
-			NewRuleCredentials(),
-			NewRuleShellName(),
-			NewRuleRunPolicy(),
-			NewRuleRunnerLabel(),
-			NewRuleEvents(),
-			NewRuleWorkflowRun(project),
-			NewRuleJobNeeds(),
-			NewRuleParallelSteps(),
-			NewRuleAction(localActions),
-			NewRuleLocalActionCheckout(),
-			NewRuleEnvVar(),
-			NewRuleID(),
-			NewRuleGlob(),
-			NewRulePermissions(),
-			NewRuleTimeoutCheck(),
-			NewRuleRequirePermissions(),
-			NewRuleWorkflowCall(path, localReusableWorkflows),
-			NewRuleExpression(localActions, localReusableWorkflows),
-			NewRuleDeprecatedCommands(),
-			NewRuleIfCond(),
-		}
-
-		// Only add required actions rule if config exists and has required actions
-		if cfg != nil && len(cfg.RequiredActions) > 0 {
-			rules = append(rules, NewRuleRequiredActions(cfg.RequiredActions))
-		}
-
-		if l.shellcheck != "" {
-			r, err := NewRuleShellcheck(l.shellcheck, proc)
-			if err == nil {
-				rules = append(rules, r)
-			} else {
-				l.log("Rule \"shellcheck\" was disabled:", err)
-			}
-		} else {
-			l.log("Rule \"shellcheck\" was disabled since shellcheck command name was empty")
-		}
-		if l.pyflakes != "" {
-			r, err := NewRulePyflakes(l.pyflakes, proc)
-			if err == nil {
-				rules = append(rules, r)
-			} else {
-				l.log("Rule \"pyflakes\" was disabled:", err)
-			}
-		} else {
-			l.log("Rule \"pyflakes\" was disabled since pyflakes command name was empty")
-		}
+		rules := newBuiltinRules(&ruleContext{
+			path:                   path,
+			project:                project,
+			localActions:           localActions,
+			localReusableWorkflows: localReusableWorkflows,
+			config:                 cfg,
+			shellcheck:             l.shellcheck,
+			pyflakes:               l.pyflakes,
+			proc:                   proc,
+		}, l.log)
 		if l.onRulesCreated != nil {
 			rules = l.onRulesCreated(rules)
 		}
@@ -661,11 +622,13 @@ func (l *Linter) check(
 		}
 	}
 
+	all = l.annotateErrors(all, content)
+
 	all = l.filterErrors(all, cfg.PathConfigs(path))
 
 	inlineIgnores, ignoreErrs := parseInlineIgnores(content)
 	all = l.filterInlineIgnores(all, inlineIgnores)
-	all = append(all, ignoreErrs...)
+	all = append(all, l.annotateErrors(ignoreErrs, content)...)
 
 	for _, err := range all {
 		err.Filepath = path // Populate filename in the error
@@ -715,4 +678,22 @@ func (l *Linter) printErrors(errs []*Error, src []byte) {
 	for _, err := range errs {
 		err.PrettyPrint(l.out, src)
 	}
+}
+
+// annotateErrors fills the fields of the errors which are derived from the diagnostic ID: the
+// severity, the documentation URL and the end position of the region.
+func (l *Linter) annotateErrors(errs []*Error, src []byte) []*Error {
+	lines := sourceLines(src)
+	for _, err := range errs {
+		if err.ID == "" {
+			err.ID = err.Kind
+		}
+		err.Severity = SeverityError
+		if info, ok := LookupRule(err.ID); ok {
+			err.Severity = info.DefaultLevel
+			err.DocURL = info.DocURL()
+		}
+		err.fillRegion(lines)
+	}
+	return errs
 }

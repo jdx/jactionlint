@@ -313,6 +313,7 @@ func (u *UntrustedInputChecker) end() {
 
 	if len(inputs) == 1 {
 		err := errorfAtExpr(
+			"template-injection",
 			u.start,
 			"%q is potentially untrusted. avoid using it directly in inline scripts. instead, pass it through an environment variable. see https://docs.github.com/en/actions/reference/security/secure-use#good-practices-for-mitigating-script-injection-attacks for more details",
 			inputs[0],
@@ -322,6 +323,7 @@ func (u *UntrustedInputChecker) end() {
 		// When multiple untrusted inputs are detected, it means the expression extracts multiple properties with object
 		// filter syntax. Show all properties in error message.
 		err := errorfAtExpr(
+			"template-injection",
 			u.start,
 			"object filter extracts potentially untrusted properties %s. avoid using the value directly in inline scripts. instead, pass the value through an environment variable. see https://docs.github.com/en/actions/reference/security/secure-use#good-practices-for-mitigating-script-injection-attacks for more details",
 			sortedQuotes(inputs),

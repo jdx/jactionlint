@@ -187,6 +187,7 @@ func (lex *ExprLexer) error(msg string) {
 			Offset:  p.Offset,
 			Line:    p.Line,
 			Column:  p.Column,
+			ID:      "expression-syntax",
 		}
 	}
 }

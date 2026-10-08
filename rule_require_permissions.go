@@ -38,7 +38,8 @@ func (rule *RuleRequirePermissions) VisitJobPre(n *Job) error {
 	if !rule.enabled() || rule.workflowHasPermissions || n.Permissions != nil {
 		return nil
 	}
-	rule.Errorf(
+	rule.ReportIDf(
+		"missing-permissions",
 		n.Pos,
 		"neither the workflow nor this job sets \"permissions:\" so the GITHUB_TOKEN gets the default permissions of the repository. set \"permissions:\" at workflow-level or job-level (use \"permissions: {}\" for no permissions) because \"require-permissions\" is enabled",
 	)

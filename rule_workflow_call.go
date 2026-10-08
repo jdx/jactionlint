@@ -67,7 +67,8 @@ func (rule *RuleWorkflowCall) VisitJobPre(n *Job) error {
 		if cfg := rule.Config(); cfg != nil && cfg.RequireCommitHash {
 			ref := u.Value[strings.LastIndexByte(u.Value, '@')+1:]
 			if !commitHashRegex.MatchString(ref) {
-				rule.Errorf(
+				rule.ReportIDf(
+					"unpinned-uses",
 					u.Pos,
 					"reusable workflow call %q must be pinned to a full-length commit SHA like \"owner/repo/path/to/workflow.yml@{sha}\" because \"require-commit-hash\" is enabled",
 					u.Value,
@@ -84,7 +85,8 @@ func (rule *RuleWorkflowCall) VisitJobPre(n *Job) error {
 		rule.cache.writeCache(s, nil)
 	}
 
-	rule.Errorf(
+	rule.ReportIDf(
+		"invalid-workflow-call",
 		u.Pos,
 		"reusable workflow call %q at \"uses\" is not following the format \"owner/repo/path/to/workflow.yml@ref\" nor \"./path/to/workflow.yml\" nor \"$/path/to/workflow.yml\". see https://docs.github.com/en/actions/learn-github-actions/reusing-workflows for more details",
 		u.Value,
@@ -96,7 +98,7 @@ func (rule *RuleWorkflowCall) checkWorkflowCallUsesLocal(call *WorkflowCall) {
 	u := call.Uses
 	m, err := rule.cache.FindMetadata(u.Value)
 	if err != nil {
-		rule.Error(u.Pos, err.Error())
+		rule.ReportID("invalid-local-workflow", u.Pos, err.Error())
 		return
 	}
 	if m == nil {
@@ -108,7 +110,7 @@ func (rule *RuleWorkflowCall) checkWorkflowCallUsesLocal(call *WorkflowCall) {
 	for n, i := range m.Inputs {
 		if i != nil && i.Required {
 			if _, ok := call.Inputs[n]; !ok {
-				rule.Errorf(u.Pos, "input %q is required by %q reusable workflow", i.Name, u.Value)
+				rule.ReportIDf("missing-workflow-input", u.Pos, "input %q is required by %q reusable workflow", i.Name, u.Value)
 			}
 		}
 	}
@@ -126,7 +128,7 @@ func (rule *RuleWorkflowCall) checkWorkflowCallUsesLocal(call *WorkflowCall) {
 					note = "defined inputs are " + sortedQuotes(is)
 				}
 			}
-			rule.Errorf(i.Name.Pos, "input %q is not defined in %q reusable workflow. %s", i.Name.Value, u.Value, note)
+			rule.ReportIDf("unknown-workflow-input", i.Name.Pos, "input %q is not defined in %q reusable workflow. %s", i.Name.Value, u.Value, note)
 		}
 	}
 
@@ -135,7 +137,7 @@ func (rule *RuleWorkflowCall) checkWorkflowCallUsesLocal(call *WorkflowCall) {
 		for n, s := range m.Secrets {
 			if s.Required {
 				if _, ok := call.Secrets[n]; !ok {
-					rule.Errorf(u.Pos, "secret %q is required by %q reusable workflow", s.Name, u.Value)
+					rule.ReportIDf("missing-workflow-secret", u.Pos, "secret %q is required by %q reusable workflow", s.Name, u.Value)
 				}
 			}
 		}
@@ -153,7 +155,7 @@ func (rule *RuleWorkflowCall) checkWorkflowCallUsesLocal(call *WorkflowCall) {
 						note = "defined secrets are " + sortedQuotes(ss)
 					}
 				}
-				rule.Errorf(s.Name.Pos, "secret %q is not defined in %q reusable workflow. %s", s.Name.Value, u.Value, note)
+				rule.ReportIDf("unknown-workflow-secret", s.Name.Pos, "secret %q is not defined in %q reusable workflow. %s", s.Name.Value, u.Value, note)
 			}
 		}
 	}
@@ -234,7 +236,8 @@ func (rule *RuleWorkflowCall) checkWorkflowCallPermissions(call *WorkflowCall, m
 			}
 		}
 		if len(wants) > 0 {
-			rule.Errorf(
+			rule.ReportIDf(
+				"workflow-call-permissions",
 				u.Pos,
 				"nested job %q of %q requires %s but the calling job grants %s",
 				id, u.Value,

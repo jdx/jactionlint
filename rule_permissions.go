@@ -152,7 +152,7 @@ func (rule *RulePermissions) checkPermissions(p *Permissions) {
 		case "write-all", "read-all":
 			// OK
 		default:
-			rule.Errorf(p.All.Pos, "%q is invalid for permission for all the scopes. available values are \"read-all\", \"write-all\" or {}", p.All.Value)
+			rule.ReportIDf("invalid-permissions", p.All.Pos, "%q is invalid for permission for all the scopes. available values are \"read-all\", \"write-all\" or {}", p.All.Value)
 		}
 		return
 	}
@@ -165,12 +165,12 @@ func (rule *RulePermissions) checkPermissions(p *Permissions) {
 			for s := range allPermissionScopes {
 				ss = append(ss, s)
 			}
-			rule.Errorf(p.Name.Pos, "unknown permission scope %q. all available permission scopes are %s", n, sortedQuotes(ss))
+			rule.ReportIDf("invalid-permissions", p.Name.Pos, "unknown permission scope %q. all available permission scopes are %s", n, sortedQuotes(ss))
 			continue
 		}
 
 		if !slices.Contains(s, p.Value.Value) {
-			rule.Errorf(p.Value.Pos, "%q is invalid as permission of scope %q. available values are %s", p.Value.Value, n, quotes(s))
+			rule.ReportIDf("invalid-permissions", p.Value.Pos, "%q is invalid as permission of scope %q. available values are %s", p.Value.Value, n, quotes(s))
 		}
 	}
 }

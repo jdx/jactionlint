@@ -72,7 +72,8 @@ func (rule *RuleLocalActionCheckout) checkStep(n *Step, checkedOut bool) bool {
 		if strings.HasPrefix(spec, "./") {
 			if !checkedOut && !rule.reported {
 				rule.reported = true
-				rule.Errorf(
+				rule.ReportIDf(
+					"local-action-checkout",
 					e.Uses.Pos,
 					"local action %q is used before any checkout step in this job. the repository is not on the runner yet so the action cannot be found. add \"actions/checkout\" before this step or use \"$/\" syntax. this is reported because \"require-checkout-before-local-action\" is enabled",
 					spec,

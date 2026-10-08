@@ -30,10 +30,80 @@ type Error struct {
 	Filepath string
 	// Line is a line number where the error occurred. This value is 1-based.
 	Line int
-	// Column is a column number where the error occurred. This value is 1-based.
+	// Column is a column number where the error occurred. This value is 1-based and counts Unicode
+	// code points.
 	Column int
-	// Kind is a string to represent kind of the error. Usually rule name which found the error.
+	// EndLine is the line number of the end of the problematic region. This value is 1-based. It is
+	// the same as Line unless the region spans several lines.
+	EndLine int
+	// EndColumn is the column number just after the end of the problematic region on EndLine. It is
+	// 1-based and counts Unicode code points, so a region of one character at column 5 has EndColumn
+	// 6. When a rule did not report where the region ends, the linter fills it with the end of the
+	// token which starts at Line and Column.
+	EndColumn int
+	// Kind is a string to represent kind of the error. Usually rule name which found the error. It is
+	// the legacy way to group errors. Use ID to tell which diagnostic was reported.
 	Kind string
+	// ID is the stable identifier of the diagnostic such as "unpinned-uses". See Rules for all IDs of
+	// jactionlint. Errors reported by custom rules through RuleBase.Error have the Kind as their ID.
+	ID string
+	// Severity is how serious the error is. It is determined by the configuration: the level of the
+	// rule or the default level of the rule.
+	Severity Severity
+	// DocURL is a URL of the documentation of the diagnostic. It is empty for custom rules.
+	DocURL string
+	// Fix is an automatic correction for the error. It is nil when the error cannot be fixed
+	// mechanically.
+	Fix *Fix
+}
+
+// Fix is an automatic correction for an Error. It is a list of edits to a single file. The edits
+// must not overlap each other.
+type Fix struct {
+	// Description describes what applying the fix does, e.g. "Add timeout-minutes".
+	Description string `json:"description"`
+	// Unsafe marks a fix which may change the behavior of the workflow. Unsafe fixes are applied
+	// only when requested explicitly and are not put in SARIF output.
+	Unsafe bool `json:"unsafe,omitempty"`
+	// Edits are the replacements to apply.
+	Edits []TextEdit `json:"edits"`
+}
+
+// TextEdit replaces the bytes in [Start, End) of a file with NewText. Offsets are byte offsets
+// from the beginning of the file. Start == End inserts the text, and an empty NewText deletes the
+// range.
+type TextEdit struct {
+	// Start is the byte offset where the replaced range starts.
+	Start int `json:"start"`
+	// End is the byte offset just after the replaced range.
+	End int `json:"end"`
+	// NewText is the text to put in place of the range.
+	NewText string `json:"new_text"`
+}
+
+// validFor reports whether all edits are inside the source and none of them overlap.
+func (f *Fix) validFor(src []byte) bool {
+	if f == nil || len(f.Edits) == 0 {
+		return false
+	}
+	edits := slices.Clone(f.Edits)
+	slices.SortFunc(edits, func(a, b TextEdit) int {
+		if a.Start != b.Start {
+			return a.Start - b.Start
+		}
+		return a.End - b.End
+	})
+	prevEnd := 0
+	for i, e := range edits {
+		if e.Start < 0 || e.End < e.Start || e.End > len(src) {
+			return false
+		}
+		if i > 0 && e.Start < prevEnd {
+			return false
+		}
+		prevEnd = e.End
+	}
+	return true
 }
 
 // Error returns summary of the error as string.
@@ -45,22 +115,18 @@ func (e *Error) String() string {
 	return e.Error()
 }
 
-func errorAt(pos *Pos, kind string, msg string) *Error {
+func errorAt(pos *Pos, kind string, id string, msg string) *Error {
 	return &Error{
 		Message: msg,
 		Line:    pos.Line,
 		Column:  pos.Col,
 		Kind:    kind,
+		ID:      id,
 	}
 }
 
-func errorfAt(pos *Pos, kind string, format string, args ...interface{}) *Error {
-	return &Error{
-		Message: fmt.Sprintf(format, args...),
-		Line:    pos.Line,
-		Column:  pos.Col,
-		Kind:    kind,
-	}
+func errorfAt(pos *Pos, kind string, id string, format string, args ...interface{}) *Error {
+	return errorAt(pos, kind, id, fmt.Sprintf(format, args...))
 }
 
 // GetTemplateFields fields for formatting this error with Go template.

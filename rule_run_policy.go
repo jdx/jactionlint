@@ -63,7 +63,8 @@ func (rule *RuleRunPolicy) VisitStep(n *Step) error {
 	}
 
 	if cfg.RequireShell && run.Shell == nil && rule.jobShell == nil && rule.workflowShell == nil {
-		rule.Error(
+		rule.ReportID(
+			"require-shell",
 			run.RunPos,
 			"shell is not set explicitly. set \"shell:\" at the step or \"defaults.run.shell\" because \"require-shell\" is enabled",
 		)
@@ -71,7 +72,8 @@ func (rule *RuleRunPolicy) VisitStep(n *Step) error {
 
 	if max := cfg.MaxRunLines; max > 0 {
 		if lines := countScriptLines(run.Run.Value); lines > max {
-			rule.Errorf(
+			rule.ReportIDf(
+				"max-run-lines",
 				run.Run.Pos,
 				"script in \"run:\" has %d lines but at most %d lines are allowed because \"max-run-lines\" is set. consider moving it to a script file or an action",
 				lines,

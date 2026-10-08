@@ -52,7 +52,8 @@ func (rule *RuleMatrix) checkDuplicateInRow(row *MatrixRow) {
 		ok := true
 		for _, p := range seen {
 			if p.Equals(v) {
-				rule.Errorf(
+				rule.ReportIDf(
+					"matrix-duplicate-value",
 					v.Pos(),
 					"duplicate value %s is found in matrix %q. the same value is at %s",
 					v.String(),
@@ -142,7 +143,7 @@ func (rule *RuleMatrix) checkExclude(m *Matrix) {
 	// "include" combinations are processed after "exclude", so values only added by "include" can never be excluded.
 	// https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#jobsjob_idstrategymatrixexclude
 	if len(m.Rows) == 0 {
-		rule.Error(m.Pos, "\"exclude\" section exists but no matrix variation exists")
+		rule.ReportID("matrix-invalid-exclude", m.Pos, "\"exclude\" section exists but no matrix variation exists")
 		return
 	}
 
@@ -169,7 +170,8 @@ func (rule *RuleMatrix) checkExclude(m *Matrix) {
 				for k := range rows {
 					ss = append(ss, k)
 				}
-				rule.Errorf(
+				rule.ReportIDf(
+					"matrix-invalid-exclude",
 					a.Key.Pos,
 					"%q in \"exclude\" section does not exist in matrix. available matrix configurations are %s",
 					k,
@@ -188,7 +190,8 @@ func (rule *RuleMatrix) checkExclude(m *Matrix) {
 			for _, v := range row {
 				ss = append(ss, v.String())
 			}
-			rule.Errorf(
+			rule.ReportIDf(
+				"matrix-invalid-exclude",
 				a.Value.Pos(),
 				"value %s in \"exclude\" does not match in matrix %q combinations. possible values are %s",
 				a.Value.String(),

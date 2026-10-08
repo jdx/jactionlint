@@ -380,13 +380,13 @@ func (rule *RuleAction) checkRepoAction(spec string, exec *ExecAction) {
 	}
 
 	if rule.config != nil && rule.config.RequireCommitHash && !commitHashRegex.MatchString(ref) {
-		rule.Errorf(exec.Uses.Pos, "action %q must be pinned to a full-length commit SHA like \"{owner}/{repo}@{sha}\" because \"require-commit-hash\" is enabled", spec)
+		rule.ReportIDf("unpinned-uses", exec.Uses.Pos, "action %q must be pinned to a full-length commit SHA like \"{owner}/{repo}@{sha}\" because \"require-commit-hash\" is enabled", spec)
 	}
 
 	meta, ok := PopularActions[spec]
 	if !ok {
 		if _, ok := OutdatedPopularActionSpecs[spec]; ok {
-			rule.Errorf(exec.Uses.Pos, "the runner of %q action is too old to run on GitHub Actions. update the action's version to fix this issue", spec)
+			rule.ReportIDf("outdated-action-runner", exec.Uses.Pos, "the runner of %q action is too old to run on GitHub Actions. update the action's version to fix this issue", spec)
 			return
 		}
 		rule.Debug("This action is not found in popular actions data set: %s", spec)
@@ -403,11 +403,11 @@ func (rule *RuleAction) checkRepoAction(spec string, exec *ExecAction) {
 }
 
 func (rule *RuleAction) invalidActionFormat(pos *Pos, spec string, why string) {
-	rule.Errorf(pos, "specifying action %q in invalid format because %s. available formats are \"{owner}/{repo}@{ref}\" or \"{owner}/{repo}/{path}@{ref}\"", spec, why)
+	rule.ReportIDf("invalid-uses", pos, "specifying action %q in invalid format because %s. available formats are \"{owner}/{repo}@{ref}\" or \"{owner}/{repo}/{path}@{ref}\"", spec, why)
 }
 
 func (rule *RuleAction) missingRunsProp(pos *Pos, prop, ty, action, path string) {
-	rule.Errorf(pos, `%q is required in "runs" section because %q is a %s action. the action is defined at %q`, prop, action, ty, path)
+	rule.ReportIDf("invalid-local-action", pos, `%q is required in "runs" section because %q is a %s action. the action is defined at %q`, prop, action, ty, path)
 }
 
 func (rule *RuleAction) checkInvalidRunsProps(pos *Pos, r *ActionMetadataRuns, ty, action, path string, props []string) {
@@ -426,7 +426,7 @@ func (rule *RuleAction) checkInvalidRunsProps(pos *Pos, r *ActionMetadataRuns, t
 			prop == "env" && r.Env != nil
 
 		if invalid {
-			rule.Errorf(pos, `%q is not allowed in "runs" section because %q is a %s action. the action is defined at %q`, prop, action, ty, path)
+			rule.ReportIDf("invalid-local-action", pos, `%q is not allowed in "runs" section because %q is a %s action. the action is defined at %q`, prop, action, ty, path)
 		}
 	}
 }
@@ -438,7 +438,7 @@ func (rule *RuleAction) checkRunsFileExists(file, dir, prop, name string, pos *P
 	}
 	p := filepath.Join(dir, f)
 	if _, err := os.Stat(p); errors.Is(err, os.ErrNotExist) {
-		rule.Errorf(pos, `file %q does not exist in %q. it is specified at %q key in "runs" section in %q action`, f, dir, prop, name)
+		rule.ReportIDf("invalid-local-action", pos, `file %q does not exist in %q. it is specified at %q key in "runs" section in %q action`, f, dir, prop, name)
 	}
 }
 
@@ -449,7 +449,7 @@ func (rule *RuleAction) checkLocalDockerActionRuns(r *ActionMetadataRuns, dir, n
 	} else if !isImageOnDockerRegistry(r.Image) {
 		rule.checkRunsFileExists(r.Image, dir, "image", name, pos)
 		if filepath.Base(filepath.FromSlash(r.Image)) != "Dockerfile" {
-			rule.Errorf(pos, `the local file %q referenced from "image" key must be named "Dockerfile" in %q action. the action is defined at %q`, r.Image, name, dir)
+			rule.ReportIDf("invalid-local-action", pos, `the local file %q referenced from "image" key must be named "Dockerfile" in %q action. the action is defined at %q`, r.Image, name, dir)
 		}
 	}
 	rule.checkRunsFileExists(r.PreEntrypoint, dir, "pre-entrypoint", name, pos)
@@ -476,12 +476,12 @@ func (rule *RuleAction) checkLocalJavaScriptActionRuns(r *ActionMetadataRuns, di
 
 	rule.checkRunsFileExists(r.Pre, dir, "pre", name, pos)
 	if r.Pre == "" && r.PreIf != "" {
-		rule.Errorf(pos, `"pre" is required when "pre-if" is specified in "runs" section in %q action. the action is defined at %q`, name, dir)
+		rule.ReportIDf("invalid-local-action", pos, `"pre" is required when "pre-if" is specified in "runs" section in %q action. the action is defined at %q`, name, dir)
 	}
 
 	rule.checkRunsFileExists(r.Post, dir, "post", name, pos)
 	if r.Post == "" && r.PostIf != "" {
-		rule.Errorf(pos, `"post" is required when "post-if" is specified in "runs" section in %q action. the action is defined at %q`, name, dir)
+		rule.ReportIDf("invalid-local-action", pos, `"post" is required when "post-if" is specified in "runs" section in %q action. the action is defined at %q`, name, dir)
 	}
 
 	rule.checkInvalidRunsProps(pos, r, "JavaScript", name, dir, []string{"steps", "image", "pre-entrypoint", "entrypoint", "post-entrypoint", "args", "env"})
@@ -490,7 +490,8 @@ func (rule *RuleAction) checkLocalJavaScriptActionRuns(r *ActionMetadataRuns, di
 func (rule *RuleAction) checkLocalActionInputs(meta *ActionMetadata, pos *Pos) {
 	for _, i := range meta.Inputs {
 		if i.Deprecated && i.DeprecationMessage == "" {
-			rule.Errorf(
+			rule.ReportIDf(
+				"invalid-local-action",
 				pos,
 				"input %q is deprecated but \"deprecationMessage\" is empty in metadata of %q action at %q",
 				i.Name,
@@ -505,7 +506,7 @@ func (rule *RuleAction) checkLocalActionInputs(meta *ActionMetadata, pos *Pos) {
 func (rule *RuleAction) checkLocalActionRuns(meta *ActionMetadata, pos *Pos) {
 	switch r := &meta.Runs; r.Using {
 	case "":
-		rule.Errorf(pos, `"runs.using" is missing in local action %q defined at %q`, meta.Name, meta.Dir())
+		rule.ReportIDf("invalid-local-action", pos, `"runs.using" is missing in local action %q defined at %q`, meta.Name, meta.Dir())
 	case "docker":
 		rule.checkLocalDockerActionRuns(r, meta.Dir(), meta.Name, pos)
 	case "composite":
@@ -513,7 +514,7 @@ func (rule *RuleAction) checkLocalActionRuns(meta *ActionMetadata, pos *Pos) {
 	case "node20", "node24":
 		rule.checkLocalJavaScriptActionRuns(r, meta.Dir(), meta.Name, pos)
 	default:
-		rule.Errorf(pos, `invalid runner name %q at runs.using in %q action defined at %q. valid runners are "composite", "docker", "node20", and "node24". see https://docs.github.com/en/actions/creating-actions/metadata-syntax-for-github-actions#runs`, r.Using, meta.Name, meta.Dir())
+		rule.ReportIDf("invalid-local-action", pos, `invalid runner name %q at runs.using in %q action defined at %q. valid runners are "composite", "docker", "node20", and "node24". see https://docs.github.com/en/actions/creating-actions/metadata-syntax-for-github-actions#runs`, r.Using, meta.Name, meta.Dir())
 
 		// Probably invalid version of Node.js runner. Assume it is JavaScript action to find as many errors as possible
 		if strings.HasPrefix(r.Using, "node") {
@@ -537,7 +538,8 @@ func (rule *RuleAction) checkDockerAction(uri string, exec *ExecAction) {
 	}
 
 	if _, err := url.Parse(uri); err != nil {
-		rule.Errorf(
+		rule.ReportIDf(
+			"invalid-uses",
 			exec.Uses.Pos,
 			"URI for Docker container %q is invalid: %s (tag=%s)",
 			uri,
@@ -547,25 +549,26 @@ func (rule *RuleAction) checkDockerAction(uri string, exec *ExecAction) {
 	}
 
 	if tagExists && tag == "" {
-		rule.Errorf(exec.Uses.Pos, "tag of Docker action should not be empty: %q", uri)
+		rule.ReportIDf("invalid-uses", exec.Uses.Pos, "tag of Docker action should not be empty: %q", uri)
 	}
 
 	if rule.config != nil && rule.config.RequireCommitHash && !dockerDigestRegex.MatchString(fullURI) {
-		rule.Errorf(exec.Uses.Pos, "docker image must be pinned to a digest like \"docker://{image}@sha256:{digest}\" because \"require-commit-hash\" is enabled: %q", fullURI)
+		rule.ReportIDf("unpinned-uses", exec.Uses.Pos, "docker image must be pinned to a digest like \"docker://{image}@sha256:{digest}\" because \"require-commit-hash\" is enabled: %q", fullURI)
 	}
 }
 
 // https://docs.github.com/en/actions/creating-actions/metadata-syntax-for-github-actions
 func (rule *RuleAction) checkLocalActionMetadata(meta *ActionMetadata, action *ExecAction) {
 	if meta.Name == "" {
-		rule.Errorf(action.Uses.Pos, "name is required in action metadata %q", meta.Path())
+		rule.ReportIDf("invalid-local-action", action.Uses.Pos, "name is required in action metadata %q", meta.Path())
 	}
 	if meta.Description == "" {
-		rule.Errorf(action.Uses.Pos, "description is required in metadata of %q action at %q", meta.Name, meta.Path())
+		rule.ReportIDf("invalid-local-action", action.Uses.Pos, "description is required in metadata of %q action at %q", meta.Name, meta.Path())
 	}
 	if meta.Branding.Icon != "" {
 		if _, ok := BrandingIcons[strings.ToLower(meta.Branding.Icon)]; !ok {
-			rule.Errorf(
+			rule.ReportIDf(
+				"invalid-local-action",
 				action.Uses.Pos,
 				"incorrect icon name %q at branding.icon in metadata of %q action at %q. see the official document to know the exhaustive list of supported icons: https://docs.github.com/en/actions/creating-actions/metadata-syntax-for-github-actions#brandingicon",
 				meta.Branding.Icon,
@@ -576,7 +579,8 @@ func (rule *RuleAction) checkLocalActionMetadata(meta *ActionMetadata, action *E
 	}
 	if meta.Branding.Color != "" {
 		if _, ok := BrandingColors[strings.ToLower(meta.Branding.Color)]; !ok {
-			rule.Errorf(
+			rule.ReportIDf(
+				"invalid-local-action",
 				action.Uses.Pos,
 				"incorrect color %q at branding.icon in metadata of %q action at %q. see the official document to know the exhaustive list of supported colors: https://docs.github.com/en/actions/creating-actions/metadata-syntax-for-github-actions#brandingcolor",
 				meta.Branding.Color,
@@ -593,7 +597,7 @@ func (rule *RuleAction) checkLocalActionMetadata(meta *ActionMetadata, action *E
 func (rule *RuleAction) checkLocalAction(spec string, action *ExecAction) {
 	meta, cached, err := rule.cache.FindMetadata(spec)
 	if err != nil {
-		rule.Error(action.Uses.Pos, err.Error())
+		rule.ReportID("invalid-local-action", action.Uses.Pos, err.Error())
 		return
 	}
 	if meta == nil {
@@ -621,7 +625,8 @@ func (rule *RuleAction) checkAction(meta *ActionMetadata, exec *ExecAction, desc
 			for _, i := range meta.Inputs {
 				ns = append(ns, i.Name)
 			}
-			rule.Errorf(
+			rule.ReportIDf(
+				"unknown-action-input",
 				i.Name.Pos,
 				"input %q is not defined in action %s. available inputs are %s",
 				i.Name.Value,
@@ -640,7 +645,7 @@ func (rule *RuleAction) checkAction(meta *ActionMetadata, exec *ExecAction, desc
 			if d != "" {
 				msg += ": " + d
 			}
-			rule.Error(i.Name.Pos, msg)
+			rule.ReportID("deprecated-action-input", i.Name.Pos, msg)
 		}
 	}
 
@@ -654,7 +659,8 @@ func (rule *RuleAction) checkAction(meta *ActionMetadata, exec *ExecAction, desc
 						ns = append(ns, i.Name)
 					}
 				}
-				rule.Errorf(
+				rule.ReportIDf(
+					"missing-action-input",
 					exec.Uses.Pos,
 					"missing input %q which is required by action %s. all required inputs are %s",
 					i.Name,

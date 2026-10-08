@@ -31,14 +31,14 @@ func (rule *RuleTimeoutCheck) VisitJobPre(n *Job) error {
 
 	if n.TimeoutMinutes == nil {
 		if cfg.TimeoutMinutes.Required {
-			rule.Error(n.Pos, "\"timeout-minutes\" is not set at this job. Set it to avoid wasting runner minutes when the job hangs")
+			rule.ReportID("missing-timeout", n.Pos, "\"timeout-minutes\" is not set at this job. Set it to avoid wasting runner minutes when the job hangs")
 		}
 		return nil
 	}
 
 	// The value is not known when it is an expression
 	if n.TimeoutMinutes.Expression == nil && cfg.TimeoutMinutes.Max > 0 && n.TimeoutMinutes.Value > cfg.TimeoutMinutes.Max {
-		rule.Errorf(n.TimeoutMinutes.Pos, "\"timeout-minutes\" is %v, which is greater than the maximum %v minutes allowed by the configuration", n.TimeoutMinutes.Value, cfg.TimeoutMinutes.Max)
+		rule.ReportIDf("timeout-too-long", n.TimeoutMinutes.Pos, "\"timeout-minutes\" is %v, which is greater than the maximum %v minutes allowed by the configuration", n.TimeoutMinutes.Value, cfg.TimeoutMinutes.Max)
 	}
 	return nil
 }

@@ -3110,7 +3110,7 @@ keys.
 jactionlint checks if these contexts and special functions are used correctly. It reports an error when it finds that some context
 or special function is not available in your workflow.
 
-<a id="#check-deprecated-workflow-commands"></a>
+<a id="check-deprecated-workflow-commands"></a>
 ## Check deprecated workflow commands
 
 Example input:
