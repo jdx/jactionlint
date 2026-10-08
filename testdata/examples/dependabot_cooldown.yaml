@@ -1,0 +1,20 @@
+version: 2
+updates:
+  # ERROR: no cooldown, so Dependabot applies its implicit 3 days
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: weekly
+    cooldown:
+      # ERROR: 2 days is less than the minimum of 7
+      default-days: 2
+  - package-ecosystem: cargo
+    directory: "/"
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7

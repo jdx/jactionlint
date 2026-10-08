@@ -31,8 +31,8 @@ How to read the table:
 | `cache-poisoning` | `cache-poisoning` | 3 / B | strict | not yet assessed |
 | `concurrency-limits` | `concurrency-limits` | 3 / A | strict | not yet assessed |
 | `dangerous-triggers` | `dangerous-triggers` | 3 / A | default | not yet assessed |
-| `dependabot-cooldown` | `dependabot-cooldown` | 3 / E | strict | not yet assessed |
-| `dependabot-execution` | `dependabot-execution` | 3 / E | strict | not yet assessed |
+| `dependabot-cooldown` | `dependabot-cooldown` (exists) | 3 / E | default | full on the corpus: 386 of 386 zizmor findings in 193 repositories, plus 3 true positives zizmor 1.30.1 misses (it stops at the first update which satisfies the minimum). `-fix` needs the `default-days` option; zizmor has a built-in 7. The `semver-*-days` keys are checked by neither |
+| `dependabot-execution` | `dependabot-execution` (exists) | 3 / E | default | not measured: no `allow` in the 193 repositories of the corpus, so both tools report 0. Covered by unit tests only. The fix is unsafe (zizmor offers it too) |
 | `excessive-permissions` | `excessive-permissions` | 3 / B | strict | not yet assessed |
 | `forbidden-uses` | `forbidden-uses` | 3 / A | opt-in (allow/deny config) | not yet assessed |
 | `github-app` | `github-app` | 3 / B and E | strict | not yet assessed |
@@ -40,7 +40,7 @@ How to read the table:
 | `hardcoded-container-credentials` | existing check, [Hardcoded credentials](checks.md#check-hardcoded-credentials); ID assigned in Phase 1 | exists today, ID in Phase 1 | default | not yet assessed |
 | `impostor-commit` | `impostor-commit` | 3 / G | online | not yet assessed |
 | `insecure-commands` | `insecure-commands` | 3 / A | default | not yet assessed |
-| `insecure-url-scheme` | `insecure-url-scheme` (where applicable to dependabot.yml) | 3 / E | strict | not yet assessed |
+| `insecure-url-scheme` | not planned for `dependabot.yml`: zizmor 1.30.1 applies this audit to `repo:` URLs of `.pre-commit-config.yaml` only | none | n/a | not planned |
 | `known-vulnerable-actions` | `known-vulnerable-actions` | 3 / G | online | not yet assessed |
 | `misfeature` | `misfeature` | 3 / C | strict | not yet assessed |
 | `obfuscation` | `obfuscation` | 3 / C | strict | not yet assessed |
@@ -64,6 +64,14 @@ How to read the table:
 | `unsound-contains` | `unsound-contains` | 3 / A | default | not yet assessed |
 | `unsound-ternary` | `unsound-ternary` | 3 / C | default | not yet assessed |
 | `use-trusted-publishing` | `use-trusted-publishing` | 3 / D | strict | not yet assessed |
+
+## Beyond zizmor
+
+Rules of jactionlint that zizmor has no audit for.
+
+| Rule ID | What it does | Profile |
+| --- | --- | --- |
+| `dependabot-missing-actions-update` | `dependabot.yml` has no `github-actions` update although `.github/workflows` uses actions. It is skipped when the repository has a Renovate configuration. 20 findings in 193 repositories, all true positives (a Go module with only a `gomod` update). | strict (pedantic tier) |
 
 See [CONTRIBUTING.md](https://github.com/jdx/jactionlint/blob/main/CONTRIBUTING.md#policy-for-jactionlints-features) for the
 criteria a rule must meet before it is added.

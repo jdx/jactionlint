@@ -30,6 +30,9 @@ rules:
 | [context-availability](#context-availability) | correctness | error | default |
 | [cron-too-frequent](#cron-too-frequent) | correctness | error | default |
 | [cyclic-job-needs](#cyclic-job-needs) | correctness | error | default |
+| [dependabot-cooldown](#dependabot-cooldown) | security | warn | default |
+| [dependabot-execution](#dependabot-execution) | security | error | default |
+| [dependabot-missing-actions-update](#dependabot-missing-actions-update) | policy | warn | strict |
 | [dependabot-syntax](#dependabot-syntax) | correctness | error | default |
 | [deprecated-action-input](#deprecated-action-input) | correctness | error | default |
 | [deprecated-commands](#deprecated-commands) | correctness | error | default |
@@ -142,6 +145,37 @@ Jobs depend on each other in a cycle.
 - Default level: error
 - Profile: default
 - Details and examples: [checks](./checks.md#check-job-deps)
+
+## dependabot-cooldown
+
+An update in dependabot.yml has no cooldown or a cooldown shorter than the minimum.
+
+- Group: security
+- Default level: warn
+- Profile: default
+- Fixable: yes
+- Option `days` (int, default 7): The minimum number of days "cooldown.default-days" must be. Defaults to 7.
+- Option `default-days` (int, no default; the rule does nothing without it): The number of days -fix writes as "cooldown.default-days". It must be at least "days". There is no default: without it findings have no fix.
+- Details and examples: [checks](./checks.md#check-dependabot-cooldown)
+
+## dependabot-execution
+
+An update in dependabot.yml allows insecure external code execution.
+
+- Group: security
+- Default level: error
+- Profile: default
+- Fixable: yes
+- Details and examples: [checks](./checks.md#check-dependabot-execution)
+
+## dependabot-missing-actions-update
+
+dependabot.yml has no github-actions update although the repository has workflows using actions.
+
+- Group: policy
+- Default level: warn
+- Profile: strict
+- Details and examples: [checks](./checks.md#check-dependabot-missing-actions-update)
 
 ## dependabot-syntax
 

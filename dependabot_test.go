@@ -17,6 +17,24 @@ const (
 	dependabotFixturePath   = ".github/dependabot.yml"
 )
 
+// dependabotRuleFixtures are the fixtures which test a rule of dependabot.yml. The other fixtures test
+// the syntax, so they run with these rules turned off.
+var dependabotRuleFixtures = map[string]string{
+	"dependabot_cooldown":  "dependabot-cooldown",
+	"dependabot_execution": "dependabot-execution",
+}
+
+func dependabotFixtureConfig(base string) *Config {
+	cfg := fixtureConfig()
+	for _, id := range dependabotRuleFixtures {
+		cfg.Rules[id] = RuleConfig{Level: SeverityOff}
+	}
+	if id, ok := dependabotRuleFixtures[filepath.Base(base)]; ok {
+		delete(cfg.Rules, id)
+	}
+	return cfg
+}
+
 func TestDependabotFixtures(t *testing.T) {
 	for _, subdir := range []string{"ok", "err", "examples"} {
 		files, err := filepath.Glob(filepath.Join("testdata", subdir, dependabotFixturePrefix+"*.yaml"))
@@ -37,7 +55,7 @@ func TestDependabotFixtures(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				l.defaultConfig = fixtureConfig()
+				l.defaultConfig = dependabotFixtureConfig(base)
 				errs, err := l.Lint(dependabotFixturePath, src, &Project{root: filepath.Dir(f)})
 				if err != nil {
 					t.Fatal(err)
@@ -49,7 +67,7 @@ func TestDependabotFixtures(t *testing.T) {
 					return
 				}
 				for _, e := range errs {
-					if e.ID != "dependabot-syntax" && e.ID != "yaml-syntax" {
+					if e.ID != "dependabot-syntax" && e.ID != "yaml-syntax" && e.ID != dependabotRuleFixtures[filepath.Base(base)] {
 						t.Errorf("unexpected ID %q: %s", e.ID, e)
 					}
 				}
@@ -259,7 +277,7 @@ func TestDependabotRuleVisitor(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	l.defaultConfig = &Config{}
+	l.defaultConfig = dependabotFixtureConfig("")
 
 	errs, err := l.Lint(dependabotFixturePath, src, nil)
 	if err != nil {
@@ -313,7 +331,7 @@ func TestWorkflowRulesDoNotRunOnDependabot(t *testing.T) {
 		t.Fatal(err)
 	}
 	l.defaultConfig = &Config{}
-	src := "version: 2\nupdates:\n  - package-ecosystem: npm\n    directory: /\n    schedule:\n      interval: daily\n"
+	src := "version: 2\nupdates:\n  - package-ecosystem: npm\n    directory: /\n    schedule:\n      interval: daily\n    cooldown:\n      default-days: 7\n"
 	errs, err := l.Lint(dependabotFixturePath, []byte(src), nil)
 	if err != nil {
 		t.Fatal(err)
@@ -363,7 +381,8 @@ func makeDependabotProject(t *testing.T, dependabot map[string]string, config st
 	return root
 }
 
-const brokenDependabot = "version: 2\nupdates:\n  - package-ecosystem: npm\n    directory: /\n    schedule:\n      interval: daily\n      dayy: monday\n"
+// brokenDependabot has one syntax error. It sets the cooldown so that no other rule reports.
+const brokenDependabot = "version: 2\nupdates:\n  - package-ecosystem: npm\n    directory: /\n    schedule:\n      interval: daily\n      dayy: monday\n    cooldown:\n      default-days: 7\n"
 
 func lintRepo(t *testing.T, root string, opts LinterOptions) ([]*Error, string) {
 	t.Helper()
@@ -545,7 +564,7 @@ func TestDependabotIgnores(t *testing.T) {
 		}
 	})
 	t.Run("unused inline comment", func(t *testing.T) {
-		src := "version: 2\n# jactionlint ignore=dependabot-syntax\nupdates:\n  - package-ecosystem: npm\n    directory: /\n    schedule:\n      interval: daily\n"
+		src := "version: 2\n# jactionlint ignore=dependabot-syntax\nupdates:\n  - package-ecosystem: npm\n    directory: /\n    schedule:\n      interval: daily\n    cooldown:\n      default-days: 7\n"
 		root := makeDependabotProject(t, map[string]string{"dependabot.yml": src}, "rules:\n  unused-ignore: error\n")
 		if errs, _ := lintRepo(t, root, LinterOptions{}); len(errs) != 1 || errs[0].ID != "unused-ignore" {
 			t.Errorf("unexpected errors %v", errs)
