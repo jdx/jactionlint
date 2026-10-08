@@ -97,6 +97,7 @@ func (l *Linter) FixRepository(dir string, mode FixMode) (*FixResult, error) {
 	if err != nil {
 		return nil, err
 	}
+	files = append(files, p.DependabotFiles()...)
 	return l.FixFiles(files, p, mode)
 }
 
