@@ -68,3 +68,32 @@ func TestBotConditionsOnlyTheFirstOfACondition(t *testing.T) {
 		t.Errorf("want %q but got %q (%v)", want, got, rest)
 	}
 }
+
+// A negated actor test only decides what the guarded job or step skips. A test is spoofable when it
+// selects the bot, which depends on the number of "!" around it.
+func TestBotConditionsPolarity(t *testing.T) {
+	tests := []struct {
+		cond string
+		want int
+	}{
+		{"github.actor == 'dependabot[bot]'", 1},
+		{"github.actor != 'dependabot[bot]'", 0},
+		{"!(github.actor == 'dependabot[bot]')", 0},
+		{"!(github.actor != 'dependabot[bot]')", 1},
+		{"!(!(github.actor == 'dependabot[bot]'))", 1},
+		{"!(github.actor == 'dependabot[bot]' && github.repository == 'a/b')", 0},
+		{"!(github.actor == 'dependabot[bot]' || github.event_name == 'push')", 0},
+		{"github.event_name == 'push' || github.actor == 'dependabot[bot]'", 1},
+		{"!(github.event_name == 'push') && github.actor == 'dependabot[bot]'", 1},
+		{"!contains(github.actor, '[bot]')", 0},
+		{"!(!contains(github.actor, '[bot]'))", 1},
+	}
+	for _, tc := range tests {
+		t.Run(tc.cond, func(t *testing.T) {
+			src := "on: pull_request_target\njobs:\n  j:\n    runs-on: ubuntu-latest\n    if: ${{ " + tc.cond + " }}\n    steps:\n      - run: echo\n"
+			if got := len(errsWithID(lintWithConfig(t, botConfig(t), src), "bot-conditions")); got != tc.want {
+				t.Errorf("want %d findings but got %d", tc.want, got)
+			}
+		})
+	}
+}

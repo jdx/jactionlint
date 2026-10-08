@@ -82,14 +82,29 @@ func (rule *RuleBotConditions) checkCond(s *String) {
 		return
 	}
 	reported := false
-	VisitExprNode(node, func(n, parent ExprNode, entering bool) {
+	// negations is the number of "!" operators around the node. An odd number inverts the meaning:
+	// the actor test then only decides what the guarded job or step skips, a spoofed bot gains nothing.
+	negations := 0
+	VisitExprNode(node, func(n, _ ExprNode, entering bool) {
+		if _, ok := n.(*NotOpNode); ok {
+			if entering {
+				negations++
+			} else {
+				negations--
+			}
+		}
 		if !entering || reported {
 			return // one finding for a condition is enough: the fix is the same for all of them
 		}
+		inverted := negations%2 == 1
 		switch n := n.(type) {
 		case *CompareOpNode:
-			if n.Kind != CompareOpNodeKindEq {
-				return // x != bot only skips what the condition guards; a spoofed bot gains nothing
+			// "x != bot" is an equality when it is negated an odd number of times, and "x == bot" is not
+			// one then
+			switch {
+			case n.Kind == CompareOpNodeKindEq && !inverted, n.Kind == CompareOpNodeKindNotEq && inverted:
+			default:
+				return
 			}
 			if ref, other := spoofableOperand(n.Left, n.Right); ref != nil {
 				reported = rule.checkBot(s, text, base, ref, other)
@@ -97,7 +112,7 @@ func (rule *RuleBotConditions) checkCond(s *String) {
 				reported = rule.checkBot(s, text, base, ref, other)
 			}
 		case *FuncCallNode:
-			if _, negated := parent.(*NotOpNode); negated || len(n.Args) != 2 {
+			if inverted || len(n.Args) != 2 {
 				return // !contains(github.actor, '[bot]') only skips what the condition guards
 			}
 			switch strings.ToLower(n.Callee) {
