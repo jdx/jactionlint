@@ -1,0 +1,25 @@
+[
+  {
+    "message": "\"github.event.head_commit.message\" is potentially untrusted. avoid using it directly in inline scripts.",
+    "filepath": ".github/workflows/ci.yml",
+    "line": 12,
+    "column": 41,
+    "kind": "expression",
+    "snippet": "      - run: echo \"${{ github.event.head_commit.message }}\"",
+    "end_column": 72
+  },
+  {
+    "message": "neither the workflow nor this job sets \"permissions:\" so the GITHUB_TOKEN gets the default permissions",
+    "filepath": ".github/workflows/ci.yml",
+    "line": 8,
+    "column": 3,
+    "kind": "require-permissions"
+  },
+  {
+    "message": "label \"weird-runner\" is unknown",
+    "filepath": ".github/workflows/ci.yml",
+    "line": 9,
+    "column": 14,
+    "kind": "runner-label"
+  }
+]

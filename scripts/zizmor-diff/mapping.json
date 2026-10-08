@@ -1,0 +1,40 @@
+{
+  "zizmor": "1.30.1",
+  "audits": {
+    "template-injection": {
+      "coverage": "partial",
+      "notes": "jactionlint reports untrusted contexts in expressions. zizmor also covers env indirection, github-script and more contexts.",
+      "jactionlint": [{ "rule": "expression", "message_contains": "potentially untrusted" }]
+    },
+    "hardcoded-container-credentials": {
+      "coverage": "full",
+      "notes": "The credentials rule reports a literal password in container or services credentials.",
+      "jactionlint": [{ "rule": "credentials" }]
+    },
+    "excessive-permissions": {
+      "coverage": "partial",
+      "notes": "Only the opt-in require-permissions check (no permissions block at all). Broad write scopes are not reported yet.",
+      "jactionlint": [{ "rule": "require-permissions" }]
+    },
+    "unpinned-uses": {
+      "coverage": "partial",
+      "notes": "Only the opt-in require-commit-hash check for actions. zizmor also flags branch and tag refs for reusable workflows.",
+      "jactionlint": [{ "rule": "action", "message_contains": "must be pinned to a full-length commit SHA" }]
+    },
+    "unpinned-images": {
+      "coverage": "partial",
+      "notes": "Only docker:// action references under require-commit-hash. container: and services: images are not checked yet.",
+      "jactionlint": [{ "rule": "action", "message_contains": "docker image must be pinned to a digest" }]
+    },
+    "unsound-ternary": {
+      "coverage": "partial",
+      "notes": "jactionlint reports the falsy ternary idiom. zizmor 1.30.1 has no audit of this name, so this entry stays inert until a matching audit exists.",
+      "jactionlint": [{ "rule": "expression", "message_contains": "always falsy" }]
+    },
+    "forbidden-uses": {
+      "coverage": "partial",
+      "notes": "required-actions enforces a required set of actions. zizmor's allow and deny lists are the inverse and are not covered yet.",
+      "jactionlint": [{ "rule": "required-actions" }]
+    }
+  }
+}
