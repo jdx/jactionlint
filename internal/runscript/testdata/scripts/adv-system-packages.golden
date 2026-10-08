@@ -60,7 +60,7 @@ cmd 14:1 name="uv" tool=uv
   flags --from="git+https://github.com/o/r@v1"[quoted]
   pos "tool" "install" "tool"
   install tool=uv eco=pypi verb=install run=false global=false locked=false manifest=false reqs=0
-    pkg "git+https://github.com/o/r@v1" name="" ver="git+https://github.com/o/r@v1" kind=git pinned=true dyn=false local=false
+    pkg "git+https://github.com/o/r@v1" name="" ver="git+https://github.com/o/r@v1" kind=git pinned=false dyn=false local=false
 cmd 15:1 name="uvx" tool=uvx
   pos "ruff" "check" "."
   install tool=uvx eco=pypi verb=run run=true global=false locked=false manifest=false reqs=0

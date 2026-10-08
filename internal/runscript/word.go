@@ -69,6 +69,11 @@ func (b *builder) word(w *syntax.Word) *Word {
 	var sb strings.Builder
 	b.parts(out, w.Parts, false, &sb)
 	value, exprs := b.s.restore(sb.String())
+	// Expansions (${A:-${{ x }}}, $(...), <(...), $((...))) are copied from the source, so their expressions are
+	// not placeholders for restore to find. The expressions inside the word's span are the complete list.
+	if all := b.exprsIn(start, end); len(all) > len(exprs) {
+		exprs = all
+	}
 	out.Value, out.Exprs = value, exprs
 	if len(w.Parts) == 1 {
 		if _, ok := w.Parts[0].(*syntax.CmdSubst); ok {

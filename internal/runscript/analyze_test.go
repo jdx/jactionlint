@@ -844,3 +844,48 @@ func TestNodeInstallFlags(t *testing.T) {
 		}
 	}
 }
+
+func TestRefPinned(t *testing.T) {
+	for ref, want := range map[string]bool{
+		"0123abcd":       true,
+		"v1.2.3":         true,
+		"1.2.3-rc.1":     true,
+		"v2.0":           true,
+		"v1":             false, // moving major tag
+		"2024-release":   false,
+		"v1-nightly":     false,
+		"main":           false,
+		"release/v1.2.3": false,
+		"1.0-nightly":    true, // looks like a version, so it is taken as one
+	} {
+		if have := refPinned(ref); have != want {
+			t.Errorf("refPinned(%q) = %v, want %v", ref, have, want)
+		}
+	}
+}
+
+func TestExpressionsInsideExpansions(t *testing.T) {
+	for _, script := range []string{
+		`echo "x=${A:-${{ github.head_ref }}}" >> $GITHUB_ENV`,
+		`echo "x=$(echo ${{ github.head_ref }})" >> $GITHUB_ENV`,
+		`echo "x=$((${{ github.run_number }} + 1))" >> $GITHUB_ENV`,
+		`cat <(echo ${{ github.head_ref }}) >> $GITHUB_ENV`,
+	} {
+		s := mustAnalyze(t, script)
+		found := false
+		for _, c := range s.Commands {
+			for _, a := range c.Args {
+				if len(a.Exprs) > 0 {
+					found = true
+				}
+			}
+		}
+		if !found {
+			t.Errorf("no word of %q has its expression", script)
+		}
+		ws := s.WritesTo("GITHUB_ENV")
+		if len(ws) != 1 || len(ws[0].Exprs) == 0 {
+			t.Errorf("WritesTo of %q has no producer expression: %+v", script, ws)
+		}
+	}
+}
