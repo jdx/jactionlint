@@ -783,9 +783,27 @@ func TestHTTPClientCommitOnAnyBranch(t *testing.T) {
 			fmt.Fprint(w, `{"data":{"repository":null},"errors":[{"message":"Could not resolve to a Repository"}]}`)
 		})
 		_, err := f.client(httpGitHubOptions{Token: "tok"}).CommitOnAnyBranch(ctx, "o", "r", sha, 10)
-		var se *GitHubStatusError
-		if !errors.As(err, &se) || !strings.Contains(err.Error(), "Could not resolve") {
+		if !errors.Is(err, ErrGitHubBranchScanUnavailable) || !strings.Contains(err.Error(), "Could not resolve") {
 			t.Errorf("got %v", err)
+		}
+	})
+
+	t.Run("partial data with errors", func(t *testing.T) {
+		f := newFakeGitHub(t)
+		f.handle("/graphql", func(w http.ResponseWriter, r *http.Request) {
+			fmt.Fprint(w, `{"data":{"repository":{"refs":{"pageInfo":{"hasNextPage":false,"endCursor":""},"nodes":[{"name":"b","compare":null}]}}},"errors":[{"message":"Field error"}]}`)
+		})
+		_, err := f.client(httpGitHubOptions{Token: "tok"}).CommitOnAnyBranch(ctx, "o", "r", sha, 10)
+		// A scan with holes cannot give a verdict, and it must not be counted as a failure of the session
+		if !errors.Is(err, ErrGitHubBranchScanUnavailable) {
+			t.Errorf("got %v", err)
+		}
+		s := newOnlineSession(ctx, scanErrClient{err}, nil)
+		for range 5 {
+			s.record(err)
+		}
+		if s.stopped() != nil {
+			t.Error("scans with errors must not stop the session")
 		}
 	})
 
@@ -891,4 +909,23 @@ func TestImpostorCommitUsesTheBranchScanner(t *testing.T) {
 			}
 		})
 	}
+}
+
+type scanErrClient struct{ error }
+
+func (scanErrClient) Repository(context.Context, string, string) (*GitHubRepo, error) {
+	return nil, nil
+}
+func (scanErrClient) Tags(context.Context, string, string) (*GitHubTagList, error) { return nil, nil }
+func (scanErrClient) ResolveRef(context.Context, string, string, GitHubRefNamespace, string) (string, bool, error) {
+	return "", false, nil
+}
+func (scanErrClient) Branches(context.Context, string, string, int) (*GitHubBranchList, error) {
+	return nil, nil
+}
+func (scanErrClient) Compare(context.Context, string, string, string, string) (GitHubCompareStatus, error) {
+	return "", nil
+}
+func (scanErrClient) Advisories(context.Context, string, string) ([]GitHubAdvisory, error) {
+	return nil, nil
 }

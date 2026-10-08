@@ -521,3 +521,70 @@ func TestKnownVulnerableActionsFindsAdvisoriesOfASubdirectory(t *testing.T) {
 		t.Errorf("unexpected message %q", errs[0].Message)
 	}
 }
+
+// scanFailingClient fails every branch scan like a GraphQL query with errors.
+type scanFailingClient struct{ GitHubClient }
+
+func (scanFailingClient) CommitOnAnyBranch(context.Context, string, string, string, int) (GitHubBranchScan, error) {
+	return GitHubBranchScan{}, fmt.Errorf("%w: GraphQL: Could not resolve", ErrGitHubBranchScanUnavailable)
+}
+
+// A branch scan that fails does not stop the online rules: the branches are compared over REST.
+func TestFailingBranchScansDoNotStopTheSession(t *testing.T) {
+	head := strings.Repeat("a", 40)
+	shas := []string{strings.Repeat("c", 40), strings.Repeat("d", 40), strings.Repeat("e", 40), strings.Repeat("f", 40)}
+	compare := ""
+	var steps []string
+	for i, sha := range shas {
+		if i > 0 {
+			compare += ","
+		}
+		compare += `"` + head + `...` + sha + `":"diverged"`
+		steps = append(steps, "uses: o/r@"+sha)
+	}
+	fx := `{"repos":{"o/r":{"repo":{"default_branch":"main"},"tags":{"tags":[]},
+	  "branches":{"branches":[{"name":"main","sha":"` + head + `"}]},
+	  "refs":{"heads/main":{"sha":"` + head + `","found":true}},
+	  "compare":{` + compare + `}}}}`
+	c, err := NewFixtureGitHubClient([]byte(fx))
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg := &Config{Rules: map[string]RuleConfig{"stale-action-refs": {Level: SeverityOff, levelSet: true}, "known-vulnerable-actions": {Level: SeverityOff, levelSet: true}}}
+	errs, _ := lintOnline(t, scanFailingClient{c}, cfg, workflowWith(steps...))
+	n := 0
+	for _, e := range errs {
+		if e.ID == "impostor-commit" {
+			n++
+		}
+	}
+	if n != len(shas) {
+		t.Errorf("want %d impostor findings from the REST comparison but got %v", len(shas), lineIDsOf(errs))
+	}
+}
+
+// resolveFailingClient fails ResolveRef like a lookup that cannot be answered.
+type resolveFailingClient struct{ GitHubClient }
+
+func (resolveFailingClient) ResolveRef(context.Context, string, string, GitHubRefNamespace, string) (string, bool, error) {
+	return "", false, errors.New("boom")
+}
+
+// A tag that cannot be looked up is not a tag which does not exist.
+func TestRefVersionMismatchIsSilentWhenTheTagLookupFails(t *testing.T) {
+	sha := strings.Repeat("c", 40)
+	fx := `{"repos":{"o/r":{"repo":{"default_branch":"main"},"tags":{"tags":[],"truncated":true},
+	  "refs":{"tags/v2":{"found":false},"tags/2":{"found":false}}}}}`
+	c, err := NewFixtureGitHubClient([]byte(fx))
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg := &Config{Rules: map[string]RuleConfig{"stale-action-refs": {Level: SeverityOff, levelSet: true}, "impostor-commit": {Level: SeverityOff, levelSet: true}, "known-vulnerable-actions": {Level: SeverityOff, levelSet: true}}}
+	src := workflowWith("uses: o/r@" + sha + " # v2")
+	if errs, _ := lintOnline(t, c, cfg, src); len(errs) != 1 || errs[0].ID != "ref-version-mismatch" {
+		t.Fatalf("a tag which does not exist is a mismatch: %v", lineIDsOf(errs))
+	}
+	for _, e := range func() []*Error { errs, _ := lintOnline(t, resolveFailingClient{c}, cfg, src); return errs }() {
+		t.Errorf("unexpected %s: %s", e.ID, e.Message)
+	}
+}

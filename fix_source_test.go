@@ -1,6 +1,7 @@
 package jactionlint
 
 import (
+	"strings"
 	"testing"
 
 	"go.yaml.in/yaml/v4"
@@ -89,5 +90,49 @@ func TestFixesAroundMultiLineValues(t *testing.T) {
 				t.Errorf("permissions or timeout-minutes missing after %d fixes:\n%s", n, out)
 			}
 		})
+	}
+}
+
+// A workflow whose root mapping is indented gets its new keys at that indentation.
+func TestFixesInAnIndentedRootMapping(t *testing.T) {
+	src := "  on: push\n  jobs:\n    a:\n      runs-on: ubuntu-latest\n      steps:\n        - run: echo\n"
+	before, perrs := Parse([]byte(src))
+	if before == nil || len(perrs) > 0 {
+		t.Fatalf("the fixture does not parse: %v", perrs)
+	}
+	out, n, left := fixWith(t, []byte(src), fixerConfig(t, ""), FixModeUnsafe)
+	after, perrs := Parse(out)
+	if after == nil || len(perrs) > 0 {
+		t.Fatalf("the fixed file does not parse: %v\n%s", perrs, out)
+	}
+	if n != 2 || len(left) != 0 {
+		t.Errorf("%d fixes, left %v\n%s", n, left, out)
+	}
+	if after.Permissions == nil || len(after.Jobs) != 1 || after.Jobs["a"].TimeoutMinutes == nil {
+		t.Errorf("permissions or the job are wrong after the fixes:\n%s", out)
+	}
+	want := "  on: push\n  permissions:\n    contents: read\n  jobs:\n"
+	if !strings.HasPrefix(string(out), want) {
+		t.Errorf("want the file to start with %q but got\n%s", want, out)
+	}
+}
+
+// The fixes keep the CRLF line breaks and the indentation of a file whose root keys are indented.
+func TestFixesInAnIndentedCRLFFile(t *testing.T) {
+	src := "# comment\r\n---\r\n  on: push\r\n  jobs:\r\n    a:\r\n      runs-on: ubuntu-latest\r\n      steps:\r\n        - run: echo\r\n"
+	before, perrs := Parse([]byte(src))
+	if before == nil || len(perrs) > 0 {
+		t.Fatalf("the fixture does not parse: %v", perrs)
+	}
+	out, n, left := fixWith(t, []byte(src), fixerConfig(t, ""), FixModeUnsafe)
+	after, perrs := Parse(out)
+	if after == nil || len(perrs) > 0 {
+		t.Fatalf("the fixed file does not parse: %v\n%q", perrs, out)
+	}
+	if n != 2 || len(left) != 0 || after.Permissions == nil || after.Jobs["a"].TimeoutMinutes == nil || len(after.On) != 1 {
+		t.Errorf("%d fixes, left %v:\n%q", n, left, out)
+	}
+	if strings.Contains(strings.ReplaceAll(string(out), "\r\n", ""), "\n") {
+		t.Errorf("a line break which is not CRLF was added: %q", out)
 	}
 }

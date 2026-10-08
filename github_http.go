@@ -660,7 +660,9 @@ func (c *httpGitHubClient) CommitOnAnyBranch(ctx context.Context, owner, repo, s
 			if len(res.Errors) > 0 {
 				msg = res.Errors[0].Message
 			}
-			return GitHubBranchScan{}, &GitHubStatusError{Status: http.StatusOK, Message: "GraphQL: " + msg}
+			// The scan is an optimization. An error of the query (a field that cannot be resolved, for
+			// example) must not count as a failure of the session: the caller compares the branches over REST.
+			return GitHubBranchScan{}, fmt.Errorf("%w: GraphQL: %s", ErrGitHubBranchScanUnavailable, msg)
 		}
 		refs := res.Data.Repository.Refs
 		for _, n := range refs.Nodes {
