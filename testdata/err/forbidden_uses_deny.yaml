@@ -1,0 +1,16 @@
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache/save@v4
+        with:
+          key: k
+          path: p
+      - uses: actions/cache@v4
+        with:
+          key: k
+          path: p
+      - uses: tj-actions/changed-files@v45
+      - uses: tj-actions/other@v1
