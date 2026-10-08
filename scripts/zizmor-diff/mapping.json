@@ -18,8 +18,11 @@
     },
     "unpinned-uses": {
       "coverage": "partial",
-      "notes": "Only the opt-in require-commit-hash check for actions. zizmor also flags branch and tag refs for reusable workflows.",
-      "jactionlint": [{ "rule": "action", "message_contains": "must be pinned to a full-length commit SHA" }]
+      "notes": "Only the opt-in require-commit-hash check, for actions and for reusable workflows.",
+      "jactionlint": [
+        { "rule": "action", "message_contains": "must be pinned to a full-length commit SHA" },
+        { "rule": "workflow-call", "message_contains": "must be pinned to a full-length commit SHA" }
+      ]
     },
     "unpinned-images": {
       "coverage": "partial",

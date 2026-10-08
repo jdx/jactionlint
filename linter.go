@@ -593,7 +593,7 @@ func (l *Linter) check(
 	if w != nil {
 		dbg := l.debugWriter()
 
-		rules := newBuiltinRules(&ruleContext{
+		rules := newBuiltinRules(&RuleEnv{
 			path:                   path,
 			project:                project,
 			localActions:           localActions,

@@ -64,3 +64,13 @@ func (rule *RuleID) validateConvention(id *String, what string) {
 	}
 	rule.ReportIDf("invalid-id", id.Pos, "invalid %s ID %q. %s ID must start with a letter or _ and contain only alphanumeric characters, -, or _", what, id.Value, what)
 }
+
+func init() {
+	registerRules(
+		RuleInfo{ID: "duplicate-step-id", Group: RuleGroupCorrectness, Summary: "A step ID is not unique within its job.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-job-step-ids"},
+		RuleInfo{ID: "invalid-id", Group: RuleGroupCorrectness, Summary: "A job or step ID does not follow the naming convention.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "id-naming-convention"},
+	)
+	registerRuleFactory("id", func(env *RuleEnv) []Rule {
+		return []Rule{NewRuleID()}
+	})
+}

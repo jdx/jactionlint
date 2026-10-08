@@ -117,3 +117,12 @@ func (rule *RuleParallelSteps) checkRef(ref *String) {
 func isBackgroundStep(s *Step) bool {
 	return s.Background != nil && (s.Background.Expression != nil || s.Background.Value)
 }
+
+func init() {
+	registerRules(
+		RuleInfo{ID: "invalid-parallel-step", Group: RuleGroupCorrectness, Summary: "A step is not allowed inside a parallel group or refers to a wrong step.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-parallel-step-refs"},
+	)
+	registerRuleFactory("parallel-steps", func(env *RuleEnv) []Rule {
+		return []Rule{NewRuleParallelSteps()}
+	})
+}
