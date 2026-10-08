@@ -2,6 +2,7 @@ package jactionlint
 
 import (
 	"fmt"
+	"path"
 	"regexp"
 	"slices"
 	"sort"
@@ -262,6 +263,9 @@ func isFixedRef(path []string) bool {
 		if path[1] == "event" {
 			if len(path) < 3 {
 				return false
+			}
+			if path[2] == "inputs" || path[2] == "client_payload" {
+				return false // typed by whoever starts the run or sends the dispatch, whatever the name is
 			}
 			return fixedEventLeaves[path[len(path)-1]] || (path[2] == "repository" && len(path) == 4 && path[3] == "name")
 		}
@@ -672,8 +676,7 @@ func posixShell(wf *Workflow, job *Job, run *ExecRun) bool {
 		shell = wf.Defaults.Run.Shell
 	}
 	if shell != nil {
-		s := strings.ToLower(strings.TrimSpace(shell.Value))
-		return s == "bash" || s == "sh"
+		return posixShellTemplate(shell.Value)
 	}
 	if job == nil || job.RunsOn == nil || job.RunsOn.LabelsExpr != nil || len(job.RunsOn.Labels) == 0 {
 		return false
@@ -693,6 +696,36 @@ func posixShell(wf *Workflow, job *Job, run *ExecRun) bool {
 	}
 	return unix
 }
+
+// posixShellTemplate reports whether the value of "shell:" runs the script with a POSIX shell the fixes
+// can write for: bash, sh, dash or zsh, alone or with plain options and the "{0}" placeholder for the
+// script file, like "bash {0}" or "bash --noprofile --norc -eo pipefail {0}". A word with quotes,
+// variables or operators, or a placeholder anywhere else than the end, is not understood.
+func posixShellTemplate(value string) bool {
+	words := strings.Fields(value)
+	if len(words) == 0 {
+		return false
+	}
+	switch strings.ToLower(path.Base(words[0])) {
+	case "bash", "sh", "dash", "zsh":
+	default:
+		return false
+	}
+	for i, w := range words[1:] {
+		if w == "{0}" {
+			if i != len(words)-2 {
+				return false
+			}
+			continue
+		}
+		if !shellTemplateWordRe.MatchString(w) {
+			return false
+		}
+	}
+	return true
+}
+
+var shellTemplateWordRe = regexp.MustCompile(`^[A-Za-z0-9_.+-]+$`)
 
 // tiFixInput is what is needed to fix the expansions in one script.
 type tiFixInput struct {
