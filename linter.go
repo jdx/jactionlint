@@ -82,6 +82,10 @@ type LinterOptions struct {
 	// the case, jactionlint will try to read config from the repository's .github/jactionlint.yaml,
 	// then from $XDG_CONFIG_HOME/jactionlint/jactionlint.yaml ($HOME/.config when unset).
 	ConfigFile string
+	// Config is a configuration to use instead of reading one from a file or the repository. It is for
+	// callers which have no file system (the playground) or want fixed rules. ConfigFile takes precedence
+	// when both are set.
+	Config *Config
 	// Format selects the output format. It is one of "text" (the default when empty), "oneline", "json",
 	// "jsonl", "sarif", "gcc" and "github", or a custom template to format error messages. A template
 	// must follow Go Template format and contain at least one {{ }} placeholder. When the format is
@@ -188,13 +192,15 @@ func NewLinter(out io.Writer, opts *LinterOptions) (*Linter, error) {
 			return nil, err
 		}
 		cfg = c
+	} else if opts.Config != nil {
+		cfg = opts.Config
 	}
 
 	// Load the user-global config as a fallback for projects which have no
 	// .github/jactionlint.yaml. The -config-file option takes precedence over it.
 	var globalCfg *Config
 	var globalCfgPath string
-	if opts.ConfigFile == "" {
+	if opts.ConfigFile == "" && opts.Config == nil {
 		c, p, err := loadGlobalConfig()
 		if err != nil {
 			return nil, err

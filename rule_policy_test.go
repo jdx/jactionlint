@@ -454,7 +454,8 @@ func TestCachePoisoningActions(t *testing.T) {
 		{"setup-node without cache", "      - uses: actions/setup-node@v4\n", 0},
 		{"setup-node with cache", "      - uses: actions/setup-node@v4\n        with:\n          cache: pnpm\n", 1},
 		{"setup-node with cache false", "      - uses: actions/setup-node@v4\n        with:\n          cache: false\n", 0},
-		{"setup-node v5 opt out", "      - uses: actions/setup-node@v5\n        with:\n          cache: npm\n          package-manager-cache: false\n", 0},
+		{"setup-node v5 opt out of the automatic cache", "      - uses: actions/setup-node@v5\n        with:\n          package-manager-cache: false\n", 0},
+		{"setup-node v5 explicit cache with the automatic one off", "      - uses: actions/setup-node@v5\n        with:\n          cache: npm\n          package-manager-cache: false\n", 1},
 		{"setup-go caches by default", "      - uses: actions/setup-go@v5\n", 1},
 		{"setup-go v3 does not", "      - uses: actions/setup-go@v3\n", 0},
 		{"setup-go v3 with cache", "      - uses: actions/setup-go@v3\n        with:\n          cache: true\n", 1},
@@ -578,7 +579,8 @@ func TestPolicyDocsExamples(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	doc := string(b)
+	// A Windows checkout may convert the line breaks of the document
+	doc := strings.ReplaceAll(string(b), "\r\n", "\n")
 	for _, id := range policyRuleIDs {
 		if id == "unpinned-uses" {
 			continue // documented in the action format section, which scripts/check-checks maintains

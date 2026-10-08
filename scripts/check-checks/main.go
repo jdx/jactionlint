@@ -16,6 +16,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/jdx/jactionlint/v2"
+	"github.com/jdx/jactionlint/v2/internal/exampleconfig"
 )
 
 // requiresOnlineMarker is the first line of the examples of the online checks. Those checks need the
@@ -23,25 +24,12 @@ import (
 // instead (the same ones the tests of the checks use).
 const requiresOnlineMarker = "# requires -online\n"
 
-// exampleConfig is the configuration the examples are linted with. Every example is a minimal
-// workflow showing one check, and most of them have jobs without timeout-minutes, which the
-// default profile reports. Turning that off keeps the outputs about the check being explained.
-const exampleConfig = "rules:\n  missing-timeout: off\n"
-
 // Actionlint lints the example. The examples in the sections whose headings start with "Dependabot" are
 // Dependabot configuration files. The others are workflows.
 func Actionlint(src []byte, heading string) ([]byte, error) {
 	var out bytes.Buffer
 
-	cfg, err := os.CreateTemp("", "jactionlint-example-*.yaml")
-	if err != nil {
-		return nil, err
-	}
-	defer os.Remove(cfg.Name())
-	_, err = cfg.WriteString(exampleConfig)
-	if cerr := cfg.Close(); err == nil {
-		err = cerr
-	}
+	cfg, err := jactionlint.ParseConfig([]byte(exampleconfig.YAML))
 	if err != nil {
 		return nil, err
 	}
@@ -52,7 +40,7 @@ func Actionlint(src []byte, heading string) ([]byte, error) {
 	}
 
 	opts := &jactionlint.LinterOptions{
-		ConfigFile:    cfg.Name(),
+		Config:        cfg,
 		StdinFileName: name,
 		Shellcheck:    "shellcheck",
 		Pyflakes:      "pyflakes",

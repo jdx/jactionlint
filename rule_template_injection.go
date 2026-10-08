@@ -59,7 +59,9 @@ func (rule *RuleTemplateInjection) VisitStep(n *Step) error {
 		for i := range spans {
 			sp := &spans[i]
 			cl := ctx.classify(sp)
-			if cl.Tier == tiDirect || cl.Tier == tiNone || !tiEnabled(cfg, cl.Tier) {
+			// The expression rule reports a direct property (cl.Ref is nil then). One which it did not report,
+			// like github.event.issue['Title'], which matchUntrusted reads case-insensitively, is ours.
+			if (cl.Tier == tiDirect && cl.Ref == nil) || cl.Tier == tiNone || !tiEnabled(cfg, cl.Tier) {
 				continue
 			}
 			if !planned {
@@ -69,6 +71,8 @@ func (rule *RuleTemplateInjection) VisitStep(n *Step) error {
 			pos := sp.TokPos(cl.Ref.Node.Token())
 			fix := plan[sp.Start]
 			switch cl.Tier {
+			case tiDirect:
+				rule.ReportIDf("template-injection", pos, "%q is potentially untrusted. avoid using it directly in inline scripts. instead, pass it through an environment variable. see https://docs.github.com/en/actions/reference/security/secure-use#good-practices-for-mitigating-script-injection-attacks for more details", cl.Ref.Display(sp.Src))
 			case tiSubtree:
 				rule.ReportIDf("template-injection", pos, "%q includes potentially untrusted properties such as %q. avoid expanding it in inline scripts. instead, pass the properties you need through environment variables", cl.Ref.Display(sp.Src), cl.Source)
 			case tiEnv:

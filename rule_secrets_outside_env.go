@@ -22,9 +22,10 @@ func NewRuleSecretsOutsideEnv() *RuleSecretsOutsideEnv {
 
 // VisitWorkflowPre is callback when visiting Workflow node before visiting its children.
 func (rule *RuleSecretsOutsideEnv) VisitWorkflowPre(n *Workflow) error {
-	if _, ok := n.FindWorkflowCallEvent(); ok {
+	if onlyWorkflowCall(n) {
 		// A reusable workflow gets its secrets from the caller. Environment secrets do not reach it
 		// unless the caller inherits all secrets, so there is nothing the workflow itself can fix.
+		// A workflow which also has another trigger runs on its own too, so it is checked.
 		return nil
 	}
 	allow := rule.Config().ruleOptionStrings("secrets-outside-env", "allow")

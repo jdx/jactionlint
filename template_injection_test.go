@@ -35,6 +35,9 @@ func TestTemplateInjectionTiers(t *testing.T) {
 		want []string
 	}{
 		{"direct", "      - run: echo '${{ github.event.issue.title }}'\n", []string{"template-injection"}},
+		{"mixed-case property", "      - run: echo '${{ github.event.issue.Title }}'\n", []string{"template-injection"}},
+		{"mixed-case index", "      - run: echo \"${{ github.event.issue['Title'] }}\"\n", []string{"template-injection"}},
+		{"index", "      - run: echo \"${{ github.event.issue['title'] }}\"\n", []string{"template-injection"}},
 		{"every untrusted expression of a script", "      - run: |\n          echo '${{ github.head_ref }}'\n          echo '${{ github.event.issue.body }}'\n", []string{"template-injection", "template-injection"}},
 		{"github-script", "      - uses: actions/github-script@v7\n        with:\n          script: console.log('${{ github.head_ref }}')\n", []string{"template-injection"}},
 		{"code input of another action", "      - uses: nick-fields/retry@v3\n        with:\n          command: echo ${{ github.head_ref }}\n", []string{"template-injection"}},
