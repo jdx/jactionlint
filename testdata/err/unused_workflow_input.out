@@ -1,0 +1,2 @@
+test.yaml:7:7: input "dry-run" of "workflow_dispatch" is never used: no expression reads "inputs.dry-run". remove it or use it [unused-workflow-input]
+test.yaml:15:7: input "channel" of "workflow_call" is never used: no expression reads "inputs.channel". remove it from the workflow and from the callers, or use it [unused-workflow-input]
