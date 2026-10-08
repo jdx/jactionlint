@@ -49,6 +49,7 @@ List of checks:
 - [Deprecated inputs usage](#deprecated-inputs-usage)
 - [YAML anchors](#yaml-anchors)
 - [Expansions in scripts (opt-in)](#check-template-injection-expansion)
+- [Obfuscated paths and expressions (opt-in)](#check-obfuscation)
 
 Note that jactionlint focuses on catching mistakes in workflow files. If you want some general code style checks, please consider
 using a general YAML checker like [yamllint][].
@@ -3724,6 +3725,64 @@ rules:
 What is considered free text is a decision about the value, not the syntax. A boolean input, a matrix of literals and the `result` of
 a job cannot hold anything but a few words, and a `string` input can hold anything. When you know that a value is safe, set the
 level of the rule to `off` or ignore the line, for example with `# jactionlint ignore=template-injection-expansion`.
+
+<a id="check-obfuscation"></a>
+## Obfuscated paths and expressions (opt-in)
+
+Some constructs work but hide what they do from the people and the tools reading the workflow. This is the rule `obfuscation`. It is
+enabled by the `strict` profile and reports:
+
+- a path at `uses:` with empty, `.` or `..` segments, like `actions/checkout/./sub` or `./.github/actions/../actions/x`. A leading
+  `../` of a local path is not reported because it refers to a repository checked out next to the workspace;
+- `format()` with literal arguments only, and any other expression which is a constant, outside of `if:` (constant conditions are
+  reported by `constant-condition`);
+- `fromJSON(toJSON(x))`, unless `x` is a property of a context (`fromJSON(toJSON(matrix.container))` is a known way to turn the
+  value into an object);
+- an index which is computed, like `vars[format('NAME_{0}', github.job)]`. It hides which property is read.
+
+Example input:
+
+```yaml
+on: push
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout/./sub@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ format('{0}/{1}', 'octocat', 'hello-world') }}
+      - run: echo '${{ fromJSON(toJSON('[1]'))[0] }}'
+      - run: echo '${{ vars[format('NAME_{0}', github.job)] }}'
+```
+
+Output:
+
+<!-- Skip update output -->
+```
+test.yaml:7:15: warning: path of "actions/checkout/./sub@v4" has redundant or empty segments ("//", "." or ".."). write it as "actions/checkout/sub@v4" [obfuscation]
+  |
+7 |       - uses: actions/checkout/./sub@v4
+  |               ^~~~~~~~~~~~~~~~~~~~~~~~~
+test.yaml:10:27: warning: format() is called with literal arguments only so its result is the constant "octocat/hello-world". write the string itself [expression]
+   |
+10 |           repository: ${{ format('{0}/{1}', 'octocat', 'hello-world') }}
+   |                           ^~~~~~~~~~~~~~~~~
+test.yaml:11:24: warning: fromJSON(toJSON(...)) returns its argument unchanged. remove both calls [expression]
+   |
+11 |       - run: echo '${{ fromJSON(toJSON('[1]'))[0] }}'
+   |                        ^~~~~~~~~~~~~~~~~~~~~~~~~~
+test.yaml:12:29: warning: the index is computed, which hides which property is read from tools that look for it. use a literal property name or a matrix to select the value [expression]
+   |
+12 |       - run: echo '${{ vars[format('NAME_{0}', github.job)] }}'
+   |                             ^~~~~~~~~~~~~~~~~~
+```
+
+<!-- Skip playground link -->
+
+`-fix=unsafe` rewrites the paths of `uses:`. It is unsafe because the plain path is expected, but not guaranteed, to name the same
+action.
 
 
 [Installation](install.md) | [Usage](usage.md) | [Configuration](config.md) | [Go API](api.md) | [References](reference.md)

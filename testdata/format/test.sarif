@@ -190,6 +190,21 @@
               "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
             },
             {
+              "id": "obfuscation",
+              "name": "Obfuscation",
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "description": "Checks for obfuscated paths at \"uses:\"",
+                "queryURI": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+              },
+              "fullDescription": {
+                "text": "Checks for obfuscated paths at \"uses:\""
+              },
+              "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+            },
+            {
               "id": "parallel-steps",
               "name": "ParallelSteps",
               "defaultConfiguration": {

@@ -43,6 +43,11 @@
       "notes": "required-actions enforces a required set of actions. zizmor's allow and deny lists are the inverse and are not covered yet.",
       "jactionlint": [{ "rule": "required-actions" }]
     },
+    "obfuscation": {
+      "coverage": "partial",
+      "notes": "Redundant path segments at uses:, fromJSON(toJSON(x)) and format() with literal arguments.",
+      "jactionlint": [{ "rule": "obfuscation" }]
+    },
     "unsound-condition": {
       "coverage": "full",
       "notes": "if-always-true reports every condition with characters around ${{ }}, which includes the trailing newline of a block scalar.",

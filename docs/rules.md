@@ -70,6 +70,7 @@ rules:
 | [missing-timeout](#missing-timeout) | policy | error | strict |
 | [missing-workflow-input](#missing-workflow-input) | correctness | error | default |
 | [missing-workflow-secret](#missing-workflow-secret) | correctness | error | default |
+| [obfuscation](#obfuscation) | security | warn | strict |
 | [outdated-action-runner](#outdated-action-runner) | correctness | error | default |
 | [pyflakes](#pyflakes) | correctness | error | default |
 | [recursive-alias](#recursive-alias) | correctness | error | default |
@@ -503,6 +504,16 @@ A required secret of a reusable workflow is not passed.
 - Default level: error
 - Profile: default
 - Details and examples: [checks](./checks.md#check-reusable-workflows)
+
+## obfuscation
+
+A path at uses: or an expression is written in an obfuscated way.
+
+- Group: security
+- Default level: warn
+- Profile: strict
+- Fixable: yes
+- Details and examples: [checks](./checks.md#check-obfuscation)
 
 ## outdated-action-runner
 

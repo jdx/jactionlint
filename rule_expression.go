@@ -916,6 +916,9 @@ func (rule *RuleExpression) checkSemanticsOfExprNode(expr ExprNode, line, col in
 	if rule.config.RuleEnabled("unsound-ternary") {
 		rule.checkFalsyTernary(expr, line, col)
 	}
+	if rule.config.RuleEnabled("obfuscation") {
+		rule.checkObfuscation(expr, line, col, workflowKey)
+	}
 
 	return ty, ok
 }

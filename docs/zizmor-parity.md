@@ -43,7 +43,7 @@ How to read the table:
 | `insecure-url-scheme` | `insecure-url-scheme` (where applicable to dependabot.yml) | 3 / E | strict | not yet assessed |
 | `known-vulnerable-actions` | `known-vulnerable-actions` | 3 / G | online | not yet assessed |
 | `misfeature` | `misfeature` | 3 / C | strict | not yet assessed |
-| `obfuscation` | `obfuscation` | 3 / C | strict | not yet assessed |
+| `obfuscation` | `obfuscation` | 3 / C | strict | partial: redundant segments at `uses:`, constant expressions and `format()` of literals outside `if:`, `fromJSON(toJSON(x))` and computed indices. All zizmor findings of the corpus are reported (see [batch C](#batch-c-measurements)). Constants in `if:` are `constant-condition`; `fromJSON(toJSON(context))` is deliberately not reported; the `uses:` fix is unsafe. No composite actions yet |
 | `overprovisioned-secrets` | `overprovisioned-secrets` | 3 / A | strict | not yet assessed |
 | `ref-confusion` | `ref-confusion` | 3 / G | online | not yet assessed |
 | `ref-version-mismatch` | `ref-version-mismatch` | 3 / G | online | not yet assessed |
