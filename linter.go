@@ -61,8 +61,12 @@ type LinterOptions struct {
 	// Color is option for colorizing error outputs. See ColorOptionKind document for each enum values.
 	Color ColorOptionKind
 	// Oneline is flag if one line output is enabled. When enabling it, one error is output per one
-	// line. It is useful when reading outputs from programs.
+	// line. It is useful when reading outputs from programs. It is the same as setting Format to
+	// "oneline" and it only affects the text format.
 	Oneline bool
+	// ShowRuleIDs makes the text format show the stable rule ID such as "unpinned-uses" at the end of
+	// each error instead of the kind such as "action".
+	ShowRuleIDs bool
 	// Shellcheck is executable for running shellcheck external command. It can be command name like
 	// "shellcheck" or file path like "/path/to/shellcheck", "path/to/shellcheck". When this value
 	// is empty, shellcheck won't run to check scripts in workflow file.
@@ -78,8 +82,10 @@ type LinterOptions struct {
 	// the case, jactionlint will try to read config from the repository's .github/jactionlint.yaml,
 	// then from $XDG_CONFIG_HOME/jactionlint/jactionlint.yaml ($HOME/.config when unset).
 	ConfigFile string
-	// Format is a custom template to format error messages. It must follow Go Template format and
-	// contain at least one {{ }} placeholder. https://pkg.go.dev/text/template
+	// Format selects the output format. It is one of "text" (the default when empty), "oneline", "json",
+	// "jsonl", "sarif", "gcc" and "github", or a custom template to format error messages. A template
+	// must follow Go Template format and contain at least one {{ }} placeholder. When the format is
+	// not a native one, it is regarded as a template. https://pkg.go.dev/text/template
 	Format string
 	// StdinFileName is a file name when reading input from stdin. When this value is empty, "<stdin>"
 	// is used as the default value.
@@ -104,7 +110,7 @@ type Linter struct {
 	out            io.Writer
 	logOut         io.Writer
 	logLevel       LogLevel
-	oneline        bool
+	printer        printer
 	shellcheck     string
 	pyflakes       string
 	ignorePats     IgnorePatterns
@@ -179,12 +185,16 @@ func NewLinter(out io.Writer, opts *LinterOptions) (*Linter, error) {
 	}
 
 	var formatter *ErrorFormatter
-	if opts.Format != "" {
+	if isTemplateFormat(opts.Format) {
 		f, err := NewErrorFormatter(opts.Format)
 		if err != nil {
 			return nil, err
 		}
 		formatter = f
+	}
+	prn, err := newPrinter(opts.Format, opts.Oneline, opts.ShowRuleIDs, formatter)
+	if err != nil {
+		return nil, err
 	}
 
 	cwd := "."
@@ -204,7 +214,7 @@ func NewLinter(out io.Writer, opts *LinterOptions) (*Linter, error) {
 		out,
 		lout,
 		level,
-		opts.Oneline,
+		prn,
 		opts.Shellcheck,
 		opts.Pyflakes,
 		ignore,
@@ -430,24 +440,14 @@ func (l *Linter) LintFiles(filepaths []string, project *Project) ([]*Error, erro
 	}
 
 	all := make([]*Error, 0, total)
-	if l.errFmt != nil {
-		temp := make([]*ErrorTemplateFields, 0, total)
-		for i := range ws {
-			w := &ws[i]
-			for _, err := range w.errs {
-				temp = append(temp, err.GetTemplateFields(w.src))
-			}
-			all = append(all, w.errs...)
-		}
-		if err := l.errFmt.Print(l.out, temp); err != nil {
-			return nil, err
-		}
-	} else {
-		for i := range ws {
-			w := &ws[i]
-			l.printErrors(w.errs, w.src)
-			all = append(all, w.errs...)
-		}
+	results := make([]fileResult, 0, len(ws))
+	for i := range ws {
+		w := &ws[i]
+		results = append(results, fileResult{w.path, w.src, w.errs})
+		all = append(all, w.errs...)
+	}
+	if err := l.printer.print(l.out, results); err != nil {
+		return nil, err
 	}
 
 	l.log("Found", total, "errors in", n, "files")
@@ -487,12 +487,10 @@ func (l *Linter) LintFile(path string, project *Project) ([]*Error, error) {
 		return nil, err
 	}
 
-	if l.errFmt != nil {
-		l.errFmt.PrintErrors(l.out, errs, src)
-	} else {
-		l.printErrors(errs, src)
+	if err := l.printer.print(l.out, []fileResult{{path, src, errs}}); err != nil {
+		return nil, err
 	}
-	return errs, err
+	return errs, nil
 }
 
 // LintStdin lints the content read from STDIN. The stdin parameter is a reader to read from STDIN,
@@ -529,10 +527,8 @@ func (l *Linter) Lint(path string, content []byte, project *Project) ([]*Error, 
 	if err != nil {
 		return nil, err
 	}
-	if l.errFmt != nil {
-		l.errFmt.PrintErrors(l.out, errs, content)
-	} else {
-		l.printErrors(errs, content)
+	if err := l.printer.print(l.out, []fileResult{{path, content, errs}}); err != nil {
+		return nil, err
 	}
 	return errs, nil
 }
@@ -692,15 +688,6 @@ Loop:
 		l.log("Filtered", len(errs)-len(filtered), "error(s) due to \"-ignore\" command line option and \"ignore\" configuration")
 	}
 	return filtered
-}
-
-func (l *Linter) printErrors(errs []*Error, src []byte) {
-	if l.oneline {
-		src = nil
-	}
-	for _, err := range errs {
-		err.PrettyPrint(l.out, src)
-	}
 }
 
 // warnDeprecations reports the deprecated keys of the config to the log output. It reports each

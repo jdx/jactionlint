@@ -55,6 +55,16 @@ func (s Severity) MarshalText() ([]byte, error) {
 	return []byte(s.String()), nil
 }
 
+// UnmarshalText implements encoding.TextUnmarshaler. It accepts the names of ParseSeverity.
+func (s *Severity) UnmarshalText(b []byte) error {
+	v, err := ParseSeverity(string(b))
+	if err != nil {
+		return err
+	}
+	*s = v
+	return nil
+}
+
 // UnmarshalYAML implements yaml.Unmarshaler.
 func (s *Severity) UnmarshalYAML(n *yaml.Node) error {
 	if n.Kind != yaml.ScalarNode {

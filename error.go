@@ -145,6 +145,11 @@ func (e *Error) GetTemplateFields(source []byte) *ErrorTemplateFields {
 		}
 	}
 
+	endLine := e.EndLine
+	if endLine == 0 {
+		endLine = e.Line
+	}
+
 	return &ErrorTemplateFields{
 		Message:   e.Message,
 		Filepath:  e.Filepath,
@@ -153,6 +158,11 @@ func (e *Error) GetTemplateFields(source []byte) *ErrorTemplateFields {
 		Kind:      e.Kind,
 		Snippet:   snippet,
 		EndColumn: end,
+		ID:        e.ID,
+		Severity:  e.Severity,
+		DocURL:    e.DocURL,
+		EndLine:   endLine,
+		Fix:       e.Fix,
 	}
 }
 
@@ -160,14 +170,32 @@ func (e *Error) GetTemplateFields(source []byte) *ErrorTemplateFields {
 // message with colorful output and source snippet with indicator. When nil is set to source, no
 // source snippet is not printed. To disable colorful output, set true to fatih/color.NoColor.
 func (e *Error) PrettyPrint(w io.Writer, source []byte) {
+	e.prettyPrint(w, source, false)
+}
+
+// prettyPrint is PrettyPrint which can show the rule ID instead of the kind. The output format of an
+// error of error level is the one of the former versions. Errors of the other levels are prefixed
+// with their level so that they can be told apart from errors.
+func (e *Error) prettyPrint(w io.Writer, source []byte, showID bool) {
 	yellow.Fprint(w, e.Filepath)
 	gray.Fprint(w, ":")
 	fmt.Fprint(w, e.Line)
 	gray.Fprint(w, ":")
 	fmt.Fprint(w, e.Column)
 	gray.Fprint(w, ": ")
-	bold.Fprint(w, e.Message)
-	gray.Fprintf(w, " [%s]\n", e.Kind)
+	prefix := ""
+	switch e.Severity {
+	case SeverityWarning:
+		prefix = "warning: "
+	case SeverityInfo:
+		prefix = "info: "
+	}
+	bold.Fprint(w, prefix+e.Message)
+	label := e.Kind
+	if showID && e.ID != "" {
+		label = e.ID
+	}
+	gray.Fprintf(w, " [%s]\n", label)
 
 	if len(source) == 0 || e.Line <= 0 {
 		return
@@ -261,8 +289,23 @@ type ErrorTemplateFields struct {
 	// When encoding into JSON, this field may be omitted when the snippet is empty.
 	Snippet string `json:"snippet,omitempty"`
 	// EndColumn is a column number where the error indicator (^~~~~~~) ends. When no indicator
-	// can be shown, EndColumn is equal to Column.
+	// can be shown, EndColumn is equal to Column. Note that it is the column of the last character
+	// of the indicator and counts the display width of the characters, which differs from
+	// Error.EndColumn that is the exclusive end of the region counted in Unicode code points.
 	EndColumn int `json:"end_column"`
+	// ID is the stable ID of the rule which found the error such as "unpinned-uses".
+	ID string `json:"id"`
+	// Severity is "error", "warn" or "info".
+	Severity Severity `json:"severity"`
+	// DocURL is the URL of the documentation of the rule. When encoding into JSON, this field may be
+	// omitted when the error is not from a built-in rule.
+	DocURL string `json:"doc_url,omitempty"`
+	// EndLine is the line number where the region of the error ends. It is the same as Line unless the
+	// region spans several lines.
+	EndLine int `json:"end_line"`
+	// Fix is the automatic fix for the error. When encoding into JSON, this field is omitted when the
+	// error cannot be fixed automatically.
+	Fix *Fix `json:"fix,omitempty"`
 }
 
 func unescapeBackslash(s string) string {
@@ -299,6 +342,25 @@ func toPascalCase(s string) string {
 type ruleTemplateFields struct {
 	Name        string
 	Description string
+}
+
+// ruleInfoTemplateFields is the fields of a rule which a template for formatting errors can use through
+// the allRules function.
+type ruleInfoTemplateFields struct {
+	// ID is the stable ID of the rule such as "unpinned-uses".
+	ID string
+	// Name is the ID in Pascal case such as "UnpinnedUses".
+	Name string
+	// Description is a one-line description of the rule.
+	Description string
+	// Group is "correctness", "security", "policy" or "style".
+	Group string
+	// DefaultLevel is the severity of the rule when it is enabled without an explicit level.
+	DefaultLevel Severity
+	// Profile is the first profile which enables the rule. It is empty when no profile enables it.
+	Profile string
+	// URL is the URL of the documentation of the rule.
+	URL string
 }
 
 func compareRuleTemplateByName(lhs, rhs *ruleTemplateFields) int {
@@ -338,6 +400,22 @@ func NewErrorFormatter(format string) (*ErrorFormatter, error) {
 		},
 		"toPascalCase": toPascalCase,
 		"getVersion":   getCommandVersion,
+		"allRules": func() []*ruleInfoTemplateFields {
+			rules := Rules()
+			ret := make([]*ruleInfoTemplateFields, 0, len(rules))
+			for _, r := range rules {
+				ret = append(ret, &ruleInfoTemplateFields{
+					ID:           r.ID,
+					Name:         toPascalCase(r.ID),
+					Description:  r.Summary,
+					Group:        string(r.Group),
+					DefaultLevel: r.DefaultLevel,
+					Profile:      string(r.Profile),
+					URL:          r.DocURL(),
+				})
+			}
+			return ret
+		},
 		"allKinds": func() []*ruleTemplateFields {
 			ret := make([]*ruleTemplateFields, 0, len(r))
 			for _, e := range r {

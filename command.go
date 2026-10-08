@@ -51,19 +51,24 @@ func printUsageHeader(out io.Writer) {
 
     $ jactionlint -
 
-  To serialize errors into JSON, use -format option. It allows to format error
-  messages flexibly with Go template syntax.
+  To serialize errors, use -format option. json, jsonl, sarif (for code scanning
+  and tools like hk), gcc and github (GitHub Actions annotations) are available:
+
+    $ jactionlint -format sarif
+
+  A Go template also allows to format error messages flexibly:
 
     $ jactionlint -format '{{json .}}'
 
 Documents:
 
   - List of checks: https://github.com/jdx/jactionlint/tree/%s/docs/checks.md
+  - Rule IDs:       https://github.com/jdx/jactionlint/tree/%s/docs/rules.md
   - Usage:          https://github.com/jdx/jactionlint/tree/%s/docs/usage.md
   - Configuration:  https://github.com/jdx/jactionlint/tree/%s/docs/config.md
 
 Flags:
-`, b, b, b)
+`, b, b, b, b)
 }
 
 func getCommandVersion() string {
@@ -145,7 +150,8 @@ func (cmd *Command) Main(args []string) int {
 	flags.StringVar(&opts.Shellcheck, "shellcheck", "shellcheck", "Command name or file path of \"shellcheck\" external command. If empty, shellcheck integration will be disabled")
 	flags.StringVar(&opts.Pyflakes, "pyflakes", "pyflakes", "Command name or file path of \"pyflakes\" external command. If empty, pyflakes integration will be disabled")
 	flags.BoolVar(&opts.Oneline, "oneline", false, "Use one line per one error. Useful for reading error messages from programs")
-	flags.StringVar(&opts.Format, "format", "", "Custom template to format error messages in Go template syntax. See the usage documentation for more details")
+	flags.StringVar(&opts.Format, "format", "", "Output format: text (default), oneline, json, jsonl, sarif, gcc or github. A custom template in Go template syntax which has {{ }} is also accepted. See the usage documentation for more details")
+	flags.BoolVar(&opts.ShowRuleIDs, "rule-ids", false, "Show the stable rule ID such as unpinned-uses at the end of each error in the text format instead of the kind. The ID is used in the rules of the config file and in -ignore")
 	flags.StringVar(&opts.ConfigFile, "config-file", "", "File path to config file")
 	flags.BoolVar(&initConfig, "init-config", false, "Generate default config file at .github/jactionlint.yaml in current project")
 	flags.BoolVar(&migrateConfig, "migrate-config", false, "Rewrite the deprecated keys of the config file (.github/jactionlint.yaml or the file of -config-file) into the \"rules\" mapping")
