@@ -1,0 +1,18 @@
+# None of these is reported by the rules of the default profile: insecure-commands, unsound-contains
+# and secrets-inherit
+on: push
+env:
+  ACTIONS_ALLOW_UNSECURE_COMMANDS: false
+jobs:
+  a:
+    runs-on: ubuntu-latest
+    if: contains(fromJSON('["refs/heads/main", "refs/heads/develop"]'), github.ref)
+    steps:
+      - run: echo
+        if: contains(github.event.head_commit.message, 'skip ci')
+        env:
+          ACTIONS_ALLOW_UNSECURE_COMMANDS: '1'
+  b:
+    uses: octo-org/octo-repo/.github/workflows/w.yaml@v1
+    secrets:
+      token: ${{ secrets.TOKEN }}

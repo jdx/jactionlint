@@ -193,6 +193,10 @@ rules:
 | ------------------ | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------- |
 | `max-run-lines`    | `max`  | Maximum number of non-blank lines in a `run:` script. Default `100` when the rule is enabled by the `all` profile.                              |
 | `timeout-too-long` | `max`  | Maximum allowed `timeout-minutes` of a job in minutes. Values given by `${{ }}` are not checked. The rule does nothing without `max`.           |
+| `forbidden-uses`      | `allow` | List of patterns of the only actions and reusable workflows that may be used, e.g. `actions/*`. See [forbidden actions](checks.md#check-forbidden-uses). |
+| `forbidden-uses`      | `deny`  | List of patterns of actions and reusable workflows that must not be used. The rule does nothing without `allow` or `deny`.                      |
+| `secrets-outside-env` | `allow` | List of secret names that may be used by a job without an `environment:`. `GITHUB_TOKEN` is always allowed.                                     |
+| `typosquat-uses`      | `allow` | List of `owner/repo` slugs that are never reported, e.g. a legitimate fork of a popular action.                                                 |
 
 ## Extending config files
 
