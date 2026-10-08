@@ -605,7 +605,7 @@ func (l *Linter) check(
 		l.debug("No config was found")
 	}
 
-	if isDependabotPath(path) {
+	if l.isDependabotFile(path) {
 		return l.checkDependabot(path, content, project, cfg, start)
 	}
 

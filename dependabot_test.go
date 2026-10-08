@@ -86,6 +86,58 @@ func TestIsDependabotPath(t *testing.T) {
 	}
 }
 
+func TestDependabotFileIsResolvedAgainstWorkingDir(t *testing.T) {
+	root := t.TempDir()
+	workflows := filepath.Join(root, ".github", "workflows")
+	if err := os.MkdirAll(workflows, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// Not valid as a Dependabot configuration, valid as a workflow
+	workflow := []byte("on: push\njobs:\n  test:\n    runs-on: ubuntu-latest\n    timeout-minutes: 5\n    steps:\n      - run: echo hi\n")
+
+	for _, tc := range []struct {
+		name string
+		dir  string
+		path string
+		want bool
+	}{
+		{"bare name in the workflows directory", workflows, "dependabot.yml", false},
+		{"bare name in the .github directory", filepath.Join(root, ".github"), "dependabot.yml", true},
+		{"relative path", root, filepath.Join(".github", "dependabot.yml"), true},
+		{"relative workflow path", root, filepath.Join(".github", "workflows", "dependabot.yml"), false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			opts := &LinterOptions{WorkingDir: tc.dir}
+			l, err := NewLinter(io.Discard, opts)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if have := l.isDependabotFile(tc.path); have != tc.want {
+				t.Errorf("isDependabotFile(%q) in %q = %v, want %v", tc.path, tc.dir, have, tc.want)
+			}
+			if !tc.want {
+				errs, err := l.Lint(tc.path, workflow, nil)
+				if err != nil {
+					t.Fatal(err)
+				}
+				for _, e := range errs {
+					if e.ID == "dependabot-syntax" {
+						t.Errorf("workflow was linted as a Dependabot configuration: %v", e)
+					}
+				}
+			}
+		})
+	}
+
+	l, err := NewLinter(io.Discard, &LinterOptions{WorkingDir: workflows, StdinFileName: "dependabot.yml"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !l.isDependabotFile("dependabot.yml") {
+		t.Error("the name given for STDIN must keep meaning a Dependabot configuration")
+	}
+}
+
 func TestParseDependabotTree(t *testing.T) {
 	src, err := os.ReadFile(filepath.Join("testdata", "ok", "dependabot_full.yaml"))
 	if err != nil {

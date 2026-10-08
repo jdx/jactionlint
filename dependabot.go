@@ -169,6 +169,16 @@ func isDependabotPath(p string) bool {
 	return dir == "." || dir == "/" || path.Base(dir) == ".github"
 }
 
+// isDependabotFile is isDependabotPath for a path given to the linter. A relative path is resolved
+// against the working directory first, so that "dependabot.yml" linted from inside ".github/workflows"
+// is still a workflow. The name for STDIN is used as it is: it has no directory on purpose.
+func (l *Linter) isDependabotFile(p string) bool {
+	if p != l.stdin && !filepath.IsAbs(p) {
+		p = filepath.Join(l.cwd, p)
+	}
+	return isDependabotPath(p)
+}
+
 // DependabotFiles returns the paths of the Dependabot configuration files of the project:
 // ".github/dependabot.yml" and ".github/dependabot.yaml" when they exist.
 func (p *Project) DependabotFiles() []string {
