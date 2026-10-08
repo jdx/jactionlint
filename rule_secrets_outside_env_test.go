@@ -20,6 +20,11 @@ func TestSecretsOutsideEnv(t *testing.T) {
 		{"environment mapping", "on: push\njobs:\n  a:\n    runs-on: ubuntu-latest\n    environment:\n      name: prod\n    steps:\n      - run: echo ${{ secrets.A }}\n", nil},
 		{"with of an action", "on: push\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: octo/repo@v1\n        with:\n          token: ${{ secrets.A }}\n", []int{8}},
 		{"reusable workflow", "on: workflow_call\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo ${{ secrets.A }}\n", nil},
+		{"reusable workflow mapping", "on:\n  workflow_call:\n    inputs: {}\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo ${{ secrets.A }}\n", nil},
+		{"reusable workflow which also has other triggers", "on: [push, workflow_call]\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo ${{ secrets.A }}\n", []int{6}},
+		{"matrix row", "on: push\njobs:\n  a:\n    runs-on: ubuntu-latest\n    strategy:\n      matrix:\n        t: [\"${{ secrets.A }}\"]\n    steps:\n      - run: echo\n", []int{7}},
+		{"matrix include", "on: push\njobs:\n  a:\n    runs-on: ubuntu-latest\n    strategy:\n      matrix:\n        include:\n          - t: ${{ secrets.A }}\n    steps:\n      - run: echo\n", []int{8}},
+		{"timeout", "on: push\njobs:\n  a:\n    runs-on: ubuntu-latest\n    timeout-minutes: ${{ secrets.A }}\n    steps:\n      - run: echo\n", []int{5}},
 		{"workflow level env is not a job", "on: push\nenv:\n  X: ${{ secrets.A }}\njobs:\n  a:\n" + batchAJob, nil},
 		{"job calling a workflow", "on: push\njobs:\n  a:\n    uses: octo/repo/.github/workflows/w.yaml@v1\n    secrets:\n      s: ${{ secrets.A }}\n", nil},
 	}

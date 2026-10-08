@@ -3064,7 +3064,7 @@ release job the rule reports the steps which restore a cache:
 | Action | Restores a cache unless |
 | --- | --- |
 | `actions/cache`, `actions/cache/restore` | `lookup-only: true` |
-| `actions/setup-node`, `setup-python`, `setup-java`, `setup-dotnet` | the `cache` input is missing or `false` (`setup-node`: also `package-manager-cache: false`) |
+| `actions/setup-node`, `setup-python`, `setup-java`, `setup-dotnet` | the `cache` input is missing or `false` (`package-manager-cache: false` only turns off the automatic cache of `setup-node`, not an explicit `cache`) |
 | `actions/setup-go` | `cache: false` (before `v4` the cache is opt-in) |
 | `ruby/setup-ruby` | `bundler-cache` is missing or `false` |
 | `astral-sh/setup-uv` | `enable-cache: false` |
