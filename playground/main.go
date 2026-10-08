@@ -18,11 +18,12 @@ func fail(err error, when string) {
 }
 
 func encodeErrorAsMap(err *jactionlint.Error) map[string]interface{} {
-	obj := make(map[string]interface{}, 4)
+	obj := make(map[string]interface{}, 5)
 	obj["message"] = err.Message
 	obj["line"] = err.Line
 	obj["column"] = err.Column
 	obj["kind"] = err.Kind
+	obj["severity"] = err.Severity.String()
 	return obj
 }
 
