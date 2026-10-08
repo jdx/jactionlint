@@ -191,7 +191,7 @@ label=/abs/path   # trailing comment
 		t.Fatal(err)
 	}
 	want := []Repo{
-		{"a", "/home/u/src/a-jactionlint"},
+		{"a", filepath.Join("/home/u", "src", "a-jactionlint")},
 		{"label", "/abs/path"},
 		{"u", "/home/u"},
 		{"dir", "/with=equals/dir"},
