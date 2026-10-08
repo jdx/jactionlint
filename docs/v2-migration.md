@@ -17,7 +17,7 @@ with stable rule IDs, severities and profiles. These changes are breaking, which
 | Stable rule IDs | Every diagnostic carries an ID (for example `unpinned-uses`) that never changes, replacing matching on message text and the coarse `kind`. `-ignore`, `paths.*.ignore` and inline ignore comments accept IDs as well as message regular expressions. | planned |
 | Strict config parsing | An unknown key in `jactionlint.yaml` becomes an error, with a suggestion for the closest known key. Today unknown keys are silently ignored. | planned |
 | Exit codes by severity | Findings of severity `error` exit with 1. `warn` and `info` findings do not fail the run unless `-strict-exit` is given. `-min-severity` hides lower severities. | planned |
-| `-format` changes | Built-in formats `text` (default), `oneline`, `json`, `jsonl`, `sarif`, `gcc` and `github`. Go templates keep working, with `allKinds` replaced by `allRules`. SARIF output carries rule metadata, levels and fixes. | planned |
+| `-format` changes | Built-in formats `text` (default), `oneline`, `json`, `jsonl`, `sarif`, `gcc` and `github`. Go templates keep working. `allKinds` still works and `allRules` is added to list every rule ID. SARIF output carries rule metadata, levels and fixes. | planned |
 | Config booleans become `rules:` | Options such as `require-permissions` become entries in a `rules:` map (`<id>: off\|info\|warn\|error`), together with a `profile:` (`default`, `strict` or `all`) and `extends:` for shared config. | planned |
 
 ## Config migration
