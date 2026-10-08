@@ -484,6 +484,30 @@ func TestHTTPClientCompareBranchesAndAdvisories(t *testing.T) {
 	}
 }
 
+func TestHTTPClientAdvisoriesOfSeveralPackages(t *testing.T) {
+	f := newFakeGitHub(t)
+	var requests int
+	f.handle("/advisories", func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		if got := r.URL.Query().Get("affects"); got != "o/r,o/r/sub" {
+			t.Errorf("affects = %q", got)
+		}
+		// The same advisory is listed for both packages
+		fmt.Fprint(w, `[
+		 {"ghsa_id":"GHSA-1","vulnerabilities":[{"package":{"ecosystem":"actions","name":"o/r"},"vulnerable_version_range":"< 2"}]},
+		 {"ghsa_id":"GHSA-1","vulnerabilities":[{"package":{"ecosystem":"actions","name":"o/r/sub"},"vulnerable_version_range":"< 2"}]},
+		 {"ghsa_id":"GHSA-2","vulnerabilities":[{"package":{"ecosystem":"actions","name":"o/r/sub"},"vulnerable_version_range":"< 3"}]}]`)
+	})
+	c := f.client(httpGitHubOptions{})
+	advs, err := c.AdvisoriesForPackages(context.Background(), []string{"o/r", "o/r/sub"})
+	if err != nil || len(advs) != 2 || advs[0].ID != "GHSA-1" || advs[1].ID != "GHSA-2" {
+		t.Fatalf("AdvisoriesForPackages() = %+v, %v", advs, err)
+	}
+	if requests != 1 {
+		t.Errorf("want one request but got %d", requests)
+	}
+}
+
 func TestHTTPClientContextCancellation(t *testing.T) {
 	f := newFakeGitHub(t)
 	release := make(chan struct{})

@@ -41,6 +41,9 @@ type fixtureRef struct {
 
 type fixtureAdvisories struct {
 	List []GitHubAdvisory `json:"list"`
+	// Packages has the advisories of a subdirectory of the repository by its full lower-case package name
+	// ("o/r/sub"), which include the ones of the repository. A subdirectory without an entry has the List.
+	Packages map[string][]GitHubAdvisory `json:"packages,omitempty"`
 }
 
 const fixtureCompareNotFound GitHubCompareStatus = "not-found"
@@ -174,6 +177,32 @@ func (c *FixtureGitHubClient) Advisories(_ context.Context, owner, repo string) 
 	return append([]GitHubAdvisory(nil), r.Advisories.List...), nil
 }
 
+// AdvisoriesForPackages implements GitHubPackageAdvisoryClient.
+func (c *FixtureGitHubClient) AdvisoriesForPackages(ctx context.Context, packages []string) ([]GitHubAdvisory, error) {
+	var ret []GitHubAdvisory
+	seen := map[string]bool{}
+	for _, pkg := range packages {
+		owner, rest, _ := strings.Cut(pkg, "/")
+		repo, _, _ := strings.Cut(rest, "/")
+		list, err := c.Advisories(ctx, owner, repo)
+		if err != nil {
+			return nil, err
+		}
+		if r := c.data.Repos[fixtureKey(owner, repo)]; r != nil && r.Advisories != nil {
+			if l, ok := r.Advisories.Packages[strings.ToLower(pkg)]; ok {
+				list = l
+			}
+		}
+		for _, a := range list {
+			if !seen[a.ID] {
+				seen[a.ID] = true
+				ret = append(ret, a)
+			}
+		}
+	}
+	return ret, nil
+}
+
 // RecordingGitHubClient wraps a GitHubClient and records the answers it gives. Fixtures returns them
 // in the format NewFixtureGitHubClient reads.
 type RecordingGitHubClient struct {
@@ -301,6 +330,44 @@ func (c *RecordingGitHubClient) Advisories(ctx context.Context, owner, repo stri
 		c.rec(owner, repo, func(r *fixtureRepo) { r.Advisories = &fixtureAdvisories{List: append([]GitHubAdvisory{}, v...)} })
 	}
 	return v, err
+}
+
+// AdvisoriesForPackages implements GitHubPackageAdvisoryClient. The answer for a subdirectory is
+// recorded under its package name. The repository itself is recorded by Advisories.
+func (c *RecordingGitHubClient) AdvisoriesForPackages(ctx context.Context, packages []string) ([]GitHubAdvisory, error) {
+	pc, ok := c.inner.(GitHubPackageAdvisoryClient)
+	if !ok {
+		if len(packages) == 1 {
+			owner, repo, _ := strings.Cut(packages[0], "/")
+			return c.Advisories(ctx, owner, repo)
+		}
+		return nil, errors.New("the wrapped GitHub client cannot look up advisories by package")
+	}
+	v, err := pc.AdvisoriesForPackages(ctx, packages)
+	if err != nil {
+		return v, err
+	}
+	for _, pkg := range packages {
+		owner, rest, _ := strings.Cut(pkg, "/")
+		repo, sub, _ := strings.Cut(rest, "/")
+		list := append([]GitHubAdvisory{}, v...)
+		c.rec(owner, repo, func(r *fixtureRepo) {
+			if r.Advisories == nil {
+				r.Advisories = &fixtureAdvisories{}
+			}
+			if sub == "" {
+				if len(packages) == 1 {
+					r.Advisories.List = list
+				}
+				return
+			}
+			if r.Advisories.Packages == nil {
+				r.Advisories.Packages = map[string][]GitHubAdvisory{}
+			}
+			r.Advisories.Packages[strings.ToLower(pkg)] = list
+		})
+	}
+	return v, nil
 }
 
 func isNotFound(err error) bool {

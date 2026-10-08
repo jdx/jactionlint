@@ -518,8 +518,15 @@ func (c *httpGitHubClient) Compare(ctx context.Context, owner, repo, base, head 
 
 // Advisories implements GitHubClient.
 func (c *httpGitHubClient) Advisories(ctx context.Context, owner, repo string) ([]GitHubAdvisory, error) {
+	return c.AdvisoriesForPackages(ctx, []string{owner + "/" + repo})
+}
+
+// AdvisoriesForPackages implements GitHubPackageAdvisoryClient. The API takes a comma separated list of
+// packages in "affects", so a repository and one of its subdirectories cost one request.
+func (c *httpGitHubClient) AdvisoriesForPackages(ctx context.Context, packages []string) ([]GitHubAdvisory, error) {
 	var ret []GitHubAdvisory
-	q := url.Values{"ecosystem": {"actions"}, "affects": {owner + "/" + repo}, "per_page": {"100"}}
+	seen := map[string]bool{}
+	q := url.Values{"ecosystem": {"actions"}, "affects": {strings.Join(packages, ",")}, "per_page": {"100"}}
 	_, err := c.getPages(ctx, "/advisories?"+q.Encode(), maxGitHubPages, func(body []byte) error {
 		var as []struct {
 			ID              string `json:"ghsa_id"`
@@ -541,9 +548,10 @@ func (c *httpGitHubClient) Advisories(ctx context.Context, owner, repo string) (
 			return err
 		}
 		for _, a := range as {
-			if a.WithdrawnAt != "" {
+			if a.WithdrawnAt != "" || seen[a.ID] {
 				continue
 			}
+			seen[a.ID] = true
 			adv := GitHubAdvisory{ID: a.ID, CVE: a.CVE, Summary: a.Summary, Severity: a.Severity, URL: a.URL}
 			for _, v := range a.Vulnerabilities {
 				if !strings.EqualFold(v.Package.Ecosystem, "actions") {

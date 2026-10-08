@@ -159,6 +159,15 @@ func (e *GitHubRateLimitError) Is(target error) bool { return target == ErrGitHu
 // errOnlineUnsupported is why the online rules cannot run in builds without network access.
 var errOnlineUnsupported = errors.New("online checks need network access to the GitHub API, which is not available in the WebAssembly build (the playground)")
 
+// GitHubPackageAdvisoryClient is an optional interface of a GitHubClient. GitHub publishes the
+// advisories of an action in a subdirectory (gradle/actions/setup-gradle) under the full package
+// name, which the "owner/repo" lookup of GitHubClient.Advisories does not find. A client which
+// implements it returns the advisories which affect any of the packages, each written
+// "owner/repo" or "owner/repo/subpath", in one lookup and without duplicates.
+type GitHubPackageAdvisoryClient interface {
+	AdvisoriesForPackages(ctx context.Context, packages []string) ([]GitHubAdvisory, error)
+}
+
 // GitHubBranchScan is the result of GitHubBranchScanner.CommitOnAnyBranch.
 type GitHubBranchScan struct {
 	// Found is true when the commit is the head of a branch or an ancestor of one.

@@ -21,7 +21,11 @@ func NewRuleKnownVulnerableActions(sess *onlineSession, allow []string) *RuleKno
 // VisitWorkflowPost implements Pass.
 func (r *RuleKnownVulnerableActions) VisitWorkflowPost(*Workflow) error {
 	for _, s := range r.sites {
-		advs, err := r.sess.Advisories(s.ref.Owner, s.ref.Repo)
+		subpath := ""
+		if s.ref.Kind == UsesAction {
+			subpath = s.ref.Subpath
+		}
+		advs, err := r.sess.Advisories(s.ref.Owner, s.ref.Repo, subpath)
 		if err != nil {
 			r.skipped(s, "the advisories", err)
 			continue

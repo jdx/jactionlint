@@ -125,7 +125,7 @@ type onlineSession struct {
 	refs       memo[refKey, refResult]
 	branches   memo[repoKey, *GitHubBranchList]
 	compares   memo[compareKey, GitHubCompareStatus]
-	advisories memo[repoKey, []GitHubAdvisory]
+	advisories memo[string, []GitHubAdvisory]
 	origins    memo[originKey, originResult]
 }
 
@@ -279,9 +279,20 @@ func (s *onlineSession) Compare(owner, repo, base, head string) (GitHubCompareSt
 	})
 }
 
-// Advisories returns the security advisories of the action repository.
-func (s *onlineSession) Advisories(owner, repo string) ([]GitHubAdvisory, error) {
-	return s.advisories.get(newRepoKey(owner, repo), func() ([]GitHubAdvisory, error) {
-		return call(s, func(ctx context.Context) ([]GitHubAdvisory, error) { return s.client.Advisories(ctx, owner, repo) })
+// Advisories returns the security advisories of the action: those of the repository and, for an action in
+// a subdirectory, those published under the full package name ("owner/repo/subpath"). The subpath may be
+// empty. A client which cannot look up packages is asked for the repository only.
+func (s *onlineSession) Advisories(owner, repo, subpath string) ([]GitHubAdvisory, error) {
+	packages := []string{strings.ToLower(owner + "/" + repo)}
+	if sub := strings.Trim(strings.ToLower(subpath), "/"); sub != "" {
+		packages = append(packages, packages[0]+"/"+sub)
+	}
+	return s.advisories.get(strings.Join(packages, ","), func() ([]GitHubAdvisory, error) {
+		return call(s, func(ctx context.Context) ([]GitHubAdvisory, error) {
+			if pc, ok := s.client.(GitHubPackageAdvisoryClient); ok {
+				return pc.AdvisoriesForPackages(ctx, packages)
+			}
+			return s.client.Advisories(ctx, owner, repo)
+		})
 	})
 }
