@@ -5,7 +5,7 @@ import (
 	"io"
 	"path/filepath"
 
-	"github.com/jdx/jactionlint"
+	"github.com/jdx/jactionlint/v2"
 )
 
 // A rule type to check every steps have their names.

@@ -16,7 +16,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/jdx/jactionlint"
+	"github.com/jdx/jactionlint/v2"
 	"go.yaml.in/yaml/v4"
 )
 

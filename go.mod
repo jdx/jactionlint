@@ -1,4 +1,4 @@
-module github.com/jdx/jactionlint
+module github.com/jdx/jactionlint/v2
 
 go 1.25.0
 
