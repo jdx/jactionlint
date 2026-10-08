@@ -1,0 +1,6 @@
+cmd 1:1 name="echo"
+  pos "SMALL_EDIT_RESTORE_STARTED_NS=$(date +%s%N)"[subst quoted]
+cmd 1:39 name="date"
+  pos "+%s%N"
+redirect 1:52 op=">>" fd="" target="$GITHUB_ENV"[var:GITHUB_ENV quoted] append=true write=true
+writes GITHUB_ENV at 1:52 append=true producers=1 exprs=[]

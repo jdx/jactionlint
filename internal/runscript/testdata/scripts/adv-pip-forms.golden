@@ -1,0 +1,88 @@
+expr 11:19 "inputs.version"
+expr 11:42 "inputs.extra"
+cmd 1:1 name="pip" tool=pip
+  pos "install" "requests"
+  install tool=pip eco=pypi verb=install run=false global=false locked=false manifest=false reqs=0
+    pkg "requests" name="requests" ver="" kind=registry pinned=false dyn=false local=false
+cmd 2:1 name="pip" tool=pip
+  pos "install" "requests==2.31.0" "urllib3>=2"[quoted] "idna~=3.0"[quoted] "six==1.*"[glob]
+  install tool=pip eco=pypi verb=install run=false global=false locked=false manifest=false reqs=0
+    pkg "requests==2.31.0" name="requests" ver="==2.31.0" kind=registry pinned=true dyn=false local=false
+    pkg "urllib3>=2" name="urllib3" ver=">=2" kind=registry pinned=false dyn=false local=false
+    pkg "idna~=3.0" name="idna" ver="~=3.0" kind=registry pinned=false dyn=false local=false
+    pkg "six==1.*" name="six" ver="==1.*" kind=registry pinned=false dyn=false local=false
+cmd 3:1 name="pip3" tool=pip
+  flags --upgrade
+  pos "install" "pip" "setuptools" "wheel"
+  install tool=pip eco=pypi verb=install run=false global=false locked=false manifest=false reqs=0
+    pkg "pip" name="pip" ver="" kind=registry pinned=false dyn=false local=false
+    pkg "setuptools" name="setuptools" ver="" kind=registry pinned=false dyn=false local=false
+    pkg "wheel" name="wheel" ver="" kind=registry pinned=false dyn=false local=false
+cmd 4:1 name="python" tool=pip
+  flags -U
+  pos "install" "pip"
+  install tool=pip eco=pypi verb=install run=false global=false locked=false manifest=false reqs=0
+    pkg "pip" name="pip" ver="" kind=registry pinned=false dyn=false local=false
+cmd 5:1 name="python3.11" tool=pip
+  flags --user -r="requirements.txt" -c="constraints.txt"
+  pos "install" "pkg[extra]==1.0"[quoted]
+  install tool=pip eco=pypi verb=install run=false global=false locked=false manifest=false reqs=1
+    pkg "pkg[extra]==1.0" name="pkg" ver="==1.0" kind=registry pinned=true dyn=false local=false
+cmd 6:1 name="pip" tool=pip
+  flags --index-url="https://example.com/simple" --extra-index-url="https://pypi.org/simple"
+  pos "install" "pkg"
+  install tool=pip eco=pypi verb=install run=false global=false locked=false manifest=false reqs=0
+    pkg "pkg" name="pkg" ver="" kind=registry pinned=false dyn=false local=false
+cmd 7:1 name="pip" tool=pip
+  flags -e="."
+  pos "install" "./dist/*.whl"[glob] "../x.tgz" "/abs/path.whl"
+  install tool=pip eco=pypi verb=install run=false global=false locked=false manifest=false reqs=0
+    pkg "./dist/*.whl" name="./dist/*.whl" ver="" kind=path pinned=false dyn=false local=true
+    pkg "../x.tgz" name="../x.tgz" ver="" kind=path pinned=false dyn=false local=true
+    pkg "/abs/path.whl" name="/abs/path.whl" ver="" kind=path pinned=false dyn=false local=true
+    pkg "." name="." ver="" kind=path pinned=false dyn=false local=true
+cmd 8:1 name="pip" tool=pip
+  pos "install" "git+https://github.com/o/r.git@v1.2.3" "git+https://github.com/o/r.git@main" "git+https://github.com/o/r.git@0123456789abcdef0123456789abcdef01234567"
+  install tool=pip eco=pypi verb=install run=false global=false locked=false manifest=false reqs=0
+    pkg "git+https://github.com/o/r.git@v1.2.3" name="" ver="git+https://github.com/o/r.git@v1.2.3" kind=git pinned=true dyn=false local=false
+    pkg "git+https://github.com/o/r.git@main" name="" ver="git+https://github.com/o/r.git@main" kind=git pinned=false dyn=false local=false
+    pkg "git+https://github.com/o/r.git@0123456789abcdef0123456789abcdef01234567" name="" ver="git+https://github.com/o/r.git@0123456789abcdef0123456789abcdef01234567" kind=git pinned=true dyn=false local=false
+cmd 9:1 name="pip" tool=pip
+  pos "install" "pkg@https://example.com/pkg.whl" "https://example.com/other.whl#sha256=abc"
+  install tool=pip eco=pypi verb=install run=false global=false locked=false manifest=false reqs=0
+    pkg "pkg@https://example.com/pkg.whl" name="" ver="pkg@https://example.com/pkg.whl" kind=url pinned=false dyn=false local=false
+    pkg "https://example.com/other.whl#sha256=abc" name="" ver="https://example.com/other.whl#sha256=abc" kind=url pinned=true dyn=false local=false
+cmd 10:1 name="pip" tool=pip
+  flags --require-hashes -r="req.txt"
+  pos "install"
+  install tool=pip eco=pypi verb=install run=false global=false locked=true manifest=false reqs=1
+cmd 11:1 name="pip" tool=pip
+  pos "install" "pkg==${{ inputs.version }}"[expr quoted] "${{ inputs.extra }}"[expr whole-expr] "$PKGS"[var:PKGS] "$(cat pkgs.txt)"[subst quoted]
+  install tool=pip eco=pypi verb=install run=false global=false locked=false manifest=false reqs=0
+    pkg "pkg==${{ inputs.version }}" name="pkg" ver="==${{ inputs.version }}" kind=registry pinned=true dyn=true local=false
+    pkg "${{ inputs.extra }}" name="" ver="" kind=dynamic pinned=false dyn=true local=false
+    pkg "$PKGS" name="" ver="" kind=dynamic pinned=false dyn=true local=false
+    pkg "$(cat pkgs.txt)" name="" ver="" kind=dynamic pinned=false dyn=true local=false
+cmd 11:71 name="cat"
+  pos "pkgs.txt"
+cmd 12:1 name="pip" tool=pip
+  pos "install" "requests"
+  install tool=pip eco=pypi verb=install run=false global=false locked=false manifest=false reqs=0
+    pkg "requests" name="requests" ver="" kind=registry pinned=false dyn=false local=false
+cmd 12:23 name="pip" tool=pip
+  flags -y
+  pos "uninstall" "requests"
+cmd 12:50 name="pip" tool=pip
+  flags --version
+cmd 12:65 name="pip" tool=pip
+  pos "list"
+cmd 13:1 name="pip" tool=pip wrappers=sudo
+  pos "install" "pkg"
+  install tool=pip eco=pypi verb=install run=false global=false locked=false manifest=false reqs=0
+    pkg "pkg" name="pkg" ver="" kind=registry pinned=false dyn=false local=false
+cmd 14:1 name="pip" tool=pip
+  flags -r="requirements.txt" --no-deps
+  pos "install"
+  install tool=pip eco=pypi verb=install run=false global=false locked=false manifest=false reqs=1
+cmd 14:46 name="pip" tool=pip
+  pos "check"

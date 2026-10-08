@@ -1,0 +1,56 @@
+cmd 1:1 name="twine" tool=twine
+  pos "upload" "dist/*"[glob]
+  publish tool=twine verb="upload" kind=package dry=false registry=<nil>
+cmd 2:1 name="python" tool=twine
+  flags --repository="testpypi"
+  pos "upload" "dist/*"[glob]
+  publish tool=twine verb="upload" kind=package dry=false registry="testpypi"
+cmd 3:1 name="twine" tool=twine
+  pos "check" "dist/*"[glob]
+cmd 4:1 name="cargo" tool=cargo
+  pos "publish"
+  publish tool=cargo verb="publish" kind=package dry=false registry=<nil>
+cmd 5:1 name="cargo" tool=cargo
+  flags --dry-run
+  pos "publish"
+  publish tool=cargo verb="publish" kind=package dry=true registry=<nil>
+cmd 6:1 name="npm" tool=npm
+  flags --provenance --access="public"
+  pos "publish"
+  publish tool=npm verb="publish" kind=package dry=false registry=<nil>
+cmd 7:1 name="npm" tool=npm
+  flags --dry-run
+  pos "publish"
+  publish tool=npm verb="publish" kind=package dry=true registry=<nil>
+cmd 8:1 name="pnpm" tool=pnpm
+  flags --no-git-checks
+  pos "publish"
+  publish tool=pnpm verb="publish" kind=package dry=false registry=<nil>
+cmd 9:1 name="yarn" tool=yarn
+  pos "npm" "publish"
+  publish tool=yarn verb="npm publish" kind=package dry=false registry=<nil>
+cmd 10:1 name="gem" tool=gem
+  pos "push" "foo.gem"
+  publish tool=gem verb="push" kind=package dry=false registry=<nil>
+cmd 11:1 name="uv" tool=uv
+  pos "publish"
+  publish tool=uv verb="publish" kind=package dry=false registry=<nil>
+cmd 12:1 name="poetry" tool=poetry
+  flags --build
+  pos "publish"
+  publish tool=poetry verb="publish" kind=package dry=false registry=<nil>
+cmd 13:1 name="gh" tool=gh
+  flags --title="v1"[quoted] --notes-file="notes.md"
+  pos "release" "create" "v1.0.0" "dist/*"[glob]
+  publish tool=gh verb="release create" kind=release dry=false registry=<nil>
+cmd 14:1 name="gh" tool=gh
+  pos "release" "upload" "v1.0.0" "dist/*"[glob]
+  publish tool=gh verb="release upload" kind=release dry=false registry=<nil>
+cmd 15:1 name="gh" tool=gh
+  pos "release" "view" "v1"
+cmd 16:1 name="gh" tool=gh
+  flags --title="x"[quoted] --body="y"[quoted]
+  pos "pr" "create"
+cmd 17:1 name="gh" tool=gh
+  flags -f="title=x"
+  pos "api" "repos/o/r/issues"

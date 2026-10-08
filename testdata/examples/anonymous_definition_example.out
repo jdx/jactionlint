@@ -1,0 +1,2 @@
+test.yaml:1:1: workflow has no "name:", so GitHub shows its file path in the Actions UI. add a top-level "name:" to make the workflow recognizable [anonymous-definition]
+test.yaml:3:3: job "build" has no "name:", so the Actions UI shows only its ID. add a "name:" to describe what the job does [anonymous-definition]

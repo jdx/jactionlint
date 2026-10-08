@@ -1,0 +1,13 @@
+echo "A=1" >> $GITHUB_ENV
+echo "A=1" >>"$GITHUB_ENV"
+echo "A=1" >> "${GITHUB_ENV}"
+echo "A=1" >${GITHUB_ENV}
+echo "A=1" >| $GITHUB_ENV
+echo "A=1" &>> "$GITHUB_ENV"
+echo "A=1" 2>&1 >> $GITHUB_ENV
+printf 'A=%s\n' "$X" >> $GITHUB_PATH
+echo "k=v" >> $GITHUB_OUTPUT
+echo "s=v" >> $GITHUB_STATE
+echo A=1 | tee -a "$GITHUB_ENV" > /dev/null
+echo A=1 | sudo tee --append $GITHUB_ENV
+echo A=1 | tee $GITHUB_ENV

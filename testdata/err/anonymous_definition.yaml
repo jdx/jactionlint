@@ -1,0 +1,15 @@
+on: push
+jobs:
+  # No name
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo build
+  named:
+    name: A named job
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo named
+  # Calling a reusable workflow is not reported
+  call:
+    uses: octo-org/octo-repo/.github/workflows/reusable.yaml@main

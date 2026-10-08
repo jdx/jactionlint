@@ -79,6 +79,16 @@ func (c *Config) ruleOptionNumber(id, name string) (float64, bool) {
 	return 0, false
 }
 
+// ruleOptionStrings returns the value of an option which is a list of strings.
+func (c *Config) ruleOptionStrings(id, name string) []string {
+	v, ok := c.RuleOption(id, name)
+	if !ok {
+		return nil
+	}
+	ss, _ := v.([]string)
+	return ss
+}
+
 // normalizeRules validates the "rules" mapping against the registry and fills in the default level of
 // the rules which are configured with options only.
 func (c *Config) normalizeRules() error {
@@ -163,6 +173,23 @@ func normalizeOption(opt RuleOption, v any) (any, error) {
 			ret[k] = s
 		}
 		return ret, nil
+	case RuleOptionStrings:
+		items, ok := v.([]any)
+		if !ok {
+			if ss, ok := v.([]string); ok {
+				return slices.Clone(ss), nil
+			}
+			return nil, fmt.Errorf("it must be a list of strings")
+		}
+		ss := make([]string, 0, len(items))
+		for _, it := range items {
+			s, ok := it.(string)
+			if !ok {
+				return nil, fmt.Errorf("it must be a list of strings")
+			}
+			ss = append(ss, s)
+		}
+		return ss, nil
 	}
 	return nil, fmt.Errorf("unsupported option kind %q", opt.Kind)
 }

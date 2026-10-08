@@ -1,0 +1,5 @@
+cmd 1:1 name="mkdir"
+  pos "fixture"
+cmd 2:1 name="cat"
+redirect 2:5 op=">" fd="" target="fixture/mise.toml" append=false write=true
+redirect 2:25 op="<<" fd="" target="EOF"[quoted] append=false write=false heredoc(delim="EOF" quoted=true tabs=false exprs=0 lines=2)

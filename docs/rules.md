@@ -25,13 +25,17 @@ rules:
 
 | ID | Group | Default level | Profile |
 | --- | --- | --- | --- |
+| [anonymous-definition](#anonymous-definition) | policy | warn | strict |
 | [artipacked](#artipacked) | security | warn | strict |
 | [cache-poisoning](#cache-poisoning) | security | warn | strict |
+| [concurrency-limits](#concurrency-limits) | policy | warn | strict |
 | [conflicting-runner-labels](#conflicting-runner-labels) | correctness | error | default |
 | [constant-condition](#constant-condition) | correctness | error | default |
 | [context-availability](#context-availability) | correctness | error | default |
 | [cron-too-frequent](#cron-too-frequent) | correctness | error | default |
 | [cyclic-job-needs](#cyclic-job-needs) | correctness | error | default |
+| [dangerous-triggers](#dangerous-triggers) | security | warn | strict |
+| [dependabot-syntax](#dependabot-syntax) | correctness | error | default |
 | [deprecated-action-input](#deprecated-action-input) | correctness | error | default |
 | [deprecated-commands](#deprecated-commands) | correctness | error | default |
 | [duplicate-job-id](#duplicate-job-id) | correctness | error | default |
@@ -41,9 +45,11 @@ rules:
 | [excessive-permissions](#excessive-permissions) | security | warn | strict |
 | [expression-syntax](#expression-syntax) | correctness | error | default |
 | [expression-type](#expression-type) | correctness | error | default |
+| [forbidden-uses](#forbidden-uses) | policy | error | only when configured |
 | [github-app](#github-app) | security | warn | strict |
 | [hardcoded-container-credentials](#hardcoded-container-credentials) | security | error | default |
 | [if-always-true](#if-always-true) | correctness | error | default |
+| [insecure-commands](#insecure-commands) | security | error | default |
 | [invalid-activity-type](#invalid-activity-type) | correctness | error | default |
 | [invalid-cron](#invalid-cron) | correctness | error | default |
 | [invalid-env-var-name](#invalid-env-var-name) | correctness | error | default |
@@ -75,15 +81,20 @@ rules:
 | [missing-workflow-input](#missing-workflow-input) | correctness | error | default |
 | [missing-workflow-secret](#missing-workflow-secret) | correctness | error | default |
 | [outdated-action-runner](#outdated-action-runner) | correctness | error | default |
+| [overprovisioned-secrets](#overprovisioned-secrets) | security | warn | strict |
 | [pyflakes](#pyflakes) | correctness | error | default |
 | [recursive-alias](#recursive-alias) | correctness | error | default |
 | [require-expression-wrapping](#require-expression-wrapping) | style | error | all |
 | [require-shell](#require-shell) | style | error | all |
 | [required-actions](#required-actions) | policy | error | only when configured |
+| [secrets-inherit](#secrets-inherit) | security | warn | default |
+| [secrets-outside-env](#secrets-outside-env) | security | warn | all |
+| [self-hosted-runner](#self-hosted-runner) | security | info | all |
 | [self-repository](#self-repository) | security | info | strict |
 | [shellcheck](#shellcheck) | correctness | error | default |
 | [template-injection](#template-injection) | security | error | default |
 | [timeout-too-long](#timeout-too-long) | policy | error | only when configured |
+| [typosquat-uses](#typosquat-uses) | security | warn | strict |
 | [undefined-function](#undefined-function) | correctness | error | default |
 | [undefined-job-needs](#undefined-job-needs) | correctness | error | default |
 | [undefined-property](#undefined-property) | correctness | error | default |
@@ -95,6 +106,8 @@ rules:
 | [unknown-workflow-secret](#unknown-workflow-secret) | correctness | error | default |
 | [unpinned-images](#unpinned-images) | security | warn | strict |
 | [unpinned-uses](#unpinned-uses) | policy | error | strict |
+| [unredacted-secrets](#unredacted-secrets) | security | warn | strict |
+| [unsound-contains](#unsound-contains) | security | warn | default |
 | [unsound-ternary](#unsound-ternary) | correctness | error | default |
 | [unused-anchor](#unused-anchor) | correctness | error | default |
 | [unused-ignore](#unused-ignore) | policy | error | strict |
@@ -103,6 +116,16 @@ rules:
 | [workflow-run-names](#workflow-run-names) | correctness | error | default |
 | [workflow-syntax](#workflow-syntax) | correctness | error | default |
 | [yaml-syntax](#yaml-syntax) | correctness | error | default |
+
+## anonymous-definition
+
+A workflow has no top-level name:.
+
+- Group: policy
+- Default level: warn
+- Profile: strict
+- Fixable: yes
+- Details and examples: [checks](./checks.md#check-anonymous-definition)
 
 ## artipacked
 
@@ -122,6 +145,15 @@ A cache is restored in a release job or written by a privileged trigger.
 - Default level: warn
 - Profile: strict
 - Details and examples: [checks](./checks.md#check-cache-poisoning)
+
+## concurrency-limits
+
+A workflow does not cancel superseded runs with concurrency:.
+
+- Group: policy
+- Default level: warn
+- Profile: strict
+- Details and examples: [checks](./checks.md#check-concurrency-limits)
 
 ## conflicting-runner-labels
 
@@ -167,6 +199,24 @@ Jobs depend on each other in a cycle.
 - Default level: error
 - Profile: default
 - Details and examples: [checks](./checks.md#check-job-deps)
+
+## dangerous-triggers
+
+A workflow uses pull_request_target, workflow_run or issue_comment.
+
+- Group: security
+- Default level: warn
+- Profile: strict
+- Details and examples: [checks](./checks.md#check-dangerous-triggers)
+
+## dependabot-syntax
+
+The Dependabot configuration does not follow the syntax of dependabot.yml.
+
+- Group: correctness
+- Default level: error
+- Profile: default
+- Details and examples: [checks](./checks.md#check-dependabot-syntax)
 
 ## deprecated-action-input
 
@@ -250,6 +300,17 @@ A ${{ }} expression has a type error.
 - Profile: default
 - Details and examples: [checks](./checks.md#check-type-check-expression)
 
+## forbidden-uses
+
+An action or reusable workflow is not allowed or is denied by the configuration.
+
+- Group: policy
+- Default level: error
+- Profile: only when configured
+- Option `allow` (strings, no default; the rule does nothing without it): Patterns of the only actions and reusable workflows which may be used, e.g. "actions/*". The rule does nothing without allow or deny.
+- Option `deny` (strings, no default; the rule does nothing without it): Patterns of actions and reusable workflows which must not be used.
+- Details and examples: [checks](./checks.md#check-forbidden-uses)
+
 ## github-app
 
 A GitHub App token is issued with more access or a longer life than needed.
@@ -276,6 +337,16 @@ An if: condition is always true because of the characters around ${{ }}.
 - Default level: error
 - Profile: default
 - Details and examples: [checks](./checks.md#if-cond-constant)
+
+## insecure-commands
+
+ACTIONS_ALLOW_UNSECURE_COMMANDS enables the deprecated set-env and add-path commands.
+
+- Group: security
+- Default level: error
+- Profile: default
+- Fixable: yes
+- Details and examples: [checks](./checks.md#check-insecure-commands)
 
 ## invalid-activity-type
 
@@ -556,6 +627,15 @@ An action runs on a runtime which GitHub Actions no longer supports.
 - Profile: default
 - Details and examples: [checks](./checks.md#detect-outdated-popular-actions)
 
+## overprovisioned-secrets
+
+An expression uses the whole secrets context.
+
+- Group: security
+- Default level: warn
+- Profile: strict
+- Details and examples: [checks](./checks.md#check-overprovisioned-secrets)
+
 ## pyflakes
 
 pyflakes reported an issue in a Python script.
@@ -600,6 +680,34 @@ An action listed in required-actions is not used by a workflow.
 - Default level: error
 - Profile: only when configured
 
+## secrets-inherit
+
+A reusable workflow is called with secrets: inherit.
+
+- Group: security
+- Default level: warn
+- Profile: default
+- Details and examples: [checks](./checks.md#check-secrets-inherit)
+
+## secrets-outside-env
+
+A job uses a secret but has no environment.
+
+- Group: security
+- Default level: warn
+- Profile: all
+- Option `allow` (strings, no default; the rule does nothing without it): Names of secrets which may be used outside of an environment. GITHUB_TOKEN is always allowed.
+- Details and examples: [checks](./checks.md#check-secrets-outside-env)
+
+## self-hosted-runner
+
+A job runs on a self-hosted runner.
+
+- Group: security
+- Default level: info
+- Profile: all
+- Details and examples: [checks](./checks.md#check-self-hosted-runner)
+
 ## self-repository
 
 A local action or workflow is referenced as ./path instead of $/path.
@@ -637,6 +745,16 @@ timeout-minutes of a job exceeds the configured maximum.
 - Profile: only when configured
 - Option `max` (number, no default; the rule does nothing without it): The maximum allowed timeout-minutes. The rule does nothing without it.
 - Details and examples: [checks](./checks.md#check-timeout-minutes)
+
+## typosquat-uses
+
+An action is one typo away from a popular action of another owner.
+
+- Group: security
+- Default level: warn
+- Profile: strict
+- Option `allow` (strings, no default; the rule does nothing without it): Slugs (owner/repo) of actions which are never reported, e.g. a legitimate fork.
+- Details and examples: [checks](./checks.md#check-typosquat-uses)
 
 ## undefined-function
 
@@ -739,6 +857,24 @@ An action, reusable workflow or Docker image is not pinned to a commit SHA or di
 - Profile: strict
 - Option `policies` (string-map, default empty): How strongly to pin the actions matching a pattern: hash-pin (full commit SHA, the default for everything), ref-pin (any tag, branch or SHA) or any. The most specific pattern wins. Patterns are "*", "owner/*", "owner/repo" and "owner/repo/path". Docker images follow the "*" policy.
 - Details and examples: [checks](./checks.md#check-action-format)
+
+## unredacted-secrets
+
+A secret is parsed with fromJSON(), so the fields of it are not redacted in logs.
+
+- Group: security
+- Default level: warn
+- Profile: strict
+- Details and examples: [checks](./checks.md#check-unredacted-secrets)
+
+## unsound-contains
+
+A condition uses contains() on a string literal, which also matches substrings.
+
+- Group: security
+- Default level: warn
+- Profile: default
+- Details and examples: [checks](./checks.md#check-unsound-contains)
 
 ## unsound-ternary
 

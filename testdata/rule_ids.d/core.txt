@@ -3,6 +3,7 @@ constant-condition
 context-availability
 cron-too-frequent
 cyclic-job-needs
+dependabot-syntax
 deprecated-action-input
 deprecated-commands
 duplicate-job-id

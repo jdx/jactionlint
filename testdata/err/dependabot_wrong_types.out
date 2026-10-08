@@ -1,0 +1,8 @@
+.github/dependabot.yml:4:5: "updates" item is scalar node but mapping node is expected [syntax-check]
+.github/dependabot.yml:5:24: expected scalar node for string value but found sequence node with "!!seq" tag [syntax-check]
+.github/dependabot.yml:6:16: expected scalar node for string value but found mapping node with "!!map" tag [syntax-check]
+.github/dependabot.yml:7:15: "schedule" section is scalar node but mapping node is expected [syntax-check]
+.github/dependabot.yml:8:12: "allow" section must be sequence node but got scalar node with "!!str" tag [syntax-check]
+.github/dependabot.yml:11:19: "versions" section must be sequence node but got scalar node with "!!str" tag [syntax-check]
+.github/dependabot.yml:12:17: registry "1" is not defined in "registries" section [syntax-check]
+.github/dependabot.yml:14:7: "groups" section is sequence node but mapping node is expected [syntax-check]

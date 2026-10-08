@@ -1,0 +1,4 @@
+expr 1:7 "secrets.MINISIGN_KEY"
+cmd 1:1 name="echo"
+  pos "${{ secrets.MINISIGN_KEY }}"[expr quoted]
+redirect 1:36 op=">" fd="" target="minisign.key" append=false write=true

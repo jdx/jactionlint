@@ -1,0 +1,2 @@
+cmd 1:1 name="Add-Content"
+  pos "$env:GITHUB_PATH"[var:env] "$env:GITHUB_WORKSPACE\\target\\debug"[var:env quoted]

@@ -1,0 +1,31 @@
+cmd 1:4 name="["
+  flags -z
+  pos "$(git ls-files -- '*aube-lock.yaml')"[subst quoted] "]"
+cmd 1:12 name="git"
+  pos "ls-files" "*aube-lock.yaml"[quoted]
+cmd 2:3 name="echo"
+  pos "no aube-lock.yaml in this repo, nothing to do"[quoted]
+cmd 3:3 name="echo"
+  pos "found=false"[quoted]
+cmd 4:3 name="exit"
+  pos "0"
+cmd 6:1 name="echo"
+  pos "found=true"[quoted]
+cmd 7:12 name="git" pipe=1/2
+  pos "ls-files" "*aube-lock.yaml"[quoted]
+cmd 7:48 name="xargs" pipe=2/2
+  flags -n1
+  pos "dirname"
+cmd 8:3 name="echo"
+  pos "regenerating aube-lock.yaml in $d"[var:d quoted]
+cmd 9:4 name="cd"
+  pos "$d"[var:d quoted]
+cmd 9:15 name="mise"
+  pos "x" "aube" "install" "--no-frozen-lockfile"
+cmd 9:63 name="exit"
+  pos "1"
+pipeline 7:12 stages=2 negated=false
+redirect 3:22 op=">>" fd="" target="$GITHUB_OUTPUT"[var:GITHUB_OUTPUT quoted] append=true write=true
+redirect 6:19 op=">>" fd="" target="$GITHUB_OUTPUT"[var:GITHUB_OUTPUT quoted] append=true write=true
+writes GITHUB_OUTPUT at 3:22 append=true producers=1 exprs=[]
+writes GITHUB_OUTPUT at 6:19 append=true producers=1 exprs=[]

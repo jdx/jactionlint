@@ -1,0 +1,28 @@
+updates:
+  # ERROR: package-ecosystem is missing
+  - directory: "/"
+    schedule:
+      interval: daily
+  # ERROR: directory and directories are missing
+  - package-ecosystem: cargo
+    schedule:
+      interval: daily
+  # ERROR: schedule is missing
+  - package-ecosystem: gomod
+    directory: "/"
+  - package-ecosystem: pip
+    directory: "/"
+    schedule:
+      # ERROR: interval is missing
+      day: monday
+  - package-ecosystem: docker
+    directories: ["/a"]
+    schedule:
+      # ERROR: cronjob is missing for the interval "cron"
+      interval: cron
+    ignore:
+      # ERROR: dependency-name is missing
+      - versions: ["1.x"]
+    allow:
+      # ERROR: neither dependency-name nor dependency-type is given
+      - {}
