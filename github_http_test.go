@@ -783,8 +783,7 @@ func TestHTTPClientCommitOnAnyBranch(t *testing.T) {
 			fmt.Fprint(w, `{"data":{"repository":null},"errors":[{"message":"Could not resolve to a Repository"}]}`)
 		})
 		_, err := f.client(httpGitHubOptions{Token: "tok"}).CommitOnAnyBranch(ctx, "o", "r", sha, 10)
-		var se *GitHubStatusError
-		if !errors.As(err, &se) || !strings.Contains(err.Error(), "Could not resolve") {
+		if !errors.Is(err, ErrGitHubBranchScanUnavailable) || !strings.Contains(err.Error(), "Could not resolve") {
 			t.Errorf("got %v", err)
 		}
 	})
