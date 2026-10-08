@@ -827,12 +827,12 @@ func planTemplateInjectionFixes(in tiFixInput) map[int]*Fix {
 					name = reuseEnvName(in.ctx.step.Env, key)
 					if name == "" {
 						name = uniqueEnvName(envNameFor(c.path), taken)
-						newVars = append(newVars, fmt.Sprintf("%s: ${{ %s }}", name, c.text))
+						newVars = append(newVars, name+": "+RenderYAMLValue("${{ "+c.text+" }}"))
 					}
 					defined[key] = name
 				}
 			}
-			repl, ok := shellReplacement(c.place.Quote, name, in.str.Quoted)
+			repl, ok := shellReplacement(c.place.Quote, name)
 			if !ok {
 				continue
 			}
@@ -842,6 +842,14 @@ func planTemplateInjectionFixes(in tiFixInput) map[int]*Fix {
 				in.idx.matches(start-1, "'") && in.idx.matches(end, "'") {
 				// '${{ x }}' is the whole single quoted word: replace the quotes too
 				repl, start, end = `"${`+name+`}"`, start-1, end+1
+			}
+			// The text goes into a YAML scalar: escape it for the way the scalar is written
+			site, ok := YAMLSiteAt(in.idx.src, start)
+			if !ok {
+				continue
+			}
+			if repl, ok = site.Insert(repl); !ok {
+				continue
 			}
 			edits = append(edits, TextEdit{start, end, repl})
 			starts = append(starts, c.span.Start)
@@ -928,7 +936,7 @@ func uniqueEnvName(base string, taken map[string]bool) string {
 }
 
 // shellReplacement is the text which replaces a placeholder so that the shell expands the variable.
-func shellReplacement(q shQuote, name string, yamlQuoted bool) (string, bool) {
+func shellReplacement(q shQuote, name string) (string, bool) {
 	var r string
 	switch q {
 	case shDouble:
@@ -937,9 +945,6 @@ func shellReplacement(q shQuote, name string, yamlQuoted bool) (string, bool) {
 		r = `"${` + name + `}"`
 	case shSingle:
 		r = `'"${` + name + `}"'`
-	}
-	if yamlQuoted && strings.ContainsAny(r, `"'\`) {
-		return "", false // would need YAML escapes
 	}
 	return r, true
 }

@@ -283,9 +283,17 @@ func TestTemplateInjectionFixes(t *testing.T) {
 			safe: "      - run: echo \"${{ github.event.issue.title }}\"\n        shell: bash -c '{0}'\n",
 		},
 		{
-			name: "yaml quoted string with quotes in the replacement",
-			step: "      - run: \"echo ${{ github.event.issue.title }}\"\n",
-			safe: "      - run: \"echo ${{ github.event.issue.title }}\"\n",
+			// The quotes of the replacement are escaped for the double quoted YAML scalar
+			name:   "yaml quoted string with quotes in the replacement",
+			step:   "      - run: \"echo ${{ github.event.issue.title }}\"\n",
+			safe:   "      - run: \"echo ${{ github.event.issue.title }}\"\n",
+			unsafe: "      - run: \"echo \\\"${ISSUE_TITLE}\\\"\"\n        env:\n          ISSUE_TITLE: ${{ github.event.issue.title }}\n",
+		},
+		{
+			name:   "single quoted yaml string",
+			step:   "      - run: 'echo ${{ github.event.issue.title }}'\n",
+			safe:   "      - run: 'echo ${{ github.event.issue.title }}'\n",
+			unsafe: "      - run: 'echo \"${ISSUE_TITLE}\"'\n        env:\n          ISSUE_TITLE: ${{ github.event.issue.title }}\n",
 		},
 		{
 			name: "yaml quoted string keeps working",
