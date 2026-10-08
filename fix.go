@@ -126,7 +126,8 @@ func (l *Linter) FixFiles(filepaths []string, project *Project, mode FixMode) (*
 		var changed []string
 		changedIdx := map[string]int{}
 		for i, r := range results {
-			out, n := applyFixes(r.src, r.errs, mode)
+			// Fixing pays the baseline down: baselined findings are fixed too
+			out, n := applyFixes(r.src, withBaselined(r), mode)
 			if n == 0 {
 				continue
 			}
@@ -156,12 +157,14 @@ func (l *Linter) FixFiles(filepaths []string, project *Project, mode FixMode) (*
 			res.Fixed = append(res.Fixed, f)
 		}
 	}
+	results = l.withBaselineResults(results)
 	for _, r := range results {
 		res.Errors = append(res.Errors, r.errs...)
 	}
 	if err := l.printer.print(l.out, results, l.notifications()); err != nil {
 		return nil, err
 	}
+	l.reportBaselineNote(results)
 	if res.Applied > 0 {
 		fmt.Fprintf(l.logOut, "Fixed %d problem(s) in %d file(s)\n", res.Applied, len(res.Fixed))
 	}
@@ -229,4 +232,15 @@ func (f *fixFlag) Set(v string) error {
 		return fmt.Errorf("invalid value %q. use -fix or -fix=unsafe", v)
 	}
 	return nil
+}
+
+// withBaselined returns the errors of the result including the ones the baseline accepts, in the order
+// of the file.
+func withBaselined(r fileResult) []*Error {
+	if len(r.baselined) == 0 {
+		return r.errs
+	}
+	all := append(slices.Clone(r.errs), r.baselined...)
+	slices.SortStableFunc(all, compareErrors)
+	return all
 }

@@ -86,6 +86,7 @@ jactionlint -shellcheck= -pyflakes=
 | `sarif`   | A [SARIF][sarif] 2.1.0 log with the rule metadata, levels, regions and fixes. Useful for code scanning and for tools like [hk](#hk).                                     |
 | `gcc`     | `file:line:col: severity: message [id]` like GCC. `severity` is `error`, `warning` or `note`.                                                                            |
 | `github`  | [Workflow commands][ga-annotate-error] (`::error file=...,line=...,col=...,title=<id>::message`) which GitHub shows as annotations. Use `warning` and `notice` for lower levels. |
+| `summary` | Counts instead of findings: how many per rule and per file, new ones and [baselined](#baseline) ones apart. Useful in CI logs and to plan the [adoption of a stricter configuration](#baseline). |
 
 Any other value which has `{{ }}` is a custom template in [Go template syntax][go-template] as explained below. The output of
 the structured formats goes to stdout and the logs (including the deprecation warnings of the configuration) go to stderr, so the
@@ -268,6 +269,8 @@ Note that special characters escaped with backslash like `\n` in the format stri
 | `2`    | The command failed due to invalid command line option                                        |
 | `3`    | The command failed due to some fatal error                                                   |
 
+With a [baseline](#baseline) the findings it accepts do not count.
+
 Only the errors whose level is `error` count as problems. Every rule is an `error` unless [the configuration](config.md#rules)
 lowers it, so the exit status is `1` whenever something is reported by default. The findings of `warn` and `info` level are
 printed but the exit status stays `0` unless `-strict-exit` is given. `-min-severity warn` (or `error`) hides the findings
@@ -277,6 +280,102 @@ below the level.
 jactionlint -strict-exit                # warnings and infos fail, too
 jactionlint -min-severity error         # show only errors
 ```
+
+<a id="baseline"></a>
+### Adopt a stricter configuration with a baseline
+
+The default profile is strict, so the first run on a repository with many workflows can report hundreds of findings. A baseline
+lets you adopt the checks without fixing everything first: it records today's findings, hides them, and fails the build only on
+findings that are new. Then you pay the debt down at your own pace.
+
+1. **See what you are facing.** `-format summary` prints counts per rule and per file instead of the findings:
+
+   ```sh
+   jactionlint -format summary
+   ```
+
+   ```
+   113 findings in 24 of 31 files
+
+   by rule                 findings
+   missing-timeout               61
+   template-injection            23
+   ...
+   ```
+
+2. **Write the baseline.**
+
+   ```sh
+   jactionlint -baseline-write
+   ```
+
+   This lints the whole repository (like running without arguments) and writes `.github/jactionlint-baseline.json`. It exits
+   with `0`. Use `-baseline-write=FILE` for another path. Write it in the environment your CI runs in: the same configuration,
+   `-online` if CI uses it, and the same `shellcheck` and `pyflakes`. A finding that your machine cannot produce (no
+   `shellcheck`, no `-online`) is not recorded, so CI would report it as new.
+
+3. **Commit it and apply it.** The baseline is only used when you ask for it, with the flag or with the configuration:
+
+   ```sh
+   jactionlint -baseline            # hides the findings of the baseline
+   ```
+
+   ```yaml
+   # .github/jactionlint.yaml
+   baseline: auto                   # use .github/jactionlint-baseline.json when the file exists
+   ```
+
+   `baseline` takes `auto` (or `true`), `false`, or the path of the file relative to the repository root (the file must exist
+   then). On the command line `-baseline` uses the default file, `-baseline=FILE` another one and `-baseline=false` ignores a
+   baseline that the configuration enables. With the baseline applied the exit status depends only on the findings that are not
+   in it, so the build fails on new findings and nothing else. The text formats print a note on stderr with the number of hidden
+   findings.
+
+4. **Ratchet down.** Fix findings (`jactionlint -fix` also fixes the baselined ones), then shrink the file:
+
+   ```sh
+   jactionlint -baseline-write      # drops the entries of fixed findings
+   ```
+
+   `-baseline-check` lists the entries which match nothing any more as [`unused-baseline-entry`](rules.md#unused-baseline-entry)
+   findings located in the baseline file. They are `info`, so they are only shown. To make the build fail until the file is
+   shrunk, set the level in the configuration:
+
+   ```yaml
+   rules:
+     unused-baseline-entry: error
+   ```
+
+   and run `jactionlint -baseline-check` in CI. A baseline can only get smaller this way: a fixed finding leaves an unused
+   entry, a new finding is reported, and the one thing that cannot happen is a silent regression.
+
+How an entry matches a finding, so that you know what an edit does to the baseline:
+
+- An entry is the file, the rule ID, a fingerprint and an occurrence index, **not a line number**. Adding a step, moving a job
+  or reformatting does not resurrect baselined findings, and `-baseline-write` after an unrelated edit gives the same file
+  byte for byte (CRLF and LF checkouts are the same, too).
+- The fingerprint is a hash of the rule, the enclosing job (or top-level key), the whitespace-normalized source line of the
+  finding and the normalized message. **Editing the line of a finding makes it new again**, which is the point: the changed
+  code is reviewed. Changing the name of a job does the same for its findings.
+- Identical findings in one job (the same line twice) are told apart by their order. The baseline accepts as many as it
+  recorded; a third one is new, and fixing one leaves one unused entry.
+- A finding that only changed because a release rewords the message of its rule still matches (the file also stores a hash
+  without the message), so upgrading does not resurrect anything. Rewriting the baseline refreshes the messages.
+- **A renamed file loses its entries**: they are keyed by the path relative to the repository root. The findings of the new
+  path are reported and the old entries are unused. Run `jactionlint -baseline-write` after the rename (it follows the rename
+  and is the only step needed).
+- `-baseline-write file1.yaml file2.yaml` refreshes only the entries of those files and keeps the entries of the other files
+  that still exist; it is what a pre-commit hook can run for the changed files.
+- The baseline records the findings after `-ignore`, the `ignore` configuration, inline ignore comments, rules that are `off`
+  and `-min-severity`, so change these first and write the baseline last. It never records `unused-baseline-entry`.
+- Entries of rules that this run cannot reproduce (an `-online` rule without `-online`, `shellcheck` or `pyflakes` that is not
+  installed, a rule that is `off`) are not reported as unused, because nothing says they are fixed.
+- `-format sarif` keeps the baselined findings in the log as results with a `suppressions` entry of kind `external`, which
+  GitHub code scanning shows as closed. `-sarif-hide-baselined` leaves them out, for tools like [hk](#hk) that do not read
+  suppressions. `-format summary` counts them as baselined. The other formats do not print them.
+
+`-baseline` and `-baseline-write` do not take the file as a separate argument: write `-baseline=FILE`, because a following
+argument is a workflow file to check.
 
 ### Fix errors automatically
 
@@ -381,6 +480,16 @@ runs when a finding has no fix. Add this step to `hk.pkl`:
   on stdout, and nothing is on stderr unless `-verbose` or `-debug` is given, because hk parses both together. The
   deprecation warnings of the configuration are put in `invocations[].toolConfigurationNotifications` of the log instead of
   stderr in this format.
+- To adopt the checks gradually, record a [baseline](#baseline) and apply it in the commands. hk parses the SARIF log and does
+  not know suppressions, so leave the baselined findings out of it:
+
+  ```pkl
+  check = "jactionlint -baseline -sarif-hide-baselined -format sarif {{files}}"
+  check_diff = "hk util sarif-diff -- jactionlint -baseline -sarif-hide-baselined -format sarif {{files}}"
+  ```
+
+  or set `baseline: auto` in the configuration and pass only `-sarif-hide-baselined`. Refresh the file with
+  `jactionlint -baseline-write` (not through hk) when you pay findings down.
 - To use the `strict` profile, set `profile: strict` in `.github/jactionlint.yaml`.
 - `missing-timeout` is in the default profile, so the first `hk check` on a repository whose jobs have no `timeout-minutes` fails
   on every job. Its fix exists only when `rules.missing-timeout.default-minutes` is set (there is no built-in

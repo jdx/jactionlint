@@ -122,6 +122,7 @@ rules:
 | [unsound-contains](#unsound-contains) | security | warn | default |
 | [unsound-ternary](#unsound-ternary) | correctness | error | default |
 | [unused-anchor](#unused-anchor) | correctness | error | default |
+| [unused-baseline-entry](#unused-baseline-entry) | policy | info | default |
 | [unused-ignore](#unused-ignore) | policy | error | strict |
 | [workflow-call-permissions](#workflow-call-permissions) | correctness | error | default |
 | [workflow-input-type](#workflow-input-type) | correctness | error | default |
@@ -1029,6 +1030,14 @@ A YAML anchor is defined but never used.
 - Default level: error
 - Profile: default
 - Details and examples: [checks](./checks.md#yaml-anchors)
+
+## unused-baseline-entry
+
+A baseline entry matches no finding any more, so the baseline can shrink.
+
+- Group: policy
+- Default level: info
+- Profile: default
 
 ## unused-ignore
 

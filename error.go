@@ -55,6 +55,10 @@ type Error struct {
 	// Fix is an automatic correction for the error. It is nil when the error cannot be fixed
 	// mechanically.
 	Fix *Fix
+	// Baselined is true when the baseline file accepts the finding (see Config.Baseline). The linter
+	// does not return such errors from its methods or print them, except in the SARIF log (as
+	// suppressed results) and the summary format; it is set only on the way there.
+	Baselined bool
 }
 
 // Fix is an automatic correction for an Error. It is a list of edits to a single file. The edits

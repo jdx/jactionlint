@@ -59,12 +59,30 @@ are available. A custom Go template can be given too:
   * `-debug`:
     Enable debug output (for development)
 
+  * `-baseline`, `-baseline=`<FILE>, `-baseline=false`:
+    Hide the findings recorded in the baseline file (`.github/jactionlint-baseline.json` in the
+    repository by default). `-baseline=false` ignores a baseline which the configuration enables
+    (`baseline: auto`). The exit status counts only the findings which are not in the baseline.
+
+  * `-baseline-check`:
+    Report the baseline entries which match no finding any more as `unused-baseline-entry` (level
+    `info`). Implies `-baseline`.
+
+  * `-baseline-write`, `-baseline-write=`<FILE>:
+    Record the current findings as the baseline and exit with 0. With file arguments only the
+    entries of those files are refreshed. The file has no line numbers, so writing it again
+    without a change in the findings gives the same bytes. Write it in the environment of the CI.
+
   * `-fix`, `-fix=unsafe`:
     Apply the automatic fixes to the files and report what remains. `-fix=unsafe` also applies the
     fixes which may change the behavior of the workflow. Exits with 1 when an error remains.
 
+  * `-sarif-hide-baselined`:
+    Leave the findings accepted by the baseline out of `-format sarif`. By default they are in the
+    log as results with a suppression of the kind `external`.
+
   * `-format` <FORMAT>:
-    Output format: `text` (default), `oneline`, `json`, `jsonl`, `sarif`, `gcc` or `github`. A custom
+    Output format: `text` (default), `oneline`, `json`, `jsonl`, `sarif`, `gcc`, `github` or `summary`. A custom
     template in Go template syntax which has `{{ }}` is also accepted. See the usage documentation
     for more details.
 

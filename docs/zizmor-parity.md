@@ -283,3 +283,13 @@ in `default`.
 Behaviors of zizmor that were found only by this comparison, and are now reproduced: job names count for `anonymous-definition`;
 `concurrency-limits` skips workflows that only call reusable workflows; `secrets-outside-env` skips `workflow_call` workflows;
 `self-hosted-runner` reports the label only; `dangerous-triggers` exempts `actions/labeler` for `pull_request_target`.
+
+## Beyond zizmor
+
+Features of jactionlint that zizmor does not have.
+
+- **Baseline for gradual adoption** ([zizmor#2282](https://github.com/zizmorcore/zizmor/issues/2282), declined there). `jactionlint -baseline-write` records
+  the current findings and `-baseline` hides them, so a repository can adopt the stricter default and fail only on new findings.
+  Entries are keyed by file, rule ID and a fingerprint (not by line numbers), `unused-baseline-entry` and `-baseline-check` tell
+  when the baseline can shrink, `-format summary` counts findings per rule and file, and SARIF marks baselined results as
+  suppressed. See [the usage document](usage.md#baseline).

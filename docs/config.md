@@ -144,6 +144,10 @@ extends:
       matches it. It's similar to the `-ignore` command line option.
 - `online`: Turns on the [online checks](usage.md#online-checks) for the files this configuration applies to, like the `-online`
   flag does for the whole run. They query the GitHub API. The default is `false`: nothing uses the network.
+- `baseline`: Hides the findings recorded in a [baseline file](usage.md#baseline) so that a repository can adopt the checks
+  gradually. `auto` (or `true`) applies `.github/jactionlint-baseline.json` when the file exists, `false` or no key applies
+  no baseline, and any other value is the path of the baseline file relative to the repository root, which must exist. The
+  `-baseline` flag overrides it (`-baseline=false` turns it off). The file is written by `jactionlint -baseline-write`.
 - `profile`, `rules` and `extends`: See [Profiles](#profiles), [Rules](#rules) and [Extending config files](#extending-config-files).
 
 Unknown keys are errors. jactionlint reports the key with its position and suggests the closest known key when it looks
