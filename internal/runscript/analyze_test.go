@@ -892,3 +892,31 @@ func TestExpressionsInsideExpansions(t *testing.T) {
 		}
 	}
 }
+
+func TestPipelineTested(t *testing.T) {
+	for _, tc := range []struct {
+		src  string
+		want []bool // Tested of each pipeline in source order
+	}{
+		{"a | b", []bool{false}},
+		{"if a | b; then c; fi", []bool{true}},
+		{"if x; then y; elif a | b; then c; fi", []bool{true}},
+		{"while a | b; do c; done", []bool{true}},
+		{"until a | b; do c; done", []bool{true}},
+		{"a | b || true", []bool{true}},
+		{"c && a | b", []bool{true}},
+		{"a | b && c | d", []bool{true, true}},
+		{"if x; then a | b; fi", []bool{false}},
+		{"! a | b", []bool{false}},
+		{"for i in 1; do a | b; done", []bool{false}},
+	} {
+		s := mustAnalyze(t, tc.src)
+		var got []bool
+		for _, p := range s.Pipelines {
+			got = append(got, p.Tested)
+		}
+		if !reflect.DeepEqual(got, tc.want) {
+			t.Errorf("%q: Tested = %v, want %v", tc.src, got, tc.want)
+		}
+	}
+}

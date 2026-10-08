@@ -223,6 +223,9 @@ type Pipeline struct {
 	Loc
 	Stages  []*Stage
 	Negated bool
+	// Tested is whether the script looks at the exit status of the pipeline: it is the condition of `if`,
+	// `elif`, `while` or `until`, or an operand of `&&` or `||`. A failure is then not hidden but handled.
+	Tested bool
 }
 
 // Stage is one element of a pipeline. It is a single command or a compound command, so it can contain several
@@ -251,7 +254,7 @@ func (b *builder) pipeline(n *syntax.BinaryCmd) {
 		stmts = append(stmts, bc.Y)
 	}
 	flatten(n)
-	p := &Pipeline{Loc: b.s.loc(int(n.Pos().Offset()), int(n.End().Offset())), Negated: b.negated[n]}
+	p := &Pipeline{Loc: b.s.loc(int(n.Pos().Offset()), int(n.End().Offset())), Negated: b.negated[n], Tested: b.tested[n]}
 	b.s.Pipelines = append(b.s.Pipelines, p)
 	b.pending = append(b.pending, pendingPipeline{p, stmts})
 }
@@ -387,4 +390,16 @@ func (s *Script) WritesTo(varNames ...string) []*Write {
 		out = append(out, w)
 	}
 	return out
+}
+
+// markTested records the pipelines among the statements as tested.
+func (b *builder) markTested(stmts ...*syntax.Stmt) {
+	for _, st := range stmts {
+		if st == nil {
+			continue
+		}
+		if c, ok := st.Cmd.(*syntax.BinaryCmd); ok && isPipe(c.Op) {
+			b.tested[c] = true
+		}
+	}
 }

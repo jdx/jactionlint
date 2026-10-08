@@ -132,6 +132,7 @@ type builder struct {
 	// pipes whose chain is already collected by the outermost BinaryCmd; negated pipelines
 	seenPipe map[*syntax.BinaryCmd]bool
 	negated  map[*syntax.BinaryCmd]bool
+	tested   map[*syntax.BinaryCmd]bool // pipelines whose status is tested, see Pipeline.Tested
 	pending  []pendingPipeline
 	groups   []groupRedirect
 	done     map[syntax.Node]bool
@@ -148,6 +149,7 @@ func (b *builder) src(start, end int) string {
 func (b *builder) build(f *syntax.File) {
 	b.seenPipe = map[*syntax.BinaryCmd]bool{}
 	b.negated = map[*syntax.BinaryCmd]bool{}
+	b.tested = map[*syntax.BinaryCmd]bool{}
 	b.done = map[syntax.Node]bool{}
 	s := b.s
 	syntax.Walk(f, func(n syntax.Node) bool {
@@ -158,7 +160,14 @@ func (b *builder) build(f *syntax.File) {
 			b.call(n)
 		case *syntax.DeclClause:
 			b.decl(n)
+		case *syntax.IfClause:
+			b.markTested(n.Cond...)
+		case *syntax.WhileClause:
+			b.markTested(n.Cond...)
 		case *syntax.BinaryCmd:
+			if n.Op == syntax.AndStmt || n.Op == syntax.OrStmt {
+				b.markTested(n.X, n.Y)
+			}
 			if (n.Op == syntax.Pipe || n.Op == syntax.PipeAll) && !b.seenPipe[n] {
 				b.pipeline(n)
 			}
