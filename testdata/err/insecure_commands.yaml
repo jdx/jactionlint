@@ -1,0 +1,22 @@
+on: push
+
+env:
+  ACTIONS_ALLOW_UNSECURE_COMMANDS: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      ACTIONS_ALLOW_UNSECURE_COMMANDS: "True"
+      OTHER: value
+    steps:
+      - run: echo hello
+        env:
+          ACTIONS_ALLOW_UNSECURE_COMMANDS: 'true'
+      # Not enabled
+      - run: echo hello
+        env:
+          ACTIONS_ALLOW_UNSECURE_COMMANDS: "1"
+      - run: echo hello
+        env:
+          ACTIONS_ALLOW_UNSECURE_COMMANDS: false
