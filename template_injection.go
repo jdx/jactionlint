@@ -463,7 +463,8 @@ type tiTier int
 const (
 	// tiNone is an expression which is not worth a finding.
 	tiNone tiTier = iota
-	// tiDirect is an attacker controlled property. The expression rule reports it.
+	// tiDirect is an attacker controlled property. The expression rule reports it, unless the class
+	// has a Ref: the property was found by matchUntrusted only, which ignores the case.
 	tiDirect
 	// tiSubtree is an object which holds attacker controlled properties, e.g. toJSON(github.event).
 	tiSubtree
@@ -484,7 +485,7 @@ type tiClass struct {
 	Source string
 }
 
-// ID returns the rule ID of the finding. tiDirect and tiNone have none that this rule reports.
+// ID returns the rule ID of the finding. tiNone has none.
 func (t tiTier) ID() string {
 	switch t {
 	case tiDirect, tiSubtree, tiEnv:
