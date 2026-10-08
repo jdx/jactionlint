@@ -20,7 +20,13 @@ func cacheDisabledByExpression(v string) bool {
 	if !strings.Contains(v, "${{") {
 		return false
 	}
-	return strings.Contains(v, "refs/tags") || strings.Contains(v, "github.event_name") || strings.Contains(v, "github.ref_type")
+	return looksAtTrigger(v)
+}
+
+// looksAtTrigger reports whether the text mentions the event or the ref which started the run:
+// github.event_name, github.ref, github.ref_name, github.ref_type or a tag ref.
+func looksAtTrigger(v string) bool {
+	return strings.Contains(v, "github.event_name") || strings.Contains(v, "github.ref") || strings.Contains(v, "refs/tags")
 }
 
 // majorVersionRegex captures the major version of a tag such as v3.1.0.
@@ -267,7 +273,7 @@ func (rule *RuleCachePoisoning) VisitJobPre(n *Job) error {
 // stepCacheIsConditional reports whether the step or the cache setting depends on the trigger, which
 // is how a workflow caches outside of releases only.
 func stepCacheIsConditional(s *Step, a *ExecAction) bool {
-	if s.If != nil && (strings.Contains(s.If.Value, "github.event_name") || strings.Contains(s.If.Value, "github.ref")) {
+	if s.If != nil && looksAtTrigger(s.If.Value) {
 		return true
 	}
 	for _, in := range a.Inputs {

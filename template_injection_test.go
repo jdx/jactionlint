@@ -35,6 +35,11 @@ func TestTemplateInjectionTiers(t *testing.T) {
 		want []string
 	}{
 		{"direct", "      - run: echo '${{ github.event.issue.title }}'\n", []string{"template-injection"}},
+		{"dispatch input named id", "      - run: echo '${{ github.event.inputs.id }}'\n", []string{"template-injection-expansion"}},
+		{"dispatch input named sha", "      - run: echo '${{ github.event.inputs.sha }}'\n", []string{"template-injection-expansion"}},
+		{"dispatch input named number", "      - run: echo '${{ github.event.inputs.number }}'\n", []string{"template-injection-expansion"}},
+		{"client payload named sha", "      - run: echo '${{ github.event.client_payload.sha }}'\n", []string{"template-injection-expansion"}},
+		{"event id", "      - run: echo '${{ github.event.pull_request.id }}'\n", []string{"template-injection-trusted"}},
 		{"mixed-case property", "      - run: echo '${{ github.event.issue.Title }}'\n", []string{"template-injection"}},
 		{"mixed-case index", "      - run: echo \"${{ github.event.issue['Title'] }}\"\n", []string{"template-injection"}},
 		{"index", "      - run: echo \"${{ github.event.issue['title'] }}\"\n", []string{"template-injection"}},
@@ -258,6 +263,26 @@ func TestTemplateInjectionFixes(t *testing.T) {
 			safe: "      - run: echo \"${ISSUE_TITLE}\"\n        env:\n          ISSUE_TITLE: ${{ github.event.issue.title }}\n        shell: sh\n",
 		},
 		{
+			name: "bash template",
+			step: "      - run: echo \"${{ github.event.issue.title }}\"\n        shell: bash {0}\n",
+			safe: "      - run: echo \"${ISSUE_TITLE}\"\n        env:\n          ISSUE_TITLE: ${{ github.event.issue.title }}\n        shell: bash {0}\n",
+		},
+		{
+			name: "bash with options",
+			step: "      - run: echo \"${{ github.event.issue.title }}\"\n        shell: bash -eo pipefail {0}\n",
+			safe: "      - run: echo \"${ISSUE_TITLE}\"\n        env:\n          ISSUE_TITLE: ${{ github.event.issue.title }}\n        shell: bash -eo pipefail {0}\n",
+		},
+		{
+			name: "bash with long options",
+			step: "      - run: echo \"${{ github.event.issue.title }}\"\n        shell: bash --noprofile --norc -eo pipefail {0}\n",
+			safe: "      - run: echo \"${ISSUE_TITLE}\"\n        env:\n          ISSUE_TITLE: ${{ github.event.issue.title }}\n        shell: bash --noprofile --norc -eo pipefail {0}\n",
+		},
+		{
+			name: "a shell that is not understood",
+			step: "      - run: echo \"${{ github.event.issue.title }}\"\n        shell: bash -c '{0}'\n",
+			safe: "      - run: echo \"${{ github.event.issue.title }}\"\n        shell: bash -c '{0}'\n",
+		},
+		{
 			name: "yaml quoted string with quotes in the replacement",
 			step: "      - run: \"echo ${{ github.event.issue.title }}\"\n",
 			safe: "      - run: \"echo ${{ github.event.issue.title }}\"\n",
@@ -409,5 +434,18 @@ func TestTemplateInjectionFixContainerPaths(t *testing.T) {
 	want := "on: push\njobs:\n  j:\n    runs-on: ubuntu-latest\n    container: alpine\n    steps:\n      - run: echo \"${WORKSPACE} ${RUNNER_OS}\"\n        env:\n          WORKSPACE: ${{ github.workspace }}\n"
 	if diff := cmp.Diff(want, out); diff != "" {
 		t.Errorf("(-want +got): %s", diff)
+	}
+}
+
+func TestPosixShellTemplate(t *testing.T) {
+	for shell, want := range map[string]bool{
+		"bash": true, "sh": true, "BASH": true, "bash {0}": true, "bash -eo pipefail {0}": true,
+		"bash --noprofile --norc -eo pipefail {0}": true, "/bin/bash -e {0}": true, "dash {0}": true, "zsh {0}": true,
+		"": false, "pwsh": false, "pwsh -command \". '{0}'\"": false, "python {0}": false, "cmd /D /E:ON /V:OFF /S /C \"CALL \"{0}\"\"": false,
+		"bash -c '{0}'": false, "bash {0} -e": false, "bash $X {0}": false, "bash; rm {0}": false, "bash | cat {0}": false,
+	} {
+		if got := posixShellTemplate(shell); got != want {
+			t.Errorf("posixShellTemplate(%q) = %v, want %v", shell, got, want)
+		}
 	}
 }
