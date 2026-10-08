@@ -382,6 +382,7 @@ compare the findings (message, `warning: `/`info: ` prefix and kind) with the ou
   (give a job `runs-on`, pin `uses:` and so on).
 - A rule which is off by default (opt-in): the playground cannot enable it. Put `<!-- Skip update output -->` after
   `Output:` and `<!-- Skip playground link -->` instead of the link, write the output by hand, and show the `rules:` section of
-  the configuration file that produces it right after the example.
+  the configuration file that produces it right after the example. A Go test (`TestPolicyDocsExamples` for the policy rules) lints
+  the example with that configuration and compares the output, so the hand-written output cannot go stale.
 
 The tests count the permalinks in the document themselves, so there is no number to update when a section is added.
