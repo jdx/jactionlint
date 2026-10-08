@@ -460,6 +460,7 @@ func TestFixFlag(t *testing.T) {
 			t.Errorf("Set(%q): %v %v", in, f.mode, err)
 		}
 	}
+	f.Set("false")
 	if f.String() != "false" {
 		t.Error(f.String())
 	}

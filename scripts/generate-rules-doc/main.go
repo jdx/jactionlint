@@ -44,7 +44,7 @@ Each rule has:
 - a **group**: ` + "`correctness`" + ` (mistakes which make a workflow fail or misbehave), ` + "`security`" + ` (insecure constructs), ` + "`policy`" + `
   (good practices which are not mistakes by themselves) or ` + "`style`" + `.
 - a **default level**: ` + "`error`" + `, ` + "`warn`" + ` or ` + "`info`" + `. Only errors make jactionlint exit with status 1 unless ` + "`-strict-exit`" + ` is given.
-- a **profile**: the first [profile](./config.md#profile) which enables the rule. ` + "`default`" + ` is used when no profile is configured, and
+- a **profile**: the first [profile](./config.md#profiles) which enables the rule. ` + "`default`" + ` is used when no profile is configured, and
   ` + "`strict`" + ` and ` + "`all`" + ` include the rules of the profiles before them. Rules which no profile enables run only when the
   configuration turns them on.
 

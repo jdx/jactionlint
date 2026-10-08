@@ -61,8 +61,11 @@ paths:
   # Glob pattern relative to the repository root for matching files. The path separator is always '/'.
   # This example configures any YAML file under the '.github/workflows/' directory.
   .github/workflows/**/*.{yml,yaml}:
-    # List of regular expressions to filter errors by the error messages.
+    # List of rule IDs and regular expressions to filter errors. A rule ID ignores all errors of the rule, and a
+    # regular expression is matched to the error messages.
     ignore:
+      # Ignore all errors of the rule
+      - unpinned-uses
       # Ignore the specific error from shellcheck
       - 'shellcheck reported issue in this script: SC2086:.+'
   # This pattern only matches '.github/workflows/release.yaml' file.
@@ -71,31 +74,27 @@ paths:
       # Ignore errors from the old runner check. This may be useful for (outdated) self-hosted runner environment.
       - 'the runner of ".+" action is too old to run on GitHub Actions'
 
-# Configuration for the opt-in check of 'timeout-minutes' at jobs.
-timeout-minutes:
-  # Require every job to set 'timeout-minutes'.
-  required: true
-  # Maximum allowed value of 'timeout-minutes' in minutes.
-  max: 60
+# Profile: the set of rules which are enabled. 'default', 'strict' or 'all'. (default: default)
+profile: strict
 
-# Require actions to be pinned to commit hashes instead of tags/branches
-require-commit-hash: true
-# Require explicit permissions at workflow-level or job-level
-require-permissions: true
-# Report local actions used before any checkout step in the same job
-require-checkout-before-local-action: true
-# Require `if:` conditions to be wrapped in `${{ }}`
-require-expression-wrapping: true
-# Report `cond && '' || other` where the value after `&&` is always falsy
-check-falsy-ternary: true
-# Report workflow names at 'on.workflow_run.workflows' which do not exist in the repository
-check-workflow-run-names: true
+# The level of each rule by its ID: 'error', 'warn', 'info' or 'off'. See https://jactionlint.jdx.dev/rules
+rules:
+  # Lower the level of a rule enabled by the profile
+  unpinned-uses: warn
+  # Turn a rule off
+  missing-permissions: off
+  # Turn on a rule which the profile does not enable
+  require-shell: error
+  # A rule with options takes a mapping
+  max-run-lines:
+    level: warn
+    max: 30
+  timeout-too-long:
+    max: 60
 
-# Require every 'run:' step to set a shell explicitly with 'shell:' (or 'defaults.run.shell'). (default: false)
-require-shell: true
-
-# Maximum number of non-blank lines allowed in a 'run:' script. 0 disables the check. (default: 0)
-max-run-lines: 30
+# Config files to inherit from. Relative paths are resolved from this file. Later files win.
+extends:
+  - ../shared/jactionlint.yaml
 ```
 
 - `self-hosted-runner`: Configuration for your self-hosted runner environment.
@@ -107,11 +106,6 @@ max-run-lines: 30
     This is useful when all jobs must run on your own runners, or when your runners (e.g. Actions Runner Controller runner
     sets) do not have the default `self-hosted` label. Label conflict checks still apply to listed built-in labels. The default
     is `false`.
-- `require-shell`: When `true`, every `run:` step must have an explicit shell by `shell:` of the step or `defaults.run.shell` of
-  the job or the workflow. When omitted, GitHub Actions runs `bash -e {0}` on Linux/macOS, which differs from `shell: bash`
-  (`bash --noprofile --norc -eo pipefail {0}`). See [the check](checks.md#check-run-policy). The default is `false`.
-- `max-run-lines`: Maximum number of non-blank lines allowed in a `run:` script. Longer scripts are reported. `0` disables the
-  check and negative values are rejected. See [the check](checks.md#check-run-policy). The default is `0`.
 - `config-variables`: [Configuration variables][vars]. When an array is set, jactionlint will check `vars` properties strictly.
   An empty array means no variable is allowed. The default value `null` disables the check.
 - `required-actions`: List of actions which must be used in each checked workflow. This check is disabled unless the list
@@ -142,36 +136,112 @@ max-run-lines: 30
   - `{glob}`: A file path glob pattern to apply the configuration. The path separator is always '/'. It is matched to the
     relative path from the repository root. For example `.github/workflows/**/*.yaml` matches all the workflow files (with
     `.yaml` file extension). For the glob syntax, please read the [doublestar][] library's documentation.
-    - `ignore`: The configuration to ignore (filter) the errors by the error messages. This is an array of regular
-      expressions. When one of the patterns matches the error message, the error will be ignored. It's similar to the
-      `-ignore` command line option.
-- `timeout-minutes`: Configuration for the [timeout check](checks.md#check-timeout-minutes). The check is disabled by
-  default. It is enabled by setting `required: true` and/or `max`.
-  - `required`: When `true`, every job must set `timeout-minutes`. Jobs calling a reusable workflow (`uses:`) are not
-    checked since they do not support `timeout-minutes`. The default is `false`.
-  - `max`: The maximum allowed value of `timeout-minutes` in minutes. A job with a larger value is reported. This is
-    checked even when `required` is `false`. `0` (the default) means no limit. A negative value is a configuration error.
-    Values given by expressions `${{ }}` are not checked.
-- `require-commit-hash`: Optional lint to require actions to be pinned to commit hashes instead of tags/branches. Defaults to `false`
-  (disabled). When `true`, `uses:` of GitHub-hosted actions and reusable workflows must have a full-length 40-digit commit SHA ref,
-  and Docker actions must be pinned by digest (`docker://image@sha256:...`). Local actions (`./`, `$/`) are exempt.
-  See [the check document](checks.md#check-action-format) for more details.
-- `require-permissions`: Optional lint to require an explicit `permissions:` at workflow-level or job-level. Defaults to `false`
-  (disabled). When `true`, every job not covered by a workflow-level `permissions:` and lacking its own is reported.
-  `permissions: {}` counts as explicit. See [the check document](checks.md#check-permissions) for more details.
-- `require-checkout-before-local-action`: Optional lint to report a local action (`uses: ./path`) used in a job before any step that
-  checks out the repository. Defaults to `false` (disabled). See [the check document](checks.md#check-local-action-checkout) for
-  what counts as a checkout and known limitations.
-- `require-expression-wrapping`: Optional lint to require `if:` conditions (of jobs and steps) to be wrapped in `${{ }}`
-  explicitly, though GitHub Actions makes the placeholder optional there. Defaults to `false` (disabled).
-  See [the check document](checks.md#check-require-expression-wrapping) for more details.
-- `check-falsy-ternary`: Optional lint to report `cond && b || c` when `b` is a literal which is always falsy (`''`, `0`,
-  `false`, `null`). Defaults to `false` (disabled). See [the check document](checks.md#check-falsy-ternary) for more details.
-- `check-workflow-run-names`: Optional lint to check that each workflow name at `on.workflow_run.workflows` exists in the
-  repository. Defaults to `false` (disabled). A workflow is identified by its `name:`, or by its file path (like
-  `.github/workflows/ci.yaml`) when it has no name; the comparison is case-insensitive. Names containing `${{ }}` or glob
-  characters are skipped, and the check is skipped entirely when a workflow file in the repository cannot be parsed or has a
-  dynamic `name:`. See [the check document](checks.md#check-workflow-run-names) for more details.
+    - `ignore`: The configuration to ignore (filter) the errors. This is an array of [rule IDs](rules.md) and regular
+      expressions. A rule ID ignores all the errors of the rule. A regular expression ignores the errors whose message
+      matches it. It's similar to the `-ignore` command line option.
+- `profile`, `rules` and `extends`: See [Profiles](#profiles), [Rules](#rules) and [Extending config files](#extending-config-files).
+
+Unknown keys are errors. jactionlint reports the key with its position and suggests the closest known key when it looks
+like a typo:
+
+```
+unknown key "self-hosted-runnr" in the configuration at line:3,col:1. did you mean "self-hosted-runner"?
+```
+
+## Profiles
+
+A profile is a named set of [rules](rules.md) which are enabled together. `profile` selects one of them:
+
+| Profile   | Enables                                                                                                                                                                                     |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `default` | All the correctness checks, the security errors with (almost) no false positives, and the bug detectors `unsound-ternary`, `workflow-run-names` and `local-action-checkout`. Used when `profile` is omitted. |
+| `strict`  | `default` plus the posture and policy checks: `unpinned-uses`, `missing-permissions`, `missing-timeout` and `unused-ignore`.                                                                |
+| `all`     | `strict` plus the style checks: `require-shell`, `require-expression-wrapping` and `max-run-lines`.                                                                                         |
+
+The profile of each rule is in [the list of rules](rules.md). Some rules belong to no profile and run only when the
+configuration turns them on: `required-actions` (when the `required-actions` list is not empty) and `timeout-too-long` (when
+`max` is set).
+
+## Rules
+
+`rules` sets the level of each rule by its stable [rule ID](rules.md). The level is one of:
+
+- `error`: The finding is printed and makes jactionlint exit with status 1.
+- `warn` and `info`: The finding is printed with a `warning:` or `info:` prefix (or the corresponding level in `-format sarif`,
+  `gcc` and `github`). It does not change the exit status unless `-strict-exit` is given.
+- `off`: The rule is disabled.
+
+A rule not listed in `rules` follows the profile: it runs at its default level if the profile includes it and is off otherwise.
+Every rule is an `error` by default. Unknown rule IDs are errors with a suggestion for a similar ID.
+
+A rule with options takes a mapping with `level` and the options. Giving options without `level` enables the rule at its
+default level:
+
+```yaml
+rules:
+  max-run-lines:
+    level: warn
+    max: 80
+  timeout-too-long:
+    max: 60
+```
+
+| Rule               | Option | Description                                                                                                                                     |
+| ------------------ | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `max-run-lines`    | `max`  | Maximum number of non-blank lines in a `run:` script. Default `100` when the rule is enabled by the `all` profile.                              |
+| `timeout-too-long` | `max`  | Maximum allowed `timeout-minutes` of a job in minutes. Values given by `${{ }}` are not checked. The rule does nothing without `max`.           |
+
+## Extending config files
+
+`extends` lists config files to inherit from. This makes an organization-wide configuration possible: keep a shared file in a
+repository or a submodule and extend it from every project.
+
+```yaml
+extends:
+  - ../shared/jactionlint.yaml
+  - /etc/jactionlint/org.yaml
+profile: strict
+rules:
+  require-shell: off
+```
+
+- Relative paths are resolved from the directory of the file which lists them. `extends` is read only from config files
+  (not from `jactionlint` API calls that parse bytes).
+- Later files win over earlier ones, and the file itself wins over all of them.
+- `profile` and scalar keys are replaced. `rules` and `paths` are merged by key: the entry of the later file replaces the
+  entry with the same rule ID or the same glob. Lists such as `labels`, `config-variables` and `required-actions` are replaced.
+- A file can extend other files. A cycle, or a chain deeper than 10 files, is an error.
+
+## Ignoring errors by rule ID
+
+The `ignore` lists of `paths`, the `-ignore` command line option and the `# jactionlint ignore=` comments take rule IDs as
+well as regular expressions. A pattern which is exactly a rule ID ignores all the errors of the rule; any other pattern is a
+regular expression matched to the error messages. See [the usage document](usage.md#ignore-some-errors).
+
+The [`unused-ignore`](rules.md#unused-ignore) rule (in the `strict` profile) reports ignore comments which did not suppress
+anything.
+
+## Deprecated keys
+
+The following keys were replaced by `rules`. They still work for now: jactionlint translates them into rules and prints a
+deprecation warning to stderr once per config file. `jactionlint -migrate-config` rewrites the file (keeping the comments
+and the other keys) into the `rules` mapping.
+
+| Deprecated key                                      | Replacement                                                                     |
+| --------------------------------------------------- | ------------------------------------------------------------------------------- |
+| `require-commit-hash: true`                         | `rules: {unpinned-uses: error}`                                                 |
+| `require-permissions: true`                         | `rules: {missing-permissions: error}`                                           |
+| `require-checkout-before-local-action: true`        | `rules: {local-action-checkout: error}` (on by default now)                     |
+| `require-expression-wrapping: true`                 | `rules: {require-expression-wrapping: error}`                                   |
+| `check-falsy-ternary: true`                         | `rules: {unsound-ternary: error}` (on by default now)                           |
+| `check-workflow-run-names: true`                    | `rules: {workflow-run-names: error}` (on by default now)                        |
+| `require-shell: true`                               | `rules: {require-shell: error}`                                                 |
+| `max-run-lines: N`                                  | `rules: {max-run-lines: {level: error, max: N}}`                                |
+| `timeout-minutes: {required: true}`                 | `rules: {missing-timeout: error}`                                               |
+| `timeout-minutes: {max: N}`                         | `rules: {timeout-too-long: {level: error, max: N}}`                             |
+
+Setting one of these keys to `false` (or `max-run-lines: 0`) turns the rule off, which is the way to disable the three rules
+which are on by default in the old format. A rule written in `rules` wins over the deprecated key.
 
 ## Configuration file location and priority
 
@@ -206,9 +276,15 @@ jactionlint -init-config
 vim .github/jactionlint.yaml
 ```
 
+To rewrite an existing configuration which uses the [deprecated keys](#deprecated-keys):
+
+```sh
+jactionlint -migrate-config
+```
+
 ---
 
-[Checks](checks.md) | [Installation](install.md) | [Usage](usage.md) | [Go API](api.md) | [References](reference.md)
+[Checks](checks.md) | [Rules](rules.md) | [Installation](install.md) | [Usage](usage.md) | [Go API](api.md) | [References](reference.md)
 
 [xdg]: https://specifications.freedesktop.org/basedir-spec/latest/
 [Super-Linter]: https://github.com/super-linter/super-linter
