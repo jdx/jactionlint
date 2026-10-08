@@ -40,6 +40,8 @@ func TestTemplateInjectionTiers(t *testing.T) {
 		{"dispatch input named number", "      - run: echo '${{ github.event.inputs.number }}'\n", []string{"template-injection-expansion"}},
 		{"client payload named sha", "      - run: echo '${{ github.event.client_payload.sha }}'\n", []string{"template-injection-expansion"}},
 		{"event id", "      - run: echo '${{ github.event.pull_request.id }}'\n", []string{"template-injection-trusted"}},
+		{"bracket access of the context", "      - run: echo '${{ github['event'].issue.title }}'\n", []string{"template-injection"}},
+		{"bracket access all the way", "      - run: echo \"${{ github['event']['issue']['Title'] }}\"\n", []string{"template-injection"}},
 		{"mixed-case property", "      - run: echo '${{ github.event.issue.Title }}'\n", []string{"template-injection"}},
 		{"mixed-case index", "      - run: echo \"${{ github.event.issue['Title'] }}\"\n", []string{"template-injection"}},
 		{"index", "      - run: echo \"${{ github.event.issue['title'] }}\"\n", []string{"template-injection"}},

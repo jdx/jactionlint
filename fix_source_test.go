@@ -116,3 +116,23 @@ func TestFixesInAnIndentedRootMapping(t *testing.T) {
 		t.Errorf("want the file to start with %q but got\n%s", want, out)
 	}
 }
+
+// The fixes keep the CRLF line breaks and the indentation of a file whose root keys are indented.
+func TestFixesInAnIndentedCRLFFile(t *testing.T) {
+	src := "# comment\r\n---\r\n  on: push\r\n  jobs:\r\n    a:\r\n      runs-on: ubuntu-latest\r\n      steps:\r\n        - run: echo\r\n"
+	before, perrs := Parse([]byte(src))
+	if before == nil || len(perrs) > 0 {
+		t.Fatalf("the fixture does not parse: %v", perrs)
+	}
+	out, n, left := fixWith(t, []byte(src), fixerConfig(t, ""), FixModeUnsafe)
+	after, perrs := Parse(out)
+	if after == nil || len(perrs) > 0 {
+		t.Fatalf("the fixed file does not parse: %v\n%q", perrs, out)
+	}
+	if n != 2 || len(left) != 0 || after.Permissions == nil || after.Jobs["a"].TimeoutMinutes == nil || len(after.On) != 1 {
+		t.Errorf("%d fixes, left %v:\n%q", n, left, out)
+	}
+	if strings.Contains(strings.ReplaceAll(string(out), "\r\n", ""), "\n") {
+		t.Errorf("a line break which is not CRLF was added: %q", out)
+	}
+}
