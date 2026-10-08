@@ -25,9 +25,12 @@ rules:
 
 | ID | Group | Default level | Profile |
 | --- | --- | --- | --- |
+| [concurrency-cancels-prs](#concurrency-cancels-prs) | correctness | warn | default |
+| [concurrency-cancels-release](#concurrency-cancels-release) | correctness | warn | default |
 | [conflicting-runner-labels](#conflicting-runner-labels) | correctness | error | default |
 | [constant-condition](#constant-condition) | correctness | error | default |
 | [context-availability](#context-availability) | correctness | error | default |
+| [continue-on-error](#continue-on-error) | policy | info | strict |
 | [cron-too-frequent](#cron-too-frequent) | correctness | error | default |
 | [cyclic-job-needs](#cyclic-job-needs) | correctness | error | default |
 | [dependabot-syntax](#dependabot-syntax) | correctness | error | default |
@@ -37,8 +40,10 @@ rules:
 | [duplicate-job-needs](#duplicate-job-needs) | correctness | error | default |
 | [duplicate-key](#duplicate-key) | correctness | error | default |
 | [duplicate-step-id](#duplicate-step-id) | correctness | error | default |
+| [duplicate-triggers](#duplicate-triggers) | policy | warn | strict |
 | [expression-syntax](#expression-syntax) | correctness | error | default |
 | [expression-type](#expression-type) | correctness | error | default |
+| [gate-job-skipped-on-failure](#gate-job-skipped-on-failure) | correctness | error | default |
 | [hardcoded-container-credentials](#hardcoded-container-credentials) | security | error | default |
 | [if-always-true](#if-always-true) | correctness | error | default |
 | [invalid-activity-type](#invalid-activity-type) | correctness | error | default |
@@ -71,6 +76,7 @@ rules:
 | [missing-timeout](#missing-timeout) | policy | error | strict |
 | [missing-workflow-input](#missing-workflow-input) | correctness | error | default |
 | [missing-workflow-secret](#missing-workflow-secret) | correctness | error | default |
+| [mutable-runner-label](#mutable-runner-label) | policy | warn | strict |
 | [outdated-action-runner](#outdated-action-runner) | correctness | error | default |
 | [pyflakes](#pyflakes) | correctness | error | default |
 | [recursive-alias](#recursive-alias) | correctness | error | default |
@@ -90,13 +96,37 @@ rules:
 | [unknown-workflow-secret](#unknown-workflow-secret) | correctness | error | default |
 | [unpinned-uses](#unpinned-uses) | policy | error | strict |
 | [unsound-ternary](#unsound-ternary) | correctness | error | default |
+| [untrusted-artifact](#untrusted-artifact) | security | error | default |
+| [untrusted-checkout](#untrusted-checkout) | security | error | default |
 | [unused-anchor](#unused-anchor) | correctness | error | default |
 | [unused-ignore](#unused-ignore) | policy | error | strict |
+| [unused-job-output](#unused-job-output) | policy | warn | default |
+| [unused-needs](#unused-needs) | style | info | strict |
+| [unused-workflow-input](#unused-workflow-input) | policy | warn | strict |
 | [workflow-call-permissions](#workflow-call-permissions) | correctness | error | default |
 | [workflow-input-type](#workflow-input-type) | correctness | error | default |
 | [workflow-run-names](#workflow-run-names) | correctness | error | default |
 | [workflow-syntax](#workflow-syntax) | correctness | error | default |
 | [yaml-syntax](#yaml-syntax) | correctness | error | default |
+
+## concurrency-cancels-prs
+
+A concurrency group that cancels runs is shared by all pull requests, so unrelated pull requests cancel each other.
+
+- Group: correctness
+- Default level: warn
+- Profile: default
+- Details and examples: [checks](./checks.md#check-concurrency-cancels-prs)
+
+## concurrency-cancels-release
+
+cancel-in-progress can cancel a release or a deployment which is still running.
+
+- Group: correctness
+- Default level: warn
+- Profile: default
+- Fixable: yes
+- Details and examples: [checks](./checks.md#check-concurrency-cancels-release)
 
 ## conflicting-runner-labels
 
@@ -124,6 +154,16 @@ A context or special function is used where it is not available.
 - Default level: error
 - Profile: default
 - Details and examples: [checks](./checks.md#ctx-spfunc-availability)
+
+## continue-on-error
+
+A job has continue-on-error: true, so its failure does not fail the workflow.
+
+- Group: policy
+- Default level: info
+- Profile: strict
+- Option `steps` (bool, default false): Also report steps with continue-on-error: true. By default only jobs are reported.
+- Details and examples: [checks](./checks.md#check-continue-on-error)
 
 ## cron-too-frequent
 
@@ -206,6 +246,15 @@ A step ID is not unique within its job.
 - Profile: default
 - Details and examples: [checks](./checks.md#check-job-step-ids)
 
+## duplicate-triggers
+
+push and pull_request both run the workflow for the same commit.
+
+- Group: policy
+- Default level: warn
+- Profile: strict
+- Details and examples: [checks](./checks.md#check-duplicate-triggers)
+
 ## expression-syntax
 
 A ${{ }} expression has a syntax error.
@@ -223,6 +272,15 @@ A ${{ }} expression has a type error.
 - Default level: error
 - Profile: default
 - Details and examples: [checks](./checks.md#check-type-check-expression)
+
+## gate-job-skipped-on-failure
+
+A job that reads the results of the jobs it needs is skipped when one of them fails.
+
+- Group: correctness
+- Default level: error
+- Profile: default
+- Details and examples: [checks](./checks.md#check-gate-job-skipped-on-failure)
 
 ## hardcoded-container-credentials
 
@@ -512,6 +570,17 @@ A required secret of a reusable workflow is not passed.
 - Profile: default
 - Details and examples: [checks](./checks.md#check-reusable-workflows)
 
+## mutable-runner-label
+
+A runner label is an alias that GitHub moves to newer images, such as ubuntu-latest.
+
+- Group: policy
+- Default level: warn
+- Profile: strict
+- Fixable: yes
+- Option `pin` (string-map, no default; the rule does nothing without it): Maps a moving label to the fixed label that -fix writes in its place, e.g. ubuntu-latest: ubuntu-24.04. There is no default: without an entry the finding has no fix.
+- Details and examples: [checks](./checks.md#check-mutable-runner-label)
+
 ## outdated-action-runner
 
 An action runs on a runtime which GitHub Actions no longer supports.
@@ -683,6 +752,24 @@ The a && b || c idiom has a falsy b so it always evaluates to c.
 - Profile: default
 - Details and examples: [checks](./checks.md#check-falsy-ternary)
 
+## untrusted-artifact
+
+A workflow_run workflow uses an artifact of the triggering run without validating it.
+
+- Group: security
+- Default level: error
+- Profile: default
+- Details and examples: [checks](./checks.md#check-untrusted-artifact)
+
+## untrusted-checkout
+
+A pull_request_target or workflow_run workflow checks out the code of a pull request and runs it.
+
+- Group: security
+- Default level: error
+- Profile: default
+- Details and examples: [checks](./checks.md#check-untrusted-checkout)
+
 ## unused-anchor
 
 A YAML anchor is defined but never used.
@@ -699,6 +786,33 @@ An inline ignore comment did not suppress anything.
 - Group: policy
 - Default level: error
 - Profile: strict
+
+## unused-job-output
+
+An output of a job is never read by another job or by a workflow_call output.
+
+- Group: policy
+- Default level: warn
+- Profile: default
+- Details and examples: [checks](./checks.md#check-unused-job-output)
+
+## unused-needs
+
+A needs entry is neither read by the job nor needed for the order of jobs.
+
+- Group: style
+- Default level: info
+- Profile: strict
+- Details and examples: [checks](./checks.md#check-unused-needs)
+
+## unused-workflow-input
+
+An input of workflow_dispatch or workflow_call is never used.
+
+- Group: policy
+- Default level: warn
+- Profile: strict
+- Details and examples: [checks](./checks.md#check-unused-workflow-input)
 
 ## workflow-call-permissions
 

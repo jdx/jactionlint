@@ -193,6 +193,8 @@ rules:
 | ------------------ | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------- |
 | `max-run-lines`    | `max`  | Maximum number of non-blank lines in a `run:` script. Default `100` when the rule is enabled by the `all` profile.                              |
 | `timeout-too-long` | `max`  | Maximum allowed `timeout-minutes` of a job in minutes. Values given by `${{ }}` are not checked. The rule does nothing without `max`.           |
+| `mutable-runner-label` | `pin` | Mapping from a moving label to the fixed label that `-fix` writes in its place (`ubuntu-latest: ubuntu-24.04`). There is no default: without an entry the finding has no fix. |
+| `continue-on-error` | `steps` | `true` also reports steps with `continue-on-error: true`. Default `false`: only jobs are reported. |
 
 ## Extending config files
 

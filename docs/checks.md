@@ -49,6 +49,17 @@ List of checks:
 - [Deprecated inputs usage](#deprecated-inputs-usage)
 - [YAML anchors](#yaml-anchors)
 - [Dependabot configuration syntax](#check-dependabot-syntax)
+- [Concurrency that cancels unrelated pull requests](#check-concurrency-cancels-prs)
+- [Concurrency that cancels a release](#check-concurrency-cancels-release)
+- [Gate jobs that are skipped when a job fails](#check-gate-job-skipped-on-failure)
+- [Untrusted code in privileged workflows](#check-untrusted-checkout)
+- [Untrusted artifacts in workflow_run workflows](#check-untrusted-artifact)
+- [Unused job outputs](#check-unused-job-output)
+- [Unused workflow inputs (pedantic)](#check-unused-workflow-input)
+- [Needs entries that do nothing (pedantic)](#check-unused-needs)
+- [Duplicate triggers (pedantic)](#check-duplicate-triggers)
+- [Failures hidden by continue-on-error (pedantic)](#check-continue-on-error)
+- [Mutable runner labels (pedantic)](#check-mutable-runner-label)
 
 Note that jactionlint focuses on catching mistakes in workflow files. If you want some general code style checks, please consider
 using a general YAML checker like [yamllint][].
@@ -527,6 +538,10 @@ jobs:
 Output:
 
 ```
+test.yaml:7:7: warning: output "foo" of job "test" is never used: no other job reads "needs.test.outputs.foo". remove it [unused-job-output]
+  |
+7 |       foo: '${{ steps.get_value.outputs.name }}'
+  |       ^~~~
 test.yaml:10:24: property "get_value" is not defined in object type {} [expression]
    |
 10 |       - run: echo '${{ steps.get_value.outputs.name }}'
@@ -784,6 +799,10 @@ test.yaml:16:24: property "prepare" is not defined in object type {} [expression
    |
 16 |       - run: echo '${{ needs.prepare.outputs.prepared }}'
    |                        ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+test.yaml:17:3: job "build" reads "needs.some_job" but has no "if" with a status check function, so GitHub skips the job when a job it needs fails or is skipped, and a skipped job counts as passing for a required check. add "if: ${{ !cancelled() }}" (or "always()") to the job [gate-job-skipped-on-failure]
+   |
+17 |   build:
+   |   ^~~~~~
 test.yaml:26:24: property "foo" is not defined in object type {installed: string} [expression]
    |
 26 |       - run: echo '${{ needs.install.outputs.foo }}'
@@ -2746,6 +2765,10 @@ test.yaml:7:20: property "imagetag" is not defined in object type {image_tag: st
   |
 7 |         value: ${{ jobs.gen-image-version.outputs.imagetag }}
   |                    ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+test.yaml:12:7: warning: output "image_tag" of job "gen-image-version" is never used: no other job reads "needs.gen-image-version.outputs.image_tag" and no output of the workflow uses it. remove it [unused-job-output]
+   |
+12 |       image_tag: "${{ steps.get_tag.outputs.tag }}"
+   |       ^~~~~~~~~~
 ```
 
 [Playground](https://jactionlint.jdx.dev/#eNp0j8FuwyAQRO/5ipHVK/TOuf9hEWdLaShY7JIcovx7tcZGqqocGT3mzZbsTsC91OtnKvd58SlpAJQmaxPuDyD++EDmRpVjyUcIXIiXGlfRENNHWa5UO4udnQZ786mRw9vjge9yZhsomz+1dnfaLRUf8HyeFFXfP7qPqC2zUXk7tyzNJC/E8vKCWXxwmHQDC606QjQb6m7tozfi+G5U5WDfOzmPOstf48R4cdgbfwcA2ORuYw==)
@@ -3638,6 +3661,627 @@ Output:
 ---
 
 [Installation](install.md) | [Usage](usage.md) | [Configuration](config.md) | [Go API](api.md) | [References](reference.md)
+
+<a id="check-concurrency-cancels-prs"></a>
+## Concurrency that cancels unrelated pull requests
+
+Example input:
+
+```yaml
+on:
+  pull_request:
+concurrency:
+  group: ci
+  cancel-in-progress: true
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo test
+```
+
+Output:
+
+```
+test.yaml:4:10: warning: concurrency group "ci" is the same for every pull request (event "pull_request") and "cancel-in-progress" is enabled for them, so a new run for one pull request cancels the run of an unrelated one. add "github.head_ref" or "github.event.pull_request.number" to the group [concurrency-cancels-prs]
+  |
+4 |   group: ci
+  |          ^~
+```
+
+[Playground](https://jactionlint.jdx.dev/#eNokzLsNwzAMhOFeU9wCWoDLBDZBOA4EUuGjyPaB5Pr/7kypAbPGeLl8SyKpsSmXuyj/VrzcahL4bgAfyjL6rX26XS4RhPSS9rEzFs79AABeGt2UUGdpVh/HajtFyoxHAX1JgvDb9vo/APykLz4=)
+
+The rule `concurrency-cancels-prs` (in the `default` profile, as a warning) reports a `concurrency` block (of the workflow or
+of a job) of a workflow that is triggered by `pull_request`, `pull_request_target`, `pull_request_review` or
+`pull_request_review_comment`, when `cancel-in-progress` is on and the `group` has nothing that differs between pull requests.
+All pull requests share the group, so a push to one of them cancels the run of another one that has nothing to do with it.
+
+Add the pull request to the group:
+
+```yaml
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+```
+
+What the rule judges:
+
+- A group is fine when it reads something that differs between pull requests for the event: `github.head_ref`,
+  `github.event.pull_request.number`, `github.event.number`, the head of the pull request, `github.run_id` and so on. For
+  `pull_request` it also accepts `github.ref`, which is `refs/pull/<number>/merge`. It does **not** accept `github.ref` and
+  `github.sha` for `pull_request_target`, because they are the base branch there, and it does not accept `github.head_ref` for
+  `pull_request_review`, where it is empty.
+- `cancel-in-progress` counts as on when it is `true` or an expression that is true for the pull request event as far as the
+  rule can tell from `github.event_name` and `github.ref`. The idiom `cancel-in-progress: ${{ github.event_name == 'pull_request' }}`
+  is on for pull requests, so it is reported when the group is shared. An expression that depends on something else (a
+  variable, an input) is not reported.
+- A group that reads `env`, `vars`, `inputs`, `needs`, `steps` or `secrets` is not reported, because the rule cannot see its value.
+
+There is no automatic fix: which value distinguishes the runs is up to you. To turn the rule off use `rules: {concurrency-cancels-prs: off}`
+in the [configuration file](config.md) or an ignore comment on the `group:` line (`# jactionlint ignore=concurrency-cancels-prs`).
+
+<a id="check-concurrency-cancels-release"></a>
+## Concurrency that cancels a release
+
+Example input:
+
+```yaml
+on:
+  push:
+    tags: ["v*"]
+concurrency:
+  group: release
+  cancel-in-progress: true
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - run: cargo publish
+```
+
+Output:
+
+```
+test.yaml:6:23: warning: "cancel-in-progress" is enabled here (job "publish" runs "cargo publish" and the workflow runs for pushes of tags), so a new run cancels a release or deployment which is still running and can leave it half done. set "cancel-in-progress: false" to let the running one finish first [concurrency-cancels-release]
+  |
+6 |   cancel-in-progress: true
+  |                       ^~~~
+```
+
+[Playground](https://jactionlint.jdx.dev/#eNo0zD2qwzAQxPFepxhcPtAFdJVHCnlZFAexK/YjkNsHx7iaYv78VFoBVvrzXCD68Ib/7f23PQqpUJqx0Od8h2muBuPJ3bkA1IV41kPqMh3G7g1hyeWlu1/uPo+bthSvKg25p0TW2YM9fpcHL78qoJ5lA3UbegvfAQA6LzT4)
+
+The rule `concurrency-cancels-release` (in the `default` profile, as a warning) reports `cancel-in-progress` that cancels a
+release or a deployment which is still running: a new push, tag or manual run must not kill an in-flight release. Cancelling
+the run of a publish half way can leave a tag without its packages, a registry with some of the files or a deployment half
+rolled out.
+
+A `concurrency` block of the workflow or of a job is reported when `cancel-in-progress` is on for a trigger other than a pull
+request and one of these is true:
+
+- The workflow runs for a tag push or a `release` event, and the group does not name the ref. This is the case where the next
+  tag cancels the release of the previous one.
+- A job under the block publishes or deploys. That is a job with an `environment:`, a step that uses a release or deploy
+  action (for example `softprops/action-gh-release`, `pypa/gh-action-pypi-publish`, `actions/deploy-pages`,
+  `cloudflare/wrangler-action`, `goreleaser/goreleaser-action` with `release` in `args` and without `--snapshot`), a
+  `docker/build-push-action` with `push` on, or a `run:` step with a command such as `npm publish`, `cargo publish`,
+  `twine upload`, `gh release create`, `docker push`, `wrangler deploy` or `kubectl apply`. A job or step whose `if:` is false
+  for the trigger is ignored (`if: startsWith(github.ref, 'refs/tags/')` does not count for a push to a branch). `--dry-run`
+  commands do not count.
+
+What is **not** reported: the mixed idiom `cancel-in-progress: ${{ github.event_name == 'pull_request' }}` (false for pushes
+and tags) and other expressions that are false for the trigger; an expression that depends on something the rule cannot see
+(an input, a variable); a group that names the release (`inputs.*`, `github.event.release.*`) and, for tag pushes, releases
+and manual runs, a group that names the ref, because then only a second run for the same ref replaces the first one; and
+workflows that only run for pull requests. Names of workflows and jobs are not taken as a signal.
+
+The fix sets a literal `cancel-in-progress: true` to `false`. It is **unsafe** (`-fix=unsafe`) because the runs of a group queue
+instead of replacing each other, which changes when and how often the workflow runs. Expressions are not fixed.
+
+```yaml
+concurrency:
+  group: release
+  cancel-in-progress: false
+```
+
+Ignore the rule with `# jactionlint ignore=concurrency-cancels-release` on the line or turn it off with `rules: {concurrency-cancels-release: off}`.
+
+<a id="check-gate-job-skipped-on-failure"></a>
+## Gate jobs that are skipped when a job fails
+
+Example input:
+
+```yaml
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo test
+  final:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - run: test "${{ needs.test.result }}" = success
+```
+
+Output:
+
+```
+test.yaml:7:3: job "final" reads "needs.test.result" but has no "if" with a status check function, so GitHub skips the job when a job it needs fails or is skipped, and a skipped job counts as passing for a required check. add "if: ${{ !cancelled() }}" (or "always()") to the job [gate-job-skipped-on-failure]
+  |
+7 |   final:
+  |   ^~~~~~
+```
+
+[Playground](https://jactionlint.jdx.dev/#eNqUzEEKgzAQheG9p3hIt/EAgR5G0ym2hIn4Zlbi3cs0pXtXIXz/vKYZm3Md3m1hHgATWrzA7soU7oureapz2JdosrFXQIoyQ8ra8CueL51rdxV5MON/enE1EOPtOPrQFP9pF3o1nOeIO+ilCPkZABeBPj4=)
+
+The rule `gate-job-skipped-on-failure` (in the `default` profile, as an error) reports a job that has `needs` and reads the
+result of the jobs it needs, but whose own `if:` has no status check function. GitHub adds an implicit `success()` to such a
+job, so it is **skipped** when a needed job fails, is cancelled or is skipped. The check never sees a failure, and a skipped job
+counts as passing for a required status check, so the failure goes through the gate.
+
+Add a status check function that lets the job run, and check the results yourself:
+
+```yaml
+final:
+  needs: [build, test]
+  if: ${{ !cancelled() }}
+  runs-on: ubuntu-latest
+  steps:
+    - run: test "${{ contains(needs.*.result, 'failure') }}" = false
+```
+
+The rule looks at the whole job: its `if:`, the steps, `env`, `with`, `outputs` and the rest. It reports a read of
+`needs.<job>.result` or `needs.<job>.outcome`, of `needs.*.result`, and of the whole `needs` context (for example `toJSON(needs)`).
+`always()`, `cancelled()` and `failure()` (also negated, as in `!cancelled()`) in the job's `if:` satisfy the rule; an explicit
+`success()` does not, because it is what GitHub adds anyway.
+
+What is **not** reported:
+
+- A read that only compares the result with `'success'` using `==` (`if: needs.build.result == 'success'`). It is redundant in
+  a job that is skipped unless its needs succeeded, but it does not expect to see a failure.
+- Jobs that need a job with `continue-on-error`, because the result of that job is not what it seems.
+- Reads of `needs.<job>.outputs.*`.
+- A workflow where an expression does not parse (the syntax error is reported by `expression`).
+
+There is no automatic fix: whether `always()` or `!cancelled()` is right depends on whether the gate should run for a cancelled
+workflow.
+
+<a id="check-untrusted-checkout"></a>
+## Untrusted code in privileged workflows
+
+Example input:
+
+```yaml
+on: pull_request_target
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - run: npm ci && npm test
+```
+
+Output:
+
+```
+test.yaml:8:16: this step checks out code from a pull request (github.event.pull_request.head.sha) in a "pull_request_target" workflow and "npm" runs it afterwards. the workflow has a write token and secrets, so whoever controls that code can use them. run untrusted code in a "pull_request" workflow without secrets, or check out the base branch and only read the pull request as data [untrusted-checkout]
+  |
+8 |           ref: ${{ github.event.pull_request.head.sha }}
+  |                ^~~
+```
+
+[Playground](https://jactionlint.jdx.dev/#eNpMjjHOwjAMRvee4ht+dWv+hSkTN6nSYJpASUpsl6Hq3VEKqphs6z3JLyeLWaepL/RUYunFlZGkueWBbQMIsdQJFE3cVV0HTaLd5CrbEQvN/LGADsrEFs5LzIn/fSB/zyrn5fQ1gFeUYI8LKHS1+FtXjFGCDoYWSmJ+u0wgdzEcHLbteFQ0WaT5AR/RtvtWm94DACIeQkk=)
+
+The rule `untrusted-checkout` (in the `default` profile, as an error) reports a `pull_request_target` or `workflow_run`
+workflow that checks out the code of a pull request and then runs it. These events run in the context of the base repository,
+with a token that can write and with the secrets, while the code is what the author of the pull request wrote. A build script,
+a test, a `package.json` hook or a local action is enough to take over the token.
+
+Run untrusted code in a `pull_request` workflow, which has no secrets for pull requests from forks. If a privileged workflow
+has to look at the pull request, check out the base branch and read the pull request as data.
+
+A step is reported at its checkout when it puts untrusted code in the workspace and a later step in the same job runs it:
+
+- `actions/checkout` with a `ref` or `repository` that names the head of a pull request or of the triggering run
+  (`github.event.pull_request.head.*`, `github.head_ref`, `github.event.pull_request.merge_commit_sha`,
+  `github.event.workflow_run.head_sha`, `head_branch`, `head_repository`, ...) or `refs/pull/...`.
+- `gh pr checkout`, and `git checkout`, `fetch`, `switch`, `merge`, `pull`, `clone` ... with such a reference in the arguments or
+  in an environment variable they use.
+- "Runs it" is a later step with a `run:` command that can execute workspace code (a script, `npm`, `cargo`, `make`, an
+  interpreter, ...), a local action (`uses: ./...`), or one of a few actions that build the workspace. Commands that only read or
+  move files (`cat`, `git diff`, `grep`, `jq`, `tar`, `gh`, ...) do not count. A checkout with `path:` only counts when a later
+  step works in that directory (`working-directory`, `cd`, or an argument below it).
+
+What is **not** reported: a checkout of the base (no `ref`, or `github.event.pull_request.base.*`), a checkout that nothing runs,
+a job with an `environment:` (its reviewers decide), and a job or step whose `if:` reads who or what started the workflow:
+`github.actor`, the author or labels of the pull request, `github.event.pull_request.head.repo`, `github.event.workflow_run.event`,
+`needs` or `steps`. A `workflow_run` workflow is not reported when every workflow in `workflows:` is in the repository and only
+runs for `push`, `schedule`, `workflow_dispatch`, `release`, `merge_group` or `repository_dispatch`. The rule cannot tell that
+a `labeled` pull request was reviewed or that an earlier step vouched for the code in a way other than a condition on `needs` or
+`steps`. Code that other steps fetch from an output (`ref: ${{ steps.x.outputs.sha }}`) is not followed.
+
+There is no automatic fix.
+
+<a id="check-untrusted-artifact"></a>
+## Untrusted artifacts in workflow_run workflows
+
+Example input:
+
+```yaml
+on:
+  workflow_run:
+    workflows: [PR checks]
+    types: [completed]
+jobs:
+  comment:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: pr
+          path: pr
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+      - run: echo "number=$(cat pr/number)" >> "$GITHUB_ENV"
+```
+
+Output:
+
+```
+test.yaml:3:17: workflow "PR checks" specified at "workflows" of "workflow_run" event is not found in the repository. a workflow is specified by its "name:" or its file path when it has no name [workflow-run]
+  |
+3 |     workflows: [PR checks]
+  |                 ^~
+test.yaml:9:15: this step downloads an artifact of the run that triggered the workflow, which ran the code of a pull request, and the step at line 15 writes its content to $GITHUB_ENV without validating its content first. the artifact is whatever the pull request wanted, and this workflow has a write token and secrets. match the content against a strict pattern (for example digits only) before you use it, and never run or extract it [untrusted-artifact]
+  |
+9 |       - uses: actions/download-artifact@v4
+  |               ^~~~~~~~~~~~~~~~~~~~~~~~~~~~
+```
+
+[Playground](https://jactionlint.jdx.dev/#eNpcj0FL80AQhu/9FUPI4fsOm148LVhEEPUiIupFStlspmZNdmbZnW2Q0v8uScRGj+8zz/vCMOkVwMCx2/c87GKe8pkkDW+PT2BbtF3aTif5DDhiyz70KNhsVx9cp7Fn2XskmSdipqSYNOQ6k2TVG8Ek0ykJhjRbAApyGgeNFceU1g0P1LNplIni9sbK1eHiWwUYnLT6JwGQ8aghxAUKRto/KGZSrtFQHo/w7qTNdYUHJKmWj1eugdNp0ZpNJdwh/epO5OyqcV8D2pahoOxrjJflP2sEQlzP+X8Bmw0U5e39893L9e7m4bX4GgDlJ3If)
+
+The rule `untrusted-artifact` (in the `default` profile, as an error) reports a `workflow_run` workflow that downloads an artifact
+of the run that triggered it and then runs it, extracts it or writes its content to `$GITHUB_ENV`, `$GITHUB_PATH` or
+`$GITHUB_OUTPUT` without checking it. The upstream workflow ran the code of a pull request, so the artifact is whatever the pull
+request wanted. The `workflow_run` workflow has a write token and the secrets. A file name or a value with a newline in the
+environment file is enough to inject a variable such as `LD_PRELOAD` or `NODE_OPTIONS`, and an archive can write outside its
+directory.
+
+Check the content before you use it, for example match a pull request number against `^[0-9]+$`:
+
+```yaml
+- run: |
+    NUMBER=$(cat pr/number)
+    [[ "$NUMBER" =~ ^[0-9]+$ ]] || exit 1
+    echo "number=$NUMBER" >> "$GITHUB_OUTPUT"
+```
+
+The download is `actions/download-artifact` with a `run-id` that reads `github.event.workflow_run`, any use of
+`dawidd6/action-download-artifact`, `gh run download`, or an `actions/github-script` that calls `listWorkflowRunArtifacts` and
+`downloadArtifact`. The use is a later step of the same job with a `run:` that
+
+- runs something below the artifact directory (`path:`, or the artifact `name` when there is no `path`), including `cd` into it
+  and `working-directory:`;
+- extracts an archive (`unzip`, `tar -x`, `7z x`, ...) from there, or any archive after a download with `github-script`;
+- writes data read from there (`cat`, `jq`, `$(...)`, `read ... < file`) to `$GITHUB_ENV`, `$GITHUB_PATH` or `$GITHUB_OUTPUT`.
+
+A step that validates the data stops the check from there on: a regular expression match (`=~`, `grep -E`), a numeric test
+(`-eq`), a checksum or signature verification (`sha256sum -c`, `gh attestation verify`, `cosign verify`, ...). This is
+deliberately generous.
+
+What is **not** reported: artifacts of the current run, a download whose files cannot be linked to a later command (an artifact
+without `path` and `name` lands in the root of the workspace under names the rule does not know), jobs with an `environment:`,
+jobs and steps with the same guards as `untrusted-checkout`, and workflows that wait only for workflows that run for `push`,
+`schedule` and other events that only people with write access cause.
+
+There is no automatic fix.
+
+<a id="check-unused-job-output"></a>
+## Unused job outputs
+
+Example input:
+
+```yaml
+on: push
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - id: v
+        run: echo "version=1.0.0" >> "$GITHUB_OUTPUT"
+  test:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo test
+```
+
+Output:
+
+```
+test.yaml:6:7: warning: output "version" of job "build" is never used: no other job reads "needs.build.outputs.version". remove it [unused-job-output]
+  |
+6 |       version: ${{ steps.v.outputs.version }}
+  |       ^~~~~~~~
+```
+
+[Playground](https://jactionlint.jdx.dev/#eNqEjrHKgzAUhXef4hBcDf5r4Hfo0nZqB51LrQEtkoj3Xhfx3UtiSqFLt4TznXs+7wwmoT57+pZMBrQyjF14ALM4KgIgrTiWYryzJY6RF56EaeeAxc40BDJfVxDbifSiE6NTiG2LdIzfxQJDZ7CkX5w0sI/eQ6Xa/58udalQVVD58VyfmsPt0tTXplYZEIT2W87ajsyu/8v+S+EzGojXALG2Uaw=)
+
+The rule `unused-job-output` (in the `default` profile, as a warning) reports an entry of `jobs.<id>.outputs` that nothing reads:
+no job reads `needs.<id>.outputs.<name>` and no output of a reusable workflow (`on.workflow_call.outputs`) uses
+`jobs.<id>.outputs.<name>`. The output is dead code, and it makes a reader look for a consumer that does not exist.
+
+The rule reads every expression of the workflow. A read of a whole object counts as a read of everything in it:
+`toJSON(needs.build.outputs)`, `toJSON(needs)`, `needs[matrix.job].outputs.x`. When an expression does not parse, nothing is
+reported. Outputs can only be read inside the workflow, so an output of a reusable workflow that its callers use is a
+`workflow_call` output, not a job output.
+
+There is no automatic fix because removing an output means removing a block of YAML and finding its step.
+
+<a id="check-unused-workflow-input"></a>
+## Unused workflow inputs (pedantic)
+
+Example input:
+
+```yaml
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        type: string
+      dry-run:
+        type: boolean
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo ${{ inputs.version }}
+```
+
+Output:
+<!-- Skip update output -->
+```
+test.yaml:6:7: warning: input "dry-run" of "workflow_dispatch" is never used: no expression reads "inputs.dry-run". remove it or use it [unused-workflow-input]
+  |
+6 |       dry-run:
+  |       ^~~~~~~~
+```
+
+<!-- Skip playground link -->
+
+The output above is from the following `rules` section of the [configuration file](config.md):
+
+```yaml
+rules:
+  unused-workflow-input: warn
+```
+
+The rule `unused-workflow-input` (in the `strict` profile, as a warning) reports an input of `workflow_dispatch` or
+`workflow_call` that no expression of the workflow reads. A manual run asks for a value that does nothing, or a caller passes
+a value that is dropped.
+
+An input is read as `inputs.<name>`; for `workflow_dispatch` also as `github.event.inputs.<name>`. A read of the whole context
+(`toJSON(inputs)`, `inputs[matrix.name]`) counts as a read of every input, and when a script reads `$GITHUB_EVENT_PATH` the inputs
+of `workflow_dispatch` are not reported because the script can read them from the payload. A workflow where an expression does not
+parse is skipped.
+
+The rule is not in the `default` profile because an input can exist for someone else: GitHub refuses a manual run or a
+`workflow_call` that passes an input the workflow does not declare, so a tool that dispatches the workflow with an input of its own
+(for example the `distinct_id` that `codex-/return-dispatch` passes) or a caller in another repository needs it even when the
+workflow never reads it. Silence such an input with `# jactionlint ignore=unused-workflow-input` on its line. There is no
+automatic fix because removing an input of `workflow_call` breaks the callers that still pass it.
+
+<a id="check-unused-needs"></a>
+## Needs entries that do nothing (pedantic)
+
+Example input:
+
+```yaml
+on: push
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo build
+  test:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo test
+  publish:
+    needs: [build, test]
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo publish
+```
+
+Output:
+<!-- Skip update output -->
+```
+test.yaml:13:13: info: job "publish" needs "build" but never reads its outputs or result, and it already needs "test" which waits for "build". this entry changes nothing and can be removed [unused-needs]
+   |
+13 |     needs: [build, test]
+   |             ^~~~~~
+```
+
+<!-- Skip playground link -->
+
+The output above is from the following `rules` section of the [configuration file](config.md):
+
+```yaml
+rules:
+  unused-needs: info
+```
+
+The rule `unused-needs` (in the `strict` profile, as info) reports an entry of `needs` that has no effect: the job never reads
+the outputs or the result of the needed job, and another job it needs already depends on it, so the entry changes neither the order
+of the jobs nor whether the job runs.
+
+An entry is reported only when this can be shown. The other needed job must wait for the job directly or through other jobs, and
+none of the jobs on the way may have a status check function in its `if:` (`always()`, `!cancelled()`, `failure()`, ...), because
+such a job runs even when its needs failed, and then the entry changes the result. An entry that is only there for the order
+(`needs: [a, b]` with unrelated jobs) is **not** reported: the rule cannot tell it from a forgotten one.
+
+There is no automatic fix.
+
+<a id="check-duplicate-triggers"></a>
+## Duplicate triggers (pedantic)
+
+Example input:
+
+```yaml
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - run: echo test
+```
+
+Output:
+<!-- Skip update output -->
+```
+test.yaml:1:6: warning: "push" has no branch filter and "pull_request" is used too, so a commit pushed to a branch of this repository that has a pull request runs the workflow twice. limit "push" to the branches that need it, for example the default branch [duplicate-triggers]
+  |
+1 | on: [push, pull_request]
+  |      ^~~~~
+```
+
+<!-- Skip playground link -->
+
+The output above is from the following `rules` section of the [configuration file](config.md):
+
+```yaml
+rules:
+  duplicate-triggers: warn
+```
+
+The rule `duplicate-triggers` (in the `strict` profile, as a warning) reports a workflow that is triggered by `push` and by
+`pull_request` when `push` has no branch filter. A commit pushed to a branch of the repository that has a pull request starts the
+workflow twice, once for each event, and both runs say the same thing.
+
+Limit `push` to the branches that need it:
+
+```yaml
+on:
+  push:
+    branches: [main]
+  pull_request:
+```
+
+`push` counts as unfiltered when it has no `branches` (or only `**`), also with `branches-ignore`, `paths` or `tags-ignore`. A
+`push` with only `tags` does not run for branches. A `pull_request` with only `types` that do not carry new commits (for example
+`closed`) is not a duplicate. The rule does not report a workflow where every job has an `if:` on `github.event_name` or on
+`github.event.pull_request.head.repo`, or where the group of the workflow `concurrency` has `github.head_ref` and
+`github.ref_name` and cancels runs, which are the two common ways to run once.
+
+There is no automatic fix because the right branches are not known.
+
+<a id="check-continue-on-error"></a>
+## Failures hidden by continue-on-error (pedantic)
+
+Example input:
+
+```yaml
+on: push
+jobs:
+  lint:
+    runs-on: ubuntu-24.04
+    continue-on-error: true
+    steps:
+      - run: echo lint
+```
+
+Output:
+<!-- Skip update output -->
+```
+test.yaml:5:24: info: "continue-on-error: true" makes the workflow pass even when job "lint" fails, which hides failures. remove it, or limit it to what is allowed to fail, for example with an expression on a matrix entry [continue-on-error]
+  |
+5 |     continue-on-error: true
+  |                        ^~~~
+```
+
+<!-- Skip playground link -->
+
+The output above is from the following `rules` section of the [configuration file](config.md):
+
+```yaml
+rules:
+  continue-on-error: info
+```
+
+The rule `continue-on-error` (in the `strict` profile, as info) reports a job with a literal `continue-on-error: true`. The workflow
+succeeds when the job fails, so nobody sees the failure unless they open the job. Some jobs are meant to be advisory; for those
+the finding is a reminder to keep it deliberate.
+
+An expression (`continue-on-error: ${{ matrix.experimental }}`) is not reported, because it is the usual way to allow the
+failure of some matrix entries only. Steps with `continue-on-error: true` are reported only when you set the `steps` option:
+
+```yaml
+rules:
+  continue-on-error:
+    steps: true
+```
+
+There is no automatic fix: removing the line turns an advisory job into a blocking one.
+
+<a id="check-mutable-runner-label"></a>
+## Mutable runner labels (pedantic)
+
+Example input:
+
+```yaml
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo test
+```
+
+Output:
+<!-- Skip update output -->
+```
+test.yaml:4:14: warning: runner label "ubuntu-latest" is an alias that GitHub moves to newer images, so the job can break without a change in this repository. use a fixed label such as "ubuntu-24.04", which is the same image today [mutable-runner-label]
+  |
+4 |     runs-on: ubuntu-latest
+  |              ^~~~~~~~~~~~~
+```
+
+<!-- Skip playground link -->
+
+The output above is from the following `rules` section of the [configuration file](config.md):
+
+```yaml
+rules:
+  mutable-runner-label: warn
+```
+
+The rule `mutable-runner-label` (in the `strict` profile, as a warning) reports the labels of GitHub-hosted runners that GitHub
+moves to a newer image over time: `ubuntu-latest`, `windows-latest`, `macos-latest` and their sized variants. A job on
+such a label can start to fail on the day GitHub switches the image, without any change in the repository. The message names the fixed label that the
+alias is today, according to the label table of jactionlint.
+
+The rule reads `runs-on` and the values of `matrix.<key>` that `runs-on: ${{ matrix.<key> }}` selects. Jobs with `self-hosted` among
+the labels and labels given by other expressions are not reported.
+
+The fix is only offered when you decide the replacement, because jactionlint does not know which version you want. Configure it
+with the `pin` option; the finding of a label with an entry then has a fix that writes the fixed label in its place:
+
+```yaml
+rules:
+  mutable-runner-label:
+    pin:
+      ubuntu-latest: ubuntu-24.04
+      macos-latest: macos-15
+```
+
+A label in a matrix is reported but never fixed, because the same value may be compared in an expression of the job.
 
 [yamllint]: https://github.com/adrienverge/yamllint
 [issue-form]: https://github.com/jdx/jactionlint/issues/new
