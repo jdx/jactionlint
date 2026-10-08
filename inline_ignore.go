@@ -19,6 +19,17 @@ type inlineIgnoreEntry struct {
 	line, col int
 	// used is whether the pattern suppressed any error.
 	used bool
+	// zizmor is the audit name of an entry from a zizmor ignore comment. Then targets lists the
+	// diagnostics it stands for and pat is not used.
+	zizmor  string
+	targets []zizmorAlias
+}
+
+func (e *inlineIgnoreEntry) match(err *Error) bool {
+	if e.zizmor != "" {
+		return e.matchesZizmor(err)
+	}
+	return e.pat.Match(err)
 }
 
 // inlineIgnore is one set of ignore patterns which is effective for errors reported in the line
@@ -26,6 +37,9 @@ type inlineIgnoreEntry struct {
 type inlineIgnore struct {
 	start, end int
 	entries    []*inlineIgnoreEntry
+	// commentLine is the line of a zizmor ignore comment, which also applies to the errors whose region
+	// contains that line. It is 0 for the comments of jactionlint.
+	commentLine int
 }
 
 // splitIgnoreList splits comma-separated patterns. Commas inside (), [] and {} or escaped with a
@@ -147,7 +161,7 @@ func parseInlineIgnoresWithOrphans(src []byte) ([]inlineIgnore, []*inlineIgnoreE
 			}
 			end = j + 1
 		}
-		ret = append(ret, inlineIgnore{i + 1, end, pending})
+		ret = append(ret, inlineIgnore{start: i + 1, end: end, entries: pending})
 		pending = nil
 	}
 	return ret, pending, errs
@@ -163,11 +177,11 @@ func (l *Linter) filterInlineIgnores(errs []*Error, ignores []inlineIgnore) []*E
 	for _, err := range errs {
 		ignored := false
 		for _, ig := range ignores {
-			if err.Line < ig.start || ig.end < err.Line {
+			if !ig.covers(err) {
 				continue
 			}
 			for _, e := range ig.entries {
-				if e.pat.Match(err) {
+				if e.match(err) {
 					e.used = true
 					ignored = true
 				}
@@ -182,6 +196,14 @@ func (l *Linter) filterInlineIgnores(errs []*Error, ignores []inlineIgnore) []*E
 	return filtered
 }
 
+// covers returns whether the comment applies to the lines of the error.
+func (ig inlineIgnore) covers(err *Error) bool {
+	if ig.start <= err.Line && err.Line <= ig.end {
+		return true
+	}
+	return ig.commentLine > 0 && err.Line <= ig.commentLine && ig.commentLine <= max(err.EndLine, err.Line)
+}
+
 // unusedInlineIgnores returns an error for each pattern of the inline ignore comments which did not
 // suppress any error. A pattern for a rule which is off is not reported because the rule could not
 // report anything.
@@ -191,11 +213,18 @@ func unusedInlineIgnores(ignores []inlineIgnore, orphans []*inlineIgnoreEntry, c
 		if e.used {
 			return
 		}
-		if e.pat.ID != "" && !cfg.RuleEnabled(e.pat.ID) {
+		msg := fmt.Sprintf("ignore pattern %q %s. remove it", e.pat.String(), what)
+		if e.zizmor != "" {
+			// Only for an audit which maps onto a rule that is on: a rule which is off cannot report anything
+			if !zizmorEntryActive(e, cfg) {
+				return
+			}
+			msg = fmt.Sprintf("zizmor ignore comment for %q %s. remove it", e.zizmor, what)
+		} else if e.pat.ID != "" && !cfg.RuleEnabled(e.pat.ID) {
 			return
 		}
 		errs = append(errs, &Error{
-			Message: fmt.Sprintf("ignore pattern %q %s. remove it", e.pat.String(), what),
+			Message: msg,
 			Line:    e.line,
 			Column:  e.col,
 			Kind:    "ignore",

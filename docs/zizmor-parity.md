@@ -65,5 +65,15 @@ How to read the table:
 | `unsound-ternary` | `unsound-ternary` | 3 / C | default | not yet assessed |
 | `use-trusted-publishing` | `use-trusted-publishing` | 3 / D | strict | not yet assessed |
 
+## Ignore comments
+
+jactionlint honors zizmor's `# zizmor: ignore[...]` comments for the audits that map onto one of its rules, so a repository
+that already triaged its zizmor findings keeps them triaged. This is measured only for the rules that exist: on the corpus of
+520 workflow files with a zizmor comment, 2 name a mapped audit today (`template-injection`) and the rest name audits (such as
+`cache-poisoning` and `dangerous-triggers`) that have no jactionlint rule yet, so they are inert until those rules land. For
+`template-injection`, jactionlint reports fewer contexts than zizmor, so a comment can be stale for jactionlint (the
+`unused-ignore` rule says so). See [the usage document](usage.md#zizmor-ignore-comments) and
+[the alias table](v2-migration.md#zizmor-ignore-comments).
+
 See [CONTRIBUTING.md](https://github.com/jdx/jactionlint/blob/main/CONTRIBUTING.md#policy-for-jactionlints-features) for the
 criteria a rule must meet before it is added.

@@ -98,7 +98,7 @@ type Command struct {
 	onRulesCreated func([]Rule) []Rule
 }
 
-func (cmd *Command) runLinter(args []string, opts *LinterOptions, initConfig, migrateConfig bool, fix FixMode) ([]*Error, error) {
+func (cmd *Command) runLinter(args []string, opts *LinterOptions, initConfig, migrateConfig, migrateIgnores bool, fix FixMode) ([]*Error, error) {
 	l, err := NewLinter(cmd.Stdout, opts)
 	if err != nil {
 		return nil, err
@@ -109,6 +109,10 @@ func (cmd *Command) runLinter(args []string, opts *LinterOptions, initConfig, mi
 	}
 	if migrateConfig {
 		return nil, l.MigrateConfig("")
+	}
+
+	if migrateIgnores {
+		return nil, l.MigrateIgnores(args)
 	}
 
 	if fix != 0 {
@@ -158,6 +162,7 @@ func (cmd *Command) Main(args []string) int {
 	var initConfig bool
 	var fix fixFlag
 	var migrateConfig bool
+	var migrateIgnores bool
 	var noColor bool
 	var color bool
 	var minSeverity string
@@ -177,6 +182,7 @@ func (cmd *Command) Main(args []string) int {
 	flags.BoolVar(&initConfig, "init-config", false, "Generate default config file at .github/jactionlint.yaml in current project")
 	flags.Var(&fix, "fix", "Apply the safe automatic fixes to the files and report what remains. -fix=unsafe also applies the fixes which may change the behavior of the workflow. The files are rewritten in place")
 	flags.BoolVar(&migrateConfig, "migrate-config", false, "Rewrite the deprecated keys of the config file (.github/jactionlint.yaml or the file of -config-file) into the \"rules\" mapping")
+	flags.BoolVar(&migrateIgnores, "migrate-ignores", false, "Rewrite the trailing \"# zizmor: ignore[...]\" comments of the files (the workflows of the project by default) into \"# jactionlint ignore=...\" comments. jactionlint also honors the zizmor comments as they are")
 	flags.BoolVar(&noColor, "no-color", false, "Disable colorful output")
 	flags.BoolVar(&color, "color", false, "Always enable colorful output. This is useful to force colorful outputs")
 	flags.BoolVar(&opts.Verbose, "verbose", false, "Enable verbose output")
@@ -225,7 +231,7 @@ func (cmd *Command) Main(args []string) int {
 		opts.Color = ColorOptionKindNever
 	}
 
-	errs, err := cmd.runLinter(flags.Args(), &opts, initConfig, migrateConfig, fix.mode)
+	errs, err := cmd.runLinter(flags.Args(), &opts, initConfig, migrateConfig, migrateIgnores, fix.mode)
 	if err != nil {
 		fmt.Fprintln(cmd.Stderr, err.Error())
 		return ExitStatusFailure
