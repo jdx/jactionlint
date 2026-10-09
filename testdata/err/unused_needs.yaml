@@ -1,0 +1,23 @@
+on: push
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo setup
+  build:
+    needs: setup
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo build
+  test:
+    needs: [setup, build]
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo test
+  publish:
+    needs: [setup, build, test]
+    if: always() && needs.setup.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo ${{ needs.setup.result }}

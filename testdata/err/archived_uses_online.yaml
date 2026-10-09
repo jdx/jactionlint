@@ -1,0 +1,12 @@
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      # ERROR: the repository is archived
+      - uses: example/archived-action@v1
+      # OK: maintained
+      - uses: actions/checkout@v4
+  call:
+    # ERROR: reusable workflows count too
+    uses: example/archived-workflows/.github/workflows/ci.yml@v1

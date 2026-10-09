@@ -1,0 +1,8 @@
+rules:
+  unpinned-uses:
+    level: error
+    policies:
+      actions/checkout: hash-pin
+      actions/*: ref-pin
+      trusted-org/*: any
+      trusted-org/strict/sub: hash-pin

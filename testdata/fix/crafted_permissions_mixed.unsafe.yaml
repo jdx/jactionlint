@@ -1,0 +1,21 @@
+on: push
+permissions:
+  contents: read
+jobs:
+  has-permissions:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - run: git push
+  has-none:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+  has-none-too:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - run: echo two

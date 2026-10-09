@@ -1,0 +1,11 @@
+name: On sequence
+on:
+- push
+- pull_request
+env:
+  FOO: bar
+jobs:
+  a:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo a

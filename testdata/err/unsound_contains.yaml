@@ -1,0 +1,13 @@
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    if: contains('refs/heads/main refs/heads/develop', github.ref)
+    steps:
+      - run: echo deploy
+        if: ${{ contains('main develop', github.ref_name) && github.event_name == 'push' }}
+      # Sound ways to test membership
+      - run: echo ok
+        if: contains(fromJSON('["refs/heads/main", "refs/heads/develop"]'), github.ref)
+      - run: echo ok
+        if: contains(github.event.head_commit.message, 'skip ci')

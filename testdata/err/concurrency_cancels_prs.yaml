@@ -1,0 +1,31 @@
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+# The group is the same for every pull request: a new run for one of them cancels the run of another one
+concurrency:
+  group: ci
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo test
+  lint:
+    runs-on: ubuntu-latest
+    # The idiom which cancels only runs for pull requests is fine only when the group has the pull request in it
+    concurrency:
+      group: ${{ github.workflow }}-lint
+      cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+    steps:
+      - run: echo lint
+  build:
+    runs-on: ubuntu-latest
+    concurrency:
+      group: ${{ github.workflow }}-build-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
+    steps:
+      - run: echo build

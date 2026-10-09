@@ -1,0 +1,16 @@
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      # OK: the commit is tagged v4.2.2
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      # ERROR: the commit is on no branch or tag, only in the fork network (an unmerged pull request)
+      - uses: actions/checkout@2f547d07f23dec7f4a96fc091165260dcbe59529
+      # OK: a repository which does not exist (or is not visible) is left alone
+      - uses: example/forgotten@2f547d07f23dec7f4a96fc091165260dcbe59529
+      # OK: a ref which is not a commit SHA is not this rule's business
+      - uses: actions/checkout@v4
+  call:
+    # ERROR: reusable workflows can be impostors too
+    uses: actions/checkout/.github/workflows/ci.yml@2f547d07f23dec7f4a96fc091165260dcbe59529

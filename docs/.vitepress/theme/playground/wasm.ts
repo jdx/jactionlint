@@ -12,6 +12,8 @@ export interface LintError {
   message: string;
   line: number;
   column: number;
+  /** "error", "warn" or "info" */
+  severity?: string;
 }
 
 export interface Hooks {

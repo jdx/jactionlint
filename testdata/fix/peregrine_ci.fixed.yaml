@@ -1,0 +1,158 @@
+name: CI
+
+on:
+  workflow_dispatch:
+    inputs:
+      staging_only:
+        description: "Deploy to staging only (skip prod promote)"
+        required: false
+        type: boolean
+        default: false
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  # Separate cache-less job: with cache-on-failure, a fmt failure before any
+  # build would save a near-empty cache under an immutable key, keeping that
+  # key cold forever.
+  fmt:
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.97
+        with:
+          components: rustfmt
+      - run: cargo fmt -- --check
+
+  test:
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    timeout-minutes: 30
+    steps:
+      # Full history so the perf gate can check out the PR's merge-base.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Pinned so Rust releases don't silently invalidate every cache;
+      # bump deliberately in a PR to pre-warm the new cache.
+      - uses: dtolnay/rust-toolchain@1.97
+        with:
+          components: clippy
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+
+      - name: Install protoc
+        uses: arduino/setup-protoc@v3
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build
+        run: cargo build --release
+
+      # Everything runs --release so CI compiles a single profile.
+      - name: Unit tests
+        run: cargo test --release --lib
+
+      - name: Integration tests
+        run: cargo test --release --test pipeline_integration --test server_integration --test format_tests --test shutdown_signal_tests --test resolve_tests --test http_usages_tests
+
+      - name: Benchmark regression gate
+        run: cargo test --release --test ci_bench
+
+      # Perf regression gate against a pinned real corpus (cobra + gin).
+      # Counts and index size are absolute gates vs benches/ci-baseline.json;
+      # timing is gated on the branch-vs-merge-base ratio measured on this
+      # same runner (ENT-2224 — absolute timings flaked on runner-fleet
+      # drift). See tests/perf_regression.rs for thresholds. Lives in this
+      # job to reuse the release build — a separate job paid a full cold
+      # compile (~10 min).
+      - name: Fetch pinned corpus
+        run: ./benches/setup_ci.sh
+
+      # Runs whenever HEAD has a merge-base distinct from itself: PRs and
+      # workflow_dispatch on branches (which deploy to staging). Runs on main
+      # (push or dispatch) skip timing on purpose — the PR already gated the
+      # diff, re-timing it on the deploy path only re-adds flake exposure
+      # where the ENT-2224 incidents hurt. Direct pushes to main are still
+      # counts/size-gated; keeping them out entirely is a ruleset concern,
+      # not a CI one. The worktree fetches its own corpus (pin-bump PRs
+      # measure each side against its own pins) and shares CARGO_TARGET_DIR
+      # so registry deps are reused — only the peregrine crates recompile,
+      # under a different metadata hash, so the branch's artifacts survive.
+      # UPDATE_BASELINE=1 measures without gating; it also rewrites the
+      # worktree's ci-baseline.json copy, which is discarded.
+      - name: Measure merge-base perf
+        run: |
+          head=$(git rev-parse HEAD)
+          base=$(git merge-base origin/main "$head")
+          if [ "$base" = "$head" ]; then
+            echo "HEAD is on main — no distinct merge-base; timing not gated this run (counts/size still gate)"
+            exit 0
+          fi
+          echo "timing base: $base"
+          git worktree add /tmp/perf-base "$base"
+          /tmp/perf-base/benches/setup_ci.sh
+          mkdir -p /tmp/perf-base/target
+          (cd /tmp/perf-base && CARGO_TARGET_DIR="$GITHUB_WORKSPACE/target" UPDATE_BASELINE=1 \
+            cargo test --release --test perf_regression -- --nocapture)
+          cp /tmp/perf-base/target/perf-results.json /tmp/perf-base-results.json
+
+      - name: Perf regression gate
+        run: |
+          if [ -f /tmp/perf-base-results.json ]; then
+            export PERF_BASE_RESULTS=/tmp/perf-base-results.json
+          fi
+          cargo test --release --test perf_regression -- --nocapture
+
+      - name: Upload perf results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: perf-results
+          path: |
+            target/perf-results.json
+            /tmp/perf-base-results.json
+          if-no-files-found: ignore
+
+      - name: Clippy
+        run: cargo clippy --release -- -D warnings
+
+  deploy-staging:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+    needs: [test, fmt]
+    uses: entirehq/fleet/.github/workflows/deploy.yml@main
+    with:
+      image_name: fleet/peregrine
+      # Both staging cells pull from the shared us-west-2 nonprod ECR, so one
+      # build fans out to both overlays. eu-west-1 was previously omitted here,
+      # so it drifted and had to be hand-bumped — which pinned a tag absent
+      # from its (wrongly eu-west-1) registry and caused ImagePullBackOff.
+      fleet_overlay: apps/peregrine/overlays/eks-staging-us-west-2 apps/peregrine/overlays/eks-staging-eu-west-1 apps/peregrine/overlays/eks-staging-us-east-2
+      aws_account_id: "128096325110"
+      aws_region: "us-west-2"
+      platforms: linux/arm64
+    secrets: inherit
+
+  promote:
+    needs: [deploy-staging]
+    if: >-
+      github.ref == 'refs/heads/main'
+      && needs.deploy-staging.result == 'success'
+      && !(github.event_name == 'workflow_dispatch' && inputs.staging_only)
+    permissions:
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/promote.yml
+    with:
+      tag: ${{ needs.deploy-staging.outputs.image_tag }}
+      auto_merge: true
+    secrets: inherit

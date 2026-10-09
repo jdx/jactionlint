@@ -178,7 +178,7 @@ func TestRulePipelineWithoutPipefailCanBeTurnedOff(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	l.defaultConfig = mustParseConfig(t, "rules:\n  pipeline-without-pipefail: off\n")
+	l.defaultConfig = mustParseConfig(t, "rules:\n  pipeline-without-pipefail: off\n  missing-timeout: off\n")
 	errs, err := l.Lint("test.yaml", []byte(pipefailWorkflow("", "run: make | tee out\n")), nil)
 	if err != nil {
 		t.Fatal(err)

@@ -1,0 +1,2 @@
+test.yaml:14:13: job "test" needs "setup" but never reads its outputs or result, and it already needs "build" which waits for "setup". this entry changes nothing and can be removed [unused-needs]
+test.yaml:19:20: job "publish" needs "build" but never reads its outputs or result, and it already needs "test" which waits for "build". this entry changes nothing and can be removed [unused-needs]

@@ -23,6 +23,7 @@ jobs:
   build:
     name: Build site
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: read
     steps:
@@ -45,6 +46,7 @@ jobs:
     needs: build
     if: ${{ github.repository_owner == 'jdx' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       pages: write
       id-token: write

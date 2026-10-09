@@ -1,0 +1,13 @@
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      # ERROR: v1 is both a branch and a tag
+      - uses: example/confusing@v1
+      # OK: only a tag
+      - uses: example/confusing@v2
+      # OK: only a tag
+      - uses: actions/checkout@v4
+      # OK: a branch name which is not also a tag
+      - uses: actions/checkout@main

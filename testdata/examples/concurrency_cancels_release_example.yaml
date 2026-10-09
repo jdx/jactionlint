@@ -1,0 +1,11 @@
+on:
+  push:
+    tags: ["v*"]
+concurrency:
+  group: release
+  cancel-in-progress: true
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - run: cargo publish

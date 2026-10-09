@@ -1,0 +1,6 @@
+archived-uses
+impostor-commit
+known-vulnerable-actions
+ref-confusion
+ref-version-mismatch
+stale-action-refs

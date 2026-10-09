@@ -164,6 +164,9 @@ type Config struct {
 	// of the config file listing them. Later files win over earlier ones, and the config file itself
 	// wins over all of them. ReadConfigFile loads them and merges them into the returned Config.
 	Extends []string `yaml:"extends"`
+	// Online turns on the online checks (see LinterOptions.Online) for the files this configuration
+	// applies to, like the -online flag does for the whole run. They query the GitHub API.
+	Online bool `yaml:"online"`
 	// Rules sets the level and the options of each rule by rule ID. A rule not listed here follows the
 	// profile.
 	Rules map[string]RuleConfig `yaml:"rules"`
@@ -382,6 +385,9 @@ func (c *Config) merge(over *Config) {
 	for id, rc := range over.Rules {
 		c.Rules[id] = rc
 	}
+	if over.present["online"] {
+		c.Online = over.Online
+	}
 	if over.present["self-hosted-runner.labels"] {
 		c.SelfHostedRunner.Labels = over.SelfHostedRunner.Labels
 	}
@@ -484,6 +490,11 @@ func writeDefaultConfigFile(path string) error {
 # policy checks such as pinning actions to a commit SHA. "all" adds the style
 # checks. See https://jactionlint.jdx.dev/rules for all rule IDs.
 #profile: default
+
+# Turn on the checks which query the GitHub API (impostor commits, known
+# vulnerable actions, archived repositories, ...). Same as the -online flag.
+# See https://jactionlint.jdx.dev/usage#online-checks
+#online: false
 
 # Set the level of a rule by its ID: "error" (fails the run), "warn", "info" or
 # "off". A rule with options takes a mapping.

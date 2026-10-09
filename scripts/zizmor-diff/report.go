@@ -99,7 +99,7 @@ func Build(inputs []RepoInput, m *Mapping, lineTolerance int) *Report {
 		shared := make([]bool, len(in.Jactionlint))
 		seen := map[string]bool{} // audit -> counted this repo
 		for _, z := range in.Zizmor {
-			if !isWorkflowFile(z.File) {
+			if !isWorkflowFile(z.File) && !(isDependabotFile(z.File) && mapped[z.Rule] != nil) {
 				res.OutOfScope++
 				continue
 			}

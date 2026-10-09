@@ -1,0 +1,27 @@
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo publish
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-go@v5
+      - uses: goreleaser/goreleaser-action@v6
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: docker/build-push-action@v6
+        with:
+          push: true
+          cache-from: type=gha

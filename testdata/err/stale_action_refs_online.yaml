@@ -1,0 +1,11 @@
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      # OK: tagged v4.2.2
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      # INFO: no tag points to this commit
+      - uses: actions/setup-node@3235b876344d2a9aa001b8d1453c930bba69e610
+      # OK: the tag is not a SHA, the unpinned-uses rule is for that
+      - uses: actions/setup-node@v4

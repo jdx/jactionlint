@@ -15,7 +15,7 @@ func TestRuleLocalActionCheckoutEnabledByDefaultAndCanBeTurnedOff(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	l.defaultConfig = &Config{}
+	l.defaultConfig = withoutMissingTimeout(&Config{})
 	errs, err := l.Lint("test.yaml", b, nil)
 	if err != nil {
 		t.Fatal(err)

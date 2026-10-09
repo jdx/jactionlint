@@ -79,14 +79,14 @@ func (b *builder) stmt(st *syntax.Stmt) {
 		red := b.redirect(r, owner)
 		if group && owner == nil {
 			red.Group = true
-			b.groups = append(b.groups, groupRedirect{red, int(st.Cmd.Pos().Offset()), int(st.Cmd.End().Offset())})
+			b.groups = append(b.groups, groupRedirect{red, b.off(st.Cmd.Pos()), b.offEnd(st.Cmd.End())})
 		}
 	}
 }
 
 func (b *builder) redirect(r *syntax.Redirect, owner *Command) *Redirect {
 	red := &Redirect{
-		Loc:    b.s.loc(int(r.Pos().Offset()), int(r.End().Offset())),
+		Loc:    b.s.loc(b.off(r.Pos()), b.offEnd(r.End())),
 		Op:     r.Op.String(),
 		Target: b.word(r.Word),
 		Cmd:    owner,
@@ -111,7 +111,7 @@ func (b *builder) redirect(r *syntax.Redirect, owner *Command) *Redirect {
 			h.Quoted = red.Target.Quoted
 		}
 		if r.Hdoc != nil {
-			start, end := int(r.Hdoc.Pos().Offset()), int(r.Hdoc.End().Offset())
+			start, end := b.off(r.Hdoc.Pos()), b.offEnd(r.Hdoc.End())
 			h.Body = b.src(start, end)
 			if i := strings.LastIndexByte(h.Body, '\n'); i >= 0 && strings.TrimLeft(h.Body[i+1:], "\t ") == h.Delim {
 				h.Body = h.Body[:i+1] // the line with the closing delimiter belongs to the here document in the tree
@@ -255,7 +255,7 @@ func (b *builder) pipeline(n *syntax.BinaryCmd) {
 		stmts = append(stmts, bc.Y)
 	}
 	flatten(n)
-	p := &Pipeline{Loc: b.s.loc(int(n.Pos().Offset()), int(n.End().Offset())), Negated: b.negated[n], Tested: b.tested[n]}
+	p := &Pipeline{Loc: b.s.loc(b.off(n.Pos()), b.offEnd(n.End())), Negated: b.negated[n], Tested: b.tested[n]}
 	b.s.Pipelines = append(b.s.Pipelines, p)
 	b.pending = append(b.pending, pendingPipeline{p, stmts})
 }
@@ -263,10 +263,10 @@ func (b *builder) pipeline(n *syntax.BinaryCmd) {
 func (b *builder) finishPipelines() {
 	for _, pp := range b.pending {
 		for _, st := range pp.stages {
-			start, end := int(st.Pos().Offset()), int(st.End().Offset())
+			start, end := b.off(st.Pos()), b.offEnd(st.End())
 			cs, ce := start, end
 			if st.Cmd != nil { // a here document makes the statement extend over its body
-				cs, ce = int(st.Cmd.Pos().Offset()), int(st.Cmd.End().Offset())
+				cs, ce = b.off(st.Cmd.Pos()), b.offEnd(st.Cmd.End())
 			}
 			stage := &Stage{Loc: b.s.loc(start, end), Commands: b.directCommands(cs, ce)}
 			pp.p.Stages = append(pp.p.Stages, stage)

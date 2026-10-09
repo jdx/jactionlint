@@ -1,0 +1,4 @@
+test.yaml:4:3: permission "contents: write" has no comment explaining why it is needed. add a comment at the end of the line or above it [undocumented-permissions]
+test.yaml:16:7: permission "id-token: write" has no comment explaining why it is needed. add a comment at the end of the line or above it [undocumented-permissions]
+test.yaml:17:7: permission "attestations: write" has no comment explaining why it is needed. add a comment at the end of the line or above it [undocumented-permissions]
+test.yaml:20:7: permission "deployments: write" has no comment explaining why it is needed. add a comment at the end of the line or above it [undocumented-permissions]

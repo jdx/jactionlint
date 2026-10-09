@@ -1,0 +1,25 @@
+on: push
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: softprops/action-gh-release@c95fe1489396fe8a9eb87c0abf8aa5b2ef267fda # v2.2.1
+        with:
+          files: dist/*
+      - uses: ncipollo/release-action@bcfe5470707e8832e12347755757cec0eb3c22af # v1.18.0
+      - uses: svenstaro/upload-release-action@04733e069f2d7f7f0b4aebc4fbdbce8613b03ccd # 2.9.0
+      - uses: actions/create-release@v1
+      - uses: actions/upload-release-asset@v1
+      - uses: elgohr/Github-Release-Action@v5
+      - uses: dacbd/create-issue-action@v2
+      - uses: actions-ecosystem/action-add-labels@v1
+      - uses: actions-ecosystem/action-remove-labels@v1
+      - uses: addnab/docker-run-action@v3
+      - uses: sergeysova/jq-action@v2
+      # Not in the table, or not a repository action
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: docker://alpine:3.20
+      - uses: ./.github/actions/release
+      # The pedantic ones need their own switch
+      - uses: peter-evans/create-pull-request@v7
+      - uses: dtolnay/rust-toolchain@stable
