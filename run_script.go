@@ -9,6 +9,9 @@ import (
 // runscript.Origin.
 func (s *String) scriptOrigin() runscript.Origin {
 	o := runscript.Origin{Literal: s.Literal, Indent: s.Indent, Quoted: s.Quoted}
+	if s.src != nil {
+		o.Locate = s.valueAt
+	}
 	if s.Pos != nil {
 		o.Line, o.Col = s.Pos.Line, s.Pos.Col
 	}

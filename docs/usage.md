@@ -312,11 +312,12 @@ Lines and columns are 1-based and columns count Unicode code points (a tab, an a
 a LF is not counted), in every format: the SARIF log says `columnKind: unicodeCodePoints`. The region of a finding in the SARIF log
 (and the `EndLine` and `EndColumn` of an error) ends just after its last character.
 
-A finding inside an expression of a multi-line scalar is on the line and at the column of the text in the file. This is exact for a
-literal block (`|`). For a folded block (`>`) and for a plain or quoted scalar over several lines, the position is found by following
-the lines of the scalar through the source, which is exact unless the scalar has escapes (`\n`, `\x41`) before the finding, in which
-case the position on the first line of the scalar is used. The `end_column` of `json` keeps the meaning it had in actionlint, the column
-of the last character of the `^~~~` indicator, but counts code points like `column`.
+A finding inside a string (an expression, a line of a `run:` script, a secret) is on the line and at the column of the text in the file,
+in every style of YAML scalar: plain, single quoted (`''`), double quoted (escapes such as `\n`, `\"`, `\x41`, `\u00e9` and `\<newline>`),
+literal blocks (`|`) and folded blocks (`>`), also over several lines. The text of a folded line break is at the end of its line.
+The region of a finding (`end_column` of `json`, the SARIF region) is the same in every format: the SARIF region ends just after the last
+character, and the `end_column` of `json` is the column of the last character of the `^~~~` indicator, which underlines the same region
+(it counts code points like `column`).
 
 Before explaining the template details, let's see some examples.
 
@@ -657,13 +658,13 @@ used with stdin. These rules have a fix:
 | `dependabot-execution`                | Sets `insecure-external-code-execution: deny`.                                                                                    | No                                                                |
 | `insecure-commands`                   | Removes the `ACTIONS_ALLOW_UNSECURE_COMMANDS` variable.                                                                           | No                                                                |
 | `invisible-characters`                | Removes the invisible characters.                                                                                                 | Yes                                                               |
-| `missing-permissions`                 | Adds `permissions:` with `contents: read` to the workflow after the `on:` block.                                                  | Only when nothing shows that a job needs the token, else `unsafe` |
+| `missing-permissions`                 | Adds `permissions:` with `contents: read` to the workflow after the `on:` block, but not to a reusable (`workflow_call`) workflow. | Only when nothing shows that a job needs the token, else `unsafe` |
 | `missing-timeout`                     | Adds `timeout-minutes: N` to the job after `runs-on:`, only when [`default-minutes`](config.md#rules) sets `N`.                  | Yes                                                               |
 | `mutable-runner-label`                | Writes the fixed label of the [`pin`](config.md#rules) option in place of a moving one.                                           | Yes                                                               |
 | `obfuscation`                         | Writes the path of `uses:` in its plain form.                                                                                     | No                                                                |
 | `pipeline-without-pipefail`           | Adds `set -o pipefail` as the first line of a `run: \|` script.                                                                    | No                                                                |
 | `self-repository`                     | Writes `$/` for `./` in `uses:`; needs a recent runner and GHES, and actionlint 1.7.12 and older reject it.                      | No                                                                |
-| `template-injection`                  | Moves a simple `${{ }}` reference of a bash or sh script into `env:`.                                                             | For plain references; the others are `unsafe`                     |
+| `template-injection`                  | Moves a simple `${{ }}` reference of a bash or sh script into `env:`, but not one in a word list such as `for f in ${{ }}`.     | For plain references; the others are `unsafe`                     |
 | `unlocked-install`                    | Adds `--locked` to `cargo install`.                                                                                               | No                                                                |
 | `unpinned-uses`                       | With `--online`, replaces a tag with its commit and names the tag in a comment (see below).                                        | Yes                                                               |
 | `unused-ignore`                       | Removes the ignore comment, or only its patterns which did nothing when the comment has others.                                   | Yes                                                               |

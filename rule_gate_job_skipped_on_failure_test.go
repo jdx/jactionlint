@@ -20,10 +20,17 @@ func TestRuleGateJobSkippedOnFailure(t *testing.T) {
 		{"not equal to success", gate("    steps:\n      - run: echo\n        if: needs.a.result != 'success'\n"), []string{"14"}},
 		{"negated equal to success", gate("    steps:\n      - run: echo\n        if: ${{ !(needs.a.result == 'success') }}\n"), []string{"14"}},
 		{"equal to failure in the job condition", head + "  final:\n    needs: a\n    if: needs.a.result == 'failure'\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo\n", []string{"16"}},
-		{"explicit success is the implicit one", gate("    if: success() && needs.a.result != 'skipped'\n    steps:\n      - run: echo\n"), []string{"17"}},
+		{"a condition that expects a failure and has success() in it", gate("    if: success() && needs.a.result == 'failure'\n    steps:\n      - run: echo\n"), []string{"17"}},
+		{"a condition that expects anything but success", gate("    if: needs.a.result != 'success'\n    steps:\n      - run: echo\n"), []string{"17"}},
+		{"a condition that expects a cancellation", gate("    if: needs.a.result == 'cancelled'\n    steps:\n      - run: echo\n"), []string{"17"}},
 		{"step always does not run the job", gate("    steps:\n      - run: echo\n        if: always() && needs.a.result == 'failure'\n"), []string{"14"}},
 		{"job output of a reusable workflow call", head + "  call:\n    needs: a\n    uses: ./.github/workflows/x.yml\n    with:\n      ok: ${{ needs.a.result }}\n", []string{"14"}},
 
+		// Not gates: jobs that do something after their needs went well and are meant to be skipped otherwise
+		{"publish after success or skipped", gate("    if: needs.a.result == 'success' && (needs.b.result == 'success' || needs.b.result == 'skipped')\n    environment: npm\n    steps:\n      - run: npm publish\n"), nil},
+		{"cleanup after not skipped", gate("    if: success() && needs.a.result != 'skipped'\n    steps:\n      - run: echo\n"), nil},
+		{"not failed", gate("    if: needs.a.result != 'failure'\n    steps:\n      - run: echo\n"), nil},
+		{"reusable workflow call chosen by results", head + "  call:\n    needs: [a, b]\n    if: needs.a.result == 'success' && (needs.b.result == 'success' || needs.b.result == 'skipped')\n    uses: ./.github/workflows/x.yml\n", nil},
 		{"not cancelled", gate("    if: ${{ !cancelled() }}\n    steps:\n      - run: test \"${{ contains(needs.*.result, 'failure') }}\" = false\n"), nil},
 		{"always", gate("    if: always()\n    steps:\n      - run: echo ${{ needs.a.result }}\n"), nil},
 		{"always in an expression", gate("    if: ${{ always() && github.event_name == 'push' }}\n    steps:\n      - run: echo ${{ needs.a.result }}\n"), nil},

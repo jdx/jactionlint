@@ -176,10 +176,9 @@ func releaseSignal(j *Job, sc scenario) string {
 	if sc.conditionIn(j.If) == condFalse {
 		return ""
 	}
-	if j.Environment != nil && j.Environment.Name != nil && j.Environment.Name.Value != "" {
-		if j.Environment.Name.ContainsExpression() {
-			return fmt.Sprintf("job %q uses an environment that an expression chooses", j.ID.Value)
-		}
+	// An environment is also used to scope secrets or variables for a test job ("ci", "${{ matrix.environment }}"), so
+	// only one whose name (or, for an expression, a word in it) says it is a place to release to counts.
+	if j.Environment != nil && j.Environment.Name != nil && isDeploymentEnvironment(j.Environment.Name.Value) {
 		return fmt.Sprintf("job %q uses the environment %q", j.ID.Value, j.Environment.Name.Value)
 	}
 	windows := false
@@ -233,6 +232,14 @@ func releaseSignal(j *Job, sc scenario) string {
 		}
 	}
 	return ""
+}
+
+// deploymentEnvironmentWords are the parts of an environment name that say it is something to release or deploy to.
+var deploymentEnvironmentWords = []string{"prod", "stag", "preview", "release", "deploy", "live", "publish", "pages", "pypi", "npm", "crates", "rubygems", "nuget", "maven"}
+
+func isDeploymentEnvironment(name string) bool {
+	name = strings.ToLower(name)
+	return slices.ContainsFunc(deploymentEnvironmentWords, func(w string) bool { return strings.Contains(name, w) })
 }
 
 func isLiteralBranch(p string) bool {
@@ -329,13 +336,64 @@ func (rule *RuleConcurrencyCancelsRelease) VisitJobPre(n *Job) error {
 // different refs (the ref, the commit, a run).
 func groupSeparatesRefs(refs []exprRef) bool {
 	for _, r := range refs {
-		for _, d := range [][]string{{"github", "ref"}, {"github", "ref_name"}, {"github", "sha"}, {"github", "run_id"}, {"github", "run_number"}} {
+		for _, d := range [][]string{{"github", "ref"}, {"github", "ref_name"}, {"github", "sha"}} {
 			if refCovers(r.chain, d) {
 				return true
 			}
 		}
 	}
 	return false
+}
+
+// groupUniquePerRun reports whether the group has a different value for every run in the scenario, so no run can
+// cancel another one: it has github.run_id or github.run_number, possibly as the fallback of an empty value
+// (`github.head_ref || github.run_id` is the run id for a push, where head_ref is empty).
+func groupUniquePerRun(g *String, sc scenario) bool {
+	if g == nil {
+		return false
+	}
+	exprs, ok := parseTemplateExprs(g.Value)
+	if !ok {
+		return false
+	}
+	for _, e := range exprs {
+		if sc.uniquePerRun(e) {
+			return true
+		}
+	}
+	return false
+}
+
+// uniquePerRun reports whether the expression evaluates to something that differs between any two runs.
+func (sc scenario) uniquePerRun(n ExprNode) bool {
+	switch n := n.(type) {
+	case *LogicalOpNode:
+		if n.Kind != LogicalOpNodeKindOr {
+			return false
+		}
+		// `a || b` is a when a is truthy. A unique a is never empty, and an a that is empty here leaves b.
+		if sc.eval(n.Left) == condFalse || sc.pullRequestOnly(n.Left) {
+			return sc.uniquePerRun(n.Right)
+		}
+		return sc.uniquePerRun(n.Left)
+	case *FuncCallNode:
+		if strings.EqualFold(n.Callee, "format") || strings.EqualFold(n.Callee, "join") {
+			return slices.ContainsFunc(n.Args, sc.uniquePerRun)
+		}
+		return false
+	}
+	chain, _, ok := chainOf(n)
+	return ok && len(chain) == 2 && chain[0] == "github" && (chain[1] == "run_id" || chain[1] == "run_number")
+}
+
+// pullRequestOnly reports whether the node reads a value that only the events of a pull request have, so that it is
+// empty when the scenario is another event: the number of the pull request and the pull request of the payload.
+func (sc scenario) pullRequestOnly(n ExprNode) bool {
+	if sc.event == "" || isPullRequestEvent(sc.event) {
+		return false
+	}
+	chain, _, ok := chainOf(n)
+	return ok && len(chain) >= 3 && chain[0] == "github" && chain[1] == "event" && (chain[2] == "number" || chain[2] == "pull_request")
 }
 
 // groupIsScopedToRelease reports whether the group names the release itself for a run of the event: the release of a
@@ -370,7 +428,7 @@ func (rule *RuleConcurrencyCancelsRelease) check(c *Concurrency, jobs []*Job) {
 	}
 	jobLevel := c != rule.wf.Concurrency
 	for _, sc := range rule.scenarios {
-		if !sc.isTrue(c.CancelInProgress) || (sc.explicit && groupSeparatesRefs(groupRefs)) || groupIsScopedToRelease(groupRefs, sc.event) {
+		if !sc.isTrue(c.CancelInProgress) || groupUniquePerRun(c.Group, sc.scenario) || (sc.explicit && groupSeparatesRefs(groupRefs)) || groupIsScopedToRelease(groupRefs, sc.event) {
 			continue
 		}
 		signal := ""

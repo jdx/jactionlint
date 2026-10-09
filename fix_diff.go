@@ -2,6 +2,7 @@ package jactionlint
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 )
 
@@ -14,11 +15,7 @@ func unifiedDiff(oldName, newName string, oldSrc, newSrc []byte) string {
 	a := splitDiffLines(string(oldSrc))
 	b := splitDiffLines(string(newSrc))
 
-	type op struct {
-		kind byte // ' ', '-' or '+'
-		text string
-	}
-	var ops []op
+	var ops []diffOp
 	pre := 0
 	for pre < len(a) && pre < len(b) && a[pre] == b[pre] {
 		pre++
@@ -28,53 +25,16 @@ func unifiedDiff(oldName, newName string, oldSrc, newSrc []byte) string {
 		suf++
 	}
 	for i := 0; i < pre; i++ {
-		ops = append(ops, op{' ', a[i]})
+		ops = append(ops, diffOp{' ', a[i]})
 	}
 	am, bm := a[pre:len(a)-suf], b[pre:len(b)-suf]
-	n, m := len(am), len(bm)
-	if n*m > 4_000_000 {
-		for _, l := range am {
-			ops = append(ops, op{'-', l})
-		}
-		for _, l := range bm {
-			ops = append(ops, op{'+', l})
-		}
-	} else {
-		l := make([][]int32, n+1)
-		for i := range l {
-			l[i] = make([]int32, m+1)
-		}
-		for i := n - 1; i >= 0; i-- {
-			for j := m - 1; j >= 0; j-- {
-				if am[i] == bm[j] {
-					l[i][j] = l[i+1][j+1] + 1
-				} else {
-					l[i][j] = max(l[i+1][j], l[i][j+1])
-				}
-			}
-		}
-		i, j := 0, 0
-		for i < n || j < m {
-			switch {
-			case i < n && j < m && am[i] == bm[j]:
-				ops = append(ops, op{' ', am[i]})
-				i++
-				j++
-			case j >= m || (i < n && l[i+1][j] >= l[i][j+1]):
-				ops = append(ops, op{'-', am[i]})
-				i++
-			default:
-				ops = append(ops, op{'+', bm[j]})
-				j++
-			}
-		}
-	}
+	ops = append(ops, myersDiff(am, bm)...)
 	for i := len(a) - suf; i < len(a); i++ {
-		ops = append(ops, op{' ', a[i]})
+		ops = append(ops, diffOp{' ', a[i]})
 	}
 
 	var out strings.Builder
-	fmt.Fprintf(&out, "--- %s\n+++ %s\n", oldName, newName)
+	fmt.Fprintf(&out, "--- %s\n+++ %s\n", diffHeaderName(oldName), diffHeaderName(newName))
 	const context = 3
 	i := 0
 	for i < len(ops) {
@@ -134,6 +94,15 @@ func unifiedDiff(oldName, newName string, oldSrc, newSrc []byte) string {
 	return out.String()
 }
 
+// diffHeaderName returns the name for the "---" and "+++" lines. patch(1) reads the name up to the first
+// white space unless a tab ends it, so a name with a space gets the tab that git writes after it too.
+func diffHeaderName(name string) string {
+	if strings.ContainsAny(name, " ") {
+		return name + "\t"
+	}
+	return name
+}
+
 func diffRange(start, count int) string {
 	switch count {
 	case 0:
@@ -160,4 +129,107 @@ func splitDiffLines(s string) []string {
 	}
 	lines[len(lines)-1] += noEOLMark
 	return lines
+}
+
+type diffOp struct {
+	kind byte // ' ', '-' or '+'
+	text string
+}
+
+// maxDiffEdits is the number of changed lines after which myersDiff gives up on finding the shortest edit
+// script and returns every line of a as removed and every line of b as added.
+const maxDiffEdits = 3000
+
+// myersDiff returns the shortest edit script from a to b (Myers, "An O(ND) Difference Algorithm and Its
+// Variations"), which is what diff -u shows: the lines which stay are matched wherever they are, so a
+// file with repeated blocks gets one small hunk for each change instead of one for the whole run of
+// repeated lines. Time and space grow with the square of the number of changed lines, not with the product
+// of the lengths of the files.
+func myersDiff(a, b []string) []diffOp {
+	n, m := len(a), len(b)
+	if n == 0 || m == 0 {
+		return replaceAllOps(a, b)
+	}
+	maxD := min(n+m, maxDiffEdits)
+	offset := maxD + 1
+	v := make([]int, 2*maxD+3)
+	var trace [][]int
+	found := -1
+search:
+	for d := 0; d <= maxD; d++ {
+		// Only the diagonals -d..d are used in this round, so only they are saved
+		for k := -d; k <= d; k += 2 {
+			var x int
+			if k == -d || (k != d && v[offset+k-1] < v[offset+k+1]) {
+				x = v[offset+k+1]
+			} else {
+				x = v[offset+k-1] + 1
+			}
+			y := x - k
+			for x < n && y < m && a[x] == b[y] {
+				x++
+				y++
+			}
+			v[offset+k] = x
+			if x >= n && y >= m {
+				found = d
+				trace = append(trace, slices.Clone(v[offset-d:offset+d+1]))
+				break search
+			}
+		}
+		trace = append(trace, slices.Clone(v[offset-d:offset+d+1]))
+	}
+	if found < 0 {
+		return replaceAllOps(a, b)
+	}
+	// Walk back from the end to the start
+	var rev []diffOp
+	x, y := n, m
+	for d := found; d > 0; d-- {
+		prev := trace[d-1] // the diagonals -(d-1)..(d-1)
+		at := func(k int) int { return prev[k+(d-1)] }
+		k := x - y
+		var pk int
+		if k == -d || (k != d && at(k-1) < at(k+1)) {
+			pk = k + 1
+		} else {
+			pk = k - 1
+		}
+		px := at(pk)
+		py := px - pk
+		sx, sy := px+1, py // where the snake of this round starts, after the removal of a line
+		if pk == k+1 {
+			sx, sy = px, py+1 // after the addition of a line
+		}
+		for x > sx && y > sy {
+			x--
+			y--
+			rev = append(rev, diffOp{' ', a[x]})
+		}
+		if pk == k+1 {
+			y--
+			rev = append(rev, diffOp{'+', b[y]})
+		} else {
+			x--
+			rev = append(rev, diffOp{'-', a[x]})
+		}
+	}
+	for x > 0 && y > 0 {
+		x--
+		y--
+		rev = append(rev, diffOp{' ', a[x]})
+	}
+	slices.Reverse(rev)
+	return rev
+}
+
+func replaceAllOps(a, b []string) []diffOp {
+	ops := make([]diffOp, 0, len(a)+len(b))
+	for _, l := range a {
+		ops = append(ops, diffOp{'-', l})
+	}
+	for _, l := range b {
+		ops = append(ops, diffOp{'+', l})
+	}
+	return ops
 }

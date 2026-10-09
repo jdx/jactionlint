@@ -417,7 +417,6 @@ Rows of other rules:
   expressions in `if:` that zizmor reports (`${{ false }}`) are reported by `constant-condition` and `if-always-true`.
 - **`misfeature`** and **`unsound-condition`** match exactly.
 
-Known differences that are not measured: the position of a finding in a double-quoted multi-line YAML string is the first line.
 Composite actions are measured in [composite actions](#composite-actions-measurements).
 <a id="batch-a-measurements"></a>
 ## Batch A measurements

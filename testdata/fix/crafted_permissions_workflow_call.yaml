@@ -1,0 +1,10 @@
+on:
+  workflow_call:
+  push:
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - run: make

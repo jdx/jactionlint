@@ -949,14 +949,14 @@ jobs:
 Output:
 
 ```
-test.yaml:6:9: shellcheck reported issue in this script: SC2086:info:1:6: Double quote to prevent globbing and word splitting [shellcheck]
+test.yaml:6:19: shellcheck reported issue in this script: SC2086:info:1:6: Double quote to prevent globbing and word splitting [shellcheck]
   |
 6 |       - run: echo $FOO
-  |         ^~~~
-test.yaml:14:9: shellcheck reported issue in this script: SC2086:info:1:6: Double quote to prevent globbing and word splitting [shellcheck]
+  |                   ^~~~
+test.yaml:14:19: shellcheck reported issue in this script: SC2086:info:1:6: Double quote to prevent globbing and word splitting [shellcheck]
    |
 14 |       - run: echo $FOO
-   |         ^~~~
+   |                   ^~~~
 ```
 
 <!-- Skip playground link -->
@@ -970,8 +970,7 @@ level or job level. Each step can configure shell to run scripts by `shell:`.
 
 In the above example output, `SC2086:info:1:6:` means that shellcheck reported SC2086 rule violation and the location is at
 line 1, column 6. Note that the location is relative to the script of the `run:` section.
-The reported source line is the line within the script when `run:` uses a literal block (`|`, `|-`, `|+`) and no `${{ }}`
-in the script spans multiple lines. Otherwise, the position of `run:` is reported. An [ignore comment](usage.md#ignore-some-errors) on the
+The finding is reported at the token of the script in the workflow file, whatever the style of the `run:` scalar. An [ignore comment](usage.md#ignore-some-errors) on the
 step or at the `run:` key covers the lines of the script ([details](actionlint.md#where-shellcheck-findings-are-reported)).
 
 jactionlint remembers the default shell and checks what OS the job runs on. Only when the shell is `bash` or `sh`, jactionlint
@@ -1322,7 +1321,9 @@ in the `env:` of the step):
 ```
 
 When the expression is not in quotes, quoting it changes how the shell splits words and expands globs, so the fix needs
-`--fix=unsafe`. Scripts of other shells (PowerShell, cmd, Python) are not fixed.
+`--fix=unsafe`. An expression in a list of words, such as `for f in ${{ inputs.files }}; do` or `files=(${{ inputs.files }})`, is
+not fixed at all: the shell splits the value into the items of the list, and quoting it would make one item of it. Pass the value
+through `env:` yourself and decide how the script splits it. Scripts of other shells (PowerShell, cmd, Python) are not fixed.
 
 <a id="check-template-injection-sinks"></a>
 ### Container options, Docker steps and AI agent inputs
@@ -2674,11 +2675,11 @@ Output:
 test.yaml:8:48: a value that is not a literal is written to $GITHUB_ENV in a workflow triggered by "pull_request_target", which runs with secrets and a write token for events that may come from a fork. an attacker who controls the value can set LD_PRELOAD or NODE_OPTIONS (a newline adds another variable) and run code in the next steps. write only literal values and values computed from trusted sources, or pass state with $GITHUB_OUTPUT [github-env]
   |
 8 |       - run: echo "VERSION=$(cat version.txt)" >> "$GITHUB_ENV"
-  |                                                ^~
+  |                                                ^~~~~~~~~~~~~~~~
 test.yaml:9:34: untrusted input from the variable TITLE (github.event.pull_request.title) is written to $GITHUB_ENV. an attacker who controls the value can set LD_PRELOAD or NODE_OPTIONS (a newline adds another variable) and run code in the next steps. do not write input that an outsider controls to $GITHUB_ENV; validate it first or pass it to the next step with $GITHUB_OUTPUT [github-env]
   |
 9 |       - run: echo "TITLE=$TITLE" >> "$GITHUB_ENV"
-  |                                  ^~
+  |                                  ^~~~~~~~~~~~~~~~
 ```
 
 [Playground](https://jactionlint.jdx.dev/#eNp0z8FKw0AQBuB7n+In5KCH5AEW2oMQNCAVNPYiEpJ2aCPL7LozE5TSd5ckIB7saZj5v/8wgd0KiOZ9m+jTSLTVLh1JpzOg35HE4S1EYjq8rz5CL1PS2+APC0nGUgR2sN5YrfCdkugciVKURQHFJB1ofwrIdtXzS/20Xec3+04xUpIhcKlfepths0GW39fNw+tdW2132X/9pm4eq3U+j6sNgHh0vwswc4f8fMZx0JP1JY3EWv59v9RBPeFy+RkA2itTFQ==)
@@ -2741,11 +2742,11 @@ Output:
 test.yaml:6:14: command "npm install" installs a package outside of a lock file: its dependencies are resolved anew on every run, although its version is pinned. add the package to package.json and commit the package-lock.json and install with `npm ci` [adhoc-packages]
   |
 6 |       - run: npm install eslint@9.0.0
-  |              ^~~
+  |              ^~~~~~~~~~~~~~~~~~~~~~~~
 test.yaml:7:14: command "gem install" installs a package outside of a lock file: its version and its dependencies are resolved anew on every run. add the package to a Gemfile and commit the Gemfile.lock and install with `bundle install` [adhoc-packages]
   |
 7 |       - run: gem install rake
-  |              ^~~
+  |              ^~~~~~~~~~~~~~~~
 ```
 
 [Playground](https://jactionlint.jdx.dev/#eNpUyjEOAjEMRNF+TzEXyGpbUnGVrGRBwDhRxr4/MhSI6hf/DauYwfv2GCfrBrjQs8AKY8kfZ5hH0Zbvs+gy+VVASVlh84Vu9KYKoXbz62U/9uNf3eSnVnvKewDexCcZ)
@@ -2869,7 +2870,7 @@ Output:
 test.yaml:8:14: "twine upload" publishes to PyPI with the long-lived credential TWINE_PASSWORD. prefer trusted publishing with pypa/gh-action-pypi-publish and the permission "id-token: write" [use-trusted-publishing]
   |
 8 |       - run: twine upload dist/*
-  |              ^~~~~
+  |              ^~~~~~~~~~~~~~~~~~~
 test.yaml:13:21: action "pypa/gh-action-pypi-publish@76f52bc884231f62b9a034ebfe128415bbaabdfc" publishes to PyPI but is given a password (input "password") instead of using trusted publishing. prefer trusted publishing with pypa/gh-action-pypi-publish and the permission "id-token: write" [use-trusted-publishing]
    |
 13 |           password: ${{ secrets.PYPI_TOKEN }}
@@ -2974,7 +2975,7 @@ Output:
 test.yaml:6:14: "cargo install" without --locked builds with the newest dependencies that match the crate instead of the ones in its Cargo.lock, so a new release of any dependency reaches the workflow. add --locked [unlocked-install]
   |
 6 |       - run: cargo install cargo-nextest
-  |              ^~~~~
+  |              ^~~~~~~~~~~~~~~~~~~~~~~~~~~
 ```
 
 [Playground](https://jactionlint.jdx.dev/#eNoky90JwCAMxPF3p7gFsoDbaJF+IFG8BDp+SX0K4fe/oRnTeaVnVOYEWKPFBZYrJdyrq7n0EvYTrU3uCpAoM46yzoFbaaX3/Ym2NzbfAESiIIE=)
@@ -3205,6 +3206,11 @@ the text of the workflow does not mention `GITHUB_TOKEN`, `github.token`, `GH_TO
 workflow runs and that pushes with the credentials left by `actions/checkout` is not visible, so check such a workflow before
 accepting the safe fix.
 
+A reusable workflow (one with `workflow_call:` in `on:`) gets no fix. The workflow that calls it decides what the token can do,
+and a callee that asks for more than its caller grants makes GitHub reject the run, so a `contents: read` written into the callee
+breaks every caller with `permissions: {}` or fewer permissions. The finding stays and the permissions have to be chosen by hand,
+after looking at the callers.
+
 <a id="check-excessive-permissions"></a>
 ## Excessive permissions
 
@@ -3277,6 +3283,10 @@ It reports:
   `issue_comment`, which people without write access can trigger, the message says so.
 - `write-all` and `read-all`, at the workflow level or on a job. They grant a level to every scope, including scopes which the
   job never uses.
+
+In a workflow with exactly one job the scope is not reported: the job gets it either way, so "grant it only to the job" would change
+nothing (zizmor does not report it either). On `pull_request_target`, `workflow_run` or `issue_comment` it still is, with a message
+that asks whether the job needs the scope instead of asking to move it.
 
 Write scopes on a job are not reported: that is where the access should be granted. The best practice is `permissions: {}` at
 the workflow level and the scopes a job needs on that job. Read scopes and `none` are not reported either.
@@ -3607,8 +3617,9 @@ the step has none. The fix is applied by `--fix` only when no later step of the 
 later `run:` script has a `git` command that talks to a remote (`push`, `pull`, `fetch`, `clone`, `remote`, `submodule`, `lfs`,
 `ls-remote`, `commit` or `tag`) or a later step uses an action known to push (such as `stefanzweifel/git-auto-commit-action` or
 `peter-evans/create-pull-request`), the fix is unsafe and needs `--fix=unsafe`. A script which pushes without a visible git
-command cannot be detected, so check the workflow after applying the fix. A step written in flow style (`- {uses: ...}`) is
-reported without a fix.
+command cannot be detected, so check the workflow after applying the fix. A `with:` written in flow style on the line of the key
+(`with: { fetch-depth: 0 }`) gets the entry first. A step written in flow style (`- {uses: ...}`) is reported without a fix, and so
+is a flow `with:` that spans lines: write `persist-credentials: false` there by hand.
 
 A checkout is not reported when a later step of the job pushes with the credential it left (a `git push` in a script or an action
 such as `stefanzweifel/git-auto-commit-action`) and no step uploads the workspace (`path: .`, `..` or `${{ github.workspace }}`),
@@ -4351,7 +4362,7 @@ test.yaml:24:16: context "env" is not allowed here. available contexts are "gith
 test.yaml:30:20: context "env" is not allowed here. no context is available here. see https://docs.github.com/en/actions/learn-github-actions/contexts#context-availability for more details [expression]
    |
 30 |         shell: ${{ env.SHELL}}
-   |                    ^~~~~~~~~~~
+   |                    ^~~~~~~~~
 test.yaml:32:33: calling function "success" is not allowed here. "success" is only available in "jobs.<job_id>.if", "jobs.<job_id>.steps.if". see https://docs.github.com/en/actions/learn-github-actions/contexts#context-availability for more details [expression]
    |
 32 |         run: echo 'Success? ${{ success() }}'
@@ -4918,6 +4929,9 @@ equivalent of the `dependabot-cooldown` audit of zizmor.
 
 The other keys of `cooldown` (`semver-major-days`, `include` and so on) are not checked.
 
+An update whose version updates are turned off is skipped: `open-pull-requests-limit: 0`, or an `ignore` of `dependency-name: "*"`
+without `versions` (and without `update-types`, or with all three semver update types).
+
 Example input:
 
 ```yaml
@@ -5271,8 +5285,8 @@ queues runs and cancels none, is accepted. The two rules never contradict each o
 by the other.
 
 Whether to cancel is a choice, so a `concurrency:` mapping that does not cancel (to serialize releases, for example) is
-accepted, and so is a `queue:`. The rule skips workflows that only run through `workflow_call` (the caller decides) and workflows where every job sets its own
-`concurrency:`.
+accepted, and so is a `queue:`. The rule skips workflows that only run through `workflow_call` (the caller decides), workflows that only run on a `schedule` or
+by `workflow_dispatch` (no new commit supersedes such a run), and workflows where every job sets its own `concurrency:`.
 
 `jactionlint --fix` adds the block above after `on:` when it is safe to do so, that is, only for a workflow whose triggers are all
 events of a pull request (`pull_request`, `pull_request_target`, `pull_request_review` and `pull_request_review_comment`), in which
@@ -5387,11 +5401,11 @@ jobs:
 Output:
 
 ```
-test.yaml:7:14: the script downloaded from "https://example.com/install.sh" is run by "sh" without being verified, so whoever controls that server or the connection to it controls this job. if it installs a tool, install the tool with mise instead (jdx/mise-action pinned by SHA, or "mise use" with a committed mise.lock, which records the version and checksum of each tool). otherwise download the file, check its checksum or signature (sha256sum -c, gpg --verify, cosign verify-blob or gh attestation verify) before running it, or use the package of the vendor [unverified-download]
+test.yaml:7:14: the script downloaded from "https://example.com/install.sh" is run by "sh" without being verified, so whoever controls that server or the connection to it controls this job. if it installs a tool, mise can install it and record its checksum in mise.lock (jdx/mise-action in CI). otherwise check the checksum or signature (sha256sum -c, gpg --verify, cosign verify-blob or gh attestation verify) before running the file [unverified-download]
   |
 7 |         run: curl -fsSL https://example.com/install.sh | sh
   |              ^~~~
-test.yaml:9:11: the file "tool" downloaded from "https://example.com/dl/tool" is made executable without a checksum or signature check in this script, so whatever the server (or anyone on the connection) sends is trusted. if it installs a tool, install the tool with mise instead (jdx/mise-action pinned by SHA, or "mise use" with a committed mise.lock, which records the version and checksum of each tool). otherwise download the file, check its checksum or signature (sha256sum -c, gpg --verify, cosign verify-blob or gh attestation verify) before running it, or use the package of the vendor [unverified-download]
+test.yaml:9:11: the file "tool" downloaded from "https://example.com/dl/tool" is made executable without a checksum or signature check in this script, so whatever the server (or anyone on the connection) sends is trusted. if it installs a tool, mise can install it and record its checksum in mise.lock (jdx/mise-action in CI). otherwise check the checksum or signature (sha256sum -c, gpg --verify, cosign verify-blob or gh attestation verify) before running the file [unverified-download]
   |
 9 |           curl -fsSLo tool https://example.com/dl/tool
   |           ^~~~
@@ -6687,11 +6701,11 @@ Output:
 test.yaml:6:31: invisible character U+200B ZERO WIDTH SPACE in a uses: reference: it is not shown by editors or by the diff view of GitHub, so it can hide what the text really is. remove it [invisible-characters]
   |
 6 |       - uses: actions/checkout​@v4
-  |                               ^~~
+  |                               ^
 test.yaml:7:36: invisible character U+202E RIGHT-TO-LEFT OVERRIDE in a comment: it changes the order in which the text around it is displayed, so the code can run differently from how it reads. remove it [invisible-characters]
   |
 7 |       - run: echo "tests passed" # ‮success
-  |                                    ^~~~~~~
+  |                                    ^
 ```
 
 [Playground](https://jactionlint.jdx.dev/#eNo8zDsOwjAQhOE+pxiF2qKhcsVVnGUl85DXyuxSp+cuHConQQaJaorv11jL6ME63WxhngBX+lhgjcY0PJZoHulRhn2Jrp2/CkgIKjOK+NUaj1JV7ha+b6/z8/SP1mgZKtUwjx+iF1IvMw7YtzdDRMnPAKsALro=)
@@ -6883,6 +6897,10 @@ What the rule judges:
   is on for pull requests, so it is reported when the group is shared. An expression that depends on something else (a
   variable, an input) is not reported.
 - A group that reads `env`, `vars`, `inputs`, `needs`, `steps` or `secrets` is not reported, because the rule cannot see its value.
+- For `pull_request_review`, `github.event.review.id` is different for every review, and for `pull_request_review_comment`
+  `github.event.comment.id` is different for every comment, so a group that reads them is fine.
+- A `concurrency` block is not reported for an event when the `if:` of every job it covers is false for it
+  (`if: github.event_name == 'push'` under `pull_request`).
 
 There is no automatic fix: which value distinguishes the runs is up to you. To turn the rule off use `rules: {concurrency-cancels-prs: off}`
 in the [configuration file](config.md) or an ignore comment on the `group:` line (`# jactionlint ignore=concurrency-cancels-prs`).
@@ -6916,7 +6934,7 @@ test.yaml:6:23: "cancel-in-progress" is enabled here (job "publish" runs "cargo 
 test.yaml:11:14: "cargo publish" publishes to crates.io. prefer trusted publishing with rust-lang/crates-io-auth-action and the permission "id-token: write" [use-trusted-publishing]
    |
 11 |       - run: cargo publish
-   |              ^~~~~
+   |              ^~~~~~~~~~~~~
 ```
 
 [Playground](https://jactionlint.jdx.dev/#eNo0zD2qwzAQxPFepxhcPtAFdJVHCnlZFAexK/YjkNsHx7iaYv78VFoBVvrzXCD68Ib/7f23PQqpUJqx0Od8h2muBuPJ3bkA1IV41kPqMh3G7g1hyeWlu1/uPo+bthSvKg25p0TW2YM9fpcHL78qoJ5lA3UbegvfAQA6LzT4)
@@ -6943,7 +6961,11 @@ What is **not** reported: the mixed idiom `cancel-in-progress: ${{ github.event_
 and tags) and other expressions that are false for the trigger; an expression that depends on something the rule cannot see
 (an input, a variable); a group that names the release (`inputs.*`, `github.event.release.*`) and, for tag pushes, releases
 and manual runs, a group that names the ref, because then only a second run for the same ref replaces the first one; and
-workflows that only run for pull requests. Names of workflows and jobs are not taken as a signal.
+workflows that only run for pull requests. Names of workflows and jobs are not taken as a signal. A group with `github.run_id`
+or `github.run_number` (also as the fallback of an empty value: `github.head_ref || github.run_id` is the run id for a push) is
+different for every run, so no run cancels another. An `environment:` counts only when its name says it is a place to release
+to (`production`, `staging`, `preview`, `release`, `pages`, `npm`, `pypi`, ...); `ci`, or `${{ matrix.environment }}` used to
+scope secrets of a test job, does not.
 
 The fix sets a literal `cancel-in-progress: true` to `false`. It is **unsafe** (`--fix=unsafe`) because the runs of a group queue
 instead of replacing each other, which changes when and how often the workflow runs. Expressions are not fixed.
@@ -7020,6 +7042,11 @@ What is **not** reported:
 - A read that only compares the result with `'success'` using `==` (`if: needs.build.result == 'success'`). It is redundant in
   a job that is skipped unless its needs succeeded, but it does not expect to see a failure.
 - Jobs that need a job with `continue-on-error`, because the result of that job is not what it seems.
+- A job that tests results only in its own job-level `if:`, to run after its needs went well (`needs.a.result == 'success' ||
+  needs.a.result == 'skipped'`, `needs.a.result != 'skipped'`, `!= 'failure'`). That is a publish, a deploy or a cleanup that is
+  meant to be skipped on a failure, not a gate. A job-level condition is a gate only when it expects the failure itself:
+  `== 'failure'`, `== 'cancelled'`, `!= 'success'`. A gate is a job that reports what happened to its needs, so it reads results in
+  its steps, `env`, `with` or `outputs`.
 - Reads of `needs.<job>.outputs.*`.
 - A workflow where an expression does not parse (the syntax error is reported by `expression`).
 
@@ -7119,7 +7146,7 @@ Output:
 test.yaml:3:17: workflow "PR checks" specified at "workflows" of "workflow_run" event is not found in the repository. a workflow is specified by its "name:" or its file path when it has no name [workflow-run]
   |
 3 |     workflows: [PR checks]
-  |                 ^~
+  |                 ^~~~~~~~~
 test.yaml:9:15: this step downloads an artifact of the run that triggered the workflow, which ran the code of a pull request, and the step at line 15 writes its content to $GITHUB_ENV without validating its content first. the artifact is whatever the pull request wanted, and this workflow has a write token and secrets. match the content against a strict pattern (for example digits only) before you use it, and never run or extract it [untrusted-artifact]
   |
 9 |       - uses: actions/download-artifact@v4
@@ -7127,7 +7154,7 @@ test.yaml:9:15: this step downloads an artifact of the run that triggered the wo
 test.yaml:15:45: a value that is not a literal is written to $GITHUB_ENV in a workflow triggered by "workflow_run", which runs with secrets and a write token for events that may come from a fork. an attacker who controls the value can set LD_PRELOAD or NODE_OPTIONS (a newline adds another variable) and run code in the next steps. write only literal values and values computed from trusted sources, or pass state with $GITHUB_OUTPUT [github-env]
    |
 15 |       - run: echo "number=$(cat pr/number)" >> "$GITHUB_ENV"
-   |                                             ^~
+   |                                             ^~~~~~~~~~~~~~~~
 ```
 
 <!-- Skip playground link -->

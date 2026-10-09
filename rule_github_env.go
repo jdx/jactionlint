@@ -446,7 +446,10 @@ func (rule *RuleGitHubEnv) checkLines(run *ExecRun) {
 		re = reCmdEnvFile
 	}
 	origin := run.Run.scriptOrigin()
+	lineOff := 0
 	for i, line := range strings.Split(run.Run.Value, "\n") {
+		off := lineOff
+		lineOff += len(line) + 1
 		line = strings.TrimSuffix(line, "\r")
 		m := re.FindStringSubmatchIndex(line)
 		if m == nil {
@@ -463,6 +466,12 @@ func (rule *RuleGitHubEnv) checkLines(run *ExecRun) {
 		d := rule.judgeLine(line[:m[0]] + line[m[1]:])
 		start := origin.Map(i+1, m[0]+1)
 		end := origin.Map(i+1, m[1]+1)
+		if l, c, ok := run.Run.valueAt(off + m[0]); ok {
+			start = runscript.Position{Line: l, Col: c}
+			if l, c, ok := run.Run.valueAt(off + m[1]); ok {
+				end = runscript.Position{Line: l, Col: c}
+			}
+		}
 		rule.emit(d, dest, &Pos{Line: start.Line, Col: start.Col}, &Pos{Line: end.Line, Col: end.Col})
 	}
 }

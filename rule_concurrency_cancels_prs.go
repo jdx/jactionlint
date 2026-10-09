@@ -55,7 +55,12 @@ func perPullRequestContexts(event string) [][]string {
 			[]string{"github", "event", "pull_request", "merge_commit_sha"})
 	}
 	// pull_request_review and pull_request_review_comment run on refs/pull/<number>/merge but
-	// github.head_ref is empty
+	// github.head_ref is empty. Every review and every review comment has an id of its own.
+	if event == "pull_request_review" {
+		common = append(common, []string{"github", "event", "review", "id"}, []string{"github", "event", "review", "node_id"}, []string{"github", "event", "review", "html_url"})
+	} else {
+		common = append(common, []string{"github", "event", "comment", "id"}, []string{"github", "event", "comment", "node_id"}, []string{"github", "event", "comment", "html_url"})
+	}
 	return append(common,
 		[]string{"github", "ref"}, []string{"github", "ref_name"}, []string{"github", "sha"}, []string{"github", "workflow_ref"})
 }
@@ -78,19 +83,21 @@ func (rule *RuleConcurrencyCancelsPRs) VisitWorkflowPre(n *Workflow) error {
 	if len(rule.prEvents) == 0 {
 		return nil
 	}
-	rule.check(n.Concurrency)
+	rule.check(n.Concurrency, jobsInOrder(n))
 	return nil
 }
 
 // VisitJobPre is callback when visiting Job node before visiting its children.
 func (rule *RuleConcurrencyCancelsPRs) VisitJobPre(n *Job) error {
 	if len(rule.prEvents) > 0 {
-		rule.check(n.Concurrency)
+		rule.check(n.Concurrency, []*Job{n})
 	}
 	return nil
 }
 
-func (rule *RuleConcurrencyCancelsPRs) check(c *Concurrency) {
+// check reports the concurrency block when it cancels runs of unrelated pull requests. jobs are the jobs it covers: an
+// event for which the "if:" of every one of them is false starts no run that the group could cancel.
+func (rule *RuleConcurrencyCancelsPRs) check(c *Concurrency, jobs []*Job) {
 	if c == nil || c.Group == nil || c.CancelInProgress == nil {
 		return
 	}
@@ -108,7 +115,7 @@ func (rule *RuleConcurrencyCancelsPRs) check(c *Concurrency) {
 		if event != "pull_request_target" {
 			sc.refPrefix = "refs/pull/"
 		}
-		if !sc.isTrue(c.CancelInProgress) {
+		if !sc.isTrue(c.CancelInProgress) || noJobRuns(jobs, sc) {
 			continue
 		}
 		if groupDiffersPerPullRequest(refs, event) {
@@ -131,6 +138,16 @@ func (rule *RuleConcurrencyCancelsPRs) check(c *Concurrency) {
 		)
 		return
 	}
+}
+
+// noJobRuns reports whether the "if:" of every job is false when the workflow runs in the scenario.
+func noJobRuns(jobs []*Job, sc scenario) bool {
+	for _, j := range jobs {
+		if j != nil && sc.conditionIn(j.If) != condFalse {
+			return false
+		}
+	}
+	return len(jobs) > 0
 }
 
 func groupDiffersPerPullRequest(refs []exprRef, event string) bool {

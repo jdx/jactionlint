@@ -602,7 +602,7 @@ func ParseDependabot(b []byte) (*Dependabot, []*Error) {
 		return nil, handleYAMLUnmarshalError(err)
 	}
 
-	p := &parser{lines: strings.Split(string(b), "\n"), syntaxID: dependabotSyntaxID}
+	p := newParser(strings.Split(string(b), "\n"), dependabotSyntaxID)
 	d := p.parseDependabot(&n)
 
 	return d, p.errors

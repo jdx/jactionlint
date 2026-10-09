@@ -1,0 +1,13 @@
+on:
+  push:
+    branches: [main]
+
+# OK: the only job gets the scope either way, so moving it to the job would change nothing
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo release

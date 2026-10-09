@@ -70,7 +70,7 @@ func (rule *RuleUnverifiedDownload) VisitStep(n *Step) error {
 	return nil
 }
 
-const downloadRemedy = "if it installs a tool, install the tool with mise instead (jdx/mise-action pinned by SHA, or \"mise use\" with a committed mise.lock, which records the version and checksum of each tool). otherwise download the file, check its checksum or signature (sha256sum -c, gpg --verify, cosign verify-blob or gh attestation verify) before running it, or use the package of the vendor"
+const downloadRemedy = "if it installs a tool, mise can install it and record its checksum in mise.lock (jdx/mise-action in CI). otherwise check the checksum or signature (sha256sum -c, gpg --verify, cosign verify-blob or gh attestation verify) before running the file"
 
 type download struct {
 	cmd      *runscript.Command
