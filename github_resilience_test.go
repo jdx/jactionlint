@@ -227,8 +227,9 @@ func TestTransportErrorsAreClassifiedAndRetriedAsAppropriate(t *testing.T) {
 	}{
 		{"dns", &net.DNSError{Err: "no such host", Name: "api.github.com", IsNotFound: true}, 1, failNetwork},
 		{"refused", &net.OpError{Op: "dial", Err: syscall.ECONNREFUSED}, 1, failNetwork},
-		{"reset", &net.OpError{Op: "read", Err: syscall.ECONNRESET}, 2, failNetwork},
-		{"eof", io.ErrUnexpectedEOF, 2, failNetwork},
+		// A dropped connection is transient like a server error: it must not skip the rest of the run
+		{"reset", &net.OpError{Op: "read", Err: syscall.ECONNRESET}, 2, failOther},
+		{"eof", io.ErrUnexpectedEOF, 2, failOther},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

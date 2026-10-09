@@ -331,6 +331,12 @@ func (s *baselineState) match(fileKey string, errs []*Error, infos map[*Error]*b
 	if len(entries) == 0 {
 		return
 	}
+	// The file may be linted again in the same run (the passes of -fix): what the last lint saw counts
+	s.mu.Lock()
+	for _, be := range entries {
+		delete(s.seen, be)
+	}
+	s.mu.Unlock()
 	used := make(map[*BaselineEntry]bool, len(entries))
 	type key struct {
 		rule, fp string

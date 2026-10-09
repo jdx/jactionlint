@@ -284,6 +284,29 @@ type stepRange struct {
 	uses       string
 }
 
+// lastStepEnd returns the 1-based last line of the step item which starts at the 0-based line i, for the
+// step that no other step follows: the lines nested under the item, not the keys of the job that come
+// after "steps" ("timeout-minutes", "env"). The first line is "- key: value", or a key below a "-" alone.
+func lastStepEnd(lines []string, i int) int {
+	indent := func(l string) int { return len(l) - len(strings.TrimLeft(l, " \t")) }
+	base := indent(lines[i])
+	nested := base + 1 // lines of the item are indented deeper than its dash
+	if !isSequenceItem(lines[i]) {
+		nested = base // the keys of the item sit at the column of the first key
+	}
+	end := i + 1
+	for j := i + 1; j < len(lines); j++ {
+		if c, b := isCommentOrBlank(lines[j]); b || c {
+			continue
+		}
+		if indent(lines[j]) < nested {
+			break
+		}
+		end = j + 1
+	}
+	return end
+}
+
 // newScopeIndex computes the line ranges of the jobs and the steps of a workflow. A range is the
 // block of the job key or the step item, which is what the inline ignore comments cover too. Source
 // that is not a block mapping, such as a flow-style `{...}` on one line, gives overlapping ranges,
@@ -312,7 +335,7 @@ func newScopeIndex(w *Workflow, src []byte) *scopeIndex {
 			if step == nil || step.Pos == nil || step.Pos.Line < 1 || step.Pos.Line > len(lines) {
 				continue
 			}
-			sr := stepRange{start: step.Pos.Line, end: jr.end}
+			sr := stepRange{start: step.Pos.Line, end: min(jr.end, lastStepEnd(lines, step.Pos.Line-1))}
 			// A step ends where the next one starts. The item of the next step may begin on the line
 			// before its first key ("-" alone), which is not part of this step.
 			for _, next := range job.Steps[i+1:] {

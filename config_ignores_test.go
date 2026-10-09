@@ -424,7 +424,7 @@ func TestConfigIgnoreOutput(t *testing.T) {
 		t.Fatal(err)
 	}
 	s := out.String()
-	if !strings.Contains(s, ".github/jactionlint.yaml:3:5: the ignore for") {
+	if !strings.Contains(s, filepath.Join(".github", "jactionlint.yaml")+":3:5: the ignore for") {
 		t.Errorf("the config error is printed with its location:\n%s", s)
 	}
 }
@@ -494,4 +494,56 @@ func indentLines(s, prefix string) string {
 		}
 	}
 	return strings.Join(lines, "")
+}
+
+// The last step ends where its own block ends: the keys of the job that follow "steps" are not in it.
+func TestScopeOfTheLastStepStopsBeforeTheKeysOfTheJob(t *testing.T) {
+	src := "on: push\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - name: last\n        uses: actions/setup-node@v4\n        with:\n          node-version: 20\n    timeout-minutes: 5\n    env:\n      X: 1\n"
+	w, errs := Parse([]byte(src))
+	if w == nil || len(errs) > 0 {
+		t.Fatal(errs)
+	}
+	idx := newScopeIndex(w, []byte(src))
+	for line, want := range map[int]bool{6: true, 7: true, 8: true, 10: true, 11: false, 12: false, 13: false} {
+		sc := idx.scopeAt(line)
+		if line > 6 && sc.hasStep != want {
+			t.Errorf("line %d: in a step = %v, want %v", line, sc.hasStep, want)
+		}
+		if sc.job != "a" {
+			t.Errorf("line %d is in the job a: %q", line, sc.job)
+		}
+	}
+	// A step whose first key sits below a "-" alone
+	src2 := "on: push\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      -\n        uses: actions/checkout@v4\n        with:\n          x: 1\n    timeout-minutes: 5\n"
+	w, _ = Parse([]byte(src2))
+	idx = newScopeIndex(w, []byte(src2))
+	if !idx.scopeAt(9).hasStep || idx.scopeAt(10).hasStep {
+		t.Errorf("the step ends before timeout-minutes: %+v %+v", idx.scopeAt(9), idx.scopeAt(10))
+	}
+}
+
+// An entry without a file can apply to an action.yml: it is unused only when the actions were linted too.
+func TestConfigIgnoreUnusedCountsTheActionFiles(t *testing.T) {
+	cfg := ignoreConfigHead + "ignores:\n  - {rule: unpinned-uses, uses: actions/cache}\n"
+	root := ignoreProject(t, cfg, map[string]string{"ci.yaml": ignoreWorkflow})
+	dir := filepath.Join(root, ".github", "actions", "x")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	action := "name: x\ndescription: x\nruns:\n  using: composite\n  steps:\n    - uses: actions/cache@v4\n"
+	if err := os.WriteFile(filepath.Join(dir, "action.yml"), []byte(action), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	l, _ := newIgnoreLinter(t, root, fixedNow)
+	errs, err := l.LintFile(filepath.Join(root, ".github", "workflows", "ci.yaml"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := ofRule(errs, "unused-ignore"); len(got) != 0 {
+		t.Errorf("the action was not linted, so the entry may be needed there: %v", got)
+	}
+	// A whole run lints the action, which the entry suppresses
+	if got := ofRule(lintIgnoreProject(t, root, fixedNow), "unused-ignore"); len(got) != 0 {
+		t.Errorf("the entry suppresses the cache in the action: %v", got)
+	}
 }

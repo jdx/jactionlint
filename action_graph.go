@@ -311,12 +311,13 @@ func (g *callGraph) loadAction(n graphNode, queue *[]graphNode) {
 		if err != nil {
 			continue
 		}
+		// A file that does not parse is still linted, which reports why, and has no steps to follow
+		g.actionFiles[n.path] = rel
 		w, _ := ParseAction(src)
 		if w == nil {
 			return
 		}
 		g.actions[n.path] = w
-		g.actionFiles[n.path] = rel
 		for _, j := range w.Jobs {
 			g.addStepEdges(n, j.Steps, queue)
 		}

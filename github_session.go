@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 )
 
@@ -258,7 +259,13 @@ func classifyFailure(err error) failureKind {
 		if netErr.Timeout() {
 			return failTimeout
 		}
-		return failNetwork
+		// Only a host that does not resolve or a refused connection will not work for the next lookup
+		// either. A reset or a dropped connection is transient like a server error.
+		var dnsErr *net.DNSError
+		if errors.As(err, &dnsErr) || errors.Is(err, syscall.ECONNREFUSED) {
+			return failNetwork
+		}
+		return failOther
 	}
 	return failOther
 }

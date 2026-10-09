@@ -66,6 +66,9 @@ type OnlineOptions struct {
 	// Mode selects how the network is used. See OnlineMode. Setting it to "cache" or "strict" in the
 	// configuration also turns the online checks on.
 	Mode OnlineMode `yaml:"mode"`
+	// ModeSet says that Mode was chosen explicitly, also when it is the default mode: a bare -online
+	// then replaces the "cache" or "strict" mode of a configuration file instead of leaving it in force.
+	ModeSet bool `yaml:"-"`
 	// APIURL is the URL of the REST API of a GitHub Enterprise Server such as
 	// "https://ghe.example.com/api/v3". The default is $GITHUB_API_URL, else derived from
 	// $GITHUB_SERVER_URL or $GH_HOST, else https://api.github.com.
@@ -185,8 +188,9 @@ func matchRepoPattern(pat, slug string) bool {
 
 // overlay returns o with the fields set in over replacing its own.
 func (o OnlineOptions) overlay(over OnlineOptions) OnlineOptions {
-	if over.Mode != OnlineModeDefault {
+	if over.Mode != OnlineModeDefault || over.ModeSet {
 		o.Mode = over.Mode
+		o.ModeSet = o.ModeSet || over.ModeSet
 	}
 	if over.APIURL != "" {
 		o.APIURL = over.APIURL

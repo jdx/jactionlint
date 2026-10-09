@@ -281,3 +281,20 @@ func TestCommandHostFromServerURL(t *testing.T) {
 		t.Errorf("GITHUB_SERVER_URL should select the Enterprise Server API: %v", f.hits)
 	}
 }
+
+// A bare -online on the command line goes to the network although the configuration pins the cache mode.
+func TestCommandOnlineOverridesTheModeOfTheConfig(t *testing.T) {
+	f := newFakeGitHub(t)
+	githubForActionsCheckout(f, true)
+	setOnlineEnv(t, f, "tok")
+	_, wf := onlineProject(t, workflowWith("uses: actions/checkout@"+testSHAv422+" # v3"), "online-options:\n  mode: cache\n")
+	_, stdout, _ := runOnlineCommand(t, "-rule-ids", wf)
+	if f.total() != 0 {
+		t.Fatalf("the mode of the config is cache, so nothing is asked: %v", f.hits)
+	}
+	_ = stdout
+	_, stdout, _ = runOnlineCommand(t, "-online", "-rule-ids", wf)
+	if f.total() == 0 || !strings.Contains(stdout, "[archived-uses]") {
+		t.Fatalf("-online must ask GitHub:\n%s", stdout)
+	}
+}
