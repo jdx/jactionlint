@@ -82,3 +82,33 @@ func TestRepositoryModeWithOnlySubdirectoriesHasNothingToLint(t *testing.T) {
 		t.Fatalf("unexpected error %v", err)
 	}
 }
+
+// A wrong value of a flag is a usage error (2) whichever flag it is; a failure of the run itself is 3
+// (bug bash: -profile bogus exited with 2 but -format bogus with 3).
+func TestFlagValueErrorsExitWithUsageStatus(t *testing.T) {
+	root := makeWorkflowRepo(t, map[string]string{"ci.yaml": validWorkflowSrc})
+	for _, args := range [][]string{
+		{"-profile", "bogus"},
+		{"-format", "bogus"},
+		{"-format", "{{ .Nope"},
+		{"-ignore", "(unclosed"},
+		{"-min-severity", "loud"},
+		{"-online=maybe"},
+	} {
+		t.Run(strings.Join(args, " "), func(t *testing.T) {
+			var out, errOut strings.Builder
+			cmd := &Command{Stdin: strings.NewReader(""), Stdout: &out, Stderr: &errOut}
+			status := cmd.Main(append(append([]string{"jactionlint", "-shellcheck=", "-pyflakes="}, args...), filepath.Join(root, ".github", "workflows", "ci.yaml")))
+			if status != ExitStatusInvalidCommandOption {
+				t.Errorf("want %d but got %d: %s", ExitStatusInvalidCommandOption, status, errOut.String())
+			}
+		})
+	}
+
+	// An unreadable file is a failure of the run
+	var errOut strings.Builder
+	cmd := &Command{Stdin: strings.NewReader(""), Stdout: io.Discard, Stderr: &errOut}
+	if status := cmd.Main([]string{"jactionlint", "-shellcheck=", "-pyflakes=", filepath.Join(root, "missing.yaml")}); status != ExitStatusFailure {
+		t.Errorf("a missing file must exit with %d but got %d", ExitStatusFailure, status)
+	}
+}

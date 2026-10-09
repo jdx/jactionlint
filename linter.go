@@ -252,14 +252,14 @@ func NewLinter(out io.Writer, opts *LinterOptions) (*Linter, error) {
 	}
 
 	if err := opts.OnlineOptions.validate(); err != nil {
-		return nil, fmt.Errorf("invalid online options: %w", err)
+		return nil, &usageError{fmt.Errorf("invalid online options: %w", err)}
 	}
 
 	ignore := make(IgnorePatterns, 0, len(opts.IgnorePatterns))
 	for _, s := range opts.IgnorePatterns {
 		r, err := ParseIgnorePattern(s)
 		if err != nil {
-			return nil, fmt.Errorf("invalid regular expression for ignore pattern %q: %s", s, err.Error())
+			return nil, &usageError{fmt.Errorf("invalid regular expression for ignore pattern %q: %s", s, err.Error())}
 		}
 		ignore = append(ignore, r)
 	}
@@ -268,13 +268,13 @@ func NewLinter(out io.Writer, opts *LinterOptions) (*Linter, error) {
 	if isTemplateFormat(opts.Format) {
 		f, err := NewErrorFormatter(opts.Format)
 		if err != nil {
-			return nil, err
+			return nil, &usageError{err}
 		}
 		formatter = f
 	}
 	prn, err := newPrinter(opts.Format, opts.Oneline, opts.ShowRuleIDs, opts.SARIFHideBaselined, formatter)
 	if err != nil {
-		return nil, err
+		return nil, &usageError{err}
 	}
 
 	cwd := "."

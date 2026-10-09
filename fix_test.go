@@ -446,7 +446,7 @@ func TestCommandFix(t *testing.T) {
 
 	// Invalid usage
 	code, _, stderr = run(nil, "-fix", "-")
-	if code != ExitStatusFailure || !strings.Contains(stderr, "stdin") {
+	if code != ExitStatusInvalidCommandOption || !strings.Contains(stderr, "stdin") {
 		t.Errorf("-fix with stdin: %d %q", code, stderr)
 	}
 	code, _, stderr = run(nil, "-fix=maybe", path)

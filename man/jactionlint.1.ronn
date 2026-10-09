@@ -312,8 +312,9 @@ or simply run
   - **0**: It ran successfully and no problem was found.
   - **1**: It ran successfully and some problem was found. Only errors of `error` level count unless
     `-strict-exit` is given.
-  - **2**: It failed due to invalid command line option.
-  - **3**: It failed due to some fatal error.
+  - **2**: It failed due to an invalid command line option or flag value (**-profile**, **-format**,
+    **-ignore**, ...).
+  - **3**: It failed due to some fatal error such as no project or an unreadable file or config.
 
 
 ## PLAYGROUND

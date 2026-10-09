@@ -27,9 +27,11 @@ const (
 	ExitStatusSuccessNoProblem = 0
 	// ExitStatusSuccessProblemFound is the exit status when the command ran successfully with some problem found.
 	ExitStatusSuccessProblemFound = 1
-	// ExitStatusInvalidCommandOption is the exit status when parsing command line options failed.
+	// ExitStatusInvalidCommandOption is the exit status when parsing command line options failed or the value of
+	// an option is invalid (an unknown -profile, -format or -min-severity, a broken -ignore regular expression).
 	ExitStatusInvalidCommandOption = 2
-	// ExitStatusFailure is the exit status when the command stopped due to some fatal error while checking workflows.
+	// ExitStatusFailure is the exit status when the command stopped due to some fatal error while checking workflows
+	// (no project, an unreadable file or config).
 	ExitStatusFailure = 3
 )
 
@@ -104,6 +106,13 @@ type Command struct {
 	onRulesCreated func([]Rule) []Rule
 }
 
+// usageError is an error caused by the value of a command line flag (-format, -ignore, ...). The command exits
+// with ExitStatusInvalidCommandOption for it, like it does for a value which it validates itself (-profile).
+type usageError struct{ err error }
+
+func (e *usageError) Error() string { return e.err.Error() }
+func (e *usageError) Unwrap() error { return e.err }
+
 // fixRequest is what -fix, -diff and -rules ask for.
 type fixRequest struct {
 	mode   FixMode
@@ -132,10 +141,10 @@ func (cmd *Command) runLinter(args []string, opts *LinterOptions, initConfig, mi
 
 	if baselineWrite.set {
 		if len(args) == 1 && args[0] == "-" {
-			return nil, errors.New("-baseline-write cannot be used with stdin because the baseline would not know the file")
+			return nil, &usageError{errors.New("-baseline-write cannot be used with stdin because the baseline would not know the file")}
 		}
 		if fix.mode != 0 {
-			return nil, errors.New("-baseline-write cannot be combined with -fix")
+			return nil, &usageError{errors.New("-baseline-write cannot be combined with -fix")}
 		}
 		if args == nil {
 			args = []string{}
@@ -157,7 +166,7 @@ func (cmd *Command) runLinter(args []string, opts *LinterOptions, initConfig, mi
 
 	if fix.mode != 0 {
 		if len(args) == 1 && args[0] == "-" {
-			return nil, errors.New("-fix cannot be used with stdin because the fixed file would not be saved")
+			return nil, &usageError{errors.New("-fix cannot be used with stdin because the fixed file would not be saved")}
 		}
 		fo := FixOptions{Mode: fix.mode, Rules: fix.rules, DryRun: fix.diff}
 		var res *FixResult
@@ -452,6 +461,10 @@ func (cmd *Command) Main(args []string) int {
 	errs, err := cmd.runLinter(flags.Args(), &opts, initConfig, migrateConfig, migrateIgnores, req, &baselineWrite, &onlineFailed)
 	if err != nil {
 		fmt.Fprintln(cmd.Stderr, err.Error())
+		var ue *usageError
+		if errors.As(err, &ue) {
+			return ExitStatusInvalidCommandOption // the value of a flag is wrong, not the workflows
+		}
 		return ExitStatusFailure
 	}
 	if req.result != nil && len(req.result.Failures) > 0 {

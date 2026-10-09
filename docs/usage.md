@@ -353,8 +353,8 @@ Note that special characters escaped with backslash like `\n` in the format stri
 |--------|----------------------------------------------------------------------------------------------|
 | `0`    | The command ran successfully and no problem was found                                        |
 | `1`    | The command ran successfully and some problem was found                                      |
-| `2`    | The command failed due to invalid command line option                                        |
-| `3`    | The command failed due to some fatal error                                                   |
+| `2`    | The command failed due to invalid command line option or flag value (`-profile`, `-format`, `-ignore`, ...) |
+| `3`    | The command failed due to some fatal error (no project, an unreadable file or config)        |
 
 With a [baseline](#baseline) the findings it accepts do not count.
 
