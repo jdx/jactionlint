@@ -76,7 +76,7 @@ func (rule *RuleUnsoundPrefixMatch) VisitWorkflowPre(n *Workflow) error {
 			// Outside a condition, the result of a name test is a trust decision only when it selects a
 			// credential or a runner: GOOS: ${{ contains(github.repository, 'windows') && 'windows' || '' }}
 			// is not
-			if site.Cond || selectsSensitive(o.Root) {
+			if site.Cond || selectsSensitive(o.Root, inRunsOn(site)) {
 				rule.checkExpr(o, site.Cond)
 			}
 		})
@@ -84,17 +84,49 @@ func (rule *RuleUnsoundPrefixMatch) VisitWorkflowPre(n *Workflow) error {
 	return nil
 }
 
-// selectsSensitive reports whether the expression refers to a secret, the token of the workflow or a
-// self-hosted runner.
-func selectsSensitive(root ExprNode) bool {
+// inRunsOn reports whether the site is the "runs-on:" of its job, where whatever an expression tests
+// picks the runner.
+func inRunsOn(site exprSite) bool {
+	if site.Job == nil || site.Job.RunsOn == nil || site.Str == nil {
+		return false
+	}
+	r := site.Job.RunsOn
+	if site.Str == r.LabelsExpr || site.Str == r.Group {
+		return true
+	}
+	for _, l := range r.Labels {
+		if site.Str == l {
+			return true
+		}
+	}
+	return false
+}
+
+// isRunnerContext reports whether the node reads a property of the runner context.
+func isRunnerContext(n ExprNode) bool {
+	path, ok := derefPath(n)
+	return ok && len(path) > 0 && strings.EqualFold(path[0], "runner")
+}
+
+// selectsSensitive reports whether the expression selects a runner (it is in "runs-on:", or compares
+// runner.* with a "self-hosted" label), or refers to a secret or the token of the workflow. A string
+// which only contains "self-hosted" as part of the pattern being tested does not select anything.
+func selectsSensitive(root ExprNode, runsOn bool) bool {
+	if runsOn {
+		return true
+	}
 	found := false
 	VisitExprNode(root, func(n, _ ExprNode, entering bool) {
 		if !entering || found {
 			return
 		}
 		switch n := n.(type) {
-		case *StringNode:
-			found = strings.Contains(strings.ToLower(n.Value), "self-hosted")
+		case *CompareOpNode:
+			for _, pair := range [][2]ExprNode{{n.Left, n.Right}, {n.Right, n.Left}} {
+				if lit, ok := pair[1].(*StringNode); ok && isRunnerContext(pair[0]) {
+					found = found || strings.Contains(strings.ToLower(lit.Value), "self-hosted")
+				}
+			}
 		case *VariableNode:
 			// secrets.X, secrets['X'] and a bare secrets (toJSON(secrets)) all reach the context
 			found = strings.EqualFold(n.Name, "secrets")
