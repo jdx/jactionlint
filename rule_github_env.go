@@ -28,6 +28,8 @@ type RuleGitHubEnv struct {
 	// script has checked before it.
 	dest      string
 	validated map[string]bool
+	// writeAt is the offset of the write that is judged.
+	writeAt int
 }
 
 // NewRuleGitHubEnv creates a new RuleGitHubEnv instance.
@@ -89,6 +91,7 @@ func (rule *RuleGitHubEnv) checkBash(run *ExecRun) {
 	}
 	for _, w := range s.WritesTo("GITHUB_ENV", "GITHUB_PATH") {
 		rule.dest = w.Var
+		rule.writeAt = w.Redirect.Offset
 		rule.validated = validatedVars(s, w.Redirect.Offset, w.Var)
 		d := rule.judgeWrite(s, w)
 		rule.report(s, origin, w, d)
@@ -354,9 +357,10 @@ func (rule *RuleGitHubEnv) mintedByJob(e string) bool {
 }
 
 // readFrom returns the value that the shell builtin read puts in the variable: `IFS=/ read -r OWNER NAME <<< "$X"`.
-func readFrom(s *runscript.Script, name string) (*runscript.Word, bool) {
+// Only a read that runs before the offset counts: a read after the write has not happened yet.
+func readFrom(s *runscript.Script, name string, before int) (*runscript.Word, bool) {
 	for _, c := range s.Commands {
-		if c.Name != "read" {
+		if c.Name != "read" || c.Offset >= before {
 			continue
 		}
 		for _, p := range c.Positional {
@@ -413,7 +417,7 @@ func (rule *RuleGitHubEnv) judgeVar(s *runscript.Script, name string, depth int)
 	if assigned {
 		return d
 	}
-	if src, ok := readFrom(s, name); ok {
+	if src, ok := readFrom(s, name, rule.writeAt); ok {
 		return rule.judgeWord(s, src, depth+1)
 	}
 	if v, ok := rule.envValue(rule.step, name); ok {

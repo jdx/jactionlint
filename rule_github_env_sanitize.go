@@ -59,7 +59,7 @@ func setHasNewline(set string) bool {
 }
 
 // commandSanitizes tells what the output of the command guarantees whatever its input is.
-func commandSanitizes(c *runscript.Command) sanitizeKind {
+func commandSanitizes(c *runscript.Command, dest string) sanitizeKind {
 	if c == nil {
 		return sanitizeNone
 	}
@@ -72,7 +72,7 @@ func commandSanitizes(c *runscript.Command) sanitizeKind {
 		set1 := c.Positional[0].Value
 		switch {
 		case del && comp:
-			if !setHasNewline(set1) && charsetSafe(set1, false) {
+			if !setHasNewline(set1) && charsetSafe(set1, dest == "GITHUB_PATH") {
 				return sanitizeCharset
 			}
 		case del:
@@ -81,7 +81,7 @@ func commandSanitizes(c *runscript.Command) sanitizeKind {
 			}
 		case len(c.Positional) == 2 && !c.Positional[1].Dynamic():
 			set2 := c.Positional[1].Value
-			if comp && !setHasNewline(set1) && charsetSafe(set1, false) && !setHasNewline(set2) {
+			if comp && !setHasNewline(set1) && charsetSafe(set1, dest == "GITHUB_PATH") && !setHasNewline(set2) {
 				return sanitizeCharset
 			}
 			if !comp && setHasNewline(set1) && !setHasNewline(set2) {
@@ -103,7 +103,7 @@ func commandSanitizes(c *runscript.Command) sanitizeKind {
 			if !staticWord(w) {
 				continue
 			}
-			if k := sedSanitizes(w.Value, c.HasFlag("-z")); k > best {
+			if k := sedSanitizes(w.Value, c.HasFlag("-z"), dest); k > best {
 				best = k
 			}
 		}
@@ -140,8 +140,8 @@ var (
 )
 
 // sedSanitizes judges the script of sed.
-func sedSanitizes(script string, nulSeparated bool) sanitizeKind {
-	if m := reSedWhitelist.FindStringSubmatch(script); m != nil && charsetSafe(m[1], false) && !setHasNewline(m[2]) && !strings.Contains(m[2], "&") {
+func sedSanitizes(script string, nulSeparated bool, dest string) sanitizeKind {
+	if m := reSedWhitelist.FindStringSubmatch(script); m != nil && charsetSafe(m[1], dest == "GITHUB_PATH") && !setHasNewline(m[2]) && !strings.Contains(m[2], "&") {
 		return sanitizeCharset
 	}
 	if reSedNewline.MatchString(script) && (nulSeparated || strings.Contains(script, "N")) {
@@ -173,7 +173,7 @@ func sanitizedCommands(w *runscript.Word, dest string) map[*runscript.Command]bo
 			found := -1
 			for i, st := range p.Stages {
 				for _, sc := range st.Commands {
-					if commandSanitizes(sc).satisfies(dest) {
+					if commandSanitizes(sc, dest).satisfies(dest) {
 						found = i
 					}
 				}
@@ -194,7 +194,7 @@ func sanitizedCommands(w *runscript.Word, dest string) map[*runscript.Command]bo
 			}
 			continue
 		}
-		if commandSanitizes(c).satisfies(dest) {
+		if commandSanitizes(c, dest).satisfies(dest) {
 			spans = append(spans, span{c.Offset, c.End})
 		}
 	}
@@ -225,7 +225,7 @@ func sanitizedExpansions(raw, dest string) []string {
 		}
 		kind := sanitizeNone
 		switch {
-		case strings.HasPrefix(pat, "[^") && strings.HasSuffix(pat, "]") && charsetSafe(pat[2:len(pat)-1], false) && !setHasNewline(pat):
+		case strings.HasPrefix(pat, "[^") && strings.HasSuffix(pat, "]") && charsetSafe(pat[2:len(pat)-1], dest == "GITHUB_PATH") && !setHasNewline(pat):
 			kind = sanitizeCharset
 		case strings.Contains(pat, `$'\n'`) || strings.Contains(pat, `$'\r'`) || strings.Contains(pat, `$'\r\n'`) || strings.Contains(pat, "[[:space:]]") || strings.Contains(pat, "[[:cntrl:]]"):
 			if !strings.HasPrefix(pat, "[^") {
