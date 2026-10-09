@@ -37,9 +37,15 @@ features:
   - title: shellcheck and pyflakes
     details: 'Integrates with shellcheck and pyflakes for scripts at <code>run:</code>.'
     link: /checks#check-shellcheck-integ
-  - title: Security checks
-    details: Detects script injection by untrusted inputs and hard-coded credentials.
+  - title: Security and policy checks
+    details: Detects script injection by untrusted inputs, unpinned actions, excessive permissions, dangerous triggers and hard-coded credentials.
     link: /checks#untrusted-inputs
+  - title: Profiles
+    details: 'Choose how much is checked: <code>correctness</code> (what actionlint checks), <code>default</code> or <code>pedantic</code>.'
+    link: /config#profiles
+  - title: Fixes and a baseline
+    details: 'Apply the safe fixes with <code>-fix</code> and adopt the stricter checks step by step with a baseline.'
+    link: /usage#fix-errors-automatically
   - title: Other useful checks
     details: 'Glob syntax validation, dependencies check for <code>needs:</code>, runner label validation, cron syntax validation and more.'
     link: /checks
@@ -52,7 +58,7 @@ features:
 [mise](https://mise.jdx.dev/) installs jactionlint from the GitHub releases of this repository.
 
 ```sh
-mise use -g github:jdx/jactionlint@latest
+mise use -g jactionlint
 jactionlint -version
 ```
 

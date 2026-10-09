@@ -6195,7 +6195,7 @@ test.yaml:11:16: warning: shell "cmd" is the Windows cmd shell, which has no for
 ## Impostor commits (online)
 
 The checks in this section and the five that follow query the GitHub API, so they run only when you ask for it with
-`jactionlint -online` or `online: true` in [the configuration](config.md#online-checks). Nothing in jactionlint uses the network
+`jactionlint -online` or `online: true` in [the configuration](config.md#online-options). Nothing in jactionlint uses the network
 otherwise. How the token, the cache and the rate limit work is in [the usage document](usage.md#online-checks). The online
 checks are not available in the playground, so their examples have no playground link.
 

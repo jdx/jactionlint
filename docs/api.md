@@ -29,8 +29,11 @@ Followings are unexhaustive list of interesting APIs.
 - `Severity` is the level of a finding: `SeverityInfo`, `SeverityWarning` or `SeverityError`. `SeverityOff` disables a rule.
   `Profile` is the set of rules enabled by the configuration: `ProfileCorrectness`, `ProfileDefault` or `ProfilePedantic`, each
   including the one before it. `LinterOptions.Profile` overrides the profile of the configuration, like `-profile`.
-- `Linter.FixFiles()` and `Linter.FixRepository()` apply the fixes of the errors. `MigrateConfig()` rewrites the deprecated keys
-  of a config file into the `rules` mapping.
+- `Linter.FixFiles()` and `Linter.FixRepository()` apply the fixes of the errors (`FixModeSafe` or `FixModeUnsafe`; the `...WithOptions`
+  variants take `FixOptions`, for example to restrict the rules). `MigrateConfig()` and `MigrateConfigFile()` rewrite the deprecated
+  keys of a config into the `rules` mapping, `Linter.MigrateIgnores()` and `MigrateZizmorIgnores()` rewrite `# zizmor: ignore[...]` comments,
+  and `Linter.WriteBaseline()` writes a [baseline](usage.md#baseline). A `Config` that sets no profile means `ProfileDefault`.
+- `Rules()` also tells which rules are online or fixable; `RenamedRules()` lists the retired rule IDs that ignores still accept.
 - `Workflow`, `Job`, `Step`, ... are nodes of workflow syntax tree. `Workflow` is a root node.
 - `Parse()` parses given contents into a workflow syntax tree. It tries to find syntax errors as much as possible and
   returns found errors as slice.

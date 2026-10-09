@@ -98,8 +98,7 @@ action used before the repository is checked out), `action-syntax` (the metadata
 `template-injection` also covers sinks beyond scripts (container options, the prompt of AI agent actions).
 
 The `default` profile adds the security and policy rules, such as `unpinned-uses`, `missing-permissions`, `missing-timeout`,
-`excessive-permissions`, `concurrency-limits`, `template-injection` beyond the untrusted inputs of scripts, `artipacked`,
-`cache-poisoning`, `dangerous-triggers` and `use-trusted-publishing`. The `pedantic` profile adds the noisy and opinionated
+`excessive-permissions`, `concurrency-limits`, `artipacked`, `cache-poisoning`, `dangerous-triggers` and `use-trusted-publishing`. The `pedantic` profile adds the noisy and opinionated
 ones. Adopt them one at a time: pick `correctness`, then raise the profile to `default` with a [baseline](usage.md#baseline) that
 hides today's findings and fails only on new ones.
 

@@ -515,17 +515,34 @@ Each pass lints the text, chooses fixes that do not overlap, applies them and li
   quote in a double quoted scalar, a quote in a single quoted one, indentation in a block scalar, and an environment variable
   value that is not a plain-safe string is quoted. A fix that cannot represent its text in the place offers no fix.
 
-Fixes arrive with the rules that can fix their findings mechanically. The errors of the rules without a fix are only reported.
-`-fix` cannot be used with stdin. These rules have a fix today:
+Only the rules that can fix their findings mechanically have a fix; the errors of the other rules are only reported. `-fix` cannot be
+used with stdin. These rules have a fix:
 
-| Rule                  | What `-fix` does                                                                                                             | Safe                                                              |
-| --------------------- | ---------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
-| `missing-timeout`     | Adds `timeout-minutes: N` to the job after `runs-on:`, only when [`default-minutes`](config.md#rules) sets `N`.            | Yes                                                               |
-| `missing-permissions` | Adds `permissions:` with `contents: read` to the workflow after the `on:` block.                                             | Only when nothing shows that a job needs the token, else `unsafe` |
-| `unused-ignore`       | Removes the ignore comment, or only its patterns which did nothing when the comment has others.                              | Yes                                                               |
+| Rule                                  | What `-fix` does                                                                                                                  | Safe                                                              |
+| ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| `anonymous-definition`                | Adds a `name:` to the workflow and to jobs.                                                                                       | Yes                                                               |
+| `artipacked`                          | Sets `persist-credentials: false` on `actions/checkout`.                                                                          | Unless a later step pushes or needs the credentials               |
+| `bot-conditions`                      | Checks the author of the pull request (`github.event.pull_request.user.login`) instead of the actor, for workflows that only run on pull request events.                                                                | No                                                                |
+| `concurrency-cancels-release`         | Sets a literal `cancel-in-progress: true` to `false`.                                                                             | No                                                                |
+| `concurrency-limits`                  | Adds a group per pull request with `cancel-in-progress: true`, only for workflows that only pull requests start and that release nothing. | Yes                                                        |
+| `dependabot-cooldown`                 | Adds or raises `cooldown.default-days`, only when [`default-days`](config.md#rules) sets the number.                              | Yes                                                               |
+| `dependabot-execution`                | Sets `insecure-external-code-execution: deny`.                                                                                    | No                                                                |
+| `insecure-commands`                   | Removes the `ACTIONS_ALLOW_UNSECURE_COMMANDS` variable.                                                                           | No                                                                |
+| `invisible-characters`                | Removes the invisible characters.                                                                                                 | Yes                                                               |
+| `missing-permissions`                 | Adds `permissions:` with `contents: read` to the workflow after the `on:` block.                                                  | Only when nothing shows that a job needs the token, else `unsafe` |
+| `missing-timeout`                     | Adds `timeout-minutes: N` to the job after `runs-on:`, only when [`default-minutes`](config.md#rules) sets `N`.                  | Yes                                                               |
+| `mutable-runner-label`                | Writes the fixed label of the [`pin`](config.md#rules) option in place of a moving one.                                           | Yes                                                               |
+| `obfuscation`                         | Writes the path of `uses:` in its plain form.                                                                                     | No                                                                |
+| `pipeline-without-pipefail`           | Adds `set -o pipefail` as the first line of a `run: \|` script.                                                                    | No                                                                |
+| `self-repository`                     | Writes `$/` for `./` in `uses:`.                                                                                                  | No                                                                |
+| `template-injection`                  | Moves a simple `${{ }}` reference of a bash or sh script into `env:`.                                                             | For plain references; the others are `unsafe`                     |
+| `unlocked-install`                    | Adds `--locked` to `cargo install`.                                                                                               | No                                                                |
+| `unpinned-uses`                       | With `-online`, replaces a tag with its commit and names the tag in a comment (see below).                                        | Yes                                                               |
+| `unused-ignore`                       | Removes the ignore comment, or only its patterns which did nothing when the comment has others.                                   | Yes                                                               |
 
 A finding in a shape the fix does not understand (a job written as `job: {runs-on: ...}`, a job with a YAML anchor, a file with
-a bare carriage return) is reported without a fix. See [the checks document](checks.md#check-timeout-minutes) for the details.
+a bare carriage return) is reported without a fix. The section of each rule in [the checks document](checks.md) says when its fix applies
+and why an unsafe one is unsafe.
 
 <a id="online-checks"></a>
 ### Online checks
@@ -669,38 +686,50 @@ runs when a finding has no fix. Add this step to `hk.pkl`:
 <a id="on-github-actions"></a>
 ## Use jactionlint on GitHub Actions
 
-Preparing `jactionlint` executable with the download script is recommended. See [the instruction](install.md#download-script) for
-more details. It sets an absolute file path of downloaded executable to `executable` output in order to use the executable in the
-following steps easily.
-
-Here is an example of simple workflow to run jactionlint on GitHub Actions. Please ensure `shell: bash` since the default
-shell for Windows runners is `pwsh`.
+The recommended way is [mise](https://mise.jdx.dev) with [`jdx/mise-action`](https://github.com/jdx/mise-action). `mise use jactionlint`
+records the version in the `mise.toml` of the project (and `mise.lock` records its checksum), so CI runs the version developers run.
+The workflow below passes the `default` profile itself:
 
 ```yaml
 name: Lint GitHub Actions workflows
-on: [push, pull_request]
-
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions: {}
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 jobs:
   jactionlint:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v6
-      - name: Download jactionlint
-        id: get_jactionlint
-        run: bash <(curl https://raw.githubusercontent.com/jdx/jactionlint/main/scripts/download-jactionlint.bash)
-        shell: bash
-      - name: Check workflow files
-        run: ${{ steps.get_jactionlint.outputs.executable }} -color
-        shell: bash
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+      - run: jactionlint -color
 ```
 
-Or simply download the executable and run it in one step:
+Add `-format github` to annotate the changed files with the findings, or `-format sarif` to upload them to code scanning.
+
+Preparing the `jactionlint` executable with the download script is another option. See [the instruction](install.md#download-script) for
+more details. It sets an absolute file path of downloaded executable to `executable` output in order to use the executable in the
+following steps easily. Please ensure `shell: bash` since the default shell for Windows runners is `pwsh`. jactionlint's own
+[`unverified-download`](checks.md#check-unverified-download) rule reports a script piped or sourced into a shell, so the step below
+accepts it with an ignore comment; prefer a pinned release and its checksum when you can:
 
 ```yaml
+- name: Download jactionlint
+  id: get_jactionlint
+  # jactionlint ignore=unverified-download
+  run: bash <(curl https://raw.githubusercontent.com/jdx/jactionlint/main/scripts/download-jactionlint.bash)
+  shell: bash
 - name: Check workflow files
-  run: |
-    bash <(curl https://raw.githubusercontent.com/jdx/jactionlint/main/scripts/download-jactionlint.bash)
-    ./jactionlint -color
+  run: ${{ steps.get_jactionlint.outputs.executable }} -color
   shell: bash
 ```
 
@@ -710,25 +739,19 @@ to the script for more usage details.
 If you want to enable [shellcheck integration](checks.md#check-shellcheck-integ), install `shellcheck` command. Note that
 shellcheck is [pre-installed on Ubuntu worker][preinstall-ubuntu].
 
-If you want to [annotate errors][ga-annotate-error] from jactionlint on GitHub, consider using
+If you want to [annotate errors][ga-annotate-error] from jactionlint on GitHub, consider using `-format github` or
 [Problem Matchers](#problem-matchers).
 
-If you prefer Docker image to running a downloaded executable, using [jactionlint Docker image](#docker) is another option.
+If you prefer Docker image to running a downloaded executable, using [jactionlint Docker image](#docker) is another option:
 
 ```yaml
-name: Lint GitHub Actions workflows
-on: [push, pull_request]
-
-jobs:
-  jactionlint:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-      - name: Check workflow files
-        uses: docker://ghcr.io/jdx/jactionlint:latest
-        with:
-          args: -color
+- name: Check workflow files
+  uses: docker://ghcr.io/jdx/jactionlint:latest
+  with:
+    args: -color
 ```
+
+The `default` profile asks for a pinned image here too (`unpinned-uses`): use the digest of the image you tested.
 
 ## Online playground
 

@@ -3,12 +3,12 @@ Configuration
 
 This document describes how to configure [jactionlint](https://github.com/jdx/jactionlint) behavior.
 
-Note that configuration file is optional. Running jactionlint without configuration file works fine in most cases:
-correctness checks and high-confidence security checks are on by default. A configuration file is for the things that only
-you can know (your self-hosted runner labels, your ignore patterns) and for opting in to the policy tier (for example
-`require-permissions` or `require-shell`), which is not enabled by default (`missing-timeout` is the one policy check that is). See
-[the policy for new checks](https://github.com/jdx/jactionlint/blob/main/CONTRIBUTING.md#policy-for-jactionlints-features)
-for the three tiers.
+Note that configuration file is optional. Running jactionlint without a configuration file works fine in most cases: the
+`default` [profile](#profiles) is on, which has the correctness checks and the security and policy checks that are worth failing a
+build on. A configuration file is for the things that only you can know (your self-hosted runner labels, your ignore patterns),
+for choosing another profile (`correctness` is what [actionlint](actionlint.md) checks, `pedantic` adds the noisy and opinionated
+rules) and for tuning single rules (`rules:`). See [the policy for new checks](https://github.com/jdx/jactionlint/blob/main/CONTRIBUTING.md#policy-for-jactionlints-features)
+for the three tiers and how a check gets into a profile.
 
 ## Configuration file
 
@@ -195,8 +195,8 @@ A profile is a named set of [rules](rules.md) which are enabled together. `profi
 
 | Profile       | Enables                                                                                                                                                                                                                                                                                    |
 | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `correctness` | What actionlint checks (syntax, expressions, actions, `workflow_call`, permissions, credentials, events, globs, runner labels, shell names, IDs, `needs`, matrix, `if:`, shellcheck, pyflakes), the untrusted inputs in a script (`template-injection`), and the bug detectors of jactionlint such as `unsound-ternary`, `workflow-run-names`, `local-action-checkout`, `action-syntax` and `dependabot-syntax`. No security posture or policy rule. |
-| `default`     | `correctness` plus the security and policy rules worth failing a build on: pinned actions and images, permissions, timeouts, concurrency, dangerous triggers, artifact and cache poisoning, injection sinks beyond scripts, trusted publishing and so on. Used when `profile` is omitted.        |
+| `correctness` | What actionlint checks (syntax, expressions, actions, `workflow_call`, permissions, credentials, events, globs, runner labels, shell names, IDs, `needs`, matrix, `if:`, shellcheck, pyflakes), `template-injection` (untrusted input in scripts, in `container:` options and in the prompts of AI agent actions), and the bug detectors of jactionlint such as `unsound-ternary`, `workflow-run-names`, `local-action-checkout`, `action-syntax` and `dependabot-syntax`. No security posture or policy rule. |
+| `default`     | `correctness` plus the security and policy rules worth failing a build on: pinned actions and images, permissions, timeouts, concurrency, dangerous triggers, artifact and cache poisoning, unverified downloads, trusted publishing and so on. Used when `profile` is omitted.        |
 | `pedantic`    | `default` plus the noisy and opinionated rules (`require-shell`, `max-run-lines`, `anonymous-definition`, `self-hosted-runner`, `unused-needs` and so on) and the pedantic findings of the audits that have them (see below).                                                                |
 
 Each profile includes the rules of the profile before it. `-profile NAME` on the command line overrides `profile` of the

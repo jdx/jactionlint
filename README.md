@@ -14,7 +14,14 @@ Features:
 - **Actions usage check** to check that inputs at `with:` and outputs in `steps.{id}.outputs` are correct
 - **Reusable workflow check** to check inputs/outputs/secrets of reusable workflows and workflow calls
 - **[shellcheck][] and [pyflakes][] integrations** for scripts at `run:`
-- **Security checks**; [script injection][script-injection-doc] by untrusted inputs, hard-coded credentials
+- **Security and policy checks**; [script injection][script-injection-doc] by untrusted inputs, unpinned actions, excessive
+  permissions, dangerous triggers, cache poisoning, hard-coded credentials, missing timeouts, ... Covers much of what
+  [zizmor][zizmor] audits, with [rules and fixes of its own](docs/zizmor-parity.md)
+- **Composite actions and `dependabot.yml`** are checked together with the workflows
+- **Profiles** (`correctness`, `default`, `pedantic`) to choose how much is checked, and [the checks of actionlint][from-actionlint] with one line
+- **Automatic fixes** (`-fix`, `-diff`), a **baseline** to adopt the checks step by step, **durable ignores** that survive Renovate, and
+  SARIF, GCC and GitHub output formats
+- **Online checks** (opt-in, `-online`) for impostor commits, known vulnerable actions, archived repositories and stale refs
 - **Other several useful checks**; [glob syntax][filter-pattern-doc] validation, dependencies check for `needs:`,
   runner label validation, cron syntax validation, ...
 
@@ -97,18 +104,79 @@ mise use -g jactionlint
 go install github.com/jdx/jactionlint/v2/cmd/jactionlint@latest
 ```
 
-`mise use jactionlint` without `-g` adds it to the `mise.toml` of the current project, so everyone working on the project (and
-CI, for example with [`jdx/mise-action`](https://github.com/jdx/mise-action)) uses the same version. `mise upgrade jactionlint`
-updates it.
-
-Basically all you need to do is run the `jactionlint` command in your repository. jactionlint automatically detects workflows and
-checks errors. jactionlint organizes its checks in three tiers: correctness (workflows that are broken), security (workflows that are
-exploitable or weaken the supply chain) and policy (project conventions, opt-in). Correctness and high-confidence security
-checks are on by default and aim for as few false positives as possible. Policy checks are never enabled unless you ask
-for them. See [the contributing guide](CONTRIBUTING.md) for how new checks are accepted.
+`mise use jactionlint` without `-g` adds it to the `mise.toml` of the current project, so everyone working on the project and CI
+use the same version. `mise upgrade jactionlint` updates it. Then run `jactionlint` in your repository. It finds the workflows,
+the composite actions and `dependabot.yml` and checks them:
 
 ```sh
 jactionlint
+```
+
+### Choose how much is checked
+
+jactionlint organizes its checks in three tiers (correctness, security and policy, see [the contributing guide](CONTRIBUTING.md#policy-for-jactionlints-features))
+and three profiles that each include the one before it. The profile decides what runs:
+
+| Profile       | What it checks                                                                                                           |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `correctness` | What actionlint checks, plus jactionlint's bug detectors. No opinion about security or style.                           |
+| `default`     | **What runs when you configure nothing.** `correctness` plus the security and policy rules worth failing a build on.     |
+| `pedantic`    | `default` plus noisy and opinionated rules.                                                                              |
+
+The default is stricter than a plain linter on purpose, so a repository that never configured anything gets the security checks too,
+and it can fail on its first run. To get only the checks of actionlint, see [Coming from actionlint][from-actionlint]:
+
+```sh
+jactionlint -profile correctness
+```
+
+or put `profile: correctness` in `.github/jactionlint.yaml`. To adopt the `default` profile step by step, `jactionlint -baseline-write`
+records today's findings and `jactionlint -baseline` fails only on new ones ([baseline](docs/usage.md#baseline)). `jactionlint -fix`
+fixes what can be fixed mechanically. See [the configuration document][config] and [the migration guide](docs/v2-migration.md) if you used v1.
+
+### In CI with mise
+
+[`jdx/mise-action`](https://github.com/jdx/mise-action) installs the version in `mise.toml`, so CI runs what developers run. Pin the
+actions by commit SHA:
+
+```yaml
+name: Lint GitHub Actions workflows
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions: {}
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  jactionlint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+      - run: jactionlint
+```
+
+### With hk
+
+[hk](https://hk.jdx.dev) runs jactionlint as a Git hook and fixer. With `-format sarif` it gets the diagnostics with their rule IDs and
+the fixes. Add this step to `hk.pkl` (see [the usage document][usage-hk] for baselines and the online checks):
+
+```pkl
+["jactionlint"] {
+    glob = List(".github/workflows/*.yml", ".github/workflows/*.yaml")
+    batch = true
+    diagnostic_format = "sarif"
+    check = "jactionlint -format sarif {{files}}"
+    check_diff = "hk util sarif-diff -- jactionlint -format sarif {{files}}"
+    fix = "jactionlint -fix {{files}}"
+}
 ```
 
 Another option to try jactionlint is [the online playground][playground]. Your browser can run jactionlint through WebAssembly.
@@ -122,9 +190,12 @@ See [the usage document][usage] for more details.
   download script (for CI), supports by several package managers are available.
 - [Usage][usage]: How to use `jactionlint` command locally or on GitHub Actions, the online playground, an official Docker image,
   and integrations with reviewdog, Problem Matchers, super-linter, pre-commit, VS Code.
-- [Configuration][config]: How to configure jactionlint behavior. Currently, the labels of self-hosted runners, the configuration
-  variables, and ignore patterns of errors for each file paths can be set.
+- [Rules][rules]: Every rule ID with its group, default level and profile.
+- [Configuration][config]: How to configure jactionlint behavior: profiles, the level of each rule, runner labels, configuration
+  variables, ignores (by rule, by place, with an expiry), the baseline and the online options.
 - [Coming from actionlint][from-actionlint]: How to get the checks of actionlint with `profile: correctness`, and what jactionlint adds.
+- [Migrating to v2][migration]: What changed since v1, and what to do about it.
+- [jactionlint and zizmor][zizmor-parity]: Where jactionlint stands relative to zizmor, audit by audit.
 - [Go API][api]: How to use jactionlint as Go library.
 - [References][refs]: Links to resources.
 
@@ -157,6 +228,11 @@ jactionlint is distributed under [the MIT license](./LICENSE.txt).
 [install]: https://github.com/jdx/jactionlint/blob/main/docs/install.md
 [usage]: https://github.com/jdx/jactionlint/blob/main/docs/usage.md
 [config]: https://github.com/jdx/jactionlint/blob/main/docs/config.md
+[rules]: https://github.com/jdx/jactionlint/blob/main/docs/rules.md
+[migration]: https://github.com/jdx/jactionlint/blob/main/docs/v2-migration.md
+[zizmor-parity]: https://github.com/jdx/jactionlint/blob/main/docs/zizmor-parity.md
+[zizmor]: https://docs.zizmor.sh/
+[usage-hk]: https://github.com/jdx/jactionlint/blob/main/docs/usage.md#hk
 [from-actionlint]: https://github.com/jdx/jactionlint/blob/main/docs/actionlint.md
 [api]: https://github.com/jdx/jactionlint/blob/main/docs/api.md
 [refs]: https://github.com/jdx/jactionlint/blob/main/docs/reference.md
