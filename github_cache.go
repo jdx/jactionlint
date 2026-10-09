@@ -128,6 +128,14 @@ func (c *diskCache) put(key string, e *cacheEntry) {
 	c.grew(int64(len(b)))
 }
 
+// remove deletes the entry. Failures are ignored.
+func (c *diskCache) remove(key string) {
+	if c == nil {
+		return
+	}
+	os.Remove(c.path(key))
+}
+
 // grew accounts for written bytes and prunes the directory when it became too big. The first call
 // measures what is already there.
 func (c *diskCache) grew(n int64) {
