@@ -26,11 +26,18 @@ func (m *UntrustedInputMap) String() string {
 // Find child object property in this map
 func (m *UntrustedInputMap) findObjectProp(name string) (*UntrustedInputMap, bool) {
 	if m != nil && m.Children != nil {
-		if c, ok := m.Children[name]; ok {
+		if c, ok := m.Children[normalizeContextName(name)]; ok {
 			return c, true
 		}
 	}
 	return nil, false
+}
+
+// normalizeContextName is the one place that decides how names of contexts and properties are compared. GitHub
+// reads them case-insensitively, so github.event.issue.Title is the title, and the tables of untrusted inputs
+// are in lower case. The checker of expressions and the classification of the template injection rule both use it.
+func normalizeContextName(name string) string {
+	return strings.ToLower(name)
 }
 
 // Find child array element in this map. This is special case with object filter where its receiver is an array
@@ -224,7 +231,7 @@ func (u *UntrustedInputChecker) compact() {
 }
 
 func (u *UntrustedInputChecker) onVar(v *VariableNode) {
-	c, ok := u.roots[v.Name] // Find root context (currently only "github" exists)
+	c, ok := u.roots[normalizeContextName(v.Name)] // Find root context (currently only "github" exists)
 	if !ok {
 		return
 	}
