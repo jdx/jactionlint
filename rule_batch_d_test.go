@@ -463,6 +463,9 @@ func TestUseTrustedPublishingFallbackCommands(t *testing.T) {
 		"dotnet nuget push x.nupkg --source https://feed.example.com":       0,
 		"dotnet nuget push x.nupkg -s https://feed.example.com":             0,
 		"dotnet nuget push x.nupkg --source ${{ vars.FEED }}":               0,
+		"cargo publish --registry crates-io":                                1,
+		"cargo publish --registry my-registry":                              0,
+		"cargo publish --index sparse+https://index.crates.io/":             1,
 		"uvx twine upload dist/*":                                           1,
 		"uvx twine upload --repository-url https://x.example.com dist/*":    0,
 	} {
@@ -502,6 +505,24 @@ func TestGitHubEnvCompactExpressions(t *testing.T) {
 	} {
 		if got := countBatchD(t, "github-env", head+step); got != 0 {
 			t.Errorf("%s: %d findings for a trusted value, want 0", name, got)
+		}
+	}
+}
+
+// A variable in the body of an unquoted here document is judged by its value, like in the argument of echo.
+func TestGitHubEnvHeredocVariables(t *testing.T) {
+	const head = "on: push\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n"
+	for name, tc := range map[string]struct {
+		step string
+		want int
+	}{
+		"untrusted input in a variable": {"      - env:\n          TITLE: ${{ github.event.pull_request.title }}\n        run: |\n          cat <<EOF >> $GITHUB_ENV\n          T=$TITLE\n          EOF\n", 1},
+		"braced variable":               {"      - env:\n          TITLE: ${{ github.event.pull_request.title }}\n        run: |\n          cat <<EOF >> $GITHUB_ENV\n          T=${TITLE}\n          EOF\n", 1},
+		"trusted variable":              {"      - env:\n          SHA: ${{ github.sha }}\n        run: |\n          cat <<EOF >> $GITHUB_ENV\n          S=$SHA\n          EOF\n", 0},
+		"quoted delimiter":              {"      - env:\n          TITLE: ${{ github.event.pull_request.title }}\n        run: |\n          cat <<'EOF' >> $GITHUB_ENV\n          T=$TITLE\n          EOF\n", 0},
+	} {
+		if got := countBatchD(t, "github-env-untrusted-input", head+tc.step); got != tc.want {
+			t.Errorf("%s: %d findings, want %d", name, got, tc.want)
 		}
 	}
 }
