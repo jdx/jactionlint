@@ -2836,8 +2836,8 @@ test.yaml:8:14: warning: tool "golang.org/x/tools/cmd/stringer@latest" is instal
 - `run:` scripts that install or run a tool without an exact version: `pip install`, `pipx install` and `pipx run`,
   `uv tool install`, `uv pip install` and `uvx`, `cargo install` and `cargo binstall`, `go install`, `npm install -g`,
   `npx --yes`, `pnpm dlx` and `yarn dlx`. One finding names all the tools of a command. Pin them with `==`, `--version`,
-  `@v1.2.3` or `@1.2.3` according to the tool. Packages from a path, requirements files (`pip install -r`) and `npx tsc`,
-  which runs the program of the project, are not reported. There is no fix since the version to use is the decision of the
+  `@v1.2.3` or `@1.2.3` according to the tool. Packages from a path, requirements files (`pip install -r`) and `npx tsc`
+  (and `npm exec tsc`, `npm x tsc`, `bun x tsc`), which runs the program of the project, are not reported. There is no fix since the version to use is the decision of the
   author.
 
 Installs of the packages of a project are the business of the lock file, see [unlocked installs](#check-unlocked-install).
@@ -6164,7 +6164,7 @@ The rule reports:
   by an earlier step that checks the permission of the actor. This is a heuristic: it cannot tell a correct condition from a
   condition that mentions the actor.
 - **Settings that turn the safeguards off.** `--dangerously-skip-permissions`, `--permission-mode bypassPermissions` and allowed
-  tools that give a shell (`Bash`, `Bash(*)`, `Bash(python:*)`, `Bash(curl:*)`) or any URL (`WebFetch`) in `claude_args` and `settings`
+  tools that give a shell (`Bash`, `Bash(*)`, `Bash(python:*)`, `Bash(python -c:*)`, `Bash(curl:*)`) or any URL (`WebFetch`) in `claude_args` and `settings`
   of Claude Code; `safety-strategy: unsafe` (except on Windows, where Codex needs it), `sandbox: danger-full-access` and the
   matching `codex-args` of Codex; `tools.allowed` with `run_shell_command` of the Gemini CLI; `shell(bash:*)` in `copilot-allow-tools`
   of AI inference; `--skip-permissions-unsafe` of Droid. Exact commands like `Bash(git diff:*)` are not reported. With the option
