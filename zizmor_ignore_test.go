@@ -61,9 +61,14 @@ func TestZizmorIgnorePlacements(t *testing.T) {
 		{"spacing is fixed 1", "      - run: " + zInj + " # zizmor:ignore[template-injection]\n", []string{"6 template-injection"}},
 		{"spacing is fixed 2", "      - run: " + zInj + " #zizmor: ignore[template-injection]\n", []string{"6 template-injection"}},
 		{"spacing is fixed 3", "      - run: " + zInj + " #  zizmor: ignore[template-injection]\n", []string{"6 template-injection"}},
-		// zizmor honors a comment only inside the span of the finding, so a comment on a line of its
-		// own above the line is not enough
+		// zizmor honors a comment inside the span of any location of the finding, and the step is one,
+		// so a comment on a line of its own above the first step is not enough
 		{"whole line above", "      # zizmor: ignore[template-injection]\n      - run: " + zInj + "\n", []string{"7 template-injection"}},
+		{"line of its own between keys", "      - name: x\n        # zizmor: ignore[template-injection]\n        run: " + zInj + "\n", nil},
+		{"line of its own between keys, other rule", "      - name: x\n        # zizmor: ignore[artipacked]\n        run: " + zInj + "\n", []string{"8 template-injection"}},
+		{"other key of the step", "      - run: " + zInj + "\n        env:\n          A: b # zizmor: ignore[template-injection]\n", nil},
+		{"name of the step", "      - name: x # zizmor: ignore[template-injection]\n        run: " + zInj + "\n", nil},
+		{"line of its own between two steps", "      - run: " + zInj + "\n      # zizmor: ignore[template-injection]\n      - run: echo\n", nil},
 		{"on the next step", "      - run: " + zInj + "\n      - run: echo # zizmor: ignore[template-injection]\n", []string{"6 template-injection"}},
 		{"header of a block scalar", "      - run: | # zizmor: ignore[template-injection]\n          " + zInj + "\n          echo b\n", nil},
 		{"header of a folded scalar", "      - run: > # zizmor: ignore[template-injection]\n          echo a\n          " + zInj + "\n", nil},
@@ -73,7 +78,7 @@ func TestZizmorIgnorePlacements(t *testing.T) {
 		{"header of a block scalar with indicator after another comment", "      - run: |- # keep # zizmor: ignore[template-injection]\n          " + zInj + "\n", nil},
 		{"header of a block scalar with indicator", "      - run: |- # zizmor: ignore[template-injection]\n          " + zInj + "\n", nil},
 		{"header of a block scalar is not the next step", "      - run: | # zizmor: ignore[template-injection]\n          echo a\n      - run: " + zInj + "\n", []string{"8 template-injection"}},
-		{"header of a step key", "      - env: # zizmor: ignore[template-injection]\n          A: b\n        run: " + zInj + "\n", []string{"8 template-injection"}},
+		{"header of a step key", "      - env: # zizmor: ignore[template-injection]\n          A: b\n        run: " + zInj + "\n", nil},
 		// The anchor is unused, which is another finding
 		{"anchor", "      - run: &cmd " + zInj + " # zizmor: ignore[template-injection]\n", []string{"6 unused-anchor"}},
 		{"quoted value", "      - run: \"" + zInj + "\" # zizmor: ignore[template-injection]\n", nil},
@@ -82,7 +87,7 @@ func TestZizmorIgnorePlacements(t *testing.T) {
 		// The text is part of the script, not a comment
 		{"inside a block scalar", "      - run: |\n          " + zInj + " # zizmor: ignore[template-injection]\n", []string{"7 template-injection"}},
 		{"line of its own inside a block scalar", "      - run: |\n          # zizmor: ignore[template-injection]\n          " + zInj + "\n", []string{"8 template-injection"}},
-		{"after a block scalar", "      - run: |\n          " + zInj + "\n        # zizmor: ignore[template-injection]\n", []string{"7 template-injection"}},
+		{"after a block scalar", "      - run: |\n          " + zInj + "\n        # zizmor: ignore[template-injection]\n", nil},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -206,7 +211,16 @@ func TestZizmorIgnoreMessageFilter(t *testing.T) {
 }
 
 func TestZizmorUnusedIgnore(t *testing.T) {
-	cfg := mustParseConfig(t, "rules:\n  unused-ignore: warn\n  unpinned-uses: error\n")
+	// zizmor may still run on the repository, and its regions are not exactly the ones of jactionlint, so
+	// a comment of zizmor is not reported unless the "zizmor" option is on
+	plain := mustParseConfig(t, "rules:\n  unused-ignore: warn\n  unpinned-uses: error\n")
+	if have := lintZ(t, plain, zWorkflow("      - run: echo ok # zizmor: ignore[template-injection]\n")); len(have) != 0 {
+		t.Errorf("a zizmor comment must not be reported by default: %v", have)
+	}
+	if have := lintZ(t, plain, zWorkflow("      # jactionlint ignore=template-injection\n      - run: echo ok\n")); len(have) != 1 {
+		t.Errorf("an unused comment of jactionlint is still reported: %v", have)
+	}
+	cfg := mustParseConfig(t, "rules:\n  unused-ignore: {level: warn, zizmor: true}\n  unpinned-uses: error\n")
 	step := func(comment string) string {
 		return zWorkflow("      - run: echo ok " + comment + "\n")
 	}
@@ -223,7 +237,7 @@ func TestZizmorUnusedIgnore(t *testing.T) {
 	}
 
 	// Never for a rule which is off
-	off := mustParseConfig(t, "rules:\n  unused-ignore: warn\n  template-injection: off\n  missing-permissions: off\n")
+	off := mustParseConfig(t, "rules:\n  unused-ignore: {level: warn, zizmor: true}\n  template-injection: off\n  missing-permissions: off\n")
 	for _, c := range []string{"# zizmor: ignore[template-injection]", "# zizmor: ignore[excessive-permissions]"} {
 		if have := lintZ(t, off, step(c)); len(have) != 0 {
 			t.Errorf("%s: a rule which is off must not be reported: %v", c, have)
@@ -231,7 +245,7 @@ func TestZizmorUnusedIgnore(t *testing.T) {
 	}
 
 	// Never for an online rule while the online checks are off: it could not have reported anything
-	offline := mustParseConfig(t, "rules:\n  unused-ignore: warn\n")
+	offline := mustParseConfig(t, "rules:\n  unused-ignore: {level: warn, zizmor: true}\n")
 	if have := lintZ(t, offline, step("# zizmor: ignore[impostor-commit]")); len(have) != 0 {
 		t.Errorf("an online rule must not be reported offline: %v", have)
 	}
@@ -455,5 +469,45 @@ func TestMigrateZizmorIgnoreFiles(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "No zizmor ignore comment could be migrated") {
 		t.Errorf("a second run must change nothing: %q", out.String())
+	}
+}
+
+// A comment applies wherever zizmor applies it: the whole step, the `uses:` and `secrets:` pairs of a job which calls
+// a reusable workflow, the whole `on:` value.
+func TestZizmorIgnoreScopes(t *testing.T) {
+	cfg := mustParseConfig(t, "rules:\n  secrets-inherit: error\n  dangerous-triggers: error\n  unpinned-uses: error\n  secrets-outside-env: error\n")
+	call := func(jobBody string) string {
+		return "on: push\npermissions: {}\njobs:\n  a:\n" + jobBody
+	}
+	tests := []struct {
+		name string
+		src  string
+		want []string
+	}{
+		{"secrets after uses", call("    uses: o/r/.github/workflows/x.yml@main\n    secrets: inherit # zizmor: ignore[secrets-inherit]\n"), []string{"5 unpinned-uses"}},
+		{"secrets before uses", call("    secrets: inherit # zizmor: ignore[secrets-inherit]\n    uses: o/r/.github/workflows/x.yml@main\n"), []string{"6 unpinned-uses"}},
+		{"line of its own under secrets", call("    uses: o/r/.github/workflows/x.yml@main\n    secrets: inherit\n    # zizmor: ignore[secrets-inherit]\n"), []string{"5 unpinned-uses"}},
+		{"the job is ignored whole for unpinned-uses", call("    uses: o/r/.github/workflows/x.yml@main\n    with: # zizmor: ignore[unpinned-uses]\n      a: b\n    secrets: inherit\n"), []string{"5 secrets-inherit"}},
+		{"with is not secrets", call("    uses: o/r/.github/workflows/x.yml@main\n    with: # zizmor: ignore[secrets-inherit]\n      a: b\n    secrets: inherit\n"), []string{"5 secrets-inherit", "5 unpinned-uses"}},
+		{"trigger", "on:\n  workflow_run:\n    workflows: [a] # zizmor: ignore[dangerous-triggers]\n    types: [completed]\n  pull_request_target:\njobs:\n  a:\n    runs-on: x\n    steps:\n      - run: echo\n", nil},
+		{"trigger without a comment", "on:\n  workflow_run:\n    workflows: [a]\n    types: [completed]\n  pull_request_target:\njobs:\n  a:\n    runs-on: x\n    steps:\n      - run: echo\n", []string{"2 dangerous-triggers", "5 dangerous-triggers"}},
+		{"job scope", "on: push\njobs:\n  a:\n    runs-on: x # zizmor: ignore[secrets-outside-env]\n    steps:\n      - run: echo ${{ secrets.A }}\n", nil},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			have := lintZ(t, cfg, tc.src)
+			// only the rules under test
+			var got []string
+			for _, h := range have {
+				for _, id := range []string{"secrets-inherit", "dangerous-triggers", "unpinned-uses", "secrets-outside-env"} {
+					if strings.HasSuffix(h, " "+id) {
+						got = append(got, h)
+					}
+				}
+			}
+			if diff := cmp.Diff(tc.want, got); diff != "" {
+				t.Errorf("(-want +got): %s\nall: %v", diff, have)
+			}
+		})
 	}
 }

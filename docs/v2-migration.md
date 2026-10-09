@@ -329,8 +329,8 @@ nothing now starts suppressing. Stacked comments on their own lines still cover 
 
 ## zizmor ignore comments
 
-A `# zizmor: ignore[rule-a,rule-b]` comment is honored, with the scoping rules of zizmor: it applies to the findings whose region
-contains the comment. A name stands for the jactionlint rule of the same ID. Two audits are reported under another ID:
+A `# zizmor: ignore[rule-a,rule-b]` comment is honored, with the scoping rules of zizmor: it applies to the findings that have a
+location with the comment in it (the whole step, the `uses:` or `secrets:` of a job that calls a reusable workflow, the whole `on:` value). A name stands for the jactionlint rule of the same ID. Two audits are reported under another ID:
 
 | zizmor audit | jactionlint rule | Note |
 | --- | --- | --- |
@@ -340,7 +340,7 @@ contains the comment. A name stands for the jactionlint rule of the same ID. Two
 A name with no rule of that ID (an audit jactionlint lacks) is skipped. `jactionlint --migrate-ignores [files]` rewrites the trailing
 comments into `# jactionlint ignore=` comments on the line above, with the reason as a plain comment line. A name that would widen
 the scope when migrated (`unpinned-images` covers only some findings of `unpinned-uses`) stays in a zizmor comment. Running it again
-changes nothing. With `unused-ignore` enabled, a zizmor comment is reported as stale only when its audit maps to an enabled rule.
+changes nothing. `unused-ignore` does not report zizmor comments unless its `zizmor` option is on, and then only when the audit maps to an enabled rule.
 See [zizmor ignore comments](usage.md#zizmor-ignore-comments).
 
 ## Online mode

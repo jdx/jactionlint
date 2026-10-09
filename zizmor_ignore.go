@@ -170,6 +170,13 @@ func parseZizmorIgnores(src []byte) []inlineIgnore {
 	}
 	lines := splitSourceLines(src)
 	var ret []inlineIgnore
+	var structure *zizmorStructure
+	scopes := func() *zizmorStructure {
+		if structure == nil {
+			structure = scanZizmorStructure(src, lines)
+		}
+		return structure
+	}
 	for _, c := range scanZizmorComments(src, lines) {
 		ig := inlineIgnore{commentLine: c.line}
 		for _, n := range c.names {
@@ -185,6 +192,7 @@ func parseZizmorIgnores(src []byte) []inlineIgnore {
 		if s, e, ok := zizmorHeaderRange(lines, c); ok {
 			ig.start, ig.end = s, e
 		}
+		ig.scopes = zizmorScopesOf(scopes(), c.line, ig.entries)
 		ret = append(ret, ig)
 	}
 	return ret

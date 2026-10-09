@@ -3061,6 +3061,9 @@ The finding has a safe fix: `jactionlint --fix` removes the pattern, or the whol
 patterns of the comment that were used. Two related findings are always on, from the `correctness` profile: `invalid-ignore-comment` (the
 comment cannot be parsed) and `expired-ignore` (an `expires` date of an entry in `ignores` has passed).
 
+A `# zizmor: ignore[...]` comment is not reported, because zizmor may still run on the repository and decides what the comment suppresses. Set the
+option `zizmor: true` of the rule to find the ones that are left over once zizmor is gone.
+
 <a id="check-env-var-names"></a>
 ## Environment variable names
 

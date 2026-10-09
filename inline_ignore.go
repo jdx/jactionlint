@@ -68,6 +68,9 @@ type inlineIgnore struct {
 	// commentLine is the line of a zizmor ignore comment, which also applies to the errors whose region
 	// contains that line. It is 0 for the comments of jactionlint.
 	commentLine int
+	// scopes are the regions in which a zizmor comment ignores the findings of some rules, besides the
+	// region of the finding itself.
+	scopes []zizmorScope
 }
 
 // splitIgnoreList splits comma-separated patterns. Commas inside (), [] and {} or escaped with a
@@ -279,7 +282,15 @@ func (ig inlineIgnore) covers(err *Error) bool {
 	if ig.start <= err.Line && err.Line <= ig.end {
 		return true
 	}
-	return ig.commentLine > 0 && err.Line <= ig.commentLine && ig.commentLine <= max(err.EndLine, err.Line)
+	if ig.commentLine > 0 && err.Line <= ig.commentLine && ig.commentLine <= max(err.EndLine, err.Line) {
+		return true
+	}
+	for _, sc := range ig.scopes {
+		if sc.rules[err.ID] && sc.start <= err.Line && err.Line <= sc.end {
+			return true
+		}
+	}
+	return false
 }
 
 // unusedInlineIgnores returns an error for each pattern of the inline ignore comments which did not
@@ -293,7 +304,13 @@ func unusedInlineIgnores(ignores []inlineIgnore, orphans []*inlineIgnoreEntry, c
 			return false
 		}
 		if e.zizmor != "" {
-			// Only for an audit which maps onto a rule that is on: a rule which is off cannot report anything
+			// A comment of zizmor is a comment of another tool, which may still run: zizmor decides what it
+			// suppresses, and its regions are not the ones of jactionlint. It is reported only on request, as
+			// a leftover of a migration, and then only for an audit which maps onto a rule that is on: a
+			// rule which is off cannot report anything
+			if on, _ := cfg.ruleOptionBool("unused-ignore", "zizmor"); !on {
+				return false
+			}
 			return zizmorEntryActive(e, cfg, online)
 		}
 		if rr, ok := lookupRenamed(e.pat.Retired); ok && rr.Option == pedanticOption.Name && !cfg.auditPedantic(rr.ID) {
@@ -406,6 +423,7 @@ func isSequenceItem(line string) bool {
 func init() {
 	registerRules(
 		RuleInfo{ID: "invalid-ignore-comment", Group: RuleGroupCorrectness, Summary: "An inline ignore comment is invalid.", DefaultLevel: SeverityError, Profile: ProfileCorrectness, DocsAnchor: "check-unused-ignore"},
-		RuleInfo{ID: "unused-ignore", Group: RuleGroupPolicy, Summary: "An ignore comment or an entry of \"ignores\" in the config file did not suppress anything.", DefaultLevel: SeverityError, Profile: ProfilePedantic, Fixable: true, DocsAnchor: "check-unused-ignore"},
+		RuleInfo{ID: "unused-ignore", Group: RuleGroupPolicy, Summary: "An ignore comment or an entry of \"ignores\" in the config file did not suppress anything.", DefaultLevel: SeverityError, Profile: ProfilePedantic, Fixable: true, DocsAnchor: "check-unused-ignore",
+			Options: []RuleOption{{Name: "zizmor", Kind: RuleOptionBool, Default: false, Summary: "Also report \"# zizmor: ignore[...]\" comments which suppressed nothing. Turn it on after zizmor is gone."}}},
 	)
 }

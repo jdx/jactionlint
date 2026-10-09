@@ -1301,6 +1301,7 @@ An ignore comment or an entry of "ignores" in the config file did not suppress a
 - Default level: error
 - Profile: pedantic
 - Fixable: yes
+- Option `zizmor` (bool, default false): Also report "# zizmor: ignore[...]" comments which suppressed nothing. Turn it on after zizmor is gone.
 - Details and examples: [checks](./checks.md#check-unused-ignore)
 
 ## unused-job-output

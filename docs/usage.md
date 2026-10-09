@@ -245,13 +245,18 @@ steps:
   follow the closing bracket after white space. The comment may follow another comment (`# v4.1.0 # zizmor: ignore[...]`).
 - Several names are separated with commas. A name that jactionlint has no rule for (an audit it lacks) is skipped, not an error.
   `# zizmor: ignore` without a rule list does nothing, as in zizmor.
-- Like in zizmor, the comment applies to the findings whose region contains the comment, so it sits on the flagged line
-  (a comment on a line of its own above does not apply). A comment on the line which opens a value, such as `on:`,
-  `permissions:` or `run: |`, applies to everything inside that value, because zizmor reports those findings over the whole value.
+- Like in zizmor, the comment applies to the findings which have a location with the comment in it, and a finding of
+  zizmor has more than the line it points at. A comment on any line of a step (`name:`, a line of its own between two keys,
+  `env:`) applies to the `template-injection`, `artipacked`, `unpinned-uses` and other findings of the step. A comment
+  on any line of a job applies to its `secrets-outside-env` finding. For a job that calls a reusable workflow, a comment on
+  its `uses:` or `secrets:` applies to `secrets-inherit`, and a comment anywhere in `on:` applies to `dangerous-triggers`. A
+  comment on the line which opens a value, such as `permissions:` or `run: |`, applies to everything inside that value.
+  A comment on a line of its own above the first line of a step belongs to the step above, not to it.
   Text inside a block scalar or a quoted string is never a comment.
 - Audit names that differ from the jactionlint rule ID are mapped by [a short table](v2-migration.md#zizmor-ignore-comments).
-- With [`unused-ignore`](rules.md#unused-ignore), a zizmor comment is reported as stale only when its audit maps to a rule
-  that is enabled, never for an audit jactionlint does not have.
+- [`unused-ignore`](rules.md#unused-ignore) does not report zizmor comments, because zizmor may still run on the repository
+  and decides what its comments suppress. Once zizmor is gone, turn on its `zizmor` option to find the comments left over;
+  then a comment is reported only when its audit maps to a rule that is enabled.
 
 `jactionlint --migrate-ignores [files]` rewrites the trailing zizmor comments (of the workflows of the project when no file is
 given) into `# jactionlint ignore=` comments on the line above and moves the reason to a plain comment line. Names with no
