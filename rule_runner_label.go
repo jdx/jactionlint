@@ -2,6 +2,7 @@ package jactionlint
 
 import (
 	"path"
+	"regexp"
 	"strings"
 )
 
@@ -136,6 +137,25 @@ type RuleRunnerLabel struct {
 	// all past compatibility values here for better error message. If accumulating all compatibility
 	// values into one integer, we can no longer know what labels are conflicting.
 	compats map[runnerOSCompat]*String
+	// selfHosted is whether the labels of the job being checked have "self-hosted". Its other labels are chosen by
+	// whoever runs the runner, so an unknown one is not a mistake.
+	selfHosted bool
+}
+
+// largerRunnerSizeRe matches the size suffix that larger runners of GitHub get in their default label:
+// ubuntu-latest-8-cores, windows-2022-16-core, ubuntu-24.04-xl, macos-14-xlarge, ubuntu-24.04-32cpu.
+var largerRunnerSizeRe = regexp.MustCompile(`^(.+)-(?:\d+-cores?|\d+-?x?cpus?|\d+-?vcpus?|\d*xl|x{0,2}large)$`)
+
+// largerRunnerCompat returns the compatibility of a larger runner label, which is a label of a GitHub-hosted runner
+// with a size suffix. The name of a larger runner is set by whoever creates it, so a base that is a known label is the
+// only part that can be checked.
+func largerRunnerCompat(label string) (runnerOSCompat, bool) {
+	m := largerRunnerSizeRe.FindStringSubmatch(strings.ToLower(label))
+	if m == nil {
+		return compatInvalid, false
+	}
+	c, ok := defaultRunnerOSCompats[m[1]]
+	return c, ok
 }
 
 // NewRuleRunnerLabel creates new RuleRunnerLabel instance.
@@ -159,6 +179,21 @@ func (rule *RuleRunnerLabel) VisitJobPre(n *Job) error {
 	if n.Strategy != nil {
 		m = n.Strategy.Matrix
 	}
+
+	rule.selfHosted = false
+	for _, l := range n.RunsOn.Labels {
+		if strings.EqualFold(l.Value, "self-hosted") {
+			rule.selfHosted = true
+		}
+	}
+	if n.RunsOn.LabelsExpr != nil {
+		for _, l := range rule.tryToGetLabelsInMatrix(n.RunsOn.LabelsExpr, m) {
+			if strings.EqualFold(l.Value, "self-hosted") {
+				rule.selfHosted = true
+			}
+		}
+	}
+	defer func() { rule.selfHosted = false }()
 
 	if len(n.RunsOn.Labels) == 1 {
 		rule.checkLabel(n.RunsOn.Labels[0], m)
@@ -243,6 +278,10 @@ func (rule *RuleRunnerLabel) verifyRunnerLabel(label *String) runnerOSCompat {
 		}
 	}
 
+	if c, ok := largerRunnerCompat(l); ok {
+		return c
+	}
+
 	for _, k := range known {
 		m, err := path.Match(k, l)
 		if err != nil {
@@ -252,6 +291,10 @@ func (rule *RuleRunnerLabel) verifyRunnerLabel(label *String) runnerOSCompat {
 		if m {
 			return compatInvalid
 		}
+	}
+
+	if rule.selfHosted {
+		return compatInvalid // a label of the runner of its owner
 	}
 
 	rule.ReportIDf(

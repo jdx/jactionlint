@@ -2053,7 +2053,11 @@ jactionlint checks proper label is used at `runs-on:` configuration. Even if an 
 `runs-on: ${{ matrix.foo }}`, jactionlint parses the expression and resolves the possible values, then validates the values.
 
 When you define some custom labels for your self-hosted runner, jactionlint does not know the labels. Please set the label
-names in [`jactionlint.yaml` configuration file](config.md) to let jactionlint know them.
+names in [`jactionlint.yaml` configuration file](config.md) to let jactionlint know them. A job that has the label `self-hosted`
+runs on a runner of its owner, who chooses the other labels, so a label next to `self-hosted` is never reported as unknown (unless
+`self-hosted-runner.strict-labels` is on). A label made of a known GitHub-hosted label and the size of a larger runner
+(`ubuntu-latest-16-cores`, `ubuntu-24.04-xl`, `macos-14-xlarge`, `windows-2022-32cpu`) is accepted too; the names that an
+organization gives to its larger runners are custom labels, set them in the configuration file.
 
 In addition to checking label values, jactionlint checks combinations of labels. `runs-on:` section can be an array that contains
 multiple labels. In this case, a runner which has all the labels will be selected. However, those labels combinations can have
