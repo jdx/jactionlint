@@ -117,6 +117,12 @@ func TestRuleRunnerLabelCheckLabels(t *testing.T) {
 			matrix: []string{"ubuntu-latest"},
 		},
 		{
+			what:   "self-hosted is one value of the matrix and the other value is a job of its own",
+			labels: []string{"${{matrix.os}}"},
+			matrix: []string{"self-hosted", "ubntu-latest"},
+			errs:   []string{`"ubntu-latest" is unknown`},
+		},
+		{
 			what:   "user-defined label with matrix",
 			labels: []string{"self-hosted", "${{matrix.os}}"},
 			matrix: []string{"foo", "bar"},
@@ -183,9 +189,26 @@ func TestRuleRunnerLabelCheckLabels(t *testing.T) {
 			errs:   []string{`"linux-latest" is unknown`},
 		},
 		{
-			what:   "undefined self-hosted label",
+			what:   "custom label next to self-hosted is the label of the runner of its owner",
 			labels: []string{"self-hosted", "foo"},
+		},
+		{
+			what:   "custom label without self-hosted is unknown",
+			labels: []string{"ubuntu-latest", "foo"},
 			errs:   []string{`"foo" is unknown`},
+		},
+		{
+			what:   "larger runner of a known label",
+			labels: []string{"ubuntu-24.04-xl"},
+		},
+		{
+			what:   "larger runner with a size in cores",
+			labels: []string{"ubuntu-latest-16-cores"},
+		},
+		{
+			what:   "larger runner of an unknown base",
+			labels: []string{"ubuntu-99.04-xl"},
+			errs:   []string{`"ubuntu-99.04-xl" is unknown`},
 		},
 		{
 			what:   "GH-hosted runner labels conflict",

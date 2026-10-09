@@ -120,7 +120,18 @@ func (a *downloadAnalysis) trusted(u *runscript.Word) bool {
 	if host != "" && isLocalHost(host) {
 		return true
 	}
-	return isCommitPinnedURL(u.Value, host)
+	return isCommitPinnedURL(u.Value, host) || isOwnRepositoryAtCommit(u.Value)
+}
+
+// reOwnRepositoryAtCommit matches a file of the repository that runs the workflow at the commit that runs it:
+// https://github.com/${GITHUB_REPOSITORY}/raw/${GITHUB_SHA}/tools/x.sh, with the shell variables or the expressions.
+// On raw.githubusercontent.com the commit follows the repository at once: after "raw/" it would be a branch called raw.
+var reOwnRepositoryAtCommit = regexp.MustCompile(`(?i)^https://(?:github\.com/(?:\$\{?GITHUB_REPOSITORY\}?|\$\{\{\s*github\.repository\s*\}\})/(?:(?:raw|blob)/)?|raw\.githubusercontent\.com/(?:\$\{?GITHUB_REPOSITORY\}?|\$\{\{\s*github\.repository\s*\}\})/)(?:\$\{?GITHUB_(?:WORKFLOW_)?SHA\}?|\$\{\{\s*github\.(?:workflow_)?sha\s*\}\})(?:/|$|\?|#)`)
+
+// isOwnRepositoryAtCommit reports whether the URL is a file of this repository at the commit being built, whose
+// content is fixed by that commit and was checked in by the repository itself.
+func isOwnRepositoryAtCommit(u string) bool {
+	return reOwnRepositoryAtCommit.MatchString(u)
 }
 
 var reCommitPath = regexp.MustCompile(`/[0-9a-f]{40}(/|$|\?|#)`)

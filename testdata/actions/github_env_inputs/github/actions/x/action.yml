@@ -1,0 +1,21 @@
+name: x
+description: x
+inputs:
+  version:
+    description: v
+    required: true
+runs:
+  using: composite
+  steps:
+    # ERROR: the caller chooses the input, through an environment variable
+    - shell: bash
+      env:
+        V: ${{ inputs.version }}
+      run: |
+        echo "VERSION=$V" >> "$GITHUB_ENV"
+    # ERROR: directly
+    - shell: bash
+      run: echo "${{ inputs.version }}" >> "$GITHUB_PATH"
+    # OK: a literal
+    - shell: bash
+      run: echo "MODE=release" >> "$GITHUB_ENV"

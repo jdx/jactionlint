@@ -107,15 +107,10 @@ func (rule *RuleUseTrustedPublishing) checkRun(step *Step, run *ExecRun) {
 			continue
 		}
 		info := trustedPublishing[eco]
-		cred := ""
-		for _, name := range publishCredentialVars[eco] {
-			if _, ok := rule.envValue(step, name); ok {
-				cred = name
-				break
-			}
-		}
+		cred := rule.credentialVar(step, eco)
 		for _, f := range c.Flags {
-			if cred == "" && f.Value != nil && slices.Contains([]string{"--token", "--password", "--api-key", "-p"}, f.Name) && c.Tool != "gh" {
+			// -p is the password of twine, and the package of cargo (`cargo publish -p crate`)
+			if cred == "" && f.Value != nil && slices.Contains([]string{"--token", "--password", "--api-key", "-p"}, f.Name) && c.Tool != "gh" && (f.Name != "-p" || eco == "pypi") && !rule.exchangedToken(f.Value.Exprs) {
 				cred = f.Name
 			}
 		}
@@ -125,6 +120,83 @@ func (rule *RuleUseTrustedPublishing) checkRun(step *Step, run *ExecRun) {
 		start, end := commandRange(s, origin, c)
 		rule.errorIDAt("use-trusted-publishing", start, trustedPublishingMessage(cmd, info.registry, info.instead, cred, granted)).endAt(end)
 	}
+}
+
+// credentialVar returns the name of the variable of the step that holds a long-lived credential for the registry of
+// the ecosystem, or "". A variable that is set to nothing (setup-node writes a placeholder NODE_AUTH_TOKEN, which
+// `NODE_AUTH_TOKEN: ”` blanks so that npm falls back to the OIDC token), and a variable that is set from the output
+// of an action that exchanges the OIDC token for a short-lived one (rust-lang/crates-io-auth-action), is not one.
+func (rule *RuleUseTrustedPublishing) credentialVar(step *Step, eco string) string {
+	for _, name := range publishCredentialVars[eco] {
+		v, ok := rule.envValue(step, name)
+		if !ok {
+			continue
+		}
+		if strings.TrimSpace(v.Value) == "" || isEmptyExpression(v.Value) {
+			continue
+		}
+		if exprs := expressionsOf(v.Value); len(exprs) > 0 && rule.exchangedToken(exprs) {
+			continue
+		}
+		return name
+	}
+	return ""
+}
+
+// oidcExchangeActions are the actions that trade the OIDC token of the job for a short-lived registry token, which
+// they return as an output. A token from one of them is trusted publishing.
+var oidcExchangeActions = []string{"rust-lang/crates-io-auth-action", "nuget/login"}
+
+var stepOutputRe = regexp.MustCompile(`(?i)\bsteps\.([a-z_][a-z0-9_-]*)\.outputs\.`)
+
+// exchangedToken reports whether the expressions read the output of a step of the job that runs an action of
+// oidcExchangeActions.
+func (rule *RuleUseTrustedPublishing) exchangedToken(exprs []string) bool {
+	if rule.job == nil || len(exprs) == 0 {
+		return false
+	}
+	for _, expr := range exprs {
+		if secretRefRe.MatchString(expr) {
+			continue // `secrets.TOKEN || steps.auth.outputs.token` publishes with the secret whenever it is set
+		}
+		for _, m := range stepOutputRe.FindAllStringSubmatch(expr, -1) {
+			for _, st := range rule.job.Steps {
+				if st == nil || st.ID == nil || !strings.EqualFold(st.ID.Value, m[1]) {
+					continue
+				}
+				if a, ok := st.Exec.(*ExecAction); ok && a.Uses != nil {
+					if slices.Contains(oidcExchangeActions, ParseUses(a.Uses.Value).CanonicalName()) {
+						return true
+					}
+				}
+			}
+		}
+	}
+	return false
+}
+
+// expressionsOf returns the inner texts of the ${{ }} expressions in the string.
+func expressionsOf(s string) []string {
+	var out []string
+	for {
+		i := strings.Index(s, "${{")
+		if i < 0 {
+			return out
+		}
+		j := strings.Index(s[i:], "}}")
+		if j < 0 {
+			return out
+		}
+		out = append(out, s[i+3:i+j])
+		s = s[i+j+2:]
+	}
+}
+
+// isEmptyExpression reports whether the string is an expression of an empty string literal.
+func isEmptyExpression(s string) bool {
+	e := expressionsOf(s)
+	return len(e) == 1 && strings.TrimSpace(strings.Replace(strings.TrimSpace(s), "${{"+e[0]+"}}", "", 1)) == "" &&
+		(strings.TrimSpace(e[0]) == "''" || strings.TrimSpace(e[0]) == `""`)
 }
 
 func trustedPublishingMessage(cmd, registry, instead, cred string, granted bool) string {
@@ -176,13 +248,7 @@ func (rule *RuleUseTrustedPublishing) checkPowerShell(step *Step, run *ExecRun, 
 			if loc == nil {
 				continue
 			}
-			cred := ""
-			for _, name := range publishCredentialVars[p.eco] {
-				if _, ok := rule.envValue(step, name); ok {
-					cred = name
-					break
-				}
-			}
+			cred := rule.credentialVar(step, p.eco)
 			if m := powerShellTokenRe.FindStringSubmatch(code); cred == "" && m != nil {
 				cred = strings.ToLower(m[1])
 			}

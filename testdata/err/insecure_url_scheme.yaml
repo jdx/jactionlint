@@ -19,3 +19,11 @@ jobs:
       - run: curl http://$HOST/x
       - run: git config --global url."https://github.com/".insteadOf git://github.com/
       - run: echo "see http://example.com/docs"
+      # An RFC 3161 timestamp authority is http by design, its answer is signed
+      - uses: octo/sign@v1
+        with:
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com
+      # but an input which only has the word in its name is a URL like any other
+      - uses: octo/sign@v1
+        with:
+          timestamp-mirror: http://mirror.example.com/files

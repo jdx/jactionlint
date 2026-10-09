@@ -602,3 +602,12 @@ func (c *Config) ruleOptionStringMap(id, name string) (map[string]string, bool) 
 	m, ok := v.(map[string]string)
 	return m, ok
 }
+
+// ruleConfigured reports whether the configuration has an entry for the rule in "rules".
+func (c *Config) ruleConfigured(id string) bool {
+	if c == nil {
+		return false
+	}
+	_, ok := c.Rules[id]
+	return ok
+}

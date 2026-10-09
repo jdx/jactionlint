@@ -95,7 +95,10 @@ The `correctness` profile also has bug detectors that actionlint does not: `unso
 falsy), `workflow-run-names` (a `workflow_run` trigger naming a workflow that does not exist), `local-action-checkout` (a local
 action used before the repository is checked out), `action-syntax` (the metadata of composite actions) and `dependabot-syntax`
 (`dependabot.yml`). A repository that passed actionlint can have findings from them; turn each one off with `rules: {<id>: off}`.
-`template-injection` also covers sinks beyond scripts (container options, the prompt of AI agent actions).
+`template-injection` also covers sinks beyond scripts (container options, the prompt of AI agent actions), and in the `default`
+profile the free text that is chosen from outside the workflow (`inputs.*` of type string, `client_payload`, release names, `ref_name`).
+`workflow-input-type` differs from actionlint in one point: a quoted `"true"` or `'1'` passed to a reusable workflow is a string,
+so it can be passed to an input of the type `string` (actionlint 1.7 reports it as a boolean or a number).
 
 The `default` profile adds the security and policy rules, such as `unpinned-uses`, `missing-permissions`, `missing-timeout`,
 `excessive-permissions`, `concurrency-limits`, `artipacked`, `cache-poisoning`, `dangerous-triggers` and `use-trusted-publishing`. The `pedantic` profile adds the noisy and opinionated

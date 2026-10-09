@@ -290,6 +290,77 @@ func (c *tiContext) isTrustedRef(path []string) bool {
 	return false
 }
 
+// externalText returns what kind of value the property is when it is free text chosen by someone outside of
+// the workflow file, and "" when it is not. It does not know the case of the properties which the table of
+// attacker controlled properties covers.
+//
+//   - inputs.*, github.event.inputs.*: whoever starts the run (workflow_dispatch) or calls the workflow
+//     (workflow_call), or the caller of a composite action. Inputs of the type boolean, number, choice and
+//     environment are fixed vocabularies and are not text.
+//   - github.event.client_payload: the sender of the repository_dispatch event.
+//   - github.event.release: the name, tag and text of the release.
+//   - github.ref_name, github.base_ref, github.event.pull_request.base.ref: a branch or tag name, which may hold
+//     shell syntax (a$(cmd)). Creating one takes write access, which is why zizmor still counts it.
+//
+// github.actor, SHAs, numbers and the IDs of events stay with isFixedRef: GitHub restricts their characters.
+func (c *tiContext) externalText(path []string) string {
+	// Names of contexts and properties are case insensitive
+	path = slices.Clone(path)
+	for i := range path {
+		path[i] = strings.ToLower(path[i])
+	}
+	switch path[0] {
+	case "inputs":
+		if len(path) == 2 && c.inputIsNotText(path[1]) {
+			return ""
+		}
+		if len(path) == 1 && !c.inputsHoldText() {
+			return ""
+		}
+		return "an input chosen by whoever runs this"
+	case "github":
+		if len(path) < 2 {
+			return ""
+		}
+		switch path[1] {
+		case "ref_name", "base_ref":
+			return "a branch or tag name"
+		case "event":
+			if len(path) < 3 {
+				return ""
+			}
+			switch path[2] {
+			case "inputs":
+				if len(path) == 4 && c.inputIsNotText(path[3]) {
+					return ""
+				}
+				if len(path) == 3 && !c.inputsHoldText() {
+					return ""
+				}
+				return "an input chosen by whoever runs this"
+			case "client_payload":
+				return "the payload of a repository_dispatch event"
+			case "release":
+				if len(path) >= 4 {
+					switch path[3] {
+					case "tag_name", "name", "body", "target_commitish":
+						return "the name or text of a release"
+					case "assets":
+						if last := path[len(path)-1]; last == "name" || last == "label" {
+							return "the name of a release asset"
+						}
+					}
+				}
+			case "pull_request":
+				if len(path) == 5 && path[3] == "base" && path[4] == "ref" {
+					return "a branch name"
+				}
+			}
+		}
+	}
+	return ""
+}
+
 // matrixIsLiteral reports whether every value of the matrix variable is written in the workflow.
 func (c *tiContext) matrixIsLiteral(name string) bool {
 	if c.job == nil || c.job.Strategy == nil || c.job.Strategy.Matrix == nil {
@@ -344,7 +415,7 @@ func (c *tiContext) inputIsNotText(name string) bool {
 	for _, e := range c.wf.On {
 		switch e := e.(type) {
 		case *WorkflowDispatchEvent:
-			if in, ok := e.Inputs[name]; ok {
+			if in, ok := e.Inputs[strings.ToLower(name)]; ok {
 				switch in.Type {
 				case WorkflowDispatchEventInputTypeNumber, WorkflowDispatchEventInputTypeBoolean,
 					WorkflowDispatchEventInputTypeChoice, WorkflowDispatchEventInputTypeEnvironment:
@@ -355,7 +426,7 @@ func (c *tiContext) inputIsNotText(name string) bool {
 			}
 		case *WorkflowCallEvent:
 			for _, in := range e.Inputs {
-				if in.ID == name {
+				if strings.EqualFold(in.ID, name) {
 					if in.Type != WorkflowCallEventInputTypeBoolean && in.Type != WorkflowCallEventInputTypeNumber {
 						return false
 					}
@@ -365,6 +436,35 @@ func (c *tiContext) inputIsNotText(name string) bool {
 		}
 	}
 	return found
+}
+
+// inputsHoldText reports whether the whole inputs object can hold free text: an input of the workflow which
+// is not a boolean, a number, a choice or an environment, or any input of a composite action (c.wf is nil).
+// A workflow which declares no input at all has no text in it.
+func (c *tiContext) inputsHoldText() bool {
+	if c.wf == nil {
+		return true
+	}
+	for _, e := range c.wf.On {
+		switch e := e.(type) {
+		case *WorkflowDispatchEvent:
+			for _, in := range e.Inputs {
+				switch in.Type {
+				case WorkflowDispatchEventInputTypeNumber, WorkflowDispatchEventInputTypeBoolean,
+					WorkflowDispatchEventInputTypeChoice, WorkflowDispatchEventInputTypeEnvironment:
+				default:
+					return true
+				}
+			}
+		case *WorkflowCallEvent:
+			for _, in := range e.Inputs {
+				if in.Type != WorkflowCallEventInputTypeBoolean && in.Type != WorkflowCallEventInputTypeNumber {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }
 
 var knownContexts = map[string]bool{
@@ -433,6 +533,32 @@ func (c *tiContext) envTaint(name string, depth int) string {
 	return ""
 }
 
+// envExternalText returns what kind of free text from outside the workflow file the environment variable is set from
+// (see externalText), or an empty string. Putting such a value in env: and interpolating it with ${{ env.X }} is
+// as much an injection as interpolating it directly.
+func (c *tiContext) envExternalText(name string, depth int) string {
+	if depth > 4 {
+		return ""
+	}
+	v := c.lookupEnv(name)
+	if v == nil || v.Value == nil {
+		return ""
+	}
+	for _, sp := range scanExprs(v.Value) {
+		for _, r := range exprContextRefs(sp.Node) {
+			if k := c.externalText(r.Path); k != "" {
+				return k
+			}
+			if strings.EqualFold(r.Path[0], "env") && len(r.Path) == 2 {
+				if k := c.envExternalText(r.Path[1], depth+1); k != "" {
+					return k
+				}
+			}
+		}
+	}
+	return ""
+}
+
 // untrustedErrs returns the findings of the check for contexts which are known to be attacker
 // controlled. This is the check which the expression rule runs on scripts.
 func untrustedErrs(n ExprNode) []*ExprError {
@@ -462,6 +588,11 @@ const (
 	tiSubtree
 	// tiEnv is an environment variable which holds an attacker controlled property.
 	tiEnv
+	// tiInput is a value which whoever starts or calls the workflow, sends the dispatch event, publishes the
+	// release or names the branch chooses (inputs.*, github.event.client_payload.*, github.ref_name). It is free
+	// text which GitHub does not validate, so it is as dangerous in a script as the properties above. The Source of
+	// the class says which kind of value it is. Booleans, numbers and choices are never of this tier.
+	tiInput
 	// tiExpansion is any other expansion into a script whose value is free text.
 	tiExpansion
 	// tiTrusted is an expansion into a script whose value an attacker cannot control, like
@@ -489,6 +620,11 @@ func (t tiTier) ID() string {
 // pedantic reports whether the tier is one of the pedantic findings, which the option "pedantic" turns on.
 func (t tiTier) pedantic() bool {
 	return t == tiExpansion || t == tiTrusted
+}
+
+// beyondActionlint reports whether the tier is a finding which actionlint (the correctness profile) does not make.
+func (t tiTier) beyondActionlint() bool {
+	return t == tiInput
 }
 
 // retiredID is the ID that the findings of the tier had before the audit was one rule (see RenamedRule).
@@ -536,6 +672,17 @@ func (c *tiContext) classify(sp *exprSpan) tiClass {
 	}
 	for i := range refs {
 		r := &refs[i]
+		if kind := c.externalText(r.Path); kind != "" {
+			return tiClass{Tier: tiInput, Ref: r, Source: kind}
+		}
+		if r.Path[0] == "env" && len(r.Path) == 2 {
+			if kind := c.envExternalText(r.Path[1], 0); kind != "" {
+				return tiClass{Tier: tiInput, Ref: r, Source: "set from " + kind}
+			}
+		}
+	}
+	for i := range refs {
+		r := &refs[i]
 		if !c.isTrustedRef(r.Path) {
 			return tiClass{Tier: tiExpansion, Ref: r}
 		}
@@ -570,6 +717,9 @@ func tiEnabled(cfg *Config, t tiTier) bool {
 	id := t.ID()
 	if id == "" || !cfg.RuleEnabled(id) {
 		return false
+	}
+	if t.beyondActionlint() && !cfg.profile().Includes(ProfileDefault) && !cfg.ruleConfigured(id) {
+		return false // the correctness profile is what actionlint reports
 	}
 	return !t.pedantic() || cfg.auditPedantic(id)
 }

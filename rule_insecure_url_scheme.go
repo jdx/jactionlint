@@ -1,6 +1,7 @@
 package jactionlint
 
 import (
+	"regexp"
 	"sort"
 	"strings"
 
@@ -70,6 +71,11 @@ func insecureURL(v string) (string, bool) {
 	return v[:i-len(scheme)] + secure + v[i:], true
 }
 
+// timestampAuthorityInput matches the names of the inputs which hold the address of a timestamp authority
+// (timestamp-rfc3161, timestamp-server, timestamp-url, tsa-url). Other inputs which only mention a timestamp
+// (timestamp-mirror) are checked like every URL.
+var timestampAuthorityInput = regexp.MustCompile(`^(?:timestamp|tsa)(?:-(?:rfc3161|server|url|authority|endpoint|tsa))*$`)
+
 // VisitStep is callback when visiting Step node.
 func (rule *RuleInsecureURLScheme) VisitStep(n *Step) error {
 	switch e := n.Exec.(type) {
@@ -82,6 +88,11 @@ func (rule *RuleInsecureURLScheme) VisitStep(n *Step) error {
 		for _, name := range names {
 			in := e.Inputs[name]
 			if in == nil || in.Value == nil || strings.ContainsAny(strings.TrimSpace(in.Value.Value), " \t\n") {
+				continue
+			}
+			if timestampAuthorityInput.MatchString(strings.ReplaceAll(name, "_", "-")) {
+				// The address of a timestamp authority (RFC 3161) is http by design: what it returns is signed, and the
+				// documented endpoints of the common authorities are http
 				continue
 			}
 			if secure, ok := insecureURL(in.Value.Value); ok {

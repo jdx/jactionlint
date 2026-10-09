@@ -75,6 +75,7 @@ List of checks:
 - [Secrets outside an environment (pedantic)](#check-secrets-outside-env)
 - [Typosquatting of actions](#check-typosquat-uses)
 - [Forbidden actions (opt-in)](#check-forbidden-uses)
+- [Inputs, payloads, release names and branch names](#check-template-injection-inputs)
 - [Expansions in scripts (pedantic)](#check-template-injection-expansion)
 - [AI agent actions](#check-agentic-actions)
 - [Bots trusted by `github.actor`](#check-bot-conditions)
@@ -1790,6 +1791,10 @@ test.yaml:26:18: type of "age" input is "number" but its default value "teen" ca
    |
 26 |         default: teen
    |                  ^~~~
+test.yaml:33:24: "inputs.massage" is an input chosen by whoever runs this, which is not validated and can hold shell syntax. avoid using it directly in inline scripts. instead, pass it through an environment variable. see https://docs.github.com/en/actions/reference/security/secure-use#good-practices-for-mitigating-script-injection-attacks for more details [expression]
+   |
+33 |       - run: echo "${{ inputs.massage }}"
+   |                        ^~~~~~~~~~~~~~
 test.yaml:33:24: property "massage" is not defined in object type {age: number; id: any; kind: string; message: string; name: string; verbose: bool} [expression]
    |
 33 |       - run: echo "${{ inputs.massage }}"
@@ -1802,6 +1807,10 @@ test.yaml:37:28: property access of object must be type of string but got "numbe
    |
 37 |       - run: echo "${{ env[inputs.age] }}"
    |                            ^~~~~~~~~~~
+test.yaml:39:24: "github.event.inputs.massage" is an input chosen by whoever runs this, which is not validated and can hold shell syntax. avoid using it directly in inline scripts. instead, pass it through an environment variable. see https://docs.github.com/en/actions/reference/security/secure-use#good-practices-for-mitigating-script-injection-attacks for more details [expression]
+   |
+39 |       - run: echo "${{ github.event.inputs.massage }}"
+   |                        ^~~~~~~~~~~~~~~~~~~~~~~~~~~
 test.yaml:39:24: property "massage" is not defined in object type {age: string; id: string; kind: string; message: string; name: string; verbose: string} [expression]
    |
 39 |       - run: echo "${{ github.event.inputs.massage }}"
@@ -2044,7 +2053,11 @@ jactionlint checks proper label is used at `runs-on:` configuration. Even if an 
 `runs-on: ${{ matrix.foo }}`, jactionlint parses the expression and resolves the possible values, then validates the values.
 
 When you define some custom labels for your self-hosted runner, jactionlint does not know the labels. Please set the label
-names in [`jactionlint.yaml` configuration file](config.md) to let jactionlint know them.
+names in [`jactionlint.yaml` configuration file](config.md) to let jactionlint know them. A job that has the label `self-hosted`
+runs on a runner of its owner, who chooses the other labels, so a label next to `self-hosted` is never reported as unknown (unless
+`self-hosted-runner.strict-labels` is on). A label made of a known GitHub-hosted label and the size of a larger runner
+(`ubuntu-latest-16-cores`, `ubuntu-24.04-xl`, `macos-14-xlarge`, `windows-2022-32cpu`) is accepted too; the names that an
+organization gives to its larger runners are custom labels, set them in the configuration file.
 
 In addition to checking label values, jactionlint checks combinations of labels. `runs-on:` section can be an array that contains
 multiple labels. In this case, a runner which has all the labels will be selected. However, those labels combinations can have
@@ -2209,7 +2222,10 @@ jobs:
 
 A job is considered to check out the repository when an earlier step in the same job
 
-- uses an action whose `owner/repo` name contains `checkout` (e.g. `actions/checkout`), or
+- uses an action whose name contains `checkout` (e.g. `actions/checkout`, or a wrapper such as
+  `pytorch/pytorch/.github/actions/checkout-pytorch`; the owner, the repository and the path in the repository count), or
+  uses a remote action with an input that only a checkout has (`fetch-depth`, `persist-credentials`, `submodules`,
+  `sparse-checkout`, `sparse-checkout-cone-mode`, `lfs`, `fetch-tags`, `set-safe-directory`), or
 - has a `run:` script with a line containing `git` and one of `clone`, `init`, `fetch`, `pull`, `checkout`, `worktree` or
   `submodule`, or `gh repo clone` / `gh pr checkout`.
 
@@ -2218,6 +2234,8 @@ Known limitations (use `ignore` in the configuration file when they matter):
 - Whether the checkout step actually runs (`if:`) is not considered.
 - A self-hosted runner may keep the workspace between jobs, so a job without a checkout step can work there.
 - A step which generates the action directory without checking out the repository is reported.
+- What a remote composite action does cannot be known without fetching it, so the name and the inputs are a heuristic: a wrapper
+  with an unrelated name and none of the inputs above is not taken for a checkout and the next local action is reported.
 - `uses: $/path` (self-repository syntax) is never reported since it does not need a checkout. `uses:` of reusable workflows and
   composite action files are not checked.
 ### Require `${{ }}` in `if:` conditions (pedantic)
@@ -2676,6 +2694,8 @@ The rule `github-env` (in the `default` profile) reports two kinds of writes:
 - A write of input that an outsider controls, whatever the trigger: an expression such
   as `github.event.issue.title` or `github.head_ref`, or an environment variable that was set to one (as `TITLE` is in the
   example above; a template injection check does not see that one).
+  In the metadata of a composite action, `inputs.*` counts as such an input (also through `env:`): the caller chooses it, and a
+  workflow can pass it the title of an issue. This holds without a calling workflow, the action may be used by other repositories.
 
 `echo "VERSION=1.0" >> "$GITHUB_ENV"` and `echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"` are fine. Use `$GITHUB_OUTPUT` to pass
 state between steps (`echo "version=$(cat version.txt)" >> "$GITHUB_OUTPUT"` is not reported) and validate or avoid the value
@@ -2705,7 +2725,7 @@ jobs:
 Output:
 
 ```
-test.yaml:6:14: command "npm install" installs a package outside of a lock file: its version and its dependencies are resolved anew on every run. add the package to package.json and commit the package-lock.json and install with `npm ci` [adhoc-packages]
+test.yaml:6:14: command "npm install" installs a package outside of a lock file: its dependencies are resolved anew on every run, although its version is pinned. add the package to package.json and commit the package-lock.json and install with `npm ci` [adhoc-packages]
   |
 6 |       - run: npm install eslint@9.0.0
   |              ^~~
@@ -2866,6 +2886,11 @@ or `npm publish` with that permission.
 provenance: a publish command that is given a long-lived credential (an environment variable such as `NODE_AUTH_TOKEN` or
 `CARGO_REGISTRY_TOKEN`, or `--token`) is reported even when the job can request the OIDC token. Scripts of `shell: pwsh` (the default
 shell of the Windows runners) and `powershell` are searched for the publish commands line by line.
+
+A credential variable that does not hold a long-lived credential is not one: `NODE_AUTH_TOKEN: ''` blanks the placeholder token
+that `actions/setup-node` writes, so that npm falls back to the OIDC token (the documented way to publish to npm with provenance),
+and a variable set from the output of `rust-lang/crates-io-auth-action` or `NuGet/login` of the same job (for example
+`CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}`) holds a token that is valid for minutes. Both are trusted publishing.
 
 <a id="check-superfluous-actions"></a>
 ## Superfluous actions
@@ -3577,6 +3602,8 @@ release job the rule reports the steps which restore a cache:
 | --- | --- |
 | `actions/cache`, `actions/cache/restore` | `lookup-only: true` |
 | `actions/setup-node`, `setup-python`, `setup-java`, `setup-dotnet` | the `cache` input is missing or `false` (`package-manager-cache: false` only turns off the automatic cache of `setup-node`, not an explicit `cache`) |
+| `actions/setup-node` v5 and later | `package-manager-cache: false` (or an expression of it that is false on the release), or `package.json` of the repository does not name a package manager. v5 caches on its own when the top-level `packageManager` of `package.json` names npm, yarn or pnpm with a version (`pnpm@9`), and ignores `devEngines`; v6 and later cache only when `devEngines.packageManager` (any entry) or the top-level `packageManager` names `npm`. Without a repository to read (a workflow linted on its own, a composite action) the answer is "caches" |
+| `docker/setup-buildx-action` v3 and later | `cache-binary: false` (it caches the buildx binary) |
 | `actions/setup-go` | `cache: false` (before `v4` the cache is opt-in) |
 | `ruby/setup-ruby` | `bundler-cache` is missing or `false` |
 | `astral-sh/setup-uv` | `enable-cache: false` |
@@ -3585,6 +3612,13 @@ release job the rule reports the steps which restore a cache:
 | `gradle/actions/setup-gradle` | `cache-disabled: true` |
 | `docker/build-push-action` | there is no `cache-from` with `type=gha` |
 | `hendrikmuhs/ccache-action`, `DeterminateSystems/magic-nix-cache-action` | never: remove the step |
+
+A `tags:` filter that lets no tag through is no tag trigger: `tags: ['!**']`, a list of negative patterns only (GitHub requires one
+positive pattern) and a list that ends with `!**`. A workflow that runs on pushed tags only to start checks is not a release
+either: when the workflow or the job sets `permissions:` and grants nothing but read access (`read-all`, `{}`, `contents: read`),
+and the job has no `environment:`, reads no secret other than `GITHUB_TOKEN` and runs no publishing command or action, the tag does not make it a release job. This is a heuristic:
+without `permissions:` the token is whatever the repository sets, so the job may publish, and a job can still publish with a secret
+that it does not name (the secret of a reusable workflow, a credential stored on the runner). The `release` event always counts.
 
 The list is not exhaustive: it has the actions whose caching behavior is known. A step is not reported when its `if:` looks at
 `github.event_name` or `github.ref`, or an input is an expression which does, since that is how caching is limited to
@@ -3670,6 +3704,18 @@ test.yaml:25:18: input "path" of workflow_call event has the default value "", b
    |
 25 |         default: ''
    |                  ^~
+test.yaml:31:24: "inputs.scheme" is an input chosen by whoever runs this, which is not validated and can hold shell syntax. avoid using it directly in inline scripts. instead, pass it through an environment variable. see https://docs.github.com/en/actions/reference/security/secure-use#good-practices-for-mitigating-script-injection-attacks for more details [expression]
+   |
+31 |       - run: echo "${{ inputs.scheme }}://${{ inputs.host }}:${{ inputs.port }}${{ inputs.path }}"
+   |                        ^~~~~~~~~~~~~
+test.yaml:31:47: "inputs.host" is an input chosen by whoever runs this, which is not validated and can hold shell syntax. avoid using it directly in inline scripts. instead, pass it through an environment variable. see https://docs.github.com/en/actions/reference/security/secure-use#good-practices-for-mitigating-script-injection-attacks for more details [expression]
+   |
+31 |       - run: echo "${{ inputs.scheme }}://${{ inputs.host }}:${{ inputs.port }}${{ inputs.path }}"
+   |                                               ^~~~~~~~~~~
+test.yaml:31:84: "inputs.path" is an input chosen by whoever runs this, which is not validated and can hold shell syntax. avoid using it directly in inline scripts. instead, pass it through an environment variable. see https://docs.github.com/en/actions/reference/security/secure-use#good-practices-for-mitigating-script-injection-attacks for more details [expression]
+   |
+31 |       - run: echo "${{ inputs.scheme }}://${{ inputs.host }}:${{ inputs.port }}${{ inputs.path }}"
+   |                                                                                    ^~~~~~~~~~~
 ```
 
 [Playground](https://jactionlint.jdx.dev/#eNp8kctu8yAQhff/U4yiX8oqiXpZ8Qxd9KKuK4zHxSlmyDAojSLevcJ2IsuNu4NvZg6HOeTVP4Aj8Vfj6PhhtHMFALQ+JInDGSAaix1ebgA1RsNtkJa8gre+CNTA++vTpKXRyYkCKxLiFcspoIIo3PrPEVqKon7P4bfugsOtoe6v6UAsC8aeiWXR1lrd3T88rmfSPnUV8ggPCfm0oP1SanPxQYOqPRq52NNil+xpsXMFxkNqGWsFwglvuF7f3sWeqj6smlTfwMnHTXkkVclL2jgtGAdPUTBcg92UTgVoLMHq//k85r4dAoec1W43wSWqAieo7B9ynpLyr5xXPwMAtTmuwA==)
@@ -3771,6 +3817,10 @@ jobs:
 Output:
 
 ```
+test.yaml:20:23: "inputs.uri" is an input chosen by whoever runs this, which is not validated and can hold shell syntax. avoid using it directly in inline scripts. instead, pass it through an environment variable. see https://docs.github.com/en/actions/reference/security/secure-use#good-practices-for-mitigating-script-injection-attacks for more details [expression]
+   |
+20 |         run: curl ${{ inputs.uri }} -d ${{ inputs.lucky_number }}
+   |                       ^~~~~~~~~~
 test.yaml:20:23: property "uri" is not defined in object type {lucky_number: number; url: string} [expression]
    |
 20 |         run: curl ${{ inputs.uri }} -d ${{ inputs.lucky_number }}
@@ -4067,6 +4117,9 @@ on:
   push:
     branches: [main]
 
+permissions:
+  contents: read
+
 jobs:
   # ERROR: Caller does not grant pull-requests: write but the called job requires it.
   caller:
@@ -4077,10 +4130,10 @@ Output:
 <!-- Skip update output -->
 
 ```
-test.yaml:7:11: nested job "snapshot" of "./.github/workflows/reusable.yaml" requires "pull-requests: write" but the calling job grants "pull-requests: none" [workflow-call]
-  |
-7 |     uses: ./.github/workflows/reusable.yaml
-  |           ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+test.yaml:10:11: nested job "snapshot" of "./.github/workflows/reusable.yaml" requires "pull-requests: write" but the calling job grants "pull-requests: none" [workflow-call]
+   |
+10 |     uses: ./.github/workflows/reusable.yaml
+   |           ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 ```
 
 <!-- Skip playground link -->
@@ -4093,11 +4146,13 @@ workflow-level block) and reports each missing scope.
 
 The check ignores `if:` on called jobs because GitHub evaluates permissions before any condition runs.
 
-When the caller has no `permissions:` block at the workflow level and none on the calling job, jactionlint assumes
-GitHub's restricted default token (only `contents: read` and `packages: read` are granted). This default can be
-overridden via the [`assume-default-permissions` configuration](./config.md); set it to `permissive` if your
-repository's "Workflow permissions" setting grants read + write to everything by default. Even under `permissive`,
-`id-token` is still treated as `none` because OIDC tokens always require an explicit opt-in.
+When the caller has no `permissions:` block at the workflow level and none on the calling job, the token gets the default of the
+repository (Settings, Actions, General, "Workflow permissions"), which jactionlint cannot read from a workflow file. It does not
+guess: only a scope that no default token has is reported (`id-token`, which always needs an explicit opt-in, and any other scope
+that is missing even from a read-write token), and the message says so. Set
+[`assume-default-permissions`](./config.md) to `restricted` when the repository uses the restricted token (only `contents: read`
+and `packages: read` are granted), and every other scope the called workflow needs is reported. `permissive` assumes read and
+write on every scope but `id-token`, which is also what the check does when the option is not set.
 
 When the caller workflow is itself a reusable workflow (`on.workflow_call`) without any `permissions:` block, the check is
 skipped: such a workflow inherits the token permissions of its own caller, which jactionlint cannot see.
@@ -4991,7 +5046,11 @@ jactionlint reports a pipeline when all of the following hold:
   followed by `|| true` in the first stage (`{ git show || true; cat note; } | sort`) is not blamed either.
 - No later stage stops reading early. `head`, `grep -q`, `grep -m`, `read`, `sed ... q` and `awk ... exit` end the pipeline
   before the producer is done, which kills it with SIGPIPE. With `pipefail` such a pipeline fails although nothing went wrong,
-  so such pipelines are not reported.
+  so such pipelines are not reported. That holds for a pipeline in the body of a loop as well
+  (`for s in a b; do cmd "$s" | grep -Fq x; done`).
+- The pipeline is not inside a command substitution in the argument of a command (`echo "hash=$(sha256sum f | cut -d' ' -f1)"`):
+  the status of the substitution is not the status of anything, so `pipefail` would change nothing. The value of an assignment
+  (`hash=$(sha256sum f | cut -d' ' -f1)`) is the status of the assignment, and that pipeline is reported.
 
 Add `set -o pipefail` before the pipeline or use `shell: bash`. `shell: sh` has no `pipefail` in dash (the `sh` of Ubuntu),
 so use `shell: bash` there. Be aware that turning `pipefail` on makes hidden failures fail the step, and that `grep` without a
@@ -5123,6 +5182,13 @@ concurrency:
 For a workflow that pull requests start, the group above is per pull request: a new push cancels the older runs of the same
 pull request and nothing else. A group that is the same for every pull request would cancel the runs of unrelated ones, which
 [`concurrency-cancels-prs`](#check-concurrency-cancels-prs) reports.
+
+A workflow that releases or deploys is told the opposite: when it runs on the `release` event or on pushed tags, or a job has an
+`environment:`, publishes a package or deploys, cancelling a run that is half done leaves a half done release
+([`concurrency-cancels-release`](#check-concurrency-cancels-release) reports exactly that). The advice is then `cancel-in-progress: false`,
+so that a new run waits for the running one, there is no fix for it, and the plain group name (`concurrency: release`), which
+queues runs and cancels none, is accepted. The two rules never contradict each other: the block that one recommends is not reported
+by the other.
 
 Whether to cancel is a choice, so a `concurrency:` mapping that does not cancel (to serialize releases, for example) is
 accepted, and so is a `queue:`. The rule skips workflows that only run through `workflow_call` (the caller decides) and workflows where every job sets its own
@@ -5265,7 +5331,9 @@ it first. Whoever controls the server, or the connection to it, then controls th
 
 A pipe into something that only reads the data (`curl ... | tar xz`, `| jq`, `| python3 -c '...'`) is not reported, and neither is a
 URL for a full commit on GitHub, GitLab, Codeberg or Bitbucket (`https://raw.githubusercontent.com/<owner>/<repo>/<40 hex digits>/install.sh`),
-because the URL fixes the content. A host that is not on the internet (`localhost`, a private address) is not reported either. A
+because the URL fixes the content. A file of this repository at the commit that runs the workflow is the same
+(`https://github.com/${GITHUB_REPOSITORY}/raw/${GITHUB_SHA}/tools/release.sh`, or with `${{ github.repository }}` and `${{ github.sha }}`): the
+repository checked it in itself. A host that is not on the internet (`localhost`, a private address) is not reported either. A
 script is analyzed when its shell is `bash` or `sh`; the default shell of Windows runners is `pwsh`, which is not analyzed.
 
 If the download installs a tool, install the tool with [mise](https://mise.jdx.dev) instead: use `jdx/mise-action` pinned by SHA,
@@ -5427,7 +5495,9 @@ The message names the same URL with `https://`. There is no fix, because the hos
 
 URLs of hosts that are not on the internet are not reported: `localhost`, loopback, private and link-local addresses, names without
 a dot (the services of a job), and `.local`, `.internal`, `.svc`, `.lan` and `.test` names. A host that is a variable or an expression
-is not reported either, nor are proxies (`curl -x`), headers, request data and text printed by `echo`. This rule is not the audit of
+is not reported either, nor are proxies (`curl -x`), headers, request data and text printed by `echo`. An input whose name contains
+`timestamp` (`timestamp-rfc3161`) is not reported: the address of an RFC 3161 timestamp authority is `http` by design, because what it
+returns is signed. This rule is not the audit of
 the same name in zizmor 1.30.1, which checks the `repo:` URLs of `.pre-commit-config.yaml` and is not covered here.
 
 Turn the rule off with `insecure-url-scheme: off` in `rules` or ignore one finding with `# jactionlint ignore=insecure-url-scheme`.
@@ -5834,6 +5904,74 @@ rules:
 The rule is for policy, so its default level is `error`. There is no automatic fix.
 
 
+<a id="check-template-injection-inputs"></a>
+## Inputs, payloads, release names and branch names
+
+Some values are not on the list of attacker controlled properties, but the person who chooses them is not the author of the
+workflow either, and GitHub does not validate them. `template-injection` reports them in the `default` profile (not in
+`correctness`, which is what actionlint reports), because a `${{ }}` of them in a script runs whatever the sender typed:
+
+- `inputs.*` and `github.event.inputs.*` of a `workflow_dispatch` workflow (anyone with write access can type anything), of a
+  reusable workflow (whatever the caller passes, which may be an attacker controlled value of the caller) and of a composite
+  action. An input of the type `boolean`, `number`, `choice` or `environment` is a fixed vocabulary and is not reported;
+- `github.event.client_payload.*`, which the sender of a `repository_dispatch` event chooses;
+- `github.event.release.tag_name`, `name`, `body` and `target_commitish`, and the names of the release assets;
+- `github.ref_name`, `github.base_ref` and `github.event.pull_request.base.ref`: a branch or tag name can hold shell syntax such
+  as `a$(cmd)`. Creating a branch takes write access, which is why zizmor reports them as well.
+
+`github.actor`, SHAs, numbers and the IDs of events are not reported: GitHub restricts their characters. `steps.*.outputs.*`,
+`needs.*.outputs.*`, `matrix.*` and `env.*` are values of the workflow itself, which the pedantic option of the
+[expansions](#check-template-injection-expansion) covers. The fix is the same as for the properties above.
+
+Example input:
+
+```yaml
+on:
+  workflow_dispatch:
+    inputs:
+      title:
+        type: string
+      dry-run:
+        type: boolean
+  repository_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      # ERROR: whoever starts the run types the title
+      - run: echo "${{ inputs.title }}"
+      # ERROR: the sender of the event chooses the payload
+      - run: echo "${{ github.event.client_payload.branch }}"
+      # ERROR: a branch name can hold shell syntax
+      - run: echo "${{ github.ref_name }}"
+      # OK: a boolean cannot hold anything else
+      - run: echo "${{ inputs.dry-run }}"
+      # OK: the shell expands the variable
+      - run: echo "$TITLE"
+        env:
+          TITLE: ${{ inputs.title }}
+```
+
+Output:
+
+```
+test.yaml:15:24: "inputs.title" is an input chosen by whoever runs this, which is not validated and can hold shell syntax. avoid using it directly in inline scripts. instead, pass it through an environment variable. see https://docs.github.com/en/actions/reference/security/secure-use#good-practices-for-mitigating-script-injection-attacks for more details [expression]
+   |
+15 |       - run: echo "${{ inputs.title }}"
+   |                        ^~~~~~~~~~~~
+test.yaml:17:24: "github.event.client_payload.branch" is the payload of a repository_dispatch event, which is not validated and can hold shell syntax. avoid using it directly in inline scripts. instead, pass it through an environment variable. see https://docs.github.com/en/actions/reference/security/secure-use#good-practices-for-mitigating-script-injection-attacks for more details [expression]
+   |
+17 |       - run: echo "${{ github.event.client_payload.branch }}"
+   |                        ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+test.yaml:19:24: "github.ref_name" is a branch or tag name, which is not validated and can hold shell syntax. avoid using it directly in inline scripts. instead, pass it through an environment variable. see https://docs.github.com/en/actions/reference/security/secure-use#good-practices-for-mitigating-script-injection-attacks for more details [expression]
+   |
+19 |       - run: echo "${{ github.ref_name }}"
+   |                        ^~~~~~~~~~~~~~~
+```
+
+[Playground](https://jactionlint.jdx.dev/#eNqMkLFu8zAMhHc/xSH4V/sBtP9DgY7ZDclmYrUqKVBUAiPIuxd2nLYomqKbxDviPp6wa4Cz6OshybkfY8nehmkZApFztXJ7AxYt0f0D2JzJoZhGPm7DUedWK3/3BJFEnhtAKUuJJjp/SWpeJKwhRsVuu1q5tMIONVS22ia/aKtUjPIHUrs4HWiYBLt/l8tG3K2ouF53j3zHaFMNHZ2IrRtSJLY++zmJH7ugnofpD9tKh579269BG9DWzEPn/mn//P8uAcSnzxKBVXX44cD3AQAr74WJ)
+
 <a id="check-template-injection-expansion"></a>
 ## Expansions in scripts (pedantic)
 
@@ -5842,8 +5980,9 @@ the `script` of github-script and in the inputs listed above is also a risk: the
 before it runs, so a value with quotes, `$(...)` or a newline changes the script. The option `pedantic` of the rule reports them
 too, in two kinds:
 
-- Values that are free text: `inputs.*` of type `string`, `steps.*.outputs.*`, `needs.*.outputs.*`, `matrix.*` with values from
-  `fromJSON`, `env.*` set from an expression and `github.ref_name`.
+- Values that are free text: `steps.*.outputs.*`, `needs.*.outputs.*`, `matrix.*` with values from `fromJSON` and `env.*` set
+  from an expression. (Free text inputs and `github.ref_name` are reported by the default profile, see
+  [above](#check-template-injection-inputs).)
 - Values that an attacker cannot control: `github.repository`, `github.sha`, `runner.*`, `secrets.*`, `vars.*`, boolean, number
   and choice inputs, a matrix whose values are written in the workflow, enumerations like `needs.*.result`, and expressions
   which only test a context. This is the "everything is a code smell" view of the pedantic persona of zizmor: a value that cannot
@@ -7343,6 +7482,10 @@ Output:
    |
 11 |     - run: ./publish.sh "${{ secrets.PUBLISH_TOKEN }}"
    |                              ^~~~~~~~~~~~~~~~~~~~~
+.github/actions/example/action.yml:14:28: "inputs.tokan" is an input chosen by whoever runs this, which is not validated and can hold shell syntax. avoid using it directly in inline scripts. instead, pass it through an environment variable. see https://docs.github.com/en/actions/reference/security/secure-use#good-practices-for-mitigating-script-injection-attacks for more details [expression]
+   |
+14 |     - run: ./build.sh "${{ inputs.tokan }}"
+   |                            ^~~~~~~~~~~~
 .github/actions/example/action.yml:14:28: property "tokan" is not defined in object type {token: string} [expression]
    |
 14 |     - run: ./build.sh "${{ inputs.tokan }}"
@@ -7392,6 +7535,10 @@ Output:
    |
 11 |     - run: echo "hello ${{ inputs.who }}"
    |       ^~~~
+.github/actions/example/action.yml:11:28: "inputs.who" is an input chosen by whoever runs this, which is not validated and can hold shell syntax. avoid using it directly in inline scripts. instead, pass it through an environment variable. see https://docs.github.com/en/actions/reference/security/secure-use#good-practices-for-mitigating-script-injection-attacks for more details [expression]
+   |
+11 |     - run: echo "hello ${{ inputs.who }}"
+   |                            ^~~~~~~~~~
 .github/actions/example/action.yml:14:7: unexpected key "shell" for step to execute action. expected one of "background", "continue-on-error", "env", "id", "if", "name", "timeout-minutes", "uses", "with" [syntax-check]
    |
 14 |       shell: bash

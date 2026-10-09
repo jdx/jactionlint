@@ -81,7 +81,7 @@ func (rule *RuleLocalActionCheckout) checkStep(n *Step, checkedOut bool) bool {
 			}
 			return false
 		}
-		return isCheckoutActionSpec(spec)
+		return isCheckoutActionSpec(spec) || hasCheckoutInputs(e)
 	case *ExecParallel:
 		if rule.handled == nil {
 			rule.handled = map[*Step]bool{}
@@ -102,7 +102,10 @@ func (rule *RuleLocalActionCheckout) checkStep(n *Step, checkedOut bool) bool {
 }
 
 // isCheckoutActionSpec returns whether the `uses:` value looks like an action to check out a repository such as
-// "actions/checkout@v4". Any action whose owner/repo name contains "checkout" is accepted.
+// "actions/checkout@v4". What a remote composite action does is unknown without fetching it, so any action whose
+// name contains "checkout" is accepted, in the owner, the repository or the path in the repository:
+// "pytorch/pytorch/.github/actions/checkout-pytorch@main" is a wrapper which checks out. A local action ("./...")
+// is never one, because it needs the checkout itself.
 func isCheckoutActionSpec(spec string) bool {
 	if strings.HasPrefix(spec, "docker://") || strings.HasPrefix(spec, ".") || strings.HasPrefix(spec, "$/") {
 		return false
@@ -112,7 +115,26 @@ func isCheckoutActionSpec(spec string) bool {
 	if len(parts) < 2 {
 		return false
 	}
-	return strings.Contains(strings.ToLower(parts[0]+"/"+parts[1]), "checkout")
+	return strings.Contains(strings.ToLower(s), "checkout")
+}
+
+// checkoutInputs are the inputs of actions/checkout which a wrapper with another name passes on. A remote action
+// which is given one of them is taken for a checkout.
+var checkoutInputs = []string{"fetch-depth", "persist-credentials", "submodules", "sparse-checkout", "sparse-checkout-cone-mode", "lfs", "fetch-tags", "set-safe-directory"}
+
+// hasCheckoutInputs reports whether a remote action is configured like a checkout. The name of the action does not
+// say what it does, but nobody passes fetch-depth to an action that does not fetch.
+func hasCheckoutInputs(e *ExecAction) bool {
+	spec := e.Uses.Value
+	if strings.HasPrefix(spec, "docker://") || strings.HasPrefix(spec, ".") || strings.HasPrefix(spec, "$/") {
+		return false
+	}
+	for _, name := range checkoutInputs {
+		if _, ok := e.Inputs[name]; ok {
+			return true
+		}
+	}
+	return false
 }
 
 func init() {
