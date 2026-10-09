@@ -992,10 +992,26 @@ func (sema *ExprSemanticsChecker) checkFuncCall(n *FuncCallNode) ExprType {
 		errs = append(errs, err)
 	}
 
-	// All candidates failed
-	sema.errs = append(sema.errs, errs...)
+	// All candidates failed. One call is one mistake, so one finding: the one of the candidate that got the
+	// furthest (a wrong number of arguments is the least far), the first one of equals
+	best := errs[0]
+	for _, e := range errs[1:] {
+		if overloadProgress(e) > overloadProgress(best) {
+			best = e
+		}
+	}
+	sema.errs = append(sema.errs, best)
 
 	return AnyType{}
+}
+
+// overloadProgress ranks the error of a function signature which did not fit the call: the later the argument
+// at fault, the better the signature fits.
+func overloadProgress(e *ExprError) int {
+	if strings.HasPrefix(e.Message, "number of arguments is wrong") {
+		return -1
+	}
+	return e.Offset
 }
 
 func (sema *ExprSemanticsChecker) checkNotOp(n *NotOpNode) ExprType {

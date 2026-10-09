@@ -1045,7 +1045,6 @@ func TestExprSemanticsCheckError(t *testing.T) {
 			input: "contains('foo')",
 			expected: []string{
 				"number of arguments is wrong. function \"contains(string, string) -> bool\" takes 2 parameters but 1 arguments are given",
-				"number of arguments is wrong. function \"contains(array<any>, any) -> bool\" takes 2 parameters but 1 arguments are given",
 			},
 		},
 		{
@@ -1067,7 +1066,13 @@ func TestExprSemanticsCheckError(t *testing.T) {
 			input: "contains('foo', null)",
 			expected: []string{
 				"2nd argument of function call is not assignable. \"null\" cannot be assigned to \"string\"",
-				"1st argument of function call is not assignable. \"string\" cannot be assigned to \"array<any>\"",
+			},
+		},
+		{
+			what:  "one finding for a call that fits no overload",
+			input: "contains(true, 'a')",
+			expected: []string{
+				"1st argument of function call is not assignable. \"bool\" cannot be assigned to \"string\"",
 			},
 		},
 		{
