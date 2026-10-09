@@ -691,3 +691,19 @@ func TestBaselineIsPortableAcrossCheckouts(t *testing.T) {
 		t.Fatalf("a baseline must work in another checkout: %d %q", status, out)
 	}
 }
+
+// A file that is linted again in the same run (the passes of -fix) is judged by its last lint: an entry
+// whose finding was fixed in between is not seen.
+func TestBaselineMatchForgetsEarlierLints(t *testing.T) {
+	e := &BaselineEntry{File: "a.yaml", Rule: "r", Fingerprint: "f", Context: "c"}
+	s := newBaselineState("b.json", t.TempDir(), &Baseline{Entries: []*BaselineEntry{e}})
+	finding := &Error{ID: "r"}
+	s.match("a.yaml", []*Error{finding}, map[*Error]*baselineInfo{finding: {file: "a.yaml", fingerprint: "f", context: "c"}})
+	if !s.wasSeen(e) || !finding.Baselined {
+		t.Fatal("the first lint sees the finding")
+	}
+	s.match("a.yaml", nil, nil)
+	if s.wasSeen(e) {
+		t.Error("the finding is gone in the second lint, so the entry matches nothing any more")
+	}
+}
