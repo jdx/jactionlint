@@ -483,6 +483,11 @@ func TestCachePoisoningActions(t *testing.T) {
 		{"enable-cache decided by the ref", "      - uses: astral-sh/setup-uv@v6\n        with:\n          python-version: ${{ github.ref_name }}\n          enable-cache: ${{ github.ref == 'refs/heads/main' }}\n", 0},
 		{"setup-node cache decided by the event", "      - uses: actions/setup-node@v4\n        with:\n          cache: ${{ github.event_name == 'push' && 'npm' || '' }}\n", 0},
 		{"step if on the event", "      - uses: actions/cache@v4\n        if: github.event_name == 'push'\n        with:\n          path: x\n          key: y\n", 0},
+		{"package-manager-cache does not switch off an explicit cache", "      - uses: actions/setup-node@v5\n        with:\n          cache: npm\n          package-manager-cache: ${{ github.event_name != 'release' }}\n", 1},
+		{"lookup-only true on the release", "      - uses: Swatinem/rust-cache@v2\n        with:\n          lookup-only: ${{ github.event_name == 'release' }}\n", 0},
+		{"lookup-only false on the release", "      - uses: Swatinem/rust-cache@v2\n        with:\n          lookup-only: ${{ github.event_name != 'release' }}\n", 1},
+		{"cache-disabled true on a tag", "      - uses: gradle/actions/setup-gradle@v4\n        with:\n          cache-disabled: ${{ startsWith(github.ref, 'refs/tags/') }}\n", 0},
+		{"cache-disabled false on a tag", "      - uses: gradle/actions/setup-gradle@v4\n        with:\n          cache-disabled: ${{ github.ref == 'refs/heads/main' }}\n", 1},
 		{"bundler-cache decided by the ref", "      - uses: ruby/setup-ruby@v1\n        with:\n          bundler-cache: ${{ github.ref == 'refs/heads/main' }}\n", 0},
 	}
 	for _, tc := range tests {
