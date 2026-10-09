@@ -5495,7 +5495,9 @@ The message names the same URL with `https://`. There is no fix, because the hos
 
 URLs of hosts that are not on the internet are not reported: `localhost`, loopback, private and link-local addresses, names without
 a dot (the services of a job), and `.local`, `.internal`, `.svc`, `.lan` and `.test` names. A host that is a variable or an expression
-is not reported either, nor are proxies (`curl -x`), headers, request data and text printed by `echo`. This rule is not the audit of
+is not reported either, nor are proxies (`curl -x`), headers, request data and text printed by `echo`. An input whose name contains
+`timestamp` (`timestamp-rfc3161`) is not reported: the address of an RFC 3161 timestamp authority is `http` by design, because what it
+returns is signed. This rule is not the audit of
 the same name in zizmor 1.30.1, which checks the `repo:` URLs of `.pre-commit-config.yaml` and is not covered here.
 
 Turn the rule off with `insecure-url-scheme: off` in `rules` or ignore one finding with `# jactionlint ignore=insecure-url-scheme`.
