@@ -82,6 +82,11 @@ func TestUnverifiedDownload(t *testing.T) {
 
 		{"python script", "curl -fsSLo install.py https://example.com/install.py\npython3 install.py", []int{7}},
 		{"node script", "curl -fsSLo install.js https://example.com/install.js\nnode install.js", []int{7}},
+		{"pathed interpreter", "curl -fsSLo install.py https://example.com/install.py\n/usr/bin/python3 install.py", []int{7}},
+		{"env interpreter", "curl -fsSLo install.py https://example.com/install.py\n/usr/bin/env python3 install.py", []int{7}},
+		{"node -r runs the script", "curl -fsSLo app.js https://example.com/app.js\nnode -r dotenv/config app.js", []int{7}},
+		{"ruby -r runs the script", "curl -fsSLo app.rb https://example.com/app.rb\nruby -r json app.rb", []int{7}},
+		{"php -r is code", "curl -fsSLo data.php https://example.com/data.php\nphp -r 'echo 1;' data.php", nil},
 		{"perl script", "wget https://example.com/install.pl\nperl install.pl", []int{7}},
 		{"python -c does not run the file", "curl -fsSLo data.json https://example.com/data.json\npython3 -c 'print(1)' data.json", nil},
 		{"curl -k", "curl -k https://example.com/x -o x", []int{7}},

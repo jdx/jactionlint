@@ -98,6 +98,8 @@ func TestInvisibleCharactersAllowed(t *testing.T) {
 		"subdivision flag":             wfWithRun("echo \U0001f3f4\U000e0067\U000e0062\U000e0065\U000e006e\U000e0067\U000e007f"),
 		"cjk variation sequence":       wfWithRun("echo \u845b\U000e0100"),
 		"mongolian":                    wfWithRun("echo \u1820\u180b\u1821"),
+		"hash keycap":                  wfWithRun("echo #\ufe0f\u20e3 *\ufe0f\u20e3"),
+		"heart with text selector":     wfWithRun("echo \u2764\ufe0e \U0001f600\ufe0f"),
 		"tab and crlf":                 strings.ReplaceAll(wfWithRun("echo\thi"), "\n", "\r\n"),
 		"invalid utf-8":                wfWithRun("echo \xff\xfe"),
 	}
@@ -179,5 +181,25 @@ func TestInvisibleCharactersOtherFiles(t *testing.T) {
 	ign := "on: push\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      # jactionlint ignore=invisible-characters\n      - run: echo \u200b\n"
 	if got := lintInvisible(t, "ci.yaml", ign); len(got) != 0 {
 		t.Errorf("want the finding ignored but got %v", got)
+	}
+}
+
+// A variation selector next to a character that is no emoji hides in a script: the backtick and the caret
+// are modifier symbols, the digits, "#" and "*" take the selector only in a keycap sequence.
+func TestInvisibleCharactersVariationSelectorAfterNoEmoji(t *testing.T) {
+	for name, text := range map[string]string{
+		"backtick and VS16": "echo `\ufe0f",
+		"caret and VS15":    "echo ^\ufe0e",
+		"digit and VS16":    "echo 5\ufe0f",
+		"hash and VS16":     "echo #\ufe0f",
+		"star and VS16":     "echo *\ufe0f",
+		"diaeresis":         "echo \u00a8\ufe0f",
+		"letter and ZWJ":    "echo a\u200d\U0001f525",
+	} {
+		t.Run(name, func(t *testing.T) {
+			if errs := lintInvisible(t, "ci.yaml", wfWithRun(text)); len(errs) == 0 {
+				t.Error("the invisible character must be reported")
+			}
+		})
 	}
 }
