@@ -63,6 +63,13 @@ var notExpressions = map[string]string{
 	"WorkflowCallSecret.Name":                     "the key of a secret",
 }
 
+// skippedASTFields are the fields whose expressions are not visited through workflowExprSites on purpose.
+var skippedASTFields = map[string]bool{
+	// the metadata of an action (action.yml) is visited by the expression rule's visitActionPre; the steps
+	// of a composite action are also in Jobs
+	"Workflow.Action": true,
+}
+
 type astFields struct {
 	values map[string]string // the marker of a string to the field which holds it
 }
@@ -89,6 +96,9 @@ func (a *astFields) populate(v reflect.Value, field string, variant int, stack m
 		for i := 0; i < t.Elem().NumField(); i++ {
 			f := t.Elem().Field(i)
 			if !f.IsExported() {
+				continue
+			}
+			if skippedASTFields[name+"."+f.Name] {
 				continue
 			}
 			a.populate(n.Elem().Field(i), name+"."+f.Name, variant, stack)
