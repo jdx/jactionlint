@@ -343,6 +343,38 @@ func TestPitfallSuperfluousActionsOnMatrixRunners(t *testing.T) {
 	}
 }
 
+// A runner that cannot be shown to be hosted is not reported: matrix arrays, include, nested lists and values
+// that are unknown statically.
+func TestPitfallSuperfluousActionsMayBeSelfHosted(t *testing.T) {
+	cfg := pitfallConfig()
+	cfg.Rules["superfluous-actions"] = RuleConfig{Level: SeverityError, Options: map[string]any{"pedantic": true}}
+	wf := func(strategy, runsOn string) string {
+		return "on: push\njobs:\n  j:\n    strategy:\n" + strategy + "    runs-on: " + runsOn + "\n    steps:\n      - uses: dtolnay/rust-toolchain@stable\n"
+	}
+	cases := []struct {
+		name, strategy, runsOn string
+		want                   int
+	}{
+		{"array row value", "      matrix:\n        r: [[self-hosted, linux], ubuntu-24.04]\n", "${{ matrix.r }}", 0},
+		{"nested array", "      matrix:\n        r: [[[self-hosted]]]\n", "${{ matrix.r }}", 0},
+		{"include string", "      matrix:\n        r: [ubuntu-24.04]\n        include:\n          - r: self-hosted\n", "${{ matrix.r }}", 0},
+		{"include array", "      matrix:\n        r: [ubuntu-24.04]\n        include:\n          - r: [self-hosted, linux]\n", "${{ matrix.r }}", 0},
+		{"include only", "      matrix:\n        include:\n          - r: [self-hosted, linux]\n", "${{ matrix.r }}", 0},
+		{"fromJSON matrix", "      matrix: ${{ fromJSON(needs.x.outputs.m) }}\n", "${{ matrix.r }}", 0},
+		{"fromJSON row", "      matrix:\n        r: ${{ fromJSON(needs.x.outputs.r) }}\n", "${{ matrix.r }}", 0},
+		{"expression in a value", "      matrix:\n        r: [ubuntu-24.04, \"${{ inputs.r }}\"]\n", "${{ matrix.r }}", 0},
+		{"label list with a matrix entry", "      matrix:\n        r: [[self-hosted, linux]]\n", "[${{ matrix.r }}]", 0},
+		{"self-hosted next to a matrix entry", "      matrix:\n        x: [ubuntu-24.04]\n", "[self-hosted, \"${{ matrix.x }}\"]", 0},
+		{"undefined property", "      matrix:\n        x: [ubuntu-24.04]\n", "${{ matrix.r }}", 0},
+		{"hosted arrays", "      matrix:\n        r: [[ubuntu-24.04, x64], macos-14]\n        include:\n          - r: windows-2025\n", "${{ matrix.r }}", 1},
+	}
+	for _, c := range cases {
+		if got := errsWithID(lintFileWithConfig(t, cfg, "ci.yaml", wf(c.strategy, c.runsOn)), "superfluous-actions"); len(got) != c.want {
+			t.Errorf("%s: want %d findings, got %v", c.name, c.want, got)
+		}
+	}
+}
+
 // zizmor GHSA-f42p-wjw5-97qh: the token must not reach the logs, whatever the verbosity.
 func TestPitfallTokenNeverInTheLogs(t *testing.T) {
 	const token = "ghp_PitfallSecretToken0123456789abcdef"
