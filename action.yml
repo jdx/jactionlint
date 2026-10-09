@@ -8,10 +8,10 @@ branding:
 inputs:
   version:
     description: |
-      The version of jactionlint to download: an exact X.Y.Z version, or "latest" (the default), which is the newest
-      release this version of the action knows about.
+      The version of jactionlint to download, as an exact X.Y.Z version. The default is the release the action itself
+      was published with, so pinning the action pins jactionlint too.
     required: false
-    default: latest
+    default: "1.8.2" # x-release-please-version
   executable:
     description: |
       The path of a jactionlint executable to use instead of downloading one, for example one installed with mise or

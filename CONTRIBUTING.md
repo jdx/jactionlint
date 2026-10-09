@@ -323,7 +323,7 @@ checked by CI, because squash-merged titles become the release notes.
 
 1. Merge pull requests into `main`. release-please opens or updates a release pull request that bumps the version in
    [`.release-please-manifest.json`](./.release-please-manifest.json), the version strings marked with `x-release-please-version`
-   (`.pre-commit-hooks.yaml`, `docs/usage.md`, `docs/.vitepress/version.ts`) and [CHANGELOG.md](./CHANGELOG.md).
+   (`.pre-commit-hooks.yaml`, `action.yml`, `docs/usage.md`, `docs/.vitepress/version.ts`) and [CHANGELOG.md](./CHANGELOG.md).
 2. Merge the release pull request. release-please tags `vX.Y.Z` and creates the GitHub release as a **draft**.
    Releases are immutable once published (assets and the tag cannot change), so the assets must be uploaded to the
    draft before it is published.
