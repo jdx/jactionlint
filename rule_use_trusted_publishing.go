@@ -80,6 +80,8 @@ var publicRegistries = []string{
 	"pypi", "testpypi", "https://upload.pypi.org/legacy/", "https://test.pypi.org/legacy/",
 	"https://registry.npmjs.org", "https://registry.npmjs.org/", "https://rubygems.org", "https://rubygems.org/",
 	"nuget.org", "https://api.nuget.org/v3/index.json",
+	"crates-io", "https://crates.io", "https://crates.io/", "https://github.com/rust-lang/crates.io-index",
+	"sparse+https://index.crates.io/", "https://index.crates.io/",
 }
 
 func (rule *RuleUseTrustedPublishing) checkRun(step *Step, run *ExecRun) {

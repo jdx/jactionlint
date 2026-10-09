@@ -64,6 +64,19 @@ func TestRuleUntrustedArtifact(t *testing.T) {
           path: art
       - run: python art/report.py
 `},
+		{"gh run download of the current run", nil, head + `      - run: gh run download ${{ github.run_id }} -D art
+      - run: |
+          cd art && ./build.sh
+`},
+		{"gh run download without a run", nil, head + `      - run: gh run download -n art -D art
+      - run: |
+          cd art && ./build.sh
+`},
+		{"guarded step that uses the artifact", nil, head + dl + `          name: pr
+          path: pr
+      - run: cd pr && ./build.sh
+        if: contains(github.event.workflow_run.pull_requests.*.labels.*.name, 'safe to test')
+`},
 		{"gh run download", nil, head + `      - run: gh run download ${{ github.event.workflow_run.id }} -D art # want
       - run: cd art && make
 `},
