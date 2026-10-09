@@ -6501,6 +6501,9 @@ between emoji, keycaps, flags made from tag characters), the zero width (non-)jo
 Devanagari and other Indic scripts, and others), the variation selectors of CJK ideographs and Mongolian, and direction marks
 next to Arabic or Hebrew letters.
 
+A file saved as UTF-16 or UTF-32 (it starts with the byte order mark of one of them) has a NUL byte next to every character. It gets one
+finding at its first line that names the encoding, not one for every NUL; save the file as UTF-8.
+
 One finding is reported for a run of adjacent characters. The message says where the character is (a `run:` script, an
 expression, a `uses:` reference, a comment, a value or a key). Every finding is an error, also in a comment: a comment is how the
 change is made to look harmless.
