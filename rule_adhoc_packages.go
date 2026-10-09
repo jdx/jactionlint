@@ -103,28 +103,42 @@ func adhocInstall(c *runscript.Command) (manifest, instead string, ok bool) {
 	return "", "", false
 }
 
+// lernaValueFlags are the options of `lerna add` (and the filter options it shares with the other commands) that take
+// the next word as their value.
+var lernaValueFlags = map[string]bool{
+	"--scope": true, "--ignore": true, "--since": true, "--registry": true,
+	"--concurrency": true, "--log-level": true, "--loglevel": true, "--npm-client": true, "--cwd": true,
+}
+
 // lernaAddsPackage reports whether the command is `lerna add pkg`, also started through yarn, pnpm, npx or
-// `pnpm exec`: it writes the package into the package.json files of the repository.
+// `pnpm exec`, and the package comes from a registry. `lerna add PACKAGE [LOCATION...]` names one package and then
+// the places to add it to; options (`--scope web`, `--dev`) are neither. A package given as a path installs from the
+// checkout.
 func lernaAddsPackage(c *runscript.Command) bool {
-	pos := c.Positional
+	argv := c.Args
 	if c.Name == "lerna" {
-		pos = append([]*runscript.Word{c.NameWord}, pos...)
+		argv = append([]*runscript.Word{c.NameWord}, argv...)
 	}
-	for i, w := range pos {
+	for i, w := range argv {
 		if i > 1 {
 			break
 		}
 		if w.Dynamic() || w.Value != "lerna" {
 			continue
 		}
-		rest := pos[i+1:]
+		rest := argv[i+1:]
 		if len(rest) < 2 || rest[0].Dynamic() || rest[0].Value != "add" {
 			return false
 		}
-		for _, p := range rest[1:] {
-			if !expandsList(p) && !strings.HasPrefix(p.Value, ".") && !strings.HasPrefix(p.Value, "/") {
-				return true
+		for k := 1; k < len(rest); k++ {
+			a := rest[k]
+			if !a.Dynamic() && strings.HasPrefix(a.Value, "-") && a.Value != "-" {
+				if lernaValueFlags[a.Value] {
+					k++ // its value
+				}
+				continue
 			}
+			return !expandsList(a) && !strings.HasPrefix(a.Value, ".") && !strings.HasPrefix(a.Value, "/")
 		}
 		return false
 	}
