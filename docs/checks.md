@@ -3267,6 +3267,10 @@ It reports:
 - `write-all` and `read-all`, at the workflow level or on a job. They grant a level to every scope, including scopes which the
   job never uses.
 
+In a workflow with exactly one job the scope is not reported: the job gets it either way, so "grant it only to the job" would change
+nothing (zizmor does not report it either). On `pull_request_target`, `workflow_run` or `issue_comment` it still is, with a message
+that asks whether the job needs the scope instead of asking to move it.
+
 Write scopes on a job are not reported: that is where the access should be granted. The best practice is `permissions: {}` at
 the workflow level and the scopes a job needs on that job. Read scopes and `none` are not reported either.
 
@@ -4898,6 +4902,9 @@ equivalent of the `dependabot-cooldown` audit of zizmor.
 
 The other keys of `cooldown` (`semver-major-days`, `include` and so on) are not checked.
 
+An update whose version updates are turned off is skipped: `open-pull-requests-limit: 0`, or an `ignore` of `dependency-name: "*"`
+without `versions` (and without `update-types`, or with all three semver update types).
+
 Example input:
 
 ```yaml
@@ -5249,8 +5256,8 @@ queues runs and cancels none, is accepted. The two rules never contradict each o
 by the other.
 
 Whether to cancel is a choice, so a `concurrency:` mapping that does not cancel (to serialize releases, for example) is
-accepted, and so is a `queue:`. The rule skips workflows that only run through `workflow_call` (the caller decides) and workflows where every job sets its own
-`concurrency:`.
+accepted, and so is a `queue:`. The rule skips workflows that only run through `workflow_call` (the caller decides), workflows that only run on a `schedule` or
+by `workflow_dispatch` (no new commit supersedes such a run), and workflows where every job sets its own `concurrency:`.
 
 `jactionlint --fix` adds the block above after `on:` when it is safe to do so, that is, only for a workflow whose triggers are all
 events of a pull request (`pull_request`, `pull_request_target`, `pull_request_review` and `pull_request_review_comment`), in which
@@ -5365,11 +5372,11 @@ jobs:
 Output:
 
 ```
-test.yaml:7:14: the script downloaded from "https://example.com/install.sh" is run by "sh" without being verified, so whoever controls that server or the connection to it controls this job. if it installs a tool, install the tool with mise instead (jdx/mise-action pinned by SHA, or "mise use" with a committed mise.lock, which records the version and checksum of each tool). otherwise download the file, check its checksum or signature (sha256sum -c, gpg --verify, cosign verify-blob or gh attestation verify) before running it, or use the package of the vendor [unverified-download]
+test.yaml:7:14: the script downloaded from "https://example.com/install.sh" is run by "sh" without being verified, so whoever controls that server or the connection to it controls this job. if it installs a tool, mise can install it and record its checksum in mise.lock (jdx/mise-action in CI). otherwise check the checksum or signature (sha256sum -c, gpg --verify, cosign verify-blob or gh attestation verify) before running the file [unverified-download]
   |
 7 |         run: curl -fsSL https://example.com/install.sh | sh
   |              ^~~~
-test.yaml:9:11: the file "tool" downloaded from "https://example.com/dl/tool" is made executable without a checksum or signature check in this script, so whatever the server (or anyone on the connection) sends is trusted. if it installs a tool, install the tool with mise instead (jdx/mise-action pinned by SHA, or "mise use" with a committed mise.lock, which records the version and checksum of each tool). otherwise download the file, check its checksum or signature (sha256sum -c, gpg --verify, cosign verify-blob or gh attestation verify) before running it, or use the package of the vendor [unverified-download]
+test.yaml:9:11: the file "tool" downloaded from "https://example.com/dl/tool" is made executable without a checksum or signature check in this script, so whatever the server (or anyone on the connection) sends is trusted. if it installs a tool, mise can install it and record its checksum in mise.lock (jdx/mise-action in CI). otherwise check the checksum or signature (sha256sum -c, gpg --verify, cosign verify-blob or gh attestation verify) before running the file [unverified-download]
   |
 9 |           curl -fsSLo tool https://example.com/dl/tool
   |           ^~~~
@@ -6859,6 +6866,10 @@ What the rule judges:
   is on for pull requests, so it is reported when the group is shared. An expression that depends on something else (a
   variable, an input) is not reported.
 - A group that reads `env`, `vars`, `inputs`, `needs`, `steps` or `secrets` is not reported, because the rule cannot see its value.
+- For `pull_request_review`, `github.event.review.id` is different for every review, and for `pull_request_review_comment`
+  `github.event.comment.id` is different for every comment, so a group that reads them is fine.
+- A `concurrency` block is not reported for an event when the `if:` of every job it covers is false for it
+  (`if: github.event_name == 'push'` under `pull_request`).
 
 There is no automatic fix: which value distinguishes the runs is up to you. To turn the rule off use `rules: {concurrency-cancels-prs: off}`
 in the [configuration file](config.md) or an ignore comment on the `group:` line (`# jactionlint ignore=concurrency-cancels-prs`).
@@ -6919,7 +6930,11 @@ What is **not** reported: the mixed idiom `cancel-in-progress: ${{ github.event_
 and tags) and other expressions that are false for the trigger; an expression that depends on something the rule cannot see
 (an input, a variable); a group that names the release (`inputs.*`, `github.event.release.*`) and, for tag pushes, releases
 and manual runs, a group that names the ref, because then only a second run for the same ref replaces the first one; and
-workflows that only run for pull requests. Names of workflows and jobs are not taken as a signal.
+workflows that only run for pull requests. Names of workflows and jobs are not taken as a signal. A group with `github.run_id`
+or `github.run_number` (also as the fallback of an empty value: `github.head_ref || github.run_id` is the run id for a push) is
+different for every run, so no run cancels another. An `environment:` counts only when its name says it is a place to release
+to (`production`, `staging`, `preview`, `release`, `pages`, `npm`, `pypi`, ...); `ci`, or `${{ matrix.environment }}` used to
+scope secrets of a test job, does not.
 
 The fix sets a literal `cancel-in-progress: true` to `false`. It is **unsafe** (`--fix=unsafe`) because the runs of a group queue
 instead of replacing each other, which changes when and how often the workflow runs. Expressions are not fixed.
@@ -6996,6 +7011,11 @@ What is **not** reported:
 - A read that only compares the result with `'success'` using `==` (`if: needs.build.result == 'success'`). It is redundant in
   a job that is skipped unless its needs succeeded, but it does not expect to see a failure.
 - Jobs that need a job with `continue-on-error`, because the result of that job is not what it seems.
+- A job that tests results only in its own job-level `if:`, to run after its needs went well (`needs.a.result == 'success' ||
+  needs.a.result == 'skipped'`, `needs.a.result != 'skipped'`, `!= 'failure'`). That is a publish, a deploy or a cleanup that is
+  meant to be skipped on a failure, not a gate. A job-level condition is a gate only when it expects the failure itself:
+  `== 'failure'`, `== 'cancelled'`, `!= 'success'`. A gate is a job that reports what happened to its needs, so it reads results in
+  its steps, `env`, `with` or `outputs`.
 - Reads of `needs.<job>.outputs.*`.
 - A workflow where an expression does not parse (the syntax error is reported by `expression`).
 

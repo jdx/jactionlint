@@ -34,6 +34,9 @@ func NewRuleDependabotCooldown(src []byte) *RuleDependabotCooldown {
 
 // VisitDependabotUpdate is callback when visiting an item of "updates".
 func (r *RuleDependabotCooldown) VisitDependabotUpdate(u *DependabotUpdate) error {
+	if dependabotUpdatesDisabled(u) {
+		return nil // a cooldown delays pull requests that are never opened
+	}
 	cfg := r.Config()
 	minDays := dependabotDefaultMinCooldownDays
 	if v, ok := cfg.ruleOptionNumber("dependabot-cooldown", "days"); ok {
@@ -70,6 +73,31 @@ func (r *RuleDependabotCooldown) VisitDependabotUpdate(u *DependabotUpdate) erro
 		r.report(d.Pos, r.raiseDefaultDays(u, fixDays), "\"cooldown.default-days\" is %d, which is less than the minimum %d days. set it to at least %d", d.Value, minDays, minDays)
 	}
 	return nil
+}
+
+// dependabotUpdatesDisabled reports whether the version updates of the entry are turned off: "open-pull-requests-limit: 0"
+// or an ignore of every dependency and every kind of update. A cooldown only delays version updates, so it has no
+// purpose there.
+func dependabotUpdatesDisabled(u *DependabotUpdate) bool {
+	if l := u.OpenPullRequestsLimit; l != nil && l.Expression == nil && l.Value == 0 {
+		return true
+	}
+	for _, i := range u.Ignore {
+		if i == nil || i.DependencyName == nil || i.DependencyName.Value != "*" || len(i.Versions) > 0 {
+			continue
+		}
+		if len(i.UpdateTypes) == 0 {
+			return true
+		}
+		all := map[string]bool{}
+		for _, t := range i.UpdateTypes {
+			all[t.Value] = true
+		}
+		if all["version-update:semver-major"] && all["version-update:semver-minor"] && all["version-update:semver-patch"] {
+			return true
+		}
+	}
+	return false
 }
 
 func (r *RuleDependabotCooldown) report(pos *Pos, fix *Fix, format string, args ...any) {
