@@ -258,7 +258,8 @@ func readsScriptFromStdin(c *runscript.Command) bool {
 	if len(c.Positional) == 0 {
 		return true
 	}
-	return len(c.Positional) == 1 && c.Positional[0].Value == "-"
+	// "-" in the script position runs the program from stdin even when more arguments follow
+	return c.Positional[0].Value == "-"
 }
 
 // downloadURLOf returns the URL a curl or wget command fetches.
@@ -446,9 +447,8 @@ func (t *fileTracker) event(c *runscript.Command) {
 		for _, w := range c.Positional[:len(c.Positional)-1] {
 			if d := match(w); d != nil {
 				t.tracked[normPath(dst)] = d
-				if strings.HasSuffix(dst, "/") {
-					t.tracked[normPath(dst+path.Base(w.Value))] = d
-				}
+				// dst may be an existing directory, with or without a trailing slash
+				t.tracked[normPath(strings.TrimSuffix(dst, "/")+"/"+path.Base(w.Value))] = d
 			}
 		}
 	case c.Name == "chmod":
