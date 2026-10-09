@@ -11,12 +11,18 @@ import (
 	"io"
 	"log"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/jdx/jactionlint/v2"
 	"github.com/jdx/jactionlint/v2/internal/exampleconfig"
 )
+
+// requiresOnlineMarker is the first line of the examples of the online checks. Those checks need the
+// GitHub API, so the example is run with the recorded answers in testdata/online/github.json
+// instead (the same ones the tests of the checks use).
+const requiresOnlineMarker = "# requires -online\n"
 
 // Actionlint lints the example. The examples in the sections whose headings start with "Dependabot" are
 // Dependabot configuration files. The others are workflows.
@@ -41,12 +47,25 @@ func Actionlint(src []byte, heading string) ([]byte, error) {
 		Color:         jactionlint.ColorOptionKindNever,
 	}
 
-	l, err := jactionlint.NewLinter(&out, opts)
+	p, err := jactionlint.NewProjects().At(".")
 	if err != nil {
 		return nil, err
 	}
 
-	p, err := jactionlint.NewProjects().At(".")
+	if bytes.HasPrefix(src, []byte(requiresOnlineMarker)) {
+		b, err := os.ReadFile(filepath.Join(p.RootDir(), "testdata", "online", "github.json"))
+		if err != nil {
+			return nil, err
+		}
+		c, err := jactionlint.NewFixtureGitHubClient(b)
+		if err != nil {
+			return nil, err
+		}
+		opts.Online = true
+		opts.GitHubClient = c
+	}
+
+	l, err := jactionlint.NewLinter(&out, opts)
 	if err != nil {
 		return nil, err
 	}

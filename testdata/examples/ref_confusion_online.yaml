@@ -1,0 +1,10 @@
+# requires -online
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      # ERROR: v1 is a branch and a tag of this repository
+      - uses: example/confusing@v1
+      # OK: v2 is only a tag
+      - uses: example/confusing@v2

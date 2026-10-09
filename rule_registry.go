@@ -189,6 +189,7 @@ type RuleEnv struct {
 	shellcheck             string
 	pyflakes               string
 	proc                   *concurrentProcess
+	online                 *onlineSession // nil unless the online checks are on
 
 	log  func(args ...interface{})
 	name string // the factory being run

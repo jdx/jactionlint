@@ -397,3 +397,24 @@ func TestRunZizmorFailureIsRecorded(t *testing.T) {
 		}
 	}
 }
+
+func TestZizmorArgumentsOnline(t *testing.T) {
+	has := func(args []string, a string) bool {
+		for _, x := range args {
+			if x == a {
+				return true
+			}
+		}
+		return false
+	}
+	if !has(zizmorArguments(false), "--offline") {
+		t.Error("the default run must be offline")
+	}
+	on := zizmorArguments(true)
+	if has(on, "--offline") || !has(on, "--persona") {
+		t.Errorf("--online drops --offline and keeps the rest: %v", on)
+	}
+	if !has(zizmorArgs, "--offline") {
+		t.Error("zizmorArgs must not be modified")
+	}
+}

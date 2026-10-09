@@ -100,6 +100,26 @@ type LinterOptions struct {
 	// MinSeverity hides the errors less severe than it. The zero value shows every error. For example
 	// SeverityWarning hides the errors of info level.
 	MinSeverity Severity
+	// Online turns on the rules which query the GitHub API: impostor-commit, known-vulnerable-actions,
+	// ref-confusion, stale-action-refs, archived-uses and ref-version-mismatch (and the pinning
+	// fix of unpinned-uses, see Error.Fix). Nothing reaches the network when it is false. The token is
+	// read from $GITHUB_TOKEN or $GH_TOKEN; without one the API allows very few requests. When the
+	// API cannot be used (rate limit, no network) the online rules stop with one warning. It
+	// is an error in builds without network access such as the WebAssembly one, unless
+	// GitHubClient is set. The "online" key of the configuration file turns it on for the files it
+	// applies to.
+	Online bool
+	// GitHubClient replaces the built-in client of the GitHub API, which sends REST requests and caches
+	// the answers in $XDG_CACHE_HOME/jactionlint. It is used by tests (see NewFixtureGitHubClient)
+	// and implies nothing by itself: the online rules need Online or the "online" configuration.
+	GitHubClient GitHubClient
+	// OnlineCacheTTL is how long the built-in client uses a cached answer without asking GitHub
+	// whether it changed. Zero means one hour. A negative value revalidates every answer (which
+	// costs no rate limit when nothing changed).
+	OnlineCacheTTL time.Duration
+	// Context stops the online lookups when it is canceled, for example on interruption. Nil means
+	// context.Background.
+	Context context.Context
 	// OnRulesCreated is a hook to add or remove the check rules. This function is called on checking
 	// every workflow files. Rules created by Linter instance are passed to the argument and the
 	// function should return the modified rules.
@@ -130,6 +150,7 @@ type Linter struct {
 	onDependabot   func([]DependabotRule) []DependabotRule
 	configFile     string
 	minSeverity    Severity
+	online         onlineSettings
 	warned         sync.Map // *Config -> struct{}: configs whose deprecations were already reported
 	notesMu        sync.Mutex
 	notes          []string // deprecation warnings found while linting
@@ -239,6 +260,10 @@ func NewLinter(out io.Writer, opts *LinterOptions) (*Linter, error) {
 		onDependabot:   opts.OnDependabotRulesCreated,
 		configFile:     opts.ConfigFile,
 		minSeverity:    opts.MinSeverity,
+		online:         onlineSettings{enabled: opts.Online, client: opts.GitHubClient, ttl: opts.OnlineCacheTTL, ctx: opts.Context},
+	}
+	if opts.Online && opts.GitHubClient == nil && !onlineSupported {
+		return nil, errOnlineUnsupported
 	}
 
 	l.debug("Create a Linter instance with option %#v", opts)
@@ -636,7 +661,12 @@ func (l *Linter) check(
 	if w != nil {
 		dbg := l.debugWriter()
 
+		sess, err := l.onlineSession(cfg)
+		if err != nil {
+			return nil, err
+		}
 		rules := newBuiltinRules(&RuleEnv{
+			online:                 sess,
 			path:                   path,
 			src:                    content,
 			project:                project,
@@ -685,24 +715,30 @@ func (l *Linter) check(
 		}
 	}
 
-	return l.finishCheck(path, content, all, cfg, start), nil
+	return l.finishCheck(path, content, all, cfg, start, w != nil), nil
 }
 
 // finishCheck post-processes the errors found in one file: it fills the fields derived from the
-// rule IDs, applies the ignores and the minimum severity, and sorts the errors.
-func (l *Linter) finishCheck(path string, content []byte, all []*Error, cfg *Config, start time.Time) []*Error {
+// rule IDs, applies the ignores and the minimum severity, and sorts the errors. isWorkflow tells that
+// the file is a workflow, for which the online pin fixes are attached.
+func (l *Linter) finishCheck(path string, content []byte, all []*Error, cfg *Config, start time.Time, isWorkflow bool) []*Error {
 	all = l.annotateErrors(all, content, cfg)
 
 	// Inline ignores are applied first so that every pattern sees all errors, which tells whether it
 	// is used. The order of the filters does not change which errors remain.
 	inlineIgnores, orphans, ignoreErrs := parseInlineIgnoresWithOrphans(content)
 	all = l.filterInlineIgnores(all, inlineIgnores)
-	unused := unusedInlineIgnores(inlineIgnores, orphans, cfg)
+	unused := unusedInlineIgnores(inlineIgnores, orphans, cfg, l.online.enabled || (cfg != nil && cfg.Online))
 	dropFixesChangingYAML(content, unused)
 	all = append(all, l.annotateErrors(unused, content, cfg)...)
 
 	all = l.filterErrors(all, cfg.PathConfigs(path))
 	all = append(all, l.annotateErrors(ignoreErrs, content, cfg)...)
+	if isWorkflow {
+		if sess, _ := l.onlineSession(cfg); sess != nil {
+			l.attachPinFixes(sess, content, all)
+		}
+	}
 
 	if l.minSeverity > SeverityInfo {
 		kept := all[:0]

@@ -142,6 +142,36 @@
       "coverage": "full",
       "notes": "if-always-true reports every condition with characters around ${{ }}, which includes the trailing newline of a block scalar.",
       "jactionlint": [{ "rule": "if-always-true" }]
+    },
+    "impostor-commit": {
+      "coverage": "partial",
+      "notes": "Online (-online). Same definition: the commit is on no branch or tag. jactionlint compares with the tags and up to max-branches branches through the REST API, so a repository with more branches gives no verdict. zizmor reads the branch list of the commit page.",
+      "jactionlint": [{ "rule": "impostor-commit" }]
+    },
+    "known-vulnerable-actions": {
+      "coverage": "partial",
+      "notes": "Online (-online). Advisories of the actions ecosystem matched against the version of the tag, or of the most specific tag at the commit. A branch ref has no version and is not reported. The allow option lists advisory IDs to ignore.",
+      "jactionlint": [{ "rule": "known-vulnerable-actions" }]
+    },
+    "ref-confusion": {
+      "coverage": "partial",
+      "notes": "Online (-online). Reports a ref that is both a branch and a tag.",
+      "jactionlint": [{ "rule": "ref-confusion" }]
+    },
+    "stale-action-refs": {
+      "coverage": "partial",
+      "notes": "Online (-online). Reports a hash-pinned action that no tag points to. At most 1000 tags of a repository are read.",
+      "jactionlint": [{ "rule": "stale-action-refs" }]
+    },
+    "archived-uses": {
+      "coverage": "partial",
+      "notes": "Online (-online). Reports actions and reusable workflows in archived repositories.",
+      "jactionlint": [{ "rule": "archived-uses" }]
+    },
+    "ref-version-mismatch": {
+      "coverage": "partial",
+      "notes": "Online (-online). Reports a version comment that does not match the pinned commit. A missing comment is not reported and no comment fix is offered.",
+      "jactionlint": [{ "rule": "ref-version-mismatch" }]
     }
   }
 }

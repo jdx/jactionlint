@@ -236,7 +236,7 @@ func (l *Linter) checkDependabot(path string, content []byte, project *Project, 
 		}
 	}
 
-	return l.finishCheck(path, content, all, cfg, start), nil
+	return l.finishCheck(path, content, all, cfg, start, false), nil
 }
 
 func init() {

@@ -22,6 +22,15 @@ func profileText(p jactionlint.Profile) string {
 	return string(p)
 }
 
+// ruleProfileText describes when a rule is enabled. Online rules do not follow a profile: they run
+// when the online checks are on.
+func ruleProfileText(r jactionlint.RuleInfo) string {
+	if r.Online {
+		return "only with `-online`"
+	}
+	return profileText(r.Profile)
+}
+
 func yesNo(b bool) string {
 	if b {
 		return "yes"
@@ -61,13 +70,13 @@ rules:
 `)
 	rules := jactionlint.Rules()
 	for _, r := range rules {
-		fmt.Fprintf(&b, "| [%s](#%s) | %s | %s | %s |\n", r.ID, r.ID, r.Group, levelText(r.DefaultLevel), profileText(r.Profile))
+		fmt.Fprintf(&b, "| [%s](#%s) | %s | %s | %s |\n", r.ID, r.ID, r.Group, levelText(r.DefaultLevel), ruleProfileText(r))
 	}
 	b.WriteString("\n")
 
 	for _, r := range rules {
 		fmt.Fprintf(&b, "## %s\n\n%s\n\n", r.ID, r.Summary)
-		fmt.Fprintf(&b, "- Group: %s\n- Default level: %s\n- Profile: %s\n", r.Group, levelText(r.DefaultLevel), profileText(r.Profile))
+		fmt.Fprintf(&b, "- Group: %s\n- Default level: %s\n- Profile: %s\n", r.Group, levelText(r.DefaultLevel), ruleProfileText(r))
 		if r.Online {
 			b.WriteString("- Needs network access: yes (only with `-online`)\n")
 		}
@@ -80,6 +89,8 @@ rules:
 				def = "default empty"
 			} else if o.Default != nil {
 				def = fmt.Sprintf("default %v", o.Default)
+			} else if o.Kind == jactionlint.RuleOptionStrings {
+				def = "empty by default"
 			}
 			fmt.Fprintf(&b, "- Option `%s` (%s, %s): %s\n", o.Name, o.Kind, def, o.Summary)
 		}

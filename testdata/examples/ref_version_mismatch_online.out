@@ -1,0 +1,1 @@
+test.yaml:10:15: the version comment "# v3.0.0" does not match the commit pinned in action "actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683": tag "v3.0.0" points to commit a12a3943b4bd, but the pinned commit is tagged "v4.2.2". update the comment, or pin the commit of the version you mean [ref-version-mismatch]
