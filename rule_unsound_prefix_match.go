@@ -71,12 +71,13 @@ var identityContexts = map[string]nameKind{
 
 // VisitWorkflowPre is callback when visiting Workflow node before visiting its children.
 func (rule *RuleUnsoundPrefixMatch) VisitWorkflowPre(n *Workflow) error {
+	sensitive := sensitiveContexts(n)
 	workflowExprSites(n, func(site exprSite) {
 		scanExpressions(site.Str, site.Cond, func(o *exprOccurrence) {
 			// Outside a condition, the result of a name test is a trust decision only when it selects a
 			// credential or a runner: GOOS: ${{ contains(github.repository, 'windows') && 'windows' || '' }}
 			// is not
-			if site.Cond || selectsSensitive(o.Root, inRunsOn(site)) {
+			if site.Cond || sensitiveContext(sensitive, site, o.Root) {
 				rule.checkExpr(o, site.Cond)
 			}
 		})
@@ -84,35 +85,72 @@ func (rule *RuleUnsoundPrefixMatch) VisitWorkflowPre(n *Workflow) error {
 	return nil
 }
 
-// inRunsOn reports whether the site is the "runs-on:" of its job, where whatever an expression tests
-// picks the runner.
-func inRunsOn(site exprSite) bool {
-	if site.Job == nil || site.Job.RunsOn == nil || site.Str == nil {
-		return false
-	}
-	r := site.Job.RunsOn
-	if site.Str == r.LabelsExpr || site.Str == r.Group {
-		return true
-	}
-	for _, l := range r.Labels {
-		if site.Str == l {
-			return true
+// sensitiveContexts returns the strings of the workflow which hold what a trust decision selects: the
+// runner, the environment (and with it its secrets), the image and credentials of a container or a
+// service, the permissions and the secrets passed to a reusable workflow.
+func sensitiveContexts(w *Workflow) map[*String]bool {
+	set := map[*String]bool{}
+	add := func(ss ...*String) {
+		for _, s := range ss {
+			if s != nil {
+				set[s] = true
+			}
 		}
 	}
-	return false
+	permissions := func(p *Permissions) {
+		if p == nil {
+			return
+		}
+		add(p.All)
+		for _, sc := range p.Scopes {
+			if sc != nil {
+				add(sc.Name, sc.Value)
+			}
+		}
+	}
+	container := func(c *Container) {
+		if c == nil {
+			return
+		}
+		add(c.Image)
+		if c.Credentials != nil {
+			add(c.Credentials.Username, c.Credentials.Password, c.Credentials.Expression)
+		}
+	}
+	permissions(w.Permissions)
+	for _, j := range w.Jobs {
+		if j.RunsOn != nil {
+			add(j.RunsOn.LabelsExpr, j.RunsOn.Group)
+			add(j.RunsOn.Labels...)
+		}
+		if j.Environment != nil {
+			add(j.Environment.Name, j.Environment.URL)
+		}
+		permissions(j.Permissions)
+		container(j.Container)
+		if j.Services != nil {
+			add(j.Services.Expression)
+			for _, sv := range j.Services.Value {
+				if sv != nil {
+					container(sv.Container)
+				}
+			}
+		}
+		if j.WorkflowCall != nil {
+			for _, sec := range j.WorkflowCall.Secrets {
+				if sec != nil {
+					add(sec.Value)
+				}
+			}
+		}
+	}
+	return set
 }
 
-// isRunnerContext reports whether the node reads a property of the runner context.
-func isRunnerContext(n ExprNode) bool {
-	path, ok := derefPath(n)
-	return ok && len(path) > 0 && strings.EqualFold(path[0], "runner")
-}
-
-// selectsSensitive reports whether the expression selects a runner (it is in "runs-on:", or compares
-// runner.* with a "self-hosted" label), or refers to a secret or the token of the workflow. A string
-// which only contains "self-hosted" as part of the pattern being tested does not select anything.
-func selectsSensitive(root ExprNode, runsOn bool) bool {
-	if runsOn {
+// sensitiveContext reports whether a name test in the site decides something which matters: the site
+// is one of the sensitiveContexts, or the expression reads a secret or the token of the workflow.
+func sensitiveContext(contexts map[*String]bool, site exprSite, root ExprNode) bool {
+	if site.Str != nil && contexts[site.Str] {
 		return true
 	}
 	found := false
@@ -121,12 +159,6 @@ func selectsSensitive(root ExprNode, runsOn bool) bool {
 			return
 		}
 		switch n := n.(type) {
-		case *CompareOpNode:
-			for _, pair := range [][2]ExprNode{{n.Left, n.Right}, {n.Right, n.Left}} {
-				if lit, ok := pair[1].(*StringNode); ok && isRunnerContext(pair[0]) {
-					found = found || strings.Contains(strings.ToLower(lit.Value), "self-hosted")
-				}
-			}
 		case *VariableNode:
 			// secrets.X, secrets['X'] and a bare secrets (toJSON(secrets)) all reach the context
 			found = strings.EqualFold(n.Name, "secrets")
