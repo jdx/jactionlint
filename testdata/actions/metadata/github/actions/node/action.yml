@@ -1,0 +1,16 @@
+name: node
+description: A JavaScript action, which has no steps to check
+inputs:
+  who:
+    description: who
+    default: world
+outputs:
+  greeting:
+    description: greeting
+runs:
+  using: node24
+  main: dist/index.js
+  post: dist/cleanup.js
+branding:
+  icon: heart
+  color: red

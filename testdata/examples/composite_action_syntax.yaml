@@ -1,0 +1,16 @@
+name: Example
+description: Does not follow the syntax of action.yml
+inputs:
+  who:
+    # ERROR: "descriptions" is a typo of "description"
+    descriptions: Who to greet
+runs:
+  using: composite
+  steps:
+    # ERROR: The shell is required in a composite action
+    - run: echo "hello ${{ inputs.who }}"
+    - uses: actions/checkout@v4
+      # ERROR: "shell" is only for "run:" steps
+      shell: bash
+  # ERROR: "main" is only for JavaScript actions
+  main: dist/index.js

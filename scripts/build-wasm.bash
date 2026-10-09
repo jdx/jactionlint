@@ -25,4 +25,5 @@ if [ ! -f "${wasm_exec}" ]; then
     exit 1
 fi
 echo "Copying ${wasm_exec} to ${out}/wasm_exec.js"
-cp "${wasm_exec}" "${out}/wasm_exec.js"
+# -f: the copy from a downloaded toolchain is read-only, so a second run could not overwrite it
+cp -f "${wasm_exec}" "${out}/wasm_exec.js"

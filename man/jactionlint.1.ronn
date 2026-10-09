@@ -27,7 +27,10 @@ Features:
 
 ## USAGE
 
-To check all workflow files in the current repository, just run **jactionlint** without arguments.
+To check all workflow files in the current repository, just run **jactionlint** without arguments. The composite
+actions of the repository (**action.yml** in the root, under **.github/actions** and the directories which a local
+**uses: ./path** refers to) and **.github/dependabot.yml** are checked as well. A file named **action.yml** or
+**action.yaml** is the metadata of an action wherever it is, except under **.github/workflows**.
 It automatically finds the nearest `.github/workflows` directory:
 
     $ jactionlint
@@ -79,6 +82,10 @@ are available. A custom Go template can be given too:
   * `-migrate-config`:
     Rewrite the deprecated keys of the config file (`.github/jactionlint.yaml` or the file of
     `-config-file`) into the `rules` mapping
+
+  * `-migrate-ignores`:
+    Rewrite the trailing `# zizmor: ignore[...]` comments of the files (the workflows of the project
+    by default) into `# jactionlint ignore=...` comments. zizmor comments are also honored as they are
 
   * `-min-severity` <LEVEL>:
     Hide the errors less severe than this level: `info` (default), `warn` or `error`

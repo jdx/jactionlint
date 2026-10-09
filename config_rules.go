@@ -43,6 +43,16 @@ func (c *Config) RuleEnabled(id string) bool {
 	return c.RuleLevel(id) != SeverityOff
 }
 
+// RuleRuns reports whether the rule runs in a run where the online checks are on or off: an online rule
+// needs online mode as well as a level which is not off. Use it where a consumer asks whether a rule could
+// have reported something (unused-ignore); RuleEnabled only looks at the level.
+func (c *Config) RuleRuns(id string, online bool) bool {
+	if info, ok := ruleIndex[id]; ok && info.Online && !online {
+		return false
+	}
+	return c.RuleEnabled(id)
+}
+
 func (c *Config) profile() Profile {
 	if c == nil || c.Profile == "" {
 		return ProfileDefault
@@ -215,7 +225,7 @@ func normalizeOption(opt RuleOption, v any) (any, error) {
 // They still work and are translated into rules.
 type legacyConfig struct {
 	TimeoutMinutes *struct {
-		Required bool    `yaml:"required"`
+		Required *bool   `yaml:"required"`
 		Max      float64 `yaml:"max"`
 	} `yaml:"timeout-minutes"`
 	RequireCommitHash                *bool `yaml:"require-commit-hash"`
@@ -285,12 +295,17 @@ func (l *legacyConfig) entries() ([]legacyEntry, error) {
 		if math.IsNaN(t.Max) || math.IsInf(t.Max, 0) || t.Max < 0 {
 			return nil, fmt.Errorf("\"max\" in \"timeout-minutes\" must be a non-negative number, but got %v", t.Max)
 		}
-		instead := "\"rules: {missing-timeout: error, timeout-too-long: {level: error, max: ...}}\""
-		level := SeverityOff
-		if t.Required {
-			level = SeverityError
+		// "required" decides missing-timeout only when it is written. Leaving it out says nothing about the
+		// rule, so the profile decides; "required: false" is the only way to turn it off.
+		instead := "\"rules: {timeout-too-long: {level: error, max: ...}}\""
+		if t.Required != nil {
+			instead = "\"rules: {missing-timeout: error, timeout-too-long: {level: error, max: ...}}\""
+			level := SeverityOff
+			if *t.Required {
+				level = SeverityError
+			}
+			ret = append(ret, legacyEntry{"timeout-minutes", "missing-timeout", RuleConfig{Level: level, levelSet: true}, instead})
 		}
-		ret = append(ret, legacyEntry{"timeout-minutes", "missing-timeout", RuleConfig{Level: level, levelSet: true}, instead})
 		if t.Max > 0 {
 			ret = append(ret, legacyEntry{"timeout-minutes", "timeout-too-long", RuleConfig{Level: SeverityError, levelSet: true, Options: map[string]any{"max": t.Max}}, instead})
 		}

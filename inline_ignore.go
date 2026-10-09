@@ -24,6 +24,17 @@ type inlineIgnoreEntry struct {
 	used bool
 	// comment is the comment line the pattern is written in.
 	comment *ignoreComment
+	// zizmor is the audit name of an entry from a zizmor ignore comment. Then targets lists the
+	// diagnostics it stands for and pat is not used.
+	zizmor  string
+	targets []zizmorAlias
+}
+
+func (e *inlineIgnoreEntry) match(err *Error) bool {
+	if e.zizmor != "" {
+		return e.matchesZizmor(err)
+	}
+	return e.pat.Match(err)
 }
 
 // ignoreComment is one comment line with `ignore=`. Its offsets let the unused-ignore rule remove the
@@ -48,6 +59,9 @@ type ignoreSeg struct {
 type inlineIgnore struct {
 	start, end int
 	entries    []*inlineIgnoreEntry
+	// commentLine is the line of a zizmor ignore comment, which also applies to the errors whose region
+	// contains that line. It is 0 for the comments of jactionlint.
+	commentLine int
 }
 
 // splitIgnoreList splits comma-separated patterns. Commas inside (), [] and {} or escaped with a
@@ -156,30 +170,39 @@ func parseInlineIgnoresWithOrphans(src []byte) ([]inlineIgnore, []*inlineIgnoreE
 			continue
 		}
 
-		// This line is the target. Compute the indentation which the nested lines must exceed.
-		indent := len(line) - len(strings.TrimLeft(line, " \t"))
-		threshold := indent // for a sequence item, this makes the whole item the target
-		// YAML allows the items of a sequence to sit at the same column as the key holding it:
-		//   key:
-		//   - a
-		// When the target is a key, such items belong to it.
-		isKey := !isSequenceItem(line)
-		end := i + 1
-		for j := i + 1; j < len(lines); j++ {
-			// Comments are skipped like blank lines so that a comment does not cut a nested block short
-			if c, b := isCommentOrBlank(lines[j]); b || c {
-				continue
-			}
-			ind := len(lines[j]) - len(strings.TrimLeft(lines[j], " \t"))
-			if ind < threshold || (ind == threshold && !(isKey && isSequenceItem(lines[j]))) {
-				break
-			}
-			end = j + 1
-		}
-		ret = append(ret, inlineIgnore{i + 1, end, pending})
+		// This line is the target
+		end := ignoreTargetEnd(lines, i)
+		ret = append(ret, inlineIgnore{start: i + 1, end: end, entries: pending})
 		pending = nil
 	}
 	return ret, pending, errs
+}
+
+// ignoreTargetEnd returns the last line (1-based) which an ignore comment above the line lines[i] covers: the line,
+// and the lines nested under it. When the line starts a sequence item ("- "), the whole item is covered.
+func ignoreTargetEnd(lines []string, i int) int {
+	line := lines[i]
+	// The indentation which the nested lines must exceed
+	indent := len(line) - len(strings.TrimLeft(line, " \t"))
+	threshold := indent // for a sequence item, this makes the whole item the target
+	// YAML allows the items of a sequence to sit at the same column as the key holding it:
+	//   key:
+	//   - a
+	// When the target is a key, such items belong to it.
+	isKey := !isSequenceItem(line)
+	end := i + 1
+	for j := i + 1; j < len(lines); j++ {
+		// Comments are skipped like blank lines so that a comment does not cut a nested block short
+		if c, b := isCommentOrBlank(lines[j]); b || c {
+			continue
+		}
+		ind := len(lines[j]) - len(strings.TrimLeft(lines[j], " \t"))
+		if ind < threshold || (ind == threshold && !(isKey && isSequenceItem(lines[j]))) {
+			break
+		}
+		end = j + 1
+	}
+	return end
 }
 
 // filterInlineIgnores removes errors suppressed by inline ignore comments and marks the patterns which
@@ -192,11 +215,11 @@ func (l *Linter) filterInlineIgnores(errs []*Error, ignores []inlineIgnore) []*E
 	for _, err := range errs {
 		ignored := false
 		for _, ig := range ignores {
-			if err.Line < ig.start || ig.end < err.Line {
+			if !ig.covers(err) {
 				continue
 			}
 			for _, e := range ig.entries {
-				if e.pat.Match(err) {
+				if e.match(err) {
 					e.used = true
 					ignored = true
 				}
@@ -211,21 +234,40 @@ func (l *Linter) filterInlineIgnores(errs []*Error, ignores []inlineIgnore) []*E
 	return filtered
 }
 
+// covers returns whether the comment applies to the lines of the error.
+func (ig inlineIgnore) covers(err *Error) bool {
+	if ig.start <= err.Line && err.Line <= ig.end {
+		return true
+	}
+	return ig.commentLine > 0 && err.Line <= ig.commentLine && ig.commentLine <= max(err.EndLine, err.Line)
+}
+
 // unusedInlineIgnores returns an error for each pattern of the inline ignore comments which did not
-// suppress any error. A pattern for a rule which is off is not reported because the rule could not
-// report anything.
-func unusedInlineIgnores(ignores []inlineIgnore, orphans []*inlineIgnoreEntry, cfg *Config) []*Error {
+// suppress any error. A pattern for a rule which is off, or an online rule while the online checks are
+// off (online), is not reported because the rule could not report anything.
+func unusedInlineIgnores(ignores []inlineIgnore, orphans []*inlineIgnoreEntry, cfg *Config, online bool) []*Error {
 	var errs []*Error
 	// stale tells whether the pattern is reported: it did nothing and could have done something
 	stale := func(e *inlineIgnoreEntry) bool {
-		return !e.used && (e.pat.ID == "" || cfg.RuleEnabled(e.pat.ID))
+		if e.used {
+			return false
+		}
+		if e.zizmor != "" {
+			// Only for an audit which maps onto a rule that is on: a rule which is off cannot report anything
+			return zizmorEntryActive(e, cfg, online)
+		}
+		return e.pat.ID == "" || cfg.RuleRuns(e.pat.ID, online)
 	}
 	report := func(e *inlineIgnoreEntry, what string) {
 		if !stale(e) {
 			return
 		}
+		msg := fmt.Sprintf("ignore pattern %q %s. remove it", e.pat.String(), what)
+		if e.zizmor != "" {
+			msg = fmt.Sprintf("zizmor ignore comment for %q %s. remove it", e.zizmor, what)
+		}
 		errs = append(errs, &Error{
-			Message: fmt.Sprintf("ignore pattern %q %s. remove it", e.pat.String(), what),
+			Message: msg,
 			Line:    e.line,
 			Column:  e.col,
 			Kind:    "ignore",

@@ -1,0 +1,11 @@
+name: broken
+description: Does not follow the syntax of action.yml
+inputs:
+  who:
+    descriptions: who
+runs:
+  using: node
+  steps:
+    - run: echo
+      shell: bash
+  main: index.js

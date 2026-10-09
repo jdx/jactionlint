@@ -37,3 +37,10 @@ func isWorkflowFile(file string) bool {
 	ext := path.Ext(base)
 	return ext == ".yml" || ext == ".yaml"
 }
+
+// isDependabotFile reports whether the file is the Dependabot configuration of the repository.
+// jactionlint checks it too, but only the audits which the mapping knows are compared there: zizmor's
+// other audits do not apply to it, and the file is out of scope for them.
+func isDependabotFile(file string) bool {
+	return file == ".github/dependabot.yml" || file == ".github/dependabot.yaml"
+}

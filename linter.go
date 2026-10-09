@@ -156,6 +156,7 @@ type Linter struct {
 	minSeverity    Severity
 	online         onlineSettings
 	warned         sync.Map // *Config -> struct{}: configs whose deprecations were already reported
+	graphs         sync.Map // root directory -> *sync.Once-guarded *callGraph, see callGraphOf
 	notesMu        sync.Mutex
 	notes          []string // deprecation warnings found while linting
 }
@@ -355,25 +356,37 @@ func (l *Linter) LintRepository(dir string) ([]*Error, error) {
 
 	l.log("Linting all workflow files and Dependabot configuration in repository:", dir)
 
-	p, err := l.projects.At(dir)
+	files, p, err := l.repositoryFiles(dir)
 	if err != nil {
 		return nil, err
 	}
+	l.log("Collected", len(files), "YAML files")
+	return l.LintFiles(files, p)
+}
+
+// repositoryFiles finds the nearest project of dir and returns its files which are linted: the workflow
+// files and the Dependabot configuration. LintRepository and FixRepository both use it, so what is fixed is always
+// what is linted.
+func (l *Linter) repositoryFiles(dir string) ([]string, *Project, error) {
+	p, err := l.projects.At(dir)
+	if err != nil {
+		return nil, nil, err
+	}
 	if p == nil {
-		return nil, fmt.Errorf("no project was found in any parent directories of %q. check workflows directory is put correctly in your Git repository", dir)
+		return nil, nil, fmt.Errorf("no project was found in any parent directories of %q. check workflows directory is put correctly in your Git repository", dir)
 	}
 
 	l.log("Detected project:", p.RootDir())
 	files, err := walkWorkflowFiles(p.WorkflowsDir())
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	files = append(files, p.DependabotFiles()...)
+	files = append(files, l.callGraphOf(p).actionPaths()...)
 	if len(files) == 0 {
-		return nil, fmt.Errorf("no YAML file was found in %q", p.WorkflowsDir())
+		return nil, nil, fmt.Errorf("no YAML file was found in %q", p.WorkflowsDir())
 	}
-	l.log("Collected", len(files), "YAML files")
-	return l.LintFiles(files, p)
+	return files, p, nil
 }
 
 // collectWorkflowFiles returns the paths of all YAML files in the directory recursively in sorted order.
@@ -653,7 +666,17 @@ func (l *Linter) check(
 		return l.checkDependabot(path, content, project, cfg, start)
 	}
 
-	w, all := Parse(content)
+	isAction := l.isActionFile(path)
+	var w *Workflow
+	var all []*Error
+	if isAction {
+		w, all = ParseAction(content)
+		if w != nil && project != nil {
+			w.Action.Callers = l.actionCallers(project, l.absFilePath(path))
+		}
+	} else {
+		w, all = Parse(content)
+	}
 
 	if l.logLevel >= LogLevelVerbose {
 		elapsed := time.Since(start)
@@ -671,6 +694,7 @@ func (l *Linter) check(
 			online:                 sess,
 			path:                   path,
 			src:                    content,
+			action:                 isAction,
 			project:                project,
 			localActions:           localActions,
 			localReusableWorkflows: localReusableWorkflows,
@@ -707,6 +731,9 @@ func (l *Linter) check(
 		for _, rule := range rules {
 			errs := rule.Errs()
 			l.debug("%s found %d errors", rule.Name(), len(errs))
+			if isAction {
+				errs = slices.DeleteFunc(slices.Clone(errs), func(e *Error) bool { return dropsOnActions(e.Kind, e.ID) })
+			}
 			all = append(all, errs...)
 		}
 
@@ -720,17 +747,37 @@ func (l *Linter) check(
 	return l.finishCheck(path, content, all, cfg, start, w != nil), nil
 }
 
+// absFilePath resolves a path given to the linter against the working directory.
+func (l *Linter) absFilePath(p string) string {
+	if !filepath.IsAbs(p) {
+		p = filepath.Join(l.cwd, p)
+	}
+	return p
+}
+
+// isActionFile reports whether the path is the metadata file of an action (see IsActionPath). The path
+// is resolved against the working directory first, so that "action.yml" linted from inside ".github/workflows"
+// is still a workflow. The name for STDIN is used as it is.
+func (l *Linter) isActionFile(p string) bool {
+	if p != l.stdin {
+		p = l.absFilePath(p)
+	}
+	return IsActionPath(p)
+}
+
 // finishCheck post-processes the errors found in one file: it fills the fields derived from the
 // rule IDs, applies the ignores and the minimum severity, and sorts the errors. isWorkflow tells that
 // the file is a workflow, for which the online pin fixes are attached.
 func (l *Linter) finishCheck(path string, content []byte, all []*Error, cfg *Config, start time.Time, isWorkflow bool) []*Error {
+	all = append(all, checkSourceRules(content, cfg)...)
 	all = l.annotateErrors(all, content, cfg)
 
 	// Inline ignores are applied first so that every pattern sees all errors, which tells whether it
 	// is used. The order of the filters does not change which errors remain.
 	inlineIgnores, orphans, ignoreErrs := parseInlineIgnoresWithOrphans(content)
+	inlineIgnores = append(inlineIgnores, parseZizmorIgnores(content)...)
 	all = l.filterInlineIgnores(all, inlineIgnores)
-	unused := unusedInlineIgnores(inlineIgnores, orphans, cfg)
+	unused := unusedInlineIgnores(inlineIgnores, orphans, cfg, l.online.enabled || (cfg != nil && cfg.Online))
 	dropFixesChangingYAML(content, unused)
 	all = append(all, l.annotateErrors(unused, content, cfg)...)
 
@@ -845,4 +892,30 @@ func (l *Linter) annotateErrors(errs []*Error, src []byte, cfg *Config) []*Error
 		kept = append(kept, err)
 	}
 	return kept
+}
+
+// lazyCallGraph builds the call graph of a repository once, however many files ask for it in parallel.
+type lazyCallGraph struct {
+	once  sync.Once
+	graph *callGraph
+}
+
+// callGraphOf returns the call graph of the project. The linter builds it when the first action.yml (or
+// the list of the actions of the repository) is needed and keeps it for the rest of the run, so that
+// every workflow and action is read once.
+func (l *Linter) callGraphOf(p *Project) *callGraph {
+	v, _ := l.graphs.LoadOrStore(p.root, &lazyCallGraph{})
+	lg := v.(*lazyCallGraph)
+	lg.once.Do(func() { lg.graph = newCallGraph(p.root) })
+	return lg.graph
+}
+
+// actionCallers returns the local workflows which run the action defined in the file, or nil when the
+// file is not in the project.
+func (l *Linter) actionCallers(p *Project, file string) *ActionCallers {
+	rel, err := filepath.Rel(absPath(p.root), absPath(file))
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return nil
+	}
+	return l.callGraphOf(p).callersOf(filepath.ToSlash(filepath.Dir(rel)))
 }

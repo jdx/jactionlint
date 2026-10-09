@@ -1,0 +1,4 @@
+.github/actions/example/action.yml:6:5: unexpected key "descriptions" for input "who". expected one of "default", "deprecationMessage", "description", "required" [syntax-check]
+.github/actions/example/action.yml:11:7: "shell" is required for a "run" step of a composite action, which has no default shell. for example, add "shell: bash" [syntax-check]
+.github/actions/example/action.yml:14:7: unexpected key "shell" for step to execute action. expected one of "background", "continue-on-error", "env", "id", "if", "name", "timeout-minutes", "uses", "with" [syntax-check]
+.github/actions/example/action.yml:16:3: "main" is not available in "runs" section of the composite action. it is for JavaScript and Docker actions [syntax-check]

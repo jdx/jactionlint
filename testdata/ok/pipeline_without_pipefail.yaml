@@ -1,0 +1,115 @@
+on:
+  workflow_call:
+    inputs:
+      runner:
+        type: string
+defaults:
+  run:
+    shell: bash
+jobs:
+  workflow-default-shell:
+    runs-on: ubuntu-latest
+    steps:
+      - run: make | tee build.log
+  bash:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - run: curl -fsSL https://example.com/data.json | jq .
+  job-shell-overrides:
+    runs-on: ubuntu-latest
+    steps:
+      - shell: bash
+        run: curl https://example.com | tar xz
+      - shell: pwsh
+        run: Get-Content a | Select-String b
+      - shell: python
+        run: print(1)
+  pipefail-in-script:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          set -eo pipefail
+          make | tee out.txt
+      - run: |
+          set -euxo pipefail
+          make | tee out.txt
+      - run: |
+          set -o errexit -o pipefail
+          make | tee out.txt
+      - run: |
+          set -Eeuo pipefail
+          make | tee out.txt
+      - run: |
+          export SHELLOPTS=pipefail
+          make | tee out.txt
+  windows:
+    runs-on: windows-latest
+    steps:
+      - run: Get-Content a | Select-String b
+      - run: make | tee out.txt
+  unknown-runner:
+    runs-on: [self-hosted, x64]
+    steps:
+      - run: make | tee out.txt
+  unknown-expression:
+    runs-on: ${{ inputs.runner }}
+    steps:
+      - run: make | tee out.txt
+  windows-matrix:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - run: make | tee out.txt
+  cannot-fail-first-stage:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          echo "$TOKEN" | docker login --password-stdin
+          printf '%s\n' "$A" | tee -a "$GITHUB_STEP_SUMMARY"
+          cat <<EOF | kubectl apply -f -
+          kind: Namespace
+          EOF
+          cat <<< "$X" | jq .
+          yes | head -n 3 > /dev/null
+          true | cat
+          echo a | grep a | sort
+  tested-pipelines:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          if make | grep -q ready; then echo ready; fi
+          if ! make | grep ready; then echo missing; fi
+          while make | grep -q busy; do sleep 1; done
+          make | grep ready || true
+          make | grep ready && echo found
+          ! make | grep ready
+  consumers-quitting-early:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          git log --oneline | head -n 1
+          git branch | head
+          curl -s https://example.com | grep -q ok
+          curl -s https://example.com | grep -m1 ok
+          make | sed -n 1q
+          make | awk '{print; exit}'
+          make | head -n 1 | tr '[:lower:]' '[:upper:]'
+      - run: git log | read -r _
+  custom-shell-without-errexit:
+    runs-on: ubuntu-latest
+    steps:
+      - shell: bash {0}
+        run: make | tee out.txt
+      - shell: bash --noprofile --norc -eo pipefail {0}
+        run: make | tee out.txt
+  no-pipeline:
+    runs-on: ubuntu-latest
+    steps:
+      - run: make && echo ready
+      - run: echo "a|b"
+      - run: make || echo "a | b"

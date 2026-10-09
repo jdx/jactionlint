@@ -641,3 +641,149 @@ func TestKnownVulnerableActionsFindsAdvisoriesOfASubdirectory(t *testing.T) {
 		t.Errorf("unexpected message %q", errs[0].Message)
 	}
 }
+
+// scanFailingClient fails every branch scan like a GraphQL query with errors.
+type scanFailingClient struct{ GitHubClient }
+
+func (scanFailingClient) CommitOnAnyBranch(context.Context, string, string, string, int) (GitHubBranchScan, error) {
+	return GitHubBranchScan{}, fmt.Errorf("%w: GraphQL: Could not resolve", ErrGitHubBranchScanUnavailable)
+}
+
+// A branch scan that fails does not stop the online rules: the branches are compared over REST.
+func TestFailingBranchScansDoNotStopTheSession(t *testing.T) {
+	head := strings.Repeat("a", 40)
+	shas := []string{strings.Repeat("c", 40), strings.Repeat("d", 40), strings.Repeat("e", 40), strings.Repeat("f", 40)}
+	compare := ""
+	var steps []string
+	for i, sha := range shas {
+		if i > 0 {
+			compare += ","
+		}
+		compare += `"` + head + `...` + sha + `":"diverged"`
+		steps = append(steps, "uses: o/r@"+sha)
+	}
+	fx := `{"repos":{"o/r":{"repo":{"default_branch":"main"},"tags":{"tags":[]},
+	  "branches":{"branches":[{"name":"main","sha":"` + head + `"}]},
+	  "refs":{"heads/main":{"sha":"` + head + `","found":true}},
+	  "compare":{` + compare + `}}}}`
+	c, err := NewFixtureGitHubClient([]byte(fx))
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg := &Config{Rules: map[string]RuleConfig{"stale-action-refs": {Level: SeverityOff, levelSet: true}, "known-vulnerable-actions": {Level: SeverityOff, levelSet: true}}}
+	errs, _ := lintOnline(t, scanFailingClient{c}, cfg, workflowWith(steps...))
+	n := 0
+	for _, e := range errs {
+		if e.ID == "impostor-commit" {
+			n++
+		}
+	}
+	if n != len(shas) {
+		t.Errorf("want %d impostor findings from the REST comparison but got %v", len(shas), lineIDsOf(errs))
+	}
+}
+
+// resolveFailingClient fails ResolveRef like a lookup that cannot be answered.
+type resolveFailingClient struct{ GitHubClient }
+
+func (resolveFailingClient) ResolveRef(context.Context, string, string, GitHubRefNamespace, string) (string, bool, error) {
+	return "", false, errors.New("boom")
+}
+
+// A tag that cannot be looked up is not a tag which does not exist.
+func TestRefVersionMismatchIsSilentWhenTheTagLookupFails(t *testing.T) {
+	sha := strings.Repeat("c", 40)
+	fx := `{"repos":{"o/r":{"repo":{"default_branch":"main"},"tags":{"tags":[],"truncated":true},
+	  "refs":{"tags/v2":{"found":false},"tags/2":{"found":false}}}}}`
+	c, err := NewFixtureGitHubClient([]byte(fx))
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg := &Config{Rules: map[string]RuleConfig{"stale-action-refs": {Level: SeverityOff, levelSet: true}, "impostor-commit": {Level: SeverityOff, levelSet: true}, "known-vulnerable-actions": {Level: SeverityOff, levelSet: true}}}
+	src := workflowWith("uses: o/r@" + sha + " # v2")
+	if errs, _ := lintOnline(t, c, cfg, src); len(errs) != 1 || errs[0].ID != "ref-version-mismatch" {
+		t.Fatalf("a tag which does not exist is a mismatch: %v", lineIDsOf(errs))
+	}
+	for _, e := range func() []*Error { errs, _ := lintOnline(t, resolveFailingClient{c}, cfg, src); return errs }() {
+		t.Errorf("unexpected %s: %s", e.ID, e.Message)
+	}
+}
+
+// An ignore for an online rule is not unused while the online checks are off: the rule did not run.
+func TestUnusedIgnoreOfOnlineRules(t *testing.T) {
+	src := "on: push\njobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      # jactionlint ignore=impostor-commit\n      - uses: actions/checkout@v4\n"
+	cfg := mustParseConfig(t, "profile: strict\nrules:\n  unused-ignore: error\n  missing-timeout: off\n  stale-action-refs: off\n")
+	unused := func(errs []*Error) int { return len(errsWithID(errs, "unused-ignore")) }
+
+	l, err := NewLinter(io.Discard, &LinterOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	l.defaultConfig = cfg
+	errs, err := l.Lint("test.yaml", []byte(src), &Project{root: t.TempDir()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := unused(errs); got != 0 {
+		t.Errorf("offline: the online rule could not report, so the ignore is not unused: %v", lineIDsOf(errs))
+	}
+	if errs, _ := lintOnline(t, onlineFixtureClient(t), cfg, src); unused(errs) != 1 {
+		t.Errorf("online: the rule ran and found nothing to ignore: %v", lineIDsOf(errs))
+	}
+}
+
+func TestAffectedByPrefersThePackageOfTheSubdirectory(t *testing.T) {
+	adv := func(vs ...GitHubVulnerability) GitHubAdvisory {
+		return GitHubAdvisory{ID: "GHSA-test", Vulnerabilities: vs}
+	}
+	root := GitHubVulnerability{Package: "o/r", VulnerableRange: "< 2.0.0", FirstPatched: "2.0.0"}
+	sub := GitHubVulnerability{Package: "o/r/sub", VulnerableRange: "< 1.5.0", FirstPatched: "1.5.0"}
+	other := GitHubVulnerability{Package: "o/r/other", VulnerableRange: "< 9.0.0", FirstPatched: "9.0.0"}
+	ver := func(s string) advisoryVersion {
+		v, ok := parseAdvisoryVersion(s)
+		if !ok {
+			t.Fatalf("version %q", s)
+		}
+		return v
+	}
+	tests := []struct {
+		name        string
+		a           GitHubAdvisory
+		uses        string
+		version     string
+		wantFound   bool
+		wantPatched string
+	}{
+		{"root advisory, subdirectory action: the root ranges apply", adv(root), "o/r/sub@v1", "1.9.0", true, "2.0.0"},
+		{"root advisory, subdirectory action, patched", adv(root), "o/r/sub@v1", "2.1.0", false, ""},
+		{"root advisory, root action", adv(root), "o/r@v1", "1.9.0", true, "2.0.0"},
+		{"subdirectory advisory, root action: not affected", adv(sub), "o/r@v1", "1.0.0", false, ""},
+		{"subdirectory advisory, another subdirectory: not affected", adv(sub), "o/r/else@v1", "1.0.0", false, ""},
+		{"subdirectory advisory, its action", adv(sub), "o/r/sub@v1", "1.0.0", true, "1.5.0"},
+		{"both listed: the subdirectory ranges and patched version win", adv(root, sub), "o/r/sub@v1", "1.0.0", true, "1.5.0"},
+		{"both listed, order does not matter", adv(sub, root), "o/r/sub@v1", "1.0.0", true, "1.5.0"},
+		{"both listed: patched for the subdirectory although the root range still covers it", adv(root, sub), "o/r/sub@v1", "1.7.0", false, ""},
+		{"both listed, root action uses the root entry", adv(sub, root), "o/r@v1", "1.7.0", true, "2.0.0"},
+		{"the entry of another subdirectory does not hide the root entry", adv(other, root), "o/r/sub@v1", "1.9.0", true, "2.0.0"},
+		{"package names are compared without case", adv(GitHubVulnerability{Package: "O/R/Sub", VulnerableRange: "< 3", FirstPatched: "3"}), "o/r/sub@v1", "1.0.0", true, "3"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			ref := ParseUses(tc.uses)
+			got, found := affectedBy(tc.a, ref, ver(tc.version))
+			if found != tc.wantFound || got.FirstPatched != tc.wantPatched {
+				t.Errorf("affectedBy = %+v, %v; want found=%v patched=%q", got, found, tc.wantFound, tc.wantPatched)
+			}
+		})
+	}
+
+	// Two advisories for the same action are reported on their own
+	a1 := GitHubAdvisory{ID: "GHSA-1", Vulnerabilities: []GitHubVulnerability{root}}
+	a2 := GitHubAdvisory{ID: "GHSA-2", Vulnerabilities: []GitHubVulnerability{sub, root}}
+	ref := ParseUses("o/r/sub@v1")
+	v1, f1 := affectedBy(a1, ref, ver("1.7.0"))
+	v2, f2 := affectedBy(a2, ref, ver("1.7.0"))
+	if !f1 || v1.FirstPatched != "2.0.0" || f2 {
+		t.Errorf("GHSA-1 = %+v %v, GHSA-2 = %+v %v", v1, f1, v2, f2)
+	}
+}

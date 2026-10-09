@@ -1,0 +1,25 @@
+version: 2
+updates:
+  # ERROR: external code execution is allowed
+  - package-ecosystem: pip
+    directory: "/"
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    insecure-external-code-execution: allow
+  # OK: deny is the default
+  - package-ecosystem: bundler
+    directory: "/"
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    insecure-external-code-execution: deny
+  # OK: not set
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7

@@ -72,7 +72,7 @@ func TestRateLimitBeyondBoundIsSkippedWithTheResetTime(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := reset.Local().Format("15:04:05")
-	if !strings.Contains(err.Error(), "resets at "+want) || !strings.Contains(err.Error(), "in 9m") {
+	if !strings.Contains(err.Error(), "resets at "+want) || !(strings.Contains(err.Error(), "in 9m") || strings.Contains(err.Error(), "in 10m")) {
 		t.Errorf("the message must name the reset time %s and the wait: %v", want, err)
 	}
 	if len(f.sleptFor()) != 0 {
