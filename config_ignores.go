@@ -586,7 +586,7 @@ func (l *Linter) finishIgnoreRun(results []fileResult) []fileResult {
 				days := int(ig.expires.Sub(today) / (24 * time.Hour))
 				e = ig.errorAt("expired-ignore", fmt.Sprintf("the ignore for %s expires on %s (in %d days)%s", describeIgnore(ig), ig.Expires, days, ignoreReason(ig)))
 				upcoming = true
-			case !rc.used[ig] && ig.someRuleRuns(cfg, l.online.enabled || cfg.Online) && rc.judgeUnused(ig, covered):
+			case !rc.used[ig] && ig.someRuleRuns(cfg, l.online.enabled || (!l.online.off && cfg.Online)) && rc.judgeUnused(ig, covered):
 				e = ig.errorAt("unused-ignore", fmt.Sprintf("the ignore for %s did not suppress any finding. remove it from \"ignores\"%s", describeIgnore(ig), ignoreReason(ig)))
 			default:
 				continue
