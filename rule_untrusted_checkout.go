@@ -1,6 +1,7 @@
 package jactionlint
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/jdx/jactionlint/v2/internal/runscript"
@@ -16,6 +17,17 @@ type RuleUntrustedCheckout struct {
 	privileged []string
 	wf         *Workflow
 	job        *Job
+	// fetches are the fetches of an untrusted revision in the steps before the current one that no command has put
+	// in the working tree yet, see pendingFetch.
+	fetches []*pendingFetch
+}
+
+// pendingFetch is a `git fetch` of a revision of a pull request whose script does not put it in the working tree.
+// A later step can: `git checkout FETCH_HEAD`, or `git checkout pr` for `git fetch origin <head>:pr`.
+type pendingFetch struct {
+	pos   *Pos
+	what  string
+	names []string // what the revision is called afterwards: FETCH_HEAD and the destinations of the refspecs
 }
 
 // NewRuleUntrustedCheckout creates a new RuleUntrustedCheckout instance. The project can be nil.
@@ -61,6 +73,7 @@ func (rule *RuleUntrustedCheckout) VisitJobPre(n *Job) error {
 	// step runs code depends on the directory only, so it is asked once for each directory and not for
 	// each checkout: a job with thousands of checkouts is not quadratic.
 	rule.job = n
+	rule.fetches = nil
 	pending := map[string][]*untrustedCheckout{}
 	var dirs []string // the keys of pending in the order they were added
 	for _, s := range flattenSteps(n.Steps) {
@@ -104,7 +117,7 @@ func (rule *RuleUntrustedCheckout) report(c *untrustedCheckout, how string) {
 	}
 	privileges := "the workflow has a write token and secrets, so whoever controls that code can use them"
 	if rule.job != nil && rule.wf != nil && tokenIsAbsent(rule.wf, rule.job) {
-		privileges = "the job has no token (\"permissions: {}\"), but the code still runs on the runner with everything else the job gives it, such as secrets passed to a step and the cache"
+		privileges = "the job's GITHUB_TOKEN has no permissions (\"permissions: {}\"), but the code still runs on the runner with everything else the job gives it, such as secrets passed to a step and the cache"
 	}
 	rule.ReportIDf(
 		"untrusted-checkout",
@@ -114,7 +127,7 @@ func (rule *RuleUntrustedCheckout) report(c *untrustedCheckout, how string) {
 	)
 }
 
-// tokenIsAbsent reports whether the job sets "permissions: {}", so GITHUB_TOKEN has no scope at all.
+// tokenIsAbsent reports whether the job sets "permissions: {}", so GITHUB_TOKEN is created with no scope at all.
 func tokenIsAbsent(w *Workflow, j *Job) bool {
 	p := j.Permissions
 	if p == nil {
@@ -151,20 +164,35 @@ func (rule *RuleUntrustedCheckout) checkoutsOf(j *Job, s *Step) []*untrustedChec
 		}
 		env := untrustedEnvNames(rule.wf, j, s)
 		var ret []*untrustedCheckout
+		earlier := rule.fetches
 		for i, c := range script.Commands {
 			what, ok := commandChecksOutUntrusted(c, env)
+			pos := s.Pos
+			if e.RunPos != nil {
+				pos = e.RunPos
+			}
+			if !ok && c.Name == "git" && workTreeVerbs[c.Verb()] {
+				// the revision that an earlier step fetched
+				for k, f := range earlier {
+					if f != nil && wordsName(c, f.names) {
+						what, ok, pos = f.what, true, f.pos
+						earlier[k] = nil
+						break
+					}
+				}
+			}
 			if !ok && c.Name == "git" && c.Verb() == "fetch" {
 				// A fetch only downloads the objects: it checks out the code when a later command in
 				// the script puts what it fetched in the working tree.
-				if w, bad := commandNamesUntrusted(c, env); bad && fetchedThenUsed(script.Commands[i+1:]) {
-					what, ok = w, true
+				if w, bad := commandNamesUntrusted(c, env); bad {
+					if fetchedThenUsed(script.Commands[i+1:]) {
+						what, ok = w, true
+					} else {
+						rule.fetches = append(rule.fetches, &pendingFetch{pos: pos, what: w, names: fetchedNames(c)})
+					}
 				}
 			}
 			if ok {
-				pos := s.Pos
-				if e.RunPos != nil {
-					pos = e.RunPos
-				}
 				dir := ""
 				if c.Name == "git" && c.Verb() == "clone" && len(c.Positional) > 2 {
 					dir = normalizeDir(c.Sub(2))
@@ -225,6 +253,29 @@ func commandNamesUntrusted(c *runscript.Command, envNames map[string]bool) (stri
 var workTreeVerbs = map[string]bool{
 	"checkout": true, "switch": true, "merge": true, "cherry-pick": true, "rebase": true, "reset": true,
 	"restore": true, "pull": true, "read-tree": true, "worktree": true,
+}
+
+// fetchedNames returns the names a `git fetch` gives the revisions it downloads: FETCH_HEAD, and the destination of
+// each refspec (`pull/1/head:pr` names `pr`).
+func fetchedNames(c *runscript.Command) []string {
+	names := []string{"FETCH_HEAD"}
+	for _, p := range c.Positional {
+		// the word may hold an expression before the colon (`pull/${{ github.event.number }}/head:pr`)
+		if i := strings.LastIndexByte(p.Raw, ':'); i >= 0 && i+1 < len(p.Raw) && !strings.ContainsAny(p.Raw[i+1:], "$`") {
+			names = append(names, strings.Trim(strings.TrimPrefix(p.Raw[i+1:], "refs/heads/"), `"'`))
+		}
+	}
+	return names
+}
+
+// wordsName reports whether a word of the command is one of the names.
+func wordsName(c *runscript.Command, names []string) bool {
+	for _, w := range c.Words {
+		if !w.Dynamic() && slices.Contains(names, w.Value) {
+			return true
+		}
+	}
+	return false
 }
 
 // fetchedThenUsed reports whether one of the commands puts a fetched revision in the working tree.

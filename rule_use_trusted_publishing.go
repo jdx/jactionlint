@@ -147,6 +147,7 @@ func (rule *RuleUseTrustedPublishing) npmRegistryIsPrivate(step *Step, s *runscr
 			return !registryValueIsPublic(f.Value.Value)
 		}
 	}
+	envPublic := false
 	for _, name := range []string{"npm_config_registry", "YARN_NPM_REGISTRY_SERVER", "YARN_NPM_PUBLISH_REGISTRY"} {
 		for _, env := range []*Env{step.Env, rule.jobEnv(), rule.workflowEnv()} {
 			if env == nil {
@@ -162,9 +163,15 @@ func (rule *RuleUseTrustedPublishing) npmRegistryIsPrivate(step *Step, s *runscr
 				}
 			}
 			if found {
-				break // the nearest scope that sets it decides
+				// the nearest scope that sets it decides, and it is public here: a file cannot override the
+				// environment of the process
+				envPublic = envPublic || rule.registryEnvAppliesTo(name, publish.Tool)
+				break
 			}
 		}
+	}
+	if envPublic {
+		return false
 	}
 	private := false
 	if rule.job != nil {
@@ -214,6 +221,15 @@ func (rule *RuleUseTrustedPublishing) npmRegistryIsPrivate(step *Step, s *runscr
 		}
 	}
 	return private
+}
+
+// registryEnvAppliesTo reports whether the environment variable chooses the registry of the tool: `npm_config_*` is
+// read by npm, pnpm and yarn 1, `YARN_*` by yarn.
+func (rule *RuleUseTrustedPublishing) registryEnvAppliesTo(name, tool string) bool {
+	if strings.HasPrefix(name, "YARN_") {
+		return tool == "yarn"
+	}
+	return tool == "npm" || tool == "pnpm" || tool == "yarn"
 }
 
 // registryValueIsPublic reports whether the value is the public registry of npm or empty. An expression is not.

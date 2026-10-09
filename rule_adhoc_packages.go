@@ -115,6 +115,11 @@ var lernaValueFlags = map[string]bool{
 // the places to add it to; options (`--scope web`, `--dev`) are neither. A package given as a path installs from the
 // checkout.
 func lernaAddsPackage(c *runscript.Command) bool {
+	switch c.Name {
+	case "lerna", "npx", "bunx", "pnpx", "yarn", "pnpm", "npm":
+	default:
+		return false // `echo lerna add pkg` installs nothing
+	}
 	argv := c.Args
 	if c.Name == "lerna" {
 		argv = append([]*runscript.Word{c.NameWord}, argv...)

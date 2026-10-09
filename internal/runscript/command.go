@@ -55,6 +55,10 @@ type Command struct {
 	// LoopBody is whether the command is in the body of a `for`, `while`, `until` or `select` loop. A command there
 	// runs for each round, so what it does with its input does not end the stream of the stage the loop is in.
 	LoopBody bool
+	// InFunc is whether the command is in the body of a function. The body runs when the function is called, not
+	// where it is defined, so the assignments of the whole script (and the prefix assignments of the call) can
+	// come before it.
+	InFunc bool
 	// Cond is whether the command may not run, or runs in another shell than the one that holds the variables of
 	// the script: it is in a branch of `if` or `case`, a loop, the right operand of `&&` or `||`, a function, a
 	// subshell, a substitution, a pipeline or a background job.
@@ -157,6 +161,7 @@ type builder struct {
 	testedCalls                        map[*syntax.CallExpr]bool  // commands whose status is tested, see Command.Tested
 	testedAnd, testedLoop, testedOther map[*syntax.CallExpr]bool  // why, see Command.AndOnly and Command.LoopCond
 	loopBody                           map[*syntax.CallExpr]bool  // see Command.LoopBody
+	funcBody                           map[*syntax.CallExpr]bool  // see Command.InFunc
 	pending                            []pendingPipeline
 	groups                             []groupRedirect
 	done                               map[syntax.Node]bool
@@ -173,6 +178,16 @@ func (b *builder) markLoopBody(body []*syntax.Stmt) {
 			return true
 		})
 	}
+}
+
+// markFuncBody records the commands of the body of a function, see Command.InFunc.
+func (b *builder) markFuncBody(body syntax.Node) {
+	syntax.Walk(body, func(n syntax.Node) bool {
+		if call, ok := n.(*syntax.CallExpr); ok {
+			b.funcBody[call] = true
+		}
+		return true
+	})
 }
 
 // splitWord records a word whose unquoted expansions the shell splits into several items on purpose.
@@ -224,6 +239,7 @@ func (b *builder) build(f *syntax.File) {
 	b.testedCalls = map[*syntax.CallExpr]bool{}
 	b.testedAnd, b.testedLoop, b.testedOther = map[*syntax.CallExpr]bool{}, map[*syntax.CallExpr]bool{}, map[*syntax.CallExpr]bool{}
 	b.loopBody = map[*syntax.CallExpr]bool{}
+	b.funcBody = map[*syntax.CallExpr]bool{}
 	b.done = map[syntax.Node]bool{}
 	s := b.s
 	syntax.Walk(f, func(n syntax.Node) bool {
@@ -242,6 +258,9 @@ func (b *builder) build(f *syntax.File) {
 		case *syntax.WhileClause:
 			b.markTestedAs(testedLoop, n.Cond...)
 			b.markLoopBody(n.Do)
+		case *syntax.FuncDecl:
+			b.markFuncBody(n.Body)
+			b.s.Funcs = append(b.s.Funcs, n.Name.Value)
 		case *syntax.ForClause:
 			b.markLoopBody(n.Do)
 			if it, ok := n.Loop.(*syntax.WordIter); ok {
@@ -270,6 +289,9 @@ func (b *builder) build(f *syntax.File) {
 	for n, c := range b.cmds {
 		if call, ok := n.(*syntax.CallExpr); ok && b.loopBody[call] {
 			c.LoopBody = true
+		}
+		if call, ok := n.(*syntax.CallExpr); ok && b.funcBody[call] {
+			c.InFunc = true
 		}
 		if call, ok := n.(*syntax.CallExpr); ok && b.testedCalls[call] {
 			c.Tested = true

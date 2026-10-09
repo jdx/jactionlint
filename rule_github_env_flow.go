@@ -1,6 +1,7 @@
 package jactionlint
 
 import (
+	"slices"
 	"sort"
 
 	"github.com/jdx/jactionlint/v2/internal/runscript"
@@ -51,12 +52,13 @@ func flowEvents(s *runscript.Script, name string, at int, loop bool) []flowEvent
 		if a.Name != name {
 			continue
 		}
-		if a.Cmd != nil && !a.Cmd.Decl {
-			continue // NAME=value cmd: only the environment of cmd
+		if a.Cmd != nil && !a.Cmd.Decl && !slices.Contains(s.Funcs, a.Cmd.Name) {
+			continue // NAME=value cmd: only the environment of cmd, unless cmd is a function of the script
 		}
 		in := false
 		for _, t := range s.Totals {
-			if t.Name == name && a.Offset >= t.Offset && a.Offset < t.End {
+			// a total is one event at its end; a write inside it sees the assignments before the write one by one
+			if t.Name == name && a.Offset >= t.Offset && a.Offset < t.End && t.End <= at {
 				totals[t] = append(totals[t], a)
 				in = true
 			}
@@ -107,7 +109,10 @@ func flowEvents(s *runscript.Script, name string, at int, loop bool) []flowEvent
 }
 
 // guardHolds reports whether the guard proves the value harmless for the destination.
-func guardHolds(g *runscript.Guard, dest string) bool {
+func (rule *RuleGitHubEnv) guardHolds(s *runscript.Script, g *runscript.Guard, dest string) bool {
+	if g.Bare && !rule.errexit && !setsErrexitBefore(s, g.Offset) {
+		return false // a failing test does not stop a shell that runs without -e
+	}
 	if g.Regex != "" {
 		return validatingRegex(g.Regex, dest)
 	}
@@ -146,7 +151,7 @@ func (rule *RuleGitHubEnv) judgeVar(s *runscript.Script, name string, depth int)
 		e := evs[i]
 		switch e.kind {
 		case flowGuard:
-			if !e.maybe && guardHolds(e.guard, rule.dest) {
+			if !e.maybe && rule.guardHolds(s, e.guard, rule.dest) {
 				decided = true
 			}
 		case flowAssign:
@@ -229,4 +234,18 @@ func (rule *RuleGitHubEnv) judgeInitial(name string, depth int) data {
 		return data{}
 	}
 	return data{kind: dataUnknown}
+}
+
+// setsErrexitBefore reports whether the script turns errexit on (`set -e`, `set -o errexit`) before the offset.
+func setsErrexitBefore(s *runscript.Script, off int) bool {
+	on := false
+	for _, c := range s.Commands {
+		if c.Name != "set" || c.Offset >= off || c.Cond {
+			continue
+		}
+		if v, ok := setOption(c.Args, "errexit", 'e'); ok {
+			on = v
+		}
+	}
+	return on
 }
