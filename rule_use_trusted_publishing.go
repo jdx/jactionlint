@@ -109,7 +109,8 @@ func (rule *RuleUseTrustedPublishing) checkRun(step *Step, run *ExecRun) {
 		info := trustedPublishing[eco]
 		cred := rule.credentialVar(step, eco)
 		for _, f := range c.Flags {
-			if cred == "" && f.Value != nil && slices.Contains([]string{"--token", "--password", "--api-key", "-p"}, f.Name) && c.Tool != "gh" && !rule.exchangedToken(f.Value.Exprs) {
+			// -p is the password of twine, and the package of cargo (`cargo publish -p crate`)
+			if cred == "" && f.Value != nil && slices.Contains([]string{"--token", "--password", "--api-key", "-p"}, f.Name) && c.Tool != "gh" && (f.Name != "-p" || eco == "pypi") && !rule.exchangedToken(f.Value.Exprs) {
 				cred = f.Name
 			}
 		}

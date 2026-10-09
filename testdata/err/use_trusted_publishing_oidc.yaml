@@ -50,3 +50,8 @@ jobs:
       - run: cargo publish
         env:
           CARGO_REGISTRY_TOKEN: ${{ steps.other.outputs.token }}
+  cargo-package:
+    runs-on: ubuntu-latest
+    steps:
+      # OK: -p is the package of cargo and not a password, and the job can request the OIDC token
+      - run: cargo publish -p my-crate
