@@ -116,6 +116,11 @@ func (s *onlineSession) versionOf(ref *UsesRef) (advisoryVersion, bool, error) {
 	if err != nil {
 		return advisoryVersion{}, false, err
 	}
+	if idx.truncated {
+		// With more tags than were read, the tag which names the exact version may be missing, and "v4" or a
+		// less specific tag would stand for a version which may be an affected one or a patched one.
+		return advisoryVersion{}, false, nil
+	}
 	var sha string
 	switch ref.RefKind {
 	case RefFullSHA:
