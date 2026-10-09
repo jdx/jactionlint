@@ -418,11 +418,14 @@ func (rule *RuleCachePoisoning) checkWrite(m *String) {
 // workflow says what the token may do and grants nothing but read access (`permissions: read-all`, `{}`,
 // `contents: read`), and the job has no environment and calls no reusable workflow. A tag is often only a way to
 // start the checks (pytorch pushes ciflow/* tags), and nothing is published without a write permission, a secret or
-// an environment. A job that runs a publishing command or action is judged by publishingReason. Without
+// an environment, and a job that reads a secret other than GITHUB_TOKEN may have a credential. A job that runs a publishing command or action is judged by publishingReason. Without
 // `permissions:` the token is whatever the repository sets, which is not known, so the job may publish.
 func (rule *RuleCachePoisoning) cannotPublish(j *Job) bool {
 	if j.Environment != nil || j.WorkflowCall != nil {
 		return false
+	}
+	if rule.usesOwnSecret(j) {
+		return false // a secret other than the token of the workflow can be the credential to publish with
 	}
 	p := j.Permissions
 	if p == nil {
@@ -440,6 +443,58 @@ func (rule *RuleCachePoisoning) cannotPublish(j *Job) bool {
 		}
 	}
 	return true
+}
+
+var secretRefRe = regexp.MustCompile(`(?i)\bsecrets(?:\.([a-z_][a-z0-9_-]*)|\s*\[|\b\s*\))`)
+
+// usesOwnSecret reports whether the job, or the env: of the workflow, reads a secret other than GITHUB_TOKEN.
+func (rule *RuleCachePoisoning) usesOwnSecret(j *Job) bool {
+	has := func(s *String) bool {
+		if s == nil || !strings.Contains(s.Value, "secrets") {
+			return false
+		}
+		for _, m := range secretRefRe.FindAllStringSubmatch(s.Value, -1) {
+			if !strings.EqualFold(m[1], "github_token") {
+				return true
+			}
+		}
+		return false
+	}
+	env := func(e *Env) bool {
+		if e == nil {
+			return false
+		}
+		if has(e.Expression) {
+			return true
+		}
+		for _, v := range e.Vars {
+			if v != nil && has(v.Value) {
+				return true
+			}
+		}
+		return false
+	}
+	if env(rule.wf.Env) || env(j.Env) {
+		return true
+	}
+	for _, s := range j.Steps {
+		if s == nil || env(s.Env) {
+			return true
+		}
+		switch e := s.Exec.(type) {
+		case *ExecRun:
+			if has(e.Run) {
+				return true
+			}
+		case *ExecAction:
+			for _, in := range e.Inputs {
+				if in != nil && has(in.Value) {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }
 
 // VisitJobPre is callback when visiting Job node before visiting its children.
