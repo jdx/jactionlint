@@ -568,7 +568,7 @@ func TestBaselineSummaryFormat(t *testing.T) {
 	if status != ExitStatusSuccessProblemFound {
 		t.Errorf("status %d", status)
 	}
-	for _, want := range []string{"3 findings in 1 of 1 files\n", "by rule", "by file", "missing-timeout", "template-injection", ".github/workflows/ci.yaml"} {
+	for _, want := range []string{"3 findings in 1 of 1 files\n", "by rule", "by file", "missing-timeout", "template-injection", filepath.Join(".github", "workflows", "ci.yaml")} {
 		if !strings.Contains(out, want) {
 			t.Errorf("the summary lacks %q:\n%s", want, out)
 		}
