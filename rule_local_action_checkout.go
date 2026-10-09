@@ -15,9 +15,14 @@ var checkoutCommandRegex = regexp.MustCompile(`(?m)\bgit\b[^\n]*\b(clone|init|fe
 // configuration.
 type RuleLocalActionCheckout struct {
 	RuleBase
+	// repo is the "owner/repo" of the repository, lower case, "" when it is not known
+	repo       string
 	checkedOut bool
-	reported   bool
-	handled    map[*Step]bool
+	// populated is whether an earlier step may have put files in the workspace by other means than a checkout
+	// (an artifact, an archive that was extracted)
+	populated bool
+	reported  bool
+	handled   map[*Step]bool
 }
 
 // NewRuleLocalActionCheckout creates a new RuleLocalActionCheckout instance.
@@ -33,6 +38,7 @@ func NewRuleLocalActionCheckout() *RuleLocalActionCheckout {
 // VisitJobPre is callback when visiting Job node before visiting its children.
 func (rule *RuleLocalActionCheckout) VisitJobPre(n *Job) error {
 	rule.checkedOut = false
+	rule.populated = false
 	rule.reported = false
 	rule.handled = nil
 	return nil
@@ -53,6 +59,9 @@ func (rule *RuleLocalActionCheckout) VisitStep(n *Step) error {
 	if rule.checkStep(n, false) {
 		rule.checkedOut = true
 	}
+	if stepPopulatesWorkspace(n) {
+		rule.populated = true
+	}
 	return nil
 }
 
@@ -70,6 +79,11 @@ func (rule *RuleLocalActionCheckout) checkStep(n *Step, checkedOut bool) bool {
 		spec := e.Uses.Value
 		// "$/path" is resolved by the runner without a checkout so it is not subject to this check
 		if strings.HasPrefix(spec, "./") {
+			// An action outside of ".github/" in the workspace can come from an artifact or an archive that
+			// an earlier step unpacked, which is not a checkout
+			if rule.populated && !strings.HasPrefix(spec, "./.github/") {
+				return false
+			}
 			if !checkedOut && !rule.reported {
 				rule.reported = true
 				rule.ReportIDf(
@@ -81,7 +95,7 @@ func (rule *RuleLocalActionCheckout) checkStep(n *Step, checkedOut bool) bool {
 			}
 			return false
 		}
-		return isCheckoutActionSpec(spec) || hasCheckoutInputs(e)
+		return isCheckoutActionSpecIn(spec, rule.repo) || hasCheckoutInputs(e)
 	case *ExecParallel:
 		if rule.handled == nil {
 			rule.handled = map[*Step]bool{}
@@ -101,12 +115,38 @@ func (rule *RuleLocalActionCheckout) checkStep(n *Step, checkedOut bool) bool {
 	return false
 }
 
+// extractCommandRegex matches the commands that unpack files into the workspace.
+var extractCommandRegex = regexp.MustCompile(`(?m)\b(tar|unzip|7z|7za|gunzip|unxz|rsync)\b`)
+
+// stepPopulatesWorkspace reports whether the step may put files in the workspace without a checkout: it downloads an
+// artifact or unpacks an archive.
+func stepPopulatesWorkspace(n *Step) bool {
+	switch e := n.Exec.(type) {
+	case *ExecRun:
+		return e.Run != nil && extractCommandRegex.MatchString(e.Run.Value)
+	case *ExecAction:
+		if e.Uses == nil {
+			return false
+		}
+		name := strings.ToLower(ParseUses(e.Uses.Value).CanonicalName())
+		return name == "actions/download-artifact"
+	}
+	return false
+}
+
 // isCheckoutActionSpec returns whether the `uses:` value looks like an action to check out a repository such as
 // "actions/checkout@v4". What a remote composite action does is unknown without fetching it, so any action whose
 // name contains "checkout" is accepted, in the owner, the repository or the path in the repository:
 // "pytorch/pytorch/.github/actions/checkout-pytorch@main" is a wrapper which checks out. A local action ("./...")
 // is never one, because it needs the checkout itself.
 func isCheckoutActionSpec(spec string) bool {
+	return isCheckoutActionSpecIn(spec, "")
+}
+
+// isCheckoutActionSpecIn is isCheckoutActionSpec for a workflow of the repository ("owner/repo", lower case, or ""
+// when it is not known). A composite action of the repository itself, `uses: owner/repo/.github/actions/prep@main`,
+// is a wrapper that may check the repository out whatever its name is.
+func isCheckoutActionSpecIn(spec, repo string) bool {
 	if strings.HasPrefix(spec, "docker://") || strings.HasPrefix(spec, ".") || strings.HasPrefix(spec, "$/") {
 		return false
 	}
@@ -114,6 +154,9 @@ func isCheckoutActionSpec(spec string) bool {
 	parts := strings.SplitN(s, "/", 3)
 	if len(parts) < 2 {
 		return false
+	}
+	if repo != "" && len(parts) == 3 && strings.EqualFold(parts[0]+"/"+parts[1], repo) && strings.HasPrefix(parts[2], ".github/actions/") {
+		return true
 	}
 	return strings.Contains(strings.ToLower(s), "checkout")
 }
@@ -142,6 +185,10 @@ func init() {
 		RuleInfo{ID: "local-action-checkout", Group: RuleGroupCorrectness, Summary: "A local action is used before any step checks out the repository.", DefaultLevel: SeverityError, Profile: ProfileCorrectness, DocsAnchor: "check-local-action-checkout"},
 	)
 	registerRuleFactory("local-action-checkout", func(env *RuleEnv) []Rule {
-		return []Rule{NewRuleLocalActionCheckout()}
+		r := NewRuleLocalActionCheckout()
+		if env.project != nil {
+			r.repo = githubRepositoryOf(env.project.RootDir())
+		}
+		return []Rule{r}
 	})
 }

@@ -1,0 +1,3 @@
+rules:
+  cache-poisoning: error
+  unpinned-uses: off

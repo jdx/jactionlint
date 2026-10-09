@@ -46,6 +46,12 @@ var tokenUseRe = regexp.MustCompile(`(?i)github_token|github\.token|\bgh_token\b
 // "contents: read" removes every other permission from the GITHUB_TOKEN, which breaks a job
 // commenting on a pull request, publishing a package and so on.
 func fixMissingPermissions(w *Workflow) *Fix {
+	if _, ok := w.FindWorkflowCallEvent(); ok {
+		// A reusable workflow gets at most the permissions its caller grants. Setting "contents: read"
+		// in the callee makes GitHub reject every caller which grants less, and the callers are in
+		// other files, so there is no value that is right to write. The finding stays without a fix.
+		return nil
+	}
 	d := newSrcDoc(w.Source)
 	if d == nil {
 		return nil

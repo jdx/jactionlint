@@ -18,7 +18,7 @@ func sourceLines(src []byte) [][]byte {
 }
 
 // tokenEndColumn returns the column just after the run of non-space characters which starts at the
-// column in the line. The column is 1-based and counts Unicode code points. When there is no
+// column in the line (up to the "}}" of an expression). The column is 1-based and counts Unicode code points. When there is no
 // character at the column, the column itself is returned.
 func tokenEndColumn(line []byte, col int) int {
 	if col <= 0 {
@@ -37,6 +37,9 @@ func tokenEndColumn(line []byte, col int) int {
 		r, w := utf8.DecodeRune(line[i:])
 		if r == ' ' || r == '\t' {
 			break
+		}
+		if r == '}' && end > col && bytes.HasPrefix(line[i:], []byte("}}")) {
+			break // the end of a ${{ }} written without a space before it is not part of the token
 		}
 		i += w
 		end++

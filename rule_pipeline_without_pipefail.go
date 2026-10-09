@@ -142,7 +142,7 @@ func (rule *RulePipelineWithoutPipefail) VisitStep(n *Step) error {
 
 	discarded := discardedSubstitutions(script)
 	for _, p := range script.Pipelines {
-		if p.Negated || p.Tested || pipefailOnAt(events, p.Offset) || pipelineIsDiscarded(p, discarded) {
+		if p.Negated || p.Tested || pipefailOnAt(events, p.Offset) || pipelineIsDiscarded(p, discarded) || readsPipestatus(script, p) {
 			continue
 		}
 		c := hiddenFailure(p)
@@ -191,6 +191,29 @@ func discardedSubstitutions(s *runscript.Script) map[*runscript.Command]bool {
 		}
 	}
 	return m
+}
+
+// readsPipestatus reports whether the command right after the pipeline reads PIPESTATUS, so the script looks at the
+// status of every stage itself: `make | tee log; rc=${PIPESTATUS[0]}`.
+func readsPipestatus(s *runscript.Script, p *runscript.Pipeline) bool {
+	rest := s.Source[p.End:]
+	// the next statement: skip what ends the pipeline, blank lines and comments
+	for {
+		rest = strings.TrimLeft(rest, " \t\r\n;")
+		if !strings.HasPrefix(rest, "#") {
+			break
+		}
+		i := strings.IndexByte(rest, '\n')
+		if i < 0 {
+			return false
+		}
+		rest = rest[i:]
+	}
+	end := strings.IndexAny(rest, ";\n")
+	if end < 0 {
+		end = len(rest)
+	}
+	return strings.Contains(rest[:end], "PIPESTATUS")
 }
 
 // pipelineIsDiscarded reports whether the pipeline is one inside a substitution of discardedSubstitutions.

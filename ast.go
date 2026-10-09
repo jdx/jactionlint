@@ -46,6 +46,10 @@ type String struct {
 	// literal block. 0 means unknown (or not a literal block). When set, positions in the value
 	// can be mapped back to the source.
 	Indent int
+
+	// src is the text of the file the string was parsed from, which maps the offsets of Value to
+	// positions (see valueAt). It is nil for a string that was not parsed from a file.
+	src *scalarSource
 }
 
 // ContainsExpression checks if the given string contains a ${{ }} placeholder or not. This function
@@ -1065,6 +1069,10 @@ type Workflow struct {
 	// ParseAction. The workflow then has no events, permissions or other workflow-level
 	// configuration. The steps of a composite action are in Jobs as one job with Composite set.
 	Action *ActionFile
+	// inheritedSecrets is true when the linter knows that the workflow is a reusable workflow which at least one
+	// workflow of the repository calls and every call passes "secrets: inherit". The secrets that the workflow
+	// declares are then not all it can read.
+	inheritedSecrets bool
 	// Source is the content of the source file. Rules which offer a fix (Error.Fix) read it to turn
 	// positions into byte offsets. It is never nil for a workflow returned by Parse. Do not modify it.
 	Source []byte

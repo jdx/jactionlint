@@ -13,3 +13,7 @@ jobs:
       issues: write
     steps:
       - run: echo label
+  other:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo other

@@ -176,6 +176,12 @@ func TestTemplateInjectionFixes(t *testing.T) {
 		unsafe string // the step after all the fixes; empty when it is the same as safe
 	}{
 		{
+			// Quoting the list makes one item of it, and the script means the items
+			name: "a word list is not quoted",
+			step: "      - run: |\n          for f in ${{ github.event.issue.title }}; do echo \"$f\"; done\n",
+			safe: "      - run: |\n          for f in ${{ github.event.issue.title }}; do echo \"$f\"; done\n",
+		},
+		{
 			name: "double quotes with a new env",
 			step: "      - run: echo \"${{ github.event.issue.title }}\"\n",
 			safe: "      - run: echo \"${ISSUE_TITLE}\"\n        env:\n          ISSUE_TITLE: ${{ github.event.issue.title }}\n",
@@ -317,7 +323,9 @@ func TestTemplateInjectionFixes(t *testing.T) {
 		{
 			name: "yaml quoted string keeps working",
 			step: "      - run: \"echo \\\"${{ github.event.issue.title }}\\\"\"\n",
-			safe: "      - run: \"echo \\\"${{ github.event.issue.title }}\\\"\"\n", // escapes before the expression: left alone
+			// the position of the expression after the escapes is exact, so the fix applies
+			safe:   "      - run: \"echo \\\"${ISSUE_TITLE}\\\"\"\n        env:\n          ISSUE_TITLE: ${{ github.event.issue.title }}\n",
+			unsafe: "      - run: \"echo \\\"${ISSUE_TITLE}\\\"\"\n        env:\n          ISSUE_TITLE: ${{ github.event.issue.title }}\n",
 		},
 		{
 			name:   "bracket test",
@@ -507,5 +515,24 @@ func TestTemplateInjectionInputsFollowTheProfile(t *testing.T) {
 	}
 	if n := count("profile: default\nrules:\n  template-injection: off\n"); n != 0 {
 		t.Errorf("off reports %d", n)
+	}
+}
+
+// An expression twice on a line, once in single quotes (a safe fix) and once unquoted (an unsafe one), is
+// fixed completely in one run of the unsafe mode, and the safe mode leaves only the unsafe one.
+func TestTemplateInjectionFixTwiceOnOneLine(t *testing.T) {
+	src := tiWorkflow("      - run: unzip -n '${{ github.event.issue.title }}/x.zip' -d ${{ github.event.issue.title }}\n")
+	safe, _ := fixAll(t, tiConfig(t), src, FixModeSafe)
+	if !strings.Contains(safe, `''"${ISSUE_TITLE}"'/x.zip' -d ${{ github.event.issue.title }}`) {
+		t.Errorf("safe mode fixes the quoted one only:\n%s", safe)
+	}
+	out, left := fixAll(t, tiConfig(t), src, FixModeUnsafe)
+	if !strings.Contains(out, `''"${ISSUE_TITLE}"'/x.zip' -d "${ISSUE_TITLE}"`) {
+		t.Errorf("both are replaced:\n%s", out)
+	}
+	for _, e := range left {
+		if e.ID == "template-injection" {
+			t.Errorf("a finding is left: %v", e)
+		}
 	}
 }

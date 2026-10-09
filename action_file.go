@@ -102,7 +102,7 @@ func ParseAction(b []byte) (*Workflow, []*Error) {
 		return nil, handleYAMLUnmarshalError(err)
 	}
 
-	p := &parser{lines: strings.Split(string(b), "\n"), syntaxID: actionSyntaxID}
+	p := newParser(strings.Split(string(b), "\n"), actionSyntaxID)
 	w := p.parseAction(&n)
 	w.Comments = NewCommentIndex(b)
 	w.Source = b

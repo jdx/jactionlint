@@ -24,6 +24,10 @@ type RuleGitHubEnv struct {
 	RuleBase
 	runContext
 	step *Step
+	// dest is the file of the write that is judged ("GITHUB_ENV" or "GITHUB_PATH"), validated the variables the
+	// script has checked before it.
+	dest      string
+	validated map[string]bool
 }
 
 // NewRuleGitHubEnv creates a new RuleGitHubEnv instance.
@@ -84,6 +88,8 @@ func (rule *RuleGitHubEnv) checkBash(run *ExecRun) {
 		return
 	}
 	for _, w := range s.WritesTo("GITHUB_ENV", "GITHUB_PATH") {
+		rule.dest = w.Var
+		rule.validated = validatedVars(s, w.Redirect.Offset, w.Var)
 		d := rule.judgeWrite(s, w)
 		rule.report(s, origin, w, d)
 	}
@@ -206,10 +212,14 @@ var benignSubstitutionCommands = map[string]bool{
 // benignSubstitution reports whether the word has command substitutions and all their commands are benign. An
 // arithmetic expansion has no commands and is not judged.
 func benignSubstitution(w *runscript.Word) bool {
-	if len(w.Subs) == 0 {
+	return benignSubs(w.Subs)
+}
+
+func benignSubs(subs []*runscript.Command) bool {
+	if len(subs) == 0 {
 		return false
 	}
-	for _, c := range w.Subs {
+	for _, c := range subs {
 		if !benignSubstitutionCommands[c.Name] || c.Name == "" {
 			return false
 		}
@@ -230,11 +240,28 @@ func (rule *RuleGitHubEnv) judgeWordArgs(s *runscript.Script, w *runscript.Word,
 // judgeWord judges a word of the script: its expressions, and the environment variables and variables of the
 // script it expands.
 func (rule *RuleGitHubEnv) judgeWord(s *runscript.Script, w *runscript.Word, depth int) data {
-	d := rule.judgeExprList(w.Exprs, depth)
+	exprs, vars, subs := w.Exprs, w.Vars, w.Subs
+	if rule.dest != "" {
+		// What a pipeline of the substitution or an expansion has made safe does not count.
+		if cover := sanitizedCommands(w, rule.dest); len(cover) > 0 {
+			subs = nil
+			for _, c := range w.Subs {
+				if !cover[c] {
+					subs = append(subs, c)
+					continue
+				}
+				for _, a := range c.Words {
+					exprs, vars = subtractOnce(exprs, a.Exprs), subtractOnce(vars, a.Vars)
+				}
+			}
+		}
+		vars = subtractOnce(vars, sanitizedExpansions(w.Raw, rule.dest))
+	}
+	d := rule.judgeExprList(exprs, depth)
 	if d.kind == dataUntrusted {
 		return d
 	}
-	if w.Subst && !benignSubstitution(w) {
+	if w.Subst && (len(subs) > 0 || len(w.Subs) == 0) && !benignSubstitution(w) {
 		d = d.worse(data{kind: dataUnknown})
 	}
 	if w.Glob {
@@ -242,7 +269,7 @@ func (rule *RuleGitHubEnv) judgeWord(s *runscript.Script, w *runscript.Word, dep
 	}
 	if w.Subst {
 		// the arguments of the commands of a substitution decide what they print
-		for _, c := range w.Subs {
+		for _, c := range subs {
 			for _, a := range c.Args {
 				d = d.worse(rule.judgeWordArgs(s, a, depth))
 			}
@@ -251,7 +278,7 @@ func (rule *RuleGitHubEnv) judgeWord(s *runscript.Script, w *runscript.Word, dep
 	if len(w.Vars) == 0 && !w.Subst && strings.Contains(w.Raw, "$") && len(w.Exprs) == 0 {
 		return d.worse(data{kind: dataUnknown}) // $1, $@, $$ ...
 	}
-	for _, v := range w.Vars {
+	for _, v := range vars {
 		d = d.worse(rule.judgeVar(s, v, depth))
 		if d.kind == dataUntrusted {
 			return d
@@ -286,7 +313,64 @@ func (rule *RuleGitHubEnv) judgeExpr(e string) data {
 	if rule.wf != nil && rule.wf.Action != nil && exprReadsContext(e, "inputs") {
 		return data{kind: dataUntrusted, input: e}
 	}
+	if rule.mintedByJob(e) {
+		return data{}
+	}
 	return judgeExprs([]string{e})
+}
+
+// mintedTokenActions are actions that create a token of a GitHub App; the token is not data of the event.
+var mintedTokenActions = []string{
+	"actions/create-github-app-token", "tibdex/github-app-token", "peter-murray/workflow-application-token-action",
+	"getsentry/action-github-app-token", "wow-actions/use-app-token",
+}
+
+// mintedByJob reports whether the expression is the token output of a step of the job that mints an app token.
+func (rule *RuleGitHubEnv) mintedByJob(e string) bool {
+	n, ok := parseExprText(e).(*ObjectDerefNode)
+	if !ok || rule.job == nil {
+		return false
+	}
+	path, ok := chainPath(n)
+	parts := strings.Split(path, ".")
+	if !ok || len(parts) != 4 || parts[0] != "steps" || parts[2] != "outputs" || (parts[3] != "token" && parts[3] != "installation-token") {
+		return false
+	}
+	for _, st := range rule.job.Steps {
+		if st.ID == nil || !strings.EqualFold(st.ID.Value, parts[1]) {
+			continue
+		}
+		_, u := stepAction(st)
+		if u == nil {
+			return false
+		}
+		for _, a := range mintedTokenActions {
+			if u.isRepoAction(a) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// readFrom returns the value that the shell builtin read puts in the variable: `IFS=/ read -r OWNER NAME <<< "$X"`.
+func readFrom(s *runscript.Script, name string) (*runscript.Word, bool) {
+	for _, c := range s.Commands {
+		if c.Name != "read" {
+			continue
+		}
+		for _, p := range c.Positional {
+			if p.Value != name {
+				continue
+			}
+			for _, r := range c.Redirects {
+				if r.Op == "<<<" && r.Target != nil {
+					return r.Target, true
+				}
+			}
+		}
+	}
+	return nil, false
 }
 
 // envContextVar returns NAME of an expression that is exactly `env.NAME`.
@@ -307,6 +391,9 @@ func (rule *RuleGitHubEnv) judgeVar(s *runscript.Script, name string, depth int)
 	if depth > 3 {
 		return data{kind: dataUnknown}
 	}
+	if rule.validated[name] {
+		return data{}
+	}
 	assigned := false
 	d := data{}
 	for _, a := range s.Assignments {
@@ -325,6 +412,9 @@ func (rule *RuleGitHubEnv) judgeVar(s *runscript.Script, name string, depth int)
 	}
 	if assigned {
 		return d
+	}
+	if src, ok := readFrom(s, name); ok {
+		return rule.judgeWord(s, src, depth+1)
 	}
 	if v, ok := rule.envValue(rule.step, name); ok {
 		ed := rule.judgeExprList(exprsIn(v.Value), depth+1)
@@ -356,7 +446,10 @@ func (rule *RuleGitHubEnv) checkLines(run *ExecRun) {
 		re = reCmdEnvFile
 	}
 	origin := run.Run.scriptOrigin()
+	lineOff := 0
 	for i, line := range strings.Split(run.Run.Value, "\n") {
+		off := lineOff
+		lineOff += len(line) + 1
 		line = strings.TrimSuffix(line, "\r")
 		m := re.FindStringSubmatchIndex(line)
 		if m == nil {
@@ -373,6 +466,12 @@ func (rule *RuleGitHubEnv) checkLines(run *ExecRun) {
 		d := rule.judgeLine(line[:m[0]] + line[m[1]:])
 		start := origin.Map(i+1, m[0]+1)
 		end := origin.Map(i+1, m[1]+1)
+		if l, c, ok := run.Run.valueAt(off + m[0]); ok {
+			start = runscript.Position{Line: l, Col: c}
+			if l, c, ok := run.Run.valueAt(off + m[1]); ok {
+				end = runscript.Position{Line: l, Col: c}
+			}
+		}
 		rule.emit(d, dest, &Pos{Line: start.Line, Col: start.Col}, &Pos{Line: end.Line, Col: end.Col})
 	}
 }

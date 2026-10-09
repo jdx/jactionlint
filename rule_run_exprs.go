@@ -106,6 +106,11 @@ var trustedPaths = map[string]bool{
 	"github.event.number": true, "github.event.pull_request.number": true,
 	"github.event.pull_request.head.sha": true, "github.event.pull_request.base.sha": true,
 	"github.event.workflow_run.id": true, "github.event.workflow_run.head_sha": true,
+	// timestamps and counters that GitHub sets
+	"github.event.workflow_run.run_started_at": true, "github.event.workflow_run.created_at": true,
+	"github.event.workflow_run.updated_at": true, "github.event.workflow_run.run_number": true,
+	"github.event.workflow_run.run_attempt": true, "github.event.pull_request.created_at": true,
+	"github.event.pull_request.updated_at": true, "github.event.pull_request.id": true,
 }
 
 // trustedContexts are the contexts that are trusted as a whole.

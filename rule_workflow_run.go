@@ -122,6 +122,9 @@ func (rule *RuleWorkflowRun) VisitWorkflowPre(n *Workflow) error {
 					"workflow %q specified at \"workflows\" of \"workflow_run\" event is not found in the repository. a workflow is specified by its \"name:\" or its file path when it has no name",
 					name.Value,
 				)
+				if end, ok := name.endPos(); ok {
+					rule.errs[len(rule.errs)-1].endAt(end) // the whole name, quotes included
+				}
 			}
 		}
 	}

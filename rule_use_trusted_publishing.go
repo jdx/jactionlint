@@ -106,6 +106,9 @@ func (rule *RuleUseTrustedPublishing) checkRun(step *Step, run *ExecRun) {
 		if !ok {
 			continue
 		}
+		if eco == "npm" && rule.npmRegistryIsPrivate(step, s, c) {
+			continue
+		}
 		info := trustedPublishing[eco]
 		cred := rule.credentialVar(step, eco)
 		for _, f := range c.Flags {
@@ -120,6 +123,78 @@ func (rule *RuleUseTrustedPublishing) checkRun(step *Step, run *ExecRun) {
 		start, end := commandRange(s, origin, c)
 		rule.errorIDAt("use-trusted-publishing", start, trustedPublishingMessage(cmd, info.registry, info.instead, cred, granted)).endAt(end)
 	}
+}
+
+// npmRegistrySettings are the keys of the configuration of npm, pnpm and yarn that choose the registry.
+var npmRegistrySettings = []string{"registry", "npmregistryserver", "npmpublishregistry"}
+
+// npmRegistryIsPrivate reports whether the publish goes to a registry other than the public one although the command
+// does not say so: the script set it with `npm config set registry URL` or `yarn config set npmRegistryServer URL`
+// before the command, the step, the job or the workflow set it in the environment, or a step before it ran
+// setup-node with another `registry-url` (GitHub Packages, a registry of your own). Those registries have no trusted
+// publishing.
+func (rule *RuleUseTrustedPublishing) npmRegistryIsPrivate(step *Step, s *runscript.Script, publish *runscript.Command) bool {
+	for _, name := range []string{"npm_config_registry", "YARN_NPM_REGISTRY_SERVER", "YARN_NPM_PUBLISH_REGISTRY"} {
+		for _, env := range []*Env{step.Env, rule.jobEnv(), rule.workflowEnv()} {
+			if env == nil {
+				continue
+			}
+			for key, v := range env.Vars {
+				if strings.EqualFold(key, name) && v != nil && v.Value != nil && !registryValueIsPublic(v.Value.Value) {
+					return true
+				}
+			}
+		}
+	}
+	for _, c := range s.Commands {
+		if c.Offset >= publish.Offset {
+			break
+		}
+		if (c.Tool != "npm" && c.Tool != "yarn" && c.Tool != "pnpm") || len(c.Positional) < 3 {
+			continue
+		}
+		verb := 0
+		if c.Sub(0) == "config" && c.Sub(1) == "set" {
+			verb = 2
+		} else if c.Sub(0) == "set" {
+			verb = 1
+		} else {
+			continue
+		}
+		key, val := c.Positional[verb], c.Positional[verb+1:]
+		if len(val) == 0 {
+			continue
+		}
+		k := strings.ToLower(key.Value)
+		if i := strings.LastIndex(k, ":"); i >= 0 {
+			k = k[i+1:] // @scope:registry
+		}
+		if !key.Dynamic() && slices.Contains(npmRegistrySettings, k) && !registryValueIsPublic(val[0].Value) {
+			return true
+		}
+	}
+	if rule.job == nil {
+		return false
+	}
+	for _, st := range rule.job.Steps {
+		if st == step {
+			break
+		}
+		e, ok := st.Exec.(*ExecAction)
+		if !ok || e.Uses == nil || e.Uses.ContainsExpression() || ParseUses(e.Uses.Value).CanonicalName() != "actions/setup-node" {
+			continue
+		}
+		if r, ok := inputValue(e, "registry-url"); ok && r != "" && !registryValueIsPublic(r) {
+			return true
+		}
+	}
+	return false
+}
+
+// registryValueIsPublic reports whether the value is the public registry of npm or empty. An expression is not.
+func registryValueIsPublic(v string) bool {
+	v = strings.TrimSpace(strings.Trim(strings.TrimSpace(v), `"'`))
+	return v == "" || slices.Contains(publicRegistries, v)
 }
 
 // credentialVar returns the name of the variable of the step that holds a long-lived credential for the registry of
@@ -249,7 +324,7 @@ func (rule *RuleUseTrustedPublishing) checkPowerShell(step *Step, run *ExecRun, 
 				continue
 			}
 			cred := rule.credentialVar(step, p.eco)
-			if m := powerShellTokenRe.FindStringSubmatch(code); cred == "" && m != nil {
+			if m := powerShellTokenRe.FindStringSubmatch(code); cred == "" && m != nil && !rule.exchangedToken(expressionsOf(code)) {
 				cred = strings.ToLower(m[1])
 			}
 			if granted && cred == "" {
@@ -316,6 +391,10 @@ func publishCommand(c *runscript.Command) (eco, cmd string, ok bool) {
 		return "pypi", "uvx twine upload", true
 	case c.Tool == "uv" && pos(0) == "run" && has("twine", "upload"):
 		return "pypi", "uv run twine upload", true
+	case c.Tool == "uv" && pos(0) == "tool" && pos(1) == "run" && has("twine", "upload"):
+		return "pypi", "uv tool run twine upload", true
+	case c.Name == "cargo" && (pos(0) == "mono" || pos(0) == "workspaces") && pos(1) == "publish":
+		return "crates", "cargo " + pos(0) + " publish", true
 	case c.Tool == "pipx" && pos(0) == "run" && len(c.Positional) > 1 && strings.HasPrefix(c.Positional[1].Value, "twine") && has("upload"):
 		return "pypi", "pipx run twine upload", true
 	}

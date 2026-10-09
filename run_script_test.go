@@ -17,9 +17,9 @@ func TestAnalyzeRunPositions(t *testing.T) {
 		{"literal keep", "on: push\njobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - run: |+\n         echo a=1 >> $GITHUB_ENV\n", true},
 		{"literal leading blank", "on: push\njobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - run: |\n\n          echo a=1 >> $GITHUB_ENV\n", true},
 		{"literal expr", "on: push\njobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - run: |\n          echo ${{\n            github.ref\n          }}\n          echo a=1 >> $GITHUB_ENV\n", true},
-		{"plain", "on: push\njobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo a=1 >> $GITHUB_ENV\n", false},
-		{"double quoted", "on: push\njobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - run: \"echo a=1 >> $GITHUB_ENV\"\n", false},
-		{"single quoted", "on: push\njobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - run: 'echo a=1 >> $GITHUB_ENV'\n", false},
+		{"plain", "on: push\njobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo a=1 >> $GITHUB_ENV\n", true},
+		{"double quoted", "on: push\njobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - run: \"echo a=1 >> $GITHUB_ENV\"\n", true},
+		{"single quoted", "on: push\njobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - run: 'echo a=1 >> $GITHUB_ENV'\n", true},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

@@ -165,6 +165,9 @@ func (rule *RuleExpression) checkObfuscation(expr ExprNode, line, col int, workf
 			switch idx.Index.(type) {
 			case *StringNode, *IntNode:
 			default:
+				if v := chainRoot(idx.Index); v != nil && strings.EqualFold(v.Name, "matrix") {
+					return // the matrix is how a workflow selects a value by name, `fromJSON(x)[matrix.tool]`
+				}
 				tok := idx.Index.Token()
 				rule.ReportIDf("obfuscation", rule.exprPos(tok.Line, tok.Column, line, col), "the index is computed, which hides which property is read from tools that look for it. use a literal property name or a matrix to select the value")
 			}

@@ -91,11 +91,12 @@ the fields of an error are the same, and `kind` is still there.
 
 ## Where shellcheck findings are reported
 
-actionlint reports a shellcheck finding at the `run:` key of the step. jactionlint reports it at the line of the script that has
-the problem when `run:` is a literal block (`|`, `|-`, `|+`) and no `${{ }}` in the script spans several lines, which is more precise
-and puts the annotation of a pull request on the right line. For the other ways to write a script (`>`, a plain or quoted
-scalar) it still reports the `run:` line, like actionlint. The column is always that of `run:`, because the indentation of the
-script is not known to the parser; the script line and column from shellcheck are in the message (`SC2086:info:2:5:`).
+actionlint reports a shellcheck finding at the `run:` key of the step. jactionlint reports it at the token of the script that has the
+problem (the `$FOO` of `echo $FOO`), with a region that covers the token, which is more precise and puts the annotation of a pull
+request on the right line and column. This holds for every way to write the script: a literal block (`|`, `|-`, `|+`), a folded block
+(`>`), and a plain, single quoted or double quoted scalar, with escapes (`\n`, `\"`), folded lines and a `${{ }}` that spans several lines.
+The position is the position in the workflow file; the script line and column from shellcheck are still in the message
+(`SC2086:info:2:5:`). When the position cannot be found (the file is not available), the `run:` key is reported as actionlint does.
 
 Things which key on the line of a finding see this difference when moving from actionlint:
 

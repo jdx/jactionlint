@@ -255,6 +255,13 @@ type sarifRegion struct {
 
 type sarifArtifactLocation struct {
 	URI string `json:"uri"`
+	// Index is the position of the file in the artifacts of the run.
+	Index *int `json:"index,omitempty"`
+}
+
+type sarifArtifact struct {
+	Location       sarifArtifactLocation `json:"location"`
+	SourceLanguage string                `json:"sourceLanguage"`
 }
 
 type sarifPhysicalLocation struct {
@@ -298,6 +305,9 @@ type sarifResult struct {
 	Locations  []sarifLocation   `json:"locations"`
 	Fixes      []sarifFix        `json:"fixes,omitempty"`
 	Properties map[string]string `json:"properties,omitempty"`
+	// PartialFingerprints identify the finding by what it says and where it is relative to its own
+	// line, so that code scanning keeps tracking it when lines are added above it.
+	PartialFingerprints map[string]string `json:"partialFingerprints,omitempty"`
 	// Suppressions is set on the findings that the baseline accepts.
 	Suppressions []sarifSuppression `json:"suppressions,omitempty"`
 }
@@ -338,6 +348,7 @@ type sarifRun struct {
 		Driver sarifDriver `json:"driver"`
 	} `json:"tool"`
 	Invocations []sarifInvocation `json:"invocations,omitempty"`
+	Artifacts   []sarifArtifact   `json:"artifacts,omitempty"`
 	ColumnKind  string            `json:"columnKind"`
 	Results     []sarifResult     `json:"results"`
 }
@@ -560,17 +571,27 @@ func (p sarifPrinter) print(w io.Writer, results []fileResult, notes []string) e
 		})
 	}
 
+	artifacts := map[string]int{}
 	for _, r := range results {
 		var accepted editSet
 		x := newLineIndex(r.src)
-		for _, e := range r.errs {
+		fingerprints := sarifFingerprints(r.errs, r.src)
+		for i, e := range r.errs {
+			uri := sarifURI(e.Filepath)
+			ai, ok := artifacts[uri]
+			if !ok {
+				ai = len(run.Artifacts)
+				artifacts[uri] = ai
+				run.Artifacts = append(run.Artifacts, sarifArtifact{Location: sarifArtifactLocation{URI: uri}, SourceLanguage: "yaml"})
+			}
 			res := sarifResult{
 				RuleID:  e.ID,
 				Level:   e.Severity.sarifLevel(),
 				Message: sarifMessage{e.Message},
 				Locations: []sarifLocation{{PhysicalLocation: sarifPhysicalLocation{
-					ArtifactLocation: sarifArtifactLocation{URI: sarifURI(e.Filepath)},
+					ArtifactLocation: sarifArtifactLocation{URI: uri, Index: &ai},
 				}}},
+				PartialFingerprints: map[string]string{"primaryLocationLineHash": fingerprints[i]},
 			}
 			if i, ok := index[e.ID]; ok {
 				res.RuleIndex = &i
@@ -610,6 +631,23 @@ func (p sarifPrinter) print(w io.Writer, results []fileResult, notes []string) e
 	}
 	_, err := w.Write(buf.Bytes())
 	return err
+}
+
+// sarifFingerprints returns the fingerprint of each finding of a file. It is the context hash of the baseline
+// (the rule, the enclosing job or top-level key, and the normalized text of the line, without the message),
+// so it survives lines being added or removed above the finding, a change of the indentation and a rewording
+// of the message. Findings with the same hash are told apart by their number in the file, as code scanning
+// does for its own fingerprints.
+func sarifFingerprints(errs []*Error, src []byte) []string {
+	infos := computeBaselineInfo("", "", src, errs)
+	ret := make([]string, len(errs))
+	seen := map[string]int{}
+	for i, e := range errs {
+		ctx := infos[e].context
+		seen[ctx]++
+		ret[i] = fmt.Sprintf("%s:%d", ctx, seen[ctx])
+	}
+	return ret
 }
 
 // sarifRuleProperties are the properties of a rule in a SARIF log: the tags (the group) and the profile

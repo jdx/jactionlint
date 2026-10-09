@@ -37,7 +37,7 @@ func posAt(n *yaml.Node) *Pos {
 func (p *parser) newString(n *yaml.Node) *String {
 	quoted := n.Style&(yaml.DoubleQuotedStyle|yaml.SingleQuotedStyle) != 0
 	literal := n.Style == yaml.LiteralStyle
-	s := &String{Value: n.Value, Quoted: quoted, Pos: posAt(n), Literal: literal}
+	s := &String{Value: n.Value, Quoted: quoted, Pos: posAt(n), Literal: literal, src: p.scalars}
 	if literal {
 		s.Indent = p.literalIndent(n)
 	}
@@ -109,6 +109,8 @@ type parser struct {
 	errors []*Error
 	// lines are the lines of the source. This is nil when the source is not available.
 	lines []string
+	// scalars lets the strings map their offsets to positions. It is nil when the source is not available.
+	scalars *scalarSource
 	// syntaxID is the ID of the syntax errors. It is "workflow-syntax" when empty.
 	syntaxID string
 	// unexpectedAt are the positions (line, column) of the keys reported as unexpected in a Dependabot configuration.
@@ -117,6 +119,10 @@ type parser struct {
 
 // syntaxCheckKind is the kind of the errors which the parser reports.
 const syntaxCheckKind = "syntax-check"
+
+func newParser(lines []string, syntaxID string) *parser {
+	return &parser{lines: lines, scalars: newScalarSource(lines), syntaxID: syntaxID}
+}
 
 func (p *parser) error(n *yaml.Node, m string) {
 	if p.syntaxID != "" {
@@ -1840,7 +1846,7 @@ func Parse(b []byte) (*Workflow, []*Error) {
 	// Uncomment for checking YAML tree
 	// dumpYAML(&n, 0)
 
-	p := &parser{lines: strings.Split(string(b), "\n")}
+	p := newParser(strings.Split(string(b), "\n"), "")
 	w := p.parse(&n)
 	w.Comments = NewCommentIndex(b)
 	w.Source = b

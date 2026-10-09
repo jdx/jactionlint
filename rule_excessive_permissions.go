@@ -43,6 +43,8 @@ type RuleExcessivePermissions struct {
 	RuleBase
 	// trigger is the name of the privileged trigger of the workflow, or "".
 	trigger string
+	// singleJob is true when the workflow has exactly one job.
+	singleJob bool
 }
 
 // NewRuleExcessivePermissions creates a new RuleExcessivePermissions instance.
@@ -58,6 +60,7 @@ func NewRuleExcessivePermissions() *RuleExcessivePermissions {
 // VisitWorkflowPre is callback when visiting Workflow node before visiting its children.
 func (rule *RuleExcessivePermissions) VisitWorkflowPre(n *Workflow) error {
 	rule.trigger = ""
+	rule.singleJob = len(n.Jobs) == 1
 	for _, e := range n.On {
 		if slices.Contains(privilegedTriggers, e.EventName()) {
 			rule.trigger = e.EventName()
@@ -135,6 +138,20 @@ func (rule *RuleExcessivePermissions) check(p *Permissions, job bool) {
 		}
 		impact := scopeWriteImpact[name]
 		if job {
+			continue
+		}
+		if rule.singleJob {
+			// There is no other job to keep it from: moving the scope to the job would change nothing, so the advice
+			// would be a no-op (zizmor does not report this either). It stays a finding only where people without write
+			// access can start the workflow, with a message that does not ask for the move.
+			if rule.trigger != "" {
+				rule.ReportIDf(
+					"excessive-permissions",
+					s.Name.Pos,
+					"%q lets the job %s, and the workflow runs on %q which people without write access can trigger. check that the job needs it and cannot run untrusted code",
+					name+": write", impact, rule.trigger,
+				)
+			}
 			continue
 		}
 		note := ""

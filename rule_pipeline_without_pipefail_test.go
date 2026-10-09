@@ -40,6 +40,10 @@ func TestRulePipelineWithoutPipefailDetection(t *testing.T) {
 		want int
 	}{
 		{"default shell", pipefailWorkflow("", "run: make | tee out\n"), 1},
+		{"status of the first stage read right after", pipefailWorkflow("", "run: |\n          set +e\n          make 2>&1 | tee out.log\n          status=${PIPESTATUS[0]}\n          exit \"$status\"\n"), 0},
+		{"status of every stage copied right after", pipefailWorkflow("", "run: |\n          make | tee out\n          rc=(\"${PIPESTATUS[@]}\")\n"), 0},
+		{"status read in the next command", pipefailWorkflow("", "run: |\n          make | tee out\n          [ \"${PIPESTATUS[0]}\" -eq 0 ]\n"), 0},
+		{"status read only after another command", pipefailWorkflow("", "run: |\n          make | tee out\n          echo done\n          echo \"${PIPESTATUS[0]}\"\n"), 1},
 		{"quoted single line", pipefailWorkflow("", "run: 'make | tee out'\n"), 1},
 		{"double quoted", pipefailWorkflow("", "run: \"make | tee out\"\n"), 1},
 		{"folded", pipefailWorkflow("", "run: >\n          make\n          | tee out\n"), 1},
