@@ -107,6 +107,12 @@ type Script struct {
 	Redirects []*Redirect
 	// Assignments are all variable assignments (`A=1`, `A=1 cmd`, `export A=1`).
 	Assignments []*Assignment
+	// Guards are the tests at the top level that end the script unless a variable has a checked shape.
+	Guards []*Guard
+	// Totals are the variables that an `if` or `case` at the top level sets on every path.
+	Totals []*Total
+	// ForVars are the variables of `for` loops.
+	ForVars []*ForVar
 
 	splitWords [][2]int // byte ranges of the words of for/select lists and array assignments
 

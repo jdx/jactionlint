@@ -288,8 +288,8 @@ func riskyToolRule(rule, shell, web string) string {
 		switch {
 		case !hasSpec || spec == "" || (hadWild && wild == ""):
 			return fmt.Sprintf("%q lets the agent run any shell command", rule)
-		case hadWild && !strings.ContainsAny(wild, " \t"):
-			cmd := strings.ToLower(wild)
+		case hadWild && onlyFlagsAfterCommand(wild):
+			cmd := strings.ToLower(strings.Fields(wild)[0])
 			if anyCodeCommands[cmd] {
 				return fmt.Sprintf("%q lets the agent run any code through %s", rule, cmd)
 			}
@@ -303,6 +303,41 @@ func riskyToolRule(rule, shell, web string) string {
 		}
 	}
 	return ""
+}
+
+// onlyFlagsAfterCommand reports whether the text is a command, or a command and nothing but flags: the
+// wildcard of `Bash(python -c:*)` still lets the agent give the program any code, which a path or a
+// subcommand (`Bash(git log:*)`) would not.
+func onlyFlagsAfterCommand(text string) bool {
+	f := strings.Fields(text)
+	if len(f) == 0 {
+		return false
+	}
+	for _, w := range f[1:] {
+		if !strings.HasPrefix(w, "-") {
+			return false
+		}
+	}
+	return true
+}
+
+// exprMarker stands for a ${{ }} expression in the text that claudeAllowRules reads.
+const exprMarker = "@@expression@@"
+
+// exprInput returns the value of the input with every ${{ }} replaced by exprMarker.
+func exprInput(e *ExecAction, name string) (string, bool) {
+	in := e.Inputs[name]
+	if in == nil || in.Value == nil {
+		return "", false
+	}
+	v := in.Value.Value
+	if in.Value.ContainsExpression() {
+		spans := scanExprs(in.Value)
+		for i := len(spans) - 1; i >= 0; i-- {
+			v = v[:spans[i].Start] + exprMarker + v[spans[i].End:]
+		}
+	}
+	return v, true
 }
 
 // literalInput returns the value of the input with every ${{ }} replaced by 0, so that settings which only use an
@@ -394,8 +429,8 @@ func claudeSettingsIssues(str *String) []agentIssue {
 // allowed_tools input of the v0 releases.
 func claudeAllowRules(e *ExecAction) []string {
 	var rules []string
-	if s, ok := literalInput(e, "claude_args"); ok {
-		words := shellWords(s.Value)
+	if s, ok := exprInput(e, "claude_args"); ok {
+		words := shellWords(s)
 		for i := 0; i < len(words); i++ {
 			flag, val, hasVal := strings.Cut(words[i], "=")
 			if flag != "--allowedTools" && flag != "--allowed-tools" && flag != "--allowed_tools" {
@@ -409,18 +444,18 @@ func claudeAllowRules(e *ExecAction) []string {
 			}
 		}
 	}
-	if s, ok := literalInput(e, "settings"); ok {
+	if s, ok := exprInput(e, "settings"); ok {
 		var doc struct {
 			Permissions struct {
 				Allow []string `json:"allow"`
 			} `json:"permissions"`
 		}
-		if unmarshalLooseJSON(s.Value, &doc) == nil {
+		if unmarshalLooseJSON(s, &doc) == nil {
 			rules = append(rules, doc.Permissions.Allow...)
 		}
 	}
-	if s, ok := literalInput(e, "allowed_tools"); ok {
-		rules = append(rules, splitToolList(s.Value)...)
+	if s, ok := exprInput(e, "allowed_tools"); ok {
+		rules = append(rules, splitToolList(s)...)
 	}
 	return rules
 }
@@ -430,7 +465,8 @@ func claudeAllowRules(e *ExecAction) []string {
 func restrictedClaude(e *ExecAction) bool {
 	rules := claudeAllowRules(e)
 	for _, r := range rules {
-		if riskyToolRule(r, "Bash", "WebFetch") != "" {
+		// a rule that comes from an expression can be anything
+		if strings.Contains(r, exprMarker) || riskyToolRule(r, "Bash", "WebFetch") != "" {
 			return false
 		}
 	}

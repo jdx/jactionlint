@@ -122,6 +122,11 @@ func TestPitfallArtipacked(t *testing.T) {
 		{"checkout v1 has no such input", pitfallJob("      - uses: actions/checkout@v1\n"), 0},
 		{"checkout v1.0.0", pitfallJob("      - uses: actions/checkout@v1.0.0\n"), 0},
 		{"checkout v2", pitfallJob("      - uses: actions/checkout@v2\n"), 1},
+		{"a push that never runs", pitfallJob("      - uses: actions/checkout@v4\n      - if: false\n        run: git push\n"), 1},
+		{"a push that runs next to one that does not", pitfallJob("      - uses: actions/checkout@v4\n      - if: false\n        run: git push\n      - run: git push\n"), 0},
+		{"checkout v1 pinned to a commit", pitfallJob("      - uses: actions/checkout@544eadc6bf3d226fd7a7a9f0dc5b5bf7ca0675b9 # v1\n"), 0},
+		{"checkout v1.0.0 pinned to a commit", pitfallJob("      - uses: actions/checkout@544eadc6bf3d226fd7a7a9f0dc5b5bf7ca0675b9 # v1.0.0\n"), 0},
+		{"checkout v4 pinned to a commit", pitfallJob("      - uses: actions/checkout@544eadc6bf3d226fd7a7a9f0dc5b5bf7ca0675b9 # v4.1.0\n"), 1},
 	}
 	for _, tc := range tests {
 		t.Run(tc.what, func(t *testing.T) {
@@ -320,6 +325,21 @@ func TestPitfallSuperfluousActionsOnSelfHostedRunners(t *testing.T) {
 		if got := errsWithID(lintFileWithConfig(t, cfg, "ci.yaml", job(runsOn)), "superfluous-actions"); len(got) != 0 {
 			t.Errorf("%s: %v", runsOn, got)
 		}
+	}
+}
+
+// A matrix entry that is self-hosted makes the job a self-hosted one.
+func TestPitfallSuperfluousActionsOnMatrixRunners(t *testing.T) {
+	cfg := pitfallConfig()
+	cfg.Rules["superfluous-actions"] = RuleConfig{Level: SeverityError, Options: map[string]any{"pedantic": true}}
+	job := func(rows string) string {
+		return "on: push\njobs:\n  j:\n    strategy:\n      matrix:\n        r: " + rows + "\n    runs-on: ${{ matrix.r }}\n    steps:\n      - uses: dtolnay/rust-toolchain@stable\n"
+	}
+	if got := errsWithID(lintFileWithConfig(t, cfg, "ci.yaml", job("[ubuntu-24.04, macos-14]")), "superfluous-actions"); len(got) != 1 {
+		t.Errorf("hosted matrix: %v", got)
+	}
+	if got := errsWithID(lintFileWithConfig(t, cfg, "ci.yaml", job("[self-hosted, ubuntu-24.04]")), "superfluous-actions"); len(got) != 0 {
+		t.Errorf("matrix with a self-hosted entry: %v", got)
 	}
 }
 

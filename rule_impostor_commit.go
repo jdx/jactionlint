@@ -112,13 +112,12 @@ func (s *onlineSession) findCommitOrigin(owner, repo, sha string, limit int) (co
 		if found {
 			seen[head] = true
 			ok, err := reachable(head)
-			if errors.Is(err, ErrGitHubNotFound) {
-				return originUnknown, nil // GitHub does not know the commit (or it shares no history)
-			}
-			if err != nil {
+			switch {
+			case errors.Is(err, ErrGitHubNotFound):
+				// No common history with the default branch: the other branches can still have the commit
+			case err != nil:
 				return originUnknown, err
-			}
-			if ok {
+			case ok:
 				return originOwn, nil
 			}
 		}

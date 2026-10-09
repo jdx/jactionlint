@@ -183,6 +183,13 @@ func (rule *RuleAgenticActions) checkSecretsInEnv(job *Job, step *Step, a *ExecA
 		if env == nil {
 			continue
 		}
+		if env.Expression != nil {
+			if ref, src := secretRefOf(env.Expression); ref != nil {
+				rule.ReportIDf("agentic-actions", env.Expression.Pos,
+					"the secret %q is in the environment of %s, which outsiders can steer through the text of this workflow's %q trigger. its shell can print the environment. pass the secret only to the steps that need it, never to the agent, and use the GITHUB_TOKEN of the job with minimal permissions for GitHub",
+					ref.Display(src), agent.Title, trigger)
+			}
+		}
 		names := make([]string, 0, len(env.Vars))
 		for n := range env.Vars {
 			names = append(names, n)
