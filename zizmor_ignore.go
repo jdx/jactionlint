@@ -59,6 +59,9 @@ type zizmorComment struct {
 	line int
 	// start is the byte offset of the "# zizmor: ignore[" text in the line.
 	start int
+	// hash is the byte offset of the '#' which opens the comment. It is before start when the comment starts
+	// with other text ("# note # zizmor: ignore[...]").
+	hash int
 	// inline is true when the comment follows content on its line.
 	inline bool
 	names  []zizmorName
@@ -84,7 +87,7 @@ func scanZizmorComments(src []byte, lines []string) []zizmorComment {
 		if m == nil {
 			continue
 		}
-		zc := zizmorComment{line: c.Line, start: hash + m[0], inline: c.Inline}
+		zc := zizmorComment{line: c.Line, start: hash + m[0], hash: hash, inline: c.Inline}
 		if m[4] >= 0 {
 			zc.reason = strings.TrimSpace(line[hash+m[4] : hash+m[5]])
 		}
@@ -131,7 +134,7 @@ var (
 // the line which opens it applies to the lines it holds.
 func zizmorHeaderRange(lines []string, c zizmorComment) (int, int, bool) {
 	i := c.line - 1
-	head := strings.TrimRight(lines[i][:c.start], " \t")
+	head := strings.TrimRight(lines[i][:c.hash], " \t")
 	isKey := zizmorHeaderKeyRe.MatchString(head)
 	if !c.inline || (!isKey && !zizmorHeaderBlockRe.MatchString(head)) {
 		return 0, 0, false
