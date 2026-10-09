@@ -7,9 +7,10 @@ package jactionlint
 // already checks every expression.
 type RuleTemplateInjection struct {
 	RuleBase
-	src *sourceIndex
-	wf  *Workflow
-	job *Job
+	src    *sourceIndex
+	wf     *Workflow
+	job    *Job
+	matrix map[string]bool // see tiContext.matrix
 }
 
 // NewRuleTemplateInjection creates a new RuleTemplateInjection instance. The source of the file lets
@@ -35,7 +36,7 @@ func (rule *RuleTemplateInjection) VisitWorkflowPre(n *Workflow) error {
 
 // VisitJobPre is callback when visiting Job node before visiting its children.
 func (rule *RuleTemplateInjection) VisitJobPre(n *Job) error {
-	rule.job = n
+	rule.job, rule.matrix = n, nil
 	rule.reportSinks(tiContext{wf: rule.wf, job: n}, jobSinks(n))
 	return nil
 }
@@ -75,7 +76,10 @@ func (rule *RuleTemplateInjection) VisitStep(n *Step) error {
 	if !cfg.RuleEnabled("template-injection") {
 		return nil
 	}
-	ctx := tiContext{wf: rule.wf, job: rule.job, step: n}
+	if rule.matrix == nil {
+		rule.matrix = map[string]bool{} // for the matrix of this job
+	}
+	ctx := tiContext{wf: rule.wf, job: rule.job, step: n, matrix: rule.matrix}
 	rule.reportSinks(ctx, stepSinks(n))
 	for _, code := range codeStringsOf(n) {
 		spans := rule.src.scanExprs(code.Str)
@@ -103,6 +107,8 @@ func (rule *RuleTemplateInjection) VisitStep(n *Step) error {
 				rule.ReportIDf("template-injection", pos, "%q includes potentially untrusted properties such as %q. avoid expanding it in inline scripts. instead, pass the properties you need through environment variables", cl.Ref.Display(sp.Src), cl.Source)
 			case tiEnv:
 				rule.ReportIDf("template-injection", pos, "environment variable %q holds the potentially untrusted input %q. expanding it with ${{ }} in an inline script is as dangerous as using the input directly. instead, read it as a variable of the shell", cl.Ref.Display(sp.Src), cl.Source)
+			case tiInput:
+				rule.ReportIDf("template-injection", pos, "%q is %s, which is not validated and can hold shell syntax. avoid using it directly in inline scripts. instead, pass it through an environment variable. see https://docs.github.com/en/actions/reference/security/secure-use#good-practices-for-mitigating-script-injection-attacks for more details", cl.Ref.Display(sp.Src), cl.Source)
 			case tiTrusted:
 				rule.ReportIDf("template-injection", pos, "%q is expanded with ${{ }} into an inline script. its value is not controlled by an attacker, but an expansion in a script is easy to get wrong when the script changes. instead, read it as a variable of the shell", cl.Ref.Display(sp.Src))
 			default:

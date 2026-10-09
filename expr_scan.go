@@ -210,6 +210,9 @@ func (x *sourceIndex) walkFolded(s *String, base, off int, blockIndent int) (int
 // valuePos it follows the line breaks of a scalar which spans several lines when the source is
 // known. The index can be nil.
 func (x *sourceIndex) valuePosition(s *String, off int) (line, col int) {
+	if x != nil && s.Literal && s.Indent > 0 {
+		return x.literalPosition(s, off)
+	}
 	if x != nil {
 		if base, indent, ok := x.foldedBlockBase(s); ok {
 			if o, ok := x.walkFolded(s, base, off, indent); ok {
@@ -228,6 +231,26 @@ func (x *sourceIndex) valuePosition(s *String, off int) (line, col int) {
 		}
 	}
 	return valuePos(s, off)
+}
+
+// literalPosition is valuePos for a literal block scalar, for many offsets of one string: the line
+// breaks of the value are found once.
+func (x *sourceIndex) literalPosition(s *String, off int) (line, col int) {
+	if x.nlOf != s {
+		x.nlOf, x.nl = s, x.nl[:0]
+		for i := 0; i < len(s.Value); i++ {
+			if s.Value[i] == '\n' {
+				x.nl = append(x.nl, i)
+			}
+		}
+	}
+	off = min(max(off, 0), len(s.Value))
+	n := sort.SearchInts(x.nl, off) // the line breaks before the offset
+	last := -1
+	if n > 0 {
+		last = x.nl[n-1]
+	}
+	return s.Pos.Line + 1 + n, s.Indent + 1 + utf8.RuneCountInString(s.Value[last+1:off])
 }
 
 // foldedBlockBase returns the source offset where the content of a folded block scalar (">") starts,

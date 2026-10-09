@@ -60,31 +60,16 @@ func (idx *scopeIndex) unreachableAt(line int) bool {
 	if idx == nil {
 		return false
 	}
-	var job *jobRange
-	for i := range idx.jobs {
-		if j := &idx.jobs[i]; j.start <= line && line <= j.end {
-			if job != nil {
-				return false // ambiguous: flow style
-			}
-			job = j
-		}
+	jobs := findRange(len(idx.jobs), idx.ordered, func(i int) (int, int) { return idx.jobs[i].start, idx.jobs[i].end }, line)
+	if len(jobs) != 1 {
+		return false // outside every job, or ambiguous: flow style
 	}
-	if job == nil {
-		return false
-	}
+	job := &idx.jobs[jobs[0]]
 	if job.dead {
 		return true
 	}
-	var step *stepRange
-	for i := range job.steps {
-		if s := &job.steps[i]; s.start <= line && line <= s.end {
-			if step != nil {
-				return false
-			}
-			step = s
-		}
-	}
-	return step != nil && step.dead
+	steps := findRange(len(job.steps), job.ordered, func(i int) (int, int) { return job.steps[i].start, job.steps[i].end }, line)
+	return len(steps) == 1 && job.steps[steps[0]].dead
 }
 
 // dropUnreachable removes the findings of the rules which are not about correctness from the jobs and the steps that

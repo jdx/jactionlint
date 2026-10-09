@@ -1,0 +1,1 @@
+test.yaml:11:15: local action "./.github/actions/foo" is used before any checkout step in this job. the repository is not on the runner yet so the action cannot be found. add "actions/checkout" before this step or use "$/" syntax. this is reported because the "local-action-checkout" rule is enabled [local-action-checkout]

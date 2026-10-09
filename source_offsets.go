@@ -2,6 +2,7 @@ package jactionlint
 
 import (
 	"bytes"
+	"sync"
 	"unicode/utf8"
 )
 
@@ -13,6 +14,21 @@ type sourceIndex struct {
 	// valid is false when the source uses a line break other than "\n" or "\r\n", which the YAML parser
 	// counts as a line break and this index does not, so positions cannot be converted reliably.
 	valid bool
+	// crlf is true when the source has a line break written as "\r\n" anywhere.
+	crlf bool
+
+	// nl are the offsets of the line breaks in the value of the string nlOf (see literalPosition).
+	nlOf *String
+	nl   []int
+
+	sitesOnce sync.Once
+	sitesIdx  *yamlSiteIndex
+}
+
+// sites returns the YAML structure of the source, which is parsed once however many offsets are asked.
+func (x *sourceIndex) sites() *yamlSiteIndex {
+	x.sitesOnce.Do(func() { x.sitesIdx = newYAMLSiteIndex(x.src) })
+	return x.sitesIdx
 }
 
 // newSourceIndex indexes the lines of the source.
@@ -22,6 +38,9 @@ func newSourceIndex(src []byte) *sourceIndex {
 		switch {
 		case b == '\n':
 			idx.lineStarts = append(idx.lineStarts, i+1)
+			if i > 0 && src[i-1] == '\r' {
+				idx.crlf = true
+			}
 		case b == '\r' && (i+1 >= len(src) || src[i+1] != '\n'):
 			idx.valid = false
 		}

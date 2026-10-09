@@ -4,6 +4,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 )
 
 //go:generate go run ./scripts/generate-availability ./availability.go
@@ -20,7 +21,7 @@ type typedExpr struct {
 // - https://docs.github.com/en/actions/learn-github-actions/expressions
 type RuleExpression struct {
 	RuleBase
-	literalIndent    int // indentation stripped from the literal block being checked (0 if unknown)
+	origin           *exprOrigin // where the expression being checked comes from
 	matrixTy         *ObjectType
 	stepsTy          *ObjectType
 	needsTy          *ObjectType
@@ -35,6 +36,7 @@ type RuleExpression struct {
 	// The following fields let a template-injection finding carry a fix (see template_injection.go).
 	src       *sourceIndex
 	curJob    *Job
+	tiMatrix  map[string]bool // template injection: the matrix of curJob is looked at once (see tiContext.matrix)
 	curStep   *Step
 	scriptRun *ExecRun // the step when the script being checked is its run: script
 	scriptStr *String  // the script being checked
@@ -220,7 +222,7 @@ func (rule *RuleExpression) VisitWorkflowPost(n *Workflow) error {
 
 // VisitJobPre is callback when visiting Job node before visiting its children.
 func (rule *RuleExpression) VisitJobPre(n *Job) error {
-	rule.curJob = n
+	rule.curJob, rule.tiMatrix = n, map[string]bool{}
 	// Type of needs must be resolved before resolving type of matrix because `needs` context can
 	// be used in matrix configuration.
 	rule.needsTy = rule.calcNeedsType(n)
@@ -299,7 +301,7 @@ func (rule *RuleExpression) VisitJobPre(n *Job) error {
 
 // VisitJobPost is callback when visiting Job node after visiting its children
 func (rule *RuleExpression) VisitJobPost(n *Job) error {
-	rule.curJob = nil
+	rule.curJob, rule.tiMatrix = nil, nil
 	// 'environment' and 'outputs' sections are evaluated after all steps are run
 	if n.Environment != nil {
 		rule.checkString(n.Environment.Name, "jobs.<job_id>.environment")
@@ -444,7 +446,7 @@ func (rule *RuleExpression) checkOneExpression(s *String, what, workflowKey stri
 		return nil
 	}
 
-	ts, ok := rule.checkExprsIn(s.Value, s.Pos, s.Quoted, s.Indent, false, workflowKey)
+	ts, ok := rule.checkExprsIn(s, false, workflowKey)
 	if !ok {
 		return nil
 	}
@@ -613,10 +615,13 @@ func (rule *RuleExpression) checkWorkflowCall(c *WorkflowCall) {
 		var ty ExprType = StringType{}
 		switch len(ts) {
 		case 0:
-			switch v {
-			case "null":
+			switch {
+			case i.Value.Quoted:
+				// A quoted YAML scalar is a string even when its text reads like a bool, a number
+				// or null: "true" passed to a string input is fine.
+			case v == "null":
 				ty = NullType{}
-			case "true", "false":
+			case v == "true" || v == "false":
 				ty = BoolType{}
 			default:
 				if _, err := strconv.ParseFloat(v, 64); err == nil {
@@ -705,7 +710,9 @@ func (rule *RuleExpression) checkIfCondition(str *String, workflowKey string) {
 		}
 	} else {
 		src := str.Value + "}}" // }} is necessary since lexer lexes it as end of tokens
-		line, col := str.Pos.Line, str.Pos.Col
+		rule.origin = &exprOrigin{str: str, text: src}
+		defer func() { rule.origin = nil }()
+		line, col := rule.originPos(0)
 
 		p := NewExprParser()
 		expr, err := p.Parse(NewExprLexer(src))
@@ -738,7 +745,7 @@ func (rule *RuleExpression) checkString(str *String, workflowKey string) []typed
 		return nil
 	}
 
-	ts, ok := rule.checkExprsIn(str.Value, str.Pos, str.Quoted, str.Indent, false, workflowKey)
+	ts, ok := rule.checkExprsIn(str, false, workflowKey)
 	if !ok {
 		return nil
 	}
@@ -754,7 +761,7 @@ func (rule *RuleExpression) checkScriptString(str *String, workflowKey string) {
 
 	rule.scriptStr, rule.fixPlan, rule.planned = str, nil, false
 	defer func() { rule.scriptStr, rule.fixPlan, rule.planned = nil, nil, false }()
-	ts, ok := rule.checkExprsIn(str.Value, str.Pos, str.Quoted, str.Indent, true, workflowKey)
+	ts, ok := rule.checkExprsIn(str, true, workflowKey)
 	if !ok {
 		return
 	}
@@ -794,21 +801,14 @@ func (rule *RuleExpression) checkFloat(f *Float, workflowKey string) {
 	rule.checkNumberExpression(f.Expression, "float number value", workflowKey)
 }
 
-func (rule *RuleExpression) checkExprsIn(s string, pos *Pos, quoted bool, indent int, checkUntrusted bool, workflowKey string) ([]typedExpr, bool) {
-	// When indent is positive, the string is a literal block scalar whose content lines start at the
-	// line after pos with the indentation stripped by the YAML parser. In that case positions are
-	// mapped back to the source. Otherwise (e.g. plain multi-line strings) the line of the string
-	// start is used and the column is just an offset from it.
-	line, col := pos.Line, pos.Col
-	if quoted {
-		col++ // when the string is quoted like 'foo' or "foo", column should be incremented
-	}
-	// Errors on the 2nd or later line of a multi-line expression need the stripped indentation
-	rule.literalIndent = indent
-	defer func() { rule.literalIndent = 0 }()
-	full := s
+func (rule *RuleExpression) checkExprsIn(str *String, checkUntrusted bool, workflowKey string) ([]typedExpr, bool) {
+	// Positions inside the string are mapped back to the source through the position of the string and
+	// the way it is written (see exprOrigin).
+	full := str.Value
+	s := full
 	offset := 0
 	ts := []typedExpr{}
+	defer func() { rule.origin = nil }()
 	for {
 		idx := strings.Index(s, "${{")
 		if idx == -1 {
@@ -818,13 +818,8 @@ func (rule *RuleExpression) checkExprsIn(s string, pos *Pos, quoted bool, indent
 		start := idx + 3 // 3 means removing "${{"
 		s = s[start:]
 		offset += start
-		l, c := line, col+offset
-		if indent > 0 {
-			before := full[:offset]
-			nl := strings.Count(before, "\n")
-			l = pos.Line + 1 + nl
-			c = indent + 1 + offset - (strings.LastIndexByte(before, '\n') + 1)
-		}
+		rule.origin = &exprOrigin{str: str, base: offset, text: s}
+		l, c := rule.originPos(0)
 
 		nerrs := len(rule.errs)
 		ty, offsetAfter, ok := rule.checkSemantics(s, l, c, checkUntrusted, workflowKey)
@@ -835,13 +830,47 @@ func (rule *RuleExpression) checkExprsIn(s string, pos *Pos, quoted bool, indent
 		if ty == nil || offsetAfter == 0 {
 			return nil, true
 		}
-		ts = append(ts, typedExpr{ty, Pos{l, c - 3}})
+		dl, dc := rule.originPos(-len("${{"))
+		ts = append(ts, typedExpr{ty, Pos{dl, dc}})
 
 		s = s[offsetAfter:]
 		offset += offsetAfter
 	}
 
 	return ts, true
+}
+
+// exprOrigin is where the text of the expression which is checked comes from: it starts at the byte
+// offset base of the value of the string, and text is the rest of the value from there.
+type exprOrigin struct {
+	str  *String
+	base int
+	text string
+}
+
+// originPos returns the source position of the byte at the offset delta from the start of the
+// expression text.
+func (rule *RuleExpression) originPos(delta int) (line, col int) {
+	o := rule.origin
+	return rule.src.valuePosition(o.str, min(max(o.base+delta, 0), len(o.str.Value)))
+}
+
+// exprTextOffset converts the line and the column (both 1-based, the column in characters) in the text
+// of an expression to a byte offset of the text. A position past the end gives the end of the text.
+func exprTextOffset(text string, line, col int) int {
+	off := 0
+	for l := 1; l < line; l++ {
+		i := strings.IndexByte(text[off:], '\n')
+		if i < 0 {
+			return len(text)
+		}
+		off += i + 1
+	}
+	for c := 1; c < col && off < len(text) && text[off] != '\n'; c++ {
+		_, w := utf8.DecodeRuneInString(text[off:])
+		off += w
+	}
+	return off
 }
 
 // attachTemplateInjectionFix puts the fix of the expansion which starts at the offset of the script on
@@ -858,7 +887,7 @@ func (rule *RuleExpression) attachTemplateInjectionFix(nerrs, start int) {
 			rule.planned = true
 			rule.fixPlan = planTemplateInjectionFixes(tiFixInput{
 				idx: rule.src,
-				ctx: tiContext{wf: rule.workflow, job: rule.curJob, step: rule.curStep},
+				ctx: tiContext{wf: rule.workflow, job: rule.curJob, step: rule.curStep, matrix: rule.tiMatrix},
 				cfg: rule.config,
 				str: rule.scriptStr,
 				run: rule.scriptRun,
@@ -870,14 +899,18 @@ func (rule *RuleExpression) attachTemplateInjectionFix(nerrs, start int) {
 	}
 }
 
-// exprPos converts a position in an expression to a position in the source. When the expression is in a
-// literal block, the column on lines after the first is relative to the start of the line in the block.
+// exprPos converts a position in an expression to a position in the source. The line and the column
+// are relative to the text of the expression. A multi-line scalar (a block scalar, or a plain or quoted
+// scalar over several lines) is followed line by line, so the position is on the line of the text in
+// the file. The escapes of a quoted scalar and the folding of lines make it approximate (see
+// sourceIndex.valuePosition). lineBase and colBase are the position of the start of the expression,
+// which is used when the origin of the text is not known.
 func (rule *RuleExpression) exprPos(line, col, lineBase, colBase int) *Pos {
-	pos := convertExprLineColToPos(line, col, lineBase, colBase)
-	if line > 1 && rule.literalIndent > 0 {
-		pos.Col = rule.literalIndent + col
+	if o := rule.origin; o != nil {
+		l, c := rule.originPos(exprTextOffset(o.text, line, col))
+		return &Pos{Line: l, Col: c}
 	}
-	return pos
+	return convertExprLineColToPos(line, col, lineBase, colBase)
 }
 
 func (rule *RuleExpression) exprError(err *ExprError, lineBase, colBase int) {
@@ -1244,7 +1277,7 @@ func (rule *RuleExpression) checkRawYAMLValue(v RawYAMLValue) ExprType {
 }
 
 func (rule *RuleExpression) checkRawYAMLString(y *RawYAMLString) ExprType {
-	ts, ok := rule.checkExprsIn(y.Value, y.Pos(), false, 0, false, "jobs.<job_id>.strategy")
+	ts, ok := rule.checkExprsIn(&String{Value: y.Value, Pos: y.Pos()}, false, "jobs.<job_id>.strategy")
 
 	if isExprAssigned(y.Value) {
 		if !ok || len(ts) != 1 {

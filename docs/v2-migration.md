@@ -352,6 +352,10 @@ See [Go API](api.md).
 - **Unknown config keys are fatal** (exit 3), including a rule ID that does not exist.
 - **Legacy `actionlint.yaml`** is read as a jactionlint config with the `default` profile and a one-line note.
 - **Ignore comments at the end of a line now work** (see above).
+- **shellcheck findings are on the line of the script.** For a literal `run: |` block the finding is reported at the line that has the
+  problem, not at the `run:` key as actionlint does. An ignore comment on the step, above `run:` or at the end of the `run: |` line
+  still covers all the lines of the script; only a tool that keeps `file:line` pairs has to be refreshed. See
+  [where shellcheck findings are reported](actionlint.md#where-shellcheck-findings-are-reported).
 - **Fixes of baselined findings.** `-fix` also fixes findings the baseline hides.
 
 ## Related

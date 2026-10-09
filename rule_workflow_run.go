@@ -76,8 +76,9 @@ func readWorkflowNames(dir string, root string) workflowNames {
 // The names must be the names of workflows existing in the same repository.
 type RuleWorkflowRun struct {
 	RuleBase
-	project *Project
-	names   *workflowNames // Lazily read only when needed
+	project  *Project
+	siblings *siblingWorkflows // nil reads the workflows of the project for each file
+	names    *workflowNames    // Lazily read only when needed
 }
 
 // NewRuleWorkflowRun creates a new RuleWorkflowRun instance. This rule is opt-in; it does nothing
@@ -108,7 +109,7 @@ func (rule *RuleWorkflowRun) VisitWorkflowPre(n *Workflow) error {
 				continue // Dynamic or glob pattern
 			}
 			if rule.names == nil {
-				v := readWorkflowNames(rule.project.WorkflowsDir(), rule.project.RootDir())
+				v := rule.siblings.names(rule.project)
 				rule.names = &v
 			}
 			if !rule.names.ok {
@@ -132,6 +133,8 @@ func init() {
 		RuleInfo{ID: "workflow-run-names", Group: RuleGroupCorrectness, Summary: "A workflow_run event refers to a workflow which does not exist in the repository.", DefaultLevel: SeverityError, Profile: ProfileCorrectness, DocsAnchor: "check-workflow-run-names"},
 	)
 	registerRuleFactory("workflow-run", func(env *RuleEnv) []Rule {
-		return []Rule{NewRuleWorkflowRun(env.project)}
+		r := NewRuleWorkflowRun(env.project)
+		r.siblings = env.localActions.siblings()
+		return []Rule{r}
 	})
 }

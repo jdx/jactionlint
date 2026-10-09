@@ -47,6 +47,23 @@ type RuleArtipacked struct {
 	idx *sourceIndex
 	doc *yaml.Node
 	bad bool
+	// steps maps the position of the `uses` value of each step mapping of the document to the step.
+	steps map[[2]int]stepMapping
+	// pending are the fixes which are not verified yet. VisitWorkflowPost checks them together so that a
+	// file with many checkouts is parsed once more, not once more for each.
+	pending []pendingPersistFix
+}
+
+// stepMapping is a mapping node of the document with the path of child indexes from the document to it.
+type stepMapping struct {
+	path []int
+	node *yaml.Node
+}
+
+type pendingPersistFix struct {
+	err  *Error
+	edit TextEdit
+	path []int
 }
 
 // NewRuleArtipacked creates a new RuleArtipacked instance. The source of the file is needed to attach
@@ -67,6 +84,8 @@ func (rule *RuleArtipacked) VisitJobPre(n *Job) error {
 		return nil
 	}
 	steps := flattenSteps(n.Steps)
+	var suffix *stepSuffixFlags
+	uploads := false
 	for i, s := range steps {
 		a, ref := stepAction(s)
 		if a == nil || !ref.isRepoAction("actions/checkout") {
@@ -82,13 +101,19 @@ func (rule *RuleArtipacked) VisitJobPre(n *Job) error {
 			// check reports the version, and nothing here could be done (zizmor#1098)
 			continue
 		}
-		if pushesWithCredentials(steps[i+1:]) && !uploadsWorkspace(steps) {
+		if suffix == nil {
+			// Whether some later step pushes or relies on the credential, for each position: a job with
+			// many checkouts must not scan its steps for each of them.
+			suffix = suffixFlags(steps)
+			uploads = uploadsWorkspace(steps)
+		}
+		if suffix.pushes[i+1] && !uploads {
 			// A later step pushes, and it does so with the credential the checkout left. That is what the
 			// credential is for and nothing uploads the workspace, so there is nothing to leak (zizmor#1043)
 			continue
 		}
 		rule.ReportID("artipacked", a.Uses.Pos, "actions/checkout leaves the GITHUB_TOKEN in the git config of the workspace, where a later step such as an artifact upload can publish it. set \"persist-credentials: false\" under \"with:\" unless a later step needs to push")
-		rule.attachFix(a, steps[i+1:])
+		rule.attachFix(a, suffix.needs[i+1])
 	}
 	return nil
 }
@@ -145,7 +170,7 @@ func uploadsWorkspace(steps []*Step) bool {
 	return false
 }
 
-func (rule *RuleArtipacked) attachFix(a *ExecAction, later []*Step) {
+func (rule *RuleArtipacked) attachFix(a *ExecAction, unsafe bool) {
 	if rule.src == nil {
 		return
 	}
@@ -163,16 +188,90 @@ func (rule *RuleArtipacked) attachFix(a *ExecAction, later []*Step) {
 	if rule.bad {
 		return
 	}
-	edit, ok := persistCredentialsEdit(rule.doc, rule.src, rule.idx, a)
+	if rule.steps == nil {
+		rule.steps = map[[2]int]stepMapping{}
+		indexStepMappings(rule.doc, nil, rule.steps)
+	}
+	edit, path, ok := persistCredentialsEdit(rule.steps, rule.src, rule.idx, a)
 	if !ok {
 		return
 	}
-	unsafe := needsPersistedCredentials(later)
-	rule.errs[len(rule.errs)-1].Fix = &Fix{
+	e := rule.errs[len(rule.errs)-1]
+	e.Fix = &Fix{
 		Description: "Set persist-credentials: false",
 		Unsafe:      unsafe,
 		Edits:       []TextEdit{edit},
 	}
+	rule.pending = append(rule.pending, pendingPersistFix{err: e, edit: edit, path: path})
+}
+
+// VisitWorkflowPost is callback when visiting Workflow node after visiting its children. It verifies
+// the fixes: the file must still be YAML with persist-credentials: false in the same step.
+func (rule *RuleArtipacked) VisitWorkflowPost(n *Workflow) error {
+	pending := rule.pending
+	rule.pending = nil
+	if len(pending) == 0 {
+		return nil
+	}
+	var check func(set []pendingPersistFix)
+	check = func(set []pendingPersistFix) {
+		if persistFixesHold(rule.src, set) {
+			return
+		}
+		if len(set) == 1 {
+			set[0].err.Fix = nil
+			return
+		}
+		check(set[:len(set)/2])
+		check(set[len(set)/2:])
+	}
+	check(pending)
+	return nil
+}
+
+// persistFixesHold applies the edits of the fixes together and reports whether the result is YAML in
+// which every step has persist-credentials: false.
+func persistFixesHold(src []byte, fixes []pendingPersistFix) bool {
+	edits := make([]TextEdit, len(fixes))
+	for i, f := range fixes {
+		edits[i] = f.edit
+	}
+	out := applyEdits(src, edits)
+	var ndoc yaml.Node
+	if err := yaml.Unmarshal(out, &ndoc); err != nil {
+		return false
+	}
+	for _, f := range fixes {
+		nstep := followPath(&ndoc, f.path)
+		if nstep == nil {
+			return false
+		}
+		_, nwith := mappingEntry(nstep, "with")
+		if nwith == nil || nwith.Kind != yaml.MappingNode {
+			return false
+		}
+		_, nv := mappingEntry(nwith, "persist-credentials")
+		if nv == nil || nv.Kind != yaml.ScalarNode || nv.Value != "false" {
+			return false
+		}
+	}
+	return true
+}
+
+// stepSuffixFlags tells for the position i whether some step from i on pushes with the credential of
+// the checkout (pushes) or may rely on it (needs). The slices have one more element than there are steps.
+type stepSuffixFlags struct {
+	pushes, needs []bool
+}
+
+func suffixFlags(steps []*Step) *stepSuffixFlags {
+	f := &stepSuffixFlags{pushes: make([]bool, len(steps)+1), needs: make([]bool, len(steps)+1)}
+	for i := len(steps) - 1; i >= 0; i-- {
+		one := steps[i : i+1]
+		f.pushes[i] = f.pushes[i+1] || pushesWithCredentials(one)
+		f.needs[i] = f.needs[i+1] || needsPersistedCredentials(one)
+	}
+	return f
 }
 
 // needsPersistedCredentials reports whether the steps may rely on the credential that actions/checkout
@@ -199,20 +298,21 @@ func needsPersistedCredentials(steps []*Step) bool {
 	return false
 }
 
-// persistCredentialsEdit computes the edit which makes the checkout step persist-credentials: false. It
-// returns false when the YAML is written in a way that cannot be edited with certainty, and verifies
-// the result by parsing the edited file.
-func persistCredentialsEdit(doc *yaml.Node, src []byte, idx *sourceIndex, a *ExecAction) (TextEdit, bool) {
+// persistCredentialsEdit computes the edit which makes the checkout step persist-credentials: false,
+// with the path to the step in the document. It returns false when the YAML is written in a way that
+// cannot be edited with certainty. The caller verifies the edited file (persistFixesHold).
+func persistCredentialsEdit(steps map[[2]int]stepMapping, src []byte, idx *sourceIndex, a *ExecAction) (TextEdit, []int, bool) {
 	if a.Uses == nil || a.Uses.Pos == nil || !idx.valid {
-		return TextEdit{}, false
+		return TextEdit{}, nil, false
 	}
-	path, step := findStepMapping(doc, nil, a.Uses.Pos.Line, a.Uses.Pos.Col)
-	if step == nil || step.Style&yaml.FlowStyle != 0 {
-		return TextEdit{}, false
+	found, ok := steps[[2]int{a.Uses.Pos.Line, a.Uses.Pos.Col}]
+	step, path := found.node, found.path
+	if !ok || step == nil || step.Style&yaml.FlowStyle != 0 {
+		return TextEdit{}, nil, false
 	}
 	usesKey, usesVal := mappingEntry(step, "uses")
 	if usesKey == nil {
-		return TextEdit{}, false
+		return TextEdit{}, nil, false
 	}
 	nl := idx.newline()
 	withKey, withVal := mappingEntry(step, "with")
@@ -221,14 +321,14 @@ func persistCredentialsEdit(doc *yaml.Node, src []byte, idx *sourceIndex, a *Exe
 	switch {
 	case withKey == nil:
 		if usesVal.Line != usesKey.Line || strings.Contains(usesVal.Value, "\n") {
-			return TextEdit{}, false
+			return TextEdit{}, nil, false
 		}
 		at := idx.lineEnd(usesVal.Line)
 		pad := strings.Repeat(" ", usesKey.Column-1)
 		edit = TextEdit{Start: at, End: at, NewText: nl + pad + "with:" + nl + pad + "  persist-credentials: false"}
 	case withVal.Kind == yaml.ScalarNode && withVal.Tag == "!!null":
 		if withVal.Line != withKey.Line {
-			return TextEdit{}, false
+			return TextEdit{}, nil, false
 		}
 		at := idx.lineEnd(withKey.Line)
 		pad := strings.Repeat(" ", withKey.Column-1+2)
@@ -236,42 +336,24 @@ func persistCredentialsEdit(doc *yaml.Node, src []byte, idx *sourceIndex, a *Exe
 	case withVal.Kind == yaml.MappingNode && withVal.Style&yaml.FlowStyle == 0 && len(withVal.Content) > 0:
 		first := withVal.Content[0]
 		if first.Line == withKey.Line {
-			return TextEdit{}, false
+			return TextEdit{}, nil, false
 		}
 		if k, _ := mappingEntry(withVal, "persist-credentials"); k != nil {
-			return TextEdit{}, false
+			return TextEdit{}, nil, false
 		}
 		// Insert before the first entry but after the `with:` line, so that comments above the first
 		// entry stay with it.
 		if withKey.Line+1 > len(idx.lineStarts) {
-			return TextEdit{}, false
+			return TextEdit{}, nil, false
 		}
 		at := idx.lineStarts[withKey.Line] // the start of the line after `with:`
 		pad := strings.Repeat(" ", first.Column-1)
 		edit = TextEdit{Start: at, End: at, NewText: pad + "persist-credentials: false" + nl}
 	default:
-		return TextEdit{}, false
+		return TextEdit{}, nil, false
 	}
 
-	// Check the result: it must still be YAML with persist-credentials: false in the same step.
-	out := append(append(append([]byte{}, src[:edit.Start]...), edit.NewText...), src[edit.End:]...)
-	var ndoc yaml.Node
-	if err := yaml.Unmarshal(out, &ndoc); err != nil {
-		return TextEdit{}, false
-	}
-	nstep := followPath(&ndoc, path)
-	if nstep == nil {
-		return TextEdit{}, false
-	}
-	_, nwith := mappingEntry(nstep, "with")
-	if nwith == nil || nwith.Kind != yaml.MappingNode {
-		return TextEdit{}, false
-	}
-	_, nv := mappingEntry(nwith, "persist-credentials")
-	if nv == nil || nv.Kind != yaml.ScalarNode || nv.Value != "false" {
-		return TextEdit{}, false
-	}
-	return edit, true
+	return edit, path, true
 }
 
 // mappingEntry returns the key and the value node of the key in a mapping node, or nils.
@@ -287,20 +369,20 @@ func mappingEntry(m *yaml.Node, key string) (*yaml.Node, *yaml.Node) {
 	return nil, nil
 }
 
-// findStepMapping looks for the mapping node which has a `uses` key whose value starts at the position.
-// It returns the node with the path of child indexes from the document to it.
-func findStepMapping(n *yaml.Node, path []int, line, col int) ([]int, *yaml.Node) {
+// indexStepMappings records the mapping nodes which have a `uses` key by the position of its value, with
+// the path of child indexes from the document to the node.
+func indexStepMappings(n *yaml.Node, path []int, into map[[2]int]stepMapping) {
 	if n.Kind == yaml.MappingNode {
-		if k, v := mappingEntry(n, "uses"); k != nil && v.Line == line && v.Column == col {
-			return path, n
+		if k, v := mappingEntry(n, "uses"); k != nil {
+			key := [2]int{v.Line, v.Column}
+			if _, dup := into[key]; !dup {
+				into[key] = stepMapping{path: path, node: n}
+			}
 		}
 	}
 	for i, c := range n.Content {
-		if p, found := findStepMapping(c, append(path[:len(path):len(path)], i), line, col); found != nil {
-			return p, found
-		}
+		indexStepMappings(c, append(path[:len(path):len(path)], i), into)
 	}
-	return nil, nil
 }
 
 func followPath(n *yaml.Node, path []int) *yaml.Node {

@@ -1,0 +1,11 @@
+on: push
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      # ERROR: nothing in the name or the inputs of this action says that it checks out the repository
+      - uses: owner/repo/.github/actions/setup@v1
+        with:
+          version: 1
+      - uses: ./.github/actions/foo

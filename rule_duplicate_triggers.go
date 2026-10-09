@@ -70,10 +70,14 @@ func (rule *RuleDuplicateTriggers) VisitWorkflowPre(n *Workflow) error {
 	if !runsForCommits || rule.deduplicated(n) {
 		return nil
 	}
+	what := "has no branch filter"
+	if !push.Branches.IsEmpty() {
+		what = "matches every branch (the filter \"**\")"
+	}
 	rule.ReportID(
 		"duplicate-triggers",
 		push.Pos,
-		"\"push\" has no branch filter and \"pull_request\" is used too, so a commit pushed to a branch of this repository that has a pull request runs the workflow twice. limit \"push\" to the branches that need it, for example the default branch",
+		"\"push\" "+what+" and \"pull_request\" is used too, so a commit pushed to a branch of this repository that has a pull request runs the workflow twice. limit \"push\" to the branches that need it, for example the default branch",
 	)
 	return nil
 }

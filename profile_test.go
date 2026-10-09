@@ -211,7 +211,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - run: echo ${{ github.event.pull_request.title }}
-      - run: echo ${{ inputs.name }}
+      - run: echo ${{ env.NAME }}
       - run: echo ${{ github.repository }}
         shell: zsh
 `
@@ -340,7 +340,7 @@ func TestUnusedInlineIgnoreOfARetiredID(t *testing.T) {
 		t.Errorf("used: %v", ids)
 	}
 	// A comment for a tier with nothing to suppress is unused
-	wf2 := strings.Replace(retiredIDsWorkflow, "      - run: echo ${{ inputs.name }}\n", "      # jactionlint ignore=template-injection-trusted\n      - run: echo ${{ inputs.name }}\n", 1)
+	wf2 := strings.Replace(retiredIDsWorkflow, "      - run: echo ${{ env.NAME }}\n", "      # jactionlint ignore=template-injection-trusted\n      - run: echo ${{ env.NAME }}\n", 1)
 	baselineProject(t, wf2, "profile: pedantic\n")
 	_, ids, _ = profileCmd(t)
 	if countID(ids, "unused-ignore") != 1 {

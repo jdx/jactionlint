@@ -27,6 +27,13 @@ jobs:
       - run: curl -fsSL https://example.com/x.tar.gz | tar xz
       - run: curl -fsSL https://raw.githubusercontent.com/o/r/0123456789abcdef0123456789abcdef01234567/install.sh | sh
       - run: curl -fsSL http://localhost:8080/install.sh | sh
+      # A script of this repository at the commit that runs the workflow
+      - run: curl -fsSL https://github.com/${GITHUB_REPOSITORY}/raw/${GITHUB_SHA}/tools/release.sh | sh
+      - run: curl -fsSL "https://raw.githubusercontent.com/${{ github.repository }}/${{ github.sha }}/tools/release.sh" | sh
+      # ERROR: the same script from the branch can change under the run
+      - run: curl -fsSL https://github.com/${GITHUB_REPOSITORY}/raw/main/tools/release.sh | sh
+      # ERROR: another repository is not this one
+      - run: curl -fsSL https://github.com/o/r/raw/${GITHUB_SHA}/tools/release.sh | sh
       - run: |
           curl -fsSLo tool https://example.com/tool
           echo "0123456789abcdef  tool" | sha256sum -c -

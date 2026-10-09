@@ -208,13 +208,25 @@ An error object of `json` and `jsonl` has these fields.
 | `line`         | Line number of the start of the error (1-based)                                                                   |
 | `column`       | Column number of the start of the error (1-based, counted in Unicode code points)                                 |
 | `end_line`     | Line number of the end of the region of the error                                                                 |
-| `end_column`   | Column of the last character of the indicator (legacy). SARIF has the exclusive end column of the region          |
+| `end_column`   | Column of the last character of the indicator (legacy, counted in Unicode code points like `column`). SARIF has the exclusive end column of the region |
 | `kind`         | The legacy group of the error such as `expression`                                                                |
 | `id`           | The stable [rule ID](rules.md) such as `template-injection`                                                       |
 | `severity`     | `error`, `warn` or `info`                                                                                         |
 | `doc_url`      | The URL of the documentation of the rule. It is omitted for custom rules                                          |
 | `snippet`      | Code snippet to indicate the position of the error                                                                |
 | `fix`          | The automatic fix of the error: its `description` and the byte-range `edits`. It is omitted when there is no fix  |
+
+#### Lines and columns
+
+Lines and columns are 1-based and columns count Unicode code points (a tab, an accented letter and an emoji are one column each; a CR before
+a LF is not counted), in every format: the SARIF log says `columnKind: unicodeCodePoints`. The region of a finding in the SARIF log
+(and the `EndLine` and `EndColumn` of an error) ends just after its last character.
+
+A finding inside an expression of a multi-line scalar is on the line and at the column of the text in the file. This is exact for a
+literal block (`|`). For a folded block (`>`) and for a plain or quoted scalar over several lines, the position is found by following
+the lines of the scalar through the source, which is exact unless the scalar has escapes (`\n`, `\x41`) before the finding, in which
+case the position on the first line of the scalar is used. The `end_column` of `json` keeps the meaning it had in actionlint, the column
+of the last character of the `^~~~` indicator, but counts code points like `column`.
 
 Before explaining the template details, let's see some examples.
 

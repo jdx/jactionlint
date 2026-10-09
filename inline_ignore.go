@@ -355,26 +355,46 @@ func (c *ignoreComment) removeStale(stale func(*inlineIgnoreEntry) bool) *Fix {
 
 // dropFixesChangingYAML removes the fixes which would change what the YAML file means. Removing a
 // comment does not, except in odd places such as the middle of a multi-line plain scalar, where the
-// comment ends the scalar. The fix is checked by parsing the file with and without it.
+// comment ends the scalar. The fixes are checked by parsing the file with and without them. All fixes
+// are tried together first, so a file with thousands of unused ignore comments is parsed twice, not
+// thousands of times. Only when that changes the file are the fixes split in halves to find the ones
+// which do.
 func dropFixesChangingYAML(src []byte, errs []*Error) {
-	var before any
-	parsed := false
+	var withFix []*Error
 	for _, e := range errs {
-		if e.Fix == nil {
-			continue
-		}
-		if !parsed {
-			parsed = true
-			if yaml.Unmarshal(src, &before) != nil {
-				before = nil
-			}
-		}
-		out, n := applyFixes(src, []*Error{e}, FixModeUnsafe)
-		var after any
-		if n != 1 || before == nil || yaml.Unmarshal(out, &after) != nil || !reflect.DeepEqual(before, after) {
-			e.Fix = nil
+		if e.Fix != nil {
+			withFix = append(withFix, e)
 		}
 	}
+	if len(withFix) == 0 {
+		return
+	}
+	var before any
+	if yaml.Unmarshal(src, &before) != nil {
+		for _, e := range withFix {
+			e.Fix = nil
+		}
+		return
+	}
+	keeps := func(set []*Error) bool {
+		out, n := applyFixes(src, set, FixModeUnsafe)
+		var after any
+		return n == len(set) && yaml.Unmarshal(out, &after) == nil && reflect.DeepEqual(before, after)
+	}
+	var check func(set []*Error)
+	check = func(set []*Error) {
+		if keeps(set) {
+			return
+		}
+		if len(set) == 1 {
+			set[0].Fix = nil
+			return
+		}
+		mid := len(set) / 2
+		check(set[:mid])
+		check(set[mid:])
+	}
+	check(withFix)
 }
 
 // isSequenceItem returns true when the line is a block sequence item ("- ..." or a bare "-").

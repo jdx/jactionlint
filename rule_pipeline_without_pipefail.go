@@ -44,6 +44,7 @@ import (
 type RulePipelineWithoutPipefail struct {
 	RuleBase
 	src           []byte
+	starts        []int // the line starts of src, see buildLineStarts
 	workflowShell *String
 	jobShell      *String
 	nonWindows    bool
@@ -139,8 +140,9 @@ func (rule *RulePipelineWithoutPipefail) VisitStep(n *Step) error {
 	var fix *Fix
 	fixBuilt := false
 
+	discarded := discardedSubstitutions(script)
 	for _, p := range script.Pipelines {
-		if p.Negated || p.Tested || pipefailOnAt(events, p.Offset) {
+		if p.Negated || p.Tested || pipefailOnAt(events, p.Offset) || pipelineIsDiscarded(p, discarded) {
 			continue
 		}
 		c := hiddenFailure(p)
@@ -166,6 +168,44 @@ func (rule *RulePipelineWithoutPipefail) VisitStep(n *Step) error {
 		rule.errs[len(rule.errs)-1].Fix = fix
 	}
 	return nil
+}
+
+// discardedSubstitutions returns the commands inside the command substitutions in the arguments of commands, like the
+// `sha256sum f | cut -d' ' -f1` of `echo "hash=$(sha256sum f | cut -d' ' -f1)"`. The status of such a substitution is
+// not the status of anything: the command that gets the argument runs and has its own status, with or without
+// pipefail, so a failure in the pipeline cannot stop the step. The value of an assignment (`x=$(a | b)`) is different, it
+// is the status of the assignment, and so are the declarations (`local x=$(...)` has the status of local, though).
+func discardedSubstitutions(s *runscript.Script) map[*runscript.Command]bool {
+	var m map[*runscript.Command]bool
+	for _, c := range s.Commands {
+		if c.Name == "" {
+			continue // assignments only
+		}
+		for _, w := range c.Args {
+			for _, sub := range w.Subs {
+				if m == nil {
+					m = map[*runscript.Command]bool{}
+				}
+				m[sub] = true
+			}
+		}
+	}
+	return m
+}
+
+// pipelineIsDiscarded reports whether the pipeline is one inside a substitution of discardedSubstitutions.
+func pipelineIsDiscarded(p *runscript.Pipeline, discarded map[*runscript.Command]bool) bool {
+	if discarded == nil {
+		return false
+	}
+	for _, st := range p.Stages {
+		for _, c := range st.Commands {
+			if discarded[c] {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func hasExprInShell(s *String) bool { return s != nil && s.ContainsExpression() }
@@ -420,7 +460,9 @@ func hiddenFailure(p *runscript.Pipeline) *runscript.Command {
 	for _, st := range p.Stages[foundStage+1:] {
 		for _, c := range st.Commands {
 			// A command in a loop or in a pipeline of its own reads something else, or only a part of the input
-			if c.LoopBody || (c.Pipeline != nil && c.Pipeline != p) {
+			// (a stage of this pipeline is not one of them, even when the pipeline is in the body of a loop:
+			// `for s in a b; do cmd "$s" | grep -q x; done` stops at the first match of every round)
+			if (c.LoopBody && c.Pipeline != p) || (c.Pipeline != nil && c.Pipeline != p) {
 				continue
 			}
 			if stopsReadingEarly(c) {
@@ -516,7 +558,13 @@ func (rule *RulePipelineWithoutPipefail) buildFix(run *String) *Fix {
 	}
 	// The line of "run.Pos" is the one of the "|" header, the content starts at the next line.
 	lineNo := run.Pos.Line + 1 + first
-	start := pipefailLineStart(rule.src, lineNo)
+	if rule.starts == nil {
+		rule.starts = buildLineStarts(rule.src) // once for all the scripts of the file
+	}
+	start := -1
+	if lineNo >= 1 && lineNo <= len(rule.starts) && rule.starts[lineNo-1] < len(rule.src) {
+		start = rule.starts[lineNo-1]
+	}
 	if start < 0 {
 		return nil
 	}
@@ -541,25 +589,6 @@ func (rule *RulePipelineWithoutPipefail) buildFix(run *String) *Fix {
 		Unsafe:      true,
 		Edits:       []TextEdit{{Start: start, End: start, NewText: indent + "set -o pipefail" + nl}},
 	}
-}
-
-// pipefailLineStart returns the byte offset of the start of the 1-based line, -1 if there is no such line.
-func pipefailLineStart(src []byte, line int) int {
-	if line < 1 {
-		return -1
-	}
-	off := 0
-	for i := 1; i < line; i++ {
-		j := bytes.IndexByte(src[off:], '\n')
-		if j < 0 {
-			return -1
-		}
-		off += j + 1
-	}
-	if off >= len(src) {
-		return -1
-	}
-	return off
 }
 
 // runnerIsNotWindows returns whether the job is known to run on Linux or macOS: no label can be Windows and at

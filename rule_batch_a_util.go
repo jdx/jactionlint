@@ -18,18 +18,15 @@ func reportWithFix(r *RuleBase, id string, pos *Pos, msg string, fix *Fix) {
 
 // srcLineStart returns the byte offset of the first byte of the 1-based line, or -1.
 func srcLineStart(src []byte, line int) int {
-	if line < 1 {
+	return newLineIndex(src).startOf(line)
+}
+
+// startOf is srcLineStart for the source of the index.
+func (x *lineIndex) startOf(line int) int {
+	if line < 1 || line > len(x.starts) {
 		return -1
 	}
-	off := 0
-	for i := 1; i < line; i++ {
-		j := bytes.IndexByte(src[off:], '\n')
-		if j < 0 {
-			return -1
-		}
-		off += j + 1
-	}
-	return off
+	return x.starts[line-1]
 }
 
 // srcLineEnd returns the byte offset just after the last byte of the line, excluding its line

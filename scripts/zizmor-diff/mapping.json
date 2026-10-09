@@ -58,7 +58,7 @@
     },
     "template-injection": {
       "coverage": "partial",
-      "notes": "Placeholders in run:, github-script and the code inputs of some well-known actions: attacker controlled contexts and objects holding them (template-injection), env variables set from them, and, with the pedantic option of template-injection (the pedantic persona), every other non-constant expansion. jactionlint also reports attacker controlled placeholders in container and service options, in the args of docker:// steps and in the prompt, arguments and settings of AI agent actions, which zizmor does not.",
+      "notes": "Placeholders in run:, github-script and the code inputs of some well-known actions: attacker controlled contexts and objects holding them (template-injection), free text from outside the workflow (inputs, client_payload, release names, ref_name; not the fixed vocabularies of boolean, number and choice inputs), env variables set from them, and, with the pedantic option of template-injection (the pedantic persona), every other non-constant expansion. jactionlint also reports attacker controlled placeholders in container and service options, in the args of docker:// steps and in the prompt, arguments and settings of AI agent actions, which zizmor does not.",
       "jactionlint": [
         { "rule": "expression", "message_contains": "potentially untrusted" },
         { "rule": "template-injection" }

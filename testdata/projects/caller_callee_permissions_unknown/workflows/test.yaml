@@ -1,0 +1,9 @@
+on:
+  push:
+    branches: [main]
+
+jobs:
+  # The caller sets no permissions, so the token is what the repository setting says. A default token can write
+  # pull requests and contents, but none has id-token
+  caller:
+    uses: ./workflows/reusable.yaml

@@ -1,0 +1,4 @@
+rules:
+  github-env: error
+  unpinned-uses: off
+  pipeline-without-pipefail: off
