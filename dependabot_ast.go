@@ -129,8 +129,10 @@ type DependabotCommitMessage struct {
 type DependabotCooldown struct {
 	// Pos is the position of the "cooldown" key.
 	Pos *Pos
-	// DefaultDays is the "default-days" key.
+	// DefaultDays is the "default-days" key. It is nil when the key is missing or its value is not a valid integer.
 	DefaultDays *Int
+	// HasDefaultDays is whether the "default-days" key is written, valid or not.
+	HasDefaultDays bool
 	// SemverMajorDays is the "semver-major-days" key.
 	SemverMajorDays *Int
 	// SemverMinorDays is the "semver-minor-days" key.
