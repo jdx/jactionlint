@@ -187,7 +187,7 @@ An error object of `json` and `jsonl` has these fields.
 | `line`         | Line number of the start of the error (1-based)                                                                   |
 | `column`       | Column number of the start of the error (1-based, counted in Unicode code points)                                 |
 | `end_line`     | Line number of the end of the region of the error                                                                 |
-| `end_column`   | Column of the last character of the indicator (legacy). SARIF has the exclusive end column of the region          |
+| `end_column`   | Column of the last character of the indicator (legacy, counted in Unicode code points like `column`). SARIF has the exclusive end column of the region |
 | `kind`         | The legacy group of the error such as `expression`                                                                |
 | `id`           | The stable [rule ID](rules.md) such as `template-injection`                                                       |
 | `severity`     | `error`, `warn` or `info`                                                                                         |

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"regexp"
+	"sort"
 	"strings"
 	"unicode/utf8"
 
@@ -216,24 +217,52 @@ func plainRoundTrips(s string) bool {
 // YAMLSiteAt finds out how the scalar which contains the byte offset is written. It returns false
 // when the offset is not inside a scalar, when the source does not parse, or when the context is
 // not one the helpers handle (for instance, a block scalar whose content is empty).
+//
+// Every call parses the whole source. Code which asks about many offsets of one source builds a
+// yamlSiteIndex once instead (sourceIndex.sites does it lazily).
 func YAMLSiteAt(src []byte, off int) (YAMLSite, bool) {
+	return newYAMLSiteIndex(src).at(off)
+}
+
+// yamlSiteIndex answers YAMLSiteAt for one source without parsing it again for every question.
+type yamlSiteIndex struct {
+	src     []byte
+	t       *nodeTable
+	scalars []*yaml.Node // in document order, which is the order of their offsets
+}
+
+// newYAMLSiteIndex parses the source. The result answers false for everything when the source does
+// not parse.
+func newYAMLSiteIndex(src []byte) *yamlSiteIndex {
+	x := &yamlSiteIndex{src: src}
 	docs, err := parseYAMLDocs(src)
 	if err != nil {
-		return YAMLSite{}, false
+		return x
 	}
 	t := newNodeTable(src, docs)
 	if t == nil {
+		return x
+	}
+	x.t = t
+	for _, d := range docs {
+		t.eachScalar(d, func(n *yaml.Node) { x.scalars = append(x.scalars, n) })
+	}
+	return x
+}
+
+func (x *yamlSiteIndex) at(off int) (YAMLSite, bool) {
+	if x == nil || x.t == nil {
 		return YAMLSite{}, false
 	}
-	var best *yaml.Node
-	for _, d := range docs {
-		t.eachScalar(d, func(n *yaml.Node) {
-			if s, e := t.extent(n, n); off >= s && off < e {
-				best = n
-			}
-		})
+	src, t := x.src, x.t
+	// The extent of a scalar ends where the next node starts, so the extents do not overlap and only
+	// the last scalar which starts at or before the offset can contain it.
+	i := sort.Search(len(x.scalars), func(i int) bool { return t.start[x.scalars[i]] > off }) - 1
+	if i < 0 {
+		return YAMLSite{}, false
 	}
-	if best == nil {
+	best := x.scalars[i]
+	if s, e := t.extent(best, best); off < s || off >= e {
 		return YAMLSite{}, false
 	}
 	switch {

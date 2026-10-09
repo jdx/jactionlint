@@ -2,6 +2,7 @@ package jactionlint
 
 import (
 	"bytes"
+	"sync"
 	"unicode/utf8"
 )
 
@@ -13,6 +14,15 @@ type sourceIndex struct {
 	// valid is false when the source uses a line break other than "\n" or "\r\n", which the YAML parser
 	// counts as a line break and this index does not, so positions cannot be converted reliably.
 	valid bool
+
+	sitesOnce sync.Once
+	sitesIdx  *yamlSiteIndex
+}
+
+// sites returns the YAML structure of the source, which is parsed once however many offsets are asked.
+func (idx *sourceIndex) sites() *yamlSiteIndex {
+	idx.sitesOnce.Do(func() { idx.sitesIdx = newYAMLSiteIndex(idx.src) })
+	return idx.sitesIdx
 }
 
 // newSourceIndex indexes the lines of the source.

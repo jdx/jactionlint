@@ -845,7 +845,7 @@ func planTemplateInjectionFixes(in tiFixInput) map[int]*Fix {
 				repl, start, end = `"${`+name+`}"`, start-1, end+1
 			}
 			// The text goes into a YAML scalar: escape it for the way the scalar is written
-			site, ok := YAMLSiteAt(in.idx.src, start)
+			site, ok := in.idx.sites().at(start)
 			if !ok {
 				continue
 			}

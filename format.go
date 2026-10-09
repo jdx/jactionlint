@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
+	"sort"
 	"strings"
 	"unicode/utf8"
 )
@@ -378,21 +379,17 @@ func sarifURI(path string) string {
 // byte offset in the source. A carriage return before a line feed is not counted so that the end of a
 // line is the same position with LF and CRLF.
 func offsetPosition(src []byte, off int) (line, col int) {
-	line, col = 1, 1
-	for i := 0; i < off; {
+	off = min(max(off, 0), len(src))
+	starts := lineStartsOf(src)
+	line = sort.Search(len(starts), func(i int) bool { return starts[i] > off })
+	col = 1
+	for i := starts[line-1]; i < off; {
 		r, w := utf8.DecodeRune(src[i:])
-		switch {
-		case r == '\n':
-			line++
-			col = 1
-		case r == '\r' && i+1 < len(src) && src[i+1] == '\n':
-			// Not counted
-		default:
-			col++
+		if !(r == '\r' && i+1 < len(src) && src[i+1] == '\n') {
+			col++ // a carriage return before a line feed is not counted
 		}
 		i += w
 	}
-	// An offset at the carriage return of CRLF is the end of the line
 	return line, col
 }
 
@@ -408,21 +405,70 @@ func editsConflict(a, b TextEdit) bool {
 	return b.Start < a.End || (b.Start == a.Start && (a.End == a.Start || b.End == b.Start))
 }
 
+// editSet is a set of edits which do not conflict with each other (see editsConflict). It answers
+// whether another edit conflicts with one of them without looking at all of them, so that choosing the
+// fixes of a file with thousands of findings is not quadratic.
+type editSet struct {
+	sorted []TextEdit // ordered by Start; edits which start at one offset are insertions of one fix or identical
+}
+
+// find returns the index of the first edit which starts at or after the offset.
+func (s *editSet) find(start int) int {
+	return sort.Search(len(s.sorted), func(i int) bool { return s.sorted[i].Start >= start })
+}
+
+// has reports whether the identical edit is in the set.
+func (s *editSet) has(e TextEdit) bool {
+	for i := s.find(e.Start); i < len(s.sorted) && s.sorted[i].Start == e.Start; i++ {
+		if s.sorted[i] == e {
+			return true
+		}
+	}
+	return false
+}
+
+// conflicts reports whether the edit conflicts with an edit of the set. An edit identical to one of
+// the set does not.
+func (s *editSet) conflicts(e TextEdit) bool {
+	if s.has(e) {
+		return false
+	}
+	i := s.find(e.Start)
+	// The edits are disjoint, so only the one just before can reach into e.
+	if i > 0 && editsConflict(s.sorted[i-1], e) {
+		return true
+	}
+	// Every edit which starts inside e, or where e starts, conflicts (the identical edit is excluded above).
+	for ; i < len(s.sorted) && s.sorted[i].Start < max(e.End, e.Start+1); i++ {
+		if editsConflict(s.sorted[i], e) {
+			return true
+		}
+	}
+	return false
+}
+
+// add puts the edit in the set. It must not conflict with the set.
+func (s *editSet) add(e TextEdit) {
+	if s.has(e) {
+		return
+	}
+	i := s.find(e.Start)
+	s.sorted = slices.Insert(s.sorted, i, e)
+}
+
 // sarifFixes builds the "fixes" of a result. It returns nil when the error has no fix, when the fix is
 // unsafe, or when its edits are invalid or conflict with the edits which are already in the log. Tools
 // like "hk util sarif-diff" apply the fixes of all results together and give up when any of them is
 // broken, so a fix which could not be applied is better left out: the finding is then reported as one
 // which needs the fixer.
-func sarifFixes(e *Error, src []byte, accepted *[]TextEdit) []sarifFix {
+func sarifFixes(e *Error, src []byte, accepted *editSet) []sarifFix {
 	f := e.Fix
 	if f == nil || f.Unsafe || !f.validFor(src) {
 		return nil
 	}
 	for _, edit := range f.Edits {
-		for _, a := range *accepted {
-			if editsConflict(a, edit) {
-				return nil
-			}
+		if accepted.conflicts(edit) {
+			return nil
 		}
 	}
 
@@ -442,7 +488,7 @@ func sarifFixes(e *Error, src []byte, accepted *[]TextEdit) []sarifFix {
 		r.DeletedRegion = sarifRegion{StartLine: sl, StartColumn: sc, EndLine: el, EndColumn: ec}
 		r.InsertedContent.Text = edit.NewText
 		change.Replacements = append(change.Replacements, r)
-		*accepted = append(*accepted, edit)
+		accepted.add(edit)
 	}
 	desc := f.Description
 	if desc == "" {
@@ -511,7 +557,7 @@ func (p sarifPrinter) print(w io.Writer, results []fileResult, notes []string) e
 	}
 
 	for _, r := range results {
-		var accepted []TextEdit
+		var accepted editSet
 		for _, e := range r.errs {
 			res := sarifResult{
 				RuleID:  e.ID,

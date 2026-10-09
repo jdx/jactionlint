@@ -143,11 +143,9 @@ func (e *Error) GetTemplateFields(source []byte) *ErrorTemplateFields {
 	if len(source) > 0 && e.Line > 0 {
 		if l, ok := e.getLine(source); ok {
 			snippet = l
-			if len(l) >= e.Column-1 {
-				if i := e.getIndicator(l); i != "" {
-					snippet += "\n" + i
-					end = len(i) // Byte length can be used here because this line only contains ASCII
-				}
+			if i, last := e.indicator(l); i != "" {
+				snippet += "\n" + i
+				end = last
 			}
 		}
 	}
@@ -208,7 +206,10 @@ func (e *Error) prettyPrint(w io.Writer, source []byte, showID bool) {
 		return
 	}
 	line, ok := e.getLine(source)
-	if !ok || len(line) < e.Column-1 {
+	if !ok {
+		return
+	}
+	if _, ok := columnInLine(line, e.Column); !ok && e.Column > 0 {
 		return
 	}
 
@@ -221,27 +222,94 @@ func (e *Error) prettyPrint(w io.Writer, source []byte, showID bool) {
 	green.Fprintln(w, e.getIndicator(line))
 }
 
+// getLine returns the text of the line e.Line of the source without its line break. Lines which do
+// not fit the buffer of bufio.Scanner (64 KiB) are not returned, as the text output would be useless.
 func (e *Error) getLine(source []byte) (string, bool) {
-	s := bufio.NewScanner(bytes.NewReader(source))
-	l := 0
-	for s.Scan() {
-		l++
-		if l == e.Line {
-			return s.Text(), true
-		}
+	starts := lineStartsOf(source)
+	if e.Line < 1 || e.Line > len(starts) || starts[e.Line-1] >= len(source) {
+		return "", false
 	}
-	return "", false
+	b := starts[e.Line-1]
+	end := len(source)
+	if e.Line < len(starts) {
+		end = starts[e.Line] // just after the "\n"
+	}
+	line := source[b:end]
+	line = bytes.TrimSuffix(line, []byte("\n"))
+	line = bytes.TrimSuffix(line, []byte("\r"))
+	if len(line) >= bufio.MaxScanTokenSize {
+		return "", false
+	}
+	return string(line), true
+}
+
+// The printers ask for many lines of one source in a row. Scanning the source for each one is quadratic
+// in the number of findings, so the line starts of the last source are remembered.
+var lineStartsCache struct {
+	sync.Mutex
+	src    []byte
+	starts []int
+}
+
+// lineStartsOf returns the byte offset where each line of the source starts. The text after a trailing
+// line break is a line (an empty one).
+func lineStartsOf(src []byte) []int {
+	c := &lineStartsCache
+	c.Lock()
+	defer c.Unlock()
+	if c.starts != nil && len(c.src) == len(src) && (len(src) == 0 || &c.src[0] == &src[0]) {
+		return c.starts
+	}
+	starts := []int{0}
+	for i := 0; i < len(src); {
+		j := bytes.IndexByte(src[i:], '\n')
+		if j < 0 {
+			break
+		}
+		i += j + 1
+		starts = append(starts, i)
+	}
+	c.src, c.starts = src, starts
+	return starts
+}
+
+// columnInLine converts the 1-based column of a line, counted in Unicode code points, to a byte offset
+// of the line. It returns false when the line is too short for the column. The column just after the
+// last character is valid.
+func columnInLine(line string, col int) (int, bool) {
+	if col < 1 {
+		return 0, false
+	}
+	n := 1
+	for i := range line {
+		if n == col {
+			return i, true
+		}
+		n++
+	}
+	return len(line), n == col
 }
 
 func (e *Error) getIndicator(line string) string {
+	ind, _ := e.indicator(line)
+	return ind
+}
+
+// indicator returns the line ^~~~ which underlines the token at the column of the error, and the
+// column of the last character it underlines. The column is counted in code points like Column, while
+// the indicator is padded by the display width of the characters before the column so that it lines
+// up in a terminal.
+func (e *Error) indicator(line string) (string, int) {
 	if e.Column <= 0 {
-		return ""
+		return "", e.Column
+	}
+	start, ok := columnInLine(line, e.Column)
+	if !ok {
+		return "", e.Column
 	}
 
-	start := e.Column - 1 // Column is 1-based
-
-	// Count width of non-space characters after '^' for underline
-	uw := 0
+	// Count the characters and the width of the non-space characters after '^' for the underline
+	uw, chars := 0, 0
 	r := strings.NewReader(line[start:])
 	for {
 		c, s, err := r.ReadRune()
@@ -249,14 +317,19 @@ func (e *Error) getIndicator(line string) string {
 			break
 		}
 		uw += runewidth.RuneWidth(c)
+		chars++
 	}
 	if uw > 0 {
 		uw-- // Decrement for place for '^'
 	}
+	end := e.Column
+	if chars > 0 {
+		end += chars - 1
+	}
 
 	// Count width of spaces before '^'
 	sw := runewidth.StringWidth(line[:start])
-	return fmt.Sprintf("%s^%s", strings.Repeat(" ", sw), strings.Repeat("~", uw))
+	return fmt.Sprintf("%s^%s", strings.Repeat(" ", sw), strings.Repeat("~", uw)), end
 }
 
 func compareErrors(lhs, rhs *Error) int {
