@@ -81,6 +81,10 @@ func urlParts(v string) (scheme, host string, ok bool) {
 		return "", "", false
 	}
 	scheme = strings.ToLower(v[:i])
+	// git+http and svn+http fetch over the scheme after the plus
+	if j := strings.LastIndexByte(scheme, '+'); j >= 0 {
+		scheme = scheme[j+1:]
+	}
 	rest := v[i+3:]
 	if j := strings.IndexAny(rest, "/?#"); j >= 0 {
 		rest = rest[:j]
@@ -134,8 +138,13 @@ func matchesAllowedURL(allow []string, url string) bool {
 		switch {
 		case a == "":
 		case strings.Contains(a, "://"):
-			if strings.HasPrefix(strings.ToLower(url), strings.ToLower(a)) {
-				return true
+			// The prefix ends at a boundary of the URL: https://github.com is not https://github.com.evil.net
+			lu, la := strings.ToLower(url), strings.ToLower(a)
+			if strings.HasPrefix(lu, la) {
+				rest := lu[len(la):]
+				if rest == "" || strings.HasSuffix(la, "/") || strings.ContainsRune("/?#", rune(rest[0])) {
+					return true
+				}
 			}
 		case host != "" && strings.EqualFold(a, host):
 			return true

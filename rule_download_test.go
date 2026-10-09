@@ -80,6 +80,10 @@ func TestUnverifiedDownload(t *testing.T) {
 		{"install -Dm 755", "curl -fsSLo tool https://example.com/tool\nsudo install -Dm 755 tool /usr/local/bin/tool", []int{7}},
 		{"install without a mode", "curl -fsSLo tool https://example.com/tool\nsudo install -t /usr/local/share tool", nil},
 
+		{"python script", "curl -fsSLo install.py https://example.com/install.py\npython3 install.py", []int{7}},
+		{"node script", "curl -fsSLo install.js https://example.com/install.js\nnode install.js", []int{7}},
+		{"perl script", "wget https://example.com/install.pl\nperl install.pl", []int{7}},
+		{"python -c does not run the file", "curl -fsSLo data.json https://example.com/data.json\npython3 -c 'print(1)' data.json", nil},
 		{"curl -k", "curl -k https://example.com/x -o x", []int{7}},
 		{"curl cluster -k", "curl -fsSLk https://example.com/x -o x", []int{7}},
 		{"curl --insecure", "curl --insecure https://example.com/x -o x", []int{7}},
@@ -183,6 +187,9 @@ func TestInsecureURLScheme(t *testing.T) {
 		{"git clone", "git clone git://github.com/o/r", []int{7}},
 		{"git clone http", "git -C dir clone http://example.com/o/r.git", []int{7}},
 		{"git remote add", "git remote add up http://example.com/o/r.git", []int{7}},
+		{"pip vcs url", "pip install git+http://example.com/o/r.git", []int{7}},
+		{"svn vcs url", "pip install svn+http://example.com/o/r", []int{7}},
+		{"vcs url over https", "pip install git+https://example.com/o/r.git", nil},
 		{"pip index", "pip install --index-url http://pypi.example.com/simple pkg", []int{7}},
 		{"pip index equals", "pip install --index-url=http://pypi.example.com/simple pkg", []int{7}},
 		{"npm registry", "npm install --registry http://registry.example.com pkg", []int{7}},
@@ -335,5 +342,36 @@ func TestHasExecMode(t *testing.T) {
 		if got := hasExecMode(m); got != want {
 			t.Errorf("hasExecMode(%q) = %v, want %v", m, got, want)
 		}
+	}
+}
+
+func TestMatchesAllowedURLEndsAtAURLBoundary(t *testing.T) {
+	allow := []string{"https://github.com", "https://get.example.com/"}
+	for url, want := range map[string]bool{
+		"https://github.com":                     true,
+		"https://github.com/o/r":                 true,
+		"https://github.com?x=1":                 true,
+		"https://github.com.evil.net/install.sh": false,
+		"https://github.comx/o":                  false,
+		"https://get.example.com/install":        true,
+		"https://get.example.com.evil.net/x":     false,
+		"HTTPS://GITHUB.COM/o":                   true,
+	} {
+		if got := matchesAllowedURL(allow, url); got != want {
+			t.Errorf("matchesAllowedURL(%q) = %v, want %v", url, got, want)
+		}
+	}
+}
+
+func TestClusteredInsecureFlagIsNamedAlone(t *testing.T) {
+	errs := lintFileWithConfig(t, nil, "ci.yaml", downloadWorkflow("curl -fsSLk https://example.com/x -o x"))
+	var msg string
+	for _, e := range errs {
+		if e.ID == "unverified-download" {
+			msg = e.Message
+		}
+	}
+	if !strings.HasPrefix(msg, `"-k" disables`) || !strings.Contains(msg, `remove "-k" and`) {
+		t.Errorf("the message must name -k alone: %q", msg)
 	}
 }
