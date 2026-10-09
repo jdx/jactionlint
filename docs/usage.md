@@ -841,14 +841,14 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           persist-credentials: false
-      - uses: jdx/jactionlint@v2
+      - uses: jdx/jactionlint@v1.8.2  # x-release-please-version
 ```
 
 Pin the action to a commit hash, like any other, if you want it immutable. These inputs are available:
 
 | Input | Default | Description |
 |-------|---------|-------------|
-| `version` | the release of the action | An exact `X.Y.Z` version of jactionlint. Every release bumps the default, so `jdx/jactionlint@v2.1.0` installs jactionlint 2.1.0 |
+| `version` | the release of the action | An exact `X.Y.Z` version of jactionlint. Every release bumps the default, so `jdx/jactionlint@v2.1.0` installs jactionlint 2.1.0 (the example above shows the current release) |
 | `executable` | | The path of a jactionlint executable to use instead of downloading one, for example one installed by mise |
 | `files` | | Files to check, separated by whitespace. Without it the nearest `.github/workflows` is checked |
 | `profile` | | `correctness`, `default` or `pedantic`. Without it the `profile` of the config file applies |
