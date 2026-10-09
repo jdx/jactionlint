@@ -1,6 +1,7 @@
 package jactionlint
 
 import (
+	"fmt"
 	"regexp"
 	"slices"
 	"strconv"
@@ -174,29 +175,63 @@ func NewRuleCachePoisoning() *RuleCachePoisoning {
 	}
 }
 
+// releaseTrigger tells how the events publish a release ("runs on the release event" or "runs on
+// pushed tags"), or returns "" when they do not. scenarios are the runs of the events that publish.
+func releaseTrigger(events []Event) (why string, scenarios []triggerScenario) {
+	for _, e := range events {
+		ev, ok := e.(*WebhookEvent)
+		if !ok {
+			continue
+		}
+		if e.EventName() == "release" {
+			why = "runs on the release event"
+			scenarios = append(scenarios, scenarioRelease)
+		}
+		if e.EventName() == "push" && !ev.Tags.IsEmpty() {
+			if why == "" {
+				why = "runs on pushed tags"
+			}
+			scenarios = append(scenarios, scenarioTagPush)
+		}
+	}
+	return why, scenarios
+}
+
+// eventScenarios lists one run per event.
+func eventScenarios(events []Event) []triggerScenario {
+	var ret []triggerScenario
+	for _, e := range events {
+		ret = append(ret, triggerScenario{"event_name": e.EventName()})
+	}
+	return ret
+}
+
 // VisitWorkflowPre is callback when visiting Workflow node before visiting its children.
 func (rule *RuleCachePoisoning) VisitWorkflowPre(n *Workflow) error {
 	rule.wf = n
 	rule.releaseWhy, rule.privileged = "", ""
 	rule.scenarios, rule.eventScenarios = nil, nil
 	for _, e := range n.On {
-		name := e.EventName()
-		rule.eventScenarios = append(rule.eventScenarios, triggerScenario{"event_name": name})
-		if slices.Contains(privilegedTriggers, name) && rule.privileged == "" {
+		if name := e.EventName(); slices.Contains(privilegedTriggers, name) && rule.privileged == "" {
 			rule.privileged = name
 		}
-		switch ev := e.(type) {
-		case *WebhookEvent:
-			if name == "release" {
-				rule.releaseWhy = "the workflow runs on the release event"
-				rule.scenarios = append(rule.scenarios, scenarioRelease)
-			}
-			if name == "push" && !ev.Tags.IsEmpty() {
+	}
+	if n.Action == nil {
+		if why, sc := releaseTrigger(n.On); why != "" {
+			rule.releaseWhy, rule.scenarios = "the workflow "+why, sc
+		}
+		rule.eventScenarios = eventScenarios(n.On)
+	} else if c := n.Action.Callers; c.Known() {
+		// The action runs in the context of the workflow which calls it. A caller which releases is enough:
+		// a cache restored there ends up in the published artifacts.
+		for _, cl := range c.Callers {
+			if why, sc := releaseTrigger(cl.Events); why != "" {
 				if rule.releaseWhy == "" {
-					rule.releaseWhy = "the workflow runs on pushed tags"
+					rule.releaseWhy = fmt.Sprintf("%s %s and calls this action", cl.describe(), why)
 				}
-				rule.scenarios = append(rule.scenarios, scenarioTagPush)
+				rule.scenarios = append(rule.scenarios, sc...)
 			}
+			rule.eventScenarios = append(rule.eventScenarios, eventScenarios(cl.Events)...)
 		}
 	}
 	if !rule.Config().RuleEnabled("cache-poisoning") {
@@ -267,8 +302,8 @@ func (rule *RuleCachePoisoning) VisitJobPre(n *Job) error {
 		rule.ReportIDf(
 			"cache-poisoning",
 			a.Uses.Pos,
-			"%s restores a cache although %s, so a poisoned cache entry can end up in the published artifacts. %s, or set \"cache-mode: none\" on the job",
-			name, why, hint,
+			"%s restores a cache although %s, so a poisoned cache entry can end up in the published artifacts. %s, or set \"cache-mode: none\" on the job%s",
+			name, why, hint, callerJob(rule.wf),
 		)
 	}
 	return nil
@@ -354,4 +389,12 @@ func init() {
 	registerRuleFactory("cache-poisoning", func(env *RuleEnv) []Rule {
 		return []Rule{NewRuleCachePoisoning()}
 	})
+}
+
+// callerJob completes "on the job" for the metadata of an action, which has no job of its own.
+func callerJob(w *Workflow) string {
+	if w.Action != nil {
+		return " that calls this action"
+	}
+	return ""
 }

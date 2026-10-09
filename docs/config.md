@@ -119,8 +119,7 @@ extends:
     use of the action has this version. When omitted any version is accepted.
 
   Local actions (`./...` and `$/...`) and Docker images (`docker://...`) never match. Only workflow files are checked; the steps of
-  composite action files (`action.yml`) are not.
-
+  composite action files (`action.yml`) are not (see [composite actions](checks.md#check-composite-actions)).
 - `assume-default-permissions`: Controls how the caller/callee permissions check for local reusable workflow calls
   treats a caller workflow that has no `permissions:` block at the workflow level _and_ no `permissions:` block on
   the calling job. This mirrors the repository-level "Workflow permissions" setting (Settings → Actions → General),

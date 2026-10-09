@@ -1,0 +1,6 @@
+rules:
+  github-env: error
+  untrusted-checkout: error
+  unpinned-uses: off
+  template-injection-expansion: off
+  pipeline-without-pipefail: off

@@ -6,7 +6,8 @@ This document describes how to use [jactionlint](https://github.com/jdx/jactionl
 ## `jactionlint` command
 
 With no argument, jactionlint finds all workflow files in the current repository and checks them. It checks the Dependabot
-configuration `.github/dependabot.yml` (or `.github/dependabot.yaml`) of the repository as well.
+configuration `.github/dependabot.yml` (or `.github/dependabot.yaml`) of the repository and its [composite actions](checks.md#check-composite-actions)
+(`action.yml` in the root, under `.github/actions`, and the directories which a local `uses: ./path` refers to) as well.
 
 ```sh
 jactionlint
@@ -31,6 +32,17 @@ directory. Give it as an argument or use `-stdin-filename` to check it. Workflow
 ```sh
 jactionlint .github/dependabot.yml
 cat dependabot.yml | jactionlint -stdin-filename .github/dependabot.yml -
+```
+
+The metadata of an action is recognized by its name: a file named `action.yml` or `action.yaml` is an action anywhere except under
+`.github/workflows`. Give it as an argument (this is what the `.github/actions/**/action.y*ml` glob of hk does) or use
+`-stdin-filename` to check it. The steps of a composite action are checked with the rules for workflow steps, and the rules which
+depend on how the action is run use the local workflows that call it. Ignore comments, `paths:`, `-format sarif` and `-fix` work as
+for workflows. See [composite actions](checks.md#check-composite-actions).
+
+```sh
+jactionlint .github/actions/setup/action.yml
+cat action.yml | jactionlint -stdin-filename action.yml -
 ```
 
 To know all flags and options, see an output of `jactionlint -h` or [the online command manual][cmd-manual].

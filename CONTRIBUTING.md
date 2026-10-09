@@ -125,6 +125,12 @@ file (`linter.go` and `rule_registry.go` stay untouched). A rule needs these fil
 5. `mise run rules-doc` regenerates `docs/rules.md`, which is generated from the registry and sorted by ID. `hk check --all`
    (and so CI) fails when it is stale (`mise run rules-doc:check` checks only that).
 
+6. Whether the rule applies to `action.yml` files: add the name of its factory to `actionRuleScope` in `rule_action_scope.go`
+   (`actionApplies` for rules that check steps, `actionCallerDependent` when the result depends on the trigger of the calling
+   workflows, `actionNotApplicable` for rules about workflow or job settings) and list its IDs in the table of
+   [composite actions](docs/checks.md#check-composite-actions). `TestActionScopeIsComplete` and `TestActionScopeIsDocumented` fail
+   until both are done. A caller-dependent rule reads the trigger with `Workflow.TriggerEvents` instead of `Workflow.On`.
+
 An online rule (`Online: true` in its `RuleInfo`, enabled only by `-online`) takes the `onlineSession` from the `RuleEnv` in its
 factory and returns nothing when it is nil. It never talks to the network in tests: the golden files named `*_online` in
 `testdata/err` and `testdata/examples` are linted with the answers recorded in `testdata/online/github.json`, served by

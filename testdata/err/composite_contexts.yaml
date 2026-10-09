@@ -1,0 +1,30 @@
+name: Contexts
+description: The contexts a composite action can read
+inputs:
+  Who:
+    description: Who to greet
+    default: ${{ github.actor }}
+  other:
+    description: Another input
+outputs:
+  greeting:
+    description: The greeting
+    value: ${{ steps.greet.outputs.text }}
+  broken:
+    description: Refers to a step that does not exist
+    value: ${{ steps.missing.outputs.text }}
+runs:
+  using: composite
+  steps:
+    - id: greet
+      run: echo "text=hello ${{ inputs.who }} ${{ inputs.OTHER }}" >> "$GITHUB_OUTPUT"
+      shell: bash
+    - run: echo "${{ secrets.TOKEN }}"
+      shell: bash
+    - run: echo "${{ inputs.unknown }}"
+      shell: bash
+    - run: echo "${{ runner.os }} ${{ vars.NAME }} ${{ env.HOME }} ${{ job.status }} ${{ steps.greet.outputs.text }}"
+      shell: bash
+    - if: ${{ always() && failure() }}
+      run: echo failed
+      shell: bash

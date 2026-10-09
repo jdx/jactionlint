@@ -305,7 +305,7 @@ func jobRefs(j *Job) *refSet {
 // webhookEvents returns the webhook events of the workflow by name.
 func webhookEvents(w *Workflow, names ...string) []*WebhookEvent {
 	var ret []*WebhookEvent
-	for _, e := range w.On {
+	for _, e := range w.TriggerEvents() {
 		we, ok := e.(*WebhookEvent)
 		if !ok || we.Hook == nil {
 			continue
@@ -322,7 +322,7 @@ func webhookEvents(w *Workflow, names ...string) []*WebhookEvent {
 
 // hasEvent reports whether the workflow is triggered by one of the events.
 func hasEvent(w *Workflow, names ...string) bool {
-	for _, e := range w.On {
+	for _, e := range w.TriggerEvents() {
 		for _, n := range names {
 			if e.EventName() == n {
 				return true

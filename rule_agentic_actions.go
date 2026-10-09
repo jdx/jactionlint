@@ -62,7 +62,7 @@ func NewRuleAgenticActions(anyTrigger bool) *RuleAgenticActions {
 // VisitWorkflowPre is callback when visiting Workflow node before visiting its children.
 func (rule *RuleAgenticActions) VisitWorkflowPre(n *Workflow) error {
 	rule.wf, rule.trigger, rule.gateTrigger, rule.checkoutTrigger = n, "", "", ""
-	for _, e := range n.On {
+	for _, e := range n.TriggerEvents() {
 		name := e.EventName()
 		if agentUntrustedTriggers[name] && rule.trigger == "" {
 			rule.trigger = name

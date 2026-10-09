@@ -32,6 +32,20 @@ func NewRuleUnpinnedImages() *RuleUnpinnedImages {
 // matrixImageRegex matches an image which is the value of one matrix variable.
 var matrixImageRegex = regexp.MustCompile(`^\$\{\{\s*matrix\.([A-Za-z0-9_-]+)\s*\}\}$`)
 
+// VisitWorkflowPre is callback when visiting Workflow node before visiting its children. It checks the
+// "image" of a Docker action (action.yml), which is a registry image when it starts with "docker://"
+// and a Dockerfile otherwise.
+func (rule *RuleUnpinnedImages) VisitWorkflowPre(n *Workflow) error {
+	if n.Action == nil || n.Action.Runs == nil || n.Action.Runs.Image == nil || !rule.Config().RuleEnabled("unpinned-images") {
+		return nil
+	}
+	img := n.Action.Runs.Image
+	if ref, ok := strings.CutPrefix(img.Value, "docker://"); ok {
+		rule.checkImage(ref, img.Pos, func(image string) string { return fmt.Sprintf("image %q of this Docker action", image) })
+	}
+	return nil
+}
+
 // VisitJobPre is callback when visiting Job node before visiting its children.
 func (rule *RuleUnpinnedImages) VisitJobPre(n *Job) error {
 	if !rule.Config().RuleEnabled("unpinned-images") {

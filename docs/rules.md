@@ -25,6 +25,7 @@ rules:
 
 | ID | Group | Default level | Profile |
 | --- | --- | --- | --- |
+| [action-syntax](#action-syntax) | correctness | error | default |
 | [adhoc-packages](#adhoc-packages) | security | warn | default |
 | [agentic-actions](#agentic-actions) | security | error | default |
 | [anonymous-definition](#anonymous-definition) | policy | warn | strict |
@@ -157,6 +158,15 @@ rules:
 | [workflow-run-names](#workflow-run-names) | correctness | error | default |
 | [workflow-syntax](#workflow-syntax) | correctness | error | default |
 | [yaml-syntax](#yaml-syntax) | correctness | error | default |
+
+## action-syntax
+
+The action metadata does not follow the syntax of action.yml.
+
+- Group: correctness
+- Default level: error
+- Profile: default
+- Details and examples: [checks](./checks.md#check-composite-action-syntax)
 
 ## adhoc-packages
 

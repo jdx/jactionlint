@@ -1,0 +1,15 @@
+name: composite-syntax
+description: Composite action with mistakes
+runs:
+  using: composite
+  main: index.js
+  steps:
+    - run: echo no shell
+    - uses: actions/checkout@v4
+      shell: bash
+    - run: echo
+      shell: bash
+      id: dup
+    - run: echo
+      shell: bash
+      id: dup

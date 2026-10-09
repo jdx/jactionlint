@@ -20,11 +20,12 @@ func absPath(path string) string {
 }
 
 // findProject creates new Project instance by finding a project which the given path belongs to.
-// A project must be a Git repository and have ".github/workflows" directory.
+// A project must be a Git repository and have a ".github/workflows" directory, an "action.yml" at its root
+// or a ".github/actions" directory.
 func findProject(path string) (*Project, error) {
 	d := absPath(path)
 	for {
-		if s, err := os.Stat(filepath.Join(d, ".github", "workflows")); err == nil && s.IsDir() {
+		if hasProjectContent(d) {
 			if _, err := os.Stat(filepath.Join(d, ".git")); err == nil { // Note: .git may be a file
 				return NewProject(d)
 			}
@@ -36,6 +37,21 @@ func findProject(path string) (*Project, error) {
 		}
 		d = p
 	}
+}
+
+// hasProjectContent reports whether the directory has workflows or actions to check.
+func hasProjectContent(d string) bool {
+	for _, dir := range []string{filepath.Join(".github", "workflows"), filepath.Join(".github", "actions")} {
+		if s, err := os.Stat(filepath.Join(d, dir)); err == nil && s.IsDir() {
+			return true
+		}
+	}
+	for _, name := range actionFileNames {
+		if s, err := os.Stat(filepath.Join(d, name)); err == nil && !s.IsDir() {
+			return true
+		}
+	}
+	return false
 }
 
 // NewProject creates a new instance with a file path to the root directory of the repository.
@@ -117,4 +133,12 @@ func (ps *Projects) At(path string) (*Project, error) {
 	}
 
 	return p, nil
+}
+
+// ActionFiles returns the paths of the metadata files (action.yml or action.yaml) of the local actions
+// of the project: the one in the root, the ones under ".github/actions" and the ones which a local
+// `uses: ./path` of a workflow or of another action refers to. The paths are absolute and sorted.
+// It reads the workflows and the actions of the project on every call; the linter keeps what it read.
+func (p *Project) ActionFiles() []string {
+	return newCallGraph(p.root).actionPaths()
 }

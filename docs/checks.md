@@ -99,6 +99,8 @@ List of checks:
 - [Mutable runner labels (pedantic)](#check-mutable-runner-label)
 - [Invisible characters](#check-invisible-characters)
 - [Unsound prefix matches on names](#check-unsound-prefix-match)
+- [Composite actions](#check-composite-actions)
+- [Composite action syntax](#check-composite-action-syntax)
 
 Note that jactionlint focuses on catching mistakes in workflow files. If you want some general code style checks, please consider
 using a general YAML checker like [yamllint][].
@@ -7191,6 +7193,142 @@ A label in a matrix is reported but never fixed, because the same value may be c
 [self-hosted-runner]: https://docs.github.com/en/actions/hosting-your-own-runners/about-self-hosted-runners
 [action-uses-doc]: https://docs.github.com/en/actions/learn-github-actions/workflow-syntax-for-github-actions#jobsjob_idstepsuses
 [dependabot-doc]: https://docs.github.com/en/code-security/dependabot/working-with-dependabot/keeping-your-actions-up-to-date-with-dependabot
+<a id="check-composite-actions"></a>
+## Composite actions
+
+jactionlint checks the metadata of actions (`action.yml` or `action.yaml`) together with the workflows. When the repository is
+linted without file arguments it checks the action in the root of the repository, every action under `.github/actions`, and every
+directory which a local `uses: ./path` of a workflow or of another action refers to. An action is also checked when its file is given
+explicitly (`jactionlint .github/actions/setup/action.yml`, which is what the [hk][hk] step does for `.github/actions/**/action.y*ml`)
+or with `-stdin-filename`. The file is recognized by its name: `action.yml` and `action.yaml` are actions anywhere except under
+`.github/workflows`. Output formats, [ignore comments](usage.md#ignore-some-errors), `paths:` in [the configuration](config.md),
+SARIF and `-fix` work for them like for workflows.
+
+The `steps` of a composite action (`runs.using: composite`) are checked with the same rules as the steps of a workflow job, and
+the rule IDs are the same. Actions that run JavaScript (`node20`, `node24`, ...) or a container (`docker`) have no steps: only their
+metadata is checked (the syntax, and the `docker://` image of a Docker action by `unpinned-images`).
+
+What differs from a workflow:
+
+- Every `run:` step must have `shell:` because a composite action has no default shell. A missing one is an error of
+  `action-syntax`, so the opt-in `require-shell` is not used for actions.
+- The `inputs` context has the inputs declared in the `inputs:` section (all of them are strings), and `outputs.<id>.value` can read
+  the `steps` context. The `secrets` context is not available: [secrets must be passed as an input][contexts-doc].
+- There is no `on:`, `permissions:`, `runs-on:`, `needs:`, `timeout-minutes:` or `concurrency:`: they belong to the workflow that calls
+  the action, so the rules about them are not applied to actions.
+
+**Caller-aware rules.** Some findings depend on how the action is run, which only the calling workflow knows. For every action
+jactionlint finds the local workflows which call it with `uses: ./path`, also through other local actions and reusable workflows
+(`uses: ./.github/workflows/build.yml`; a reusable workflow runs in the context of the workflow that calls it). Cycles, like an action
+that calls itself, are followed once. The context of an action is the most dangerous one among its callers: an action called from
+a `pull_request` workflow and from a `pull_request_target` workflow is judged as if it only ran in the second one. The message names
+the workflow, for example `.github/workflows/release.yml runs on the release event and calls this action`.
+
+- `cache-poisoning` reports a restored cache when a calling workflow runs on `release` or on pushed tags.
+- `bot-conditions` offers its fix (which needs a pull request event) only when every caller runs on a pull request event.
+- `github-env`, `untrusted-checkout`, `untrusted-artifact` and `agentic-actions` look at the events of the callers like they look at the events of a workflow: `github-env` and `untrusted-checkout` need a caller that runs on `pull_request_target` (or `workflow_run`), `untrusted-artifact` one that runs on `workflow_run`, and `agentic-actions` one that outsiders can steer.
+- `template-injection`, `template-injection-expansion` and `template-injection-trusted` add the calling workflow to the message when it
+  runs on a trigger that an outsider controls (`pull_request_target`, `workflow_run`, `issue_comment`, `issues`, comments and reviews).
+
+When no local workflow calls the action (it is published for other repositories, or used by a workflow that is not in the repository)
+the rules do not assume a trigger and judge the action by its own steps: the caller-dependent findings above are not reported, and
+`bot-conditions` has no fix. Findings about the inputs (for example that `inputs.title` is expanded into a script) are reported either
+way because any caller can pass attacker-controlled text. jactionlint does not look at what the callers pass in `with:`.
+
+How the rules treat actions:
+
+- **Applies** to the steps (and the metadata) of an action: `action-syntax`, `adhoc-packages`, `archived-uses`, `artipacked`, `checkout-static-credentials`, `constant-condition`, `context-availability`, `deprecated-action-input`, `deprecated-commands`, `duplicate-key`, `duplicate-step-id`, `expression-syntax`, `expression-type`, `forbidden-uses`, `github-app`, `if-always-true`, `impostor-commit`, `insecure-commands`, `insecure-ssh-keyscan`, `insecure-url-scheme`, `invalid-env-var-name`, `invalid-function-call`, `invalid-id`, `invalid-ignore-comment`, `invalid-local-action`, `invalid-parallel-step`, `invalid-shell-name`, `invalid-uses`, `invisible-characters`, `known-vulnerable-actions`, `max-run-lines`, `merge-key`, `misfeature`, `misfeature-custom-shell`, `missing-action-input`, `obfuscation`, `outdated-action-runner`, `pipeline-without-pipefail`, `pyflakes`, `recursive-alias`, `ref-confusion`, `ref-version-mismatch`, `require-expression-wrapping`, `self-repository`, `shellcheck`, `stale-action-refs`, `superfluous-actions`, `template-injection`, `template-injection-expansion`, `template-injection-trusted`, `typosquat-uses`, `undefined-function`, `undefined-property`, `unknown-action-input`, `unlocked-install`, `unpinned-images`, `unpinned-tools`, `unpinned-uses`, `unsound-contains`, `unsound-prefix-match`, `unsound-ternary`, `unused-anchor`, `unused-ignore`, `unverified-download`, `use-trusted-publishing`, `yaml-syntax`.
+- **Caller-dependent**: `agentic-actions`, `bot-conditions`, `cache-poisoning`, `github-env` (`github-env-untrusted-input` does not depend on the caller), `untrusted-artifact` and `untrusted-checkout`.
+- **Not applicable** because an action does not have what the rule checks, or because only the calling job can decide: `anonymous-definition`, `concurrency-cancels-prs`, `concurrency-cancels-release`, `concurrency-limits`, `conflicting-runner-labels`, `continue-on-error`, `cron-too-frequent`, `cyclic-job-needs`, `dangerous-triggers`, `dependabot-cooldown`, `dependabot-execution`, `dependabot-missing-actions-update`, `dependabot-syntax`, `duplicate-job-id`, `duplicate-job-needs`, `duplicate-triggers`, `excessive-permissions`, `gate-job-skipped-on-failure`, `hardcoded-container-credentials`, `invalid-activity-type`, `invalid-cron`, `invalid-event-config`, `invalid-event-filter`, `invalid-glob`, `invalid-label-pattern`, `invalid-local-workflow`, `invalid-permissions`, `invalid-timezone`, `invalid-workflow-call`, `invalid-workflow-call-input`, `invalid-workflow-dispatch-input`, `local-action-checkout`, `matrix-duplicate-value`, `matrix-invalid-exclude`, `missing-permissions`, `missing-timeout`, `missing-workflow-input`, `missing-workflow-secret`, `mutable-runner-label`, `overprovisioned-secrets`, `require-shell`, `required-actions`, `secrets-inherit`, `secrets-outside-env`, `self-hosted-runner`, `timeout-too-long`, `undefined-job-needs`, `undocumented-permissions`, `unknown-event`, `unknown-runner-label`, `unknown-workflow-input`, `unknown-workflow-secret`, `unredacted-secrets`, `unused-job-output`, `unused-needs`, `unused-workflow-input`, `workflow-call-permissions`, `workflow-input-type`, `workflow-run-names`, `workflow-syntax`.
+
+Example input:
+
+```yaml
+name: Build
+description: Builds the project
+inputs:
+  token:
+    description: Token to publish with
+    required: true
+runs:
+  using: composite
+  steps:
+    # ERROR: Secrets are not passed to composite actions. Declare an input instead
+    - run: ./publish.sh "${{ secrets.PUBLISH_TOKEN }}"
+      shell: bash
+    # ERROR: The input "tokan" is not declared
+    - run: ./build.sh "${{ inputs.tokan }}"
+      shell: bash
+```
+
+Output:
+
+```
+.github/actions/example/action.yml:11:30: context "secrets" is not allowed in a composite action because secrets are not passed to it. declare an input and let the workflow pass the secret with "with:". available contexts are "env", "github", "inputs", "job", "matrix", "needs", "runner", "steps", "strategy", "vars". see https://docs.github.com/en/actions/learn-github-actions/contexts#context-availability for more details [expression]
+   |
+11 |     - run: ./publish.sh "${{ secrets.PUBLISH_TOKEN }}"
+   |                              ^~~~~~~~~~~~~~~~~~~~~
+.github/actions/example/action.yml:14:28: property "tokan" is not defined in object type {token: string} [expression]
+   |
+14 |     - run: ./build.sh "${{ inputs.tokan }}"
+   |                            ^~~~~~~~~~~~
+```
+
+<!-- Skip playground link -->
+
+<a id="check-composite-action-syntax"></a>
+## Composite action syntax
+
+The syntax of the metadata file is checked like the syntax of workflows: unknown keys (with a suggestion), duplicate keys, missing
+`runs.using`, `runs.main` of a JavaScript action, `runs.image` of a Docker action and `runs.steps` of a composite action, keys which
+belong to another kind of action (`steps` in a `node24` action), values of the wrong type, and `run:` steps of a composite action
+without `shell:`. They are reported with the rule ID `action-syntax`. `runs.using` accepts `composite`, `docker` and `node` followed by
+a version number.
+
+Example input:
+
+```yaml
+name: Example
+description: Does not follow the syntax of action.yml
+inputs:
+  who:
+    # ERROR: "descriptions" is a typo of "description"
+    descriptions: Who to greet
+runs:
+  using: composite
+  steps:
+    # ERROR: The shell is required in a composite action
+    - run: echo "hello ${{ inputs.who }}"
+    - uses: actions/checkout@v4
+      # ERROR: "shell" is only for "run:" steps
+      shell: bash
+  # ERROR: "main" is only for JavaScript actions
+  main: dist/index.js
+```
+
+Output:
+
+```
+.github/actions/example/action.yml:6:5: unexpected key "descriptions" for input "who". expected one of "default", "deprecationMessage", "description", "required" [syntax-check]
+  |
+6 |     descriptions: Who to greet
+  |     ^~~~~~~~~~~~~
+.github/actions/example/action.yml:11:7: "shell" is required for a "run" step of a composite action, which has no default shell. for example, add "shell: bash" [syntax-check]
+   |
+11 |     - run: echo "hello ${{ inputs.who }}"
+   |       ^~~~
+.github/actions/example/action.yml:14:7: unexpected key "shell" for step to execute action. expected one of "background", "continue-on-error", "env", "id", "if", "name", "timeout-minutes", "uses", "with" [syntax-check]
+   |
+14 |       shell: bash
+   |       ^~~~~~
+.github/actions/example/action.yml:16:3: "main" is not available in "runs" section of the composite action. it is for JavaScript and Docker actions [syntax-check]
+   |
+16 |   main: dist/index.js
+   |   ^~~~~
+```
+
+<!-- Skip playground link -->
+
 [credentials-doc]: https://docs.github.com/en/actions/learn-github-actions/workflow-syntax-for-github-actions#jobsjob_idcontainercredentials
 [actions-cache]: https://github.com/actions/cache
 [permissions-doc]: https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#permissions
@@ -7221,3 +7359,4 @@ A label in a matrix is reported but never fixed, because the same value may be c
 [anochor-support-announce]: https://github.blog/changelog/2025-09-18-actions-yaml-anchors-and-non-public-workflow-templates/
 [yaml-anchor-spec]: https://yaml.org/spec/1.2.2/#71-alias-nodes
 [dependabot-options-doc]: https://docs.github.com/en/code-security/dependabot/working-with-dependabot/dependabot-options-reference
+[hk]: https://hk.jdx.dev
