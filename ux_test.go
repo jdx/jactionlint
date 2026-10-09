@@ -371,6 +371,20 @@ func TestBaselineWriteSaysHowToApplyTheBaseline(t *testing.T) {
 	if got := run("-baseline-write"); strings.Contains(got, "baseline: auto") {
 		t.Errorf("the configuration already applies the baseline: %q", got)
 	}
+
+	// A baseline written to another file than the one the configuration applies is not applied by a plain run
+	if got := run("-baseline-write=ci/other.json"); !strings.Contains(got, "baseline: ci/other.json") {
+		t.Errorf("the configuration applies another file, so the line for this one must be shown: %q", got)
+	}
+	if err := os.WriteFile(filepath.Join(root, ".github", "jactionlint.yaml"), []byte("baseline: ci/other.json\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := run("-baseline-write=ci/other.json"); strings.Contains(got, "baseline: ci/other.json") {
+		t.Errorf("the configuration names this very file: %q", got)
+	}
+	if got := run("-baseline-write"); !strings.Contains(got, "baseline: auto") {
+		t.Errorf("the configuration names another file than the default one: %q", got)
+	}
 }
 
 func manyFindingsRepo(t *testing.T) string {

@@ -47,16 +47,25 @@ func baselineNamesAFile(cfg *Config) bool {
 	return true
 }
 
-// baselineConfigured reports whether the configuration applies a baseline to every run.
-func baselineConfigured(cfg *Config) bool {
+// baselineConfigured reports whether the configuration applies the baseline file at path to every run:
+// "auto" names the default file of root and any other on-value names the file itself.
+func baselineConfigured(cfg *Config, root, path string) bool {
 	if cfg == nil {
 		return false
 	}
+	var applied string
 	switch strings.ToLower(strings.TrimSpace(cfg.Baseline)) {
 	case "", "false", "off", "no":
 		return false
+	case "auto", "true", "yes":
+		applied = filepath.Join(root, DefaultBaselineFile)
+	default:
+		applied = cfg.Baseline
+		if !filepath.IsAbs(applied) {
+			applied = filepath.Join(root, applied)
+		}
 	}
-	return true
+	return filepath.Clean(applied) == filepath.Clean(path)
 }
 
 // resolveBaselineSetting returns the path of the baseline to apply and whether it must exist. An
@@ -278,7 +287,7 @@ func (l *Linter) WriteBaseline(files []string, path string) (*WriteBaselineResul
 		}
 	}
 	if cfg := l.configFor(project); cfg != nil {
-		res.Applied = baselineConfigured(cfg)
+		res.Applied = baselineConfigured(cfg, root, path)
 		if cfg.Path != "" && project != nil {
 			if rel, err := filepath.Rel(project.RootDir(), cfg.Path); err == nil && !strings.HasPrefix(rel, "..") {
 				res.ConfigFile = filepath.ToSlash(rel)
