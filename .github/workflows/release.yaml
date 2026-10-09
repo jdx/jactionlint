@@ -25,8 +25,10 @@ jobs:
       - uses: ruby/setup-ruby@14594264cd68ce8a2345dd349bc3d138a4ef85c8 # v1.327.0
         with:
           ruby-version: '3.3'
-      # ronn is installed by name on purpose: scripts/build-man.bash does the same for `mise run man`
-      - run: gem install ronn # jactionlint ignore=adhoc-packages
+      # ronn-ng, the maintained fork, is installed by name on purpose: scripts/build-man.bash does the same for
+      # `mise run man`. The original ronn needs hpricot, whose native extension no longer builds with the compiler of
+      # the macOS runner.
+      - run: gem install --no-document ronn-ng # jactionlint ignore=adhoc-packages
       # Only the roff page is shipped. Generating the HTML page crashes with the current mustache gem
       # (undefined method `strip' for an instance of Array) so it is skipped with --roff.
       - run: ronn --roff ./man/jactionlint.1.ronn
