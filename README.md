@@ -124,6 +124,7 @@ See [the usage document][usage] for more details.
   and integrations with reviewdog, Problem Matchers, super-linter, pre-commit, VS Code.
 - [Configuration][config]: How to configure jactionlint behavior. Currently, the labels of self-hosted runners, the configuration
   variables, and ignore patterns of errors for each file paths can be set.
+- [Coming from actionlint][from-actionlint]: How to get the checks of actionlint with `profile: correctness`, and what jactionlint adds.
 - [Go API][api]: How to use jactionlint as Go library.
 - [References][refs]: Links to resources.
 
@@ -156,6 +157,7 @@ jactionlint is distributed under [the MIT license](./LICENSE.txt).
 [install]: https://github.com/jdx/jactionlint/blob/main/docs/install.md
 [usage]: https://github.com/jdx/jactionlint/blob/main/docs/usage.md
 [config]: https://github.com/jdx/jactionlint/blob/main/docs/config.md
+[from-actionlint]: https://github.com/jdx/jactionlint/blob/main/docs/actionlint.md
 [api]: https://github.com/jdx/jactionlint/blob/main/docs/api.md
 [refs]: https://github.com/jdx/jactionlint/blob/main/docs/reference.md
 [issue-form]: https://github.com/jdx/jactionlint/issues/new

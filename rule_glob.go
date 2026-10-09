@@ -88,7 +88,7 @@ func (rule *RuleGlob) globErrors(errs []InvalidGlobPattern, pos *Pos, quoted boo
 
 func init() {
 	registerRules(
-		RuleInfo{ID: "invalid-glob", Group: RuleGroupCorrectness, Summary: "A glob filter pattern is invalid.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-glob-pattern"},
+		RuleInfo{ID: "invalid-glob", Group: RuleGroupCorrectness, Summary: "A glob filter pattern is invalid.", DefaultLevel: SeverityError, Profile: ProfileCorrectness, DocsAnchor: "check-glob-pattern"},
 	)
 	registerRuleFactory("glob", func(env *RuleEnv) []Rule {
 		return []Rule{NewRuleGlob()}

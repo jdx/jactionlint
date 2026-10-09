@@ -112,7 +112,7 @@ func (rule *RuleDuplicateTriggers) deduplicated(n *Workflow) bool {
 
 func init() {
 	registerRules(
-		RuleInfo{ID: "duplicate-triggers", Group: RuleGroupPolicy, Summary: "push and pull_request both run the workflow for the same commit.", DefaultLevel: SeverityWarning, Profile: ProfileStrict, DocsAnchor: "check-duplicate-triggers"},
+		RuleInfo{ID: "duplicate-triggers", Group: RuleGroupPolicy, Summary: "push and pull_request both run the workflow for the same commit.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-duplicate-triggers"},
 	)
 	registerRuleFactory("duplicate-triggers", func(env *RuleEnv) []Rule {
 		return []Rule{NewRuleDuplicateTriggers()}

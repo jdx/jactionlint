@@ -53,13 +53,21 @@ Each rule has:
 - a **group**: ` + "`correctness`" + ` (mistakes which make a workflow fail or misbehave), ` + "`security`" + ` (insecure constructs), ` + "`policy`" + `
   (good practices which are not mistakes by themselves) or ` + "`style`" + `.
 - a **default level**: ` + "`error`" + `, ` + "`warn`" + ` or ` + "`info`" + `. Only errors make jactionlint exit with status 1 unless ` + "`-strict-exit`" + ` is given.
-- a **profile**: the first [profile](./config.md#profiles) which enables the rule. ` + "`default`" + ` is used when no profile is configured, and
-  ` + "`strict`" + ` and ` + "`all`" + ` include the rules of the profiles before them. Rules which no profile enables run only when the
-  configuration turns them on.
+- a **profile**: the first [profile](./config.md#profiles) which enables the rule. There are three, and each includes the rules
+  of the one before it: ` + "`correctness`" + ` (what actionlint checks and the bug detectors of jactionlint), ` + "`default`" + ` (adds the
+  security posture and policy rules, and is used when no profile is configured) and ` + "`pedantic`" + ` (adds the noisy and opinionated
+  rules). Rules which no profile enables run only when the configuration turns them on, and the rules marked "only with
+  ` + "`-online`" + `" run with that flag whatever the profile is. The profile comes from the ` + "`profile`" + ` key of the configuration or the
+  ` + "`-profile`" + ` flag.
+- a **pedantic option**: a few audits report their noisier findings too when the option ` + "`pedantic`" + ` is true. It is true under
+  the ` + "`pedantic`" + ` profile and false otherwise, and ` + "`rules: {<id>: {pedantic: true}}`" + ` turns it on for one audit.
+
+The rules of the security, policy and style groups do not look at a job or a step whose ` + "`if:`" + ` is the literal ` + "`false`" + `, because it
+never runs. The rules of the correctness group still do: a mistake in it breaks the file whether it runs or not.
 
 ` + "```yaml" + `
 # .github/jactionlint.yaml
-profile: strict
+profile: pedantic
 rules:
   unpinned-uses: warn # lower the level
   require-shell: off # turn a rule off
@@ -98,6 +106,24 @@ rules:
 			fmt.Fprintf(&b, "- Details and examples: [checks](./checks.md#%s)\n", r.DocsAnchor)
 		}
 		b.WriteString("\n")
+	}
+
+	b.WriteString(`## Retired rule IDs
+
+An audit is one rule with one ID. These IDs existed while 2.0 was in development, before the first release, and were merged into
+the rule that reports their findings now. ` + "`-ignore`" + `, the ` + "`ignore`" + ` lists of ` + "`paths`" + ` and the ` + "`# jactionlint ignore=`" + ` comments still
+take them: such an ignore matches only the findings that had the old ID, and jactionlint warns that the ID is deprecated.
+` + "`rules`" + `, ` + "`ignores`" + `, ` + "`fix.rules`" + ` and ` + "`-rules`" + ` do not take them.
+
+| Retired ID | Rule | Findings are on with |
+| --- | --- | --- |
+`)
+	for _, rr := range jactionlint.RenamedRules() {
+		on := "always"
+		if rr.Option != "" {
+			on = "the option `" + rr.Option + "`"
+		}
+		fmt.Fprintf(&b, "| `%s` | [%s](#%s) | %s |\n", rr.Old, rr.ID, rr.ID, on)
 	}
 
 	out := strings.TrimRight(b.String(), "\n") + "\n"

@@ -506,7 +506,7 @@ func (p sarifPrinter) print(w io.Writer, results []fileResult, notes []string) e
 			ShortDescription: sarifMessage{info.Summary},
 			HelpURI:          info.DocURL(),
 			DefaultConfig:    sarifRuleConfig{Level: info.DefaultLevel.sarifLevel()},
-			Properties:       map[string]any{"tags": []string{string(info.Group)}},
+			Properties:       sarifRuleProperties(info),
 		})
 	}
 
@@ -559,4 +559,18 @@ func (p sarifPrinter) print(w io.Writer, results []fileResult, notes []string) e
 	}
 	_, err := w.Write(buf.Bytes())
 	return err
+}
+
+// sarifRuleProperties are the properties of a rule in a SARIF log: the tags (the group) and the profile
+// that enables the rule ("online" for the rules that run with -online, none when the configuration has to
+// turn the rule on), so that a consumer can tell the rules of the correctness profile from the others.
+func sarifRuleProperties(info *RuleInfo) map[string]any {
+	props := map[string]any{"tags": []string{string(info.Group)}}
+	switch {
+	case info.Online:
+		props["profile"] = "online"
+	case info.Profile != "":
+		props["profile"] = string(info.Profile)
+	}
+	return props
 }

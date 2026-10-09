@@ -47,6 +47,28 @@ cat action.yml | jactionlint -stdin-filename action.yml -
 
 To know all flags and options, see an output of `jactionlint -h` or [the online command manual][cmd-manual].
 
+<a id="profile"></a>
+### Choose a profile
+
+jactionlint has three [profiles](config.md#profiles), each including the one before it: `correctness` (what actionlint checks, plus
+the bug detectors of jactionlint), `default` (adds the security posture and policy rules; used when nothing is configured) and
+`pedantic` (adds the noisy and opinionated rules). Pick one in the config file, or on the command line, which wins:
+
+```sh
+jactionlint -profile correctness   # only mistakes, like actionlint
+jactionlint -profile pedantic      # everything
+```
+
+```yaml
+# .github/jactionlint.yaml
+profile: correctness
+rules:
+  unpinned-uses: error # a rule of a higher profile on top of it
+```
+
+The old names `strict` and `all` are read as `pedantic` in the config file with a deprecation warning. See
+[coming from actionlint](actionlint.md) for the checks of actionlint.
+
 ### Ignore some errors
 
 Every error has a stable [rule ID](rules.md) such as `unpinned-uses`. `-rule-ids` shows it at the end of each error instead of the
@@ -94,7 +116,7 @@ Which form to use: an ignore comment is right next to the code it is about, but 
 bumping an action) drops the comment at the end of it. Put an ignore on a line that such tools manage in the config file instead, where
 it matches by rule, file, job, step and `uses:` and survives the rewrite: see [durable ignores](config.md#durable-ignores).
 
-A comment which suppresses nothing is reported by the [`unused-ignore`](rules.md#unused-ignore) rule of the `strict` profile.
+A comment which suppresses nothing is reported by the [`unused-ignore`](rules.md#unused-ignore) rule of the `pedantic` profile.
 
 ### zizmor ignore comments
 
@@ -344,7 +366,7 @@ jactionlint -min-severity error         # show only errors
 <a id="baseline"></a>
 ### Adopt a stricter configuration with a baseline
 
-The default profile is strict, so the first run on a repository with many workflows can report hundreds of findings. A baseline
+The default profile has the security posture and policy rules, so the first run on a repository with many workflows can report hundreds of findings. A baseline
 lets you adopt the checks without fixing everything first: it records today's findings, hides them, and fails the build only on
 findings that are new. Then you pay the debt down at your own pace.
 
@@ -569,7 +591,7 @@ jactionlint -online
 
 #### Pin tags to commits with `-online -fix`
 
-With the online checks, `-fix` can repair `unpinned-uses` findings (a rule of the `strict` profile) by replacing a tag with the commit
+With the online checks, `-fix` can repair `unpinned-uses` findings (a rule of the `default` profile) by replacing a tag with the commit
 it points to and naming the tag in a comment, the format Dependabot and Renovate keep up to date:
 
 ```yaml
@@ -621,10 +643,10 @@ runs when a finding has no fix. Add this step to `hk.pkl`:
 
   or set `baseline: auto` in the configuration and pass only `-sarif-hide-baselined`. Refresh the file with
   `jactionlint -baseline-write` (not through hk) when you pay findings down.
-- To use the `strict` profile, set `profile: strict` in `.github/jactionlint.yaml`.
+- To follow another profile, set `profile: correctness` or `profile: pedantic` in `.github/jactionlint.yaml`, or pass `-profile NAME` in the hk command. `correctness` is what actionlint checks; see [coming from actionlint](actionlint.md).
 - `missing-timeout` is in the default profile, so the first `hk check` on a repository whose jobs have no `timeout-minutes` fails
   on every job. Its fix exists only when `rules.missing-timeout.default-minutes` is set (there is no built-in
-  number). The fix is safe and is in the SARIF log, so `hk fix` adds the timeout without running `jactionlint -fix`. `missing-permissions` (`strict`) is only in the log when the fix is safe; otherwise hk runs
+  number). The fix is safe and is in the SARIF log, so `hk fix` adds the timeout without running `jactionlint -fix`. `missing-permissions` (`default`) is only in the log when the fix is safe; otherwise hk runs
   `jactionlint -fix`, which leaves the unsafe fix alone and still reports the finding, and you decide whether to run
   `jactionlint -fix=unsafe`.
 - To add the [online checks](#online-checks) put the flag in the commands. A second step keeps them apart from the offline checks, so

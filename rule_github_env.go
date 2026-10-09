@@ -15,7 +15,7 @@ import (
 //
 //   - "github-env": a write of a value that is not a literal in a workflow started by pull_request_target or
 //     workflow_run, which run with secrets and a write token while the event may come from a fork, and
-//   - "github-env-untrusted-input": a write of a value that is known to come from an outsider (an untrusted
+//   - a write of a value that is known to come from an outsider (an untrusted
 //     context or an environment variable holding one), whatever the trigger.
 //
 // Scripts of bash and sh are analyzed with the run-script analyzer, scripts of pwsh, powershell and cmd by
@@ -108,7 +108,8 @@ func (rule *RuleGitHubEnv) emit(d data, dest string, start, end *Pos) {
 		if d.via != "" {
 			src = "from the variable " + d.via + " (" + d.input + ")"
 		}
-		rule.errorIDAt("github-env-untrusted-input", start, "untrusted input "+src+" is written to "+dest+". "+effect+". do not write input that an outsider controls to "+dest+"; validate it first or pass it to the next step with $GITHUB_OUTPUT").endAt(end)
+		e := rule.errorIDAt("github-env", start, "untrusted input "+src+" is written to "+dest+". "+effect+". do not write input that an outsider controls to "+dest+"; validate it first or pass it to the next step with $GITHUB_OUTPUT").endAt(end)
+		e.RetiredID = "github-env-untrusted-input"
 	case dataUnknown:
 		trigger, ok := rule.privileged()
 		if !ok {
@@ -383,11 +384,10 @@ func (rule *RuleGitHubEnv) judgeLine(rest string) data {
 
 func init() {
 	registerRules(
-		RuleInfo{ID: "github-env", Group: RuleGroupSecurity, Summary: "A value that is not a literal is written to GITHUB_ENV or GITHUB_PATH in a workflow triggered by pull_request_target or workflow_run.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-github-env"},
-		RuleInfo{ID: "github-env-untrusted-input", Group: RuleGroupSecurity, Summary: "Input that an outsider controls is written to GITHUB_ENV or GITHUB_PATH.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-github-env"},
+		RuleInfo{ID: "github-env", Group: RuleGroupSecurity, Summary: "Input that an outsider controls, or a value that is not a literal in a workflow triggered by pull_request_target or workflow_run, is written to GITHUB_ENV or GITHUB_PATH.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-github-env"},
 	)
 	registerRuleFactory("github-env", func(env *RuleEnv) []Rule {
-		if !env.config.RuleEnabled("github-env") && !env.config.RuleEnabled("github-env-untrusted-input") {
+		if !env.config.RuleEnabled("github-env") {
 			return nil
 		}
 		return []Rule{NewRuleGitHubEnv()}

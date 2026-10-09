@@ -1,6 +1,3 @@
-template-injection-expansion
-template-injection-trusted
 obfuscation
 bot-conditions
 misfeature
-misfeature-custom-shell

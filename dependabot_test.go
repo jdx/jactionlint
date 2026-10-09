@@ -30,7 +30,7 @@ func dependabotFixtureConfig(base string) *Config {
 		cfg.Rules[id] = RuleConfig{Level: SeverityOff}
 	}
 	if id, ok := dependabotRuleFixtures[filepath.Base(base)]; ok {
-		delete(cfg.Rules, id)
+		cfg.Rules[id] = RuleConfig{Level: SeverityError} // not in the profile of the tests
 	}
 	return cfg
 }

@@ -22,29 +22,48 @@ const (
 )
 
 // Profile is a named set of rules which are enabled together. A profile includes every rule of the
-// profiles before it: ProfileDefault < ProfileStrict < ProfileAll.
+// profiles before it: ProfileCorrectness < ProfileDefault < ProfilePedantic.
 type Profile string
 
 const (
-	// ProfileDefault enables the correctness checks and the checks which have (almost) no false
-	// positives. This is the profile used when none is configured.
+	// ProfileCorrectness enables what actionlint checks by default plus the bug detectors of the
+	// correctness group. It has no security posture or policy rules, apart from the basic checks
+	// actionlint has too (an untrusted input in a script, hard-coded container credentials).
+	ProfileCorrectness Profile = "correctness"
+	// ProfileDefault adds the security posture and policy rules which are worth failing a build on.
+	// It is the profile used when none is configured.
 	ProfileDefault Profile = "default"
-	// ProfileStrict adds the security posture and policy checks.
-	ProfileStrict Profile = "strict"
-	// ProfileAll adds the style and pedantic checks.
-	ProfileAll Profile = "all"
+	// ProfilePedantic adds the noisy and opinionated rules and the pedantic checks of the audits.
+	ProfilePedantic Profile = "pedantic"
+)
+
+// Names of the profiles of the first v2 releases which still work, mapped to ProfilePedantic, with a
+// deprecation warning.
+const (
+	deprecatedProfileStrict = "strict"
+	deprecatedProfileAll    = "all"
 )
 
 // profileRank orders the profiles. The empty profile (never enabled by a profile) has no rank.
-var profileRank = map[Profile]int{ProfileDefault: 1, ProfileStrict: 2, ProfileAll: 3}
+var profileRank = map[Profile]int{ProfileCorrectness: 1, ProfileDefault: 2, ProfilePedantic: 3}
 
-// ParseProfile parses the name of a profile.
+// ParseProfile parses the name of a profile: "correctness", "default" or "pedantic".
 func ParseProfile(s string) (Profile, error) {
 	p := Profile(s)
 	if _, ok := profileRank[p]; !ok {
-		return "", fmt.Errorf("invalid profile %q. available profiles are \"default\", \"strict\" and \"all\"", s)
+		return "", fmt.Errorf("invalid profile %q. available profiles are \"correctness\", \"default\" and \"pedantic\"", s)
 	}
 	return p, nil
+}
+
+// parseConfigProfile parses the value of "profile" in a config file. It also accepts the retired names
+// "strict" and "all", which stand for "pedantic": the returned deprecation message is not empty then.
+func parseConfigProfile(s string) (Profile, string, error) {
+	if s == deprecatedProfileStrict || s == deprecatedProfileAll {
+		return ProfilePedantic, fmt.Sprintf("\"profile: %s\" is deprecated and will be removed in a future version. it means \"profile: pedantic\" now. the profiles are now \"correctness\" (what actionlint checks), \"default\" and \"pedantic\"", s), nil
+	}
+	p, err := ParseProfile(s)
+	return p, "", err
 }
 
 // Includes reports whether the rules of the profile q are enabled by the profile p.
@@ -146,6 +165,52 @@ func registerRules(infos ...RuleInfo) {
 		p := info
 		ruleIndex[info.ID] = &p
 	}
+}
+
+// RenamedRule is a rule ID which was merged into the ID of another rule before 2.0 was released, when one audit
+// was split in several IDs. The old ID is not a rule any more: its findings are the ones of ID with the
+// option Option on. Ignores of the old ID (-ignore, "ignore" of "paths" and inline ignore comments) still
+// work, matching only the findings that had the old ID, and print a deprecation warning. Everything else
+// that takes a rule ID (rules, ignores, fix.rules, -rules) refuses it and names the new place.
+type RenamedRule struct {
+	// Old is the retired ID.
+	Old string
+	// ID is the ID of the rule which reports the findings now.
+	ID string
+	// Option is the option of ID that turns the findings on, or empty when ID reports them always.
+	Option string
+}
+
+// renamedRules are the retired IDs, sorted by Old. testdata/rule_ids.d/removed-before-release.txt lists them.
+var renamedRules = []RenamedRule{
+	{Old: "github-env-untrusted-input", ID: "github-env"},
+	{Old: "misfeature-custom-shell", ID: "misfeature", Option: "pedantic"},
+	{Old: "template-injection-expansion", ID: "template-injection", Option: "pedantic"},
+	{Old: "template-injection-trusted", ID: "template-injection", Option: "pedantic"},
+}
+
+// RenamedRules returns the retired rule IDs and the rules that report their findings now.
+func RenamedRules() []RenamedRule {
+	return slices.Clone(renamedRules)
+}
+
+// lookupRenamed returns the retired rule with the ID.
+func lookupRenamed(id string) (RenamedRule, bool) {
+	for _, r := range renamedRules {
+		if r.Old == id {
+			return r, true
+		}
+	}
+	return RenamedRule{}, false
+}
+
+// renamedMessage is the deprecation warning about the use of a retired rule ID in an ignore.
+func (r RenamedRule) renamedMessage() string {
+	msg := fmt.Sprintf("the rule ID %q was merged into %q before 2.0. the ignore still works and covers only the findings that the old rule reported; %q would ignore every finding of %q", r.Old, r.ID, r.ID, r.ID)
+	if r.Option != "" {
+		msg += fmt.Sprintf(". to stop reporting them instead, set \"rules: {%s: {%s: false}}\"", r.ID, r.Option)
+	}
+	return msg
 }
 
 // DefaultMaxRunLines is the maximum number of lines of a run: script which the max-run-lines rule

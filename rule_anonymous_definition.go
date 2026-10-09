@@ -29,9 +29,20 @@ func NewRuleAnonymousDefinition(path string, src []byte) *RuleAnonymousDefinitio
 	}
 }
 
+// isCopilotSetupSteps reports whether the path is the workflow that prepares the environment of the Copilot coding agent.
+// GitHub runs it when the agent starts, whatever its triggers are, from a job with a fixed ID, and accepts few keys in
+// it. A name tells nothing there and a concurrency group has no use (zizmor#1481).
+func isCopilotSetupSteps(path string) bool {
+	switch strings.ToLower(filepath.Base(filepath.ToSlash(path))) {
+	case "copilot-setup-steps.yml", "copilot-setup-steps.yaml":
+		return true
+	}
+	return false
+}
+
 // VisitWorkflowPre is callback when visiting Workflow node before visiting its children.
 func (rule *RuleAnonymousDefinition) VisitWorkflowPre(n *Workflow) error {
-	if n.Name != nil {
+	if n.Name != nil || isCopilotSetupSteps(rule.path) {
 		return nil
 	}
 
@@ -59,7 +70,7 @@ func (rule *RuleAnonymousDefinition) VisitWorkflowPre(n *Workflow) error {
 
 // VisitJobPre is callback when visiting Job node before visiting its children.
 func (rule *RuleAnonymousDefinition) VisitJobPre(n *Job) error {
-	if n.Name != nil || n.WorkflowCall != nil || n.ID == nil || n.ID.Pos == nil {
+	if n.Name != nil || n.WorkflowCall != nil || n.ID == nil || n.ID.Pos == nil || isCopilotSetupSteps(rule.path) {
 		// A job which calls a reusable workflow is shown as "caller / called job" and is not reported
 		return nil
 	}
@@ -167,7 +178,7 @@ func (rule *RuleAnonymousDefinition) deriveName(n *Workflow) string {
 
 func init() {
 	registerRules(
-		RuleInfo{ID: "anonymous-definition", Group: RuleGroupPolicy, Summary: "A workflow has no top-level name:.", DefaultLevel: SeverityWarning, Profile: ProfileStrict, Fixable: true, DocsAnchor: "check-anonymous-definition"},
+		RuleInfo{ID: "anonymous-definition", Group: RuleGroupPolicy, Summary: "A workflow has no top-level name:.", DefaultLevel: SeverityWarning, Profile: ProfilePedantic, Fixable: true, DocsAnchor: "check-anonymous-definition"},
 	)
 	registerRuleFactory("anonymous-definition", func(env *RuleEnv) []Rule {
 		if !env.config.RuleEnabled("anonymous-definition") {

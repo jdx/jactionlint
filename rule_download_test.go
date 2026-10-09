@@ -108,13 +108,13 @@ func TestUnverifiedDownload(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.what, func(t *testing.T) {
-			wantLines(t, lintFileWithConfig(t, nil, "ci.yaml", downloadWorkflow(tc.script)), "unverified-download", tc.lines...)
+			wantLines(t, lintFileWithConfig(t, defaultProfileConfig(), "ci.yaml", downloadWorkflow(tc.script)), "unverified-download", tc.lines...)
 		})
 	}
 }
 
 func TestUnverifiedDownloadAllow(t *testing.T) {
-	cfg := mustParseConfig(t, "rules:\n  unverified-download:\n    allow: [mise.run, \"https://get.example.com/\"]\n")
+	cfg := mustParseConfig(t, "profile: default\nrules:\n  unverified-download:\n    allow: [mise.run, \"https://get.example.com/\"]\n")
 	for _, tc := range []struct {
 		script string
 		lines  []int
@@ -153,7 +153,7 @@ func TestUnverifiedDownloadShells(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.what, func(t *testing.T) {
-			wantLines(t, lintFileWithConfig(t, nil, "ci.yaml", tc.src), "unverified-download", tc.lines...)
+			wantLines(t, lintFileWithConfig(t, defaultProfileConfig(), "ci.yaml", tc.src), "unverified-download", tc.lines...)
 		})
 	}
 }
@@ -186,7 +186,7 @@ func TestInsecureSSHKeyscan(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.what, func(t *testing.T) {
-			wantLines(t, lintFileWithConfig(t, nil, "ci.yaml", downloadWorkflow(tc.script)), "insecure-ssh-keyscan", tc.lines...)
+			wantLines(t, lintFileWithConfig(t, defaultProfileConfig(), "ci.yaml", downloadWorkflow(tc.script)), "insecure-ssh-keyscan", tc.lines...)
 		})
 	}
 }
@@ -237,7 +237,7 @@ func TestInsecureURLScheme(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.what, func(t *testing.T) {
-			wantLines(t, lintFileWithConfig(t, nil, "ci.yaml", downloadWorkflow(tc.script)), "insecure-url-scheme", tc.lines...)
+			wantLines(t, lintFileWithConfig(t, defaultProfileConfig(), "ci.yaml", downloadWorkflow(tc.script)), "insecure-url-scheme", tc.lines...)
 		})
 	}
 }
@@ -264,7 +264,7 @@ func TestInsecureURLSchemeInputs(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.what, func(t *testing.T) {
-			wantLines(t, lintFileWithConfig(t, nil, "ci.yaml", tc.src), "insecure-url-scheme", tc.lines...)
+			wantLines(t, lintFileWithConfig(t, defaultProfileConfig(), "ci.yaml", tc.src), "insecure-url-scheme", tc.lines...)
 		})
 	}
 }
@@ -274,21 +274,21 @@ func TestCheckoutStaticCredentials(t *testing.T) {
 		return "on: push\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n        with:\n" + with
 	}
 	cfg := mustParseConfig(t, "rules:\n  checkout-static-credentials:\n    secret-tokens: true\n    allow: [Deploy_Key]\n")
-	strict := mustParseConfig(t, "profile: strict\n")
-	strictOff := mustParseConfig(t, "profile: strict\nrules:\n  checkout-static-credentials:\n    secret-tokens: false\n")
+	strict := mustParseConfig(t, "profile: pedantic\n")
+	strictOff := mustParseConfig(t, "profile: pedantic\nrules:\n  checkout-static-credentials:\n    secret-tokens: false\n")
 	tests := []struct {
 		what  string
 		src   string
 		cfg   *Config
 		lines []int
 	}{
-		{"token under the strict profile", wf("          token: ${{ secrets.PAT }}\n"), strict, []int{8}},
-		{"token under the strict profile, option off", wf("          token: ${{ secrets.PAT }}\n"), strictOff, nil},
-		{"ssh key", wf("          ssh-key: ${{ secrets.SSH_KEY }}\n"), nil, []int{8}},
-		{"ssh key literal", wf("          ssh-key: |\n            -----BEGIN OPENSSH PRIVATE KEY-----\n"), nil, []int{8}},
+		{"token under the pedantic profile", wf("          token: ${{ secrets.PAT }}\n"), strict, []int{8}},
+		{"token under the pedantic profile, option off", wf("          token: ${{ secrets.PAT }}\n"), strictOff, nil},
+		{"ssh key", wf("          ssh-key: ${{ secrets.SSH_KEY }}\n"), defaultProfileConfig(), []int{8}},
+		{"ssh key literal", wf("          ssh-key: |\n            -----BEGIN OPENSSH PRIVATE KEY-----\n"), defaultProfileConfig(), []int{8}},
 		{"ssh key not a secret", wf("          ssh-key: ${{ steps.keys.outputs.key }}\n"), nil, nil},
 		{"token is off by default", wf("          token: ${{ secrets.PAT }}\n"), nil, nil},
-		{"token literal", wf("          token: ghp_0123456789\n"), nil, []int{8}},
+		{"token literal", wf("          token: ghp_0123456789\n"), defaultProfileConfig(), []int{8}},
 		{"token", wf("          token: ${{ secrets.PAT }}\n"), cfg, []int{8}},
 		{"token index", wf("          token: ${{ secrets['PAT'] }}\n"), cfg, []int{8}},
 		{"token default", wf("          token: ${{ secrets.GITHUB_TOKEN }}\n"), cfg, nil},
@@ -303,8 +303,8 @@ func TestCheckoutStaticCredentials(t *testing.T) {
 		{"both", wf("          ssh-key: ${{ secrets.K }}\n          token: ${{ secrets.T }}\n"), cfg, []int{8, 9}},
 		{"other action", "on: push\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: octo/checkout@v4\n        with:\n          ssh-key: ${{ secrets.K }}\n", nil, nil},
 		{"no inputs", "on: push\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n", cfg, nil},
-		{"upper case input", wf("          SSH-KEY: ${{ secrets.K }}\n"), nil, []int{8}},
-		{"pinned by sha", "on: push\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2\n        with:\n          ssh-key: ${{ secrets.K }}\n", nil, []int{8}},
+		{"upper case input", wf("          SSH-KEY: ${{ secrets.K }}\n"), defaultProfileConfig(), []int{8}},
+		{"pinned by sha", "on: push\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2\n        with:\n          ssh-key: ${{ secrets.K }}\n", defaultProfileConfig(), []int{8}},
 	}
 	for _, tc := range tests {
 		t.Run(tc.what, func(t *testing.T) {
@@ -380,7 +380,7 @@ func TestMatchesAllowedURLEndsAtAURLBoundary(t *testing.T) {
 }
 
 func TestClusteredInsecureFlagIsNamedAlone(t *testing.T) {
-	errs := lintFileWithConfig(t, nil, "ci.yaml", downloadWorkflow("curl -fsSLk https://example.com/x -o x"))
+	errs := lintFileWithConfig(t, defaultProfileConfig(), "ci.yaml", downloadWorkflow("curl -fsSLk https://example.com/x -o x"))
 	var msg string
 	for _, e := range errs {
 		if e.ID == "unverified-download" {

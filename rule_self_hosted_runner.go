@@ -60,7 +60,7 @@ func (rule *RuleSelfHostedRunner) VisitJobPre(n *Job) error {
 
 func init() {
 	registerRules(
-		RuleInfo{ID: "self-hosted-runner", Group: RuleGroupSecurity, Summary: "A job runs on a self-hosted runner.", DefaultLevel: SeverityInfo, Profile: ProfileAll, DocsAnchor: "check-self-hosted-runner"},
+		RuleInfo{ID: "self-hosted-runner", Group: RuleGroupSecurity, Summary: "A job runs on a self-hosted runner.", DefaultLevel: SeverityInfo, Profile: ProfilePedantic, DocsAnchor: "check-self-hosted-runner"},
 	)
 	registerRuleFactory("self-hosted-runner", func(env *RuleEnv) []Rule {
 		if !env.config.RuleEnabled("self-hosted-runner") {

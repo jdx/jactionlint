@@ -116,7 +116,7 @@ func init() {
 	registerRules(RuleInfo{
 		ID: "dependabot-missing-actions-update", Group: RuleGroupPolicy,
 		Summary:      "dependabot.yml has no github-actions update although the repository has workflows using actions.",
-		DefaultLevel: SeverityWarning, Profile: ProfileStrict, DocsAnchor: "check-dependabot-missing-actions-update",
+		DefaultLevel: SeverityWarning, Profile: ProfilePedantic, DocsAnchor: "check-dependabot-missing-actions-update",
 	})
 	dependabotRuleFactories = append(dependabotRuleFactories, dependabotRuleFactory{
 		kind: "dependabot-missing-actions-update",

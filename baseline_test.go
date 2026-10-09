@@ -36,9 +36,12 @@ func baselineProject(t *testing.T, workflow string, config string) (root string)
 	}
 	writeTestFile(t, filepath.Join(root, ".git", "HEAD"), "ref: refs/heads/main\n")
 	writeTestFile(t, filepath.Join(root, ".github", "workflows", "ci.yaml"), workflow)
-	if config != "" {
-		writeTestFile(t, filepath.Join(root, ".github", "jactionlint.yaml"), config)
+	if config == "" {
+		// The findings the tests count: a template injection and a missing timeout per job. The profile
+		// does not enable the second one.
+		config = "rules:\n  missing-timeout: error\n"
 	}
+	writeTestFile(t, filepath.Join(root, ".github", "jactionlint.yaml"), config)
 	t.Chdir(root)
 	return root
 }

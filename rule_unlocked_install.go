@@ -1,6 +1,8 @@
 package jactionlint
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/jdx/jactionlint/v2/internal/runscript"
@@ -10,28 +12,36 @@ import (
 // dependencies are resolved anew on every run, so a new (or compromised) release of any transitive dependency
 // reaches the workflow.
 //
-// It reports two IDs:
+// It reports, with the one ID "unlocked-install":
 //
-//   - "unlocked-install": `cargo install` without --locked. The flag is the documented way to use the
-//     Cargo.lock that the crate was published with. This is the one finding that has a fix.
-//   - "unlocked-install-pedantic": installs from a manifest that are not bound to the lock file: `npm install`
-//     instead of `npm ci`, `yarn install` and `bun install` without a frozen lock file, `pnpm install
-//     --no-frozen-lockfile`, and `pip install -r` without hashes or constraints.
+//   - `cargo install` without --locked. The flag is the documented way to use the Cargo.lock that the crate was
+//     published with. This is the one finding that has a fix.
+//   - installs from a manifest that are not bound to the lock file of the repository: `npm install` instead of
+//     `npm ci`, `yarn install` without --immutable and `pnpm install --no-frozen-lockfile`. They are reported
+//     when the repository has the lock file (the project root, or the working-directory of the step, has
+//     package-lock.json, yarn.lock or pnpm-lock.yaml), because only then the lock file is being ignored. Without
+//     the lock file there is nothing to bind to.
+//   - with the option "pedantic", the same installs without a lock file in the repository, `bun install` without a
+//     frozen lock file, and `pip install -r` without hashes or constraints.
 type RuleUnlockedInstall struct {
 	RuleBase
 	runContext
-	src *fileOffsets
+	src  *fileOffsets
+	root string // the root directory of the project, empty when the file is not in one
+	step *Step
 }
 
 // NewRuleUnlockedInstall creates a new RuleUnlockedInstall instance. The source is the content of the file; it is
-// needed to build the fix and can be nil, in which case no fix is attached.
-func NewRuleUnlockedInstall(src []byte) *RuleUnlockedInstall {
+// needed to build the fix and can be nil, in which case no fix is attached. The root is the root directory of the
+// project, where the lock files are looked up; it can be empty.
+func NewRuleUnlockedInstall(src []byte, root string) *RuleUnlockedInstall {
 	r := &RuleUnlockedInstall{
 		RuleBase: NewRuleBase("unlocked-install", "Checks for installations that are not bound to a lock file at \"run:\""),
 	}
 	if src != nil {
 		r.src = newFileOffsets(src)
 	}
+	r.root = root
 	return r
 }
 
@@ -63,6 +73,7 @@ func (rule *RuleUnlockedInstall) VisitStep(n *Step) error {
 	if s == nil {
 		return nil
 	}
+	rule.step = n
 	for _, c := range s.Commands {
 		in := c.Installs()
 		if in == nil {
@@ -106,6 +117,33 @@ func (rule *RuleUnlockedInstall) insertAfter(s *runscript.Script, origin runscri
 	return TextEdit{Start: off, End: off, NewText: text}, true
 }
 
+// reportsInstall reports whether an install of a package manager that is not bound to the lock file is a finding:
+// when the repository has one of the lock files, or when the pedantic findings are on.
+func (rule *RuleUnlockedInstall) reportsInstall(lockFiles ...string) bool {
+	if rule.pedantic("unlocked-install") {
+		return true
+	}
+	if rule.root == "" {
+		return false
+	}
+	dirs := []string{rule.root}
+	if rule.step != nil {
+		if run, ok := rule.step.Exec.(*ExecRun); ok && run.WorkingDirectory != nil && !run.WorkingDirectory.ContainsExpression() {
+			if wd := filepath.FromSlash(strings.TrimSpace(run.WorkingDirectory.Value)); wd != "" && !filepath.IsAbs(wd) && filepath.IsLocal(wd) {
+				dirs = append(dirs, filepath.Join(rule.root, wd))
+			}
+		}
+	}
+	for _, d := range dirs {
+		for _, f := range lockFiles {
+			if st, err := os.Stat(filepath.Join(d, f)); err == nil && !st.IsDir() {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func (rule *RuleUnlockedInstall) checkManifest(s *runscript.Script, origin runscript.Origin, c *runscript.Command, in *runscript.Install) {
 	switch in.Ecosystem {
 	case "npm":
@@ -124,7 +162,7 @@ func (rule *RuleUnlockedInstall) checkManifest(s *runscript.Script, origin runsc
 			// pnpm freezes the lock file by default in CI, so only an explicit opt-out is reported
 			f := c.Flag("--frozen-lockfile")
 			if c.HasFlag("--no-frozen-lockfile") || (f != nil && f.Value != nil && f.Value.Value == "false") {
-				if rule.pedantic("unlocked-install") {
+				if rule.reportsInstall("pnpm-lock.yaml") {
 					rule.errorIDAt("unlocked-install", start, `"pnpm install" is told not to freeze the lock file, so it may update pnpm-lock.yaml instead of failing when it is out of date. pass --frozen-lockfile`).endAt(end)
 				}
 			}
@@ -135,11 +173,11 @@ func (rule *RuleUnlockedInstall) checkManifest(s *runscript.Script, origin runsc
 		}
 		switch c.Tool {
 		case "npm":
-			if rule.pedantic("unlocked-install") {
+			if rule.reportsInstall("package-lock.json", "npm-shrinkwrap.json") {
 				rule.errorIDAt("unlocked-install", start, quote(name)+" resolves the dependencies again and may update the package-lock.json instead of failing when it is out of date. use `npm ci`").endAt(end)
 			}
 		case "yarn":
-			if rule.pedantic("unlocked-install") {
+			if rule.reportsInstall("yarn.lock") {
 				rule.errorIDAt("unlocked-install", start, quote(name)+" does not require the yarn.lock to be up to date in Yarn 1, and relies on the CI detection of Yarn 2+. pass `--immutable` (`--frozen-lockfile` for Yarn 1)").endAt(end)
 			}
 		case "bun":
@@ -177,12 +215,16 @@ func (rule *RuleUnlockedInstall) checkManifest(s *runscript.Script, origin runsc
 
 func init() {
 	registerRules(
-		RuleInfo{ID: "unlocked-install", Group: RuleGroupSecurity, Summary: "cargo install runs without --locked.", DefaultLevel: SeverityWarning, Profile: ProfileDefault, Fixable: true, DocsAnchor: "check-unlocked-install", Options: []RuleOption{pedanticOption}},
+		RuleInfo{ID: "unlocked-install", Group: RuleGroupSecurity, Summary: "cargo install runs without --locked, or npm, yarn or pnpm install without freezing a lock file that the repository has.", DefaultLevel: SeverityError, Profile: ProfileDefault, Fixable: true, DocsAnchor: "check-unlocked-install", Options: []RuleOption{pedanticOption}},
 	)
 	registerRuleFactory("unlocked-install", func(env *RuleEnv) []Rule {
 		if !env.config.RuleEnabled("unlocked-install") {
 			return nil
 		}
-		return []Rule{NewRuleUnlockedInstall(env.Source())}
+		root := ""
+		if env.project != nil {
+			root = env.project.RootDir()
+		}
+		return []Rule{NewRuleUnlockedInstall(env.Source(), root)}
 	})
 }

@@ -76,12 +76,42 @@ func (rule *RuleBotConditions) VisitStep(n *Step) error {
 	return nil
 }
 
+// authorOfPullRequest are the properties which hold the author of the pull request. Unlike the actor, the author
+// is the account that opened the pull request, so a bot cannot be impersonated by pushing to its branch.
+var authorOfPullRequest = map[string]bool{
+	"github.event.pull_request.user.login": true,
+	"github.event.pull_request.user.id":    true,
+}
+
+// checksBotAuthor reports whether the condition can only be true when the author of the pull request is a bot: it
+// is a comparison of the author with a bot, or a conjunction with such a comparison among its operands. Then a test
+// of the actor next to it adds nothing an attacker could use (zizmor#1914).
+func checksBotAuthor(n ExprNode) bool {
+	switch n := n.(type) {
+	case *LogicalOpNode:
+		return n.Kind == LogicalOpNodeKindAnd && (checksBotAuthor(n.Left) || checksBotAuthor(n.Right))
+	case *CompareOpNode:
+		if n.Kind != CompareOpNodeKindEq {
+			return false
+		}
+		for _, p := range [][2]ExprNode{{n.Left, n.Right}, {n.Right, n.Left}} {
+			if path, ok := derefPath(p[0]); ok && authorOfPullRequest[strings.Join(path, ".")] && botLiteral(p[1]) != "" {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func (rule *RuleBotConditions) checkCond(s *String) {
 	if s == nil {
 		return
 	}
 	node, text, base, ok := parseWholeExpr(s.Value)
 	if !ok {
+		return
+	}
+	if checksBotAuthor(node) {
 		return
 	}
 	reported := false
@@ -249,7 +279,7 @@ func preferredActor(name string) string {
 
 func init() {
 	registerRules(
-		RuleInfo{ID: "bot-conditions", Group: RuleGroupSecurity, Summary: "A condition trusts a bot by github.actor, which can be spoofed.", DefaultLevel: SeverityWarning, Profile: ProfileStrict, Fixable: true, DocsAnchor: "check-bot-conditions"},
+		RuleInfo{ID: "bot-conditions", Group: RuleGroupSecurity, Summary: "A condition trusts a bot by github.actor, which can be spoofed.", DefaultLevel: SeverityError, Profile: ProfileDefault, Fixable: true, DocsAnchor: "check-bot-conditions"},
 	)
 	registerRuleFactory("bot-conditions", func(env *RuleEnv) []Rule {
 		return []Rule{NewRuleBotConditions(env.src)}

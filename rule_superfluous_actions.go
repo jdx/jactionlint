@@ -1,6 +1,9 @@
 package jactionlint
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 // superfluousAction is an action that does what a tool of the runner image does as well (usually the GitHub CLI
 // `gh`, `git` or `docker`). Such an action adds a dependency, and the supply chain risk that comes with it, for
@@ -50,6 +53,7 @@ var superfluousActions = []superfluousAction{
 // without it. See superfluousActions for the table.
 type RuleSuperfluousActions struct {
 	RuleBase
+	selfHosted bool // the job runs on a self-hosted runner
 }
 
 // NewRuleSuperfluousActions creates a new RuleSuperfluousActions instance.
@@ -59,8 +63,31 @@ func NewRuleSuperfluousActions() *RuleSuperfluousActions {
 	}
 }
 
+// VisitJobPre is callback when visiting Job node before visiting its children.
+func (rule *RuleSuperfluousActions) VisitJobPre(n *Job) error {
+	rule.selfHosted = false
+	if n.RunsOn != nil {
+		for _, l := range n.RunsOn.Labels {
+			if l != nil && strings.EqualFold(l.Value, "self-hosted") {
+				rule.selfHosted = true
+			}
+		}
+	}
+	return nil
+}
+
+// VisitJobPost is callback when visiting Job node after visiting its children.
+func (rule *RuleSuperfluousActions) VisitJobPost(n *Job) error {
+	rule.selfHosted = false
+	return nil
+}
+
 // VisitStep is callback when visiting Step node.
 func (rule *RuleSuperfluousActions) VisitStep(n *Step) error {
+	if rule.selfHosted {
+		// The tools of the GitHub-hosted images are not there, so the action is what installs them (zizmor#1865)
+		return nil
+	}
 	a, u := usesOfStep(n)
 	if a == nil || u.Kind != UsesAction {
 		return nil
@@ -85,7 +112,7 @@ func (rule *RuleSuperfluousActions) VisitStep(n *Step) error {
 
 func init() {
 	registerRules(
-		RuleInfo{ID: "superfluous-actions", Group: RuleGroupSecurity, Summary: "An action does what a tool of the runner image does as well, such as gh release create.", DefaultLevel: SeverityWarning, Profile: ProfileDefault, DocsAnchor: "check-superfluous-actions", Options: []RuleOption{pedanticOption}},
+		RuleInfo{ID: "superfluous-actions", Group: RuleGroupSecurity, Summary: "An action does what a tool of the runner image does as well, such as gh release create.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-superfluous-actions", Options: []RuleOption{pedanticOption}},
 	)
 	registerRuleFactory("superfluous-actions", func(env *RuleEnv) []Rule {
 		if !env.config.RuleEnabled("superfluous-actions") {

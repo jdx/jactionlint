@@ -64,7 +64,7 @@ func (rule *RuleEnvVar) checkEnv(env *Env) {
 
 func init() {
 	registerRules(
-		RuleInfo{ID: "invalid-env-var-name", Group: RuleGroupCorrectness, Summary: "An environment variable name contains characters which are not allowed.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-env-var-names"},
+		RuleInfo{ID: "invalid-env-var-name", Group: RuleGroupCorrectness, Summary: "An environment variable name contains characters which are not allowed.", DefaultLevel: SeverityError, Profile: ProfileCorrectness, DocsAnchor: "check-env-var-names"},
 	)
 	registerRuleFactory("env-var", func(env *RuleEnv) []Rule {
 		return []Rule{NewRuleEnvVar()}

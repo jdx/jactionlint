@@ -153,7 +153,7 @@ jobs:
 	}
 	for _, tc := range tests {
 		t.Run(tc.what, func(t *testing.T) {
-			checkLines(t, lintBatchH(t, "", tc.src, "unused-job-output"), markedWantLines(tc.src)...)
+			checkLines(t, lintBatchH(t, "rules:\n  unused-job-output: error\n", tc.src, "unused-job-output"), markedWantLines(tc.src)...)
 		})
 	}
 }
@@ -268,7 +268,7 @@ jobs:
 }
 
 func TestRuleUnusedNeeds(t *testing.T) {
-	const cfg = "profile: strict\n"
+	const cfg = "profile: pedantic\n"
 	tests := []struct {
 		what string
 		src  string

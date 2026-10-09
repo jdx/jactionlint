@@ -215,7 +215,7 @@ func unpinnedToolInstall(c *runscript.Command, in *runscript.Install) bool {
 
 func init() {
 	registerRules(
-		RuleInfo{ID: "unpinned-tools", Group: RuleGroupSecurity, Summary: "An action installs the newest version of its tool because no version is set or it is latest.", DefaultLevel: SeverityWarning, Profile: ProfileDefault, DocsAnchor: "check-unpinned-tools", Options: []RuleOption{pedanticOption}},
+		RuleInfo{ID: "unpinned-tools", Group: RuleGroupSecurity, Summary: "An action installs the newest version of its tool because no version is set or it is latest.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-unpinned-tools", Options: []RuleOption{pedanticOption}},
 	)
 	registerRuleFactory("unpinned-tools", func(env *RuleEnv) []Rule {
 		if !env.config.RuleEnabled("unpinned-tools") {

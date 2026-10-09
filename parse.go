@@ -1844,11 +1844,11 @@ func Parse(b []byte) (*Workflow, []*Error) {
 
 func init() {
 	registerRules(
-		RuleInfo{ID: "duplicate-key", Group: RuleGroupCorrectness, Summary: "A key is defined more than once in a mapping.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-missing-required-duplicate-keys"},
-		RuleInfo{ID: "merge-key", Group: RuleGroupCorrectness, Summary: "The YAML merge key << is used, which GitHub Actions does not support.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "yaml-anchors"},
-		RuleInfo{ID: "recursive-alias", Group: RuleGroupCorrectness, Summary: "A YAML alias refers to itself.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "yaml-anchors"},
-		RuleInfo{ID: "unused-anchor", Group: RuleGroupCorrectness, Summary: "A YAML anchor is defined but never used.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "yaml-anchors"},
-		RuleInfo{ID: "workflow-syntax", Group: RuleGroupCorrectness, Summary: "The workflow does not follow the syntax of GitHub Actions workflows.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-unexpected-keys"},
-		RuleInfo{ID: "yaml-syntax", Group: RuleGroupCorrectness, Summary: "The file is not valid YAML.", DefaultLevel: SeverityError, Profile: ProfileDefault},
+		RuleInfo{ID: "duplicate-key", Group: RuleGroupCorrectness, Summary: "A key is defined more than once in a mapping.", DefaultLevel: SeverityError, Profile: ProfileCorrectness, DocsAnchor: "check-missing-required-duplicate-keys"},
+		RuleInfo{ID: "merge-key", Group: RuleGroupCorrectness, Summary: "The YAML merge key << is used, which GitHub Actions does not support.", DefaultLevel: SeverityError, Profile: ProfileCorrectness, DocsAnchor: "yaml-anchors"},
+		RuleInfo{ID: "recursive-alias", Group: RuleGroupCorrectness, Summary: "A YAML alias refers to itself.", DefaultLevel: SeverityError, Profile: ProfileCorrectness, DocsAnchor: "yaml-anchors"},
+		RuleInfo{ID: "unused-anchor", Group: RuleGroupCorrectness, Summary: "A YAML anchor is defined but never used.", DefaultLevel: SeverityError, Profile: ProfileCorrectness, DocsAnchor: "yaml-anchors"},
+		RuleInfo{ID: "workflow-syntax", Group: RuleGroupCorrectness, Summary: "The workflow does not follow the syntax of GitHub Actions workflows.", DefaultLevel: SeverityError, Profile: ProfileCorrectness, DocsAnchor: "check-unexpected-keys"},
+		RuleInfo{ID: "yaml-syntax", Group: RuleGroupCorrectness, Summary: "The file is not valid YAML.", DefaultLevel: SeverityError, Profile: ProfileCorrectness},
 	)
 }

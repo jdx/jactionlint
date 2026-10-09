@@ -147,7 +147,7 @@ func init() {
 	registerRules(
 		RuleInfo{
 			ID: "unpinned-images", Group: RuleGroupSecurity, Summary: "A container or service image is not pinned by a digest.",
-			DefaultLevel: SeverityWarning, Profile: ProfileStrict, DocsAnchor: "check-unpinned-images",
+			DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-unpinned-images",
 			Options: []RuleOption{{Name: "require-digest", Kind: RuleOptionBool, Default: true, Summary: "Report images pinned by a tag other than latest too. Turn it off to report only images without a tag or with the latest tag."}},
 		},
 	)

@@ -173,7 +173,7 @@ func (rule *RulePyflakes) parseNextError(stdout []byte, pos *Pos) ([]byte, error
 
 func init() {
 	registerRules(
-		RuleInfo{ID: "pyflakes", Group: RuleGroupCorrectness, Summary: "pyflakes reported an issue in a Python script.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-pyflakes-integ"},
+		RuleInfo{ID: "pyflakes", Group: RuleGroupCorrectness, Summary: "pyflakes reported an issue in a Python script.", DefaultLevel: SeverityError, Profile: ProfileCorrectness, DocsAnchor: "check-pyflakes-integ"},
 	)
 	registerRuleFactory("pyflakes", func(env *RuleEnv) []Rule {
 		if env.pyflakes == "" {

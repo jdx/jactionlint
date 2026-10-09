@@ -58,11 +58,10 @@
     },
     "template-injection": {
       "coverage": "partial",
-      "notes": "Placeholders in run:, github-script and the code inputs of some well-known actions: attacker controlled contexts and objects holding them (template-injection), env variables set from them, and every other non-constant expansion (template-injection-expansion). jactionlint also reports attacker controlled placeholders in container and service options, in the args of docker:// steps and in the prompt, arguments and settings of AI agent actions, which zizmor does not.",
+      "notes": "Placeholders in run:, github-script and the code inputs of some well-known actions: attacker controlled contexts and objects holding them (template-injection), env variables set from them, and, with the pedantic option of template-injection (the pedantic persona), every other non-constant expansion. jactionlint also reports attacker controlled placeholders in container and service options, in the args of docker:// steps and in the prompt, arguments and settings of AI agent actions, which zizmor does not.",
       "jactionlint": [
         { "rule": "expression", "message_contains": "potentially untrusted" },
-        { "rule": "template-injection" },
-        { "rule": "template-injection-expansion" }
+        { "rule": "template-injection" }
       ]
     },
     "hardcoded-container-credentials": {
@@ -106,7 +105,7 @@
     "github-env": {
       "coverage": "partial",
       "notes": "Bash and sh scripts are parsed, pwsh and cmd are matched line by line. A write of an expression or variable that is trusted (github.sha, HOME, ...) is not reported, which zizmor reports in pull_request_target and workflow_run workflows. Untrusted input is also reported under other triggers.",
-      "jactionlint": [{ "rule": "github-env" }, { "rule": "github-env-untrusted-input" }]
+      "jactionlint": [{ "rule": "github-env" }]
     },
     "adhoc-packages": {
       "coverage": "partial",
@@ -125,7 +124,7 @@
     },
     "superfluous-actions": {
       "coverage": "full",
-      "notes": "The same table of actions. The entries zizmor reports only with its pedantic persona are reported when the option pedantic of superfluous-actions is on, which it is under the strict and all profiles.",
+      "notes": "The same table of actions. The entries zizmor reports only with its pedantic persona are reported when the option pedantic of superfluous-actions is on, which it is under the pedantic profile.",
       "jactionlint": [{ "rule": "superfluous-actions" }]
     },
     "forbidden-uses": {
@@ -170,7 +169,7 @@
     },
     "misfeature": {
       "coverage": "partial",
-      "notes": "The pip-install input of setup-python and the cmd shell. Shells that are not well known are the separate misfeature-custom-shell rule, which zizmor reports in the auditor persona only.",
+      "notes": "The pip-install input of setup-python and the cmd shell. Shells that are not well known are reported with the pedantic option of misfeature, which zizmor does in the auditor persona only.",
       "jactionlint": [{ "rule": "misfeature" }]
     },
     "unsound-condition": {

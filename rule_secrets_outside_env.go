@@ -63,7 +63,7 @@ func (rule *RuleSecretsOutsideEnv) VisitWorkflowPre(n *Workflow) error {
 func init() {
 	registerRules(
 		RuleInfo{
-			ID: "secrets-outside-env", Group: RuleGroupSecurity, Summary: "A job uses a secret but has no environment.", DefaultLevel: SeverityWarning, Profile: ProfileAll,
+			ID: "secrets-outside-env", Group: RuleGroupSecurity, Summary: "A job uses a secret but has no environment.", DefaultLevel: SeverityWarning, Profile: ProfilePedantic,
 			DocsAnchor: "check-secrets-outside-env",
 			Options:    []RuleOption{{Name: "allow", Kind: RuleOptionStrings, Summary: "Names of secrets which may be used outside of an environment. GITHUB_TOKEN is always allowed."}},
 		},

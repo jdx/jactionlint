@@ -398,6 +398,6 @@ func (u *UntrustedInputChecker) Init() {
 
 func init() {
 	registerRules(
-		RuleInfo{ID: "template-injection", Group: RuleGroupSecurity, Summary: "A potentially untrusted input is expanded in a script, a container option or the prompt of an AI agent.", DefaultLevel: SeverityError, Profile: ProfileDefault, Fixable: true, DocsAnchor: "untrusted-inputs"},
+		RuleInfo{ID: "template-injection", Group: RuleGroupSecurity, Summary: "A potentially untrusted input is expanded in a script, a container option or the prompt of an AI agent. With the option pedantic, so is any other expression.", DefaultLevel: SeverityError, Profile: ProfileCorrectness, Fixable: true, DocsAnchor: "untrusted-inputs", Options: []RuleOption{pedanticOption}},
 	)
 }

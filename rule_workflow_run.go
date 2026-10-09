@@ -129,7 +129,7 @@ func (rule *RuleWorkflowRun) VisitWorkflowPre(n *Workflow) error {
 
 func init() {
 	registerRules(
-		RuleInfo{ID: "workflow-run-names", Group: RuleGroupCorrectness, Summary: "A workflow_run event refers to a workflow which does not exist in the repository.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-workflow-run-names"},
+		RuleInfo{ID: "workflow-run-names", Group: RuleGroupCorrectness, Summary: "A workflow_run event refers to a workflow which does not exist in the repository.", DefaultLevel: SeverityError, Profile: ProfileCorrectness, DocsAnchor: "check-workflow-run-names"},
 	)
 	registerRuleFactory("workflow-run", func(env *RuleEnv) []Rule {
 		return []Rule{NewRuleWorkflowRun(env.project)}

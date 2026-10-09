@@ -77,10 +77,72 @@ func (rule *RuleArtipacked) VisitJobPre(n *Job) error {
 			// cannot be judged
 			continue
 		}
+		if checkoutV1Re.MatchString(ref.Ref) {
+			// actions/checkout@v1 has no such input and always leaves the credential. The outdated runner
+			// check reports the version, and nothing here could be done (zizmor#1098)
+			continue
+		}
+		if pushesWithCredentials(steps[i+1:]) && !uploadsWorkspace(steps) {
+			// A later step pushes, and it does so with the credential the checkout left. That is what the
+			// credential is for and nothing uploads the workspace, so there is nothing to leak (zizmor#1043)
+			continue
+		}
 		rule.ReportID("artipacked", a.Uses.Pos, "actions/checkout leaves the GITHUB_TOKEN in the git config of the workspace, where a later step such as an artifact upload can publish it. set \"persist-credentials: false\" under \"with:\" unless a later step needs to push")
 		rule.attachFix(a, steps[i+1:])
 	}
 	return nil
+}
+
+// checkoutV1Re matches the refs of the first major version of actions/checkout.
+var checkoutV1Re = regexp.MustCompile(`^v?1(\.[0-9]+)*$`)
+
+// gitPushRe matches a git command that pushes.
+var gitPushRe = regexp.MustCompile(`(?m)\bgit\b[^\n]*\bpush\b`)
+
+// pushesWithCredentials reports whether one of the steps pushes with the credential of the checkout: a `git push` in
+// a script or an action that pushes. Another remote operation (fetch, clone, tag) or a push with a credential of its
+// own is not told from a push here, so only the push counts.
+func pushesWithCredentials(steps []*Step) bool {
+	for _, s := range steps {
+		switch e := s.Exec.(type) {
+		case *ExecRun:
+			if e.Run != nil && gitPushRe.MatchString(e.Run.Value) {
+				return true
+			}
+		case *ExecAction:
+			if e.Uses == nil {
+				continue
+			}
+			name := strings.ToLower(ParseUses(e.Uses.Value).CanonicalName())
+			for _, p := range gitPushingActions {
+				if name == p || strings.HasPrefix(name, p+"/") {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
+// uploadsWorkspace reports whether a step uploads an artifact of the whole workspace (or its parent), which
+// publishes the git config of the checkout with the credential in it.
+func uploadsWorkspace(steps []*Step) bool {
+	for _, s := range steps {
+		a, ref := stepAction(s)
+		if a == nil || !ref.isRepoAction("actions/upload-artifact") {
+			continue
+		}
+		path, ok := a.input("path")
+		if !ok {
+			continue
+		}
+		for _, p := range strings.FieldsFunc(path, func(r rune) bool { return r == '\n' || r == ' ' }) {
+			if p == "." || p == "./" || p == ".." || p == "../" || strings.Contains(p, "github.workspace") {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func (rule *RuleArtipacked) attachFix(a *ExecAction, later []*Step) {
@@ -253,7 +315,7 @@ func followPath(n *yaml.Node, path []int) *yaml.Node {
 
 func init() {
 	registerRules(
-		RuleInfo{ID: "artipacked", Group: RuleGroupSecurity, Summary: "actions/checkout persists the GITHUB_TOKEN credential in the git config.", DefaultLevel: SeverityWarning, Profile: ProfileStrict, Fixable: true, DocsAnchor: "check-artipacked"},
+		RuleInfo{ID: "artipacked", Group: RuleGroupSecurity, Summary: "actions/checkout persists the GITHUB_TOKEN credential in the git config.", DefaultLevel: SeverityError, Profile: ProfileDefault, Fixable: true, DocsAnchor: "check-artipacked"},
 	)
 	registerRuleFactory("artipacked", func(env *RuleEnv) []Rule {
 		return []Rule{NewRuleArtipacked(env.Source())}

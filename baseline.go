@@ -396,7 +396,7 @@ func init() {
 	registerRules(RuleInfo{
 		ID: unusedBaselineEntryID, Group: RuleGroupPolicy,
 		Summary:      "A baseline entry matches no finding any more, so the baseline can shrink.",
-		DefaultLevel: SeverityInfo, Profile: ProfileDefault,
+		DefaultLevel: SeverityInfo, Profile: ProfileCorrectness,
 	})
 }
 

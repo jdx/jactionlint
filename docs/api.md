@@ -27,7 +27,8 @@ Followings are unexhaustive list of interesting APIs.
 - `Rules()` returns the `RuleInfo` of every rule (ID, group, summary, default level, profile and options). `LookupRule()`
   finds one by its ID. The IDs are stable. `RuleDocURL()` returns the URL of the documentation of a rule.
 - `Severity` is the level of a finding: `SeverityInfo`, `SeverityWarning` or `SeverityError`. `SeverityOff` disables a rule.
-  `Profile` is the set of rules enabled by the configuration: `ProfileDefault`, `ProfileStrict` or `ProfileAll`.
+  `Profile` is the set of rules enabled by the configuration: `ProfileCorrectness`, `ProfileDefault` or `ProfilePedantic`, each
+  including the one before it. `LinterOptions.Profile` overrides the profile of the configuration, like `-profile`.
 - `Linter.FixFiles()` and `Linter.FixRepository()` apply the fixes of the errors. `MigrateConfig()` rewrites the deprecated keys
   of a config file into the `rules` mapping.
 - `Workflow`, `Job`, `Step`, ... are nodes of workflow syntax tree. `Workflow` is a root node.

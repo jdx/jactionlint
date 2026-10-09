@@ -51,7 +51,7 @@ func (rule *RuleUnsoundContains) VisitWorkflowPre(n *Workflow) error {
 
 func init() {
 	registerRules(
-		RuleInfo{ID: "unsound-contains", Group: RuleGroupSecurity, Summary: "A condition uses contains() on a string literal, which also matches substrings.", DefaultLevel: SeverityWarning, Profile: ProfileDefault, DocsAnchor: "check-unsound-contains"},
+		RuleInfo{ID: "unsound-contains", Group: RuleGroupSecurity, Summary: "A condition uses contains() on a string literal, which also matches substrings.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-unsound-contains"},
 	)
 	registerRuleFactory("unsound-contains", func(env *RuleEnv) []Rule {
 		if !env.config.RuleEnabled("unsound-contains") {

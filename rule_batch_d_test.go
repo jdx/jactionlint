@@ -366,7 +366,7 @@ func TestGitHubEnvTriggersAndNames(t *testing.T) {
 	count := func(src string) int {
 		n := 0
 		for _, e := range lintBatchD(t, "test.yaml", src, cfg) {
-			if e.ID == "github-env" || e.ID == "github-env-untrusted-input" {
+			if e.ID == "github-env" {
 				n++
 			}
 		}
@@ -423,14 +423,14 @@ func TestBatchDPedanticOption(t *testing.T) {
 			t.Errorf("%s: no pedantic finding with the option", id)
 		}
 		strict := on(nil)
-		strict.Profile = ProfileStrict
+		strict.Profile = ProfilePedantic
 		if n := count(strict, id); n == 0 {
-			t.Errorf("%s: no pedantic finding under the strict profile", id)
+			t.Errorf("%s: no pedantic finding under the pedantic profile", id)
 		}
 		strictOff := on(map[string]any{"pedantic": false})
-		strictOff.Profile = ProfileStrict
+		strictOff.Profile = ProfilePedantic
 		if n := count(strictOff, id); n != 0 {
-			t.Errorf("%s: %d pedantic findings with pedantic: false under the strict profile", id, n)
+			t.Errorf("%s: %d pedantic findings with pedantic: false under the pedantic profile", id, n)
 		}
 	}
 }
@@ -439,7 +439,7 @@ func countBatchD(t *testing.T, id, src string) int {
 	t.Helper()
 	n := 0
 	for _, e := range lintBatchD(t, "test.yaml", src, allBatchDRules()) {
-		if e.ID == id {
+		if findingName(e) == id {
 			n++
 		}
 	}

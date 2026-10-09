@@ -45,7 +45,7 @@ func (rule *RuleOverprovisionedSecrets) VisitWorkflowPre(n *Workflow) error {
 
 func init() {
 	registerRules(
-		RuleInfo{ID: "overprovisioned-secrets", Group: RuleGroupSecurity, Summary: "An expression uses the whole secrets context.", DefaultLevel: SeverityWarning, Profile: ProfileStrict, DocsAnchor: "check-overprovisioned-secrets"},
+		RuleInfo{ID: "overprovisioned-secrets", Group: RuleGroupSecurity, Summary: "An expression uses the whole secrets context.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-overprovisioned-secrets"},
 	)
 	registerRuleFactory("overprovisioned-secrets", func(env *RuleEnv) []Rule {
 		if !env.config.RuleEnabled("overprovisioned-secrets") {

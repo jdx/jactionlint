@@ -11,7 +11,7 @@ import (
 // that would add noise to the fixtures.
 func tiConfig(t *testing.T) *Config {
 	t.Helper()
-	return mustParseConfig(t, "profile: all\nrules:\n  missing-permissions: off\n  missing-timeout: off\n  anonymous-definition: off\n  require-shell: off\n  require-expression-wrapping: off\n  unpinned-uses: off\n")
+	return mustParseConfig(t, "profile: pedantic\nrules:\n  concurrency-limits: off\n  missing-permissions: off\n  missing-timeout: off\n  anonymous-definition: off\n  require-shell: off\n  require-expression-wrapping: off\n  unpinned-uses: off\n")
 }
 
 func tiWorkflow(runs string) string {
@@ -22,7 +22,7 @@ func idsOf(errs []*Error, prefix string) []string {
 	var ret []string
 	for _, e := range errs {
 		if strings.HasPrefix(e.ID, prefix) {
-			ret = append(ret, e.ID)
+			ret = append(ret, findingName(e))
 		}
 	}
 	return ret
@@ -80,7 +80,7 @@ func TestTemplateInjectionTiers(t *testing.T) {
 			var got []string
 			for _, e := range errs {
 				if strings.HasPrefix(e.ID, "template-injection") {
-					got = append(got, e.ID)
+					got = append(got, findingName(e))
 				}
 			}
 			if diff := cmp.Diff(tc.want, got); diff != "" {
@@ -131,7 +131,7 @@ jobs:
 	var got []string
 	for _, e := range errs {
 		if strings.HasPrefix(e.ID, "template-injection") {
-			got = append(got, e.ID+" "+strings.SplitN(e.Message, `"`, 3)[1])
+			got = append(got, findingName(e)+" "+strings.SplitN(e.Message, `"`, 3)[1])
 		}
 	}
 	want := []string{
@@ -423,7 +423,7 @@ func FuzzTemplateInjectionFix(f *testing.F) {
 			step = "      - run: " + script + "\n"
 		}
 		src := tiWorkflow(step)
-		cfg := &Config{Profile: ProfileAll}
+		cfg := &Config{Profile: ProfilePedantic}
 		errs := lintWithConfig(t, cfg, src)
 		for _, e := range errs {
 			if e.Kind == "syntax-check" {

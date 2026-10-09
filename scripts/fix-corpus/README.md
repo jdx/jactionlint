@@ -35,5 +35,5 @@ go run ./scripts/fix-corpus -jactionlint ./jactionlint [-unsafe] [-no-zizmor] [-
 | `-keep DIR` | keep the fixed copies in DIR, to read the changes with `diff -ru` |
 
 Directories are repositories (a directory with `.github/`). Without arguments the script uses `~/src/*-jactionlint` and
-`~/src/mise`. The config turns on `profile: all` and gives `missing-timeout` a `default-minutes`, because without a
+`~/src/mise`. The config turns on `profile: pedantic` and gives `missing-timeout` a `default-minutes`, because without a
 configured number that fixer offers nothing.

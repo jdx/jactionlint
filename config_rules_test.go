@@ -13,7 +13,7 @@ import (
 
 func TestConfigRulesParse(t *testing.T) {
 	c := mustParseConfig(t, `
-profile: strict
+profile: pedantic
 rules:
   unpinned-uses: warn
   require-shell: off
@@ -26,7 +26,7 @@ rules:
   invalid-glob: true
   matrix-duplicate-value: false
 `)
-	if c.Profile != ProfileStrict {
+	if c.Profile != ProfilePedantic {
 		t.Errorf("profile: %q", c.Profile)
 	}
 	levels := map[string]Severity{
@@ -60,22 +60,22 @@ rules:
 }
 
 func TestConfigRuleLevelByProfile(t *testing.T) {
-	ids := []string{"expression-type", "unsound-ternary", "unpinned-uses", "missing-permissions", "require-shell", "max-run-lines", "timeout-too-long", "required-actions"}
+	ids := []string{"expression-type", "unsound-ternary", "template-injection", "unpinned-uses", "missing-permissions", "adhoc-packages", "require-shell", "max-run-lines", "timeout-too-long", "required-actions"}
+	correctness := map[string]bool{"expression-type": true, "unsound-ternary": true, "template-injection": true}
+	def := map[string]bool{"expression-type": true, "unsound-ternary": true, "template-injection": true, "unpinned-uses": true, "missing-permissions": true, "adhoc-packages": true}
+	pedantic := map[string]bool{"expression-type": true, "unsound-ternary": true, "template-injection": true, "unpinned-uses": true, "missing-permissions": true, "adhoc-packages": true, "require-shell": true, "max-run-lines": true}
 	tests := []struct {
 		profile string
 		want    map[string]bool
 	}{
-		{"", map[string]bool{"expression-type": true, "unsound-ternary": true}},
-		{"default", map[string]bool{"expression-type": true, "unsound-ternary": true}},
-		{"strict", map[string]bool{"expression-type": true, "unsound-ternary": true, "unpinned-uses": true, "missing-permissions": true}},
-		{"all", map[string]bool{"expression-type": true, "unsound-ternary": true, "unpinned-uses": true, "missing-permissions": true, "require-shell": true, "max-run-lines": true}},
+		{"correctness", correctness},
+		{"default", def},
+		{"pedantic", pedantic},
+		{"strict", pedantic}, // retired names
+		{"all", pedantic},
 	}
 	for _, tc := range tests {
-		src := ""
-		if tc.profile != "" {
-			src = "profile: " + tc.profile + "\n"
-		}
-		c := mustParseConfig(t, src)
+		c := mustParseConfig(t, "profile: "+tc.profile+"\n")
 		for _, id := range ids {
 			if got := c.RuleEnabled(id); got != tc.want[id] {
 				t.Errorf("profile %q: RuleEnabled(%q) = %v, want %v", tc.profile, id, got, tc.want[id])
@@ -83,17 +83,22 @@ func TestConfigRuleLevelByProfile(t *testing.T) {
 		}
 	}
 
-	// A nil config behaves like an empty one
+	// A configuration without a profile, and a nil one, use the default profile
+	withDefaultProfile(t)
 	var nilCfg *Config
-	if !nilCfg.RuleEnabled("expression-type") || nilCfg.RuleEnabled("unpinned-uses") {
-		t.Error("a nil config must use the default profile")
+	for _, c := range []*Config{nilCfg, mustParseConfig(t, "")} {
+		for _, id := range ids {
+			if got := c.RuleEnabled(id); got != def[id] {
+				t.Errorf("no profile: RuleEnabled(%q) = %v, want %v", id, got, def[id])
+			}
+		}
 	}
 	if _, ok := nilCfg.RuleOption("max-run-lines", "max"); !ok {
 		t.Error("the default of an option is available without a config")
 	}
 
-	// max-run-lines enabled by the "all" profile uses the default maximum
-	c := mustParseConfig(t, "profile: all\n")
+	// max-run-lines enabled by the pedantic profile uses the default maximum
+	c := mustParseConfig(t, "profile: pedantic\n")
 	if m, ok := c.ruleOptionNumber("max-run-lines", "max"); !ok || m != DefaultMaxRunLines {
 		t.Errorf("default max = %v, %v", m, ok)
 	}
@@ -209,7 +214,7 @@ timeout-minutes:
 	}
 
 	// max-run-lines: 0 means disabled, also under the "all" profile
-	c = mustParseConfig(t, "profile: all\nmax-run-lines: 0\n")
+	c = mustParseConfig(t, "profile: pedantic\nmax-run-lines: 0\n")
 	if c.RuleEnabled("max-run-lines") {
 		t.Error("max-run-lines: 0 must disable the rule")
 	}
@@ -236,7 +241,7 @@ func TestConfigExtends(t *testing.T) {
 	}
 
 	write("org/base.yaml", `
-profile: strict
+profile: pedantic
 rules:
   unpinned-uses: warn
   require-shell: error
@@ -272,7 +277,7 @@ paths:
 	if err != nil {
 		t.Fatal(err)
 	}
-	if c.Profile != ProfileStrict {
+	if c.Profile != ProfilePedantic {
 		t.Errorf("profile must be inherited: %q", c.Profile)
 	}
 	if got := c.RuleLevel("unpinned-uses"); got != SeverityError {
@@ -339,11 +344,11 @@ paths:
 			}
 			body := "extends: [" + next + "]\n"
 			if next == "last.yaml" {
-				body = "profile: all\n"
+				body = "profile: pedantic\n"
 			}
 			write("deep/deep"+string(rune('a'+i))+".yaml", body)
 		}
-		write("deep/last.yaml", "profile: all\n")
+		write("deep/last.yaml", "profile: pedantic\n")
 		_, err := ReadConfigFile(filepath.Join(dir, "deep", "deepa.yaml"))
 		if err == nil || !strings.Contains(err.Error(), "more than") {
 			t.Errorf("unexpected error: %v", err)
@@ -358,13 +363,13 @@ paths:
 		}
 	})
 	t.Run("absolute path", func(t *testing.T) {
-		abs := write("abs/base.yaml", "profile: all\n")
+		abs := write("abs/base.yaml", "profile: pedantic\n")
 		p := write("abs/c.yaml", "extends: ['"+filepath.ToSlash(abs)+"']\n")
 		c, err := ReadConfigFile(p)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if c.Profile != ProfileAll {
+		if c.Profile != ProfilePedantic {
 			t.Error("absolute extends was not loaded")
 		}
 	})
@@ -382,8 +387,8 @@ func TestConfigRulesAffectLinting(t *testing.T) {
 		{"lowered", "rules:\n  template-injection: warn\n", []Severity{SeverityWarning}},
 		{"info", "rules:\n  template-injection: info\n", []Severity{SeverityInfo}},
 		{"off", "rules:\n  template-injection: off\n", nil},
-		{"strict adds the pinning rule", "profile: strict\n", []Severity{SeverityError, SeverityError, SeverityError, SeverityError}},
-		{"strict with a lowered rule", "profile: strict\nrules:\n  unpinned-uses: warn\n  missing-permissions: off\n  missing-timeout: off\n", []Severity{SeverityWarning, SeverityError}},
+		{"strict adds the pinning rule", "profile: pedantic\n", []Severity{SeverityError, SeverityError, SeverityError, SeverityError}},
+		{"strict with a lowered rule", "profile: pedantic\nrules:\n  unpinned-uses: warn\n  missing-permissions: off\n  missing-timeout: off\n", []Severity{SeverityWarning, SeverityError}},
 	}
 	for _, tc := range tests {
 		t.Run(tc.what, func(t *testing.T) {
@@ -519,7 +524,7 @@ func TestLegacyTimeoutMinutesLeavesMissingTimeoutToTheProfile(t *testing.T) {
 		}
 	}
 
-	off := mustParseConfig(t, "profile: strict\ntimeout-minutes:\n  required: false\n  max: 30\n")
+	off := mustParseConfig(t, "profile: pedantic\ntimeout-minutes:\n  required: false\n  max: 30\n")
 	if off.RuleEnabled("missing-timeout") {
 		t.Error("required: false must turn missing-timeout off")
 	}

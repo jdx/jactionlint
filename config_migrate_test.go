@@ -113,7 +113,7 @@ func TestMigrateConfigMergesIntoExistingRules(t *testing.T) {
 }
 
 func TestMigrateConfigNothingToMigrate(t *testing.T) {
-	for _, in := range []string{"", "profile: strict\n", "# only a comment\n", "rules:\n  require-shell: error\n"} {
+	for _, in := range []string{"", "profile: pedantic\n", "# only a comment\n", "rules:\n  require-shell: error\n"} {
 		out, migrated, err := MigrateConfig([]byte(in))
 		if err != nil {
 			t.Fatalf("%q: %v", in, err)

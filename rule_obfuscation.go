@@ -254,7 +254,7 @@ func formatOfLiterals(args []ExprNode) (string, bool) {
 
 func init() {
 	registerRules(
-		RuleInfo{ID: "obfuscation", Group: RuleGroupSecurity, Summary: "A path at uses: or an expression is written in an obfuscated way.", DefaultLevel: SeverityWarning, Profile: ProfileStrict, Fixable: true, DocsAnchor: "check-obfuscation"},
+		RuleInfo{ID: "obfuscation", Group: RuleGroupSecurity, Summary: "A path at uses: or an expression is written in an obfuscated way.", DefaultLevel: SeverityError, Profile: ProfileDefault, Fixable: true, DocsAnchor: "check-obfuscation"},
 	)
 	registerRuleFactory("obfuscation", func(env *RuleEnv) []Rule {
 		return []Rule{NewRuleObfuscation(env.src)}

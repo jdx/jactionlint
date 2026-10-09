@@ -306,7 +306,7 @@ func TestFixRefusesToWriteAFileChangedMeanwhile(t *testing.T) {
 }
 
 func TestCommandDiffAndRules(t *testing.T) {
-	root := writeProject(t, map[string]string{".github/workflows/ci.yaml": engineWorkflow, "jactionlint.yaml": "rules:\n  local-action-checkout: off\n  unsound-ternary: off\n  workflow-run-names: off\n  missing-timeout: off\n"})
+	root := writeProject(t, map[string]string{".github/workflows/ci.yaml": engineWorkflow, "jactionlint.yaml": "rules:\n  insecure-commands: error\n  local-action-checkout: off\n  unsound-ternary: off\n  workflow-run-names: off\n  missing-timeout: off\n"})
 	path := filepath.Join(root, ".github", "workflows", "ci.yaml")
 	run := func(args ...string) (int, string, string) {
 		var stdout, stderr bytes.Buffer
@@ -386,7 +386,7 @@ func TestFixRealRulesOnTrickyYAML(t *testing.T) {
 				src := strings.ReplaceAll("on: issues\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n"+step, "\n", eol)
 				root := writeProject(t, map[string]string{".github/workflows/ci.yaml": src})
 				path := filepath.Join(root, ".github", "workflows", "ci.yaml")
-				l, _, _ := engineLinter(t, root, nil, mustParseConfig(t, "profile: all\nrules:\n  missing-timeout:\n    default-minutes: 5\n"))
+				l, _, _ := engineLinter(t, root, nil, mustParseConfig(t, "profile: pedantic\nrules:\n  missing-timeout:\n    default-minutes: 5\n"))
 				res, err := l.FixFiles([]string{path}, nil, FixModeUnsafe)
 				if err != nil {
 					t.Fatal(err)
@@ -401,7 +401,7 @@ func TestFixRealRulesOnTrickyYAML(t *testing.T) {
 				if eol == "\r\n" && strings.Contains(strings.ReplaceAll(string(b), "\r\n", ""), "\n") {
 					t.Errorf("a bare LF was added to a CRLF file:\n%q", b)
 				}
-				l, _, _ = engineLinter(t, root, nil, mustParseConfig(t, "profile: all\nrules:\n  missing-timeout:\n    default-minutes: 5\n"))
+				l, _, _ = engineLinter(t, root, nil, mustParseConfig(t, "profile: pedantic\nrules:\n  missing-timeout:\n    default-minutes: 5\n"))
 				res, err = l.FixFiles([]string{path}, nil, FixModeUnsafe)
 				if err != nil {
 					t.Fatal(err)

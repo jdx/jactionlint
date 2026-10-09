@@ -3,15 +3,16 @@
 jactionlint started as a linter for mistakes only. It now has three tiers of checks, and every check belongs to exactly
 one of them:
 
-| Tier            | What it finds                                                                          | Enabled by default                     |
-| --------------- | -------------------------------------------------------------------------------------- | -------------------------------------- |
-| **Correctness** | Workflows that are broken or do not do what they say: syntax, types, bad inputs, etc.  | Yes                                    |
-| **Security**    | Workflows that are exploitable or weaken the supply chain: injection, unpinned actions | High-confidence checks only            |
-| **Policy**      | Project conventions: explicit `shell:`, run script length, `permissions:` set          | No, except `missing-timeout`. Opt-in through a profile or config |
+| Tier            | What it finds                                                                          | Profile                                                                   |
+| --------------- | -------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| **Correctness** | Workflows that are broken or do not do what they say: syntax, types, bad inputs, etc.  | `correctness` (what actionlint checks and the bug detectors we added)     |
+| **Security**    | Workflows that are exploitable or weaken the supply chain: injection, unpinned actions | `default`; the noisy tier of an audit is in its `pedantic` option         |
+| **Policy**      | Project conventions: explicit `shell:`, run script length, `permissions:` set          | `default` when it is worth failing a build on, `pedantic` otherwise       |
 
-The tier decides the default, not the importance of the check. A policy check is welcome, but it never turns on for
-someone who did not ask for it. See [the configuration document](docs/config.md) for how checks are enabled today, and
-[the v2 migration plan](docs/v2-migration.md) for where this is heading (stable rule IDs, severities and profiles).
+The profile decides what runs for someone who chose nothing: `correctness` < `default` < `pedantic`, each including the one
+before it. Every rule of `correctness` and `default` reports `error`; a rule that cannot be an error belongs to `pedantic`.
+See [the configuration document](docs/config.md#profiles) for how checks are enabled, and
+[the v2 migration plan](docs/v2-migration.md) for where this is heading.
 
 ## Accepting a new check
 
@@ -19,7 +20,10 @@ A patch that adds a check (or a feature request for one) is accepted when all of
 
 - **Stable ID.** The check has a stable, documented rule ID that will not be renamed. For security checks, reuse the name
   of the equivalent [zizmor audit](docs/zizmor-parity.md) when there is one so users can map them.
-- **Tier.** The check states which tier it belongs to and why.
+- **Tier and profile.** The check states which tier it belongs to and why, and which profile enables it. `testdata/profiles.txt`
+  records the profile and level of every rule (`go test -run TestRuleProfilesSnapshot -update-profiles` writes it), so a new rule
+  or a changed profile shows in the diff. One audit is one ID: put its noisier findings behind the `pedantic` option instead of
+  adding an ID with a suffix.
 - **Docs section.** [The checks document](docs/checks.md) has a section for it with an example, the output and a
   playground link. See [How to write checks document](#how-to-write-checks-document).
 - **Golden tests.** There are tests under `testdata/` (`err`, `ok` and `examples` as appropriate) that show both what is
@@ -105,7 +109,7 @@ file (`linter.go` and `rule_registry.go` stay untouched). A rule needs these fil
        // One RuleInfo per ID the rule can report. Registering an ID twice panics.
        registerRules(RuleInfo{
            ID: "my-rule", Group: RuleGroupPolicy, Summary: "A one-line description ending with a period.",
-           DefaultLevel: SeverityWarning, Profile: ProfileStrict, DocsAnchor: "check-my-rule",
+           DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-my-rule",
        })
        // How to create the rule for one file. Return nil when it is not needed (e.g. its config is empty),
        // or call env.Skip(reason) to log why it is disabled. env has the config, project, caches and
@@ -395,16 +399,17 @@ Please see [the readme of the script](./scripts/check-checks/README.md) for the 
 document format that this script assumes.
 
 The output block is what the CLI prints for the example, and the playground prints the same. Both lint the example with
-the configuration in [`internal/exampleconfig`](./internal/exampleconfig/exampleconfig.go), which only turns off
-`missing-timeout`: the examples are minimal workflows and most of their jobs have no `timeout-minutes`. The playground tests
+the configuration in [`internal/exampleconfig`](./internal/exampleconfig/exampleconfig.go), which uses the `default` profile and
+turns off the rules every minimal example breaks (`missing-timeout`, `missing-permissions`, `unpinned-uses`, `concurrency-limits`, `obfuscation`
+and a few more): the examples are minimal workflows. The playground tests
 (`mise run docs:test`) decode every permalink in the document, lint it with the real wasm build and compare the findings
 (message, `warning: `/`info: ` prefix and kind) with the output block above it. So:
 
-- A rule which is on by default: write the example, run the script and keep both the generated output and the playground
+- A rule which the example configuration has on (the rules of the `correctness` and `default` profiles it does not turn off): write the example, run the script and keep both the generated output and the playground
   link. The output must be what the playground prints, so an example for one rule must not trigger another default-on rule
   (give a job `runs-on`, pin `uses:` and so on). If a new default-on rule fires on most examples, turn it off in
   `internal/exampleconfig`, which changes the CLI and the playground together.
-- A rule which is off by default (opt-in): the playground cannot enable it. Put `<!-- Skip update output -->` after
+- A rule which the example configuration has off (the `pedantic` profile and the rules it turns off): the playground cannot enable it. Put `<!-- Skip update output -->` after
   `Output:` and `<!-- Skip playground link -->` instead of the link, write the output by hand, and show the `rules:` section of
   the configuration file that produces it right after the example. A Go test (`TestPolicyDocsExamples` for the policy rules) lints
   the example with that configuration and compares the output, so the hand-written output cannot go stale.

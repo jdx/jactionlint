@@ -32,7 +32,7 @@ jobs:
       - name: Dog fooding 🐶
         run: |
           echo "::add-matcher::.github/jactionlint-matcher.json"
-          ./jactionlint -color
+          ./jactionlint -profile correctness -color
   wasm:
     name: Wasm
     runs-on: ubuntu-latest
@@ -68,7 +68,7 @@ jobs:
         run: docker container run
           --mount type=bind,source="$(pwd)",target=/mnt/app
           --workdir /mnt/app
-          -- ${{ steps.image.outputs.digest }} -color -verbose
+          -- ${{ steps.image.outputs.digest }} -profile correctness -color -verbose
       - name: Lint Dockerfile with hadolint
         run: docker run --rm -i hadolint/hadolint hadolint --ignore DL3018 --ignore DL3066 --strict-labels - < Dockerfile
 

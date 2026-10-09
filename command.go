@@ -294,6 +294,7 @@ func (cmd *Command) Main(args []string) int {
 	var noColor bool
 	var color bool
 	var minSeverity string
+	var profileName string
 	var strictExit bool
 	var onlineTTL time.Duration
 	var baseline, baselineWrite optionalValueFlag
@@ -302,6 +303,7 @@ func (cmd *Command) Main(args []string) int {
 	flags.SetOutput(cmd.Stderr)
 	flags.Var(&ignorePats, "ignore", "Rule ID (e.g. unpinned-uses) or regular expression matching to error messages you want to ignore. This flag is repeatable")
 	flags.StringVar(&minSeverity, "min-severity", "info", "Hide the errors less severe than this level: info, warn or error")
+	flags.StringVar(&profileName, "profile", "", "Rule profile: correctness (what actionlint checks), default or pedantic. It overrides \"profile\" of the config file. Each profile includes the rules of the one before it. See the rules documentation")
 	flags.BoolVar(&strictExit, "strict-exit", false, "Exit with status 1 also when only errors of warn or info level are found. By default only errors of error level make the exit status 1")
 	flags.StringVar(&opts.Shellcheck, "shellcheck", "shellcheck", "Command name or file path of \"shellcheck\" external command. If empty, shellcheck integration will be disabled")
 	flags.StringVar(&opts.Pyflakes, "pyflakes", "pyflakes", "Command name or file path of \"pyflakes\" external command. If empty, pyflakes integration will be disabled")
@@ -367,6 +369,14 @@ func (cmd *Command) Main(args []string) int {
 		return ExitStatusInvalidCommandOption
 	}
 	opts.MinSeverity = sev
+	if profileName != "" {
+		p, err := ParseProfile(profileName)
+		if err != nil {
+			fmt.Fprintf(cmd.Stderr, "invalid value %q for -profile. available values are \"correctness\", \"default\" and \"pedantic\"\n", profileName)
+			return ExitStatusInvalidCommandOption
+		}
+		opts.Profile = p
+	}
 	if baselineWrite.set && (baseline.set || baseline.off || opts.BaselineCheck) {
 		fmt.Fprintln(cmd.Stderr, "-baseline-write cannot be combined with -baseline or -baseline-check: it records every finding")
 		return ExitStatusInvalidCommandOption

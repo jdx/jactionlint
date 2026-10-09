@@ -83,19 +83,17 @@ func (f FixFailure) String() string {
 // metadata, and the removal of unused ignore comments last. IDs which are not listed (custom rules)
 // come after the listed ones, in alphabetical order. A fix of a safe kind always wins over an unsafe one.
 var fixPriority = map[string]int{
-	"template-injection":           10,
-	"template-injection-trusted":   11,
-	"template-injection-expansion": 12,
-	"insecure-commands":            20,
-	"artipacked":                   30,
-	"bot-conditions":               40,
-	"unpinned-uses":                50,
-	"self-repository":              60,
-	"obfuscation":                  70,
-	"missing-permissions":          80,
-	"missing-timeout":              90,
-	"anonymous-definition":         100,
-	"unused-ignore":                900,
+	"template-injection":   10,
+	"insecure-commands":    20,
+	"artipacked":           30,
+	"bot-conditions":       40,
+	"unpinned-uses":        50,
+	"self-repository":      60,
+	"obfuscation":          70,
+	"missing-permissions":  80,
+	"missing-timeout":      90,
+	"anonymous-definition": 100,
+	"unused-ignore":        900,
 }
 
 func fixRank(id string) int {
@@ -564,14 +562,33 @@ func (l *Linter) lintSource(file string, src []byte, project *Project) (fileResu
 }
 
 // configFor returns the configuration which applies to files of the project.
+// The -profile option, when given, replaces the profile of the configuration.
 func (l *Linter) configFor(project *Project) *Config {
-	if l.defaultConfig != nil {
-		return l.defaultConfig
+	var cfg *Config
+	switch {
+	case l.defaultConfig != nil:
+		cfg = l.defaultConfig
+	case project != nil && project.Config() != nil:
+		cfg = project.Config()
+	default:
+		cfg = l.globalConfig
 	}
-	if project != nil && project.Config() != nil {
-		return project.Config()
+	if l.profile == "" {
+		return cfg
 	}
-	return l.globalConfig
+	if cfg == nil {
+		return &Config{Profile: l.profile}
+	}
+	if cfg.Profile == l.profile {
+		return cfg
+	}
+	if c, ok := l.profiled.Load(cfg); ok {
+		return c.(*Config)
+	}
+	c := *cfg
+	c.Profile = l.profile
+	actual, _ := l.profiled.LoadOrStore(cfg, &c)
+	return actual.(*Config)
 }
 
 // writeFileUnchanged writes the new text of the file unless the file changed since it was read.

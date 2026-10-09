@@ -78,7 +78,7 @@ func TestCommandNeverUsesTheNetworkWithoutOnline(t *testing.T) {
 	f := newFakeGitHub(t)
 	githubForActionsCheckout(f, true)
 	setOnlineEnv(t, f, "tok")
-	_, wf := onlineProject(t, workflowWith("uses: actions/checkout@v4", "uses: actions/checkout@"+testSHAv422+" # v3"), "profile: all\n")
+	_, wf := onlineProject(t, workflowWith("uses: actions/checkout@v4", "uses: actions/checkout@"+testSHAv422+" # v3"), "profile: pedantic\n")
 	status, stdout, stderr := runOnlineCommand(t, "-rule-ids", wf)
 	if n := f.total(); n != 0 {
 		t.Fatalf("%d requests were made without -online", n)

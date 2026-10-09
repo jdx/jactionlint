@@ -1297,9 +1297,9 @@ func typeOfActionOutputs(meta *ActionMetadata) *ObjectType {
 
 func init() {
 	registerRules(
-		RuleInfo{ID: "expression-type", Group: RuleGroupCorrectness, Summary: "A ${{ }} expression has a type error.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-type-check-expression"},
-		RuleInfo{ID: "unsound-ternary", Group: RuleGroupCorrectness, Summary: "The a && b || c idiom has a falsy b so it always evaluates to c.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-falsy-ternary"},
-		RuleInfo{ID: "workflow-input-type", Group: RuleGroupCorrectness, Summary: "The type of a value passed to a reusable workflow does not match its input.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-reusable-workflows"},
+		RuleInfo{ID: "expression-type", Group: RuleGroupCorrectness, Summary: "A ${{ }} expression has a type error.", DefaultLevel: SeverityError, Profile: ProfileCorrectness, DocsAnchor: "check-type-check-expression"},
+		RuleInfo{ID: "unsound-ternary", Group: RuleGroupCorrectness, Summary: "The a && b || c idiom has a falsy b so it always evaluates to c.", DefaultLevel: SeverityError, Profile: ProfileCorrectness, DocsAnchor: "check-falsy-ternary"},
+		RuleInfo{ID: "workflow-input-type", Group: RuleGroupCorrectness, Summary: "The type of a value passed to a reusable workflow does not match its input.", DefaultLevel: SeverityError, Profile: ProfileCorrectness, DocsAnchor: "check-reusable-workflows"},
 	)
 	registerRuleFactory("expression", func(env *RuleEnv) []Rule {
 		r := NewRuleExpression(env.localActions, env.localReusableWorkflows)

@@ -398,7 +398,7 @@ func (rule *RuleConcurrencyCancelsRelease) report(c *Concurrency, why string) {
 	rule.ReportIDf(
 		"concurrency-cancels-release",
 		pos,
-		"\"cancel-in-progress\" is enabled here (%s), so a new run cancels a release or deployment which is still running and can leave it half done. set \"cancel-in-progress: false\" to let the running one finish first",
+		"\"cancel-in-progress\" is enabled here (%s), so a new run cancels a release or deployment which is still running and can leave it half done. set \"cancel-in-progress: false\" (or remove it) to let the running one finish first. keep the group per ref or tag so that unrelated releases do not wait for each other, and add \"queue: max\" when no release may be skipped (otherwise a newer pending run replaces an older pending one)",
 		why,
 	)
 	if c.CancelInProgress.Expression != nil || !c.CancelInProgress.Value {
@@ -445,7 +445,7 @@ func (rule *RuleConcurrencyCancelsRelease) cancelEdit(p *Pos) (TextEdit, bool) {
 
 func init() {
 	registerRules(
-		RuleInfo{ID: "concurrency-cancels-release", Group: RuleGroupCorrectness, Summary: "cancel-in-progress can cancel a release or a deployment which is still running.", DefaultLevel: SeverityWarning, Profile: ProfileDefault, Fixable: true, DocsAnchor: "check-concurrency-cancels-release"},
+		RuleInfo{ID: "concurrency-cancels-release", Group: RuleGroupCorrectness, Summary: "cancel-in-progress can cancel a release or a deployment which is still running.", DefaultLevel: SeverityError, Profile: ProfileDefault, Fixable: true, DocsAnchor: "check-concurrency-cancels-release"},
 	)
 	registerRuleFactory("concurrency-cancels-release", func(env *RuleEnv) []Rule {
 		return []Rule{NewRuleConcurrencyCancelsRelease(env.Source())}

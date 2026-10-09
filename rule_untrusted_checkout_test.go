@@ -268,10 +268,10 @@ jobs:
 	}
 	for _, tc := range tests {
 		t.Run(tc.what, func(t *testing.T) {
-			errs := onlyID(lintInProject(t, tc.others, tc.src, ""), "untrusted-checkout")
+			errs := onlyID(lintInProject(t, tc.others, tc.src, "rules:\n  untrusted-checkout: error\n"), "untrusted-checkout")
 			checkLines(t, errs, markedWantLines(tc.src)...)
 			crlf := strings.ReplaceAll(tc.src, "\n", "\r\n")
-			checkLines(t, onlyID(lintInProject(t, tc.others, crlf, ""), "untrusted-checkout"), markedWantLines(tc.src)...)
+			checkLines(t, onlyID(lintInProject(t, tc.others, crlf, "rules:\n  untrusted-checkout: error\n"), "untrusted-checkout"), markedWantLines(tc.src)...)
 		})
 	}
 }

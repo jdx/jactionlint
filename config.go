@@ -22,6 +22,9 @@ type IgnorePattern struct {
 	ID string
 	// Regexp is the regular expression to match error messages. It is nil when the pattern is a rule ID.
 	Regexp *regexp.Regexp
+	// Retired is the retired rule ID the pattern was written with (see RenamedRule), or empty. ID is then
+	// the rule it was merged into, and the pattern matches only the findings which had the retired ID.
+	Retired string
 }
 
 // ParseIgnorePattern parses a pattern of -ignore, "paths.*.ignore" and inline ignore comments. When the
@@ -30,6 +33,9 @@ type IgnorePattern struct {
 func ParseIgnorePattern(s string) (IgnorePattern, error) {
 	if _, ok := LookupRule(s); ok {
 		return IgnorePattern{ID: s}, nil
+	}
+	if rr, ok := lookupRenamed(s); ok {
+		return IgnorePattern{ID: rr.ID, Retired: rr.Old}, nil
 	}
 	r, err := regexp.Compile(s)
 	if err != nil {
@@ -43,7 +49,18 @@ func (p IgnorePattern) String() string {
 	if p.Regexp != nil {
 		return p.Regexp.String()
 	}
+	if p.Retired != "" {
+		return p.Retired
+	}
 	return p.ID
+}
+
+// deprecation returns the warning about a retired rule ID, or an empty string.
+func (p IgnorePattern) deprecation() string {
+	if rr, ok := lookupRenamed(p.Retired); ok {
+		return rr.renamedMessage()
+	}
+	return ""
 }
 
 // Match returns whether the pattern matches the error.
@@ -51,7 +68,10 @@ func (p IgnorePattern) Match(err *Error) bool {
 	if p.Regexp != nil {
 		return p.Regexp.MatchString(err.Message)
 	}
-	return p.ID != "" && p.ID == err.ID
+	if p.ID == "" || p.ID != err.ID {
+		return false
+	}
+	return p.Retired == "" || p.Retired == err.RetiredID
 }
 
 // IgnorePatterns is a list of patterns. These patterns are used for filtering errors by matching the
@@ -157,8 +177,9 @@ func (rc *RuleConfig) UnmarshalYAML(n *yaml.Node) error {
 // Config is configuration of jactionlint. This struct instance is parsed from "jactionlint.yaml"
 // file usually put in ".github" directory.
 type Config struct {
-	// Profile selects the set of rules which are enabled by default: "default", "strict" or "all". The
-	// empty value means ProfileDefault. See Rules for which rules each profile enables.
+	// Profile selects the set of rules which are enabled by default: "correctness", "default" or
+	// "pedantic". The empty value means ProfileDefault. See Rules for which rules each profile enables.
+	// The retired names "strict" and "all" are read as "pedantic" with a deprecation warning.
 	Profile Profile `yaml:"profile"`
 	// Extends is a list of config files to inherit from. Relative paths are resolved from the directory
 	// of the config file listing them. Later files win over earlier ones, and the config file itself
@@ -232,6 +253,9 @@ type Config struct {
 	// "require-shell: true" which is replaced by the "rules" mapping. The config still works.
 	// "jactionlint -migrate-config" rewrites the file.
 	Deprecations []string `yaml:"-"`
+	// Notices are messages about the config file which are not warnings, for example that a file written
+	// for actionlint was read and which profile applies to it.
+	Notices []string `yaml:"-"`
 
 	// present records which keys were written explicitly so that merging with the files listed in
 	// "extends" can tell a missing key from a zero value.
@@ -314,13 +338,23 @@ func parseConfig(b []byte) (*Config, error) {
 	c.present = presentKeys(&root)
 
 	if c.Profile != "" {
-		if _, err := ParseProfile(string(c.Profile)); err != nil {
+		p, dep, err := parseConfigProfile(string(c.Profile))
+		if err != nil {
 			return nil, fmt.Errorf("%w in \"profile\"", err)
 		}
+		c.Profile = p
+		if dep != "" {
+			c.Deprecations = append(c.Deprecations, dep)
+		}
 	}
-	for pat := range c.Paths {
+	for pat, pc := range c.Paths {
 		if !doublestar.ValidatePattern(pat) {
 			return nil, fmt.Errorf("invalid glob pattern %q in \"paths\"", pat)
+		}
+		for _, ig := range pc.Ignore {
+			if m := ig.deprecation(); m != "" {
+				c.Deprecations = append(c.Deprecations, fmt.Sprintf("\"paths\": %s", m))
+			}
 		}
 	}
 	for i, r := range c.RequiredActions {
@@ -460,6 +494,7 @@ func (c *Config) merge(over *Config) {
 		c.Fix.Rules = over.Fix.Rules
 	}
 	c.Deprecations = append(c.Deprecations, over.Deprecations...)
+	c.Notices = append(c.Notices, over.Notices...)
 	for k := range over.present {
 		c.present[k] = true
 	}
@@ -492,10 +527,21 @@ func loadRepoConfig(root string) (*Config, error) {
 		case err != nil:
 			return nil, fmt.Errorf("could not parse config file %q: %w", p, err)
 		default:
+			c.noteActionlintFile(f, filepath.ToSlash(filepath.Join(".github", f)))
 			return c, nil
 		}
 	}
 	return nil, nil
+}
+
+// noteActionlintFile adds the notice that a config file with a name of actionlint was read, when it does not
+// choose a profile. Such a file keeps working, but the profile it gets is the default one, which is
+// stricter than actionlint is. The notice says how to get the checks of actionlint only.
+func (c *Config) noteActionlintFile(name, shown string) {
+	if !strings.HasPrefix(name, "actionlint.") || c.present["profile"] {
+		return
+	}
+	c.Notices = append(c.Notices, fmt.Sprintf("config file %q was read as a jactionlint config. it sets no \"profile\", so the default profile applies, which has more rules than actionlint. add \"profile: correctness\" to the file or run with -profile correctness for the checks of actionlint. see https://jactionlint.jdx.dev/actionlint", shown))
 }
 
 // loadGlobalConfig reads the user-global config file from
@@ -524,6 +570,7 @@ func loadGlobalConfig() (*Config, string, error) {
 			case err != nil:
 				return nil, "", fmt.Errorf("could not parse global config file %q: %w", p, err)
 			default:
+				c.noteActionlintFile(f, p)
 				return c, p, nil
 			}
 		}
@@ -532,10 +579,11 @@ func loadGlobalConfig() (*Config, string, error) {
 }
 
 func writeDefaultConfigFile(path string) error {
-	b := []byte(`# Rules are enabled by profile. "default" has the correctness checks and the
-# checks with (almost) no false positives. "strict" adds the security posture and
-# policy checks such as pinning actions to a commit SHA. "all" adds the style
-# checks. See https://jactionlint.jdx.dev/rules for all rule IDs.
+	b := []byte(`# Rules are enabled by profile, and each profile includes the one before it.
+# "correctness" is what actionlint checks plus the bug detectors of jactionlint.
+# "default" adds the security posture and policy rules worth failing a build on.
+# "pedantic" adds the noisy and opinionated rules. The -profile flag overrides
+# this. See https://jactionlint.jdx.dev/rules for all rule IDs.
 #profile: default
 
 # Turn on the checks which query the GitHub API (impostor commits, known

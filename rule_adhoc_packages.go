@@ -106,7 +106,7 @@ func hasRegistryPackage(in *runscript.Install) bool {
 
 func init() {
 	registerRules(
-		RuleInfo{ID: "adhoc-packages", Group: RuleGroupSecurity, Summary: "A package is installed by name with npm, yarn, pnpm, bun, gem or bundle add outside of a lock file.", DefaultLevel: SeverityWarning, Profile: ProfileDefault, DocsAnchor: "check-adhoc-packages"},
+		RuleInfo{ID: "adhoc-packages", Group: RuleGroupSecurity, Summary: "A package is installed by name with npm, yarn, pnpm, bun, gem or bundle add outside of a lock file.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-adhoc-packages"},
 	)
 	registerRuleFactory("adhoc-packages", func(env *RuleEnv) []Rule {
 		if !env.config.RuleEnabled("adhoc-packages") {

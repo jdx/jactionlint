@@ -51,3 +51,11 @@ jobs:
         with:
           path: x
           key: y
+  pushes-and-uploads:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: git push
+      - uses: actions/upload-artifact@v4
+        with:
+          path: .

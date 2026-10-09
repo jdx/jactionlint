@@ -1,6 +1,0 @@
-# jactionlint v1 configuration which turns on the opt-in checks that overlap with zizmor audits. Pass it
-# with --jactionlint-arg=-config-file=... (the mise task does) so the corpus run measures partial coverage
-# instead of reporting nothing for repositories that are clean under their own configuration.
-require-permissions: true
-require-commit-hash: true
-check-falsy-ternary: true

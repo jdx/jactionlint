@@ -1,3 +1,4 @@
 rules:
-  template-injection-expansion: warn
-  template-injection-trusted: info
+  template-injection:
+    level: warn
+    pedantic: true

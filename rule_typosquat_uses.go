@@ -126,7 +126,7 @@ func withinOneEdit(a, b string) bool {
 func init() {
 	registerRules(
 		RuleInfo{
-			ID: "typosquat-uses", Group: RuleGroupSecurity, Summary: "An action is one typo away from a popular action of another owner.", DefaultLevel: SeverityWarning, Profile: ProfileStrict,
+			ID: "typosquat-uses", Group: RuleGroupSecurity, Summary: "An action is one typo away from a popular action of another owner.", DefaultLevel: SeverityError, Profile: ProfileDefault,
 			DocsAnchor: "check-typosquat-uses",
 			Options:    []RuleOption{{Name: "allow", Kind: RuleOptionStrings, Summary: "Slugs (owner/repo) of actions which are never reported, e.g. a legitimate fork."}},
 		},

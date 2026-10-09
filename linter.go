@@ -109,6 +109,10 @@ type LinterOptions struct {
 	// GitHubClient is set. The "online" key of the configuration file turns it on for the files it
 	// applies to.
 	Online bool
+	// Profile selects the profile (ProfileCorrectness, ProfileDefault or ProfilePedantic) for every file,
+	// whatever the configuration says: it is what -profile asks for. The empty value leaves the choice to
+	// the configuration.
+	Profile Profile
 	// OnlineOff turns the online checks off although the configuration file turns them on: it is what
 	// -online=false asks for. It wins over Online and over the configuration.
 	OnlineOff bool
@@ -181,6 +185,9 @@ type Linter struct {
 	minSeverity    Severity
 	online         onlineSettings
 	baseline       linterBaseline
+	warnedOnce     sync.Map // string -> struct{}: the messages warnOnce printed
+	profile        Profile  // the -profile override, empty when the configuration decides
+	profiled       sync.Map // *Config -> *Config: the configs with the profile override applied
 	warned         sync.Map // *Config -> struct{}: configs whose deprecations were already reported
 	graphs         sync.Map // root directory -> *sync.Once-guarded *callGraph, see callGraphOf
 	notesMu        sync.Mutex
@@ -302,6 +309,14 @@ func NewLinter(out io.Writer, opts *LinterOptions) (*Linter, error) {
 		configFile:     opts.ConfigFile,
 		minSeverity:    opts.MinSeverity,
 		online:         onlineSettings{off: opts.OnlineOff, enabled: !opts.OnlineOff && (opts.Online || opts.OnlineOptions.Mode != OnlineModeDefault), client: opts.GitHubClient, ttl: opts.OnlineCacheTTL, ctx: opts.Context, opts: opts.OnlineOptions},
+	}
+	l.warnRetiredIgnores(ignore...)
+	if opts.Profile != "" {
+		p, err := ParseProfile(string(opts.Profile))
+		if err != nil {
+			return nil, err
+		}
+		l.profile = p
 	}
 	l.baseline.on = opts.Baseline
 	l.baseline.off = opts.NoBaseline
@@ -687,14 +702,7 @@ func (l *Linter) check(
 	}
 
 	// Config priority: -config-file option, then repository config, then user-global config
-	var cfg *Config
-	if l.defaultConfig != nil {
-		cfg = l.defaultConfig
-	} else if project != nil && project.Config() != nil {
-		cfg = project.Config()
-	} else {
-		cfg = l.globalConfig
-	}
+	cfg := l.configFor(project)
 	if cfg != nil {
 		l.debug("Config: %#v", cfg)
 		l.warnDeprecations(cfg)
@@ -807,6 +815,9 @@ func (l *Linter) isActionFile(p string) bool {
 // the file is a workflow, for which the online pin fixes are attached.
 func (l *Linter) finishCheck(path string, content []byte, all []*Error, cfg *Config, bl *baselineState, start time.Time, isWorkflow bool, ic *ignoreContext) []*Error {
 	all = append(all, checkSourceRules(content, cfg)...)
+	if ic != nil {
+		all = dropUnreachable(all, ic.scopes)
+	}
 	all = l.annotateErrors(all, content, cfg)
 
 	// The ignores of the config file are matched first, without removing anything, so that the inline
@@ -820,6 +831,14 @@ func (l *Linter) finishCheck(path string, content []byte, all []*Error, cfg *Con
 	// Inline ignores are applied first so that every pattern sees all errors, which tells whether it
 	// is used. The order of the filters does not change which errors remain.
 	inlineIgnores, orphans, ignoreErrs := parseInlineIgnoresWithOrphans(content)
+	for _, ig := range inlineIgnores {
+		for _, e := range ig.entries {
+			l.warnRetiredIgnores(e.pat)
+		}
+	}
+	for _, e := range orphans {
+		l.warnRetiredIgnores(e.pat)
+	}
 	inlineIgnores = append(inlineIgnores, parseZizmorIgnores(content)...)
 	all = l.filterInlineIgnores(all, inlineIgnores)
 	all = dropIgnored(all, cfgHit)
@@ -897,7 +916,7 @@ Loop:
 // warnDeprecations reports the deprecated keys of the config to the log output. It reports each
 // config only once even if many files are linted with it.
 func (l *Linter) warnDeprecations(cfg *Config) {
-	if len(cfg.Deprecations) == 0 {
+	if len(cfg.Deprecations) == 0 && len(cfg.Notices) == 0 {
 		return
 	}
 	if _, loaded := l.warned.LoadOrStore(cfg, struct{}{}); loaded {
@@ -905,12 +924,38 @@ func (l *Linter) warnDeprecations(cfg *Config) {
 	}
 	l.notesMu.Lock()
 	l.notes = append(l.notes, cfg.Deprecations...)
+	l.notes = append(l.notes, cfg.Notices...)
 	l.notesMu.Unlock()
 	if structured(l.printer) {
 		return // The warnings are in the output document
 	}
 	for _, d := range cfg.Deprecations {
 		fmt.Fprintln(l.logOut, "warning:", d)
+	}
+	for _, n := range cfg.Notices {
+		fmt.Fprintln(l.logOut, "note:", n)
+	}
+}
+
+// warnOnce reports a warning about the run once, however many files cause it.
+func (l *Linter) warnOnce(msg string) {
+	if _, loaded := l.warnedOnce.LoadOrStore(msg, struct{}{}); loaded {
+		return
+	}
+	l.notesMu.Lock()
+	l.notes = append(l.notes, msg)
+	l.notesMu.Unlock()
+	if !structured(l.printer) {
+		fmt.Fprintln(l.logOut, "warning:", msg)
+	}
+}
+
+// warnRetiredIgnores warns about the ignore patterns written with a retired rule ID.
+func (l *Linter) warnRetiredIgnores(pats ...IgnorePattern) {
+	for _, p := range pats {
+		if m := p.deprecation(); m != "" {
+			l.warnOnce(m)
+		}
 	}
 }
 

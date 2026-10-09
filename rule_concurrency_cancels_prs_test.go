@@ -48,7 +48,7 @@ func TestRuleConcurrencyCancelsPRs(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.what, func(t *testing.T) {
-			checkLines(t, lintBatchH(t, "", tc.src, "concurrency-cancels-prs"), tc.want...)
+			checkLines(t, lintBatchH(t, "rules:\n  concurrency-cancels-prs: error\n", tc.src, "concurrency-cancels-prs"), tc.want...)
 		})
 	}
 }

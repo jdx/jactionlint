@@ -296,6 +296,9 @@ func unusedInlineIgnores(ignores []inlineIgnore, orphans []*inlineIgnoreEntry, c
 			// Only for an audit which maps onto a rule that is on: a rule which is off cannot report anything
 			return zizmorEntryActive(e, cfg, online)
 		}
+		if rr, ok := lookupRenamed(e.pat.Retired); ok && rr.Option == pedanticOption.Name && !cfg.auditPedantic(rr.ID) {
+			return false // the findings of the retired ID are not reported without the pedantic option
+		}
 		return e.pat.ID == "" || cfg.RuleRuns(e.pat.ID, online)
 	}
 	report := func(e *inlineIgnoreEntry, what string) {
@@ -382,7 +385,7 @@ func isSequenceItem(line string) bool {
 
 func init() {
 	registerRules(
-		RuleInfo{ID: "invalid-ignore-comment", Group: RuleGroupCorrectness, Summary: "An inline ignore comment is invalid.", DefaultLevel: SeverityError, Profile: ProfileDefault},
-		RuleInfo{ID: "unused-ignore", Group: RuleGroupPolicy, Summary: "An ignore comment or an entry of \"ignores\" in the config file did not suppress anything.", DefaultLevel: SeverityError, Profile: ProfileStrict},
+		RuleInfo{ID: "invalid-ignore-comment", Group: RuleGroupCorrectness, Summary: "An inline ignore comment is invalid.", DefaultLevel: SeverityError, Profile: ProfileCorrectness},
+		RuleInfo{ID: "unused-ignore", Group: RuleGroupPolicy, Summary: "An ignore comment or an entry of \"ignores\" in the config file did not suppress anything.", DefaultLevel: SeverityError, Profile: ProfilePedantic},
 	)
 }
