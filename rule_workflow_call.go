@@ -169,10 +169,16 @@ func (rule *RuleWorkflowCall) checkWorkflowCallPermissions(call *WorkflowCall, m
 		return
 	}
 
+	// The token of a caller that sets no permissions has the permissions of the repository setting (Settings, Actions,
+	// General), which a workflow file does not tell. Unless the configuration says which one to assume
+	// ("assume-default-permissions"), the benefit of the doubt goes to the caller: only what no default token has
+	// (id-token, attestations written by a restricted token, ...) is missing.
 	cfg := rule.Config()
-	mode := AssumeDefaultPermissionsRestricted
+	mode := AssumeDefaultPermissionsPermissive
+	assumed := ""
 	if cfg != nil && cfg.AssumeDefaultPermissions != nil {
 		mode = *cfg.AssumeDefaultPermissions
+		assumed = mode
 	}
 
 	// Caller's effective permissions: job-level wins over workflow-level. A nil callerPerm means
@@ -230,14 +236,20 @@ func (rule *RuleWorkflowCall) checkWorkflowCallPermissions(call *WorkflowCall, m
 			}
 		}
 		if len(wants) > 0 {
-			rule.ReportIDf(
-				"workflow-call-permissions",
-				u.Pos,
+			msg := fmt.Sprintf(
 				"nested job %q of %q requires %s but the calling job grants %s",
 				id, u.Value,
 				strings.Join(wants, ", "),
 				strings.Join(haves, ", "),
 			)
+			if callerPerm == nil {
+				if assumed == "" {
+					msg += ". neither the calling job nor its workflow sets \"permissions:\", so the token has the default of the repository, and no default token has these permissions"
+				} else {
+					msg += fmt.Sprintf(". neither the calling job nor its workflow sets \"permissions:\", so the token has the default of the repository, which is assumed to be %s by \"assume-default-permissions\"", assumed)
+				}
+			}
+			rule.ReportID("workflow-call-permissions", u.Pos, msg)
 		}
 	}
 }

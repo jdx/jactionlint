@@ -48,9 +48,11 @@ required-actions:
     version: v3
 # Controls what permissions are assumed for a caller workflow that declares no
 # "permissions:" block at all when checking caller/callee permissions for local
-# reusable workflow calls. "restricted" (default) assumes GitHub's restricted
-# default token. "permissive" assumes write on every scope except "id-token",
-# which always requires an explicit opt-in regardless of repo settings.
+# reusable workflow calls. The default token is a setting of the repository, so
+# when this is not set only a scope that no default token has ("id-token") is
+# reported. "restricted" assumes GitHub's restricted default token. "permissive"
+# assumes write on every scope except "id-token", which always requires an
+# explicit opt-in regardless of repo settings.
 assume-default-permissions: restricted
 
 # Secrets in array of strings defined in your repository or organization.
@@ -131,13 +133,13 @@ extends:
 - `assume-default-permissions`: Controls how the caller/callee permissions check for local reusable workflow calls
   treats a caller workflow that has no `permissions:` block at the workflow level _and_ no `permissions:` block on
   the calling job. This mirrors the repository-level "Workflow permissions" setting (Settings → Actions → General),
-  which jactionlint cannot read from the workflow file. Set to `restricted` (the default) to assume GitHub's
-  restricted default token (`contents: read` and `packages: read`, everything else `none`). Set to `permissive` to
-  assume the permissive default (write on every scope). Even under `permissive`, `id-token` is still treated as
-  `none` because OIDC tokens always require an explicit opt-in regardless of the repo-level Workflow permissions
-  setting. Note: this only affects callers with no `permissions:` block anywhere. Once a caller declares any
-  `permissions:` block — even `permissions: {}` — the check always runs against that explicit block, because
-  GitHub treats any scope omitted from an explicit block as `none`.
+  which jactionlint cannot read from the workflow file. When the option is not set, nothing is assumed: only a scope
+  that no default token has (`id-token`, which always requires an explicit opt-in) is reported. Set to `restricted` to
+  assume GitHub's restricted default token (`contents: read` and `packages: read`, everything else `none`) and report
+  every other scope the called workflow needs. Set to `permissive` to assume the permissive default (write on every
+  scope); `id-token` is still treated as `none` there. Note: this only affects callers with no `permissions:` block
+  anywhere. Once a caller declares any `permissions:` block — even `permissions: {}` — the check always runs against
+  that explicit block, because GitHub treats any scope omitted from an explicit block as `none`.
 - `config-secrets`: [Secrets][secrets]. When an array is set, jactionlint will check `secrets` properties strictly against the
   list. An empty array means no secret is allowed. The default value `null` disables the check. `GITHUB_TOKEN` is always allowed. Note: this check only applies
   when secrets are not explicitly declared in the workflow (e.g. via `secrets:` in `on.workflow_call`), since declared secrets

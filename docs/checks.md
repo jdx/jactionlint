@@ -4113,6 +4113,9 @@ on:
   push:
     branches: [main]
 
+permissions:
+  contents: read
+
 jobs:
   # ERROR: Caller does not grant pull-requests: write but the called job requires it.
   caller:
@@ -4123,10 +4126,10 @@ Output:
 <!-- Skip update output -->
 
 ```
-test.yaml:7:11: nested job "snapshot" of "./.github/workflows/reusable.yaml" requires "pull-requests: write" but the calling job grants "pull-requests: none" [workflow-call]
-  |
-7 |     uses: ./.github/workflows/reusable.yaml
-  |           ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+test.yaml:10:11: nested job "snapshot" of "./.github/workflows/reusable.yaml" requires "pull-requests: write" but the calling job grants "pull-requests: none" [workflow-call]
+   |
+10 |     uses: ./.github/workflows/reusable.yaml
+   |           ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 ```
 
 <!-- Skip playground link -->
@@ -4139,11 +4142,13 @@ workflow-level block) and reports each missing scope.
 
 The check ignores `if:` on called jobs because GitHub evaluates permissions before any condition runs.
 
-When the caller has no `permissions:` block at the workflow level and none on the calling job, jactionlint assumes
-GitHub's restricted default token (only `contents: read` and `packages: read` are granted). This default can be
-overridden via the [`assume-default-permissions` configuration](./config.md); set it to `permissive` if your
-repository's "Workflow permissions" setting grants read + write to everything by default. Even under `permissive`,
-`id-token` is still treated as `none` because OIDC tokens always require an explicit opt-in.
+When the caller has no `permissions:` block at the workflow level and none on the calling job, the token gets the default of the
+repository (Settings, Actions, General, "Workflow permissions"), which jactionlint cannot read from a workflow file. It does not
+guess: only a scope that no default token has is reported (`id-token`, which always needs an explicit opt-in, and any other scope
+that is missing even from a read-write token), and the message says so. Set
+[`assume-default-permissions`](./config.md) to `restricted` when the repository uses the restricted token (only `contents: read`
+and `packages: read` are granted), and every other scope the called workflow needs is reported. `permissive` assumes read and
+write on every scope but `id-token`, which is also what the check does when the option is not set.
 
 When the caller workflow is itself a reusable workflow (`on.workflow_call`) without any `permissions:` block, the check is
 skipped: such a workflow inherits the token permissions of its own caller, which jactionlint cannot see.

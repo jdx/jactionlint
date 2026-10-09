@@ -469,6 +469,7 @@ func TestRuleWorkflowCallCheckPermissions(t *testing.T) {
 		{
 			what:       "caller silent, default restricted, required write",
 			calleePerm: scopes("pull-requests", "write"),
+			cfgMode:    AssumeDefaultPermissionsRestricted,
 			wantErr:    `requires "pull-requests: write" but the calling job grants "pull-requests: none"`,
 		},
 		{
@@ -485,6 +486,7 @@ func TestRuleWorkflowCallCheckPermissions(t *testing.T) {
 		{
 			what:       "caller silent, default restricted denies id-token",
 			calleePerm: scopes("id-token", "write"),
+			cfgMode:    AssumeDefaultPermissionsRestricted,
 			wantErr:    `requires "id-token: write" but the calling job grants "id-token: none"`,
 		},
 		{
@@ -511,6 +513,29 @@ func TestRuleWorkflowCallCheckPermissions(t *testing.T) {
 			calleePerm: nil,
 		},
 		{
+			// The default token is a setting of the repository, which the workflow does not tell: nothing is
+			// assumed unless "assume-default-permissions" is set, so a scope that a default token can have is not missing
+			what:       "caller silent, default unknown, required write is not flagged",
+			calleePerm: scopes("pull-requests", "write", "contents", "write", "packages", "write"),
+		},
+		{
+			what:       "caller silent, default unknown, id-token is flagged since no default token has it",
+			calleePerm: scopes("id-token", "write", "contents", "write"),
+			wantErr:    `requires "id-token: write" but the calling job grants "id-token: none". neither the calling job nor its workflow sets "permissions:", so the token has the default of the repository, and no default token has these permissions`,
+		},
+		{
+			what:       "caller silent, restricted by the configuration, says so",
+			calleePerm: scopes("pull-requests", "write"),
+			cfgMode:    AssumeDefaultPermissionsRestricted,
+			wantErr:    `which is assumed to be restricted by "assume-default-permissions"`,
+		},
+		{
+			what:       "caller that sets permissions is judged by them whatever the default is",
+			callerJob:  scopes("contents", "read"),
+			calleePerm: scopes("pull-requests", "write"),
+			wantErr:    `requires "pull-requests: write" but the calling job grants "pull-requests: none"`,
+		},
+		{
 			what:       "contents:read under restricted default ok",
 			calleePerm: scopes("contents", "read"),
 		},
@@ -521,6 +546,7 @@ func TestRuleWorkflowCallCheckPermissions(t *testing.T) {
 		{
 			what:       "packages:write under restricted default flagged",
 			calleePerm: scopes("packages", "write"),
+			cfgMode:    AssumeDefaultPermissionsRestricted,
 			wantErr:    `requires "packages: write" but the calling job grants "packages: read"`,
 		},
 		{
@@ -528,6 +554,7 @@ func TestRuleWorkflowCallCheckPermissions(t *testing.T) {
 			// permissions before runtime conditions are evaluated.
 			what:       "caller if: does not suppress the check",
 			calleePerm: scopes("pull-requests", "write"),
+			cfgMode:    AssumeDefaultPermissionsRestricted,
 			ifCond:     "github.event_name == 'pull_request'",
 			wantErr:    `requires "pull-requests: write" but the calling job grants "pull-requests: none"`,
 		},

@@ -1,0 +1,1 @@
+workflows/test.yaml:9:11: nested job "release" of "./workflows/reusable.yaml" requires "id-token: write" but the calling job grants "id-token: none". neither the calling job nor its workflow sets "permissions:", so the token has the default of the repository, and no default token has these permissions [workflow-call]

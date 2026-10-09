@@ -235,10 +235,12 @@ type Config struct {
 	// when the list is empty.
 	RequiredActions []RequiredActionRule `yaml:"required-actions"`
 	// AssumeDefaultPermissions controls how the workflow-call permission check treats a caller that
-	// has no `permissions:` block at the workflow level and none on the calling job. "restricted"
-	// (default) assumes GitHub's restricted default token (contents/packages: read, everything else:
-	// none). "permissive" assumes write on every scope except `id-token`, which always requires an
-	// explicit opt-in regardless of the repo-level Workflow permissions setting. Only affects callers
+	// has no `permissions:` block at the workflow level and none on the calling job. Unset, nothing
+	// is assumed (the default token is a setting of the repository): only a scope that no default
+	// token has (`id-token`) is reported. "restricted" assumes GitHub's restricted default token
+	// (contents/packages: read, everything else: none). "permissive" assumes write on every scope
+	// except `id-token`, which always requires an explicit opt-in regardless of the repo-level
+	// Workflow permissions setting. Only affects callers
 	// with no permissions block anywhere; once any permissions block is declared, the check always
 	// runs against it.
 	AssumeDefaultPermissions *string `yaml:"assume-default-permissions"`
@@ -645,10 +647,10 @@ paths:
 #    expires: 2027-06-30
 
 # Controls what permissions are assumed for a caller workflow that declares no
-# "permissions:" block at all when checking reusable workflow calls. Set to
-# "restricted" (the default) to assume GitHub's restricted default token. Set to
-# "permissive" to assume write on every scope except "id-token" (which always
-# requires an explicit opt-in).
+# "permissions:" block at all when checking reusable workflow calls. Unset, only
+# "id-token", which no default token has, is reported. Set to "restricted" to
+# assume GitHub's restricted default token. Set to "permissive" to assume write
+# on every scope except "id-token" (which always requires an explicit opt-in).
 #assume-default-permissions: restricted
 `)
 	if err := os.WriteFile(path, b, 0644); err != nil {
