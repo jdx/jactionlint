@@ -3,6 +3,7 @@
 package jactionlint
 
 import (
+	"bytes"
 	"fmt"
 	"net/http"
 	"os"
@@ -296,5 +297,23 @@ func TestCommandOnlineOverridesTheModeOfTheConfig(t *testing.T) {
 	_, stdout, _ = runOnlineCommand(t, "-online", "-rule-ids", wf)
 	if f.total() == 0 || !strings.Contains(stdout, "[archived-uses]") {
 		t.Fatalf("-online must ask GitHub:\n%s", stdout)
+	}
+}
+
+// -diff must not hide that a lookup of -online=strict was skipped behind the exit status of the diff.
+func TestCommandDiffStillFailsWhenStrictSkippedALookup(t *testing.T) {
+	f := newFakeGitHub(t)
+	githubForActionsCheckout(f, false)
+	githubFailingFor(f, "corp/private", http.StatusInternalServerError)
+	setOnlineEnv(t, f, "tok")
+	_, wf := onlineProject(t, workflowWith("uses: actions/checkout@v4", "uses: corp/private@v1"), "")
+	var out, errOut bytes.Buffer
+	cmd := &Command{Stdin: strings.NewReader(""), Stdout: &out, Stderr: &errOut, onRulesCreated: newEditRule("ubuntu", "ubuntu-latest", "ubuntu-24.04")}
+	status := cmd.Main([]string{"jactionlint", "-no-color", "-shellcheck=", "-pyflakes=", "-diff", "-online=strict", wf})
+	if !strings.Contains(out.String(), "+++ ") {
+		t.Fatalf("setup: the fix must produce a diff:\n%s\n%s", out.String(), errOut.String())
+	}
+	if status != ExitStatusFailure || !strings.Contains(errOut.String(), "online=strict: ") {
+		t.Errorf("status %d\n%s", status, errOut.String())
 	}
 }

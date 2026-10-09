@@ -440,17 +440,15 @@ func (cmd *Command) Main(args []string) int {
 		fmt.Fprintln(cmd.Stderr, err.Error())
 		return ExitStatusFailure
 	}
-	if req.result != nil {
-		if len(req.result.Failures) > 0 {
-			return ExitStatusFailure
-		}
-		if diff && req.result.Diff != "" {
-			return ExitStatusSuccessProblemFound
-		}
+	if req.result != nil && len(req.result.Failures) > 0 {
+		return ExitStatusFailure
 	}
 	if onlineFailed > 0 {
 		fmt.Fprintf(cmd.Stderr, "online=strict: %d GitHub lookups were skipped, so the online checks are incomplete\n", onlineFailed)
 		return ExitStatusFailure
+	}
+	if req.result != nil && diff && req.result.Diff != "" {
+		return ExitStatusSuccessProblemFound
 	}
 	return exitStatusOf(errs, strictExit)
 }

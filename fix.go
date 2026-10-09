@@ -468,6 +468,12 @@ func (l *Linter) fixOne(r fileResult, project *Project, mode FixMode, only map[s
 			out.failures = append(out.failures, fixFailure{[]string{id}, why})
 		}
 		if len(accepted) == 0 {
+			if len(refused) > 0 {
+				// The fixes of the rules left out for overlapping a refused one are no longer blocked: plan
+				// again. Every refusal bans a rule, so this ends, and it does not use up a pass.
+				n--
+				continue
+			}
 			settled = true
 			break
 		}

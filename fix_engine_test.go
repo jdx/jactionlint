@@ -413,3 +413,23 @@ func TestFixRealRulesOnTrickyYAML(t *testing.T) {
 		}
 	}
 }
+
+// A fix that is refused must not keep an overlapping fix of another rule from being applied.
+func TestFixRetriesTheFixesDroppedForARefusedOne(t *testing.T) {
+	root := writeProject(t, map[string]string{".github/workflows/ci.yaml": engineWorkflow})
+	path := filepath.Join(root, ".github", "workflows", "ci.yaml")
+	// Both rules edit "ubuntu-latest". The first one wins the overlap and breaks the file.
+	hook := chain(newEditRule("a-bad-rule", "runs-on: ubuntu-latest", "runs-on: [ubuntu-latest"), newEditRule("z-good-rule", "ubuntu-latest", "ubuntu-24.04"))
+	l, _, _ := engineLinter(t, root, hook, nil)
+	res, err := l.FixFiles([]string{path}, nil, FixModeSafe)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, _ := os.ReadFile(path)
+	if !strings.Contains(string(b), "runs-on: ubuntu-24.04") || strings.Contains(string(b), "[ubuntu") {
+		t.Errorf("the overlapping good fix must be applied once the bad one is refused:\n%s", b)
+	}
+	if len(res.Failures) != 1 || res.ByRule["z-good-rule"] != 1 {
+		t.Errorf("unexpected result: %+v", res)
+	}
+}
