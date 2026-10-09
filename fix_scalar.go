@@ -113,6 +113,10 @@ func plainInsertable(text string, flow, atStart bool) bool {
 	if strings.Contains(text, " #") || strings.Contains(text, "\t#") || strings.Contains(text, ": ") || strings.Contains(text, ":\t") || strings.HasSuffix(text, ":") {
 		return false
 	}
+	// After a space (or at the start) a "#" begins a comment, and the site may be after one
+	if strings.HasPrefix(text, "#") {
+		return false
+	}
 	if flow && strings.ContainsAny(text, ",[]{}") {
 		return false
 	}

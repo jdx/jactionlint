@@ -191,3 +191,18 @@ func TestYAMLSiteInsertKeepsCRLF(t *testing.T) {
 		t.Errorf("LF file: %q", got)
 	}
 }
+
+// A text that starts with "#" can follow a space and then starts a comment.
+func TestYAMLSiteInsertRefusesALeadingHash(t *testing.T) {
+	src := []byte("a: x y\n")
+	site, ok := YAMLSiteAt(src, strings.Index(string(src), "y"))
+	if !ok || site.Context != YAMLPlain {
+		t.Fatalf("site: %+v %v", site, ok)
+	}
+	if got, ok := site.Insert("#z"); ok {
+		t.Errorf("a leading # must be refused: %q", got)
+	}
+	if got, ok := site.Insert("z#"); !ok || got != "z#" {
+		t.Errorf("a # inside is fine: %q %v", got, ok)
+	}
+}
