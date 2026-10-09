@@ -274,35 +274,44 @@ func (rule *RuleCachePoisoning) VisitJobPre(n *Job) error {
 	return nil
 }
 
-// cacheGateInputs lists, for the actions of cacheActions, the inputs which decide whether the action uses
-// the cache at all. Only an expression in one of these can make the caching conditional on the trigger.
-// Everything else (key, restore-keys, versions, paths) is ignored: a release workflow often has github.ref
-// in a key or in node-version without the cache being off.
+// cacheGate is an input which decides whether an action uses the cache. offWhenTrue is set for the inputs that
+// switch the cache off ("lookup-only: true"); for the others a value that is empty or false switches it off.
+type cacheGate struct {
+	input       string
+	offWhenTrue bool
+}
+
+// cacheGateInputs lists, for the actions of cacheActions, the inputs which decide whether the action
+// restores the cache at all, because `reads` reports exactly the cases they switch on. Only an expression
+// in one of these can make the caching conditional on the trigger. Everything else (key, restore-keys,
+// versions, paths) is ignored: a release workflow often has github.ref in a key or in node-version
+// without the cache being off. Sources are the action.yml files of the actions.
 //
-// Sources: the action.yml of each action. actions/cache and actions/cache/restore have none: their only
-// switch is the step's own "if:".
-//   - actions/setup-node, setup-python, setup-java, setup-dotnet, setup-go: "cache"
-//     (setup-node also "package-manager-cache", which turns the automatic caching of v5 off)
-//   - ruby/setup-ruby: "bundler-cache"
-//   - astral-sh/setup-uv: "enable-cache"
-//   - swatinem/rust-cache: "lookup-only" (its "save-if" only decides about saving, not about restoring)
-//   - jdx/mise-action: "cache"
-//   - gradle/actions/setup-gradle, gradle/gradle-build-action: "cache-disabled" ("cache-read-only" still
-//     restores)
-//   - docker/build-push-action: "cache-from"
-var cacheGateInputs = map[string][]string{
-	"actions/setup-node":                        {"cache", "package-manager-cache"},
-	"actions/setup-python":                      {"cache"},
-	"actions/setup-java":                        {"cache"},
-	"actions/setup-dotnet":                      {"cache"},
-	"actions/setup-go":                          {"cache"},
-	"ruby/setup-ruby":                           {"bundler-cache"},
-	"astral-sh/setup-uv":                        {"enable-cache"},
-	"swatinem/rust-cache":                       {"lookup-only"},
-	"jdx/mise-action":                           {"cache"},
-	"gradle/actions/setup-gradle":               {"cache-disabled"},
-	"gradle/gradle-build-action":                {"cache-disabled"},
-	"docker/build-push-action":                  {"cache-from"},
+// Left out on purpose: setup-node's "package-manager-cache" only turns off the automatic detection of v5 and
+// leaves an explicit "cache" as it is, and rust-cache's "save-if" and gradle's "cache-read-only" only
+// stop saving, the restore still happens.
+var cacheGateInputs = map[string][]cacheGate{
+	// "cache" names the package manager to cache: empty or false means none
+	"actions/setup-node":   {{input: "cache"}},
+	"actions/setup-python": {{input: "cache"}},
+	"actions/setup-java":   {{input: "cache"}},
+	"actions/setup-dotnet": {{input: "cache"}},
+	"actions/setup-go":     {{input: "cache"}}, // "cache: false" turns off the default
+	// "bundler-cache: true" runs bundle install with a cache
+	"ruby/setup-ruby": {{input: "bundler-cache"}},
+	// "enable-cache: false" turns off the default
+	"astral-sh/setup-uv": {{input: "enable-cache"}},
+	// "lookup-only: true" checks for a cache without restoring it
+	"swatinem/rust-cache": {{input: "lookup-only", offWhenTrue: true}},
+	// "cache: false" turns off the cache of mise-action
+	"jdx/mise-action": {{input: "cache"}},
+	// "cache-disabled: true" turns off all caching of the action
+	"gradle/actions/setup-gradle": {{input: "cache-disabled", offWhenTrue: true}},
+	"gradle/gradle-build-action":  {{input: "cache-disabled", offWhenTrue: true}},
+	// "cache-from" with type=gha is what restores the cache; empty means none
+	"docker/build-push-action": {{input: "cache-from"}},
+	// the next ones have no switch: only the "if:" of the step can gate them (actions/cache has "lookup-only",
+	// which `reads` handles as a literal)
 	"actions/cache":                             nil,
 	"actions/cache/restore":                     nil,
 	"hendrikmuhs/ccache-action":                 nil,
