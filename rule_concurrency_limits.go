@@ -36,6 +36,9 @@ func (rule *RuleConcurrencyLimits) VisitWorkflowPre(n *Workflow) error {
 		return nil
 	}
 	if c := n.Concurrency; c != nil {
+		if onlyScheduledOrManual(n) {
+			return nil // nothing supersedes a timer or a manual run, so there is nothing to cancel
+		}
 		// Whether runs are cancelled is a choice: serializing a release pipeline is as valid as cancelling
 		// the superseded runs of a test pipeline. Only the form which cannot cancel at all is reported.
 		if c.Bare && !onlyWorkflowCall(n) && releaseReason(n) == "" {
