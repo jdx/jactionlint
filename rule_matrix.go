@@ -201,3 +201,13 @@ func (rule *RuleMatrix) checkExclude(m *Matrix) {
 		}
 	}
 }
+
+func init() {
+	registerRules(
+		RuleInfo{ID: "matrix-duplicate-value", Group: RuleGroupCorrectness, Summary: "A matrix has a duplicate value.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-matrix-values"},
+		RuleInfo{ID: "matrix-invalid-exclude", Group: RuleGroupCorrectness, Summary: "An exclude entry of a matrix does not match the matrix.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-matrix-values"},
+	)
+	registerRuleFactory("matrix", func(env *RuleEnv) []Rule {
+		return []Rule{NewRuleMatrix()}
+	})
+}

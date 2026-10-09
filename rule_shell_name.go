@@ -177,3 +177,12 @@ func (rule *RuleShellName) getPlatformFromRunner(runner *Runner) platformKind {
 
 	return ret
 }
+
+func init() {
+	registerRules(
+		RuleInfo{ID: "invalid-shell-name", Group: RuleGroupCorrectness, Summary: "A shell name is not available on the runner.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-shell-names"},
+	)
+	registerRuleFactory("shell-name", func(env *RuleEnv) []Rule {
+		return []Rule{NewRuleShellName()}
+	})
+}

@@ -1,5 +1,5 @@
 // Command generate-rules-doc generates docs/rules.md, the reference of all rule IDs, from the rule
-// registry of the jactionlint package.
+// registry of the jactionlint package. With -check it only verifies that the file is up to date.
 package main
 
 import (
@@ -93,12 +93,32 @@ rules:
 }
 
 func run(args []string, stdout io.Writer) error {
+	check := false
+	if len(args) > 0 && args[0] == "-check" {
+		check = true
+		args = args[1:]
+	}
 	if len(args) > 1 {
-		return fmt.Errorf("usage: generate-rules-doc [dstfile|-]")
+		return fmt.Errorf("usage: generate-rules-doc [-check] [dstfile|-]")
 	}
 	dst := "docs/rules.md"
 	if len(args) == 1 {
 		dst = args[0]
+	}
+	if check {
+		// Compare with LF line endings so a Windows checkout with CRLF is not reported as stale.
+		var want strings.Builder
+		if err := generate(&want); err != nil {
+			return err
+		}
+		got, err := os.ReadFile(dst)
+		if err != nil {
+			return err
+		}
+		if strings.ReplaceAll(string(got), "\r\n", "\n") != want.String() {
+			return fmt.Errorf("%s is outdated. run \"mise run rules-doc\" (or \"go run ./scripts/generate-rules-doc\") and commit the result", dst)
+		}
+		return nil
 	}
 	if dst == "-" {
 		return generate(stdout)

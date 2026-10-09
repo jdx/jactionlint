@@ -373,3 +373,14 @@ func (rule *RuleRunnerLabel) getKnownLabels() []string {
 func (rule *RuleRunnerLabel) isStrict() bool {
 	return rule.config != nil && rule.config.SelfHostedRunner.StrictLabels
 }
+
+func init() {
+	registerRules(
+		RuleInfo{ID: "conflicting-runner-labels", Group: RuleGroupCorrectness, Summary: "The runner labels of a job conflict with each other.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-runner-labels"},
+		RuleInfo{ID: "invalid-label-pattern", Group: RuleGroupCorrectness, Summary: "A runner label pattern in the configuration is not a valid glob.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-runner-labels"},
+		RuleInfo{ID: "unknown-runner-label", Group: RuleGroupCorrectness, Summary: "A runner label is unknown.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-runner-labels"},
+	)
+	registerRuleFactory("runner-label", func(env *RuleEnv) []Rule {
+		return []Rule{NewRuleRunnerLabel()}
+	})
+}

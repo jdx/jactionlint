@@ -114,3 +114,12 @@ func isCheckoutActionSpec(spec string) bool {
 	}
 	return strings.Contains(strings.ToLower(parts[0]+"/"+parts[1]), "checkout")
 }
+
+func init() {
+	registerRules(
+		RuleInfo{ID: "local-action-checkout", Group: RuleGroupCorrectness, Summary: "A local action is used before any step checks out the repository.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-local-action-checkout"},
+	)
+	registerRuleFactory("local-action-checkout", func(env *RuleEnv) []Rule {
+		return []Rule{NewRuleLocalActionCheckout()}
+	})
+}

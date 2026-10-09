@@ -22,6 +22,18 @@ run = "go build ./cmd/jactionlint"
 description = "Regenerate popular_actions.go, all_webhooks.go and availability.go (fetches data from GitHub) and docs/rules.md"
 run = ["go generate", "go run ./scripts/generate-rules-doc"]
 
+[tasks.rules-doc]
+description = "Regenerate docs/rules.md from the rule registry (run after adding or changing a rule)"
+run = "go run ./scripts/generate-rules-doc"
+
+[tasks."rules-doc:check"]
+description = "Fail when docs/rules.md is outdated"
+run = "go run ./scripts/generate-rules-doc -check"
+
+[tasks."rule-ids"]
+description = "Record newly registered rule IDs in testdata/rule_ids.d/<name>.txt. Usage: mise run rule-ids <name>"
+run = "go test -run TestRuleIDsAreStable -update-rule-ids={{arg(name=\"name\")}} ."
+
 [tasks.test]
 description = "Run all tests"
 run = "go test -race ./..."

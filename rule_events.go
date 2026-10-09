@@ -316,3 +316,20 @@ func (rule *RuleEvents) checkWorkflowDispatchEvent(event *WorkflowDispatchEvent)
 func (rule *RuleEvents) checkImageVersionEvent(event *ImageVersionEvent) {
 	// Do nothing
 }
+
+func init() {
+	registerRules(
+		RuleInfo{ID: "cron-too-frequent", Group: RuleGroupCorrectness, Summary: "A scheduled job runs more often than once every 5 minutes.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-cron-syntax-and-timezone"},
+		RuleInfo{ID: "invalid-activity-type", Group: RuleGroupCorrectness, Summary: "An activity type is not available for the Webhook event.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-webhook-events"},
+		RuleInfo{ID: "invalid-cron", Group: RuleGroupCorrectness, Summary: "A cron schedule has an invalid format.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-cron-syntax-and-timezone"},
+		RuleInfo{ID: "invalid-event-config", Group: RuleGroupCorrectness, Summary: "An event is configured with options it does not support.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-webhook-events"},
+		RuleInfo{ID: "invalid-event-filter", Group: RuleGroupCorrectness, Summary: "An event filter is not available for the event or conflicts with another filter.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-webhook-events"},
+		RuleInfo{ID: "invalid-timezone", Group: RuleGroupCorrectness, Summary: "A timezone of a schedule is not a valid IANA timezone name.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-cron-syntax-and-timezone"},
+		RuleInfo{ID: "invalid-workflow-call-input", Group: RuleGroupCorrectness, Summary: "An input of the workflow_call event is invalid.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-reusable-workflows"},
+		RuleInfo{ID: "invalid-workflow-dispatch-input", Group: RuleGroupCorrectness, Summary: "An input of the workflow_dispatch event is invalid.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-workflow-dispatch-events"},
+		RuleInfo{ID: "unknown-event", Group: RuleGroupCorrectness, Summary: "An unknown Webhook event is used.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-webhook-events"},
+	)
+	registerRuleFactory("events", func(env *RuleEnv) []Rule {
+		return []Rule{NewRuleEvents()}
+	})
+}

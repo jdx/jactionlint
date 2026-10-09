@@ -1,7 +1,7 @@
 package jactionlint
 
 import (
-	"bufio"
+	"flag"
 	"go/ast"
 	goparser "go/parser"
 	"go/token"
@@ -80,36 +80,73 @@ func TestRuleRegistryIsWellFormed(t *testing.T) {
 	}
 }
 
+var updateRuleIDs = flag.String("update-rule-ids", "", "write the rule IDs which are in no testdata/rule_ids.d/*.txt to testdata/rule_ids.d/<value>.txt")
+
 // Rule IDs are public API: they are written in configuration files, ignore comments and CI
-// annotations. testdata/rule_ids.txt is the snapshot of all IDs which have been released.
-// Removing or renaming an ID breaks users so it fails this test. Add new IDs to the snapshot.
+// annotations. The files testdata/rule_ids.d/*.txt are the snapshot of all IDs which have been
+// released. Removing or renaming an ID breaks users so it fails this test. Newly registered IDs are
+// added with: go test -run TestRuleIDsAreStable -update-rule-ids=<name> (writes rule_ids.d/<name>.txt,
+// so every batch of rules owns a separate file).
 func TestRuleIDsAreStable(t *testing.T) {
-	f, err := os.Open(filepath.Join("testdata", "rule_ids.txt"))
+	dir := filepath.Join("testdata", "rule_ids.d")
+	files, err := filepath.Glob(filepath.Join(dir, "*.txt"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer f.Close()
+	if len(files) == 0 {
+		t.Fatalf("no snapshot files in %s", dir)
+	}
 
-	snapshot := map[string]bool{}
-	s := bufio.NewScanner(f)
-	for s.Scan() {
-		if id := strings.TrimSpace(s.Text()); id != "" {
-			snapshot[id] = true
+	snapshot := map[string]string{}
+	for _, name := range files {
+		b, err := os.ReadFile(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, line := range strings.Split(string(b), "\n") {
+			if id := strings.TrimSpace(line); id != "" {
+				snapshot[id] = name
+			}
 		}
 	}
-	if err := s.Err(); err != nil {
-		t.Fatal(err)
-	}
 
-	for id := range snapshot {
+	for id, file := range snapshot {
 		if _, ok := LookupRule(id); !ok {
-			t.Errorf("rule ID %q was removed or renamed. IDs are stable; keep it registered", id)
+			t.Errorf("rule ID %q (listed in %s) was removed or renamed. IDs are stable; keep it registered", id, file)
 		}
 	}
+
+	var added []string
 	for _, r := range ruleRegistry {
-		if !snapshot[r.ID] {
-			t.Errorf("rule ID %q is not in testdata/rule_ids.txt. add it to the snapshot", r.ID)
+		if _, ok := snapshot[r.ID]; !ok {
+			added = append(added, r.ID)
 		}
+	}
+	if len(added) == 0 {
+		return
+	}
+	if *updateRuleIDs != "" {
+		name := *updateRuleIDs
+		if !regexp.MustCompile(`^[a-z0-9][a-z0-9_-]*$`).MatchString(name) {
+			t.Fatalf("invalid -update-rule-ids name %q", name)
+		}
+		dst := filepath.Join(dir, name+".txt")
+		var prev []byte
+		if b, err := os.ReadFile(dst); err == nil {
+			prev = b
+		}
+		out := string(prev)
+		for _, id := range added { // ruleRegistry is sorted by ID
+			out += id + "\n"
+		}
+		if err := os.WriteFile(dst, []byte(out), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		t.Logf("wrote %d rule IDs to %s", len(added), dst)
+		return
+	}
+	for _, id := range added {
+		t.Errorf("rule ID %q is in no testdata/rule_ids.d/*.txt. run: go test -run TestRuleIDsAreStable -update-rule-ids=<name>", id)
 	}
 }
 
@@ -133,6 +170,11 @@ func TestRuleIDsInSourceMatchRegistry(t *testing.T) {
 		}
 		ast.Inspect(f, func(n ast.Node) bool {
 			switch n := n.(type) {
+			case *ast.CompositeLit:
+				// The ID of a RuleInfo registers the rule; it is not a report of it.
+				if id, ok := n.Type.(*ast.Ident); ok && id.Name == "RuleInfo" {
+					return false
+				}
 			case *ast.CallExpr:
 				var fn string
 				switch f := n.Fun.(type) {
@@ -224,5 +266,38 @@ func TestSeverity(t *testing.T) {
 	b, _ := SeverityWarning.MarshalText()
 	if string(b) != "warn" {
 		t.Errorf("unexpected text %q", b)
+	}
+}
+
+func TestRegisterRulesPanicsOnDuplicate(t *testing.T) {
+	defer func() {
+		if recover() == nil {
+			t.Error("registering an ID twice must panic")
+		}
+	}()
+	registerRules(RuleInfo{ID: "unpinned-uses"})
+}
+
+func TestRegisterRuleFactoryPanicsOnDuplicate(t *testing.T) {
+	defer func() {
+		if recover() == nil {
+			t.Error("registering a factory twice must panic")
+		}
+	}()
+	registerRuleFactory("matrix", func(*RuleEnv) []Rule { return nil })
+}
+
+// The order of the rules decides the order of errors at the same position, so it must not depend on
+// the order of the source files.
+func TestRuleFactoryOrderIsStable(t *testing.T) {
+	var got []string
+	for _, f := range ruleFactories {
+		got = append(got, f.name)
+	}
+	if len(got) < len(legacyRuleOrder) || !slices.Equal(got[:len(legacyRuleOrder)], legacyRuleOrder) {
+		t.Errorf("legacy rules must be applied first in the legacy order: %v", got)
+	}
+	if rest := got[len(legacyRuleOrder):]; !slices.IsSorted(rest) {
+		t.Errorf("new rules must be sorted by name: %v", rest)
 	}
 }

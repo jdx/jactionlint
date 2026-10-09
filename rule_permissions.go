@@ -174,3 +174,12 @@ func (rule *RulePermissions) checkPermissions(p *Permissions) {
 		}
 	}
 }
+
+func init() {
+	registerRules(
+		RuleInfo{ID: "invalid-permissions", Group: RuleGroupCorrectness, Summary: "A permission scope or its value is invalid.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-permissions"},
+	)
+	registerRuleFactory("permissions", func(env *RuleEnv) []Rule {
+		return []Rule{NewRulePermissions()}
+	})
+}

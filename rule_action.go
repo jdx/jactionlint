@@ -671,3 +671,18 @@ func (rule *RuleAction) checkAction(meta *ActionMetadata, exec *ExecAction, desc
 		}
 	}
 }
+
+func init() {
+	registerRules(
+		RuleInfo{ID: "deprecated-action-input", Group: RuleGroupCorrectness, Summary: "A deprecated input of an action is used.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "deprecated-inputs-usage"},
+		RuleInfo{ID: "invalid-local-action", Group: RuleGroupCorrectness, Summary: "A local action cannot be loaded or its metadata is invalid.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "action-metadata-syntax"},
+		RuleInfo{ID: "invalid-uses", Group: RuleGroupCorrectness, Summary: "A uses: value does not follow the format of an action or a Docker image.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-action-format"},
+		RuleInfo{ID: "missing-action-input", Group: RuleGroupCorrectness, Summary: "A required input of an action is not specified.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-local-action-inputs"},
+		RuleInfo{ID: "outdated-action-runner", Group: RuleGroupCorrectness, Summary: "An action runs on a runtime which GitHub Actions no longer supports.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "detect-outdated-popular-actions"},
+		RuleInfo{ID: "unknown-action-input", Group: RuleGroupCorrectness, Summary: "An input which the action does not define is specified.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-local-action-inputs"},
+		RuleInfo{ID: "unpinned-uses", Group: RuleGroupPolicy, Summary: "An action, reusable workflow or Docker image is not pinned to a commit SHA or digest.", DefaultLevel: SeverityError, Profile: ProfileStrict, DocsAnchor: "check-action-format"},
+	)
+	registerRuleFactory("action", func(env *RuleEnv) []Rule {
+		return []Rule{NewRuleAction(env.localActions)}
+	})
+}
