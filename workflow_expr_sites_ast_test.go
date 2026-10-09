@@ -2,7 +2,9 @@ package jactionlint
 
 import (
 	"fmt"
+	"os"
 	"reflect"
+	"regexp"
 	"sort"
 	"strings"
 	"testing"
@@ -52,7 +54,6 @@ var notExpressions = map[string]string{
 	"WebhookEvent.Workflows":                      "names of the workflows of workflow_run",
 	"WebhookEventFilter.Name":                     "the name of a filter",
 	"WebhookEventFilter.Values":                   "the patterns of a filter",
-	"WorkflowCallEventInput.Default":              "the declaration of an input",
 	"WorkflowCallEventInput.Description":          "the declaration of an input",
 	"WorkflowCallEventInput.Name":                 "the declaration of an input",
 	"WorkflowCallEventOutput.Description":         "the declaration of an output",
@@ -170,4 +171,81 @@ func TestWorkflowExprSitesEmitEveryASTString(t *testing.T) {
 	if len(fields) > 0 {
 		t.Errorf("workflowExprSites does not emit these fields of the AST (emit them, or list them in notExpressions with the reason): %s", strings.Join(fields, ", "))
 	}
+}
+
+// availabilityFields maps each key of the table of context availability (availability.go) to a field of
+// the AST which holds the key. A key of the table accepts expressions, so its field must be emitted and
+// must not be explained away in notExpressions.
+var availabilityFields = map[string]string{
+	"concurrency":                                      "Concurrency.Group",
+	"env":                                              "EnvVar.Value",
+	"jobs.<job_id>.concurrency":                        "Concurrency.Group",
+	"jobs.<job_id>.container":                          "Container.Image",
+	"jobs.<job_id>.container.credentials":              "Credentials.Username",
+	"jobs.<job_id>.container.env.<env_id>":             "EnvVar.Value",
+	"jobs.<job_id>.container.image":                    "Container.Image",
+	"jobs.<job_id>.continue-on-error":                  "Job.ContinueOnError.Expression",
+	"jobs.<job_id>.defaults.run":                       "DefaultsRun.Shell",
+	"jobs.<job_id>.env":                                "EnvVar.Value",
+	"jobs.<job_id>.environment":                        "Environment.Name",
+	"jobs.<job_id>.environment.url":                    "Environment.URL",
+	"jobs.<job_id>.if":                                 "Job.If",
+	"jobs.<job_id>.name":                               "Job.Name",
+	"jobs.<job_id>.outputs.<output_id>":                "Output.Value",
+	"jobs.<job_id>.runs-on":                            "Runner.LabelsExpr",
+	"jobs.<job_id>.secrets.<secrets_id>":               "WorkflowCallSecret.Value",
+	"jobs.<job_id>.services":                           "Services.Expression",
+	"jobs.<job_id>.services.<service_id>.credentials":  "Credentials.Password",
+	"jobs.<job_id>.services.<service_id>.env.<env_id>": "EnvVar.Value",
+	"jobs.<job_id>.snapshot.if":                        "Snapshot.If",
+	"jobs.<job_id>.steps.continue-on-error":            "Step.ContinueOnError.Expression",
+	"jobs.<job_id>.steps.env":                          "EnvVar.Value",
+	"jobs.<job_id>.steps.if":                           "Step.If",
+	"jobs.<job_id>.steps.name":                         "Step.Name",
+	"jobs.<job_id>.steps.run":                          "ExecRun.Run",
+	"jobs.<job_id>.steps.timeout-minutes":              "Step.TimeoutMinutes.Expression",
+	"jobs.<job_id>.steps.with":                         "Input.Value",
+	"jobs.<job_id>.steps.working-directory":            "ExecRun.WorkingDirectory",
+	"jobs.<job_id>.strategy":                           "Strategy.FailFast.Expression",
+	"jobs.<job_id>.timeout-minutes":                    "Job.TimeoutMinutes.Expression",
+	"jobs.<job_id>.with.<with_id>":                     "WorkflowCallInput.Value",
+	"on.workflow_call.inputs.<inputs_id>.default":      "WorkflowCallEventInput.Default",
+	"on.workflow_call.outputs.<output_id>.value":       "WorkflowCallEventOutput.Value",
+	"run-name": "Workflow.RunName",
+}
+
+// notExpressions and the table of context availability must not disagree: every key of availability.go is
+// in availabilityFields, and none of their fields is declared to never hold an expression.
+func TestNotExpressionsAgreeWithAvailability(t *testing.T) {
+	src, err := os.ReadFile("availability.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	keys := map[string]bool{}
+	for _, m := range regexp.MustCompile(`"([^"]+)"`).FindAllStringSubmatch(string(src[strings.Index(string(src), "switch key"):]), -1) {
+		if !strings.HasPrefix(m[1], "hashfiles") && strings.ToLower(m[1]) == m[1] && !isContextName(m[1]) {
+			keys[m[1]] = true
+		}
+	}
+	for k := range keys {
+		field, ok := availabilityFields[k]
+		if !ok {
+			t.Errorf("availability.go has the key %q, which availabilityFields does not map to a field of the AST", k)
+			continue
+		}
+		if why := notExpressions[field]; why != "" {
+			t.Errorf("%s holds %q, which accepts expressions, but notExpressions says: %s", field, k, why)
+		}
+	}
+	for k := range availabilityFields {
+		if ctx, _ := WorkflowKeyAvailability(k); ctx == nil {
+			t.Errorf("availabilityFields maps %q, which availability.go does not know", k)
+		}
+	}
+}
+
+// isContextName reports whether a string literal of availability.go names a context or a function
+// instead of a workflow key.
+func isContextName(s string) bool {
+	return !strings.ContainsAny(s, ".<") && s != "concurrency" && s != "env" && s != "run-name"
 }
