@@ -107,3 +107,20 @@ func TestConcurrencyLimitsAgreesWithCancelsRelease(t *testing.T) {
 		t.Errorf("the bare group of a release workflow: %v", got)
 	}
 }
+
+func TestConcurrencyLimitsAdviceForReleaseCalledFromAnotherWorkflow(t *testing.T) {
+	cfg := ruleConfig("concurrency-limits")
+	// The caller of a reusable workflow decides github.event_name, so a job that publishes for the release event
+	// counts as a release job in a workflow which is also called
+	src := "on:\n  workflow_call:\n  push:\njobs:\n  a:\n    if: github.event_name == 'release'\n    runs-on: ubuntu-latest\n    steps:\n      - run: cargo publish\n"
+	errs := lintFileWithConfig(t, cfg, "ci.yaml", src)
+	var msg string
+	for _, e := range errs {
+		if e.ID == "concurrency-limits" {
+			msg = e.Message
+		}
+	}
+	if !strings.Contains(msg, "cancel-in-progress: false") || !strings.Contains(msg, "queue: max") {
+		t.Errorf("a release job must be advised cancel-in-progress false and queue max: %q", msg)
+	}
+}

@@ -156,6 +156,9 @@ func (rule *RuleUseTrustedPublishing) exchangedToken(exprs []string) bool {
 		return false
 	}
 	for _, expr := range exprs {
+		if secretRefRe.MatchString(expr) {
+			continue // `secrets.TOKEN || steps.auth.outputs.token` publishes with the secret whenever it is set
+		}
 		for _, m := range stepOutputRe.FindAllStringSubmatch(expr, -1) {
 			for _, st := range rule.job.Steps {
 				if st == nil || st.ID == nil || !strings.EqualFold(st.ID.Value, m[1]) {

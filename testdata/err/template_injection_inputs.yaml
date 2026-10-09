@@ -33,6 +33,12 @@ jobs:
       - run: echo "${{ github.event.release.tag_name }} ${{ github.event.release.name }}"
       # ERROR: a branch or tag name can hold shell syntax
       - run: echo "${{ github.ref_name }} ${{ github.base_ref }}"
+      # ERROR: an environment variable set from such an input is the same value when expanded with ${{ }}
+      - run: echo "${{ env.TITLE }}"
+        env:
+          TITLE: ${{ inputs.title }}
+      # ERROR: the whole inputs object holds the free text
+      - run: echo '${{ toJSON(inputs) }}'
       # OK: booleans, numbers and choices are fixed vocabularies
       - run: echo "${{ inputs.flag }} ${{ inputs.level }} ${{ inputs.count }} ${{ github.event.inputs.level }}"
       # OK: the value reaches the script through an environment variable

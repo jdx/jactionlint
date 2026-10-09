@@ -204,5 +204,14 @@ func cacheCanRunOnReleaseTrigger(job *Job, s *Step, a *ExecAction, name string, 
 			return false
 		}
 	}
+	// The automatic caching of setup-node v5 is switched off by "package-manager-cache"; an explicit "cache" is
+	// not affected by it, so it decides only when there is no explicit "cache"
+	if name == "actions/setup-node" {
+		if _, explicit := a.input("cache"); !explicit {
+			if v, ok := a.input("package-manager-cache"); ok && strings.Contains(v, "${{") && !gateAllows(v, scenarios, false) {
+				return false
+			}
+		}
+	}
 	return true
 }

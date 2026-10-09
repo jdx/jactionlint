@@ -70,6 +70,11 @@ func TestCachePoisoningChecksThatCannotPublish(t *testing.T) {
 		{"a job that writes", on + "permissions: read-all\n" + job("    permissions:\n      packages: write\n", ""), 1},
 		{"a job that drops the write permission of the workflow", on + "permissions: write-all\n" + job("    permissions: read-all\n", ""), 0},
 		{"an environment", on + "permissions: read-all\n" + job("    environment: production\n", ""), 1},
+		{"a secret of the repository", on + "permissions: read-all\n" + job("", "      - run: ./deploy\n        env:\n          TOKEN: ${{ secrets.DEPLOY_TOKEN }}\n"), 1},
+		{"a secret of the workflow env", on + "permissions: read-all\nenv:\n  T: ${{ secrets.NPM_TOKEN }}\n" + job("", ""), 1},
+		{"an input with a secret", on + "permissions: read-all\n" + job("", "      - uses: some/action@v1\n        with:\n          t: ${{ secrets.X }}\n"), 1},
+		{"all the secrets", on + "permissions: read-all\n" + job("", "      - run: echo '${{ toJSON(secrets) }}'\n"), 1},
+		{"only the token of the workflow", on + "permissions: read-all\n" + job("", "      - run: ./check\n        env:\n          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}\n"), 0},
 		{"a publishing command", on + "permissions: read-all\n" + job("", "      - run: cargo publish\n"), 1},
 		{"a publishing action", on + "permissions: read-all\n" + job("", "      - uses: pypa/gh-action-pypi-publish@release/v1\n"), 1},
 		{"the release event always counts", "on:\n  release:\n    types: [published]\npermissions: read-all\n" + job("", ""), 1},
@@ -99,6 +104,11 @@ func TestCachePoisoningAutomaticCaches(t *testing.T) {
 		{"v6 caches npm only", `{"packageManager": "pnpm@9.0.0"}`, "      - uses: actions/setup-node@v6\n", 0},
 		{"v6 and npm", `{"packageManager": "npm@10.0.0"}`, "      - uses: actions/setup-node@v6\n", 1},
 		{"devEngines", `{"devEngines": {"packageManager": {"name": "npm"}}}`, "      - uses: actions/setup-node@v6\n", 1},
+		{"v5 reads only the top-level field", `{"devEngines": {"packageManager": {"name": "npm"}}}`, "      - uses: actions/setup-node@v5\n", 0},
+		{"v6 reads devEngines before the top-level field", `{"packageManager": "pnpm@9.0.0", "devEngines": {"packageManager": {"name": "npm"}}}`, "      - uses: actions/setup-node@v6\n", 1},
+		{"v6 and a list in devEngines", `{"devEngines": {"packageManager": [{"name": "pnpm"}, {"name": "npm"}]}}`, "      - uses: actions/setup-node@v6\n", 1},
+		{"v6 and a caret in the top-level field", `{"packageManager": "^npm@10"}`, "      - uses: actions/setup-node@v6\n", 1},
+		{"v5 needs a version after the name", `{"packageManager": "pnpm"}`, "      - uses: actions/setup-node@v5\n", 0},
 		{"no package manager in package.json", `{"name": "x"}`, "      - uses: actions/setup-node@v5\n", 0},
 		{"no package.json", "-", "      - uses: actions/setup-node@v5\n", 0},
 		{"a commit with the version in its comment", `{"packageManager": "npm@10.0.0"}`, "      - uses: actions/setup-node@" + sha + " # v4.4.0\n", 0},
@@ -118,6 +128,30 @@ func TestCachePoisoningAutomaticCaches(t *testing.T) {
 				}
 			}
 			if got := lintCacheWorkflow(t, root, head+tc.step); len(got) != tc.want {
+				t.Errorf("want %d findings but got %v", tc.want, got)
+			}
+		})
+	}
+}
+
+func TestCachePoisoningGatesOfRestoreSwitches(t *testing.T) {
+	const head = "on:\n  push:\n    tags: ['v*']\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n"
+	off := "${{ !startsWith(github.ref, 'refs/tags/') }}"
+	tests := []struct {
+		name string
+		step string
+		want int
+	}{
+		{"buildx binary cached", "      - uses: docker/setup-buildx-action@v3\n", 1},
+		{"buildx binary cache off on tags", "      - uses: docker/setup-buildx-action@v3\n        with:\n          cache-binary: " + off + "\n", 0},
+		{"buildx binary cache on", "      - uses: docker/setup-buildx-action@v3\n        with:\n          cache-binary: ${{ startsWith(github.ref, 'refs/tags/') }}\n", 1},
+		{"node automatic cache off on tags", "      - uses: actions/setup-node@v5\n        with:\n          package-manager-cache: " + off + "\n", 0},
+		{"node automatic cache on", "      - uses: actions/setup-node@v5\n        with:\n          package-manager-cache: ${{ startsWith(github.ref, 'refs/tags/') }}\n", 1},
+		{"node explicit cache is not switched off by it", "      - uses: actions/setup-node@v5\n        with:\n          cache: npm\n          package-manager-cache: " + off + "\n", 1},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := lintCacheWorkflow(t, "", head+tc.step); len(got) != tc.want {
 				t.Errorf("want %d findings but got %v", tc.want, got)
 			}
 		})

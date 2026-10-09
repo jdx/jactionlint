@@ -34,6 +34,8 @@ jobs:
       - run: curl -fsSL https://github.com/${GITHUB_REPOSITORY}/raw/main/tools/release.sh | sh
       # ERROR: another repository is not this one
       - run: curl -fsSL https://github.com/o/r/raw/${GITHUB_SHA}/tools/release.sh | sh
+      # ERROR: on raw.githubusercontent.com "raw" is the branch and the commit is part of the path
+      - run: curl -fsSL https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/raw/${GITHUB_SHA}/tools/release.sh | sh
       - run: |
           curl -fsSLo tool https://example.com/tool
           echo "0123456789abcdef  tool" | sha256sum -c -
