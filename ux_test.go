@@ -187,14 +187,15 @@ func TestBaselineSurvivesMovingTheCheckout(t *testing.T) {
 	if st, out := run(first, "-baseline-write"); st != 0 {
 		t.Fatalf("%d %s", st, out)
 	}
-	// Windows cannot rename a directory which is the working directory of the process
+	// Copy the checkout to another place instead of renaming it: Windows refuses to rename a directory in which
+	// a file was just read (the runner's scanners may still hold it)
 	t.Chdir(parent)
 	second := filepath.Join(parent, "moved", "elsewhere")
-	if err := os.MkdirAll(filepath.Dir(second), 0o755); err != nil {
+	if err := os.CopyFS(second, os.DirFS(first)); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Rename(first, second); err != nil {
-		t.Fatal(err)
+	if err := os.RemoveAll(first); err != nil {
+		t.Log(err)
 	}
 	for i := 0; i < 8; i++ {
 		st, out := run(second, "-baseline", "-baseline-check")
