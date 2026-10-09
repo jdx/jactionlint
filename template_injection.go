@@ -314,9 +314,10 @@ func (c *tiContext) externalText(path []string) string {
 		if len(path) == 2 && c.inputIsNotText(path[1]) {
 			return ""
 		}
-		if len(path) >= 2 {
-			return "an input chosen by whoever runs this"
+		if len(path) == 1 && !c.inputsHoldText() {
+			return ""
 		}
+		return "an input chosen by whoever runs this"
 	case "github":
 		if len(path) < 2 {
 			return ""
@@ -331,6 +332,9 @@ func (c *tiContext) externalText(path []string) string {
 			switch path[2] {
 			case "inputs":
 				if len(path) == 4 && c.inputIsNotText(path[3]) {
+					return ""
+				}
+				if len(path) == 3 && !c.inputsHoldText() {
 					return ""
 				}
 				return "an input chosen by whoever runs this"
@@ -434,6 +438,35 @@ func (c *tiContext) inputIsNotText(name string) bool {
 	return found
 }
 
+// inputsHoldText reports whether the whole inputs object can hold free text: an input of the workflow which
+// is not a boolean, a number, a choice or an environment, or any input of a composite action (c.wf is nil).
+// A workflow which declares no input at all has no text in it.
+func (c *tiContext) inputsHoldText() bool {
+	if c.wf == nil {
+		return true
+	}
+	for _, e := range c.wf.On {
+		switch e := e.(type) {
+		case *WorkflowDispatchEvent:
+			for _, in := range e.Inputs {
+				switch in.Type {
+				case WorkflowDispatchEventInputTypeNumber, WorkflowDispatchEventInputTypeBoolean,
+					WorkflowDispatchEventInputTypeChoice, WorkflowDispatchEventInputTypeEnvironment:
+				default:
+					return true
+				}
+			}
+		case *WorkflowCallEvent:
+			for _, in := range e.Inputs {
+				if in.Type != WorkflowCallEventInputTypeBoolean && in.Type != WorkflowCallEventInputTypeNumber {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
 var knownContexts = map[string]bool{
 	"github": true, "env": true, "vars": true, "job": true, "jobs": true, "steps": true, "runner": true,
 	"secrets": true, "strategy": true, "matrix": true, "needs": true, "inputs": true,
@@ -493,6 +526,32 @@ func (c *tiContext) envTaint(name string, depth int) string {
 			if r.Path[0] == "env" && len(r.Path) == 2 {
 				if t := c.envTaint(r.Path[1], depth+1); t != "" {
 					return t
+				}
+			}
+		}
+	}
+	return ""
+}
+
+// envExternalText returns what kind of free text from outside the workflow file the environment variable is set from
+// (see externalText), or an empty string. Putting such a value in env: and interpolating it with ${{ env.X }} is
+// as much an injection as interpolating it directly.
+func (c *tiContext) envExternalText(name string, depth int) string {
+	if depth > 4 {
+		return ""
+	}
+	v := c.lookupEnv(name)
+	if v == nil || v.Value == nil {
+		return ""
+	}
+	for _, sp := range scanExprs(v.Value) {
+		for _, r := range exprContextRefs(sp.Node) {
+			if k := c.externalText(r.Path); k != "" {
+				return k
+			}
+			if strings.EqualFold(r.Path[0], "env") && len(r.Path) == 2 {
+				if k := c.envExternalText(r.Path[1], depth+1); k != "" {
+					return k
 				}
 			}
 		}
@@ -615,6 +674,11 @@ func (c *tiContext) classify(sp *exprSpan) tiClass {
 		r := &refs[i]
 		if kind := c.externalText(r.Path); kind != "" {
 			return tiClass{Tier: tiInput, Ref: r, Source: kind}
+		}
+		if r.Path[0] == "env" && len(r.Path) == 2 {
+			if kind := c.envExternalText(r.Path[1], 0); kind != "" {
+				return tiClass{Tier: tiInput, Ref: r, Source: "set from " + kind}
+			}
 		}
 	}
 	for i := range refs {
