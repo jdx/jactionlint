@@ -1,0 +1,24 @@
+cmd 1:1 name="echo"
+  pos "A=1"
+cmd 2:1 name="echo"
+  pos "A=1"
+cmd 3:1 name="echo"
+  pos "A=1"
+cmd 4:1 name="echo"
+  pos "A=1"
+cmd 5:1 name="echo"
+  pos "A=1"
+cmd 6:1 name="echo"
+  pos "A=1"
+cmd 7:1 name="echo"
+  pos "A=1"
+cmd 8:1 name="echo"
+  pos "A=1"
+redirect 1:10 op=">>" fd="" target="$RUNNER_TEMP/$GITHUB_ENV_x"[var:RUNNER_TEMP,GITHUB_ENV_x] append=true write=true
+redirect 2:10 op=">>" fd="" target="$GITHUB_ENV_x"[var:GITHUB_ENV_x quoted] append=true write=true
+redirect 3:10 op=">>" fd="" target="$GITHUB_ENVIRONMENT"[var:GITHUB_ENVIRONMENT] append=true write=true
+redirect 4:10 op=">>" fd="" target="${GITHUB_ENV}.bak"[var:GITHUB_ENV quoted] append=true write=true
+redirect 5:10 op=">>" fd="" target="$GITHUB_ENV"[quoted] append=true write=true
+redirect 6:10 op=">>" fd="" target="$GITHUB_ENV/"[var:GITHUB_ENV] append=true write=true
+redirect 7:10 op=">>" fd="" target="${GITHUB_ENV:-/dev/null}"[var:GITHUB_ENV] append=true write=true
+redirect 8:10 op=">>" fd="" target="$env_GITHUB_ENV"[var:env_GITHUB_ENV] append=true write=true

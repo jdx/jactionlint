@@ -5,6 +5,7 @@ FROM golang:${GOLANG_VER} AS builder
 WORKDIR /go/src/app
 COPY go.* *.go ./
 COPY cmd cmd/
+COPY internal internal/
 ENV CGO_ENABLED=0
 ARG JACTIONLINT_VER=
 RUN go build -v -ldflags "-s -w -X github.com/jdx/jactionlint/v2.version=${JACTIONLINT_VER}" ./cmd/jactionlint

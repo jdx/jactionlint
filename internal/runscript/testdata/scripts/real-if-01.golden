@@ -1,0 +1,3 @@
+cmd 1:1 name="awk"
+  pos "/^## \\[/{if(found) exit; found=1} found{print}"[quoted] "CHANGELOG.md"
+redirect 1:67 op=">" fd="" target="release-notes.md" append=false write=true

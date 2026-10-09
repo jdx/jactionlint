@@ -1,0 +1,5 @@
+cmd 1:1 name="cargo" tool=cargo
+  flags --version="0.13.2" --locked
+  pos "install" "cargo-fuzz"
+  install tool=cargo eco=crates verb=install run=false global=false locked=true manifest=false reqs=0
+    pkg "cargo-fuzz" name="cargo-fuzz" ver="0.13.2" kind=registry pinned=true dyn=false local=false

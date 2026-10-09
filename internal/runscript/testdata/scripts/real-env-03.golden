@@ -1,0 +1,6 @@
+cmd 1:1 name="source" tool=source
+  pos "./test/setup-bitwarden-ci.sh"
+cmd 2:1 name="echo"
+  pos "BW_SESSION=$BW_SESSION"[var:BW_SESSION quoted]
+redirect 2:31 op=">>" fd="" target="$GITHUB_ENV"[var:GITHUB_ENV quoted] append=true write=true
+writes GITHUB_ENV at 2:31 append=true producers=1 exprs=[]

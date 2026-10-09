@@ -1,0 +1,65 @@
+cmd 1:1 name="echo"
+  pos "A=1"[quoted]
+cmd 2:1 name="echo"
+  pos "A=1"[quoted]
+cmd 3:1 name="echo"
+  pos "A=1"[quoted]
+cmd 4:1 name="echo"
+  pos "A=1"[quoted]
+cmd 5:1 name="echo"
+  pos "A=1"[quoted]
+cmd 6:1 name="echo"
+  pos "A=1"[quoted]
+cmd 7:1 name="echo"
+  pos "A=1"[quoted]
+cmd 8:1 name="printf"
+  pos "A=%s\\n"[quoted] "$X"[var:X quoted]
+cmd 9:1 name="echo"
+  pos "k=v"[quoted]
+cmd 10:1 name="echo"
+  pos "s=v"[quoted]
+cmd 11:1 name="echo" pipe=1/2
+  pos "A=1"
+cmd 11:12 name="tee" tool=tee pipe=2/2
+  flags -a
+  pos "$GITHUB_ENV"[var:GITHUB_ENV quoted]
+cmd 12:1 name="echo" pipe=1/2
+  pos "A=1"
+cmd 12:12 name="tee" tool=tee wrappers=sudo pipe=2/2
+  flags --append
+  pos "$GITHUB_ENV"[var:GITHUB_ENV]
+cmd 13:1 name="echo" pipe=1/2
+  pos "A=1"
+cmd 13:12 name="tee" tool=tee pipe=2/2
+  pos "$GITHUB_ENV"[var:GITHUB_ENV]
+pipeline 11:1 stages=2 negated=false
+pipeline 12:1 stages=2 negated=false
+pipeline 13:1 stages=2 negated=false
+redirect 1:12 op=">>" fd="" target="$GITHUB_ENV"[var:GITHUB_ENV] append=true write=true
+redirect 2:12 op=">>" fd="" target="$GITHUB_ENV"[var:GITHUB_ENV quoted] append=true write=true
+redirect 3:12 op=">>" fd="" target="${GITHUB_ENV}"[var:GITHUB_ENV quoted] append=true write=true
+redirect 4:12 op=">" fd="" target="${GITHUB_ENV}"[var:GITHUB_ENV] append=false write=true
+redirect 5:12 op=">|" fd="" target="$GITHUB_ENV"[var:GITHUB_ENV] append=false write=true
+redirect 6:12 op="&>>" fd="" target="$GITHUB_ENV"[var:GITHUB_ENV quoted] append=true write=true
+redirect 7:12 op=">&" fd="2" target="1" append=false write=false
+redirect 7:17 op=">>" fd="" target="$GITHUB_ENV"[var:GITHUB_ENV] append=true write=true
+redirect 8:22 op=">>" fd="" target="$GITHUB_PATH"[var:GITHUB_PATH] append=true write=true
+redirect 9:12 op=">>" fd="" target="$GITHUB_OUTPUT"[var:GITHUB_OUTPUT] append=true write=true
+redirect 10:12 op=">>" fd="" target="$GITHUB_STATE"[var:GITHUB_STATE] append=true write=true
+redirect 11:19 op="tee" fd="" target="$GITHUB_ENV"[var:GITHUB_ENV quoted] append=true write=true tee
+redirect 11:33 op=">" fd="" target="/dev/null" append=false write=true
+redirect 12:30 op="tee" fd="" target="$GITHUB_ENV"[var:GITHUB_ENV] append=true write=true tee
+redirect 13:16 op="tee" fd="" target="$GITHUB_ENV"[var:GITHUB_ENV] append=false write=true tee
+writes GITHUB_ENV at 1:12 append=true producers=1 exprs=[]
+writes GITHUB_ENV at 2:12 append=true producers=1 exprs=[]
+writes GITHUB_ENV at 3:12 append=true producers=1 exprs=[]
+writes GITHUB_ENV at 4:12 append=false producers=1 exprs=[]
+writes GITHUB_ENV at 5:12 append=false producers=1 exprs=[]
+writes GITHUB_ENV at 6:12 append=true producers=1 exprs=[]
+writes GITHUB_ENV at 7:17 append=true producers=1 exprs=[]
+writes GITHUB_ENV at 11:19 append=true producers=2 exprs=[]
+writes GITHUB_ENV at 12:30 append=true producers=2 exprs=[]
+writes GITHUB_ENV at 13:16 append=false producers=2 exprs=[]
+writes GITHUB_PATH at 8:22 append=true producers=1 exprs=[]
+writes GITHUB_OUTPUT at 9:12 append=true producers=1 exprs=[]
+writes GITHUB_STATE at 10:12 append=true producers=1 exprs=[]

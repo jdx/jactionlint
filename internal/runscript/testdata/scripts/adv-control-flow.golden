@@ -1,0 +1,91 @@
+expr 6:8 "github.event_name"
+cmd 1:1 name="set"
+  flags -euo
+  pos "pipefail"
+cmd 3:3 name="pip" tool=pip
+  pos "install" "in-function"
+  install tool=pip eco=pypi verb=install run=false global=false locked=false manifest=false reqs=0
+    pkg "in-function" name="in-function" ver="" kind=registry pinned=false dyn=false local=false
+cmd 5:1 name="f"
+cmd 7:3 name="npm" tool=npm
+  pos "install" "in-if"
+  install tool=npm eco=npm verb=install run=false global=false locked=false manifest=false reqs=0
+    pkg "in-if" name="in-if" ver="" kind=registry pinned=false dyn=false local=false
+cmd 8:6 name="true"
+cmd 9:3 name="cargo" tool=cargo
+  pos "install" "in-elif"
+  install tool=cargo eco=crates verb=install run=false global=false locked=false manifest=false reqs=0
+    pkg "in-elif" name="in-elif" ver="" kind=registry pinned=false dyn=false local=false
+cmd 11:3 name="go" tool=go
+  pos "install" "in/else@v1"
+  install tool=go eco=go verb=install run=false global=false locked=false manifest=false reqs=0
+    pkg "in/else@v1" name="in/else" ver="v1" kind=module pinned=false dyn=false local=false
+cmd 13:18 name="pip" tool=pip
+  pos "install" "$p"[var:p quoted]
+  install tool=pip eco=pypi verb=install run=false global=false locked=false manifest=false reqs=0
+    pkg "$p" name="" ver="" kind=dynamic pinned=false dyn=true local=false
+cmd 14:7 name="read"
+  flags -r
+  pos "l"
+cmd 14:21 name="echo"
+  pos "$l"[var:l quoted]
+cmd 16:6 name="apt-get" tool=apt
+  flags -y
+  pos "install" "a"
+  install tool=apt eco=apt verb=install run=false global=false locked=false manifest=false reqs=0
+    pkg "a" name="a" ver="" kind=registry pinned=false dyn=false local=false
+cmd 17:6 name="echo"
+  pos "other"
+cmd 19:7 name="false"
+cmd 19:17 name="break"
+cmd 20:5 name="pip" tool=pip
+  pos "install" "in-subst"
+  install tool=pip eco=pypi verb=install run=false global=false locked=false manifest=false reqs=0
+    pkg "in-subst" name="in-subst" ver="" kind=registry pinned=false dyn=false local=false
+cmd 20:31 name="npm" tool=npm
+  pos "i" "in-backtick"
+  install tool=npm eco=npm verb=i run=false global=false locked=false manifest=false reqs=0
+    pkg "in-backtick" name="in-backtick" ver="" kind=registry pinned=false dyn=false local=false
+cmd 21:1 name="["
+  flags -f
+  pos "x" "]"
+cmd 21:13 name="pip" tool=pip
+  pos "install" "and-list"
+  install tool=pip eco=pypi verb=install run=false global=false locked=false manifest=false reqs=0
+    pkg "and-list" name="and-list" ver="" kind=registry pinned=false dyn=false local=false
+cmd 21:37 name="pip" tool=pip
+  pos "install" "or-list"
+  install tool=pip eco=pypi verb=install run=false global=false locked=false manifest=false reqs=0
+    pkg "or-list" name="or-list" ver="" kind=registry pinned=false dyn=false local=false
+cmd 22:1 name="pip" tool=pip
+  pos "install" "bg"
+  install tool=pip eco=pypi verb=install run=false global=false locked=false manifest=false reqs=0
+    pkg "bg" name="bg" ver="" kind=registry pinned=false dyn=false local=false
+cmd 22:18 name="wait"
+cmd 23:2 name="cd"
+  pos "sub"
+cmd 23:12 name="npm" tool=npm
+  pos "ci"
+  install tool=npm eco=npm verb=ci run=false global=false locked=true manifest=true reqs=0
+cmd 24:1 name="echo"
+  pos "$(( 1 + 2 ))"[subst]
+cmd 25:1 name="declare"
+  assign arr=<nil>
+cmd 26:1 name="export"
+  assign A="1"
+  assign B="$(date)"[subst quoted]
+cmd 26:17 name="date"
+cmd 27:1 name="pip" tool=pip
+  assign local_var="1"
+  pos "install" "with-assign"
+  install tool=pip eco=pypi verb=install run=false global=false locked=false manifest=false reqs=0
+    pkg "with-assign" name="with-assign" ver="" kind=registry pinned=false dyn=false local=false
+redirect 14:31 op=">>" fd="" target="$GITHUB_ENV"[var:GITHUB_ENV quoted] append=true write=true
+redirect 14:54 op="<" fd="" target="list.txt" append=false write=false group inner=2
+assignment 20:1 x value="$(pip install in-subst)"[subst] append=false array=false
+assignment 20:28 y value="`npm i in-backtick`"[subst] append=false array=false
+assignment 25:12 arr value=<nil> append=false array=true
+assignment 26:8 A value="1" append=false array=false
+assignment 26:12 B value="$(date)"[subst quoted] append=false array=false
+assignment 27:1 local_var value="1" append=false array=false
+writes GITHUB_ENV at 14:31 append=true producers=1 exprs=[]
