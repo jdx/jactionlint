@@ -182,7 +182,7 @@ func (rule *RuleExpression) VisitWorkflowPre(n *Workflow) error {
 					sty.Props[id] = StringType{}
 					rule.checkString(s.Description, "")
 				}
-				if workflowCallOnly {
+				if workflowCallOnly && !n.InheritedSecrets {
 					rule.secretsTy = sty
 				}
 			}

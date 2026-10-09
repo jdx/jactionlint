@@ -30,17 +30,27 @@ func NewRuleSelfRepository(src []byte) *RuleSelfRepository {
 	}
 }
 
-func (rule *RuleSelfRepository) check(u *String) {
+func (rule *RuleSelfRepository) check(u *String, workflowCall bool) {
 	if u == nil || !strings.HasPrefix(u.Value, "./") {
 		return
 	}
 	suggested := "$/" + strings.TrimPrefix(u.Value, "./")
-	rule.ReportIDf(
-		"self-repository",
-		u.Pos,
-		"%q is looked up in the workspace at run time, where an earlier step can replace it. use the self-repository syntax %q which always refers to the commit running the workflow",
-		u.Value, suggested,
-	)
+	if workflowCall {
+		// A reusable workflow is resolved before any step runs, so nothing can replace it
+		rule.ReportIDf(
+			"self-repository",
+			u.Pos,
+			"%q is a path that cannot be told apart from an arbitrary directory by a policy that requires pinning. use the self-repository syntax %q, which names the reusable workflow of this repository at the commit running the workflow",
+			u.Value, suggested,
+		)
+	} else {
+		rule.ReportIDf(
+			"self-repository",
+			u.Pos,
+			"%q is looked up in the workspace at run time, where an earlier step can replace it. use the self-repository syntax %q which always refers to the commit running the workflow",
+			u.Value, suggested,
+		)
+	}
 	if rule.src == nil {
 		return
 	}
@@ -62,7 +72,7 @@ func (rule *RuleSelfRepository) VisitStep(n *Step) error {
 		return nil
 	}
 	if a, ok := n.Exec.(*ExecAction); ok {
-		rule.check(a.Uses)
+		rule.check(a.Uses, false)
 	}
 	return nil
 }
@@ -73,7 +83,7 @@ func (rule *RuleSelfRepository) VisitJobPre(n *Job) error {
 		return nil
 	}
 	if n.WorkflowCall != nil {
-		rule.check(n.WorkflowCall.Uses)
+		rule.check(n.WorkflowCall.Uses, true)
 	}
 	return nil
 }

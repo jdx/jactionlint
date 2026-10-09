@@ -171,6 +171,32 @@ var cacheActions = []cacheAction{
 		}
 		return true, "set \"cache-binary: false\""
 	}},
+	{"oven-sh/setup-bun", func(a *ExecAction, u *UsesRef) (bool, string) {
+		// the downloaded bun executable is cached unless "no-cache" is true
+		if v, _ := a.input("no-cache"); isTrueLiteral(v) {
+			return false, ""
+		}
+		return true, "set \"no-cache: true\""
+	}},
+	{"actions-rust-lang/setup-rust-toolchain", func(a *ExecAction, u *UsesRef) (bool, string) {
+		// it runs Swatinem/rust-cache unless "cache" is false
+		if v, ok := a.input("cache"); ok && isFalseLiteral(v) {
+			return false, ""
+		}
+		return true, "set \"cache: false\""
+	}},
+	{"mlugg/setup-zig", func(a *ExecAction, u *UsesRef) (bool, string) {
+		if v, ok := a.input("use-cache"); ok && isFalseLiteral(v) {
+			return false, ""
+		}
+		return true, "set \"use-cache: false\""
+	}},
+	{"awalsh128/cache-apt-pkgs-action", func(a *ExecAction, u *UsesRef) (bool, string) {
+		return true, "remove this step"
+	}},
+	{"nix-community/cache-nix-action", func(a *ExecAction, u *UsesRef) (bool, string) {
+		return true, "remove this step"
+	}},
 	{"hendrikmuhs/ccache-action", func(a *ExecAction, u *UsesRef) (bool, string) {
 		return true, "remove this step"
 	}},
@@ -279,10 +305,24 @@ var publishingActions = []string{
 	"peaceiris/actions-gh-pages",
 	"jamesives/github-pages-deploy-action",
 	"cloudflare/wrangler-action",
+	"googleapis/release-please-action",
+	"google-github-actions/release-please-action",
+	"cycjimmy/semantic-release-action",
+	"marvinpinto/action-automatic-releases",
+	"helm/chart-releaser-action",
+	"getsentry/action-release",
+	"jasonetco/build-and-tag-action",
+	"actions/publish-action",
+	"vedantmgoyal9/winget-releaser",
+	"tauri-apps/tauri-action",
+	"changesets/action",
+	"crazy-max/ghaction-github-release",
+	"haaleo/publish-vscode-extension",
+	"elgohr/publish-docker-github-action",
 }
 
 // publishCommandRegex matches a command of a `run:` script that publishes a release or a package.
-var publishCommandRegex = regexp.MustCompile(`(?m)\b(cargo\s+publish|npm\s+publish|pnpm\s+publish|yarn\s+(npm\s+)?publish|twine\s+upload|gem\s+push|poetry\s+publish|uv\s+publish|docker\s+push|gh\s+release\s+(create|upload)|goreleaser\s+(release|publish)|vsce\s+publish|mvn\b[^\n]*\bdeploy|gradle\w*\s+[^\n]*\bpublish)\b`)
+var publishCommandRegex = regexp.MustCompile(`(?m)\b(cargo\s+publish|npm\s+publish|pnpm\s+publish|yarn\s+(npm\s+)?publish|cargo\s+(mono|workspaces)\s+publish|(?:pnpm|npx)\s+(?:-r\s+)?changeset\s+publish|lerna\s+publish|semantic-release|ovsx\s+publish|dotnet\s+nuget\s+push|(?:dart|flutter)\s+pub\s+publish|helm\s+push|oras\s+push|twine\s+upload|gem\s+push|poetry\s+publish|uv\s+publish|docker\s+push|gh\s+release\s+(create|upload)|goreleaser\s+(release|publish)|vsce\s+publish|mvn\b[^\n]*\bdeploy|gradle\w*\s+[^\n]*\bpublish)\b`)
 
 // RuleCachePoisoning is a rule checker for two ways the GitHub Actions cache turns into an attack path:
 //
@@ -544,7 +584,7 @@ func (rule *RuleCachePoisoning) VisitJobPre(n *Job) error {
 			}
 			reads, hint = auto(a, withCommentVersion(rule.wf, a, ref), root)
 		}
-		if !reads || !cacheCanRunOnReleaseTrigger(n, s, a, name, scenarios) {
+		if !reads || !cacheCanRunOnReleaseTrigger(n, s, a, name, scenarios) || rule.callersTurnCacheOff(a, name) {
 			continue
 		}
 		rule.ReportIDf(
@@ -555,6 +595,70 @@ func (rule *RuleCachePoisoning) VisitJobPre(n *Job) error {
 		)
 	}
 	return nil
+}
+
+var inputRefRe = regexp.MustCompile(`^\$\{\{\s*inputs\.([A-Za-z_][A-Za-z0-9_-]*)\s*\}\}$`)
+
+// callersTurnCacheOff reports whether the step of a composite action restores a cache only when the input of the
+// action says so, and every release workflow that calls the action sets that input to switch the cache off:
+// `enable-cache: false` of setup-uv passed down as `enable-cache: ${{ inputs.enable-cache }}`. Without a call that
+// is known to pass the value (a call through another action, or a caller that is not known), the answer is no.
+func (rule *RuleCachePoisoning) callersTurnCacheOff(a *ExecAction, name string) bool {
+	if rule.wf == nil || rule.wf.Action == nil || !rule.wf.Action.Callers.Known() {
+		return false
+	}
+	for _, g := range cacheGateInputs[name] {
+		v, ok := a.input(g.input)
+		if !ok {
+			continue
+		}
+		m := inputRefRe.FindStringSubmatch(strings.TrimSpace(v))
+		if m == nil {
+			continue
+		}
+		if rule.everyReleaseCallerSets(m[1], g.offWhenTrue) {
+			return true
+		}
+	}
+	return false
+}
+
+// everyReleaseCallerSets reports whether every release workflow that runs the action passes the input with a
+// literal value that switches the cache off (false, or true for an input that switches it off when true), or leaves
+// the input out and the default of the action switches it off.
+func (rule *RuleCachePoisoning) everyReleaseCallerSets(input string, offWhenTrue bool) bool {
+	off := func(v string) bool {
+		if offWhenTrue {
+			return isTrueLiteral(v)
+		}
+		return isFalseLiteral(v)
+	}
+	def, hasDefault := "", false
+	for _, in := range rule.wf.Action.Inputs {
+		if in != nil && in.ID != nil && strings.EqualFold(in.ID.Value, input) && in.Default != nil {
+			def, hasDefault = in.Default.Value, true
+		}
+	}
+	releasing := 0
+	for _, cl := range rule.wf.Action.Callers.Callers {
+		if why, _ := releaseTrigger(cl.Events); why == "" {
+			continue
+		}
+		releasing++
+		if len(cl.Calls) == 0 {
+			return false
+		}
+		for _, call := range cl.Calls {
+			v, ok := call.input(input)
+			switch {
+			case ok && off(v):
+			case !ok && hasDefault && off(def):
+			default:
+				return false
+			}
+		}
+	}
+	return releasing > 0
 }
 
 // cacheGate is an input which decides whether an action uses the cache. offWhenTrue is set for the inputs that
@@ -600,6 +704,11 @@ var cacheGateInputs = map[string][]cacheGate{
 	"actions/cache":                             nil,
 	"actions/cache/restore":                     nil,
 	"hendrikmuhs/ccache-action":                 nil,
+	"awalsh128/cache-apt-pkgs-action":           nil,
+	"nix-community/cache-nix-action":            nil,
+	"oven-sh/setup-bun":                         {{input: "no-cache", offWhenTrue: true}},
+	"actions-rust-lang/setup-rust-toolchain":    {{input: "cache"}},
+	"mlugg/setup-zig":                           {{input: "use-cache"}},
 	"determinatesystems/magic-nix-cache-action": nil,
 }
 

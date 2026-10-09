@@ -1,0 +1,1 @@
+.github/actions/on/action.yml:10:13: astral-sh/setup-uv restores a cache although .github/workflows/rel.yml runs on the release event and calls this action, so a poisoned cache entry can end up in the published artifacts. set "enable-cache: false", or set "cache-mode: none" on the job that calls this action [cache-poisoning]

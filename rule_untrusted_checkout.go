@@ -15,6 +15,7 @@ type RuleUntrustedCheckout struct {
 	siblings   *siblingWorkflows // nil reads the workflows of the project for each file
 	privileged []string
 	wf         *Workflow
+	job        *Job
 }
 
 // NewRuleUntrustedCheckout creates a new RuleUntrustedCheckout instance. The project can be nil.
@@ -59,6 +60,7 @@ func (rule *RuleUntrustedCheckout) VisitJobPre(n *Job) error {
 	// The checkouts which no step has run the code of yet, by the directory they put it in. Whether a
 	// step runs code depends on the directory only, so it is asked once for each directory and not for
 	// each checkout: a job with thousands of checkouts is not quadratic.
+	rule.job = n
 	pending := map[string][]*untrustedCheckout{}
 	var dirs []string // the keys of pending in the order they were added
 	for _, s := range flattenSteps(n.Steps) {
@@ -100,12 +102,25 @@ func (rule *RuleUntrustedCheckout) report(c *untrustedCheckout, how string) {
 	if event == "workflow_run" {
 		source = "the run that triggered this workflow"
 	}
+	privileges := "the workflow has a write token and secrets, so whoever controls that code can use them"
+	if rule.job != nil && rule.wf != nil && tokenIsAbsent(rule.wf, rule.job) {
+		privileges = "the job has no token (\"permissions: {}\"), but the code still runs on the runner with everything else the job gives it, such as secrets passed to a step and the cache"
+	}
 	rule.ReportIDf(
 		"untrusted-checkout",
 		c.pos,
-		"this step checks out code from %s (%s) in a %q workflow and %s runs it afterwards. the workflow has a write token and secrets, so whoever controls that code can use them. run untrusted code in a \"pull_request\" workflow without secrets, or check out the base branch and only read the pull request as data",
-		source, c.what, event, how,
+		"this step checks out code from %s (%s) in a %q workflow and %s runs it afterwards. %s. run untrusted code in a \"pull_request\" workflow without secrets, or check out the base branch and only read the pull request as data",
+		source, c.what, event, how, privileges,
 	)
+}
+
+// tokenIsAbsent reports whether the job sets "permissions: {}", so GITHUB_TOKEN has no scope at all.
+func tokenIsAbsent(w *Workflow, j *Job) bool {
+	p := j.Permissions
+	if p == nil {
+		p = w.Permissions
+	}
+	return p != nil && p.All == nil && len(p.Scopes) == 0
 }
 
 // checkoutsOf returns the untrusted code that the step checks out.
@@ -136,8 +151,16 @@ func (rule *RuleUntrustedCheckout) checkoutsOf(j *Job, s *Step) []*untrustedChec
 		}
 		env := untrustedEnvNames(rule.wf, j, s)
 		var ret []*untrustedCheckout
-		for _, c := range script.Commands {
-			if what, ok := commandChecksOutUntrusted(c, env); ok {
+		for i, c := range script.Commands {
+			what, ok := commandChecksOutUntrusted(c, env)
+			if !ok && c.Name == "git" && c.Verb() == "fetch" {
+				// A fetch only downloads the objects: it checks out the code when a later command in
+				// the script puts what it fetched in the working tree.
+				if w, bad := commandNamesUntrusted(c, env); bad && fetchedThenUsed(script.Commands[i+1:]) {
+					what, ok = w, true
+				}
+			}
+			if ok {
 				pos := s.Pos
 				if e.RunPos != nil {
 					pos = e.RunPos
@@ -154,8 +177,10 @@ func (rule *RuleUntrustedCheckout) checkoutsOf(j *Job, s *Step) []*untrustedChec
 	return nil
 }
 
+// gitCheckoutVerbs are the git commands that put a revision in the working tree. A "fetch" is not one:
+// it only downloads objects, see fetchedThenUsed.
 var gitCheckoutVerbs = map[string]bool{
-	"checkout": true, "switch": true, "fetch": true, "pull": true, "merge": true, "cherry-pick": true,
+	"checkout": true, "switch": true, "pull": true, "merge": true, "cherry-pick": true,
 	"rebase": true, "clone": true, "reset": true, "restore": true,
 }
 
@@ -171,23 +196,45 @@ func commandChecksOutUntrusted(c *runscript.Command, envNames map[string]bool) (
 		if !gitCheckoutVerbs[c.Verb()] {
 			return "", false
 		}
-		for _, w := range c.Words {
-			for _, e := range w.Exprs {
-				if what, bad := untrustedValue("${{ " + e + " }}"); bad {
-					return what, true
-				}
+		return commandNamesUntrusted(c, envNames)
+	}
+	return "", false
+}
+
+// commandNamesUntrusted reports whether a word of the command names the head of a pull request.
+func commandNamesUntrusted(c *runscript.Command, envNames map[string]bool) (string, bool) {
+	for _, w := range c.Words {
+		for _, e := range w.Exprs {
+			if what, bad := untrustedValue("${{ " + e + " }}"); bad {
+				return what, true
 			}
-			for _, v := range w.Vars {
-				if envNames[v] {
-					return "$" + v, true
-				}
+		}
+		for _, v := range w.Vars {
+			if envNames[v] {
+				return "$" + v, true
 			}
-			if strings.Contains(w.Value, "refs/pull/") {
-				return w.Value, true
-			}
+		}
+		if strings.Contains(w.Value, "refs/pull/") {
+			return w.Value, true
 		}
 	}
 	return "", false
+}
+
+// workTreeVerbs are the git commands that change the files in the working tree to a revision.
+var workTreeVerbs = map[string]bool{
+	"checkout": true, "switch": true, "merge": true, "cherry-pick": true, "rebase": true, "reset": true,
+	"restore": true, "pull": true, "read-tree": true, "worktree": true,
+}
+
+// fetchedThenUsed reports whether one of the commands puts a fetched revision in the working tree.
+func fetchedThenUsed(rest []*runscript.Command) bool {
+	for _, c := range rest {
+		if c.Name == "git" && workTreeVerbs[c.Verb()] {
+			return true
+		}
+	}
+	return false
 }
 
 func init() {

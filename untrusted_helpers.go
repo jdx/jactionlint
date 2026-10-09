@@ -192,6 +192,41 @@ var nonExecutingCommands = map[string]bool{
 	"tee": true, "mktemp": true, "rsync": true, "xz": true, "bzip2": true, "7z": true, "7za": true, "file": true,
 	"column": true, "nl": true, "paste": true, "comm": true, "join": true, "split": true, "tac": true, "rev": true,
 	"id": true, "whoami": true, "uname": true, "hostname": true, "env": true, "trap": true, "wait": true,
+	// shell keywords and builtins that never start a program
+	"break": true, "continue": true, "compgen": true, "complete": true, "alias": true, "unalias": true, "let": true,
+	"getopts": true, "hash": true, "umask": true, "ulimit": true, "typeset": true, "jobs": true, "bg": true, "fg": true,
+	"disown": true, "dirs": true, "popd": true, "pushd": true, "history": true, "mapfile": true, "readarray": true,
+	"caller": true, "enable": true, "shopt": true, "bind": true, ":": true, "{": true, "}": true, "!": true,
+	// programs that print, convert or count data
+	"xxd": true, "od": true, "hexdump": true, "base64": true, "strings": true, "seq": true, "expr": true, "nproc": true,
+	"tput": true, "yes": true, "sync": true, "lsb_release": true, "fold": true, "fmt": true, "iconv": true, "less": true,
+	"more": true, "ps": true, "free": true, "lscpu": true, "cmp": true, "ssh-keyscan": true, "ping": true,
+	"nslookup": true, "dig": true, "systemctl": true, "service": true, "update-ca-certificates": true, "ldconfig": true,
+}
+
+// packageInstallers are the system package managers. They run no code of the workspace unless a
+// package file of it is installed.
+var packageInstallers = map[string]bool{"apt-get": true, "apt": true, "apt-cache": true, "aptitude": true, "dpkg": true, "dnf": true, "yum": true, "apk": true, "zypper": true, "pacman": true}
+
+// runsFromOtherDir reports whether the command is an interpreter that runs a script from outside the
+// directory, so the directory is only data in its arguments: `python3 base/check.py pr-head`.
+func runsFromOtherDir(c *runscript.Command, dir string) bool {
+	if dir == "" || len(c.Wrappers) > 0 {
+		return false
+	}
+	switch c.Name {
+	case "python", "python3", "node", "ruby", "perl", "bash", "sh", "deno":
+	default:
+		return false
+	}
+	if c.HasFlag("-m", "-c", "-e", "-p", "-r", "-i", "--eval", "--import", "--require") {
+		return false
+	}
+	if len(c.Positional) == 0 || c.Positional[0].Dynamic() {
+		return false
+	}
+	script := normalizeDir(c.Positional[0].Value)
+	return script != "" && !strings.HasPrefix(script, "-") && !wordIsUnder(c.Positional[0], dir)
 }
 
 // commandRunsCode reports whether the command may run code that is in the workspace: a script, a
@@ -205,6 +240,14 @@ func commandRunsCode(c *runscript.Command) bool {
 	}
 	if strings.Contains(c.NameWord.Value, "/") {
 		return true // ./script.sh, build/tool
+	}
+	if packageInstallers[c.Name] {
+		for _, w := range c.Words {
+			if strings.Contains(w.Value, "/") || strings.HasSuffix(w.Value, ".deb") || strings.HasSuffix(w.Value, ".rpm") {
+				return true // a package file of the workspace
+			}
+		}
+		return false
 	}
 	return !nonExecutingCommands[c.Name]
 }
@@ -309,7 +352,7 @@ func stepRunsCode(s *Step, dir string, after int) (string, bool) {
 			if c.Offset < after || !commandRunsCode(c) {
 				continue
 			}
-			if dir != "" && !inDir && !commandTouches(c, dir) {
+			if dir != "" && !inDir && (!commandTouches(c, dir) || runsFromOtherDir(c, dir)) {
 				continue
 			}
 			name := c.Name

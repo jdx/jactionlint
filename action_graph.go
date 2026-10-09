@@ -30,6 +30,10 @@ type ActionCaller struct {
 	// Events are the events which trigger the workflow, without workflow_call. They are empty when the
 	// workflow is only called by other workflows, which is not known.
 	Events []Event
+	// Calls are the steps of the workflow that run the action, when the workflow runs it in one of its own steps
+	// (Via is empty). They tell what the workflow passes to the action. They are nil for a call through
+	// another action or reusable workflow.
+	Calls []*ExecAction
 }
 
 // ActionCallers are the local workflows which run an action. It lets the rules which depend on the
@@ -181,6 +185,11 @@ type callGraph struct {
 	actionFiles map[string]string
 	// callers is the reverse of callees.
 	callers map[graphNode][]graphNode
+	// calls are the steps of a node that run the local action of another node.
+	calls map[[2]graphNode][]*ExecAction
+	// notInheriting holds the edges from a workflow to a reusable workflow that has a job calling it without
+	// "secrets: inherit".
+	notInheriting map[[2]graphNode]bool
 
 	mu   sync.Mutex
 	memo map[string]*ActionCallers
@@ -211,7 +220,10 @@ func newCallGraph(root string) *callGraph {
 		actions:     map[string]*Workflow{},
 		actionFiles: map[string]string{},
 		callers:     map[graphNode][]graphNode{},
-		memo:        map[string]*ActionCallers{},
+		calls:       map[[2]graphNode][]*ExecAction{},
+
+		notInheriting: map[[2]graphNode]bool{},
+		memo:          map[string]*ActionCallers{},
 	}
 
 	wfDir := filepath.Join(root, ".github", "workflows")
@@ -240,6 +252,9 @@ func newCallGraph(root string) *callGraph {
 			if j.WorkflowCall != nil && j.WorkflowCall.Uses != nil {
 				if t, ok := localTarget(j.WorkflowCall.Uses.Value); ok {
 					g.addEdge(n, t, &queue)
+					if !j.WorkflowCall.InheritSecrets {
+						g.notInheriting[[2]graphNode{n, t}] = true
+					}
 				}
 			}
 			g.addStepEdges(n, j.Steps, &queue)
@@ -299,6 +314,7 @@ func (g *callGraph) addStepEdges(from graphNode, steps []*Step, queue *[]graphNo
 		}
 		if t, ok := localTarget(a.Uses.Value); ok {
 			g.addEdge(from, t, queue)
+			g.calls[[2]graphNode{from, t}] = append(g.calls[[2]graphNode{from, t}], a)
 		}
 	})
 }
@@ -406,6 +422,9 @@ func (g *callGraph) callersOf(dir string) *ActionCallers {
 			}
 			if len(events) > 0 || !called {
 				found[from.path] = &ActionCaller{Workflow: from.path, Via: via, Events: events}
+				if it.node == start {
+					found[from.path].Calls = g.calls[[2]graphNode{from, start}]
+				}
 			}
 			// A reusable workflow runs in the context of the workflow calling it.
 			if called {
@@ -436,4 +455,17 @@ func (w *Workflow) callerWarning() string {
 		return ""
 	}
 	return fmt.Sprintf("this action is called from %s, which runs on %q", w.Action.Callers.who(cl), trigger)
+}
+
+// allCallersInheritSecrets reports whether the workflow at the path (relative to the root with "/") is called
+// by at least one local workflow and every job that calls it passes "secrets: inherit".
+func (g *callGraph) allCallersInheritSecrets(rel string) bool {
+	to := graphNode{'w', rel}
+	froms := g.callers[to]
+	for _, from := range froms {
+		if g.notInheriting[[2]graphNode{from, to}] {
+			return false
+		}
+	}
+	return len(froms) > 0
 }

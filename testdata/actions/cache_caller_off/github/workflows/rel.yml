@@ -1,0 +1,16 @@
+on:
+  release:
+    types: [published]
+permissions: {}
+jobs:
+  a:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: ./.github/actions/off
+        with:
+          enable-cache: false
+      - uses: ./.github/actions/on
+        with:
+          enable-cache: true
+      - run: echo hi

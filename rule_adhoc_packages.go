@@ -1,6 +1,8 @@
 package jactionlint
 
 import (
+	"strings"
+
 	"github.com/jdx/jactionlint/v2/internal/runscript"
 )
 
@@ -81,6 +83,9 @@ func adhocInstall(c *runscript.Command) (manifest, instead string, ok bool) {
 		}
 		return "a Gemfile and commit the Gemfile.lock", "`bundle install`", true
 	}
+	if lernaAddsPackage(c) {
+		return "the package.json of the package and commit the lock file", "the frozen lock file install of the package manager (`npm ci`, `yarn install --immutable`, `pnpm install --frozen-lockfile`)", true
+	}
 	in := c.Installs()
 	if in == nil || in.Ecosystem != "npm" || in.Run || !hasRegistryPackage(in) {
 		return "", "", false
@@ -98,11 +103,53 @@ func adhocInstall(c *runscript.Command) (manifest, instead string, ok bool) {
 	return "", "", false
 }
 
+// lernaAddsPackage reports whether the command is `lerna add pkg`, also started through yarn, pnpm, npx or
+// `pnpm exec`: it writes the package into the package.json files of the repository.
+func lernaAddsPackage(c *runscript.Command) bool {
+	pos := c.Positional
+	if c.Name == "lerna" {
+		pos = append([]*runscript.Word{c.NameWord}, pos...)
+	}
+	for i, w := range pos {
+		if i > 1 {
+			break
+		}
+		if w.Dynamic() || w.Value != "lerna" {
+			continue
+		}
+		rest := pos[i+1:]
+		if len(rest) < 2 || rest[0].Dynamic() || rest[0].Value != "add" {
+			return false
+		}
+		for _, p := range rest[1:] {
+			if !expandsList(p) && !strings.HasPrefix(p.Value, ".") && !strings.HasPrefix(p.Value, "/") {
+				return true
+			}
+		}
+		return false
+	}
+	return false
+}
+
 // hasRegistryPackage reports whether the install names a package from a registry, a repository or a URL. Local
 // paths do not count: `npm install .` and `npm install ./vendor/pkg` install from the checkout.
 func hasRegistryPackage(in *runscript.Install) bool {
 	for _, p := range in.Packages {
-		if !p.Local && p.Kind != runscript.KindPath {
+		if !p.Local && p.Kind != runscript.KindPath && !expandsList(p.Word) {
+			return true
+		}
+	}
+	return false
+}
+
+// expandsList reports whether the word is a list of arguments the script builds, `"${filters[@]}"` or `"$@"`. What
+// is in it is not known: it holds the flags of the command as well as packages.
+func expandsList(w *runscript.Word) bool {
+	if w == nil {
+		return false
+	}
+	for _, m := range []string{"[@]}", "[*]}", "$@", "$*", "${@", "${*"} {
+		if strings.Contains(w.Raw, m) {
 			return true
 		}
 	}

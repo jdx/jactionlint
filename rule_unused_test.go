@@ -176,6 +176,20 @@ jobs:
     steps:
       - run: echo ${{ inputs.used }}
 `},
+		{"read from the payload in github-script", `on:
+  workflow_dispatch:
+    inputs:
+      b:
+        type: string
+jobs:
+  j:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v9
+        with:
+          script: |
+            console.log(context.payload.inputs.b)
+`},
 		{"read as github.event.inputs", `on:
   workflow_dispatch:
     inputs:
