@@ -419,6 +419,10 @@ func hiddenFailure(p *runscript.Pipeline) *runscript.Command {
 	// A later stage which quits early makes everything in front of it die with SIGPIPE
 	for _, st := range p.Stages[foundStage+1:] {
 		for _, c := range st.Commands {
+			// A command in a loop or in a pipeline of its own reads something else, or only a part of the input
+			if c.LoopBody || (c.Pipeline != nil && c.Pipeline != p) {
+				continue
+			}
 			if stopsReadingEarly(c) {
 				return nil
 			}
