@@ -2725,7 +2725,7 @@ jobs:
 Output:
 
 ```
-test.yaml:6:14: command "npm install" installs a package outside of a lock file: its version and its dependencies are resolved anew on every run. add the package to package.json and commit the package-lock.json and install with `npm ci` [adhoc-packages]
+test.yaml:6:14: command "npm install" installs a package outside of a lock file: its dependencies are resolved anew on every run, although its version is pinned. add the package to package.json and commit the package-lock.json and install with `npm ci` [adhoc-packages]
   |
 6 |       - run: npm install eslint@9.0.0
   |              ^~~
