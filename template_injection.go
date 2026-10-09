@@ -77,14 +77,17 @@ func codeStringsOf(step *Step) []tiCode {
 
 // ctxRef is a reference to a context property in an expression such as github.event.issue.title.
 type ctxRef struct {
-	// Path holds the lower case names. A '*' is an object filter or an index which is not a literal.
+	// Path holds the names normalized by normalizeContextName. A '*' is an object filter (github.event.*.body,
+	// labels.*.name). A "[]" is an index which is a number or an expression (labels[0], labels[matrix.i]); it
+	// reaches the elements of an array like a filter does, but it is a different way to write the access.
 	Path []string
 	// Node is the root of the reference.
 	Node ExprNode
 }
 
+// String joins the path. An index shows as '*' like a filter does, which is how the untrusted inputs are listed.
 func (r *ctxRef) String() string {
-	return strings.Join(r.Path, ".")
+	return strings.ReplaceAll(strings.Join(r.Path, "."), "[]", "*")
 }
 
 // Display returns the reference as it is written in the expression when it is a plain property
@@ -109,15 +112,15 @@ func (r *ctxRef) Display(src string) string {
 func exprContextRefs(n ExprNode) []ctxRef {
 	switch n := n.(type) {
 	case *VariableNode:
-		return []ctxRef{{Path: []string{strings.ToLower(n.Name)}, Node: n}}
+		return []ctxRef{{Path: []string{normalizeContextName(n.Name)}, Node: n}}
 	case *ObjectDerefNode:
-		return appendSeg(exprContextRefs(n.Receiver), strings.ToLower(n.Property))
+		return appendSeg(exprContextRefs(n.Receiver), normalizeContextName(n.Property))
 	case *ArrayDerefNode:
 		return appendSeg(exprContextRefs(n.Receiver), "*")
 	case *IndexAccessNode:
-		seg := "*"
+		seg := "[]"
 		if s, ok := n.Index.(*StringNode); ok {
-			seg = strings.ToLower(s.Value)
+			seg = normalizeContextName(s.Value)
 		}
 		return appendSeg(exprContextRefs(n.Operand), seg)
 	case *LogicalOpNode:
@@ -196,6 +199,11 @@ func matchUntrusted(path []string) (untrustedMatch, string) {
 		for _, m := range cur {
 			if c, ok := m.findObjectProp(seg); ok {
 				next = append(next, c)
+			} else if seg == "[]" {
+				// An index reaches the elements of an array, which the table has as "*"
+				if c, ok := m.findArrayElem(); ok {
+					next = append(next, c)
+				}
 			} else if seg == "*" {
 				for _, c := range m.Children {
 					next = append(next, c)
@@ -519,13 +527,8 @@ func (c *tiContext) classify(sp *exprSpan) tiClass {
 		r := &refs[i]
 		switch m, leaf := matchUntrusted(r.Path); m {
 		case untrustedLeaf:
-			for _, seg := range r.Path {
-				if seg == "*" {
-					// A filter like github.event.* only reaches a leaf among its matches. That is
-					// not a finding of its own.
-					return tiClass{Tier: tiDirect}
-				}
-			}
+			// A filter or an index on the way (labels.*.name, labels[0].name) still ends in an attacker controlled
+			// leaf. The Ref is kept: a reference is dropped only when it is known to be trusted.
 			return tiClass{Tier: tiDirect, Ref: r}
 		case untrustedSubtree:
 			return tiClass{Tier: tiSubtree, Ref: r, Source: leaf}
