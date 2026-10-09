@@ -34,6 +34,19 @@ type linterBaseline struct {
 	states map[string]*baselineState
 }
 
+// baselineNamesAFile reports whether the configuration gives the path of a baseline file, which
+// -baseline-check then checks, instead of a switch (auto, true, false) or nothing.
+func baselineNamesAFile(cfg *Config) bool {
+	if cfg == nil {
+		return false
+	}
+	switch strings.ToLower(strings.TrimSpace(cfg.Baseline)) {
+	case "", "false", "off", "no", "auto", "true", "yes":
+		return false
+	}
+	return true
+}
+
 // resolveBaselineSetting returns the path of the baseline to apply and whether it must exist. An
 // empty path means no baseline.
 func (l *Linter) resolveBaselineSetting(root string, cfg *Config) (path string, required bool) {
@@ -41,7 +54,7 @@ func (l *Linter) resolveBaselineSetting(root string, cfg *Config) (path string, 
 	if b.off || b.writing {
 		return "", false
 	}
-	if b.on || (b.check && (cfg == nil || cfg.Baseline == "")) {
+	if b.on || (b.check && !baselineNamesAFile(cfg)) {
 		if b.file != "" {
 			return b.file, true
 		}

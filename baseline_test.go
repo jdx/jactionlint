@@ -760,3 +760,18 @@ func TestBaselineRuleRanAsIsFollowsTheOnlineSettings(t *testing.T) {
 		t.Error("-online turns them on")
 	}
 }
+
+// -baseline-check asks for the baseline although the configuration switches it off.
+func TestBaselineCheckWithBaselineFalseInTheConfig(t *testing.T) {
+	baselineProject(t, baselineWorkflow, "baseline: false\n")
+	if status, _, _ := baselineCmd(t, "-baseline-write"); status != 0 {
+		t.Fatalf("setup: %d", status)
+	}
+	// Fix everything the baseline knows about so that all of its entries are stale
+	root, _ := os.Getwd()
+	writeTestFile(t, filepath.Join(root, ".github", "workflows", "ci.yaml"), "name: ci\non: push\npermissions: {}\njobs: {}\n")
+	_, out, _ := baselineCmd(t, "-baseline-check", "-rule-ids")
+	if !strings.Contains(out, "unused-baseline-entry") {
+		t.Errorf("the stale entries must be reported:\n%s", out)
+	}
+}
