@@ -240,7 +240,7 @@ func (ig *ConfigIgnore) matchUses(value string) bool {
 	if ig.usesPat.Match(ref) {
 		return true
 	}
-	if ref.Kind == UsesAction {
+	if ref.Kind == UsesAction || ref.Kind == UsesReusableWorkflow {
 		return false // a repository reference is judged by the pattern alone: its refs are case-sensitive
 	}
 	// Docker images and local paths are not repository references: compare the whole value
