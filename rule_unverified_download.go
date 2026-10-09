@@ -182,6 +182,14 @@ func shellPipeText(sp *runscript.ShellPipe) string {
 	return "\"" + name + "\""
 }
 
+// isScriptInterpreter reports whether the command is an interpreter other than a shell.
+func isScriptInterpreter(c *runscript.Command) bool {
+	if c.Tool != "" || c.Name == "" {
+		return false
+	}
+	return rePythonName.MatchString(c.Name) || c.Name == "perl" || c.Name == "ruby" || c.Name == "node" || c.Name == "php"
+}
+
 var rePythonName = regexp.MustCompile(`^(python|py)[0-9.]*$`)
 
 // readsScriptFromStdin reports whether the command is an interpreter (other than the shells, which
@@ -232,6 +240,9 @@ func (a *downloadAnalysis) insecureTLS() {
 			continue
 		}
 		name := f.Name
+		if len(name) > 2 && name[0] == '-' && name[1] != '-' {
+			name = "-k" // a cluster such as -fsSLk: only -k disables the verification
+		}
 		a.report(f.Word.Offset, "%q disables the verification of the TLS certificate of the server, so the download can be replaced by anyone on the connection and nothing proves who sent it. remove %q and make the runner trust the certificate (for a private CA, \"--cacert\" of curl or \"--ca-certificate\" of wget)", name, name)
 	}
 }
@@ -426,6 +437,13 @@ func (t *fileTracker) event(c *runscript.Command) {
 	case strings.Contains(c.NameWord.Value, "/"):
 		if d := match(c.NameWord); d != nil {
 			t.report(d, c.NameWord.Value, "is run")
+		}
+	case isScriptInterpreter(c) && !c.HasFlag("-c", "-m", "-e", "-r"):
+		// python3 install.py, node install.js, perl install.pl: the first operand is the script
+		if len(c.Positional) > 0 {
+			if d := match(c.Positional[0]); d != nil {
+				t.report(d, c.Positional[0].Value, "is run by "+c.Name)
+			}
 		}
 	case shellNames[c.Name] && !c.HasFlag("-c"):
 		if len(c.Positional) > 0 {
