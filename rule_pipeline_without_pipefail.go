@@ -133,7 +133,9 @@ func (rule *RulePipelineWithoutPipefail) VisitStep(n *Step) error {
 
 	origin := run.Run.scriptOrigin()
 	events := pipefailEvents(script)
-	fixable := (kind == pipefailShellDefault || (kind == pipefailShellTemplate && tmplBash)) && !hasExprInShell(shell)
+	// The fix turns pipefail on for the whole script. A pipeline that ends in a consumer which quits early (head,
+	// grep -q) is not reported because pipefail would make it die with SIGPIPE, so a script that has one is left alone.
+	fixable := (kind == pipefailShellDefault || (kind == pipefailShellTemplate && tmplBash)) && !hasExprInShell(shell) && !anyPipelineQuitsEarly(script)
 	var fix *Fix
 	fixBuilt := false
 
@@ -376,19 +378,37 @@ var pipefailFilters = map[string]bool{
 	"column": true, "fold": true, "rev": true, "nl": true, "paste": true,
 }
 
+// anyPipelineQuitsEarly reports whether a pipeline of the script has a stage after the first which can exit before its
+// input ends.
+func anyPipelineQuitsEarly(s *runscript.Script) bool {
+	for _, p := range s.Pipelines {
+		for _, st := range p.Stages[min(1, len(p.Stages)):] {
+			for _, c := range st.Commands {
+				if stopsReadingEarly(c) {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
 // hiddenFailure returns the command whose failure the pipeline hides, nil if there is none to report.
 func hiddenFailure(p *runscript.Pipeline) *runscript.Command {
 	var found *runscript.Command
+	foundStage := 0 // c.Stage is the stage in the innermost pipeline of the command, not in p
 	for i, st := range p.Stages[:len(p.Stages)-1] {
 		if found != nil {
 			break
 		}
 		for _, c := range st.Commands {
-			if (c.Name == "" && c.NameWord == nil) || c.Tested {
-				continue // only assignments, or the script handles the failure itself (`cmd || true`)
+			// Only assignments, or the script handles the failure itself (`cmd || true`). The left side of `&&` in a
+			// group is not handled: the group fails with it and the next stage hides that.
+			if (c.Name == "" && c.NameWord == nil) || (c.Tested && !c.AndOnly) {
+				continue
 			}
 			if failureMatters(c, i) {
-				found = c
+				found, foundStage = c, i
 				break
 			}
 		}
@@ -397,7 +417,7 @@ func hiddenFailure(p *runscript.Pipeline) *runscript.Command {
 		return nil
 	}
 	// A later stage which quits early makes everything in front of it die with SIGPIPE
-	for _, st := range p.Stages[found.Stage+1:] {
+	for _, st := range p.Stages[foundStage+1:] {
 		for _, c := range st.Commands {
 			if stopsReadingEarly(c) {
 				return nil
@@ -441,8 +461,9 @@ func stopsReadingEarly(c *runscript.Command) bool {
 	case "head":
 		return true
 	case "read":
-		// `cmd | read x` and `cmd | { read x; ...; }` take one line and leave. A `while read` loop reads to the end.
-		return !c.Tested
+		// `cmd | read x`, `cmd | { read x; ...; }` and `if read x` take one line and leave. The condition of a
+		// `while` loop reads to the end.
+		return !c.LoopCond
 	case "grep", "egrep", "fgrep", "rg":
 		for _, a := range c.Args {
 			v := a.Value

@@ -46,6 +46,11 @@ type Command struct {
 	// is the operand of `&&` or `||` that is not the last one (`cmd || true`). It is also set for the commands of
 	// a `{ }` group or `( )` subshell in such a place.
 	Tested bool
+	// AndOnly is whether Tested is only because the command is the left operand of `&&`. Its failure is then the
+	// status of the list, which a group or a subshell passes on.
+	AndOnly bool
+	// LoopCond is whether the command is in the condition of `while` or `until`.
+	LoopCond bool
 	// Decl is true for declaration builtins: export, declare, local, readonly, typeset. Their assignments are in
 	// Assigns.
 	Decl bool
@@ -136,14 +141,15 @@ type builder struct {
 	omap []int // offsets of the text the parser saw -> offsets of the script; nil when they are the same
 	cmds map[syntax.Command]*Command
 	// pipes whose chain is already collected by the outermost BinaryCmd; negated pipelines
-	seenPipe    map[*syntax.BinaryCmd]bool
-	negated     map[*syntax.BinaryCmd]bool
-	tested      map[*syntax.BinaryCmd]bool // pipelines whose status is tested, see Pipeline.Tested
-	testedCalls map[*syntax.CallExpr]bool  // commands whose status is tested, see Command.Tested
-	pending     []pendingPipeline
-	groups      []groupRedirect
-	done        map[syntax.Node]bool
-	sorted      []*Command // commands by offset
+	seenPipe                           map[*syntax.BinaryCmd]bool
+	negated                            map[*syntax.BinaryCmd]bool
+	tested                             map[*syntax.BinaryCmd]bool // pipelines whose status is tested, see Pipeline.Tested
+	testedCalls                        map[*syntax.CallExpr]bool  // commands whose status is tested, see Command.Tested
+	testedAnd, testedLoop, testedOther map[*syntax.CallExpr]bool  // why, see Command.AndOnly and Command.LoopCond
+	pending                            []pendingPipeline
+	groups                             []groupRedirect
+	done                               map[syntax.Node]bool
+	sorted                             []*Command // commands by offset
 }
 
 // off is the offset of a position of the parser in the original script.
@@ -186,6 +192,7 @@ func (b *builder) build(f *syntax.File) {
 	b.negated = map[*syntax.BinaryCmd]bool{}
 	b.tested = map[*syntax.BinaryCmd]bool{}
 	b.testedCalls = map[*syntax.CallExpr]bool{}
+	b.testedAnd, b.testedLoop, b.testedOther = map[*syntax.CallExpr]bool{}, map[*syntax.CallExpr]bool{}, map[*syntax.CallExpr]bool{}
 	b.done = map[syntax.Node]bool{}
 	s := b.s
 	syntax.Walk(f, func(n syntax.Node) bool {
@@ -202,9 +209,11 @@ func (b *builder) build(f *syntax.File) {
 		case *syntax.IfClause:
 			b.markTested(n.Cond...)
 		case *syntax.WhileClause:
-			b.markTested(n.Cond...)
+			b.markTestedAs(testedLoop, n.Cond...)
 		case *syntax.BinaryCmd:
-			if n.Op == syntax.AndStmt || n.Op == syntax.OrStmt {
+			if n.Op == syntax.AndStmt {
+				b.markTestedAs(testedAnd, n.X)
+			} else if n.Op == syntax.OrStmt {
 				b.markTested(n.X)
 			}
 			if (n.Op == syntax.Pipe || n.Op == syntax.PipeAll) && !b.seenPipe[n] {
@@ -216,6 +225,8 @@ func (b *builder) build(f *syntax.File) {
 	for n, c := range b.cmds {
 		if call, ok := n.(*syntax.CallExpr); ok && b.testedCalls[call] {
 			c.Tested = true
+			c.AndOnly = b.testedAnd[call] && !b.testedOther[call] && !b.testedLoop[call]
+			c.LoopCond = b.testedLoop[call]
 		}
 	}
 	b.sorted = slices.Clone(s.Commands)
