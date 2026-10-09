@@ -93,6 +93,16 @@
         { "rule": "expression", "message_contains": "always falsy" }
       ]
     },
+    "dependabot-cooldown": {
+      "coverage": "partial",
+      "notes": "jactionlint compares default-days (explicit or implicit) with the minimum, like zizmor, and checks every update. zizmor 1.30.1 stops at the first update which satisfies the minimum, so it can miss later ones. The semver-*-days keys are not checked by either.",
+      "jactionlint": [{ "rule": "dependabot-cooldown" }]
+    },
+    "dependabot-execution": {
+      "coverage": "full",
+      "notes": "Both report insecure-external-code-execution: allow on every update.",
+      "jactionlint": [{ "rule": "dependabot-execution" }]
+    },
     "github-env": {
       "coverage": "partial",
       "notes": "Bash and sh scripts are parsed, pwsh and cmd are matched line by line. A write of an expression or variable that is trusted (github.sha, HOME, ...) is not reported, which zizmor reports in pull_request_target and workflow_run workflows. Untrusted input is also reported under other triggers.",

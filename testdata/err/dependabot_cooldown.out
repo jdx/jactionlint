@@ -1,0 +1,4 @@
+.github/dependabot.yml:4:5: "cooldown" is not set in this update, so Dependabot applies its implicit cooldown of 3 days. set "cooldown.default-days" to at least 7 to avoid updating to a version right after its release [dependabot-cooldown]
+.github/dependabot.yml:13:5: "cooldown" does not set "default-days", so Dependabot applies its implicit cooldown of 3 days. set "default-days" to at least 7 [dependabot-cooldown]
+.github/dependabot.yml:21:21: "cooldown.default-days" is 2, which is less than the minimum 7 days. set it to at least 7 [dependabot-cooldown]
+.github/dependabot.yml:28:21: "cooldown.default-days" is 0, which is less than the minimum 7 days. set it to at least 7 [dependabot-cooldown]

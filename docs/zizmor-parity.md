@@ -32,8 +32,8 @@ How to read the table:
 | `cache-poisoning` | `cache-poisoning` | 3 / B | strict | partial: a fixed table of cache actions, `tags-ignore` is not a release trigger. [batch B measurements](#batch-b-corpus-measurements) |
 | `concurrency-limits` | `concurrency-limits` | 3 / A | strict | full: only a missing `concurrency:` and the bare group form are reported; see [measurements](#batch-a-measurements) |
 | `dangerous-triggers` | `dangerous-triggers` | 3 / A | strict | full; adds `issue_comment`, which zizmor flags from 1.31; reported at the trigger, zizmor reports at `on:` |
-| `dependabot-cooldown` | `dependabot-cooldown` | 3 / E | strict | not yet assessed |
-| `dependabot-execution` | `dependabot-execution` | 3 / E | strict | not yet assessed |
+| `dependabot-cooldown` | `dependabot-cooldown` | 3 / E | default | full on the corpus: 386 of 386 zizmor findings in 193 repositories, plus 3 true positives zizmor 1.30.1 misses (it stops at the first update which satisfies the minimum). `-fix` needs the `default-days` option; zizmor has a built-in 7. The `semver-*-days` keys are checked by neither |
+| `dependabot-execution` | `dependabot-execution` | 3 / E | default | not measured: no `allow` in the 193 repositories of the corpus, so both tools report 0. Covered by unit tests only. The fix is unsafe (zizmor offers it too) |
 | `excessive-permissions` | `excessive-permissions` | 3 / B | strict | partial: write scopes, `write-all`, `read-all`, workflow-level default permissions (option) and, with `missing-permissions`, job-level default permissions. [batch B measurements](#batch-b-corpus-measurements), [missing-permissions measurements](#measured-missing-permissions-and-missing-timeout) |
 | `forbidden-uses` | `forbidden-uses` | 3 / A | opt-in (allow/deny config) | partial: patterns follow zizmor documentation but were not measured against zizmor |
 | `github-app` | `github-app` | 3 / B and E | strict | partial: `actions/create-github-app-token` only, no dependabot side yet. [batch B measurements](#batch-b-corpus-measurements) |
@@ -73,6 +73,7 @@ Rules of jactionlint which zizmor 1.30.1 has no audit for:
 | ID | Profile | What it reports |
 | --- | --- | --- |
 | `unlocked-install` | default | `cargo install` without `--locked`. Fixable (unsafe). With the option `pedantic` (on under `strict`): `npm install` instead of `npm ci`, `yarn` and `bun install` without a frozen lock file, `pnpm install --no-frozen-lockfile`, `pip install -r` without hashes or constraints. See [the check](checks.md#check-unlocked-install) |
+| `dependabot-missing-actions-update` | strict | `dependabot.yml` has no `github-actions` update although `.github/workflows` uses actions. It is skipped when the repository has a Renovate configuration. 20 findings in 193 repositories, all true positives (a Go module with only a `gomod` update). See [the check](checks.md#check-dependabot-missing-actions-update) |
 
 ## Batch B corpus measurements
 

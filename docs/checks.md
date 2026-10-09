@@ -55,6 +55,9 @@ List of checks:
 - [Deprecated inputs usage](#deprecated-inputs-usage)
 - [YAML anchors](#yaml-anchors)
 - [Dependabot configuration syntax](#check-dependabot-syntax)
+- [Dependabot cooldown](#check-dependabot-cooldown)
+- [Dependabot insecure code execution](#check-dependabot-execution)
+- [Dependabot updates of actions (opt-in)](#check-dependabot-missing-actions-update)
 - [Workflow and job names (opt-in)](#check-anonymous-definition)
 - [Concurrency limits (opt-in)](#check-concurrency-limits)
 - [Inherited secrets](#check-secrets-inherit)
@@ -4607,6 +4610,8 @@ version: 2
 updates:
   - package-ecosystem: github-actions
     directory: "/"
+    cooldown:
+      default-days: 7
     schedule:
       interval: weekly
       # ERROR: "dayy" is a typo of "day"
@@ -4626,25 +4631,180 @@ updates:
 Output:
 
 ```
-.github/dependabot.yml:8:7: unexpected key "dayy" for "schedule" section. expected one of "cronjob", "day", "interval", "time", "timezone" [syntax-check]
-  |
-8 |       dayy: monday
-  |       ^~~~~
-.github/dependabot.yml:10:5: unexpected key "label" for "updates" section. expected one of "allow", "assignees", "commit-message", "cooldown", "directories", "directory", "exclude-paths", "groups", "ignore", "insecure-external-code-execution", "labels", "milestone", "multi-ecosystem-group", "open-pull-requests-limit", "package-ecosystem", "patterns", "pull-request-branch-name", "rebase-strategy", "registries", "reviewers", "schedule", "target-branch", "vendor", "versioning-strategy" [syntax-check]
+.github/dependabot.yml:10:7: unexpected key "dayy" for "schedule" section. expected one of "cronjob", "day", "interval", "time", "timezone" [syntax-check]
    |
-10 |     label: [dependencies]
+10 |       dayy: monday
+   |       ^~~~~
+.github/dependabot.yml:12:5: unexpected key "label" for "updates" section. expected one of "allow", "assignees", "commit-message", "cooldown", "directories", "directory", "exclude-paths", "groups", "ignore", "insecure-external-code-execution", "labels", "milestone", "multi-ecosystem-group", "open-pull-requests-limit", "package-ecosystem", "patterns", "pull-request-branch-name", "rebase-strategy", "registries", "reviewers", "schedule", "target-branch", "vendor", "versioning-strategy" [syntax-check]
+   |
+12 |     label: [dependencies]
    |     ^~~~~~
-.github/dependabot.yml:15:17: schedule interval "hourly" is invalid. expected one of "daily", "weekly", "monthly", "quarterly", "semiannually", "yearly", "cron" [syntax-check]
+.github/dependabot.yml:13:5: warning: "cooldown" is not set in this update, so Dependabot applies its implicit cooldown of 3 days. set "cooldown.default-days" to at least 7 to avoid updating to a version right after its release [dependabot-cooldown]
    |
-15 |       interval: hourly
+13 |   - package-ecosystem: npm
+   |     ^~~~~~~~~~~~~~~~~~
+.github/dependabot.yml:17:17: schedule interval "hourly" is invalid. expected one of "daily", "weekly", "monthly", "quarterly", "semiannually", "yearly", "cron" [syntax-check]
+   |
+17 |       interval: hourly
    |                 ^~~~~~
-.github/dependabot.yml:17:5: "schedule" key is missing in "updates" item [syntax-check]
+.github/dependabot.yml:19:5: warning: "cooldown" is not set in this update, so Dependabot applies its implicit cooldown of 3 days. set "cooldown.default-days" to at least 7 to avoid updating to a version right after its release [dependabot-cooldown]
    |
-17 |   - package-ecosystem: cargo
+19 |   - package-ecosystem: cargo
+   |     ^~~~~~~~~~~~~~~~~~
+.github/dependabot.yml:19:5: "schedule" key is missing in "updates" item [syntax-check]
+   |
+19 |   - package-ecosystem: cargo
    |     ^~~~~~~~~~~~~~~~~~
 ```
 
 <!-- Skip playground link -->
+
+<a id="check-dependabot-cooldown"></a>
+## Dependabot cooldown
+
+A cooldown makes Dependabot wait until a new version is some days old before it proposes the update. It limits the damage of
+a compromised release, which is usually taken down within days, and of releases which turn out to be broken. Without
+`cooldown.default-days` Dependabot applies an implicit cooldown of 3 days. This check reports an update of `dependabot.yml`
+whose `cooldown.default-days` (explicit or implicit) is less than the minimum, which is 7 days. The finding is at the update
+when it has no `cooldown`, at `cooldown` when it has no `default-days`, and at the value otherwise. The check is the
+equivalent of the `dependabot-cooldown` audit of zizmor.
+
+The other keys of `cooldown` (`semver-major-days`, `include` and so on) are not checked.
+
+Example input:
+
+```yaml
+version: 2
+updates:
+  # ERROR: no cooldown, so Dependabot applies its implicit 3 days
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: weekly
+    cooldown:
+      # ERROR: 2 days is less than the minimum of 7
+      default-days: 2
+  - package-ecosystem: cargo
+    directory: "/"
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+```
+
+Output:
+
+```
+.github/dependabot.yml:4:5: warning: "cooldown" is not set in this update, so Dependabot applies its implicit cooldown of 3 days. set "cooldown.default-days" to at least 7 to avoid updating to a version right after its release [dependabot-cooldown]
+  |
+4 |   - package-ecosystem: github-actions
+  |     ^~~~~~~~~~~~~~~~~~
+.github/dependabot.yml:14:21: warning: "cooldown.default-days" is 2, which is less than the minimum 7 days. set it to at least 7 [dependabot-cooldown]
+   |
+14 |       default-days: 2
+   |                     ^
+```
+
+<!-- Skip playground link -->
+
+The rule is `dependabot-cooldown`. It is enabled by default as a warning. Change the minimum with the `days` option and let
+`-fix` write the cooldown by setting `default-days`:
+
+```yaml
+rules:
+  dependabot-cooldown:
+    days: 14
+    default-days: 14
+```
+
+jactionlint never makes up the number of days: without the `default-days` option the findings have no fix. With it,
+`-fix` adds a `cooldown` section, adds `default-days` to a `cooldown` section without it, or raises a smaller value. The fix
+is offered only when the number is at least `days`, and not when the update is written in flow style (`{...}`). To turn the
+check off, set `dependabot-cooldown: off`.
+
+<a id="check-dependabot-execution"></a>
+## Dependabot insecure code execution
+
+Some package managers run code of the dependencies (build scripts, `setup.py`, plugins) while they resolve versions.
+Dependabot does not run it unless an update sets `insecure-external-code-execution: allow`. In an automated job the code is
+run without a human looking at it first, and it may find the credentials Dependabot has for private registries. This check
+reports every update which allows it. It is the equivalent of the `dependabot-execution` audit of zizmor.
+
+Example input:
+
+```yaml
+version: 2
+updates:
+  - package-ecosystem: pip
+    directory: "/"
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    # ERROR: Dependabot may run code of the dependencies it updates
+    insecure-external-code-execution: allow
+```
+
+Output:
+
+```
+.github/dependabot.yml:10:39: "insecure-external-code-execution: allow" lets Dependabot run code from the dependencies it updates, which can expose the credentials Dependabot uses. remove it or set it to "deny" [dependabot-execution]
+   |
+10 |     insecure-external-code-execution: allow
+   |                                       ^~~~~
+```
+
+<!-- Skip playground link -->
+
+The rule is `dependabot-execution`. It is enabled by default as an error. Remove the key or set it to `deny` (the default).
+`-fix=unsafe` sets the value to `deny`. The fix is unsafe because updates of dependencies which need the code to run stop
+working. If you need `allow` for a registry, ignore the finding for that file with `paths:` in [the configuration](config.md)
+or with an [ignore comment](usage.md).
+
+<a id="check-dependabot-missing-actions-update"></a>
+## Dependabot updates of actions (opt-in)
+
+A repository which uses Dependabot for its dependencies often forgets that the actions in its workflows are dependencies too:
+they are never updated, or updated by hand when someone notices. This check reports a `dependabot.yml` which has no update with
+`package-ecosystem: github-actions` while `.github/workflows` has a workflow using an action or a reusable workflow (not a
+local path or a `docker://` image). It is a policy of jactionlint; zizmor has no such audit.
+
+The check does nothing when the repository has a Renovate configuration (`renovate.json`, `.github/renovate.json`,
+`.renovaterc` and so on), since another tool may update the actions. A repository which does not have `dependabot.yml` at all
+is not reported: there is no file to report. There is no automatic fix because the update needs a schedule that only you can
+choose.
+
+Example input:
+
+```yaml
+version: 2
+updates:
+  # ERROR: the workflows of the repository use actions but nothing updates them
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+```
+
+Output:
+<!-- Skip update output -->
+```
+.github/dependabot.yml:1:1: this repository uses actions in its workflows but no update has the "github-actions" package ecosystem, so Dependabot never updates them. add an update with "package-ecosystem: github-actions" and "directory: /" [dependabot-missing-actions-update]
+  |
+1 | version: 2
+  | ^~~~~~~~~~
+```
+
+<!-- Skip playground link -->
+
+The rule is `dependabot-missing-actions-update`. It is enabled by the `strict` profile as a warning, or explicitly with
+`rules: {dependabot-missing-actions-update: warn}`.
 
 <a id="check-anonymous-definition"></a>
 ## Workflow and job names (opt-in)
