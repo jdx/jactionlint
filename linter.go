@@ -882,6 +882,8 @@ func (l *Linter) check(
 				l.shared.mark(sr.sharedErrs())
 			}
 			errs := rule.Errs()
+			// A reusable workflow which cannot be loaded is a problem of that file, which every call reports
+			l.shared.mark(slices.DeleteFunc(slices.Clone(errs), func(e *Error) bool { return e.ID != "invalid-local-workflow" }))
 			l.debug("%s found %d errors", rule.Name(), len(errs))
 			if isAction {
 				errs = slices.DeleteFunc(slices.Clone(errs), func(e *Error) bool { return dropsOnActions(e.Kind, e.ID) })
