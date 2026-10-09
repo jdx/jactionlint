@@ -204,6 +204,8 @@ rules:
 | `typosquat-uses`           | `allow`           | List of `owner/repo` slugs that are never reported, e.g. a legitimate fork of a popular action.                                                                                 |
 | `impostor-commit`          | `max-branches`    | How many branches of an action repository a pinned commit is compared with before giving up without a verdict. Default `1000`; without a token at most 100 are compared.        |
 | `known-vulnerable-actions` | `allow`           | List of advisory IDs (`GHSA-...`) which are not reported: `allow: [GHSA-mrrh-fwg8-r2c3]`. Default none.                                                                         |
+| `mutable-runner-label`     | `pin`             | Mapping from a moving label to the fixed label that `-fix` writes in its place (`ubuntu-latest: ubuntu-24.04`). There is no default: without an entry the finding has no fix.   |
+| `continue-on-error`        | `steps`           | `true` also reports steps with `continue-on-error: true`. Default `false`: only jobs are reported.                                                                              |
 
 ## Extending config files
 

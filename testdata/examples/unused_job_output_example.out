@@ -1,0 +1,1 @@
+test.yaml:6:7: output "version" of job "build" is never used: no other job reads "needs.build.outputs.version". remove it [unused-job-output]

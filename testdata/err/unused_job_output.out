@@ -1,0 +1,2 @@
+test.yaml:8:7: output "digest" of job "build" is never used: no other job reads "needs.build.outputs.digest". remove it [unused-job-output]
+test.yaml:9:7: output "all" of job "build" is never used: no other job reads "needs.build.outputs.all". remove it [unused-job-output]

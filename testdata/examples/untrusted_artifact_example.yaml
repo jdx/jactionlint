@@ -1,0 +1,15 @@
+on:
+  workflow_run:
+    workflows: [PR checks]
+    types: [completed]
+jobs:
+  comment:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: pr
+          path: pr
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+      - run: echo "number=$(cat pr/number)" >> "$GITHUB_ENV"
