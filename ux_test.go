@@ -458,9 +458,26 @@ func TestRunHintAfterManyFindings(t *testing.T) {
 // The workflows of this repository pass the default profile, which is what CI and hk run on them (dogfooding): every
 // action is pinned to a commit SHA, permissions, timeouts and concurrency are explicit.
 func TestOwnWorkflowsPassTheDefaultProfile(t *testing.T) {
-	files, err := filepath.Glob(filepath.Join(".github", "workflows", "*.yaml"))
-	if err != nil || len(files) == 0 {
-		t.Fatalf("workflows not found: %v %v", files, err)
+	// GitHub runs both extensions
+	var files []string
+	for _, ext := range []string{"*.yaml", "*.yml"} {
+		fs, err := filepath.Glob(filepath.Join(".github", "workflows", ext))
+		if err != nil {
+			t.Fatal(err)
+		}
+		files = append(files, fs...)
+	}
+	if len(files) == 0 {
+		t.Fatal("workflows not found")
+	}
+	if _, err := os.Stat(filepath.Join(".github", "workflows", "comment-release-fixes.yml")); err == nil {
+		found := false
+		for _, f := range files {
+			found = found || strings.HasSuffix(f, "comment-release-fixes.yml")
+		}
+		if !found {
+			t.Error("a .yml workflow is not linted")
+		}
 	}
 	l, err := NewLinter(io.Discard, &LinterOptions{Profile: ProfileDefault})
 	if err != nil {
