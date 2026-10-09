@@ -13,7 +13,7 @@ import (
 
 func expectedMapping(where string, n *yaml.Node) error {
 	return fmt.Errorf(
-		"yaml: %s must be mapping node but %s node was found at line:%d, col:%d",
+		"yaml: %s must be mapping node but %s node was found at line %d, column %d",
 		where,
 		nodeKindName(n.Kind),
 		n.Line,
@@ -460,7 +460,7 @@ func parseReusableWorkflowMetadata(src []byte) (*ReusableWorkflowMetadata, error
 	}
 
 	if m == nil {
-		return nil, fmt.Errorf("\"workflow_call\" event trigger is not found in \"on:\" at line:%d, column:%d", n.Line, n.Column)
+		return nil, fmt.Errorf("\"workflow_call\" event trigger is not found in \"on:\" at line %d, column %d", n.Line, n.Column)
 	}
 
 	// Decode top-level permissions (if any).

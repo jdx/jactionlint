@@ -178,7 +178,7 @@ func (p *parser) resolveAliases(root *yaml.Node) {
 				} else {
 					// Don't resolve the recursive alias because it causes stack overflow on parsing the tree as
 					// `RawYAMLValue`. (#610)
-					p.errorID("recursive-alias", c, fmt.Sprintf("recursive alias %q is found. anchor was declared at line:%d, column:%d", c.Alias.Anchor, c.Alias.Line, c.Alias.Column))
+					p.errorID("recursive-alias", c, fmt.Sprintf("recursive alias %q is found. anchor was declared at line %d, column %d", c.Alias.Anchor, c.Alias.Line, c.Alias.Column))
 				}
 			}
 		}

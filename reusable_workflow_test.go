@@ -335,7 +335,7 @@ func TestReusableWorkflowUnmarshalEventNotFound(t *testing.T) {
 			if !strings.Contains(msg, "\"workflow_call\" event trigger is not found in \"on:\"") {
 				t.Fatal("Unexpected error:", msg)
 			}
-			loc := fmt.Sprintf("line:%d, column:%d", tc.line, tc.col)
+			loc := fmt.Sprintf("line %d, column %d", tc.line, tc.col)
 			if !strings.Contains(msg, loc) {
 				t.Fatalf("location is not %q: %s", loc, msg)
 			}
@@ -454,10 +454,10 @@ func TestReusableWorkflowCacheFindMetadataError(t *testing.T) {
 			if !strings.Contains(msg, tc.want) {
 				t.Fatalf("unexpected error. wanted %q but got %q", tc.want, msg)
 			}
-			// Trying to find metadata with the same spec later returns nil to avoid duplicate errors
+			// Finding it again fails the same way: every call of the workflow reports it, and the linter keeps one
 			m, err := c.FindMetadata(tc.spec)
-			if err != nil {
-				t.Fatal("error happens when finding metadata again:", err)
+			if err == nil || err.Error() != msg {
+				t.Fatalf("the same error is expected when finding metadata again: %v", err)
 			}
 			if m != nil {
 				t.Fatal("nil is not cached:", m)

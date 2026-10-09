@@ -91,16 +91,16 @@ func (pats IgnorePatterns) Match(err *Error) bool {
 // UnmarshalYAML implements yaml.Unmarshaler.
 func (pats *IgnorePatterns) UnmarshalYAML(n *yaml.Node) error {
 	if n.Kind != yaml.SequenceNode {
-		return fmt.Errorf("yaml: \"ignore\" must be a sequence node at line:%d,col:%d", n.Line, n.Column)
+		return fmt.Errorf("yaml: \"ignore\" must be a sequence node at line %d, column %d", n.Line, n.Column)
 	}
 	rs := make([]IgnorePattern, 0, len(n.Content))
 	for _, p := range n.Content {
 		if p.Kind != yaml.ScalarNode || (p.Tag != "" && p.Tag != "!!str") {
-			return fmt.Errorf("yaml: \"ignore\" items must be strings at line:%d,col:%d", p.Line, p.Column)
+			return fmt.Errorf("yaml: \"ignore\" items must be strings at line %d, column %d", p.Line, p.Column)
 		}
 		r, err := ParseIgnorePattern(p.Value)
 		if err != nil {
-			return fmt.Errorf("invalid regular expression %q in \"ignore\" at line%d,col:%d: %w", p.Value, n.Line, n.Column, err)
+			return fmt.Errorf("invalid regular expression %q in \"ignore\" at line %d, column %d: %w", p.Value, n.Line, n.Column, err)
 		}
 		rs = append(rs, r)
 	}
@@ -143,7 +143,7 @@ func (rc *RuleConfig) UnmarshalYAML(n *yaml.Node) error {
 		}
 		lv, err := ParseSeverity(n.Value)
 		if err != nil {
-			return fmt.Errorf("%w at line:%d,col:%d", err, n.Line, n.Column)
+			return fmt.Errorf("%w at line %d, column %d", err, n.Line, n.Column)
 		}
 		*rc = RuleConfig{Level: lv, levelSet: true}
 		return nil
@@ -154,7 +154,7 @@ func (rc *RuleConfig) UnmarshalYAML(n *yaml.Node) error {
 			if k.Value == "level" {
 				lv, err := ParseSeverity(v.Value)
 				if v.Kind != yaml.ScalarNode || err != nil {
-					return fmt.Errorf("\"level\" must be one of \"off\", \"info\", \"warn\" and \"error\" at line:%d,col:%d", v.Line, v.Column)
+					return fmt.Errorf("\"level\" must be one of \"off\", \"info\", \"warn\" and \"error\" at line %d, column %d", v.Line, v.Column)
 				}
 				out.Level, out.levelSet = lv, true
 				continue
@@ -171,7 +171,7 @@ func (rc *RuleConfig) UnmarshalYAML(n *yaml.Node) error {
 		*rc = out
 		return nil
 	}
-	return fmt.Errorf("a rule must be configured with a level or a mapping at line:%d,col:%d", n.Line, n.Column)
+	return fmt.Errorf("a rule must be configured with a level or a mapping at line %d, column %d", n.Line, n.Column)
 }
 
 // Config is configuration of jactionlint. This struct instance is parsed from "jactionlint.yaml"

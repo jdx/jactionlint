@@ -69,7 +69,7 @@ describe("Playground component", () => {
     const rows = root.querySelectorAll(".jal-errors button");
     expect(rows).toHaveLength(1);
     expect(rows[0].textContent).toContain('unknown Webhook event "foo"');
-    expect(rows[0].textContent).toContain("line:1, col:5");
+    expect(rows[0].textContent).toContain("line 1, column 5");
     expect(rows[0].textContent).toContain("events");
     expect(root.querySelector(".jal-note")).toBeNull(); // loading note is gone
     await nextTick();

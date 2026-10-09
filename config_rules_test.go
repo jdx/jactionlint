@@ -120,18 +120,18 @@ func TestConfigParseStrictErrors(t *testing.T) {
 		in   string
 		want []string
 	}{
-		{"unknown top-level key", "nothing-like-it: 1\n", []string{`unknown key "nothing-like-it" in the configuration at line:1,col:1`, "available keys are"}},
+		{"unknown top-level key", "nothing-like-it: 1\n", []string{`unknown key "nothing-like-it" in the configuration at line 1, column 1`, "available keys are"}},
 		{"did you mean a key", "self-hosted-runnr:\n  labels: []\n", []string{`unknown key "self-hosted-runnr"`, `did you mean "self-hosted-runner"?`}},
-		{"did you mean a legacy key", "\nrequire-shel: true\n", []string{`line:2,col:1`, `did you mean "require-shell"?`}},
-		{"unknown nested key", "self-hosted-runner:\n  label: [a]\n", []string{`unknown key "label" in "self-hosted-runner" at line:2,col:3`, `did you mean "labels"?`}},
+		{"did you mean a legacy key", "\nrequire-shel: true\n", []string{`line 2, column 1`, `did you mean "require-shell"?`}},
+		{"unknown nested key", "self-hosted-runner:\n  label: [a]\n", []string{`unknown key "label" in "self-hosted-runner" at line 2, column 3`, `did you mean "labels"?`}},
 		{"unknown key of path config", "paths:\n  a.yaml:\n    ignor: [x]\n", []string{`unknown key "ignor" in "paths"`, `did you mean "ignore"?`}},
 		{"unknown key of required action", "required-actions:\n  - action: a/b\n    ver: v1\n", []string{`unknown key "ver" in "required-actions"`, `did you mean "version"?`}},
 		{"unknown key of legacy timeout", "timeout-minutes:\n  require: true\n", []string{`unknown key "require" in "timeout-minutes"`}},
-		{"unknown rule", "rules:\n  unpinned-use: error\n", []string{`unknown rule ID "unpinned-use" in "rules" at line:2,col:3`, `did you mean "unpinned-uses"?`, "https://jactionlint.jdx.dev/rules"}},
+		{"unknown rule", "rules:\n  unpinned-use: error\n", []string{`unknown rule ID "unpinned-use" in "rules" at line 2, column 3`, `did you mean "unpinned-uses"?`, "https://jactionlint.jdx.dev/rules"}},
 		{"unknown rule without suggestion", "rules:\n  zzzzzzzz: error\n", []string{`unknown rule ID "zzzzzzzz"`, "https://jactionlint.jdx.dev/rules"}},
 		{"unknown rule option", "rules:\n  max-run-lines:\n    maxx: 3\n", []string{`unknown key "maxx" in the options of rule "max-run-lines"`, `did you mean "max"?`}},
 		{"rule without options", "rules:\n  require-shell:\n    max: 3\n", []string{`unknown key "max" in the options of rule "require-shell"`}},
-		{"invalid level", "rules:\n  require-shell: fatal\n", []string{`invalid severity "fatal"`, "line:2,col:18"}},
+		{"invalid level", "rules:\n  require-shell: fatal\n", []string{`invalid severity "fatal"`, "line 2, column 18"}},
 		{"invalid level in mapping", "rules:\n  require-shell: {level: fatal}\n", []string{`"level" must be one of`}},
 		{"rule is a list", "rules:\n  require-shell: [error]\n", []string{"a rule must be configured with a level or a mapping"}},
 		{"negative option", "rules:\n  max-run-lines: {max: -1}\n", []string{`invalid value -1 for option "max" of rule "max-run-lines"`, "non-negative integer"}},

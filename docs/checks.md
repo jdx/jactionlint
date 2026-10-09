@@ -176,7 +176,7 @@ test.yaml:3:3: "runs-on" section is missing in job "test" [workflow-syntax]
   |
 3 |   test:
   |   ^~~~~
-test.yaml:8:9: key "VERSION_NAME" is duplicated in "matrix" section. previously defined at line:7,col:9. note that this key is case insensitive [duplicate-key]
+test.yaml:8:9: key "VERSION_NAME" is duplicated in "matrix" section. previously defined at line 7, column 9. note that this key is case insensitive [duplicate-key]
   |
 8 |         VERSION_NAME: [V1, V2]
   |         ^~~~~~~~~~~~~
@@ -1619,7 +1619,7 @@ jobs:
 Output:
 
 ```
-test.yaml:6:28: duplicate value "14" is found in matrix "node". the same value is at line:6,col:24 [matrix-duplicate-value]
+test.yaml:6:28: duplicate value "14" is found in matrix "node". the same value is at line 6, column 24 [matrix-duplicate-value]
   |
 6 |         node: [10, 12, 14, 14]
   |                            ^~~
@@ -2079,7 +2079,7 @@ jobs:
 Output:
 
 ```
-test.yaml:4:30: label "windows-latest" conflicts with label "ubuntu-latest" defined at line:4,col:15. note: to run your job on each workers, use matrix [conflicting-runner-labels]
+test.yaml:4:30: label "windows-latest" conflicts with label "ubuntu-latest" defined at line 4, column 15. note: to run your job on each workers, use matrix [conflicting-runner-labels]
   |
 4 |     runs-on: [ubuntu-latest, windows-latest]
   |                              ^~~~~~~~~~~~~~~
@@ -2584,11 +2584,11 @@ jobs:
 Output:
 
 ```
-test.yaml:10:13: step ID "STEP_ID" duplicates. previously defined at line:7,col:13. step ID must be unique within a job. note that step ID is case insensitive [duplicate-step-id]
+test.yaml:10:13: step ID "STEP_ID" duplicates. previously defined at line 7, column 13. step ID must be unique within a job. note that step ID is case insensitive [duplicate-step-id]
    |
 10 |         id: STEP_ID
    |             ^~~~~~~
-test.yaml:12:3: key "TEST" is duplicated in "jobs" section. previously defined at line:3,col:3. note that this key is case insensitive [duplicate-key]
+test.yaml:12:3: key "TEST" is duplicated in "jobs" section. previously defined at line 3, column 3. note that this key is case insensitive [duplicate-key]
    |
 12 |   TEST:
    |   ^~~~~
@@ -4770,7 +4770,7 @@ test.yaml:22:14: "env" section is alias node but mapping node is expected [workf
    |
 22 |         env: *recursive
    |              ^~~~~~~~~~
-test.yaml:22:14: recursive alias "recursive" is found. anchor was declared at line:19, column:9 [recursive-alias]
+test.yaml:22:14: recursive alias "recursive" is found. anchor was declared at line 19, column 9 [recursive-alias]
    |
 22 |         env: *recursive
    |              ^~~~~~~~~~

@@ -188,7 +188,7 @@ Unknown keys are errors. jactionlint reports the key with its position and sugge
 like a typo:
 
 ```
-unknown key "self-hosted-runnr" in the configuration at line:3,col:1. did you mean "self-hosted-runner"?
+unknown key "self-hosted-runnr" in the configuration at line 3, column 1. did you mean "self-hosted-runner"?
 ```
 
 ## Profiles

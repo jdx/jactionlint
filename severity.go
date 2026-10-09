@@ -68,11 +68,11 @@ func (s *Severity) UnmarshalText(b []byte) error {
 // UnmarshalYAML implements yaml.Unmarshaler.
 func (s *Severity) UnmarshalYAML(n *yaml.Node) error {
 	if n.Kind != yaml.ScalarNode {
-		return fmt.Errorf("severity must be one of \"off\", \"info\", \"warn\" and \"error\" at line:%d,col:%d", n.Line, n.Column)
+		return fmt.Errorf("severity must be one of \"off\", \"info\", \"warn\" and \"error\" at line %d, column %d", n.Line, n.Column)
 	}
 	v, err := ParseSeverity(n.Value)
 	if err != nil {
-		return fmt.Errorf("%w at line:%d,col:%d", err, n.Line, n.Column)
+		return fmt.Errorf("%w at line %d, column %d", err, n.Line, n.Column)
 	}
 	*s = v
 	return nil

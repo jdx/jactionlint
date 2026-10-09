@@ -193,7 +193,7 @@ An unknown key, rule ID or rule option in the config file is an error with a sug
 keys were ignored silently, so a typo is now found:
 
 ```
-unknown key "self-hosted-runnr" in the configuration at line:3,col:1. did you mean "self-hosted-runner"?
+unknown key "self-hosted-runnr" in the configuration at line 3, column 1. did you mean "self-hosted-runner"?
 ```
 
 ### Deprecated booleans and `--migrate-config`

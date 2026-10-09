@@ -63,7 +63,7 @@ describe("permalinks in docs/checks.md", () => {
   it("every link decodes and reproduces the documented errors", () => {
     expect(links.length).toBeGreaterThan(0);
     const failures: string[] = [];
-    // Positions inside messages ("previously defined at line:7,col:9") shift as well
+    // Positions inside messages ("previously defined at line 7, column 9") shift as well
     const norm = (s: string) => s.replace(/line:\d+,\s*col(?:umn)?:\d+/g, "line:N,col:N");
     for (const { output, hash } of links) {
       const errs = lint(decodeSource(hash));

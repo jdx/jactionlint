@@ -373,7 +373,7 @@ func mappingPairs(n *yaml.Node) (keys, vals []*yaml.Node) {
 }
 
 func unknownKeyError(k *yaml.Node, where string, allowed []string) error {
-	msg := fmt.Sprintf("unknown key %q in %s at line:%d,col:%d", k.Value, where, k.Line, k.Column)
+	msg := fmt.Sprintf("unknown key %q in %s at line %d, column %d", k.Value, where, k.Line, k.Column)
 	if s := didYouMean(k.Value, allowed); s != "" {
 		return fmt.Errorf("%s. did you mean %q?", msg, s)
 	}
@@ -421,7 +421,7 @@ func validateConfigKeys(root *yaml.Node) error {
 			for _, fv := range fvals {
 				for _, id := range fv.Content {
 					if _, ok := ruleIndex[id.Value]; !ok {
-						return fmt.Errorf("unknown rule ID %q in \"fix.rules\" at line:%d,col:%d%s", id.Value, id.Line, id.Column, suggestRuleID(id.Value))
+						return fmt.Errorf("unknown rule ID %q in \"fix.rules\" at line %d, column %d%s", id.Value, id.Line, id.Column, suggestRuleID(id.Value))
 					}
 				}
 			}
@@ -457,7 +457,7 @@ func validateConfigKeys(root *yaml.Node) error {
 			for j, rk := range rkeys {
 				info, ok := ruleIndex[rk.Value]
 				if !ok {
-					return fmt.Errorf("unknown rule ID %q in \"rules\" at line:%d,col:%d%s", rk.Value, rk.Line, rk.Column, suggestRuleID(rk.Value))
+					return fmt.Errorf("unknown rule ID %q in \"rules\" at line %d, column %d%s", rk.Value, rk.Line, rk.Column, suggestRuleID(rk.Value))
 				}
 				allowed := []string{"level"}
 				for _, o := range info.Options {
