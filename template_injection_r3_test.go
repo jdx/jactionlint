@@ -56,3 +56,11 @@ func TestTemplateInjectionReportsTheInputsObjectOfAnAction(t *testing.T) {
 		t.Errorf("want 1 finding but got %v", got)
 	}
 }
+
+// A composite action which declares no input has nothing in inputs that the caller controls.
+func TestTemplateInjectionIgnoresTheInputsObjectOfAnActionWithoutInputs(t *testing.T) {
+	const action = "name: x\ndescription: d\nruns:\n  using: composite\n  steps:\n    - run: echo \"${{ inputs }}\"\n      shell: bash\n"
+	if got := lintTemplateInjection(t, "action.yml", action); len(got) != 0 {
+		t.Errorf("want no finding but got %v", got)
+	}
+}

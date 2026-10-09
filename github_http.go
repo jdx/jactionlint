@@ -84,9 +84,21 @@ type httpGitHubClient struct {
 	limit       *GitHubRateLimitError // set once the limit is reached
 	noticedAnon bool
 	// visibility remembers per repository ("owner/repo", lower case) whether it is public, as the answer of
-	// the repository endpoint said. A repository that is not in the map is unknown, which counts as private.
-	visibility map[string]bool
+	// the repository endpoint said when it was last asked. A repository that is not in the map is unknown,
+	// which counts as private.
+	visibility map[string]visibilityFact
 }
+
+// visibilityFact is what the repository endpoint said about a repository, and when the server said it.
+type visibilityFact struct {
+	public bool
+	at     time.Time
+}
+
+// sharedVisibilityTTL bounds the age of the confirmation that a repository is public, for sharing an answer
+// between tokens and for serving a shared copy. It is deliberately short and independent of the TTL of the
+// cache: a repository can turn private at any time.
+const sharedVisibilityTTL = 5 * time.Minute
 
 // httpGitHubOptions configures newHTTPGitHubClient.
 type httpGitHubOptions struct {
@@ -279,9 +291,10 @@ type httpResponse struct {
 
 // httpAnswer is the answer of one request.
 type httpAnswer struct {
-	status int
-	body   []byte
-	link   string
+	status  int
+	body    []byte
+	link    string
+	fetched time.Time // when the answer came from the server (zero for a 404, which has no body to date)
 }
 
 func (c *httpGitHubClient) currentToken() string {
@@ -308,7 +321,7 @@ func (c *httpGitHubClient) setRateLimited(reset time.Time, authenticated bool) *
 
 // answerFromEntry converts a cache entry to an answer.
 func answerFromEntry(e *cacheEntry) *httpAnswer {
-	return &httpAnswer{status: e.Status, body: e.Body, link: e.Link}
+	return &httpAnswer{status: e.Status, body: e.Body, link: e.Link, fetched: e.Fetched}
 }
 
 // scope tells apart the cached answers of different API hosts and credentials: private repositories
@@ -320,22 +333,58 @@ func (c *httpGitHubClient) scope(token string) string {
 	return c.base.Host + "|token:" + cacheKey("token", token)
 }
 
-// lookup finds the cached answer of a request. A public answer fetched without a token (status 200)
+// lookup finds the cached answer of a request. A public answer fetched with another token (status 200)
 // also serves a client with a token, since a token cannot make public data differ; a cached "not
-// found" does not, because the token may see more.
+// found" does not, because the token may see more. A copy in the shared slot that a token made is served
+// only while its confirmation that the repository is public is fresh, and not at all once this run saw the
+// repository turn private (see shareIfPublic).
 func (c *httpGitHubClient) lookup(u, token string) (entry *cacheEntry, key string) {
 	key = cacheKey(c.scope(token), u)
-	if entry = c.cache.get(key, u); entry != nil || token == "" {
+	id := c.repoID(u)
+	if entry = c.cache.get(key, u); entry != nil && token == "" && !c.sharedUsable(entry, id) {
+		entry = nil // the anonymous slot holds the shared copies
+	}
+	if entry != nil || token == "" {
 		return entry, key
 	}
-	if e := c.cache.get(cacheKey(c.scope(""), u), u); e != nil && e.Status == http.StatusOK {
+	if e := c.cache.get(cacheKey(c.scope(""), u), u); e != nil && e.Status == http.StatusOK && c.sharedUsable(e, id) {
 		return e, key
 	}
 	return nil, key
 }
 
+// repoID is the lower case "owner/repo" a URL of the API is about, or "".
+func (c *httpGitHubClient) repoID(u string) string {
+	if owner, repo, _, ok := c.repoOf(u); ok {
+		return strings.ToLower(owner + "/" + repo)
+	}
+	return ""
+}
+
+// sharedUsable reports whether an entry of the shared slot may be served. An answer fetched without a token is
+// public by definition. A copy made from the answer of a token is public only as long as the repository was
+// confirmed public a short time ago, and this run has not seen it turn private.
+func (c *httpGitHubClient) sharedUsable(e *cacheEntry, id string) bool {
+	if e.Shared.IsZero() {
+		return true
+	}
+	if age := c.now().Sub(e.Shared); age >= sharedVisibilityTTL || age < -time.Minute {
+		return false
+	}
+	if f, known := c.visibilityOf(id); known && !f.public {
+		return false
+	}
+	return true
+}
+
 // get fetches an API URL (a path relative to the API, or an absolute URL of the same host).
 func (c *httpGitHubClient) get(ctx context.Context, target string) (*httpAnswer, error) {
+	return c.getOpt(ctx, target, false)
+}
+
+// getOpt is get; with revalidate a cached answer is never served without asking the server (a conditional
+// request, so that an unchanged answer costs no quota), whatever its age.
+func (c *httpGitHubClient) getOpt(ctx context.Context, target string, revalidate bool) (*httpAnswer, error) {
 	u := target
 	if !strings.HasPrefix(target, "http://") && !strings.HasPrefix(target, "https://") {
 		u = c.base.String() + target
@@ -350,7 +399,7 @@ func (c *httpGitHubClient) get(ctx context.Context, target string) (*httpAnswer,
 
 	token := c.currentToken()
 	entry, key := c.lookup(u, token)
-	if entry != nil && (c.offline || (c.ttl > 0 && c.now().Sub(entry.Fetched) < c.ttl)) {
+	if entry != nil && !revalidate && (c.offline || (c.ttl > 0 && c.now().Sub(entry.Fetched) < c.ttl)) {
 		c.logf("GET %s: from the cache", target)
 		return answerFromEntry(entry), nil
 	}
@@ -370,9 +419,15 @@ func (c *httpGitHubClient) get(ctx context.Context, target string) (*httpAnswer,
 	if err != nil && entry != nil && errors.Is(err, ErrGitHubRateLimited) {
 		return answerFromEntry(entry), nil
 	}
-	if err == nil && ans.status == http.StatusOK && token != "" && c.currentToken() == token {
+	if err == nil && token != "" && !revalidate && c.currentToken() == token { // a revalidation is the caller's business
 		if owner, repo, self, ok := c.repoOf(u); ok {
-			c.shareIfPublic(ctx, u, key, owner, repo, self)
+			if ans.status == http.StatusOK {
+				c.shareIfPublic(ctx, u, key, owner, repo, self)
+			} else if self && (ans.status == http.StatusNotFound || ans.status == http.StatusForbidden || ans.status == http.StatusUnauthorized) {
+				// Not visible to this token any more: whatever was shared about it goes
+				c.setVisibility(strings.ToLower(owner+"/"+repo), false, c.now())
+				c.cache.remove(cacheKey(c.scope(""), u))
+			}
 		}
 	}
 	return ans, err
@@ -422,23 +477,29 @@ func repoBodyPublic(body []byte) bool {
 // differently to different tokens, and an answer fetched with a token is not known to be public: a token
 // of another job of the same workflow (every CI job has its own GITHUB_TOKEN) would never find it.
 //
-// The rule that keeps private answers private: an answer is copied to the shared slot (the one of
-// requests without a token) only when the repository endpoint said that the repository is public. When
-// that is not known yet it is asked once per repository (a conditional, cacheable request). If the
-// repository is private, or the answer is not known, nothing is shared and an older shared copy of the
-// request is removed. A "not found" is never shared (a token may see more).
+// The invariant that keeps private answers private, and fails closed: an answer enters the shared slot (the
+// one of requests without a token), and is served from it, only if the fact "the repository is public" is
+// fresh, that is the server said so at most sharedVisibilityTTL ago, in this run or in a revalidation made
+// now. A fact that is stale (an answer of the repository endpoint that came out of the cache), unknown, or
+// that could not be refreshed means per-token only, and an older shared copy of the request is removed. An
+// observation of a private, internal, forbidden or missing repository removes the shared copy at once and
+// blocks serving the others of that repository for the rest of the run; the copies carry the time of their
+// confirmation (cacheEntry.Shared) so that they expire on their own in the runs that did not see it. A
+// "not found" is never shared (a token may see more).
 func (c *httpGitHubClient) shareIfPublic(ctx context.Context, u, key, owner, repo string, self bool) {
-	if c.cache == nil {
-		return
+	if c.cache == nil || c.offline {
+		return // offline nothing can be confirmed
 	}
 	e := c.cache.get(key, u)
 	if e == nil || e.Status != http.StatusOK {
 		return
 	}
 	id := strings.ToLower(owner + "/" + repo)
+	anon := cacheKey(c.scope(""), u)
 	if self {
-		c.setVisibility(id, repoBodyPublic(e.Body))
-	} else if _, known := c.visibilityOf(id); !known {
+		c.setVisibility(id, repoBodyPublic(e.Body), e.Fetched)
+	}
+	if !c.visibilityCurrent(id) {
 		if c.rateLimited() != nil {
 			return // sharing is an optimization: it never waits for the limit
 		}
@@ -446,34 +507,44 @@ func (c *httpGitHubClient) shareIfPublic(ctx context.Context, u, key, owner, rep
 		if err != nil {
 			return
 		}
-		ans, err := c.get(ctx, path)
+		ans, err := c.getOpt(ctx, path, true)
 		if err != nil {
-			return // unknown: not shared, and not remembered
+			c.cache.remove(anon) // could not refresh: unknown
+			return
 		}
-		c.setVisibility(id, ans.status == http.StatusOK && repoBodyPublic(ans.body))
+		// An answer that came from a stale entry (the limit was reached meanwhile) is not a confirmation
+		c.setVisibility(id, ans.status == http.StatusOK && repoBodyPublic(ans.body), ans.fetched)
 	}
-	anon := cacheKey(c.scope(""), u)
-	if public, _ := c.visibilityOf(id); public {
-		c.cache.put(anon, e)
+	if f, _ := c.visibilityOf(id); f.public && c.visibilityCurrent(id) {
+		shared := *e
+		shared.Shared = f.at
+		c.cache.put(anon, &shared)
 	} else {
 		c.cache.remove(anon)
 	}
 }
 
-func (c *httpGitHubClient) visibilityOf(id string) (public, known bool) {
+func (c *httpGitHubClient) visibilityOf(id string) (f visibilityFact, known bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	public, known = c.visibility[id]
-	return public, known
+	f, known = c.visibility[id]
+	return f, known
 }
 
-func (c *httpGitHubClient) setVisibility(id string, public bool) {
+// visibilityCurrent reports whether a recent answer of the server tells the visibility of the repository.
+func (c *httpGitHubClient) visibilityCurrent(id string) bool {
+	f, known := c.visibilityOf(id)
+	age := c.now().Sub(f.at)
+	return known && !f.at.IsZero() && age < sharedVisibilityTTL && age > -time.Minute
+}
+
+func (c *httpGitHubClient) setVisibility(id string, public bool, at time.Time) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.visibility == nil {
-		c.visibility = map[string]bool{}
+		c.visibility = map[string]visibilityFact{}
 	}
-	c.visibility[id] = public
+	c.visibility[id] = visibilityFact{public: public, at: at}
 }
 
 // waitOutRateLimit applies the policy of the client to a request that is about to be sent while the rate
@@ -1172,9 +1243,12 @@ func (c *httpGitHubClient) CommitOnAnyBranch(ctx context.Context, owner, repo, s
 	key := cacheKey(c.scope(token), name)
 	var stale *GitHubBranchScan // an expired answer, for when the rate limit leaves no choice
 	e := c.cache.get(key, name)
+	if e != nil && token == "" && !c.sharedUsable(e, strings.ToLower(owner+"/"+repo)) {
+		e = nil // the anonymous slot holds the shared copies
+	}
 	if e == nil {
 		// The answer of another token for a public repository (see shareIfPublic)
-		if shared := c.cache.get(cacheKey(c.scope(""), name), name); shared != nil && shared.Status == http.StatusOK {
+		if shared := c.cache.get(cacheKey(c.scope(""), name), name); shared != nil && shared.Status == http.StatusOK && c.sharedUsable(shared, strings.ToLower(owner+"/"+repo)) {
 			e = shared
 		}
 	}

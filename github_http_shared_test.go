@@ -117,3 +117,83 @@ func TestGraphQLHonorsARecordedRateLimit(t *testing.T) {
 		t.Errorf("want a wait and one request: %+v, %v, %d requests, waits %v", scan, err, posts, f.sleptFor())
 	}
 }
+
+// The visibility that decides whether an answer may enter the shared slot must be fresh: a repository
+// body that comes out of the cache (still within the TTL) must not say "public" about a repository that
+// turned private since, and a shared copy is not served once its confirmation is old.
+func TestHTTPClientSharingFailsClosedOnStaleVisibility(t *testing.T) {
+	f := newFakeGitHub(t)
+	repoBody := `{"private":false,"default_branch":"main"}`
+	f.handle("/repos/o/r", func(w http.ResponseWriter, r *http.Request) { fmt.Fprint(w, repoBody) })
+	f.json("/repos/o/r/tags", `[{"name":"v1","commit":{"sha":"`+strings.Repeat("a", 40)+`"}}]`)
+	f.json("/repos/o/r/branches", `[{"name":"main","commit":{"sha":"`+strings.Repeat("b", 40)+`"}}]`)
+	dir := t.TempDir()
+	ctx := context.Background()
+	t0 := time.Now()
+	at := func(c *httpGitHubClient, d time.Duration) *httpGitHubClient {
+		c.now = func() time.Time { return t0.Add(d) }
+		return c
+	}
+
+	// Public: the tags are shared
+	a := at(f.client(httpGitHubOptions{CacheDir: dir, TTL: time.Hour, Token: "a"}), 0)
+	if _, err := a.Tags(ctx, "o", "r"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := at(f.client(httpGitHubOptions{CacheDir: dir, TTL: time.Hour, Offline: true}), time.Minute).Tags(ctx, "o", "r"); err != nil {
+		t.Fatalf("a fresh public copy is shared: %v", err)
+	}
+
+	// Ten minutes later the repository is private. Its body is still fresh in the cache (TTL one hour).
+	repoBody = `{"private":true,"default_branch":"main"}`
+	// The shared copy has outlived its confirmation: nobody gets it, not even offline
+	for _, tok := range []string{"", "b"} {
+		_, err := at(f.client(httpGitHubOptions{CacheDir: dir, TTL: time.Hour, Offline: true, Token: tok}), 10*time.Minute).Tags(ctx, "o", "r")
+		if !errors.Is(err, ErrGitHubNotCached) {
+			t.Errorf("token %q: a shared copy with an old confirmation must not be served: %v", tok, err)
+		}
+	}
+	// A token which still reads it fetches something new: the visibility is asked again, not taken from the cache
+	a2 := at(f.client(httpGitHubOptions{CacheDir: dir, TTL: time.Hour, Token: "a"}), 10*time.Minute)
+	if _, err := a2.Branches(ctx, "o", "r", 10); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := at(f.client(httpGitHubOptions{CacheDir: dir, TTL: time.Hour, Token: "b", Offline: true}), 10*time.Minute+time.Second).Branches(ctx, "o", "r", 10); !errors.Is(err, ErrGitHubNotCached) {
+		t.Errorf("the branches of a repository that turned private were shared: %v", err)
+	}
+	if _, err := at(f.client(httpGitHubOptions{CacheDir: dir, TTL: time.Hour, Offline: true}), 10*time.Minute+time.Second).Branches(ctx, "o", "r", 10); !errors.Is(err, ErrGitHubNotCached) {
+		t.Errorf("anonymous: the branches of a repository that turned private were shared: %v", err)
+	}
+}
+
+// When the visibility cannot be refreshed nothing is shared.
+func TestHTTPClientDoesNotShareWhenVisibilityCannotBeRefreshed(t *testing.T) {
+	f := newFakeGitHub(t)
+	repoOK := true
+	f.handle("/repos/o/r", func(w http.ResponseWriter, r *http.Request) {
+		if !repoOK {
+			http.Error(w, "boom", http.StatusInternalServerError)
+			return
+		}
+		fmt.Fprint(w, `{"private":false,"default_branch":"main"}`)
+	})
+	f.json("/repos/o/r/tags", `[]`)
+	f.json("/repos/o/r/branches", `[]`)
+	dir := t.TempDir()
+	ctx := context.Background()
+	t0 := time.Now()
+	a := f.client(httpGitHubOptions{CacheDir: dir, TTL: time.Hour, Token: "a"})
+	a.now = func() time.Time { return t0 }
+	if _, err := a.Tags(ctx, "o", "r"); err != nil {
+		t.Fatal(err)
+	}
+	repoOK = false
+	a2 := f.client(httpGitHubOptions{CacheDir: dir, TTL: time.Hour, Token: "a"})
+	a2.now = func() time.Time { return t0.Add(10 * time.Minute) }
+	_, _ = a2.Branches(ctx, "o", "r", 10)
+	c := f.client(httpGitHubOptions{CacheDir: dir, TTL: time.Hour, Offline: true})
+	c.now = func() time.Time { return t0.Add(10*time.Minute + time.Second) }
+	if _, err := c.Branches(ctx, "o", "r", 10); !errors.Is(err, ErrGitHubNotCached) {
+		t.Errorf("shared although the visibility could not be refreshed: %v", err)
+	}
+}

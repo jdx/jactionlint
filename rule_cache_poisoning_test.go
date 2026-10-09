@@ -175,3 +175,18 @@ func TestCachePoisoningUnknownPayloadRefDoesNotHideTheCache(t *testing.T) {
 		}
 	}
 }
+
+func TestCachePoisoningTagOnlyPushHasNoBranchRun(t *testing.T) {
+	// the only run of this workflow is a tag push, so a step kept away from tags never restores the cache
+	const head = "on:\n  push:\n    tags: ['v*']\npermissions: read-all\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n"
+	const tail = "      - run: docker push example/img\n"
+	step := "      - uses: Swatinem/rust-cache@v2\n        if: ${{ !startsWith(github.event.ref, 'refs/tags/') }}\n"
+	if got := lintCacheWorkflow(t, "", head+step+tail); len(got) != 0 {
+		t.Errorf("tag-only push: want no finding but got %v", got)
+	}
+	// with a branch filter a branch is pushed too, and the step runs there
+	branches := "on:\n  push:\n    branches: [main]\n    tags: ['v*']\n" + head[len("on:\n  push:\n    tags: ['v*']\n"):]
+	if got := lintCacheWorkflow(t, "", branches+step+tail); len(got) != 1 {
+		t.Errorf("branches and tags: want 1 finding but got %v", got)
+	}
+}

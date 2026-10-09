@@ -69,6 +69,9 @@ func (idx *scopeIndex) unreachableAt(line int) bool {
 		return true
 	}
 	steps := findRange(len(job.steps), job.ordered, func(i int) (int, int) { return job.steps[i].start, job.steps[i].end }, line)
+	if len(steps) > 1 {
+		steps = job.innermostSteps(line) // the children of a "parallel" group lie inside the group
+	}
 	return len(steps) == 1 && job.steps[steps[0]].dead
 }
 

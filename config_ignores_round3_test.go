@@ -257,3 +257,25 @@ func TestFixReportsConfigIgnoreFindings(t *testing.T) {
 		}
 	}
 }
+
+// Findings inside the children of a "parallel" group that never runs are dropped like those of any dead
+// step, and a dead child of a live group drops only its own lines.
+func TestUnreachableFilteringCoversParallelChildren(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		src  string
+		want []int // remaining unpinned-uses lines
+	}{
+		{"dead group", "      - if: false\n        parallel:\n          - uses: actions/checkout@v4\n          - uses: actions/cache@v4\n      - uses: actions/setup-node@v4\n", []int{13}},
+		{"dead child", "      - parallel:\n          - if: false\n            uses: actions/checkout@v4\n          - uses: actions/cache@v4\n      - uses: actions/setup-node@v4\n", []int{12, 13}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			src := "name: ci\non: push\npermissions: {}\njobs:\n  b:\n    runs-on: ubuntu-latest\n    timeout-minutes: 5\n    steps:\n" + tc.src
+			root := ignoreProject(t, ignoreConfigHead, map[string]string{"ci.yaml": src})
+			errs := lintIgnoreProject(t, root, fixedNow)
+			if got := unpinnedAt(errs); !sameInts(got, tc.want) {
+				t.Errorf("remaining %v, want %v (%v)", got, tc.want, lineIDsOf(errs))
+			}
+		})
+	}
+}
