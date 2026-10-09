@@ -22,14 +22,16 @@ local fast = new Mapping<String, Step> {
     }
     // Dog fooding: lint our own workflows with the jactionlint in this tree. This is the step shape which
     // hk needs to show the diagnostics with rule IDs (diagnostic_format = "sarif") and to apply the fixes
-    // of jactionlint as a patch (check_diff). Findings without a fix fall back to `jactionlint -fix`.
+    // of jactionlint as a patch (check_diff). Findings without a fix fall back to `jactionlint -fix`. The
+    // correctness profile is what actionlint checks: our own workflows do not pin their actions, set permissions
+    // or have concurrency groups yet, which the default profile asks for.
     ["jactionlint"] {
         glob = List(".github/workflows/*.yaml", ".github/workflows/*.yml", ".github/dependabot.y*ml")
         batch = true
         diagnostic_format = "sarif"
-        check = "go run ./cmd/jactionlint -format sarif {{files}}"
-        check_diff = "hk util sarif-diff -- go run ./cmd/jactionlint -format sarif {{files}}"
-        fix = "go run ./cmd/jactionlint -fix {{files}}"
+        check = "go run ./cmd/jactionlint -profile correctness -format sarif {{files}}"
+        check_diff = "hk util sarif-diff -- go run ./cmd/jactionlint -profile correctness -format sarif {{files}}"
+        fix = "go run ./cmd/jactionlint -profile correctness -fix {{files}}"
     }
 }
 
