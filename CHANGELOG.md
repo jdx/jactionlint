@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.0.2](https://github.com/jdx/jactionlint/compare/v2.0.1...v2.0.2) (2026-10-09)
+
+
+### Bug Fixes
+
+* **ci:** sign the macOS binaries by certificate hash in the release workflow ([#111](https://github.com/jdx/jactionlint/issues/111)) ([1ac64f6](https://github.com/jdx/jactionlint/commit/1ac64f62b472fa555f769276d0eaac6f9a69b49e))
+
 ## [2.0.1](https://github.com/jdx/jactionlint/compare/v2.0.0...v2.0.1) (2026-10-09)
 
 

@@ -11,7 +11,7 @@ inputs:
       The version of jactionlint to download, as an exact X.Y.Z version. The default is the release the action itself
       was published with, so pinning the action pins jactionlint too.
     required: false
-    default: "2.0.1" # x-release-please-version
+    default: "2.0.2" # x-release-please-version
   executable:
     description: |
       The path of a jactionlint executable to use instead of downloading one, for example one installed with mise or
