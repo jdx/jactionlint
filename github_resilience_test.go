@@ -747,3 +747,69 @@ func TestForbiddenForTheTokenIsRetriedWithoutIt(t *testing.T) {
 		t.Errorf("a repository which is blocked for everyone stays a 403: %v", err)
 	}
 }
+
+func TestGHHostnameOfTheAPIHost(t *testing.T) {
+	for api, want := range map[string]string{
+		"api.github.com":   "github.com",
+		"api.acme.ghe.com": "acme.ghe.com",
+		"ghe.example.com":  "ghe.example.com",
+		"api.example.com":  "api.example.com",
+		"127.0.0.1:8080":   "127.0.0.1:8080",
+	} {
+		if got := ghHostname(api); got != want {
+			t.Errorf("ghHostname(%q) = %q, want %q", api, got, want)
+		}
+	}
+}
+
+// A 403 is a per-repository miss: the server answered, so it ends a run of timeouts and server errors.
+func TestForbiddenEndsTheStreakOfFailures(t *testing.T) {
+	s := newOnlineSession(context.Background(), scanErrClient{errors.New("x")}, nil)
+	timeout := &net.OpError{Op: "read", Err: os.ErrDeadlineExceeded}
+	s.record(timeout, "a/a")
+	s.record(timeout, "b/b")
+	s.record(&GitHubStatusError{Status: http.StatusForbidden}, "c/c")
+	s.record(timeout, "d/d")
+	s.record(timeout, "e/e")
+	if err := s.blockedErr(); err != nil {
+		t.Errorf("four timeouts that are not in a row must not skip the rest: %v", err)
+	}
+	s.record(timeout, "f/f")
+	if s.blockedErr() == nil {
+		t.Error("three in a row do")
+	}
+}
+
+// GraphQL requests wait for a rate limit and retry a server error like the REST requests do.
+func TestGraphQLRetriesAndWaitsLikeREST(t *testing.T) {
+	sha := strings.Repeat("a", 40)
+	body := `{"data":{"repository":{"refs":{"pageInfo":{"hasNextPage":false,"endCursor":""},"nodes":[{"name":"b","compare":{"status":"DIVERGED"}}]}}}}`
+	for name, first := range map[string]func(w http.ResponseWriter){
+		"server error": func(w http.ResponseWriter) { w.WriteHeader(http.StatusBadGateway) },
+		"rate limit": func(w http.ResponseWriter) {
+			w.Header().Set("X-RateLimit-Remaining", "0")
+			w.Header().Set("X-RateLimit-Reset", fmt.Sprint(time.Now().Add(5*time.Second).Unix()))
+			w.WriteHeader(http.StatusForbidden)
+			fmt.Fprint(w, `{"message":"API rate limit exceeded"}`)
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			f := newFakeGitHub(t)
+			var n atomic.Int32
+			f.handle("/graphql", func(w http.ResponseWriter, r *http.Request) {
+				if n.Add(1) == 1 {
+					first(w)
+					return
+				}
+				fmt.Fprint(w, body)
+			})
+			scan, err := f.client(httpGitHubOptions{Token: "tok"}).CommitOnAnyBranch(context.Background(), "o", "r", sha, 10)
+			if err != nil || n.Load() != 2 || !scan.Complete {
+				t.Errorf("scan %+v, %v after %d requests", scan, err, n.Load())
+			}
+			if len(f.sleptFor()) != 1 {
+				t.Errorf("want one wait: %v", f.sleptFor())
+			}
+		})
+	}
+}

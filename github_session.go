@@ -377,6 +377,9 @@ func (s *onlineSession) record(err error, what string) {
 		s.blockLocked(err, until)
 	case failUnauthorized:
 		s.blockLocked(err, time.Time{})
+	case failForbidden:
+		// A repository the token cannot see: the server answers, so it is no outage
+		s.transient = 0
 	case failNetwork:
 		// The host does not resolve or refuses connections: it will not work for the next lookup either
 		s.blockLocked(err, time.Time{})

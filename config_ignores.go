@@ -239,7 +239,21 @@ func (ig *ConfigIgnore) matchUses(value string) bool {
 		return true
 	}
 	// Docker images and local paths are not repository references: compare the whole value
-	return ig.usesGlob && wildcardMatch(strings.ToLower(ig.Uses), strings.ToLower(value))
+	if ig.usesGlob {
+		return wildcardMatch(strings.ToLower(ig.Uses), strings.ToLower(value))
+	}
+	return strings.EqualFold(ig.Uses, value) // docker://alpine:3.20 or ./.github/actions/foo, as written
+}
+
+// someRuleRuns reports whether one of the rules of the entry could have reported anything in this run:
+// an entry for a rule that is off, or for an online rule while the online checks are off, is not unused.
+func (ig *ConfigIgnore) someRuleRuns(cfg *Config, online bool) bool {
+	for _, id := range ig.Rules {
+		if cfg.RuleRuns(id, online) {
+			return true
+		}
+	}
+	return false
 }
 
 // matchFile reports whether the file glob matches the path. rel is the path relative to the project
@@ -567,7 +581,7 @@ func (l *Linter) finishIgnoreRun(results []fileResult) []fileResult {
 				days := int(ig.expires.Sub(today) / (24 * time.Hour))
 				e = ig.errorAt("expired-ignore", fmt.Sprintf("the ignore for %s expires on %s (in %d days)%s", describeIgnore(ig), ig.Expires, days, ignoreReason(ig)))
 				upcoming = true
-			case !rc.used[ig] && rc.judgeUnused(ig, covered):
+			case !rc.used[ig] && ig.someRuleRuns(cfg, l.online.enabled || cfg.Online) && rc.judgeUnused(ig, covered):
 				e = ig.errorAt("unused-ignore", fmt.Sprintf("the ignore for %s did not suppress any finding. remove it from \"ignores\"%s", describeIgnore(ig), ignoreReason(ig)))
 			default:
 				continue
