@@ -103,9 +103,15 @@ func (rule *RuleAgenticActions) checkAgent(job *Job, prev []*Step, step *Step, a
 	limited := tokenIsLimited(rule.wf, job) || (agent.restricted != nil && agent.restricted(a))
 
 	// A gated action runs for users with write access only, unless an input opens the gate.
-	if agent.Gated && rule.gateTrigger != "" && !limited {
+	// exposed is whether outsiders can steer the agent, limited or not: a limited agent still holds its secrets
+	// and can print them, so the secrets of its environment are checked for it as well.
+	if agent.Gated && rule.gateTrigger != "" {
 		for _, g := range agent.OpenGate {
 			if v, ok := a.input(g.Input); ok && v == g.Wildcard {
+				exposed = true
+				if limited {
+					continue
+				}
 				who := "anyone can cause on a public repository"
 				if rule.gateTrigger == "workflow_run" {
 					who = "follows a workflow that outsiders can start"
@@ -113,15 +119,16 @@ func (rule *RuleAgenticActions) checkAgent(job *Job, prev []*Step, step *Step, a
 				rule.ReportIDf("agentic-actions", a.Inputs[g.Input].Value.Pos,
 					"%q is %q, so %s can start %s, although the action checks for write access otherwise. this workflow runs on %q, which %s, and the text they write steers the agent%s. list the users you trust instead of the wildcard",
 					g.Input, g.Wildcard, g.Who, agent.Title, rule.gateTrigger, who, token)
-				exposed = true
 			}
 		}
 	}
-	if !agent.Gated && rule.trigger != "" && !limited && !rule.agentGuarded(job, prev, step) {
-		rule.ReportIDf("agentic-actions", a.Uses.Pos,
-			"%s does not check who started it, and this workflow runs on %q, which anyone can cause on a public repository. the text they write steers the agent, which has the secrets of the job%s. restrict the job with an if: on github.event.comment.author_association (OWNER, MEMBER or COLLABORATOR) or on a label that only maintainers add, run it in an environment with required reviewers, or limit the agent to the few tools it needs",
-			agent.Title, rule.trigger, token)
+	if !agent.Gated && rule.trigger != "" && !rule.agentGuarded(job, prev, step) {
 		exposed = true
+		if !limited {
+			rule.ReportIDf("agentic-actions", a.Uses.Pos,
+				"%s does not check who started it, and this workflow runs on %q, which anyone can cause on a public repository. the text they write steers the agent, which has the secrets of the job%s. restrict the job with an if: on github.event.comment.author_association (OWNER, MEMBER or COLLABORATOR) or on a label that only maintainers add, run it in an environment with required reviewers, or limit the agent to the few tools it needs",
+				agent.Title, rule.trigger, token)
+		}
 	}
 
 	if agent.unsafe != nil && (rule.trigger != "" || rule.anyTrigger) {
@@ -157,7 +164,11 @@ func (rule *RuleAgenticActions) checkAgent(job *Job, prev []*Step, step *Step, a
 	}
 
 	if exposed {
-		rule.checkSecretsInEnv(job, step, agent)
+		trigger := rule.trigger
+		if trigger == "" {
+			trigger = rule.gateTrigger
+		}
+		rule.checkSecretsInEnv(job, step, a, agent, trigger)
 	}
 
 	if rule.checkoutTrigger != "" {
@@ -167,7 +178,7 @@ func (rule *RuleAgenticActions) checkAgent(job *Job, prev []*Step, step *Step, a
 
 // checkSecretsInEnv reports a secret other than GITHUB_TOKEN in the environment of an agent that outsiders can
 // steer: its shell tool can print the environment.
-func (rule *RuleAgenticActions) checkSecretsInEnv(job *Job, step *Step, agent *agentAction) {
+func (rule *RuleAgenticActions) checkSecretsInEnv(job *Job, step *Step, a *ExecAction, agent *agentAction, trigger string) {
 	for _, env := range []*Env{step.Env, job.Env, rule.wf.Env} {
 		if env == nil {
 			continue
@@ -185,8 +196,20 @@ func (rule *RuleAgenticActions) checkSecretsInEnv(job *Job, step *Step, agent *a
 			if ref, src := secretRefOf(v.Value); ref != nil {
 				rule.ReportIDf("agentic-actions", v.Value.Pos,
 					"the secret %q is in the environment of %s, which outsiders can steer through the text of this workflow's %q trigger. its shell can print the environment. pass the secret only to the steps that need it, never to the agent, and use the GITHUB_TOKEN of the job with minimal permissions for GitHub",
-					ref.Display(src), agent.Title, rule.trigger)
+					ref.Display(src), agent.Title, trigger)
 			}
+		}
+	}
+	// Some actions take the environment of the agent as an input
+	for _, name := range agent.EnvInputs {
+		in := a.Inputs[name]
+		if in == nil || in.Value == nil {
+			continue
+		}
+		if ref, src := secretRefOf(in.Value); ref != nil {
+			rule.ReportIDf("agentic-actions", in.Value.Pos,
+				"the secret %q is in the environment of %s (the %q input), which outsiders can steer through the text of this workflow's %q trigger. its shell can print the environment. pass the secret only to the steps that need it, never to the agent, and use the GITHUB_TOKEN of the job with minimal permissions for GitHub",
+				ref.Display(src), agent.Title, name, trigger)
 		}
 	}
 }
