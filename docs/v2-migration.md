@@ -252,7 +252,9 @@ with `{{ }}`). The text output of an error is unchanged, so the [problem matcher
 
 - `json` and `jsonl` are the same as `{{json .}}` templates and add `id`, `severity`, `doc_url`, `end_line`, `end_column` and `fix`.
 - `sarif` is SARIF 2.1.0 with rule metadata, levels, regions and the fixes of the rules that have one. Findings accepted by a
-  baseline are results with a suppression, unless `--sarif-hide-baselined` is given.
+  baseline are results with a suppression, unless `--sarif-hide-baselined` is given. Each result has a `partialFingerprints`
+  `primaryLocationLineHash` (the baseline fingerprint of the finding without its message, and its number in the file), so code
+  scanning keeps tracking a finding when lines are added above it, and the files are listed in `artifacts`.
 - `gcc` prints `file:line:col: error|warning|note: message [id]`. `github` prints workflow commands (`::error`, `::warning`,
   `::notice`) with the rule ID as the `title`.
 - `summary` prints counts per rule and per file instead of findings.
