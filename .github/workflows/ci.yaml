@@ -5,6 +5,9 @@ on:
   pull_request:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -19,7 +22,9 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
       - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
       - run: go test -v -race ./...
       # Check build without CGO
@@ -32,13 +37,15 @@ jobs:
       - name: Dog fooding 🐶
         run: |
           echo "::add-matcher::.github/jactionlint-matcher.json"
-          ./jactionlint -profile correctness -color
+          ./jactionlint -color
   wasm:
     name: Wasm
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
       - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
       # Builds main.wasm, then runs the playground tests against it (the permalinks in docs/checks.md etc.)
       - name: Test playground
@@ -48,7 +55,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
       - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
       - run: hk check --all
   docker:
@@ -56,10 +65,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
       - name: Build image
         id: image
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           build-args: |
             GOLANG_VER=1.27
@@ -68,7 +79,7 @@ jobs:
         run: docker container run
           --mount type=bind,source="$(pwd)",target=/mnt/app
           --workdir /mnt/app
-          -- ${{ steps.image.outputs.digest }} -profile correctness -color -verbose
+          -- ${{ steps.image.outputs.digest }} -color -verbose
       - name: Lint Dockerfile with hadolint
         run: docker run --rm -i hadolint/hadolint hadolint --ignore DL3018 --ignore DL3066 --strict-labels - < Dockerfile
 

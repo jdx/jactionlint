@@ -4,6 +4,12 @@ on:
     tags:
       - "v*.*.*"
 
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   binaries:
     runs-on: ubuntu-latest
@@ -13,21 +19,24 @@ jobs:
       id-token: write
       attestations: write
     steps:
-      - uses: actions/checkout@v6
-      - uses: ruby/setup-ruby@v1
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: ruby/setup-ruby@14594264cd68ce8a2345dd349bc3d138a4ef85c8 # v1.327.0
         with:
           ruby-version: '3.3'
-      - run: gem install ronn
+      # ronn is installed by name on purpose: scripts/build-man.bash does the same for `mise run man`
+      - run: gem install ronn # jactionlint ignore=adhoc-packages
       # Only the roff page is shipped. Generating the HTML page crashes with the current mustache gem
       # (undefined method `strip' for an instance of Array) so it is skipped with --roff.
       - run: ronn --roff ./man/jactionlint.1.ronn
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
           go-version: '1.27'
           check-latest: true
+          # The workflow runs on pushed tags and publishes the binaries: nothing restored from a cache may end up in them
+          cache: false
       - name: Get version
         run: echo VERSION="${GITHUB_REF#refs/tags/v}" >> "$GITHUB_ENV"
-      - uses: goreleaser/goreleaser-action@v7
+      - uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
         with:
           version: '~> v2'
           args: release --clean
@@ -38,7 +47,7 @@ jobs:
       # Sign a packslip (https://packslip.dev) for the archives and upload the bundle (packslip.sigstore.json) to the
       # draft release. This lets mise install jactionlint with the packslip backend. Releases are immutable once
       # published so this has to happen before the release is published below.
-      - uses: jdx/packslip@v1
+      - uses: jdx/packslip@2af36e792faa28130987c8af509e475c7458405d # v1.6.0
         with:
           artifacts: dist/jactionlint_*.tar.gz dist/jactionlint_*.zip
           bin: jactionlint
@@ -48,13 +57,13 @@ jobs:
         run: gh release edit "$GITHUB_REF_NAME" --draft=false --repo "$GITHUB_REPOSITORY"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - uses: actions/attest-build-provenance@v4
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-checksums: ${{ format('./dist/jactionlint_{0}_checksums.txt', env.VERSION) }}
       - name: Post-release download check
         run: bash ./scripts/download-jactionlint.bash "$VERSION"
       - name: Clone nested repository to make version bump commit
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           path: ./tmp-jactionlint-for-update-ver
           ref: main
@@ -78,24 +87,26 @@ jobs:
       contents: read
       packages: write
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
       - name: Get tag name
         id: tag
         run: |
           echo "name=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v4
+        uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
       - name: Set up Docker Buildx
         id: buildx
-        uses: docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       - name: Login to GitHub Container Registry
-        uses: docker/login-action@v4
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Build and push
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           platforms: linux/amd64,linux/arm64
           build-args: |

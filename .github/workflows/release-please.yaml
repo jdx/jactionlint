@@ -2,6 +2,10 @@ name: Release Please
 
 permissions: {}
 
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
 on:
   push:
     branches:
@@ -17,9 +21,6 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
-    outputs:
-      release_created: ${{ steps.release-please.outputs.release_created }}
-      tag: ${{ steps.release-please.outputs.tag_name }}
     steps:
       # Opens/updates the release PR from conventional commits. Merging it tags
       # vX.Y.Z and creates a DRAFT GitHub release (see release-please-config.json). The tag push triggers

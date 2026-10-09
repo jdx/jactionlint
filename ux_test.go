@@ -437,3 +437,24 @@ func TestRunHintAfterManyFindings(t *testing.T) {
 		t.Errorf("everything is accepted by the baseline, so there is no hint: %q", errOut)
 	}
 }
+
+// The workflows of this repository pass the default profile, which is what CI and hk run on them (dogfooding): every
+// action is pinned to a commit SHA, permissions, timeouts and concurrency are explicit.
+func TestOwnWorkflowsPassTheDefaultProfile(t *testing.T) {
+	files, err := filepath.Glob(filepath.Join(".github", "workflows", "*.yaml"))
+	if err != nil || len(files) == 0 {
+		t.Fatalf("workflows not found: %v %v", files, err)
+	}
+	l, err := NewLinter(io.Discard, &LinterOptions{Profile: ProfileDefault})
+	if err != nil {
+		t.Fatal(err)
+	}
+	l.shellcheck, l.pyflakes = "", "" // the tools may be missing; they check the scripts and not the policy
+	errs, err := l.LintFiles(files, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range errs {
+		t.Errorf("%v", e)
+	}
+}
