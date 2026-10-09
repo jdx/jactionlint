@@ -62,7 +62,7 @@ func (b *builder) word(w *syntax.Word) *Word {
 	if w == nil {
 		return nil
 	}
-	start, end := int(w.Pos().Offset()), int(w.End().Offset())
+	start, end := b.off(w.Pos()), b.offEnd(w.End())
 	out := &Word{Loc: b.s.loc(start, end), Raw: b.src(start, end)}
 	_, out.whole = b.s.exprSpans[start]
 	out.whole = out.whole && b.s.exprSpans[start] == end
@@ -126,15 +126,15 @@ func (b *builder) parts(w *Word, parts []syntax.WordPart, inDQ bool, sb *strings
 			if p.Param != nil {
 				w.Vars = append(w.Vars, p.Param.Value)
 			}
-			sb.WriteString(b.src(int(p.Pos().Offset()), int(p.End().Offset())))
+			sb.WriteString(b.src(b.off(p.Pos()), b.offEnd(p.End())))
 			// nested expansions: ${A:-$(cmd)}
 			b.collectSubs(w, p)
 		case *syntax.CmdSubst, *syntax.ProcSubst, *syntax.ArithmExp:
 			w.Subst = true
-			sb.WriteString(b.src(int(part.Pos().Offset()), int(part.End().Offset())))
+			sb.WriteString(b.src(b.off(part.Pos()), b.offEnd(part.End())))
 		default:
 			// extended globs, brace expansions, ...
-			sb.WriteString(b.src(int(part.Pos().Offset()), int(part.End().Offset())))
+			sb.WriteString(b.src(b.off(part.Pos()), b.offEnd(part.End())))
 			if _, ok := part.(*syntax.ExtGlob); ok {
 				w.Glob = true
 			}
