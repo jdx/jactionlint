@@ -123,3 +123,27 @@ func TestCachePoisoningAutomaticCaches(t *testing.T) {
 		})
 	}
 }
+
+func TestCachePoisoningGatesOfRestoreSwitches(t *testing.T) {
+	const head = "on:\n  push:\n    tags: ['v*']\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n"
+	off := "${{ !startsWith(github.ref, 'refs/tags/') }}"
+	tests := []struct {
+		name string
+		step string
+		want int
+	}{
+		{"buildx binary cached", "      - uses: docker/setup-buildx-action@v3\n", 1},
+		{"buildx binary cache off on tags", "      - uses: docker/setup-buildx-action@v3\n        with:\n          cache-binary: " + off + "\n", 0},
+		{"buildx binary cache on", "      - uses: docker/setup-buildx-action@v3\n        with:\n          cache-binary: ${{ startsWith(github.ref, 'refs/tags/') }}\n", 1},
+		{"node automatic cache off on tags", "      - uses: actions/setup-node@v5\n        with:\n          package-manager-cache: " + off + "\n", 0},
+		{"node automatic cache on", "      - uses: actions/setup-node@v5\n        with:\n          package-manager-cache: ${{ startsWith(github.ref, 'refs/tags/') }}\n", 1},
+		{"node explicit cache is not switched off by it", "      - uses: actions/setup-node@v5\n        with:\n          cache: npm\n          package-manager-cache: " + off + "\n", 1},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := lintCacheWorkflow(t, "", head+tc.step); len(got) != tc.want {
+				t.Errorf("want %d findings but got %v", tc.want, got)
+			}
+		})
+	}
+}

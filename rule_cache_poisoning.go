@@ -496,9 +496,9 @@ type cacheGate struct {
 // versions, paths) is ignored: a release workflow often has github.ref in a key or in node-version
 // without the cache being off. Sources are the action.yml files of the actions.
 //
-// Left out on purpose: setup-node's "package-manager-cache" only turns off the automatic detection of v5 and
-// leaves an explicit "cache" as it is, and rust-cache's "save-if" and gradle's "cache-read-only" only
-// stop saving, the restore still happens.
+// Left out on purpose: rust-cache's "save-if" and gradle's "cache-read-only" only stop saving, the restore still
+// happens. setup-node's "package-manager-cache" only turns off the automatic detection of v5 and leaves an explicit
+// "cache" as it is, so cacheCanRunOnReleaseTrigger looks at it only when there is no explicit "cache".
 var cacheGateInputs = map[string][]cacheGate{
 	// "cache" names the package manager to cache: empty or false means none
 	"actions/setup-node":   {{input: "cache"}},
@@ -506,6 +506,8 @@ var cacheGateInputs = map[string][]cacheGate{
 	"actions/setup-java":   {{input: "cache"}},
 	"actions/setup-dotnet": {{input: "cache"}},
 	"actions/setup-go":     {{input: "cache"}}, // "cache: false" turns off the default
+	// "cache-binary: false" stops setup-buildx-action from restoring the buildx binary from the cache
+	"docker/setup-buildx-action": {{input: "cache-binary"}},
 	// "bundler-cache: true" runs bundle install with a cache
 	"ruby/setup-ruby": {{input: "bundler-cache"}},
 	// "enable-cache: false" turns off the default
