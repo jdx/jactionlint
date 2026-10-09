@@ -203,13 +203,13 @@ func (p *parser) parseDependabotCooldown(pos *Pos, n *yaml.Node) *DependabotCool
 		switch e.id {
 		case "default-days":
 			c.HasDefaultDays = true
-			c.DefaultDays = p.parseDependabotInt(v, "default-days", 0, 90)
+			c.DefaultDays = p.parseDependabotInt(v, "default-days", 0, dependabotMaxCooldownDays)
 		case "semver-major-days":
-			c.SemverMajorDays = p.parseDependabotInt(v, "semver-major-days", 0, 90)
+			c.SemverMajorDays = p.parseDependabotInt(v, "semver-major-days", 0, dependabotMaxCooldownDays)
 		case "semver-minor-days":
-			c.SemverMinorDays = p.parseDependabotInt(v, "semver-minor-days", 0, 90)
+			c.SemverMinorDays = p.parseDependabotInt(v, "semver-minor-days", 0, dependabotMaxCooldownDays)
 		case "semver-patch-days":
-			c.SemverPatchDays = p.parseDependabotInt(v, "semver-patch-days", 0, 90)
+			c.SemverPatchDays = p.parseDependabotInt(v, "semver-patch-days", 0, dependabotMaxCooldownDays)
 		case "include":
 			c.Include = p.parseStringSequence("include", v, true, false)
 		case "exclude":
