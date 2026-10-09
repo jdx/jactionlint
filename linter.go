@@ -835,6 +835,7 @@ func (l *Linter) check(
 		l.log("Found", len(all), "parse errors in", elapsed.Milliseconds(), "ms for", path)
 	}
 
+	var skippedRules map[string]bool
 	if w != nil {
 		dbg := l.debugWriter()
 
@@ -842,7 +843,7 @@ func (l *Linter) check(
 		if err != nil {
 			return nil, err
 		}
-		rules := newBuiltinRules(&RuleEnv{
+		env := &RuleEnv{
 			online:                 sess,
 			path:                   path,
 			src:                    content,
@@ -854,7 +855,9 @@ func (l *Linter) check(
 			shellcheck:             l.shellcheck,
 			pyflakes:               l.pyflakes,
 			proc:                   proc,
-		}, l.log)
+		}
+		rules := newBuiltinRules(env, l.log)
+		skippedRules = env.skipped
 		if l.onRulesCreated != nil {
 			rules = l.onRulesCreated(rules)
 		}
@@ -901,7 +904,7 @@ func (l *Linter) check(
 		}
 	}
 
-	return l.finishCheck(path, content, all, cfg, bl, start, w != nil, &ignoreContext{project: project, scopes: newScopeIndex(w, content)}), nil
+	return l.finishCheck(path, content, all, cfg, bl, start, w != nil, &ignoreContext{project: project, scopes: newScopeIndex(w, content), skipped: skippedRules}), nil
 }
 
 // isActionFile reports whether the path is the metadata file of an action (see IsActionPath). The path
@@ -928,8 +931,10 @@ func (l *Linter) finishCheck(path string, content []byte, all []*Error, cfg *Con
 	// The ignores of the config file are matched first, without removing anything, so that the inline
 	// ignores see every error as well and neither is reported as unused for covering the same error.
 	var cfgHit map[*Error]bool
+	var skipped map[string]bool
 	if ic != nil {
-		l.trackIgnoreConfig(cfg, ic.project, path)
+		skipped = ic.skipped
+		l.trackIgnoreConfig(cfg, ic.project, path, ic.skipped)
 		cfgHit = l.matchConfigIgnores(all, cfg, ic.project, path, ic.scopes)
 	}
 
@@ -954,7 +959,7 @@ func (l *Linter) finishCheck(path string, content []byte, all []*Error, cfg *Con
 	inlineIgnores = append(inlineIgnores, parseZizmorIgnores(content)...)
 	all = l.filterInlineIgnores(all, inlineIgnores)
 	all = dropIgnored(all, cfgHit)
-	unused := unusedInlineIgnores(inlineIgnores, orphans, cfg, l.online.enabled || (!l.online.off && cfg != nil && cfg.Online))
+	unused := unusedInlineIgnores(inlineIgnores, orphans, cfg, l.onlineOn(cfg), skipped)
 	dropFixesChangingYAML(content, unused)
 	all = append(all, l.annotateErrors(unused, content, cfg)...)
 

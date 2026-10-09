@@ -49,7 +49,8 @@ type ConfigIgnore struct {
 	// expression between slashes ("/^actions\/(checkout|cache)@/") matched against the whole value.
 	// Empty matches every step.
 	Uses string
-	// Job is the ID of the job (its key in "jobs").
+	// Job is the ID of the job (its key in "jobs"). It is matched without regard to case, like the IDs in
+	// "needs" are.
 	Job string
 	// Step is the "id" or the "name" of the step.
 	Step string
@@ -234,7 +235,14 @@ func (ig *ConfigIgnore) matchUses(value string) bool {
 	case value == "":
 		return false
 	case ig.usesRe != nil:
-		return ig.usesRe.MatchString(value)
+		// A local path is also tried in the other spelling: "./x" and "$/x" name the same action
+		if ig.usesRe.MatchString(value) {
+			return true
+		}
+		if p, ok := canonLocalUsesSpec(value); ok {
+			return ig.usesRe.MatchString(p) || ig.usesRe.MatchString(selfRepositoryUsesPrefix+strings.TrimPrefix(p, "./"))
+		}
+		return false
 	}
 	ref := ParseUses(value)
 	if ig.usesPat.Match(ref) {
@@ -243,18 +251,27 @@ func (ig *ConfigIgnore) matchUses(value string) bool {
 	if ref.Kind == UsesAction || ref.Kind == UsesReusableWorkflow {
 		return false // a repository reference is judged by the pattern alone: its refs are case-sensitive
 	}
-	// Docker images and local paths are not repository references: compare the whole value
-	if ig.usesGlob {
-		return wildcardMatch(strings.ToLower(ig.Uses), strings.ToLower(value))
+	// Docker images and local paths are not repository references: compare the whole value. A local path
+	// has two spellings, "./path" and "$/path", which are the same action: both sides are compared in the
+	// "./" form.
+	pat := ig.Uses
+	if p, ok := canonLocalUsesSpec(pat); ok {
+		pat = p
 	}
-	return strings.EqualFold(ig.Uses, value) // docker://alpine:3.20 or ./.github/actions/foo, as written
+	if ref.Kind == UsesLocal {
+		value = ref.Path
+	}
+	if ig.usesGlob {
+		return wildcardMatch(strings.ToLower(pat), strings.ToLower(value))
+	}
+	return strings.EqualFold(pat, value) // docker://alpine:3.20 or ./.github/actions/foo
 }
 
 // someRuleRuns reports whether one of the rules of the entry could have reported anything in this run:
 // an entry for a rule that is off, or for an online rule while the online checks are off, is not unused.
-func (ig *ConfigIgnore) someRuleRuns(cfg *Config, online bool) bool {
+func (ig *ConfigIgnore) someRuleRuns(cfg *Config, online bool, skipped map[string]bool) bool {
 	for _, id := range ig.Rules {
-		if cfg.RuleRuns(id, online) {
+		if cfg.RuleRuns(id, online) && !skipped[id] {
 			return true
 		}
 	}
@@ -307,6 +324,9 @@ type stepRange struct {
 	id, name   string
 	uses       string
 	dead       bool // the step never runs: its "if:" is the literal false
+	// parent is the index in the steps of the job of the "parallel" step this step is in, or -1. The range of
+	// such a step lies inside the range of its parent.
+	parent int
 }
 
 // lastStepEnd returns the 1-based last line of the step item which starts at the 0-based line i, for the
@@ -356,37 +376,46 @@ func newScopeIndex(w *Workflow, src []byte) *scopeIndex {
 		if job.WorkflowCall != nil && job.WorkflowCall.Uses != nil {
 			jr.uses = job.WorkflowCall.Uses.Value
 		}
-		for i, step := range job.Steps {
-			if step == nil || step.Pos == nil || step.Pos.Line < 1 || step.Pos.Line > len(lines) {
-				continue
-			}
-			sr := stepRange{start: step.Pos.Line, end: min(jr.end, lastStepEnd(lines, step.Pos.Line-1))}
-			// A step ends where the next one starts. The item of the next step may begin on the line
-			// before its first key ("-" alone), which is not part of this step.
-			for _, next := range job.Steps[i+1:] {
-				if next != nil && next.Pos != nil && next.Pos.Line > step.Pos.Line {
-					sr.end = next.Pos.Line - 1
-					if sr.end > sr.start && strings.TrimSpace(lines[sr.end-1]) == "-" {
-						sr.end--
+		// The steps of a "parallel" group are steps of their own: an ignore for `uses:` or `step:` must find
+		// them. Their ranges lie inside the range of the group step (see scopeAt).
+		var addSteps func(steps []*Step, limit, parent int, parentDead bool)
+		addSteps = func(steps []*Step, limit, parent int, parentDead bool) {
+			for i, step := range steps {
+				if step == nil || step.Pos == nil || step.Pos.Line < 1 || step.Pos.Line > len(lines) {
+					continue
+				}
+				sr := stepRange{start: step.Pos.Line, end: min(limit, lastStepEnd(lines, step.Pos.Line-1)), parent: parent}
+				// A step ends where the next one starts. The item of the next step may begin on the line
+				// before its first key ("-" alone), which is not part of this step.
+				for _, next := range steps[i+1:] {
+					if next != nil && next.Pos != nil && next.Pos.Line > step.Pos.Line {
+						sr.end = next.Pos.Line - 1
+						if sr.end > sr.start && strings.TrimSpace(lines[sr.end-1]) == "-" {
+							sr.end--
+						}
+						break
 					}
-					break
+				}
+				if sr.end < sr.start {
+					sr.end = sr.start
+				}
+				sr.dead = parentDead || isStaticallyFalse(step.If)
+				if step.ID != nil {
+					sr.id = step.ID.Value
+				}
+				if step.Name != nil {
+					sr.name = step.Name.Value
+				}
+				if a, ok := step.Exec.(*ExecAction); ok && a != nil && a.Uses != nil {
+					sr.uses = a.Uses.Value
+				}
+				jr.steps = append(jr.steps, sr)
+				if g, ok := step.Exec.(*ExecParallel); ok && g != nil && parent < 0 {
+					addSteps(g.Steps, sr.end, len(jr.steps)-1, sr.dead)
 				}
 			}
-			if sr.end < sr.start {
-				sr.end = sr.start
-			}
-			sr.dead = isStaticallyFalse(step.If)
-			if step.ID != nil {
-				sr.id = step.ID.Value
-			}
-			if step.Name != nil {
-				sr.name = step.Name.Value
-			}
-			if a, ok := step.Exec.(*ExecAction); ok && a != nil && a.Uses != nil {
-				sr.uses = a.Uses.Value
-			}
-			jr.steps = append(jr.steps, sr)
 		}
+		addSteps(job.Steps, jr.end, -1, false)
 		jr.ordered = rangesOrdered(len(jr.steps), func(i int) (int, int) { return jr.steps[i].start, jr.steps[i].end })
 		idx.jobs = append(idx.jobs, jr)
 	}
@@ -431,6 +460,20 @@ func findRange(n int, ordered bool, at func(i int) (start, end int), line int) [
 	return found
 }
 
+// innermostSteps returns the steps which contain the line, without the "parallel" steps whose children
+// contain it as well: the step of a group is more precise than the group.
+func (j *jobRange) innermostSteps(line int) []int {
+	var in []int
+	for i, st := range j.steps {
+		if st.start <= line && line <= st.end {
+			in = append(in, i)
+		}
+	}
+	return slices.DeleteFunc(in, func(i int) bool {
+		return slices.ContainsFunc(in, func(k int) bool { return j.steps[k].parent == i })
+	})
+}
+
 // scopeAt returns the scope of a line.
 func (idx *scopeIndex) scopeAt(line int) ignoreScope {
 	var sc ignoreScope
@@ -445,6 +488,9 @@ func (idx *scopeIndex) scopeAt(line int) ignoreScope {
 	sc.job = j.id
 	sc.uses = j.uses
 	steps := findRange(len(j.steps), j.ordered, func(i int) (int, int) { return j.steps[i].start, j.steps[i].end }, line)
+	if len(steps) > 1 {
+		steps = j.innermostSteps(line)
+	}
 	switch len(steps) {
 	case 0:
 	case 1:
@@ -464,7 +510,7 @@ func (ig *ConfigIgnore) matches(id string, sc ignoreScope, path, rel string) boo
 	if !ig.hasRule(id) || !ig.matchFile(path, rel) {
 		return false
 	}
-	if ig.Job != "" && ig.Job != sc.job {
+	if ig.Job != "" && !strings.EqualFold(ig.Job, sc.job) { // job IDs are case-insensitive, as in "needs"
 		return false
 	}
 	if ig.Step != "" && !(sc.hasStep && (ig.Step == sc.stepID || ig.Step == sc.stepName)) {
@@ -478,6 +524,8 @@ func (ig *ConfigIgnore) matches(id string, sc ignoreScope, path, rel string) boo
 type ignoreContext struct {
 	project *Project
 	scopes  *scopeIndex
+	// skipped are the rules which could not be created for the file (see RuleEnv.skipped)
+	skipped map[string]bool
 }
 
 // ignoreRun records, for one run of the linter, which configuration ignores suppressed something and
@@ -492,6 +540,7 @@ type ignoreRunConfig struct {
 	project *Project
 	files   map[string]bool // absolute paths linted with this config
 	used    map[*ConfigIgnore]bool
+	skipped map[string]bool // rules which could not be created for a file (their external command is missing)
 }
 
 func (r *ignoreRun) config(cfg *Config) *ignoreRunConfig {
@@ -507,7 +556,7 @@ func (r *ignoreRun) config(cfg *Config) *ignoreRunConfig {
 }
 
 // track notes that a file is linted with the config, so that its ignores are reported at the end.
-func (l *Linter) trackIgnoreConfig(cfg *Config, project *Project, path string) {
+func (l *Linter) trackIgnoreConfig(cfg *Config, project *Project, path string, skipped map[string]bool) {
 	if cfg == nil || len(cfg.Ignores) == 0 {
 		return
 	}
@@ -519,6 +568,12 @@ func (l *Linter) trackIgnoreConfig(cfg *Config, project *Project, path string) {
 	}
 	if path != "" && path != "<stdin>" {
 		rc.files[l.absFilePath(path)] = true
+	}
+	for id := range skipped {
+		if rc.skipped == nil {
+			rc.skipped = map[string]bool{}
+		}
+		rc.skipped[id] = true
 	}
 }
 
@@ -614,29 +669,34 @@ func (l *Linter) finishIgnoreRun(results []fileResult) []fileResult {
 		covered := rc.coveredFiles(l)
 		for i := range cfg.Ignores {
 			ig := &cfg.Ignores[i]
-			var e *Error
-			upcoming := false
-			switch {
-			case ig.expired(now):
-				e = ig.errorAt("expired-ignore", fmt.Sprintf("the ignore for %s expired on %s and no longer suppresses anything. fix the findings, or renew it with a new date in \"expires\"%s", describeIgnore(ig), ig.Expires, ignoreReason(ig)))
-			case !ig.expires.IsZero() && ig.expires.Sub(today) <= ignoreExpiryWarning:
+			type found struct {
+				e        *Error
+				upcoming bool
+			}
+			var fs []found
+			expired := ig.expired(now)
+			if expired {
+				fs = append(fs, found{ig.errorAt("expired-ignore", fmt.Sprintf("the ignore for %s expired on %s and no longer suppresses anything. fix the findings, or renew it with a new date in \"expires\"%s", describeIgnore(ig), ig.Expires, ignoreReason(ig))), false})
+			} else if !ig.expires.IsZero() && ig.expires.Sub(today) <= ignoreExpiryWarning {
 				days := int(ig.expires.Sub(today) / (24 * time.Hour))
-				e = ig.errorAt("expired-ignore", fmt.Sprintf("the ignore for %s expires on %s (in %d days)%s", describeIgnore(ig), ig.Expires, days, ignoreReason(ig)))
-				upcoming = true
-			case !rc.used[ig] && ig.someRuleRuns(cfg, l.online.enabled || (!l.online.off && cfg.Online)) && rc.judgeUnused(ig, covered):
-				e = ig.errorAt("unused-ignore", fmt.Sprintf("the ignore for %s did not suppress any finding. remove it from \"ignores\"%s", describeIgnore(ig), ignoreReason(ig)))
-			default:
-				continue
+				fs = append(fs, found{ig.errorAt("expired-ignore", fmt.Sprintf("the ignore for %s expires on %s (in %d days)%s", describeIgnore(ig), ig.Expires, days, ignoreReason(ig))), true})
 			}
-			level := cfg.RuleLevel(e.ID)
-			if level == SeverityOff {
-				continue
+			// An entry which is about to expire can be unused as well: the warning must not hide it. An
+			// expired one suppresses nothing by definition, so only the expiry is reported.
+			if !expired && !rc.used[ig] && ig.someRuleRuns(cfg, l.onlineOn(cfg), rc.skipped) && rc.judgeUnused(ig, covered) {
+				fs = append(fs, found{ig.errorAt("unused-ignore", fmt.Sprintf("the ignore for %s did not suppress any finding. remove it from \"ignores\"%s", describeIgnore(ig), ignoreReason(ig))), false})
 			}
-			e.Severity = level
-			if upcoming {
-				e.Severity = min(level, SeverityInfo)
+			for _, f := range fs {
+				level := cfg.RuleLevel(f.e.ID)
+				if level == SeverityOff {
+					continue
+				}
+				f.e.Severity = level
+				if f.upcoming {
+					f.e.Severity = min(level, SeverityInfo)
+				}
+				add(ig.Path, f.e)
 			}
-			add(ig.Path, e)
 		}
 	}
 	sort.Strings(paths)
@@ -658,6 +718,7 @@ func (l *Linter) finishIgnoreRun(results []fileResult) []fileResult {
 			e.Filepath = display
 			e.fillRegion(lines)
 		}
+		errs = l.filterErrors(errs, nil) // --ignore applies to these findings like to any other
 		if l.minSeverity > SeverityInfo {
 			kept := errs[:0]
 			for _, e := range errs {

@@ -220,10 +220,10 @@ func (e *inlineIgnoreEntry) matchesZizmor(err *Error) bool {
 
 // zizmorEntryActive returns whether a zizmor ignore could suppress anything with the configuration:
 // one of the diagnostics it stands for must be enabled.
-func zizmorEntryActive(e *inlineIgnoreEntry, cfg *Config, online bool) bool {
+func zizmorEntryActive(e *inlineIgnoreEntry, cfg *Config, online bool, skipped map[string]bool) bool {
 	for _, t := range e.targets {
 		// An online rule cannot report anything while the online checks are off
-		if cfg.RuleRuns(t.ID, online) {
+		if cfg.RuleRuns(t.ID, online) && !skipped[t.ID] {
 			return true
 		}
 	}

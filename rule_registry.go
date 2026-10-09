@@ -253,9 +253,12 @@ type RuleEnv struct {
 	config                 *Config
 	shellcheck             string
 	pyflakes               string
-	proc                   *concurrentProcess
-	online                 *onlineSession // nil unless the online checks are on
-	action                 bool           // the file is the metadata of an action (action.yml), see actionRuleScope
+	// skipped holds the names of the rules whose factory could not create them (the external command is
+	// missing). Such a rule did not run, so an ignore for it is not unused.
+	skipped map[string]bool
+	proc    *concurrentProcess
+	online  *onlineSession // nil unless the online checks are on
+	action  bool           // the file is the metadata of an action (action.yml), see actionRuleScope
 
 	log  func(args ...interface{})
 	name string // the factory being run
@@ -270,6 +273,10 @@ func (e *RuleEnv) Source() []byte {
 // Skip reports with the debug log that the rule being created is disabled for the reason. A factory
 // calls it and returns nil when the rule cannot be created (e.g. an external command is missing).
 func (e *RuleEnv) Skip(reason string) {
+	if e.skipped == nil {
+		e.skipped = map[string]bool{}
+	}
+	e.skipped[e.name] = true
 	if e.log != nil {
 		e.log("Rule \"" + e.name + "\" was disabled: " + reason)
 	}
