@@ -1,0 +1,225 @@
+name: Release-plz
+
+on:
+  push:
+    branches:
+      - main
+
+permissions: {}
+
+env:
+  MBX_DISABLE: "1"
+
+jobs:
+  release-plz-release:
+    name: Release-plz release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      tag: ${{ steps.release-plz.outputs.releases && fromJSON(steps.release-plz.outputs.releases)[0].tag || '' }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.RELEASE_PLZ_TOKEN }}
+          persist-credentials: false
+      - name: Run release-plz
+        id: release-plz
+        uses: release-plz/action@2eb1d8bcb770b4c48ccfaad919734b38b51958c9 # v0.5.131
+        with:
+          command: release
+        env:
+          GITHUB_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN }}
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+      - name: Fetch new tags
+        if: steps.release-plz.outputs.releases_created == 'true'
+        run: git fetch --tags
+      - name: Fix draft release tags
+        if: steps.release-plz.outputs.releases_created == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN }}
+          STEPS_RELEASE_PLZ_OUTPUTS_RELEASES: ${{ steps.release-plz.outputs.releases }}
+        run: |
+          # Draft releases created before the tag exists get an "untagged-*" tag_name.
+          # Patch each draft release to use the correct tag.
+          # Retry because the GitHub API may not immediately list the new release.
+          for tag in $(echo "${STEPS_RELEASE_PLZ_OUTPUTS_RELEASES}" | jq -r '.[].tag'); do
+            echo "Looking for untagged draft release to fix for tag: $tag"
+            release_id=""
+            for attempt in $(seq 1 10); do
+              release_id=$(gh api repos/${{ github.repository }}/releases \
+                --jq ".[] | select(.draft and (.tag_name | startswith(\"untagged-\"))) | select(.name | contains(\"${tag}\")) | .id" \
+                | head -1) || true
+              if [ -n "$release_id" ]; then
+                break
+              fi
+              echo "  Attempt $attempt/10: untagged draft not found yet, retrying in 5s..."
+              sleep 5
+            done
+            if [ -n "$release_id" ]; then
+              echo "Fixing draft release $release_id: setting tag_name to $tag"
+              gh api repos/${{ github.repository }}/releases/$release_id --method PATCH --field tag_name="$tag"
+            else
+              echo "::warning::No untagged draft release found for $tag after 10 attempts"
+            fi
+          done
+  upload-assets:
+    name: Upload assets
+    needs: release-plz-release
+    if: ${{ needs.release-plz-release.outputs.tag != '' }}
+    permissions:
+      contents: write
+      # A called workflow's token can only be narrower than its caller's, so
+      # the packslip's signing and attestation permissions are granted here.
+      id-token: write
+      attestations: write
+    uses: ./.github/workflows/release.yml
+    with:
+      tag: ${{ needs.release-plz-release.outputs.tag }}
+    secrets:
+      CERTIFICATES_P12: ${{ secrets.CERTIFICATES_P12 }}
+      CERTIFICATES_P12_PASS: ${{ secrets.CERTIFICATES_P12_PASS }}
+      APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
+      APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+      APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
+
+  publish-release:
+    name: Publish release
+    needs: [release-plz-release, upload-assets, enhance-release]
+    if: ${{ needs.release-plz-release.outputs.tag != '' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Publish GitHub release
+        env:
+          GITHUB_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN }}
+          NEEDS_RELEASE_PLZ_RELEASE_OUTPUTS_TAG: ${{ needs.release-plz-release.outputs.tag }}
+        run: gh release edit "${NEEDS_RELEASE_PLZ_RELEASE_OUTPUTS_TAG}" --repo jdx/communique --draft=false
+
+  enhance-release:
+    name: Enhance release notes
+    needs: release-plz-release
+    if: ${{ needs.release-plz-release.outputs.tag != '' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: refs/tags/${{ needs.release-plz-release.outputs.tag }}
+          persist-credentials: false
+      - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2 # zizmor: ignore[cache-poisoning]
+        with:
+          shared-key: ci-rust
+          save-if: false
+      - name: Enhance GitHub release with communique
+        env:
+          GITHUB_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          NEEDS_RELEASE_PLZ_RELEASE_OUTPUTS_TAG: ${{ needs.release-plz-release.outputs.tag }}
+        run: |
+          cargo build
+          ./target/debug/communique generate "${NEEDS_RELEASE_PLZ_RELEASE_OUTPUTS_TAG}" --github-release
+      - name: Append jdx.dev sponsor blurb
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN }}
+          TAG: ${{ needs.release-plz-release.outputs.tag }}
+        run: |
+          gh release view "$TAG" --json body --jq .body \
+            | perl -0pe 's/\n*##\s+💚?\s*Sponsor communique\b.*\z//s' \
+            > /tmp/release-notes.md
+
+          cat <<'EOF' >> /tmp/release-notes.md
+
+          ## 💚 Sponsor communique
+
+          communique is built and maintained by [@jdx](https://github.com/jdx), an open source developer at [**entire.io**](https://entire.io/), the title sponsor of his open source work.
+
+          If communique drafts your release notes or changelogs, please consider becoming an [individual or company sponsor](https://jdx.dev/sponsors.html). Your support funds ongoing development and helps keep communique fast, free, and independent.
+          EOF
+
+          gh release edit "$TAG" --notes-file /tmp/release-notes.md
+
+  release-plz-pr:
+    name: Release-plz PR
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    concurrency:
+      group: release-plz-${{ github.ref }}
+      cancel-in-progress: false
+    steps:
+      # release-plz-pr needs persisted credentials so the later
+      # `git push --force-with-lease` can authenticate.
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # zizmor: ignore[artipacked] v6
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.RELEASE_PLZ_TOKEN }}
+      - name: Run release-plz
+        id: release-plz
+        uses: release-plz/action@2eb1d8bcb770b4c48ccfaad919734b38b51958c9 # v0.5.131
+        with:
+          command: release-pr
+        env:
+          GITHUB_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN }}
+      # mise is set up only after release-plz has run. mise.toml wraps `cargo`
+      # with mbx, and release-plz runs `cargo package` in temporary checkouts
+      # of older commits and of the published crate, each carrying its own
+      # mise.toml. Whenever one of those pins a mr-boxington version that is
+      # not installed on the runner, mise cannot exec mbx and release-plz
+      # fails. release-plz itself only needs rustup's cargo.
+      - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        if: steps.release-plz.outputs.prs_created == 'true'
+        with:
+          cache: false
+      - name: Update release PR
+        if: steps.release-plz.outputs.prs_created == 'true'
+        continue-on-error: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          STEPS_RELEASE_PLZ_OUTPUTS_PR: ${{ steps.release-plz.outputs.pr }}
+        run: |
+          PR_NUMBER=$(echo "${STEPS_RELEASE_PLZ_OUTPUTS_PR}" | jq -r '.number')
+          gh pr checkout "$PR_NUMBER"
+
+          # Build, regenerate usage spec + docs, and fix linting in parallel
+          mise run render ::: lint-fix
+          COMMUNIQUE="$(pwd)/target/debug/communique"
+
+          VERSION=$(cargo metadata --format-version=1 --no-deps | jq -r '.packages[0].version')
+          TAG="v${VERSION}"
+
+          # Generate release notes and update CHANGELOG.md in one pass
+          FULL_NOTES=$($COMMUNIQUE generate "$TAG" --changelog)
+
+          # Update PR title and body with full release notes
+          PR_TITLE="chore(release): $(echo "$FULL_NOTES" | head -1 | sed 's/^# //')"
+          PR_BODY=$(echo "$FULL_NOTES" | tail -n +3)
+          gh pr edit "$PR_NUMBER" --title "$PR_TITLE" --body "$PR_BODY"
+
+          # Squash all branch commits into one and push
+          git add -u
+          MERGE_BASE=$(git merge-base HEAD origin/main)
+          git reset --soft "$MERGE_BASE"
+          git commit -m "chore: release ${TAG}"
+          git push --force-with-lease
+
+  # The release index at https://communique.jdx.dev/.well-known/packslip.json,
+  # rebuilt once the release is public.
+  list:
+    needs: [publish-release]
+    permissions:
+      contents: read
+      id-token: write
+    secrets:
+      CLOUDFLARE_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_ACCESS_KEY_ID }}
+      CLOUDFLARE_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_SECRET_ACCESS_KEY }}
+    uses: ./.github/workflows/packslip-releases.yml

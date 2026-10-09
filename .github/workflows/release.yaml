@@ -9,6 +9,7 @@ jobs:
     # macOS runner: the darwin binaries are signed and notarized with Apple's tooling. Go cross-compiles every
     # other target from here too.
     runs-on: macos-latest
+    timeout-minutes: 30
     permissions:
       contents: write
       id-token: write
@@ -156,6 +157,7 @@ jobs:
           git push
   docker:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: read
       packages: write
@@ -192,6 +194,7 @@ jobs:
     name: Enhance release notes
     needs: binaries
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: write
     env:

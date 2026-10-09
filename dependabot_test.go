@@ -291,7 +291,7 @@ func TestDependabotRuleIsNotCalledForWorkflow(t *testing.T) {
 	}
 	l.defaultConfig = &Config{}
 	// A workflow named dependabot.yml in the workflows directory is a workflow
-	src := "on: push\njobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo hi\n"
+	src := "on: push\njobs:\n  test:\n    runs-on: ubuntu-latest\n    timeout-minutes: 5\n    steps:\n      - run: echo hi\n"
 	errs, err := l.Lint(".github/workflows/dependabot.yml", []byte(src), nil)
 	if err != nil {
 		t.Fatal(err)
@@ -353,7 +353,7 @@ func makeDependabotProject(t *testing.T, dependabot map[string]string, config st
 			t.Fatal(err)
 		}
 	}
-	write(".github/workflows/ci.yaml", "on: push\njobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo hi\n")
+	write(".github/workflows/ci.yaml", "on: push\njobs:\n  test:\n    runs-on: ubuntu-latest\n    timeout-minutes: 5\n    steps:\n      - run: echo hi\n")
 	for name, content := range dependabot {
 		write(".github/"+name, content)
 	}

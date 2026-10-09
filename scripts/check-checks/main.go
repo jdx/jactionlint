@@ -15,6 +15,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/jdx/jactionlint/v2"
+	"github.com/jdx/jactionlint/v2/internal/exampleconfig"
 )
 
 // Actionlint lints the example. The examples in the sections whose headings start with "Dependabot" are
@@ -22,12 +23,18 @@ import (
 func Actionlint(src []byte, heading string) ([]byte, error) {
 	var out bytes.Buffer
 
+	cfg, err := jactionlint.ParseConfig([]byte(exampleconfig.YAML))
+	if err != nil {
+		return nil, err
+	}
+
 	name := "test.yaml"
 	if strings.HasPrefix(heading, "Dependabot") {
 		name = ".github/dependabot.yml"
 	}
 
 	opts := &jactionlint.LinterOptions{
+		Config:        cfg,
 		StdinFileName: name,
 		Shellcheck:    "shellcheck",
 		Pyflakes:      "pyflakes",

@@ -21,7 +21,7 @@ List of checks:
 - [Script injection by potentially untrusted inputs](#untrusted-inputs)
 - [Job dependencies validation](#check-job-deps)
 - [Parallel steps](#check-parallel-step-refs)
-- [Timeout minutes of jobs (opt-in)](#check-timeout-minutes)
+- [Timeout minutes of jobs](#check-timeout-minutes)
 - [Workflow names of `workflow_run` event](#check-workflow-run-names)
 - [Matrix values](#check-matrix-values)
 - [Webhook events validation](#check-webhook-events)
@@ -1377,7 +1377,7 @@ test.yaml:11:17: "serverr" is not the ID of a preceding background step. "wait" 
 [Playground](https://jactionlint.jdx.dev/#eNpczssNAjEMBND7VjG3nNKA26CCJGuxwOKs/KF+FD4R4mTJz6NxF8IRti3XXo0WwNl8TEBDLA+PGuKR9zLsReZ82PsKyJByZ8LJizqM9cH6IeCy0v9KQwjcto5kI5Km1NJuZ+0hK8E1eBb8RMYPlqa0Io33b4c+BwCanjvx)
 
 <a id="check-timeout-minutes"></a>
-## Timeout minutes of jobs (opt-in)
+## Timeout minutes of jobs
 
 Example input:
 
@@ -1410,8 +1410,9 @@ test.yaml:9:22: "timeout-minutes" is 120, which is greater than the maximum 60 m
 
 <!-- Skip playground link -->
 
-These are the rules `missing-timeout` (in the `strict` profile) and `timeout-too-long` (only when `max` is set). The output above
-is from the following `rules` section of the [configuration file](config.md):
+These are the rules `missing-timeout` (in the `default` profile) and `timeout-too-long` (only when `max` is set). The output above
+is from the following `rules` section of the [configuration file](config.md). `missing-timeout` is on without it; the line is
+there to show the default level:
 
 ```yaml
 rules:
@@ -1424,6 +1425,30 @@ rules:
   the default timeout of 360 minutes. Jobs calling a reusable workflow are not checked since they do not support it.
 - `timeout-too-long` reports jobs whose `timeout-minutes` is larger than the `max` option. It works without `missing-timeout`.
   Values given by expressions `${{ }}` are not checked.
+
+`missing-timeout` is enabled by default because a job without a timeout can run for six hours (and be billed for it) when a step
+hangs. Turn it off with `missing-timeout: off` in `rules`, or ignore one job with an
+[ignore comment](usage.md#ignore-some-errors) above it.
+
+#### Fixing missing timeouts
+
+jactionlint has no built-in number of minutes, because the right limit depends on your jobs. The finding tells you to set
+`timeout-minutes`, and `jactionlint -fix` adds it only when you configure the number with the `default-minutes` option:
+
+```yaml
+rules:
+  missing-timeout:
+    default-minutes: 15
+```
+
+Then `-fix` adds `timeout-minutes: 15` to every job which has none. It is a safe fix: a job which is cancelled after that time
+is the only way it can change a workflow, and one which really needs longer sets its own value. The line goes right after
+`runs-on:` (or after `name:`, or as the first key of the job when it has neither), with the indentation of the job's other keys
+and the line endings of the file. Without `default-minutes` the finding has no fix.
+
+When `timeout-too-long` has a `max` smaller than `default-minutes`, the fix uses `max` so the result stays clean. Jobs calling a
+reusable workflow are skipped since they do not support `timeout-minutes`. A job written in the flow style (`job: {runs-on: ...}`)
+or with a YAML anchor is still reported but has no fix: jactionlint does not guess where to put a key there.
 
 [timeout-minutes-doc]: https://docs.github.com/en/actions/writing-workflows/workflow-syntax-for-github-actions#jobsjob_idtimeout-minutes
 
@@ -2605,6 +2630,25 @@ When enabled, jactionlint reports every job that is not covered by `permissions:
 `permissions:` and the job has no `permissions:` of its own. Either of them is enough, and `permissions: {}` (no permissions)
 counts as explicit. Jobs which call reusable workflows (`uses:`) are checked in the same way because the caller limits the
 permissions of the callee. The error is reported at the job so that it is easy to see which jobs need a fix.
+
+#### Fixing missing permissions
+
+`jactionlint -fix` adds this to the workflow, right after the `on:` block:
+
+```yaml
+permissions:
+  contents: read
+```
+
+`contents: read` takes every other permission away from `GITHUB_TOKEN`, so it breaks a job which comments on a pull request,
+pushes a commit, publishes a package or a release and so on. jactionlint cannot see inside the actions and scripts a job runs, so
+the fix is only **safe** (applied by `-fix`) when the workflow gives no sign that the token is needed: every action of the jobs
+which have no `permissions:` is a well-known one that only reads the repository (`actions/checkout`, `actions/setup-*`,
+`actions/cache`, `actions/upload-artifact`, `jdx/mise-action` and a few more), the jobs do not call reusable workflows, and
+the text of the workflow does not mention `GITHUB_TOKEN`, `github.token`, `GH_TOKEN`, the `gh` command, `git push` or
+`api.github.com`. In every other case the fix is **unsafe** and `-fix=unsafe` applies it; review the result. A script file that the
+workflow runs and that pushes with the credentials left by `actions/checkout` is not visible, so check such a workflow before
+accepting the safe fix.
 
 <a id="check-excessive-permissions"></a>
 ## Excessive permissions (opt-in)

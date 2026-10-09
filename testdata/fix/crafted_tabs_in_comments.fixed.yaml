@@ -1,0 +1,38 @@
+# a comment	with a tab inside
+on:
+  push:	# trailing comment with a tab
+    branches: [main]	
+permissions:
+  contents: read
+jobs:
+  build:	# the key line has a tab before its comment
+    runs-on: ubuntu-latest	# so does runs-on
+    timeout-minutes: 30
+    # a comment	with a tab between the keys
+    steps:
+      - run: echo "# not a comment"
+      # tab	comment between the steps
+      - run: |
+          echo hello # not a comment either
+  second:
+    name: Second	
+    # comment with a tab	in it
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - run: echo second
+  tabs-in-a-script:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - run: |
+          cat > Makefile <<EOF
+          all:
+          	echo hi
+          EOF
+          make
+  tab-line-before-runs-on:
+    timeout-minutes: 30
+    steps:
+      - run: |
+          printf "a\tb"

@@ -17,6 +17,7 @@ jobs:
   go-generate:
     if: ${{ github.repository == 'jdx/jactionlint' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: write
       pull-requests: write

@@ -1,0 +1,67 @@
+name: entire-server-deploy-prod
+
+on:
+  workflow_call:
+    inputs:
+      runner_provider:
+        description: "Runner provider"
+        required: false
+        type: string
+        default: blacksmith
+
+concurrency:
+  group: entire-server-deploy-prod-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  # Setting the permissions to write is required in order to request an OpenID Connect JWT Token as described in https://docs.github.com/en/actions/concepts/security/openid-connect#adding-permissions-settings
+  id-token: write
+
+jobs:
+  deploy:
+    runs-on: ${{ inputs.runner_provider == 'github' && 'ubuntu-24.04' || 'blacksmith-4vcpu-ubuntu-2404' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - cluster: aws-us-east-2
+            var_name: AUTO_DEPLOY_AWS_US_EAST_2
+          - cluster: aws-eu-central-1
+            var_name: AUTO_DEPLOY_AWS_EU_CENTRAL_1
+          - cluster: aws-ap-southeast-2
+            var_name: AUTO_DEPLOY_AWS_AP_SOUTHEAST_2
+          - cluster: aws-ap-south-1
+            var_name: AUTO_DEPLOY_AWS_AP_SOUTH_1
+    steps:
+      - uses: actions/checkout@v6
+
+      # Prebuilt by release-build (goreleaser-nonprod-build.yml) earlier in the
+      # same run and reused across every prod cluster in this matrix.
+      - name: Download entire-deploy binary
+        uses: actions/download-artifact@v7
+        with:
+          name: entire-deploy-bin
+      - name: Make entire-deploy executable
+        run: chmod +x entire-deploy
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: arn:aws:iam::934711778961:role/github-actions-deploy
+          aws-region: us-east-2
+      - name: Deploy to ${{ matrix.cluster }}.entire.io
+        if: vars[matrix.var_name] != 'off'
+        run: |
+          ./entire-deploy update-binaries \
+            --config deploy/${{ matrix.cluster }}.yaml \
+            --commit "${{ github.sha }}" \
+            --log /tmp/deploy-${{ matrix.cluster }}.jsonl
+
+      - name: Upload deploy log
+        if: always() && vars[matrix.var_name] != 'off'
+        uses: actions/upload-artifact@v7
+        with:
+          name: deploy-log-${{ matrix.cluster }}
+          path: /tmp/deploy-${{ matrix.cluster }}.jsonl
+          if-no-files-found: ignore

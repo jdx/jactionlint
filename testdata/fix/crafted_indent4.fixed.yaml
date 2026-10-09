@@ -1,0 +1,18 @@
+name: Four spaces
+on:
+    push:
+        branches:
+            - main
+permissions:
+    contents: read
+jobs:
+    build:
+        runs-on: ubuntu-latest
+        timeout-minutes: 30
+        steps:
+            - run: echo one
+    test:
+        runs-on: ubuntu-latest
+        timeout-minutes: 30
+        steps:
+            - run: echo two

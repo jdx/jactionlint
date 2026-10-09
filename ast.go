@@ -1056,6 +1056,9 @@ type Workflow struct {
 	// Comments holds the YAML comments of the source file. Look a node up by the line of its Pos.
 	// It is never nil for a workflow returned by Parse.
 	Comments *CommentIndex
+	// Source is the content of the source file. Rules which offer a fix (Error.Fix) read it to turn
+	// positions into byte offsets. It is never nil for a workflow returned by Parse. Do not modify it.
+	Source []byte
 }
 
 // FindWorkflowCallEvent returns workflow_call event node if exists

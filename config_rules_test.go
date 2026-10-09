@@ -413,7 +413,7 @@ func TestLinterReportsDeprecatedConfigKeysOnce(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	src := []byte("on: push\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo\n")
+	src := []byte("on: push\njobs:\n  j:\n    runs-on: ubuntu-latest\n    timeout-minutes: 5\n    steps:\n      - run: echo\n")
 	for i := 0; i < 3; i++ {
 		errs, err := l.Lint("test.yaml", src, nil)
 		if err != nil {

@@ -25,7 +25,7 @@ func lintFormat(t *testing.T, format string, opts LinterOptions, cfg *Config, pa
 	if cfg == nil {
 		cfg = &Config{}
 	}
-	l.defaultConfig = cfg
+	l.defaultConfig = withoutMissingTimeout(cfg)
 	errs, err := l.LintFile(path, &Project{root: filepath.Dir(path)})
 	if err != nil {
 		t.Fatal(err)
@@ -264,7 +264,7 @@ func lintWithFixes(t *testing.T, src string, format string, fixes func(s *Step) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	l.defaultConfig = &Config{}
+	l.defaultConfig = withoutMissingTimeout(&Config{})
 	errs, err := l.Lint("wf.yaml", []byte(src), nil)
 	if err != nil {
 		t.Fatal(err)

@@ -7,6 +7,7 @@ import (
 	"syscall/js"
 
 	"github.com/jdx/jactionlint/v2"
+	"github.com/jdx/jactionlint/v2/internal/exampleconfig"
 )
 
 var (
@@ -28,7 +29,13 @@ func encodeErrorAsMap(err *jactionlint.Error) map[string]interface{} {
 }
 
 func lint(source string) interface{} {
-	opts := jactionlint.LinterOptions{}
+	// The same configuration as the one the examples of docs/checks.md are linted with
+	cfg, err := jactionlint.ParseConfig([]byte(exampleconfig.YAML))
+	if err != nil {
+		fail(err, "reading the configuration")
+		return nil
+	}
+	opts := jactionlint.LinterOptions{Config: cfg}
 	linter, err := jactionlint.NewLinter(io.Discard, &opts)
 	if err != nil {
 		fail(err, "creating linter instance")

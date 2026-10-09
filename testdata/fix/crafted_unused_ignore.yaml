@@ -1,0 +1,19 @@
+on: push
+permissions: {}
+jobs:
+  a:
+    # jactionlint ignore=undefined-property
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - run: echo a
+      # jactionlint ignore=template-injection,undefined-variable,no-such-id
+      - run: echo ${{ github.event.issue.title }}
+      # jactionlint ignore=expression-type, undefined-variable
+      # jactionlint ignore=missing-timeout
+      - run: echo b
+      # actionlint ignore=some message that matches nothing
+      - run: echo c
+      # jactionlint ignore=template-injection
+      - run: echo d
+    # jactionlint ignore=orphan-at-the-end
