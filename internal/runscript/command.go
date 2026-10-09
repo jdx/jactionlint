@@ -47,7 +47,8 @@ type Command struct {
 	// a `{ }` group or `( )` subshell in such a place.
 	Tested bool
 	// AndOnly is whether Tested is only because the command is the left operand of `&&`. Its failure is then the
-	// status of the list, which a group or a subshell passes on.
+	// status of the list, which a group or a subshell passes on. It is cleared for a command in a pipeline stage when
+	// a later statement of the same group overwrites that status.
 	AndOnly bool
 	// LoopCond is whether the command is in the condition of `while` or `until`.
 	LoopCond bool
