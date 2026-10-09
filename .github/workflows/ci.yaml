@@ -32,7 +32,7 @@ jobs:
       - name: Dog fooding 🐶
         run: |
           echo "::add-matcher::.github/jactionlint-matcher.json"
-          ./jactionlint -color
+          ./jactionlint -profile correctness -color
   wasm:
     name: Wasm
     runs-on: ubuntu-latest
