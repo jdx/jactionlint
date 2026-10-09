@@ -532,7 +532,7 @@ func TestActionBelowWorkflowsDirectory(t *testing.T) {
 	if _, err := l.LintRepository(root); err != nil {
 		t.Fatal(err)
 	}
-	got := out.String()
+	got := filepath.ToSlash(out.String())
 	if !strings.Contains(got, "hassfest/action.yml:6:21") || !strings.Contains(got, "[template-injection]") {
 		t.Errorf("the action in a subdirectory of the root is linted: %s", got)
 	}
