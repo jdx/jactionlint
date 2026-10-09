@@ -327,6 +327,9 @@ func (g *callGraph) addStepEdges(from graphNode, steps []*Step, queue *[]graphNo
 func (g *callGraph) loadAction(n graphNode, queue *[]graphNode) {
 	for _, name := range actionFileNames {
 		rel := path.Join(n.path, name)
+		if !IsActionPath(rel) {
+			continue // a file directly in the workflows directory is a workflow, which is linted as one
+		}
 		src, err := os.ReadFile(filepath.Join(g.root, filepath.FromSlash(rel)))
 		if err != nil {
 			continue
@@ -369,7 +372,8 @@ func standardActionDirs(root string) []string {
 			}
 			return nil
 		}
-		if n := d.Name(); n == "action.yml" || n == "action.yaml" {
+		// An action.yml directly in .github/workflows is a workflow for GitHub, which IsActionPath knows
+		if n := d.Name(); (n == "action.yml" || n == "action.yaml") && IsActionPath(filepath.ToSlash(p)) {
 			if rel, err := filepath.Rel(root, filepath.Dir(p)); err == nil && !slices.Contains(dirs, filepath.ToSlash(rel)) {
 				dirs = append(dirs, filepath.ToSlash(rel))
 			}

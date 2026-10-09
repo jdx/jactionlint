@@ -159,3 +159,32 @@ func TestCallGraphIsBuiltOncePerRun(t *testing.T) {
 		t.Error("the call graph must be cached by the linter")
 	}
 }
+
+// A file named action.yml directly in .github/workflows is a workflow for GitHub. It is found once, as a
+// workflow, and not again as the metadata of an action.
+func TestWorkflowNamedActionYMLIsNotAnAction(t *testing.T) {
+	root := t.TempDir()
+	writeTree(t, root, map[string]string{
+		".git/HEAD":                        "ref: refs/heads/main\n",
+		".github/workflows/action.yml":     "on: push\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo hi\n",
+		".github/workflows/sub/action.yml": "runs:\n  using: composite\n  steps: []\n",
+	})
+	l, err := NewLinter(io.Discard, &LinterOptions{WorkingDir: root})
+	if err != nil {
+		t.Fatal(err)
+	}
+	files, _, err := l.repositoryFiles(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	seen := map[string]int{}
+	for _, f := range files {
+		seen[filepath.ToSlash(strings.TrimPrefix(f, root))]++
+	}
+	if n := seen["/.github/workflows/action.yml"]; n != 1 {
+		t.Errorf("the workflow is listed %d times: %v", n, files)
+	}
+	if n := seen["/.github/workflows/sub/action.yml"]; n != 1 {
+		t.Errorf("the action below the workflows directory is listed %d times: %v", n, files)
+	}
+}

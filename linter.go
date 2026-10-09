@@ -924,13 +924,6 @@ func (l *Linter) finishCheck(path string, content []byte, all []*Error, cfg *Con
 		all = dropUnreachable(all, ic.scopes)
 	}
 	all = l.annotateErrors(all, content, cfg)
-	if isGeneratedSource(content) {
-		mode := GeneratedFilesSkipPolicy
-		if cfg != nil && cfg.GeneratedFiles != nil {
-			mode = *cfg.GeneratedFiles
-		}
-		all = dropForGeneratedFile(all, mode)
-	}
 
 	// The ignores of the config file are matched first, without removing anything, so that the inline
 	// ignores see every error as well and neither is reported as unused for covering the same error.
@@ -967,6 +960,15 @@ func (l *Linter) finishCheck(path string, content []byte, all []*Error, cfg *Con
 
 	all = l.filterErrors(all, cfg.PathConfigs(path))
 	all = append(all, l.annotateErrors(ignoreErrs, content, cfg)...)
+	// The findings which nobody can act on in a generated file are dropped last: an ignore comment for a dropped
+	// rule is not unused, and "skip" reports nothing, also nothing about the ignore comments.
+	if isGeneratedSource(content) {
+		mode := GeneratedFilesSkipPolicy
+		if cfg != nil && cfg.GeneratedFiles != nil {
+			mode = *cfg.GeneratedFiles
+		}
+		all = dropForGeneratedFile(all, mode)
+	}
 	if isWorkflow {
 		if sess, _ := l.onlineSession(cfg); sess != nil {
 			l.attachPinFixes(sess, content, all)
