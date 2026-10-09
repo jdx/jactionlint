@@ -46,6 +46,10 @@ type String struct {
 	// literal block. 0 means unknown (or not a literal block). When set, positions in the value
 	// can be mapped back to the source.
 	Indent int
+
+	// src is the text of the file the string was parsed from, which maps the offsets of Value to
+	// positions (see valueAt). It is nil for a string that was not parsed from a file.
+	src *scalarSource
 }
 
 // ContainsExpression checks if the given string contains a ${{ }} placeholder or not. This function

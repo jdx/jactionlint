@@ -319,11 +319,21 @@ func (e *Error) indicator(line string) (string, int) {
 	}
 
 	// Count the characters and the width of the non-space characters after '^' for the underline
+	// The region of the error is underlined when the rule gave it, so the text, the JSON and the SARIF
+	// output agree. Without one, it is the token which starts at the column. A region over several
+	// lines is underlined to the end of its first line.
+	limit := -1
+	switch {
+	case e.EndLine > e.Line:
+		line = strings.TrimRight(line, " \t")
+	case (e.EndLine == e.Line || e.EndLine == 0) && e.EndColumn > e.Column:
+		limit = e.EndColumn - e.Column
+	}
 	uw, chars := 0, 0
 	r := strings.NewReader(line[start:])
-	for {
+	for limit < 0 || chars < limit {
 		c, s, err := r.ReadRune()
-		if err != nil || s == 0 || c == ' ' || c == '\t' || c == '\n' || c == '\r' {
+		if err != nil || s == 0 || (limit < 0 && e.EndLine <= e.Line && (c == ' ' || c == '\t')) || c == '\n' || c == '\r' {
 			break
 		}
 		uw += runewidth.RuneWidth(c)
