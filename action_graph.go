@@ -325,23 +325,32 @@ func (g *callGraph) loadAction(n graphNode, queue *[]graphNode) {
 	}
 }
 
-// standardActionDirs lists the directories of the actions in the places GitHub repositories keep them:
-// the root and any directory under .github/actions.
+// skippedActionSearchDirs are the directories which the search for actions does not enter: dependencies and
+// test fixtures hold action.yml files which are not the actions of the repository.
+var skippedActionSearchDirs = map[string]bool{
+	".git": true, "node_modules": true, "vendor": true, "testdata": true, "fixtures": true, ".venv": true, "venv": true,
+	"target": true, "dist": true,
+}
+
+// standardActionDirs lists the directories of the actions of the repository: the root, any directory
+// under .github/actions and any other directory with an action.yml or action.yaml, such as the actions
+// of a repository that keeps several of them in its subdirectories (`hassfest/action.yml`), also below
+// ".github/workflows". Dependencies and test fixtures are skipped; an action in one of them is still
+// linted when a `uses:` refers to it or its file is given.
 func standardActionDirs(root string) []string {
 	var dirs []string
-	for _, name := range actionFileNames {
-		if s, err := os.Stat(filepath.Join(root, name)); err == nil && !s.IsDir() {
-			dirs = append(dirs, ".")
-			break
+	_ = filepath.WalkDir(root, func(p string, d os.DirEntry, err error) error {
+		if err != nil {
+			return nil
 		}
-	}
-	base := filepath.Join(root, ".github", "actions")
-	_ = filepath.WalkDir(base, func(p string, d os.DirEntry, err error) error {
-		if err != nil || d.IsDir() {
+		if d.IsDir() {
+			if p != root && skippedActionSearchDirs[d.Name()] {
+				return filepath.SkipDir
+			}
 			return nil
 		}
 		if n := d.Name(); n == "action.yml" || n == "action.yaml" {
-			if rel, err := filepath.Rel(root, filepath.Dir(p)); err == nil {
+			if rel, err := filepath.Rel(root, filepath.Dir(p)); err == nil && !slices.Contains(dirs, filepath.ToSlash(rel)) {
 				dirs = append(dirs, filepath.ToSlash(rel))
 			}
 		}

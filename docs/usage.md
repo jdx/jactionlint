@@ -7,7 +7,7 @@ This document describes how to use [jactionlint](https://github.com/jdx/jactionl
 
 With no argument, jactionlint finds all workflow files in the current repository and checks them. It checks the Dependabot
 configuration `.github/dependabot.yml` (or `.github/dependabot.yaml`) of the repository and its [composite actions](checks.md#check-composite-actions)
-(`action.yml` in the root, under `.github/actions`, and the directories which a local `uses: ./path` refers to) as well.
+(`action.yml` in the root, under `.github/actions`, in any other directory of the repository, and the directories which a local `uses: ./path` refers to) as well.
 
 ```sh
 jactionlint

@@ -7470,11 +7470,14 @@ A label in a matrix is reported but never fixed, because the same value may be c
 ## Composite actions
 
 jactionlint checks the metadata of actions (`action.yml` or `action.yaml`) together with the workflows. When the repository is
-linted without file arguments it checks the action in the root of the repository, every action under `.github/actions`, and every
-directory which a local `uses: ./path` of a workflow or of another action refers to. An action is also checked when its file is given
+linted without file arguments it checks every `action.yml` or `action.yaml` of the repository (the root, `.github/actions`, and any other
+directory, as in a repository that keeps several actions in `hassfest/` and `waitforjob/`; `.git`, `node_modules`, `vendor`, `testdata`,
+`fixtures`, `.venv`, `venv`, `target` and `dist` are not searched), and every directory which a local `uses: ./path` of a workflow
+or of another action refers to. An action is also checked when its file is given
 explicitly (`jactionlint .github/actions/setup/action.yml`, which is what the [hk][hk] step does for `.github/actions/**/action.y*ml`)
-or with `--stdin-filename`. The file is recognized by its name: `action.yml` and `action.yaml` are actions anywhere except under
-`.github/workflows`. Output formats, [ignore comments](usage.md#ignore-some-errors), `paths:` in [the configuration](config.md),
+or with `--stdin-filename`. The file is recognized by its name: `action.yml` and `action.yaml` are actions anywhere except directly in
+`.github/workflows`: GitHub loads only the files directly in that directory as workflows, so `.github/workflows/dir/action.yml` is the action of
+`uses: ./.github/workflows/dir`. Output formats, [ignore comments](usage.md#ignore-some-errors), `paths:` in [the configuration](config.md),
 SARIF and `--fix` work for them like for workflows.
 
 The `steps` of a composite action (`runs.using: composite`) are checked with the same rules as the steps of a workflow job, and

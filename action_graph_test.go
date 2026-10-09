@@ -130,6 +130,10 @@ func TestLinterDiscoversActions(t *testing.T) {
 		".github/actions/x/action.yml": "runs:\n  using: node20\n  main: a.js\n",
 		"tools/custom/action.yml":      "runs:\n  using: node20\n  main: a.js\n",
 		"vendor/other/action.yml":      "runs:\n  using: node20\n  main: a.js\n", // nothing refers to it
+		"node_modules/p/action.yml":    "runs:\n  using: node20\n  main: a.js\n",
+		// An action monorepo keeps its actions in directories of the root, and an action may sit below the workflows
+		"hassfest/action.yml":               "runs:\n  using: node20\n  main: a.js\n",
+		".github/workflows/dir/action.yaml": "runs:\n  using: node20\n  main: a.js\n",
 	})
 	p := &Project{root: root}
 	var rel []string
@@ -137,7 +141,7 @@ func TestLinterDiscoversActions(t *testing.T) {
 		r, _ := filepath.Rel(root, f)
 		rel = append(rel, filepath.ToSlash(r))
 	}
-	want := []string{".github/actions/x/action.yml", "action.yaml", "tools/custom/action.yml"}
+	want := []string{".github/actions/x/action.yml", ".github/workflows/dir/action.yaml", "action.yaml", "hassfest/action.yml", "tools/custom/action.yml"}
 	if diff := cmp.Diff(want, rel); diff != "" {
 		t.Error(diff)
 	}

@@ -1,6 +1,7 @@
 package jactionlint
 
 import (
+	"bytes"
 	"flag"
 	"io"
 	"io/fs"
@@ -367,7 +368,8 @@ func TestIsActionPath(t *testing.T) {
 		"/repo/some/dir/action.yml":            true,
 		".github/workflows/action.yml":         false,
 		"/repo/.github/workflows/action.yaml":  false,
-		".github/workflows/sub/action.yml":     false,
+		".github/workflows/sub/action.yml":     true,
+		".github/workflows/sub/ci.yml":         false,
 		"action.yml.bak":                       false,
 		"my-action.yml":                        false,
 		".github/workflows/ci.yml":             false,
@@ -506,5 +508,35 @@ func TestRepositoryWithOnlyAnAction(t *testing.T) {
 	}
 	if !found {
 		t.Errorf("the action of the root must be linted: %v", errs)
+	}
+}
+
+// A composite action may be kept below .github/workflows (GitHub loads only the files directly in it as workflows):
+// it is linted as an action, whether it is found by the repository mode or given.
+func TestActionBelowWorkflowsDirectory(t *testing.T) {
+	root := t.TempDir()
+	writeTree(t, root, map[string]string{
+		".github/workflows/ci.yml":         "name: ci\non: push\npermissions: {}\njobs:\n  a:\n    runs-on: ubuntu-latest\n    timeout-minutes: 1\n    steps:\n      - uses: ./.github/workflows/dir\n",
+		".github/workflows/dir/action.yml": "name: x\ndescription: d\nruns:\n  using: composite\n  steps:\n    - run: echo hi\n      shell: bash\n",
+		"hassfest/action.yml":              "name: x\ndescription: d\nruns:\n  using: composite\n  steps:\n    - run: echo ${{ github.event.issue.title }}\n      shell: bash\n",
+	})
+	if err := os.Mkdir(filepath.Join(root, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	l, err := NewLinter(&out, &LinterOptions{Format: FormatGCC})
+	if err != nil {
+		t.Fatal(err)
+	}
+	l.defaultConfig = mustParseConfig(t, "profile: correctness\nrules:\n  template-injection: error\n  local-action-checkout: off\n")
+	if _, err := l.LintRepository(root); err != nil {
+		t.Fatal(err)
+	}
+	got := out.String()
+	if !strings.Contains(got, "hassfest/action.yml:6:21") || !strings.Contains(got, "[template-injection]") {
+		t.Errorf("the action in a subdirectory of the root is linted: %s", got)
+	}
+	if strings.Contains(got, "workflows/dir/action.yml") || strings.Contains(got, "workflow-syntax") {
+		t.Errorf("the action below .github/workflows is no workflow: %s", got)
 	}
 }
