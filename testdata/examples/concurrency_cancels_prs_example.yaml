@@ -1,0 +1,10 @@
+on:
+  pull_request:
+concurrency:
+  group: ci
+  cancel-in-progress: true
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo test

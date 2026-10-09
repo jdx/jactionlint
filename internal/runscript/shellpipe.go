@@ -102,12 +102,25 @@ func readsStdin(c *Command) bool {
 	if c.HasFlag("-c") {
 		return false
 	}
-	for _, w := range c.Positional {
+	pos := c.Positional
+	if c.Name == "busybox" || c.Name == "toybox" {
+		// The first word is the applet: `busybox sh` is a shell, `busybox cat` is not
+		if len(pos) == 0 {
+			return false
+		}
+		switch pos[0].Value {
+		case "sh", "ash", "bash":
+			pos = pos[1:]
+		default:
+			return false
+		}
+	}
+	for _, w := range pos {
 		if w.Value == "-" {
 			return true
 		}
 	}
-	return len(c.Positional) == 0 || c.HasFlag("-s")
+	return len(pos) == 0 || c.HasFlag("-s")
 }
 
 func sortShellPipes(ps []*ShellPipe) {

@@ -65,16 +65,25 @@ func fixMissingPermissions(w *Workflow) *Fix {
 		return nil
 	}
 	line = end
+	// The new key goes at the indentation of the other keys of the root mapping
+	pad := strings.Repeat(" ", indent)
 	unit := strings.Repeat(" ", d.indentUnit())
 	return &Fix{
 		Description: "Add permissions: contents: read",
 		Unsafe:      !onlyReadsRepository(w),
-		Edits:       []TextEdit{d.insertAfterLine(line, "permissions:", unit+"contents: read")},
+		Edits:       []TextEdit{d.insertAfterLine(line, pad+"permissions:", pad+unit+"contents: read")},
 	}
 }
 
 // onlyReadsRepository reports whether the jobs which have no "permissions:" look like they work with
 // the "contents: read" permission. It is a heuristic and errs on the side of saying no.
+//
+// What it looks at: the text of the file for the token and the GitHub API (tokenUseRe); a job that calls a
+// reusable workflow; a job with container: or services:, whatever the image and the credentials, because
+// GitHub pulls an image of ghcr.io with the GITHUB_TOKEN without the file naming it and "contents: read"
+// removes "packages: read"; and every action, which has to be one of readOnlyActions. Not looked at:
+// "docker login" in a script uses the token by name (tokenUseRe sees it), and an action which reads
+// another repository takes a token input (named in the file).
 func onlyReadsRepository(w *Workflow) bool {
 	if tokenUseRe.Match(w.Source) {
 		return false
@@ -84,6 +93,11 @@ func onlyReadsRepository(w *Workflow) bool {
 			continue
 		}
 		if j.WorkflowCall != nil {
+			return false
+		}
+		if j.Container != nil || j.Services != nil {
+			// GitHub pulls the images with the GITHUB_TOKEN when they are in ghcr.io, without the file saying so
+			// and "contents: read" removes "packages: read"
 			return false
 		}
 		for _, s := range j.Steps {

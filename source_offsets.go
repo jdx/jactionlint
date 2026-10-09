@@ -26,11 +26,17 @@ func newSourceIndex(src []byte) *sourceIndex {
 			idx.valid = false
 		}
 	}
-	// NEL, LS and PS are line breaks for the YAML parser
-	if bytes.Contains(src, []byte("\u0085")) || bytes.Contains(src, []byte("\u2028")) || bytes.Contains(src, []byte("\u2029")) {
+	if hasUnicodeLineBreak(src) {
 		idx.valid = false
 	}
 	return idx
+}
+
+// hasUnicodeLineBreak reports whether the source has NEL, LS or PS, which the YAML parser counts as line
+// breaks and the helpers that split a source into lines (newSourceIndex, newSrcDoc) do not. Both refuse
+// such a document, so nothing is edited by an offset the parser would not agree with.
+func hasUnicodeLineBreak(src []byte) bool {
+	return bytes.Contains(src, []byte("\u0085")) || bytes.Contains(src, []byte("\u2028")) || bytes.Contains(src, []byte("\u2029"))
 }
 
 // offset returns the byte offset of a line and a column (both 1-based, the column in code points).

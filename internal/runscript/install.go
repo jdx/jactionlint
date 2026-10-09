@@ -502,6 +502,11 @@ func (in *Install) cargo(c *Command) bool {
 	return true
 }
 
+// reGoExactVersion matches a version of a Go module which names one release: vMAJOR.MINOR.PATCH with an optional
+// prerelease and build part, which includes the pseudo-versions (v0.0.0-20240101120000-0123456789ab). Queries
+// such as v1, v1.2, latest, upgrade, patch or a branch name resolve to whatever matches at the time.
+var reGoExactVersion = regexp.MustCompile(`^v[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$`)
+
 func (in *Install) golang(c *Command) bool {
 	in.Ecosystem = "go"
 	pos := c.Positional
@@ -517,7 +522,7 @@ func (in *Install) golang(c *Command) bool {
 		p := &Package{Kind: KindModule, Name: w.Value}
 		if i := strings.LastIndex(w.Value, "@"); i > 0 {
 			p.Name, p.Version = w.Value[:i], w.Value[i+1:]
-			p.Pinned = (strings.HasPrefix(p.Version, "v") && len(p.Version) > 1 && p.Version[1] >= '0' && p.Version[1] <= '9') || reHex.MatchString(p.Version) || versionIsDynamic(p.Version)
+			p.Pinned = reGoExactVersion.MatchString(p.Version) || reHex.MatchString(p.Version) || versionIsDynamic(p.Version)
 		}
 		if isLocalPath(w.Value) || w.Glob {
 			p.Kind = KindPath

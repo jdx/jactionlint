@@ -1,0 +1,7 @@
+on: push
+jobs:
+  lint:
+    runs-on: ubuntu-24.04
+    continue-on-error: true
+    steps:
+      - run: echo lint
