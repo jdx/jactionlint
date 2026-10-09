@@ -107,17 +107,12 @@ func TestPlanFixesIsDeterministic(t *testing.T) {
 			t.Fatalf("the choice depends on the order of the errors: %q and %q", want, got)
 		}
 	}
-	// template-injection wins over zz-custom (same bytes), anonymous-definition over unused-ignore? No:
-	// unused-ignore [2,5) overlaps template-injection [3,4) and anonymous-definition [4,6), so it loses.
-	const expect = "template-injection,anonymous-definition,missing-timeout | zz-custom,aa-custom,unused-ignore"
-	if want != expect && !strings.HasPrefix(want, "template-injection,") {
-		t.Errorf("unexpected plan: %q", want)
-	}
-	if !strings.Contains(want, "| ") || strings.Contains(strings.Split(want, " | ")[0], "unused-ignore") {
-		t.Errorf("unused-ignore has the lowest priority and must lose: %q", want)
-	}
-	if strings.Contains(strings.Split(want, " | ")[0], "zz-custom") {
-		t.Errorf("the lower priority fix must be dropped: %q", want)
+	// template-injection wins over zz-custom (same bytes, same priority class: the rule ID decides), and
+	// unused-ignore [2,5) overlaps template-injection [3,4) and anonymous-definition [4,6), so it loses; the
+	// unsafe aa-custom comes after every safe fix
+	const expect = "template-injection,missing-timeout,anonymous-definition | zz-custom,unused-ignore,aa-custom"
+	if want != expect {
+		t.Errorf("unexpected plan:\n got %q\nwant %q", want, expect)
 	}
 
 	// An unsafe fix never beats a safe one
@@ -337,6 +332,10 @@ func TestCommandDiffAndRules(t *testing.T) {
 	code, _, stderr = run("--fix-rules", "insecure-commands", path)
 	if code != ExitStatusInvalidCommandOption || !strings.Contains(stderr, "--fix or --diff") {
 		t.Errorf("--fix-rules without --fix: %d %q", code, stderr)
+	}
+	code, _, stderr = run("--diff", "--fix-rules=,", path)
+	if code != ExitStatusInvalidCommandOption || !strings.Contains(stderr, "lists no rule ID") {
+		t.Errorf("an empty rule list must not select every fix: %d %q", code, stderr)
 	}
 	code, _, stderr = run("--fix", "--fix-rules", "missing-timout", path)
 	if code != ExitStatusInvalidCommandOption || !strings.Contains(stderr, `did you mean "missing-timeout"`) {

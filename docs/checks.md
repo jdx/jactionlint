@@ -3076,8 +3076,8 @@ test.yaml:8:28: ignore pattern "no-such-rule" did not suppress any error. remove
 
 <!-- Skip playground link -->
 
-The finding has a safe fix: `jactionlint --fix` removes the pattern, or the whole comment when no other pattern is left, and keeps the
-patterns of the comment that were used. Two related findings are always on, from the `correctness` profile: `invalid-ignore-comment` (the
+The finding of an ignore comment has a safe fix: `jactionlint --fix` removes the pattern, or the whole comment when no other pattern is left, and keeps the
+patterns of the comment that were used. An unused pattern of an entry in `ignores` has no fix: remove it from the configuration file yourself. Two related findings are always on, from the `correctness` profile: `invalid-ignore-comment` (the
 comment cannot be parsed) and `expired-ignore` (an `expires` date of an entry in `ignores` has passed).
 
 <a id="check-env-var-names"></a>
@@ -3481,8 +3481,7 @@ test.yaml:16:11: "./.github/workflows/reusable.yml" is a path that cannot be tol
 The rule `self-repository` reports `uses: ./path` and asks for `uses: $/path`. Both name an action or reusable workflow of the
 repository that runs the workflow. `./path` is looked up in the workspace of the runner, so any earlier step can change what it
 runs (a checkout of another ref or repository, or a script writing an `action.yml`), and a policy cannot tell it from an
-arbitrary directory. `$/path` always resolves to the commit that runs the workflow. It is in the `pedantic` profile and reported as `info`, because the syntax is new and some GitHub Enterprise Server versions do not understand
-it. The output above is from the following `rules` section of [the configuration file](config.md):
+arbitrary directory. `$/path` always resolves to the commit that runs the workflow. It is in the `pedantic` profile and reported as `info`, because the syntax is new and needs runner 2.336.0 or newer. The output above is from the following `rules` section of [the configuration file](config.md):
 
 ```yaml
 rules:
@@ -3490,8 +3489,8 @@ rules:
 ```
 
 The rule has an unsafe fix, so `jactionlint --fix=unsafe` rewrites `./` to `$/`. It is unsafe because the two forms are not
-the same when a step replaces the workspace content, which is exactly the case the rule is about, and because `$/` needs a
-recent runner and GitHub Enterprise Server: actionlint 1.7.12 and older reject it (`specifying action "$/..." in invalid format`),
+the same when a step replaces the workspace content, which is exactly the case the rule is about, and because `$/` needs runner
+2.336.0 or newer: actionlint 1.7.12 and older reject it (`specifying action "$/..." in invalid format`),
 so a repository that also runs the original actionlint starts to fail there. Check which tools read your workflows before you apply it.
 
 `uses: $/path` needs no checkout step, and the [`local-action-checkout`](#check-local-action-checkout) rule does not report it.

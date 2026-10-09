@@ -128,6 +128,8 @@ func TestConfigParseStrictErrors(t *testing.T) {
 		{"unknown key of required action", "required-actions:\n  - action: a/b\n    ver: v1\n", []string{`unknown key "ver" in "required-actions"`, `did you mean "version"?`}},
 		{"unknown key of legacy timeout", "timeout-minutes:\n  require: true\n", []string{`unknown key "require" in "timeout-minutes"`}},
 		{"unknown rule", "rules:\n  unpinned-use: error\n", []string{`unknown rule ID "unpinned-use" in "rules" at line 2, column 3`, `did you mean "unpinned-uses"?`, "https://jactionlint.jdx.dev/rules"}},
+		{"unknown fix rule", "fix:\n  rules: [missing-timout]\n", []string{`unknown rule ID "missing-timout" in "fix.rules" at line 2`, `did you mean "missing-timeout"?`}},
+		{"unknown fix rule through an alias", "config-variables: &ids [missing-timout]\nfix:\n  rules: *ids\n", []string{`unknown rule ID "missing-timout" in "fix.rules" at line 1`}},
 		{"unknown rule without suggestion", "rules:\n  zzzzzzzz: error\n", []string{`unknown rule ID "zzzzzzzz"`, "https://jactionlint.jdx.dev/rules"}},
 		{"unknown rule option", "rules:\n  max-run-lines:\n    maxx: 3\n", []string{`unknown key "maxx" in the options of rule "max-run-lines"`, `did you mean "max"?`}},
 		{"rule without options", "rules:\n  require-shell:\n    max: 3\n", []string{`unknown key "max" in the options of rule "require-shell"`}},

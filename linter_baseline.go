@@ -288,9 +288,13 @@ func (l *Linter) WriteBaseline(files []string, path string) (*WriteBaselineResul
 	}
 	if cfg := l.configFor(project); cfg != nil {
 		res.Applied = baselineConfigured(cfg, root, path)
-		if cfg.Path != "" && project != nil {
-			if rel, err := filepath.Rel(project.RootDir(), cfg.Path); err == nil && !strings.HasPrefix(rel, "..") {
-				res.ConfigFile = filepath.ToSlash(rel)
+		if cfg.Path != "" {
+			// The selected file is the one to edit, also when it is outside the repository (--config-file ../x.yaml)
+			res.ConfigFile = filepath.ToSlash(cfg.Path)
+			if project != nil {
+				if rel, err := filepath.Rel(project.RootDir(), cfg.Path); err == nil && !strings.HasPrefix(rel, "..") {
+					res.ConfigFile = filepath.ToSlash(rel)
+				}
 			}
 		}
 	}
@@ -328,6 +332,11 @@ func (l *Linter) ruleRanAsIs(id string, cfg *Config) bool {
 	// RuleRuns knows the level of the rule and whether it is an online rule while the online checks are off
 	// (--online, --no-online, "online" and "online-options" of the configuration all count)
 	if !cfg.RuleRuns(id, l.onlineOn(cfg)) {
+		return false
+	}
+	// A lookup that failed (rate limit, no network) left some online findings unreported: their entries are not
+	// unused, the run just could not see them
+	if info, ok := ruleIndex[id]; ok && info.Online && l.OnlineSkipped() > 0 {
 		return false
 	}
 	switch id {

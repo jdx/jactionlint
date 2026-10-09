@@ -430,12 +430,19 @@ func (s *baselineState) match(fileKey string, errs []*Error, infos map[*Error]*b
 }
 
 // contextFallbackExcluded are the rules whose message carries what the finding is about (which advisory, which
-// problem of the called action or workflow) while the context is only the line of the call: a leftover entry
+// problem of the called action or workflow, which input or secret is missing) while the context is only the line of the call: a leftover entry
 // must not accept another finding of them as a reworded one.
 var contextFallbackExcluded = map[string]bool{
 	"invalid-local-action":     true,
 	"invalid-local-workflow":   true,
 	"known-vulnerable-actions": true,
+	// What is missing is named in the message while the context is the line of the call (or of the job or
+	// workflow): a newly required input, secret or action is a new finding, not a reworded one
+	"missing-action-input":      true,
+	"missing-workflow-input":    true,
+	"missing-workflow-secret":   true,
+	"workflow-call-permissions": true,
+	"required-actions":          true,
 }
 
 // unusedBaselineEntryID is the ID of the diagnostic for baseline entries which match nothing.
