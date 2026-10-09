@@ -13,8 +13,9 @@ import (
 // artifact is whatever the author of the pull request wanted it to be.
 type RuleUntrustedArtifact struct {
 	RuleBase
-	project *Project
-	active  bool
+	project  *Project
+	siblings *siblingWorkflows // nil reads the workflows of the project for each file
+	active   bool
 }
 
 // NewRuleUntrustedArtifact creates a new RuleUntrustedArtifact instance. The project can be nil.
@@ -47,7 +48,7 @@ func (rule *RuleUntrustedArtifact) VisitWorkflowPre(n *Workflow) error {
 		return nil
 	}
 	for _, e := range webhookEvents(n, "workflow_run") {
-		if !upstreamWorkflowsTrusted(rule.project, e) {
+		if !upstreamWorkflowsTrusted(rule.project, rule.siblings, e) {
 			rule.active = true
 		}
 	}
@@ -279,6 +280,8 @@ func init() {
 		RuleInfo{ID: "untrusted-artifact", Group: RuleGroupSecurity, Summary: "A workflow_run workflow uses an artifact of the triggering run without validating it.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-untrusted-artifact"},
 	)
 	registerRuleFactory("untrusted-artifact", func(env *RuleEnv) []Rule {
-		return []Rule{NewRuleUntrustedArtifact(env.project)}
+		r := NewRuleUntrustedArtifact(env.project)
+		r.siblings = env.localActions.siblings()
+		return []Rule{r}
 	})
 }

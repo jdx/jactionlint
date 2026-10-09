@@ -1,0 +1,15 @@
+# Text which is not ASCII before the findings: é is 2 bytes, ✓ is 3, 😀 is 4.
+name: "日本語 ✓"
+on: pull_request
+jobs:
+  a:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "héllo wörld ✓ 😀" ${{ github.head_ref }} ${{ github.event.pull_request.title }}
+      - name: "é 😀"
+        if: github.event.head_commit.message == format('é {0}', 'x') && format('a{0}', 'b') == 'ab'
+        run: echo "日本語" ${{ github.event.pull_request.body }}
+      - uses: actions/checkout@v4 # ✓ 😀
+      - run: |
+          echo 'ü' ${{ github.event.issue.title }}
+          echo "😀😀" ${{ github.head_ref }}

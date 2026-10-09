@@ -195,7 +195,8 @@ func (md *ActionMetadata) Path() string {
 // to be created per one repository.
 type LocalActionsCache struct {
 	mu    sync.RWMutex
-	proj  *Project // might be nil
+	sib   *siblingWorkflows // see siblings
+	proj  *Project          // might be nil
 	cache map[string]*ActionMetadata
 	dbg   io.Writer
 }
@@ -207,6 +208,20 @@ func NewLocalActionsCache(proj *Project, dbg io.Writer) *LocalActionsCache {
 		cache: map[string]*ActionMetadata{},
 		dbg:   dbg,
 	}
+}
+
+// siblings returns what is read from the workflows of the project once for all the files linted with
+// this cache. It is nil for a nil cache.
+func (c *LocalActionsCache) siblings() *siblingWorkflows {
+	if c == nil {
+		return nil
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.sib == nil {
+		c.sib = &siblingWorkflows{}
+	}
+	return c.sib
 }
 
 func newNullLocalActionsCache(dbg io.Writer) *LocalActionsCache {

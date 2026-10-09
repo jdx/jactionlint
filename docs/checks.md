@@ -970,7 +970,8 @@ level or job level. Each step can configure shell to run scripts by `shell:`.
 In the above example output, `SC2086:info:1:6:` means that shellcheck reported SC2086 rule violation and the location is at
 line 1, column 6. Note that the location is relative to the script of the `run:` section.
 The reported source line is the line within the script when `run:` uses a literal block (`|`, `|-`, `|+`) and no `${{ }}`
-in the script spans multiple lines. Otherwise, the position of `run:` is reported.
+in the script spans multiple lines. Otherwise, the position of `run:` is reported. An [ignore comment](usage.md#ignore-some-errors) on the
+step or at the `run:` key covers the lines of the script ([details](actionlint.md#where-shellcheck-findings-are-reported)).
 
 jactionlint remembers the default shell and checks what OS the job runs on. Only when the shell is `bash` or `sh`, jactionlint
 applies shellcheck to scripts.
@@ -6638,6 +6639,9 @@ not reported either: the byte order mark at the start of a file, emoji sequences
 between emoji, keycaps, flags made from tag characters), the zero width (non-)joiner in scripts which are spelled with it (Persian,
 Devanagari and other Indic scripts, and others), the variation selectors of CJK ideographs and Mongolian, and direction marks
 next to Arabic or Hebrew letters.
+
+A file saved as UTF-16 or UTF-32 (it starts with the byte order mark of one of them) has a NUL byte next to every character. It gets one
+finding at its first line that names the encoding, not one for every NUL; save the file as UTF-8.
 
 One finding is reported for a run of adjacent characters. The message says where the character is (a `run:` script, an
 expression, a `uses:` reference, a comment, a value or a key). Every finding is an error, also in a comment: a comment is how the

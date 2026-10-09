@@ -138,16 +138,24 @@ func errorfAt(pos *Pos, kind string, id string, format string, args ...interface
 
 // GetTemplateFields fields for formatting this error with Go template.
 func (e *Error) GetTemplateFields(source []byte) *ErrorTemplateFields {
+	var x *lineIndex
+	if len(source) > 0 && e.Line > 0 {
+		x = newLineIndex(source)
+	}
+	return e.templateFields(x)
+}
+
+// templateFields is GetTemplateFields with the lines of the source found by the index, which is nil
+// when there is no source.
+func (e *Error) templateFields(x *lineIndex) *ErrorTemplateFields {
 	snippet := ""
 	end := e.Column
-	if len(source) > 0 && e.Line > 0 {
-		if l, ok := e.getLine(source); ok {
+	if x != nil && e.Line > 0 {
+		if l, ok := e.getLine(x); ok {
 			snippet = l
-			if len(l) >= e.Column-1 {
-				if i := e.getIndicator(l); i != "" {
-					snippet += "\n" + i
-					end = len(i) // Byte length can be used here because this line only contains ASCII
-				}
+			if i, last := e.indicator(l); i != "" {
+				snippet += "\n" + i
+				end = last
 			}
 		}
 	}
@@ -177,13 +185,17 @@ func (e *Error) GetTemplateFields(source []byte) *ErrorTemplateFields {
 // message with colorful output and source snippet with indicator. When nil is set to source, no
 // source snippet is not printed. To disable colorful output, set true to fatih/color.NoColor.
 func (e *Error) PrettyPrint(w io.Writer, source []byte) {
-	e.prettyPrint(w, source, false)
+	var x *lineIndex
+	if len(source) > 0 {
+		x = newLineIndex(source)
+	}
+	e.prettyPrint(w, x, false)
 }
 
 // prettyPrint is PrettyPrint which can show the rule ID instead of the kind. The output format of an
 // error of error level is the one of the former versions. Errors of the other levels are prefixed
 // with their level so that they can be told apart from errors.
-func (e *Error) prettyPrint(w io.Writer, source []byte, showID bool) {
+func (e *Error) prettyPrint(w io.Writer, x *lineIndex, showID bool) {
 	yellow.Fprint(w, e.Filepath)
 	gray.Fprint(w, ":")
 	fmt.Fprint(w, e.Line)
@@ -204,11 +216,14 @@ func (e *Error) prettyPrint(w io.Writer, source []byte, showID bool) {
 	}
 	gray.Fprintf(w, " [%s]\n", label)
 
-	if len(source) == 0 || e.Line <= 0 {
+	if x == nil || len(x.src) == 0 || e.Line <= 0 {
 		return
 	}
-	line, ok := e.getLine(source)
-	if !ok || len(line) < e.Column-1 {
+	line, ok := e.getLine(x)
+	if !ok {
+		return
+	}
+	if _, ok := columnInLine(line, e.Column); !ok && e.Column > 0 {
 		return
 	}
 
@@ -221,27 +236,90 @@ func (e *Error) prettyPrint(w io.Writer, source []byte, showID bool) {
 	green.Fprintln(w, e.getIndicator(line))
 }
 
-func (e *Error) getLine(source []byte) (string, bool) {
-	s := bufio.NewScanner(bytes.NewReader(source))
-	l := 0
-	for s.Scan() {
-		l++
-		if l == e.Line {
-			return s.Text(), true
-		}
+// getLine returns the text of the line e.Line of the source without its line break. Lines which do
+// not fit the buffer of bufio.Scanner (64 KiB) are not returned, as the text output would be useless.
+func (e *Error) getLine(x *lineIndex) (string, bool) {
+	if x == nil || e.Line < 1 || e.Line > len(x.starts) || x.starts[e.Line-1] >= len(x.src) {
+		return "", false
 	}
-	return "", false
+	b := x.starts[e.Line-1]
+	end := len(x.src)
+	if e.Line < len(x.starts) {
+		end = x.starts[e.Line] // just after the "\n"
+	}
+	line := x.src[b:end]
+	line = bytes.TrimSuffix(line, []byte("\n"))
+	line = bytes.TrimSuffix(line, []byte("\r"))
+	if len(line) >= bufio.MaxScanTokenSize {
+		return "", false
+	}
+	return string(line), true
+}
+
+// lineIndex finds the lines of a source without scanning it from its start for each. The printers and
+// the fixers ask for many lines of one source in a row, which was quadratic in the number of findings.
+// It does not follow changes of the source: build one for each source and do not change it meanwhile.
+type lineIndex struct {
+	src    []byte
+	starts []int // the byte offset where each line starts; the text after a trailing line break is a line
+}
+
+func newLineIndex(src []byte) *lineIndex {
+	return &lineIndex{src: src, starts: buildLineStarts(src)}
+}
+
+// buildLineStarts returns the byte offset where each line of the source starts. The text after a
+// trailing line break is a line (an empty one).
+func buildLineStarts(src []byte) []int {
+	starts := []int{0}
+	for i := 0; i < len(src); {
+		j := bytes.IndexByte(src[i:], '\n')
+		if j < 0 {
+			break
+		}
+		i += j + 1
+		starts = append(starts, i)
+	}
+	return starts
+}
+
+// columnInLine converts the 1-based column of a line, counted in Unicode code points, to a byte offset
+// of the line. It returns false when the line is too short for the column. The column just after the
+// last character is valid.
+func columnInLine(line string, col int) (int, bool) {
+	if col < 1 {
+		return 0, false
+	}
+	n := 1
+	for i := range line {
+		if n == col {
+			return i, true
+		}
+		n++
+	}
+	return len(line), n == col
 }
 
 func (e *Error) getIndicator(line string) string {
+	ind, _ := e.indicator(line)
+	return ind
+}
+
+// indicator returns the line ^~~~ which underlines the token at the column of the error, and the
+// column of the last character it underlines. The column is counted in code points like Column, while
+// the indicator is padded by the display width of the characters before the column so that it lines
+// up in a terminal.
+func (e *Error) indicator(line string) (string, int) {
 	if e.Column <= 0 {
-		return ""
+		return "", e.Column
+	}
+	start, ok := columnInLine(line, e.Column)
+	if !ok {
+		return "", e.Column
 	}
 
-	start := e.Column - 1 // Column is 1-based
-
-	// Count width of non-space characters after '^' for underline
-	uw := 0
+	// Count the characters and the width of the non-space characters after '^' for the underline
+	uw, chars := 0, 0
 	r := strings.NewReader(line[start:])
 	for {
 		c, s, err := r.ReadRune()
@@ -249,14 +327,19 @@ func (e *Error) getIndicator(line string) string {
 			break
 		}
 		uw += runewidth.RuneWidth(c)
+		chars++
 	}
 	if uw > 0 {
 		uw-- // Decrement for place for '^'
 	}
+	end := e.Column
+	if chars > 0 {
+		end += chars - 1
+	}
 
 	// Count width of spaces before '^'
 	sw := runewidth.StringWidth(line[:start])
-	return fmt.Sprintf("%s^%s", strings.Repeat(" ", sw), strings.Repeat("~", uw))
+	return fmt.Sprintf("%s^%s", strings.Repeat(" ", sw), strings.Repeat("~", uw)), end
 }
 
 func compareErrors(lhs, rhs *Error) int {
@@ -451,8 +534,12 @@ func (f *ErrorFormatter) Print(out io.Writer, t []*ErrorTemplateFields) error {
 // PrintErrors prints the errors after formatting them with template.
 func (f *ErrorFormatter) PrintErrors(out io.Writer, errs []*Error, src []byte) error {
 	t := make([]*ErrorTemplateFields, 0, len(errs))
+	var x *lineIndex
+	if len(src) > 0 {
+		x = newLineIndex(src)
+	}
 	for _, err := range errs {
-		t = append(t, err.GetTemplateFields(src))
+		t = append(t, err.templateFields(x))
 	}
 	return f.Print(out, t)
 }

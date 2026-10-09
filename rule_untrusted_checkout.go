@@ -12,6 +12,7 @@ import (
 type RuleUntrustedCheckout struct {
 	RuleBase
 	project    *Project
+	siblings   *siblingWorkflows // nil reads the workflows of the project for each file
 	privileged []string
 	wf         *Workflow
 }
@@ -38,7 +39,6 @@ type untrustedCheckout struct {
 	// not see the code.
 	offset int
 	step   *Step
-	done   bool
 }
 
 // VisitWorkflowPre is callback when visiting Workflow node before visiting its children.
@@ -47,7 +47,7 @@ func (rule *RuleUntrustedCheckout) VisitWorkflowPre(n *Workflow) error {
 	if !rule.Config().RuleEnabled("untrusted-checkout") {
 		return nil
 	}
-	rule.privileged = privilegedEvents(n, rule.project)
+	rule.privileged = privilegedEvents(n, rule.project, rule.siblings)
 	return nil
 }
 
@@ -56,18 +56,25 @@ func (rule *RuleUntrustedCheckout) VisitJobPre(n *Job) error {
 	if len(rule.privileged) == 0 || (n.Environment != nil && n.Environment.Name != nil) || conditionIsGuard(n.If) {
 		return nil
 	}
-	var pending []*untrustedCheckout
+	// The checkouts which no step has run the code of yet, by the directory they put it in. Whether a
+	// step runs code depends on the directory only, so it is asked once for each directory and not for
+	// each checkout: a job with thousands of checkouts is not quadratic.
+	pending := map[string][]*untrustedCheckout{}
+	var dirs []string // the keys of pending in the order they were added
 	for _, s := range flattenSteps(n.Steps) {
 		if conditionIsGuard(s.If) {
 			continue // a step a maintainer has to allow neither runs the code nor fetches it
 		}
-		for _, c := range pending {
-			if c.done {
+		for _, dir := range dirs {
+			cs := pending[dir]
+			if len(cs) == 0 {
 				continue
 			}
-			if how, ok := stepRunsCode(s, c.dir, 0); ok {
-				rule.report(c, how)
-				c.done = true
+			if how, ok := stepRunsCode(s, dir, 0); ok {
+				for _, c := range cs {
+					rule.report(c, how)
+				}
+				pending[dir] = nil
 			}
 		}
 		for _, c := range rule.checkoutsOf(n, s) {
@@ -75,10 +82,13 @@ func (rule *RuleUntrustedCheckout) VisitJobPre(n *Job) error {
 				// The same script can run the code it fetched
 				if how, ok := stepRunsCode(s, c.dir, c.offset+1); ok {
 					rule.report(c, how)
-					c.done = true
+					continue
 				}
 			}
-			pending = append(pending, c)
+			if _, seen := pending[c.dir]; !seen {
+				dirs = append(dirs, c.dir)
+			}
+			pending[c.dir] = append(pending[c.dir], c)
 		}
 	}
 	return nil
@@ -185,6 +195,8 @@ func init() {
 		RuleInfo{ID: "untrusted-checkout", Group: RuleGroupSecurity, Summary: "A pull_request_target or workflow_run workflow checks out the code of a pull request and runs it.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-untrusted-checkout"},
 	)
 	registerRuleFactory("untrusted-checkout", func(env *RuleEnv) []Rule {
-		return []Rule{NewRuleUntrustedCheckout(env.project)}
+		r := NewRuleUntrustedCheckout(env.project)
+		r.siblings = env.localActions.siblings()
+		return []Rule{r}
 	})
 }

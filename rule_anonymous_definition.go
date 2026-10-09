@@ -12,8 +12,9 @@ import (
 // https://docs.github.com/en/actions/writing-workflows/workflow-syntax-for-github-actions#name
 type RuleAnonymousDefinition struct {
 	RuleBase
-	path string
-	src  []byte
+	path  string
+	src   []byte
+	lines *lineIndex // the lines of src, built when a fix needs them
 }
 
 // NewRuleAnonymousDefinition creates a new RuleAnonymousDefinition instance. The path and the source
@@ -59,7 +60,7 @@ func (rule *RuleAnonymousDefinition) VisitWorkflowPre(n *Workflow) error {
 		rule.ReportID("anonymous-definition", pos, msg)
 		return nil
 	}
-	at := srcLineStart(rule.src, line)
+	at := rule.lineIndex().startOf(line)
 	text := "name: " + RenderYAMLValue(name) + srcLineBreak(rule.src)
 	reportWithFix(&rule.RuleBase, "anonymous-definition", pos, msg, &Fix{
 		Description: "Add name: " + name,
@@ -92,7 +93,7 @@ func (rule *RuleAnonymousDefinition) VisitJobPre(n *Job) error {
 // so the fix does not change how the job is displayed.
 func (rule *RuleAnonymousDefinition) jobNameEdit(n *Job) (TextEdit, bool) {
 	src := rule.src
-	start := srcLineStart(src, n.ID.Pos.Line)
+	start := rule.lineIndex().startOf(n.ID.Pos.Line)
 	if len(src) == 0 || start < 0 {
 		return TextEdit{}, false
 	}
@@ -186,4 +187,12 @@ func init() {
 		}
 		return []Rule{NewRuleAnonymousDefinition(env.path, env.src)}
 	})
+}
+
+// lineIndex returns the lines of the source of the file, which are found once for all the fixes.
+func (rule *RuleAnonymousDefinition) lineIndex() *lineIndex {
+	if rule.lines == nil {
+		rule.lines = newLineIndex(rule.src)
+	}
+	return rule.lines
 }

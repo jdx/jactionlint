@@ -170,21 +170,19 @@ func planFixes(src []byte, errs []*Error, mode FixMode, only, banned map[string]
 		return strings.Compare(a.err.Message, b.err.Message)
 	})
 
-	var edits []TextEdit
+	var edits editSet
 Fixes:
 	for _, p := range cands {
 		for _, edit := range p.fix.Edits {
-			for _, a := range edits {
-				if editsConflict(a, edit) {
-					dropped = append(dropped, p)
-					continue Fixes
-				}
+			if edits.conflicts(edit) {
+				dropped = append(dropped, p)
+				continue Fixes
 			}
 		}
+		// The edits of one fix may conflict with each other; those of the fix are added one by one
+		// like before, so the later ones are not checked against the earlier ones of the same fix.
 		for _, edit := range p.fix.Edits {
-			if !slices.Contains(edits, edit) {
-				edits = append(edits, edit)
-			}
+			edits.add(edit)
 		}
 		chosen = append(chosen, p)
 	}
@@ -194,9 +192,11 @@ Fixes:
 // editsOf returns the distinct edits of the fixes.
 func editsOf(fixes []plannedFix) []TextEdit {
 	var edits []TextEdit
+	seen := map[TextEdit]bool{}
 	for _, p := range fixes {
 		for _, e := range p.fix.Edits {
-			if !slices.Contains(edits, e) {
+			if !seen[e] {
+				seen[e] = true
 				edits = append(edits, e)
 			}
 		}

@@ -257,18 +257,67 @@ func baselineScope(lines [][]byte, line int) string {
 	return topKey + "/" + child
 }
 
+// baselineScopes returns baselineScope of every line in one pass over the lines, so that a file with many
+// findings is not scanned once for each. The result at the index i is the scope of the line i+1.
+func baselineScopes(lines [][]byte) []string {
+	scopes := make([]string, len(lines))
+	var topKey, child string
+	var inTop, broken bool
+	childIndent := -1
+	for i, l := range lines {
+		if s := strings.TrimSpace(string(l)); s == "---" || s == "..." {
+			inTop = false
+			continue // the scope of the separator is empty
+		}
+		if lineIndent(l) == 0 {
+			if k, ok := yamlKeyOfLine(string(l)); ok {
+				topKey, child, inTop, broken, childIndent = k, "", true, false, -1
+				scopes[i] = topKey
+				continue
+			}
+		}
+		if !inTop {
+			continue
+		}
+		// The line after a top-level key belongs to the key just below it, found at the first indentation
+		if t := strings.TrimSpace(string(l)); t != "" && !strings.HasPrefix(t, "#") && !broken {
+			if ind := lineIndent(l); ind == 0 {
+				broken = true // a line at the margin that is not a key ends the search
+			} else {
+				if childIndent < 0 {
+					childIndent = ind
+				}
+				if ind == childIndent {
+					if k, ok := yamlKeyOfLine(t); ok {
+						child = k
+					}
+				}
+			}
+		}
+		scopes[i] = topKey
+		if child != "" {
+			scopes[i] = topKey + "/" + child
+		}
+	}
+	return scopes
+}
+
 // computeBaselineInfo sets the baseline identity of each error. The errors must be sorted by
 // position. fileKey is the path relative to the repository root with forward slashes.
 func computeBaselineInfo(fileKey, root string, src []byte, errs []*Error) map[*Error]*baselineInfo {
 	infos := make(map[*Error]*baselineInfo, len(errs))
 	lines := sourceLines(src)
+	scopes := baselineScopes(lines)
 	counts := map[string]int{}
 	for _, e := range errs {
 		text := ""
 		if e.Line >= 1 && e.Line <= len(lines) {
 			text = strings.Join(strings.Fields(string(lines[e.Line-1])), " ")
 		}
-		scope := baselineScope(lines, e.Line)
+		scope := ""
+		if e.Line >= 1 && e.Line <= len(scopes) {
+			scope = scopes[e.Line-1]
+		}
 		ctx := hashParts(e.ID, scope, text)
 		fp := hashParts(e.ID, scope, text, normalizeBaselineMessage(e.Message, root))
 		key := e.ID + "\x00" + fp

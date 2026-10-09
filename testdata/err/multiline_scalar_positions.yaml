@@ -1,0 +1,39 @@
+# Findings inside multi-line scalars are reported on the line and the column of the offending text.
+on: push
+env:
+  FOLD: >-
+    a ${{ format('x{0}', 'y') }}
+    b ${{ format('z{0}', 'w') }}
+jobs:
+  a:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo
+        if: |
+          github.ref == 'x' &&
+          format('a{0}', 'b') == 'ab'
+      - run: echo
+        if: >-
+          github.ref == 'x' &&
+          format('a{0}', 'b') == 'ab'
+      - run: echo
+        if: github.ref == 'x' &&
+          format('a{0}', 'b') == 'ab'
+      - run: echo
+        if: "github.ref == 'x' &&
+          format('a{0}', 'b') == 'ab'"
+      - run: |
+          echo ${{ github.head_ref }}
+          echo ${{ github.event.pull_request.title }}
+      - run: >
+          echo ${{ github.head_ref }}
+          echo ${{ github.event.pull_request.title }}
+      - run: "echo ${{ github.head_ref }}
+          echo ${{ github.event.pull_request.title }}"
+      - run: echo ${{ github.head_ref }}
+          echo ${{ github.event.pull_request.title }}
+      - run: echo
+        env:
+          X: |
+            ${{ vars.FOO }} ${{ secrets.A }}
+            ${{ foo.bar }}

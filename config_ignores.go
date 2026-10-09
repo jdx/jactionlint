@@ -288,6 +288,9 @@ type ignoreScope struct {
 // scopeIndex finds the ignoreScope of a line of a workflow.
 type scopeIndex struct {
 	jobs []jobRange
+	// ordered is true when the ranges of the jobs do not overlap and come in the order of the lines,
+	// which lets a lookup bisect them. Flow style can break that.
+	ordered bool
 }
 
 type jobRange struct {
@@ -295,6 +298,7 @@ type jobRange struct {
 	id         string
 	uses       string
 	steps      []stepRange
+	ordered    bool // the ranges of the steps do not overlap and come in the order of the lines
 	dead       bool // the job never runs: its "if:" is the literal false
 }
 
@@ -383,9 +387,48 @@ func newScopeIndex(w *Workflow, src []byte) *scopeIndex {
 			}
 			jr.steps = append(jr.steps, sr)
 		}
+		jr.ordered = rangesOrdered(len(jr.steps), func(i int) (int, int) { return jr.steps[i].start, jr.steps[i].end })
 		idx.jobs = append(idx.jobs, jr)
 	}
+	// The jobs come from a map, in any order
+	sort.Slice(idx.jobs, func(i, j int) bool { return idx.jobs[i].start < idx.jobs[j].start })
+	idx.ordered = rangesOrdered(len(idx.jobs), func(i int) (int, int) { return idx.jobs[i].start, idx.jobs[i].end })
 	return idx
+}
+
+// rangesOrdered reports whether the line ranges (inclusive) come in order and do not overlap.
+func rangesOrdered(n int, at func(i int) (start, end int)) bool {
+	prevEnd := 0
+	for i := 0; i < n; i++ {
+		s, e := at(i)
+		if s <= prevEnd || e < s {
+			return false
+		}
+		prevEnd = e
+	}
+	return true
+}
+
+// findRange returns the indexes of the ranges which contain the line, up to two: more than one means
+// that the line is ambiguous. For ordered ranges it bisects, so that the lookups for the findings of
+// a file with many steps do not scan all steps each.
+func findRange(n int, ordered bool, at func(i int) (start, end int), line int) []int {
+	if ordered {
+		i := sort.Search(n, func(i int) bool { s, _ := at(i); return s > line }) - 1
+		if i >= 0 {
+			if _, e := at(i); line <= e {
+				return []int{i}
+			}
+		}
+		return nil
+	}
+	var found []int
+	for i := 0; i < n && len(found) < 2; i++ {
+		if s, e := at(i); s <= line && line <= e {
+			found = append(found, i)
+		}
+	}
+	return found
 }
 
 // scopeAt returns the scope of a line.
@@ -394,29 +437,20 @@ func (idx *scopeIndex) scopeAt(line int) ignoreScope {
 	if idx == nil {
 		return sc
 	}
-	var jobs []*jobRange
-	for i := range idx.jobs {
-		if j := &idx.jobs[i]; j.start <= line && line <= j.end {
-			jobs = append(jobs, j)
-		}
-	}
+	jobs := findRange(len(idx.jobs), idx.ordered, func(i int) (int, int) { return idx.jobs[i].start, idx.jobs[i].end }, line)
 	if len(jobs) != 1 {
 		return sc // outside every job, or ambiguous
 	}
-	j := jobs[0]
+	j := &idx.jobs[jobs[0]]
 	sc.job = j.id
 	sc.uses = j.uses
-	var steps []*stepRange
-	for i := range j.steps {
-		if s := &j.steps[i]; s.start <= line && line <= s.end {
-			steps = append(steps, s)
-		}
-	}
+	steps := findRange(len(j.steps), j.ordered, func(i int) (int, int) { return j.steps[i].start, j.steps[i].end }, line)
 	switch len(steps) {
 	case 0:
 	case 1:
+		st := &j.steps[steps[0]]
 		sc.hasStep = true
-		sc.stepID, sc.stepName, sc.uses = steps[0].id, steps[0].name, steps[0].uses
+		sc.stepID, sc.stepName, sc.uses = st.id, st.name, st.uses
 	default:
 		// Several steps share the line (flow style): which one is unknown
 		sc.uses = ""
