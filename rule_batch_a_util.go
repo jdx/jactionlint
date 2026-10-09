@@ -285,6 +285,12 @@ func workflowExprSites(w *Workflow, f func(site exprSite)) {
 					emit(nil, o.Value, false)
 				}
 			}
+			// The default of an input is evaluated with the github, inputs and vars contexts
+			for _, in := range c.Inputs {
+				if in != nil {
+					emit(nil, in.Default, false)
+				}
+			}
 		}
 	}
 
