@@ -147,7 +147,8 @@ func zizmorHeaderRange(lines []string, c zizmorComment) (int, int, bool) {
 	}
 	end := c.line
 	for j := i + 1; j < len(lines); j++ {
-		if cm, b := isCommentOrBlank(lines[j]); cm || b {
+		if cm, b := isCommentOrBlank(lines[j]); b || (cm && (isKey || indentOf(lines[j]) <= col)) {
+			// A line which starts with "#" in a block scalar is part of the script, not a comment
 			continue
 		}
 		ind := indentOf(lines[j])
