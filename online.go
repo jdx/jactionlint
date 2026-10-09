@@ -14,10 +14,10 @@ import (
 type onlineSettings struct {
 	enabled bool
 	// off is LinterOptions.OnlineOff: the configuration cannot turn the online checks on.
-	off bool
-	client  GitHubClient
-	ttl     time.Duration
-	ctx     context.Context
+	off    bool
+	client GitHubClient
+	ttl    time.Duration
+	ctx    context.Context
 	// opts are LinterOptions.OnlineOptions: the command line, which wins over the configuration.
 	opts OnlineOptions
 
