@@ -145,8 +145,8 @@ func TestUnsoundPrefixMatchRefsOption(t *testing.T) {
 
 func TestUnsoundPrefixMatchSites(t *testing.T) {
 	cfg := ruleConfig("unsound-prefix-match")
-	// Outside conditions, only a test which selects a secret, the token or a self-hosted runner is a
-	// trust decision
+	// Outside conditions, only a test in a sensitive context (the runner, the environment, a container or a
+	// service, the secrets of a reusable workflow) or one which reads a secret or the token is a trust decision
 	src := "on: push\njobs:\n  a:\n    runs-on: ${{ startsWith(github.repository, 'jdx') && 'self-hosted' || 'ubuntu-latest' }}\n    env:\n      GOOS: ${{ contains(github.repository, 'windows_exporter') && 'windows' || '' }}\n      TRUSTED: ${{ startsWith(github.actor, 'jdx') }}\n    steps:\n      - uses: actions/checkout@v4\n        with:\n          token: ${{ startsWith(github.actor, 'jdx') && secrets.TOKEN }}\n      - run: echo\n        env:\n          T: ${{ endsWith(github.repository, '/x') && github.token || '' }}\n"
 	wantLines(t, lintFileWithConfig(t, cfg, "ci.yaml", src), "unsound-prefix-match", 4, 11, 14)
 	// On by default
@@ -163,8 +163,40 @@ func TestUnsoundPrefixMatchSelfHostedLiteral(t *testing.T) {
 	wantLines(t, lintFileWithConfig(t, cfg, "ci.yaml", env), "unsound-prefix-match")
 	runsOn := "on: push\njobs:\n  a:\n    runs-on: ${{ startsWith(github.repository, 'jdx') && matrix.os || 'ubuntu-latest' }}\n    steps:\n      - run: echo\n"
 	wantLines(t, lintFileWithConfig(t, cfg, "ci.yaml", runsOn), "unsound-prefix-match", 4)
-	cmp := "on: push\njobs:\n  a:\n    runs-on: ubuntu-latest\n    env:\n      X: ${{ startsWith(github.actor, 'jdx') && runner.environment == 'self-hosted' }}\n    steps:\n      - run: echo\n"
-	wantLines(t, lintFileWithConfig(t, cfg, "ci.yaml", cmp), "unsound-prefix-match", 6)
+}
+
+// Where the expression sits decides: each of these contexts picks something a trust decision protects.
+func TestUnsoundPrefixMatchSensitiveContexts(t *testing.T) {
+	cfg := ruleConfig("unsound-prefix-match")
+	test := "startsWith(github.actor, 'jdx')"
+	for _, tc := range []struct{ what, job string }{
+		{"environment name", "    environment: ${{ " + test + " && 'production' || 'staging' }}\n    steps:\n      - run: echo\n"},
+		{"environment url", "    environment:\n      name: x\n      url: ${{ " + test + " && 'https://a' || 'https://b' }}\n    steps:\n      - run: echo\n"},
+		{"container image", "    container:\n      image: ${{ " + test + " && 'a:1' || 'b:1' }}\n    steps:\n      - run: echo\n"},
+		{"container credentials", "    container:\n      image: a:1\n      credentials:\n        username: ${{ " + test + " && 'u' || 'v' }}\n        password: x\n    steps:\n      - run: echo\n"},
+		{"service image", "    services:\n      db:\n        image: ${{ " + test + " && 'a:1' || 'b:1' }}\n    steps:\n      - run: echo\n"},
+		{"runs-on", "    runs-on: ${{ " + test + " && 'big' || 'small' }}\n    steps:\n      - run: echo\n"},
+	} {
+		src := "on: push\njobs:\n  a:\n" + tc.job
+		if !strings.Contains(tc.job, "runs-on") {
+			src = "on: push\njobs:\n  a:\n    runs-on: ubuntu-latest\n" + tc.job
+		}
+		if got := errsWithID(lintFileWithConfig(t, cfg, "ci.yaml", src), "unsound-prefix-match"); len(got) != 1 {
+			t.Errorf("%s: want a finding, got %v", tc.what, got)
+		}
+	}
+	// the secrets passed to a reusable workflow
+	call := "on: push\njobs:\n  a:\n    uses: o/r/.github/workflows/x.yml@v1\n    secrets:\n      token: ${{ " + test + " && 'a' || 'b' }}\n"
+	if got := errsWithID(lintFileWithConfig(t, cfg, "ci.yaml", call), "unsound-prefix-match"); len(got) != 1 {
+		t.Errorf("workflow call secret: want a finding, got %v", got)
+	}
+	// a plain name or env
+	for _, field := range []string{"    name: ${{ " + test + " && 'a' || 'b' }}\n", "    env:\n      X: ${{ " + test + " && 'a' || 'b' }}\n"} {
+		src := "on: push\njobs:\n  a:\n    runs-on: ubuntu-latest\n" + field + "    steps:\n      - run: echo\n"
+		if got := errsWithID(lintFileWithConfig(t, cfg, "ci.yaml", src), "unsound-prefix-match"); len(got) != 0 {
+			t.Errorf("%q: want no finding, got %v", field, got)
+		}
+	}
 }
 
 // The credentials reached by an index or as a whole are credentials too.
