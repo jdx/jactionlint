@@ -405,7 +405,11 @@ func eventScenarios(events []Event) []triggerScenario {
 		if ev, ok := e.(*WebhookEvent); ok && e.EventName() == "push" && ev.Branches == nil && ev.BranchesIgnore == nil && tagFilterMatches(ev.Tags) {
 			continue
 		}
-		ret = append(ret, triggerScenario{"event_name": e.EventName()})
+		sc := triggerScenario{"event_name": e.EventName()}
+		if e.EventName() == "push" {
+			sc[refPrefixKey] = "refs/heads/" // the run which is not a tag push is a branch push
+		}
+		ret = append(ret, sc)
 	}
 	return ret
 }

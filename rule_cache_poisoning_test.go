@@ -190,3 +190,30 @@ func TestCachePoisoningTagOnlyPushHasNoBranchRun(t *testing.T) {
 		t.Errorf("branches and tags: want 1 finding but got %v", got)
 	}
 }
+
+func TestCachePoisoningBranchPushKnowsItsRefIsNotATag(t *testing.T) {
+	// a branch push has a ref of refs/heads/*: a condition which asks for a tag is false there, even though the
+	// name of the branch is not known
+	const head = "on:\n  push:\n    branches: [main]\njobs:\n  j:\n    runs-on: ubuntu-latest\n    permissions: read-all\n    steps:\n"
+	const tail = "      - run: docker push example/img\n"
+	tests := []struct {
+		name string
+		step string
+		want int
+	}{
+		{"step for tags only, payload ref", "      - uses: Swatinem/rust-cache@v2\n        if: startsWith(github.event.ref, 'refs/tags/')\n", 0},
+		{"step for tags only, ref", "      - uses: Swatinem/rust-cache@v2\n        if: startsWith(github.ref, 'refs/tags/')\n", 0},
+		{"input for tags only", "      - uses: docker/setup-buildx-action@v3\n        with:\n          cache-binary: ${{ startsWith(github.event.ref, 'refs/tags/') }}\n", 0},
+		{"step for tags only, equality", "      - uses: Swatinem/rust-cache@v2\n        if: github.event.ref == 'refs/tags/v1'\n", 0},
+		{"step for branches", "      - uses: Swatinem/rust-cache@v2\n        if: startsWith(github.event.ref, 'refs/heads/')\n", 1},
+		{"step for one branch", "      - uses: Swatinem/rust-cache@v2\n        if: github.event.ref == 'refs/heads/main'\n", 1},
+		{"step not for tags", "      - uses: Swatinem/rust-cache@v2\n        if: ${{ !startsWith(github.event.ref, 'refs/tags/') }}\n", 1},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := lintCacheWorkflow(t, "", head+tc.step+tail); len(got) != tc.want {
+				t.Errorf("want %d findings but got %v", tc.want, got)
+			}
+		})
+	}
+}
