@@ -347,3 +347,55 @@ func TestUnusedInlineIgnoreOfARetiredID(t *testing.T) {
 		t.Errorf("unused: %v", ids)
 	}
 }
+
+func TestUnlockedInstallNeedsALockFileInTheRepository(t *testing.T) {
+	wf := func(run, extra string) string {
+		return "name: CI\non: push\npermissions: {}\nconcurrency:\n  group: ci\n  cancel-in-progress: true\njobs:\n  build:\n    runs-on: ubuntu-latest\n    timeout-minutes: 10\n    steps:\n      - run: " + run + "\n" + extra
+	}
+	tests := []struct {
+		what  string
+		run   string
+		extra string
+		files []string // files of the repository
+		want  int
+	}{
+		{"npm install without a lock file", "npm install", "", nil, 0},
+		{"npm install with package-lock.json", "npm install", "", []string{"package-lock.json"}, 1},
+		{"npm install with npm-shrinkwrap.json", "npm install", "", []string{"npm-shrinkwrap.json"}, 1},
+		{"npm ci", "npm ci", "", []string{"package-lock.json"}, 0},
+		{"npm install of a package", "npm install -g eslint", "", []string{"package-lock.json"}, 0},
+		{"the lock file of another tool", "npm install", "", []string{"yarn.lock"}, 0},
+		{"yarn install with yarn.lock", "yarn install", "", []string{"yarn.lock"}, 1},
+		{"yarn with yarn.lock", "yarn", "", []string{"yarn.lock"}, 1},
+		{"yarn immutable", "yarn install --immutable", "", []string{"yarn.lock"}, 0},
+		{"yarn without yarn.lock", "yarn install", "", nil, 0},
+		{"pnpm not frozen", "pnpm install --no-frozen-lockfile", "", []string{"pnpm-lock.yaml"}, 1},
+		{"pnpm not frozen without a lock file", "pnpm install --no-frozen-lockfile", "", nil, 0},
+		{"pnpm install", "pnpm install", "", []string{"pnpm-lock.yaml"}, 0},
+		{"working directory with the lock file", "npm install", "        working-directory: web\n", []string{"web/package-lock.json"}, 1},
+		{"working directory without it", "npm install", "        working-directory: web\n", []string{"other/package-lock.json"}, 0},
+		{"working directory outside the repository", "npm install", "        working-directory: ../web\n", []string{"package-lock.json"}, 1}, // the root one counts
+		{"bun stays pedantic", "bun install", "", []string{"bun.lock"}, 0},
+		{"pip stays pedantic", "pip install -r requirements.txt", "", []string{"requirements.txt"}, 0},
+	}
+	for _, tc := range tests {
+		t.Run(tc.what, func(t *testing.T) {
+			root := baselineProject(t, wf(tc.run, tc.extra), "profile: default\n")
+			for _, f := range tc.files {
+				writeTestFile(t, filepath.Join(root, f), "{}\n")
+			}
+			_, ids, _ := profileCmd(t)
+			if got := countID(ids, "unlocked-install"); got != tc.want {
+				t.Errorf("want %d findings but got %v", tc.want, ids)
+			}
+		})
+	}
+
+	// The pedantic option reports them without a lock file too
+	for _, run := range []string{"npm install", "yarn install", "bun install", "pip install -r requirements.txt"} {
+		baselineProject(t, wf(run, ""), "profile: default\nrules:\n  unlocked-install:\n    pedantic: true\n")
+		if _, ids, _ := profileCmd(t); countID(ids, "unlocked-install") != 1 {
+			t.Errorf("%s with pedantic: %v", run, ids)
+		}
+	}
+}

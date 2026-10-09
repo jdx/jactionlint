@@ -2934,7 +2934,19 @@ The rule is fixable. `jactionlint -fix=unsafe` inserts `--locked`. The fix is **
 succeeded, for example when the lock file of the crate is out of date. It is only offered when the position of `install` in the
 file is known for sure.
 
-With the option `pedantic` (on under the `pedantic` profile) the rule reports installs from a manifest that the lock file does not bind:
+The rule also reports installs from a manifest that ignore the lock file of the repository. They are reported when the lock file
+exists, because only then it is being ignored: the root of the repository (or the `working-directory` of the step) has the file of
+the tool, `package-lock.json` (or `npm-shrinkwrap.json`) for npm, `yarn.lock` for Yarn or `pnpm-lock.yaml` for pnpm.
+
+- `npm install` without a package: use `npm ci`, which fails when `package-lock.json` is out of date;
+- `yarn` and `yarn install` without `--immutable` (`--frozen-lockfile` in Yarn 1) and `pnpm install --no-frozen-lockfile`. pnpm freezes
+  the lock file in CI by default, so plain `pnpm install` is not reported. Yarn 2+ does so too, so for Yarn the flag makes it
+  explicit.
+
+With the option `pedantic` (on under the `pedantic` profile) the rule reports these installs without a lock file in the repository
+as well (a lock file may be created in the job, or not exist yet), and two more kinds of installs: `bun install` without
+`--frozen-lockfile` (or use `bun ci`), and `pip install -r` (also `uv pip install -r`) without `--require-hashes` or a constraints
+file `-c`.
 
 Example input:
 
@@ -2951,11 +2963,11 @@ jobs:
 Output:
 <!-- Skip update output -->
 ```
-test.yaml:6:14: warning: "npm install" resolves the dependencies again and may update the package-lock.json instead of failing when it is out of date. use `npm ci` [unlocked-install]
+test.yaml:6:14: "npm install" resolves the dependencies again and may update the package-lock.json instead of failing when it is out of date. use `npm ci` [unlocked-install]
   |
 6 |       - run: npm install
   |              ^~~
-test.yaml:7:14: warning: "pip install -r requirements.txt" installs a requirements file without hashes or constraints, so the transitive dependencies are resolved anew on every run. use a lock file with hashes (`pip-compile --generate-hashes`) and pass --require-hashes, or pin them with -c [unlocked-install]
+test.yaml:7:14: "pip install -r requirements.txt" installs a requirements file without hashes or constraints, so the transitive dependencies are resolved anew on every run. use a lock file with hashes (`pip-compile --generate-hashes`) and pass --require-hashes, or pin them with -c [unlocked-install]
   |
 7 |       - run: pip install -r requirements.txt
   |              ^~~
@@ -2963,11 +2975,7 @@ test.yaml:7:14: warning: "pip install -r requirements.txt" installs a requiremen
 
 <!-- Skip playground link -->
 
-- `npm install` without a package: use `npm ci`, which fails when `package-lock.json` is out of date;
-- `yarn` and `yarn install` without `--immutable` (`--frozen-lockfile` in Yarn 1), `bun install` without `--frozen-lockfile`
-  (or use `bun ci`), and `pnpm install --no-frozen-lockfile`. pnpm freezes the lock file in CI by default, so plain
-  `pnpm install` is not reported. Yarn 2+ does so too, so for Yarn the flag makes it explicit;
-- `pip install -r` (also `uv pip install -r`) without `--require-hashes` or a constraints file `-c`.
+This is the output with the option `pedantic`, or with a `package-lock.json` in the repository for the first finding.
 
 Installing named packages is covered by [adhoc packages](#check-adhoc-packages) and [unpinned tools](#check-unpinned-tools).
 These rules have no equivalent in zizmor.
@@ -5042,7 +5050,7 @@ jobs:
 Output:
 <!-- Skip update output -->
 ```
-test.yaml:1:1: warning: workflow has no "concurrency:", so every run of it executes at the same time even when a newer run supersedes the older ones. add a top-level "concurrency:" with a "group:" and "cancel-in-progress: true" [concurrency-limits]
+test.yaml:1:1: workflow has no "concurrency:", so every run of it executes at the same time even when a newer run supersedes the older ones. add a top-level "concurrency:" with a "group:" and "cancel-in-progress: true". use a group per pull request such as "${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}", so that a new push cancels only the older runs of the same pull request and not the runs of the others [concurrency-limits]
   |
 1 | on:
   | ^~~
@@ -5054,7 +5062,7 @@ The output above is from this `rules` section of the [configuration file](config
 
 ```yaml
 rules:
-  concurrency-limits: warn
+  concurrency-limits: error
 ```
 
 The rule `concurrency-limits` (in the `default` profile) reports a workflow without a `concurrency:` setting, and a workflow whose
@@ -5071,10 +5079,19 @@ concurrency:
   cancel-in-progress: true
 ```
 
+For a workflow that pull requests start, the group above is per pull request: a new push cancels the older runs of the same
+pull request and nothing else. A group that is the same for every pull request would cancel the runs of unrelated ones, which
+[`concurrency-cancels-prs`](#check-concurrency-cancels-prs) reports.
+
 Whether to cancel is a choice, so a `concurrency:` mapping that does not cancel (to serialize releases, for example) is
 accepted, and so is a `queue:`. The rule skips workflows that only run through `workflow_call` (the caller decides), workflows
-whose jobs all call a reusable workflow, and workflows where every job sets its own `concurrency:`. Because there is no safe
-default, the finding has no automatic fix.
+whose jobs all call a reusable workflow, and workflows where every job sets its own `concurrency:`.
+
+`jactionlint -fix` adds the block above after `on:` when it is safe to do so, that is, only for a workflow whose triggers are all
+events of a pull request (`pull_request`, `pull_request_target`, `pull_request_review` and `pull_request_review_comment`), in which
+no job has an `environment:` or publishes or deploys anything, no job has a `concurrency:` of its own, and the file has no
+anchors or aliases. It never adds the block to a workflow that a push, a tag, a release or a manual run starts, because cancelling
+those runs is a decision about the workflow: use the group of your choice there.
 
 <a id="check-secrets-inherit"></a>
 ## Inherited secrets
@@ -6612,7 +6629,7 @@ jobs:
 Output:
 
 ```
-test.yaml:6:23: "cancel-in-progress" is enabled here (job "publish" runs "cargo publish" and the workflow runs for pushes of tags), so a new run cancels a release or deployment which is still running and can leave it half done. set "cancel-in-progress: false" to let the running one finish first [concurrency-cancels-release]
+test.yaml:6:23: "cancel-in-progress" is enabled here (job "publish" runs "cargo publish" and the workflow runs for pushes of tags), so a new run cancels a release or deployment which is still running and can leave it half done. set "cancel-in-progress: false" (or remove it) to let the running one finish first. keep the group per ref or tag so that unrelated releases do not wait for each other, and add "queue: max" when no release may be skipped (otherwise a newer pending run replaces an older pending one) [concurrency-cancels-release]
   |
 6 |   cancel-in-progress: true
   |                       ^~~~
@@ -6651,11 +6668,19 @@ workflows that only run for pull requests. Names of workflows and jobs are not t
 The fix sets a literal `cancel-in-progress: true` to `false`. It is **unsafe** (`-fix=unsafe`) because the runs of a group queue
 instead of replacing each other, which changes when and how often the workflow runs. Expressions are not fixed.
 
+What to write for a release:
+
 ```yaml
 concurrency:
-  group: release
-  cancel-in-progress: false
+  group: release-${{ github.ref }} # one group per tag or branch, so that unrelated releases do not wait for each other
+  cancel-in-progress: false # or leave it out: false is the default
+  queue: max # when no release may be skipped
 ```
+
+`cancel-in-progress: false` lets the running release finish. Without `queue`, GitHub keeps one pending run per group and a newer
+pending run replaces the older pending one, which skips that release. `queue: max` keeps the pending runs in a queue instead, so
+every release runs. It cannot be combined with `cancel-in-progress: true`, and jactionlint accepts it. A group per tag or ref
+is what keeps the releases of different tags from queueing behind each other.
 
 Ignore the rule with `# jactionlint ignore=concurrency-cancels-release` on the line or turn it off with `rules: {concurrency-cancels-release: off}`.
 

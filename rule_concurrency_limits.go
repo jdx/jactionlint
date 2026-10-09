@@ -3,6 +3,8 @@ package jactionlint
 import (
 	"bytes"
 	"regexp"
+	"slices"
+	"strings"
 )
 
 // RuleConcurrencyLimits is a rule to detect workflows without a concurrency limit. By default GitHub
@@ -63,8 +65,87 @@ func (rule *RuleConcurrencyLimits) VisitWorkflowPre(n *Workflow) error {
 	} else if line, ok := firstKeyLine(rule.src); ok {
 		pos = &Pos{Line: line, Col: 1}
 	}
-	rule.ReportID("concurrency-limits", pos, "workflow has no \"concurrency:\", so every run of it executes at the same time even when a newer run supersedes the older ones. add a top-level \"concurrency:\" with a \"group:\" and \"cancel-in-progress: true\"")
+	msg := "workflow has no \"concurrency:\", so every run of it executes at the same time even when a newer run supersedes the older ones. add a top-level \"concurrency:\" with a \"group:\" and \"cancel-in-progress: true\""
+	if startedByPullRequest(n) {
+		msg += ". use a group per pull request such as \"" + pullRequestGroup + "\", so that a new push cancels only the older runs of the same pull request and not the runs of the others"
+	}
+	rule.ReportID("concurrency-limits", pos, msg)
+	if fix := fixConcurrencyLimits(n); fix != nil {
+		rule.errs[len(rule.errs)-1].Fix = fix
+	}
 	return nil
+}
+
+// pullRequestGroup is the group that the fix writes: the runs of one pull request cancel each other and nothing else.
+const pullRequestGroup = "${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}"
+
+// startedByPullRequest reports whether the workflow runs for an event of a pull request.
+func startedByPullRequest(w *Workflow) bool {
+	for _, e := range w.On {
+		if slices.Contains(pullRequestEvents, e.EventName()) {
+			return true
+		}
+	}
+	return false
+}
+
+// anchorRe matches an anchor or an alias used as a value or a sequence item, and the merge key.
+var anchorRe = regexp.MustCompile(`(?m)^[^#\n]*(?:[:-][ \t]+[&*][A-Za-z0-9_-]+|<<[ \t]*:)`)
+
+// fixConcurrencyLimits makes the fix which adds a top-level "concurrency:" that cancels the superseded runs of the
+// same pull request. It is a safe fix, so it is offered only where cancelling cannot hurt:
+//
+//   - every trigger is an event of a pull request, so there is no push, tag, release or manual run to cancel;
+//   - no job releases or deploys anything (an environment, a publish or deploy command or action);
+//   - no job has a "concurrency:" of its own;
+//   - the file is written in a shape the edit understands: no anchors or aliases, and the "on:" entry is a block
+//     the parser and the helpers agree on.
+func fixConcurrencyLimits(w *Workflow) *Fix {
+	if len(w.On) == 0 {
+		return nil
+	}
+	for _, e := range w.On {
+		if !slices.Contains(pullRequestEvents, e.EventName()) {
+			return nil
+		}
+	}
+	sc := releaseScenario{scenario: scenario{event: "pull_request"}}
+	for _, j := range w.Jobs {
+		if j == nil || j.Concurrency != nil || releaseSignal(j, sc.scenario) != "" {
+			return nil
+		}
+	}
+	d := newSrcDoc(w.Source)
+	if d == nil || anchorRe.Match(w.Source) {
+		return nil
+	}
+	if _, _, _, ok := d.topLevelKey("concurrency"); ok {
+		return nil // the parser did not see it, so the shape is not understood
+	}
+	line, indent, inline, ok := d.topLevelKey("on")
+	if !ok {
+		line, indent, inline, ok = d.topLevelKey(`"on"`)
+	}
+	if !ok || strings.HasPrefix(inline, "&") || strings.HasPrefix(inline, "*") {
+		return nil
+	}
+	end, ok := d.entryEnd(line, indent, inline)
+	if !ok {
+		return nil
+	}
+	if (strings.HasPrefix(inline, "{") || strings.HasPrefix(inline, "[")) && end != line {
+		return nil // a flow collection over several lines
+	}
+	pad := strings.Repeat(" ", indent)
+	unit := strings.Repeat(" ", d.indentUnit())
+	return &Fix{
+		Description: "Add concurrency that cancels superseded runs of the same pull request",
+		Edits: []TextEdit{d.insertAfterLine(end,
+			pad+"concurrency:",
+			pad+unit+"group: "+pullRequestGroup,
+			pad+unit+"cancel-in-progress: true",
+		)},
+	}
 }
 
 var onKeyRegexp = regexp.MustCompile(`^(?:on|"on"|'on')[ \t]*:`)
@@ -94,7 +175,7 @@ func onlyWorkflowCall(n *Workflow) bool {
 
 func init() {
 	registerRules(
-		RuleInfo{ID: "concurrency-limits", Group: RuleGroupPolicy, Summary: "A workflow does not cancel superseded runs with concurrency:.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-concurrency-limits"},
+		RuleInfo{ID: "concurrency-limits", Group: RuleGroupPolicy, Summary: "A workflow does not cancel superseded runs with concurrency:.", DefaultLevel: SeverityError, Profile: ProfileDefault, Fixable: true, DocsAnchor: "check-concurrency-limits"},
 	)
 	registerRuleFactory("concurrency-limits", func(env *RuleEnv) []Rule {
 		if !env.config.RuleEnabled("concurrency-limits") {

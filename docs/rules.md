@@ -276,6 +276,7 @@ A workflow does not cancel superseded runs with concurrency:.
 - Group: policy
 - Default level: error
 - Profile: default
+- Fixable: yes
 - Details and examples: [checks](./checks.md#check-concurrency-limits)
 
 ## conflicting-runner-labels
@@ -1175,7 +1176,7 @@ A secret which the reusable workflow does not define is passed.
 
 ## unlocked-install
 
-cargo install runs without --locked.
+cargo install runs without --locked, or npm, yarn or pnpm install without freezing a lock file that the repository has.
 
 - Group: security
 - Default level: error

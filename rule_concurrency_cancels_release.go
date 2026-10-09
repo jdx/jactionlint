@@ -398,7 +398,7 @@ func (rule *RuleConcurrencyCancelsRelease) report(c *Concurrency, why string) {
 	rule.ReportIDf(
 		"concurrency-cancels-release",
 		pos,
-		"\"cancel-in-progress\" is enabled here (%s), so a new run cancels a release or deployment which is still running and can leave it half done. set \"cancel-in-progress: false\" to let the running one finish first",
+		"\"cancel-in-progress\" is enabled here (%s), so a new run cancels a release or deployment which is still running and can leave it half done. set \"cancel-in-progress: false\" (or remove it) to let the running one finish first. keep the group per ref or tag so that unrelated releases do not wait for each other, and add \"queue: max\" when no release may be skipped (otherwise a newer pending run replaces an older pending one)",
 		why,
 	)
 	if c.CancelInProgress.Expression != nil || !c.CancelInProgress.Value {

@@ -11,7 +11,7 @@ import (
 // that would add noise to the fixtures.
 func tiConfig(t *testing.T) *Config {
 	t.Helper()
-	return mustParseConfig(t, "profile: pedantic\nrules:\n  missing-permissions: off\n  missing-timeout: off\n  anonymous-definition: off\n  require-shell: off\n  require-expression-wrapping: off\n  unpinned-uses: off\n")
+	return mustParseConfig(t, "profile: pedantic\nrules:\n  concurrency-limits: off\n  missing-permissions: off\n  missing-timeout: off\n  anonymous-definition: off\n  require-shell: off\n  require-expression-wrapping: off\n  unpinned-uses: off\n")
 }
 
 func tiWorkflow(runs string) string {
