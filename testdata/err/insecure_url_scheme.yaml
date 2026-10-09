@@ -23,3 +23,7 @@ jobs:
       - uses: octo/sign@v1
         with:
           timestamp-rfc3161: http://timestamp.acs.microsoft.com
+      # but an input which only has the word in its name is a URL like any other
+      - uses: octo/sign@v1
+        with:
+          timestamp-mirror: http://mirror.example.com/files
