@@ -886,6 +886,7 @@ func (p *parser) parseConcurrency(pos *Pos, n *yaml.Node) *Concurrency {
 
 	if n.Kind == yaml.ScalarNode {
 		ret.Group = p.parseString(n, false)
+		ret.Bare = true
 		return ret
 	}
 
@@ -961,7 +962,7 @@ func (p *parser) parseOutputs(n *yaml.Node) map[string]*Output {
 func (p *parser) parseRawYAMLValue(n *yaml.Node) RawYAMLValue {
 	switch n.Kind {
 	case yaml.ScalarNode:
-		return &RawYAMLString{n.Value, n.Tag == "!!str", posAt(n)}
+		return &RawYAMLString{Value: n.Value, StringTag: n.Tag == "!!str", pos: posAt(n), str: p.newString(n)}
 	case yaml.SequenceNode:
 		vs := make([]RawYAMLValue, 0, len(n.Content))
 		for _, c := range n.Content {
@@ -1623,6 +1624,7 @@ func (p *parser) parseJob(id *String, n *yaml.Node) *Job {
 				// https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions#onworkflow_callsecretsinherit
 				if e.val.Value == "inherit" {
 					call.InheritSecrets = true
+					call.InheritSecretsPos = posAt(e.val)
 				} else {
 					p.errorf(e.val, "expected mapping node for secrets or \"inherit\" string node but found %q node", e.val.Value)
 				}

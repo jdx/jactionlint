@@ -632,6 +632,7 @@ func (l *Linter) check(
 
 		rules := newBuiltinRules(&RuleEnv{
 			path:                   path,
+			src:                    content,
 			project:                project,
 			localActions:           localActions,
 			localReusableWorkflows: localReusableWorkflows,

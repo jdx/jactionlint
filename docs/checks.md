@@ -49,6 +49,18 @@ List of checks:
 - [Deprecated inputs usage](#deprecated-inputs-usage)
 - [YAML anchors](#yaml-anchors)
 - [Dependabot configuration syntax](#check-dependabot-syntax)
+- [Workflow and job names (opt-in)](#check-anonymous-definition)
+- [Concurrency limits (opt-in)](#check-concurrency-limits)
+- [Inherited secrets](#check-secrets-inherit)
+- [Insecure workflow commands](#check-insecure-commands)
+- [Dangerous triggers (opt-in)](#check-dangerous-triggers)
+- [Self-hosted runners (opt-in)](#check-self-hosted-runner)
+- [Unsound `contains()` on a string](#check-unsound-contains)
+- [Overprovisioned secrets (opt-in)](#check-overprovisioned-secrets)
+- [Unredacted secrets (opt-in)](#check-unredacted-secrets)
+- [Secrets outside an environment (opt-in)](#check-secrets-outside-env)
+- [Typosquatting of actions (opt-in)](#check-typosquat-uses)
+- [Forbidden actions (opt-in)](#check-forbidden-uses)
 
 Note that jactionlint focuses on catching mistakes in workflow files. If you want some general code style checks, please consider
 using a general YAML checker like [yamllint][].
@@ -3634,6 +3646,591 @@ Output:
 ```
 
 <!-- Skip playground link -->
+
+<a id="check-anonymous-definition"></a>
+## Workflow and job names (opt-in)
+
+Example input:
+
+```yaml
+on: push
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - run: make
+```
+
+Output:
+<!-- Skip update output -->
+```
+test.yaml:1:1: warning: workflow has no "name:", so GitHub shows its file path in the Actions UI. add a top-level "name:" to make the workflow recognizable [anonymous-definition]
+  |
+1 | on: push
+  | ^~~
+test.yaml:3:3: warning: job "build" has no "name:", so the Actions UI shows only its ID. add a "name:" to describe what the job does [anonymous-definition]
+  |
+3 |   build:
+  |   ^~~~~~
+```
+
+<!-- Skip playground link -->
+
+The output above is from this `rules` section of the [configuration file](config.md):
+
+```yaml
+rules:
+  anonymous-definition: warn
+```
+
+The rule `anonymous-definition` (in the `strict` profile) reports workflows without a top-level `name:` and jobs without a
+`name:`. GitHub shows the file path of a workflow without a name, and the ID of a job without one, in the Actions UI, in the
+checks of a pull request and in notifications. Names make it clear which definition is running, and a name can be changed
+without breaking the `needs:` of other jobs, which refer to the job ID. Jobs that call a reusable workflow are not reported
+since GitHub shows them as `caller / called job`.
+
+The rule is fixable. `jactionlint -fix` adds `name: <file name without the extension>` to the workflow and `name: <job ID>` to
+a job, which shows the job exactly as it was shown before. Both fixes are safe. A workflow read from stdin gets the ID of its
+only job; with several jobs it has no fix.
+
+To turn the rule off for a project, set `anonymous-definition: off` in `rules`. Single findings can be ignored with
+`# jactionlint ignore=anonymous-definition`.
+
+<a id="check-concurrency-limits"></a>
+## Concurrency limits (opt-in)
+
+Example input:
+
+```yaml
+on:
+  pull_request:
+  push:
+    branches: [main]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - run: make test
+```
+
+Output:
+<!-- Skip update output -->
+```
+test.yaml:1:1: warning: workflow has no "concurrency:", so every run of it executes at the same time even when a newer run supersedes the older ones. add a top-level "concurrency:" with a "group:" and "cancel-in-progress: true" [concurrency-limits]
+  |
+1 | on:
+  | ^~~
+```
+
+<!-- Skip playground link -->
+
+The output above is from this `rules` section of the [configuration file](config.md):
+
+```yaml
+rules:
+  concurrency-limits: warn
+```
+
+The rule `concurrency-limits` (in the `strict` profile) reports a workflow without a `concurrency:` setting, and a workflow whose
+`concurrency:` is written as a plain group name (`concurrency: my-group`), which cannot cancel anything. By default GitHub runs
+every instance of a workflow at the same time even when a new run supersedes the old ones. That wastes runner minutes (an
+attacker can use it to burn the billed minutes of a repository) and can make workflows race when they look for artifacts by
+workflow and job names.
+
+Add a top-level `concurrency:` with a group and `cancel-in-progress: true` (or an expression which is true in most cases):
+
+```yaml
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+```
+
+Whether to cancel is a choice, so a `concurrency:` mapping that does not cancel (to serialize releases, for example) is
+accepted, and so is a `queue:`. The rule skips workflows that only run through `workflow_call` (the caller decides), workflows
+whose jobs all call a reusable workflow, and workflows where every job sets its own `concurrency:`. Because there is no safe
+default, the finding has no automatic fix.
+
+<a id="check-secrets-inherit"></a>
+## Inherited secrets
+
+Example input:
+
+```yaml
+on: push
+jobs:
+  deploy:
+    uses: octo-org/octo-repo/.github/workflows/deploy.yaml@main
+    secrets: inherit
+```
+
+Output:
+
+```
+test.yaml:4:11: warning: "secrets: inherit" passes every secret of this workflow to the reusable workflow "octo-org/octo-repo/.github/workflows/deploy.yaml@main". list only the secrets it needs in a "secrets:" mapping, e.g. "NAME: ${{ secrets.NAME }}" [secrets-inherit]
+  |
+4 |     uses: octo-org/octo-repo/.github/workflows/deploy.yaml@main
+  |           ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+```
+
+[Playground](https://jactionlint.jdx.dev/#eNoky7ERgzAMBdCeKbRAcK8qqwBRsBLj75Pk49g+F9O95qEyte55+mB1nohe0gquv4i6izNhCzxgexowaUjzrpH7mk7Y911werrbfC1HeR6L1vFdNpNwJq1ZTOM3AOpyJd8=)
+
+The rule `secrets-inherit` (in the `default` profile, as a warning) reports a job that calls a reusable workflow with
+`secrets: inherit`. The called workflow receives every secret that the caller can see, so it breaks the principle of least
+privilege and makes it impossible to tell from the caller which secrets the called workflow gets.
+
+Pass the secrets the called workflow needs one by one:
+
+```yaml
+jobs:
+  deploy:
+    uses: octo-org/octo-repo/.github/workflows/deploy.yaml@main
+    secrets:
+      deploy-token: ${{ secrets.DEPLOY_TOKEN }}
+```
+
+There is no automatic fix because jactionlint cannot know which secrets the called workflow uses. To accept the inheritance for
+a trusted workflow of your own organization, ignore the finding with `# jactionlint ignore=secrets-inherit` or turn the rule
+off with `secrets-inherit: off` in `rules`.
+
+<a id="check-insecure-commands"></a>
+## Insecure workflow commands
+
+Example input:
+
+```yaml
+on: push
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+        env:
+          ACTIONS_ALLOW_UNSECURE_COMMANDS: true
+```
+
+Output:
+
+```
+test.yaml:8:11: the step enables the deprecated insecure workflow commands "set-env" and "add-path" with ACTIONS_ALLOW_UNSECURE_COMMANDS. any output of a step can inject environment variables with them. remove the variable and write to the files $GITHUB_ENV and $GITHUB_PATH instead [insecure-commands]
+  |
+8 |           ACTIONS_ALLOW_UNSECURE_COMMANDS: true
+  |           ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+```
+
+[Playground](https://jactionlint.jdx.dev/#eNo8y8GKgzAYBOC7TzEEr673HISsK6ugZlmVHoOxAS0hEZO/z19sS28zzDfecewU1uTmdeAJoGmz1zMAB7mQnYA0uUiZnaMJ8TmFaPbwUkB2Sg6zrB4srWVX5V/WL7PN9eYYigIs/W3GevpWf2Ks2fsGGHfnnwKIcmxkPyjRtvKipn6oyum/UqXsOtH/DBzxIPMYAK27MTc=)
+
+The rule `insecure-commands` (in the `default` profile) reports a workflow, job or step that sets the environment variable
+`ACTIONS_ALLOW_UNSECURE_COMMANDS` to `true` (or `1`). GitHub [deprecated the workflow commands][deprecate-set-env-add-path]
+`::set-env` and `::add-path` in 2020 because anything that can print a line to the log of a step can use them to inject
+environment variables, and so to run code. This variable opts back in to them. The [deprecated workflow commands](#check-deprecated-workflow-commands)
+check reports the commands themselves.
+
+Write to the environment files instead (`$GITHUB_ENV`, `$GITHUB_PATH`) and remove the variable.
+
+The rule is fixable but the fix is **unsafe**: `jactionlint -fix=unsafe` removes the variable (and the `env:` mapping when it
+was the only entry). A step that still prints `::set-env` or `::add-path` stops working after that, so replace the commands first.
+
+<a id="check-dangerous-triggers"></a>
+## Dangerous triggers (opt-in)
+
+Example input:
+
+```yaml
+on:
+  pull_request_target:
+    types: [opened]
+jobs:
+  comment:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo hello
+```
+
+Output:
+<!-- Skip update output -->
+```
+test.yaml:2:3: warning: trigger "pull_request_target" is dangerous: it runs in the context of the base repository with a write token and secrets even when the pull request comes from a fork. use "pull_request" unless write access is required, and never check out or run code of the pull request [dangerous-triggers]
+  |
+2 |   pull_request_target:
+  |   ^~~~~~~~~~~~~~~~~~~~
+```
+
+<!-- Skip playground link -->
+
+The output above is from this `rules` section of the [configuration file](config.md):
+
+```yaml
+rules:
+  dangerous-triggers: warn
+```
+
+The rule `dangerous-triggers` (in the `strict` profile) reports the triggers `pull_request_target`, `workflow_run` and
+`issue_comment`. They run with the secrets and the write token of the repository (in the context of the default branch) while
+a fork, or any commenter, controls part of the event. Making them safe is hard: it is not enough to avoid checking out the
+pull request, because arguments, environment variables and files that come from the event can still lead to code execution. See
+[Keeping your GitHub Actions and workflows secure: preventing pwn requests](https://securitylab.github.com/resources/github-actions-preventing-pwn-requests/).
+
+Prefer `pull_request` unless the workflow really needs write access (to leave a comment, for example), `workflow_call` instead
+of `workflow_run`, and a label added by a maintainer instead of a comment as the trigger. A workflow whose steps are only
+`actions/labeler` is accepted for `pull_request_target`, since it never runs code from the pull request.
+
+The rule only looks at the trigger, so a workflow that uses one of them safely is reported as well. Ignore it with
+`# jactionlint ignore=dangerous-triggers` and a reason, as in `zizmor: ignore[dangerous-triggers]`. zizmor 1.30.1 does not report
+`issue_comment` yet.
+
+<a id="check-self-hosted-runner"></a>
+## Self-hosted runners (opt-in)
+
+Example input:
+
+```yaml
+on: push
+jobs:
+  build:
+    runs-on: [self-hosted, linux]
+    steps:
+      - run: make
+```
+
+Output:
+<!-- Skip update output -->
+```
+test.yaml:4:15: info: job runs on a self-hosted runner (label "self-hosted"). self-hosted runners are hard to secure and should not run workflows of untrusted pull requests of a public repository [self-hosted-runner]
+  |
+4 |     runs-on: [self-hosted, linux]
+  |               ^~~~~~~~~~~~
+```
+
+<!-- Skip playground link -->
+
+The output above is from this `rules` section of the [configuration file](config.md):
+
+```yaml
+rules:
+  self-hosted-runner: info
+```
+
+The rule `self-hosted-runner` (in the `all` profile, at the `info` level) points out jobs that have the `self-hosted` label in
+`runs-on:`, also when it comes from a literal value of the matrix. [Self-hosted runners][self-hosted-runner-security] are hard
+to secure: unless they are ephemeral, a job can leave something behind for the next one, and GitHub does not recommend them for
+public repositories, where any pull request can run code on them. The rule is informational because it cannot see how a runner
+is set up. Runner labels of third party providers (without the `self-hosted` label) are not reported, and neither are labels
+that come from an expression it cannot resolve.
+
+If you must use self-hosted runners in a public repository, require approval for the workflows of outside contributors and use
+ephemeral (just-in-time) runners.
+
+[self-hosted-runner-security]: https://docs.github.com/en/actions/hosting-your-own-runners/managing-self-hosted-runners/about-self-hosted-runners#self-hosted-runner-security
+
+<a id="check-unsound-contains"></a>
+## Unsound contains() on a string
+
+Example input:
+
+```yaml
+on: push
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - run: ./deploy.sh
+        if: contains('refs/heads/main refs/heads/develop', github.ref)
+```
+
+Output:
+
+```
+test.yaml:7:13: warning: contains() with the string literal "refs/heads/main refs/heads/develop" as its first argument is true for any substring of it, not only for its words. to check membership in a list pass an array instead, e.g. contains(fromJSON('["a", "b"]'), value), or compare each value with == [unsound-contains]
+  |
+7 |         if: contains('refs/heads/main refs/heads/develop', github.ref)
+  |             ^~~~~~~~~~~~~~~~~~~~~~~~~
+```
+
+[Playground](https://jactionlint.jdx.dev/#eNpMy8GuAiEMheH9PMXZzb2JM7PnbUCKYLAQ2pr49gbHhbs2/3caO3STvNxbELcAkXptr3kBw1i2KSwYq23VK4l+kih1ORWwTemwH+d4l/wNQEkO18bqC8vfOijJkclHOR6+MH7+SE+qra8X3IpmC/ug9P8eABuBMf8=)
+
+The rule `unsound-contains` (in the `default` profile, as a warning) reports a condition in `if:` that calls `contains()` with a
+string literal as the first argument and something else as the second. People write it to test that a value is one of a list
+of words, but `contains()` on strings tests for a substring, so `contains('refs/heads/main refs/heads/develop', github.ref)` is
+also true for a branch named `mai` or `heads/dev`. When the condition guards a deployment or a privileged step, that is a
+bypass.
+
+Give `contains()` an array, or compare with each value:
+
+```yaml
+if: contains(fromJSON('["refs/heads/main", "refs/heads/develop"]'), github.ref)
+# or
+if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'
+```
+
+Calls where the first argument is not a literal (`contains(github.event.head_commit.message, 'skip ci')`) are not reported.
+There is no automatic fix.
+
+<a id="check-overprovisioned-secrets"></a>
+## Overprovisioned secrets (opt-in)
+
+Example input:
+
+```yaml
+on: push
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - run: ./deploy.sh
+        env:
+          SECRETS: ${{ toJSON(secrets) }}
+```
+
+Output:
+<!-- Skip update output -->
+```
+test.yaml:8:31: warning: the whole "secrets" context is used, which exposes every secret to the runner even if only one is needed. reference each secret by its name, e.g. "secrets.NAME" [overprovisioned-secrets]
+  |
+8 |           SECRETS: ${{ toJSON(secrets) }}
+  |                               ^~~~~~~~
+```
+
+<!-- Skip playground link -->
+
+The output above is from this `rules` section of the [configuration file](config.md):
+
+```yaml
+rules:
+  overprovisioned-secrets: warn
+```
+
+The rule `overprovisioned-secrets` (in the `strict` profile) reports expressions that use the whole `secrets` context:
+`toJSON(secrets)`, `secrets[<computed name>]`, `secrets.*` or a bare `secrets` passed to a function. GitHub passes to the
+runner only the secrets that a job refers to by name. An expression like the above makes it pass all of them, even if the
+step needs one.
+
+Refer to each secret by its name instead:
+
+```yaml
+env:
+  SECRET_ONE: ${{ secrets.SECRET_ONE }}
+  SECRET_TWO: ${{ secrets.SECRET_TWO }}
+```
+
+`secrets.NAME` and `secrets['NAME']` are fine. There is no automatic fix.
+
+<a id="check-unredacted-secrets"></a>
+## Unredacted secrets (opt-in)
+
+Example input:
+
+```yaml
+on: push
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - run: ./deploy.sh
+        env:
+          PASSWORD: ${{ fromJSON(secrets.CREDENTIALS).password }}
+```
+
+Output:
+<!-- Skip update output -->
+```
+test.yaml:8:25: warning: secret "CREDENTIALS" is parsed with fromJSON(), and the runner does not redact the fields of a parsed secret from the logs. store each field in its own secret and reference it by name [unredacted-secrets]
+  |
+8 |           PASSWORD: ${{ fromJSON(secrets.CREDENTIALS).password }}
+  |                         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+```
+
+<!-- Skip playground link -->
+
+The output above is from this `rules` section of the [configuration file](config.md):
+
+```yaml
+rules:
+  unredacted-secrets: warn
+```
+
+The rule `unredacted-secrets` (in the `strict` profile) reports a field that is extracted from a secret parsed with `fromJSON()`,
+as in `fromJSON(secrets.CREDENTIALS).password`. The runner redacts the exact value of each secret from the logs, but it does
+not know that a field of a JSON document is a secret too, so the extracted value can show up in the logs in clear.
+
+Store each field in its own secret (`secrets.CREDENTIALS_PASSWORD`). Passing the whole parsed secret on (`fromJSON(secrets.X)`
+without a property access) is not reported. There is no automatic fix.
+
+<a id="check-secrets-outside-env"></a>
+## Secrets outside an environment (opt-in)
+
+Example input:
+
+```yaml
+on: push
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - run: ./deploy.sh
+        env:
+          API_KEY: ${{ secrets.API_KEY }}
+```
+
+Output:
+<!-- Skip update output -->
+```
+test.yaml:8:24: warning: secret "API_KEY" is used by a job which has no "environment:", so it is a repository or organization secret exposed to every job. move it to an environment with protection rules and set "environment:" at the job [secrets-outside-env]
+  |
+8 |           API_KEY: ${{ secrets.API_KEY }}
+  |                        ^~~~~~~~~~~~~~~
+```
+
+<!-- Skip playground link -->
+
+The output above is from this `rules` section of the [configuration file](config.md):
+
+```yaml
+rules:
+  secrets-outside-env: warn
+```
+
+The rule `secrets-outside-env` (in the `all` profile) reports a use of a secret in a job that has no `environment:`. Secrets of a
+repository or an organization are exposed to every job that asks for them. The secrets of an
+[environment](https://docs.github.com/en/actions/managing-workflow-runs-and-deployments/managing-deployments/managing-environments-for-deployment)
+are only available to jobs that meet its protection rules (required reviewers, branch restrictions), which limits the damage of
+a compromised workflow.
+
+Move the secret to an environment, remove it from the repository secrets, and set `environment:` at the job. jactionlint
+cannot see where a secret is stored, so it assumes that the secrets of a job with an `environment:` are environment secrets.
+
+`GITHUB_TOKEN` is never reported because its permissions are set by the workflow. Workflows that run through `workflow_call`
+are skipped: environment secrets do not reach a reusable workflow unless the caller inherits all secrets. Secrets that are fine
+outside of an environment can be listed in the `allow` option (names are case-insensitive):
+
+```yaml
+rules:
+  secrets-outside-env:
+    level: warn
+    allow: [CI_COVERAGE_TOKEN]
+```
+
+The line of a secret in a folded block scalar (`>-`) is the line where the block starts. There is no automatic fix.
+
+<a id="check-typosquat-uses"></a>
+## Typosquatting of actions (opt-in)
+
+Example input:
+
+```yaml
+on: push
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: action/checkout@v4
+```
+
+Output:
+<!-- Skip update output -->
+```
+test.yaml:6:15: warning: "action/checkout" looks like a typo of the popular action "actions/checkout", which belongs to another account. a typosquatted account can serve malicious code. check the name; to accept it as is, add "action/checkout" to the "allow" option of the "typosquat-uses" rule [typosquat-uses]
+  |
+6 |       - uses: action/checkout@v4
+  |               ^~~~~~~~~~~~~~~~~~
+```
+
+<!-- Skip playground link -->
+
+The output above is from this `rules` section of the [configuration file](config.md):
+
+```yaml
+rules:
+  typosquat-uses: warn
+```
+
+The rule `typosquat-uses` (in the `strict` profile) reports an action whose `owner/repo` is one typo away from a popular action
+of another owner, like `action/checkout` instead of `actions/checkout` or `dokcer/login-action` instead of
+`docker/login-action`. An attacker can register the misspelled account and serve malicious code to everyone who copied the typo.
+One typo means a character added, removed, replaced or two neighboring characters swapped. The popular actions are the ones
+in the data set behind [the popular action inputs check](#check-popular-action-inputs).
+
+A near miss in the repository name under the right owner (`actions/chekout`) is not reported: nobody else can create it, and
+it fails to resolve. An action that is itself in the data set is never reported.
+
+If the name is intentional (a fork or a renamed action), add its `owner/repo` to the `allow` option:
+
+```yaml
+rules:
+  typosquat-uses:
+    level: warn
+    allow: [acttons/setup-node]
+```
+
+The check compares names only. It does not ask GitHub whether the repository exists. There is no automatic fix because
+jactionlint cannot be sure which name was meant.
+
+<a id="check-forbidden-uses"></a>
+## Forbidden actions (opt-in)
+
+Example input:
+
+```yaml
+on: push
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: tj-actions/changed-files@v45
+```
+
+Output:
+<!-- Skip update output -->
+```
+test.yaml:7:15: action "tj-actions/changed-files@v45" is not allowed because it matches no pattern in the "allow" list of the "forbidden-uses" rule ("actions/*", "github/codeql-action/*"). use an allowed one or add a pattern to the configuration [forbidden-uses]
+  |
+7 |       - uses: tj-actions/changed-files@v45
+  |               ^~~~~~~~~~~~~~~~~~~~~~~~~~~~
+```
+
+<!-- Skip playground link -->
+
+The output above is from this `rules` section of the [configuration file](config.md):
+
+```yaml
+rules:
+  forbidden-uses:
+    allow:
+      - actions/*
+      - github/codeql-action/*
+```
+
+The rule `forbidden-uses` restricts which actions and reusable workflows a repository may use. It does nothing unless the `allow`
+or the `deny` option is set. With `allow`, only the matching ones are accepted. With `deny`, the matching ones are rejected. It is
+the inverse of [`required-actions`](config.md), which demands that some action is used.
+
+Both options are lists of patterns. A pattern is `owner/repo[/path]`, optionally followed by `@ref`; names are
+case-insensitive and refs are case-sensitive:
+
+| Pattern | Matches |
+| --- | --- |
+| `*` | every action and reusable workflow |
+| `actions/*` | every action of the owner, including those in sub-directories |
+| `github/codeql-action/*` | the repository and everything in it, e.g. `github/codeql-action/init` |
+| `actions/cache` | only the root of the repository: not `actions/cache/save` |
+| `actions/cache/save` | only that sub-directory |
+| `octo-org/shared/.github/workflows/ci.yaml@v1` | only that workflow at that ref |
+| `octo-org/*@v1` | anything of the owner at `v1` |
+| `actions/setup-*` | any other `*` matches any characters |
+
+Local actions (`./path`, `$/path`) and Docker images (`docker://`) are never reported, and neither are values that contain an
+expression. A deny pattern wins over an allow pattern. When both lists are set, a reference must match `allow` and must not match
+`deny`.
+
+```yaml
+rules:
+  forbidden-uses:
+    deny:
+      - tj-actions/changed-files
+```
+
+The rule is for policy, so its default level is `error`. There is no automatic fix.
+
 
 ---
 

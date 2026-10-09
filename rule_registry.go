@@ -61,6 +61,8 @@ const (
 	RuleOptionInt RuleOptionKind = "int"
 	// RuleOptionNumber is an option taking a non-negative number.
 	RuleOptionNumber RuleOptionKind = "number"
+	// RuleOptionStrings is an option taking a list of strings.
+	RuleOptionStrings RuleOptionKind = "strings"
 )
 
 // RuleOption describes one option which can be given to a rule in the "rules" mapping of the
@@ -173,6 +175,7 @@ func (r *RuleInfo) option(name string) (RuleOption, bool) {
 // one file. A factory registered with registerRuleFactory receives it.
 type RuleEnv struct {
 	path                   string
+	src                    []byte // the source of the file being linted
 	project                *Project
 	localActions           *LocalActionsCache
 	localReusableWorkflows *LocalReusableWorkflowCache

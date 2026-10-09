@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -146,6 +147,8 @@ jobs:
 	}
 
 	var have []string
+	// Findings of the other rules of the strict profile are not the point of the test
+	got = slices.DeleteFunc(got, func(e *Error) bool { return e.Kind != "ignore" })
 	for _, e := range got {
 		have = append(have, fmt.Sprintf("%d:%d %s", e.Line, e.Column, e.ID))
 		if e.Kind != "ignore" || e.Severity != SeverityError {

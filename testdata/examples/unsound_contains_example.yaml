@@ -1,0 +1,7 @@
+on: push
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - run: ./deploy.sh
+        if: contains('refs/heads/main refs/heads/develop', github.ref)

@@ -1,6 +1,61 @@
 {
   "zizmor": "1.30.1",
   "audits": {
+    "anonymous-definition": {
+      "coverage": "full",
+      "notes": "Workflows only. zizmor also checks action.yml, which jactionlint does not lint.",
+      "jactionlint": [{ "rule": "anonymous-definition" }]
+    },
+    "concurrency-limits": {
+      "coverage": "partial",
+      "notes": "Reports a missing concurrency block and cancel-in-progress left unset or false. Skips workflows started only by workflow_call and workflows where every job has its own concurrency.",
+      "jactionlint": [{ "rule": "concurrency-limits" }]
+    },
+    "dangerous-triggers": {
+      "coverage": "full",
+      "notes": "pull_request_target, workflow_run and issue_comment (zizmor 1.30.1 does not flag issue_comment yet). jactionlint reports at the trigger and zizmor at on:, so lines differ for multi-line on blocks.",
+      "jactionlint": [{ "rule": "dangerous-triggers" }]
+    },
+    "insecure-commands": {
+      "coverage": "partial",
+      "notes": "Workflow, job and step env, when the value is true. action.yml and container env are not checked.",
+      "jactionlint": [{ "rule": "insecure-commands" }]
+    },
+    "overprovisioned-secrets": {
+      "coverage": "full",
+      "notes": "The whole secrets context (toJSON(secrets), secrets[...], a bare secrets).",
+      "jactionlint": [{ "rule": "overprovisioned-secrets" }]
+    },
+    "secrets-inherit": {
+      "coverage": "full",
+      "notes": "Reports secrets: inherit at the calling job.",
+      "jactionlint": [{ "rule": "secrets-inherit" }]
+    },
+    "secrets-outside-env": {
+      "coverage": "full",
+      "notes": "Jobs with secrets but no environment. The allow option mirrors zizmor's.",
+      "jactionlint": [{ "rule": "secrets-outside-env" }]
+    },
+    "self-hosted-runner": {
+      "coverage": "partial",
+      "notes": "Literal labels and matrix values. Labels that come from other expressions are not resolved.",
+      "jactionlint": [{ "rule": "self-hosted-runner" }]
+    },
+    "typosquat-uses": {
+      "coverage": "partial",
+      "notes": "Slugs one edit away from a popular action of another owner. zizmor's typomania covers more transformations.",
+      "jactionlint": [{ "rule": "typosquat-uses" }]
+    },
+    "unredacted-secrets": {
+      "coverage": "full",
+      "notes": "Any fromJSON(secrets.X), with or without a field access.",
+      "jactionlint": [{ "rule": "unredacted-secrets" }]
+    },
+    "unsound-contains": {
+      "coverage": "full",
+      "notes": "contains() with a string literal as its first argument in if: conditions.",
+      "jactionlint": [{ "rule": "unsound-contains" }]
+    },
     "template-injection": {
       "coverage": "partial",
       "notes": "jactionlint reports untrusted contexts in expressions. zizmor also covers env indirection, github-script and more contexts.",
@@ -46,8 +101,8 @@
     },
     "forbidden-uses": {
       "coverage": "partial",
-      "notes": "required-actions enforces a required set of actions. zizmor's allow and deny lists are the inverse and are not covered yet.",
-      "jactionlint": [{ "rule": "required-actions" }]
+      "notes": "allow and deny lists of repository patterns (rules.forbidden-uses.allow and deny); not measured against zizmor yet. required-actions is the separate inverse check and does not cover these findings.",
+      "jactionlint": [{ "rule": "forbidden-uses" }]
     }
   }
 }

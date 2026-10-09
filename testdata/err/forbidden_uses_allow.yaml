@@ -1,0 +1,12 @@
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: github/codeql-action/init@v3
+      - uses: docker/login-action@v3
+      - uses: ./local-action
+      - uses: docker://alpine:3
+  call:
+    uses: octo-org/shared/.github/workflows/ci.yaml@v1
