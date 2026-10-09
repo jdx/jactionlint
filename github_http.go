@@ -340,17 +340,33 @@ func (c *httpGitHubClient) scope(token string) string {
 // repository turn private (see shareIfPublic).
 func (c *httpGitHubClient) lookup(u, token string) (entry *cacheEntry, key string) {
 	key = cacheKey(c.scope(token), u)
-	id := c.repoID(u)
-	if entry = c.cache.get(key, u); entry != nil && token == "" && !c.sharedUsable(entry, id) {
-		entry = nil // the anonymous slot holds the shared copies
+	return c.findCached(key, u, token, c.repoID(u)), key
+}
+
+// sharedScope is the slot of the copies that a token made for everybody (see shareIfPublic). It is not the
+// anonymous slot: that one holds what the server answered to a request without a token, and a copy of an
+// answer of a token must neither replace nor hide it, nor take it along when it is purged.
+func (c *httpGitHubClient) sharedScope() string {
+	return c.base.Host + "|shared"
+}
+
+// findCached looks up the request named name (key is where the client's own answers are kept). The order:
+// the slot of the client; for a client with a token the answers fetched without one (public by definition;
+// only a 200 serves a token, which may see more than an anonymous "not found"); then the shared copies,
+// while they are usable.
+func (c *httpGitHubClient) findCached(key, name, token, id string) *cacheEntry {
+	if e := c.cache.get(key, name); e != nil && c.sharedUsable(e, id) {
+		return e
 	}
-	if entry != nil || token == "" {
-		return entry, key
+	if token != "" {
+		if e := c.cache.get(cacheKey(c.scope(""), name), name); e != nil && e.Status == http.StatusOK && c.sharedUsable(e, id) {
+			return e
+		}
 	}
-	if e := c.cache.get(cacheKey(c.scope(""), u), u); e != nil && e.Status == http.StatusOK && c.sharedUsable(e, id) {
-		return e, key
+	if e := c.cache.get(cacheKey(c.sharedScope(), name), name); e != nil && e.Status == http.StatusOK && c.sharedUsable(e, id) {
+		return e
 	}
-	return nil, key
+	return nil
 }
 
 // repoID is the lower case "owner/repo" a URL of the API is about, or "".
@@ -419,18 +435,39 @@ func (c *httpGitHubClient) getOpt(ctx context.Context, target string, revalidate
 	if err != nil && entry != nil && errors.Is(err, ErrGitHubRateLimited) {
 		return answerFromEntry(entry), nil
 	}
-	if err == nil && token != "" && !revalidate && c.currentToken() == token { // a revalidation is the caller's business
-		if owner, repo, self, ok := c.repoOf(u); ok {
-			if ans.status == http.StatusOK {
-				c.shareIfPublic(ctx, u, key, owner, repo, self)
-			} else if self && (ans.status == http.StatusNotFound || ans.status == http.StatusForbidden || ans.status == http.StatusUnauthorized) {
-				// Not visible to this token any more: whatever was shared about it goes
-				c.setVisibility(strings.ToLower(owner+"/"+repo), false, c.now())
-				c.cache.remove(cacheKey(c.scope(""), u))
-			}
-		}
+	if token != "" && !revalidate {
+		c.afterTokenRequest(ctx, u, token, key, ans, err)
 	}
 	return ans, err
+}
+
+// afterTokenRequest is what follows a request made with a token: a good answer may be shared (see
+// shareIfPublic), and a repository endpoint that no longer answers the token purges what was shared about the
+// repository. do turns a 401 (retried without the token, which is dropped) and a 403 that is no rate limit
+// (an error) into something else than a status, so these are recognized here as well as the 404.
+func (c *httpGitHubClient) afterTokenRequest(ctx context.Context, u, token, key string, ans *httpAnswer, err error) {
+	owner, repo, self, ok := c.repoOf(u)
+	if !ok {
+		return
+	}
+	var se *GitHubStatusError
+	denied := err != nil && errors.As(err, &se) && (se.Status == http.StatusForbidden || se.Status == http.StatusUnauthorized)
+	if err == nil {
+		switch {
+		case c.currentToken() != token:
+			denied = self // the token was rejected (401) and dropped: what it vouched for is not vouched for any more
+		case ans.status == http.StatusNotFound || ans.status == http.StatusForbidden || ans.status == http.StatusUnauthorized:
+			denied = self
+		case ans.status == http.StatusOK:
+			c.shareIfPublic(ctx, u, key, owner, repo, self)
+			return
+		}
+	}
+	if denied && self {
+		// Not visible to this token any more: whatever was shared about it goes
+		c.setVisibility(strings.ToLower(owner+"/"+repo), false, c.now())
+		c.cache.remove(cacheKey(c.sharedScope(), u))
+	}
 }
 
 // doLimited sends the request while holding one of the slots for concurrent requests.
@@ -495,7 +532,7 @@ func (c *httpGitHubClient) shareIfPublic(ctx context.Context, u, key, owner, rep
 		return
 	}
 	id := strings.ToLower(owner + "/" + repo)
-	anon := cacheKey(c.scope(""), u)
+	anon := cacheKey(c.sharedScope(), u)
 	if self {
 		c.setVisibility(id, repoBodyPublic(e.Body), e.Fetched)
 	}
@@ -657,6 +694,7 @@ func (c *httpGitHubClient) do(ctx context.Context, u, token string, entry *cache
 		switch st := res.status; {
 		case st == http.StatusNotModified && entry != nil:
 			entry.Fetched = c.now()
+			entry.Shared = time.Time{} // the server just answered this client itself
 			c.cache.put(key, entry)
 			return answerFromEntry(entry), nil
 		case st == http.StatusOK:
@@ -1242,16 +1280,7 @@ func (c *httpGitHubClient) CommitOnAnyBranch(ctx context.Context, owner, repo, s
 	name := fmt.Sprintf("graphql:branch-scan:%s/%s@%s:%d", strings.ToLower(owner), strings.ToLower(repo), strings.ToLower(sha), limit)
 	key := cacheKey(c.scope(token), name)
 	var stale *GitHubBranchScan // an expired answer, for when the rate limit leaves no choice
-	e := c.cache.get(key, name)
-	if e != nil && token == "" && !c.sharedUsable(e, strings.ToLower(owner+"/"+repo)) {
-		e = nil // the anonymous slot holds the shared copies
-	}
-	if e == nil {
-		// The answer of another token for a public repository (see shareIfPublic)
-		if shared := c.cache.get(cacheKey(c.scope(""), name), name); shared != nil && shared.Status == http.StatusOK && c.sharedUsable(shared, strings.ToLower(owner+"/"+repo)) {
-			e = shared
-		}
-	}
+	e := c.findCached(key, name, token, strings.ToLower(owner+"/"+repo))
 	if e != nil {
 		var scan GitHubBranchScan
 		if json.Unmarshal(e.Body, &scan) == nil {

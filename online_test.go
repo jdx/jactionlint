@@ -813,6 +813,10 @@ func TestImpostorCommitSearchesOnWhenTheDefaultBranchHasNoCommonHistory(t *testi
 	if errs := run("diverged"); len(errs) != 1 || errs[0].ID != "impostor-commit" {
 		t.Errorf("no branch has the commit: %v", lineIDsOf(errs))
 	}
+	// GitHub does not know the commit at all (every comparison is a 404): that is not an impostor
+	if errs := run("not-found"); len(errs) != 0 {
+		t.Errorf("an unknown commit: %v", lineIDsOf(errs))
+	}
 }
 
 // With more tags than were read the tag of the exact version may be missing, so the version is not known.
