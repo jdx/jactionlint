@@ -150,6 +150,11 @@ func evalGate(n ExprNode, sc triggerScenario) gateValue {
 // unless it mentions the trigger: someone wrote it to keep the run away from some triggers, and
 // guessing wrong would report the workflow for something it does not do.
 func gateAllowsRun(cond string, scenarios []triggerScenario) bool {
+	return gateAllows(cond, scenarios, false)
+}
+
+// gateAllows is gateAllowsRun; offWhenTrue is for an input which switches the feature off when it is true.
+func gateAllows(cond string, scenarios []triggerScenario, offWhenTrue bool) bool {
 	e := parseGateExpression(cond)
 	for _, sc := range scenarios {
 		if e == nil {
@@ -158,10 +163,15 @@ func gateAllowsRun(cond string, scenarios []triggerScenario) bool {
 			}
 			return true
 		}
+		on, off := triTrue, triFalse
+		if offWhenTrue {
+			on, off = triFalse, triTrue
+		}
 		switch evalGate(e, sc).truth() {
-		case triTrue:
+		case on:
 			return true
-		case triUnknown:
+		case off:
+		default:
 			if !looksAtTrigger(cond) {
 				return true
 			}
@@ -189,8 +199,8 @@ func cacheCanRunOnReleaseTrigger(job *Job, s *Step, a *ExecAction, name string, 
 	if s.If != nil && !gateAllowsRun(s.If.Value, scenarios) {
 		return false
 	}
-	for _, in := range cacheGateInputs[name] {
-		if v, ok := a.input(in); ok && strings.Contains(v, "${{") && !gateAllowsRun(v, scenarios) {
+	for _, g := range cacheGateInputs[name] {
+		if v, ok := a.input(g.input); ok && strings.Contains(v, "${{") && !gateAllows(v, scenarios, g.offWhenTrue) {
 			return false
 		}
 	}
