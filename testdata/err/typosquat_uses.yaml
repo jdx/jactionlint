@@ -1,0 +1,12 @@
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: action/checkout@v4
+      - uses: dokcer/login-action@v3
+      - uses: actions/checkout@v4
+      # A legitimate fork which is allowed by the configuration
+      - uses: acttons/setup-node@v4
+      # Right owner, wrong name: it fails to resolve and nobody can squat it
+      - uses: actions/chekout@v4

@@ -1,0 +1,11 @@
+on: push
+
+permissions: {}
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - run: echo hello

@@ -27,6 +27,11 @@ func (c *Config) RuleLevel(id string) Severity {
 	if c != nil && id == "required-actions" && len(c.RequiredActions) > 0 {
 		return info.DefaultLevel
 	}
+	if info.Online {
+		// Online rules do not follow the profile. They exist only when the online checks are on
+		// (-online or "online: true"), and then run at their own level.
+		return info.DefaultLevel
+	}
 	if info.Profile != "" && c.profile().Includes(info.Profile) {
 		return info.DefaultLevel
 	}
@@ -36,6 +41,16 @@ func (c *Config) RuleLevel(id string) Severity {
 // RuleEnabled reports whether the rule runs with this configuration. It can be called on a nil Config.
 func (c *Config) RuleEnabled(id string) bool {
 	return c.RuleLevel(id) != SeverityOff
+}
+
+// RuleRuns reports whether the rule runs in a run where the online checks are on or off: an online rule
+// needs online mode as well as a level which is not off. Use it where a consumer asks whether a rule could
+// have reported something (unused-ignore); RuleEnabled only looks at the level.
+func (c *Config) RuleRuns(id string, online bool) bool {
+	if info, ok := ruleIndex[id]; ok && info.Online && !online {
+		return false
+	}
+	return c.RuleEnabled(id)
 }
 
 func (c *Config) profile() Profile {
@@ -64,6 +79,18 @@ func (c *Config) RuleOption(id, name string) (any, bool) {
 	return nil, false
 }
 
+// RuleOptionStrings returns the value of a list option of the rule: the one written in "rules", or else
+// the default of the option. The boolean is false when the option has neither. It can be called on
+// a nil Config.
+func (c *Config) RuleOptionStrings(id, name string) ([]string, bool) {
+	v, ok := c.RuleOption(id, name)
+	if !ok {
+		return nil, false
+	}
+	l, ok := v.([]string)
+	return l, ok
+}
+
 // ruleOptionNumber returns the value of a numeric option as float64.
 func (c *Config) ruleOptionNumber(id, name string) (float64, bool) {
 	v, ok := c.RuleOption(id, name)
@@ -77,6 +104,16 @@ func (c *Config) ruleOptionNumber(id, name string) (float64, bool) {
 		return v, true
 	}
 	return 0, false
+}
+
+// ruleOptionStrings returns the value of an option which is a list of strings.
+func (c *Config) ruleOptionStrings(id, name string) []string {
+	v, ok := c.RuleOption(id, name)
+	if !ok {
+		return nil
+	}
+	ss, _ := v.([]string)
+	return ss
 }
 
 // normalizeRules validates the "rules" mapping against the registry and fills in the default level of
@@ -163,6 +200,23 @@ func normalizeOption(opt RuleOption, v any) (any, error) {
 			ret[k] = s
 		}
 		return ret, nil
+	case RuleOptionStrings:
+		items, ok := v.([]any)
+		if !ok {
+			if ss, ok := v.([]string); ok {
+				return slices.Clone(ss), nil
+			}
+			return nil, fmt.Errorf("it must be a list of strings")
+		}
+		ss := make([]string, 0, len(items))
+		for _, it := range items {
+			s, ok := it.(string)
+			if !ok {
+				return nil, fmt.Errorf("it must be a list of strings")
+			}
+			ss = append(ss, s)
+		}
+		return ss, nil
 	}
 	return nil, fmt.Errorf("unsupported option kind %q", opt.Kind)
 }
@@ -171,7 +225,7 @@ func normalizeOption(opt RuleOption, v any) (any, error) {
 // They still work and are translated into rules.
 type legacyConfig struct {
 	TimeoutMinutes *struct {
-		Required bool    `yaml:"required"`
+		Required *bool   `yaml:"required"`
 		Max      float64 `yaml:"max"`
 	} `yaml:"timeout-minutes"`
 	RequireCommitHash                *bool `yaml:"require-commit-hash"`
@@ -241,12 +295,17 @@ func (l *legacyConfig) entries() ([]legacyEntry, error) {
 		if math.IsNaN(t.Max) || math.IsInf(t.Max, 0) || t.Max < 0 {
 			return nil, fmt.Errorf("\"max\" in \"timeout-minutes\" must be a non-negative number, but got %v", t.Max)
 		}
-		instead := "\"rules: {missing-timeout: error, timeout-too-long: {level: error, max: ...}}\""
-		level := SeverityOff
-		if t.Required {
-			level = SeverityError
+		// "required" decides missing-timeout only when it is written. Leaving it out says nothing about the
+		// rule, so the profile decides; "required: false" is the only way to turn it off.
+		instead := "\"rules: {timeout-too-long: {level: error, max: ...}}\""
+		if t.Required != nil {
+			instead = "\"rules: {missing-timeout: error, timeout-too-long: {level: error, max: ...}}\""
+			level := SeverityOff
+			if *t.Required {
+				level = SeverityError
+			}
+			ret = append(ret, legacyEntry{"timeout-minutes", "missing-timeout", RuleConfig{Level: level, levelSet: true}, instead})
 		}
-		ret = append(ret, legacyEntry{"timeout-minutes", "missing-timeout", RuleConfig{Level: level, levelSet: true}, instead})
 		if t.Max > 0 {
 			ret = append(ret, legacyEntry{"timeout-minutes", "timeout-too-long", RuleConfig{Level: SeverityError, levelSet: true, Options: map[string]any{"max": t.Max}}, instead})
 		}
@@ -281,7 +340,7 @@ func (c *Config) applyLegacy(l *legacyConfig) error {
 
 var (
 	configTopKeys = []string{
-		"profile", "extends", "rules",
+		"profile", "extends", "rules", "online",
 		"self-hosted-runner", "config-variables", "config-secrets", "paths", "required-actions", "assume-default-permissions",
 		// Deprecated keys which are translated into rules
 		"timeout-minutes", "require-commit-hash", "require-permissions", "require-checkout-before-local-action",

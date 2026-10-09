@@ -65,6 +65,8 @@ const (
 	RuleOptionBool RuleOptionKind = "bool"
 	// RuleOptionStringMap is an option taking a mapping from strings to strings.
 	RuleOptionStringMap RuleOptionKind = "string-map"
+	// RuleOptionStrings is an option taking a list of strings.
+	RuleOptionStrings RuleOptionKind = "strings"
 )
 
 // RuleOption describes one option which can be given to a rule in the "rules" mapping of the
@@ -179,6 +181,7 @@ func (r *RuleInfo) option(name string) (RuleOption, bool) {
 // one file. A factory registered with registerRuleFactory receives it.
 type RuleEnv struct {
 	path                   string
+	src                    []byte // the source of the file being linted
 	project                *Project
 	localActions           *LocalActionsCache
 	localReusableWorkflows *LocalReusableWorkflowCache
@@ -186,7 +189,7 @@ type RuleEnv struct {
 	shellcheck             string
 	pyflakes               string
 	proc                   *concurrentProcess
-	src                    []byte
+	online                 *onlineSession // nil unless the online checks are on
 
 	log  func(args ...interface{})
 	name string // the factory being run

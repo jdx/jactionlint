@@ -99,7 +99,7 @@ func TestRuleMutableRunnerLabel(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.what, func(t *testing.T) {
-			checkLines(t, lintBatchH(t, pedanticCfg, tc.src, "mutable-runner-label"), wantLines(tc.src)...)
+			checkLines(t, lintBatchH(t, pedanticCfg, tc.src, "mutable-runner-label"), markedWantLines(tc.src)...)
 			if len(lintBatchH(t, "", tc.src, "mutable-runner-label")) != 0 {
 				t.Errorf("the rule must be off in the default profile")
 			}

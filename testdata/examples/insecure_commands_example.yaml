@@ -1,0 +1,8 @@
+on: push
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+        env:
+          ACTIONS_ALLOW_UNSECURE_COMMANDS: true

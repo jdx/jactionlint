@@ -82,6 +82,21 @@ type Config struct {
 	Mapping         *Mapping
 	LineTolerance   int
 	Jobs            int
+	// Online runs jactionlint with -online and zizmor without --offline, so that the online audits can be
+	// compared. Both tools read the token from the environment (GITHUB_TOKEN or GH_TOKEN).
+	Online bool
+}
+
+// zizmorArguments returns the flags of zizmor after its command.
+func zizmorArguments(online bool) []string {
+	args := make([]string, 0, len(zizmorArgs))
+	for _, a := range zizmorArgs {
+		if online && a == "--offline" {
+			continue
+		}
+		args = append(args, a)
+	}
+	return args
 }
 
 // analyze runs both tools on one repository. Failures of one tool are recorded and do not stop the rest.
@@ -92,7 +107,11 @@ func analyze(ctx context.Context, run Runner, c *Config, repo Repo) (RepoInput, 
 		return in, ""
 	}
 
-	jl := append(append(append([]string{}, c.Jactionlint...), c.JactionlintArgs...), jactionlintArgs...)
+	jl := append([]string{}, c.Jactionlint...)
+	if c.Online {
+		jl = append(jl, "-online")
+	}
+	jl = append(append(jl, c.JactionlintArgs...), jactionlintArgs...)
 	out, stderr, code, err := run(ctx, repo.Dir, jl)
 	switch {
 	case err != nil:
@@ -105,7 +124,7 @@ func analyze(ctx context.Context, run Runner, c *Config, repo Repo) (RepoInput, 
 		}
 	}
 
-	zz := append(append(append([]string{}, c.Zizmor...), zizmorArgs...), ".")
+	zz := append(append(append([]string{}, c.Zizmor...), zizmorArguments(c.Online)...), ".")
 	out, stderr, code, err = run(ctx, repo.Dir, zz)
 	version := ""
 	switch {
@@ -175,6 +194,7 @@ func realMain(args []string, stdout, stderr io.Writer) int {
 	zz := fs.String("zizmor", "mise x zizmor@1.30.1 -- zizmor", "zizmor command (split on spaces)")
 	mapPath := fs.String("mapping", "", "audit mapping file (default: the embedded mapping.json)")
 	tol := fs.Int("line-tolerance", 0, "lines of distance allowed between a zizmor finding and the jactionlint finding covering it")
+	online := fs.Bool("online", false, "compare the online audits: run jactionlint with -online and zizmor without --offline. Needs GITHUB_TOKEN or GH_TOKEN and makes GitHub API requests")
 	jobs := fs.Int("jobs", 4, "repositories analyzed in parallel")
 	mdOut := fs.String("markdown", "", "write the markdown report to this file (default: stdout)")
 	jsonOut := fs.String("json", "", "write the JSON report to this file")
@@ -239,7 +259,7 @@ func realMain(args []string, stdout, stderr io.Writer) int {
 	}
 
 	rep := Run(context.Background(), execRunner, &Config{
-		Repos: repos, Jactionlint: jlCmd, JactionlintArgs: extra, Zizmor: zzCmd, Mapping: m, LineTolerance: *tol, Jobs: *jobs,
+		Repos: repos, Jactionlint: jlCmd, JactionlintArgs: extra, Zizmor: zzCmd, Mapping: m, LineTolerance: *tol, Jobs: *jobs, Online: *online,
 	}, stderr)
 
 	if *jsonOut != "" {

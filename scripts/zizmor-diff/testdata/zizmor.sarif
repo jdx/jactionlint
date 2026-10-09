@@ -42,7 +42,7 @@
           ]
         },
         {
-          "ruleId": "zizmor/anonymous-definition",
+          "ruleId": "zizmor/future-audit",
           "message": { "text": "workflow or action definition without a name" },
           "locations": [
             {
@@ -54,12 +54,12 @@
           ]
         },
         {
-          "ruleId": "zizmor/dependabot-cooldown",
-          "message": { "text": "insufficient cooldown in Dependabot updates" },
+          "ruleId": "zizmor/artipacked",
+          "message": { "text": "credential persistence through GitHub Actions artifacts" },
           "locations": [
             {
               "physicalLocation": {
-                "artifactLocation": { "uri": ".github/dependabot.yml" },
+                "artifactLocation": { "uri": "action.yml" },
                 "region": { "startLine": 4 }
               }
             }

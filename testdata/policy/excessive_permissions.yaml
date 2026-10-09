@@ -1,0 +1,32 @@
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  id-token: write
+  issues: read
+  pull-requests: none
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo release
+  job-write:
+    runs-on: ubuntu-latest
+    # OK: write access on a job is how access should be granted
+    permissions:
+      packages: write
+    steps:
+      - run: echo publish
+  job-write-all:
+    runs-on: ubuntu-latest
+    permissions: write-all
+    steps:
+      - run: echo everything
+  job-read-all:
+    runs-on: ubuntu-latest
+    permissions: read-all
+    steps:
+      - run: echo read

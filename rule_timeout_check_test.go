@@ -34,8 +34,9 @@ func TestRuleTimeoutCheck(t *testing.T) {
 		cfg  *Config
 		want []string // substrings of messages, in order of lines
 	}{
-		{"nil config", nil, nil},
-		{"default config is opt-in", &Config{}, nil},
+		{"nil config is the default profile", nil, []string{`"timeout-minutes" is not set at this job`}},
+		{"default profile requires the key", &Config{}, []string{`"timeout-minutes" is not set at this job`}},
+		{"the rule can be turned off", mustParseConfig(t, "rules:\n  missing-timeout: off\n"), nil},
 		{
 			"required",
 			mustParseConfig(t, "rules:\n  missing-timeout: error\n"),
@@ -48,12 +49,12 @@ func TestRuleTimeoutCheck(t *testing.T) {
 		},
 		{
 			"max only does not require the key",
-			mustParseConfig(t, "rules:\n  timeout-too-long: {max: 30}\n"),
+			mustParseConfig(t, "rules:\n  missing-timeout: off\n  timeout-too-long: {max: 30}\n"),
 			[]string{`"timeout-minutes" is 45, which is greater than the maximum 30 minutes`},
 		},
 		{
 			"max equal to value is allowed",
-			mustParseConfig(t, "rules:\n  timeout-too-long: {max: 45}\n"),
+			mustParseConfig(t, "rules:\n  missing-timeout: off\n  timeout-too-long: {max: 45}\n"),
 			nil,
 		},
 	}

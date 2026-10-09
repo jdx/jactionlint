@@ -1,0 +1,2 @@
+test.yaml:5:3: permission "packages: read" has no comment explaining why it is needed. add a comment at the end of the line or above it [undocumented-permissions]
+test.yaml:7:3: permission "issues: write" has no comment explaining why it is needed. add a comment at the end of the line or above it [undocumented-permissions]

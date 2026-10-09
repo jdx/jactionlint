@@ -1,0 +1,61 @@
+on: push
+permissions: {}
+jobs:
+  sequence-at-key-column:
+    runs-on:
+    - self-hosted
+    - linux
+    steps:
+      - run: echo a
+  sequence-indented:
+    runs-on:
+      - self-hosted
+      - linux
+    # a comment that belongs to steps
+    steps:
+      - run: echo b
+  mapping:
+    runs-on:
+      group: ubuntu-runners
+      labels: ubuntu-20.04-16core
+    steps:
+      - run: echo c
+  inline-comment:
+    runs-on: ubuntu-latest # runner
+    # comment after
+    steps:
+      - run: echo d
+  quoted-key:
+    "runs-on": ubuntu-latest
+    steps:
+      - run: echo e
+  'quoted-job':
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo f
+  name-first:
+    name: Name first
+    steps:
+      - run: echo g
+    runs-on: ubuntu-latest
+  expression:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - run: echo h
+  no-runs-on-or-name:
+    steps:
+      - run: echo i
+  multi-line-flow:
+    runs-on: [self-hosted,
+      linux]
+    steps:
+      - run: echo j
+  folded-if:
+    if: >-
+      github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo k

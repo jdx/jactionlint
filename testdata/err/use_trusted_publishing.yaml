@@ -1,0 +1,73 @@
+on:
+  release:
+    types: [published]
+env:
+  CARGO_REGISTRY_TOKEN: ${{ secrets.CRATES_TOKEN }}
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      # Commands which publish with a long-lived credential
+      - run: twine upload dist/*
+        env:
+          TWINE_PASSWORD: ${{ secrets.PYPI_TOKEN }}
+      - run: python -m twine upload --repository testpypi dist/*
+      - run: uv publish
+      - run: uvx twine upload dist/*
+      - run: poetry publish --build
+      - run: cargo publish
+      - run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - run: pnpm publish --no-git-checks
+      - run: yarn npm publish
+      - run: gem push pkg/*.gem
+        env:
+          GEM_HOST_API_KEY: ${{ secrets.RUBYGEMS_API_KEY }}
+      - run: bundle exec gem push pkg/*.gem
+      - run: dotnet nuget push pkg.nupkg --api-key ${{ secrets.NUGET }} --source https://api.nuget.org/v3/index.json
+      # Actions which are given a credential
+      - uses: pypa/gh-action-pypi-publish@76f52bc884231f62b9a034ebfe128415bbaabdfc # v1.12.4
+        with:
+          password: ${{ secrets.PYPI_TOKEN }}
+      - uses: rubygems/configure-rubygems-credentials@bc6dd217f8a4f919d6835fcfefd470ef821f5c44 # v1.0.0
+        with:
+          api-token: ${{ secrets.RUBYGEMS_API_KEY }}
+      - uses: rubygems/release-gem@9e85cb11501bebc2ae661c1500176316d3987059 # v1.1.1
+        with:
+          setup-trusted-publisher: false
+      - uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
+        with:
+          registry-url: https://registry.npmjs.org
+          always-auth: true
+      # Not publishing, a registry of your own or a dry run
+      - run: twine check dist/*
+      - run: twine upload --repository-url https://pypi.example.com/ dist/*
+      - run: cargo publish --dry-run
+      - run: cargo publish --registry my-registry
+      - run: npm publish --registry https://npm.example.com
+      - run: npm publish --dry-run
+      - run: npm pack
+      - run: gh release create v1 dist/*
+      - run: echo "twine upload dist/*"
+      # Trusted publishing
+      - uses: pypa/gh-action-pypi-publish@76f52bc884231f62b9a034ebfe128415bbaabdfc # v1.12.4
+      - uses: pypa/gh-action-pypi-publish@76f52bc884231f62b9a034ebfe128415bbaabdfc # v1.12.4
+        with:
+          repository-url: https://pypi.example.com/legacy/
+          password: ${{ secrets.PRIVATE }}
+      - uses: rubygems/release-gem@9e85cb11501bebc2ae661c1500176316d3987059 # v1.1.1
+      - uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
+        with:
+          registry-url: https://registry.npmjs.org
+  with-oidc:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    steps:
+      - run: twine upload dist/*
+      - run: npm publish --provenance
+  without-permissions:
+    runs-on: ubuntu-latest
+    steps:
+      - run: cargo publish

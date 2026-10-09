@@ -1,0 +1,3 @@
+test.yaml:14:15: swatinem/rust-cache restores a cache although the job runs "cargo publish", so a poisoned cache entry can end up in the published artifacts. remove this step or set "lookup-only: true", or set "cache-mode: none" on the job [cache-poisoning]
+test.yaml:19:15: actions/setup-go restores a cache although the job publishes with goreleaser/goreleaser-action, so a poisoned cache entry can end up in the published artifacts. set "cache: false", or set "cache-mode: none" on the job [cache-poisoning]
+test.yaml:24:15: docker/build-push-action restores a cache although the job pushes an image, so a poisoned cache entry can end up in the published artifacts. remove the "cache-from" input, or set "cache-mode: none" on the job [cache-poisoning]

@@ -1,0 +1,147 @@
+name: CI
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  deployment:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - uses: jdx/mise-action@dad1bfd3df957f44999b559dd69dc1671cb4e9ea # v4.2.1
+        with:
+          version: 2026.8.2
+          install: false
+          cache: false
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
+        with:
+          terraform_version: 1.14.9
+      - run: terraform -chdir=deploy/azure/terraform fmt -check -recursive
+      - run: terraform -chdir=deploy/azure/terraform init -backend=false
+      - run: terraform -chdir=deploy/azure/terraform validate
+      - name: Validate bootstrap plan
+        run: |
+          install -d -m 0700 deploy/azure/bootstrap/runtime
+          install -m 0600 deploy/azure/bootstrap/runtime.env.example deploy/azure/bootstrap/runtime/.env
+          install -m 0600 deploy/azure/bootstrap/cache.env.example deploy/azure/bootstrap/runtime/cache.env
+          printf '%s\n' \
+            '[[bootstrap.linux.firewall.rules]]' \
+            'name = "ssh-admin"' \
+            'direction = "incoming"' \
+            'action = "allow"' \
+            'port = 22' \
+            'protocol = "tcp"' \
+            'source = "203.0.113.10/32"' \
+            >deploy/azure/bootstrap/mise.local.toml
+          SSH_CONNECTION="203.0.113.10 54321 192.0.2.10 22" \
+            MISE_TRUSTED_CONFIG_PATHS="$PWD/deploy/azure/bootstrap" \
+            mise --cd deploy/azure/bootstrap bootstrap plan --json >/dev/null
+      - name: Validate Compose and dashboard configuration
+        working-directory: deploy/azure/bootstrap
+        run: |
+          install -m 0600 cache.env.example cache.env
+          docker compose --env-file runtime.env.example config --quiet
+          jq empty monitoring/grafana/dashboards/mbx-cache.json
+      - name: Validate the Helm chart
+        run: |
+          base=(--set config.databaseUrl=postgres://cache/cache --set config.s3Bucket=cache)
+          helm lint charts/mbx-cache "${base[@]}"
+
+          # The deployment must never name a ServiceAccount the chart did not
+          # create, or its pods stay unschedulable.
+          created() { awk '/^kind: ServiceAccount$/{f=1;next} f&&/^  name: /{print $2;exit}'; }
+          referenced() { awk '/serviceAccountName: /{print $2;exit}'; }
+          check() {
+            want_created=$1 want_referenced=$2
+            shift 2
+            rendered=$(helm template test charts/mbx-cache "${base[@]}" "$@")
+            got_created=$(printf '%s' "$rendered" | created)
+            got_referenced=$(printf '%s' "$rendered" | referenced)
+            if [[ "${got_created:-none}" != "$want_created" || "$got_referenced" != "$want_referenced" ]]; then
+              echo "::error::helm $*: created=${got_created:-none} (want $want_created), referenced=$got_referenced (want $want_referenced)"
+              exit 1
+            fi
+          }
+          check test-mbx-cache test-mbx-cache
+          check custom custom --set serviceAccount.name=custom
+          check none existing --set serviceAccount.create=false --set serviceAccount.name=existing
+          check none default --set serviceAccount.create=false
+          helm template azure charts/mbx-cache \
+            --set config.storage=azure \
+            --set config.databaseUrl=postgres://cache/cache \
+            --set config.azureAccount=mbxcache \
+            --set config.azureContainer=cache >/dev/null
+      - run: shellcheck deploy/azure/deploy.sh deploy/azure/test-deploy.sh
+      - run: deploy/azure/test-deploy.sh
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # Production uses PostgreSQL and Azure Blob Storage, so CI exercises both
+    # real protocols rather than only their in-memory stand-ins.
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: cache
+          POSTGRES_PASSWORD: cache
+          POSTGRES_DB: cache
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U cache"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 15
+    env:
+      MBX_CACHE_TEST_AZURITE: "1"
+      MBX_CACHE_TEST_DATABASE_URL: postgres://cache:cache@127.0.0.1:5432/cache
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      # `rustup` rather than an action: it is already on the runner, and this needs
+      # two components and no other behaviour.
+      - name: Install Rust components
+        run: rustup component add rustfmt clippy
+      - uses: Swatinem/rust-cache@49a0bdc70d2e1b713ca9e2869b211fcce03d3c1c # v2
+      - name: Create the Azurite test container
+        env:
+          AZURE_STORAGE_CONNECTION_STRING: DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://127.0.0.1:10000/devstoreaccount1;
+        run: |
+          docker run --detach --name mbx-cache-azurite \
+            --publish 10000:10000 \
+            mcr.microsoft.com/azure-storage/azurite:3.35.0 \
+            azurite-blob --blobHost 0.0.0.0 --skipApiVersionCheck
+          for attempt in {1..20}; do
+            if az storage container create --name cache --output none; then
+              exit 0
+            fi
+            sleep 1
+          done
+          exit 1
+      - run: cargo fmt --check
+      - run: cargo clippy --all-targets --all-features -- -D warnings
+      - run: cargo test --all-features
+
+  final:
+    permissions: {}
+    needs:
+      - deployment
+      - test
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    # Run on success or upstream failure but skip when the workflow is cancelled
+    # — `always()` would override `cancel-in-progress` and waste a runner.
+    if: ${{ !cancelled() }}
+    steps:
+      - name: Check job results
+        if: |
+          needs.deployment.result != 'success' ||
+          needs.test.result != 'success'
+        run: exit 1
+      - run: echo "All CI jobs completed successfully"

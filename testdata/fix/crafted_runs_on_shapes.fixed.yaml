@@ -1,0 +1,72 @@
+on: push
+permissions: {}
+jobs:
+  sequence-at-key-column:
+    runs-on:
+    - self-hosted
+    - linux
+    timeout-minutes: 30
+    steps:
+      - run: echo a
+  sequence-indented:
+    runs-on:
+      - self-hosted
+      - linux
+    timeout-minutes: 30
+    # a comment that belongs to steps
+    steps:
+      - run: echo b
+  mapping:
+    runs-on:
+      group: ubuntu-runners
+      labels: ubuntu-20.04-16core
+    timeout-minutes: 30
+    steps:
+      - run: echo c
+  inline-comment:
+    runs-on: ubuntu-latest # runner
+    timeout-minutes: 30
+    # comment after
+    steps:
+      - run: echo d
+  quoted-key:
+    "runs-on": ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - run: echo e
+  'quoted-job':
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - run: echo f
+  name-first:
+    name: Name first
+    steps:
+      - run: echo g
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+  expression:
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - run: echo h
+  no-runs-on-or-name:
+    timeout-minutes: 30
+    steps:
+      - run: echo i
+  multi-line-flow:
+    runs-on: [self-hosted,
+      linux]
+    timeout-minutes: 30
+    steps:
+      - run: echo j
+  folded-if:
+    if: >-
+      github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - run: echo k

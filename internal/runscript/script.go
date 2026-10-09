@@ -117,13 +117,35 @@ func Analyze(script, shell string) (s *Script, err error) {
 	s = &Script{Source: script}
 	s.indexLines()
 	sub := s.substitute()
-	f, perr := syntax.NewParser(syntax.Variant(syntax.LangBash)).Parse(strings.NewReader(sub), "")
+	// The parser sees the script with the "\r" of each CRLF removed, so that a "\<newline>" continuation and a
+	// heredoc delimiter keep their meaning. omap turns its offsets back into offsets of the original script.
+	parsed, omap := stripCR(sub)
+	f, perr := syntax.NewParser(syntax.Variant(syntax.LangBash)).Parse(strings.NewReader(parsed), "")
 	if perr != nil {
 		return nil, &ParseError{perr}
 	}
-	b := &builder{s: s, sub: sub, cmds: map[syntax.Command]*Command{}}
+	b := &builder{s: s, sub: sub, omap: omap, cmds: map[syntax.Command]*Command{}}
 	b.build(f)
 	return s, nil
+}
+
+// stripCR removes the "\r" of every "\r\n". It returns the text and, when something was removed, a table which maps
+// each offset of the text (and its end) to the offset in src; the table is nil when src has no CRLF.
+func stripCR(src string) (string, []int) {
+	if !strings.Contains(src, "\r\n") {
+		return src, nil
+	}
+	out := make([]byte, 0, len(src))
+	omap := make([]int, 0, len(src)+1)
+	for i := 0; i < len(src); i++ {
+		if src[i] == '\r' && i+1 < len(src) && src[i+1] == '\n' {
+			continue
+		}
+		out = append(out, src[i])
+		omap = append(omap, i)
+	}
+	omap = append(omap, len(src))
+	return string(out), omap
 }
 
 func (s *Script) indexLines() {
@@ -162,9 +184,6 @@ func (s *Script) loc(off, end int) Loc {
 // computed from the original script.
 func (s *Script) substitute() string {
 	src := s.Source
-	if strings.Contains(src, "\r\n") { // same length, so offsets stay valid
-		src = strings.ReplaceAll(src, "\r\n", " \n")
-	}
 	if !strings.Contains(src, "${{") {
 		return src
 	}

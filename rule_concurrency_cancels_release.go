@@ -120,29 +120,29 @@ var releaseActions = map[string]bool{
 }
 
 // inputTruth evaluates the value of an input that is true or false in the scenario.
-func (sc scenario) inputTruth(v string) tri {
+func (sc scenario) inputTruth(v string) condTruth {
 	v = strings.TrimSpace(v)
 	switch {
 	case isTrueLiteral(v):
-		return triTrue
+		return condTrue
 	case isFalseLiteral(v):
-		return triFalse
+		return condFalse
 	}
 	exprs, ok := parseTemplateExprs(v)
 	if !ok || len(exprs) != 1 || !isExprAssigned(v) {
-		return triUnknown
+		return condUnknown
 	}
 	return sc.eval(exprs[0])
 }
 
 // conditionIn evaluates the `if:` condition in the scenario. A missing condition is true.
-func (sc scenario) conditionIn(c *String) tri {
+func (sc scenario) conditionIn(c *String) condTruth {
 	if c == nil {
-		return triTrue
+		return condTrue
 	}
 	exprs, ok := conditionExprs(c)
 	if !ok || len(exprs) != 1 || !isExprAssigned(c.Value) && c.ContainsExpression() {
-		return triUnknown
+		return condUnknown
 	}
 	return sc.eval(exprs[0])
 }
@@ -150,7 +150,7 @@ func (sc scenario) conditionIn(c *String) tri {
 // releaseSignal tells why the job releases or deploys something when the workflow runs in the
 // scenario, "" if it does not. A job or a step whose condition is false in the scenario is ignored.
 func releaseSignal(j *Job, sc scenario) string {
-	if sc.conditionIn(j.If) == triFalse {
+	if sc.conditionIn(j.If) == condFalse {
 		return ""
 	}
 	if j.Environment != nil && j.Environment.Name != nil && j.Environment.Name.Value != "" {
@@ -165,7 +165,7 @@ func releaseSignal(j *Job, sc scenario) string {
 		}
 	}
 	for _, s := range flattenSteps(j.Steps) {
-		if sc.conditionIn(s.If) == triFalse {
+		if sc.conditionIn(s.If) == condFalse {
 			continue
 		}
 		switch e := s.Exec.(type) {
@@ -179,7 +179,7 @@ func releaseSignal(j *Job, sc scenario) string {
 			case releaseActions[name]:
 				return fmt.Sprintf("job %q uses %q", j.ID.Value, u.CanonicalName())
 			case name == "docker/build-push-action":
-				if v, ok := e.input("push"); ok && sc.inputTruth(v) == triTrue {
+				if v, ok := e.input("push"); ok && sc.inputTruth(v) == condTrue {
 					return fmt.Sprintf("job %q pushes a Docker image", j.ID.Value)
 				}
 			case name == "goreleaser/goreleaser-action":

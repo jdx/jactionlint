@@ -1,0 +1,1 @@
+test.yaml:8:15: ref "v1" of action "example/confusing@v1" is both a branch and a tag of example/confusing, so it is ambiguous what runs and whoever controls the other ref can change it. pin the action to a full-length commit SHA [ref-confusion]

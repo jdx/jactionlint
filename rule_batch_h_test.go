@@ -65,8 +65,8 @@ func checkLines(t *testing.T, errs []*Error, want ...string) {
 	}
 }
 
-// wantLines returns the lines of the source that end with the marker "# want".
-func wantLines(src string) []string {
+// markedWantLines returns the lines of the source that end with the marker "# want".
+func markedWantLines(src string) []string {
 	var ret []string
 	for i, l := range strings.Split(src, "\n") {
 		if strings.HasSuffix(strings.TrimRight(l, " "), "# want") {

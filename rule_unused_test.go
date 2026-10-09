@@ -153,7 +153,7 @@ jobs:
 	}
 	for _, tc := range tests {
 		t.Run(tc.what, func(t *testing.T) {
-			checkLines(t, lintBatchH(t, "", tc.src, "unused-job-output"), wantLines(tc.src)...)
+			checkLines(t, lintBatchH(t, "", tc.src, "unused-job-output"), markedWantLines(tc.src)...)
 		})
 	}
 }
@@ -262,7 +262,7 @@ jobs:
 	}
 	for _, tc := range tests {
 		t.Run(tc.what, func(t *testing.T) {
-			checkLines(t, lintBatchH(t, pedanticCfg, tc.src, "unused-workflow-input"), wantLines(tc.src)...)
+			checkLines(t, lintBatchH(t, pedanticCfg, tc.src, "unused-workflow-input"), markedWantLines(tc.src)...)
 		})
 	}
 }
@@ -389,7 +389,7 @@ jobs:
 	}
 	for _, tc := range tests {
 		t.Run(tc.what, func(t *testing.T) {
-			want := wantLines(tc.src)
+			want := markedWantLines(tc.src)
 			if tc.what == "through two jobs and in flow style" {
 				want = []string{"19"}
 			}

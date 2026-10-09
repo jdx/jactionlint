@@ -202,9 +202,9 @@ timeout-minutes:
 		}
 	}
 
-	// timeout-minutes without required: nothing is required, only the maximum is checked
+	// timeout-minutes without required: only the maximum is set, missing-timeout is left to the profile
 	c = mustParseConfig(t, "timeout-minutes:\n  max: 5\n")
-	if c.RuleEnabled("missing-timeout") || !c.RuleEnabled("timeout-too-long") {
+	if _, set := c.Rules["missing-timeout"]; set || !c.RuleEnabled("timeout-too-long") {
 		t.Errorf("unexpected rules %+v", c.Rules)
 	}
 
@@ -371,7 +371,7 @@ paths:
 }
 
 func TestConfigRulesAffectLinting(t *testing.T) {
-	src := "on: push\njobs:\n  j:\n    runs-on: ubuntu-24.04\n    steps:\n      - uses: actions/checkout@v4\n      - run: echo ${{ github.event.issue.title }}\n"
+	src := "on: push\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n        with:\n          persist-credentials: false\n      - run: echo ${{ github.event.issue.title }}\n"
 
 	tests := []struct {
 		what string
@@ -390,7 +390,10 @@ func TestConfigRulesAffectLinting(t *testing.T) {
 			errs := lintWithConfig(t, mustParseConfig(t, tc.cfg), src)
 			var got []Severity
 			for _, e := range errs {
-				got = append(got, e.Severity)
+				switch e.ID {
+				case "template-injection", "unpinned-uses", "missing-permissions", "missing-timeout":
+					got = append(got, e.Severity)
+				}
 			}
 			if diff := cmp.Diff(tc.want, got); diff != "" {
 				t.Errorf("severities (-want +got): %s\n%v", diff, errs)
@@ -410,7 +413,7 @@ func TestLinterReportsDeprecatedConfigKeysOnce(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	src := []byte("on: push\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo\n")
+	src := []byte("on: push\njobs:\n  j:\n    runs-on: ubuntu-latest\n    timeout-minutes: 5\n    steps:\n      - run: echo\n")
 	for i := 0; i < 3; i++ {
 		errs, err := l.Lint("test.yaml", src, nil)
 		if err != nil {
@@ -500,5 +503,64 @@ func TestInitConfigIsValidAndMigrationFree(t *testing.T) {
 	}
 	if _, err := ReadConfigFile(g); err != nil {
 		t.Errorf("examples in the generated config are invalid: %v\n%s", err, strings.Join(uncommented, "\n"))
+	}
+}
+
+func TestLegacyTimeoutMinutesLeavesMissingTimeoutToTheProfile(t *testing.T) {
+	// The profile must decide when "required" is not written, so the level is the same as without the key
+	for _, profile := range []string{"default", "strict", "all"} {
+		with := mustParseConfig(t, "profile: "+profile+"\ntimeout-minutes:\n  max: 30\n")
+		without := mustParseConfig(t, "profile: "+profile+"\n")
+		if with.RuleLevel("missing-timeout") != without.RuleLevel("missing-timeout") {
+			t.Errorf("profile %s: timeout-minutes {max: 30} changed missing-timeout from %v to %v", profile, without.RuleLevel("missing-timeout"), with.RuleLevel("missing-timeout"))
+		}
+		if !with.RuleEnabled("timeout-too-long") {
+			t.Errorf("profile %s: timeout-too-long should be on", profile)
+		}
+	}
+
+	off := mustParseConfig(t, "profile: strict\ntimeout-minutes:\n  required: false\n  max: 30\n")
+	if off.RuleEnabled("missing-timeout") {
+		t.Error("required: false must turn missing-timeout off")
+	}
+	on := mustParseConfig(t, "timeout-minutes:\n  required: true\n")
+	if on.RuleLevel("missing-timeout") != SeverityError {
+		t.Errorf("required: true: level %v", on.RuleLevel("missing-timeout"))
+	}
+	if len(on.Deprecations) != 1 || strings.Contains(mustParseConfig(t, "timeout-minutes:\n  max: 3\n").Deprecations[0], "missing-timeout") {
+		t.Errorf("the message for {max} alone must not mention missing-timeout")
+	}
+}
+
+func TestMigrateConfigTimeoutMinutes(t *testing.T) {
+	for _, tc := range []struct {
+		in          string
+		wantMissing string // "" means the rule must not be written
+	}{
+		{"timeout-minutes:\n  max: 30\n", ""},
+		{"timeout-minutes:\n  required: false\n  max: 30\n", "off"},
+		{"timeout-minutes:\n  required: true\n", "error"},
+	} {
+		out, _, err := MigrateConfig([]byte(tc.in))
+		if err != nil {
+			t.Fatal(err)
+		}
+		c := mustParseConfig(t, string(out))
+		rc, set := c.Rules["missing-timeout"]
+		switch {
+		case tc.wantMissing == "" && set:
+			t.Errorf("%q: missing-timeout written:\n%s", tc.in, out)
+		case tc.wantMissing == "off" && (!set || rc.Level != SeverityOff):
+			t.Errorf("%q: want missing-timeout off:\n%s", tc.in, out)
+		case tc.wantMissing == "error" && (!set || rc.Level != SeverityError):
+			t.Errorf("%q: want missing-timeout error:\n%s", tc.in, out)
+		}
+		if len(c.Deprecations) != 0 {
+			t.Errorf("%q: deprecations remain: %v", tc.in, c.Deprecations)
+		}
+		before := mustParseConfig(t, tc.in)
+		if before.RuleLevel("missing-timeout") != c.RuleLevel("missing-timeout") || before.RuleLevel("timeout-too-long") != c.RuleLevel("timeout-too-long") {
+			t.Errorf("%q: the migrated config means something else:\n%s", tc.in, out)
+		}
 	}
 }

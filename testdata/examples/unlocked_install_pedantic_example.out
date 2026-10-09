@@ -1,0 +1,2 @@
+test.yaml:6:14: "npm install" resolves the dependencies again and may update the package-lock.json instead of failing when it is out of date. use `npm ci` [unlocked-install]
+test.yaml:7:14: "pip install -r requirements.txt" installs a requirements file without hashes or constraints, so the transitive dependencies are resolved anew on every run. use a lock file with hashes (`pip-compile --generate-hashes`) and pass --require-hashes, or pin them with -c [unlocked-install]

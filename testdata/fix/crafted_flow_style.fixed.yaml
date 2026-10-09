@@ -1,0 +1,16 @@
+on: push
+permissions:
+  contents: read
+jobs:
+  flow: {runs-on: ubuntu-latest, steps: [{run: echo flow}]}
+  block:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - run: echo block
+  anchored: &anchored
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo anchored
+  flowtail:
+    {runs-on: ubuntu-latest, steps: [{run: echo tail}]}

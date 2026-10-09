@@ -1,0 +1,2 @@
+test.yaml:5:13: "cache-mode: write" lets code triggered by "pull_request_target" write cache entries that other workflows, including release workflows, restore later. use "cache-mode: read" or "none" [cache-poisoning]
+test.yaml:14:17: "cache-mode: write-only" lets code triggered by "pull_request_target" write cache entries that other workflows, including release workflows, restore later. use "cache-mode: read" or "none" [cache-poisoning]

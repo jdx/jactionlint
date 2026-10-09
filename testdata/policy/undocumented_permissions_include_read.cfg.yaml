@@ -1,0 +1,4 @@
+rules:
+  undocumented-permissions:
+    level: error
+    include-read: true

@@ -1,0 +1,27 @@
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      # Built with the newest matching dependencies
+      - run: cargo install ripgrep
+      - run: cargo install --version 14.1.0 ripgrep
+      - run: cargo install ripgrep@14.1.0
+      - run: cargo install --path .
+      - run: cargo install --git https://github.com/jdx/hk --tag v1.0.0 hk
+      - run: sudo cargo install cargo-edit cargo-udeps
+      - run: |
+          set -eu
+          cargo install   cargo-deny
+      - run: cargo install "cargo-nextest"
+      - run: cargo install $TOOL
+        env:
+          TOOL: cargo-nextest
+      # Built with the Cargo.lock of the crate
+      - run: cargo install --locked ripgrep
+      - run: cargo install ripgrep --locked
+      - run: cargo install --frozen --path .
+      - run: cargo binstall -y ripgrep
+      - run: cargo install --list
+      - run: cargo build --release
+      - run: echo "cargo install ripgrep"

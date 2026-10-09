@@ -2,5 +2,6 @@ on: push
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - run: echo

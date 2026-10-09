@@ -326,24 +326,24 @@ func hasEvent(w *Workflow, names ...string) bool {
 	return false
 }
 
-// tri is a three-valued truth: an expression may be known to be true, known to be false or depend on
+// condTruth is a three-valued truth: an expression may be known to be true, known to be false or depend on
 // something that the rule cannot know.
-type tri int8
+type condTruth int8
 
 const (
-	triUnknown tri = iota
-	triTrue
-	triFalse
+	condUnknown condTruth = iota
+	condTrue
+	condFalse
 )
 
-func triNot(t tri) tri {
+func triNot(t condTruth) condTruth {
 	switch t {
-	case triTrue:
-		return triFalse
-	case triFalse:
-		return triTrue
+	case condTrue:
+		return condFalse
+	case condFalse:
+		return condTrue
 	}
-	return triUnknown
+	return condUnknown
 }
 
 // scenario describes what is known about a workflow run when a condition is evaluated: the event
@@ -434,51 +434,51 @@ func isPullRequestEvent(e string) bool {
 }
 
 // equals compares the value with a literal like GitHub does, ignoring case.
-func (v stringValue) equals(lit string) tri {
+func (v stringValue) equals(lit string) condTruth {
 	if v.known {
 		if strings.EqualFold(v.exact, lit) {
-			return triTrue
+			return condTrue
 		}
-		return triFalse
+		return condFalse
 	}
 	if v.prefix != "" && !strings.HasPrefix(strings.ToLower(lit), strings.ToLower(v.prefix)) {
-		return triFalse
+		return condFalse
 	}
-	return triUnknown
+	return condUnknown
 }
 
-func (v stringValue) startsWith(lit string) tri {
+func (v stringValue) startsWith(lit string) condTruth {
 	l, p := strings.ToLower(lit), strings.ToLower(v.prefix)
 	if v.known {
 		return boolTri(strings.HasPrefix(strings.ToLower(v.exact), l))
 	}
 	if p != "" {
 		if strings.HasPrefix(p, l) {
-			return triTrue
+			return condTrue
 		}
 		if !strings.HasPrefix(l, p) {
-			return triFalse
+			return condFalse
 		}
 	}
-	return triUnknown
+	return condUnknown
 }
 
-func boolTri(b bool) tri {
+func boolTri(b bool) condTruth {
 	if b {
-		return triTrue
+		return condTrue
 	}
-	return triFalse
+	return condFalse
 }
 
 // eval evaluates a condition in the scenario. It knows the event name, the ref and string
-// comparisons and gives up (triUnknown) on everything else, so a result of triTrue or triFalse is
+// comparisons and gives up (condUnknown) on everything else, so a result of condTrue or condFalse is
 // certain.
-func (sc scenario) eval(n ExprNode) tri {
+func (sc scenario) eval(n ExprNode) condTruth {
 	switch n := n.(type) {
 	case *BoolNode:
 		return boolTri(n.Value)
 	case *NullNode:
-		return triFalse
+		return condFalse
 	case *IntNode:
 		return boolTri(n.Value != 0)
 	case *StringNode:
@@ -489,32 +489,32 @@ func (sc scenario) eval(n ExprNode) tri {
 		l, r := sc.eval(n.Left), sc.eval(n.Right)
 		if n.Kind == LogicalOpNodeKindAnd {
 			switch {
-			case l == triFalse || r == triFalse:
-				return triFalse
-			case l == triTrue && r == triTrue:
-				return triTrue
+			case l == condFalse || r == condFalse:
+				return condFalse
+			case l == condTrue && r == condTrue:
+				return condTrue
 			}
-			return triUnknown
+			return condUnknown
 		}
 		switch {
-		case l == triTrue || r == triTrue:
-			return triTrue
-		case l == triFalse && r == triFalse:
-			return triFalse
+		case l == condTrue || r == condTrue:
+			return condTrue
+		case l == condFalse && r == condFalse:
+			return condFalse
 		}
-		return triUnknown
+		return condUnknown
 	case *CompareOpNode:
 		if !n.Kind.IsEqualityOp() {
-			return triUnknown
+			return condUnknown
 		}
-		var t tri
+		var t condTruth
 		switch {
 		case isStringLiteral(n.Right):
 			t = sc.value(n.Left).equals(n.Right.(*StringNode).Value)
 		case isStringLiteral(n.Left):
 			t = sc.value(n.Right).equals(n.Left.(*StringNode).Value)
 		default:
-			return triUnknown
+			return condUnknown
 		}
 		if n.Kind == CompareOpNodeKindNotEq {
 			return triNot(t)
@@ -524,7 +524,7 @@ func (sc scenario) eval(n ExprNode) tri {
 		if strings.EqualFold(n.Callee, "startsWith") && len(n.Args) == 2 && isStringLiteral(n.Args[1]) {
 			return sc.value(n.Args[0]).startsWith(n.Args[1].(*StringNode).Value)
 		}
-		return triUnknown
+		return condUnknown
 	}
 	chain, _, ok := chainOf(n)
 	if ok && len(chain) == 2 && chain[0] == "github" && (chain[1] == "head_ref" || chain[1] == "base_ref") {
@@ -532,7 +532,7 @@ func (sc scenario) eval(n ExprNode) tri {
 			return boolTri(v.exact != "")
 		}
 	}
-	return triUnknown
+	return condUnknown
 }
 
 func isStringLiteral(n ExprNode) bool {
@@ -555,7 +555,7 @@ func (sc scenario) isTrue(b *Bool) bool {
 	if !ok || len(exprs) != 1 || !b.Expression.IsExpressionAssigned() {
 		return false
 	}
-	return sc.eval(exprs[0]) == triTrue
+	return sc.eval(exprs[0]) == condTrue
 }
 
 // statusFunctions are the functions that stop GitHub from adding the implicit success() to the
