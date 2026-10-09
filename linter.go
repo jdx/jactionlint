@@ -109,6 +109,9 @@ type LinterOptions struct {
 	// GitHubClient is set. The "online" key of the configuration file turns it on for the files it
 	// applies to.
 	Online bool
+	// OnlineOff turns the online checks off although the configuration file turns them on: it is what
+	// -online=false asks for. It wins over Online and over the configuration.
+	OnlineOff bool
 	// GitHubClient replaces the built-in client of the GitHub API, which sends REST requests and caches
 	// the answers in $XDG_CACHE_HOME/jactionlint. It is used by tests (see NewFixtureGitHubClient)
 	// and implies nothing by itself: the online rules need Online or the "online" configuration.
@@ -298,7 +301,7 @@ func NewLinter(out io.Writer, opts *LinterOptions) (*Linter, error) {
 		onDependabot:   opts.OnDependabotRulesCreated,
 		configFile:     opts.ConfigFile,
 		minSeverity:    opts.MinSeverity,
-		online:         onlineSettings{enabled: opts.Online || opts.OnlineOptions.Mode != OnlineModeDefault, client: opts.GitHubClient, ttl: opts.OnlineCacheTTL, ctx: opts.Context, opts: opts.OnlineOptions},
+		online:         onlineSettings{off: opts.OnlineOff, enabled: !opts.OnlineOff && (opts.Online || opts.OnlineOptions.Mode != OnlineModeDefault), client: opts.GitHubClient, ttl: opts.OnlineCacheTTL, ctx: opts.Context, opts: opts.OnlineOptions},
 	}
 	l.baseline.on = opts.Baseline
 	l.baseline.off = opts.NoBaseline
@@ -820,7 +823,7 @@ func (l *Linter) finishCheck(path string, content []byte, all []*Error, cfg *Con
 	inlineIgnores = append(inlineIgnores, parseZizmorIgnores(content)...)
 	all = l.filterInlineIgnores(all, inlineIgnores)
 	all = dropIgnored(all, cfgHit)
-	unused := unusedInlineIgnores(inlineIgnores, orphans, cfg, l.online.enabled || (cfg != nil && cfg.Online))
+	unused := unusedInlineIgnores(inlineIgnores, orphans, cfg, l.online.enabled || (!l.online.off && cfg != nil && cfg.Online))
 	dropFixesChangingYAML(content, unused)
 	all = append(all, l.annotateErrors(unused, content, cfg)...)
 

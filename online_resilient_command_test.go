@@ -317,3 +317,19 @@ func TestCommandDiffStillFailsWhenStrictSkippedALookup(t *testing.T) {
 		t.Errorf("status %d\n%s", status, errOut.String())
 	}
 }
+
+// -online=false turns the online checks off although the configuration turns them on.
+func TestCommandOnlineFalseOverridesTheConfig(t *testing.T) {
+	f := newFakeGitHub(t)
+	githubForActionsCheckout(f, true)
+	setOnlineEnv(t, f, "tok")
+	_, wf := onlineProject(t, workflowWith("uses: actions/checkout@"+testSHAv422+" # v3"), "online: true\n")
+	if _, stdout, _ := runOnlineCommand(t, "-rule-ids", wf); f.total() == 0 || !strings.Contains(stdout, "[archived-uses]") {
+		t.Fatalf("setup: the config turns the checks on: %v\n%s", f.hits, stdout)
+	}
+	n := f.total()
+	_, stdout, _ := runOnlineCommand(t, "-online=false", "-rule-ids", wf)
+	if f.total() != n || strings.Contains(stdout, "[archived-uses]") {
+		t.Errorf("-online=false must keep the network away: %d requests\n%s", f.total()-n, stdout)
+	}
+}
