@@ -1096,7 +1096,9 @@ func (sema *ExprSemanticsChecker) checkWithNarrowing(n ExprNode, isTruthy bool) 
 		}
 		return sema.checkLogicalOp(n)
 	case *NotOpNode:
-		return sema.checkWithNarrowing(n.Operand, !isTruthy)
+		// The operand is checked under the narrowing, but the value of `!x` is a boolean whatever x is
+		sema.checkWithNarrowing(n.Operand, !isTruthy)
+		return BoolType{}
 	default:
 		return sema.check(n)
 	}

@@ -745,17 +745,22 @@ func TestExprSemanticsCheckOK(t *testing.T) {
 		{
 			what:     "not operator negates && operator type narrowing",
 			input:    "!('foo' && 10) && 20",
-			expected: NumberType{},
+			expected: AnyType{}, // the value of ! is a boolean, so the result is a boolean or a number
 		},
 		{
 			what:     "not operator negates || operator type narrowing",
 			input:    "!('foo' || 10) || 20",
-			expected: NumberType{},
+			expected: AnyType{}, // the value of ! is a boolean, so the result is a boolean or a number
 		},
 		{
 			what:     "double not operators does nothing on type narrowing",
 			input:    "!!('foo' || 10) && 20",
-			expected: NumberType{},
+			expected: AnyType{}, // the value of ! is a boolean, so the result is a boolean or a number
+		},
+		{
+			what:     "not operator is boolean whatever its operand is",
+			input:    "!github.event_name && github.event_name != 'x'",
+			expected: BoolType{},
 		},
 		{
 			what:     "escaped braces in format string",
