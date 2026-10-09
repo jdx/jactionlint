@@ -326,7 +326,7 @@ func TestLinterRequiredActionsOptIn(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		l.defaultConfig = cfg
+		l.defaultConfig = withoutMissingTimeout(cfg)
 		errs, err := l.Lint("a.yaml", src, nil)
 		if err != nil {
 			t.Fatal(err)

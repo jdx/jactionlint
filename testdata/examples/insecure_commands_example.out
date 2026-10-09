@@ -1,0 +1,1 @@
+test.yaml:8:11: the step enables the deprecated insecure workflow commands "set-env" and "add-path" with ACTIONS_ALLOW_UNSECURE_COMMANDS. any output of a step can inject environment variables with them. remove the variable and write to the files $GITHUB_ENV and $GITHUB_PATH instead [insecure-commands]

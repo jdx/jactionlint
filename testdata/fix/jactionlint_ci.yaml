@@ -1,0 +1,107 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  unit-tests:
+    name: Unit tests
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+      - run: go test -v -race ./...
+      # Check build without CGO
+      - run: go build ./cmd/jactionlint
+        env:
+          # Note: -race requires cgo
+          CGO_ENABLED: 0
+      # Set -race for catching data races on dog fooding (#333)
+      - run: go build -race ./cmd/jactionlint
+      - name: Dog fooding 🐶
+        run: |
+          echo "::add-matcher::.github/jactionlint-matcher.json"
+          ./jactionlint -color
+  wasm:
+    name: Wasm
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./playground
+    steps:
+      - uses: actions/checkout@v6
+      - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+      - name: Build playground
+        run: make build
+      - name: Lint playground
+        run: npm run lint
+      - name: Run tests for wasm
+        run: npm test
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+      - run: hk check --all
+  docker:
+    name: Dockerfile
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Build image
+        id: image
+        uses: docker/build-push-action@v7
+        with:
+          build-args: |
+            GOLANG_VER=1.27
+          push: false
+      - name: Test Docker image
+        run: docker container run
+          --mount type=bind,source="$(pwd)",target=/mnt/app
+          --workdir /mnt/app
+          -- ${{ steps.image.outputs.digest }} -color -verbose
+      - name: Lint Dockerfile with hadolint
+        run: docker run --rm -i hadolint/hadolint hadolint --ignore DL3018 --ignore DL3066 --strict-labels - < Dockerfile
+
+  # Aggregator that required-status-checks can target. If any upstream job
+  # failed or was skipped, this job exits non-zero so the PR is blocked. Lets
+  # the branch-protection rule depend on one name instead of the whole matrix.
+  final:
+    name: final
+    needs: [unit-tests, wasm, lint, docker]
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    permissions: {}
+    # Run on success or upstream failure but skip when the workflow is
+    # cancelled; `always()` would override cancel-in-progress.
+    if: ${{ !cancelled() }}
+    steps:
+      - name: Gate on upstream job results
+        env:
+          NEEDS_JSON: ${{ toJSON(needs) }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import sys
+
+          needs = json.loads(os.environ["NEEDS_JSON"])
+          failed = False
+          for name, data in sorted(needs.items()):
+              result = data.get("result", "unknown")
+              print(f"{name}: {result}")
+              if result != "success":
+                  failed = True
+          sys.exit(1 if failed else 0)
+          PY

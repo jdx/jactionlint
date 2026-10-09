@@ -14,8 +14,8 @@ func allBatchDRules() *Config {
 	for _, id := range batchDDefaultRules {
 		c.Rules[id] = RuleConfig{Level: SeverityError}
 	}
-	for _, id := range []string{"unlocked-install-pedantic", "unpinned-tools-pedantic", "superfluous-actions-pedantic"} {
-		c.Rules[id] = RuleConfig{Level: SeverityError}
+	for _, id := range []string{"unlocked-install", "unpinned-tools", "superfluous-actions"} {
+		c.Rules[id] = RuleConfig{Level: SeverityError, Options: map[string]any{"pedantic": true}}
 	}
 	return c
 }
@@ -26,7 +26,7 @@ func lintBatchD(t *testing.T, name string, src string, cfg *Config) []*Error {
 	if err != nil {
 		t.Fatal(err)
 	}
-	l.defaultConfig = cfg
+	l.defaultConfig = withoutMissingTimeout(cfg)
 	errs, err := l.Lint(name, []byte(src), &Project{root: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
@@ -73,7 +73,7 @@ func newBatchDLinter(t *testing.T, root string) *Linter {
 	if err != nil {
 		t.Fatal(err)
 	}
-	l.defaultConfig = &Config{Rules: map[string]RuleConfig{"unlocked-install": {Level: SeverityError}}}
+	l.defaultConfig = withoutMissingTimeout(&Config{Rules: map[string]RuleConfig{"unlocked-install": {Level: SeverityError}}})
 	return l
 }
 
@@ -262,7 +262,7 @@ func TestBatchDLabelIsID(t *testing.T) {
 		}
 		ids = append(ids, e.ID)
 	}
-	for _, id := range []string{"github-env", "unlocked-install", "unpinned-tools-pedantic", "adhoc-packages"} {
+	for _, id := range []string{"github-env", "unlocked-install", "unpinned-tools", "adhoc-packages"} {
 		found := false
 		for _, i := range ids {
 			found = found || i == id
@@ -395,6 +395,42 @@ func TestGitHubEnvTriggersAndNames(t *testing.T) {
 	} {
 		if got := count(tc.src); got != tc.want {
 			t.Errorf("%s: %d findings, want %d", name, got, tc.want)
+		}
+	}
+}
+
+// The pedantic persona of an audit is the option "pedantic" of the same rule, on by default under the strict
+// and all profiles only.
+func TestBatchDPedanticOption(t *testing.T) {
+	src := "on: push\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - run: npm install\n      - uses: stefanzweifel/git-auto-commit-action@v5\n      - run: pip install requests\n"
+	count := func(c *Config, id string) int {
+		n := 0
+		for _, e := range lintBatchD(t, "test.yaml", src, c) {
+			if e.ID == id {
+				n++
+			}
+		}
+		return n
+	}
+	for _, id := range []string{"unlocked-install", "superfluous-actions", "unpinned-tools"} {
+		on := func(extra map[string]any) *Config {
+			return &Config{Rules: map[string]RuleConfig{id: {Level: SeverityError, Options: extra}}}
+		}
+		if n := count(on(nil), id); n != 0 {
+			t.Errorf("%s: %d pedantic findings without the option under the default profile", id, n)
+		}
+		if n := count(on(map[string]any{"pedantic": true}), id); n == 0 {
+			t.Errorf("%s: no pedantic finding with the option", id)
+		}
+		strict := on(nil)
+		strict.Profile = ProfileStrict
+		if n := count(strict, id); n == 0 {
+			t.Errorf("%s: no pedantic finding under the strict profile", id)
+		}
+		strictOff := on(map[string]any{"pedantic": false})
+		strictOff.Profile = ProfileStrict
+		if n := count(strictOff, id); n != 0 {
+			t.Errorf("%s: %d pedantic findings with pedantic: false under the strict profile", id, n)
 		}
 	}
 }

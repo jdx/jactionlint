@@ -1,0 +1,10 @@
+# requires -online
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      # ERROR: the repository is archived
+      - uses: example/archived-action@v1
+      # OK
+      - uses: actions/checkout@v4

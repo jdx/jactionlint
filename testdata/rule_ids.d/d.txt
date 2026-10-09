@@ -2,9 +2,6 @@ adhoc-packages
 github-env
 github-env-untrusted-input
 superfluous-actions
-superfluous-actions-pedantic
 unlocked-install
-unlocked-install-pedantic
 unpinned-tools
-unpinned-tools-pedantic
 use-trusted-publishing

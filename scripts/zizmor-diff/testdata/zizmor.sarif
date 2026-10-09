@@ -42,7 +42,7 @@
           ]
         },
         {
-          "ruleId": "zizmor/anonymous-definition",
+          "ruleId": "zizmor/future-audit",
           "message": { "text": "workflow or action definition without a name" },
           "locations": [
             {

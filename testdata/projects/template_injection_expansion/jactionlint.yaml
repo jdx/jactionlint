@@ -1,0 +1,3 @@
+rules:
+  template-injection-expansion: warn
+  template-injection-trusted: info

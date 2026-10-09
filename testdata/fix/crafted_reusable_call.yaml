@@ -1,0 +1,14 @@
+on: push
+permissions: {}
+jobs:
+  call:
+    uses: ./.github/workflows/reusable.yaml
+    with:
+      x: 1
+  call-with-name:
+    name: Call
+    uses: octo/repo/.github/workflows/w.yaml@v1
+  normal:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo normal

@@ -1,0 +1,53 @@
+on: push
+
+jobs:
+  no-with:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: echo hello
+  with-other-inputs:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4 # a comment
+        with:
+          # all history for the changelog
+          fetch-depth: 0
+          submodules: true
+      - uses: actions/upload-artifact@v4
+        with:
+          path: .
+  pushes:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          git commit -am update
+          git push
+  flow:
+    runs-on: ubuntu-latest
+    steps:
+      - {uses: actions/checkout@v4}
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0}
+  ok:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: ${{ vars.PERSIST }}
+      - uses: actions/checkout@v4
+        with:
+          repository: owner/other
+          persist-credentials: false
+      - uses: actions/cache@v4
+        with:
+          path: x
+          key: y

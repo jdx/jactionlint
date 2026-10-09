@@ -1,0 +1,1 @@
+test.yaml:8:15: action "example/archived-action@v1" is in the archived repository example/archived-action, which is read-only and no longer maintained, so problems in it will not be fixed. replace it with a maintained alternative, or run the commands yourself in a "run:" step [archived-uses]

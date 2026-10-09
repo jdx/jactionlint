@@ -72,7 +72,9 @@ func (rule *RuleSuperfluousActions) VisitStep(n *Step) error {
 		}
 		msg := fmt.Sprintf("action %q is superfluous: the runner already has the tools to do this. %s", a.Uses.Value, s.instead)
 		if s.pedantic {
-			rule.errorIDAt("superfluous-actions-pedantic", a.Uses.Pos, msg)
+			if rule.pedantic("superfluous-actions") {
+				rule.errorIDAt("superfluous-actions", a.Uses.Pos, msg)
+			}
 		} else {
 			rule.errorIDAt("superfluous-actions", a.Uses.Pos, msg)
 		}
@@ -83,11 +85,10 @@ func (rule *RuleSuperfluousActions) VisitStep(n *Step) error {
 
 func init() {
 	registerRules(
-		RuleInfo{ID: "superfluous-actions", Group: RuleGroupSecurity, Summary: "An action does what a tool of the runner image does as well, such as gh release create.", DefaultLevel: SeverityWarning, Profile: ProfileDefault, DocsAnchor: "check-superfluous-actions"},
-		RuleInfo{ID: "superfluous-actions-pedantic", Group: RuleGroupPolicy, Summary: "An action does what a few commands of the runner image do, such as git commit and push or gh pr create.", DefaultLevel: SeverityWarning, Profile: ProfileStrict, DocsAnchor: "check-superfluous-actions"},
+		RuleInfo{ID: "superfluous-actions", Group: RuleGroupSecurity, Summary: "An action does what a tool of the runner image does as well, such as gh release create.", DefaultLevel: SeverityWarning, Profile: ProfileDefault, DocsAnchor: "check-superfluous-actions", Options: []RuleOption{pedanticOption}},
 	)
 	registerRuleFactory("superfluous-actions", func(env *RuleEnv) []Rule {
-		if !env.config.RuleEnabled("superfluous-actions") && !env.config.RuleEnabled("superfluous-actions-pedantic") {
+		if !env.config.RuleEnabled("superfluous-actions") {
 			return nil
 		}
 		return []Rule{NewRuleSuperfluousActions()}

@@ -1,0 +1,29 @@
+on: push
+
+jobs:
+  tokens:
+    runs-on: ubuntu-latest
+    steps:
+      # no permission-* input
+      - uses: actions/create-github-app-token@3ff1caaa28b64c9cc276ce0a02e2ff584f3900c5
+        with:
+          app-id: ${{ vars.APP_ID }}
+          private-key: ${{ secrets.APP_KEY }}
+      # owner without repositories, and skipping the revoke
+      - uses: actions/create-github-app-token@3ff1caaa28b64c9cc276ce0a02e2ff584f3900c5
+        with:
+          app-id: ${{ vars.APP_ID }}
+          private-key: ${{ secrets.APP_KEY }}
+          owner: my-org
+          permission-contents: read
+          skip-token-revoke: true
+      # OK
+      - uses: actions/create-github-app-token@3ff1caaa28b64c9cc276ce0a02e2ff584f3900c5
+        with:
+          app-id: ${{ vars.APP_ID }}
+          private-key: ${{ secrets.APP_KEY }}
+          owner: my-org
+          repositories: repo-a,repo-b
+          permission-contents: read
+          permission-pull-requests: write
+          skip-token-revoke: false

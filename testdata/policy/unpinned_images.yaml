@@ -1,0 +1,45 @@
+on: push
+
+jobs:
+  container:
+    runs-on: ubuntu-latest
+    container: node
+    steps:
+      - run: echo hello
+  latest:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/owner/image:latest
+    steps:
+      - run: echo hello
+  tag:
+    runs-on: ubuntu-latest
+    container:
+      image: node:20
+    services:
+      db:
+        image: postgres:16-alpine
+      cache:
+        image: redis
+      pinned:
+        image: postgres:16@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+      broken:
+        image: postgres@sha256:abc
+      dynamic:
+        image: ${{ vars.IMAGE }}
+      registry-port:
+        image: localhost:5000/team/image
+    steps:
+      - run: echo hello
+  matrix:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        image: ["debian:12", "alpine@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"]
+        include:
+          - image: ubuntu
+          - image: ${{ vars.OTHER }}
+        other: [x]
+    container: ${{ matrix.image }}
+    steps:
+      - run: echo hello

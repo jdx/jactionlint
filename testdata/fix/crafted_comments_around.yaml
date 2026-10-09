@@ -1,0 +1,27 @@
+# header comment
+name: Comments around
+
+# explain the trigger
+on:
+  push:
+    branches: [main]
+
+  # between on and jobs
+  pull_request:
+
+# the jobs
+jobs:
+  # about build
+  build: # build job
+    # about runs-on
+    runs-on: ubuntu-latest
+    # about steps
+    steps:
+      - run: echo one
+
+  # about test
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - run: echo two

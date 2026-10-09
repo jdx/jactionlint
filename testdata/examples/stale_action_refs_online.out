@@ -1,0 +1,1 @@
+test.yaml:10:15: action "actions/setup-node@3235b876344d2a9aa001b8d1453c930bba69e610" is pinned to commit 3235b876344d, which no tag of actions/setup-node points to. the commit may contain changes that no release documents. pin the commit of a tagged release instead [stale-action-refs]

@@ -1,0 +1,14 @@
+name: Four spaces
+on:
+    push:
+        branches:
+            - main
+jobs:
+    build:
+        runs-on: ubuntu-latest
+        steps:
+            - run: echo one
+    test:
+        runs-on: ubuntu-latest
+        steps:
+            - run: echo two

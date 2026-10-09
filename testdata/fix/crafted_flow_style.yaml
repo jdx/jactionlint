@@ -1,0 +1,13 @@
+on: push
+jobs:
+  flow: {runs-on: ubuntu-latest, steps: [{run: echo flow}]}
+  block:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo block
+  anchored: &anchored
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo anchored
+  flowtail:
+    {runs-on: ubuntu-latest, steps: [{run: echo tail}]}

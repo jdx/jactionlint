@@ -1,0 +1,3 @@
+test.yaml:7:15: action "actions/cache/save@v4" is forbidden by pattern "actions/cache/*" in the "deny" list of the "forbidden-uses" rule. remove it or change the configuration [forbidden-uses]
+test.yaml:11:15: action "actions/cache@v4" is forbidden by pattern "actions/cache/*" in the "deny" list of the "forbidden-uses" rule. remove it or change the configuration [forbidden-uses]
+test.yaml:15:15: action "tj-actions/changed-files@v45" is forbidden by pattern "tj-actions/changed-files" in the "deny" list of the "forbidden-uses" rule. remove it or change the configuration [forbidden-uses]

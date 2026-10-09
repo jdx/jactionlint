@@ -1,0 +1,224 @@
+name: Release-plz
+
+permissions: {}
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to finish releasing (e.g. v2.7.0). Skips release-plz, uploads assets, enhances notes, and publishes."
+        required: true
+        type: string
+
+env:
+  MBX_DISABLE: "1"
+
+jobs:
+  release-plz-release:
+    name: Release
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    if: ${{ github.event_name == 'push' && github.repository_owner == 'jdx' }}
+    permissions:
+      contents: write
+      pull-requests: write
+      # Lets this job mint the OIDC token that crates.io exchanges for a
+      # short-lived publish token; see the crates.io auth step below.
+      id-token: write
+    outputs:
+      tag: ${{ steps.release-plz.outputs.releases && fromJSON(steps.release-plz.outputs.releases)[0].tag || '' }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Install mise
+        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        with:
+          cache: false
+      - name: Build UI assets
+        working-directory: ui
+        run: |
+          aube install
+          aube run build
+      # Exchanges this job's OIDC identity for a crates.io token that is valid
+      # for 30 minutes and scoped to this crate. The crate is configured on
+      # crates.io to accept publishes only from this workflow, so there is no
+      # long-lived registry token to leak or rotate.
+      - name: Authenticate to crates.io
+        id: crates-io-auth
+        uses: rust-lang/crates-io-auth-action@c6f97d42243bad5fab37ca0427f495c86d5b1a18 # v1.0.5
+      - name: Run release-plz
+        id: release-plz
+        uses: release-plz/action@2eb1d8bcb770b4c48ccfaad919734b38b51958c9 # v0.5.131
+        with:
+          command: release
+        env:
+          GITHUB_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN }}
+          CARGO_REGISTRY_TOKEN: ${{ steps.crates-io-auth.outputs.token }}
+
+  upload-assets:
+    name: Upload assets
+    needs: release-plz-release
+    if: >-
+      ${{ always() && (inputs.tag != '' || needs.release-plz-release.outputs.tag != '') }}
+    permissions:
+      contents: write
+      # A called workflow's token can only be narrower than its caller's, so
+      # the packslip's signing and attestation permissions are granted here.
+      id-token: write
+      attestations: write
+    uses: ./.github/workflows/release.yml
+    with:
+      tag: ${{ inputs.tag != '' && inputs.tag || needs.release-plz-release.outputs.tag }}
+    secrets:
+      CERTIFICATES_P12: ${{ secrets.CERTIFICATES_P12 }}
+      CERTIFICATES_P12_PASS: ${{ secrets.CERTIFICATES_P12_PASS }}
+      APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
+      APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+      APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
+
+  enhance-release:
+    name: Enhance release notes
+    needs: release-plz-release
+    if: >-
+      ${{ always() && (inputs.tag != '' || needs.release-plz-release.outputs.tag != '') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    env:
+      TAG: ${{ inputs.tag != '' && inputs.tag || needs.release-plz-release.outputs.tag }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        with:
+          cache: false
+      - run: communique generate "$TAG" --github-release
+        env:
+          GITHUB_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      - name: Append sponsor blurb
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN }}
+        run: |
+          body=$(gh release view "$TAG" --json body --jq .body)
+          if grep -qiE '^##.*Sponsor pitchfork' <<<"$body"; then
+            echo "Sponsor section already present in $TAG release notes; skipping append."
+            exit 0
+          fi
+          {
+            printf '%s\n' "$body"
+            cat <<'EOF'
+
+          ## 💚 Sponsor pitchfork
+
+          pitchfork is built and maintained by [@jdx](https://github.com/jdx), an open source developer at [**entire.io**](https://entire.io/), the title sponsor of his open source work.
+
+          If pitchfork has a place in your development workflow, please consider becoming an [individual or company sponsor](https://jdx.dev/sponsors.html). Your support funds ongoing development and helps keep pitchfork fast, free, and independent.
+          EOF
+          } > /tmp/release-notes.md
+          gh release edit "$TAG" --notes-file /tmp/release-notes.md
+
+  publish-release:
+    name: Publish release
+    needs: [release-plz-release, upload-assets, enhance-release]
+    if: >-
+      ${{ !cancelled() && (needs.release-plz-release.result == 'success' || (needs.release-plz-release.result == 'skipped' && inputs.tag != '')) && needs.upload-assets.result == 'success' && needs.enhance-release.result == 'success' && (inputs.tag != '' || needs.release-plz-release.outputs.tag != '') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    env:
+      TAG: ${{ inputs.tag != '' && inputs.tag || needs.release-plz-release.outputs.tag }}
+    steps:
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN }}
+        run: gh release edit "$TAG" --repo "${{ github.repository }}" --draft=false
+
+  release-plz-pr:
+    name: Release PR
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    if: ${{ github.event_name == 'push' && github.repository_owner == 'jdx' }}
+    permissions:
+      contents: write
+      pull-requests: write
+    concurrency:
+      group: release-plz-${{ github.ref }}
+      cancel-in-progress: false
+    steps:
+      # release-plz-pr needs persisted credentials so the later
+      # `git fetch` / `git push --force-with-lease` can authenticate.
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # zizmor: ignore[artipacked] v6
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.RELEASE_PLZ_TOKEN }}
+      - name: Install mise
+        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        with:
+          cache: false
+      - name: Build UI assets
+        working-directory: ui
+        run: |
+          aube install
+          aube run build
+      # release-plz updates the PR before the next step can regenerate docs.
+      # Warm the render dependencies so the follow-up push supersedes that
+      # intermediate PR revision before its CI run reaches the render check.
+      - name: Warm render dependencies
+        run: mise run build
+      - name: Run release-plz
+        id: release-plz
+        uses: release-plz/action@2eb1d8bcb770b4c48ccfaad919734b38b51958c9 # v0.5.131
+        with:
+          command: release-pr
+        env:
+          GITHUB_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN }}
+      - name: Squash generated docs into release PR
+        run: |
+          PR_BRANCH=$(echo "${STEPS_RELEASE_PLZ_OUTPUTS_PR}" | jq -r '.head_branch // empty')
+          if [ -z "$PR_BRANCH" ]; then
+            PR_BRANCH=$(gh pr list --state open --base main --json headRefName,updatedAt --jq 'sort_by(.updatedAt) | reverse | map(select(.headRefName | startswith("release-plz-")))[0].headRefName // empty' 2>/dev/null || true)
+          fi
+          if [ -z "$PR_BRANCH" ]; then
+            echo "No release PR branch found, skipping"
+            exit 0
+          fi
+          echo "Updating release PR on branch: $PR_BRANCH"
+          git fetch origin "$PR_BRANCH"
+          git checkout "$PR_BRANCH"
+          mise run render
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git commit --amend --no-edit
+            git push --force-with-lease origin "$PR_BRANCH"
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN }}
+          STEPS_RELEASE_PLZ_OUTPUTS_PR: ${{ steps.release-plz.outputs.pr }}
+
+  # The release index at https://pitchfork.jdx.dev/.well-known/packslip.json,
+  # rebuilt once the release is public.
+  list:
+    needs: [publish-release]
+    permissions:
+      contents: read
+      id-token: write
+    secrets:
+      CLOUDFLARE_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_ACCESS_KEY_ID }}
+      CLOUDFLARE_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_SECRET_ACCESS_KEY }}
+    uses: ./.github/workflows/packslip-releases.yml

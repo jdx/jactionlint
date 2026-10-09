@@ -1,0 +1,2 @@
+go test fuzz v1
+string("\rjobs:\n 0: \n  steps:\n  - uses: ACtions/CheCkout@00")

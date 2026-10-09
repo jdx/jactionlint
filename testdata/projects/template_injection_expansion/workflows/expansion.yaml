@@ -1,0 +1,70 @@
+on:
+  workflow_dispatch:
+    inputs:
+      text:
+        type: string
+      flag:
+        type: boolean
+      pick:
+        type: choice
+        options: [a, b]
+
+jobs:
+  free-text:
+    runs-on: ubuntu-latest
+    steps:
+      # Free text: the value becomes part of the script
+      - run: echo '${{ inputs.text }}'
+      - id: version
+        run: echo "v=1" >> "$GITHUB_OUTPUT"
+      - run: echo '${{ steps.version.outputs.v }}'
+      # The name of a branch is chosen by whoever pushes it
+      - run: echo '${{ github.ref_name }}'
+      # An environment variable that is set from an expression
+      - run: echo '${{ env.FROM_EXPR }}'
+        env:
+          FROM_EXPR: ${{ github.sha }}
+      # The result of || can be its left operand
+      - run: echo '${{ inputs.text || 'default' }}'
+      # A code input of an action is a script too
+      - uses: actions/github-script@v7
+        with:
+          script: console.log('${{ inputs.text }}')
+
+  values-that-are-not-text:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        os: [linux, mac]
+        include:
+          - os: windows
+            ext: .exe
+    steps:
+      # Boolean, number, choice and environment inputs cannot hold code
+      - run: echo '${{ inputs.flag }} ${{ inputs.pick }}'
+      # A matrix whose values are written in the workflow
+      - run: echo '${{ matrix.os }} ${{ matrix.ext }}'
+      # Enumerations
+      - id: step
+        run: echo
+      - run: echo '${{ steps.step.outcome }} ${{ job.status }}'
+      # The value of an environment variable which is a literal
+      - run: echo '${{ env.LITERAL }}'
+        env:
+          LITERAL: value
+      # Contexts of GitHub and the runner
+      - run: echo '${{ github.repository }} ${{ github.sha }} ${{ runner.os }} ${{ secrets.TOKEN }}'
+      # Only tested: the result is a boolean or a literal
+      - run: echo '${{ github.event_name == 'push' && 'a' || 'b' }}'
+      # The shell reads the variable
+      - run: echo "$TEXT"
+        env:
+          TEXT: ${{ inputs.text }}
+
+  dynamic-matrix:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        os: ${{ fromJSON('["a", "b"]') }}
+    steps:
+      - run: echo '${{ matrix.os }}'

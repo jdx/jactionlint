@@ -65,7 +65,7 @@ func TestParseJactionlint(t *testing.T) {
 	}
 	want := []string{
 		".github/workflows/ci.yml:12:expression",
-		".github/workflows/ci.yml:8:require-permissions",
+		".github/workflows/ci.yml:8:missing-permissions",
 		".github/workflows/ci.yml:9:runner-label",
 	}
 	if diff := cmp.Diff(want, rules); diff != "" {
@@ -115,7 +115,7 @@ func TestParseZizmor(t *testing.T) {
 		".github/workflows/ci.yml:12:template-injection",
 		".github/workflows/ci.yml:8:excessive-permissions",
 		".github/workflows/other.yml:3:excessive-permissions",
-		".github/workflows/ci.yml:1:anonymous-definition",
+		".github/workflows/ci.yml:1:future-audit",
 		".github/dependabot.yml:4:dependabot-cooldown",
 	}
 	if diff := cmp.Diff(want, s); diff != "" {
@@ -146,6 +146,11 @@ func TestDefaultMapping(t *testing.T) {
 		if _, ok := m.Audits[name]; !ok {
 			t.Errorf("audit %q is not mapped", name)
 		}
+	}
+	// required-actions is the inverse check: its findings are not zizmor's forbidden-uses findings
+	fu := m.Audits["forbidden-uses"]
+	if len(fu.Jactionlint) != 1 || fu.Jactionlint[0].Rule != "forbidden-uses" || fu.covers(Finding{Rule: "required-actions"}) {
+		t.Errorf("forbidden-uses is mapped to %+v", fu.Jactionlint)
 	}
 	if m.Audits["hardcoded-container-credentials"].Coverage != "full" {
 		t.Error("hardcoded-container-credentials should be full")
@@ -249,7 +254,7 @@ func TestBuild(t *testing.T) {
 	for _, a := range rep.Unmapped {
 		unmapped = append(unmapped, a.Audit)
 	}
-	if diff := cmp.Diff([]string{"anonymous-definition"}, unmapped); diff != "" {
+	if diff := cmp.Diff([]string{"future-audit"}, unmapped); diff != "" {
 		t.Errorf("unmapped (dependabot is out of scope): %s", diff)
 	}
 
@@ -300,13 +305,13 @@ func TestMarkdown(t *testing.T) {
 	out := b.String()
 	for _, want := range []string{
 		"## Mapped audits",
-		"| template-injection | partial | `template-injection`, `expression` | 1 | 1 | 0 | 1 |",
-		"| excessive-permissions | partial | `missing-permissions`, `require-permissions` | 2 | 1 | 1 | 1 |",
+		"| template-injection | partial | `expression`, `template-injection`, `template-injection-expansion` | 1 | 1 | 0 | 1 |",
+		"| excessive-permissions | partial | `excessive-permissions`, `missing-permissions` | 2 | 1 | 1 | 1 |",
 		"| **total** |",
 		"## jactionlint only",
 		"| runner-label | 1 | `r/.github/workflows/ci.yml:9` |",
 		"## Unmapped zizmor audits",
-		"| anonymous-definition | 1 | 1 |",
+		"| future-audit | 1 | 1 |",
 		"skipped: directory not found",
 		"zizmor failed: exit 1: boom \\| bang",
 		"| r | 4 | 3 | 2 | 1 |",
@@ -390,5 +395,26 @@ func TestRunZizmorFailureIsRecorded(t *testing.T) {
 		if r.Zizmor != 0 || r.Jactionlint != 0 {
 			t.Errorf("%s: failed repo counted: %+v", name, r)
 		}
+	}
+}
+
+func TestZizmorArgumentsOnline(t *testing.T) {
+	has := func(args []string, a string) bool {
+		for _, x := range args {
+			if x == a {
+				return true
+			}
+		}
+		return false
+	}
+	if !has(zizmorArguments(false), "--offline") {
+		t.Error("the default run must be offline")
+	}
+	on := zizmorArguments(true)
+	if has(on, "--offline") || !has(on, "--persona") {
+		t.Errorf("--online drops --offline and keeps the rest: %v", on)
+	}
+	if !has(zizmorArgs, "--offline") {
+		t.Error("zizmorArgs must not be modified")
 	}
 }

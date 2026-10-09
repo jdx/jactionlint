@@ -1,0 +1,6 @@
+rules:
+  unpinned-uses:
+    level: error
+    policies:
+      actions/*: ref-pin
+      trusted-org/tool: any

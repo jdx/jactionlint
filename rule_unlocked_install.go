@@ -124,7 +124,9 @@ func (rule *RuleUnlockedInstall) checkManifest(s *runscript.Script, origin runsc
 			// pnpm freezes the lock file by default in CI, so only an explicit opt-out is reported
 			f := c.Flag("--frozen-lockfile")
 			if c.HasFlag("--no-frozen-lockfile") || (f != nil && f.Value != nil && f.Value.Value == "false") {
-				rule.errorIDAt("unlocked-install-pedantic", start, `"pnpm install" is told not to freeze the lock file, so it may update pnpm-lock.yaml instead of failing when it is out of date. pass --frozen-lockfile`).endAt(end)
+				if rule.pedantic("unlocked-install") {
+					rule.errorIDAt("unlocked-install", start, `"pnpm install" is told not to freeze the lock file, so it may update pnpm-lock.yaml instead of failing when it is out of date. pass --frozen-lockfile`).endAt(end)
+				}
 			}
 			return
 		}
@@ -133,11 +135,17 @@ func (rule *RuleUnlockedInstall) checkManifest(s *runscript.Script, origin runsc
 		}
 		switch c.Tool {
 		case "npm":
-			rule.errorIDAt("unlocked-install-pedantic", start, quote(name)+" resolves the dependencies again and may update the package-lock.json instead of failing when it is out of date. use `npm ci`").endAt(end)
+			if rule.pedantic("unlocked-install") {
+				rule.errorIDAt("unlocked-install", start, quote(name)+" resolves the dependencies again and may update the package-lock.json instead of failing when it is out of date. use `npm ci`").endAt(end)
+			}
 		case "yarn":
-			rule.errorIDAt("unlocked-install-pedantic", start, quote(name)+" does not require the yarn.lock to be up to date in Yarn 1, and relies on the CI detection of Yarn 2+. pass `--immutable` (`--frozen-lockfile` for Yarn 1)").endAt(end)
+			if rule.pedantic("unlocked-install") {
+				rule.errorIDAt("unlocked-install", start, quote(name)+" does not require the yarn.lock to be up to date in Yarn 1, and relies on the CI detection of Yarn 2+. pass `--immutable` (`--frozen-lockfile` for Yarn 1)").endAt(end)
+			}
 		case "bun":
-			rule.errorIDAt("unlocked-install-pedantic", start, quote(name)+" may update bun.lock instead of failing when it is out of date. use `bun ci` or pass `--frozen-lockfile`").endAt(end)
+			if rule.pedantic("unlocked-install") {
+				rule.errorIDAt("unlocked-install", start, quote(name)+" may update bun.lock instead of failing when it is out of date. use `bun ci` or pass `--frozen-lockfile`").endAt(end)
+			}
 		}
 	case "pypi":
 		start, end := commandRange(s, origin, c)
@@ -161,17 +169,18 @@ func (rule *RuleUnlockedInstall) checkManifest(s *runscript.Script, origin runsc
 		for _, r := range in.Requirements {
 			req = append(req, r.Value)
 		}
-		rule.errorIDAt("unlocked-install-pedantic", start, quote(strings.TrimSpace(cmd+" install -r "+strings.Join(req, " -r ")))+" installs a requirements file without hashes or constraints, so the transitive dependencies are resolved anew on every run. use a lock file with hashes (`pip-compile --generate-hashes`) and pass --require-hashes, or pin them with -c").endAt(end)
+		if rule.pedantic("unlocked-install") {
+			rule.errorIDAt("unlocked-install", start, quote(strings.TrimSpace(cmd+" install -r "+strings.Join(req, " -r ")))+" installs a requirements file without hashes or constraints, so the transitive dependencies are resolved anew on every run. use a lock file with hashes (`pip-compile --generate-hashes`) and pass --require-hashes, or pin them with -c").endAt(end)
+		}
 	}
 }
 
 func init() {
 	registerRules(
-		RuleInfo{ID: "unlocked-install", Group: RuleGroupSecurity, Summary: "cargo install runs without --locked.", DefaultLevel: SeverityWarning, Profile: ProfileDefault, Fixable: true, DocsAnchor: "check-unlocked-install"},
-		RuleInfo{ID: "unlocked-install-pedantic", Group: RuleGroupPolicy, Summary: "An install from a manifest is not bound to its lock file: npm install, yarn or bun install without a frozen lock file, pip install -r without hashes.", DefaultLevel: SeverityWarning, Profile: ProfileStrict, DocsAnchor: "check-unlocked-install"},
+		RuleInfo{ID: "unlocked-install", Group: RuleGroupSecurity, Summary: "cargo install runs without --locked.", DefaultLevel: SeverityWarning, Profile: ProfileDefault, Fixable: true, DocsAnchor: "check-unlocked-install", Options: []RuleOption{pedanticOption}},
 	)
 	registerRuleFactory("unlocked-install", func(env *RuleEnv) []Rule {
-		if !env.config.RuleEnabled("unlocked-install") && !env.config.RuleEnabled("unlocked-install-pedantic") {
+		if !env.config.RuleEnabled("unlocked-install") {
 			return nil
 		}
 		return []Rule{NewRuleUnlockedInstall(env.Source())}

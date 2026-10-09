@@ -188,7 +188,7 @@ type publishingAction struct {
 	manual func(in func(name string) (string, bool)) (input, what string, ok bool)
 }
 
-var publishingActions = []publishingAction{
+var trustedPublishingActions = []publishingAction{
 	{action: "pypa/gh-action-pypi-publish", eco: "pypi", manual: func(in func(string) (string, bool)) (string, string, bool) {
 		if v, ok := in("password"); !ok || v == "" || !defaultOrPublicRepository(in, "repository-url", "repository_url") {
 			return "", "", false
@@ -240,7 +240,7 @@ func (rule *RuleUseTrustedPublishing) checkAction(e *ExecAction) {
 		return
 	}
 	name := u.CanonicalName()
-	for _, a := range publishingActions {
+	for _, a := range trustedPublishingActions {
 		if a.action != name {
 			continue
 		}

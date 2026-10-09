@@ -103,7 +103,9 @@ func (rule *RuleUnpinnedTools) checkAction(e *ExecAction) {
 		}
 		report := func(pos *Pos, msg string) {
 			if t.pedantic {
-				rule.errorIDAt("unpinned-tools-pedantic", pos, msg)
+				if rule.pedantic("unpinned-tools") {
+					rule.errorIDAt("unpinned-tools", pos, msg)
+				}
 			} else {
 				rule.errorIDAt("unpinned-tools", pos, msg)
 			}
@@ -160,7 +162,9 @@ func (rule *RuleUnpinnedTools) checkRun(run *ExecRun) {
 		}
 		sort.Strings(names)
 		start, end := commandRange(s, origin, c)
-		rule.errorIDAt("unpinned-tools-pedantic", start, plural(names)+" installed without an exact version, so every run may fetch a different release. pin "+pinExample(in.Ecosystem)).endAt(end)
+		if rule.pedantic("unpinned-tools") {
+			rule.errorIDAt("unpinned-tools", start, plural(names)+" installed without an exact version, so every run may fetch a different release. pin "+pinExample(in.Ecosystem)).endAt(end)
+		}
 	}
 }
 
@@ -211,11 +215,10 @@ func unpinnedToolInstall(c *runscript.Command, in *runscript.Install) bool {
 
 func init() {
 	registerRules(
-		RuleInfo{ID: "unpinned-tools", Group: RuleGroupSecurity, Summary: "An action installs the newest version of its tool because no version is set or it is latest.", DefaultLevel: SeverityWarning, Profile: ProfileDefault, DocsAnchor: "check-unpinned-tools"},
-		RuleInfo{ID: "unpinned-tools-pedantic", Group: RuleGroupPolicy, Summary: "A tool is installed or run without an exact version by a run: script or by further actions.", DefaultLevel: SeverityWarning, Profile: ProfileStrict, DocsAnchor: "check-unpinned-tools"},
+		RuleInfo{ID: "unpinned-tools", Group: RuleGroupSecurity, Summary: "An action installs the newest version of its tool because no version is set or it is latest.", DefaultLevel: SeverityWarning, Profile: ProfileDefault, DocsAnchor: "check-unpinned-tools", Options: []RuleOption{pedanticOption}},
 	)
 	registerRuleFactory("unpinned-tools", func(env *RuleEnv) []Rule {
-		if !env.config.RuleEnabled("unpinned-tools") && !env.config.RuleEnabled("unpinned-tools-pedantic") {
+		if !env.config.RuleEnabled("unpinned-tools") {
 			return nil
 		}
 		return []Rule{NewRuleUnpinnedTools()}

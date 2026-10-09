@@ -1,0 +1,174 @@
+package jactionlint
+
+// shQuote is how a position of a POSIX shell script is quoted.
+type shQuote int8
+
+const (
+	shUnquoted shQuote = iota
+	shDouble
+	shSingle
+)
+
+// shPlace describes where a ${{ }} placeholder sits in a shell script.
+type shPlace struct {
+	// Quote is the quoting of the shell at the placeholder.
+	Quote shQuote
+	// Cannot is true when the placeholder is somewhere a shell scanner this small cannot reason about
+	// (command substitution, here-documents, comments, ...). No replacement is attempted for it.
+	Cannot bool
+	// Unsafe is the reason why replacing the placeholder with a variable expansion could change what
+	// the script does for benign values, e.g. the value is not quoted so quoting it changes word
+	// splitting. It is empty when the replacement is equivalent.
+	Unsafe string
+}
+
+// shSpan is the byte range [Start, End) of a placeholder in a script.
+type shSpan struct{ Start, End int }
+
+// analyzeShellPlaceholders scans a POSIX shell script (bash or sh) and tells for each placeholder
+// how it is quoted. The scanner knows single and double quotes, backslashes, comments and the
+// constructs which it cannot follow. It does not parse the shell language. Anything it does not
+// understand makes the placeholders "Cannot" so that no edit is made.
+func analyzeShellPlaceholders(script string, spans []shSpan) []shPlace {
+	places := make([]shPlace, len(spans))
+	next := 0 // index of the next placeholder to meet
+	var (
+		quote     = shUnquoted
+		inComment bool
+		inDBrack  bool // between [[ and ]]
+		word      []byte
+		wordPlain = true // the current word has no quote or placeholder
+		globalBad bool
+	)
+	endWord := func() {
+		if wordPlain && len(word) > 0 {
+			switch string(word) {
+			case "[[":
+				inDBrack = true
+			case "]]":
+				inDBrack = false
+			case "case", "select", "coproc":
+				globalBad = true
+			}
+		}
+		word = word[:0]
+		wordPlain = true
+	}
+	i := 0
+	for i < len(script) {
+		if next < len(spans) && i == spans[next].Start {
+			p := &places[next]
+			p.Quote = quote
+			switch {
+			case inComment:
+				p.Cannot = true
+			case i > 0 && script[i-1] == '\\' && quote != shSingle:
+				p.Cannot = true
+			case quote == shUnquoted:
+				p.Unsafe = "the value is not quoted so quoting it changes word splitting and globbing"
+			}
+			if inDBrack && quote != shSingle {
+				if p.Unsafe == "" {
+					p.Unsafe = "the value is in [[ ]] where quoting changes the meaning of patterns"
+				}
+			}
+			wordPlain = false
+			i = spans[next].End
+			next++
+			continue
+		}
+		c := script[i]
+		if inComment {
+			if c == '\n' {
+				inComment = false
+			}
+			i++
+			continue
+		}
+		switch quote {
+		case shSingle:
+			if c == '\'' {
+				quote = shUnquoted
+			}
+			i++
+			continue
+		case shDouble:
+			switch c {
+			case '"':
+				quote = shUnquoted
+			case '\\':
+				// A backslash escapes the next character. A placeholder after it is detected through
+				// script[i-1] when the loop gets there.
+				if !(next < len(spans) && spans[next].Start == i+1) {
+					i++
+				}
+			case '`':
+				globalBad = true
+			case '$':
+				if i+1 < len(script) && script[i+1] == '(' {
+					globalBad = true
+				}
+			}
+			i++
+			continue
+		}
+
+		// Unquoted
+		switch c {
+		case ' ', '\t', '\r':
+			endWord()
+		case '\n', ';', '&', '|', '(', ')', '{', '}':
+			endWord()
+			if c == '(' && i > 0 && (script[i-1] == '<' || script[i-1] == '>' || script[i-1] == '$') {
+				globalBad = true // process substitution and command substitution
+			}
+		case '<':
+			if i+1 < len(script) && script[i+1] == '<' {
+				globalBad = true // here-document and here-string
+			}
+			endWord()
+		case '>':
+			endWord()
+		case '#':
+			if len(word) == 0 && wordPlain {
+				inComment = true
+			} else {
+				word = append(word, c)
+			}
+		case '\\':
+			wordPlain = false
+			if !(next < len(spans) && spans[next].Start == i+1) {
+				i++ // the escaped character is literal
+			}
+		case '\'':
+			wordPlain = false
+			quote = shSingle
+		case '"':
+			wordPlain = false
+			quote = shDouble
+		case '`':
+			globalBad = true
+		case '$':
+			if i+1 < len(script) && (script[i+1] == '(' || script[i+1] == '\'' || script[i+1] == '"') {
+				globalBad = true
+			}
+			word = append(word, c)
+		default:
+			word = append(word, c)
+		}
+		i++
+	}
+	endWord()
+	for k := next; k < len(spans); k++ {
+		places[k].Cannot = true // the scanner skipped it, so it does not know where it is
+	}
+	if quote != shUnquoted {
+		globalBad = true // unterminated quote
+	}
+	if globalBad {
+		for i := range places {
+			places[i].Cannot = true
+		}
+	}
+	return places
+}

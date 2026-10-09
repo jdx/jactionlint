@@ -9,7 +9,7 @@ import (
 )
 
 func TestRuleWorkflowRunNames(t *testing.T) {
-	const caller = "on:\n  workflow_run:\n    workflows: [%s]\n    types: [completed]\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo\n"
+	const caller = "on:\n  workflow_run:\n    workflows: [%s]\n    types: [completed]\njobs:\n  j:\n    runs-on: ubuntu-latest\n    timeout-minutes: 5\n    steps:\n      - run: echo\n"
 
 	tests := []struct {
 		what  string
@@ -129,7 +129,7 @@ func TestRuleWorkflowRunEnabledByDefaultAndCanBeTurnedOff(t *testing.T) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	src := "on:\n  workflow_run:\n    workflows: [Nope]\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo\n"
+	src := "on:\n  workflow_run:\n    workflows: [Nope]\njobs:\n  j:\n    runs-on: ubuntu-latest\n    timeout-minutes: 5\n    steps:\n      - run: echo\n"
 	l, err := NewLinter(io.Discard, &LinterOptions{})
 	if err != nil {
 		t.Fatal(err)

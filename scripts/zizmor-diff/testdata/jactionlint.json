@@ -13,7 +13,8 @@
     "filepath": ".github/workflows/ci.yml",
     "line": 8,
     "column": 3,
-    "kind": "require-permissions"
+    "kind": "require-permissions",
+    "id": "missing-permissions"
   },
   {
     "message": "label \"weird-runner\" is unknown",

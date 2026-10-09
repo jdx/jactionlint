@@ -7,7 +7,7 @@ one of them:
 | --------------- | -------------------------------------------------------------------------------------- | -------------------------------------- |
 | **Correctness** | Workflows that are broken or do not do what they say: syntax, types, bad inputs, etc.  | Yes                                    |
 | **Security**    | Workflows that are exploitable or weaken the supply chain: injection, unpinned actions | High-confidence checks only            |
-| **Policy**      | Project conventions: required `timeout-minutes`, explicit `shell:`, run script length  | No. Opt-in through a profile or config |
+| **Policy**      | Project conventions: explicit `shell:`, run script length, `permissions:` set          | No, except `missing-timeout`. Opt-in through a profile or config |
 
 The tier decides the default, not the importance of the check. A policy check is welcome, but it never turns on for
 someone who did not ask for it. See [the configuration document](docs/config.md) for how checks are enabled today, and
@@ -124,6 +124,13 @@ file (`linter.go` and `rule_registry.go` stay untouched). A rule needs these fil
    The test fails when a listed ID is no longer registered.
 5. `mise run rules-doc` regenerates `docs/rules.md`, which is generated from the registry and sorted by ID. `hk check --all`
    (and so CI) fails when it is stale (`mise run rules-doc:check` checks only that).
+
+An online rule (`Online: true` in its `RuleInfo`, enabled only by `-online`) takes the `onlineSession` from the `RuleEnv` in its
+factory and returns nothing when it is nil. It never talks to the network in tests: the golden files named `*_online` in
+`testdata/err` and `testdata/examples` are linted with the answers recorded in `testdata/online/github.json`, served by
+`NewFixtureGitHubClient`, and a lookup that is not in the file fails the test. Add the repositories your rule needs to the file;
+`NewRecordingGitHubClient` records the answers of the real client in the same format (trim the tag lists by hand). A docs example
+of an online rule starts with the line `# requires -online` so that `scripts/check-checks` uses the same fixtures.
 
 Tests also fail when a reported ID is not registered, a registered ID is never reported, or an anchor does not exist in
 `docs/checks.md`. Before pushing run `go build ./...`, `go vet ./...`, `go test -race ./...` and `hk check --all`.
@@ -372,3 +379,20 @@ the code blocks after `Output:` and the `Playground` links. This script should b
 
 Please see [the readme of the script](./scripts/check-checks/README.md) for the usage and knowing the details of the
 document format that this script assumes.
+
+The output block is what the CLI prints for the example, and the playground prints the same. Both lint the example with
+the configuration in [`internal/exampleconfig`](./internal/exampleconfig/exampleconfig.go), which only turns off
+`missing-timeout`: the examples are minimal workflows and most of their jobs have no `timeout-minutes`. The playground tests
+(`mise run docs:test`) decode every permalink in the document, lint it with the real wasm build and compare the findings
+(message, `warning: `/`info: ` prefix and kind) with the output block above it. So:
+
+- A rule which is on by default: write the example, run the script and keep both the generated output and the playground
+  link. The output must be what the playground prints, so an example for one rule must not trigger another default-on rule
+  (give a job `runs-on`, pin `uses:` and so on). If a new default-on rule fires on most examples, turn it off in
+  `internal/exampleconfig`, which changes the CLI and the playground together.
+- A rule which is off by default (opt-in): the playground cannot enable it. Put `<!-- Skip update output -->` after
+  `Output:` and `<!-- Skip playground link -->` instead of the link, write the output by hand, and show the `rules:` section of
+  the configuration file that produces it right after the example. A Go test (`TestPolicyDocsExamples` for the policy rules) lints
+  the example with that configuration and compares the output, so the hand-written output cannot go stale.
+
+The tests count the permalinks in the document themselves, so there is no number to update when a section is added.
