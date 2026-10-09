@@ -119,3 +119,54 @@ func TestUnifiedDiffRoundTrip(t *testing.T) {
 		}
 	}
 }
+
+func TestUnifiedDiffOfRepeatedBlocksHasOneHunkForEachChange(t *testing.T) {
+	// A generated workflow has the same block over and over. A change in each block must give a small hunk
+	// for each, as diff -u does, and not one for the run from the first change to the last.
+	var oldSrc, newSrc strings.Builder
+	const blocks = 300
+	body := strings.Repeat("    run: x\n", 12)
+	for i := 0; i < blocks; i++ {
+		oldSrc.WriteString("  - name: step\n    uses: actions/checkout@v4\n" + body)
+		newSrc.WriteString("  - name: step\n    uses: actions/checkout@v4\n    with:\n      persist-credentials: false\n" + body)
+	}
+	d := unifiedDiff("a/x", "b/x", []byte(oldSrc.String()), []byte(newSrc.String()))
+	if got := strings.Count(d, "\n@@ "); got != blocks {
+		t.Errorf("%d hunks, want %d", got, blocks)
+	}
+	if got := strings.Count(d, "\n-"); got != 0 {
+		t.Errorf("%d removed lines, want none", got)
+	}
+	if got := applyUnifiedDiff(t, oldSrc.String(), d); got != newSrc.String() {
+		t.Error("the diff does not apply")
+	}
+
+	// Lines added in many places of a file with repeated lines
+	var a, b []string
+	for i := 0; i < 400; i++ {
+		a = append(a, "same")
+		b = append(b, "same")
+		if i%20 == 0 {
+			b = append(b, "added")
+		}
+	}
+	d = unifiedDiff("a/x", "b/x", []byte(strings.Join(a, "\n")+"\n"), []byte(strings.Join(b, "\n")+"\n"))
+	if got := strings.Count(d, "\n+added"); got != 20 {
+		t.Errorf("%d added lines in the diff, want 20", got)
+	}
+	if got := strings.Count(d, "\n-"); got != 0 {
+		t.Errorf("%d removed lines in the diff, want none:\n%s", got, d)
+	}
+}
+
+func TestUnifiedDiffHeaderNameWithSpaces(t *testing.T) {
+	d := unifiedDiff("a/.github/workflows/Build, Release.yaml", "b/.github/workflows/Build, Release.yaml", []byte("a\n"), []byte("b\n"))
+	want := "--- a/.github/workflows/Build, Release.yaml\t\n+++ b/.github/workflows/Build, Release.yaml\t\n"
+	if !strings.HasPrefix(d, want) {
+		t.Errorf("headers of a name with spaces must end in a tab for patch(1):\n%s", d)
+	}
+	d = unifiedDiff("a/x.yaml", "b/x.yaml", []byte("a\n"), []byte("b\n"))
+	if !strings.HasPrefix(d, "--- a/x.yaml\n+++ b/x.yaml\n") {
+		t.Errorf("a name without spaces has no tab:\n%s", d)
+	}
+}

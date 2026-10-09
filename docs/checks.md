@@ -1322,7 +1322,9 @@ in the `env:` of the step):
 ```
 
 When the expression is not in quotes, quoting it changes how the shell splits words and expands globs, so the fix needs
-`--fix=unsafe`. Scripts of other shells (PowerShell, cmd, Python) are not fixed.
+`--fix=unsafe`. An expression in a list of words, such as `for f in ${{ inputs.files }}; do` or `files=(${{ inputs.files }})`, is
+not fixed at all: the shell splits the value into the items of the list, and quoting it would make one item of it. Pass the value
+through `env:` yourself and decide how the script splits it. Scripts of other shells (PowerShell, cmd, Python) are not fixed.
 
 <a id="check-template-injection-sinks"></a>
 ### Container options, Docker steps and AI agent inputs
@@ -3187,6 +3189,11 @@ the text of the workflow does not mention `GITHUB_TOKEN`, `github.token`, `GH_TO
 workflow runs and that pushes with the credentials left by `actions/checkout` is not visible, so check such a workflow before
 accepting the safe fix.
 
+A reusable workflow (one with `workflow_call:` in `on:`) gets no fix. The workflow that calls it decides what the token can do,
+and a callee that asks for more than its caller grants makes GitHub reject the run, so a `contents: read` written into the callee
+breaks every caller with `permissions: {}` or fewer permissions. The finding stays and the permissions have to be chosen by hand,
+after looking at the callers.
+
 <a id="check-excessive-permissions"></a>
 ## Excessive permissions
 
@@ -3593,8 +3600,9 @@ the step has none. The fix is applied by `--fix` only when no later step of the 
 later `run:` script has a `git` command that talks to a remote (`push`, `pull`, `fetch`, `clone`, `remote`, `submodule`, `lfs`,
 `ls-remote`, `commit` or `tag`) or a later step uses an action known to push (such as `stefanzweifel/git-auto-commit-action` or
 `peter-evans/create-pull-request`), the fix is unsafe and needs `--fix=unsafe`. A script which pushes without a visible git
-command cannot be detected, so check the workflow after applying the fix. A step written in flow style (`- {uses: ...}`) is
-reported without a fix.
+command cannot be detected, so check the workflow after applying the fix. A `with:` written in flow style on the line of the key
+(`with: { fetch-depth: 0 }`) gets the entry first. A step written in flow style (`- {uses: ...}`) is reported without a fix, and so
+is a flow `with:` that spans lines: write `persist-credentials: false` there by hand.
 
 A checkout is not reported when a later step of the job pushes with the credential it left (a `git push` in a script or an action
 such as `stefanzweifel/git-auto-commit-action`) and no step uploads the workspace (`path: .`, `..` or `${{ github.workspace }}`),

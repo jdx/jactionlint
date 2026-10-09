@@ -349,6 +349,22 @@ func persistCredentialsEdit(steps map[[2]int]stepMapping, src []byte, idx *sourc
 		at := idx.lineStarts[withKey.Line] // the start of the line after `with:`
 		pad := strings.Repeat(" ", first.Column-1)
 		edit = TextEdit{Start: at, End: at, NewText: pad + "persist-credentials: false" + nl}
+	case withVal.Kind == yaml.MappingNode && withVal.Style&yaml.FlowStyle != 0:
+		// with: { fetch-depth: 0 }. The entry goes first, where the braces start on the line of the key
+		open, ok := idx.offset(withVal.Line, withVal.Column)
+		if !ok || withVal.Line != withKey.Line || open >= len(src) || src[open] != '{' {
+			return TextEdit{}, nil, false
+		}
+		if len(withVal.Content) == 0 {
+			edit = TextEdit{Start: open + 1, End: open + 1, NewText: " persist-credentials: false "}
+			break
+		}
+		first := withVal.Content[0]
+		at, ok := idx.offset(first.Line, first.Column)
+		if !ok || first.Line != withVal.Line || at <= open {
+			return TextEdit{}, nil, false
+		}
+		edit = TextEdit{Start: at, End: at, NewText: "persist-credentials: false, "}
 	default:
 		return TextEdit{}, nil, false
 	}

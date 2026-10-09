@@ -1,5 +1,7 @@
 package jactionlint
 
+import "github.com/jdx/jactionlint/v2/internal/runscript"
+
 // shQuote is how a position of a POSIX shell script is quoted.
 type shQuote int8
 
@@ -39,8 +41,19 @@ func analyzeShellPlaceholders(script string, spans []shSpan) []shPlace {
 		word      []byte
 		wordPlain = true // the current word has no quote or placeholder
 		globalBad bool
+		// cmd are the words of the current simple command, a placeholder or a quoted part makes the word "\x00"
+		cmd []string
+		// arrays is the depth of the array assignments, name=( ... ), the scanner is in
+		arrays int
 	)
 	endWord := func() {
+		if len(word) > 0 || !wordPlain {
+			if wordPlain {
+				cmd = append(cmd, string(word))
+			} else {
+				cmd = append(cmd, "\x00")
+			}
+		}
 		if wordPlain && len(word) > 0 {
 			switch string(word) {
 			case "[[":
@@ -63,6 +76,11 @@ func analyzeShellPlaceholders(script string, spans []shSpan) []shPlace {
 			case inComment:
 				p.Cannot = true
 			case i > 0 && script[i-1] == '\\' && quote != shSingle:
+				p.Cannot = true
+			case quote == shUnquoted && (arrays > 0 || inWordList(cmd)):
+				// The words of a list: the shell splits the value into the items. Quoting it makes
+				// one item of them, which is another program, and leaving it be is what the script
+				// asked for, so there is nothing to change but the script
 				p.Cannot = true
 			case quote == shUnquoted:
 				p.Unsafe = "the value is not quoted so quoting it changes word splitting and globbing"
@@ -119,6 +137,13 @@ func analyzeShellPlaceholders(script string, spans []shSpan) []shPlace {
 			endWord()
 		case '\n', ';', '&', '|', '(', ')', '{', '}':
 			endWord()
+			cmd = cmd[:0]
+			switch {
+			case c == '(' && i > 0 && script[i-1] == '=':
+				arrays++
+			case c == ')' && arrays > 0:
+				arrays--
+			}
 			if c == '(' && i > 0 && (script[i-1] == '<' || script[i-1] == '>' || script[i-1] == '$') {
 				globalBad = true // process substitution and command substitution
 			}
@@ -169,6 +194,33 @@ func analyzeShellPlaceholders(script string, spans []shSpan) []shPlace {
 		for i := range places {
 			places[i].Cannot = true
 		}
+		return places
+	}
+	// The scanner above does not know the shell grammar. The parser does: an unquoted placeholder in the words
+	// of a for/select list or of an array assignment is meant to be split, wherever it sits (after braces,
+	// prefix assignments, ${var} words, ...). A script which does not parse is not touched.
+	parsed, err := runscript.Analyze(script, "bash")
+	for i := range places {
+		if places[i].Cannot || places[i].Quote != shUnquoted {
+			continue
+		}
+		if err != nil || parsed.InSplitList(spans[i].Start) {
+			places[i].Cannot = true
+		}
 	}
 	return places
+}
+
+// inWordList reports whether the words of the command so far are the start of the list of "for NAME in" or
+// "select NAME in", where the unquoted words after "in" are split and expanded into the items.
+func inWordList(cmd []string) bool {
+	for len(cmd) > 0 {
+		switch cmd[0] {
+		case "do", "then", "else", "elif", "if", "while", "until", "!", "time":
+			cmd = cmd[1:]
+			continue
+		}
+		break
+	}
+	return len(cmd) >= 3 && (cmd[0] == "for" || cmd[0] == "select") && cmd[2] == "in"
 }

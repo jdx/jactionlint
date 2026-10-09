@@ -224,8 +224,22 @@ func TestArtipackedFix(t *testing.T) {
 			src:  "on: push\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - {uses: actions/checkout@v4}\n",
 		},
 		{
-			name: "flow with is not fixed",
-			src:  "on: push\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n        with: {fetch-depth: 0}\n",
+			name:  "flow with gets the entry first",
+			src:   "on: push\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n        with: {fetch-depth: 0}\n",
+			want:  "on: push\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n        with: {persist-credentials: false, fetch-depth: 0}\n",
+			fixed: true,
+		},
+		{
+			name:  "flow with and spaces",
+			src:   "on: push\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n        with: { fetch-depth: 0 }\n",
+			want:  "on: push\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n        with: { persist-credentials: false, fetch-depth: 0 }\n",
+			fixed: true,
+		},
+		{
+			name:  "empty flow with",
+			src:   "on: push\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n        with: {}\n",
+			want:  "on: push\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n        with: { persist-credentials: false }\n",
+			fixed: true,
 		},
 		{
 			name:  "two checkouts",

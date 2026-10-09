@@ -169,6 +169,13 @@ func (b *builder) markLoopBody(body []*syntax.Stmt) {
 	}
 }
 
+// splitWord records a word whose unquoted expansions the shell splits into several items on purpose.
+func (b *builder) splitWord(w *syntax.Word) {
+	if w != nil {
+		b.s.splitWords = append(b.s.splitWords, [2]int{b.off(w.Pos()), b.offEnd(w.End())})
+	}
+}
+
 // off is the offset of a position of the parser in the original script.
 func (b *builder) off(p syntax.Pos) int {
 	o := int(p.Offset())
@@ -231,6 +238,17 @@ func (b *builder) build(f *syntax.File) {
 			b.markLoopBody(n.Do)
 		case *syntax.ForClause:
 			b.markLoopBody(n.Do)
+			if it, ok := n.Loop.(*syntax.WordIter); ok {
+				for _, w := range it.Items {
+					b.splitWord(w)
+				}
+			}
+		case *syntax.Assign:
+			if n.Array != nil {
+				for _, el := range n.Array.Elems {
+					b.splitWord(el.Value)
+				}
+			}
 		case *syntax.BinaryCmd:
 			if n.Op == syntax.AndStmt {
 				b.markTestedAs(testedAnd, n.X)

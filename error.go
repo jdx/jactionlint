@@ -352,7 +352,51 @@ func compareErrors(lhs, rhs *Error) int {
 	if lhs.Column != rhs.Column {
 		return lhs.Column - rhs.Column
 	}
-	return strings.Compare(lhs.Message, rhs.Message)
+	if c := strings.Compare(lhs.Message, rhs.Message); c != 0 {
+		return c
+	}
+	return compareErrorFixes(lhs.Fix, rhs.Fix)
+}
+
+// compareErrorFixes orders the fixes of errors which are the same otherwise, so that the order of the
+// errors, and the one of the duplicates which is kept, does not depend on the order the jobs were
+// checked in. The same step can be in several jobs through a YAML alias, and each job decides on its
+// own whether the fix is safe. The unsafe fix comes first, because it is the one to keep: applying the fix
+// changes the step for all the jobs.
+func compareErrorFixes(l, r *Fix) int {
+	switch {
+	case l == nil && r == nil:
+		return 0
+	case l == nil:
+		return 1
+	case r == nil:
+		return -1
+	}
+	if l.Unsafe != r.Unsafe {
+		if l.Unsafe {
+			return -1
+		}
+		return 1
+	}
+	if c := strings.Compare(l.Description, r.Description); c != 0 {
+		return c
+	}
+	if len(l.Edits) != len(r.Edits) {
+		return len(l.Edits) - len(r.Edits)
+	}
+	for i := range l.Edits {
+		a, b := l.Edits[i], r.Edits[i]
+		if a.Start != b.Start {
+			return a.Start - b.Start
+		}
+		if a.End != b.End {
+			return a.End - b.End
+		}
+		if c := strings.Compare(a.NewText, b.NewText); c != 0 {
+			return c
+		}
+	}
+	return 0
 }
 
 func equalsErrors(lhs, rhs *Error) bool {
