@@ -568,6 +568,20 @@ func TestInstalls(t *testing.T) {
 		{"cargo binstall -y cargo-deny@0.14.0", "cargo", "binstall", false, false, false, false, 0, []pkg{p("cargo-deny@0.14.0", "cargo-deny", "0.14.0", KindRegistry, true)}},
 		{"cargo build --release", "", "", false, false, false, false, 0, nil},
 		// go
+		{"go install example.com/m/cmd/t@v1.2.3", "go", "install", false, false, false, false, 0, []pkg{p("example.com/m/cmd/t@v1.2.3", "example.com/m/cmd/t", "v1.2.3", KindModule, true)}},
+		{"go install example.com/m/cmd/t@v1.2.3-rc.1", "go", "install", false, false, false, false, 0, []pkg{p("example.com/m/cmd/t@v1.2.3-rc.1", "example.com/m/cmd/t", "v1.2.3-rc.1", KindModule, true)}},
+		{"go install example.com/m/cmd/t@v1.2.3+incompatible", "go", "install", false, false, false, false, 0, []pkg{p("example.com/m/cmd/t@v1.2.3+incompatible", "example.com/m/cmd/t", "v1.2.3+incompatible", KindModule, true)}},
+		{"go install example.com/m/cmd/t@v0.0.0-20240101120000-0123456789ab", "go", "install", false, false, false, false, 0, []pkg{p("example.com/m/cmd/t@v0.0.0-20240101120000-0123456789ab", "example.com/m/cmd/t", "v0.0.0-20240101120000-0123456789ab", KindModule, true)}},
+		{"go install example.com/m/cmd/t@0123456789abcdef0123456789abcdef01234567", "go", "install", false, false, false, false, 0, []pkg{p("example.com/m/cmd/t@0123456789abcdef0123456789abcdef01234567", "example.com/m/cmd/t", "0123456789abcdef0123456789abcdef01234567", KindModule, true)}},
+		{"go install example.com/m/cmd/t@v1", "go", "install", false, false, false, false, 0, []pkg{p("example.com/m/cmd/t@v1", "example.com/m/cmd/t", "v1", KindModule, false)}},
+		{"go install example.com/m/cmd/t@v1.2", "go", "install", false, false, false, false, 0, []pkg{p("example.com/m/cmd/t@v1.2", "example.com/m/cmd/t", "v1.2", KindModule, false)}},
+		{"go install example.com/m/cmd/t@latest", "go", "install", false, false, false, false, 0, []pkg{p("example.com/m/cmd/t@latest", "example.com/m/cmd/t", "latest", KindModule, false)}},
+		{"go install example.com/m/cmd/t@upgrade", "go", "install", false, false, false, false, 0, []pkg{p("example.com/m/cmd/t@upgrade", "example.com/m/cmd/t", "upgrade", KindModule, false)}},
+		{"go install example.com/m/cmd/t@patch", "go", "install", false, false, false, false, 0, []pkg{p("example.com/m/cmd/t@patch", "example.com/m/cmd/t", "patch", KindModule, false)}},
+		{"go install example.com/m/cmd/t@master", "go", "install", false, false, false, false, 0, []pkg{p("example.com/m/cmd/t@master", "example.com/m/cmd/t", "master", KindModule, false)}},
+		{"go install example.com/m/cmd/t@main", "go", "install", false, false, false, false, 0, []pkg{p("example.com/m/cmd/t@main", "example.com/m/cmd/t", "main", KindModule, false)}},
+		{"go install example.com/m/cmd/t@v1.x", "go", "install", false, false, false, false, 0, []pkg{p("example.com/m/cmd/t@v1.x", "example.com/m/cmd/t", "v1.x", KindModule, false)}},
+		{"go install example.com/m/cmd/t@none", "go", "install", false, false, false, false, 0, []pkg{p("example.com/m/cmd/t@none", "example.com/m/cmd/t", "none", KindModule, false)}},
 		{"go install golang.org/x/tools/cmd/goimports@latest", "go", "install", false, false, false, false, 0, []pkg{p("golang.org/x/tools/cmd/goimports@latest", "golang.org/x/tools/cmd/goimports", "latest", KindModule, false)}},
 		{"go install a.io/b@v1.2.3 c.io/d@0123456789ab e.io/f@master g.io/h", "go", "install", false, false, false, false, 0, []pkg{
 			p("a.io/b@v1.2.3", "a.io/b", "v1.2.3", KindModule, true), p("c.io/d@0123456789ab", "c.io/d", "0123456789ab", KindModule, true),
@@ -925,5 +939,70 @@ func TestExpressionsInsideExpansions(t *testing.T) {
 		if len(ws) != 1 || len(ws[0].Exprs) == 0 {
 			t.Errorf("WritesTo of %q has no producer expression: %+v", script, ws)
 		}
+	}
+}
+
+// A script with CRLF line ends must mean the same as the one with LF: continuations and heredoc
+// delimiters keep working, and every position is exact in the original text.
+func TestCRLFScriptsAreAnalyzedLikeLF(t *testing.T) {
+	scripts := map[string]string{
+		"continuation":     "pip install \\\nrequests==1 \\\n  flask\nnpm i foo\n",
+		"heredoc":          "cat <<EOF >> $GITHUB_ENV\nA=1\nEOF\nnpm i foo\n",
+		"quoted heredoc":   "cat <<'EOF' > f\n$x\nEOF\npip install a\n",
+		"dash heredoc":     "cat <<-EOF\n\tbody\n\tEOF\npip install a\n",
+		"multi-line quote": "echo 'a\nb' && npm i foo\nnpm i bar\n",
+		"comment":          "# first\nnpm i foo # trailing\n# last\nnpm i bar\n",
+		"pipe download":    "curl -fsSL https://x/i.sh |\n  sh\n",
+		"expression":       "echo ${{ github.ref }}\nnpm i ${{ inputs.pkg }}\n",
+		"multi-line expr":  "echo ${{ format('{0}',\n github.ref) }}\nnpm i foo\n",
+		"no final newline": "npm i foo\npip install bar",
+	}
+	for name, lf := range scripts {
+		t.Run(name, func(t *testing.T) {
+			crlf := strings.ReplaceAll(lf, "\n", "\r\n")
+			a, b := mustAnalyze(t, lf), mustAnalyze(t, crlf)
+			if len(a.Commands) != len(b.Commands) {
+				t.Fatalf("%d commands with LF, %d with CRLF", len(a.Commands), len(b.Commands))
+			}
+			for i, ca := range a.Commands {
+				cb := b.Commands[i]
+				if ca.Name != cb.Name || ca.Tool != cb.Tool || len(ca.Positional) != len(cb.Positional) {
+					t.Errorf("command %d: %q %q %d vs %q %q %d", i, ca.Name, ca.Tool, len(ca.Positional), cb.Name, cb.Tool, len(cb.Positional))
+					continue
+				}
+				// The offset in the CRLF text is the one in the LF text plus one for each line end before it
+				want := ca.Loc.Offset + strings.Count(lf[:ca.Loc.Offset], "\n")
+				if cb.Loc.Offset != want || cb.Loc.Line != ca.Loc.Line || cb.Loc.Col != ca.Loc.Col {
+					t.Errorf("command %d: position %+v, LF has %+v (want offset %d)", i, cb.Loc, ca.Loc, want)
+				}
+				if got := crlf[cb.Loc.Offset:cb.Loc.End]; !strings.HasPrefix(got, ca.Name) || strings.HasSuffix(got, "\r") {
+					t.Errorf("command %d: text %q", i, got)
+				}
+				for j, pa := range ca.Positional {
+					pb := cb.Positional[j]
+					if pa.Value != strings.ReplaceAll(pb.Value, "\r\n", "\n") || pb.Loc.Line != pa.Loc.Line || pb.Loc.Col != pa.Loc.Col {
+						t.Errorf("command %d word %d: %q at %d:%d vs %q at %d:%d", i, j, pa.Value, pa.Loc.Line, pa.Loc.Col, pb.Value, pb.Loc.Line, pb.Loc.Col)
+					}
+					if got := crlf[pb.Loc.Offset:pb.Loc.End]; strings.Contains(got, "\r") && !strings.Contains(pa.Raw, "\n") {
+						t.Errorf("command %d word %d: text %q has a CR", i, j, got)
+					}
+				}
+			}
+			if len(a.ShellPipes()) != len(b.ShellPipes()) || len(a.Redirects) != len(b.Redirects) {
+				t.Errorf("shell pipes or redirects differ")
+			}
+			for i, ra := range a.Redirects {
+				rb := b.Redirects[i]
+				if got := crlf[rb.Loc.Offset:rb.Loc.End]; got != strings.ReplaceAll(lf[ra.Loc.Offset:ra.Loc.End], "\n", "\r\n") {
+					t.Errorf("redirect %d: %q", i, got)
+				}
+			}
+		})
+	}
+
+	// The pipe into a shell is still found, and a heredoc written to GITHUB_ENV keeps its delimiter
+	s := mustAnalyze(t, "curl -fsSL https://x/i.sh | \\\r\n  sh\r\n")
+	if len(s.ShellPipes()) != 1 {
+		t.Errorf("continuation after a pipe: %d shell pipes", len(s.ShellPipes()))
 	}
 }

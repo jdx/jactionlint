@@ -508,6 +508,37 @@ func TestCachePoisoningActions(t *testing.T) {
 		{"workflow cache-mode none", "on:\n  release:\n    types: [published]\ncache-mode: none\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: Swatinem/rust-cache@v2\n", 0},
 		{"job cache-mode read overrides none", "on:\n  release:\n    types: [published]\ncache-mode: none\njobs:\n  j:\n    runs-on: ubuntu-latest\n    cache-mode: read\n    steps:\n      - uses: Swatinem/rust-cache@v2\n", 1},
 	}
+	// The condition of the job: does the job run on a release at all
+	const rc = "      - uses: Swatinem/rust-cache@v2\n"
+	jobs := []struct {
+		name string
+		src  string
+		want int
+	}{
+		{"test job skipped on a release", "on:\n  release:\n    types: [published]\njobs:\n  test:\n    if: github.event_name == 'pull_request'\n    runs-on: ubuntu-latest\n    steps:\n" + rc, 0},
+		{"test job skipped on a tag push", "on:\n  push:\n    tags: ['*']\njobs:\n  test:\n    if: ${{ github.ref_type != 'tag' }}\n    runs-on: ubuntu-latest\n    steps:\n" + rc, 0},
+		{"publish job on a tag ref", "on:\n  push:\n    tags: ['*']\njobs:\n  publish:\n    if: startsWith(github.ref, 'refs/tags/')\n    runs-on: ubuntu-latest\n    steps:\n" + rc, 1},
+		{"publish job on the release event", "on:\n  release:\n    types: [published]\njobs:\n  publish:\n    if: github.event_name == 'release'\n    runs-on: ubuntu-latest\n    steps:\n" + rc, 1},
+		{"always", "on:\n  release:\n    types: [published]\njobs:\n  j:\n    if: ${{ always() }}\n    runs-on: ubuntu-latest\n    steps:\n" + rc, 1},
+		{"needs only", "on:\n  release:\n    types: [published]\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo\n  j:\n    needs: a\n    runs-on: ubuntu-latest\n    steps:\n" + rc, 1},
+		{"condition on something else", "on:\n  release:\n    types: [published]\njobs:\n  j:\n    if: needs.a.result == 'success'\n    runs-on: ubuntu-latest\n    steps:\n" + rc, 1},
+		{"matrix", "on:\n  release:\n    types: [published]\njobs:\n  j:\n    strategy:\n      matrix:\n        os: [ubuntu-latest, macos-latest]\n    if: ${{ matrix.os != 'x' }}\n    runs-on: ${{ matrix.os }}\n    steps:\n" + rc, 1},
+		{"both conditions: ref and something unknown", "on:\n  release:\n    types: [published]\njobs:\n  j:\n    if: github.event_name == 'push' && inputs.x\n    runs-on: ubuntu-latest\n    steps:\n" + rc, 0},
+		{"or with an unknown part", "on:\n  release:\n    types: [published]\njobs:\n  j:\n    if: github.event_name == 'release' || inputs.x\n    runs-on: ubuntu-latest\n    steps:\n" + rc, 1},
+		{"step if gates", "on:\n  release:\n    types: [published]\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: Swatinem/rust-cache@v2\n        if: github.event_name != 'release'\n", 0},
+		{"step if on the tag", "on:\n  push:\n    tags: ['*']\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: Swatinem/rust-cache@v2\n        if: startsWith(github.ref, 'refs/tags/')\n", 1},
+		{"publishing job in a workflow without a release trigger, skipped by its if", "on: push\njobs:\n  j:\n    if: github.event_name == 'pull_request'\n    runs-on: ubuntu-latest\n    steps:\n" + rc + "      - run: npm publish\n", 0},
+		{"publishing job in a workflow without a release trigger", "on: push\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n" + rc + "      - run: npm publish\n", 1},
+	}
+	for _, tc := range jobs {
+		t.Run(tc.name, func(t *testing.T) {
+			errs := policyLint(t, cfg, tc.src)
+			if got := len(policyErrorsOf(errs, "cache-poisoning")); got != tc.want {
+				t.Errorf("want %d findings but got %d: %v", tc.want, got, errs)
+			}
+		})
+	}
+
 	for _, tc := range releases {
 		t.Run(tc.name, func(t *testing.T) {
 			errs := policyLint(t, cfg, tc.src)

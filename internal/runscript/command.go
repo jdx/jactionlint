@@ -128,6 +128,7 @@ func (c *Command) Publishes() *Publish { return publishOf(c) }
 type builder struct {
 	s    *Script
 	sub  string
+	omap []int // offsets of the text the parser saw -> offsets of the script; nil when they are the same
 	cmds map[syntax.Command]*Command
 	// pipes whose chain is already collected by the outermost BinaryCmd; negated pipelines
 	seenPipe map[*syntax.BinaryCmd]bool
@@ -136,6 +137,34 @@ type builder struct {
 	groups   []groupRedirect
 	done     map[syntax.Node]bool
 	sorted   []*Command // commands by offset
+}
+
+// off is the offset of a position of the parser in the original script.
+func (b *builder) off(p syntax.Pos) int {
+	o := int(p.Offset())
+	if b.omap == nil {
+		return o
+	}
+	if o < 0 {
+		return 0
+	}
+	if o >= len(b.omap) {
+		return len(b.s.Source)
+	}
+	return b.omap[o]
+}
+
+// offEnd is like off for the end of a node, which is the offset after its last byte: a "\r" removed after the
+// node does not belong to it.
+func (b *builder) offEnd(p syntax.Pos) int {
+	o := int(p.Offset())
+	if b.omap == nil || o <= 0 {
+		return b.off(p)
+	}
+	if o > len(b.omap) {
+		return len(b.s.Source)
+	}
+	return b.omap[o-1] + 1
 }
 
 func (b *builder) src(start, end int) string {
@@ -213,11 +242,11 @@ func (b *builder) decl(n *syntax.DeclClause) {
 	if len(n.Args) == 0 && n.Variant == nil {
 		return
 	}
-	start, end := int(n.Pos().Offset()), int(n.End().Offset())
+	start, end := b.off(n.Pos()), b.offEnd(n.End())
 	c := &Command{Loc: b.s.loc(start, end), Decl: true}
 	if n.Variant != nil {
 		c.Name = n.Variant.Value
-		c.NameWord = &Word{Loc: b.s.loc(int(n.Variant.Pos().Offset()), int(n.Variant.End().Offset())), Raw: n.Variant.Value, Value: n.Variant.Value}
+		c.NameWord = &Word{Loc: b.s.loc(b.off(n.Variant.Pos()), b.offEnd(n.Variant.End())), Raw: n.Variant.Value, Value: n.Variant.Value}
 		c.Words = []*Word{c.NameWord}
 	}
 	for _, a := range n.Args {
@@ -234,7 +263,7 @@ func (b *builder) assign(a *syntax.Assign, owner *Command) *Assignment {
 		return nil
 	}
 	as := &Assignment{
-		Loc:    b.s.loc(int(a.Pos().Offset()), int(a.End().Offset())),
+		Loc:    b.s.loc(b.off(a.Pos()), b.offEnd(a.End())),
 		Name:   a.Name.Value,
 		Value:  b.word(a.Value),
 		Append: a.Append,
@@ -257,7 +286,7 @@ func (b *builder) call(n *syntax.CallExpr) {
 		}
 		return
 	}
-	start, end := int(n.Pos().Offset()), int(n.End().Offset())
+	start, end := b.off(n.Pos()), b.offEnd(n.End())
 	c := &Command{Loc: b.s.loc(start, end)}
 	for _, a := range n.Assigns {
 		if as := b.assign(a, c); as != nil {
