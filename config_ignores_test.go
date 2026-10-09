@@ -610,3 +610,13 @@ func TestConfigIgnoreUnusedInAnActionOnlyRepository(t *testing.T) {
 		t.Errorf("want the unused entry: %v", got)
 	}
 }
+
+func TestConfigIgnoreRefCaseOfAReusableWorkflow(t *testing.T) {
+	ig := &ConfigIgnore{Rules: []string{"unpinned-uses"}, Uses: "o/r/.github/workflows/w.yml@v1"}
+	if err := ig.validate(); err != nil {
+		t.Fatal(err)
+	}
+	if ig.matchUses("o/r/.github/workflows/w.yml@V1") {
+		t.Error("@V1 is not @v1")
+	}
+}
