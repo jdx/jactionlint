@@ -116,7 +116,7 @@ func TestParseZizmor(t *testing.T) {
 		".github/workflows/ci.yml:8:excessive-permissions",
 		".github/workflows/other.yml:3:excessive-permissions",
 		".github/workflows/ci.yml:1:future-audit",
-		".github/dependabot.yml:4:dependabot-cooldown",
+		"action.yml:4:artipacked",
 	}
 	if diff := cmp.Diff(want, s); diff != "" {
 		t.Error(diff)
@@ -146,6 +146,11 @@ func TestDefaultMapping(t *testing.T) {
 		if _, ok := m.Audits[name]; !ok {
 			t.Errorf("audit %q is not mapped", name)
 		}
+	}
+	// required-actions is the inverse check: its findings are not zizmor's forbidden-uses findings
+	fu := m.Audits["forbidden-uses"]
+	if len(fu.Jactionlint) != 1 || fu.Jactionlint[0].Rule != "forbidden-uses" || fu.covers(Finding{Rule: "required-actions"}) {
+		t.Errorf("forbidden-uses is mapped to %+v", fu.Jactionlint)
 	}
 	if m.Audits["hardcoded-container-credentials"].Coverage != "full" {
 		t.Error("hardcoded-container-credentials should be full")
@@ -250,7 +255,7 @@ func TestBuild(t *testing.T) {
 		unmapped = append(unmapped, a.Audit)
 	}
 	if diff := cmp.Diff([]string{"future-audit"}, unmapped); diff != "" {
-		t.Errorf("unmapped (dependabot is out of scope): %s", diff)
+		t.Errorf("unmapped (action.yml is out of scope): %s", diff)
 	}
 
 	if len(rep.JactionlintOnly) != 1 || rep.JactionlintOnly[0].Rule != "runner-label" || rep.JactionlintOnly[0].Count != 1 {
@@ -390,6 +395,37 @@ func TestRunZizmorFailureIsRecorded(t *testing.T) {
 		if r.Zizmor != 0 || r.Jactionlint != 0 {
 			t.Errorf("%s: failed repo counted: %+v", name, r)
 		}
+	}
+}
+
+func TestDependabotIsComparedForMappedAudits(t *testing.T) {
+	for file, want := range map[string]bool{
+		".github/dependabot.yml":           true,
+		".github/dependabot.yaml":          true,
+		"dependabot.yml":                   false,
+		".github/workflows/dependabot.yml": false,
+	} {
+		if got := isDependabotFile(file); got != want {
+			t.Errorf("isDependabotFile(%q) = %v, want %v", file, got, want)
+		}
+	}
+
+	in := RepoInput{
+		Name: "r",
+		Zizmor: []Finding{
+			{Repo: "r", File: ".github/dependabot.yml", Line: 4, Rule: "dependabot-cooldown"},
+			{Repo: "r", File: ".github/dependabot.yml", Line: 9, Rule: "dependabot-cooldown"},
+			{Repo: "r", File: ".github/dependabot.yml", Line: 5, Rule: "unknown-dependabot-audit"},
+		},
+		Jactionlint: []Finding{{Repo: "r", File: ".github/dependabot.yml", Line: 4, Rule: "dependabot-cooldown"}},
+	}
+	rep := Build([]RepoInput{in}, testMapping(t), 0)
+	a := audit(rep, "dependabot-cooldown")
+	if a.Zizmor != 2 || a.Matched != 1 || a.Missed() != 1 {
+		t.Errorf("dependabot-cooldown = %+v", a)
+	}
+	if r := rep.Repos[0]; r.OutOfScope != 1 || r.Zizmor != 2 || r.Shared != 1 {
+		t.Errorf("repo = %+v", r)
 	}
 }
 

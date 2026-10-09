@@ -65,10 +65,6 @@ func (r *onlineUsesRule) VisitJobPre(n *Job) error {
 	return nil
 }
 
-// reSafeRepoPart matches what a GitHub owner or repository name is made of. Anything else is not
-// looked up, so a value can never change the path of the API request.
-var reSafeRepoPart = regexp.MustCompile(`^[A-Za-z0-9_.-]+$`)
-
 func (r *onlineUsesRule) add(uses *String) {
 	if uses.Pos == nil {
 		return
@@ -77,7 +73,8 @@ func (r *onlineUsesRule) add(uses *String) {
 	if ref.Dynamic || (ref.Kind != UsesAction && ref.Kind != UsesReusableWorkflow) {
 		return
 	}
-	if !reSafeRepoPart.MatchString(ref.Owner) || !reSafeRepoPart.MatchString(ref.Repo) || ref.Ref == "" {
+	// Anything which is not a plain name is not looked up, so a value can never change the path of the request
+	if !validGitHubOwner(ref.Owner) || !validGitHubRepo(ref.Repo) || !validGitRefName(ref.Ref) {
 		return
 	}
 	r.sites = append(r.sites, usesSite{ref: ref, pos: uses.Pos, comment: r.wf.Comments.Inline(uses.Pos.Line)})

@@ -80,6 +80,10 @@ are available. A custom Go template can be given too:
     Rewrite the deprecated keys of the config file (`.github/jactionlint.yaml` or the file of
     `-config-file`) into the `rules` mapping
 
+  * `-migrate-ignores`:
+    Rewrite the trailing `# zizmor: ignore[...]` comments of the files (the workflows of the project
+    by default) into `# jactionlint ignore=...` comments. zizmor comments are also honored as they are
+
   * `-min-severity` <LEVEL>:
     Hide the errors less severe than this level: `info` (default), `warn` or `error`
 

@@ -1,0 +1,3 @@
+test.yaml:5:14: runner label "ubuntu-latest" is an alias that GitHub moves to newer images, so the job can break without a change in this repository. use a fixed label such as "ubuntu-24.04", which is the same image today [mutable-runner-label]
+test.yaml:12:28: runner label "macos-latest" is an alias that GitHub moves to newer images, so the job can break without a change in this repository. use a fixed label such as "macos-15", which is the same image today [mutable-runner-label]
+test.yaml:12:42: runner label "windows-latest" is an alias that GitHub moves to newer images, so the job can break without a change in this repository. use a fixed label such as "windows-2022", which is the same image today [mutable-runner-label]

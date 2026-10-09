@@ -244,8 +244,6 @@ func partialMatch(fn string, kind nameKind, lit string) (why, advice string, uns
 	return "", "", false
 }
 
-func quote(s string) string { return `"` + s + `"` }
-
 func init() {
 	registerRules(
 		RuleInfo{

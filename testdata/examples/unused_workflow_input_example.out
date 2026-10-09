@@ -1,0 +1,1 @@
+test.yaml:6:7: input "dry-run" of "workflow_dispatch" is never used: no expression reads "inputs.dry-run". remove it or use it [unused-workflow-input]

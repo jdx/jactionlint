@@ -1,0 +1,22 @@
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version to release
+        type: string
+      dry-run:
+        description: Do not publish
+        type: boolean
+        default: false
+  workflow_call:
+    inputs:
+      version:
+        type: string
+      channel:
+        type: string
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo ${{ inputs.version }}

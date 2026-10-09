@@ -1,0 +1,42 @@
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+
+jobs:
+  comment:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: pr
+          path: pr
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+      - id: pr
+        run: echo "number=$(cat pr/number)" >> "$GITHUB_OUTPUT"
+      - run: gh pr comment ${{ steps.pr.outputs.number }} --body done
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: site
+          path: site
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+      - run: unzip site/site.zip -d out
+      - run: bash site/deploy.sh
+  validated:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: pr
+          path: pr
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+      - run: |
+          NUMBER=$(cat pr/number)
+          [[ "$NUMBER" =~ ^[0-9]+$ ]] || exit 1
+          echo "number=$NUMBER" >> "$GITHUB_OUTPUT"

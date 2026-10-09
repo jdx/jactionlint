@@ -63,6 +63,12 @@ func withFixtureRules(c *Config) *Config {
 			c.Rules[id] = RuleConfig{Level: SeverityOff}
 		}
 	}
+	for _, id := range batchHFixtureOffRules {
+		if _, ok := c.Rules[id]; !ok {
+			c.Rules[id] = RuleConfig{Level: SeverityOff}
+		}
+	}
+	turnOffBatchDRules(c)
 	return c
 }
 

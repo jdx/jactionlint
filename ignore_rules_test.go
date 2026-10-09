@@ -123,7 +123,7 @@ func TestUnusedIgnoreDetection(t *testing.T) {
 	src := `on: push
 jobs:
   j:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       # jactionlint ignore=template-injection,expression-type
       - run: echo ${{ github.event.issue.title }}

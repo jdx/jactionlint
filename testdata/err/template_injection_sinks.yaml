@@ -1,0 +1,31 @@
+on: issue_comment
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    container:
+      image: node:20
+      # ERROR: docker reads the options as command line flags
+      options: --user ${{ github.event.comment.body }}
+      volumes:
+        # ERROR: the attacker names the path that is mounted
+        - ${{ github.head_ref }}:/work
+    services:
+      db:
+        image: postgres
+        # ERROR: the same in the options of a service, and the flags can be quoted
+        options: >-
+          --health-cmd=pg_isready
+          --entrypoint "${{ github.event.issue.title }}"
+      cache:
+        # ERROR: the attacker names the image
+        image: ${{ github.event.pull_request.head.ref }}
+    steps:
+      # ERROR: the args of a Docker step are the command line of the container
+      - uses: docker://alpine:3
+        with:
+          args: echo ${{ toJSON(github.event) }}
+      # OK: a value that no attacker controls
+      - uses: docker://alpine:3
+        with:
+          args: echo ${{ github.repository }}

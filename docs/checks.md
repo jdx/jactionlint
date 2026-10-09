@@ -38,6 +38,12 @@ List of checks:
 - [Run script policy (opt-in)](#check-run-policy)
 - [Job ID and step ID uniqueness](#check-job-step-ids)
 - [Hardcoded credentials](#check-hardcoded-credentials)
+- [Dangerous writes to `GITHUB_ENV` and `GITHUB_PATH`](#check-github-env)
+- [Packages installed by name](#check-adhoc-packages)
+- [Tools installed without an exact version](#check-unpinned-tools)
+- [Publishing with long-lived credentials](#check-use-trusted-publishing)
+- [Superfluous actions](#check-superfluous-actions)
+- [Installs without a lock file](#check-unlocked-install)
 - [Environment variable names](#check-env-var-names)
 - [Permissions](#permissions)
 - [Reusable workflows](#check-reusable-workflows)
@@ -49,10 +55,18 @@ List of checks:
 - [Deprecated inputs usage](#deprecated-inputs-usage)
 - [YAML anchors](#yaml-anchors)
 - [Dependabot configuration syntax](#check-dependabot-syntax)
+- [Dependabot cooldown](#check-dependabot-cooldown)
+- [Dependabot insecure code execution](#check-dependabot-execution)
+- [Dependabot updates of actions (opt-in)](#check-dependabot-missing-actions-update)
+- [Pipelines that hide failures](#check-pipeline-without-pipefail)
 - [Workflow and job names (opt-in)](#check-anonymous-definition)
 - [Concurrency limits (opt-in)](#check-concurrency-limits)
 - [Inherited secrets](#check-secrets-inherit)
 - [Insecure workflow commands](#check-insecure-commands)
+- [Unverified downloads](#check-unverified-download)
+- [Host keys collected with ssh-keyscan](#check-insecure-ssh-keyscan)
+- [Static credentials for actions/checkout](#check-checkout-static-credentials)
+- [Insecure URL schemes](#check-insecure-url-scheme)
 - [Dangerous triggers (opt-in)](#check-dangerous-triggers)
 - [Self-hosted runners (opt-in)](#check-self-hosted-runner)
 - [Unsound `contains()` on a string](#check-unsound-contains)
@@ -62,6 +76,7 @@ List of checks:
 - [Typosquatting of actions (opt-in)](#check-typosquat-uses)
 - [Forbidden actions (opt-in)](#check-forbidden-uses)
 - [Expansions in scripts (opt-in)](#check-template-injection-expansion)
+- [AI agent actions](#check-agentic-actions)
 - [Bots trusted by `github.actor` (opt-in)](#check-bot-conditions)
 - [Obfuscated paths and expressions (opt-in)](#check-obfuscation)
 - [Misfeatures (opt-in)](#check-misfeature)
@@ -71,6 +86,17 @@ List of checks:
 - [Stale action refs (online)](#check-stale-action-refs)
 - [Archived repositories (online)](#check-archived-uses)
 - [Version comments of pinned actions (online)](#check-ref-version-mismatch)
+- [Concurrency that cancels unrelated pull requests](#check-concurrency-cancels-prs)
+- [Concurrency that cancels a release](#check-concurrency-cancels-release)
+- [Gate jobs that are skipped when a job fails](#check-gate-job-skipped-on-failure)
+- [Untrusted code in privileged workflows](#check-untrusted-checkout)
+- [Untrusted artifacts in workflow_run workflows](#check-untrusted-artifact)
+- [Unused job outputs](#check-unused-job-output)
+- [Unused workflow inputs (pedantic)](#check-unused-workflow-input)
+- [Needs entries that do nothing (pedantic)](#check-unused-needs)
+- [Duplicate triggers (pedantic)](#check-duplicate-triggers)
+- [Failures hidden by continue-on-error (pedantic)](#check-continue-on-error)
+- [Mutable runner labels (pedantic)](#check-mutable-runner-label)
 - [Invisible characters](#check-invisible-characters)
 - [Unsound prefix matches on names](#check-unsound-prefix-match)
 
@@ -551,6 +577,10 @@ jobs:
 Output:
 
 ```
+test.yaml:7:7: warning: output "foo" of job "test" is never used: no other job reads "needs.test.outputs.foo". remove it [unused-job-output]
+  |
+7 |       foo: '${{ steps.get_value.outputs.name }}'
+  |       ^~~~
 test.yaml:10:24: property "get_value" is not defined in object type {} [expression]
    |
 10 |       - run: echo '${{ steps.get_value.outputs.name }}'
@@ -808,6 +838,10 @@ test.yaml:16:24: property "prepare" is not defined in object type {} [expression
    |
 16 |       - run: echo '${{ needs.prepare.outputs.prepared }}'
    |                        ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+test.yaml:17:3: job "build" reads "needs.some_job" but has no "if" with a status check function, so GitHub skips the job when a job it needs fails or is skipped, and a skipped job counts as passing for a required check. add "if: ${{ !cancelled() }}" (or "always()") to the job [gate-job-skipped-on-failure]
+   |
+17 |   build:
+   |   ^~~~~~
 test.yaml:26:24: property "foo" is not defined in object type {installed: string} [expression]
    |
 26 |       - run: echo '${{ needs.install.outputs.foo }}'
@@ -1209,8 +1243,12 @@ The rule `template-injection` does not stop at the properties above. It reports 
   `${{ env.TITLE }}`. Reading it as a variable of the shell (`"$TITLE"`) is the fix, and it is what the environment variable is for;
 - inputs of well-known actions which run their value as code are checked like `run:` and the `script` of github-script:
   `command` of nick-fields/retry, `inlineScript` of azure/cli and azure/powershell, `script` of appleboy/ssh-action,
-  `run` and `options` of addnab/docker-run-action, and a few more. They are listed in `codeExecInputs` of
-  [template_injection.go](https://github.com/jdx/jactionlint/blob/main/template_injection.go).
+  `run` and `options` of addnab/docker-run-action, `preCommands` and `postCommands` of cloudflare/wrangler-action, `cmd` of
+  mikefarah/yq, the `command` of several SSH actions, and a few more. They are listed in `codeExecTable` of
+  [injection_sinks.go](https://github.com/jdx/jactionlint/blob/main/injection_sinks.go), each with the place where its behavior can
+  be checked;
+- fields that GitHub passes to docker are checked too, see [below](#check-template-injection-sinks);
+- the prompt, the arguments and the settings of [AI agent actions](#check-agentic-actions) are checked too, see below.
 
 Example input:
 
@@ -1280,6 +1318,62 @@ in the `env:` of the step):
 
 When the expression is not in quotes, quoting it changes how the shell splits words and expands globs, so the fix needs
 `-fix=unsafe`. Scripts of other shells (PowerShell, cmd, Python) are not fixed.
+
+<a id="check-template-injection-sinks"></a>
+### Container options, Docker steps and AI agent inputs
+
+`template-injection` also reports an attacker controlled `${{ }}` in the places where a runner or an action reads a string as a
+command line or as the instructions of an agent, although they are not scripts:
+
+| Place | Why it matters |
+| --- | --- |
+| `container.options` and `services.<id>.options` | docker reads them as command line flags, so text can add `--privileged`, `--volume` or `--entrypoint` ([zizmor#1128](https://github.com/zizmorcore/zizmor/issues/1128)) |
+| `image`, `entrypoint`, `command` and `volumes` of `container` and of a service | the attacker chooses what runs, or which path of the runner is mounted |
+| `args` and `entrypoint` of a `docker://` step | they are the command line of the container |
+| `prompt`, `claude_args`, `settings` and the other inputs of [AI agent actions](#check-agentic-actions) | the agent reads the prompt as instructions, and the arguments and settings add tools, servers and hooks |
+
+Only contexts that an attacker controls are reported here, unlike in a script: `matrix.node` in an `image` is how containers are
+written. The environment variable is not a remedy for these places (the `env` context is not available in a container, and an agent
+reads the environment as it reads the prompt): use a fixed value, or one from a fixed list, and for an agent see
+[the advice below](#check-agentic-actions). `shell:` takes no expression, so it is not a sink.
+
+Example input:
+
+```yaml
+on: issues
+
+jobs:
+  triage:
+    runs-on: ubuntu-latest
+    container:
+      image: node:20
+      # ERROR: docker reads the options as command line flags
+      options: --user ${{ github.event.issue.title }}
+    steps:
+      # ERROR: the agent reads the prompt as instructions, and quoting cannot change that
+      - uses: anthropics/claude-code-action@v1
+        with:
+          prompt: Triage "${{ github.event.issue.title }}"
+      # OK: the number of the issue is not text
+      - uses: anthropics/claude-code-action@v1
+        with:
+          prompt: Triage the issue number ${{ github.event.issue.number }}
+```
+
+Output:
+
+```
+test.yaml:9:27: "github.event.issue.title" is potentially untrusted and is expanded into the options of the container of the job. docker reads them as command line flags, so text from an attacker can add flags such as --privileged, --volume or --entrypoint. use a fixed value, or choose one from a fixed list such as a matrix or an input of type choice [expression]
+  |
+9 |       options: --user ${{ github.event.issue.title }}
+  |                           ^~~~~~~~~~~~~~~~~~~~~~~~
+test.yaml:14:31: "github.event.issue.title" is potentially untrusted and is expanded into the "prompt" input of Claude Code Action. the agent reads the prompt as instructions, so text from an attacker can steer the agent, and quoting or escaping cannot prevent that. do not put event data in the prompt: let the agent read it with its own tools, and give the agent only the permissions, secrets and tools that the worst instruction could use [expression]
+   |
+14 |           prompt: Triage "${{ github.event.issue.title }}"
+   |                               ^~~~~~~~~~~~~~~~~~~~~~~~
+```
+
+[Playground](https://jactionlint.jdx.dev/#eNq0UDluxDAM7P2KwSKtnKNUlUfkA7JMrBXYpCCSm2Lhvwc+ki5ItZ3EucgRjiiqTtp1nzJo7ABrJV1pewHNWcNG8sHZPMzJSG2HsrClwtQOJlCWTQaWkeLbyzmUakVYI0JwpYan+x3XYpMPPd2Ird/Teys2E9Z1V6lR1R/XAFfSiMQ2Nakl63Oek48UsowUUt7832+vJx34KjbF3x9QmyzVIj72s3D5Z4PLg3JtoqNpsC/D302c6Lp+DwDREIHh)
 
 <a id="check-job-deps"></a>
 ## Job dependencies validation
@@ -2531,6 +2625,353 @@ test.yaml:17:21: "password" section in "redis" service should be specified via s
 and the value should be expanded with `${{ }}` syntax at `password:`. jactionlint checks hardcoded credentials, and reports
 them as an error.
 
+<a id="check-github-env"></a>
+## Dangerous writes to `GITHUB_ENV` and `GITHUB_PATH`
+
+Example input:
+
+```yaml
+on:
+  pull_request_target:
+    types: [opened]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "VERSION=$(cat version.txt)" >> "$GITHUB_ENV"
+      - run: echo "TITLE=$TITLE" >> "$GITHUB_ENV"
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+```
+
+Output:
+
+```
+test.yaml:8:48: a value that is not a literal is written to $GITHUB_ENV in a workflow triggered by "pull_request_target", which runs with secrets and a write token for events that may come from a fork. an attacker who controls the value can set LD_PRELOAD or NODE_OPTIONS (a newline adds another variable) and run code in the next steps. write only literal values and values computed from trusted sources, or pass state with $GITHUB_OUTPUT [github-env]
+  |
+8 |       - run: echo "VERSION=$(cat version.txt)" >> "$GITHUB_ENV"
+  |                                                ^~
+test.yaml:9:34: untrusted input from the variable TITLE (github.event.pull_request.title) is written to $GITHUB_ENV. an attacker who controls the value can set LD_PRELOAD or NODE_OPTIONS (a newline adds another variable) and run code in the next steps. do not write input that an outsider controls to $GITHUB_ENV; validate it first or pass it to the next step with $GITHUB_OUTPUT [github-env-untrusted-input]
+  |
+9 |       - run: echo "TITLE=$TITLE" >> "$GITHUB_ENV"
+  |                                  ^~
+```
+
+[Playground](https://jactionlint.jdx.dev/#eNp0z8FKw0AQBuB7n+In5KCH5AEW2oMQNCAVNPYiEpJ2aCPL7LozE5TSd5ckIB7saZj5v/8wgd0KiOZ9m+jTSLTVLh1JpzOg35HE4S1EYjq8rz5CL1PS2+APC0nGUgR2sN5YrfCdkugciVKURQHFJB1ofwrIdtXzS/20Xec3+04xUpIhcKlfepths0GW39fNw+tdW2132X/9pm4eq3U+j6sNgHh0vwswc4f8fMZx0JP1JY3EWv59v9RBPeFy+RkA2itTFQ==)
+
+What a step writes to the file `$GITHUB_ENV` becomes the environment of every later step of the job, and a directory written to
+`$GITHUB_PATH` is searched for executables first. If an attacker controls what is written, they can run code in the next
+steps: a value with a newline sets another variable, and `LD_PRELOAD` or `NODE_OPTIONS` load code of their choice, while a
+directory in front of the `PATH` can shadow a program such as `ssh`. See
+[Keeping your GitHub Actions and workflows secure: preventing pwn requests](https://securitylab.github.com/resources/github-actions-preventing-pwn-requests/).
+
+There are two rules, both in the `default` profile:
+
+- `github-env` reports a write of something that is not a literal in a workflow started by `pull_request_target` or
+  `workflow_run`. These run with secrets and a write token while the event may come from a fork, so anything computed from the
+  checked out code, its artifacts or the event is suspect. Values that the workflow author or GitHub decide are accepted:
+  literals, the `HOME` and `RUNNER_*` variables, `github.sha`, `github.run_id`, `github.event.pull_request.head.sha`, the
+  `runner`, `matrix`, `vars` and `secrets` contexts, command substitutions of `mktemp`, `date`, `pwd`, `uname` and the like with
+  such arguments, and variables of `env:` or of the script that are set to such values.
+- `github-env-untrusted-input` reports a write of input that an outsider controls, whatever the trigger: an expression such
+  as `github.event.issue.title` or `github.head_ref`, or an environment variable that was set to one (as `TITLE` is in the
+  example above; a template injection check does not see that one).
+
+`echo "VERSION=1.0" >> "$GITHUB_ENV"` and `echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"` are fine. Use `$GITHUB_OUTPUT` to pass
+state between steps (`echo "version=$(cat version.txt)" >> "$GITHUB_OUTPUT"` is not reported) and validate or avoid the value
+otherwise. The rules understand `>>` and `>`, `tee`, groups (`{ ...; } >> "$GITHUB_ENV"`), here documents and a file name held
+in another variable. Scripts of `bash` and `sh` are parsed; for `pwsh`, `powershell` and `cmd` the rules look at the lines that
+mention `$env:GITHUB_ENV` or `%GITHUB_ENV%` together with a redirection or `Out-File`, `Add-Content`, `Set-Content` and
+`Tee-Object`.
+
+To turn a rule off, put `github-env: off` in the `rules` section of the [configuration file](config.md) or write
+`# jactionlint ignore=github-env` after a reason.
+
+<a id="check-adhoc-packages"></a>
+## Packages installed by name
+
+Example input:
+
+```yaml
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - run: npm install eslint@9.0.0
+      - run: gem install rake
+```
+
+Output:
+
+```
+test.yaml:6:14: warning: command "npm install" installs a package outside of a lock file: its version and its dependencies are resolved anew on every run. add the package to package.json and commit the package-lock.json and install with `npm ci` [adhoc-packages]
+  |
+6 |       - run: npm install eslint@9.0.0
+  |              ^~~
+test.yaml:7:14: warning: command "gem install" installs a package outside of a lock file: its version and its dependencies are resolved anew on every run. add the package to a Gemfile and commit the Gemfile.lock and install with `bundle install` [adhoc-packages]
+  |
+7 |       - run: gem install rake
+  |              ^~~
+```
+
+[Playground](https://jactionlint.jdx.dev/#eNpUyjEOAjEMRNF+TzEXyGpbUnGVrGRBwDhRxr4/MhSI6hf/DauYwfv2GCfrBrjQs8AKY8kfZ5hH0Zbvs+gy+VVASVlh84Vu9KYKoXbz62U/9uNf3eSnVnvKewDexCcZ)
+
+The rule `adhoc-packages` (in the `default` profile) reports a `run:` script that installs a package by name with `npm`, `yarn`,
+`pnpm`, `bun`, `gem` or `bundle add`. Such a package is usually not pinned, so the newest release (and so a compromised one)
+is picked up. Even with `eslint@9.0.0` the dependencies of the package are resolved anew on every run. Commands like
+`yarn add` and `bundle add` change the lock file of the run instead of using it.
+
+Add the package to a manifest that produces a lock file (`package.json`, a `Gemfile`), commit the lock file and install with
+a command that follows it: `npm ci`, `yarn install --immutable`, `pnpm install --frozen-lockfile`, `bun ci` or
+`bundle install`. Installing from a manifest (`npm install`, `npm ci`), from the checkout (`npm install .`) and from a gem file
+(`gem install ./pkg.gem`) is not reported. See [unlocked installs](#check-unlocked-install) for the lock file.
+
+Installing a tool for the workflow itself, such as `pip install` and `cargo install`, is covered by
+[unpinned tools](#check-unpinned-tools). The rule is the audit `adhoc-packages` of zizmor, which does not look at `pip`.
+
+<a id="check-unpinned-tools"></a>
+## Tools installed without an exact version
+
+Example input:
+
+```yaml
+on: push
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: aquasecurity/setup-trivy@e6c2c5e321ed9123bda567646e2f96565e34abe1 # v0.2.4
+```
+
+Output:
+
+```
+test.yaml:6:15: warning: action "aquasecurity/setup-trivy@e6c2c5e321ed9123bda567646e2f96565e34abe1" installs the newest version of its tool because the input "version" is not set. set "version" to an exact version [unpinned-tools]
+  |
+6 |       - uses: aquasecurity/setup-trivy@e6c2c5e321ed9123bda567646e2f96565e34abe1 # v0.2.4
+  |               ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+```
+
+[Playground](https://jactionlint.jdx.dev/#eNokyjGugzAMgOGdU1h6c3glEFdk6lWc4KpUVUhjG4nbV7TTP3z/ViJUk0f33JLEDkAylbMAzYq40y1ZUXMvUhb9kihX+V0ADkxYItDbSDhbW/X4F1arTtu6HzfG7HPg0Q+8zIMf00IBrzgh+/uMAQOPEyUe4A/2S+/76TMAq3QtNQ==)
+
+Pinning an action to a commit does not pin the tool that the action downloads. Some actions install the newest release of their
+tool unless they are told which one to use. The rule `unpinned-tools` (in the `default` profile) reports a step that uses one
+of these actions (`aquasecurity/setup-trivy`, `1password/load-secrets-action`, `extractions/setup-just` and
+`extractions/setup-crate`, the ones zizmor knows) and does not set the input that selects the version, or sets it to
+`latest` (`*` for the last two). Set the input to an exact version. A value that is an expression is not judged.
+
+With the option `pedantic` (on under `profile: strict` and `profile: all`, or `rules: {unpinned-tools: {level: warn, pedantic: true}}`) the
+rule reports more:
+
+Example input:
+
+```yaml
+on: push
+jobs:
+  tools:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
+      - run: pip install requests black==24.3.0
+      - run: go install golang.org/x/tools/cmd/stringer@latest
+```
+
+Output:
+<!-- Skip update output -->
+```
+test.yaml:6:15: warning: action "hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd" installs the newest version of its tool because the input "terraform_version" is not set. set "terraform_version" to an exact version [unpinned-tools]
+  |
+6 |       - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
+  |               ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+test.yaml:7:14: warning: tool "requests" is installed without an exact version, so every run may fetch a different release. pin it with `==`, for example `tool==1.2.3` [unpinned-tools]
+  |
+7 |       - run: pip install requests black==24.3.0
+  |              ^~~
+test.yaml:8:14: warning: tool "golang.org/x/tools/cmd/stringer@latest" is installed without an exact version, so every run may fetch a different release. pin it with a version, for example `tool@v1.2.3` [unpinned-tools]
+  |
+8 |       - run: go install golang.org/x/tools/cmd/stringer@latest
+  |              ^~
+```
+
+<!-- Skip playground link -->
+
+- further actions that use the newest version of their tool by default: `hashicorp/setup-terraform`, `azure/setup-kubectl`
+  and `azure/setup-helm` (the table is `floatingToolActions` in `rule_unpinned_tools.go`, with the source of each entry);
+- `run:` scripts that install or run a tool without an exact version: `pip install`, `pipx install` and `pipx run`,
+  `uv tool install`, `uv pip install` and `uvx`, `cargo install` and `cargo binstall`, `go install`, `npm install -g`,
+  `npx --yes`, `pnpm dlx` and `yarn dlx`. One finding names all the tools of a command. Pin them with `==`, `--version`,
+  `@v1.2.3` or `@1.2.3` according to the tool. Packages from a path, requirements files (`pip install -r`) and `npx tsc`,
+  which runs the program of the project, are not reported. There is no fix since the version to use is the decision of the
+  author.
+
+Installs of the packages of a project are the business of the lock file, see [unlocked installs](#check-unlocked-install).
+zizmor 1.30.1 only has the first rule, and only for the four actions above.
+
+<a id="check-use-trusted-publishing"></a>
+## Publishing with long-lived credentials
+
+Example input:
+
+```yaml
+on:
+  release:
+    types: [published]
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - run: twine upload dist/*
+        env:
+          TWINE_PASSWORD: ${{ secrets.PYPI_TOKEN }}
+      - uses: pypa/gh-action-pypi-publish@76f52bc884231f62b9a034ebfe128415bbaabdfc # v1.12.4
+        with:
+          password: ${{ secrets.PYPI_TOKEN }}
+```
+
+Output:
+
+```
+test.yaml:8:14: warning: "twine upload" publishes to PyPI with the long-lived credential TWINE_PASSWORD. prefer trusted publishing with pypa/gh-action-pypi-publish and the permission "id-token: write" [use-trusted-publishing]
+  |
+8 |       - run: twine upload dist/*
+  |              ^~~~~
+test.yaml:13:21: warning: action "pypa/gh-action-pypi-publish@76f52bc884231f62b9a034ebfe128415bbaabdfc" publishes to PyPI but is given a password (input "password") instead of using trusted publishing. prefer trusted publishing with pypa/gh-action-pypi-publish and the permission "id-token: write" [use-trusted-publishing]
+   |
+13 |           password: ${{ secrets.PYPI_TOKEN }}
+   |                     ^~~
+```
+
+[Playground](https://jactionlint.jdx.dev/#eNp8jsFKw0AQQO/9igE9CduaNK1xTwr2UIQ22EIRkbKbTMxK2F0ysw2h9N8lNgRP3mbmPZjnrJwANFijIuxHAO48koQPH3RtqMLic/LtNPVwOF29JlgSzkoIOlgOolaMxL+IGD1dLQDRmxK4NRYh+NqpAgpDPLsbBAC0JzkuAPvDerM6Zs+73WH79iLh9nwGwrxBpmn2nq2P++3ragOXy/ghUJ/sO69mX5VQORtnhe+8EUPy08OyXMQ6T9MknkflMtaP6n6eoC4xitMkWmitlC7KHG7gFE2jeJqMQa3h6m+eV0Sta4p/wn4GAGw+ZHU=)
+
+PyPI, crates.io, RubyGems, npm and NuGet support [trusted publishing](https://docs.pypi.org/trusted-publishers/): the registry
+trusts the OIDC token that GitHub issues for the workflow run, so no API token has to be stored as a secret, and a stolen
+token cannot publish. The rule `use-trusted-publishing` (in the `default` profile) reports
+
+- a `run:` script that publishes to the public registry: `twine upload`, `uv publish`, `poetry|flit|hatch|pdm publish`,
+  `cargo publish`, `npm|pnpm|yarn|bun publish`, `gem push`, `dotnet nuget push` and `nuget push`, also behind `sudo`,
+  `uvx`, `pipx run`, `uv run`, `bundle exec` and `python -m`. The message names the long-lived credential when the step,
+  its job or the workflow sets one of the usual environment variables (`TWINE_PASSWORD`, `NODE_AUTH_TOKEN`,
+  `CARGO_REGISTRY_TOKEN`, `GEM_HOST_API_KEY`, ...);
+- the actions `pypa/gh-action-pypi-publish` with `password`, `rubygems/configure-rubygems-credentials` with `api-token`,
+  `rubygems/release-gem` with `setup-trusted-publisher: false` and `actions/setup-node` with an npm registry and
+  `always-auth: true`.
+
+A job that grants `id-token: write` (itself or through the workflow) is accepted, since it can use trusted publishing, and so
+are dry runs and publishing to a registry of your own (`--registry`, `--repository-url`). Configure the trusted publisher at the
+registry once, then use `pypa/gh-action-pypi-publish`, `rubygems/release-gem`, `rust-lang/crates-io-auth-action`, `NuGet/login`
+or `npm publish` with that permission.
+
+<a id="check-superfluous-actions"></a>
+## Superfluous actions
+
+Example input:
+
+```yaml
+on: push
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: softprops/action-gh-release@c95fe1489396fe8a9eb87c0abf8aa5b2ef267fda # v2.2.1
+        with:
+          files: dist/*
+```
+
+Output:
+
+```
+test.yaml:6:15: warning: action "softprops/action-gh-release@c95fe1489396fe8a9eb87c0abf8aa5b2ef267fda" is superfluous: the runner already has the tools to do this. use `gh release create` in a script step [superfluous-actions]
+  |
+6 |       - uses: softprops/action-gh-release@c95fe1489396fe8a9eb87c0abf8aa5b2ef267fda # v2.2.1
+  |               ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+```
+
+[Playground](https://jactionlint.jdx.dev/#eNo8jcGOgzAMRO98haW9rRRYsgWSnPorDjglFUoi7LS/X9Gi3mY0T29yclAqr809e3YNwE4bIdMRAfaaWB1I9TVJVRsKsbwnFir8oQAUVCZ2wDlI2XPhDmeJOanbqk7hdbZDoP5i7L8dAxm05M00/6EPBnHwmoIep7Ag/MBDt7rtTzfAM8rqvg0gxO04WyJL9/saALZkOPY=)
+
+Some actions only run a command that the runner image already has. The action is a dependency that can be compromised, with
+nothing gained. The rule `superfluous-actions` (in the `default` profile) reports the ones with a simple replacement: the release
+actions (`softprops/action-gh-release`, `ncipollo/release-action`, `elgohr/Github-Release-Action`,
+`svenstaro/upload-release-action` and the archived `actions/create-release` and `actions/upload-release-asset`), which
+`gh release` replaces, `dacbd/create-issue-action`, `actions-ecosystem/action-add-labels` and `action-remove-labels` (`gh issue`,
+`gh pr`), `addnab/docker-run-action` (`docker run`) and `sergeysova/jq-action` (`jq`).
+
+With the option `pedantic` (on under the `strict` and `all` profiles) the rule reports the ones whose replacement takes several commands or
+misses a feature: `peter-evans/create-pull-request`, `peter-evans/create-or-update-comment`, `dtolnay/rust-toolchain`,
+`stefanzweifel/git-auto-commit-action` and `EndBug/add-and-commit`. Each entry of the table `superfluousActions` in
+`rule_superfluous_actions.go` names its source (the audit of zizmor, or the README of the archived action).
+
+<a id="check-unlocked-install"></a>
+## Installs without a lock file
+
+Example input:
+
+```yaml
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - run: cargo install cargo-nextest
+```
+
+Output:
+
+```
+test.yaml:6:14: warning: "cargo install" without --locked builds with the newest dependencies that match the crate instead of the ones in its Cargo.lock, so a new release of any dependency reaches the workflow. add --locked [unlocked-install]
+  |
+6 |       - run: cargo install cargo-nextest
+  |              ^~~~~
+```
+
+[Playground](https://jactionlint.jdx.dev/#eNoky90JwCAMxPF3p7gFsoDbaJF+IFG8BDp+SX0K4fe/oRnTeaVnVOYEWKPFBZYrJdyrq7n0EvYTrU3uCpAoM46yzoFbaaX3/Ym2NzbfAESiIIE=)
+
+An install that does not use a lock file resolves the dependencies anew on every run, so a new release of any transitive
+dependency, a compromised one included, reaches the workflow. The rule `unlocked-install` (in the `default` profile) reports
+`cargo install` without `--locked` (or `--frozen`): the crate was published with a `Cargo.lock`, and `--locked` builds with it.
+
+The rule is fixable. `jactionlint -fix=unsafe` inserts `--locked`. The fix is **unsafe** because the build can fail where it
+succeeded, for example when the lock file of the crate is out of date. It is only offered when the position of `install` in the
+file is known for sure.
+
+With the option `pedantic` (on under the `strict` and `all` profiles) the rule reports installs from a manifest that the lock file does not bind:
+
+Example input:
+
+```yaml
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - run: npm install
+      - run: pip install -r requirements.txt
+```
+
+Output:
+<!-- Skip update output -->
+```
+test.yaml:6:14: warning: "npm install" resolves the dependencies again and may update the package-lock.json instead of failing when it is out of date. use `npm ci` [unlocked-install]
+  |
+6 |       - run: npm install
+  |              ^~~
+test.yaml:7:14: warning: "pip install -r requirements.txt" installs a requirements file without hashes or constraints, so the transitive dependencies are resolved anew on every run. use a lock file with hashes (`pip-compile --generate-hashes`) and pass --require-hashes, or pin them with -c [unlocked-install]
+  |
+7 |       - run: pip install -r requirements.txt
+  |              ^~~
+```
+
+<!-- Skip playground link -->
+
+- `npm install` without a package: use `npm ci`, which fails when `package-lock.json` is out of date;
+- `yarn` and `yarn install` without `--immutable` (`--frozen-lockfile` in Yarn 1), `bun install` without `--frozen-lockfile`
+  (or use `bun ci`), and `pnpm install --no-frozen-lockfile`. pnpm freezes the lock file in CI by default, so plain
+  `pnpm install` is not reported. Yarn 2+ does so too, so for Yarn the flag makes it explicit;
+- `pip install -r` (also `uv pip install -r`) without `--require-hashes` or a constraints file `-c`.
+
+Installing named packages is covered by [adhoc packages](#check-adhoc-packages) and [unpinned tools](#check-unpinned-tools).
+These rules have no equivalent in zizmor.
+
 <a id="check-env-var-names"></a>
 ## Environment variable names
 
@@ -3403,6 +3844,10 @@ test.yaml:7:20: property "imagetag" is not defined in object type {image_tag: st
   |
 7 |         value: ${{ jobs.gen-image-version.outputs.imagetag }}
   |                    ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+test.yaml:12:7: warning: output "image_tag" of job "gen-image-version" is never used: no other job reads "needs.gen-image-version.outputs.image_tag" and no output of the workflow uses it. remove it [unused-job-output]
+   |
+12 |       image_tag: "${{ steps.get_tag.outputs.tag }}"
+   |       ^~~~~~~~~~
 ```
 
 [Playground](https://jactionlint.jdx.dev/#eNp0j8FuwyAQRO/5ipHVK/TOuf9hEWdLaShY7JIcovx7tcZGqqocGT3mzZbsTsC91OtnKvd58SlpAJQmaxPuDyD++EDmRpVjyUcIXIiXGlfRENNHWa5UO4udnQZ786mRw9vjge9yZhsomz+1dnfaLRUf8HyeFFXfP7qPqC2zUXk7tyzNJC/E8vKCWXxwmHQDC606QjQb6m7tozfi+G5U5WDfOzmPOstf48R4cdgbfwcA2ORuYw==)
@@ -4256,6 +4701,8 @@ version: 2
 updates:
   - package-ecosystem: github-actions
     directory: "/"
+    cooldown:
+      default-days: 7
     schedule:
       interval: weekly
       # ERROR: "dayy" is a typo of "day"
@@ -4275,25 +4722,261 @@ updates:
 Output:
 
 ```
-.github/dependabot.yml:8:7: unexpected key "dayy" for "schedule" section. expected one of "cronjob", "day", "interval", "time", "timezone" [syntax-check]
-  |
-8 |       dayy: monday
-  |       ^~~~~
-.github/dependabot.yml:10:5: unexpected key "label" for "updates" section. expected one of "allow", "assignees", "commit-message", "cooldown", "directories", "directory", "exclude-paths", "groups", "ignore", "insecure-external-code-execution", "labels", "milestone", "multi-ecosystem-group", "open-pull-requests-limit", "package-ecosystem", "patterns", "pull-request-branch-name", "rebase-strategy", "registries", "reviewers", "schedule", "target-branch", "vendor", "versioning-strategy" [syntax-check]
+.github/dependabot.yml:10:7: unexpected key "dayy" for "schedule" section. expected one of "cronjob", "day", "interval", "time", "timezone" [syntax-check]
    |
-10 |     label: [dependencies]
+10 |       dayy: monday
+   |       ^~~~~
+.github/dependabot.yml:12:5: unexpected key "label" for "updates" section. expected one of "allow", "assignees", "commit-message", "cooldown", "directories", "directory", "exclude-paths", "groups", "ignore", "insecure-external-code-execution", "labels", "milestone", "multi-ecosystem-group", "open-pull-requests-limit", "package-ecosystem", "patterns", "pull-request-branch-name", "rebase-strategy", "registries", "reviewers", "schedule", "target-branch", "vendor", "versioning-strategy" [syntax-check]
+   |
+12 |     label: [dependencies]
    |     ^~~~~~
-.github/dependabot.yml:15:17: schedule interval "hourly" is invalid. expected one of "daily", "weekly", "monthly", "quarterly", "semiannually", "yearly", "cron" [syntax-check]
+.github/dependabot.yml:13:5: warning: "cooldown" is not set in this update, so Dependabot applies its implicit cooldown of 3 days. set "cooldown.default-days" to at least 7 to avoid updating to a version right after its release [dependabot-cooldown]
    |
-15 |       interval: hourly
+13 |   - package-ecosystem: npm
+   |     ^~~~~~~~~~~~~~~~~~
+.github/dependabot.yml:17:17: schedule interval "hourly" is invalid. expected one of "daily", "weekly", "monthly", "quarterly", "semiannually", "yearly", "cron" [syntax-check]
+   |
+17 |       interval: hourly
    |                 ^~~~~~
-.github/dependabot.yml:17:5: "schedule" key is missing in "updates" item [syntax-check]
+.github/dependabot.yml:19:5: warning: "cooldown" is not set in this update, so Dependabot applies its implicit cooldown of 3 days. set "cooldown.default-days" to at least 7 to avoid updating to a version right after its release [dependabot-cooldown]
    |
-17 |   - package-ecosystem: cargo
+19 |   - package-ecosystem: cargo
+   |     ^~~~~~~~~~~~~~~~~~
+.github/dependabot.yml:19:5: "schedule" key is missing in "updates" item [syntax-check]
+   |
+19 |   - package-ecosystem: cargo
    |     ^~~~~~~~~~~~~~~~~~
 ```
 
 <!-- Skip playground link -->
+
+<a id="check-dependabot-cooldown"></a>
+## Dependabot cooldown
+
+A cooldown makes Dependabot wait until a new version is some days old before it proposes the update. It limits the damage of
+a compromised release, which is usually taken down within days, and of releases which turn out to be broken. Without
+`cooldown.default-days` Dependabot applies an implicit cooldown of 3 days. This check reports an update of `dependabot.yml`
+whose `cooldown.default-days` (explicit or implicit) is less than the minimum, which is 7 days. The finding is at the update
+when it has no `cooldown`, at `cooldown` when it has no `default-days`, and at the value otherwise. The check is the
+equivalent of the `dependabot-cooldown` audit of zizmor.
+
+The other keys of `cooldown` (`semver-major-days`, `include` and so on) are not checked.
+
+Example input:
+
+```yaml
+version: 2
+updates:
+  # ERROR: no cooldown, so Dependabot applies its implicit 3 days
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: weekly
+    cooldown:
+      # ERROR: 2 days is less than the minimum of 7
+      default-days: 2
+  - package-ecosystem: cargo
+    directory: "/"
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+```
+
+Output:
+
+```
+.github/dependabot.yml:4:5: warning: "cooldown" is not set in this update, so Dependabot applies its implicit cooldown of 3 days. set "cooldown.default-days" to at least 7 to avoid updating to a version right after its release [dependabot-cooldown]
+  |
+4 |   - package-ecosystem: github-actions
+  |     ^~~~~~~~~~~~~~~~~~
+.github/dependabot.yml:14:21: warning: "cooldown.default-days" is 2, which is less than the minimum 7 days. set it to at least 7 [dependabot-cooldown]
+   |
+14 |       default-days: 2
+   |                     ^
+```
+
+<!-- Skip playground link -->
+
+The rule is `dependabot-cooldown`. It is enabled by default as a warning. Change the minimum with the `days` option and let
+`-fix` write the cooldown by setting `default-days`:
+
+```yaml
+rules:
+  dependabot-cooldown:
+    days: 14
+    default-days: 14
+```
+
+jactionlint never makes up the number of days: without the `default-days` option the findings have no fix. With it,
+`-fix` adds a `cooldown` section, adds `default-days` to a `cooldown` section without it, or raises a smaller value. The fix
+is offered only when the number is at least `days`, and not when the update is written in flow style (`{...}`). To turn the
+check off, set `dependabot-cooldown: off`.
+
+<a id="check-dependabot-execution"></a>
+## Dependabot insecure code execution
+
+Some package managers run code of the dependencies (build scripts, `setup.py`, plugins) while they resolve versions.
+Dependabot does not run it unless an update sets `insecure-external-code-execution: allow`. In an automated job the code is
+run without a human looking at it first, and it may find the credentials Dependabot has for private registries. This check
+reports every update which allows it. It is the equivalent of the `dependabot-execution` audit of zizmor.
+
+Example input:
+
+```yaml
+version: 2
+updates:
+  - package-ecosystem: pip
+    directory: "/"
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    # ERROR: Dependabot may run code of the dependencies it updates
+    insecure-external-code-execution: allow
+```
+
+Output:
+
+```
+.github/dependabot.yml:10:39: "insecure-external-code-execution: allow" lets Dependabot run code from the dependencies it updates, which can expose the credentials Dependabot uses. remove it or set it to "deny" [dependabot-execution]
+   |
+10 |     insecure-external-code-execution: allow
+   |                                       ^~~~~
+```
+
+<!-- Skip playground link -->
+
+The rule is `dependabot-execution`. It is enabled by default as an error. Remove the key or set it to `deny` (the default).
+`-fix=unsafe` sets the value to `deny`. The fix is unsafe because updates of dependencies which need the code to run stop
+working. If you need `allow` for a registry, ignore the finding for that file with `paths:` in [the configuration](config.md)
+or with an [ignore comment](usage.md).
+
+<a id="check-dependabot-missing-actions-update"></a>
+## Dependabot updates of actions (opt-in)
+
+A repository which uses Dependabot for its dependencies often forgets that the actions in its workflows are dependencies too:
+they are never updated, or updated by hand when someone notices. This check reports a `dependabot.yml` which has no update with
+`package-ecosystem: github-actions` while `.github/workflows` has a workflow using an action or a reusable workflow (not a
+local path or a `docker://` image). It is a policy of jactionlint; zizmor has no such audit.
+
+The check does nothing when the repository has a Renovate configuration (`renovate.json`, `.github/renovate.json`,
+`.renovaterc` and so on), since another tool may update the actions. A repository which does not have `dependabot.yml` at all
+is not reported: there is no file to report. There is no automatic fix because the update needs a schedule that only you can
+choose.
+
+Example input:
+
+```yaml
+version: 2
+updates:
+  # ERROR: the workflows of the repository use actions but nothing updates them
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+```
+
+Output:
+<!-- Skip update output -->
+```
+.github/dependabot.yml:1:1: this repository uses actions in its workflows but no update has the "github-actions" package ecosystem, so Dependabot never updates them. add an update with "package-ecosystem: github-actions" and "directory: /" [dependabot-missing-actions-update]
+  |
+1 | version: 2
+  | ^~~~~~~~~~
+```
+
+<!-- Skip playground link -->
+
+The rule is `dependabot-missing-actions-update`. It is enabled by the `strict` profile as a warning, or explicitly with
+`rules: {dependabot-missing-actions-update: warn}`.
+
+<a id="check-pipeline-without-pipefail"></a>
+## Pipelines that hide failures
+
+The default shell of a `run:` step on Linux and macOS runs `bash -e {0}`, and `shell: sh` runs `sh -e {0}`. Neither enables
+`pipefail`, so the exit status of `cmd1 | cmd2` is the one of `cmd2` alone. When `cmd1` fails, the step still succeeds
+and the broken output is silently passed on. An explicit `shell: bash` runs `bash --noprofile --norc -eo pipefail {0}`, which
+does not have this problem. This is the rule `pipeline-without-pipefail`. It is enabled by the default profile. To turn it
+off, set it in [the configuration file](config.md):
+
+```yaml
+rules:
+  pipeline-without-pipefail: off
+```
+
+Example input:
+
+```yaml
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      # ERROR: when curl fails, jq reads an empty input and the step succeeds
+      - run: curl -fsSL https://example.com/data.json | jq .
+      - run: |
+          # ERROR: a failure of 'make' is hidden by 'tee'
+          make 2>&1 | tee build.log
+          # OK: the pipeline is the condition of 'if'
+          if make | grep -q ready; then echo ready; fi
+      - run: |
+          set -o pipefail
+          # OK: pipefail is on
+          make 2>&1 | tee build.log
+      # OK: 'shell: bash' enables pipefail
+      - shell: bash
+        run: make 2>&1 | tee build.log
+```
+
+Output:
+
+```
+test.yaml:7:14: failure of "curl" is hidden in the pipeline "curl -fsSL https://example.com/data.json | jq ." because the default shell runs "bash -e {0}" without pipefail. add "set -o pipefail" before the pipeline or use "shell: bash", which runs with pipefail [pipeline-without-pipefail]
+  |
+7 |       - run: curl -fsSL https://example.com/data.json | jq .
+  |              ^~~~
+test.yaml:10:11: failure of "make" is hidden in the pipeline "make 2>&1 | tee build.log" because the default shell runs "bash -e {0}" without pipefail. add "set -o pipefail" before the pipeline or use "shell: bash", which runs with pipefail [pipeline-without-pipefail]
+   |
+10 |           make 2>&1 | tee build.log
+   |           ^~~~
+```
+
+<!-- Skip playground link -->
+
+jactionlint reports a pipeline when all of the following hold:
+
+- The shell has no pipefail: the default shell on a runner which is known to be Linux or macOS (the default shell of Windows
+  is `pwsh`, so jobs on Windows runners, and jobs whose runner is not known from `runs-on:`, are skipped), `shell: sh`, or a
+  custom `bash`/`sh` template with errexit and without `pipefail`. The shell of the step, of `defaults.run.shell` of the job and
+  of the workflow are considered.
+- The script does not turn it on before the pipeline with `set -o pipefail`, `set -eo pipefail`, `set -euxo pipefail`,
+  `set -o errexit -o pipefail` or `SHELLOPTS=pipefail` (and does not turn it off again with `set +o pipefail`).
+- A stage in front of the last one is a command whose failure matters. `echo`, `printf`, `true`, `yes`, `cat` of a here
+  document or here string, and similar commands which cannot meaningfully fail do not count. Filters such as `sed`, `awk`,
+  `sort` and `tail` do not count in the middle of a pipeline either, because a failure of what feeds them is reported at that
+  command. `grep`, `rg` and `diff` never count: their non-zero status means "no match" or "files differ", and `pipefail` would
+  turn that expected answer into a failed step.
+- The script does not handle the status of the pipeline itself: it is not negated with `!`, not the condition of `if`, `elif`,
+  `while` or `until`, and not an operand of `&&` or `||` other than the last one of a list (`cmd | grep x || true`). A command
+  followed by `|| true` in the first stage (`{ git show || true; cat note; } | sort`) is not blamed either.
+- No later stage stops reading early. `head`, `grep -q`, `grep -m`, `read`, `sed ... q` and `awk ... exit` end the pipeline
+  before the producer is done, which kills it with SIGPIPE. With `pipefail` such a pipeline fails although nothing went wrong,
+  so such pipelines are not reported.
+
+Add `set -o pipefail` before the pipeline or use `shell: bash`. `shell: sh` has no `pipefail` in dash (the `sh` of Ubuntu),
+so use `shell: bash` there. Be aware that turning `pipefail` on makes hidden failures fail the step, and that `grep` without a
+match exits with 1, so check pipelines like `cmd | grep pattern | wc -l` when you enable it.
+
+`-fix=unsafe` inserts `set -o pipefail` as the first line of a `run: |` script (default shell and custom bash templates only).
+The fix is unsafe because failures which used to be ignored now fail the step. There is no fix for a script on a single line,
+for `shell: sh` and for shells which are not bash.
 
 <a id="check-anonymous-definition"></a>
 ## Workflow and job names (opt-in)
@@ -4477,6 +5160,219 @@ Write to the environment files instead (`$GITHUB_ENV`, `$GITHUB_PATH`) and remov
 
 The rule is fixable but the fix is **unsafe**: `jactionlint -fix=unsafe` removes the variable (and the `env:` mapping when it
 was the only entry). A step that still prints `::set-env` or `::add-path` stops working after that, so replace the commands first.
+
+<a id="check-unverified-download"></a>
+## Unverified downloads
+
+Example input:
+
+```yaml
+on: push
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    steps:
+      - shell: bash
+        run: curl -fsSL https://example.com/install.sh | sh
+      - run: |
+          curl -fsSLo tool https://example.com/dl/tool
+          chmod +x tool
+          ./tool --version
+```
+
+Output:
+
+```
+test.yaml:7:14: the script downloaded from "https://example.com/install.sh" is run by "sh" without being verified, so whoever controls that server or the connection to it controls this job. if it installs a tool, install the tool with mise instead (jdx/mise-action pinned by SHA, or "mise use" with a committed mise.lock, which records the version and checksum of each tool). otherwise download the file, check its checksum or signature (sha256sum -c, gpg --verify, cosign verify-blob or gh attestation verify) before running it, or use the package of the vendor [unverified-download]
+  |
+7 |         run: curl -fsSL https://example.com/install.sh | sh
+  |              ^~~~
+test.yaml:9:11: the file "tool" downloaded from "https://example.com/dl/tool" is made executable without a checksum or signature check in this script, so whatever the server (or anyone on the connection) sends is trusted. if it installs a tool, install the tool with mise instead (jdx/mise-action pinned by SHA, or "mise use" with a committed mise.lock, which records the version and checksum of each tool). otherwise download the file, check its checksum or signature (sha256sum -c, gpg --verify, cosign verify-blob or gh attestation verify) before running it, or use the package of the vendor [unverified-download]
+  |
+9 |           curl -fsSLo tool https://example.com/dl/tool
+  |           ^~~~
+```
+
+[Playground](https://jactionlint.jdx.dev/#eNpsjDEOgzAMRXdO8fcqZM8ZuvUEAVKFysQRtisGDl8BFUJVN8v/vccloJrk5sWdhAaQpFa3A5itiNsA66yoOYqaRPdJNFU5KMBBciIK6KLk72+3A3qbCe4pjzuyapXgfVriVCm1PU9+LKKRqJWMFafrDnc9U7h0GMpMf2sD+W27anniAbcFP/92B+HcO80ycvkMAGLeTWk=)
+
+The rule `unverified-download` (in the `default` profile) reports a `run:` script that runs what it has downloaded without checking
+it first. Whoever controls the server, or the connection to it, then controls the job, with its secrets and its token. It reports
+
+- a download piped into a shell or an interpreter: `curl ... | sh`, `wget -qO- ... | sudo bash`, `bash <(curl ...)`,
+  `sh -c "$(curl ...)"`, `eval "$(curl ...)"` and `curl ... | python3 -`;
+- a downloaded file that the same script makes executable (`chmod +x`, `install -m 755`), runs, sources or installs with `dpkg`,
+  `rpm` or `apt`, when no checksum or signature check (`sha256sum`, `shasum`, `gpg --verify`, `cosign verify-blob`,
+  `gh attestation verify`, `minisign`, ...) comes before the use. A file that is moved with `mv`, `cp` or `install` is followed;
+- a download made with TLS certificate verification turned off (`curl -k`, `curl --insecure`, `wget --no-check-certificate`).
+
+A pipe into something that only reads the data (`curl ... | tar xz`, `| jq`, `| python3 -c '...'`) is not reported, and neither is a
+URL for a full commit on GitHub, GitLab, Codeberg or Bitbucket (`https://raw.githubusercontent.com/<owner>/<repo>/<40 hex digits>/install.sh`),
+because the URL fixes the content. A host that is not on the internet (`localhost`, a private address) is not reported either. A
+script is analyzed when its shell is `bash` or `sh`; the default shell of Windows runners is `pwsh`, which is not analyzed.
+
+If the download installs a tool, install the tool with [mise](https://mise.jdx.dev) instead: use `jdx/mise-action` pinned by SHA,
+or `mise use` with a committed `mise.lock`, which records the version and the checksum of each tool. Otherwise download the
+installer to a file, check its checksum or signature and run the file, or use the package of the vendor.
+
+To accept a download, list the host or a URL prefix in `allow` (an entry with `://` is a prefix of the URL, anything else is a host
+name), or ignore one finding with `# jactionlint ignore=unverified-download`:
+
+```yaml
+rules:
+  unverified-download:
+    allow: [get.example.com, "https://example.org/install/"]
+```
+
+There is no fix, because whether a download is acceptable is a decision of its author. zizmor 1.30.1 has no equivalent audit; the
+idea is [zizmorcore/zizmor#711](https://github.com/zizmorcore/zizmor/issues/711). Downloads of archives that are extracted and then
+run, `npx`/`go install` of a remote script, and a verification that happens in a later step are not tracked.
+
+<a id="check-insecure-ssh-keyscan"></a>
+## Host keys collected with ssh-keyscan
+
+Example input:
+
+```yaml
+on: push
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - run: ssh-keyscan deploy.example.com >> ~/.ssh/known_hosts
+```
+
+Output:
+
+```
+test.yaml:6:14: "ssh-keyscan" writes the host key it receives to "~/.ssh/known_hosts", so the key of whoever answers the connection is trusted (trust on first use), and an attacker on the path to the server can take it over for every later ssh, scp or rsync. store the verified host key in a secret or variable and write that to the known_hosts file instead [insecure-ssh-keyscan]
+  |
+6 |       - run: ssh-keyscan deploy.example.com >> ~/.ssh/known_hosts
+  |              ^~~~~~~~~~~
+```
+
+[Playground](https://jactionlint.jdx.dev/#eNoszDEOwjAQRNE+p5gL2Old5CrICStZxNm1GK8gDWdHhnQjzdM3TWjOMj1sZZqAu7Rq51jA05VhCF9du4eau7D/LnZp/CsgDJlAlrDLyS3rlYnyzkerEjc7sCz4zJEs86720lsxdn4HAD7eKjU=)
+
+The rule `insecure-ssh-keyscan` (in the `default` profile) reports `ssh-keyscan` output that a `run:` script writes to a `known_hosts`
+file: `>>` and `>` redirections, `tee`, a command substitution and a group. `ssh-keyscan` asks the server for its key and trusts
+the answer (trust on first use), so anyone who can intercept the connection of the runner becomes the server for every later `ssh`, `scp` and `rsync` of the job.
+
+Keep the verified host key in a repository variable or secret and write that to the file instead:
+
+```yaml
+- run: echo "${{ secrets.KNOWN_HOSTS }}" >> ~/.ssh/known_hosts
+```
+
+A script that shows the fingerprints with
+`ssh-keygen -l`, to compare them with known ones, is not reported. The rule does not look at `ssh -o StrictHostKeyChecking=no`.
+
+There is no fix. Turn the rule off with `insecure-ssh-keyscan: off` in `rules` or ignore one finding with
+`# jactionlint ignore=insecure-ssh-keyscan`. zizmor 1.30.1 has no equivalent audit; the idea is
+[zizmorcore/zizmor#2012](https://github.com/zizmorcore/zizmor/issues/2012).
+
+<a id="check-checkout-static-credentials"></a>
+## Static credentials for actions/checkout
+
+Example input:
+
+```yaml
+on: push
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ssh-key: ${{ secrets.DEPLOY_SSH_KEY }}
+```
+
+Output:
+
+```
+test.yaml:8:11: actions/checkout is given secret "DEPLOY_SSH_KEY" as "ssh-key". this credential does not expire and can reach more than this job needs, and unless "persist-credentials: false" is set it is also left in the git config of the workspace for every later step to read. use the default GITHUB_TOKEN for this repository. to reach other repositories or to push something that starts other workflows, use a short-lived token from a GitHub App (actions/create-github-app-token) or a fine-grained personal access token limited to the repositories it needs, and keep it in a secret of a protected environment [checkout-static-credentials]
+  |
+8 |           ssh-key: ${{ secrets.DEPLOY_SSH_KEY }}
+  |           ^~~~~~~~
+```
+
+[Playground](https://jactionlint.jdx.dev/#eNo8yjGLwkAUxPE+n2KKa/euuWqrKy4gKCikShWS9cHGhN2QeU+RkO8uUbGb4f/LyWMyxuKSO/oC6Kwfz9sAZkt0G7DOkpobWxXqM1Fl4ksBDkahRxu0z4k/IUoYsunf9fctgFuv0X8eQEY3yN3ja1lACbMov//L0+FYN1W1a/ZljXV9DADQlS9a)
+
+The rule `checkout-static-credentials` (in the `default` profile) reports an `actions/checkout` step that is given a credential that
+does not expire: the `ssh-key` input, or a `token` written in the workflow. The default `GITHUB_TOKEN` lasts as long as the job and
+is limited to the repository, and the token of a GitHub App lasts an hour at most. An SSH key or a personal access token stays valid
+until somebody rotates it, usually reaches more than the job needs, and `actions/checkout` writes it to the git config of the
+workspace unless `persist-credentials: false` is set, where every later step can read it.
+
+Use the default token for the repository running the workflow. To reach other repositories or to push something that has to start
+other workflows, create a short-lived token with [actions/create-github-app-token](https://github.com/actions/create-github-app-token),
+or use a fine-grained personal access token that is limited to the repositories it needs and kept in a secret of a protected
+environment (one with required reviewers or a branch restriction).
+
+A `token` that comes from a secret is a personal access token in most cases, and workflows that release or push often have to use one,
+so it is a pedantic check: the option `secret-tokens` is on under the `strict` and `all` profiles and off under `default` (set it to
+`true` or `false` to decide). The `ssh-key` input and a literal `token` are always reported. Secrets named in `allow` (case-insensitive) are never reported. A `token`
+that is `secrets.GITHUB_TOKEN`, `github.token`, the output of a step, an input of a reusable workflow, or has a fallback to one
+of these, is not reported because the credential behind it is not known to be static.
+
+```yaml
+rules:
+  checkout-static-credentials:
+    secret-tokens: true
+    allow: [DEPLOY_KEY]
+```
+
+There is no fix. Turn the rule off with `checkout-static-credentials: off` in `rules` or ignore one finding with
+`# jactionlint ignore=checkout-static-credentials`. zizmor 1.30.1 has no equivalent audit; the idea is
+[zizmorcore/zizmor#1118](https://github.com/zizmorcore/zizmor/issues/1118).
+
+<a id="check-insecure-url-scheme"></a>
+## Insecure URL schemes
+
+Example input:
+
+```yaml
+on: push
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    steps:
+      - run: curl -fsSL http://example.com/data.json -o data.json
+      - uses: octo/repo@v1
+        with:
+          mirror: http://mirror.example.com/downloads
+```
+
+Output:
+
+```
+test.yaml:6:25: "http://example.com/data.json" is fetched by "curl" without encryption or authentication of the server, so anyone on the connection can read or replace what is transferred. use "https://example.com/data.json" [insecure-url-scheme]
+  |
+6 |       - run: curl -fsSL http://example.com/data.json -o data.json
+  |                         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~
+test.yaml:9:19: the input "mirror" is "http://mirror.example.com/downloads", which is fetched without encryption or authentication of the server, so anyone on the connection can read or replace what is transferred. use "https://mirror.example.com/downloads" [insecure-url-scheme]
+  |
+9 |           mirror: http://mirror.example.com/downloads
+  |                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+```
+
+[Playground](https://jactionlint.jdx.dev/#eNpUjUGOgzAMRfec4l8gRLP1ag4wuzlBAFeAQhzFdunxK0qL1J2f/pOfFEJ1nbtVBqUOUDavxwE0LxoOwQcv5iEnY7XXpMZVTwsIh0kYvWWEm/7/YTarFCM/0lYz96NscUqW+lWlIAguuD64shJkNImNq/zef94TsC8200XAtrQmjT6RE/uvluwlS5r0OQDNkEUr)
+
+The rule `insecure-url-scheme` (in the `default` profile) reports a location that is fetched over `http://`, `ftp://` or `git://`.
+These schemes send the request and the answer in the clear and do not prove who the server is, so anyone on the path can read or
+replace what the job downloads. The rule looks at
+
+- the URLs given to `curl`, `wget`, `git` (`clone`, `fetch`, `pull`, `push`, `remote`, `submodule`, `ls-remote`), `pip`, `uv`, `npm`,
+  `pnpm`, `yarn`, `bun`, `cargo`, `gem`, `go` and a few other download commands in `run:` scripts, including the values of options
+  such as `--index-url` and `--registry`;
+- inputs of actions in `with:` whose whole value is such a URL.
+
+The message names the same URL with `https://`. There is no fix, because the host may not serve the same content over HTTPS.
+
+URLs of hosts that are not on the internet are not reported: `localhost`, loopback, private and link-local addresses, names without
+a dot (the services of a job), and `.local`, `.internal`, `.svc`, `.lan` and `.test` names. A host that is a variable or an expression
+is not reported either, nor are proxies (`curl -x`), headers, request data and text printed by `echo`. This rule is not the audit of
+the same name in zizmor 1.30.1, which checks the `repo:` URLs of `.pre-commit-config.yaml` and is not covered here.
+
+Turn the rule off with `insecure-url-scheme: off` in `rules` or ignore one finding with `# jactionlint ignore=insecure-url-scheme`.
 
 <a id="check-dangerous-triggers"></a>
 ## Dangerous triggers (opt-in)
@@ -4945,6 +5841,140 @@ rules:
 What is considered free text is a decision about the value, not the syntax. A boolean input, a matrix of literals and the `result` of
 a job cannot hold anything but a few words, and a `string` input can hold anything. When you know that a value is safe, set the
 level of the rule to `off` or ignore the line, for example with `# jactionlint ignore=template-injection-expansion`.
+
+<a id="check-agentic-actions"></a>
+## AI agent actions
+
+An AI agent action such as Claude Code Action, Gemini CLI or Codex reads text and then acts with the tools it was given, using the
+token and the secrets of the job. When an outsider wrote the text (an issue, a comment, the title of a pull request, the files of a
+pull request), the outsider writes the instructions of the agent. This is the AI form of [script injection](#untrusted-inputs), and
+it is worse in one respect: there is no escaping that makes text safe to read for an agent, so the remedy is to limit what a
+hijacked agent can do. Public attacks include "PromptPwnd" (an issue body that made an agent edit an issue with the token) and
+"Trusting Claude with a Knife" (a pull request that changed what the agent runs). zizmor has no audit for this yet
+([zizmor#1605](https://github.com/zizmorcore/zizmor/issues/1605)).
+
+The rule `agentic-actions` is enabled by the default profile and reports at error level. It looks at the steps that run an agent
+action it knows (the list is below) in a workflow that outsiders can reach, that is, one with an `issues`, `issue_comment`,
+`pull_request_target`, `pull_request_review`, `pull_request_review_comment`, `discussion` or `discussion_comment` trigger.
+`pull_request` is not on the list: a workflow that a pull request from a fork starts has a read-only token and no secrets.
+`workflow_run` is not either, because it is as safe as the workflow it follows, which the rule cannot see; it is checked only for an
+open gate and for a checkout of the code that the upstream run built.
+The rule reports:
+
+- **An open gate.** Claude Code Action, Codex and Droid run only for users with write access, but an input switches that off:
+  `allowed_non_write_users: '*'`, `allowed_bots: '*'` or `allow-users: '*'`. A list of named users is accepted.
+- **No check of the user.** The agent actions that do not check who started them (Gemini CLI, AI inference, OpenHands, Oz, PR-Agent
+  and others) run for everybody who can cause the trigger. The rule accepts a job that is restricted by an `if:` on
+  `author_association`, the actor, the sender or a label (also in a job it `needs`), by an `environment:` (reviewers can be required), or
+  by an earlier step that checks the permission of the actor. This is a heuristic: it cannot tell a correct condition from a
+  condition that mentions the actor.
+- **Settings that turn the safeguards off.** `--dangerously-skip-permissions`, `--permission-mode bypassPermissions` and allowed
+  tools that give a shell (`Bash`, `Bash(*)`, `Bash(python:*)`, `Bash(curl:*)`) or any URL (`WebFetch`) in `claude_args` and `settings`
+  of Claude Code; `safety-strategy: unsafe` (except on Windows, where Codex needs it), `sandbox: danger-full-access` and the
+  matching `codex-args` of Codex; `tools.allowed` with `run_shell_command` of the Gemini CLI; `shell(bash:*)` in `copilot-allow-tools`
+  of AI inference; `--skip-permissions-unsafe` of Droid. Exact commands like `Bash(git diff:*)` are not reported. With the option
+  `any-trigger` these are reported in every workflow.
+- **Code of a pull request in the workspace.** On `pull_request_target`, `issue_comment`, `workflow_run` and the review triggers, an
+  agent that runs after a checkout of the pull request reads `CLAUDE.md`, `AGENTS.md`, `.claude/settings.json`, `.mcp.json`
+  and the like from it, so the pull request configures the agent (hooks and servers run commands with the secrets of the job). Check
+  out the base branch in the workspace and the pull request in a subdirectory with `path:`, as
+  [the documentation of Claude Code Action](https://github.com/anthropics/claude-code-action/blob/main/docs/security.md) says.
+- **Untrusted data read from the environment.** A prompt that tells the agent to read `$TITLE` when `TITLE` is set from
+  `github.event.issue.title`. (`${{ env.TITLE }}` in a prompt is reported by `template-injection`.)
+- **A secret in the environment of the agent**, when outsiders can reach the agent by one of the reports above: the shell of the agent
+  can print its environment. `GITHUB_TOKEN` is not reported.
+
+The first two reports are skipped when a steered agent can do little: for a job whose `permissions:` are set explicitly and grant no
+write access except to `issues`, `pull-requests` and `discussions` (the setup the actions document for triage and labeling), and for an
+agent that is limited to a list of exact tools (`--allowedTools "Bash(gh issue edit:*)"` of Claude Code, `tools.core` of the Gemini CLI) or
+to a read-only sandbox (Codex). These are the shape of the architecture the vendors advise: an agent with a read-only token and a
+sandbox, and a second job that acts on its validated output. The agent still holds its API key, so keep every other secret away from it.
+The message names the scopes that the token can write when the workflow or the job sets `permissions:`.
+
+The known actions, their inputs and where each was checked (an action that is not in the table is not checked; the list changes quickly):
+
+| Action | Prompt inputs | Arguments and settings | Checks the user itself |
+| --- | --- | --- | --- |
+| `anthropics/claude-code-action` | `prompt` (v0: `direct_prompt`, `override_prompt`, `custom_instructions`) | `claude_args`, `settings` (v0: `allowed_tools`, `disallowed_tools`, `mcp_config`, `claude_env`) | yes |
+| `anthropics/claude-code-base-action` | `prompt` | `claude_args`, `settings` | no |
+| `anthropics/claude-code-security-review` | | | no |
+| `google-github-actions/run-gemini-cli` | `prompt` | `settings`, `extensions` | no |
+| `google-gemini/gemini-cli-action` | `prompt` | `settings_json` | no |
+| `openai/codex-action` | `prompt` | `codex-args` | yes |
+| `actions/ai-inference` | `prompt`, `system-prompt` | `copilot-allow-tools` | no |
+| `factory-ai/droid-action` | | `droid_args`, `settings` | yes |
+| `sst/opencode/github`, `anomalyco/opencode/github` | `prompt` | | yes |
+| `openhands/openhands-github-action` | `prompt` | | no |
+| `warpdotdev/oz-agent-action` | `prompt` | `mcp` | no |
+| `qodo-ai/pr-agent` | `artifact_instructions` | | no |
+
+What the rule cannot know, so a clean result is not a proof of safety:
+
+- What the prompt tells the agent to read. A prompt that says "triage the newest issue" and gives the agent `gh issue view` exposes it to
+  the text of the issue without any `${{ }}`. Limit the tools and the token.
+- Files of the repository that configure the agent (`.claude/settings.json`, `.gemini/settings.json`, `.mcp.json`). Only the inputs
+  of the workflow are read, and an input that is an expression is skipped.
+- A gate in another workflow. A workflow with only `workflow_call` has no trigger of its own, so it is not reported.
+- Whether the agent action of a version really has an input: the rule reads names, not versions.
+
+Example input:
+
+```yaml
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  assist:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refs/pull/${{ github.event.issue.number }}/head
+      - uses: anthropics/claude-code-action@v1
+        with:
+          allowed_non_write_users: '*'
+          claude_args: --allowedTools "Bash,Edit"
+  summarize:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: google-github-actions/run-gemini-cli@v0
+        with:
+          prompt: Summarize the discussion
+```
+
+Output:
+
+```
+test.yaml:16:15: Claude Code Action runs in a workspace that holds the code of a pull request (checked out in the step at line 13), and this workflow runs on "issue_comment", with the secrets of the base repository. the agent reads its instructions and configuration from the workspace (files such as CLAUDE.md, AGENTS.md, GEMINI.md, .claude/settings.json, .mcp.json and .gemini/settings.json), so the pull request can add instructions, hooks and tool servers. check out the base branch in the workspace and put the pull request in a subdirectory with "path:" [agentic-actions]
+   |
+16 |       - uses: anthropics/claude-code-action@v1
+   |               ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+test.yaml:18:36: "allowed_non_write_users" is "*", so everybody, including users without write access, can start Claude Code Action, although the action checks for write access otherwise. this workflow runs on "issue_comment", which anyone can cause on a public repository, and the text they write steers the agent, and its token can write contents, issues. list the users you trust instead of the wildcard [agentic-actions]
+   |
+18 |           allowed_non_write_users: '*'
+   |                                    ^~~
+test.yaml:19:24: Claude Code Action: the allowed tools of Claude Code: "Bash" lets the agent run any shell command. this workflow runs on "issue_comment", so outsiders steer the agent with the text they write. allow only the exact commands that the task needs, and keep the token and the secrets of the job to the minimum [agentic-actions]
+   |
+19 |           claude_args: --allowedTools "Bash,Edit"
+   |                        ^~~~~~~~~~~~~~
+test.yaml:23:15: run-gemini-cli does not check who started it, and this workflow runs on "issue_comment", which anyone can cause on a public repository. the text they write steers the agent, which has the secrets of the job, and its token can write contents, issues. restrict the job with an if: on github.event.comment.author_association (OWNER, MEMBER or COLLABORATOR) or on a label that only maintainers add, run it in an environment with required reviewers, or limit the agent to the few tools it needs [agentic-actions]
+   |
+23 |       - uses: google-github-actions/run-gemini-cli@v0
+   |               ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+```
+
+[Playground](https://jactionlint.jdx.dev/#eNqcks1q4zAQx+9+iiEsBJZVvAt70ikU+gTtrRQjy1NbraQxmhmHNuTdi+0klEIuvRjG+un/MYiyrQACs2LjKSXMMv8AkPcR2cKTL+gEu+eqGrGkwBwo84x4yoJZ2MKhBMGLynWuXqldQMcc+KxaNLOhbEFbzaImOkGW5YgFR14pAAPKs5TzMvvVfkD/Rir76f+ZADgEGex1Aij4YucP16PGWP86HqEPMmi7wwmz7JZ4u6ypxQKnUz2g677bZRkKjcFz7aPTDo2nDs2aYj/9u+ntYqQDdk2m3Cz1G2UsbGH7e/sFW0UbV3q2YMz51iNRZNjcOR7+3HdBNhUAa0quhA/82d56oj6iWfubyxaLZtNjCjkYH8N++nuzz1gojWLh4RIDZEDoAntdXsDnAGWMshM=)
+
+To restrict an agent, allow the exact commands it needs (`--allowedTools "Bash(gh issue view:*)"`), give the job `permissions:` with the
+least access (`permissions: {}` plus the one scope), keep the key of the agent the only secret in the job, and gate the job with an
+`if:` on `github.event.comment.author_association`. To turn the rule off for a step, ignore the line (`# jactionlint ignore=agentic-actions`)
+or set `rules: {agentic-actions: off}`; `rules: {agentic-actions: {any-trigger: true}}` also reports the unsafe settings in workflows that
+outsiders cannot trigger.
 
 <a id="check-bot-conditions"></a>
 ## Bots trusted by `github.actor` (opt-in)
@@ -5502,6 +6532,635 @@ request is [zizmor#1533][zizmor-1533]).
 ---
 
 [Installation](install.md) | [Usage](usage.md) | [Configuration](config.md) | [Go API](api.md) | [References](reference.md)
+
+<a id="check-concurrency-cancels-prs"></a>
+## Concurrency that cancels unrelated pull requests
+
+Example input:
+
+```yaml
+on:
+  pull_request:
+concurrency:
+  group: ci
+  cancel-in-progress: true
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo test
+```
+
+Output:
+
+```
+test.yaml:4:10: warning: concurrency group "ci" is the same for every pull request (event "pull_request") and "cancel-in-progress" is enabled for them, so a new run for one pull request cancels the run of an unrelated one. add "github.head_ref" or "github.event.pull_request.number" to the group [concurrency-cancels-prs]
+  |
+4 |   group: ci
+  |          ^~
+```
+
+[Playground](https://jactionlint.jdx.dev/#eNokzLsNwzAMhOFeU9wCWoDLBDZBOA4EUuGjyPaB5Pr/7kypAbPGeLl8SyKpsSmXuyj/VrzcahL4bgAfyjL6rX26XS4RhPSS9rEzFs79AABeGt2UUGdpVh/HajtFyoxHAX1JgvDb9vo/APykLz4=)
+
+The rule `concurrency-cancels-prs` (in the `default` profile, as a warning) reports a `concurrency` block (of the workflow or
+of a job) of a workflow that is triggered by `pull_request`, `pull_request_target`, `pull_request_review` or
+`pull_request_review_comment`, when `cancel-in-progress` is on and the `group` has nothing that differs between pull requests.
+All pull requests share the group, so a push to one of them cancels the run of another one that has nothing to do with it.
+
+Add the pull request to the group:
+
+```yaml
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+```
+
+What the rule judges:
+
+- A group is fine when it reads something that differs between pull requests for the event: `github.head_ref`,
+  `github.event.pull_request.number`, `github.event.number`, the head of the pull request, `github.run_id` and so on. For
+  `pull_request` it also accepts `github.ref`, which is `refs/pull/<number>/merge`. It does **not** accept `github.ref` and
+  `github.sha` for `pull_request_target`, because they are the base branch there, and it does not accept `github.head_ref` for
+  `pull_request_review`, where it is empty.
+- `cancel-in-progress` counts as on when it is `true` or an expression that is true for the pull request event as far as the
+  rule can tell from `github.event_name` and `github.ref`. The idiom `cancel-in-progress: ${{ github.event_name == 'pull_request' }}`
+  is on for pull requests, so it is reported when the group is shared. An expression that depends on something else (a
+  variable, an input) is not reported.
+- A group that reads `env`, `vars`, `inputs`, `needs`, `steps` or `secrets` is not reported, because the rule cannot see its value.
+
+There is no automatic fix: which value distinguishes the runs is up to you. To turn the rule off use `rules: {concurrency-cancels-prs: off}`
+in the [configuration file](config.md) or an ignore comment on the `group:` line (`# jactionlint ignore=concurrency-cancels-prs`).
+
+<a id="check-concurrency-cancels-release"></a>
+## Concurrency that cancels a release
+
+Example input:
+
+```yaml
+on:
+  push:
+    tags: ["v*"]
+concurrency:
+  group: release
+  cancel-in-progress: true
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - run: cargo publish
+```
+
+Output:
+
+```
+test.yaml:6:23: warning: "cancel-in-progress" is enabled here (job "publish" runs "cargo publish" and the workflow runs for pushes of tags), so a new run cancels a release or deployment which is still running and can leave it half done. set "cancel-in-progress: false" to let the running one finish first [concurrency-cancels-release]
+  |
+6 |   cancel-in-progress: true
+  |                       ^~~~
+test.yaml:11:14: warning: "cargo publish" publishes to crates.io. prefer trusted publishing with rust-lang/crates-io-auth-action and the permission "id-token: write" [use-trusted-publishing]
+   |
+11 |       - run: cargo publish
+   |              ^~~~~
+```
+
+[Playground](https://jactionlint.jdx.dev/#eNo0zD2qwzAQxPFepxhcPtAFdJVHCnlZFAexK/YjkNsHx7iaYv78VFoBVvrzXCD68Ib/7f23PQqpUJqx0Od8h2muBuPJ3bkA1IV41kPqMh3G7g1hyeWlu1/uPo+bthSvKg25p0TW2YM9fpcHL78qoJ5lA3UbegvfAQA6LzT4)
+
+The rule `concurrency-cancels-release` (in the `default` profile, as a warning) reports `cancel-in-progress` that cancels a
+release or a deployment which is still running: a new push, tag or manual run must not kill an in-flight release. Cancelling
+the run of a publish half way can leave a tag without its packages, a registry with some of the files or a deployment half
+rolled out.
+
+A `concurrency` block of the workflow or of a job is reported when `cancel-in-progress` is on for a trigger other than a pull
+request and one of these is true:
+
+- The workflow runs for a tag push or a `release` event, and the group does not name the ref. This is the case where the next
+  tag cancels the release of the previous one.
+- A job under the block publishes or deploys. That is a job with an `environment:`, a step that uses a release or deploy
+  action (for example `softprops/action-gh-release`, `pypa/gh-action-pypi-publish`, `actions/deploy-pages`,
+  `cloudflare/wrangler-action`, `goreleaser/goreleaser-action` with `release` in `args` and without `--snapshot`), a
+  `docker/build-push-action` with `push` on, or a `run:` step with a command such as `npm publish`, `cargo publish`,
+  `twine upload`, `gh release create`, `docker push`, `wrangler deploy` or `kubectl apply`. A job or step whose `if:` is false
+  for the trigger is ignored (`if: startsWith(github.ref, 'refs/tags/')` does not count for a push to a branch). `--dry-run`
+  commands do not count.
+
+What is **not** reported: the mixed idiom `cancel-in-progress: ${{ github.event_name == 'pull_request' }}` (false for pushes
+and tags) and other expressions that are false for the trigger; an expression that depends on something the rule cannot see
+(an input, a variable); a group that names the release (`inputs.*`, `github.event.release.*`) and, for tag pushes, releases
+and manual runs, a group that names the ref, because then only a second run for the same ref replaces the first one; and
+workflows that only run for pull requests. Names of workflows and jobs are not taken as a signal.
+
+The fix sets a literal `cancel-in-progress: true` to `false`. It is **unsafe** (`-fix=unsafe`) because the runs of a group queue
+instead of replacing each other, which changes when and how often the workflow runs. Expressions are not fixed.
+
+```yaml
+concurrency:
+  group: release
+  cancel-in-progress: false
+```
+
+Ignore the rule with `# jactionlint ignore=concurrency-cancels-release` on the line or turn it off with `rules: {concurrency-cancels-release: off}`.
+
+<a id="check-gate-job-skipped-on-failure"></a>
+## Gate jobs that are skipped when a job fails
+
+Example input:
+
+```yaml
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo test
+  final:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - run: test "${{ needs.test.result }}" = success
+```
+
+Output:
+
+```
+test.yaml:7:3: job "final" reads "needs.test.result" but has no "if" with a status check function, so GitHub skips the job when a job it needs fails or is skipped, and a skipped job counts as passing for a required check. add "if: ${{ !cancelled() }}" (or "always()") to the job [gate-job-skipped-on-failure]
+  |
+7 |   final:
+  |   ^~~~~~
+```
+
+[Playground](https://jactionlint.jdx.dev/#eNqUzEEKgzAQheG9p3hIt/EAgR5G0ym2hIn4Zlbi3cs0pXtXIXz/vKYZm3Md3m1hHgATWrzA7soU7oureapz2JdosrFXQIoyQ8ra8CueL51rdxV5MON/enE1EOPtOPrQFP9pF3o1nOeIO+ilCPkZABeBPj4=)
+
+The rule `gate-job-skipped-on-failure` (in the `default` profile, as an error) reports a job that has `needs` and reads the
+result of the jobs it needs, but whose own `if:` has no status check function. GitHub adds an implicit `success()` to such a
+job, so it is **skipped** when a needed job fails, is cancelled or is skipped. The check never sees a failure, and a skipped job
+counts as passing for a required status check, so the failure goes through the gate.
+
+Add a status check function that lets the job run, and check the results yourself:
+
+```yaml
+final:
+  needs: [build, test]
+  if: ${{ !cancelled() }}
+  runs-on: ubuntu-latest
+  steps:
+    - run: test "${{ contains(needs.*.result, 'failure') }}" = false
+```
+
+The rule looks at the whole job: its `if:`, the steps, `env`, `with`, `outputs` and the rest. It reports a read of
+`needs.<job>.result` or `needs.<job>.outcome`, of `needs.*.result`, and of the whole `needs` context (for example `toJSON(needs)`).
+`always()`, `cancelled()` and `failure()` (also negated, as in `!cancelled()`) in the job's `if:` satisfy the rule; an explicit
+`success()` does not, because it is what GitHub adds anyway.
+
+What is **not** reported:
+
+- A read that only compares the result with `'success'` using `==` (`if: needs.build.result == 'success'`). It is redundant in
+  a job that is skipped unless its needs succeeded, but it does not expect to see a failure.
+- Jobs that need a job with `continue-on-error`, because the result of that job is not what it seems.
+- Reads of `needs.<job>.outputs.*`.
+- A workflow where an expression does not parse (the syntax error is reported by `expression`).
+
+There is no automatic fix: whether `always()` or `!cancelled()` is right depends on whether the gate should run for a cancelled
+workflow.
+
+<a id="check-untrusted-checkout"></a>
+## Untrusted code in privileged workflows
+
+Example input:
+
+```yaml
+on: pull_request_target
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - run: npm ci && npm test
+```
+
+Output:
+
+```
+test.yaml:8:16: this step checks out code from a pull request (github.event.pull_request.head.sha) in a "pull_request_target" workflow and "npm" runs it afterwards. the workflow has a write token and secrets, so whoever controls that code can use them. run untrusted code in a "pull_request" workflow without secrets, or check out the base branch and only read the pull request as data [untrusted-checkout]
+  |
+8 |           ref: ${{ github.event.pull_request.head.sha }}
+  |                ^~~
+```
+
+[Playground](https://jactionlint.jdx.dev/#eNpMjjHOwjAMRvee4ht+dWv+hSkTN6nSYJpASUpsl6Hq3VEKqphs6z3JLyeLWaepL/RUYunFlZGkueWBbQMIsdQJFE3cVV0HTaLd5CrbEQvN/LGADsrEFs5LzIn/fSB/zyrn5fQ1gFeUYI8LKHS1+FtXjFGCDoYWSmJ+u0wgdzEcHLbteFQ0WaT5AR/RtvtWm94DACIeQkk=)
+
+The rule `untrusted-checkout` (in the `default` profile, as an error) reports a `pull_request_target` or `workflow_run`
+workflow that checks out the code of a pull request and then runs it. These events run in the context of the base repository,
+with a token that can write and with the secrets, while the code is what the author of the pull request wrote. A build script,
+a test, a `package.json` hook or a local action is enough to take over the token.
+
+Run untrusted code in a `pull_request` workflow, which has no secrets for pull requests from forks. If a privileged workflow
+has to look at the pull request, check out the base branch and read the pull request as data.
+
+A step is reported at its checkout when it puts untrusted code in the workspace and a later step in the same job runs it:
+
+- `actions/checkout` with a `ref` or `repository` that names the head of a pull request or of the triggering run
+  (`github.event.pull_request.head.*`, `github.head_ref`, `github.event.pull_request.merge_commit_sha`,
+  `github.event.workflow_run.head_sha`, `head_branch`, `head_repository`, ...) or `refs/pull/...`.
+- `gh pr checkout`, and `git checkout`, `fetch`, `switch`, `merge`, `pull`, `clone` ... with such a reference in the arguments or
+  in an environment variable they use.
+- "Runs it" is a later step with a `run:` command that can execute workspace code (a script, `npm`, `cargo`, `make`, an
+  interpreter, ...), a local action (`uses: ./...`), or one of a few actions that build the workspace. Commands that only read or
+  move files (`cat`, `git diff`, `grep`, `jq`, `tar`, `gh`, ...) do not count. A checkout with `path:` only counts when a later
+  step works in that directory (`working-directory`, `cd`, or an argument below it).
+
+What is **not** reported: a checkout of the base (no `ref`, or `github.event.pull_request.base.*`), a checkout that nothing runs,
+a job with an `environment:` (its reviewers decide), and a job or step whose `if:` reads who or what started the workflow:
+`github.actor`, the author or labels of the pull request, `github.event.pull_request.head.repo`, `github.event.workflow_run.event`,
+`needs` or `steps`. A `workflow_run` workflow is not reported when every workflow in `workflows:` is in the repository and only
+runs for `push`, `schedule`, `workflow_dispatch`, `release`, `merge_group` or `repository_dispatch`. The rule cannot tell that
+a `labeled` pull request was reviewed or that an earlier step vouched for the code in a way other than a condition on `needs` or
+`steps`. Code that other steps fetch from an output (`ref: ${{ steps.x.outputs.sha }}`) is not followed.
+
+There is no automatic fix.
+
+<a id="check-untrusted-artifact"></a>
+## Untrusted artifacts in workflow_run workflows
+
+Example input:
+
+```yaml
+on:
+  workflow_run:
+    workflows: [PR checks]
+    types: [completed]
+jobs:
+  comment:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: pr
+          path: pr
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+      - run: echo "number=$(cat pr/number)" >> "$GITHUB_ENV"
+```
+
+Output:
+
+```
+test.yaml:3:17: workflow "PR checks" specified at "workflows" of "workflow_run" event is not found in the repository. a workflow is specified by its "name:" or its file path when it has no name [workflow-run]
+  |
+3 |     workflows: [PR checks]
+  |                 ^~
+test.yaml:9:15: this step downloads an artifact of the run that triggered the workflow, which ran the code of a pull request, and the step at line 15 writes its content to $GITHUB_ENV without validating its content first. the artifact is whatever the pull request wanted, and this workflow has a write token and secrets. match the content against a strict pattern (for example digits only) before you use it, and never run or extract it [untrusted-artifact]
+  |
+9 |       - uses: actions/download-artifact@v4
+  |               ^~~~~~~~~~~~~~~~~~~~~~~~~~~~
+test.yaml:15:45: a value that is not a literal is written to $GITHUB_ENV in a workflow triggered by "workflow_run", which runs with secrets and a write token for events that may come from a fork. an attacker who controls the value can set LD_PRELOAD or NODE_OPTIONS (a newline adds another variable) and run code in the next steps. write only literal values and values computed from trusted sources, or pass state with $GITHUB_OUTPUT [github-env]
+   |
+15 |       - run: echo "number=$(cat pr/number)" >> "$GITHUB_ENV"
+   |                                             ^~
+```
+
+<!-- Skip playground link -->
+
+The rule `untrusted-artifact` (in the `default` profile, as an error) reports a `workflow_run` workflow that downloads an artifact
+of the run that triggered it and then runs it, extracts it or writes its content to `$GITHUB_ENV`, `$GITHUB_PATH` or
+`$GITHUB_OUTPUT` without checking it. The upstream workflow ran the code of a pull request, so the artifact is whatever the pull
+request wanted. The `workflow_run` workflow has a write token and the secrets. A file name or a value with a newline in the
+environment file is enough to inject a variable such as `LD_PRELOAD` or `NODE_OPTIONS`, and an archive can write outside its
+directory.
+
+Check the content before you use it, for example match a pull request number against `^[0-9]+$`:
+
+```yaml
+- run: |
+    NUMBER=$(cat pr/number)
+    [[ "$NUMBER" =~ ^[0-9]+$ ]] || exit 1
+    echo "number=$NUMBER" >> "$GITHUB_OUTPUT"
+```
+
+The download is `actions/download-artifact` with a `run-id` that reads `github.event.workflow_run`, any use of
+`dawidd6/action-download-artifact`, `gh run download`, or an `actions/github-script` that calls `listWorkflowRunArtifacts` and
+`downloadArtifact`. The use is a later step of the same job with a `run:` that
+
+- runs something below the artifact directory (`path:`, or the artifact `name` when there is no `path`), including `cd` into it
+  and `working-directory:`;
+- extracts an archive (`unzip`, `tar -x`, `7z x`, ...) from there, or any archive after a download with `github-script`;
+- writes data read from there (`cat`, `jq`, `$(...)`, `read ... < file`) to `$GITHUB_ENV`, `$GITHUB_PATH` or `$GITHUB_OUTPUT`.
+
+A step that validates the data stops the check from there on: a regular expression match (`=~`, `grep -E`), a numeric test
+(`-eq`), a checksum or signature verification (`sha256sum -c`, `gh attestation verify`, `cosign verify`, ...). This is
+deliberately generous.
+
+What is **not** reported: artifacts of the current run, a download whose files cannot be linked to a later command (an artifact
+without `path` and `name` lands in the root of the workspace under names the rule does not know), jobs with an `environment:`,
+jobs and steps with the same guards as `untrusted-checkout`, and workflows that wait only for workflows that run for `push`,
+`schedule` and other events that only people with write access cause.
+
+There is no automatic fix.
+
+<a id="check-unused-job-output"></a>
+## Unused job outputs
+
+Example input:
+
+```yaml
+on: push
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - id: v
+        run: echo "version=1.0.0" >> "$GITHUB_OUTPUT"
+  test:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo test
+```
+
+Output:
+
+```
+test.yaml:6:7: warning: output "version" of job "build" is never used: no other job reads "needs.build.outputs.version". remove it [unused-job-output]
+  |
+6 |       version: ${{ steps.v.outputs.version }}
+  |       ^~~~~~~~
+```
+
+[Playground](https://jactionlint.jdx.dev/#eNqEjrHKgzAUhXef4hBcDf5r4Hfo0nZqB51LrQEtkoj3Xhfx3UtiSqFLt4TznXs+7wwmoT57+pZMBrQyjF14ALM4KgIgrTiWYryzJY6RF56EaeeAxc40BDJfVxDbifSiE6NTiG2LdIzfxQJDZ7CkX5w0sI/eQ6Xa/58udalQVVD58VyfmsPt0tTXplYZEIT2W87ajsyu/8v+S+EzGojXALG2Uaw=)
+
+The rule `unused-job-output` (in the `default` profile, as a warning) reports an entry of `jobs.<id>.outputs` that nothing reads:
+no job reads `needs.<id>.outputs.<name>` and no output of a reusable workflow (`on.workflow_call.outputs`) uses
+`jobs.<id>.outputs.<name>`. The output is dead code, and it makes a reader look for a consumer that does not exist.
+
+The rule reads every expression of the workflow. A read of a whole object counts as a read of everything in it:
+`toJSON(needs.build.outputs)`, `toJSON(needs)`, `needs[matrix.job].outputs.x`. When an expression does not parse, nothing is
+reported. Outputs can only be read inside the workflow, so an output of a reusable workflow that its callers use is a
+`workflow_call` output, not a job output.
+
+There is no automatic fix because removing an output means removing a block of YAML and finding its step.
+
+<a id="check-unused-workflow-input"></a>
+## Unused workflow inputs (pedantic)
+
+Example input:
+
+```yaml
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        type: string
+      dry-run:
+        type: boolean
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo ${{ inputs.version }}
+```
+
+Output:
+<!-- Skip update output -->
+```
+test.yaml:6:7: warning: input "dry-run" of "workflow_dispatch" is never used: no expression reads "inputs.dry-run". remove it or use it [unused-workflow-input]
+  |
+6 |       dry-run:
+  |       ^~~~~~~~
+```
+
+<!-- Skip playground link -->
+
+The output above is from the following `rules` section of the [configuration file](config.md):
+
+```yaml
+rules:
+  unused-workflow-input: warn
+```
+
+The rule `unused-workflow-input` (in the `strict` profile, as a warning) reports an input of `workflow_dispatch` or
+`workflow_call` that no expression of the workflow reads. A manual run asks for a value that does nothing, or a caller passes
+a value that is dropped.
+
+An input is read as `inputs.<name>`; for `workflow_dispatch` also as `github.event.inputs.<name>`. A read of the whole context
+(`toJSON(inputs)`, `inputs[matrix.name]`) counts as a read of every input, and when a script reads `$GITHUB_EVENT_PATH` the inputs
+of `workflow_dispatch` are not reported because the script can read them from the payload. A workflow where an expression does not
+parse is skipped.
+
+The rule is not in the `default` profile because an input can exist for someone else: GitHub refuses a manual run or a
+`workflow_call` that passes an input the workflow does not declare, so a tool that dispatches the workflow with an input of its own
+(for example the `distinct_id` that `codex-/return-dispatch` passes) or a caller in another repository needs it even when the
+workflow never reads it. Silence such an input with `# jactionlint ignore=unused-workflow-input` on its line. There is no
+automatic fix because removing an input of `workflow_call` breaks the callers that still pass it.
+
+<a id="check-unused-needs"></a>
+## Needs entries that do nothing (pedantic)
+
+Example input:
+
+```yaml
+on: push
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo build
+  test:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo test
+  publish:
+    needs: [build, test]
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo publish
+```
+
+Output:
+<!-- Skip update output -->
+```
+test.yaml:13:13: info: job "publish" needs "build" but never reads its outputs or result, and it already needs "test" which waits for "build". this entry changes nothing and can be removed [unused-needs]
+   |
+13 |     needs: [build, test]
+   |             ^~~~~~
+```
+
+<!-- Skip playground link -->
+
+The output above is from the following `rules` section of the [configuration file](config.md):
+
+```yaml
+rules:
+  unused-needs: info
+```
+
+The rule `unused-needs` (in the `strict` profile, as info) reports an entry of `needs` that has no effect: the job never reads
+the outputs or the result of the needed job, and another job it needs already depends on it, so the entry changes neither the order
+of the jobs nor whether the job runs.
+
+An entry is reported only when this can be shown. The other needed job must wait for the job directly or through other jobs, and
+none of the jobs on the way may have a status check function in its `if:` (`always()`, `!cancelled()`, `failure()`, ...), because
+such a job runs even when its needs failed, and then the entry changes the result. An entry that is only there for the order
+(`needs: [a, b]` with unrelated jobs) is **not** reported: the rule cannot tell it from a forgotten one.
+
+There is no automatic fix.
+
+<a id="check-duplicate-triggers"></a>
+## Duplicate triggers (pedantic)
+
+Example input:
+
+```yaml
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - run: echo test
+```
+
+Output:
+<!-- Skip update output -->
+```
+test.yaml:1:6: warning: "push" has no branch filter and "pull_request" is used too, so a commit pushed to a branch of this repository that has a pull request runs the workflow twice. limit "push" to the branches that need it, for example the default branch [duplicate-triggers]
+  |
+1 | on: [push, pull_request]
+  |      ^~~~~
+```
+
+<!-- Skip playground link -->
+
+The output above is from the following `rules` section of the [configuration file](config.md):
+
+```yaml
+rules:
+  duplicate-triggers: warn
+```
+
+The rule `duplicate-triggers` (in the `strict` profile, as a warning) reports a workflow that is triggered by `push` and by
+`pull_request` when `push` has no branch filter. A commit pushed to a branch of the repository that has a pull request starts the
+workflow twice, once for each event, and both runs say the same thing.
+
+Limit `push` to the branches that need it:
+
+```yaml
+on:
+  push:
+    branches: [main]
+  pull_request:
+```
+
+`push` counts as unfiltered when it has no `branches` (or only `**`), also with `branches-ignore`, `paths` or `tags-ignore`. A
+`push` with only `tags` does not run for branches. A `pull_request` with only `types` that do not carry new commits (for example
+`closed`) is not a duplicate. The rule does not report a workflow where every job has an `if:` on `github.event_name` or on
+`github.event.pull_request.head.repo`, or where the group of the workflow `concurrency` has `github.head_ref` and
+`github.ref_name` and cancels runs, which are the two common ways to run once.
+
+There is no automatic fix because the right branches are not known.
+
+<a id="check-continue-on-error"></a>
+## Failures hidden by continue-on-error (pedantic)
+
+Example input:
+
+```yaml
+on: push
+jobs:
+  lint:
+    runs-on: ubuntu-24.04
+    continue-on-error: true
+    steps:
+      - run: echo lint
+```
+
+Output:
+<!-- Skip update output -->
+```
+test.yaml:5:24: info: "continue-on-error: true" makes the workflow pass even when job "lint" fails, which hides failures. remove it, or limit it to what is allowed to fail, for example with an expression on a matrix entry [continue-on-error]
+  |
+5 |     continue-on-error: true
+  |                        ^~~~
+```
+
+<!-- Skip playground link -->
+
+The output above is from the following `rules` section of the [configuration file](config.md):
+
+```yaml
+rules:
+  continue-on-error: info
+```
+
+The rule `continue-on-error` (in the `strict` profile, as info) reports a job with a literal `continue-on-error: true`. The workflow
+succeeds when the job fails, so nobody sees the failure unless they open the job. Some jobs are meant to be advisory; for those
+the finding is a reminder to keep it deliberate.
+
+An expression (`continue-on-error: ${{ matrix.experimental }}`) is not reported, because it is the usual way to allow the
+failure of some matrix entries only. Steps with `continue-on-error: true` are reported only when you set the `steps` option:
+
+```yaml
+rules:
+  continue-on-error:
+    steps: true
+```
+
+There is no automatic fix: removing the line turns an advisory job into a blocking one.
+
+<a id="check-mutable-runner-label"></a>
+## Mutable runner labels (pedantic)
+
+Example input:
+
+```yaml
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo test
+```
+
+Output:
+<!-- Skip update output -->
+```
+test.yaml:4:14: warning: runner label "ubuntu-latest" is an alias that GitHub moves to newer images, so the job can break without a change in this repository. use a fixed label such as "ubuntu-24.04", which is the same image today [mutable-runner-label]
+  |
+4 |     runs-on: ubuntu-latest
+  |              ^~~~~~~~~~~~~
+```
+
+<!-- Skip playground link -->
+
+The output above is from the following `rules` section of the [configuration file](config.md):
+
+```yaml
+rules:
+  mutable-runner-label: warn
+```
+
+The rule `mutable-runner-label` (in the `strict` profile, as a warning) reports the labels of GitHub-hosted runners that GitHub
+moves to a newer image over time: `ubuntu-latest`, `windows-latest`, `macos-latest` and their sized variants. A job on
+such a label can start to fail on the day GitHub switches the image, without any change in the repository. The message names the fixed label that the
+alias is today, according to the label table of jactionlint.
+
+The rule reads `runs-on` and the values of `matrix.<key>` that `runs-on: ${{ matrix.<key> }}` selects. Jobs with `self-hosted` among
+the labels and labels given by other expressions are not reported.
+
+The fix is only offered when you decide the replacement, because jactionlint does not know which version you want. Configure it
+with the `pin` option; the finding of a label with an entry then has a fix that writes the fixed label in its place:
+
+```yaml
+rules:
+  mutable-runner-label:
+    pin:
+      ubuntu-latest: ubuntu-24.04
+      macos-latest: macos-15
+```
+
+A label in a matrix is reported but never fixed, because the same value may be compared in an expression of the job.
 
 [yamllint]: https://github.com/adrienverge/yamllint
 [issue-form]: https://github.com/jdx/jactionlint/issues/new

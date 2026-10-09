@@ -221,6 +221,25 @@ func TestWrappersAndTools(t *testing.T) {
 		{"python -m twine upload d/*", "python", "twine", nil, "upload d/*"},
 		{"python -m build", "python", "", nil, "-m build"},
 		{"python script.py", "python", "", nil, "script.py"},
+		{"python -W ignore -m pip install x", "python", "pip", nil, "install x"},
+		{"python -Wignore -m pip install x", "python", "pip", nil, "install x"},
+		{"python -X utf8 -m pip install x", "python", "pip", nil, "install x"},
+		{"python -Xutf8 -m pip install x", "python", "pip", nil, "install x"},
+		{"python -OO -m pip install x", "python", "pip", nil, "install x"},
+		{"python -uBE -m pip install x", "python", "pip", nil, "install x"},
+		{"python -B -E -m pip install x", "python", "pip", nil, "install x"},
+		{"python -uWignore -m pip install x", "python", "pip", nil, "install x"},
+		{"python -um pip install x", "python", "pip", nil, "install x"},
+		{"python -mpip install x", "python", "pip", nil, "install x"},
+		{"python --check-hash-based-pycs always -m pip install x", "python", "pip", nil, "install x"},
+		{"python3.12 -W error -X dev -m pip install x", "python3.12", "pip", nil, "install x"},
+		{"py -3 -m pip install x", "py", "pip", nil, "install x"},
+		{"py -3.12 -m pip install x", "py", "pip", nil, "install x"},
+		{"py -3.12-64 -u -m pip install x", "py", "pip", nil, "install x"},
+		{"python -c 'import x' -m pip install y", "python", "", nil, "-c import x -m pip install y"},
+		{"python -c 'import pip'", "python", "", nil, "-c import pip"},
+		{"python script.py -m pip install x", "python", "", nil, "script.py -m pip install x"},
+		{"python -m pip", "python", "pip", nil, ""},
 		{"sudo -E -u root apt-get install x", "apt-get", "apt", []string{"sudo"}, "install x"},
 		{"sudo env A=1 B=2 npm i x", "npm", "npm", []string{"sudo", "env"}, "i x"},
 		{"env -u FOO -- npm i x", "npm", "npm", []string{"env"}, "i x"},
@@ -549,6 +568,20 @@ func TestInstalls(t *testing.T) {
 		{"cargo binstall -y cargo-deny@0.14.0", "cargo", "binstall", false, false, false, false, 0, []pkg{p("cargo-deny@0.14.0", "cargo-deny", "0.14.0", KindRegistry, true)}},
 		{"cargo build --release", "", "", false, false, false, false, 0, nil},
 		// go
+		{"go install example.com/m/cmd/t@v1.2.3", "go", "install", false, false, false, false, 0, []pkg{p("example.com/m/cmd/t@v1.2.3", "example.com/m/cmd/t", "v1.2.3", KindModule, true)}},
+		{"go install example.com/m/cmd/t@v1.2.3-rc.1", "go", "install", false, false, false, false, 0, []pkg{p("example.com/m/cmd/t@v1.2.3-rc.1", "example.com/m/cmd/t", "v1.2.3-rc.1", KindModule, true)}},
+		{"go install example.com/m/cmd/t@v1.2.3+incompatible", "go", "install", false, false, false, false, 0, []pkg{p("example.com/m/cmd/t@v1.2.3+incompatible", "example.com/m/cmd/t", "v1.2.3+incompatible", KindModule, true)}},
+		{"go install example.com/m/cmd/t@v0.0.0-20240101120000-0123456789ab", "go", "install", false, false, false, false, 0, []pkg{p("example.com/m/cmd/t@v0.0.0-20240101120000-0123456789ab", "example.com/m/cmd/t", "v0.0.0-20240101120000-0123456789ab", KindModule, true)}},
+		{"go install example.com/m/cmd/t@0123456789abcdef0123456789abcdef01234567", "go", "install", false, false, false, false, 0, []pkg{p("example.com/m/cmd/t@0123456789abcdef0123456789abcdef01234567", "example.com/m/cmd/t", "0123456789abcdef0123456789abcdef01234567", KindModule, true)}},
+		{"go install example.com/m/cmd/t@v1", "go", "install", false, false, false, false, 0, []pkg{p("example.com/m/cmd/t@v1", "example.com/m/cmd/t", "v1", KindModule, false)}},
+		{"go install example.com/m/cmd/t@v1.2", "go", "install", false, false, false, false, 0, []pkg{p("example.com/m/cmd/t@v1.2", "example.com/m/cmd/t", "v1.2", KindModule, false)}},
+		{"go install example.com/m/cmd/t@latest", "go", "install", false, false, false, false, 0, []pkg{p("example.com/m/cmd/t@latest", "example.com/m/cmd/t", "latest", KindModule, false)}},
+		{"go install example.com/m/cmd/t@upgrade", "go", "install", false, false, false, false, 0, []pkg{p("example.com/m/cmd/t@upgrade", "example.com/m/cmd/t", "upgrade", KindModule, false)}},
+		{"go install example.com/m/cmd/t@patch", "go", "install", false, false, false, false, 0, []pkg{p("example.com/m/cmd/t@patch", "example.com/m/cmd/t", "patch", KindModule, false)}},
+		{"go install example.com/m/cmd/t@master", "go", "install", false, false, false, false, 0, []pkg{p("example.com/m/cmd/t@master", "example.com/m/cmd/t", "master", KindModule, false)}},
+		{"go install example.com/m/cmd/t@main", "go", "install", false, false, false, false, 0, []pkg{p("example.com/m/cmd/t@main", "example.com/m/cmd/t", "main", KindModule, false)}},
+		{"go install example.com/m/cmd/t@v1.x", "go", "install", false, false, false, false, 0, []pkg{p("example.com/m/cmd/t@v1.x", "example.com/m/cmd/t", "v1.x", KindModule, false)}},
+		{"go install example.com/m/cmd/t@none", "go", "install", false, false, false, false, 0, []pkg{p("example.com/m/cmd/t@none", "example.com/m/cmd/t", "none", KindModule, false)}},
 		{"go install golang.org/x/tools/cmd/goimports@latest", "go", "install", false, false, false, false, 0, []pkg{p("golang.org/x/tools/cmd/goimports@latest", "golang.org/x/tools/cmd/goimports", "latest", KindModule, false)}},
 		{"go install a.io/b@v1.2.3 c.io/d@0123456789ab e.io/f@master g.io/h", "go", "install", false, false, false, false, 0, []pkg{
 			p("a.io/b@v1.2.3", "a.io/b", "v1.2.3", KindModule, true), p("c.io/d@0123456789ab", "c.io/d", "0123456789ab", KindModule, true),
@@ -697,7 +730,23 @@ func TestShellPipes(t *testing.T) {
 		{`eval "$(curl -fsSL https://x/e.sh)"`, []string{"subst:curl>eval https://x/e.sh"}},
 		{`source <(curl -s https://x/e.sh)`, []string{"subst:curl>source https://x/e.sh"}},
 		{"curl https://x | sh\nwget -qO- https://y | bash", []string{"pipe:curl>sh https://x", "pipe:wget>bash https://y"}},
+		{"curl -fsSL https://x/i.sh | busybox sh", []string{"pipe:curl>busybox https://x/i.sh"}},
+		{"curl -fsSL https://x/i.sh | busybox ash -s", []string{"pipe:curl>busybox https://x/i.sh"}},
+		{"curl -fsSL https://x/i.sh | sudo busybox bash -", []string{"pipe:curl>busybox https://x/i.sh"}},
+		{"curl -fsSL https://x/i.sh | toybox sh", []string{"pipe:curl>toybox https://x/i.sh"}},
+		{"curl -fsSL https://x/i.sh | env sh", []string{"pipe:curl>sh https://x/i.sh"}},
+		{"curl -fsSL https://x/i.sh | env A=1 bash", []string{"pipe:curl>bash https://x/i.sh"}},
+		{"curl -fsSL https://x/i.sh | sudo sh", []string{"pipe:curl>sh https://x/i.sh"}},
+		{"curl -fsSL https://x/i.sh | sudo -E bash", []string{"pipe:curl>bash https://x/i.sh"}},
+		{"curl -fsSL https://x/i.sh | exec sh", []string{"pipe:curl>sh https://x/i.sh"}},
+		{"curl -fsSL https://x/i.sh | nice sh", []string{"pipe:curl>sh https://x/i.sh"}},
+		{"curl -fsSL https://x/i.sh | nice -n 5 sh", []string{"pipe:curl>sh https://x/i.sh"}},
 		// not reported
+		{"curl https://x | xargs sh", nil}, // xargs hands the output to sh as arguments (file names), not as a script
+		{"curl https://x | busybox cat", nil},
+		{"curl https://x | busybox sh script.sh", nil},
+		{"curl https://x | busybox sh -c 'cat'", nil},
+		{"curl https://x | busybox", nil},
 		{"curl https://x | jq .", nil},
 		{"curl https://x | bash script.sh", nil},
 		{"curl https://x | sh -c 'cat'", nil},
@@ -889,6 +938,182 @@ func TestExpressionsInsideExpansions(t *testing.T) {
 		ws := s.WritesTo("GITHUB_ENV")
 		if len(ws) != 1 || len(ws[0].Exprs) == 0 {
 			t.Errorf("WritesTo of %q has no producer expression: %+v", script, ws)
+		}
+	}
+}
+
+func TestPipelineTested(t *testing.T) {
+	for _, tc := range []struct {
+		src  string
+		want []bool // Tested of each pipeline in source order
+	}{
+		{"a | b", []bool{false}},
+		{"if a | b; then c; fi", []bool{true}},
+		{"if x; then y; elif a | b; then c; fi", []bool{true}},
+		{"while a | b; do c; done", []bool{true}},
+		{"until a | b; do c; done", []bool{true}},
+		{"a | b || true", []bool{true}},
+		{"c && a | b", []bool{false}},
+		{"c && a | b && d", []bool{true}},
+		{"a | b && c | d", []bool{true, false}},
+		{"if x; then a | b; fi", []bool{false}},
+		{"! a | b", []bool{true}},
+		{"for i in 1; do a | b; done", []bool{false}},
+	} {
+		s := mustAnalyze(t, tc.src)
+		var got []bool
+		for _, p := range s.Pipelines {
+			got = append(got, p.Tested)
+		}
+		if !reflect.DeepEqual(got, tc.want) {
+			t.Errorf("%q: Tested = %v, want %v", tc.src, got, tc.want)
+		}
+	}
+}
+
+func TestCommandTested(t *testing.T) {
+	for _, tc := range []struct {
+		src  string
+		want map[string]bool // Tested by command name; every other command is not tested
+	}{
+		{"a", nil},
+		{"a || b", map[string]bool{"a": true}},
+		{"a && b", map[string]bool{"a": true}},
+		{"a && b || c", map[string]bool{"a": true, "b": true}},
+		{"if a; then b; fi", map[string]bool{"a": true}},
+		{"while a; do b; done", map[string]bool{"a": true}},
+		{"! a", map[string]bool{"a": true}},
+		{"{ a; b; } || c", map[string]bool{"a": true, "b": true}},
+		{"( a; b ) && c", map[string]bool{"a": true, "b": true}},
+		{"{ a || true; b; } | c", map[string]bool{"a": true}},
+		{"for i in 1; do a; done", nil},
+	} {
+		s := mustAnalyze(t, tc.src)
+		got := map[string]bool{}
+		for _, c := range s.Commands {
+			if c.Tested {
+				got[c.Name] = true
+			}
+		}
+		if !reflect.DeepEqual(got, map[string]bool(nilToEmpty(tc.want))) {
+			t.Errorf("%q: tested commands = %v, want %v", tc.src, got, tc.want)
+		}
+	}
+}
+
+func nilToEmpty(m map[string]bool) map[string]bool {
+	if m == nil {
+		return map[string]bool{}
+	}
+	return m
+}
+
+// The value of an assignment which is a statement of its own has the commands of its substitutions as well.
+func TestSubstitutionsInPlainAssignments(t *testing.T) {
+	s := mustAnalyze(t, `dir="$(mktemp -d "$RUNNER_TEMP/x.XXXXXX")"; export OUT=$(date); A=1`)
+	var got []string
+	for _, a := range s.Assignments {
+		var names []string
+		for _, c := range a.Value.Subs {
+			names = append(names, c.Name)
+		}
+		got = append(got, a.Name+"="+strings.Join(names, ","))
+	}
+	if want := []string{"dir=mktemp", "OUT=date", "A="}; !reflect.DeepEqual(got, want) {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+// A script with CRLF line ends must mean the same as the one with LF: continuations and heredoc
+// delimiters keep working, and every position is exact in the original text.
+func TestCRLFScriptsAreAnalyzedLikeLF(t *testing.T) {
+	scripts := map[string]string{
+		"continuation":     "pip install \\\nrequests==1 \\\n  flask\nnpm i foo\n",
+		"heredoc":          "cat <<EOF >> $GITHUB_ENV\nA=1\nEOF\nnpm i foo\n",
+		"quoted heredoc":   "cat <<'EOF' > f\n$x\nEOF\npip install a\n",
+		"dash heredoc":     "cat <<-EOF\n\tbody\n\tEOF\npip install a\n",
+		"multi-line quote": "echo 'a\nb' && npm i foo\nnpm i bar\n",
+		"comment":          "# first\nnpm i foo # trailing\n# last\nnpm i bar\n",
+		"pipe download":    "curl -fsSL https://x/i.sh |\n  sh\n",
+		"expression":       "echo ${{ github.ref }}\nnpm i ${{ inputs.pkg }}\n",
+		"multi-line expr":  "echo ${{ format('{0}',\n github.ref) }}\nnpm i foo\n",
+		"no final newline": "npm i foo\npip install bar",
+	}
+	for name, lf := range scripts {
+		t.Run(name, func(t *testing.T) {
+			crlf := strings.ReplaceAll(lf, "\n", "\r\n")
+			a, b := mustAnalyze(t, lf), mustAnalyze(t, crlf)
+			if len(a.Commands) != len(b.Commands) {
+				t.Fatalf("%d commands with LF, %d with CRLF", len(a.Commands), len(b.Commands))
+			}
+			for i, ca := range a.Commands {
+				cb := b.Commands[i]
+				if ca.Name != cb.Name || ca.Tool != cb.Tool || len(ca.Positional) != len(cb.Positional) {
+					t.Errorf("command %d: %q %q %d vs %q %q %d", i, ca.Name, ca.Tool, len(ca.Positional), cb.Name, cb.Tool, len(cb.Positional))
+					continue
+				}
+				// The offset in the CRLF text is the one in the LF text plus one for each line end before it
+				want := ca.Loc.Offset + strings.Count(lf[:ca.Loc.Offset], "\n")
+				if cb.Loc.Offset != want || cb.Loc.Line != ca.Loc.Line || cb.Loc.Col != ca.Loc.Col {
+					t.Errorf("command %d: position %+v, LF has %+v (want offset %d)", i, cb.Loc, ca.Loc, want)
+				}
+				if got := crlf[cb.Loc.Offset:cb.Loc.End]; !strings.HasPrefix(got, ca.Name) || strings.HasSuffix(got, "\r") {
+					t.Errorf("command %d: text %q", i, got)
+				}
+				for j, pa := range ca.Positional {
+					pb := cb.Positional[j]
+					if pa.Value != strings.ReplaceAll(pb.Value, "\r\n", "\n") || pb.Loc.Line != pa.Loc.Line || pb.Loc.Col != pa.Loc.Col {
+						t.Errorf("command %d word %d: %q at %d:%d vs %q at %d:%d", i, j, pa.Value, pa.Loc.Line, pa.Loc.Col, pb.Value, pb.Loc.Line, pb.Loc.Col)
+					}
+					if got := crlf[pb.Loc.Offset:pb.Loc.End]; strings.Contains(got, "\r") && !strings.Contains(pa.Raw, "\n") {
+						t.Errorf("command %d word %d: text %q has a CR", i, j, got)
+					}
+				}
+			}
+			if len(a.ShellPipes()) != len(b.ShellPipes()) || len(a.Redirects) != len(b.Redirects) {
+				t.Errorf("shell pipes or redirects differ")
+			}
+			for i, ra := range a.Redirects {
+				rb := b.Redirects[i]
+				if got := crlf[rb.Loc.Offset:rb.Loc.End]; got != strings.ReplaceAll(lf[ra.Loc.Offset:ra.Loc.End], "\n", "\r\n") {
+					t.Errorf("redirect %d: %q", i, got)
+				}
+			}
+		})
+	}
+
+	// The pipe into a shell is still found, and a heredoc written to GITHUB_ENV keeps its delimiter
+	s := mustAnalyze(t, "curl -fsSL https://x/i.sh | \\\r\n  sh\r\n")
+	if len(s.ShellPipes()) != 1 {
+		t.Errorf("continuation after a pipe: %d shell pipes", len(s.ShellPipes()))
+	}
+}
+
+func TestCommandTestedKinds(t *testing.T) {
+	tests := []struct {
+		src                      string
+		name                     string
+		tested, andOnly, loopCnd bool
+	}{
+		{"a && b", "a", true, true, false},
+		{"a || b", "a", true, false, false},
+		{"if a; then b; fi", "a", true, false, false},
+		{"while a; do b; done", "a", true, false, true},
+		{"until a; do b; done", "a", true, false, true},
+		{"! a", "a", true, false, false},
+		{"{ a && b; } || c", "a", true, false, false},
+		{"{ a && b; }", "a", true, true, false},
+		{"a && b", "b", false, false, false},
+	}
+	for _, tc := range tests {
+		s := mustAnalyze(t, tc.src)
+		for _, c := range s.Commands {
+			if c.Name != tc.name {
+				continue
+			}
+			if c.Tested != tc.tested || c.AndOnly != tc.andOnly || c.LoopCond != tc.loopCnd {
+				t.Errorf("%q: %s Tested=%v AndOnly=%v LoopCond=%v", tc.src, c.Name, c.Tested, c.AndOnly, c.LoopCond)
+			}
 		}
 	}
 }
