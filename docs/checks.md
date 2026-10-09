@@ -3652,7 +3652,7 @@ release job the rule reports the steps which restore a cache:
 | --- | --- |
 | `actions/cache`, `actions/cache/restore` | `lookup-only: true` |
 | `actions/setup-node`, `setup-python`, `setup-java`, `setup-dotnet` | the `cache` input is missing or `false` (`package-manager-cache: false` only turns off the automatic cache of `setup-node`, not an explicit `cache`) |
-| `actions/setup-node` v5 and later | `package-manager-cache: false`, or `package.json` of the repository does not name a package manager. v5 caches on its own when `package.json` has `packageManager` (or `devEngines.packageManager`), v6 only when it names `npm`. Without a repository to read (a workflow linted on its own, a composite action) the answer is "caches" |
+| `actions/setup-node` v5 and later | `package-manager-cache: false` (or an expression of it that is false on the release), or `package.json` of the repository does not name a package manager. v5 caches on its own when the top-level `packageManager` of `package.json` names npm, yarn or pnpm with a version (`pnpm@9`), and ignores `devEngines`; v6 and later cache only when `devEngines.packageManager` (any entry) or the top-level `packageManager` names `npm`. Without a repository to read (a workflow linted on its own, a composite action) the answer is "caches" |
 | `docker/setup-buildx-action` v3 and later | `cache-binary: false` (it caches the buildx binary) |
 | `actions/setup-go` | `cache: false` (before `v4` the cache is opt-in) |
 | `ruby/setup-ruby` | `bundler-cache` is missing or `false` |
@@ -3666,9 +3666,9 @@ release job the rule reports the steps which restore a cache:
 A `tags:` filter that lets no tag through is no tag trigger: `tags: ['!**']`, a list of negative patterns only (GitHub requires one
 positive pattern) and a list that ends with `!**`. A workflow that runs on pushed tags only to start checks is not a release
 either: when the workflow or the job sets `permissions:` and grants nothing but read access (`read-all`, `{}`, `contents: read`),
-and the job has no `environment:` and no publishing command or action, the tag does not make it a release job. This is a heuristic:
+and the job has no `environment:`, reads no secret other than `GITHUB_TOKEN` and runs no publishing command or action, the tag does not make it a release job. This is a heuristic:
 without `permissions:` the token is whatever the repository sets, so the job may publish, and a job can still publish with a secret
-(then the command or the action of the job says so). The `release` event always counts.
+that it does not name (the secret of a reusable workflow, a credential stored on the runner). The `release` event always counts.
 
 The list is not exhaustive: it has the actions whose caching behavior is known. A step is not reported when its `if:` looks at
 `github.event_name` or `github.ref`, or an input is an expression which does, since that is how caching is limited to

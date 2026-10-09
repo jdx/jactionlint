@@ -1,6 +1,8 @@
 package jactionlint
 
 import (
+	"fmt"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -51,5 +53,23 @@ func TestSourceIndex(t *testing.T) {
 	}
 	if _, ok := newSourceIndex([]byte("a\rb\n")).offset(1, 1); ok {
 		t.Error("an invalid index must not convert positions")
+	}
+}
+
+// The column of a finding inside an expression is counted in characters, like every other column, also after
+// characters which take several bytes, in a block scalar and on a single line.
+func TestExpressionColumnAfterMultiByteCharacters(t *testing.T) {
+	src := "on: push\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      - run: |\n          echo hi\n          echo ${{ 'ééé' == github.nope }}\n      - run: echo ${{ 'ééé' == github.nope }}\n"
+	errs := lintFileWithConfig(t, &Config{}, "ci.yaml", src)
+	var cols []string
+	for _, e := range errs {
+		if strings.Contains(e.Message, `property "nope"`) {
+			cols = append(cols, fmt.Sprintf("%d:%d", e.Line, e.Column))
+		}
+	}
+	// the expression "github.nope" starts at the 29th character of line 8 and at the 32nd of line 9
+	want := []string{"8:29", "9:32"}
+	if !slices.Equal(cols, want) {
+		t.Errorf("want %v but got %v", want, cols)
 	}
 }

@@ -75,7 +75,7 @@ func (rule *RuleConcurrencyLimits) VisitWorkflowPre(n *Workflow) error {
 	if why := releaseReason(n); why != "" {
 		// Cancelling a release or a deployment that is running leaves it half done (concurrency-cancels-release), so the
 		// group is there to make a new run wait for the running one
-		msg = "workflow has no \"concurrency:\", so every run of it executes at the same time even when a newer run is started while one is running (" + why + "). add a top-level \"concurrency:\" with a \"group:\" and \"cancel-in-progress: false\", so that a new run waits for the running release or deployment to finish instead of cancelling it"
+		msg = "workflow has no \"concurrency:\", so every run of it executes at the same time even when a newer run is started while one is running (" + why + "). add a top-level \"concurrency:\" with a \"group:\" and \"cancel-in-progress: false\", so that a new run waits for the running release or deployment to finish instead of cancelling it. a newer run that is waiting replaces an older one that is waiting, so add \"queue: max\" when no release may be skipped"
 	} else if startedByPullRequest(n) {
 		msg += ". use a group per pull request such as \"" + pullRequestGroup + "\", so that a new push cancels only the older runs of the same pull request and not the runs of the others"
 	}
@@ -102,9 +102,13 @@ func releaseReason(w *Workflow) string {
 		}
 	}
 	for _, e := range w.On {
+		event := e.EventName()
+		if event == "workflow_call" {
+			event = callerEvent // the caller decides what github.event_name is, so no condition on it is known
+		}
 		for _, id := range jobIDsInOrder(w) {
 			if j := w.Jobs[id]; j != nil {
-				if why := releaseSignal(j, scenario{event: e.EventName()}); why != "" {
+				if why := releaseSignal(j, scenario{event: event}); why != "" {
 					return why
 				}
 			}

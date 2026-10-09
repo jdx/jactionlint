@@ -187,8 +187,8 @@ var automaticCaches = map[string]func(a *ExecAction, u *UsesRef, root string) (b
 }
 
 // setupNodeCachesAutomatically tells whether actions/setup-node restores the cache of the package manager on its
-// own. From v5 it does when package.json names a package manager (`packageManager`, or `devEngines.packageManager`)
-// and "package-manager-cache" is not false; since v6 only for npm. The action reads package.json at the root of the
+// own. From v5 it does when package.json names a package manager and "package-manager-cache" is not false (see
+// packageManagerOf for what v5 and v6 read). The action reads package.json at the root of the
 // workspace, so the file of the repository decides: a repository without one (or without the field) gets no cache.
 // Without a repository to look at (the source of a workflow on its own) the answer is yes.
 func setupNodeCachesAutomatically(a *ExecAction, u *UsesRef, root string) (bool, string) {
@@ -203,22 +203,27 @@ func setupNodeCachesAutomatically(a *ExecAction, u *UsesRef, root string) (bool,
 	if root == "" {
 		return true, hint + ". the action caches on its own when package.json has a \"packageManager\" field"
 	}
-	pm := packageManagerOf(filepath.Join(root, "package.json"))
-	if pm == "" || (!known || major >= 6) && pm != "npm" {
+	pm := packageManagerOf(filepath.Join(root, "package.json"), !known || major >= 6)
+	if pm == "" {
 		return false, ""
 	}
 	return true, hint + ". package.json has \"packageManager\": \"" + pm + "\", so the action caches on its own"
 }
 
-// packageManagerOf returns the name of the package manager that package.json selects with the field packageManager
-// or devEngines.packageManager, or "" when the file does not exist or does not select one.
-func packageManagerOf(file string) string {
+// npmPackageManagerRe is the pattern with which setup-node v6 recognizes npm: "npm", "npm@10" or "^npm@10".
+var npmPackageManagerRe = regexp.MustCompile(`^(\^)?npm(@.*)?$`)
+
+// packageManagerOf returns the name of the package manager that package.json selects for the automatic caching of
+// setup-node, or "" when the file does not exist or does not select one. It follows the code of the action: v5 reads
+// only the top-level "packageManager" ("npm@10", "^pnpm@9" for npm, yarn and pnpm), v6 and later check every entry of
+// "devEngines.packageManager" and then the top-level field, and know npm only.
+func packageManagerOf(file string, v6 bool) string {
 	b, err := os.ReadFile(file)
 	if err != nil {
 		return ""
 	}
 	var pkg struct {
-		PackageManager string `json:"packageManager"`
+		PackageManager any `json:"packageManager"`
 		DevEngines     struct {
 			PackageManager json.RawMessage `json:"packageManager"`
 		} `json:"devEngines"`
@@ -226,20 +231,34 @@ func packageManagerOf(file string) string {
 	if json.Unmarshal(b, &pkg) != nil {
 		return ""
 	}
-	if name, _, _ := strings.Cut(pkg.PackageManager, "@"); name != "" {
-		return name
+	top, _ := pkg.PackageManager.(string)
+	if !v6 {
+		name, _, found := strings.Cut(strings.TrimPrefix(top, "^"), "@")
+		if found && (name == "npm" || name == "yarn" || name == "pnpm") {
+			return name
+		}
+		return ""
 	}
+	isNpm := npmPackageManagerRe.MatchString
 	var one struct {
-		Name string `json:"name"`
-	}
-	if json.Unmarshal(pkg.DevEngines.PackageManager, &one) == nil && one.Name != "" {
-		return one.Name
+		Name any `json:"name"`
 	}
 	var many []struct {
-		Name string `json:"name"`
+		Name any `json:"name"`
 	}
-	if json.Unmarshal(pkg.DevEngines.PackageManager, &many) == nil && len(many) > 0 {
-		return many[0].Name
+	if json.Unmarshal(pkg.DevEngines.PackageManager, &many) == nil {
+		for _, m := range many {
+			if s, ok := m.Name.(string); ok && isNpm(s) {
+				return "npm"
+			}
+		}
+	} else if json.Unmarshal(pkg.DevEngines.PackageManager, &one) == nil {
+		if s, ok := one.Name.(string); ok && isNpm(s) {
+			return "npm"
+		}
+	}
+	if isNpm(top) {
+		return "npm"
 	}
 	return ""
 }
@@ -399,11 +418,14 @@ func (rule *RuleCachePoisoning) checkWrite(m *String) {
 // workflow says what the token may do and grants nothing but read access (`permissions: read-all`, `{}`,
 // `contents: read`), and the job has no environment and calls no reusable workflow. A tag is often only a way to
 // start the checks (pytorch pushes ciflow/* tags), and nothing is published without a write permission, a secret or
-// an environment. A job that runs a publishing command or action is judged by publishingReason. Without
+// an environment, and a job that reads a secret other than GITHUB_TOKEN may have a credential. A job that runs a publishing command or action is judged by publishingReason. Without
 // `permissions:` the token is whatever the repository sets, which is not known, so the job may publish.
 func (rule *RuleCachePoisoning) cannotPublish(j *Job) bool {
 	if j.Environment != nil || j.WorkflowCall != nil {
 		return false
+	}
+	if rule.usesOwnSecret(j) {
+		return false // a secret other than the token of the workflow can be the credential to publish with
 	}
 	p := j.Permissions
 	if p == nil {
@@ -421,6 +443,58 @@ func (rule *RuleCachePoisoning) cannotPublish(j *Job) bool {
 		}
 	}
 	return true
+}
+
+var secretRefRe = regexp.MustCompile(`(?i)\bsecrets(?:\.([a-z_][a-z0-9_-]*)|\s*\[|\b\s*\))`)
+
+// usesOwnSecret reports whether the job, or the env: of the workflow, reads a secret other than GITHUB_TOKEN.
+func (rule *RuleCachePoisoning) usesOwnSecret(j *Job) bool {
+	has := func(s *String) bool {
+		if s == nil || !strings.Contains(s.Value, "secrets") {
+			return false
+		}
+		for _, m := range secretRefRe.FindAllStringSubmatch(s.Value, -1) {
+			if !strings.EqualFold(m[1], "github_token") {
+				return true
+			}
+		}
+		return false
+	}
+	env := func(e *Env) bool {
+		if e == nil {
+			return false
+		}
+		if has(e.Expression) {
+			return true
+		}
+		for _, v := range e.Vars {
+			if v != nil && has(v.Value) {
+				return true
+			}
+		}
+		return false
+	}
+	if env(rule.wf.Env) || env(j.Env) {
+		return true
+	}
+	for _, s := range j.Steps {
+		if s == nil || env(s.Env) {
+			return true
+		}
+		switch e := s.Exec.(type) {
+		case *ExecRun:
+			if has(e.Run) {
+				return true
+			}
+		case *ExecAction:
+			for _, in := range e.Inputs {
+				if in != nil && has(in.Value) {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }
 
 // VisitJobPre is callback when visiting Job node before visiting its children.
@@ -496,9 +570,9 @@ type cacheGate struct {
 // versions, paths) is ignored: a release workflow often has github.ref in a key or in node-version
 // without the cache being off. Sources are the action.yml files of the actions.
 //
-// Left out on purpose: setup-node's "package-manager-cache" only turns off the automatic detection of v5 and
-// leaves an explicit "cache" as it is, and rust-cache's "save-if" and gradle's "cache-read-only" only
-// stop saving, the restore still happens.
+// Left out on purpose: rust-cache's "save-if" and gradle's "cache-read-only" only stop saving, the restore still
+// happens. setup-node's "package-manager-cache" only turns off the automatic detection of v5 and leaves an explicit
+// "cache" as it is, so cacheCanRunOnReleaseTrigger looks at it only when there is no explicit "cache".
 var cacheGateInputs = map[string][]cacheGate{
 	// "cache" names the package manager to cache: empty or false means none
 	"actions/setup-node":   {{input: "cache"}},
@@ -506,6 +580,8 @@ var cacheGateInputs = map[string][]cacheGate{
 	"actions/setup-java":   {{input: "cache"}},
 	"actions/setup-dotnet": {{input: "cache"}},
 	"actions/setup-go":     {{input: "cache"}}, // "cache: false" turns off the default
+	// "cache-binary: false" stops setup-buildx-action from restoring the buildx binary from the cache
+	"docker/setup-buildx-action": {{input: "cache-binary"}},
 	// "bundler-cache: true" runs bundle install with a cache
 	"ruby/setup-ruby": {{input: "bundler-cache"}},
 	// "enable-cache: false" turns off the default
