@@ -41,12 +41,14 @@ func (r *RuleRefVersionMismatch) VisitWorkflowPost(*Workflow) error {
 
 		// The commit is not tagged with the version of the comment. Does the tag of that name exist, and where?
 		var at string
-		found, failed := false, false
+		found := false
+		failed := false
 		for _, name := range versionSpellings(version) {
 			c, ok, err := r.sess.TagCommit(s.ref.Owner, s.ref.Repo, name)
 			if err != nil {
 				r.skipped(s, "the tag "+name, err)
-				failed = true
+				found, failed = false, true
+				at = ""
 				break
 			}
 			if ok {
@@ -55,11 +57,8 @@ func (r *RuleRefVersionMismatch) VisitWorkflowPost(*Workflow) error {
 				break
 			}
 		}
-		if failed {
-			continue // The tag could not be looked up, so there is nothing to say about it
-		}
-		if err := r.sess.stopped(); err != nil {
-			continue
+		if failed || r.sess.stopped() != nil {
+			continue // The lookup did not work: say nothing rather than guess
 		}
 		if found && at == sha {
 			continue // The list of tags was incomplete

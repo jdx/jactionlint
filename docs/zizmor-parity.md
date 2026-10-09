@@ -186,6 +186,24 @@ Gaps of the online rules that the corpus does not show, so they are not measured
 Cost: for the 173 `uses:` lines of this repository the first run makes 91 requests, a run within the hour none, and a later run
 only conditional requests (a 304 answer is free of rate limit for authenticated clients).
 
+### Online client: where it differs from zizmor
+
+Not compatible by design; the client answers zizmor issues [#1350](https://github.com/zizmorcore/zizmor/issues/1350) and
+[#2210](https://github.com/zizmorcore/zizmor/issues/2210) (one failed lookup aborts the audit) and the credentials in debug logs of
+[GHSA-f42p-wjw5-97qh](https://github.com/zizmorcore/zizmor/security/advisories/GHSA-f42p-wjw5-97qh). Measured by unit tests against an
+`httptest` server for every failure mode, not against zizmor.
+
+- A lookup which fails (404, 403, 5xx, timeout, DNS) is skipped for that `uses:` only. One warning per kind of failure, exit status
+  unchanged unless `-online=strict`.
+- Rate limits are read from `X-RateLimit-*` and `Retry-After`; a reset within 30 seconds is waited for, a later one skips with the
+  reset time in the message. 5xx and secondary limits are retried with exponential backoff and jitter, at most twice.
+- `allow` and `deny` lists of `owner/repo` patterns, a GitHub Enterprise Server host from `GITHUB_API_URL`, `GITHUB_SERVER_URL`, `GH_HOST`
+  or `-online-api-url`, and a token from a named variable, a file, the usual variables or `gh auth token`.
+- The token is sent to the API host only, is redacted from all output, and is never sent to a host that a repository's own config file chose.
+- `-online=cache` answers from the disk cache only, without the network.
+
+Not done: zizmor's precomputed snapshot of tags and advisories, which would cut the first-run cost further.
+
 ## Ignore comments
 
 jactionlint honors zizmor's `# zizmor: ignore[...]` comments for the audits that map onto one of its rules, so a repository

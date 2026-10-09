@@ -93,11 +93,31 @@ are available. A custom Go template can be given too:
   * `-no-color`:
     Disable colorful output
 
-  * `-online`:
+  * `-online`[=<MODE>]:
     Enable the checks which query the GitHub API (`impostor-commit`, `known-vulnerable-actions`,
     `ref-confusion`, `stale-action-refs`, `archived-uses` and `ref-version-mismatch`), and let `-fix`
-    pin tags to commit SHAs. The token is read from `GITHUB_TOKEN` or `GH_TOKEN`. Nothing uses the
-    network without this flag.
+    pin tags to commit SHAs. `-online=cache` uses only the answers in the disk cache and never the
+    network. `-online=strict` exits with status 3 when a lookup had to be skipped (`cache,strict`
+    does both). A lookup which fails (404, 403, server error, timeout, rate limit) is skipped with
+    one warning per kind of failure and does not change the exit status. The token is read from
+    `-online-token-env`, `-online-token-file`, `GITHUB_TOKEN`, `GH_TOKEN` or `gh auth token`, and
+    is sent only to the API host. Nothing uses the network without this flag.
+
+  * `-online-allow` <PATTERN>, `-online-deny` <PATTERN>:
+    Look up only (allow), or never look up (deny), the repositories matching `owner/repo`, where `*`
+    is a wildcard, for example `-online-deny 'mycorp/*'` for private actions. Repeatable. Deny wins.
+
+  * `-online-api-url` <URL>:
+    The REST API of a GitHub Enterprise Server such as `https://ghe.example.com/api/v3`. The default
+    is `$GITHUB_API_URL`, else derived from `$GITHUB_SERVER_URL` or `$GH_HOST`, else `api.github.com`
+
+  * `-online-token-env` <NAME>, `-online-token-file` <PATH>:
+    The environment variable and the file which hold the GitHub token, read before `GITHUB_TOKEN`
+    and `GH_TOKEN`
+
+  * `-online-max-wait` <DURATION>:
+    The longest to wait for a GitHub rate limit to reset (default 30s). A limit which resets later
+    skips the lookups. 0 never waits
 
   * `-online-cache-ttl` <DURATION>:
     How long `-online` uses an answer of the GitHub API from the cache in

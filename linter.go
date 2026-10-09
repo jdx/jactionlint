@@ -109,6 +109,9 @@ type LinterOptions struct {
 	// GitHubClient is set. The "online" key of the configuration file turns it on for the files it
 	// applies to.
 	Online bool
+	// OnlineOff turns the online checks off although the configuration file turns them on: it is what
+	// -online=false asks for. It wins over Online and over the configuration.
+	OnlineOff bool
 	// GitHubClient replaces the built-in client of the GitHub API, which sends REST requests and caches
 	// the answers in $XDG_CACHE_HOME/jactionlint. It is used by tests (see NewFixtureGitHubClient)
 	// and implies nothing by itself: the online rules need Online or the "online" configuration.
@@ -117,6 +120,10 @@ type LinterOptions struct {
 	// whether it changed. Zero means one hour. A negative value revalidates every answer (which
 	// costs no rate limit when nothing changed).
 	OnlineCacheTTL time.Duration
+	// OnlineOptions tunes the online checks (mode, API URL, token source, allow and deny lists, cache,
+	// retries). It wins over the "online-options" of the configuration file. A Mode other than the
+	// default turns the online checks on. See OnlineOptions.
+	OnlineOptions OnlineOptions
 	// Context stops the online lookups when it is canceled, for example on interruption. Nil means
 	// context.Background.
 	Context context.Context
@@ -192,9 +199,11 @@ func NewLinter(out io.Writer, opts *LinterOptions) (*Linter, error) {
 		if err != nil {
 			return nil, err
 		}
+		c.userOwned = true
 		cfg = c
 	} else if opts.Config != nil {
 		cfg = opts.Config
+		cfg.userOwned = true
 	}
 
 	// Load the user-global config as a fallback for projects which have no
@@ -207,6 +216,13 @@ func NewLinter(out io.Writer, opts *LinterOptions) (*Linter, error) {
 			return nil, err
 		}
 		globalCfg, globalCfgPath = c, p
+		if globalCfg != nil {
+			globalCfg.userOwned = true
+		}
+	}
+
+	if err := opts.OnlineOptions.validate(); err != nil {
+		return nil, fmt.Errorf("invalid online options: %w", err)
 	}
 
 	ignore := make(IgnorePatterns, 0, len(opts.IgnorePatterns))
@@ -261,9 +277,9 @@ func NewLinter(out io.Writer, opts *LinterOptions) (*Linter, error) {
 		onDependabot:   opts.OnDependabotRulesCreated,
 		configFile:     opts.ConfigFile,
 		minSeverity:    opts.MinSeverity,
-		online:         onlineSettings{enabled: opts.Online, client: opts.GitHubClient, ttl: opts.OnlineCacheTTL, ctx: opts.Context},
+		online:         onlineSettings{off: opts.OnlineOff, enabled: !opts.OnlineOff && (opts.Online || opts.OnlineOptions.Mode != OnlineModeDefault), client: opts.GitHubClient, ttl: opts.OnlineCacheTTL, ctx: opts.Context, opts: opts.OnlineOptions},
 	}
-	if opts.Online && opts.GitHubClient == nil && !onlineSupported {
+	if l.online.enabled && opts.GitHubClient == nil && !onlineSupported {
 		return nil, errOnlineUnsupported
 	}
 
@@ -764,7 +780,7 @@ func (l *Linter) finishCheck(path string, content []byte, all []*Error, cfg *Con
 	inlineIgnores, orphans, ignoreErrs := parseInlineIgnoresWithOrphans(content)
 	inlineIgnores = append(inlineIgnores, parseZizmorIgnores(content)...)
 	all = l.filterInlineIgnores(all, inlineIgnores)
-	unused := unusedInlineIgnores(inlineIgnores, orphans, cfg, l.online.enabled || (cfg != nil && cfg.Online))
+	unused := unusedInlineIgnores(inlineIgnores, orphans, cfg, l.online.enabled || (!l.online.off && cfg != nil && cfg.Online))
 	dropFixesChangingYAML(content, unused)
 	all = append(all, l.annotateErrors(unused, content, cfg)...)
 

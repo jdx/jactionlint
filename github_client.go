@@ -140,12 +140,22 @@ type GitHubRateLimitError struct {
 	// Authenticated is whether the request carried a token. Unauthenticated requests have a much
 	// lower limit.
 	Authenticated bool
+
+	now func() time.Time // for tests
 }
 
 func (e *GitHubRateLimitError) Error() string {
 	s := ErrGitHubRateLimited.Error()
 	if !e.Reset.IsZero() {
-		s += fmt.Sprintf(" (resets at %s)", e.Reset.Local().Format("15:04:05"))
+		now := time.Now
+		if e.now != nil {
+			now = e.now
+		}
+		s += fmt.Sprintf(" (resets at %s", e.Reset.Local().Format("15:04:05"))
+		if d := e.Reset.Sub(now()); d > time.Second {
+			s += ", in " + d.Round(time.Second).String()
+		}
+		s += ")"
 	}
 	if !e.Authenticated {
 		s += ". set GITHUB_TOKEN (or GH_TOKEN) to raise the limit"
@@ -155,6 +165,10 @@ func (e *GitHubRateLimitError) Error() string {
 
 // Is makes errors.Is(err, ErrGitHubRateLimited) true.
 func (e *GitHubRateLimitError) Is(target error) bool { return target == ErrGitHubRateLimited }
+
+// ErrGitHubNotCached is returned (wrapped) by the built-in client in the offline mode (-online=cache)
+// when the disk cache has no answer for a request. Nothing is sent to the network in that mode.
+var ErrGitHubNotCached = errors.New("not in the cache of GitHub answers")
 
 // errOnlineUnsupported is why the online rules cannot run in builds without network access.
 var errOnlineUnsupported = errors.New("online checks need network access to the GitHub API, which is not available in the WebAssembly build (the playground)")

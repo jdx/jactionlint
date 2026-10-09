@@ -66,6 +66,12 @@ func setOnlineEnv(t *testing.T, f *fakeGitHub, token string) {
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
 	t.Setenv("GITHUB_TOKEN", token)
 	t.Setenv("GH_TOKEN", "")
+	// The runners of GitHub Actions export these, and they would point at github.com
+	t.Setenv("GITHUB_GRAPHQL_URL", "")
+	t.Setenv("GITHUB_SERVER_URL", "")
+	t.Setenv("GH_HOST", "")
+	// Never run the gh of the machine which runs the tests
+	t.Setenv("PATH", t.TempDir())
 }
 
 func TestCommandNeverUsesTheNetworkWithoutOnline(t *testing.T) {
@@ -150,7 +156,7 @@ func TestCommandOnlineRateLimitedWarnsOnce(t *testing.T) {
 	if n := strings.Count(stderr, "warning:"); n != 1 || !strings.Contains(stderr, "rate limit") {
 		t.Errorf("want exactly one warning about the rate limit:\n%s", stderr)
 	}
-	if n := f.total(); n > maxGitHubInFlight+1 {
+	if n := f.total(); n > defaultOnlineInFlight+1 {
 		t.Errorf("%d requests were made after the limit was reached", n)
 	}
 }
