@@ -79,7 +79,9 @@ are available. A custom Go template can be given too:
     `info`). Implies `-baseline`.
 
   * `-baseline-write`, `-baseline-write=`<FILE>:
-    Record the current findings as the baseline and exit with 0. With file arguments only the
+    Record the current findings as the baseline and exit with 0. A plain run does not read the
+    baseline until the configuration says `baseline: auto` or `-baseline` is given; the command
+    prints the line to put in the configuration file. With file arguments only the
     entries of those files are refreshed. The file has no line numbers, so writing it again
     without a change in the findings gives the same bytes. Write it in the environment of the CI.
 
@@ -131,6 +133,13 @@ are available. A custom Go template can be given too:
     opinionated rules). Each profile includes the one before it. It overrides `profile` of the
     config file. `strict` and `all`, the former names, are accepted in the config file only and
     mean `pedantic`
+
+  * `-no-hints`:
+    Do not print the line at the end of a text run with many findings (20 or more) that says how to
+    count them (`-format summary`), adopt them gradually (`-baseline-write`) and get the checks of
+    actionlint only (`-profile correctness`). It is printed to stderr only when stderr is a terminal
+    or `CI` or `GITHUB_ACTIONS` is set, and never with another format. `JACTIONLINT_NO_HINTS=1`
+    does the same.
 
   * `-no-color`:
     Disable colorful output

@@ -156,6 +156,7 @@ func (l *Linter) baselineStage(path string, content []byte, project *Project, bl
 		}
 	}
 	if bl != nil {
+		l.hintBaseline.Store(true)
 		bl.match(key, errs, infos)
 		bl.markLinted(key)
 	}
@@ -448,6 +449,7 @@ func (l *Linter) printOne(r fileResult) ([]*Error, error) {
 		return nil, err
 	}
 	l.reportBaselineNote(results)
+	l.reportRunHint(results)
 	if len(results) == 1 {
 		return r.errs, nil
 	}

@@ -305,6 +305,7 @@ func (cmd *Command) Main(args []string) int {
 	var migrateConfig bool
 	var migrateIgnores bool
 	var noColor bool
+	var noHints bool
 	var color bool
 	var minSeverity string
 	var profileName string
@@ -345,6 +346,7 @@ func (cmd *Command) Main(args []string) int {
 	flags.Var(&baselineWrite, "baseline-write", "Record the current findings as the baseline (default file "+DefaultBaselineFile+") and exit with status 0. -baseline-write=FILE writes another file. With file arguments only the entries of those files are refreshed. Run it in the same environment as the CI (rules, -online, shellcheck)")
 	flags.BoolVar(&opts.BaselineCheck, "baseline-check", false, "Report the baseline entries which match no finding any more as unused-baseline-entry (info; set its level to error in \"rules\" to fail on them). Implies -baseline")
 	flags.BoolVar(&opts.SARIFHideBaselined, "sarif-hide-baselined", false, "Leave the findings accepted by the baseline out of -format sarif. By default they are in the log as suppressed results. Use it for tools like hk which do not read suppressions")
+	flags.BoolVar(&noHints, "no-hints", false, "Do not print the line at the end of a text run with many findings that says how to count them, adopt them gradually and get the checks of actionlint only. It is printed only to a terminal or in CI. JACTIONLINT_NO_HINTS=1 does the same")
 	flags.BoolVar(&noColor, "no-color", false, "Disable colorful output")
 	flags.BoolVar(&color, "color", false, "Always enable colorful output. This is useful to force colorful outputs")
 	flags.BoolVar(&opts.Verbose, "verbose", false, "Enable verbose output")
@@ -399,6 +401,7 @@ func (cmd *Command) Main(args []string) int {
 	opts.NoBaseline = baseline.off
 	opts.IgnorePatterns = ignorePats
 	opts.OnRulesCreated = cmd.onRulesCreated
+	opts.RunHints = !noHints && !HintsDisabledByEnv()
 	opts.LogWriter = cmd.Stderr
 	flags.Visit(func(f *flag.Flag) {
 		switch f.Name {

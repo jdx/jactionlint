@@ -13,6 +13,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/fatih/color"
@@ -157,6 +158,11 @@ type LinterOptions struct {
 	// SARIFHideBaselined leaves the findings which the baseline accepts out of the SARIF log. By default
 	// they are in it as results with a suppression of the kind "external".
 	SARIFHideBaselined bool
+	// RunHints lets a run of the text format that finds many findings print one line to LogWriter about how
+	// to count them, adopt them gradually and get the checks of actionlint only. It is printed only when
+	// LogWriter is a terminal or the process runs in CI, and never with another format. The jactionlint
+	// command sets it unless -no-hints or JACTIONLINT_NO_HINTS is given.
+	RunHints bool
 	// More options will come here
 }
 
@@ -186,13 +192,17 @@ type Linter struct {
 	minSeverity    Severity
 	online         onlineSettings
 	baseline       linterBaseline
-	warnedOnce     sync.Map // string -> struct{}: the messages warnOnce printed
-	profile        Profile  // the -profile override, empty when the configuration decides
-	profiled       sync.Map // *Config -> *Config: the configs with the profile override applied
-	warned         sync.Map // *Config -> struct{}: configs whose deprecations were already reported
-	graphs         sync.Map // root directory -> *sync.Once-guarded *callGraph, see callGraphOf
-	notesMu        sync.Mutex
-	notes          []string // deprecation warnings found while linting
+	warnedOnce     sync.Map    // string -> struct{}: the messages warnOnce printed
+	profile        Profile     // the -profile override, empty when the configuration decides
+	profiled       sync.Map    // *Config -> *Config: the configs with the profile override applied
+	warned         sync.Map    // *Config -> struct{}: configs whose deprecations were already reported
+	graphs         sync.Map    // root directory -> *sync.Once-guarded *callGraph, see callGraphOf
+	runHints       bool        // LinterOptions.RunHints
+	hintBaseline   atomic.Bool // a baseline was applied to a file
+	// hintBeyondCorrectness is true when a file was linted with a profile above correctness
+	hintBeyondCorrectness atomic.Bool
+	notesMu               sync.Mutex
+	notes                 []string // deprecation warnings found while linting
 }
 
 // NewLinter creates a new Linter instance.
@@ -306,6 +316,7 @@ func NewLinter(out io.Writer, opts *LinterOptions) (*Linter, error) {
 		errFmt:         formatter,
 		cwd:            cwd,
 		onRulesCreated: opts.OnRulesCreated,
+		runHints:       opts.RunHints,
 		onDependabot:   opts.OnDependabotRulesCreated,
 		configFile:     opts.ConfigFile,
 		minSeverity:    opts.MinSeverity,
@@ -551,6 +562,7 @@ func (l *Linter) LintFiles(filepaths []string, project *Project) ([]*Error, erro
 		return nil, err
 	}
 	l.reportBaselineNote(results)
+	l.reportRunHint(results)
 
 	l.log("Found", total, "errors in", n, "files")
 
@@ -899,6 +911,7 @@ func (l *Linter) isActionFile(p string) bool {
 // rule IDs, applies the ignores and the minimum severity, and sorts the errors. isWorkflow tells that
 // the file is a workflow, for which the online pin fixes are attached.
 func (l *Linter) finishCheck(path string, content []byte, all []*Error, cfg *Config, bl *baselineState, start time.Time, isWorkflow bool, ic *ignoreContext) []*Error {
+	l.noteRunProfile(cfg)
 	all = append(all, checkSourceRules(content, cfg)...)
 	if ic != nil {
 		all = dropUnreachable(all, ic.scopes)

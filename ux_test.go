@@ -1,6 +1,7 @@
 package jactionlint
 
 import (
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -366,5 +367,73 @@ func TestBaselineWriteSaysHowToApplyTheBaseline(t *testing.T) {
 	}
 	if got := run("-baseline-write"); strings.Contains(got, "baseline: auto") {
 		t.Errorf("the configuration already applies the baseline: %q", got)
+	}
+}
+
+func manyFindingsRepo(t *testing.T) string {
+	t.Helper()
+	var b strings.Builder
+	b.WriteString("on: push\njobs:\n")
+	for i := 0; i < 12; i++ {
+		fmt.Fprintf(&b, "  j%d:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n", i)
+	}
+	return makeWorkflowRepo(t, map[string]string{"ci.yaml": b.String()})
+}
+
+func TestRunHintAfterManyFindings(t *testing.T) {
+	root := manyFindingsRepo(t)
+	t.Chdir(root)
+	run := func(args ...string) (stdout, stderr string) {
+		t.Helper()
+		var out, errOut strings.Builder
+		cmd := &Command{Stdin: strings.NewReader(""), Stdout: &out, Stderr: &errOut}
+		cmd.Main(append([]string{"jactionlint", "-no-color", "-shellcheck=", "-pyflakes="}, args...))
+		return out.String(), errOut.String()
+	}
+	t.Setenv("CI", "")
+	t.Setenv("GITHUB_ACTIONS", "")
+	t.Setenv("JACTIONLINT_NO_HINTS", "")
+
+	// Neither a terminal nor CI: a script or a pipe reads the output
+	if _, errOut := run("-profile", "default"); strings.Contains(errOut, "note:") {
+		t.Errorf("no hint for a pipe: %q", errOut)
+	}
+
+	t.Setenv("CI", "true")
+	_, errOut := run("-profile", "default")
+	for _, want := range []string{"note: ", " findings in 1 file.", "-format summary", "-baseline-write", "-profile correctness", "-no-hints"} {
+		if !strings.Contains(errOut, want) {
+			t.Errorf("the hint must contain %q: %q", want, errOut)
+		}
+	}
+	if n := strings.Count(errOut, "silence this note"); n != 1 {
+		t.Errorf("the hint is printed once but %d times in %q", n, errOut)
+	}
+
+	// Never in a structured format, and the flag and the variable silence it
+	for _, args := range [][]string{{"-format", "json"}, {"-format", "sarif"}, {"-format", "summary"}, {"-format", "github"}, {"-no-hints"}} {
+		if out, errOut := run(append([]string{"-profile", "default"}, args...)...); strings.Contains(errOut, "silence this note") || strings.Contains(out, "silence this note") {
+			t.Errorf("%v: no hint expected: %q", args, errOut)
+		}
+	}
+	t.Setenv("JACTIONLINT_NO_HINTS", "1")
+	if _, errOut := run("-profile", "default"); strings.Contains(errOut, "silence this note") {
+		t.Errorf("JACTIONLINT_NO_HINTS must silence the hint: %q", errOut)
+	}
+	t.Setenv("JACTIONLINT_NO_HINTS", "")
+
+	// The checks of actionlint are what -profile correctness asks for: there is nothing to suggest
+	if _, errOut := run("-profile", "correctness"); strings.Contains(errOut, "silence this note") {
+		t.Errorf("no hint with the correctness profile: %q", errOut)
+	}
+
+	// With a baseline applied the advice to write one is left out, and -profile correctness is not suggested
+	// to someone who already uses it
+	if out, _ := run("-profile", "default", "-baseline-write"); !strings.Contains(out, "Wrote") {
+		t.Fatal(out)
+	}
+	_, errOut = run("-profile", "default", "-baseline")
+	if strings.Contains(errOut, "silence this note") {
+		t.Errorf("everything is accepted by the baseline, so there is no hint: %q", errOut)
 	}
 }

@@ -74,6 +74,22 @@ rules:
 The old names `strict` and `all` are read as `pedantic` in the config file with a deprecation warning. See
 [coming from actionlint](actionlint.md) for the checks of actionlint.
 
+#### The first run
+
+The default profile is strict on purpose, so most repositories fail it the first time (the median repository of the bug bash had
+about 60 findings, all of them errors). When a text run finds 20 or more findings, jactionlint prints one line to stderr that says
+what to do next, for example:
+
+```
+note: 132 findings in 14 files. see -format summary for the counts per rule; adopt the checks gradually with -baseline-write; for the checks of actionlint only use -profile correctness. silence this note with -no-hints or JACTIONLINT_NO_HINTS=1
+```
+
+It is shown only when stderr is a terminal or the process runs in CI (`CI` or `GITHUB_ACTIONS` is set), never with `-format json`,
+`sarif`, `summary`, `github`, `gcc` or a template, never with `-profile correctness` (those findings are mistakes, not something to
+adopt), and not at all with `-no-hints` or `JACTIONLINT_NO_HINTS=1`. The advice to write a baseline is left out once a baseline is
+applied. After `-baseline-write` the command prints the line that makes plain runs use the baseline (`baseline: auto` in the config
+file); without it only `jactionlint -baseline` reads the file.
+
 ### Ignore some errors
 
 Every error has a stable [rule ID](rules.md) such as `unpinned-uses`. `-rule-ids` shows it at the end of each error instead of the
