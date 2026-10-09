@@ -779,3 +779,37 @@ func TestForbiddenEndsTheStreakOfFailures(t *testing.T) {
 		t.Error("three in a row do")
 	}
 }
+
+// GraphQL requests wait for a rate limit and retry a server error like the REST requests do.
+func TestGraphQLRetriesAndWaitsLikeREST(t *testing.T) {
+	sha := strings.Repeat("a", 40)
+	body := `{"data":{"repository":{"refs":{"pageInfo":{"hasNextPage":false,"endCursor":""},"nodes":[{"name":"b","compare":{"status":"DIVERGED"}}]}}}}`
+	for name, first := range map[string]func(w http.ResponseWriter){
+		"server error": func(w http.ResponseWriter) { w.WriteHeader(http.StatusBadGateway) },
+		"rate limit": func(w http.ResponseWriter) {
+			w.Header().Set("X-RateLimit-Remaining", "0")
+			w.Header().Set("X-RateLimit-Reset", fmt.Sprint(time.Now().Add(5*time.Second).Unix()))
+			w.WriteHeader(http.StatusForbidden)
+			fmt.Fprint(w, `{"message":"API rate limit exceeded"}`)
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			f := newFakeGitHub(t)
+			var n atomic.Int32
+			f.handle("/graphql", func(w http.ResponseWriter, r *http.Request) {
+				if n.Add(1) == 1 {
+					first(w)
+					return
+				}
+				fmt.Fprint(w, body)
+			})
+			scan, err := f.client(httpGitHubOptions{Token: "tok"}).CommitOnAnyBranch(context.Background(), "o", "r", sha, 10)
+			if err != nil || n.Load() != 2 || !scan.Complete {
+				t.Errorf("scan %+v, %v after %d requests", scan, err, n.Load())
+			}
+			if len(f.sleptFor()) != 1 {
+				t.Errorf("want one wait: %v", f.sleptFor())
+			}
+		})
+	}
+}
