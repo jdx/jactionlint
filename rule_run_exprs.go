@@ -80,6 +80,22 @@ func exprReadsUntrustedInput(text string) bool {
 	return len(u.Errs()) > 0
 }
 
+// exprReadsContext reports whether the expression reads a property of the context with the given name (case
+// insensitive), like `inputs.version` or `inputs['version']` for "inputs".
+func exprReadsContext(text, context string) bool {
+	n := parseExprText(text)
+	if n == nil {
+		return false
+	}
+	found := false
+	VisitExprNode(n, func(node, _ ExprNode, entering bool) {
+		if v, ok := node.(*VariableNode); ok && entering && strings.EqualFold(v.Name, context) {
+			found = true
+		}
+	})
+	return found
+}
+
 // trustedPaths are the properties of contexts whose value the author of the workflow or GitHub decides, or whose
 // format an outsider cannot shape (a commit SHA, a number). Writing them somewhere is not a finding by itself.
 var trustedPaths = map[string]bool{

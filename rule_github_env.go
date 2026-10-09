@@ -275,9 +275,18 @@ func (rule *RuleGitHubEnv) judgeExprList(exprs []string, depth int) data {
 				continue
 			}
 		}
-		d = d.worse(judgeExprs([]string{e}))
+		d = d.worse(rule.judgeExpr(e))
 	}
 	return d
+}
+
+// judgeExpr judges one expression. In the metadata of an action, `inputs.*` is whatever the caller passes, and a
+// workflow can pass the title of an issue: it is an outsider's input, whichever event runs the action.
+func (rule *RuleGitHubEnv) judgeExpr(e string) data {
+	if rule.wf != nil && rule.wf.Action != nil && exprReadsContext(e, "inputs") {
+		return data{kind: dataUntrusted, input: e}
+	}
+	return judgeExprs([]string{e})
 }
 
 // envContextVar returns NAME of an expression that is exactly `env.NAME`.

@@ -2690,6 +2690,8 @@ The rule `github-env` (in the `default` profile) reports two kinds of writes:
 - A write of input that an outsider controls, whatever the trigger: an expression such
   as `github.event.issue.title` or `github.head_ref`, or an environment variable that was set to one (as `TITLE` is in the
   example above; a template injection check does not see that one).
+  In the metadata of a composite action, `inputs.*` counts as such an input (also through `env:`): the caller chooses it, and a
+  workflow can pass it the title of an issue. This holds without a calling workflow, the action may be used by other repositories.
 
 `echo "VERSION=1.0" >> "$GITHUB_ENV"` and `echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"` are fine. Use `$GITHUB_OUTPUT` to pass
 state between steps (`echo "version=$(cat version.txt)" >> "$GITHUB_OUTPUT"` is not reported) and validate or avoid the value
