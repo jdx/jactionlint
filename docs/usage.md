@@ -13,6 +13,11 @@ configuration `.github/dependabot.yml` (or `.github/dependabot.yaml`) of the rep
 jactionlint
 ```
 
+Only the `.yml` and `.yaml` files directly in `.github/workflows` are workflows: GitHub does not load the files in its subdirectories
+(test data, prompts, tool configuration), so the repository mode does not check them. A file below `.github/workflows/` which you
+give as an argument is checked anyway. The same goes for the globs of a hook such as the [hk](#hk) step: a `**` glob would pass
+those files as arguments, so write `.github/workflows/*.yml` as in the examples.
+
 When paths to YAML workflow files are given as arguments, jactionlint checks them.
 
 ```sh
@@ -68,6 +73,22 @@ rules:
 
 The old names `strict` and `all` are read as `pedantic` in the config file with a deprecation warning. See
 [coming from actionlint](actionlint.md) for the checks of actionlint.
+
+#### The first run
+
+The default profile is strict on purpose, so most repositories fail it the first time (the median repository of the bug bash had
+about 60 findings, all of them errors). When a text run finds 20 or more findings, jactionlint prints one line to stderr that says
+what to do next, for example:
+
+```
+note: 132 findings in 14 files. see -format summary for the counts per rule; adopt the checks gradually with -baseline-write; for the checks of actionlint only use -profile correctness. silence this note with -no-hints or JACTIONLINT_NO_HINTS=1
+```
+
+It is shown only when stderr is a terminal or the process runs in CI (`CI` or `GITHUB_ACTIONS` is set), never with `-format json`,
+`sarif`, `summary`, `github`, `gcc` or a template, never with `-profile correctness` (those findings are mistakes, not something to
+adopt), and not at all with `-no-hints` or `JACTIONLINT_NO_HINTS=1`. The advice to write a baseline is left out once a baseline is
+applied. After `-baseline-write` the command prints the line that makes plain runs use the baseline (`baseline: auto` in the config
+file); without it only `jactionlint -baseline` reads the file.
 
 ### Ignore some errors
 
@@ -360,8 +381,8 @@ Note that special characters escaped with backslash like `\n` in the format stri
 |--------|----------------------------------------------------------------------------------------------|
 | `0`    | The command ran successfully and no problem was found                                        |
 | `1`    | The command ran successfully and some problem was found                                      |
-| `2`    | The command failed due to invalid command line option                                        |
-| `3`    | The command failed due to some fatal error                                                   |
+| `2`    | The command failed due to invalid command line option or flag value (`-profile`, `-format`, `-ignore`, ...) |
+| `3`    | The command failed due to some fatal error (no project, an unreadable file or config)        |
 
 With a [baseline](#baseline) the findings it accepts do not count.
 
@@ -455,6 +476,11 @@ How an entry matches a finding, so that you know what an edit does to the baseli
   recorded; a third one is new, and fixing one leaves one unused entry.
 - A finding that only changed because a release rewords the message of its rule still matches (the file also stores a hash
   without the message), so upgrading does not resurrect anything. Rewriting the baseline refreshes the messages.
+- A baseline is portable: the same file works in a checkout at another path (a CI runner, a colleague's machine). The messages
+  that mention a local action show its path relative to the repository (`./.github/actions/setup`), and the path of the
+  checkout is replaced in the fingerprint of any message that still contains it. A finding about a local action (its
+  `action.yml` is broken, a file it names is missing) is reported once, at its first use in the order of the files, however
+  many workflows use the action.
 - **A renamed file loses its entries**: they are keyed by the path relative to the repository root. The findings of the new
   path are reported and the old entries are unused. Run `jactionlint -baseline-write` after the rename (it follows the rename
   and is the only step needed).
@@ -546,7 +572,7 @@ used with stdin. These rules have a fix:
 | `mutable-runner-label`                | Writes the fixed label of the [`pin`](config.md#rules) option in place of a moving one.                                           | Yes                                                               |
 | `obfuscation`                         | Writes the path of `uses:` in its plain form.                                                                                     | No                                                                |
 | `pipeline-without-pipefail`           | Adds `set -o pipefail` as the first line of a `run: \|` script.                                                                    | No                                                                |
-| `self-repository`                     | Writes `$/` for `./` in `uses:`.                                                                                                  | No                                                                |
+| `self-repository`                     | Writes `$/` for `./` in `uses:`; needs a recent runner and GHES, and actionlint 1.7.12 and older reject it.                      | No                                                                |
 | `template-injection`                  | Moves a simple `${{ }}` reference of a bash or sh script into `env:`.                                                             | For plain references; the others are `unsafe`                     |
 | `unlocked-install`                    | Adds `--locked` to `cargo install`.                                                                                               | No                                                                |
 | `unpinned-uses`                       | With `-online`, replaces a tag with its commit and names the tag in a comment (see below).                                        | Yes                                                               |

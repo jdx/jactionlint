@@ -44,6 +44,7 @@ List of checks:
 - [Publishing with long-lived credentials](#check-use-trusted-publishing)
 - [Superfluous actions](#check-superfluous-actions)
 - [Installs without a lock file](#check-unlocked-install)
+- [Ignore comments that suppress nothing (pedantic)](#check-unused-ignore)
 - [Environment variable names](#check-env-var-names)
 - [Permissions](#permissions)
 - [Reusable workflows](#check-reusable-workflows)
@@ -3014,6 +3015,52 @@ This is the output with the option `pedantic`, or with a `package-lock.json` in 
 Installing named packages is covered by [adhoc packages](#check-adhoc-packages) and [unpinned tools](#check-unpinned-tools).
 These rules have no equivalent in zizmor.
 
+<a id="check-unused-ignore"></a>
+## Ignore comments that suppress nothing (pedantic)
+
+The rule `unused-ignore` reports an ignore that did not suppress a finding: a `# jactionlint ignore=...` comment or an entry of `ignores` in [the config file](config.md). An ignore outlives the code it was written for: the finding was fixed,
+the line moved, or the rule ID was mistyped, and what remains hides nothing and misleads the reader (and would hide a new finding at the
+same place). The rule is in the `pedantic` profile. Enable it alone in [the config file](config.md):
+
+```yaml
+rules:
+  unused-ignore: error
+```
+
+Example input:
+
+```yaml
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      # jactionlint ignore=shellcheck
+      - run: echo hello
+      # jactionlint ignore=no-such-rule
+      - run: echo bye
+```
+
+Output:
+<!-- Skip update output -->
+
+```
+test.yaml:6:28: ignore pattern "shellcheck" did not suppress any error. remove it [unused-ignore]
+  |
+6 |       # jactionlint ignore=shellcheck
+  |                            ^~~~~~~~~~
+test.yaml:8:28: ignore pattern "no-such-rule" did not suppress any error. remove it [unused-ignore]
+  |
+8 |       # jactionlint ignore=no-such-rule
+  |                            ^~~~~~~~~~~~
+```
+
+<!-- Skip playground link -->
+
+The finding has a safe fix: `jactionlint -fix` removes the pattern, or the whole comment when no other pattern is left, and keeps the
+patterns of the comment that were used. Two related findings are always on, from the `correctness` profile: `invalid-ignore-comment` (the
+comment cannot be parsed) and `expired-ignore` (an `expires` date of an entry in `ignores` has passed).
+
 <a id="check-env-var-names"></a>
 ## Environment variable names
 
@@ -3415,7 +3462,9 @@ rules:
 ```
 
 The rule has an unsafe fix, so `jactionlint -fix=unsafe` rewrites `./` to `$/`. It is unsafe because the two forms are not
-the same when a step replaces the workspace content, which is exactly the case the rule is about.
+the same when a step replaces the workspace content, which is exactly the case the rule is about, and because `$/` needs a
+recent runner and GitHub Enterprise Server: actionlint 1.7.12 and older reject it (`specifying action "$/..." in invalid format`),
+so a repository that also runs the original actionlint starts to fail there. Check which tools read your workflows before you apply it.
 
 `uses: $/path` needs no checkout step, and the [`local-action-checkout`](#check-local-action-checkout) rule does not report it.
 
@@ -6646,6 +6695,9 @@ finding at its first line that names the encoding, not one for every NUL; save t
 One finding is reported for a run of adjacent characters. The message says where the character is (a `run:` script, an
 expression, a `uses:` reference, a comment, a value or a key). Every finding is an error, also in a comment: a comment is how the
 change is made to look harmless.
+
+A file encoded as UTF-16 or UTF-32 (it starts with the byte order mark `FF FE` or `FE FF`) has NUL bytes in every character. It gets one
+finding at its start, without a fix, instead of one per NUL: save it as UTF-8 without a byte order mark.
 
 `-fix` removes the characters of the finding. This is a safe fix: what is left is what the reader of the file already saw. If the
 character is meant to be in a string, write it as an escape in a double quoted YAML string (`"\u200b"`) or in the shell

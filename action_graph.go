@@ -215,7 +215,7 @@ func newCallGraph(root string) *callGraph {
 	}
 
 	wfDir := filepath.Join(root, ".github", "workflows")
-	files, _ := walkWorkflowFiles(wfDir) // a missing directory has no workflows
+	files, _ := projectWorkflowFiles(wfDir) // a missing directory has no workflows
 	var queue []graphNode
 	for _, f := range files {
 		rel, err := filepath.Rel(root, f)

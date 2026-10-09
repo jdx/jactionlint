@@ -432,10 +432,10 @@ func TestBaselineFlagsAndErrors(t *testing.T) {
 	if status, _, _ := baselineCmd(t, "-baseline-write", "-baseline"); status != ExitStatusInvalidCommandOption {
 		t.Errorf("-baseline-write -baseline is invalid, got %d", status)
 	}
-	if status, _, _ := baselineCmd(t, "-baseline-write", "-fix"); status != ExitStatusFailure {
+	if status, _, _ := baselineCmd(t, "-baseline-write", "-fix"); status != ExitStatusInvalidCommandOption {
 		t.Errorf("-baseline-write -fix is invalid, got %d", status)
 	}
-	if status, _, _ := baselineCmd(t, "-baseline-write", "-"); status != ExitStatusFailure {
+	if status, _, _ := baselineCmd(t, "-baseline-write", "-"); status != ExitStatusInvalidCommandOption {
 		t.Errorf("-baseline-write with stdin is invalid, got %d", status)
 	}
 

@@ -466,6 +466,7 @@ An entry of "ignores" in the config file has expired or is about to.
 - Group: policy
 - Default level: error
 - Profile: correctness
+- Details and examples: [checks](./checks.md#check-unused-ignore)
 
 ## expression-syntax
 
@@ -659,6 +660,7 @@ An inline ignore comment is invalid.
 - Group: correctness
 - Default level: error
 - Profile: correctness
+- Details and examples: [checks](./checks.md#check-unused-ignore)
 
 ## invalid-label-pattern
 
@@ -1215,6 +1217,7 @@ An action, reusable workflow or Docker image is not pinned to a commit SHA or di
 - Group: policy
 - Default level: error
 - Profile: default
+- Fixable: yes
 - Option `policies` (string-map, default empty): How strongly to pin the actions matching a pattern: hash-pin (full commit SHA, the default for everything), ref-pin (any tag, branch or SHA) or any. The most specific pattern wins. Patterns are "*", "owner/*", "owner/repo" and "owner/repo/path". Docker images follow the "*" policy.
 - Details and examples: [checks](./checks.md#check-action-format)
 
@@ -1297,6 +1300,8 @@ An ignore comment or an entry of "ignores" in the config file did not suppress a
 - Group: policy
 - Default level: error
 - Profile: pedantic
+- Fixable: yes
+- Details and examples: [checks](./checks.md#check-unused-ignore)
 
 ## unused-job-output
 

@@ -47,6 +47,27 @@ func baselineNamesAFile(cfg *Config) bool {
 	return true
 }
 
+// baselineConfigured reports whether the configuration applies the baseline file at path to every run:
+// "auto" names the default file of root and any other on-value names the file itself.
+func baselineConfigured(cfg *Config, root, path string) bool {
+	if cfg == nil {
+		return false
+	}
+	var applied string
+	switch strings.ToLower(strings.TrimSpace(cfg.Baseline)) {
+	case "", "false", "off", "no":
+		return false
+	case "auto", "true", "yes":
+		applied = filepath.Join(root, DefaultBaselineFile)
+	default:
+		applied = cfg.Baseline
+		if !filepath.IsAbs(applied) {
+			applied = filepath.Join(root, applied)
+		}
+	}
+	return filepath.Clean(applied) == filepath.Clean(path)
+}
+
 // resolveBaselineSetting returns the path of the baseline to apply and whether it must exist. An
 // empty path means no baseline.
 func (l *Linter) resolveBaselineSetting(root string, cfg *Config) (path string, required bool) {
@@ -144,6 +165,7 @@ func (l *Linter) baselineStage(path string, content []byte, project *Project, bl
 		}
 	}
 	if bl != nil {
+		l.hintBaseline.Store(true)
 		bl.match(key, errs, infos)
 		bl.markLinted(key)
 	}
@@ -159,6 +181,16 @@ type WriteBaselineResult struct {
 	Files int
 	// Changed is false when the file already had this content.
 	Changed bool
+	// Applied is true when the configuration already applies the baseline ("baseline: auto" or the path of
+	// a file), so a plain run uses it. Otherwise only -baseline does.
+	Applied bool
+	// ConfigFile is the configuration file, relative to the repository, in which "baseline: auto" applies the
+	// baseline to every run. It is the file the repository has, else the default .github/jactionlint.yaml
+	// that -init-config creates.
+	ConfigFile string
+	// ConfigValue is the value of "baseline" in ConfigFile which applies this baseline: "auto" for the default
+	// file, else the path of the file relative to the repository.
+	ConfigValue string
 }
 
 // WriteBaseline records the current findings as the baseline. Without files it lints the whole
@@ -246,7 +278,22 @@ func (l *Linter) WriteBaseline(files []string, path string) (*WriteBaselineResul
 	if err != nil {
 		return nil, err
 	}
-	res := &WriteBaselineResult{Path: path, Entries: len(bl.Entries)}
+	res := &WriteBaselineResult{Path: path, Entries: len(bl.Entries), ConfigFile: ".github/jactionlint.yaml", ConfigValue: "auto"}
+	if path != filepath.Join(root, DefaultBaselineFile) {
+		if rel, err := filepath.Rel(root, path); err == nil {
+			res.ConfigValue = filepath.ToSlash(rel)
+		} else {
+			res.ConfigValue = filepath.ToSlash(path)
+		}
+	}
+	if cfg := l.configFor(project); cfg != nil {
+		res.Applied = baselineConfigured(cfg, root, path)
+		if cfg.Path != "" && project != nil {
+			if rel, err := filepath.Rel(project.RootDir(), cfg.Path); err == nil && !strings.HasPrefix(rel, "..") {
+				res.ConfigFile = filepath.ToSlash(rel)
+			}
+		}
+	}
 	fileSet := map[string]bool{}
 	for _, e := range bl.Entries {
 		fileSet[e.File] = true
@@ -411,6 +458,7 @@ func (l *Linter) printOne(r fileResult) ([]*Error, error) {
 		return nil, err
 	}
 	l.reportBaselineNote(results)
+	l.reportRunHint(results)
 	if len(results) == 1 {
 		return r.errs, nil
 	}

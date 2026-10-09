@@ -13,6 +13,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/fatih/color"
@@ -157,11 +158,17 @@ type LinterOptions struct {
 	// SARIFHideBaselined leaves the findings which the baseline accepts out of the SARIF log. By default
 	// they are in it as results with a suppression of the kind "external".
 	SARIFHideBaselined bool
+	// RunHints lets a run of the text format that finds many findings print one line to LogWriter about how
+	// to count them, adopt them gradually and get the checks of actionlint only. It is printed only when
+	// LogWriter is a terminal or the process runs in CI, and never with another format. The jactionlint
+	// command sets it unless -no-hints or JACTIONLINT_NO_HINTS is given.
+	RunHints bool
 	// More options will come here
 }
 
 // Linter is struct to lint workflow files.
 type Linter struct {
+	shared     sharedFindings
 	projects   *Projects
 	out        io.Writer
 	logOut     io.Writer
@@ -185,13 +192,17 @@ type Linter struct {
 	minSeverity    Severity
 	online         onlineSettings
 	baseline       linterBaseline
-	warnedOnce     sync.Map // string -> struct{}: the messages warnOnce printed
-	profile        Profile  // the -profile override, empty when the configuration decides
-	profiled       sync.Map // *Config -> *Config: the configs with the profile override applied
-	warned         sync.Map // *Config -> struct{}: configs whose deprecations were already reported
-	graphs         sync.Map // root directory -> *sync.Once-guarded *callGraph, see callGraphOf
-	notesMu        sync.Mutex
-	notes          []string // deprecation warnings found while linting
+	warnedOnce     sync.Map    // string -> struct{}: the messages warnOnce printed
+	profile        Profile     // the -profile override, empty when the configuration decides
+	profiled       sync.Map    // *Config -> *Config: the configs with the profile override applied
+	warned         sync.Map    // *Config -> struct{}: configs whose deprecations were already reported
+	graphs         sync.Map    // root directory -> *sync.Once-guarded *callGraph, see callGraphOf
+	runHints       bool        // LinterOptions.RunHints
+	hintBaseline   atomic.Bool // a baseline was applied to a file
+	// hintBeyondCorrectness is true when a file was linted with a profile above correctness
+	hintBeyondCorrectness atomic.Bool
+	notesMu               sync.Mutex
+	notes                 []string // deprecation warnings found while linting
 }
 
 // NewLinter creates a new Linter instance.
@@ -252,14 +263,14 @@ func NewLinter(out io.Writer, opts *LinterOptions) (*Linter, error) {
 	}
 
 	if err := opts.OnlineOptions.validate(); err != nil {
-		return nil, fmt.Errorf("invalid online options: %w", err)
+		return nil, &usageError{fmt.Errorf("invalid online options: %w", err)}
 	}
 
 	ignore := make(IgnorePatterns, 0, len(opts.IgnorePatterns))
 	for _, s := range opts.IgnorePatterns {
 		r, err := ParseIgnorePattern(s)
 		if err != nil {
-			return nil, fmt.Errorf("invalid regular expression for ignore pattern %q: %s", s, err.Error())
+			return nil, &usageError{fmt.Errorf("invalid regular expression for ignore pattern %q: %s", s, err.Error())}
 		}
 		ignore = append(ignore, r)
 	}
@@ -268,13 +279,13 @@ func NewLinter(out io.Writer, opts *LinterOptions) (*Linter, error) {
 	if isTemplateFormat(opts.Format) {
 		f, err := NewErrorFormatter(opts.Format)
 		if err != nil {
-			return nil, err
+			return nil, &usageError{err}
 		}
 		formatter = f
 	}
 	prn, err := newPrinter(opts.Format, opts.Oneline, opts.ShowRuleIDs, opts.SARIFHideBaselined, formatter)
 	if err != nil {
-		return nil, err
+		return nil, &usageError{err}
 	}
 
 	cwd := "."
@@ -305,6 +316,7 @@ func NewLinter(out io.Writer, opts *LinterOptions) (*Linter, error) {
 		errFmt:         formatter,
 		cwd:            cwd,
 		onRulesCreated: opts.OnRulesCreated,
+		runHints:       opts.RunHints,
 		onDependabot:   opts.OnDependabotRulesCreated,
 		configFile:     opts.ConfigFile,
 		minSeverity:    opts.MinSeverity,
@@ -431,7 +443,7 @@ func (l *Linter) repositoryFiles(dir string) ([]string, *Project, error) {
 	}
 
 	l.log("Detected project:", p.RootDir())
-	files, err := walkWorkflowFiles(p.WorkflowsDir())
+	files, err := projectWorkflowFiles(p.WorkflowsDir())
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return nil, nil, err // a repository with only actions has no workflows directory
 	}
@@ -441,6 +453,36 @@ func (l *Linter) repositoryFiles(dir string) ([]string, *Project, error) {
 		return nil, nil, fmt.Errorf("no YAML file was found in %q", p.WorkflowsDir())
 	}
 	return files, p, nil
+}
+
+// projectWorkflowFiles returns the paths of the YAML files which are located directly in the workflows
+// directory of a project, in sorted order. GitHub loads only these as workflows, so a YAML file in a
+// subdirectory (test data, scripts, configuration for tools) is not a workflow and is not linted as one
+// by the repository mode. A file given explicitly on the command line is linted anyway.
+func projectWorkflowFiles(dir string) ([]string, error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, fmt.Errorf("could not read files in %q: %w", dir, err)
+	}
+	files := []string{}
+	for _, e := range entries {
+		n := e.Name()
+		if !strings.HasSuffix(n, ".yml") && !strings.HasSuffix(n, ".yaml") {
+			continue
+		}
+		path := filepath.Join(dir, n)
+		if e.IsDir() {
+			continue
+		}
+		if e.Type()&fs.ModeSymlink != 0 {
+			if s, err := os.Stat(path); err != nil || s.IsDir() {
+				continue // a dangling link or a link to a directory is no workflow file
+			}
+		}
+		files = append(files, path)
+	}
+	sort.Strings(files)
+	return files, nil
 }
 
 // collectWorkflowFiles returns the paths of all YAML files in the directory recursively in sorted order.
@@ -520,6 +562,7 @@ func (l *Linter) LintFiles(filepaths []string, project *Project) ([]*Error, erro
 		return nil, err
 	}
 	l.reportBaselineNote(results)
+	l.reportRunHint(results)
 
 	l.log("Found", total, "errors in", n, "files")
 
@@ -595,6 +638,7 @@ func (l *Linter) lintFilesQuietly(filepaths []string, project *Project) ([]fileR
 	if err := eg.Wait(); err != nil {
 		return nil, err
 	}
+	l.shared.dropRepeatedInFiles(ws)
 
 	// Ensure that all processes finish. `proc.wait()` must be called after `eg.Wait()`.
 	// Calling `WaitGroup.Add` after `WaitGroup.Wait` can cause a race condition (specifically when
@@ -605,6 +649,56 @@ func (l *Linter) lintFilesQuietly(filepaths []string, project *Project) ([]fileR
 	proc.wait()
 
 	return ws, nil
+}
+
+// sharedFindings are the findings which describe a thing many places share (a local action with a broken
+// metadata file) and not the place which reported them (see RuleAction.reportOnce). Every use reports such a
+// finding, so that the report does not depend on which file a goroutine happened to lint first, and only the
+// first one in the order of the files is kept.
+type sharedFindings struct{ errs sync.Map }
+
+// mark remembers the findings.
+func (s *sharedFindings) mark(errs []*Error) {
+	for _, e := range errs {
+		s.errs.Store(e, struct{}{})
+	}
+}
+
+// dropper returns a function which reports whether a finding is a repeat of an earlier shared finding with the
+// same ID and message, and so is to be dropped.
+func (s *sharedFindings) dropper() func(*Error) bool {
+	var seen map[string]bool
+	return func(e *Error) bool {
+		if _, ok := s.errs.Load(e); !ok {
+			return false
+		}
+		k := e.ID + "\x00" + e.Message
+		if seen[k] {
+			return true
+		}
+		if seen == nil {
+			seen = map[string]bool{}
+		}
+		seen[k] = true
+		return false
+	}
+}
+
+// dropRepeated removes the repeats from the sorted findings of one file.
+func (s *sharedFindings) dropRepeated(errs []*Error) []*Error {
+	return slices.DeleteFunc(errs, s.dropper())
+}
+
+// dropRepeatedInFiles keeps only the first shared finding of all files, in the order of the results. The
+// findings which the baseline accepts count as the first, too: the repeat of an accepted finding is the same
+// finding.
+func (s *sharedFindings) dropRepeatedInFiles(ws []fileResult) {
+	drop := s.dropper()
+	for i := range ws {
+		// A file has at most one of them (finishCheck dropped the repeats), either accepted or reported
+		ws[i].baselined = slices.DeleteFunc(ws[i].baselined, drop)
+		ws[i].errs = slices.DeleteFunc(ws[i].errs, drop)
+	}
 }
 
 // LintFile lints one YAML workflow file and outputs the errors to given writer. The project
@@ -782,6 +876,9 @@ func (l *Linter) check(
 		}
 
 		for _, rule := range rules {
+			if sr, ok := rule.(interface{ sharedErrs() []*Error }); ok {
+				l.shared.mark(sr.sharedErrs())
+			}
 			errs := rule.Errs()
 			l.debug("%s found %d errors", rule.Name(), len(errs))
 			if isAction {
@@ -814,6 +911,7 @@ func (l *Linter) isActionFile(p string) bool {
 // rule IDs, applies the ignores and the minimum severity, and sorts the errors. isWorkflow tells that
 // the file is a workflow, for which the online pin fixes are attached.
 func (l *Linter) finishCheck(path string, content []byte, all []*Error, cfg *Config, bl *baselineState, start time.Time, isWorkflow bool, ic *ignoreContext) []*Error {
+	l.noteRunProfile(cfg)
 	all = append(all, checkSourceRules(content, cfg)...)
 	if ic != nil {
 		all = dropUnreachable(all, ic.scopes)
@@ -860,6 +958,7 @@ func (l *Linter) finishCheck(path string, content []byte, all []*Error, cfg *Con
 
 	slices.SortFunc(all, compareErrors)
 	all = slices.CompactFunc(all, equalsErrors) // Alias may duplicate errors
+	all = l.shared.dropRepeated(all)
 
 	// The baseline identifies findings by their order among identical ones, so it sees all of them,
 	// also those below the minimum severity
@@ -916,7 +1015,12 @@ Loop:
 // warnDeprecations reports the deprecated keys of the config to the log output. It reports each
 // config only once even if many files are linted with it.
 func (l *Linter) warnDeprecations(cfg *Config) {
-	if len(cfg.Deprecations) == 0 && len(cfg.Notices) == 0 {
+	notices := cfg.Notices
+	if l.profile == "" {
+		// -profile decides the profile, so a note about the profile of a config file that sets none is wrong then
+		notices = append(slices.Clone(notices), cfg.profileNotices...)
+	}
+	if len(cfg.Deprecations) == 0 && len(notices) == 0 {
 		return
 	}
 	if _, loaded := l.warned.LoadOrStore(cfg, struct{}{}); loaded {
@@ -924,7 +1028,7 @@ func (l *Linter) warnDeprecations(cfg *Config) {
 	}
 	l.notesMu.Lock()
 	l.notes = append(l.notes, cfg.Deprecations...)
-	l.notes = append(l.notes, cfg.Notices...)
+	l.notes = append(l.notes, notices...)
 	l.notesMu.Unlock()
 	if structured(l.printer) {
 		return // The warnings are in the output document
@@ -932,7 +1036,7 @@ func (l *Linter) warnDeprecations(cfg *Config) {
 	for _, d := range cfg.Deprecations {
 		fmt.Fprintln(l.logOut, "warning:", d)
 	}
-	for _, n := range cfg.Notices {
+	for _, n := range notices {
 		fmt.Fprintln(l.logOut, "note:", n)
 	}
 }

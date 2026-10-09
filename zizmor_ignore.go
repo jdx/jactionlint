@@ -408,8 +408,11 @@ func (l *Linter) MigrateIgnores(paths []string) error {
 		if p == nil {
 			return fmt.Errorf("no project was found in any parent directories of %q. check workflows directory is put correctly in your Git repository", l.cwd)
 		}
-		if paths, err = collectWorkflowFiles(p.WorkflowsDir()); err != nil {
+		if paths, err = projectWorkflowFiles(p.WorkflowsDir()); err != nil {
 			return err
+		}
+		if len(paths) == 0 {
+			return fmt.Errorf("no YAML file was found in %q", p.WorkflowsDir())
 		}
 	}
 	res, err := MigrateZizmorIgnoreFiles(paths)

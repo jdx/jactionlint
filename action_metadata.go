@@ -198,7 +198,9 @@ type LocalActionsCache struct {
 	sib   *siblingWorkflows // see siblings
 	proj  *Project          // might be nil
 	cache map[string]*ActionMetadata
-	dbg   io.Writer
+	// errs are the errors of the entries which are nil because the metadata is invalid.
+	errs map[string]error
+	dbg  io.Writer
 }
 
 // NewLocalActionsCache creates new LocalActionsCache instance for the given project.
@@ -206,6 +208,7 @@ func NewLocalActionsCache(proj *Project, dbg io.Writer) *LocalActionsCache {
 	return &LocalActionsCache{
 		proj:  proj,
 		cache: map[string]*ActionMetadata{},
+		errs:  map[string]error{},
 		dbg:   dbg,
 	}
 }
@@ -250,6 +253,35 @@ func (c *LocalActionsCache) writeCache(key string, val *ActionMetadata) {
 	c.mu.Unlock()
 }
 
+// writeInvalid remembers that the metadata of the key is invalid and why.
+func (c *LocalActionsCache) writeInvalid(key string, err error) {
+	c.mu.Lock()
+	c.cache[key] = nil
+	if c.errs == nil {
+		c.errs = map[string]error{}
+	}
+	c.errs[key] = err
+	c.mu.Unlock()
+}
+
+// Lookup is like FindMetadata but it returns the error every time the metadata is invalid instead of only at the
+// first search. The rules use it so that every use of a broken action reports the same finding; which use is
+// searched first depends on the order in which the files are linted, and the linter keeps the first finding
+// in the order of the files. The second return value is nil when the action is not found.
+func (c *LocalActionsCache) Lookup(spec string) (*ActionMetadata, error) {
+	m, _, err := c.FindMetadata(spec)
+	if err != nil || m != nil {
+		return m, err
+	}
+	key, ok := canonLocalUsesSpec(spec)
+	if !ok {
+		return nil, nil
+	}
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return nil, c.errs[key]
+}
+
 // FindMetadata finds metadata for given spec. The spec should indicate for local action hence it
 // should start with "./" or with the self-repository prefix "$/". The first return value can be
 // nil even if error did not occur.
@@ -287,7 +319,6 @@ func (c *LocalActionsCache) FindMetadata(spec string) (*ActionMetadata, bool, er
 
 	var meta ActionMetadata
 	if err := yaml.Unmarshal(b, &meta); err != nil {
-		c.writeCache(key, nil) // Remember action was invalid
 
 		// Unwrap type error when a single type error occurs to simplify the error message
 		var m string
@@ -306,7 +337,9 @@ func (c *LocalActionsCache) FindMetadata(spec string) (*ActionMetadata, bool, er
 			m = err.Error()
 		}
 
-		return nil, false, fmt.Errorf("could not parse action metadata in %q: %s", dir, m)
+		err = fmt.Errorf("could not parse action metadata in %q: %s", strings.TrimSuffix(key, "/"), m)
+		c.writeInvalid(key, err) // Remember action was invalid
+		return nil, false, err
 	}
 	meta.file = f
 	meta.dir = dir
