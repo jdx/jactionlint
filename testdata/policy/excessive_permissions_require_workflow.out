@@ -1,0 +1,1 @@
+test.yaml:1:1: the workflow has no top-level "permissions:", so every job without its own gets the default permissions of the repository. set "permissions: {}" at the workflow level and grant the scopes to the jobs which need them [excessive-permissions]

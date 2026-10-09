@@ -1,0 +1,24 @@
+on:
+  push:
+
+permissions: {}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - run: echo build
+  read-only:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - run: echo read
+  reusable:
+    permissions:
+      contents: read
+      pull-requests: none
+    uses: owner/repo/.github/workflows/x.yml@v1

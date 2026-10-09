@@ -25,6 +25,36 @@
               "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
             },
             {
+              "id": "artipacked",
+              "name": "Artipacked",
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "description": "Checks that actions/checkout does not persist the GITHUB_TOKEN credential in the git config",
+                "queryURI": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+              },
+              "fullDescription": {
+                "text": "Checks that actions/checkout does not persist the GITHUB_TOKEN credential in the git config"
+              },
+              "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+            },
+            {
+              "id": "cache-poisoning",
+              "name": "CachePoisoning",
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "description": "Checks for caches restored in release workflows and caches written by privileged triggers",
+                "queryURI": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+              },
+              "fullDescription": {
+                "text": "Checks for caches restored in release workflows and caches written by privileged triggers"
+              },
+              "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+            },
+            {
               "id": "credentials",
               "name": "Credentials",
               "defaultConfiguration": {
@@ -85,6 +115,21 @@
               "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
             },
             {
+              "id": "excessive-permissions",
+              "name": "ExcessivePermissions",
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "description": "Checks for write permissions of the GITHUB_TOKEN which are broader than needed: \"write-all\" and write scopes at the workflow level",
+                "queryURI": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+              },
+              "fullDescription": {
+                "text": "Checks for write permissions of the GITHUB_TOKEN which are broader than needed: \"write-all\" and write scopes at the workflow level"
+              },
+              "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+            },
+            {
               "id": "expression",
               "name": "Expression",
               "defaultConfiguration": {
@@ -96,6 +141,21 @@
               },
               "fullDescription": {
                 "text": "Syntax and semantics checks for expressions embedded with ${{ }} syntax"
+              },
+              "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+            },
+            {
+              "id": "github-app",
+              "name": "GithubApp",
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "description": "Checks the use of actions/create-github-app-token for tokens which live longer or can do more than needed",
+                "queryURI": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+              },
+              "fullDescription": {
+                "text": "Checks the use of actions/create-github-app-token for tokens which live longer or can do more than needed"
               },
               "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
             },
@@ -265,6 +325,21 @@
               "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
             },
             {
+              "id": "self-repository",
+              "name": "SelfRepository",
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "description": "Checks that actions and reusable workflows of the same repository are referenced as \"$/path\" instead of \"./path\"",
+                "queryURI": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+              },
+              "fullDescription": {
+                "text": "Checks that actions and reusable workflows of the same repository are referenced as \"$/path\" instead of \"./path\""
+              },
+              "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+            },
+            {
               "id": "shell-name",
               "name": "ShellName",
               "defaultConfiguration": {
@@ -306,6 +381,36 @@
               },
               "fullDescription": {
                 "text": "Checks that timeout-minutes is set at jobs and does not exceed the configured maximum (opt-in by config)"
+              },
+              "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+            },
+            {
+              "id": "undocumented-permissions",
+              "name": "UndocumentedPermissions",
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "description": "Checks that a permission scope above \"read\" has a comment explaining why it is needed",
+                "queryURI": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+              },
+              "fullDescription": {
+                "text": "Checks that a permission scope above \"read\" has a comment explaining why it is needed"
+              },
+              "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+            },
+            {
+              "id": "unpinned-images",
+              "name": "UnpinnedImages",
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "description": "Checks that the container images of \"container:\" and \"services:\" are pinned by a digest",
+                "queryURI": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+              },
+              "fullDescription": {
+                "text": "Checks that the container images of \"container:\" and \"services:\" are pinned by a digest"
               },
               "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
             },

@@ -1,0 +1,20 @@
+on: push
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          # the release step pushes with this credential
+          persist-credentials: true
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: ${{ vars.PERSIST }}
+      - uses: actions/checkout@v4
+        with:
+          Persist-Credentials: false
+      - uses: owner/checkout@v4

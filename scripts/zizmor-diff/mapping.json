@@ -71,25 +71,18 @@
     },
     "excessive-permissions": {
       "coverage": "partial",
-      "notes": "Only the opt-in missing-permissions check (no permissions block at all). Broad write scopes are not reported yet.",
-      "jactionlint": [{ "rule": "missing-permissions" }, { "rule": "require-permissions" }]
+      "notes": "Workflow-level write scopes and write-all (excessive-permissions), and a job without any permissions (missing-permissions). Job-level write scopes are reported only on privileged triggers, while zizmor does not report job-level scopes.",
+      "jactionlint": [{ "rule": "excessive-permissions" }, { "rule": "missing-permissions" }]
     },
     "unpinned-uses": {
       "coverage": "partial",
-      "notes": "Only the opt-in unpinned-uses check (require-commit-hash in v1), for actions and for reusable workflows.",
-      "jactionlint": [
-        { "rule": "unpinned-uses", "message_contains": "must be pinned to a full-length commit SHA" },
-        { "rule": "action", "message_contains": "must be pinned to a full-length commit SHA" },
-        { "rule": "workflow-call", "message_contains": "must be pinned to a full-length commit SHA" }
-      ]
+      "notes": "The blanket hash-pin policy and the per-pattern policies (hash-pin, ref-pin, any) for actions, reusable workflows and docker:// images. Supported patterns are *, owner/*, owner/repo and owner/repo/path.",
+      "jactionlint": [{ "rule": "unpinned-uses" }]
     },
     "unpinned-images": {
       "coverage": "partial",
-      "notes": "Only docker:// action references under unpinned-uses. container: and services: images are not checked yet.",
-      "jactionlint": [
-        { "rule": "unpinned-uses", "message_contains": "docker image must be pinned to a digest" },
-        { "rule": "action", "message_contains": "docker image must be pinned to a digest" }
-      ]
+      "notes": "container: and services: images, by digest. Images in docker:// uses: are reported as unpinned-uses.",
+      "jactionlint": [{ "rule": "unpinned-images" }, { "rule": "unpinned-uses", "message_contains": "docker image must be pinned" }]
     },
     "unsound-ternary": {
       "coverage": "partial",
@@ -103,6 +96,31 @@
       "coverage": "partial",
       "notes": "allow and deny lists of repository patterns (rules.forbidden-uses.allow and deny); not measured against zizmor yet. required-actions is the separate inverse check and does not cover these findings.",
       "jactionlint": [{ "rule": "forbidden-uses" }]
+    },
+    "undocumented-permissions": {
+      "coverage": "partial",
+      "notes": "Scopes above read need a comment (read scopes too with include-read). Comments that only drive a tool do not count.",
+      "jactionlint": [{ "rule": "undocumented-permissions" }]
+    },
+    "self-repository": {
+      "coverage": "full",
+      "notes": "./ in uses: of steps and reusable workflow calls, with an unsafe fix to $/.",
+      "jactionlint": [{ "rule": "self-repository" }]
+    },
+    "github-app": {
+      "coverage": "partial",
+      "notes": "actions/create-github-app-token only: skip-token-revoke, owner without repositories and missing permission-* inputs.",
+      "jactionlint": [{ "rule": "github-app" }]
+    },
+    "artipacked": {
+      "coverage": "full",
+      "notes": "actions/checkout without persist-credentials: false, with a fix.",
+      "jactionlint": [{ "rule": "artipacked" }]
+    },
+    "cache-poisoning": {
+      "coverage": "partial",
+      "notes": "Caches restored in release workflows for a fixed table of cache actions, and cache-mode: write on privileged triggers.",
+      "jactionlint": [{ "rule": "cache-poisoning" }]
     }
   }
 }

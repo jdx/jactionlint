@@ -1941,6 +1941,32 @@ When enabled, jactionlint reports the following at `uses:`:
 Local actions and workflows (`./path`, `$/path`) are not reported because they always run at the commit of the workflow itself.
 `uses:` values containing `${{ }}` expressions are skipped since they cannot be checked statically.
 
+By default every action must be pinned to a full commit SHA. The `policies` option relaxes that for the repositories you trust,
+like the `unpinned-uses` policies of [zizmor](https://docs.zizmor.sh/audits/#unpinned-uses):
+
+```yaml
+rules:
+  unpinned-uses:
+    level: error
+    policies:
+      actions/checkout: hash-pin
+      actions/*: ref-pin
+      my-org/*: any
+```
+
+Each key is a pattern for the repository of the `uses:` value, and the value is the policy:
+
+- `hash-pin`: a full-length commit SHA is required (for Docker images, a digest). This is the policy of everything that no
+  pattern matches.
+- `ref-pin`: any tag, branch or commit SHA is accepted. For Docker images, a tag other than `latest` or a digest is required.
+- `any`: nothing is required.
+
+The patterns are `*` (everything), `owner/*`, `owner/repo` and `owner/repo/path` (the path and everything below it).
+Owners and repositories are compared case-insensitively. When several patterns match, the most specific one wins whatever the order
+they are written in: in the example, `actions/checkout` needs a commit SHA while the other `actions/*` actions only need a ref.
+Reusable workflow calls follow the same patterns. Patterns describe repositories, so a Docker image follows the `*` pattern.
+Invalid patterns and unknown policies are errors when the configuration is read.
+
 <a id="check-local-action-checkout"></a>
 ### Local action used before checkout
 
@@ -2492,6 +2518,486 @@ When enabled, jactionlint reports every job that is not covered by `permissions:
 `permissions:` and the job has no `permissions:` of its own. Either of them is enough, and `permissions: {}` (no permissions)
 counts as explicit. Jobs which call reusable workflows (`uses:`) are checked in the same way because the caller limits the
 permissions of the callee. The error is reported at the job so that it is easy to see which jobs need a fix.
+
+<a id="check-excessive-permissions"></a>
+## Excessive permissions (opt-in)
+
+Example input:
+
+```yaml
+on:
+  push:
+    branches: [main]
+
+# ERROR: every job of the workflow gets these write permissions
+permissions:
+  contents: write
+  id-token: write
+  # OK: reading is not reported
+  issues: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo build
+  publish:
+    runs-on: ubuntu-latest
+    # OK: write access granted to the job which needs it
+    permissions:
+      packages: write
+    steps:
+      - run: echo publish
+  everything:
+    runs-on: ubuntu-latest
+    # ERROR: write-all gives write access to every scope
+    permissions: write-all
+    steps:
+      - run: echo everything
+```
+
+Output:
+<!-- Skip update output -->
+```
+test.yaml:7:3: "contents: write" is granted to every job of the workflow, which lets any of them push commits and tags and create or delete releases. set "permissions: {}" at the workflow level and grant "contents: write" only to the job which needs it [excessive-permissions]
+  |
+7 |   contents: write
+  |   ^~~~~~~~~
+test.yaml:8:3: "id-token: write" is granted to every job of the workflow, which lets any of them request OIDC tokens to authenticate to cloud providers and package registries. set "permissions: {}" at the workflow level and grant "id-token: write" only to the job which needs it [excessive-permissions]
+  |
+8 |   id-token: write
+  |   ^~~~~~~~~
+test.yaml:27:18: "write-all" gives the GITHUB_TOKEN write access to every scope for the whole job. list only the scopes which are needed and set the others to "read" or "none" [excessive-permissions]
+   |
+27 |     permissions: write-all
+   |                  ^~~~~~~~~
+```
+
+<!-- Skip playground link -->
+
+The rule `excessive-permissions` reports write access that the `GITHUB_TOKEN` gets without a narrow need. It is **disabled by
+default** and enabled by the `strict` profile. The output above is from the following `rules` section of [the configuration
+file](config.md):
+
+```yaml
+rules:
+  excessive-permissions: error
+```
+
+It reports:
+
+- a write scope in the `permissions:` of the workflow. Every job inherits it, including the jobs which only build or test.
+  The message says what the scope allows (`contents: write` pushes commits and tags, `id-token: write` requests OIDC tokens,
+  `packages: write` publishes packages, and so on). When the workflow runs on `pull_request_target`, `workflow_run` or
+  `issue_comment`, which people without write access can trigger, the message says so.
+- `write-all` and `read-all`, at the workflow level or on a job. They grant a level to every scope, including scopes which the
+  job never uses.
+
+Write scopes on a job are not reported: that is where the access should be granted. The best practice is `permissions: {}` at
+the workflow level and the scopes a job needs on that job. Read scopes and `none` are not reported either.
+
+A job which has no `permissions:` in a workflow which has none is the business of the [`missing-permissions`](#permissions)
+rule, which reports the jobs the default permissions of the repository apply to. To also have a workflow without a top-level
+`permissions:` reported when its jobs set their own, turn on `require-workflow-permissions`:
+
+```yaml
+rules:
+  excessive-permissions:
+    level: warn
+    require-workflow-permissions: true
+```
+
+[zizmor](https://docs.zizmor.sh/audits/#excessive-permissions) reports both cases as `excessive-permissions`.
+
+To silence one finding, put `# jactionlint ignore=excessive-permissions` above the scope, or list the rule in `paths.*.ignore`
+of the configuration for workflows which need it (a release workflow with a single job, for example).
+
+<a id="check-undocumented-permissions"></a>
+## Undocumented permissions (opt-in)
+
+Example input:
+
+```yaml
+on: push
+
+permissions:
+  contents: write
+  # Needed to comment on the release pull request
+  pull-requests: write
+  issues: write # close stale issues
+  packages: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    steps:
+      - run: echo hello
+```
+
+Output:
+<!-- Skip update output -->
+```
+test.yaml:4:3: permission "contents: write" has no comment explaining why it is needed. add a comment at the end of the line or above it [undocumented-permissions]
+  |
+4 |   contents: write
+  |   ^~~~~~~~~
+test.yaml:14:7: permission "id-token: write" has no comment explaining why it is needed. add a comment at the end of the line or above it [undocumented-permissions]
+   |
+14 |       id-token: write
+   |       ^~~~~~~~~
+```
+
+<!-- Skip playground link -->
+
+The rule `undocumented-permissions` requires a comment which explains why a permission scope above `read` is granted. Permissions
+are easy to add and never revisited, so a sentence next to each one keeps the list honest and makes a review of the workflow
+quick. It is **disabled by default** and enabled by the `all` profile because it is a style check. The output above is from the
+following `rules` section of [the configuration file](config.md):
+
+```yaml
+rules:
+  undocumented-permissions: error
+```
+
+A scope counts as documented when a comment is at the end of its line (`issues: write # close stale issues`) or when comment
+lines are directly above it, with no blank line in between. The comment above `permissions:` does not document the scopes below
+it. Comments which only configure a tool, such as `# jactionlint ignore=...`, do not explain anything. Both the workflow and job
+`permissions:` are checked; `write-all` and `read-all` are the business of `excessive-permissions`.
+
+With the `include-read` option the scopes granted with `read` need a comment too, except `contents: read`, which every job needs
+to check out the repository:
+
+```yaml
+rules:
+  undocumented-permissions:
+    level: warn
+    include-read: true
+```
+
+[zizmor](https://docs.zizmor.sh/audits/#undocumented-permissions) behaves like `include-read: true`, and counts only a comment at the end of the line.
+
+<a id="check-unpinned-images"></a>
+## Unpinned container images (opt-in)
+
+Example input:
+
+```yaml
+on: push
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    # ERROR: no tag, so this is "latest"
+    container: node
+    services:
+      db:
+        # ERROR: a tag can be moved to another image
+        image: postgres:16
+      cache:
+        # OK: pinned by a digest
+        image: redis:7@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+    steps:
+      - run: echo hello
+```
+
+Output:
+<!-- Skip update output -->
+```
+test.yaml:7:16: container image "node" has no tag, so the registry decides which image is pulled ("latest"). pin it to a digest like "node@sha256:{digest}" [unpinned-images]
+  |
+7 |     container: node
+  |                ^~~~
+test.yaml:11:16: image "postgres:16" of service "db" is pinned by a tag, which can be moved to another image. pin it to a digest like "postgres:16@sha256:{digest}" [unpinned-images]
+   |
+11 |         image: postgres:16
+   |                ^~~~~~~~~~~
+```
+
+<!-- Skip playground link -->
+
+The rule `unpinned-images` reports `container:` and `services:` images which are not pinned by a digest. A tag can be moved to
+another image by whoever controls the registry repository, and an image without a tag is `latest`, so what runs in your job can
+change without any change to the workflow. It is **disabled by default** and enabled by the `strict` profile. The output above is
+from the following `rules` section of [the configuration file](config.md):
+
+```yaml
+rules:
+  unpinned-images: error
+```
+
+Images are pinned with their content digest: `postgres:16@sha256:{64 hex digits}`. Keep the tag next to the digest so that
+Dependabot and Renovate can update both. `docker inspect postgres:16 --format='{{index .RepoDigests 0}}'` prints the digest of
+an image you have pulled.
+
+An image without a tag and an image with the tag `latest` are reported with a stronger message. To report only those two and
+accept tags (which is what zizmor does by default), turn off the `require-digest` option:
+
+```yaml
+rules:
+  unpinned-images:
+    level: warn
+    require-digest: false
+```
+
+Images written with an expression (`image: ${{ vars.IMAGE }}`) are skipped since they cannot be checked statically. Docker
+images used as actions (`uses: docker://alpine:3.20`) are checked by the [`unpinned-uses`](#check-action-format) rule.
+
+<a id="check-self-repository"></a>
+## Self-repository syntax (opt-in)
+
+Example input:
+
+```yaml
+on: push
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          persist-credentials: false
+      # ERROR: looked up in the workspace at run time
+      - uses: ./.github/actions/setup
+      # OK
+      - uses: $/.github/actions/setup
+  call:
+    # ERROR: the same for reusable workflows
+    uses: ./.github/workflows/reusable.yml
+```
+
+Output:
+<!-- Skip update output -->
+```
+test.yaml:11:15: "./.github/actions/setup" is looked up in the workspace at run time, where an earlier step can replace it. use the self-repository syntax "$/.github/actions/setup" which always refers to the commit running the workflow [self-repository]
+   |
+11 |       - uses: ./.github/actions/setup
+   |               ^~~~~~~~~~~~~~~~~~~~~~~
+test.yaml:16:11: "./.github/workflows/reusable.yml" is looked up in the workspace at run time, where an earlier step can replace it. use the self-repository syntax "$/.github/workflows/reusable.yml" which always refers to the commit running the workflow [self-repository]
+   |
+16 |     uses: ./.github/workflows/reusable.yml
+   |           ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+```
+
+<!-- Skip playground link -->
+
+The rule `self-repository` reports `uses: ./path` and asks for `uses: $/path`. Both name an action or reusable workflow of the
+repository that runs the workflow. `./path` is looked up in the workspace of the runner, so any earlier step can change what it
+runs (a checkout of another ref or repository, or a script writing an `action.yml`), and a policy cannot tell it from an
+arbitrary directory. `$/path` always resolves to the commit that runs the workflow. It is **disabled by default**, enabled by the
+`strict` profile and reported as `info`, because the syntax is new and some GitHub Enterprise Server versions do not understand
+it. The output above is from the following `rules` section of [the configuration file](config.md):
+
+```yaml
+rules:
+  self-repository: error
+```
+
+The rule has an unsafe fix, so `jactionlint -fix=unsafe` rewrites `./` to `$/`. It is unsafe because the two forms are not
+the same when a step replaces the workspace content, which is exactly the case the rule is about.
+
+`uses: $/path` needs no checkout step, and the [`local-action-checkout`](#check-local-action-checkout) rule does not report it.
+
+<a id="check-github-app"></a>
+## GitHub App tokens (opt-in)
+
+Example input:
+
+```yaml
+on: push
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      # ERROR: no permission-* input, so the token gets all permissions of the app
+      - uses: actions/create-github-app-token@3ff1caaa28b64c9cc276ce0a02e2ff584f3900c5 # v2
+        with:
+          app-id: ${{ vars.APP_ID }}
+          private-key: ${{ secrets.APP_KEY }}
+      # ERROR: owner without repositories, and the token is not revoked
+      - uses: actions/create-github-app-token@3ff1caaa28b64c9cc276ce0a02e2ff584f3900c5 # v2
+        with:
+          app-id: ${{ vars.APP_ID }}
+          private-key: ${{ secrets.APP_KEY }}
+          owner: my-org
+          permission-contents: read
+          skip-token-revoke: true
+```
+
+Output:
+<!-- Skip update output -->
+```
+test.yaml:8:15: no "permission-*" input is set, so the token gets every permission granted to the GitHub App. request only what the job needs, for instance "permission-contents: read" [github-app]
+  |
+8 |       - uses: actions/create-github-app-token@3ff1caaa28b64c9cc276ce0a02e2ff584f3900c5 # v2
+  |               ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+test.yaml:17:18: "owner" without "repositories" issues a token with access to every repository of the owner where the app is installed. list the repositories the token is for in "repositories" [github-app]
+   |
+17 |           owner: my-org
+   |                  ^~~~~~
+test.yaml:19:30: "skip-token-revoke: true" keeps the GitHub App token valid after the job ends. remove it so that the token is revoked in the post step [github-app]
+   |
+19 |           skip-token-revoke: true
+   |                              ^~~~
+```
+
+<!-- Skip playground link -->
+
+The rule `github-app` reports uses of [`actions/create-github-app-token`][create-github-app-token] which issue a token that is
+more powerful or lives longer than the job needs. An installation token is not a problem by itself, but the defaults of the
+action are generous. It is **disabled by default** and enabled by the `strict` profile. The output above is from the following
+`rules` section of [the configuration file](config.md):
+
+```yaml
+rules:
+  github-app: error
+```
+
+It reports:
+
+- no `permission-*` input (such as `permission-contents: read`), which gives the token every permission the app has been
+  granted on the installation
+- `owner:` without `repositories:`, which gives the token access to every repository of the owner where the app is installed
+- `skip-token-revoke: true`, which keeps the token valid after the job instead of revoking it in the post step
+
+Only `actions/create-github-app-token` is checked. Other actions which issue app tokens are not known to the rule.
+
+[create-github-app-token]: https://github.com/actions/create-github-app-token
+
+<a id="check-artipacked"></a>
+## Persisted checkout credentials (opt-in)
+
+Example input:
+
+```yaml
+on: push
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      # ERROR: the token stays in .git/config for the following steps
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - run: tar czf repo.tgz .
+      # OK
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          persist-credentials: false
+          path: other
+```
+
+Output:
+<!-- Skip update output -->
+```
+test.yaml:8:15: actions/checkout leaves the GITHUB_TOKEN in the git config of the workspace, where a later step such as an artifact upload can publish it. set "persist-credentials: false" under "with:" unless a later step needs to push [artipacked]
+  |
+8 |       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+  |               ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+```
+
+<!-- Skip playground link -->
+
+The rule `artipacked` reports `actions/checkout` steps which do not set `persist-credentials`. The checkout action stores the
+`GITHUB_TOKEN` in the git config of the workspace so that later `git` commands can push. Any later step can read it, and a step
+that copies the workspace, such as `actions/upload-artifact` with `path: .`, publishes it in the artifact (the
+[ArtiPACKED](https://unit42.paloaltonetworks.com/github-repo-artifacts-leak-tokens/) attack). It is **disabled by default** and
+enabled by the `strict` profile. The output above is from the following `rules` section of [the configuration file](config.md):
+
+```yaml
+rules:
+  artipacked: error
+```
+
+Set `persist-credentials: false` unless a later step needs to push. An explicit `persist-credentials: true` says that the
+credential is needed, so it is not reported, and neither is a value given by an expression.
+
+The rule has a fix: `jactionlint -fix` adds `persist-credentials: false` under `with:` of the step, and creates `with:` when
+the step has none. The fix is applied by `-fix` only when no later step of the job looks like it needs the credential. When a
+later `run:` script has a `git` command that talks to a remote (`push`, `pull`, `fetch`, `clone`, `remote`, `submodule`, `lfs`,
+`ls-remote`, `commit` or `tag`) or a later step uses an action known to push (such as `stefanzweifel/git-auto-commit-action` or
+`peter-evans/create-pull-request`), the fix is unsafe and needs `-fix=unsafe`. A script which pushes without a visible git
+command cannot be detected, so check the workflow after applying the fix. A step written in flow style (`- {uses: ...}`) is
+reported without a fix.
+
+<a id="check-cache-poisoning"></a>
+## Cache poisoning (opt-in)
+
+Example input:
+
+```yaml
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          persist-credentials: false
+      # ERROR: restores a cache in a workflow which publishes on tags
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+      # OK: the cache is not read
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+        with:
+          lookup-only: true
+      - run: cargo publish
+```
+
+Output:
+<!-- Skip update output -->
+```
+test.yaml:13:15: swatinem/rust-cache restores a cache although the workflow runs on pushed tags, so a poisoned cache entry can end up in the published artifacts. remove this step or set "lookup-only: true", or set "cache-mode: none" on the job [cache-poisoning]
+   |
+13 |       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+   |               ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+```
+
+<!-- Skip playground link -->
+
+The rule `cache-poisoning` reports caches which an attacker can use to get code into a release. Whoever can write a GitHub Actions
+cache entry can make a later workflow restore it, so a job that publishes artifacts should not read caches at all. It is
+**disabled by default** and enabled by the `strict` profile. The output above is from the following `rules` section of [the
+configuration file](config.md):
+
+```yaml
+rules:
+  cache-poisoning: error
+```
+
+A job is a release job when the workflow runs on the `release` event or on pushed tags (`push` with `tags:`), or when the job
+uses a publishing action (such as `pypa/gh-action-pypi-publish`, `softprops/action-gh-release` or `goreleaser/goreleaser-action`)
+or runs a publishing command (`cargo publish`, `npm publish`, `twine upload`, `gh release create`, `docker push`, ...). In a
+release job the rule reports the steps which restore a cache:
+
+| Action | Restores a cache unless |
+| --- | --- |
+| `actions/cache`, `actions/cache/restore` | `lookup-only: true` |
+| `actions/setup-node`, `setup-python`, `setup-java`, `setup-dotnet` | the `cache` input is missing or `false` (`package-manager-cache: false` only turns off the automatic cache of `setup-node`, not an explicit `cache`) |
+| `actions/setup-go` | `cache: false` (before `v4` the cache is opt-in) |
+| `ruby/setup-ruby` | `bundler-cache` is missing or `false` |
+| `astral-sh/setup-uv` | `enable-cache: false` |
+| `Swatinem/rust-cache` | `lookup-only: true` |
+| `jdx/mise-action` | `cache: false` |
+| `gradle/actions/setup-gradle` | `cache-disabled: true` |
+| `docker/build-push-action` | there is no `cache-from` with `type=gha` |
+| `hendrikmuhs/ccache-action`, `DeterminateSystems/magic-nix-cache-action` | never: remove the step |
+
+The list is not exhaustive: it has the actions whose caching behavior is known. A step is not reported when its `if:` looks at
+`github.event_name` or `github.ref`, or an input is an expression which does, since that is how caching is limited to
+non-release runs (`enable-cache: ${{ !startsWith(github.ref, 'refs/tags/') }}`).
+
+`cache-mode: none` on the workflow or on the job switches the cache off for the runner and suppresses these findings.
+
+The rule also reports `cache-mode: write` and `cache-mode: write-only` in a workflow which runs on `pull_request_target`,
+`workflow_run` or `issue_comment`: code of untrusted people writes the entries which privileged workflows restore later.
+
+Differences from [zizmor](https://docs.zizmor.sh/audits/#cache-poisoning): zizmor reports a release workflow once for the trigger and once
+for each step. jactionlint reports the steps (and the job-level publishing detection is jactionlint only).
 
 <a id="check-reusable-workflows"></a>
 ## Reusable workflows
