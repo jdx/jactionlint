@@ -156,6 +156,7 @@ func (rule *RuleExpression) checkObfuscation(expr ExprNode, line, col int, workf
 		rule.ReportIDf("obfuscation", rule.exprPos(tok.Line, tok.Column, line, col), "the expression is constant so it can be replaced by its value. write the value itself")
 		return
 	}
+	isIf := strings.HasSuffix(workflowKey, ".if")
 	VisitExprNode(expr, func(n, _ ExprNode, entering bool) {
 		if !entering {
 			return
@@ -183,6 +184,9 @@ func (rule *RuleExpression) checkObfuscation(expr ExprNode, line, col int, workf
 				rule.ReportIDf("obfuscation", rule.exprPos(tok.Line, tok.Column, line, col), "fromJSON(toJSON(...)) returns its argument unchanged. remove both calls")
 			}
 		case "format":
+			if isIf && ExprNode(call) == expr {
+				return // a constant condition is reported by the constant-condition rule
+			}
 			if res, ok := formatOfLiterals(call.Args); ok {
 				rule.ReportIDf("obfuscation", rule.exprPos(tok.Line, tok.Column, line, col), "format() is called with literal arguments only so its result is the constant %q. write the string itself", res)
 			}

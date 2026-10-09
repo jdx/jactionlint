@@ -1,0 +1,37 @@
+on:
+  pull_request_target:
+    types: [opened, synchronize]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - run: npm ci && npm test
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: refs/pull/${{ github.event.number }}/merge
+          path: pr
+      - uses: ./.github/actions/lint
+      - run: make -C pr lint
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: gh pr checkout ${{ github.event.number }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - run: ./scripts/test.sh
+  read-only:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - run: git diff --stat origin/main

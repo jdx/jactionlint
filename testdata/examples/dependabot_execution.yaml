@@ -1,0 +1,10 @@
+version: 2
+updates:
+  - package-ecosystem: pip
+    directory: "/"
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    # ERROR: Dependabot may run code of the dependencies it updates
+    insecure-external-code-execution: allow

@@ -1,0 +1,9 @@
+on: push
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    steps:
+      - run: curl -fsSL http://example.com/data.json -o data.json
+      - uses: octo/repo@v1
+        with:
+          mirror: http://mirror.example.com/downloads

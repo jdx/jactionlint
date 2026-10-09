@@ -53,5 +53,6 @@ jobs:
       - run: echo '${{ github.event.inputs.notification }}'
       - run: echo '${{ github.event.inputs.environment }}'
       - run: echo '${{ github.event.inputs.number }}'
+      - run: echo '${{ github.event.inputs.pi }}'
       - run: echo "${{ contains('hello, world!', github.event.inputs.name) }}"
         if: ${{ github.event.inputs.verbose }}

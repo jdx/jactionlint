@@ -154,6 +154,14 @@ func derefPath(n ExprNode) ([]string, bool) {
 			path = append(path, strings.ToLower(v.Property))
 			n = v.Receiver
 			continue
+		case *IndexAccessNode:
+			// github['actor'] reads the same property as github.actor
+			if k, ok := v.Index.(*StringNode); ok {
+				path = append(path, strings.ToLower(k.Value))
+				n = v.Operand
+				continue
+			}
+			return nil, false
 		case *VariableNode:
 			path = append(path, strings.ToLower(v.Name))
 			for i, j := 0, len(path)-1; i < j; i, j = i+1, j-1 {

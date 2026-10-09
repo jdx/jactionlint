@@ -70,7 +70,7 @@ paths:
       # Ignore all errors of the rule
       - unpinned-uses
       # Ignore the specific error from shellcheck
-      - 'shellcheck reported issue in this script: SC2086:.+'
+      - "shellcheck reported issue in this script: SC2086:.+"
   # This pattern only matches '.github/workflows/release.yaml' file.
   .github/workflows/release.yaml:
     ignore:
@@ -121,7 +121,7 @@ extends:
   Local actions (`./...` and `$/...`) and Docker images (`docker://...`) never match. Only workflow files are checked; the steps of
   composite action files (`action.yml`) are not (see [composite actions](checks.md#check-composite-actions)).
 - `assume-default-permissions`: Controls how the caller/callee permissions check for local reusable workflow calls
-  treats a caller workflow that has no `permissions:` block at the workflow level *and* no `permissions:` block on
+  treats a caller workflow that has no `permissions:` block at the workflow level _and_ no `permissions:` block on
   the calling job. This mirrors the repository-level "Workflow permissions" setting (Settings → Actions → General),
   which jactionlint cannot read from the workflow file. Set to `restricted` (the default) to assume GitHub's
   restricted default token (`contents: read` and `packages: read`, everything else `none`). Set to `permissive` to
@@ -157,11 +157,11 @@ unknown key "self-hosted-runnr" in the configuration at line:3,col:1. did you me
 
 A profile is a named set of [rules](rules.md) which are enabled together. `profile` selects one of them:
 
-| Profile   | Enables                                                                                                                                                                                     |
-| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Profile   | Enables                                                                                                                                                                                                                                          |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `default` | All the correctness checks, the security errors with (almost) no false positives, the bug detectors `unsound-ternary`, `workflow-run-names` and `local-action-checkout`, and the policy check `missing-timeout`. Used when `profile` is omitted. |
-| `strict`  | `default` plus the posture and policy checks: `unpinned-uses`, `missing-permissions` and `unused-ignore`.                                                                |
-| `all`     | `strict` plus the style checks: `require-shell`, `require-expression-wrapping` and `max-run-lines`.                                                                                         |
+| `strict`  | `default` plus the posture and policy checks: `unpinned-uses`, `missing-permissions` and `unused-ignore`.                                                                                                                                        |
+| `all`     | `strict` plus the style checks: `require-shell`, `require-expression-wrapping` and `max-run-lines`.                                                                                                                                              |
 
 The profile of each rule is in [the list of rules](rules.md). Some rules belong to no profile and run only when the
 configuration turns them on: `required-actions` (when the `required-actions` list is not empty) and `timeout-too-long` (when
@@ -192,17 +192,19 @@ rules:
     max: 60
 ```
 
-| Rule               | Option            | Description                                                                                                                              |
-| ------------------ | ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| `max-run-lines`    | `max`             | Maximum number of non-blank lines in a `run:` script. Default `100` when the rule is enabled by the `all` profile.                       |
-| `missing-timeout`  | `default-minutes` | The `timeout-minutes` which `-fix` adds to a job without one. There is no default: without it the rule has no fix. Lowered to `max` of `timeout-too-long` when that is smaller. |
-| `timeout-too-long` | `max`             | Maximum allowed `timeout-minutes` of a job in minutes. Values given by `${{ }}` are not checked. The rule does nothing without `max`.    |
-| `forbidden-uses`      | `allow` | List of patterns of the only actions and reusable workflows that may be used, e.g. `actions/*`. See [forbidden actions](checks.md#check-forbidden-uses). |
-| `forbidden-uses`      | `deny`  | List of patterns of actions and reusable workflows that must not be used. The rule does nothing without `allow` or `deny`.                      |
-| `secrets-outside-env` | `allow` | List of secret names that may be used by a job without an `environment:`. `GITHUB_TOKEN` is always allowed.                                     |
-| `typosquat-uses`      | `allow` | List of `owner/repo` slugs that are never reported, e.g. a legitimate fork of a popular action.                                                 |
-| `impostor-commit`  | `max-branches` | How many branches of an action repository a pinned commit is compared with before giving up without a verdict. Default `1000`; without a token at most 100 are compared. |
-| `known-vulnerable-actions` | `allow` | List of advisory IDs (`GHSA-...`) which are not reported: `allow: [GHSA-mrrh-fwg8-r2c3]`. Default none. |
+| Rule                       | Option            | Description                                                                                                                                                                     |
+| -------------------------- | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `max-run-lines`            | `max`             | Maximum number of non-blank lines in a `run:` script. Default `100` when the rule is enabled by the `all` profile.                                                              |
+| `missing-timeout`          | `default-minutes` | The `timeout-minutes` which `-fix` adds to a job without one. There is no default: without it the rule has no fix. Lowered to `max` of `timeout-too-long` when that is smaller. |
+| `timeout-too-long`         | `max`             | Maximum allowed `timeout-minutes` of a job in minutes. Values given by `${{ }}` are not checked. The rule does nothing without `max`.                                           |
+| `forbidden-uses`           | `allow`           | List of patterns of the only actions and reusable workflows that may be used, e.g. `actions/*`. See [forbidden actions](checks.md#check-forbidden-uses).                        |
+| `forbidden-uses`           | `deny`            | List of patterns of actions and reusable workflows that must not be used. The rule does nothing without `allow` or `deny`.                                                      |
+| `secrets-outside-env`      | `allow`           | List of secret names that may be used by a job without an `environment:`. `GITHUB_TOKEN` is always allowed.                                                                     |
+| `typosquat-uses`           | `allow`           | List of `owner/repo` slugs that are never reported, e.g. a legitimate fork of a popular action.                                                                                 |
+| `impostor-commit`          | `max-branches`    | How many branches of an action repository a pinned commit is compared with before giving up without a verdict. Default `1000`; without a token at most 100 are compared.        |
+| `known-vulnerable-actions` | `allow`           | List of advisory IDs (`GHSA-...`) which are not reported: `allow: [GHSA-mrrh-fwg8-r2c3]`. Default none.                                                                         |
+| `mutable-runner-label`     | `pin`             | Mapping from a moving label to the fixed label that `-fix` writes in its place (`ubuntu-latest: ubuntu-24.04`). There is no default: without an entry the finding has no fix.   |
+| `continue-on-error`        | `steps`           | `true` also reports steps with `continue-on-error: true`. Default `false`: only jobs are reported.                                                                              |
 
 ## Extending config files
 
@@ -240,18 +242,19 @@ The following keys were replaced by `rules`. They still work for now: jactionlin
 deprecation warning to stderr once per config file (in `-format sarif` it is in the log's `toolConfigurationNotifications`). `jactionlint -migrate-config` rewrites the file (keeping the comments
 and the other keys) into the `rules` mapping.
 
-| Deprecated key                                      | Replacement                                                                     |
-| --------------------------------------------------- | ------------------------------------------------------------------------------- |
-| `require-commit-hash: true`                         | `rules: {unpinned-uses: error}`                                                 |
-| `require-permissions: true`                         | `rules: {missing-permissions: error}`                                           |
-| `require-checkout-before-local-action: true`        | `rules: {local-action-checkout: error}` (on by default now)                     |
-| `require-expression-wrapping: true`                 | `rules: {require-expression-wrapping: error}`                                   |
-| `check-falsy-ternary: true`                         | `rules: {unsound-ternary: error}` (on by default now)                           |
-| `check-workflow-run-names: true`                    | `rules: {workflow-run-names: error}` (on by default now)                        |
-| `require-shell: true`                               | `rules: {require-shell: error}`                                                 |
-| `max-run-lines: N`                                  | `rules: {max-run-lines: {level: error, max: N}}`                                |
-| `timeout-minutes: {required: true}`                 | `rules: {missing-timeout: error}`                                               |
-| `timeout-minutes: {max: N}`                         | `rules: {timeout-too-long: {level: error, max: N}}`                             |
+| Deprecated key                               | Replacement                                                                                    |
+| -------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `require-commit-hash: true`                  | `rules: {unpinned-uses: error}`                                                                |
+| `require-permissions: true`                  | `rules: {missing-permissions: error}`                                                          |
+| `require-checkout-before-local-action: true` | `rules: {local-action-checkout: error}` (on by default now)                                    |
+| `require-expression-wrapping: true`          | `rules: {require-expression-wrapping: error}`                                                  |
+| `check-falsy-ternary: true`                  | `rules: {unsound-ternary: error}` (on by default now)                                          |
+| `check-workflow-run-names: true`             | `rules: {workflow-run-names: error}` (on by default now)                                       |
+| `require-shell: true`                        | `rules: {require-shell: error}`                                                                |
+| `max-run-lines: N`                           | `rules: {max-run-lines: {level: error, max: N}}`                                               |
+| `timeout-minutes: {required: true}`          | `rules: {missing-timeout: error}`                                                              |
+| `timeout-minutes: {required: false}`         | `rules: {missing-timeout: off}`                                                                |
+| `timeout-minutes: {max: N}`                  | `rules: {timeout-too-long: {level: error, max: N}}` (`missing-timeout` is left to the profile) |
 
 Setting one of these keys to `false` (or `max-run-lines: 0`) turns the rule off, which is the way to disable the three rules
 which are on by default in the old format. A rule written in `rules` wins over the deprecated key.

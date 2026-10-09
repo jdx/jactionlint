@@ -343,26 +343,37 @@ func (l *Linter) LintRepository(dir string) ([]*Error, error) {
 
 	l.log("Linting all workflow files and Dependabot configuration in repository:", dir)
 
-	p, err := l.projects.At(dir)
+	files, p, err := l.repositoryFiles(dir)
 	if err != nil {
 		return nil, err
 	}
+	l.log("Collected", len(files), "YAML files")
+	return l.LintFiles(files, p)
+}
+
+// repositoryFiles finds the nearest project of dir and returns its files which are linted: the workflow
+// files and the Dependabot configuration. LintRepository and FixRepository both use it, so what is fixed is always
+// what is linted.
+func (l *Linter) repositoryFiles(dir string) ([]string, *Project, error) {
+	p, err := l.projects.At(dir)
+	if err != nil {
+		return nil, nil, err
+	}
 	if p == nil {
-		return nil, fmt.Errorf("no project was found in any parent directories of %q. check workflows directory is put correctly in your Git repository", dir)
+		return nil, nil, fmt.Errorf("no project was found in any parent directories of %q. check workflows directory is put correctly in your Git repository", dir)
 	}
 
 	l.log("Detected project:", p.RootDir())
 	files, err := walkWorkflowFiles(p.WorkflowsDir())
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	files = append(files, p.DependabotFiles()...)
 	files = append(files, l.callGraphOf(p).actionPaths()...)
 	if len(files) == 0 {
-		return nil, fmt.Errorf("no YAML file was found in %q", p.WorkflowsDir())
+		return nil, nil, fmt.Errorf("no YAML file was found in %q", p.WorkflowsDir())
 	}
-	l.log("Collected", len(files), "YAML files")
-	return l.LintFiles(files, p)
+	return files, p, nil
 }
 
 // collectWorkflowFiles returns the paths of all YAML files in the directory recursively in sorted order.
@@ -745,13 +756,15 @@ func (l *Linter) isActionFile(p string) bool {
 // rule IDs, applies the ignores and the minimum severity, and sorts the errors. isWorkflow tells that
 // the file is a workflow, for which the online pin fixes are attached.
 func (l *Linter) finishCheck(path string, content []byte, all []*Error, cfg *Config, start time.Time, isWorkflow bool) []*Error {
+	all = append(all, checkSourceRules(content, cfg)...)
 	all = l.annotateErrors(all, content, cfg)
 
 	// Inline ignores are applied first so that every pattern sees all errors, which tells whether it
 	// is used. The order of the filters does not change which errors remain.
 	inlineIgnores, orphans, ignoreErrs := parseInlineIgnoresWithOrphans(content)
+	inlineIgnores = append(inlineIgnores, parseZizmorIgnores(content)...)
 	all = l.filterInlineIgnores(all, inlineIgnores)
-	unused := unusedInlineIgnores(inlineIgnores, orphans, cfg)
+	unused := unusedInlineIgnores(inlineIgnores, orphans, cfg, l.online.enabled || (cfg != nil && cfg.Online))
 	dropFixesChangingYAML(content, unused)
 	all = append(all, l.annotateErrors(unused, content, cfg)...)
 

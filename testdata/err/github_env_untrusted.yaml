@@ -1,0 +1,29 @@
+# A trigger which is not privileged: only input that an outsider controls is reported
+on:
+  issues:
+    types: [opened]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "TITLE=${{ github.event.issue.title }}" >> "$GITHUB_ENV"
+      - run: echo "TITLE=$TITLE" | tee -a "$GITHUB_ENV"
+        env:
+          TITLE: ${{ github.event.issue.title }}
+      - run: |
+          title="$TITLE"
+          echo "TITLE=$title" >> "$GITHUB_ENV"
+        env:
+          TITLE: ${{ github.event.issue.title }}
+      - run: echo "$BODY" >> $GITHUB_PATH
+        env:
+          BODY: "prefix ${{ github.event.issue.body }}"
+      # Not reported: not a privileged trigger and no untrusted input
+      - run: echo "N=$(cat version.txt)" >> $GITHUB_ENV
+      - run: echo "N=$NUMBER" >> $GITHUB_ENV
+        env:
+          NUMBER: ${{ github.event.issue.number }}
+      - run: echo "TITLE=$TITLE" > other.txt
+        env:
+          TITLE: ${{ github.event.issue.title }}
+      - run: echo "N=${{ contains(github.event.issue.title, 'x') }}" >> $GITHUB_ENV

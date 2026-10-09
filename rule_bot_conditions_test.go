@@ -97,3 +97,20 @@ func TestBotConditionsPolarity(t *testing.T) {
 		})
 	}
 }
+
+func TestBotConditionsBracketAccess(t *testing.T) {
+	for cond, want := range map[string]int{
+		"github['actor'] == 'dependabot[bot]'":                  1,
+		"github.event['sender'].login == 'dependabot[bot]'":     1,
+		"github['event']['sender']['login'] == 'renovate[bot]'": 1,
+		"github['Actor'] == 'dependabot[bot]'":                  1,
+		"github['actor'] != 'dependabot[bot]'":                  0,
+		"github['repository'] == 'dependabot[bot]'":             0,
+		"github[inputs.who] == 'dependabot[bot]'":               0,
+	} {
+		src := "on: pull_request_target\njobs:\n  j:\n    runs-on: ubuntu-latest\n    if: ${{ " + cond + " }}\n    steps:\n      - run: echo\n"
+		if got := len(errsWithID(lintWithConfig(t, botConfig(t), src), "bot-conditions")); got != want {
+			t.Errorf("%s: want %d findings but got %d", cond, want, got)
+		}
+	}
+}

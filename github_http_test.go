@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -570,9 +571,214 @@ func TestHTTPClientInvalidBaseURL(t *testing.T) {
 	}
 }
 
-func TestEscapeRefName(t *testing.T) {
-	if got := escapeRefName("feature/a b#c"); got != "feature/a%20b%23c" {
-		t.Errorf("escapeRefName = %q", got)
+func TestRepoURLEscapesEverySegment(t *testing.T) {
+	got, err := repoURL("o", "r", "git", "ref", "heads", "feature", "a#b?c")
+	if err != nil || got != "/repos/o/r/git/ref/heads/feature/a%23b%3Fc" {
+		t.Errorf("repoURL = %q, %v", got, err)
+	}
+	for _, bad := range [][]string{{"..", "r"}, {".", "r"}, {"o", ".."}, {"o", "."}, {"o", "..x"}, {"o/x", "r"}, {"o", "r/x"}, {"", "r"}, {"o", ""}, {"o", "r\\x"}, {"-o", "r"}, {"o-", "r"}} {
+		if got, err := repoURL(bad[0], bad[1]); err == nil {
+			t.Errorf("repoURL(%q, %q) = %q: should be refused", bad[0], bad[1], got)
+		}
+	}
+	if _, err := repoURL("o", "r", "..", "x"); err == nil {
+		t.Error("a dot segment in the tail should be refused")
+	}
+}
+
+func TestGitHubNameValidators(t *testing.T) {
+	owners := map[string]bool{"o": true, "actions": true, "A-b-9": true, "": false, "-a": false, "a-": false, "a_b": false, "a.b": false, "a/b": false, "..": false, ".": false, "a b": false, strings.Repeat("a", 39): true, strings.Repeat("a", 40): false}
+	for s, want := range owners {
+		if got := validGitHubOwner(s); got != want {
+			t.Errorf("validGitHubOwner(%q) = %v", s, got)
+		}
+	}
+	repos := map[string]bool{"r": true, "a.b_c-d": true, ".github": true, "": false, ".": false, "..": false, "..x": false, "a/b": false, "a\\b": false, "a\x00b": false, "a b": false, strings.Repeat("a", 100): true, strings.Repeat("a", 101): false}
+	for s, want := range repos {
+		if got := validGitHubRepo(s); got != want {
+			t.Errorf("validGitHubRepo(%q) = %v", s, got)
+		}
+	}
+	refs := map[string]bool{
+		"main": true, "v1.2.3": true, "feature/x": true, "release/1.0": true, "a@b": true, "v1": true,
+		"": false, "..": false, "../../../../user": false, "a/../b": false, "a..b": false, "/a": false, "a/": false, "a//b": false,
+		"a.lock": false, "x/a.lock": false, "a.": false, ".a": false, "x/.a": false, "a@{b": false, "@": false, "a b": false, "a~b": false,
+		"a^b": false, "a:b": false, "a?b": false, "a*b": false, "a[b": false, "a\\b": false, "a\x00b": false, "a\nb": false, "a\x7fb": false,
+		"%2e%2e": false, "a%2fb": false,
+	}
+	for s, want := range refs {
+		if got := validGitRefName(s); got != want {
+			t.Errorf("validGitRefName(%q) = %v", s, got)
+		}
+	}
+}
+
+func FuzzGitHubNames(f *testing.F) {
+	for _, s := range []string{"main", "../x", "a/../b", "%2e%2e", "a\\b", "x\x00", "feature/x"} {
+		f.Add(s)
+	}
+	f.Fuzz(func(t *testing.T, s string) {
+		// Whatever is accepted must not be able to act as a dot segment, however it is split
+		if validGitRefName(s) {
+			for _, seg := range strings.Split(s, "/") {
+				if seg == "" || seg == "." || seg == ".." || strings.HasPrefix(seg, ".") || strings.ContainsAny(seg, "\\%") {
+					t.Fatalf("ref %q accepted with segment %q", s, seg)
+				}
+			}
+		}
+		if validGitHubRepo(s) && (s == "." || strings.HasPrefix(s, "..") || strings.ContainsAny(s, "/\\%")) {
+			t.Fatalf("repo %q accepted", s)
+		}
+		if validGitHubOwner(s) && strings.ContainsAny(s, "./\\%_") {
+			t.Fatalf("owner %q accepted", s)
+		}
+	})
+}
+
+// pathRecorder is a server which answers 404 to everything and records the paths it was asked for.
+func pathRecorder(t *testing.T) (*httptest.Server, func() []string) {
+	t.Helper()
+	var mu sync.Mutex
+	var seen []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		seen = append(seen, r.URL.EscapedPath()+"|"+r.URL.Path)
+		mu.Unlock()
+		http.NotFound(w, r)
+	}))
+	t.Cleanup(srv.Close)
+	return srv, func() []string {
+		mu.Lock()
+		defer mu.Unlock()
+		return append([]string(nil), seen...)
+	}
+}
+
+// TestHTTPClientNeverLeavesTheRepositoryPath: names from a workflow of an untrusted pull request are
+// never allowed to change the path of the request (and so never send the token to another endpoint).
+func TestHTTPClientNeverLeavesTheRepositoryPath(t *testing.T) {
+	srv, paths := pathRecorder(t)
+	c, err := newHTTPGitHubClient(httpGitHubOptions{BaseURL: srv.URL, Token: "secret", CacheDir: t.TempDir()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	owners := []string{"o", "..", ".", "o/../../x", "o/x", "", "o\\x", "o%2f..", "o\x00"}
+	repos := []string{"r", "..", ".", "..r", "r/../..", "r/x", "", "r\\x", "%2e%2e", "r\x00"}
+	refs := []string{"main", "../../../../../../user", "a/../../x", "%2e%2e", "%2e%2e/%2e%2e", "a%2fb", "a\\..\\b", "a\x00b", "/etc", "a/", ".hidden", "x/..", "..", "a..b", "feature/ok"}
+	for _, o := range owners {
+		for _, r := range repos {
+			_, _ = c.Repository(ctx, o, r)
+			_, _ = c.Tags(ctx, o, r)
+			_, _ = c.Branches(ctx, o, r, 10)
+			for _, ref := range refs {
+				_, _, _ = c.ResolveRef(ctx, o, r, GitHubRefTags, ref)
+				_, _, _ = c.ResolveRef(ctx, o, r, GitHubRefHeads, ref)
+				_, _ = c.Compare(ctx, o, r, ref, "main")
+				_, _ = c.Compare(ctx, o, r, "main", ref)
+			}
+		}
+	}
+	for _, p := range paths() {
+		esc, dec, _ := strings.Cut(p, "|")
+		if !strings.HasPrefix(esc, "/repos/o/r") {
+			t.Errorf("request to %q leaves /repos/o/r", p)
+		}
+		for _, s := range strings.Split(dec, "/") {
+			if s == ".." || s == "." {
+				t.Errorf("request to %q has a dot segment", p)
+			}
+		}
+		if strings.Contains(esc, "..") && !strings.Contains(esc, "...") {
+			t.Errorf("request to %q contains ..", p)
+		}
+	}
+	if len(paths()) == 0 {
+		t.Error("the valid names should have been requested")
+	}
+}
+
+func TestHTTPClientRequestsOnlyForValidatedNames(t *testing.T) {
+	srv, paths := pathRecorder(t)
+	c, err := newHTTPGitHubClient(httpGitHubOptions{BaseURL: srv.URL, CacheDir: t.TempDir()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, ref := range []string{"../repo", "../../../../../../user", "%2e%2e", "a%2fb", "a\\b", "a\x00b"} {
+		if _, _, err := c.ResolveRef(context.Background(), "o", "r", GitHubRefTags, ref); err == nil {
+			t.Errorf("ref %q: want an error", ref)
+		}
+	}
+	if _, err := c.Repository(context.Background(), "..", "repo"); err == nil {
+		t.Error("owner .. should be refused")
+	}
+	if n := len(paths()); n != 0 {
+		t.Errorf("%d requests were sent for invalid names: %v", n, paths())
+	}
+	if _, _, err := c.ResolveRef(context.Background(), "o", "r", GitHubRefHeads, "feature/a#b"); err != nil {
+		t.Fatal(err)
+	}
+	if got := paths(); len(got) != 1 || !strings.HasPrefix(got[0], "/repos/o/r/git/ref/heads/feature/a%23b|") {
+		t.Errorf("paths = %v", got)
+	}
+}
+
+func TestHTTPClientRefusesRedirectsOfAuthenticatedRequests(t *testing.T) {
+	var foreign []string
+	other := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		foreign = append(foreign, r.Header.Get("Authorization"))
+		fmt.Fprint(w, `{}`)
+	}))
+	defer other.Close()
+	f := newFakeGitHub(t)
+	f.handle("/repos/o/r", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, other.URL+"/steal", http.StatusFound)
+	})
+	f.handle("/repos/o/same", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/repos/o/r2", http.StatusFound)
+	})
+	f.json("/repos/o/r2", `{"full_name":"o/r2"}`)
+
+	c := f.client(httpGitHubOptions{Token: "secret"})
+	if _, err := c.Repository(context.Background(), "o", "r"); err == nil {
+		t.Error("a redirect of an authenticated request to another host should be refused")
+	}
+	if len(foreign) != 0 {
+		t.Errorf("the other host was contacted: %v", foreign)
+	}
+	if _, err := c.Repository(context.Background(), "o", "same"); err != nil {
+		t.Errorf("a redirect inside the API should be followed: %v", err)
+	}
+
+	// Without a token the redirect is followed, but never with an Authorization header
+	anon := f.client(httpGitHubOptions{CacheDir: t.TempDir()})
+	_, _ = anon.Repository(context.Background(), "o", "r")
+	for _, a := range foreign {
+		if a != "" {
+			t.Errorf("Authorization %q sent to another host", a)
+		}
+	}
+}
+
+func TestAuthRedirectPolicyKeepsTheCallersPolicy(t *testing.T) {
+	called := false
+	f := newFakeGitHub(t)
+	f.json("/repos/o/r", `{}`)
+	c := f.client(httpGitHubOptions{HTTPClient: &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error {
+		called = true
+		return nil
+	}}})
+	_ = c
+	pol := c.hc.CheckRedirect
+	u1, _ := url.Parse("https://api.github.com/a")
+	u2, _ := url.Parse("https://evil.example/b")
+	via := &http.Request{URL: u1, Header: http.Header{"Authorization": {"Bearer x"}}}
+	if err := pol(&http.Request{URL: u2, Header: http.Header{}}, []*http.Request{via}); err == nil {
+		t.Error("redirect to another host with a token should be refused")
+	}
+	same, _ := url.Parse("https://api.github.com/c")
+	if err := pol(&http.Request{URL: same, Header: http.Header{}}, []*http.Request{via}); err != nil || !called {
+		t.Errorf("err = %v, caller's policy called = %v", err, called)
 	}
 }
 
@@ -783,9 +989,27 @@ func TestHTTPClientCommitOnAnyBranch(t *testing.T) {
 			fmt.Fprint(w, `{"data":{"repository":null},"errors":[{"message":"Could not resolve to a Repository"}]}`)
 		})
 		_, err := f.client(httpGitHubOptions{Token: "tok"}).CommitOnAnyBranch(ctx, "o", "r", sha, 10)
-		var se *GitHubStatusError
-		if !errors.As(err, &se) || !strings.Contains(err.Error(), "Could not resolve") {
+		if !errors.Is(err, ErrGitHubBranchScanUnavailable) || !strings.Contains(err.Error(), "Could not resolve") {
 			t.Errorf("got %v", err)
+		}
+	})
+
+	t.Run("partial data with errors", func(t *testing.T) {
+		f := newFakeGitHub(t)
+		f.handle("/graphql", func(w http.ResponseWriter, r *http.Request) {
+			fmt.Fprint(w, `{"data":{"repository":{"refs":{"pageInfo":{"hasNextPage":false,"endCursor":""},"nodes":[{"name":"b","compare":null}]}}},"errors":[{"message":"Field error"}]}`)
+		})
+		_, err := f.client(httpGitHubOptions{Token: "tok"}).CommitOnAnyBranch(ctx, "o", "r", sha, 10)
+		// A scan with holes cannot give a verdict, and it must not be counted as a failure of the session
+		if !errors.Is(err, ErrGitHubBranchScanUnavailable) {
+			t.Errorf("got %v", err)
+		}
+		s := newOnlineSession(ctx, scanErrClient{err}, nil)
+		for range 5 {
+			s.record(err)
+		}
+		if s.stopped() != nil {
+			t.Error("scans with errors must not stop the session")
 		}
 	})
 
@@ -891,4 +1115,23 @@ func TestImpostorCommitUsesTheBranchScanner(t *testing.T) {
 			}
 		})
 	}
+}
+
+type scanErrClient struct{ error }
+
+func (scanErrClient) Repository(context.Context, string, string) (*GitHubRepo, error) {
+	return nil, nil
+}
+func (scanErrClient) Tags(context.Context, string, string) (*GitHubTagList, error) { return nil, nil }
+func (scanErrClient) ResolveRef(context.Context, string, string, GitHubRefNamespace, string) (string, bool, error) {
+	return "", false, nil
+}
+func (scanErrClient) Branches(context.Context, string, string, int) (*GitHubBranchList, error) {
+	return nil, nil
+}
+func (scanErrClient) Compare(context.Context, string, string, string, string) (GitHubCompareStatus, error) {
+	return "", nil
+}
+func (scanErrClient) Advisories(context.Context, string, string) ([]GitHubAdvisory, error) {
+	return nil, nil
 }

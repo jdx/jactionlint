@@ -1,0 +1,1 @@
+test.yaml:4:14: runner label "ubuntu-latest" is an alias that GitHub moves to newer images, so the job can break without a change in this repository. use a fixed label such as "ubuntu-24.04", which is the same image today [mutable-runner-label]

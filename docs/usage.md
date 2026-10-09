@@ -76,6 +76,34 @@ steps:
 
 A comment which suppresses nothing is reported by the [`unused-ignore`](rules.md#unused-ignore) rule of the `strict` profile.
 
+### zizmor ignore comments
+
+A repository which used [zizmor](https://docs.zizmor.sh/usage/#ignoring-results) keeps the findings it has already triaged:
+jactionlint honors `# zizmor: ignore[rule-a,rule-b]` comments for the rule IDs it shares with zizmor, with zizmor's rules.
+
+```yaml
+steps:
+  - uses: actions/checkout@v4 # zizmor: ignore[unpinned-uses] pinned by the mirror
+  - run: | # zizmor: ignore[template-injection]
+      echo '${{ github.event.pull_request.title }}'
+```
+
+- The comment must be a YAML comment spelled exactly `# zizmor: ignore[...]` (one space after `#` and after `:`). A reason may
+  follow the closing bracket after white space. The comment may follow another comment (`# v4.1.0 # zizmor: ignore[...]`).
+- Several names are separated with commas. A name that jactionlint has no rule for (an audit it lacks) is skipped, not an error.
+  `# zizmor: ignore` without a rule list does nothing, as in zizmor.
+- Like in zizmor, the comment applies to the findings whose region contains the comment, so it sits on the flagged line
+  (a comment on a line of its own above does not apply). A comment on the line which opens a value, such as `on:`,
+  `permissions:` or `run: |`, applies to everything inside that value, because zizmor reports those findings over the whole value.
+  Text inside a block scalar or a quoted string is never a comment.
+- Audit names that differ from the jactionlint rule ID are mapped by [a short table](v2-migration.md#zizmor-ignore-comments).
+- With [`unused-ignore`](rules.md#unused-ignore), a zizmor comment is reported as stale only when its audit maps to a rule
+  that is enabled, never for an audit jactionlint does not have.
+
+`jactionlint -migrate-ignores [files]` rewrites the trailing zizmor comments (of the workflows of the project when no file is
+given) into `# jactionlint ignore=` comments on the line above and moves the reason to a plain comment line. Names with no
+jactionlint counterpart stay in the zizmor comment, and running it again changes nothing.
+
 `-shellcheck` and `-pyflakes` specifies file paths of executables. Setting empty string to them disables `shellcheck` and
 `pyflakes` rules. As a bonus, disabling them makes jactionlint much faster Since these external linter integrations spawn many
 processes.

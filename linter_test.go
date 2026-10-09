@@ -86,7 +86,9 @@ func TestLinterLintOK(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			linter.defaultConfig = withoutMissingTimeout(&Config{})
+			// The security rules of the fixtures of other checks would only add noise: see rule_batch_d_test.go
+			// for the fixtures which show that the rules of the run-script batch stay quiet.
+			linter.defaultConfig = withoutMissingTimeout(withFixtureRules(&Config{}))
 			if strings.HasSuffix(strings.TrimSuffix(filepath.Base(f), filepath.Ext(f)), "_online") {
 				linter.online = onlineSettings{enabled: true, client: onlineFixtureClient(t)}
 			}

@@ -36,7 +36,25 @@ func (rule *RuleTemplateInjection) VisitWorkflowPre(n *Workflow) error {
 // VisitJobPre is callback when visiting Job node before visiting its children.
 func (rule *RuleTemplateInjection) VisitJobPre(n *Job) error {
 	rule.job = n
+	rule.reportSinks(tiContext{wf: rule.wf, job: n}, jobSinks(n))
 	return nil
+}
+
+// reportSinks reports the attacker controlled expressions in the strings that are read as command lines
+// by docker or a shell, or as the prompt or the arguments of an AI agent (injection_sinks.go).
+func (rule *RuleTemplateInjection) reportSinks(ctx tiContext, sinks []injectionSink) {
+	if len(sinks) == 0 || !rule.Config().RuleEnabled("template-injection") {
+		return
+	}
+	for _, s := range sinks {
+		spans := rule.src.scanExprs(s.Str)
+		for i := range spans {
+			sp := &spans[i]
+			if h := ctx.sinkHitOf(sp); h != nil {
+				rule.ReportID("template-injection", sp.TokPos(h.Ref.Node.Token()), h.message(sp.Src, s))
+			}
+		}
+	}
 }
 
 // VisitJobPost is callback when visiting Job node after visiting its children.
@@ -52,6 +70,7 @@ func (rule *RuleTemplateInjection) VisitStep(n *Step) error {
 		return nil
 	}
 	ctx := tiContext{wf: rule.wf, job: rule.job, step: n}
+	rule.reportSinks(ctx, stepSinks(n))
 	for _, code := range codeStringsOf(n) {
 		spans := rule.src.scanExprs(code.Str)
 		var plan map[int]*Fix

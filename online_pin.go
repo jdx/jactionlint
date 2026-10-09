@@ -100,7 +100,7 @@ func pinFix(sess *onlineSession, src []byte, lineStart, col int) (*Fix, error) {
 	if ref.Dynamic || (ref.Kind != UsesAction && ref.Kind != UsesReusableWorkflow) || (ref.RefKind != RefSemverTag && ref.RefKind != RefOther) {
 		return nil, fmt.Errorf("%q is not an action or workflow referenced by a symbolic ref", spec)
 	}
-	if !reSafeRepoPart.MatchString(ref.Owner) || !reSafeRepoPart.MatchString(ref.Repo) {
+	if !validGitHubOwner(ref.Owner) || !validGitHubRepo(ref.Repo) || !validGitRefName(ref.Ref) {
 		return nil, fmt.Errorf("%q is not a GitHub repository", spec)
 	}
 
