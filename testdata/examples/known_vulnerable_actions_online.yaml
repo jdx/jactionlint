@@ -1,0 +1,10 @@
+# requires -online
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      # ERROR: v45 is version 45.0.2, which an advisory covers
+      - uses: tj-actions/changed-files@v45
+      # OK: 46.0.1 contains the fix
+      - uses: tj-actions/changed-files@2f7c5bfce28377bc069a65ba478de0a74aa0ca32 # v46.0.1

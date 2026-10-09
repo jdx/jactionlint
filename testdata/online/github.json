@@ -1,0 +1,293 @@
+{
+  "_note": "Trimmed answers of the GitHub API recorded in 2026-10 (see github_fixture.go). Tag and branch lists keep only the entries the tests use. example/* repositories are made up.",
+  "repos": {
+    "actions/checkout": {
+      "repo": {
+        "archived": false,
+        "default_branch": "main"
+      },
+      "tags": {
+        "tags": [
+          {
+            "name": "v5",
+            "sha": "fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09"
+          },
+          {
+            "name": "v4.2.2",
+            "sha": "11bd71901bbe5b1630ceea73d27597364c9af683"
+          },
+          {
+            "name": "v4.2.1",
+            "sha": "eef61447b9ff4aafe5dcd4e0bbf5d482be7e7871"
+          },
+          {
+            "name": "v4",
+            "sha": "11d5960a326750d5838078e36cf38b85af677262"
+          },
+          {
+            "name": "v3.0.0",
+            "sha": "a12a3943b4bdde767164f792f33f40b04645d846"
+          },
+          {
+            "name": "v3",
+            "sha": "a37ce9120846195fa4ece8f58b268e6043cb2f26"
+          },
+          {
+            "name": "v2",
+            "sha": "0717577d45739eb3c851188b29f50ed6c0b2194e"
+          }
+        ]
+      },
+      "branches": {
+        "branches": [
+          {
+            "name": "main",
+            "sha": "f548e57e544e1ff5a4c46bf1e1b8685f8e4a348a"
+          },
+          {
+            "name": "releases/v1",
+            "sha": "0b496e91ec7ae4428c3ed2eeb4c3a40df431f2cc"
+          }
+        ]
+      },
+      "refs": {
+        "heads/main": {
+          "sha": "f548e57e544e1ff5a4c46bf1e1b8685f8e4a348a",
+          "found": true
+        },
+        "heads/v4": {
+          "found": false
+        },
+        "heads/v3": {
+          "found": false
+        },
+        "tags/v4": {
+          "sha": "11d5960a326750d5838078e36cf38b85af677262",
+          "found": true
+        },
+        "heads/v2": {
+          "found": false
+        },
+        "heads/v4.2.2": {
+          "found": false
+        }
+      },
+      "compare": {
+        "f548e57e544e1ff5a4c46bf1e1b8685f8e4a348a...2f547d07f23dec7f4a96fc091165260dcbe59529": "ahead",
+        "0b496e91ec7ae4428c3ed2eeb4c3a40df431f2cc...2f547d07f23dec7f4a96fc091165260dcbe59529": "ahead",
+        "f548e57e544e1ff5a4c46bf1e1b8685f8e4a348a...11bd71901bbe5b1630ceea73d27597364c9af683": "behind",
+        "f548e57e544e1ff5a4c46bf1e1b8685f8e4a348a...0000000000000000000000000000000000000001": "not-found"
+      },
+      "advisories": {
+        "list": []
+      }
+    },
+    "tj-actions/changed-files": {
+      "repo": {
+        "archived": false,
+        "default_branch": "main"
+      },
+      "tags": {
+        "tags": [
+          {
+            "name": "v44",
+            "sha": "2d756ea4c53f7f6b397767d8723b3a10a9f35bf2"
+          },
+          {
+            "name": "v45",
+            "sha": "48d8f15b2aaa3d255ca5af3eba4870f807ce6b3c"
+          },
+          {
+            "name": "v45.0.2",
+            "sha": "48d8f15b2aaa3d255ca5af3eba4870f807ce6b3c"
+          },
+          {
+            "name": "v45.0.7",
+            "sha": "a284dc1814e3fd07f2e34267fc8f81227ed29fb8"
+          },
+          {
+            "name": "v46",
+            "sha": "ed68ef82c095e0d48ec87eccea555d944a631a4c"
+          },
+          {
+            "name": "v46.0.1",
+            "sha": "2f7c5bfce28377bc069a65ba478de0a74aa0ca32"
+          }
+        ]
+      },
+      "refs": {
+        "heads/v45": {
+          "found": false
+        }
+      },
+      "advisories": {
+        "list": [
+          {
+            "id": "GHSA-mrrh-fwg8-r2c3",
+            "cve": "CVE-2025-30066",
+            "summary": "tj-actions changed-files through 45.0.7 allows remote attackers to discover secrets by reading actions logs.",
+            "severity": "high",
+            "url": "https://github.com/advisories/GHSA-mrrh-fwg8-r2c3",
+            "vulnerabilities": [
+              {
+                "package": "tj-actions/changed-files",
+                "range": "<= 45.0.7",
+                "first_patched": "46.0.1"
+              }
+            ]
+          },
+          {
+            "id": "GHSA-mcph-m25j-8j63",
+            "cve": "CVE-2023-51664",
+            "summary": "tj-actions/changed-files has Potential Actions command injection in output filenames (GHSL-2023-271)",
+            "severity": "high",
+            "url": "https://github.com/advisories/GHSA-mcph-m25j-8j63",
+            "vulnerabilities": [
+              {
+                "package": "tj-actions/changed-files",
+                "range": "< 41",
+                "first_patched": "41"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "actions-rs/cargo": {
+      "repo": {
+        "archived": true,
+        "default_branch": "master"
+      },
+      "tags": {
+        "tags": [
+          {
+            "name": "v1",
+            "sha": "844f36862e911db73fe0815f00a4a2602c279505"
+          },
+          {
+            "name": "v1.0.3",
+            "sha": "844f36862e911db73fe0815f00a4a2602c279505"
+          }
+        ]
+      },
+      "advisories": {
+        "list": []
+      }
+    },
+    "actions/setup-node": {
+      "repo": {
+        "archived": false,
+        "default_branch": "main"
+      },
+      "tags": {
+        "tags": [
+          {
+            "name": "v4",
+            "sha": "49933ea5288caeca8642d1e84afbd3f7d6820020"
+          },
+          {
+            "name": "v4.1.0",
+            "sha": "39370e3970a6d050c480ffad4ff0ed4d3fdee5af"
+          }
+        ]
+      },
+      "advisories": {
+        "list": []
+      },
+      "refs": {
+        "heads/v4": {
+          "found": false
+        }
+      }
+    },
+    "actions/upload-artifact": {
+      "repo": {
+        "archived": false,
+        "default_branch": "main"
+      },
+      "tags": {
+        "tags": [
+          {
+            "name": "v4",
+            "sha": "ea165f8d65b6e75b540449e92b4886f43607fa02"
+          }
+        ]
+      },
+      "advisories": {
+        "list": []
+      },
+      "refs": {
+        "heads/v4": {
+          "found": false
+        }
+      }
+    },
+    "example/confusing": {
+      "repo": {
+        "archived": false,
+        "default_branch": "main"
+      },
+      "tags": {
+        "tags": [
+          {
+            "name": "v1",
+            "sha": "1111111111111111111111111111111111111111"
+          },
+          {
+            "name": "v2",
+            "sha": "2222222222222222222222222222222222222222"
+          }
+        ]
+      },
+      "refs": {
+        "heads/v1": {
+          "sha": "3333333333333333333333333333333333333333",
+          "found": true
+        },
+        "heads/v2": {
+          "found": false
+        }
+      },
+      "advisories": {
+        "list": []
+      }
+    },
+    "example/archived-workflows": {
+      "repo": {
+        "archived": true,
+        "default_branch": "main"
+      },
+      "tags": {
+        "tags": [
+          {
+            "name": "v1",
+            "sha": "4444444444444444444444444444444444444444"
+          }
+        ]
+      },
+      "advisories": {
+        "list": []
+      }
+    },
+    "example/forgotten": {
+      "missing": true
+    },
+    "example/archived-action": {
+      "repo": {
+        "archived": true,
+        "default_branch": "main"
+      },
+      "tags": {
+        "tags": [
+          {
+            "name": "v1",
+            "sha": "5555555555555555555555555555555555555555"
+          }
+        ]
+      },
+      "advisories": {
+        "list": []
+      }
+    }
+  }
+}

@@ -1,0 +1,33 @@
+on: push
+
+defaults:
+  run:
+    shell: perl {0}
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: cmd
+    steps:
+      - run: echo hello
+      - run: echo hello
+        shell: cmd /c "{0}"
+      - run: echo hello
+        shell: pwsh
+      - run: echo hello
+        shell: bash -eo pipefail {0}
+      - run: print("hello")
+        shell: python
+      - run: echo hello
+        shell: powershell
+      - run: print(1)
+        shell: ruby {0}
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+          pip-install: '.[dev]'
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'

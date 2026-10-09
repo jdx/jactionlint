@@ -1,0 +1,177 @@
+name: release
+
+# Builds a binary per target and attaches them to an existing release.
+#
+# Normally called by release-plz.yml against the draft it just created, so the
+# release is only published once its assets are in place. `workflow_dispatch`
+# is there for re-running a build that failed after the tag already existed.
+
+permissions: {}
+
+on:
+  workflow_call:
+    inputs:
+      tag:
+        required: true
+        type: string
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to attach binaries to, e.g. v0.1.0"
+        required: true
+        type: string
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    strategy:
+      # One target failing should not deny the others their artifacts.
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-musl
+            os: ubuntu-latest
+            bin: mbx
+          - target: aarch64-unknown-linux-musl
+            os: ubuntu-24.04-arm
+            bin: mbx
+          - target: aarch64-apple-darwin
+            os: macos-latest
+            bin: mbx
+          - target: x86_64-apple-darwin
+            os: macos-latest
+            bin: mbx
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+            bin: mbx.exe
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.tag }}
+          persist-credentials: false
+
+      - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          key: ${{ matrix.target }}
+
+      - name: Install the musl toolchain
+        if: endsWith(matrix.target, '-musl')
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y musl-tools
+
+      - name: Build
+        shell: bash
+        # rustls brings in aws-lc-sys, which compiles C: cc-rs looks for a
+        # target-prefixed compiler, and Debian's musl-tools only ships
+        # `musl-gcc`. Naming it for both musl targets is harmless elsewhere,
+        # since nothing else consults these variables.
+        env:
+          CC_x86_64_unknown_linux_musl: musl-gcc
+          CC_aarch64_unknown_linux_musl: musl-gcc
+        run: cargo build --release --locked --package mbx --target ${{ matrix.target }}
+
+      - name: Check the binary runs
+        # Every target but this one is native to its runner.
+        if: matrix.target != 'x86_64-apple-darwin'
+        shell: bash
+        run: ./target/${{ matrix.target }}/release/${{ matrix.bin }} --version
+
+      # The archive is flat and holds only the binary, so extracting it
+      # straight into a directory on PATH is the whole install. Names carry no
+      # version, which is what makes `releases/latest/download/…` a stable URL.
+      - name: Archive
+        if: runner.os != 'Windows'
+        run: tar -czf "mbx-${{ matrix.target }}.tar.gz" -C "target/${{ matrix.target }}/release" ${{ matrix.bin }}
+
+      - name: Archive
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          cd "target/${{ matrix.target }}/release"
+          7z a "$GITHUB_WORKSPACE/mbx-${{ matrix.target }}.zip" ${{ matrix.bin }}
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: binary-${{ matrix.target }}
+          path: mbx-${{ matrix.target }}.*
+          # Only needed long enough for the attach job to collect them.
+          retention-days: 1
+          if-no-files-found: error
+
+  attach:
+    name: Attach to release
+    # Needs every target: a release carrying four of five archives is worse
+    # than one that arrives late, and the draft stays unpublished either way.
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          path: artifacts
+          pattern: binary-*
+          merge-multiple: true
+
+      - name: Collect assets
+        run: |
+          mkdir -p release-assets
+          find artifacts -type f \( -name '*.tar.gz' -o -name '*.zip' \) \
+            -exec mv {} release-assets/ \;
+          ls -la release-assets/
+          # An empty upload would silently produce a release with no binaries.
+          [ -n "$(ls -A release-assets/)" ] || {
+            echo "::error::no binaries were produced"; exit 1; }
+
+      - name: Generate checksums
+        run: |
+          cd release-assets
+          sha256sum -- * > SHA256SUMS
+          cat SHA256SUMS
+
+      # Called from release-plz.yml the release always exists, drafted, and
+      # `gh` resolves a draft by tag fine. Dispatched by hand it may not: the
+      # documented recovery is for a tag that exists whose release does not,
+      # because release-plz failed after tagging or someone deleted the draft.
+      # Uploading into nothing would fail there, so create it first. Same guard
+      # as jdx/mbx-cache. `--verify-tag` keeps a mistyped tag from conjuring a
+      # release for a ref that does not exist.
+      - name: Attach to release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          if ! gh release view "$TAG" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+            gh release create "$TAG" \
+              --repo "${{ github.repository }}" \
+              --draft \
+              --generate-notes \
+              --title "$TAG" \
+              --verify-tag
+          fi
+          gh release upload "$TAG" release-assets/* --repo "${{ github.repository }}" --clobber
+
+      # Called from release-plz.yml, undrafting is that workflow's job — it
+      # happens after this one returns. Run by hand, nothing else will do it,
+      # and the release would sit drafted forever. Since manual dispatch is the
+      # documented recovery for a build that failed after the tag existed, that
+      # would leave the recovery path itself broken.
+      - name: Publish the release
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ inputs.tag }}
+        run: gh release edit "$TAG" --repo "${{ github.repository }}" --draft=false

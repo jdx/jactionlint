@@ -12,7 +12,10 @@ func lintWithConfig(t *testing.T, cfg *Config, src string) []*Error {
 	if err != nil {
 		t.Fatal(err)
 	}
-	l.defaultConfig = cfg
+	if cfg == nil {
+		cfg = &Config{}
+	}
+	l.defaultConfig = withoutMissingTimeout(cfg)
 	errs, err := l.Lint("test.yaml", []byte(src), nil)
 	if err != nil {
 		t.Fatal(err)

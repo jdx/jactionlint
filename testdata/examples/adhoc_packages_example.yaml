@@ -1,0 +1,7 @@
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - run: npm install eslint@9.0.0
+      - run: gem install rake

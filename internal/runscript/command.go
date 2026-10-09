@@ -128,6 +128,7 @@ func (c *Command) Publishes() *Publish { return publishOf(c) }
 type builder struct {
 	s    *Script
 	sub  string
+	omap []int // offsets of the text the parser saw -> offsets of the script; nil when they are the same
 	cmds map[syntax.Command]*Command
 	// pipes whose chain is already collected by the outermost BinaryCmd; negated pipelines
 	seenPipe map[*syntax.BinaryCmd]bool
@@ -136,6 +137,34 @@ type builder struct {
 	groups   []groupRedirect
 	done     map[syntax.Node]bool
 	sorted   []*Command // commands by offset
+}
+
+// off is the offset of a position of the parser in the original script.
+func (b *builder) off(p syntax.Pos) int {
+	o := int(p.Offset())
+	if b.omap == nil {
+		return o
+	}
+	if o < 0 {
+		return 0
+	}
+	if o >= len(b.omap) {
+		return len(b.s.Source)
+	}
+	return b.omap[o]
+}
+
+// offEnd is like off for the end of a node, which is the offset after its last byte: a "\r" removed after the
+// node does not belong to it.
+func (b *builder) offEnd(p syntax.Pos) int {
+	o := int(p.Offset())
+	if b.omap == nil || o <= 0 {
+		return b.off(p)
+	}
+	if o > len(b.omap) {
+		return len(b.s.Source)
+	}
+	return b.omap[o-1] + 1
 }
 
 func (b *builder) src(start, end int) string {
@@ -180,6 +209,12 @@ func (b *builder) build(f *syntax.File) {
 			}
 		}
 	}
+	// the value of a plain assignment (`A=$(cmd)`) is not a word of a command
+	for _, a := range s.Assignments {
+		if a.Cmd == nil && a.Value != nil && a.Value.Subst && a.Value.Subs == nil {
+			a.Value.Subs = b.commandsWithin(a.Value, nil)
+		}
+	}
 	for _, r := range s.Redirects {
 		if r.Target != nil && r.Target.Subst {
 			r.Target.Subs = b.commandsWithin(r.Target, nil)
@@ -213,11 +248,11 @@ func (b *builder) decl(n *syntax.DeclClause) {
 	if len(n.Args) == 0 && n.Variant == nil {
 		return
 	}
-	start, end := int(n.Pos().Offset()), int(n.End().Offset())
+	start, end := b.off(n.Pos()), b.offEnd(n.End())
 	c := &Command{Loc: b.s.loc(start, end), Decl: true}
 	if n.Variant != nil {
 		c.Name = n.Variant.Value
-		c.NameWord = &Word{Loc: b.s.loc(int(n.Variant.Pos().Offset()), int(n.Variant.End().Offset())), Raw: n.Variant.Value, Value: n.Variant.Value}
+		c.NameWord = &Word{Loc: b.s.loc(b.off(n.Variant.Pos()), b.offEnd(n.Variant.End())), Raw: n.Variant.Value, Value: n.Variant.Value}
 		c.Words = []*Word{c.NameWord}
 	}
 	for _, a := range n.Args {
@@ -234,7 +269,7 @@ func (b *builder) assign(a *syntax.Assign, owner *Command) *Assignment {
 		return nil
 	}
 	as := &Assignment{
-		Loc:    b.s.loc(int(a.Pos().Offset()), int(a.End().Offset())),
+		Loc:    b.s.loc(b.off(a.Pos()), b.offEnd(a.End())),
 		Name:   a.Name.Value,
 		Value:  b.word(a.Value),
 		Append: a.Append,
@@ -257,7 +292,7 @@ func (b *builder) call(n *syntax.CallExpr) {
 		}
 		return
 	}
-	start, end := int(n.Pos().Offset()), int(n.End().Offset())
+	start, end := b.off(n.Pos()), b.offEnd(n.End())
 	c := &Command{Loc: b.s.loc(start, end)}
 	for _, a := range n.Assigns {
 		if as := b.assign(a, c); as != nil {
@@ -354,7 +389,7 @@ var (
 	rePython = regexp.MustCompile(`^(python|py)[0-9.]*$`)
 )
 
-var shells = set("sh bash zsh dash ash ksh fish busybox")
+var shells = set("sh bash zsh dash ash ksh fish busybox toybox")
 
 // canonicalTool maps the command name (and for python -m the module) to a tool name and returns the arguments
 // after the tool.
@@ -366,18 +401,11 @@ func canonicalTool(name string, args []*Word) (string, []*Word) {
 	case rePip.MatchString(name):
 		return "pip", args
 	case rePython.MatchString(name):
-		// python -m MODULE, also with a few leading bool flags
-		for i := 0; i+1 < len(args); i++ {
-			a := args[i].Value
-			if a == "-m" && !args[i+1].Dynamic() {
-				switch m := args[i+1].Value; m {
-				case "pip", "pipx", "twine", "uv":
-					return m, args[i+2:]
-				}
-				return "", args
-			}
-			if a != "-u" && a != "-B" && a != "-E" && a != "-s" && a != "-S" && a != "-I" && a != "-O" && a != "-W" {
-				break
+		// python [interpreter options] -m MODULE
+		if m, rest, ok := pythonModule(name, args); ok {
+			switch m {
+			case "pip", "pipx", "twine", "uv":
+				return m, rest
 			}
 		}
 		return "", args
@@ -465,3 +493,62 @@ func set(s string) map[string]bool {
 	}
 	return m
 }
+
+// pythonModule finds "-m MODULE" among the interpreter options of python, python3.12 or the py launcher and
+// returns the module and the arguments after it. The scan stops at the first thing which is not an option of the
+// interpreter: a script, -c (code), "--" or a word it cannot see through. The options come from `python --help`
+// (CPython 3.13):
+//
+//	flags without a value: -b -B -d -E -i -I -O -OO -P -q -R -s -S -u -v -x -V -h -? and clusters of them (-uBE)
+//	options with a value:  -W arg, -X opt (also attached: -Wignore, -Xutf8, and at the end of a cluster: -uWignore)
+//	long options:          --check-hash-based-pycs MODE takes a value, the others (--help, --version) do not
+//
+// The py launcher of Windows also takes -3, -3.12, -3-64 and -V:3.12 first.
+func pythonModule(name string, args []*Word) (string, []*Word, bool) {
+	launcher := strings.HasPrefix(name, "py") && !strings.HasPrefix(name, "python")
+	for i := 0; i < len(args); i++ {
+		w := args[i]
+		if w.Dynamic() {
+			return "", nil, false
+		}
+		a := w.Value
+		if len(a) < 2 || a[0] != '-' || a == "--" {
+			return "", nil, false // a script, "-" (stdin) or the end of the options
+		}
+		if strings.HasPrefix(a, "--") {
+			if a == "--check-hash-based-pycs" {
+				i++ // its value
+			}
+			continue
+		}
+		if launcher && reLauncherVersion.MatchString(a) {
+			continue
+		}
+		// A cluster of flags, which can end in an option with a value
+		for j := 1; j < len(a); j++ {
+			switch a[j] {
+			case 'b', 'B', 'd', 'E', 'i', 'I', 'O', 'P', 'q', 'R', 's', 'S', 'u', 'v', 'x', 'V', 'h', '?':
+				continue
+			case 'W', 'X':
+				if j == len(a)-1 {
+					i++ // the value is the next word
+				}
+			case 'm':
+				mod := a[j+1:]
+				if mod != "" {
+					return mod, args[i+1:], true
+				}
+				if i+1 >= len(args) || args[i+1].Dynamic() {
+					return "", nil, false
+				}
+				return args[i+1].Value, args[i+2:], true
+			default: // -c, an unknown option
+				return "", nil, false
+			}
+			break // the rest of the word was the value
+		}
+	}
+	return "", nil, false
+}
+
+var reLauncherVersion = regexp.MustCompile(`^-(?:\d[\d.]*(?:-\d+)?|V:\S+)$`)

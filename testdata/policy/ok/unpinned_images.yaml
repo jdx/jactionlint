@@ -1,0 +1,19 @@
+on: push
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    container:
+      image: node:20@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+    services:
+      db:
+        image: postgres@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+      dynamic:
+        image: ${{ vars.IMAGE }}
+    steps:
+      # docker:// images are checked by unpinned-uses
+      - uses: docker://alpine:3.20
+  other:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo hello

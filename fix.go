@@ -80,24 +80,16 @@ Fixes:
 	return out, applied
 }
 
-// FixRepository fixes the YAML workflow files of the nearest project like LintRepository lints them.
+// FixRepository fixes the files of the nearest project which LintRepository lints: the workflows and the Dependabot configuration.
 // When the directory path is empty, the current working directory will be used instead.
 func (l *Linter) FixRepository(dir string, mode FixMode) (*FixResult, error) {
 	if dir == "" {
 		dir = l.cwd
 	}
-	p, err := l.projects.At(dir)
+	files, p, err := l.repositoryFiles(dir)
 	if err != nil {
 		return nil, err
 	}
-	if p == nil {
-		return nil, fmt.Errorf("no project was found in any parent directories of %q. check workflows directory is put correctly in your Git repository", dir)
-	}
-	files, err := collectWorkflowFiles(p.WorkflowsDir())
-	if err != nil {
-		return nil, err
-	}
-	files = append(files, p.DependabotFiles()...)
 	return l.FixFiles(files, p, mode)
 }
 

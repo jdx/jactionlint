@@ -1,0 +1,4 @@
+rules:
+  unpinned-images:
+    level: error
+    require-digest: false

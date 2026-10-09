@@ -353,8 +353,8 @@ func (rule *RuleAction) checkRepoAction(ref *UsesRef, exec *ExecAction) {
 		}
 	}
 
-	if rule.config.RuleEnabled("unpinned-uses") && ref.RefKind != RefFullSHA {
-		rule.ReportIDf("unpinned-uses", exec.Uses.Pos, "action %q must be pinned to a full-length commit SHA like \"{owner}/{repo}@{sha}\" because the \"unpinned-uses\" rule is enabled", spec)
+	if msg := unpinnedUsesMessage(rule.config, ref, false); msg != "" {
+		rule.ReportID("unpinned-uses", exec.Uses.Pos, msg)
 	}
 
 	meta, ok := PopularActions[spec]
@@ -516,8 +516,8 @@ func (rule *RuleAction) checkDockerAction(ref *UsesRef, exec *ExecAction) {
 		rule.ReportIDf("invalid-uses", exec.Uses.Pos, "tag of Docker action should not be empty: %q", uri)
 	}
 
-	if rule.config.RuleEnabled("unpinned-uses") && ref.RefKind != RefDigest {
-		rule.ReportIDf("unpinned-uses", exec.Uses.Pos, "docker image must be pinned to a digest like \"docker://{image}@sha256:{digest}\" because the \"unpinned-uses\" rule is enabled: %q", ref.Raw)
+	if msg := unpinnedUsesMessage(rule.config, ref, false); msg != "" {
+		rule.ReportID("unpinned-uses", exec.Uses.Pos, msg)
 	}
 }
 
@@ -644,7 +644,7 @@ func init() {
 		RuleInfo{ID: "missing-action-input", Group: RuleGroupCorrectness, Summary: "A required input of an action is not specified.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-local-action-inputs"},
 		RuleInfo{ID: "outdated-action-runner", Group: RuleGroupCorrectness, Summary: "An action runs on a runtime which GitHub Actions no longer supports.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "detect-outdated-popular-actions"},
 		RuleInfo{ID: "unknown-action-input", Group: RuleGroupCorrectness, Summary: "An input which the action does not define is specified.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-local-action-inputs"},
-		RuleInfo{ID: "unpinned-uses", Group: RuleGroupPolicy, Summary: "An action, reusable workflow or Docker image is not pinned to a commit SHA or digest.", DefaultLevel: SeverityError, Profile: ProfileStrict, DocsAnchor: "check-action-format"},
+		RuleInfo{ID: "unpinned-uses", Group: RuleGroupPolicy, Summary: "An action, reusable workflow or Docker image is not pinned to a commit SHA or digest.", DefaultLevel: SeverityError, Profile: ProfileStrict, DocsAnchor: "check-action-format", Options: unpinnedUsesOptions},
 	)
 	registerRuleFactory("action", func(env *RuleEnv) []Rule {
 		return []Rule{NewRuleAction(env.localActions)}

@@ -3,9 +3,12 @@ package jactionlint
 import (
 	"bytes"
 	"fmt"
+	"reflect"
 	"regexp"
 	"strings"
 	"unicode/utf8"
+
+	"go.yaml.in/yaml/v4"
 )
 
 // inlineIgnoreRe matches a whole-line comment which suppresses errors such as
@@ -19,6 +22,25 @@ type inlineIgnoreEntry struct {
 	line, col int
 	// used is whether the pattern suppressed any error.
 	used bool
+	// comment is the comment line the pattern is written in.
+	comment *ignoreComment
+}
+
+// ignoreComment is one comment line with `ignore=`. Its offsets let the unused-ignore rule remove the
+// patterns which did nothing.
+type ignoreComment struct {
+	// lineStart and lineEnd are the byte range of the whole line including its line terminator.
+	lineStart, lineEnd int
+	// valStart and valEnd are the byte range of the text after `ignore=`.
+	valStart, valEnd int
+	// segs are the comma-separated parts of the text after `ignore=`.
+	segs []ignoreSeg
+}
+
+// ignoreSeg is one part of the list in a comment. entry is nil when the part is empty or invalid.
+type ignoreSeg struct {
+	text  string
+	entry *inlineIgnoreEntry
 }
 
 // inlineIgnore is one set of ignore patterns which is effective for errors reported in the line
@@ -75,7 +97,9 @@ func parseInlineIgnoresWithOrphans(src []byte) ([]inlineIgnore, []*inlineIgnoreE
 		return nil, nil, nil
 	}
 	lines := strings.Split(string(src), "\n")
+	starts := make([]int, len(lines)+1) // byte offsets of the lines in the source
 	for i, l := range lines {
+		starts[i+1] = starts[i] + len(l) + 1
 		lines[i] = strings.TrimSuffix(l, "\r")
 	}
 
@@ -99,11 +123,13 @@ func parseInlineIgnoresWithOrphans(src []byte) ([]inlineIgnore, []*inlineIgnoreE
 			col++
 			// Patterns are located after "ignore="
 			from := strings.Index(line, "ignore=") + len("ignore=")
+			cm := &ignoreComment{lineStart: starts[i], lineEnd: min(starts[i+1], len(src)), valStart: starts[i] + from, valEnd: starts[i] + len(line)}
 			for _, p := range splitIgnoreList(m[1]) {
 				raw := p
 				p = strings.TrimSpace(p)
 				if p == "" {
 					from += len(raw) + 1
+					cm.segs = append(cm.segs, ignoreSeg{})
 					continue
 				}
 				patCol := utf8.RuneCountInString(line[:from]) + 1 + utf8.RuneCountInString(raw[:len(raw)-len(strings.TrimLeft(raw, " \t"))])
@@ -117,9 +143,12 @@ func parseInlineIgnoresWithOrphans(src []byte) ([]inlineIgnore, []*inlineIgnoreE
 						Kind:    "syntax-check",
 						ID:      "invalid-ignore-comment",
 					})
+					cm.segs = append(cm.segs, ignoreSeg{text: p})
 					continue
 				}
-				pending = append(pending, &inlineIgnoreEntry{pat: r, line: i + 1, col: patCol})
+				e := &inlineIgnoreEntry{pat: r, line: i + 1, col: patCol, comment: cm}
+				cm.segs = append(cm.segs, ignoreSeg{text: p, entry: e})
+				pending = append(pending, e)
 			}
 			continue
 		}
@@ -183,15 +212,16 @@ func (l *Linter) filterInlineIgnores(errs []*Error, ignores []inlineIgnore) []*E
 }
 
 // unusedInlineIgnores returns an error for each pattern of the inline ignore comments which did not
-// suppress any error. A pattern for a rule which is off is not reported because the rule could not
-// report anything.
-func unusedInlineIgnores(ignores []inlineIgnore, orphans []*inlineIgnoreEntry, cfg *Config) []*Error {
+// suppress any error. A pattern for a rule which is off, or an online rule while the online checks are
+// off (online), is not reported because the rule could not report anything.
+func unusedInlineIgnores(ignores []inlineIgnore, orphans []*inlineIgnoreEntry, cfg *Config, online bool) []*Error {
 	var errs []*Error
+	// stale tells whether the pattern is reported: it did nothing and could have done something
+	stale := func(e *inlineIgnoreEntry) bool {
+		return !e.used && (e.pat.ID == "" || cfg.RuleRuns(e.pat.ID, online))
+	}
 	report := func(e *inlineIgnoreEntry, what string) {
-		if e.used {
-			return
-		}
-		if e.pat.ID != "" && !cfg.RuleEnabled(e.pat.ID) {
+		if !stale(e) {
 			return
 		}
 		errs = append(errs, &Error{
@@ -200,6 +230,7 @@ func unusedInlineIgnores(ignores []inlineIgnore, orphans []*inlineIgnoreEntry, c
 			Column:  e.col,
 			Kind:    "ignore",
 			ID:      "unused-ignore",
+			Fix:     e.comment.removeStale(func(o *inlineIgnoreEntry) bool { return stale(o) && o.comment == e.comment }),
 		})
 	}
 	for _, ig := range ignores {
@@ -211,6 +242,54 @@ func unusedInlineIgnores(ignores []inlineIgnore, orphans []*inlineIgnoreEntry, c
 		report(e, "is not followed by any line to apply to")
 	}
 	return errs
+}
+
+// removeStale makes the fix removing the patterns of the comment for which stale is true. The
+// comment line is deleted when nothing else is left in it. Otherwise the list is rewritten with the
+// remaining patterns. All the stale patterns of a comment get the same edit, so applying them
+// together never conflicts.
+func (c *ignoreComment) removeStale(stale func(*inlineIgnoreEntry) bool) *Fix {
+	if c == nil {
+		return nil
+	}
+	var kept []string
+	for _, s := range c.segs {
+		if s.text == "" || (s.entry != nil && stale(s.entry)) {
+			continue
+		}
+		kept = append(kept, s.text)
+	}
+	if len(kept) == 0 {
+		return &Fix{Description: "Remove the unused ignore comment", Edits: []TextEdit{{Start: c.lineStart, End: c.lineEnd}}}
+	}
+	return &Fix{
+		Description: "Remove the unused ignore patterns",
+		Edits:       []TextEdit{{Start: c.valStart, End: c.valEnd, NewText: strings.Join(kept, ",")}},
+	}
+}
+
+// dropFixesChangingYAML removes the fixes which would change what the YAML file means. Removing a
+// comment does not, except in odd places such as the middle of a multi-line plain scalar, where the
+// comment ends the scalar. The fix is checked by parsing the file with and without it.
+func dropFixesChangingYAML(src []byte, errs []*Error) {
+	var before any
+	parsed := false
+	for _, e := range errs {
+		if e.Fix == nil {
+			continue
+		}
+		if !parsed {
+			parsed = true
+			if yaml.Unmarshal(src, &before) != nil {
+				before = nil
+			}
+		}
+		out, n := applyFixes(src, []*Error{e}, FixModeUnsafe)
+		var after any
+		if n != 1 || before == nil || yaml.Unmarshal(out, &after) != nil || !reflect.DeepEqual(before, after) {
+			e.Fix = nil
+		}
+	}
 }
 
 // isSequenceItem returns true when the line is a block sequence item ("- ..." or a bare "-").

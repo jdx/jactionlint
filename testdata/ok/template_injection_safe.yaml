@@ -1,0 +1,28 @@
+on: issue_comment
+
+env:
+  TITLE: ${{ github.event.issue.title }}
+  NAME: literal
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      # The shell expands the variables
+      - run: echo "$TITLE" "$GITHUB_HEAD_REF"
+      - run: echo "$ISSUE_BODY"
+        env:
+          ISSUE_BODY: ${{ github.event.issue.body }}
+      # The result is a boolean
+      - run: if [ "${{ contains(github.event.comment.body, '/deploy') }}" = "true" ]; then echo deploy; fi
+      # The value is not evaluated as code
+      - uses: actions/stale@v9
+        with:
+          stale-pr-message: ${{ github.event.issue.title }} was closed
+      # The default profile reports neither of these
+      - run: echo '${{ github.repository }} ${{ env.NAME }} ${{ runner.os }}'
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const title = process.env.TITLE
+            console.log(title)

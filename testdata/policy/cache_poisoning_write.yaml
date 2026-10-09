@@ -1,0 +1,21 @@
+on:
+  pull_request_target:
+    types: [opened]
+
+cache-mode: write
+
+jobs:
+  label:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo hello
+  save:
+    runs-on: ubuntu-latest
+    cache-mode: write-only
+    steps:
+      - run: echo hello
+  read:
+    runs-on: ubuntu-latest
+    cache-mode: read
+    steps:
+      - run: echo hello

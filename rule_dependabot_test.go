@@ -1,6 +1,7 @@
 package jactionlint
 
 import (
+	"bytes"
 	"io"
 	"os"
 	"path/filepath"
@@ -321,5 +322,22 @@ func TestFixRepositoryFixesDependabot(t *testing.T) {
 	// The unsafe fix remains as a finding
 	if len(res.Errors) != 1 || res.Errors[0].ID != "dependabot-execution" {
 		t.Fatal(res.Errors)
+	}
+}
+
+// -fix without files fixes the Dependabot configuration and still reports what it cannot fix, a syntax error
+// included, so that the exit status stays 1.
+func TestFixRepositoryKeepsSyntaxErrorsOfDependabot(t *testing.T) {
+	src := "version: 2\nupdates:\n  - package-ecosystem: npm\n    directory: /\n    schedule:\n      interval: weekly\n    unknown-key: 1\n"
+	root := makeDependabotProject(t, map[string]string{"dependabot.yml": src},
+		"rules:\n  dependabot-cooldown:\n    default-days: 7\n")
+	t.Chdir(root)
+	var stdout, stderr bytes.Buffer
+	code := (&Command{Stdin: strings.NewReader(""), Stdout: &stdout, Stderr: &stderr}).Main([]string{"jactionlint", "-no-color", "-fix"})
+	if code != ExitStatusSuccessProblemFound || !strings.Contains(stdout.String(), "unknown-key") {
+		t.Errorf("exit status %d\nstdout: %s\nstderr: %s", code, stdout.String(), stderr.String())
+	}
+	if b, _ := os.ReadFile(filepath.Join(root, ".github", "dependabot.yml")); !strings.Contains(string(b), "default-days: 7") {
+		t.Errorf("the cooldown was not added: %s", b)
 	}
 }

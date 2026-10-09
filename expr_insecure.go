@@ -391,6 +391,6 @@ func (u *UntrustedInputChecker) Init() {
 
 func init() {
 	registerRules(
-		RuleInfo{ID: "template-injection", Group: RuleGroupSecurity, Summary: "A potentially untrusted input is expanded in a script.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "untrusted-inputs"},
+		RuleInfo{ID: "template-injection", Group: RuleGroupSecurity, Summary: "A potentially untrusted input is expanded in a script.", DefaultLevel: SeverityError, Profile: ProfileDefault, Fixable: true, DocsAnchor: "untrusted-inputs"},
 	)
 }

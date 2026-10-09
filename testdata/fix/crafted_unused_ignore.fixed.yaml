@@ -1,0 +1,13 @@
+on: push
+permissions: {}
+jobs:
+  a:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - run: echo a
+      # jactionlint ignore=template-injection
+      - run: echo ${{ github.event.issue.title }}
+      - run: echo b
+      - run: echo c
+      - run: echo d

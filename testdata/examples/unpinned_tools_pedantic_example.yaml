@@ -1,0 +1,8 @@
+on: push
+jobs:
+  tools:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
+      - run: pip install requests black==24.3.0
+      - run: go install golang.org/x/tools/cmd/stringer@latest
