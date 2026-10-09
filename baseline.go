@@ -360,7 +360,7 @@ func (s *baselineState) match(fileKey string, errs []*Error, infos map[*Error]*b
 		rest = append(rest, e)
 	}
 	for _, e := range rest {
-		if e.ID == "invalid-local-action" {
+		if contextFallbackExcluded[e.ID] {
 			// Its message is about the action, and the context is only the line that calls it: another problem
 			// of the same action is a new finding, not a reworded one
 			continue
@@ -378,6 +378,15 @@ func (s *baselineState) match(fileKey string, errs []*Error, infos map[*Error]*b
 		s.seen[be] = true
 	}
 	s.mu.Unlock()
+}
+
+// contextFallbackExcluded are the rules whose message carries what the finding is about (which advisory, which
+// problem of the called action or workflow) while the context is only the line of the call: a leftover entry
+// must not accept another finding of them as a reworded one.
+var contextFallbackExcluded = map[string]bool{
+	"invalid-local-action":     true,
+	"invalid-local-workflow":   true,
+	"known-vulnerable-actions": true,
 }
 
 // unusedBaselineEntryID is the ID of the diagnostic for baseline entries which match nothing.

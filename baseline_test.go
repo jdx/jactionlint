@@ -711,16 +711,18 @@ func TestBaselineMatchForgetsEarlierLints(t *testing.T) {
 
 // A different problem of the same local action is not the old finding reworded.
 func TestBaselineContextFallbackSkipsInvalidLocalAction(t *testing.T) {
-	e := &BaselineEntry{File: "a.yaml", Rule: "invalid-local-action", Fingerprint: "old", Context: "c"}
-	s := newBaselineState("b.json", t.TempDir(), &Baseline{Entries: []*BaselineEntry{e}})
-	finding := &Error{ID: "invalid-local-action"}
-	s.match("a.yaml", []*Error{finding}, map[*Error]*baselineInfo{finding: {file: "a.yaml", fingerprint: "new", context: "c"}})
-	if finding.Baselined {
-		t.Error("the new problem must be reported")
+	for _, id := range []string{"invalid-local-action", "invalid-local-workflow", "known-vulnerable-actions"} {
+		e := &BaselineEntry{File: "a.yaml", Rule: id, Fingerprint: "old", Context: "c"}
+		s := newBaselineState("b.json", t.TempDir(), &Baseline{Entries: []*BaselineEntry{e}})
+		finding := &Error{ID: id}
+		s.match("a.yaml", []*Error{finding}, map[*Error]*baselineInfo{finding: {file: "a.yaml", fingerprint: "new", context: "c"}})
+		if finding.Baselined {
+			t.Errorf("%s: the new problem must be reported", id)
+		}
 	}
 	other := &Error{ID: "missing-timeout"}
 	e2 := &BaselineEntry{File: "a.yaml", Rule: "missing-timeout", Fingerprint: "old", Context: "c"}
-	s = newBaselineState("b.json", t.TempDir(), &Baseline{Entries: []*BaselineEntry{e2}})
+	s := newBaselineState("b.json", t.TempDir(), &Baseline{Entries: []*BaselineEntry{e2}})
 	s.match("a.yaml", []*Error{other}, map[*Error]*baselineInfo{other: {file: "a.yaml", fingerprint: "new", context: "c"}})
 	if !other.Baselined {
 		t.Error("a reworded message of another rule still matches")
