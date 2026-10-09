@@ -27,6 +27,16 @@ func TestGitHubEnvSanitizedValues(t *testing.T) {
 		{"sanitized once and then raw", `S=$(echo "$TITLE" | tr -d '\n')
           echo "B=$S $TITLE" >> "$GITHUB_ENV"`, 1},
 
+		{"a read after the write does not make the value trusted", `echo "TITLE=$TITLE" >> "$GITHUB_ENV"
+          IFS=/ read -r OWNER TITLE <<< "$REPO"`, 1},
+		{"a read of an untrusted value before the write", `IFS=/ read -r OWNER NAME <<< "$TITLE"
+          echo "NAME=$NAME" >> "$GITHUB_ENV"`, 1},
+		{"tr that keeps the dot and slash for the path", `echo "$(echo "$REF" | tr -cd 'a-z./')" >> "$GITHUB_PATH"`, 1},
+		{"tr that keeps the colon for the path", `echo "$(echo "$REF" | tr -cd 'a-z:')" >> "$GITHUB_PATH"`, 1},
+		{"sed whitelist with a slash for the path", `echo "$(echo "$REF" | sed 's/[^a-z.]/-/g')" >> "$GITHUB_PATH"`, 1},
+		{"expansion keeping the dot and slash for the path", `echo "${TITLE//[^a-z.]/}" >> "$GITHUB_PATH"`, 1},
+		{"tr that keeps the dot for the environment is fine", `echo "K=$(echo "$TITLE" | tr -cd 'a-z.')" >> "$GITHUB_ENV"`, 0},
+
 		// not reported
 		{"newline deleted", `C=$(echo "$TITLE" | tr -d "\n\r")
           echo "C=$C" >> "$GITHUB_ENV"`, 0},

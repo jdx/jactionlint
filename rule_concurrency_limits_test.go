@@ -31,6 +31,9 @@ func TestConcurrencyLimits(t *testing.T) {
 		{"cron only", "on:\n  schedule:\n    - cron: '0 6 * * 1'\n" + job, nil},
 		{"cron and manual only", "on:\n  schedule:\n    - cron: '0 6 * * 1'\n  workflow_dispatch:\n" + job, nil},
 		{"manual only", "on: workflow_dispatch\n" + job, nil},
+		{"bare group on cron only", "on:\n  schedule:\n    - cron: '0 6 * * 1'\nconcurrency: g\n" + job, nil},
+		{"bare group on manual only", "on: workflow_dispatch\nconcurrency: g\n" + job, nil},
+		{"bare group on cron and push", "on:\n  schedule:\n    - cron: '0 6 * * 1'\n  push:\nconcurrency: g\n" + job, []int{5}},
 		{"cron and push", "on:\n  schedule:\n    - cron: '0 6 * * 1'\n  push:\n" + job, []int{1}},
 		{"a reusable workflow itself", "on: workflow_call\njobs:\n  a:\n    uses: octo/repo/.github/workflows/w.yaml@v1\n", nil},
 	}
