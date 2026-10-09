@@ -30,10 +30,10 @@ type ActionCaller struct {
 	// Events are the events which trigger the workflow, without workflow_call. They are empty when the
 	// workflow is only called by other workflows, which is not known.
 	Events []Event
-	// Calls are the steps of the workflow that run the action, when the workflow runs it in one of its own steps
+	// calls are the steps of the workflow that run the action, when the workflow runs it in one of its own steps
 	// (Via is empty). They tell what the workflow passes to the action. They are nil for a call through
 	// another action or reusable workflow.
-	Calls []*ExecAction
+	calls []*ExecAction
 }
 
 // ActionCallers are the local workflows which run an action. It lets the rules which depend on the
@@ -423,7 +423,7 @@ func (g *callGraph) callersOf(dir string) *ActionCallers {
 			if len(events) > 0 || !called {
 				found[from.path] = &ActionCaller{Workflow: from.path, Via: via, Events: events}
 				if it.node == start {
-					found[from.path].Calls = g.calls[[2]graphNode{from, start}]
+					found[from.path].calls = g.calls[[2]graphNode{from, start}]
 				}
 			}
 			// A reusable workflow runs in the context of the workflow calling it.

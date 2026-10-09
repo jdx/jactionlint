@@ -645,10 +645,10 @@ func (rule *RuleCachePoisoning) everyReleaseCallerSets(input string, offWhenTrue
 			continue
 		}
 		releasing++
-		if len(cl.Calls) == 0 {
+		if len(cl.calls) == 0 {
 			return false
 		}
-		for _, call := range cl.Calls {
+		for _, call := range cl.calls {
 			v, ok := call.input(input)
 			switch {
 			case ok && off(v):

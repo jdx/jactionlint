@@ -824,7 +824,7 @@ func (l *Linter) check(
 	} else {
 		w, all = Parse(content)
 		if w != nil && project != nil {
-			w.InheritedSecrets = l.callersInheritSecrets(project, l.absFilePath(path))
+			w.inheritedSecrets = l.callersInheritSecrets(project, l.absFilePath(path))
 		}
 	}
 
