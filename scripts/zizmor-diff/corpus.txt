@@ -1,0 +1,27 @@
+# Repositories the differential harness runs over, one per line: a directory or label=directory.
+# ~ expands to the home directory. Blank lines and # comments are ignored. Missing directories are skipped
+# and listed in the report.
+~/src/aube-action-jactionlint
+~/src/aube-jactionlint
+~/src/blog-jactionlint
+~/src/clx-jactionlint
+~/src/communique-jactionlint
+~/src/demand-jactionlint
+~/src/ensembler-jactionlint
+~/src/fnox-jactionlint
+~/src/mbx-cache-jactionlint
+~/src/mise-action-jactionlint
+~/src/mise-versions-jactionlint
+~/src/mr-boxington-action-jactionlint
+~/src/mr-boxington-jactionlint
+~/src/omapac-jactionlint
+~/src/packslip-jactionlint
+~/src/pitchfork-jactionlint
+~/src/pklr-jactionlint
+~/src/renovate-config-jactionlint
+~/src/tak-jactionlint
+~/src/usage-jactionlint
+~/src/usage-sh-jactionlint
+~/src/vfox-gcloud-jactionlint
+~/src/xx-jactionlint
+~/src/mise

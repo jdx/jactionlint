@@ -85,6 +85,11 @@ run = [
   "./jactionlint -format '{% raw %}{{json .}}{% endraw %}' ./testdata/err/one_error.yaml > ./scripts/generate-jactionlint-matcher/test/want.json || true",
 ]
 
+[tasks.zizmor-diff]
+description = "Compare jactionlint with zizmor 1.30.1 over the repositories in scripts/zizmor-diff/corpus.txt (see scripts/zizmor-diff/README.md)"
+depends = ["build"]
+run = "go run ./scripts/zizmor-diff --jactionlint ./jactionlint --jactionlint-config scripts/zizmor-diff/strict-v1.yaml"
+
 [tasks.clean]
 description = "Remove build outputs"
 run = [
