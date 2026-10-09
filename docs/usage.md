@@ -448,6 +448,11 @@ How an entry matches a finding, so that you know what an edit does to the baseli
   recorded; a third one is new, and fixing one leaves one unused entry.
 - A finding that only changed because a release rewords the message of its rule still matches (the file also stores a hash
   without the message), so upgrading does not resurrect anything. Rewriting the baseline refreshes the messages.
+- A baseline is portable: the same file works in a checkout at another path (a CI runner, a colleague's machine). The messages
+  that mention a local action show its path relative to the repository (`./.github/actions/setup`), and the path of the
+  checkout is replaced in the fingerprint of any message that still contains it. A finding about a local action (its
+  `action.yml` is broken, a file it names is missing) is reported once, at its first use in the order of the files, however
+  many workflows use the action.
 - **A renamed file loses its entries**: they are keyed by the path relative to the repository root. The findings of the new
   path are reported and the old entries are unused. Run `jactionlint -baseline-write` after the rename (it follows the rename
   and is the only step needed).

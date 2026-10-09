@@ -162,6 +162,7 @@ type LinterOptions struct {
 
 // Linter is struct to lint workflow files.
 type Linter struct {
+	shared     sharedFindings
 	projects   *Projects
 	out        io.Writer
 	logOut     io.Writer
@@ -625,6 +626,7 @@ func (l *Linter) lintFilesQuietly(filepaths []string, project *Project) ([]fileR
 	if err := eg.Wait(); err != nil {
 		return nil, err
 	}
+	l.shared.dropRepeatedInFiles(ws)
 
 	// Ensure that all processes finish. `proc.wait()` must be called after `eg.Wait()`.
 	// Calling `WaitGroup.Add` after `WaitGroup.Wait` can cause a race condition (specifically when
@@ -635,6 +637,56 @@ func (l *Linter) lintFilesQuietly(filepaths []string, project *Project) ([]fileR
 	proc.wait()
 
 	return ws, nil
+}
+
+// sharedFindings are the findings which describe a thing many places share (a local action with a broken
+// metadata file) and not the place which reported them (see RuleAction.reportOnce). Every use reports such a
+// finding, so that the report does not depend on which file a goroutine happened to lint first, and only the
+// first one in the order of the files is kept.
+type sharedFindings struct{ errs sync.Map }
+
+// mark remembers the findings.
+func (s *sharedFindings) mark(errs []*Error) {
+	for _, e := range errs {
+		s.errs.Store(e, struct{}{})
+	}
+}
+
+// dropper returns a function which reports whether a finding is a repeat of an earlier shared finding with the
+// same ID and message, and so is to be dropped.
+func (s *sharedFindings) dropper() func(*Error) bool {
+	var seen map[string]bool
+	return func(e *Error) bool {
+		if _, ok := s.errs.Load(e); !ok {
+			return false
+		}
+		k := e.ID + "\x00" + e.Message
+		if seen[k] {
+			return true
+		}
+		if seen == nil {
+			seen = map[string]bool{}
+		}
+		seen[k] = true
+		return false
+	}
+}
+
+// dropRepeated removes the repeats from the sorted findings of one file.
+func (s *sharedFindings) dropRepeated(errs []*Error) []*Error {
+	return slices.DeleteFunc(errs, s.dropper())
+}
+
+// dropRepeatedInFiles keeps only the first shared finding of all files, in the order of the results. The
+// findings which the baseline accepts count as the first, too: the repeat of an accepted finding is the same
+// finding.
+func (s *sharedFindings) dropRepeatedInFiles(ws []fileResult) {
+	drop := s.dropper()
+	for i := range ws {
+		// A file has at most one of them (finishCheck dropped the repeats), either accepted or reported
+		ws[i].baselined = slices.DeleteFunc(ws[i].baselined, drop)
+		ws[i].errs = slices.DeleteFunc(ws[i].errs, drop)
+	}
 }
 
 // LintFile lints one YAML workflow file and outputs the errors to given writer. The project
@@ -812,6 +864,9 @@ func (l *Linter) check(
 		}
 
 		for _, rule := range rules {
+			if sr, ok := rule.(interface{ sharedErrs() []*Error }); ok {
+				l.shared.mark(sr.sharedErrs())
+			}
 			errs := rule.Errs()
 			l.debug("%s found %d errors", rule.Name(), len(errs))
 			if isAction {
@@ -890,6 +945,7 @@ func (l *Linter) finishCheck(path string, content []byte, all []*Error, cfg *Con
 
 	slices.SortFunc(all, compareErrors)
 	all = slices.CompactFunc(all, equalsErrors) // Alias may duplicate errors
+	all = l.shared.dropRepeated(all)
 
 	// The baseline identifies findings by their order among identical ones, so it sees all of them,
 	// also those below the minimum severity

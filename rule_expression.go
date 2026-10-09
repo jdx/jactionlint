@@ -392,12 +392,10 @@ func (rule *RuleExpression) getActionOutputsType(spec *String) *ObjectType {
 	}
 
 	if _, ok := canonLocalUsesSpec(spec.Value); ok {
-		meta, _, err := rule.localActions.FindMetadata(spec.Value)
-		if err != nil {
-			rule.ReportID("invalid-local-action", spec.Pos, err.Error())
-			return NewMapObjectType(StringType{})
-		}
-		if meta == nil {
+		// A broken metadata file is reported by the action rule at every use of the action (see
+		// RuleAction.reportOnce). Reporting it here too made the report depend on which rule searched first.
+		meta, err := rule.localActions.Lookup(spec.Value)
+		if err != nil || meta == nil {
 			return NewMapObjectType(StringType{})
 		}
 
