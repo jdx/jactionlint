@@ -66,6 +66,10 @@ func setOnlineEnv(t *testing.T, f *fakeGitHub, token string) {
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
 	t.Setenv("GITHUB_TOKEN", token)
 	t.Setenv("GH_TOKEN", "")
+	// The runners of GitHub Actions export these, and they would point at github.com
+	t.Setenv("GITHUB_GRAPHQL_URL", "")
+	t.Setenv("GITHUB_SERVER_URL", "")
+	t.Setenv("GH_HOST", "")
 	// Never run the gh of the machine which runs the tests
 	t.Setenv("PATH", t.TempDir())
 }
