@@ -1,5 +1,59 @@
 # Changelog
 
+## [2.0.0](https://github.com/jdx/jactionlint/compare/v1.8.2...v2.0.0) (2026-10-09)
+
+
+### ⚠ BREAKING CHANGES
+
+* use POSIX/GNU command line options only ([#85](https://github.com/jdx/jactionlint/issues/85))
+* add the correctness, default and pedantic profiles and consolidate rule IDs ([#79](https://github.com/jdx/jactionlint/issues/79))
+* add stable rule IDs, severities, profiles and native output formats (v2) ([#47](https://github.com/jdx/jactionlint/issues/47))
+
+### Features
+
+* add a GitHub Action that downloads and runs jactionlint (v2) ([#108](https://github.com/jdx/jactionlint/issues/108)) ([b27de1f](https://github.com/jdx/jactionlint/commit/b27de1faa95e4f6722d43985f14e1c145415dc03))
+* add a shared uses parser and keep yaml comments ([#50](https://github.com/jdx/jactionlint/issues/50)) ([da20b77](https://github.com/jdx/jactionlint/commit/da20b7715f9faf24fbe4a8fef63325c04435cb19))
+* add an internal analyzer for run scripts ([#53](https://github.com/jdx/jactionlint/issues/53)) ([be4bf70](https://github.com/jdx/jactionlint/commit/be4bf7060d845228946ea199a90171b65edfb119))
+* add baseline adoption with -baseline-write and -format summary ([#75](https://github.com/jdx/jactionlint/issues/75)) ([66bfa78](https://github.com/jdx/jactionlint/commit/66bfa78a0e86b5ae9de5d75ab91571e7e8d6e04b))
+* add durable config ignores with expiry ([#74](https://github.com/jdx/jactionlint/issues/74)) ([4e72865](https://github.com/jdx/jactionlint/commit/4e72865fb8eeb400ec9f932f5c0a4799e224a029))
+* add fixers for missing-timeout, missing-permissions and unused-ignore ([#59](https://github.com/jdx/jactionlint/issues/59)) ([17e1e45](https://github.com/jdx/jactionlint/commit/17e1e4546186231f2244722883ab24db7baf8684))
+* add stable rule IDs, severities, profiles and native output formats (v2) ([#47](https://github.com/jdx/jactionlint/issues/47)) ([0c06391](https://github.com/jdx/jactionlint/commit/0c06391aed64b22368953f146f0cfe52850e3034))
+* add the concurrency, gate-job, untrusted-checkout and dead-code rules ([#64](https://github.com/jdx/jactionlint/issues/64)) ([6664fa4](https://github.com/jdx/jactionlint/commit/6664fa40bf662a22b054d3d4e19baacfd5c7bf67))
+* add the correctness, default and pedantic profiles and consolidate rule IDs ([#79](https://github.com/jdx/jactionlint/issues/79)) ([e42a7b9](https://github.com/jdx/jactionlint/commit/e42a7b9cba99f1f5f3cd6d8298ab361dbd7ba47c))
+* add the dependabot-cooldown and dependabot-execution rules ([#63](https://github.com/jdx/jactionlint/issues/63)) ([729babe](https://github.com/jdx/jactionlint/commit/729babe82b4bb5293e2c4fe4102812b4e160ecbb))
+* add the excessive-permissions, unpinned-images, artipacked, cache-poisoning and other permission and pinning rules ([#57](https://github.com/jdx/jactionlint/issues/57)) ([00c2c1f](https://github.com/jdx/jactionlint/commit/00c2c1fd0995a2979018976ddbf93f1ea49e5648))
+* add the github-env, adhoc-packages, unpinned-tools, use-trusted-publishing, superfluous-actions and unlocked-install rules ([#62](https://github.com/jdx/jactionlint/issues/62)) ([21c4e0c](https://github.com/jdx/jactionlint/commit/21c4e0c979080582a06c4a6135404c982c835785))
+* add the impostor-commit, known-vulnerable-actions, ref-confusion, stale-action-refs, archived-uses and ref-version-mismatch online rules ([#60](https://github.com/jdx/jactionlint/issues/60)) ([714ba46](https://github.com/jdx/jactionlint/commit/714ba4612a8af92ad41c6873be806cf3c785a82e))
+* add the insecure-commands, unsound-contains, secrets-inherit, dangerous-triggers and other secrets and workflow-structure rules ([#56](https://github.com/jdx/jactionlint/issues/56)) ([be87194](https://github.com/jdx/jactionlint/commit/be87194bc2496114eac92f0d3e40f89a01ae6fa3))
+* add the invisible-characters and unsound-prefix-match rules ([#71](https://github.com/jdx/jactionlint/issues/71)) ([4d6cb5e](https://github.com/jdx/jactionlint/commit/4d6cb5e4e797cf0fecaa331a060366636f50ffd9))
+* add the pipeline-without-pipefail rule ([#65](https://github.com/jdx/jactionlint/issues/65)) ([c373d0e](https://github.com/jdx/jactionlint/commit/c373d0e56f9364f6fdeeeec4eb59835c44ebadc3))
+* add the template-injection tiers, bot-conditions, obfuscation and misfeature rules ([#58](https://github.com/jdx/jactionlint/issues/58)) ([70e11b9](https://github.com/jdx/jactionlint/commit/70e11b93dc8766759dcf46aaf1cf8fa1690175bd))
+* add the unverified-download, insecure-ssh-keyscan, checkout-static-credentials and insecure-url-scheme rules ([#70](https://github.com/jdx/jactionlint/issues/70)) ([eae08cc](https://github.com/jdx/jactionlint/commit/eae08cca92a53fd68a07a95a38cc1019b0ef2cb1))
+* converge -fix, add -fix -rules and -diff, verify every pass ([#76](https://github.com/jdx/jactionlint/issues/76)) ([8944339](https://github.com/jdx/jactionlint/commit/8944339936d3b2de0f28999c1d5fd0853764c28f))
+* extend template-injection to container and AI-agent sinks and add agentic-actions ([#69](https://github.com/jdx/jactionlint/issues/69)) ([6938d15](https://github.com/jdx/jactionlint/commit/6938d15966ffb7bd30e49626b94d5c005a9c7bdc))
+* honor zizmor ignore comments and add -migrate-ignores ([#66](https://github.com/jdx/jactionlint/issues/66)) ([23a3140](https://github.com/jdx/jactionlint/commit/23a314007f12c05a07df0cc4b73cad171597e409))
+* lint composite action.yml files with caller-aware context ([#72](https://github.com/jdx/jactionlint/issues/72)) ([a0f2843](https://github.com/jdx/jactionlint/commit/a0f2843975f4e06e0add178d9d95fb12301fbc3a))
+* lint dependabot.yml and add a visitor for dependabot rules ([#51](https://github.com/jdx/jactionlint/issues/51)) ([2f687b6](https://github.com/jdx/jactionlint/commit/2f687b689a55579f617f75f72b2c91f786c6b8c8))
+* make -online resilient to failed lookups and add token discovery ([#73](https://github.com/jdx/jactionlint/issues/73)) ([507b083](https://github.com/jdx/jactionlint/commit/507b0835f0f235a8b40b63c0b108289bedbb15c6))
+* use POSIX/GNU command line options only ([#85](https://github.com/jdx/jactionlint/issues/85)) ([baac11d](https://github.com/jdx/jactionlint/commit/baac11dc607d70be987b34af98fc47a060c91106))
+
+
+### Bug Fixes
+
+* apply zizmor ignores like zizmor, show rule IDs, lint every action, skip policy rules in generated files ([#91](https://github.com/jdx/jactionlint/issues/91)) ([d644def](https://github.com/jdx/jactionlint/commit/d644def68c18fefdd28535bbc9876498ffe3910c))
+* close the gaps in untrusted-artifact, agentic-actions and five more rules ([#95](https://github.com/jdx/jactionlint/issues/95)) ([fdf32d3](https://github.com/jdx/jactionlint/commit/fdf32d3a4d539019f03c2c0bdf142095f83970eb))
+* cut false positives in the concurrency, gate, permissions and cooldown rules ([#86](https://github.com/jdx/jactionlint/issues/86)) ([ac69a21](https://github.com/jdx/jactionlint/commit/ac69a21ba49eba3f04f087119873d93f4805407e))
+* keep the baseline from hiding new missing inputs and validate the fix options ([#98](https://github.com/jdx/jactionlint/issues/98)) ([896cf35](https://github.com/jdx/jactionlint/commit/896cf35d490b579963e332e76d3d2781a700c593))
+* lint only direct workflow files, guide first runs, and dogfood the default profile ([#84](https://github.com/jdx/jactionlint/issues/84)) ([468ead1](https://github.com/jdx/jactionlint/commit/468ead1aa985f055fa3fe740a56ff9fa74d521e6))
+* make large workflows fast, report exact positions in multi-line scalars and harden against pathological input ([#83](https://github.com/jdx/jactionlint/issues/83)) ([be058ab](https://github.com/jdx/jactionlint/commit/be058abcf4decac771abd4a36deaad01d8b21962))
+* **release:** expand the signing identity in the codesign hook ([#77](https://github.com/jdx/jactionlint/issues/77)) ([885293f](https://github.com/jdx/jactionlint/commit/885293f1ce59a8aa2da57a6e0ede3f8270904728))
+* remove false positives and close coverage gaps found by the bug bash ([#82](https://github.com/jdx/jactionlint/issues/82)) ([7ed5ce1](https://github.com/jdx/jactionlint/commit/7ed5ce144884ee6b7040a9330413356530e3063c))
+* remove the false positives and false negatives of 14 rules found in round 2 ([#89](https://github.com/jdx/jactionlint/issues/89)) ([62c0fc0](https://github.com/jdx/jactionlint/commit/62c0fc06453dff0f5dae448dcf5dc4a34bc04ae3))
+* report positions inside YAML scalars exactly ([#88](https://github.com/jdx/jactionlint/issues/88)) ([7f6d89c](https://github.com/jdx/jactionlint/commit/7f6d89cb991ac419f1c5c07d8dab492fabd25bbb))
+* share the online cache between tokens, honor online false and match config ignores ([#97](https://github.com/jdx/jactionlint/issues/97)) ([2c49f4b](https://github.com/jdx/jactionlint/commit/2c49f4bb507c0f62d4746100da17d06d2934193a))
+* stop --fix from breaking reusable workflows and word lists, and make --diff minimal ([#87](https://github.com/jdx/jactionlint/issues/87)) ([6748c2f](https://github.com/jdx/jactionlint/commit/6748c2f977f8035179f09068c4639919fce0291a))
+* use the exact env name in the template-injection fix and tighten the cache-poisoning gates ([#96](https://github.com/jdx/jactionlint/issues/96)) ([7684ba2](https://github.com/jdx/jactionlint/commit/7684ba2ce582fa354c63dde0d718ccdfd5760815))
+
 ## [1.8.2](https://github.com/jdx/jactionlint/compare/v1.8.1...v1.8.2) (2026-10-05)
 
 

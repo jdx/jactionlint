@@ -958,7 +958,7 @@ and pyflakes).
 Available tags are:
 
 - `jactionlint:latest`: Latest stable version of jactionlint. This image is recommended.
-- `jactionlint:{version}`: Specific version of jactionlint. (e.g. `jactionlint:1.8.2`) <!-- x-release-please-version -->
+- `jactionlint:{version}`: Specific version of jactionlint. (e.g. `jactionlint:2.0.0`) <!-- x-release-please-version -->
 
 Just run the image with `docker run`:
 
@@ -1058,7 +1058,7 @@ Add this to your `.pre-commit-config.yaml` in your repository:
 ---
 repos:
   - repo: https://github.com/jdx/jactionlint
-    rev: v1.8.2  # x-release-please-version
+    rev: v2.0.0  # x-release-please-version
     hooks:
       - id: jactionlint
 ```
