@@ -1,0 +1,5 @@
+name: remote-docker
+description: A Docker action which runs a registry image
+runs:
+  using: docker
+  image: docker://alpine:3

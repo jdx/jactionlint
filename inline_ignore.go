@@ -15,6 +15,12 @@ import (
 // `# jactionlint ignore=<pattern>[,<pattern>...]`. `# actionlint ignore=...` is also accepted.
 var inlineIgnoreRe = regexp.MustCompile(`^\s*#\s*j?actionlint\s+ignore=(.*)$`)
 
+// trailingIgnoreRe finds the ignore directive in a comment which follows YAML content on its line,
+// e.g. `uses: actions/checkout@abc # v4 # jactionlint ignore=unpinned-uses`. It is given the text from the
+// `#` which starts the comment. The directive is the first `#` after white space (or the start of the
+// comment) that is followed by `jactionlint ignore=`.
+var trailingIgnoreRe = regexp.MustCompile(`(?:^|\s)#\s*j?actionlint\s+ignore=(.*)$`)
+
 // inlineIgnoreEntry is one pattern of an inline ignore comment.
 type inlineIgnoreEntry struct {
 	pat IgnorePattern
@@ -24,6 +30,17 @@ type inlineIgnoreEntry struct {
 	used bool
 	// comment is the comment line the pattern is written in.
 	comment *ignoreComment
+	// zizmor is the audit name of an entry from a zizmor ignore comment. Then targets lists the
+	// diagnostics it stands for and pat is not used.
+	zizmor  string
+	targets []zizmorAlias
+}
+
+func (e *inlineIgnoreEntry) match(err *Error) bool {
+	if e.zizmor != "" {
+		return e.matchesZizmor(err)
+	}
+	return e.pat.Match(err)
 }
 
 // ignoreComment is one comment line with `ignore=`. Its offsets let the unused-ignore rule remove the
@@ -48,6 +65,9 @@ type ignoreSeg struct {
 type inlineIgnore struct {
 	start, end int
 	entries    []*inlineIgnoreEntry
+	// commentLine is the line of a zizmor ignore comment, which also applies to the errors whose region
+	// contains that line. It is 0 for the comments of jactionlint.
+	commentLine int
 }
 
 // splitIgnoreList splits comma-separated patterns. Commas inside (), [] and {} or escaped with a
@@ -81,10 +101,17 @@ func isCommentOrBlank(line string) (comment bool, blank bool) {
 	return strings.HasPrefix(t, "#"), t == ""
 }
 
-// parseInlineIgnores scans the source for `# jactionlint ignore=...` comments. A comment must be
-// placed on its own line. It applies to the next YAML line which is not a comment nor blank and to
-// the lines nested under it. When the line starts a sequence item ("- "), the whole item is the
-// target. Multiple comment lines can be stacked. Invalid patterns are reported as errors.
+// parseInlineIgnores scans the source for `# jactionlint ignore=...` comments. There are two forms.
+//
+// A comment on its own line applies to the next YAML line which is not a comment nor blank and to the
+// lines nested under it. Multiple comment lines can be stacked.
+//
+// A comment at the end of a line, after YAML content, applies to that line and to the lines nested
+// under it. The directive may follow other comment text (`uses: a/b@sha # v1 # jactionlint ignore=x`).
+// A '#' inside a quoted string or a block scalar such as a `run: |` script is not a comment.
+//
+// In both forms, when the target line starts a sequence item ("- "), the whole item is the target:
+// a comment on the first line of a step covers the whole step. Invalid patterns are reported as errors.
 func parseInlineIgnores(src []byte) ([]inlineIgnore, []*Error) {
 	ignores, _, errs := parseInlineIgnoresWithOrphans(src)
 	return ignores, errs
@@ -102,10 +129,50 @@ func parseInlineIgnoresWithOrphans(src []byte) ([]inlineIgnore, []*inlineIgnoreE
 		starts[i+1] = starts[i] + len(l) + 1
 		lines[i] = strings.TrimSuffix(l, "\r")
 	}
+	comments := NewCommentIndex(src)
 
 	var ret []inlineIgnore
 	var errs []*Error
 	var pending []*inlineIgnoreEntry
+
+	// addDirective turns the text after `ignore=` into entries. dirStart is the byte offset in the line
+	// of the '#' starting the directive, from the byte offset of the list, and the comment owns the
+	// bytes [delStart, delEnd) of the file when it is deleted as a whole.
+	addDirective := func(i int, line string, dirStart, from int, list string, delStart, delEnd int) {
+		col := strings.Index(line[dirStart:], "jactionlint")
+		if col < 0 {
+			col = strings.Index(line[dirStart:], "actionlint")
+		}
+		col = utf8.RuneCountInString(line[:dirStart+col]) + 1
+		cm := &ignoreComment{lineStart: delStart, lineEnd: delEnd, valStart: starts[i] + from, valEnd: starts[i] + from + len(list)}
+		for _, p := range splitIgnoreList(list) {
+			raw := p
+			p = strings.TrimSpace(p)
+			if p == "" {
+				from += len(raw) + 1
+				cm.segs = append(cm.segs, ignoreSeg{})
+				continue
+			}
+			patCol := utf8.RuneCountInString(line[:from]) + 1 + utf8.RuneCountInString(raw[:len(raw)-len(strings.TrimLeft(raw, " \t"))])
+			from += len(raw) + 1
+			r, err := ParseIgnorePattern(p)
+			if err != nil {
+				errs = append(errs, &Error{
+					Message: fmt.Sprintf("invalid regular expression %q in inline ignore comment: %s", p, err.Error()),
+					Line:    i + 1,
+					Column:  col,
+					Kind:    "syntax-check",
+					ID:      "invalid-ignore-comment",
+				})
+				cm.segs = append(cm.segs, ignoreSeg{text: p})
+				continue
+			}
+			e := &inlineIgnoreEntry{pat: r, line: i + 1, col: patCol, comment: cm}
+			cm.segs = append(cm.segs, ignoreSeg{text: p, entry: e})
+			pending = append(pending, e)
+		}
+	}
+
 	for i, line := range lines {
 		comment, blank := isCommentOrBlank(line)
 		if blank {
@@ -116,70 +183,66 @@ func parseInlineIgnoresWithOrphans(src []byte) ([]inlineIgnore, []*inlineIgnoreE
 			if m == nil {
 				continue
 			}
-			col := strings.Index(line, "jactionlint")
-			if col < 0 {
-				col = strings.Index(line, "actionlint")
-			}
-			col++
 			// Patterns are located after "ignore="
 			from := strings.Index(line, "ignore=") + len("ignore=")
-			cm := &ignoreComment{lineStart: starts[i], lineEnd: min(starts[i+1], len(src)), valStart: starts[i] + from, valEnd: starts[i] + len(line)}
-			for _, p := range splitIgnoreList(m[1]) {
-				raw := p
-				p = strings.TrimSpace(p)
-				if p == "" {
-					from += len(raw) + 1
-					cm.segs = append(cm.segs, ignoreSeg{})
-					continue
-				}
-				patCol := utf8.RuneCountInString(line[:from]) + 1 + utf8.RuneCountInString(raw[:len(raw)-len(strings.TrimLeft(raw, " \t"))])
-				from += len(raw) + 1
-				r, err := ParseIgnorePattern(p)
-				if err != nil {
-					errs = append(errs, &Error{
-						Message: fmt.Sprintf("invalid regular expression %q in inline ignore comment: %s", p, err.Error()),
-						Line:    i + 1,
-						Column:  col,
-						Kind:    "syntax-check",
-						ID:      "invalid-ignore-comment",
-					})
-					cm.segs = append(cm.segs, ignoreSeg{text: p})
-					continue
-				}
-				e := &inlineIgnoreEntry{pat: r, line: i + 1, col: patCol, comment: cm}
-				cm.segs = append(cm.segs, ignoreSeg{text: p, entry: e})
-				pending = append(pending, e)
-			}
+			dirStart := strings.Index(line, "#")
+			addDirective(i, line, dirStart, from, m[1], starts[i], min(starts[i+1], len(src)))
 			continue
+		}
+		// A comment at the end of a line with content applies to this line, together with the comments above
+		if c := comments.Inline(i + 1); c != nil && strings.Contains(c.Text, "actionlint") {
+			hash := byteOffsetOfColumn(line, c.Column)
+			rest := line[hash:]
+			if loc := trailingIgnoreRe.FindStringSubmatchIndex(rest); loc != nil {
+				dirStart := hash + loc[0]
+				if !strings.HasPrefix(rest[loc[0]:], "#") {
+					dirStart++ // the match starts with the white space before '#'
+				}
+				// Deleting the directive takes the white space before it, but not the comment before it
+				delStart := dirStart
+				for delStart > 0 && (line[delStart-1] == ' ' || line[delStart-1] == '\t') {
+					delStart--
+				}
+				addDirective(i, line, dirStart, hash+loc[2], rest[loc[2]:loc[3]], starts[i]+delStart, starts[i]+len(line))
+			}
 		}
 		if len(pending) == 0 {
 			continue
 		}
 
-		// This line is the target. Compute the indentation which the nested lines must exceed.
-		indent := len(line) - len(strings.TrimLeft(line, " \t"))
-		threshold := indent // for a sequence item, this makes the whole item the target
-		// YAML allows the items of a sequence to sit at the same column as the key holding it:
-		//   key:
-		//   - a
-		// When the target is a key, such items belong to it.
-		isKey := !isSequenceItem(line)
-		end := i + 1
-		for j := i + 1; j < len(lines); j++ {
-			// Comments are skipped like blank lines so that a comment does not cut a nested block short
-			if c, b := isCommentOrBlank(lines[j]); b || c {
-				continue
-			}
-			ind := len(lines[j]) - len(strings.TrimLeft(lines[j], " \t"))
-			if ind < threshold || (ind == threshold && !(isKey && isSequenceItem(lines[j]))) {
-				break
-			}
-			end = j + 1
-		}
-		ret = append(ret, inlineIgnore{i + 1, end, pending})
+		// This line is the target
+		end := ignoreTargetEnd(lines, i)
+		ret = append(ret, inlineIgnore{start: i + 1, end: end, entries: pending})
 		pending = nil
 	}
 	return ret, pending, errs
+}
+
+// ignoreTargetEnd returns the last line (1-based) which an ignore comment above the line lines[i] covers: the line,
+// and the lines nested under it. When the line starts a sequence item ("- "), the whole item is covered.
+func ignoreTargetEnd(lines []string, i int) int {
+	line := lines[i]
+	// The indentation which the nested lines must exceed
+	indent := len(line) - len(strings.TrimLeft(line, " \t"))
+	threshold := indent // for a sequence item, this makes the whole item the target
+	// YAML allows the items of a sequence to sit at the same column as the key holding it:
+	//   key:
+	//   - a
+	// When the target is a key, such items belong to it.
+	isKey := !isSequenceItem(line)
+	end := i + 1
+	for j := i + 1; j < len(lines); j++ {
+		// Comments are skipped like blank lines so that a comment does not cut a nested block short
+		if c, b := isCommentOrBlank(lines[j]); b || c {
+			continue
+		}
+		ind := len(lines[j]) - len(strings.TrimLeft(lines[j], " \t"))
+		if ind < threshold || (ind == threshold && !(isKey && isSequenceItem(lines[j]))) {
+			break
+		}
+		end = j + 1
+	}
+	return end
 }
 
 // filterInlineIgnores removes errors suppressed by inline ignore comments and marks the patterns which
@@ -192,11 +255,11 @@ func (l *Linter) filterInlineIgnores(errs []*Error, ignores []inlineIgnore) []*E
 	for _, err := range errs {
 		ignored := false
 		for _, ig := range ignores {
-			if err.Line < ig.start || ig.end < err.Line {
+			if !ig.covers(err) {
 				continue
 			}
 			for _, e := range ig.entries {
-				if e.pat.Match(err) {
+				if e.match(err) {
 					e.used = true
 					ignored = true
 				}
@@ -211,21 +274,40 @@ func (l *Linter) filterInlineIgnores(errs []*Error, ignores []inlineIgnore) []*E
 	return filtered
 }
 
+// covers returns whether the comment applies to the lines of the error.
+func (ig inlineIgnore) covers(err *Error) bool {
+	if ig.start <= err.Line && err.Line <= ig.end {
+		return true
+	}
+	return ig.commentLine > 0 && err.Line <= ig.commentLine && ig.commentLine <= max(err.EndLine, err.Line)
+}
+
 // unusedInlineIgnores returns an error for each pattern of the inline ignore comments which did not
-// suppress any error. A pattern for a rule which is off is not reported because the rule could not
-// report anything.
-func unusedInlineIgnores(ignores []inlineIgnore, orphans []*inlineIgnoreEntry, cfg *Config) []*Error {
+// suppress any error. A pattern for a rule which is off, or an online rule while the online checks are
+// off (online), is not reported because the rule could not report anything.
+func unusedInlineIgnores(ignores []inlineIgnore, orphans []*inlineIgnoreEntry, cfg *Config, online bool) []*Error {
 	var errs []*Error
 	// stale tells whether the pattern is reported: it did nothing and could have done something
 	stale := func(e *inlineIgnoreEntry) bool {
-		return !e.used && (e.pat.ID == "" || cfg.RuleEnabled(e.pat.ID))
+		if e.used {
+			return false
+		}
+		if e.zizmor != "" {
+			// Only for an audit which maps onto a rule that is on: a rule which is off cannot report anything
+			return zizmorEntryActive(e, cfg, online)
+		}
+		return e.pat.ID == "" || cfg.RuleRuns(e.pat.ID, online)
 	}
 	report := func(e *inlineIgnoreEntry, what string) {
 		if !stale(e) {
 			return
 		}
+		msg := fmt.Sprintf("ignore pattern %q %s. remove it", e.pat.String(), what)
+		if e.zizmor != "" {
+			msg = fmt.Sprintf("zizmor ignore comment for %q %s. remove it", e.zizmor, what)
+		}
 		errs = append(errs, &Error{
-			Message: fmt.Sprintf("ignore pattern %q %s. remove it", e.pat.String(), what),
+			Message: msg,
 			Line:    e.line,
 			Column:  e.col,
 			Kind:    "ignore",
@@ -301,6 +383,6 @@ func isSequenceItem(line string) bool {
 func init() {
 	registerRules(
 		RuleInfo{ID: "invalid-ignore-comment", Group: RuleGroupCorrectness, Summary: "An inline ignore comment is invalid.", DefaultLevel: SeverityError, Profile: ProfileDefault},
-		RuleInfo{ID: "unused-ignore", Group: RuleGroupPolicy, Summary: "An inline ignore comment did not suppress anything.", DefaultLevel: SeverityError, Profile: ProfileStrict},
+		RuleInfo{ID: "unused-ignore", Group: RuleGroupPolicy, Summary: "An ignore comment or an entry of \"ignores\" in the config file did not suppress anything.", DefaultLevel: SeverityError, Profile: ProfileStrict},
 	)
 }

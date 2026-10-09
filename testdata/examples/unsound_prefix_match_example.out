@@ -1,0 +1,1 @@
+test.yaml:7:13: startsWith(github.actor, "jdx") is also true for an account whose name only begins with "jdx", such as "jdx-evil", which anybody can create. compare the whole name with == or, for several names, test a list with contains(fromJSON('["a", "b"]'), value) [unsound-prefix-match]

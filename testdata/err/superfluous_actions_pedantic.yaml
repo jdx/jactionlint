@@ -1,0 +1,15 @@
+on: push
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: peter-evans/create-pull-request@v7
+      - uses: peter-evans/create-or-update-comment@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: stefanzweifel/git-auto-commit-action@v5
+      - uses: EndBug/add-and-commit@v9
+      # The ones of the default tier have their own switch
+      - uses: softprops/action-gh-release@v2
+      - uses: actions/checkout@v4

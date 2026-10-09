@@ -1,0 +1,59 @@
+# Workflows which the rules for scripts and installs must stay quiet about, with all of them enabled
+on:
+  pull_request_target:
+    types: [opened]
+env:
+  CHANNEL: stable
+jobs:
+  literals:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - run: echo "FOO=bar" >> "$GITHUB_ENV"
+      - run: echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+      - run: echo "SHA=${{ github.sha }}" >> "$GITHUB_ENV"
+      - run: echo "HEAD=${{ github.event.pull_request.head.sha }}" >> "$GITHUB_ENV"
+      - run: echo "C=${{ env.CHANNEL }}" >> "$GITHUB_ENV"
+      - run: echo "C=$CHANNEL" >> "$GITHUB_ENV"
+      - run: echo "key=$(date +%s)" >> "$GITHUB_OUTPUT"
+      - run: |
+          cat <<'EOF2' >> "$GITHUB_ENV"
+          A=$NOT_EXPANDED
+          EOF2
+      - run: npm ci
+      - run: npm install --package-lock-only
+      - run: yarn install --immutable
+      - run: bun ci
+      - run: pnpm install
+      - run: pnpm install --frozen-lockfile
+      - run: bundle install
+      - run: pip install --require-hashes -r requirements.txt
+      - run: pip install -r requirements.txt -c constraints.txt
+      - run: pip install -e .
+      - run: uv sync --locked
+      - run: cargo install --locked cargo-edit --version 0.13.0
+      - run: cargo install --locked --path .
+      - run: cargo install --frozen --path .
+      - run: pip install requests==2.32.3
+      - run: pipx run black==24.3.0 .
+      - run: uvx ruff@0.6.0 check
+      - run: go install golang.org/x/tools/cmd/stringer@v0.24.0
+      - run: npx tsc --noEmit
+      - run: npm publish --provenance
+      - run: twine upload dist/*
+      - run: cargo publish --dry-run
+      - uses: aquasecurity/setup-trivy@e6c2c5e321ed9123bda567646e2f96565e34abe1 # v0.2.4
+        with:
+          version: v0.60.0
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
+        with:
+          terraform_version: ${{ vars.TERRAFORM_VERSION }}
+      - uses: pypa/gh-action-pypi-publish@76f52bc884231f62b9a034ebfe128415bbaabdfc # v1.12.4
+  not-bash:
+    runs-on: ubuntu-latest
+    steps:
+      - run: print("npm install lodash")
+        shell: python

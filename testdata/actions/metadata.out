@@ -1,0 +1,7 @@
+.github/actions/broken/action.yml:5:5: unexpected key "descriptions" for input "who". expected one of "default", "deprecationMessage", "description", "required" [syntax-check]
+.github/actions/broken/action.yml:7:10: "using" "node" is invalid. it must be "composite", "docker" or a Node.js runtime such as "node24" [syntax-check]
+.github/actions/composite-syntax/action.yml:5:3: "main" is not available in "runs" section of the composite action. it is for JavaScript and Docker actions [syntax-check]
+.github/actions/composite-syntax/action.yml:7:7: "shell" is required for a "run" step of a composite action, which has no default shell. for example, add "shell: bash" [syntax-check]
+.github/actions/composite-syntax/action.yml:9:7: unexpected key "shell" for step to execute action. expected one of "background", "continue-on-error", "env", "id", "if", "name", "timeout-minutes", "uses", "with" [syntax-check]
+.github/actions/composite-syntax/action.yml:15:11: step ID "dup" duplicates. previously defined at line:12,col:11. step ID must be unique within a job. note that step ID is case insensitive [id]
+.github/actions/remote-docker/action.yml:5:10: image "alpine:3" of this Docker action is pinned by a tag, which can be moved to another image. pin it to a digest like "alpine:3@sha256:{digest}" [unpinned-images]

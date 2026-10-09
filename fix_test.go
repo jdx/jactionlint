@@ -482,3 +482,67 @@ func TestFixFlag(t *testing.T) {
 		t.Error(f.String())
 	}
 }
+
+// FixRepository must look at the same files as LintRepository, the Dependabot configuration included: the
+// errors of that file are part of the leftover diagnostics.
+func TestFixRepositoryIncludesTheDependabotConfiguration(t *testing.T) {
+	wf := "on: push\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo aaa\n"
+	root := writeProject(t, map[string]string{
+		".github/workflows/a.yaml": wf,
+		".github/dependabot.yml":   "version: 2\nupdates:\n  - package-ecosystem: npm\n    directory: /\n    unknown-key: 1\n",
+	})
+	var out bytes.Buffer
+	l, err := NewLinter(&out, &LinterOptions{WorkingDir: root, Format: FormatGCC, OnRulesCreated: func(rules []Rule) []Rule {
+		return append(rules, &wholeFileRule{RuleBase: NewRuleBase("whole", "")})
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	l.defaultConfig = fixtureConfig()
+
+	lint, err := l.LintRepository(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantDependabot := 0
+	for _, e := range lint {
+		if strings.HasSuffix(e.Filepath, "dependabot.yml") {
+			wantDependabot++
+		}
+	}
+	if wantDependabot == 0 {
+		t.Fatalf("LintRepository reports nothing for the broken dependabot.yml: %v", lint)
+	}
+
+	out.Reset()
+	res, err := l.FixRepository(root, FixModeSafe)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Applied != 1 {
+		t.Errorf("the workflow should be fixed: %+v", res)
+	}
+	got := 0
+	for _, e := range res.Errors {
+		if strings.HasSuffix(e.Filepath, "dependabot.yml") {
+			got++
+		}
+	}
+	if got != wantDependabot || !strings.Contains(out.String(), "dependabot.yml") {
+		t.Errorf("the errors of dependabot.yml are missing from the result of -fix: got %d, want %d\n%s", got, wantDependabot, out.String())
+	}
+}
+
+func TestCommandFixWithoutArgumentsReportsTheDependabotConfiguration(t *testing.T) {
+	root := writeProject(t, map[string]string{
+		".github/workflows/ci.yaml": "on: push\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo ok\n",
+		".github/dependabot.yml":    "version: 2\nupdates:\n  - package-ecosystem: npm\n    directory: /\n    unknown-key: 1\n",
+	})
+	t.Chdir(root)
+	var stdout, stderr bytes.Buffer
+	cmd := &Command{Stdin: strings.NewReader(""), Stdout: &stdout, Stderr: &stderr}
+	code := cmd.Main([]string{"jactionlint", "-no-color", "-fix"})
+	if code != ExitStatusSuccessProblemFound || !strings.Contains(stdout.String(), "dependabot.yml") {
+		t.Errorf("exit status %d\nstdout: %s\nstderr: %s", code, stdout.String(), stderr.String())
+	}
+}

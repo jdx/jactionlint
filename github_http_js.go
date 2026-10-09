@@ -2,10 +2,8 @@
 
 package jactionlint
 
-import "time"
-
 // newDefaultGitHubClient reports that the GitHub API is not reachable in the WebAssembly build.
-func newDefaultGitHubClient(ttl time.Duration, notify func(string), debug func(string, ...any)) (GitHubClient, error) {
+func newDefaultGitHubClient(defaultClientOptions) (GitHubClient, error) {
 	return nil, errOnlineUnsupported
 }
 

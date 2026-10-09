@@ -1,0 +1,53 @@
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      # Further actions which use the newest version of their tool by default
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
+      - uses: azure/setup-kubectl@776406bce94f63e41d621b960d78ee25c8b76ede # v4.0.1
+        with:
+          version: latest
+      - uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4.3.1
+      # Tools installed by scripts without an exact version
+      - run: pip install requests pytest==8.0.0 black
+      - run: python3 -m pip install --upgrade pip
+      - run: pipx install poetry
+      - run: pipx run black .
+      - run: uv tool install ruff
+      - run: uvx ruff check
+      - run: cargo install cargo-edit
+      - run: cargo install --git https://github.com/jdx/hk hk
+      - run: cargo binstall -y cargo-nextest
+      - run: go install golang.org/x/tools/cmd/stringer@latest
+      - run: go install golang.org/x/tools/cmd/stringer
+      - run: npm install -g typescript
+      - run: npx --yes create-vite
+      - run: pnpm dlx prettier --check .
+      - run: yarn dlx -p typescript tsc --init
+      # Exact versions, projects and what the lock file decides
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
+        with:
+          terraform_version: 1.9.8
+      - uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4.3.1
+        with:
+          version-file: .tool-versions
+      - run: pip install requests==2.32.3 "pytest==8.0.0"
+      - run: pip install -r requirements.txt
+      - run: pip install -e .
+      - run: pip install ./dist/pkg.whl
+      - run: pip install "$PKG"
+      - run: pipx run black==24.3.0 .
+      - run: uvx ruff@0.6.0 check
+      - run: cargo install cargo-edit --version 0.13.0
+      - run: cargo install cargo-edit@0.13.0
+      - run: cargo install --path .
+      - run: go install golang.org/x/tools/cmd/stringer@v0.24.0
+      - run: go install honnef.co/go/tools/cmd/staticcheck@2025.1.1
+      - run: go get github.com/go-git/go-git/v5
+      - run: go install ./cmd/...
+      - run: npm install -g typescript@5.6.2
+      - run: npx tsc
+      - run: npx prettier --check .
+      - run: npm install
+      - run: sudo apt-get install -y jq

@@ -1,0 +1,1 @@
+test.yaml:10:24: Claude Code Action: "--dangerously-skip-permissions" turns off every permission check of Claude Code. an agent can be steered by any text it reads. allow only the exact commands that the task needs, and keep the token and the secrets of the job to the minimum [agentic-actions]

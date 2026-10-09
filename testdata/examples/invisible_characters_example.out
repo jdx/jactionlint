@@ -1,0 +1,2 @@
+test.yaml:6:31: invisible character U+200B ZERO WIDTH SPACE in a uses: reference: it is not shown by editors or by the diff view of GitHub, so it can hide what the text really is. remove it [invisible-characters]
+test.yaml:7:36: invisible character U+202E RIGHT-TO-LEFT OVERRIDE in a comment: it changes the order in which the text around it is displayed, so the code can run differently from how it reads. remove it [invisible-characters]

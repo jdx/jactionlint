@@ -264,7 +264,7 @@ func applyVerified(src []byte, chosen []plannedFix) (out []byte, accepted []plan
 	return out, accepted, refused
 }
 
-// FixRepository fixes the YAML workflow files of the nearest project like LintRepository lints them.
+// FixRepository fixes the files of the nearest project which LintRepository lints: the workflows and the Dependabot configuration.
 // When the directory path is empty, the current working directory will be used instead.
 func (l *Linter) FixRepository(dir string, mode FixMode) (*FixResult, error) {
 	return l.FixRepositoryWithOptions(dir, FixOptions{Mode: mode})
@@ -275,14 +275,7 @@ func (l *Linter) FixRepositoryWithOptions(dir string, opts FixOptions) (*FixResu
 	if dir == "" {
 		dir = l.cwd
 	}
-	p, err := l.projects.At(dir)
-	if err != nil {
-		return nil, err
-	}
-	if p == nil {
-		return nil, fmt.Errorf("no project was found in any parent directories of %q. check workflows directory is put correctly in your Git repository", dir)
-	}
-	files, err := collectWorkflowFiles(p.WorkflowsDir())
+	files, p, err := l.repositoryFiles(dir)
 	if err != nil {
 		return nil, err
 	}
@@ -383,6 +376,7 @@ func (l *Linter) FixFilesWithOptions(filepaths []string, project *Project, opts 
 		}
 	}
 
+	results = l.withBaselineResults(results)
 	for _, r := range results {
 		res.Errors = append(res.Errors, r.errs...)
 	}
@@ -394,6 +388,7 @@ func (l *Linter) FixFilesWithOptions(filepaths []string, project *Project, opts 
 		return nil, err
 	}
 	l.printFixSummary(res, opts.DryRun)
+	l.reportBaselineNote(results)
 	return res, nil
 }
 
@@ -448,7 +443,8 @@ func (l *Linter) fixOne(r fileResult, project *Project, mode FixMode, only map[s
 	hashes := map[[32]byte]int{sha256.Sum256(r.src): 0}
 	var passes []pass
 	banned := map[string]bool{}
-	cur, errs := r.src, r.errs
+	// Fixing pays the baseline down: baselined findings are fixed too
+	cur, errs := r.src, withBaselined(r)
 
 	settled := false
 	for n := 0; ; n++ {
@@ -505,7 +501,7 @@ func (l *Linter) fixOne(r fileResult, project *Project, mode FixMode, only map[s
 		if err != nil {
 			return nil, err
 		}
-		errs = res.errs
+		errs = withBaselined(res)
 	}
 
 	final := states[len(states)-1]
@@ -517,7 +513,7 @@ func (l *Linter) fixOne(r fileResult, project *Project, mode FixMode, only map[s
 		}
 		out.result = res
 	} else if len(states) > 1 {
-		out.result = fileResult{file: r.file, path: r.path, src: cur, errs: errs}
+		out.result = newFileResult(r.file, r.path, cur, errs)
 	}
 	for _, p := range passes {
 		out.n += p.n
@@ -558,7 +554,7 @@ func (l *Linter) lintSource(file string, src []byte, project *Project) (fileResu
 	if err != nil {
 		return fileResult{}, fmt.Errorf("fatal error while checking %s: %w", path, err)
 	}
-	return fileResult{file: file, path: path, src: src, errs: errs}, nil
+	return newFileResult(file, path, src, errs), nil
 }
 
 // configFor returns the configuration which applies to files of the project.
@@ -659,4 +655,15 @@ func (f *fixFlag) Set(v string) error {
 		return fmt.Errorf("invalid value %q. use -fix or -fix=unsafe", v)
 	}
 	return nil
+}
+
+// withBaselined returns the errors of the result including the ones the baseline accepts, in the order
+// of the file.
+func withBaselined(r fileResult) []*Error {
+	if len(r.baselined) == 0 {
+		return r.errs
+	}
+	all := append(slices.Clone(r.errs), r.baselined...)
+	slices.SortStableFunc(all, compareErrors)
+	return all
 }

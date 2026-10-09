@@ -27,12 +27,14 @@ const (
 	FormatSARIF = "sarif"
 	// FormatGCC prints "file:line:col: severity: message [id]" like GCC does.
 	FormatGCC = "gcc"
+	// FormatSummary prints counts of the findings per rule and per file, new and baselined ones apart.
+	FormatSummary = "summary"
 	// FormatGitHub prints GitHub Actions workflow commands which annotate the files in the pull request.
 	FormatGitHub = "github"
 )
 
 // nativeFormats are the names of the formats which are not Go templates.
-var nativeFormats = []string{FormatText, FormatOneline, FormatJSON, FormatJSONL, FormatSARIF, FormatGCC, FormatGitHub}
+var nativeFormats = []string{FormatText, FormatOneline, FormatJSON, FormatJSONL, FormatSARIF, FormatGCC, FormatGitHub, FormatSummary}
 
 // fileResult is the result of linting one file.
 type fileResult struct {
@@ -42,7 +44,15 @@ type fileResult struct {
 	// path is the path shown in the errors: relative to the working directory when possible.
 	path string
 	src  []byte
+	// errs are the findings to report. The ones the baseline accepts are not here.
 	errs []*Error
+	// baselined are the findings which the baseline accepts.
+	baselined []*Error
+	// baselineFile is true for the result which stands for the baseline file itself. Its stale are the
+	// entries which match nothing, and errs has them only with -baseline-check.
+	baselineFile    bool
+	baselineEntries int
+	stale           []*Error
 }
 
 // printer prints the results of linting.
@@ -62,7 +72,7 @@ func structured(p printer) bool {
 }
 
 // newPrinter creates the printer for the format. A format with "{{" is a Go template.
-func newPrinter(format string, oneline, showIDs bool, tmpl *ErrorFormatter) (printer, error) {
+func newPrinter(format string, oneline, showIDs, hideBaselined bool, tmpl *ErrorFormatter) (printer, error) {
 	switch format {
 	case "", FormatText:
 		return textPrinter{oneline: oneline, showIDs: showIDs}, nil
@@ -73,7 +83,9 @@ func newPrinter(format string, oneline, showIDs bool, tmpl *ErrorFormatter) (pri
 	case FormatJSONL:
 		return jsonlPrinter{}, nil
 	case FormatSARIF:
-		return sarifPrinter{}, nil
+		return sarifPrinter{hideBaselined: hideBaselined}, nil
+	case FormatSummary:
+		return summaryPrinter{}, nil
 	case FormatGCC:
 		return gccPrinter{}, nil
 	case FormatGitHub:
@@ -225,7 +237,10 @@ func (githubPrinter) print(w io.Writer, results []fileResult, _ []string) error 
 
 // --- sarif ----------------------------------------------------------------------------------
 
-type sarifPrinter struct{}
+type sarifPrinter struct {
+	// hideBaselined leaves the findings the baseline accepts out instead of marking them suppressed.
+	hideBaselined bool
+}
 
 type sarifMessage struct {
 	Text string `json:"text"`
@@ -268,6 +283,13 @@ type sarifFix struct {
 	ArtifactChanges []sarifArtifactChange `json:"artifactChanges"`
 }
 
+// sarifSuppression marks a result as accepted. The kind "external" says that the decision is kept
+// outside the source code, which is where the baseline file is.
+type sarifSuppression struct {
+	Kind          string `json:"kind"`
+	Justification string `json:"justification,omitempty"`
+}
+
 type sarifResult struct {
 	RuleID     string            `json:"ruleId"`
 	RuleIndex  *int              `json:"ruleIndex,omitempty"`
@@ -276,6 +298,8 @@ type sarifResult struct {
 	Locations  []sarifLocation   `json:"locations"`
 	Fixes      []sarifFix        `json:"fixes,omitempty"`
 	Properties map[string]string `json:"properties,omitempty"`
+	// Suppressions is set on the findings that the baseline accepts.
+	Suppressions []sarifSuppression `json:"suppressions,omitempty"`
 }
 
 type sarifRuleConfig struct {
@@ -427,10 +451,18 @@ func sarifFixes(e *Error, src []byte, accepted *[]TextEdit) []sarifFix {
 	return []sarifFix{{Description: sarifMessage{desc}, ArtifactChanges: []sarifArtifactChange{change}}}
 }
 
-func (sarifPrinter) print(w io.Writer, results []fileResult, notes []string) error {
+func (p sarifPrinter) print(w io.Writer, results []fileResult, notes []string) error {
 	// Files are sorted so that the log does not depend on the order of the arguments
 	results = slices.Clone(results)
 	slices.SortStableFunc(results, func(a, b fileResult) int { return strings.Compare(a.path, b.path) })
+	for i, r := range results {
+		if len(r.baselined) == 0 || p.hideBaselined {
+			continue
+		}
+		all := append(slices.Clone(r.errs), r.baselined...)
+		slices.SortStableFunc(all, compareErrors)
+		results[i].errs = all
+	}
 
 	run := sarifRun{ColumnKind: "unicodeCodePoints", Results: []sarifResult{}}
 	if len(notes) > 0 {
@@ -494,6 +526,9 @@ func (sarifPrinter) print(w io.Writer, results []fileResult, notes []string) err
 			}
 			if e.Kind != "" && e.Kind != e.ID {
 				res.Properties = map[string]string{"kind": e.Kind}
+			}
+			if e.Baselined {
+				res.Suppressions = []sarifSuppression{{Kind: "external", Justification: "accepted by the jactionlint baseline"}}
 			}
 			if e.Line > 0 {
 				reg := &sarifRegion{StartLine: e.Line}

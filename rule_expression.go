@@ -1,6 +1,7 @@
 package jactionlint
 
 import (
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -63,6 +64,11 @@ func NewRuleExpression(actionsCache *LocalActionsCache, workflowCache *LocalReus
 
 // VisitWorkflowPre is callback when visiting Workflow node before visiting its children.
 func (rule *RuleExpression) VisitWorkflowPre(n *Workflow) error {
+	if n.Action != nil {
+		rule.workflow = n
+		rule.visitActionPre(n.Action)
+		return nil
+	}
 	rule.checkString(n.Name, "")
 
 	// Declared workflow_call secrets are exhaustive only when no other event can trigger the workflow.
@@ -201,6 +207,10 @@ func (rule *RuleExpression) VisitWorkflowPre(n *Workflow) error {
 
 // VisitWorkflowPost is callback when visiting Workflow node after visiting its children
 func (rule *RuleExpression) VisitWorkflowPost(n *Workflow) error {
+	if n.Action != nil {
+		rule.workflow = nil
+		return nil
+	}
 	if e, ok := n.FindWorkflowCallEvent(); ok {
 		rule.checkWorkflowCallOutputs(e.Outputs, n.Jobs)
 	}
@@ -278,6 +288,12 @@ func (rule *RuleExpression) VisitJobPre(n *Job) error {
 
 	rule.stepsTy = NewEmptyStrictObjectType()
 
+	if n.Composite {
+		// The matrix and the needs of the job which calls the action are not known here
+		rule.matrixTy = NewEmptyObjectType()
+		rule.needsTy = NewEmptyObjectType()
+	}
+
 	return nil
 }
 
@@ -292,6 +308,12 @@ func (rule *RuleExpression) VisitJobPost(n *Job) error {
 	}
 	for _, output := range n.Outputs {
 		rule.checkString(output.Value, "jobs.<job_id>.outputs.<output_id>")
+	}
+	if n.Composite && rule.workflow != nil && rule.workflow.Action != nil {
+		// The outputs of a composite action are evaluated after all of its steps ran
+		for _, o := range rule.workflow.Action.Outputs {
+			rule.checkString(o.Value, "jobs.<job_id>.steps.run")
+		}
 	}
 
 	rule.matrixTy = nil
@@ -898,13 +920,24 @@ func (rule *RuleExpression) checkSemanticsOfExprNode(expr ExprNode, line, col in
 		if len(ctx) == 0 {
 			rule.Debug("No context availability was found for workflow key %q", workflowKey)
 		}
+		if rule.workflow != nil && rule.workflow.Action != nil {
+			ctx = compositeContexts(ctx)
+		}
 		c.SetContextAvailability(ctx)
 		c.SetSpecialFunctionAvailability(sp)
 	}
 
 	ty, errs := c.Check(expr)
+	if rule.workflow != nil && rule.workflow.Action != nil {
+		errs = compositeExprErrors(errs)
+	}
 	ok := true
 	for _, err := range errs {
+		if err.ID == "template-injection" {
+			if note := rule.workflow.callerWarning(); note != "" {
+				err.Message += ". " + note
+			}
+		}
 		rule.exprError(err, line, col)
 		// A potentially untrusted input is a finding about the script, not an error of the expression.
 		// The other expressions of the script are still checked.
@@ -1275,4 +1308,43 @@ func init() {
 		}
 		return []Rule{r, NewRuleTemplateInjection(env.src)}
 	})
+}
+
+// compositeContexts narrows the contexts available to a step of a workflow job to those available in a
+// composite action. GitHub documents only one difference: the secrets context is not available, so
+// a secret must be passed as an input. The other contexts are left alone because the runner does not
+// document whether it passes them on.
+// https://docs.github.com/en/actions/reference/workflows-and-actions/contexts
+func compositeContexts(ctx []string) []string {
+	return slices.DeleteFunc(slices.Clone(ctx), func(c string) bool { return c == "secrets" })
+}
+
+// visitActionPre checks the parts of an action.yml which are not steps: the defaults of the inputs. It
+// also sets the type of the "inputs" context for the steps: every input of an action is a string.
+func (rule *RuleExpression) visitActionPre(a *ActionFile) {
+	// The default of an input is evaluated before the inputs exist
+	rule.inputsTy = NewMapObjectType(StringType{})
+	for _, in := range a.Inputs {
+		rule.checkString(in.Default, "jobs.<job_id>.steps.run")
+	}
+
+	ity := NewEmptyStrictObjectType()
+	for _, in := range a.Inputs {
+		ity.Props[strings.ToLower(in.ID.Value)] = StringType{}
+	}
+	rule.inputsTy = ity
+}
+
+// compositeExprErrors tells what to do instead when a composite action reads the secrets context.
+func compositeExprErrors(errs []*ExprError) []*ExprError {
+	ret := make([]*ExprError, 0, len(errs))
+	for _, e := range errs {
+		if rest, ok := strings.CutPrefix(e.Message, `context "secrets" is not allowed here. `); ok && e.ID == "context-availability" {
+			c := *e
+			c.Message = `context "secrets" is not allowed in a composite action because secrets are not passed to it. declare an input and let the workflow pass the secret with "with:". ` + rest
+			e = &c
+		}
+		ret = append(ret, e)
+	}
+	return ret
 }

@@ -27,7 +27,10 @@ Features:
 
 ## USAGE
 
-To check all workflow files in the current repository, just run **jactionlint** without arguments.
+To check all workflow files in the current repository, just run **jactionlint** without arguments. The composite
+actions of the repository (**action.yml** in the root, under **.github/actions** and the directories which a local
+**uses: ./path** refers to) and **.github/dependabot.yml** are checked as well. A file named **action.yml** or
+**action.yaml** is the metadata of an action wherever it is, except under **.github/workflows**.
 It automatically finds the nearest `.github/workflows` directory:
 
     $ jactionlint
@@ -59,6 +62,20 @@ are available. A custom Go template can be given too:
   * `-debug`:
     Enable debug output (for development)
 
+  * `-baseline`, `-baseline=`<FILE>, `-baseline=false`:
+    Hide the findings recorded in the baseline file (`.github/jactionlint-baseline.json` in the
+    repository by default). `-baseline=false` ignores a baseline which the configuration enables
+    (`baseline: auto`). The exit status counts only the findings which are not in the baseline.
+
+  * `-baseline-check`:
+    Report the baseline entries which match no finding any more as `unused-baseline-entry` (level
+    `info`). Implies `-baseline`.
+
+  * `-baseline-write`, `-baseline-write=`<FILE>:
+    Record the current findings as the baseline and exit with 0. With file arguments only the
+    entries of those files are refreshed. The file has no line numbers, so writing it again
+    without a change in the findings gives the same bytes. Write it in the environment of the CI.
+
   * `-diff`:
     Print the changes `-fix` would make as a unified diff on stdout and do not write the files. Implies
     `-fix`. The errors which remain are printed on stderr. Exits with 1 when there is a diff or an error
@@ -70,15 +87,22 @@ are available. A custom Go template can be given too:
     YAML which differs from the original only where the edits are, or the fix is refused and the exit
     status is 3. Exits with 1 when an error remains.
 
+  * `-sarif-hide-baselined`:
+    Leave the findings accepted by the baseline out of `-format sarif`. By default they are in the
+    log as results with a suppression of the kind `external`.
+
   * `-format` <FORMAT>:
-    Output format: `text` (default), `oneline`, `json`, `jsonl`, `sarif`, `gcc` or `github`. A custom
+    Output format: `text` (default), `oneline`, `json`, `jsonl`, `sarif`, `gcc`, `github` or `summary`. A custom
     template in Go template syntax which has `{{ }}` is also accepted. See the usage documentation
     for more details.
 
   * `-ignore` <PATTERN>:
     Rule ID (e.g. `unpinned-uses`) or regular expression matching to error messages you want to
     ignore. This flag is repeatable. For example, `-ignore A -ignore B` ignores errors whose message
-    includes "A" OR "B".
+    includes "A" OR "B". To accept a finding in one place, an ignore comment (`# jactionlint
+    ignore=<PATTERN>` above a line or at its end) or an entry of `ignores:` in the config file can be
+    used. The latter matches by rule, file, job, step and `uses:` and survives tools such as
+    Renovate rewriting the line. It can expire (`expires: YYYY-MM-DD`).
 
   * `-init-config`:
     Generate default config file at `.github/jactionlint.yaml` in current project
@@ -87,17 +111,41 @@ are available. A custom Go template can be given too:
     Rewrite the deprecated keys of the config file (`.github/jactionlint.yaml` or the file of
     `-config-file`) into the `rules` mapping
 
+  * `-migrate-ignores`:
+    Rewrite the trailing `# zizmor: ignore[...]` comments of the files (the workflows of the project
+    by default) into `# jactionlint ignore=...` comments. zizmor comments are also honored as they are
+
   * `-min-severity` <LEVEL>:
     Hide the errors less severe than this level: `info` (default), `warn` or `error`
 
   * `-no-color`:
     Disable colorful output
 
-  * `-online`:
+  * `-online`[=<MODE>]:
     Enable the checks which query the GitHub API (`impostor-commit`, `known-vulnerable-actions`,
     `ref-confusion`, `stale-action-refs`, `archived-uses` and `ref-version-mismatch`), and let `-fix`
-    pin tags to commit SHAs. The token is read from `GITHUB_TOKEN` or `GH_TOKEN`. Nothing uses the
-    network without this flag.
+    pin tags to commit SHAs. `-online=cache` uses only the answers in the disk cache and never the
+    network. `-online=strict` exits with status 3 when a lookup had to be skipped (`cache,strict`
+    does both). A lookup which fails (404, 403, server error, timeout, rate limit) is skipped with
+    one warning per kind of failure and does not change the exit status. The token is read from
+    `-online-token-env`, `-online-token-file`, `GITHUB_TOKEN`, `GH_TOKEN` or `gh auth token`, and
+    is sent only to the API host. Nothing uses the network without this flag.
+
+  * `-online-allow` <PATTERN>, `-online-deny` <PATTERN>:
+    Look up only (allow), or never look up (deny), the repositories matching `owner/repo`, where `*`
+    is a wildcard, for example `-online-deny 'mycorp/*'` for private actions. Repeatable. Deny wins.
+
+  * `-online-api-url` <URL>:
+    The REST API of a GitHub Enterprise Server such as `https://ghe.example.com/api/v3`. The default
+    is `$GITHUB_API_URL`, else derived from `$GITHUB_SERVER_URL` or `$GH_HOST`, else `api.github.com`
+
+  * `-online-token-env` <NAME>, `-online-token-file` <PATH>:
+    The environment variable and the file which hold the GitHub token, read before `GITHUB_TOKEN`
+    and `GH_TOKEN`
+
+  * `-online-max-wait` <DURATION>:
+    The longest to wait for a GitHub rate limit to reset (default 30s). A limit which resets later
+    skips the lookups. 0 never waits
 
   * `-online-cache-ttl` <DURATION>:
     How long `-online` uses an answer of the GitHub API from the cache in

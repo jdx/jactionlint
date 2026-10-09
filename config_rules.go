@@ -43,6 +43,16 @@ func (c *Config) RuleEnabled(id string) bool {
 	return c.RuleLevel(id) != SeverityOff
 }
 
+// RuleRuns reports whether the rule runs in a run where the online checks are on or off: an online rule
+// needs online mode as well as a level which is not off. Use it where a consumer asks whether a rule could
+// have reported something (unused-ignore); RuleEnabled only looks at the level.
+func (c *Config) RuleRuns(id string, online bool) bool {
+	if info, ok := ruleIndex[id]; ok && info.Online && !online {
+		return false
+	}
+	return c.RuleEnabled(id)
+}
+
 func (c *Config) profile() Profile {
 	if c == nil || c.Profile == "" {
 		return ProfileDefault
@@ -215,7 +225,7 @@ func normalizeOption(opt RuleOption, v any) (any, error) {
 // They still work and are translated into rules.
 type legacyConfig struct {
 	TimeoutMinutes *struct {
-		Required bool    `yaml:"required"`
+		Required *bool   `yaml:"required"`
 		Max      float64 `yaml:"max"`
 	} `yaml:"timeout-minutes"`
 	RequireCommitHash                *bool `yaml:"require-commit-hash"`
@@ -285,12 +295,17 @@ func (l *legacyConfig) entries() ([]legacyEntry, error) {
 		if math.IsNaN(t.Max) || math.IsInf(t.Max, 0) || t.Max < 0 {
 			return nil, fmt.Errorf("\"max\" in \"timeout-minutes\" must be a non-negative number, but got %v", t.Max)
 		}
-		instead := "\"rules: {missing-timeout: error, timeout-too-long: {level: error, max: ...}}\""
-		level := SeverityOff
-		if t.Required {
-			level = SeverityError
+		// "required" decides missing-timeout only when it is written. Leaving it out says nothing about the
+		// rule, so the profile decides; "required: false" is the only way to turn it off.
+		instead := "\"rules: {timeout-too-long: {level: error, max: ...}}\""
+		if t.Required != nil {
+			instead = "\"rules: {missing-timeout: error, timeout-too-long: {level: error, max: ...}}\""
+			level := SeverityOff
+			if *t.Required {
+				level = SeverityError
+			}
+			ret = append(ret, legacyEntry{"timeout-minutes", "missing-timeout", RuleConfig{Level: level, levelSet: true}, instead})
 		}
-		ret = append(ret, legacyEntry{"timeout-minutes", "missing-timeout", RuleConfig{Level: level, levelSet: true}, instead})
 		if t.Max > 0 {
 			ret = append(ret, legacyEntry{"timeout-minutes", "timeout-too-long", RuleConfig{Level: SeverityError, levelSet: true, Options: map[string]any{"max": t.Max}}, instead})
 		}
@@ -325,14 +340,15 @@ func (c *Config) applyLegacy(l *legacyConfig) error {
 
 var (
 	configTopKeys = []string{
-		"profile", "extends", "rules", "online",
-		"self-hosted-runner", "config-variables", "config-secrets", "paths", "required-actions", "assume-default-permissions", "fix",
+		"profile", "extends", "rules", "online", "online-options", "baseline",
+		"self-hosted-runner", "config-variables", "config-secrets", "paths", "ignores", "required-actions", "assume-default-permissions", "fix",
 		// Deprecated keys which are translated into rules
 		"timeout-minutes", "require-commit-hash", "require-permissions", "require-checkout-before-local-action",
 		"require-expression-wrapping", "check-falsy-ternary", "check-workflow-run-names", "require-shell", "max-run-lines",
 	}
 	selfHostedRunnerKeys   = []string{"labels", "strict-labels"}
 	fixConfigKeys          = []string{"rules"}
+	onlineOptionsKeys      = []string{"mode", "api-url", "token-env", "token-file", "allow", "deny", "cache-ttl", "max-rate-limit-wait", "retries", "concurrency", "gh-cli"}
 	pathConfigKeys         = []string{"ignore"}
 	requiredActionKeys     = []string{"action", "version"}
 	legacyTimeoutMinutesKy = []string{"required", "max"}
@@ -403,6 +419,8 @@ func validateConfigKeys(root *yaml.Node) error {
 					}
 				}
 			}
+		case "online-options":
+			err = checkKeys(v, "\"online-options\"", onlineOptionsKeys)
 		case "timeout-minutes":
 			err = checkKeys(v, "\"timeout-minutes\"", legacyTimeoutMinutesKy)
 		case "paths":
@@ -410,6 +428,14 @@ func validateConfigKeys(root *yaml.Node) error {
 			for _, pc := range pcs {
 				if err = checkKeys(pc, "\"paths\"", pathConfigKeys); err != nil {
 					break
+				}
+			}
+		case "ignores":
+			if v.Kind == yaml.SequenceNode {
+				for _, item := range v.Content {
+					if err = checkKeys(item, "\"ignores\"", configIgnoreKeys); err != nil {
+						break
+					}
 				}
 			}
 		case "required-actions":

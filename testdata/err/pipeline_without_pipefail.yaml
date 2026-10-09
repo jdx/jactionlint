@@ -1,0 +1,52 @@
+on: push
+jobs:
+  default-shell:
+    runs-on: ubuntu-latest
+    steps:
+      - run: curl -fsSL https://example.com/install.sh | sh
+      - run: |
+          echo start
+          gh api repos/o/r/releases | jq -r '.[0].tag_name'
+          cat build.log | tee out.txt
+      - run: |
+          if true; then
+            docker build . | tail -n 5
+          fi
+      - run: |
+          make 2>&1 | tee build.log
+          x=$(git log --oneline | sort)
+          echo "$x"
+  explicit-sh:
+    runs-on: macos-latest
+    steps:
+      - shell: sh
+        run: |
+          npm test | tee test.log
+  custom-shell:
+    runs-on: [self-hosted, linux]
+    defaults:
+      run:
+        shell: bash -e {0}
+    steps:
+      - run: |
+          make | tee log
+      - shell: bash --noprofile --norc -eo pipefail {0}
+        run: |
+          make | tee log
+  matrix:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - run: |
+          make | tee log
+  after-set:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          make | tee first
+          set -o pipefail
+          make | tee second
+          set +o pipefail
+          make | tee third

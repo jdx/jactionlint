@@ -1,0 +1,31 @@
+on:
+  workflow_dispatch:
+    inputs:
+      image:
+        type: choice
+        options: [node:18, node:20]
+      flags:
+        type: string
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node: ['18', '20']
+    container:
+      image: node:${{ matrix.node }}
+      # Fixed text, and values that no attacker controls
+      options: --cpus 2 --label repo=${{ github.repository }}
+    services:
+      db:
+        image: ${{ inputs.image }}
+        options: ${{ inputs.flags }}
+    steps:
+      - uses: docker://alpine:3
+        with:
+          args: echo ${{ matrix.node }}
+      # The value of the pull request is passed through the environment of a script, not in a sink
+      - run: echo "$TITLE"
+        env:
+          TITLE: ${{ github.event.issue.title }}
