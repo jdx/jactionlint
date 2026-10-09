@@ -474,9 +474,37 @@ func describePlace(c invisibleLineContext, line string, byteOff int, inComment, 
 	return "a value"
 }
 
+// wideEncoding names the UTF-16 or UTF-32 encoding that the byte order mark at the start of src shows, or returns "".
+func wideEncoding(src []byte) string {
+	switch {
+	case bytes.HasPrefix(src, []byte{0xFF, 0xFE, 0x00, 0x00}):
+		return "UTF-32 (little endian)"
+	case bytes.HasPrefix(src, []byte{0x00, 0x00, 0xFE, 0xFF}):
+		return "UTF-32 (big endian)"
+	case bytes.HasPrefix(src, []byte{0xFF, 0xFE}):
+		return "UTF-16 (little endian)"
+	case bytes.HasPrefix(src, []byte{0xFE, 0xFF}):
+		return "UTF-16 (big endian)"
+	}
+	return ""
+}
+
 func checkInvisibleCharacters(src []byte, cfg *Config) []*Error {
 	if !cfg.RuleEnabled("invisible-characters") {
 		return nil
+	}
+	if enc := wideEncoding(src); enc != "" {
+		// Every character has NUL bytes, so the scan below would report one finding per NUL, and its fix would
+		// delete them and damage the file. One finding at the start says what is wrong instead, without a fix.
+		return []*Error{{
+			Message:   fmt.Sprintf("the file is encoded as %s, not UTF-8, so every character has NUL bytes in it and the file cannot be checked for invisible characters. save it as UTF-8 without a byte order mark", enc),
+			Line:      1,
+			Column:    1,
+			EndLine:   1,
+			EndColumn: 1,
+			Kind:      "invisible-characters",
+			ID:        "invisible-characters",
+		}}
 	}
 	runs := findInvisibleRuns(src)
 	if len(runs) == 0 {

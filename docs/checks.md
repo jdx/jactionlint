@@ -6553,6 +6553,9 @@ One finding is reported for a run of adjacent characters. The message says where
 expression, a `uses:` reference, a comment, a value or a key). Every finding is an error, also in a comment: a comment is how the
 change is made to look harmless.
 
+A file encoded as UTF-16 or UTF-32 (it starts with the byte order mark `FF FE` or `FE FF`) has NUL bytes in every character. It gets one
+finding at its start, without a fix, instead of one per NUL: save it as UTF-8 without a byte order mark.
+
 `-fix` removes the characters of the finding. This is a safe fix: what is left is what the reader of the file already saw. If the
 character is meant to be in a string, write it as an escape in a double quoted YAML string (`"\u200b"`) or in the shell
 (`$'\u200b'`), where it is visible in the source. To silence a finding, put `# jactionlint ignore=invisible-characters` on the line above it,

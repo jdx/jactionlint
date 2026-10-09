@@ -458,3 +458,30 @@ func TestOwnWorkflowsPassTheDefaultProfile(t *testing.T) {
 		t.Errorf("%v", e)
 	}
 }
+
+// A UTF-16 file has NUL bytes everywhere: one finding without a fix says that, instead of one finding per NUL whose
+// fix would delete the NULs and damage the file (bug bash: 93 findings for a 93 character file).
+func TestUTF16FileGetsOneInvisibleCharactersFinding(t *testing.T) {
+	text := "on: push\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo hi\n"
+	le := []byte{0xFF, 0xFE}
+	be := []byte{0xFE, 0xFF}
+	for _, r := range text {
+		le = append(le, byte(r), 0)
+		be = append(be, 0, byte(r))
+	}
+	for name, src := range map[string][]byte{"utf16le": le, "utf16be": be} {
+		t.Run(name, func(t *testing.T) {
+			errs := checkInvisibleCharacters(src, mustParseConfig(t, "rules:\n  invisible-characters: error\n"))
+			if len(errs) != 1 {
+				t.Fatalf("want one finding but got %d: %v", len(errs), errs)
+			}
+			e := errs[0]
+			if e.Fix != nil || e.Line != 1 || !strings.Contains(e.Message, "UTF-16") || !strings.Contains(e.Message, "save it as UTF-8") {
+				t.Errorf("unexpected finding %+v", e)
+			}
+		})
+	}
+	if errs := checkInvisibleCharacters([]byte("\xEF\xBB\xBF"+text), mustParseConfig(t, "rules:\n  invisible-characters: error\n")); len(errs) != 0 {
+		t.Errorf("a UTF-8 byte order mark is not a finding here: %v", errs)
+	}
+}
