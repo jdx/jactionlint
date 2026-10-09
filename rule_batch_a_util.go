@@ -260,8 +260,22 @@ func workflowExprSites(w *Workflow, f func(site exprSite)) {
 		}
 	}
 
+	permissions := func(j *Job, p *Permissions) {
+		if p == nil {
+			return
+		}
+		emit(j, p.All, false)
+		for _, sc := range p.Scopes {
+			if sc != nil {
+				emit(j, sc.Name, false)
+				emit(j, sc.Value, false)
+			}
+		}
+	}
+
 	emit(nil, w.Name, false)
 	emit(nil, w.RunName, false)
+	permissions(nil, w.Permissions)
 	emit(nil, w.CacheMode, false)
 	env(nil, w.Env)
 	defaults(nil, w.Defaults)
@@ -284,6 +298,7 @@ func workflowExprSites(w *Workflow, f func(site exprSite)) {
 		emit(j, j.Name, false)
 		emit(j, j.If, true)
 		emit(j, j.CacheMode, false)
+		permissions(j, j.Permissions)
 		if j.RunsOn != nil {
 			emit(j, j.RunsOn.LabelsExpr, false)
 			emit(j, j.RunsOn.Group, false)
