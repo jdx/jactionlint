@@ -298,7 +298,9 @@ func stepRunsCode(s *Step, dir string, after int) (string, bool) {
 		u := ParseUses(e.Uses.Value)
 		switch {
 		case u.Kind == UsesLocal:
-			if dir != "" {
+			// An action below the directory of the checkout is code of the checkout. With a checkout in a
+			// subdirectory, an action elsewhere in the workspace is not.
+			if v := normalizeDir(e.Uses.Value); dir != "" && v != dir && !strings.HasPrefix(v, dir+"/") {
 				return "", false
 			}
 			return "the local action " + e.Uses.Value, true
