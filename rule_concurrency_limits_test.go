@@ -28,6 +28,13 @@ func TestConcurrencyLimits(t *testing.T) {
 		{"one job is not limited", "on: push\njobs:\n  a:\n    concurrency:\n      group: g\n" + batchAJob + "  b:\n" + batchAJob, []int{1}},
 		{"only reusable workflow calls are limited by the caller", "on: push\njobs:\n  a:\n    uses: octo/repo/.github/workflows/w.yaml@v1\n", []int{1}},
 		{"reusable workflow calls with a workflow limit", "on: push\nconcurrency:\n  group: g\n  cancel-in-progress: true\njobs:\n  a:\n    uses: octo/repo/.github/workflows/w.yaml@v1\n", nil},
+		{"cron only", "on:\n  schedule:\n    - cron: '0 6 * * 1'\n" + job, nil},
+		{"cron and manual only", "on:\n  schedule:\n    - cron: '0 6 * * 1'\n  workflow_dispatch:\n" + job, nil},
+		{"manual only", "on: workflow_dispatch\n" + job, nil},
+		{"bare group on cron only", "on:\n  schedule:\n    - cron: '0 6 * * 1'\nconcurrency: g\n" + job, nil},
+		{"bare group on manual only", "on: workflow_dispatch\nconcurrency: g\n" + job, nil},
+		{"bare group on cron and push", "on:\n  schedule:\n    - cron: '0 6 * * 1'\n  push:\nconcurrency: g\n" + job, []int{5}},
+		{"cron and push", "on:\n  schedule:\n    - cron: '0 6 * * 1'\n  push:\n" + job, []int{1}},
 		{"a reusable workflow itself", "on: workflow_call\njobs:\n  a:\n    uses: octo/repo/.github/workflows/w.yaml@v1\n", nil},
 	}
 	for _, tc := range tests {
@@ -39,7 +46,7 @@ func TestConcurrencyLimits(t *testing.T) {
 
 func TestPathsWithoutNamesOrConcurrencyForCopilot(t *testing.T) {
 	cfg := mustParseConfig(t, "profile: pedantic\n")
-	src := "on: workflow_dispatch\njobs:\n  copilot-setup-steps:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo\n"
+	src := "on:\n  push:\n  workflow_dispatch:\njobs:\n  copilot-setup-steps:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo\n"
 	for _, path := range []string{"copilot-setup-steps.yml", ".github/workflows/copilot-setup-steps.yaml"} {
 		errs := lintFileWithConfig(t, cfg, path, src)
 		for _, id := range []string{"concurrency-limits", "anonymous-definition"} {

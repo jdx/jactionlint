@@ -36,6 +36,9 @@ func (rule *RuleConcurrencyLimits) VisitWorkflowPre(n *Workflow) error {
 		return nil
 	}
 	if c := n.Concurrency; c != nil {
+		if onlyScheduledOrManual(n) {
+			return nil // nothing supersedes a timer or a manual run, so there is nothing to cancel
+		}
 		// Whether runs are cancelled is a choice: serializing a release pipeline is as valid as cancelling
 		// the superseded runs of a test pipeline. Only the form which cannot cancel at all is reported.
 		if c.Bare && !onlyWorkflowCall(n) && releaseReason(n) == "" {
@@ -45,6 +48,10 @@ func (rule *RuleConcurrencyLimits) VisitWorkflowPre(n *Workflow) error {
 	}
 	if onlyWorkflowCall(n) {
 		// The caller decides how many runs of a reusable workflow exist
+		return nil
+	}
+	if onlyScheduledOrManual(n) {
+		// Nothing supersedes a run of a timer or of a person who started it by hand
 		return nil
 	}
 	// Every job needs a limit, at the workflow or on the job itself. That includes the jobs which call a reusable
@@ -224,4 +231,20 @@ func init() {
 		}
 		return []Rule{NewRuleConcurrencyLimits(env.path, env.src)}
 	})
+}
+
+// onlyScheduledOrManual reports whether the workflow is started only by a schedule or by hand. A new commit does not
+// supersede such a run, so there is nothing for a concurrency group to cancel.
+func onlyScheduledOrManual(n *Workflow) bool {
+	if len(n.On) == 0 {
+		return false
+	}
+	for _, e := range n.On {
+		switch e.EventName() {
+		case "schedule", "workflow_dispatch":
+		default:
+			return false
+		}
+	}
+	return true
 }

@@ -15,6 +15,14 @@ func TestRuleConcurrencyCancelsRelease(t *testing.T) {
 		want []string
 	}{
 		{"tag push with a group that is the same for all tags", "on:\n  push:\n    tags: ['v*']\nconcurrency:\n  group: release\n  cancel-in-progress: true\n" + job, []string{"6"}},
+		{"push group falls back to the run id", "on:\n  push:\n    branches: [main]\nconcurrency:\n  group: ci-${{ github.workflow }}-${{ github.head_ref || github.run_id }}\n  cancel-in-progress: true\njobs:\n  a:\n    runs-on: ubuntu-latest\n    environment: production\n" + steps, nil},
+		{"release group falls back to the run id after the number of a pull request", "on:\n  release:\n    types: [published]\nconcurrency:\n  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.number || github.run_id }}\n  cancel-in-progress: true\n" + job, nil},
+		{"push group with the run id only", "on:\n  push:\n    branches: [main]\nconcurrency:\n  group: ci-${{ github.run_id }}\n  cancel-in-progress: true\njobs:\n  a:\n    runs-on: ubuntu-latest\n    environment: production\n" + steps, nil},
+		{"run id in format", "on:\n  push:\n    branches: [main]\nconcurrency:\n  group: ${{ format('{0}-{1}', github.workflow, github.run_number) }}\n  cancel-in-progress: true\njobs:\n  a:\n    runs-on: ubuntu-latest\n    environment: production\n" + steps, nil},
+		{"run id is behind a ref that is set for a push", "on:\n  push:\n    branches: [main]\nconcurrency:\n  group: ci-${{ github.ref || github.run_id }}\n  cancel-in-progress: true\njobs:\n  a:\n    runs-on: ubuntu-latest\n    environment: production\n" + steps, []string{"6"}},
+		{"run id behind something unknown", "on:\n  push:\n    branches: [main]\nconcurrency:\n  group: ci-${{ inputs.x || github.run_id }}\n  cancel-in-progress: true\njobs:\n  a:\n    runs-on: ubuntu-latest\n    environment: production\n" + steps, []string{"6"}},
+		{"environment that only scopes secrets", "on:\n  push:\n    branches: [main]\n" + "concurrency:\n  group: ci\n  cancel-in-progress: true\njobs:\n  a:\n    runs-on: ubuntu-latest\n    environment: ci\n" + steps, nil},
+		{"environment chosen by the matrix", "on:\n  push:\n    branches: [main]\n" + "concurrency:\n  group: ci\n  cancel-in-progress: true\njobs:\n  a:\n    runs-on: ubuntu-latest\n    strategy:\n      matrix:\n        environment: [a, b]\n    environment: ${{ matrix.environment }}\n" + steps, nil},
 		{"tag push with the tag in the group", "on:\n  push:\n    tags: ['v*']\n" + cancel + job, nil},
 		{"tag push with the tag in the group and a publish", "on:\n  push:\n    tags: ['v*']\n" + cancel + "jobs:\n  t:\n    runs-on: ubuntu-latest\n    steps:\n      - run: cargo publish\n", nil},
 		{"release event", "on:\n  release:\n    types: [published]\nconcurrency:\n  group: ${{ github.workflow }}\n  cancel-in-progress: true\n" + job, []string{"6"}},

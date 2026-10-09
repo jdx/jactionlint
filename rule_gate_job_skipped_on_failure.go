@@ -48,16 +48,19 @@ func (rule *RuleGateJobSkippedOnFailure) VisitJobPre(n *Job) error {
 	if rs.unknown {
 		return nil
 	}
-	read := ""
-	for _, r := range rs.refs {
-		if !refCovers(r.chain, []string{"needs", "*", "result"}) && !refCovers(r.chain, []string{"needs", "*", "outcome"}) {
-			continue
+	// A gate reports what happened to the jobs it needs, so it reads their results in its steps or in the values it
+	// passes on. A job that only tests the results in its own "if:" is a job that runs when they went well (a publish
+	// or a cleanup that needs `result == 'success' || result == 'skipped'`): GitHub skipping it on a failure is what its
+	// author wants, so only a condition that expects a failure or a cancellation is a gate.
+	body := *n
+	body.If = nil
+	read := firstResultRead(jobRefs(&body).refs, false)
+	if read == "" && n.If != nil {
+		var ifRefs []exprRef
+		for _, e := range cond {
+			collectExprRefs(e, nil, &ifRefs)
 		}
-		if isSuccessComparison(r) {
-			continue
-		}
-		read = r.String()
-		break
+		read = firstResultRead(ifRefs, true)
 	}
 	if read == "" {
 		return nil
@@ -82,6 +85,43 @@ func (rule *RuleGateJobSkippedOnFailure) VisitJobPre(n *Job) error {
 		n.ID.Value, read,
 	)
 	return nil
+}
+
+// firstResultRead returns the first reference to the result of a needed job that expects to see a failure, "" if
+// there is none. In a job condition (inCondition) a comparison that selects the jobs which went well is not one.
+func firstResultRead(refs []exprRef, inCondition bool) string {
+	for _, r := range refs {
+		if !refCovers(r.chain, []string{"needs", "*", "result"}) && !refCovers(r.chain, []string{"needs", "*", "outcome"}) {
+			continue
+		}
+		if isSuccessComparison(r) || inCondition && selectsGoodResult(r) {
+			continue
+		}
+		return r.String()
+	}
+	return ""
+}
+
+// selectsGoodResult reports whether the reference is compared with == to "success" or "skipped", or with != to
+// "skipped", "failure" or "cancelled": the comparisons of a job that runs after its needs went well.
+func selectsGoodResult(r exprRef) bool {
+	c, ok := r.parent.(*CompareOpNode)
+	if !ok || r.negated || !c.Kind.IsEqualityOp() {
+		return false
+	}
+	other := c.Right
+	if c.Right == r.node {
+		other = c.Left
+	}
+	s, ok := other.(*StringNode)
+	if !ok {
+		return false
+	}
+	v := strings.ToLower(s.Value)
+	if c.Kind == CompareOpNodeKindEq {
+		return v == "success" || v == "skipped"
+	}
+	return v == "skipped" || v == "failure" || v == "cancelled"
 }
 
 // isSuccessComparison reports whether the reference is only compared with 'success' with ==. Such a

@@ -4,16 +4,9 @@ on:
 
 permissions:
   pull-requests: write
-  contents: read
 
 jobs:
   label:
     runs-on: ubuntu-latest
-    permissions:
-      issues: write
     steps:
       - run: echo label
-  other:
-    runs-on: ubuntu-latest
-    steps:
-      - run: echo other
