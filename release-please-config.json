@@ -63,6 +63,7 @@
       ],
       "extra-files": [
         ".pre-commit-hooks.yaml",
+        "action.yml",
         "docs/usage.md",
         "docs/.vitepress/version.ts"
       ]
