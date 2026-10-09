@@ -14,15 +14,6 @@ type cacheAction struct {
 	reads func(a *ExecAction, u *UsesRef) (bool, string)
 }
 
-// cacheDisabledByExpression reports whether the value of an input is an expression which looks at
-// the trigger, which is the usual way of caching only outside of releases.
-func cacheDisabledByExpression(v string) bool {
-	if !strings.Contains(v, "${{") {
-		return false
-	}
-	return looksAtTrigger(v)
-}
-
 // looksAtTrigger reports whether the text mentions the event or the ref which started the run:
 // github.event_name, github.ref, github.ref_name, github.ref_type or a tag ref.
 func looksAtTrigger(v string) bool {
@@ -168,6 +159,9 @@ type RuleCachePoisoning struct {
 	wf         *Workflow
 	releaseWhy string // why the workflow is a release workflow, or ""
 	privileged string // the privileged trigger of the workflow, or ""
+	// scenarios are the runs of a release workflow that publish; eventScenarios one run per event of the workflow,
+	// for a job that publishes in a workflow which is not triggered by a release
+	scenarios, eventScenarios []triggerScenario
 }
 
 // NewRuleCachePoisoning creates a new RuleCachePoisoning instance.
@@ -184,8 +178,10 @@ func NewRuleCachePoisoning() *RuleCachePoisoning {
 func (rule *RuleCachePoisoning) VisitWorkflowPre(n *Workflow) error {
 	rule.wf = n
 	rule.releaseWhy, rule.privileged = "", ""
+	rule.scenarios, rule.eventScenarios = nil, nil
 	for _, e := range n.On {
 		name := e.EventName()
+		rule.eventScenarios = append(rule.eventScenarios, triggerScenario{"event_name": name})
 		if slices.Contains(privilegedTriggers, name) && rule.privileged == "" {
 			rule.privileged = name
 		}
@@ -193,9 +189,13 @@ func (rule *RuleCachePoisoning) VisitWorkflowPre(n *Workflow) error {
 		case *WebhookEvent:
 			if name == "release" {
 				rule.releaseWhy = "the workflow runs on the release event"
+				rule.scenarios = append(rule.scenarios, scenarioRelease)
 			}
-			if name == "push" && !ev.Tags.IsEmpty() && rule.releaseWhy == "" {
-				rule.releaseWhy = "the workflow runs on pushed tags"
+			if name == "push" && !ev.Tags.IsEmpty() {
+				if rule.releaseWhy == "" {
+					rule.releaseWhy = "the workflow runs on pushed tags"
+				}
+				rule.scenarios = append(rule.scenarios, scenarioTagPush)
 			}
 		}
 	}
@@ -246,6 +246,10 @@ func (rule *RuleCachePoisoning) VisitJobPre(n *Job) error {
 		return nil
 	}
 
+	scenarios := rule.scenarios
+	if rule.releaseWhy == "" {
+		scenarios = rule.eventScenarios // a publishing job in a workflow which is not a release workflow
+	}
 	for _, s := range steps {
 		a, ref := stepAction(s)
 		if a == nil || ref.Kind != UsesAction {
@@ -257,7 +261,7 @@ func (rule *RuleCachePoisoning) VisitJobPre(n *Job) error {
 			continue
 		}
 		reads, hint := cacheActions[i].reads(a, ref)
-		if !reads || stepCacheIsConditional(s, a, name) {
+		if !reads || !cacheCanRunOnReleaseTrigger(n, s, a, name, scenarios) {
 			continue
 		}
 		rule.ReportIDf(
@@ -303,20 +307,6 @@ var cacheGateInputs = map[string][]string{
 	"actions/cache/restore":                     nil,
 	"hendrikmuhs/ccache-action":                 nil,
 	"determinatesystems/magic-nix-cache-action": nil,
-}
-
-// stepCacheIsConditional reports whether the step or an input which controls the caching of the action
-// depends on the trigger, which is how a workflow caches outside of releases only.
-func stepCacheIsConditional(s *Step, a *ExecAction, name string) bool {
-	if s.If != nil && looksAtTrigger(s.If.Value) {
-		return true
-	}
-	for _, in := range cacheGateInputs[name] {
-		if v, ok := a.input(in); ok && cacheDisabledByExpression(v) {
-			return true
-		}
-	}
-	return false
 }
 
 // publishingReason tells why the steps publish something, or returns "".
