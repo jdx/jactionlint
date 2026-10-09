@@ -357,11 +357,15 @@ func scriptValidates(s *Step) bool {
 	return ok && e.Run != nil && validationRegex.MatchString(e.Run.Value)
 }
 
-// stepEnvNames returns the names of the environment variables of the job and the step whose value
-// refers to something untrusted.
-func untrustedEnvNames(j *Job, s *Step) map[string]bool {
+// untrustedEnvNames returns the names of the environment variables of the workflow, the job and the step whose
+// value refers to something untrusted. The variables of the workflow are inherited by every step.
+func untrustedEnvNames(wf *Workflow, j *Job, s *Step) map[string]bool {
 	names := map[string]bool{}
-	for _, env := range []*Env{j.Env, s.Env} {
+	var wfEnv *Env
+	if wf != nil {
+		wfEnv = wf.Env
+	}
+	for _, env := range []*Env{wfEnv, j.Env, s.Env} {
 		if env == nil {
 			continue
 		}

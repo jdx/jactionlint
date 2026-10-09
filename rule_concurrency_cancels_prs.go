@@ -32,7 +32,6 @@ func perPullRequestContexts(event string) [][]string {
 	common := [][]string{
 		{"github", "run_id"},
 		{"github", "run_number"},
-		{"github", "event", "number"},
 		{"github", "event", "pull_request", "number"},
 		{"github", "event", "pull_request", "id"},
 		{"github", "event", "pull_request", "node_id"},
@@ -42,12 +41,15 @@ func perPullRequestContexts(event string) [][]string {
 		{"github", "event", "pull_request", "head", "ref"},
 		{"github", "event", "pull_request", "head", "label"},
 	}
+	// The payloads of pull_request and pull_request_target have a number of their own. The ones of the review events
+	// have only pull_request.number.
+	number := []string{"github", "event", "number"}
 	switch event {
 	case "pull_request_target":
 		// github.ref and github.sha are the ones of the base branch for this event
-		return append(common, []string{"github", "head_ref"})
+		return append(common, number, []string{"github", "head_ref"})
 	case "pull_request":
-		return append(common,
+		return append(common, number,
 			[]string{"github", "head_ref"}, []string{"github", "ref"}, []string{"github", "ref_name"},
 			[]string{"github", "sha"}, []string{"github", "workflow_ref"},
 			[]string{"github", "event", "pull_request", "merge_commit_sha"})

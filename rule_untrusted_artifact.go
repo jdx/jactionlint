@@ -75,6 +75,9 @@ func (rule *RuleUntrustedArtifact) VisitJobPre(n *Job) error {
 			if scriptValidates(later) {
 				break // everything from here on may rely on the check
 			}
+			if conditionIsGuard(later.If) {
+				continue // a step a maintainer has to allow does not use the artifact on its own
+			}
 			if how, ok := artifactUse(later, dl); ok {
 				line := 0
 				if later.Pos != nil {
@@ -145,6 +148,11 @@ func (rule *RuleUntrustedArtifact) downloadOf(s *Step) *artifactDownload {
 			if e.RunPos != nil {
 				pos = e.RunPos
 			}
+			// `gh run download` without a run ID, or with the ID of the current run, does not fetch what the triggering
+			// run uploaded
+			if !downloadsOtherRun(c) {
+				continue
+			}
 			dl := &artifactDownload{step: s, pos: pos}
 			for _, w := range c.FlagValues("-D", "--dir") {
 				if d := normalizeDir(w.Value); d != "" {
@@ -162,6 +170,17 @@ func (rule *RuleUntrustedArtifact) downloadOf(s *Step) *artifactDownload {
 		}
 	}
 	return nil
+}
+
+// downloadsOtherRun reports whether `gh run download` names a run other than the current one: its run ID is
+// the first word after "download" (the other words are flags and their values).
+func downloadsOtherRun(c *runscript.Command) bool {
+	if len(c.Positional) < 3 {
+		return false
+	}
+	id := c.Positional[2]
+	raw := strings.ToLower(id.Raw)
+	return !(strings.Contains(raw, "github.run_id") || strings.Contains(raw, "github_run_id"))
 }
 
 func refsRead(refs []exprRef, target []string) bool {

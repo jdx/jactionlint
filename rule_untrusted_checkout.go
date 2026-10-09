@@ -58,6 +58,9 @@ func (rule *RuleUntrustedCheckout) VisitJobPre(n *Job) error {
 	}
 	var pending []*untrustedCheckout
 	for _, s := range flattenSteps(n.Steps) {
+		if conditionIsGuard(s.If) {
+			continue // a step a maintainer has to allow neither runs the code nor fetches it
+		}
 		for _, c := range pending {
 			if c.done {
 				continue
@@ -66,9 +69,6 @@ func (rule *RuleUntrustedCheckout) VisitJobPre(n *Job) error {
 				rule.report(c, how)
 				c.done = true
 			}
-		}
-		if conditionIsGuard(s.If) {
-			continue
 		}
 		for _, c := range rule.checkoutsOf(n, s) {
 			if run, ok := s.Exec.(*ExecRun); ok && run.Run != nil {
@@ -124,7 +124,7 @@ func (rule *RuleUntrustedCheckout) checkoutsOf(j *Job, s *Step) []*untrustedChec
 		if script == nil {
 			return nil
 		}
-		env := untrustedEnvNames(j, s)
+		env := untrustedEnvNames(rule.wf, j, s)
 		var ret []*untrustedCheckout
 		for _, c := range script.Commands {
 			if what, ok := commandChecksOutUntrusted(c, env); ok {

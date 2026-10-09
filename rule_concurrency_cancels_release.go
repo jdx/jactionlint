@@ -331,13 +331,21 @@ func groupSeparatesRefs(refs []exprRef) bool {
 	return false
 }
 
-// groupIsScopedToRelease reports whether the group names the release itself: an input of the run or the
-// release of the event. A second run then replaces a run for the same release only.
-func groupIsScopedToRelease(refs []exprRef) bool {
+// groupIsScopedToRelease reports whether the group names the release itself for a run of the event: the release of a
+// release event, or an input of a manual or reusable run. A second run then replaces a run for the same release only.
+// The inputs of a push of a tag are empty, so every tag shares the group.
+func groupIsScopedToRelease(refs []exprRef, event string) bool {
 	for _, r := range refs {
-		for _, d := range [][]string{{"github", "event", "release"}, {"github", "event", "inputs"}, {"inputs"}} {
-			if refCovers(r.chain, d) {
+		switch event {
+		case "release":
+			if refCovers(r.chain, []string{"github", "event", "release"}) {
 				return true
+			}
+		case "workflow_dispatch", "workflow_call":
+			for _, d := range [][]string{{"github", "event", "inputs"}, {"inputs"}} {
+				if refCovers(r.chain, d) {
+					return true
+				}
 			}
 		}
 	}
@@ -353,12 +361,9 @@ func (rule *RuleConcurrencyCancelsRelease) check(c *Concurrency, jobs []*Job) {
 	if c.Group != nil {
 		groupRefs, _ = stringExprRefs(c.Group.Value)
 	}
-	if groupIsScopedToRelease(groupRefs) {
-		return
-	}
 	jobLevel := c != rule.wf.Concurrency
 	for _, sc := range rule.scenarios {
-		if !sc.isTrue(c.CancelInProgress) || (sc.explicit && groupSeparatesRefs(groupRefs)) {
+		if !sc.isTrue(c.CancelInProgress) || (sc.explicit && groupSeparatesRefs(groupRefs)) || groupIsScopedToRelease(groupRefs, sc.event) {
 			continue
 		}
 		signal := ""

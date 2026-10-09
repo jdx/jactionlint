@@ -26,6 +26,14 @@ func TestRuleUntrustedCheckout(t *testing.T) {
           path: pr
       - uses: ./.github/actions/label
 `},
+		{"workflow env", nil, "on: pull_request_target\nenv:\n  HEAD: ${{ github.event.pull_request.head.sha }}\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - run: | # want\n          git fetch origin \"$HEAD\"\n          git checkout \"$HEAD\"\n      - run: npm ci\n"},
+		{"guarded step that runs the code", nil, prt + `    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - run: npm ci
+        if: contains(github.event.pull_request.labels.*.name, 'safe to test')
+`},
 		{"head sha then npm", nil, prt + `    steps:
       - uses: actions/checkout@v4
         with:
