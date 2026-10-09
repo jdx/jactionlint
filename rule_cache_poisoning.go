@@ -14,15 +14,6 @@ type cacheAction struct {
 	reads func(a *ExecAction, u *UsesRef) (bool, string)
 }
 
-// cacheDisabledByExpression reports whether the value of an input is an expression which looks at
-// the trigger, which is the usual way of caching only outside of releases.
-func cacheDisabledByExpression(v string) bool {
-	if !strings.Contains(v, "${{") {
-		return false
-	}
-	return looksAtTrigger(v)
-}
-
 // looksAtTrigger reports whether the text mentions the event or the ref which started the run:
 // github.event_name, github.ref, github.ref_name, github.ref_type or a tag ref.
 func looksAtTrigger(v string) bool {
