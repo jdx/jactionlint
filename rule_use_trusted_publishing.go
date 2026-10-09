@@ -79,6 +79,7 @@ var publishCredentialVars = map[string][]string{
 var publicRegistries = []string{
 	"pypi", "testpypi", "https://upload.pypi.org/legacy/", "https://test.pypi.org/legacy/",
 	"https://registry.npmjs.org", "https://registry.npmjs.org/", "https://rubygems.org", "https://rubygems.org/",
+	"nuget.org", "https://api.nuget.org/v3/index.json",
 }
 
 func (rule *RuleUseTrustedPublishing) checkRun(step *Step, run *ExecRun) {
@@ -141,7 +142,11 @@ func publishCommand(c *runscript.Command) (eco, cmd string, ok bool) {
 		}
 		return eco, strings.TrimSpace(p.Tool + " " + p.Verb), true
 	}
-	// Forms the analyzer does not know as publishes
+	// Forms the analyzer does not know as publishes. A dry run and a registry of your own are skipped like they are
+	// for the commands it knows. The analyzer does not know the options of these tools, so the words are read here.
+	if c.HasFlag("--dry-run") || fallbackRegistryIsPrivate(c) {
+		return "", "", false
+	}
 	pos := func(i int) string { return c.Sub(i) }
 	has := func(words ...string) bool {
 		for _, w := range words {
@@ -170,6 +175,32 @@ func publishCommand(c *runscript.Command) (eco, cmd string, ok bool) {
 		return "pypi", "pipx run twine upload", true
 	}
 	return "", "", false
+}
+
+// fallbackRegistryIsPrivate reports whether a command selects a registry other than the public one with
+// -r, --repository, --repository-url, -s, --source or -Source, either as the next word or after "=".
+func fallbackRegistryIsPrivate(c *runscript.Command) bool {
+	names := []string{"-r", "--repository", "--repository-url", "-s", "--source", "-source"}
+	for i, a := range c.Args {
+		name, value, hasValue := strings.Cut(a.Value, "=")
+		if !slices.Contains(names, strings.ToLower(name)) || (a.Dynamic() && !hasValue) {
+			continue
+		}
+		if !hasValue {
+			if i+1 >= len(c.Args) {
+				continue
+			}
+			next := c.Args[i+1]
+			if next.Dynamic() {
+				return true
+			}
+			value = next.Value
+		}
+		if !slices.Contains(publicRegistries, value) {
+			return true
+		}
+	}
+	return false
 }
 
 func registryIsPublic(w *runscript.Word) bool {
