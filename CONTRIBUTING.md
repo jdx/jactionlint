@@ -1,14 +1,40 @@
 # Policy for jactionlint's features
 
-- jactionlint focuses on detecting mistakes. Feature requests and patches for checks that enforces code style or
-  some conventions are generally not accepted.
-- jactionlint tries to keep [the configuration](docs/config.md) as minimal as possible. Feature requests and patches
-  for checks that require user configurations are generally not accepted.
+jactionlint started as a linter for mistakes only. It now has three tiers of checks, and every check belongs to exactly
+one of them:
 
-These are important to keep jactionlint useful and convenient for everyone. I believe that no one wants to create and
-maintain a heavy configuration file just for linting CI workflows.
+| Tier            | What it finds                                                                          | Enabled by default                     |
+| --------------- | -------------------------------------------------------------------------------------- | -------------------------------------- |
+| **Correctness** | Workflows that are broken or do not do what they say: syntax, types, bad inputs, etc.  | Yes                                    |
+| **Security**    | Workflows that are exploitable or weaken the supply chain: injection, unpinned actions | High-confidence checks only            |
+| **Policy**      | Project conventions: required `timeout-minutes`, explicit `shell:`, run script length  | No. Opt-in through a profile or config |
 
-It's helpful to check if a similar patch has been rejected in the past before submitting it.
+The tier decides the default, not the importance of the check. A policy check is welcome, but it never turns on for
+someone who did not ask for it. See [the configuration document](docs/config.md) for how checks are enabled today, and
+[the v2 migration plan](docs/v2-migration.md) for where this is heading (stable rule IDs, severities and profiles).
+
+## Accepting a new check
+
+A patch that adds a check (or a feature request for one) is accepted when all of the following hold:
+
+- **Stable ID.** The check has a stable, documented rule ID that will not be renamed. For security checks, reuse the name
+  of the equivalent [zizmor audit](docs/zizmor-parity.md) when there is one so users can map them.
+- **Tier.** The check states which tier it belongs to and why.
+- **Docs section.** [The checks document](docs/checks.md) has a section for it with an example, the output and a
+  playground link. See [How to write checks document](#how-to-write-checks-document).
+- **Golden tests.** There are tests under `testdata/` (`err`, `ok` and `examples` as appropriate) that show both what is
+  reported and what is intentionally not reported.
+- **False-positive review.** The check was run on a corpus of real repositories (a set of well-known open source
+  projects, not only the contributor's own) and every finding was reviewed. Please include the corpus and the numbers in
+  the pull request description.
+- **Default-on only with ~zero false positives.** A check is enabled by default only if the corpus review shows
+  essentially no false positives. Anything noisier must be opt-in. The tier does not depend on the false-positive
+  rate: it follows what the check detects, so a noisy security check is still a security check, just not on by default.
+- **Configuration is acceptable when it is the point of the check.** Policy checks may need options (for example, an
+  allow list of actions). Correctness checks should not require configuration to be useful.
+
+Checks that cannot meet these points, for example a purely personal code style preference with no way to turn it off,
+are generally not accepted. It's helpful to check if a similar patch has been rejected in the past before submitting it.
 
 # Reporting an issue
 
