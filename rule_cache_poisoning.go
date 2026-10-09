@@ -1,7 +1,10 @@
 package jactionlint
 
 import (
+	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"strconv"
@@ -158,12 +161,87 @@ var cacheActions = []cacheAction{
 		v, _ := a.input("cache-from")
 		return strings.Contains(v, "type=gha"), "remove the \"cache-from\" input"
 	}},
+	{"docker/setup-buildx-action", func(a *ExecAction, u *UsesRef) (bool, string) {
+		// The buildx binary is cached in the GitHub Actions cache unless "cache-binary" is false (input of v3)
+		if v, ok := a.input("cache-binary"); ok && isFalseLiteral(v) {
+			return false, ""
+		}
+		if major, ok := majorOf(u); ok && major < 3 {
+			return false, ""
+		}
+		return true, "set \"cache-binary: false\""
+	}},
 	{"hendrikmuhs/ccache-action", func(a *ExecAction, u *UsesRef) (bool, string) {
 		return true, "remove this step"
 	}},
 	{"determinatesystems/magic-nix-cache-action", func(a *ExecAction, u *UsesRef) (bool, string) {
 		return true, "remove this step"
 	}},
+}
+
+// automaticCaches are the actions that restore a cache without an input asking for one, when the repository is set
+// up for it. The function reports whether the use of the action does, as far as the files of the repository (root,
+// "" when unknown) tell, and how to switch it off.
+var automaticCaches = map[string]func(a *ExecAction, u *UsesRef, root string) (bool, string){
+	"actions/setup-node": setupNodeCachesAutomatically,
+}
+
+// setupNodeCachesAutomatically tells whether actions/setup-node restores the cache of the package manager on its
+// own. From v5 it does when package.json names a package manager (`packageManager`, or `devEngines.packageManager`)
+// and "package-manager-cache" is not false; since v6 only for npm. The action reads package.json at the root of the
+// workspace, so the file of the repository decides: a repository without one (or without the field) gets no cache.
+// Without a repository to look at (the source of a workflow on its own) the answer is yes.
+func setupNodeCachesAutomatically(a *ExecAction, u *UsesRef, root string) (bool, string) {
+	const hint = "set \"package-manager-cache: false\""
+	if v, ok := a.input("package-manager-cache"); ok && isFalseLiteral(v) {
+		return false, ""
+	}
+	major, known := majorOf(u)
+	if known && major < 5 {
+		return false, ""
+	}
+	if root == "" {
+		return true, hint + ". the action caches on its own when package.json has a \"packageManager\" field"
+	}
+	pm := packageManagerOf(filepath.Join(root, "package.json"))
+	if pm == "" || (!known || major >= 6) && pm != "npm" {
+		return false, ""
+	}
+	return true, hint + ". package.json has \"packageManager\": \"" + pm + "\", so the action caches on its own"
+}
+
+// packageManagerOf returns the name of the package manager that package.json selects with the field packageManager
+// or devEngines.packageManager, or "" when the file does not exist or does not select one.
+func packageManagerOf(file string) string {
+	b, err := os.ReadFile(file)
+	if err != nil {
+		return ""
+	}
+	var pkg struct {
+		PackageManager string `json:"packageManager"`
+		DevEngines     struct {
+			PackageManager json.RawMessage `json:"packageManager"`
+		} `json:"devEngines"`
+	}
+	if json.Unmarshal(b, &pkg) != nil {
+		return ""
+	}
+	if name, _, _ := strings.Cut(pkg.PackageManager, "@"); name != "" {
+		return name
+	}
+	var one struct {
+		Name string `json:"name"`
+	}
+	if json.Unmarshal(pkg.DevEngines.PackageManager, &one) == nil && one.Name != "" {
+		return one.Name
+	}
+	var many []struct {
+		Name string `json:"name"`
+	}
+	if json.Unmarshal(pkg.DevEngines.PackageManager, &many) == nil && len(many) > 0 {
+		return many[0].Name
+	}
+	return ""
 }
 
 // publishingActions are actions that publish a release or a package. A job using one of them is a
@@ -196,7 +274,9 @@ var publishCommandRegex = regexp.MustCompile(`(?m)\b(cargo\s+publish|npm\s+publi
 //     lets untrusted code plant the entries that release workflows later restore.
 type RuleCachePoisoning struct {
 	RuleBase
+	root       string // the root of the repository, "" when unknown
 	wf         *Workflow
+	tagOnly    bool   // the workflow is a release workflow only because it runs on pushed tags
 	releaseWhy string // why the workflow is a release workflow, or ""
 	privileged string // the privileged trigger of the workflow, or ""
 	// scenarios are the runs of a release workflow that publish; eventScenarios one run per event of the workflow,
@@ -226,7 +306,7 @@ func releaseTrigger(events []Event) (why string, scenarios []triggerScenario) {
 			why = "runs on the release event"
 			scenarios = append(scenarios, scenarioRelease)
 		}
-		if e.EventName() == "push" && !ev.Tags.IsEmpty() {
+		if e.EventName() == "push" && tagFilterMatches(ev.Tags) {
 			if why == "" {
 				why = "runs on pushed tags"
 			}
@@ -234,6 +314,26 @@ func releaseTrigger(events []Event) (why string, scenarios []triggerScenario) {
 		}
 	}
 	return why, scenarios
+}
+
+// tagFilterMatches reports whether the `tags` filter of a push event lets a pushed tag through. A filter of
+// negative patterns only (`tags: ['!**']`) matches nothing: GitHub needs a positive pattern in the list, and the
+// last pattern that matches decides, so a list that ends with `!**` excludes every tag.
+func tagFilterMatches(f *WebhookEventFilter) bool {
+	if f.IsEmpty() {
+		return false
+	}
+	positive := false
+	for _, v := range f.Values {
+		if v != nil && !strings.HasPrefix(strings.TrimSpace(v.Value), "!") {
+			positive = true
+		}
+	}
+	if !positive {
+		return false
+	}
+	last := f.Values[len(f.Values)-1]
+	return last == nil || strings.TrimSpace(last.Value) != "!**"
 }
 
 // eventScenarios lists one run per event.
@@ -248,7 +348,7 @@ func eventScenarios(events []Event) []triggerScenario {
 // VisitWorkflowPre is callback when visiting Workflow node before visiting its children.
 func (rule *RuleCachePoisoning) VisitWorkflowPre(n *Workflow) error {
 	rule.wf = n
-	rule.releaseWhy, rule.privileged = "", ""
+	rule.releaseWhy, rule.privileged, rule.tagOnly = "", "", false
 	rule.scenarios, rule.eventScenarios = nil, nil
 	for _, e := range n.On {
 		if name := e.EventName(); slices.Contains(privilegedTriggers, name) && rule.privileged == "" {
@@ -258,6 +358,7 @@ func (rule *RuleCachePoisoning) VisitWorkflowPre(n *Workflow) error {
 	if n.Action == nil {
 		if why, sc := releaseTrigger(n.On); why != "" {
 			rule.releaseWhy, rule.scenarios = "the workflow "+why, sc
+			rule.tagOnly = !slices.ContainsFunc(sc, func(s triggerScenario) bool { return s["event_name"] == "release" })
 		}
 		rule.eventScenarios = eventScenarios(n.On)
 	} else if c := n.Action.Callers; c.Known() {
@@ -294,6 +395,34 @@ func (rule *RuleCachePoisoning) checkWrite(m *String) {
 	)
 }
 
+// cannotPublish reports whether a job of a workflow that runs on pushed tags is a check and not a release: the
+// workflow says what the token may do and grants nothing but read access (`permissions: read-all`, `{}`,
+// `contents: read`), and the job has no environment and calls no reusable workflow. A tag is often only a way to
+// start the checks (pytorch pushes ciflow/* tags), and nothing is published without a write permission, a secret or
+// an environment. A job that runs a publishing command or action is judged by publishingReason. Without
+// `permissions:` the token is whatever the repository sets, which is not known, so the job may publish.
+func (rule *RuleCachePoisoning) cannotPublish(j *Job) bool {
+	if j.Environment != nil || j.WorkflowCall != nil {
+		return false
+	}
+	p := j.Permissions
+	if p == nil {
+		p = rule.wf.Permissions
+	}
+	if p == nil {
+		return false
+	}
+	if p.All != nil {
+		return !strings.EqualFold(strings.TrimSpace(p.All.Value), "write-all")
+	}
+	for _, sc := range p.Scopes {
+		if sc != nil && sc.Value != nil && strings.EqualFold(strings.TrimSpace(sc.Value.Value), "write") {
+			return false
+		}
+	}
+	return true
+}
+
 // VisitJobPre is callback when visiting Job node before visiting its children.
 func (rule *RuleCachePoisoning) VisitJobPre(n *Job) error {
 	if !rule.Config().RuleEnabled("cache-poisoning") {
@@ -312,17 +441,16 @@ func (rule *RuleCachePoisoning) VisitJobPre(n *Job) error {
 	}
 
 	steps := flattenSteps(n.Steps)
-	why := rule.releaseWhy
-	if why == "" {
-		why = publishingReason(steps)
+	why, scenarios := rule.releaseWhy, rule.scenarios
+	if why != "" && rule.tagOnly && rule.cannotPublish(n) {
+		why = "" // a tag only starts a check here, see cannotPublish
 	}
 	if why == "" {
-		return nil
-	}
-
-	scenarios := rule.scenarios
-	if rule.releaseWhy == "" {
-		scenarios = rule.eventScenarios // a publishing job in a workflow which is not a release workflow
+		// a publishing job in a workflow which is not a release workflow
+		if why = publishingReason(steps); why == "" {
+			return nil
+		}
+		scenarios = rule.eventScenarios
 	}
 	for _, s := range steps {
 		a, ref := stepAction(s)
@@ -335,6 +463,13 @@ func (rule *RuleCachePoisoning) VisitJobPre(n *Job) error {
 			continue
 		}
 		reads, hint := cacheActions[i].reads(a, withCommentVersion(rule.wf, a, ref))
+		if auto := automaticCaches[name]; !reads && auto != nil {
+			root := rule.root
+			if rule.wf.Action != nil {
+				root = "" // the workspace of the caller decides
+			}
+			reads, hint = auto(a, withCommentVersion(rule.wf, a, ref), root)
+		}
 		if !reads || !cacheCanRunOnReleaseTrigger(n, s, a, name, scenarios) {
 			continue
 		}
@@ -426,7 +561,11 @@ func init() {
 		RuleInfo{ID: "cache-poisoning", Group: RuleGroupSecurity, Summary: "A cache is restored in a release job or written by a privileged trigger.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-cache-poisoning"},
 	)
 	registerRuleFactory("cache-poisoning", func(env *RuleEnv) []Rule {
-		return []Rule{NewRuleCachePoisoning()}
+		r := NewRuleCachePoisoning()
+		if env.project != nil {
+			r.root = env.project.RootDir()
+		}
+		return []Rule{r}
 	})
 }
 
