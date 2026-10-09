@@ -2881,6 +2881,11 @@ provenance: a publish command that is given a long-lived credential (an environm
 `CARGO_REGISTRY_TOKEN`, or `--token`) is reported even when the job can request the OIDC token. Scripts of `shell: pwsh` (the default
 shell of the Windows runners) and `powershell` are searched for the publish commands line by line.
 
+A credential variable that does not hold a long-lived credential is not one: `NODE_AUTH_TOKEN: ''` blanks the placeholder token
+that `actions/setup-node` writes, so that npm falls back to the OIDC token (the documented way to publish to npm with provenance),
+and a variable set from the output of `rust-lang/crates-io-auth-action` or `NuGet/login` of the same job (for example
+`CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}`) holds a token that is valid for minutes. Both are trusted publishing.
+
 <a id="check-superfluous-actions"></a>
 ## Superfluous actions
 
