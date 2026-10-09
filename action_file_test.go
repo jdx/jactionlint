@@ -67,7 +67,7 @@ func lintActionFixture(t *testing.T, name string) (string, []*Error) {
 	l.defaultConfig = withFixtureRules(cfg)
 
 	proj := &Project{root: root}
-	files, err := walkWorkflowFiles(proj.WorkflowsDir())
+	files, err := projectWorkflowFiles(proj.WorkflowsDir())
 	if err != nil {
 		t.Fatal(err)
 	}

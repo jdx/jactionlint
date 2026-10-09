@@ -13,6 +13,11 @@ configuration `.github/dependabot.yml` (or `.github/dependabot.yaml`) of the rep
 jactionlint
 ```
 
+Only the `.yml` and `.yaml` files directly in `.github/workflows` are workflows: GitHub does not load the files in its subdirectories
+(test data, prompts, tool configuration), so the repository mode does not check them. A file below `.github/workflows/` which you
+give as an argument is checked anyway. The same goes for the globs of a hook such as the [hk](#hk) step: a `**` glob would pass
+those files as arguments, so write `.github/workflows/*.yml` as in the examples.
+
 When paths to YAML workflow files are given as arguments, jactionlint checks them.
 
 ```sh

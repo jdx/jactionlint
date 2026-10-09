@@ -431,7 +431,7 @@ func (l *Linter) repositoryFiles(dir string) ([]string, *Project, error) {
 	}
 
 	l.log("Detected project:", p.RootDir())
-	files, err := walkWorkflowFiles(p.WorkflowsDir())
+	files, err := projectWorkflowFiles(p.WorkflowsDir())
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return nil, nil, err // a repository with only actions has no workflows directory
 	}
@@ -441,6 +441,36 @@ func (l *Linter) repositoryFiles(dir string) ([]string, *Project, error) {
 		return nil, nil, fmt.Errorf("no YAML file was found in %q", p.WorkflowsDir())
 	}
 	return files, p, nil
+}
+
+// projectWorkflowFiles returns the paths of the YAML files which are located directly in the workflows
+// directory of a project, in sorted order. GitHub loads only these as workflows, so a YAML file in a
+// subdirectory (test data, scripts, configuration for tools) is not a workflow and is not linted as one
+// by the repository mode. A file given explicitly on the command line is linted anyway.
+func projectWorkflowFiles(dir string) ([]string, error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, fmt.Errorf("could not read files in %q: %w", dir, err)
+	}
+	files := []string{}
+	for _, e := range entries {
+		n := e.Name()
+		if !strings.HasSuffix(n, ".yml") && !strings.HasSuffix(n, ".yaml") {
+			continue
+		}
+		path := filepath.Join(dir, n)
+		if e.IsDir() {
+			continue
+		}
+		if e.Type()&fs.ModeSymlink != 0 {
+			if s, err := os.Stat(path); err != nil || s.IsDir() {
+				continue // a dangling link or a link to a directory is no workflow file
+			}
+		}
+		files = append(files, path)
+	}
+	sort.Strings(files)
+	return files, nil
 }
 
 // collectWorkflowFiles returns the paths of all YAML files in the directory recursively in sorted order.
