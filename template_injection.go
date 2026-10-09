@@ -788,7 +788,9 @@ func planTemplateInjectionFixes(in tiFixInput) map[int]*Fix {
 		var edits []TextEdit
 		var starts []int
 		defined := map[string]string{} // lower case expression text -> variable name
-		var newVars []string           // lines "NAME: ${{ expr }}"
+		newVar := map[string]string{}  // variable name -> line "NAME: ${{ expr }}", for those not in the env yet
+		var newOrder []string          // the names of newVar in the order they were made
+		usedNew := map[string]bool{}   // the new variables an edit reads: the others are not added
 		for _, c := range cands {
 			if (c.place.Unsafe != "") != unsafe {
 				continue
@@ -810,7 +812,8 @@ func planTemplateInjectionFixes(in tiFixInput) map[int]*Fix {
 					name = reuseEnvName(in.ctx.step.Env, key)
 					if name == "" {
 						name = uniqueEnvName(envNameFor(c.path), taken)
-						newVars = append(newVars, name+": "+RenderYAMLValue("${{ "+c.text+" }}"))
+						newVar[name] = name + ": " + RenderYAMLValue("${{ "+c.text+" }}")
+						newOrder = append(newOrder, name)
 					}
 					defined[key] = name
 				}
@@ -836,9 +839,16 @@ func planTemplateInjectionFixes(in tiFixInput) map[int]*Fix {
 			}
 			edits = append(edits, TextEdit{start, end, repl})
 			starts = append(starts, c.span.Start)
+			usedNew[name] = true
 		}
 		if len(edits) == 0 {
 			continue
+		}
+		var newVars []string
+		for _, name := range newOrder {
+			if usedNew[name] {
+				newVars = append(newVars, newVar[name])
+			}
 		}
 		if len(newVars) > 0 {
 			ins, ok := envInsertion(in, newVars)

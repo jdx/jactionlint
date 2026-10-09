@@ -174,3 +174,20 @@ func TestYAMLSiteAt(t *testing.T) {
 		t.Error("an offset outside the source has no site")
 	}
 }
+
+// The lines of a text inserted into a block scalar of a CRLF file end with CRLF too.
+func TestYAMLSiteInsertKeepsCRLF(t *testing.T) {
+	src := []byte("a: |\r\n  one\r\n  two\r\n")
+	site, ok := YAMLSiteAt(src, strings.Index(string(src), "one"))
+	if !ok || site.Context != YAMLBlockScalar || !site.CRLF {
+		t.Fatalf("site: %+v %v", site, ok)
+	}
+	if got, ok := site.Insert("x\ny"); !ok || got != "x\r\n  y" {
+		t.Errorf("got %q %v", got, ok)
+	}
+	lf := []byte("a: |\n  one\n")
+	site, _ = YAMLSiteAt(lf, strings.Index(string(lf), "one"))
+	if got, _ := site.Insert("x\ny"); got != "x\n  y" {
+		t.Errorf("LF file: %q", got)
+	}
+}

@@ -469,3 +469,15 @@ func TestPosixShellTemplate(t *testing.T) {
 		}
 	}
 }
+
+// An expression the fix cannot replace must not get an environment variable that nothing reads.
+func TestTemplateInjectionFixAddsOnlyTheVariablesItUses(t *testing.T) {
+	src := tiWorkflow("      - run: ${{ github.event.issue.title }} x ${{ github.event.pull_request.title }}\n")
+	out, _ := fixAll(t, tiConfig(t), src, FixModeUnsafe)
+	if strings.Contains(out, "ISSUE_TITLE:") {
+		t.Errorf("ISSUE_TITLE is not read by the script:\n%s", out)
+	}
+	if !strings.Contains(out, "\"${PULL_REQUEST_TITLE}\"") || !strings.Contains(out, "PULL_REQUEST_TITLE: ${{") {
+		t.Errorf("the expression that can be replaced is:\n%s", out)
+	}
+}

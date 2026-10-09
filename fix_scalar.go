@@ -1,6 +1,7 @@
 package jactionlint
 
 import (
+	"bytes"
 	"fmt"
 	"regexp"
 	"strings"
@@ -59,6 +60,8 @@ type YAMLSite struct {
 	// AtStart tells that the text is inserted at the start of a plain scalar. A plain scalar cannot
 	// start with an indicator character such as "-", "&", "*", "!", "|", ">", "%" or "@".
 	AtStart bool
+	// CRLF tells that the line of the site ends with "\r\n": the lines of an inserted block text then do too.
+	CRLF bool
 }
 
 // Insert renders the text so that it reads back as the same text once it is inserted at the site. It
@@ -88,7 +91,11 @@ func (s YAMLSite) Insert(text string) (string, bool) {
 		if strings.Contains(text, "\r") {
 			return "", false
 		}
-		return strings.ReplaceAll(text, "\n", "\n"+strings.Repeat(" ", s.Indent)), true
+		nl := "\n"
+		if s.CRLF {
+			nl = "\r\n"
+		}
+		return strings.ReplaceAll(text, "\n", nl+strings.Repeat(" ", s.Indent)), true
 	case YAMLPlain, YAMLFlowPlain:
 		if !plainInsertable(text, s.Context == YAMLFlowPlain, s.AtStart) {
 			return "", false
@@ -235,7 +242,11 @@ func YAMLSiteAt(src []byte, off int) (YAMLSite, bool) {
 		if !ok {
 			return YAMLSite{}, false
 		}
-		return YAMLSite{Context: YAMLBlockScalar, Indent: ind}, true
+		crlf := false
+		if i := bytes.IndexByte(src[off:], '\n'); i > 0 {
+			crlf = src[off+i-1] == '\r'
+		}
+		return YAMLSite{Context: YAMLBlockScalar, Indent: ind, CRLF: crlf}, true
 	}
 	site := YAMLSite{Context: YAMLPlain, AtStart: off == t.start[best]}
 	if t.inFlow[best] {
