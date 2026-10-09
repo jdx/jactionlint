@@ -63,6 +63,7 @@ func withFixtureRules(c *Config) *Config {
 			c.Rules[id] = RuleConfig{Level: SeverityOff}
 		}
 	}
+	turnOffBatchDRules(c)
 	return c
 }
 

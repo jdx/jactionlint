@@ -25,6 +25,7 @@ rules:
 
 | ID | Group | Default level | Profile |
 | --- | --- | --- | --- |
+| [adhoc-packages](#adhoc-packages) | security | warn | default |
 | [anonymous-definition](#anonymous-definition) | policy | warn | strict |
 | [archived-uses](#archived-uses) | security | warn | only with `-online` |
 | [artipacked](#artipacked) | security | warn | strict |
@@ -49,6 +50,8 @@ rules:
 | [expression-type](#expression-type) | correctness | error | default |
 | [forbidden-uses](#forbidden-uses) | policy | error | only when configured |
 | [github-app](#github-app) | security | warn | strict |
+| [github-env](#github-env) | security | error | default |
+| [github-env-untrusted-input](#github-env-untrusted-input) | security | error | default |
 | [hardcoded-container-credentials](#hardcoded-container-credentials) | security | error | default |
 | [if-always-true](#if-always-true) | correctness | error | default |
 | [impostor-commit](#impostor-commit) | security | error | only with `-online` |
@@ -102,6 +105,7 @@ rules:
 | [self-repository](#self-repository) | security | info | strict |
 | [shellcheck](#shellcheck) | correctness | error | default |
 | [stale-action-refs](#stale-action-refs) | security | info | only with `-online` |
+| [superfluous-actions](#superfluous-actions) | security | warn | default |
 | [template-injection](#template-injection) | security | error | default |
 | [template-injection-expansion](#template-injection-expansion) | security | warn | strict |
 | [template-injection-trusted](#template-injection-trusted) | style | info | all |
@@ -116,18 +120,30 @@ rules:
 | [unknown-runner-label](#unknown-runner-label) | correctness | error | default |
 | [unknown-workflow-input](#unknown-workflow-input) | correctness | error | default |
 | [unknown-workflow-secret](#unknown-workflow-secret) | correctness | error | default |
+| [unlocked-install](#unlocked-install) | security | warn | default |
 | [unpinned-images](#unpinned-images) | security | warn | strict |
+| [unpinned-tools](#unpinned-tools) | security | warn | default |
 | [unpinned-uses](#unpinned-uses) | policy | error | strict |
 | [unredacted-secrets](#unredacted-secrets) | security | warn | strict |
 | [unsound-contains](#unsound-contains) | security | warn | default |
 | [unsound-ternary](#unsound-ternary) | correctness | error | default |
 | [unused-anchor](#unused-anchor) | correctness | error | default |
 | [unused-ignore](#unused-ignore) | policy | error | strict |
+| [use-trusted-publishing](#use-trusted-publishing) | security | warn | default |
 | [workflow-call-permissions](#workflow-call-permissions) | correctness | error | default |
 | [workflow-input-type](#workflow-input-type) | correctness | error | default |
 | [workflow-run-names](#workflow-run-names) | correctness | error | default |
 | [workflow-syntax](#workflow-syntax) | correctness | error | default |
 | [yaml-syntax](#yaml-syntax) | correctness | error | default |
+
+## adhoc-packages
+
+A package is installed by name with npm, yarn, pnpm, bun, gem or bundle add outside of a lock file.
+
+- Group: security
+- Default level: warn
+- Profile: default
+- Details and examples: [checks](./checks.md#check-adhoc-packages)
 
 ## anonymous-definition
 
@@ -351,6 +367,24 @@ A GitHub App token is issued with more access or a longer life than needed.
 - Default level: warn
 - Profile: strict
 - Details and examples: [checks](./checks.md#check-github-app)
+
+## github-env
+
+A value that is not a literal is written to GITHUB_ENV or GITHUB_PATH in a workflow triggered by pull_request_target or workflow_run.
+
+- Group: security
+- Default level: error
+- Profile: default
+- Details and examples: [checks](./checks.md#check-github-env)
+
+## github-env-untrusted-input
+
+Input that an outsider controls is written to GITHUB_ENV or GITHUB_PATH.
+
+- Group: security
+- Default level: error
+- Profile: default
+- Details and examples: [checks](./checks.md#check-github-env)
 
 ## hardcoded-container-credentials
 
@@ -842,6 +876,16 @@ A hash-pinned action uses a commit which no tag of the repository points to.
 - Needs network access: yes (only with `-online`)
 - Details and examples: [checks](./checks.md#check-stale-action-refs)
 
+## superfluous-actions
+
+An action does what a tool of the runner image does as well, such as gh release create.
+
+- Group: security
+- Default level: warn
+- Profile: default
+- Option `pedantic` (bool, no default): Also report the pedantic checks, which are noisier. Unset, they run under the strict and all profiles.
+- Details and examples: [checks](./checks.md#check-superfluous-actions)
+
 ## template-injection
 
 A potentially untrusted input is expanded in a script.
@@ -974,6 +1018,17 @@ A secret which the reusable workflow does not define is passed.
 - Profile: default
 - Details and examples: [checks](./checks.md#check-reusable-workflows)
 
+## unlocked-install
+
+cargo install runs without --locked.
+
+- Group: security
+- Default level: warn
+- Profile: default
+- Fixable: yes
+- Option `pedantic` (bool, no default): Also report the pedantic checks, which are noisier. Unset, they run under the strict and all profiles.
+- Details and examples: [checks](./checks.md#check-unlocked-install)
+
 ## unpinned-images
 
 A container or service image is not pinned by a digest.
@@ -983,6 +1038,16 @@ A container or service image is not pinned by a digest.
 - Profile: strict
 - Option `require-digest` (bool, default true): Report images pinned by a tag other than latest too. Turn it off to report only images without a tag or with the latest tag.
 - Details and examples: [checks](./checks.md#check-unpinned-images)
+
+## unpinned-tools
+
+An action installs the newest version of its tool because no version is set or it is latest.
+
+- Group: security
+- Default level: warn
+- Profile: default
+- Option `pedantic` (bool, no default): Also report the pedantic checks, which are noisier. Unset, they run under the strict and all profiles.
+- Details and examples: [checks](./checks.md#check-unpinned-tools)
 
 ## unpinned-uses
 
@@ -1037,6 +1102,15 @@ An inline ignore comment did not suppress anything.
 - Group: policy
 - Default level: error
 - Profile: strict
+
+## use-trusted-publishing
+
+A package is published with a long-lived credential although the registry supports trusted publishing.
+
+- Group: security
+- Default level: warn
+- Profile: default
+- Details and examples: [checks](./checks.md#check-use-trusted-publishing)
 
 ## workflow-call-permissions
 

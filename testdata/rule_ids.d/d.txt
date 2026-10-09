@@ -1,0 +1,7 @@
+adhoc-packages
+github-env
+github-env-untrusted-input
+superfluous-actions
+unlocked-install
+unpinned-tools
+use-trusted-publishing

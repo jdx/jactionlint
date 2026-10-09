@@ -209,6 +209,12 @@ func (b *builder) build(f *syntax.File) {
 			}
 		}
 	}
+	// the value of a plain assignment (`A=$(cmd)`) is not a word of a command
+	for _, a := range s.Assignments {
+		if a.Cmd == nil && a.Value != nil && a.Value.Subst && a.Value.Subs == nil {
+			a.Value.Subs = b.commandsWithin(a.Value, nil)
+		}
+	}
 	for _, r := range s.Redirects {
 		if r.Target != nil && r.Target.Subst {
 			r.Target.Subs = b.commandsWithin(r.Target, nil)

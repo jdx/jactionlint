@@ -93,6 +93,31 @@
         { "rule": "expression", "message_contains": "always falsy" }
       ]
     },
+    "github-env": {
+      "coverage": "partial",
+      "notes": "Bash and sh scripts are parsed, pwsh and cmd are matched line by line. A write of an expression or variable that is trusted (github.sha, HOME, ...) is not reported, which zizmor reports in pull_request_target and workflow_run workflows. Untrusted input is also reported under other triggers.",
+      "jactionlint": [{ "rule": "github-env" }, { "rule": "github-env-untrusted-input" }]
+    },
+    "adhoc-packages": {
+      "coverage": "partial",
+      "notes": "npm, yarn, pnpm, gem and bundle add in bash and sh scripts, plus bun. pwsh scripts are not parsed.",
+      "jactionlint": [{ "rule": "adhoc-packages" }]
+    },
+    "unpinned-tools": {
+      "coverage": "full",
+      "notes": "The four actions zizmor knows. An input that is an expression is not reported, zizmor reports it with low confidence.",
+      "jactionlint": [{ "rule": "unpinned-tools" }]
+    },
+    "use-trusted-publishing": {
+      "coverage": "partial",
+      "notes": "Publish commands in bash and sh scripts and the four actions. A job with id-token: write is not reported, as in zizmor. pwsh scripts are not parsed and npm run publish is not recognized.",
+      "jactionlint": [{ "rule": "use-trusted-publishing" }]
+    },
+    "superfluous-actions": {
+      "coverage": "full",
+      "notes": "The same table of actions. The entries zizmor reports only with its pedantic persona are reported when the option pedantic of superfluous-actions is on, which it is under the strict and all profiles.",
+      "jactionlint": [{ "rule": "superfluous-actions" }]
+    },
     "forbidden-uses": {
       "coverage": "partial",
       "notes": "allow and deny lists of repository patterns (rules.forbidden-uses.allow and deny); not measured against zizmor yet. required-actions is the separate inverse check and does not cover these findings.",

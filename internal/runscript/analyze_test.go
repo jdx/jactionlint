@@ -942,6 +942,22 @@ func TestExpressionsInsideExpansions(t *testing.T) {
 	}
 }
 
+// The value of an assignment which is a statement of its own has the commands of its substitutions as well.
+func TestSubstitutionsInPlainAssignments(t *testing.T) {
+	s := mustAnalyze(t, `dir="$(mktemp -d "$RUNNER_TEMP/x.XXXXXX")"; export OUT=$(date); A=1`)
+	var got []string
+	for _, a := range s.Assignments {
+		var names []string
+		for _, c := range a.Value.Subs {
+			names = append(names, c.Name)
+		}
+		got = append(got, a.Name+"="+strings.Join(names, ","))
+	}
+	if want := []string{"dir=mktemp", "OUT=date", "A="}; !reflect.DeepEqual(got, want) {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
 // A script with CRLF line ends must mean the same as the one with LF: continuations and heredoc
 // delimiters keep working, and every position is exact in the original text.
 func TestCRLFScriptsAreAnalyzedLikeLF(t *testing.T) {
