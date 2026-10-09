@@ -859,7 +859,7 @@ Pin the action to a commit hash, like any other, if you want it immutable. These
 | `min-severity` | | Hide findings less severe than `info`, `warn` or `error` |
 | `strict-exit` | `false` | Fail for findings of level warn and info too |
 | `online` | | `true` runs the [online checks](#online-checks) with `token`, `false` never uses the network, `cache` and `strict` are the modes of `--online`. Empty leaves it to the config file |
-| `token` | `${{ github.token }}` | The GitHub API token of the online checks. It reaches jactionlint only when they run |
+| `token` | `${{ github.token }}` | The GitHub API token of the online checks. It is not passed to jactionlint when `online` is `false` |
 | `annotations` | `true` | Annotate the files in the pull request (`--format github`) |
 | `advanced-security` | `false` | Upload the findings to code scanning as SARIF instead. The job needs `security-events: write`. It takes precedence over `annotations` |
 | `color` | `true` | Colorize the text output (when `annotations` is `false`) |

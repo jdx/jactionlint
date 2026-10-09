@@ -49,7 +49,7 @@ inputs:
     required: false
     default: ""
   token:
-    description: The GitHub API token for the online checks. Only used when online checks run.
+    description: The GitHub API token for the online checks. It is not passed to jactionlint when online is "false".
     required: false
     default: ${{ github.token }}
   annotations:

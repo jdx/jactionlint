@@ -25,11 +25,12 @@ case "${JACTIONLINT_ONLINE:-}" in
     true) args+=(--online) ;;
     *) args+=("--online=${JACTIONLINT_ONLINE}") ;;
 esac
-if [ -n "${JACTIONLINT_ONLINE:-}" ] && [ "${JACTIONLINT_ONLINE}" != "false" ]; then
-    args+=(--online-token-env=JACTIONLINT_TOKEN)
-else
-    # Nothing asks for the network, so the token has no business in the environment of jactionlint
+if [ "${JACTIONLINT_ONLINE:-}" = "false" ]; then
+    # The network is never used, so the token has no business in the environment of jactionlint
     unset JACTIONLINT_TOKEN
+else
+    # Also when "online" is empty: the config file may enable the online checks, and then they need the token
+    args+=(--online-token-env=JACTIONLINT_TOKEN)
 fi
 
 sarif=""
