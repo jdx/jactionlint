@@ -382,7 +382,7 @@ func isSequenceItem(line string) bool {
 
 func init() {
 	registerRules(
-		RuleInfo{ID: "invalid-ignore-comment", Group: RuleGroupCorrectness, Summary: "An inline ignore comment is invalid.", DefaultLevel: SeverityError, Profile: ProfileDefault},
-		RuleInfo{ID: "unused-ignore", Group: RuleGroupPolicy, Summary: "An ignore comment or an entry of \"ignores\" in the config file did not suppress anything.", DefaultLevel: SeverityError, Profile: ProfileStrict},
+		RuleInfo{ID: "invalid-ignore-comment", Group: RuleGroupCorrectness, Summary: "An inline ignore comment is invalid.", DefaultLevel: SeverityError, Profile: ProfileCorrectness},
+		RuleInfo{ID: "unused-ignore", Group: RuleGroupPolicy, Summary: "An ignore comment or an entry of \"ignores\" in the config file did not suppress anything.", DefaultLevel: SeverityError, Profile: ProfilePedantic},
 	)
 }

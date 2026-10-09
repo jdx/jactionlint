@@ -22,29 +22,48 @@ const (
 )
 
 // Profile is a named set of rules which are enabled together. A profile includes every rule of the
-// profiles before it: ProfileDefault < ProfileStrict < ProfileAll.
+// profiles before it: ProfileCorrectness < ProfileDefault < ProfilePedantic.
 type Profile string
 
 const (
-	// ProfileDefault enables the correctness checks and the checks which have (almost) no false
-	// positives. This is the profile used when none is configured.
+	// ProfileCorrectness enables what actionlint checks by default plus the bug detectors of the
+	// correctness group. It has no security posture or policy rules, apart from the basic checks
+	// actionlint has too (an untrusted input in a script, hard-coded container credentials).
+	ProfileCorrectness Profile = "correctness"
+	// ProfileDefault adds the security posture and policy rules which are worth failing a build on.
+	// It is the profile used when none is configured.
 	ProfileDefault Profile = "default"
-	// ProfileStrict adds the security posture and policy checks.
-	ProfileStrict Profile = "strict"
-	// ProfileAll adds the style and pedantic checks.
-	ProfileAll Profile = "all"
+	// ProfilePedantic adds the noisy and opinionated rules and the pedantic checks of the audits.
+	ProfilePedantic Profile = "pedantic"
+)
+
+// Names of the profiles of the first v2 releases which still work, mapped to ProfilePedantic, with a
+// deprecation warning.
+const (
+	deprecatedProfileStrict = "strict"
+	deprecatedProfileAll    = "all"
 )
 
 // profileRank orders the profiles. The empty profile (never enabled by a profile) has no rank.
-var profileRank = map[Profile]int{ProfileDefault: 1, ProfileStrict: 2, ProfileAll: 3}
+var profileRank = map[Profile]int{ProfileCorrectness: 1, ProfileDefault: 2, ProfilePedantic: 3}
 
-// ParseProfile parses the name of a profile.
+// ParseProfile parses the name of a profile: "correctness", "default" or "pedantic".
 func ParseProfile(s string) (Profile, error) {
 	p := Profile(s)
 	if _, ok := profileRank[p]; !ok {
-		return "", fmt.Errorf("invalid profile %q. available profiles are \"default\", \"strict\" and \"all\"", s)
+		return "", fmt.Errorf("invalid profile %q. available profiles are \"correctness\", \"default\" and \"pedantic\"", s)
 	}
 	return p, nil
+}
+
+// parseConfigProfile parses the value of "profile" in a config file. It also accepts the retired names
+// "strict" and "all", which stand for "pedantic": the returned deprecation message is not empty then.
+func parseConfigProfile(s string) (Profile, string, error) {
+	if s == deprecatedProfileStrict || s == deprecatedProfileAll {
+		return ProfilePedantic, fmt.Sprintf("\"profile: %s\" is deprecated and will be removed in a future version. it means \"profile: pedantic\" now. the profiles are now \"correctness\" (what actionlint checks), \"default\" and \"pedantic\"", s), nil
+	}
+	p, err := ParseProfile(s)
+	return p, "", err
 }
 
 // Includes reports whether the rules of the profile q are enabled by the profile p.

@@ -185,7 +185,7 @@ func init() {
 	registerRules(
 		RuleInfo{
 			ID: "mutable-runner-label", Group: RuleGroupPolicy, Summary: "A runner label is an alias that GitHub moves to newer images, such as ubuntu-latest.",
-			DefaultLevel: SeverityWarning, Profile: ProfileStrict, Fixable: true, DocsAnchor: "check-mutable-runner-label",
+			DefaultLevel: SeverityWarning, Profile: ProfilePedantic, Fixable: true, DocsAnchor: "check-mutable-runner-label",
 			Options: []RuleOption{{
 				Name: "pin", Kind: RuleOptionStringMap, Validate: validateRunnerPins,
 				Summary: "Maps a moving label to the fixed label that -fix writes in its place, e.g. ubuntu-latest: ubuntu-24.04. There is no default: without an entry the finding has no fix.",

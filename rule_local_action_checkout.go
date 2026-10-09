@@ -117,7 +117,7 @@ func isCheckoutActionSpec(spec string) bool {
 
 func init() {
 	registerRules(
-		RuleInfo{ID: "local-action-checkout", Group: RuleGroupCorrectness, Summary: "A local action is used before any step checks out the repository.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-local-action-checkout"},
+		RuleInfo{ID: "local-action-checkout", Group: RuleGroupCorrectness, Summary: "A local action is used before any step checks out the repository.", DefaultLevel: SeverityError, Profile: ProfileCorrectness, DocsAnchor: "check-local-action-checkout"},
 	)
 	registerRuleFactory("local-action-checkout", func(env *RuleEnv) []Rule {
 		return []Rule{NewRuleLocalActionCheckout()}

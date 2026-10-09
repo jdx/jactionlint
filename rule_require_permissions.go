@@ -55,7 +55,7 @@ func (rule *RuleRequirePermissions) VisitJobPre(n *Job) error {
 
 func init() {
 	registerRules(
-		RuleInfo{ID: "missing-permissions", Group: RuleGroupPolicy, Summary: "Neither the workflow nor the job sets permissions:.", DefaultLevel: SeverityError, Profile: ProfileStrict, Fixable: true, DocsAnchor: "permissions"},
+		RuleInfo{ID: "missing-permissions", Group: RuleGroupPolicy, Summary: "Neither the workflow nor the job sets permissions:.", DefaultLevel: SeverityError, Profile: ProfileDefault, Fixable: true, DocsAnchor: "permissions"},
 	)
 	registerRuleFactory("require-permissions", func(env *RuleEnv) []Rule {
 		return []Rule{NewRuleRequirePermissions()}

@@ -11,13 +11,18 @@ Each rule has:
 - a **group**: `correctness` (mistakes which make a workflow fail or misbehave), `security` (insecure constructs), `policy`
   (good practices which are not mistakes by themselves) or `style`.
 - a **default level**: `error`, `warn` or `info`. Only errors make jactionlint exit with status 1 unless `-strict-exit` is given.
-- a **profile**: the first [profile](./config.md#profiles) which enables the rule. `default` is used when no profile is configured, and
-  `strict` and `all` include the rules of the profiles before them. Rules which no profile enables run only when the
-  configuration turns them on.
+- a **profile**: the first [profile](./config.md#profiles) which enables the rule. There are three, and each includes the rules
+  of the one before it: `correctness` (what actionlint checks and the bug detectors of jactionlint), `default` (adds the
+  security posture and policy rules, and is used when no profile is configured) and `pedantic` (adds the noisy and opinionated
+  rules). Rules which no profile enables run only when the configuration turns them on, and the rules marked "only with
+  `-online`" run with that flag whatever the profile is. The profile comes from the `profile` key of the configuration or the
+  `-profile` flag.
+- a **pedantic option**: a few audits report their noisier findings too when the option `pedantic` is true. It is true under
+  the `pedantic` profile and false otherwise, and `rules: {<id>: {pedantic: true}}` turns it on for one audit.
 
 ```yaml
 # .github/jactionlint.yaml
-profile: strict
+profile: pedantic
 rules:
   unpinned-uses: warn # lower the level
   require-shell: off # turn a rule off
@@ -25,141 +30,141 @@ rules:
 
 | ID | Group | Default level | Profile |
 | --- | --- | --- | --- |
-| [action-syntax](#action-syntax) | correctness | error | default |
-| [adhoc-packages](#adhoc-packages) | security | warn | default |
+| [action-syntax](#action-syntax) | correctness | error | correctness |
+| [adhoc-packages](#adhoc-packages) | security | error | default |
 | [agentic-actions](#agentic-actions) | security | error | default |
-| [anonymous-definition](#anonymous-definition) | policy | warn | strict |
+| [anonymous-definition](#anonymous-definition) | policy | warn | pedantic |
 | [archived-uses](#archived-uses) | security | warn | only with `-online` |
-| [artipacked](#artipacked) | security | warn | strict |
-| [bot-conditions](#bot-conditions) | security | warn | strict |
-| [cache-poisoning](#cache-poisoning) | security | warn | strict |
+| [artipacked](#artipacked) | security | error | default |
+| [bot-conditions](#bot-conditions) | security | error | default |
+| [cache-poisoning](#cache-poisoning) | security | error | default |
 | [checkout-static-credentials](#checkout-static-credentials) | security | error | default |
-| [concurrency-cancels-prs](#concurrency-cancels-prs) | correctness | warn | default |
-| [concurrency-cancels-release](#concurrency-cancels-release) | correctness | warn | default |
-| [concurrency-limits](#concurrency-limits) | policy | warn | strict |
-| [conflicting-runner-labels](#conflicting-runner-labels) | correctness | error | default |
-| [constant-condition](#constant-condition) | correctness | error | default |
-| [context-availability](#context-availability) | correctness | error | default |
-| [continue-on-error](#continue-on-error) | policy | info | strict |
-| [cron-too-frequent](#cron-too-frequent) | correctness | error | default |
-| [cyclic-job-needs](#cyclic-job-needs) | correctness | error | default |
-| [dangerous-triggers](#dangerous-triggers) | security | warn | strict |
-| [dependabot-cooldown](#dependabot-cooldown) | security | warn | default |
+| [concurrency-cancels-prs](#concurrency-cancels-prs) | correctness | error | default |
+| [concurrency-cancels-release](#concurrency-cancels-release) | correctness | error | default |
+| [concurrency-limits](#concurrency-limits) | policy | error | default |
+| [conflicting-runner-labels](#conflicting-runner-labels) | correctness | error | correctness |
+| [constant-condition](#constant-condition) | correctness | error | correctness |
+| [context-availability](#context-availability) | correctness | error | correctness |
+| [continue-on-error](#continue-on-error) | policy | info | pedantic |
+| [cron-too-frequent](#cron-too-frequent) | correctness | error | correctness |
+| [cyclic-job-needs](#cyclic-job-needs) | correctness | error | correctness |
+| [dangerous-triggers](#dangerous-triggers) | security | error | default |
+| [dependabot-cooldown](#dependabot-cooldown) | security | error | default |
 | [dependabot-execution](#dependabot-execution) | security | error | default |
-| [dependabot-missing-actions-update](#dependabot-missing-actions-update) | policy | warn | strict |
-| [dependabot-syntax](#dependabot-syntax) | correctness | error | default |
-| [deprecated-action-input](#deprecated-action-input) | correctness | error | default |
-| [deprecated-commands](#deprecated-commands) | correctness | error | default |
-| [duplicate-job-id](#duplicate-job-id) | correctness | error | default |
-| [duplicate-job-needs](#duplicate-job-needs) | correctness | error | default |
-| [duplicate-key](#duplicate-key) | correctness | error | default |
-| [duplicate-step-id](#duplicate-step-id) | correctness | error | default |
-| [duplicate-triggers](#duplicate-triggers) | policy | warn | strict |
-| [excessive-permissions](#excessive-permissions) | security | warn | strict |
-| [expired-ignore](#expired-ignore) | policy | error | default |
-| [expression-syntax](#expression-syntax) | correctness | error | default |
-| [expression-type](#expression-type) | correctness | error | default |
+| [dependabot-missing-actions-update](#dependabot-missing-actions-update) | policy | warn | pedantic |
+| [dependabot-syntax](#dependabot-syntax) | correctness | error | correctness |
+| [deprecated-action-input](#deprecated-action-input) | correctness | error | correctness |
+| [deprecated-commands](#deprecated-commands) | correctness | error | correctness |
+| [duplicate-job-id](#duplicate-job-id) | correctness | error | correctness |
+| [duplicate-job-needs](#duplicate-job-needs) | correctness | error | correctness |
+| [duplicate-key](#duplicate-key) | correctness | error | correctness |
+| [duplicate-step-id](#duplicate-step-id) | correctness | error | correctness |
+| [duplicate-triggers](#duplicate-triggers) | policy | error | default |
+| [excessive-permissions](#excessive-permissions) | security | error | default |
+| [expired-ignore](#expired-ignore) | policy | error | correctness |
+| [expression-syntax](#expression-syntax) | correctness | error | correctness |
+| [expression-type](#expression-type) | correctness | error | correctness |
 | [forbidden-uses](#forbidden-uses) | policy | error | only when configured |
 | [gate-job-skipped-on-failure](#gate-job-skipped-on-failure) | correctness | error | default |
-| [github-app](#github-app) | security | warn | strict |
+| [github-app](#github-app) | security | error | default |
 | [github-env](#github-env) | security | error | default |
-| [github-env-untrusted-input](#github-env-untrusted-input) | security | error | default |
-| [hardcoded-container-credentials](#hardcoded-container-credentials) | security | error | default |
-| [if-always-true](#if-always-true) | correctness | error | default |
+| [github-env-untrusted-input](#github-env-untrusted-input) | security | error | pedantic |
+| [hardcoded-container-credentials](#hardcoded-container-credentials) | security | error | correctness |
+| [if-always-true](#if-always-true) | correctness | error | correctness |
 | [impostor-commit](#impostor-commit) | security | error | only with `-online` |
 | [insecure-commands](#insecure-commands) | security | error | default |
 | [insecure-ssh-keyscan](#insecure-ssh-keyscan) | security | error | default |
 | [insecure-url-scheme](#insecure-url-scheme) | security | error | default |
-| [invalid-activity-type](#invalid-activity-type) | correctness | error | default |
-| [invalid-cron](#invalid-cron) | correctness | error | default |
-| [invalid-env-var-name](#invalid-env-var-name) | correctness | error | default |
-| [invalid-event-config](#invalid-event-config) | correctness | error | default |
-| [invalid-event-filter](#invalid-event-filter) | correctness | error | default |
-| [invalid-function-call](#invalid-function-call) | correctness | error | default |
-| [invalid-glob](#invalid-glob) | correctness | error | default |
-| [invalid-id](#invalid-id) | correctness | error | default |
-| [invalid-ignore-comment](#invalid-ignore-comment) | correctness | error | default |
-| [invalid-label-pattern](#invalid-label-pattern) | correctness | error | default |
-| [invalid-local-action](#invalid-local-action) | correctness | error | default |
-| [invalid-local-workflow](#invalid-local-workflow) | correctness | error | default |
-| [invalid-parallel-step](#invalid-parallel-step) | correctness | error | default |
-| [invalid-permissions](#invalid-permissions) | correctness | error | default |
-| [invalid-shell-name](#invalid-shell-name) | correctness | error | default |
-| [invalid-timezone](#invalid-timezone) | correctness | error | default |
-| [invalid-uses](#invalid-uses) | correctness | error | default |
-| [invalid-workflow-call](#invalid-workflow-call) | correctness | error | default |
-| [invalid-workflow-call-input](#invalid-workflow-call-input) | correctness | error | default |
-| [invalid-workflow-dispatch-input](#invalid-workflow-dispatch-input) | correctness | error | default |
+| [invalid-activity-type](#invalid-activity-type) | correctness | error | correctness |
+| [invalid-cron](#invalid-cron) | correctness | error | correctness |
+| [invalid-env-var-name](#invalid-env-var-name) | correctness | error | correctness |
+| [invalid-event-config](#invalid-event-config) | correctness | error | correctness |
+| [invalid-event-filter](#invalid-event-filter) | correctness | error | correctness |
+| [invalid-function-call](#invalid-function-call) | correctness | error | correctness |
+| [invalid-glob](#invalid-glob) | correctness | error | correctness |
+| [invalid-id](#invalid-id) | correctness | error | correctness |
+| [invalid-ignore-comment](#invalid-ignore-comment) | correctness | error | correctness |
+| [invalid-label-pattern](#invalid-label-pattern) | correctness | error | correctness |
+| [invalid-local-action](#invalid-local-action) | correctness | error | correctness |
+| [invalid-local-workflow](#invalid-local-workflow) | correctness | error | correctness |
+| [invalid-parallel-step](#invalid-parallel-step) | correctness | error | correctness |
+| [invalid-permissions](#invalid-permissions) | correctness | error | correctness |
+| [invalid-shell-name](#invalid-shell-name) | correctness | error | correctness |
+| [invalid-timezone](#invalid-timezone) | correctness | error | correctness |
+| [invalid-uses](#invalid-uses) | correctness | error | correctness |
+| [invalid-workflow-call](#invalid-workflow-call) | correctness | error | correctness |
+| [invalid-workflow-call-input](#invalid-workflow-call-input) | correctness | error | correctness |
+| [invalid-workflow-dispatch-input](#invalid-workflow-dispatch-input) | correctness | error | correctness |
 | [invisible-characters](#invisible-characters) | security | error | default |
 | [known-vulnerable-actions](#known-vulnerable-actions) | security | error | only with `-online` |
-| [local-action-checkout](#local-action-checkout) | correctness | error | default |
-| [matrix-duplicate-value](#matrix-duplicate-value) | correctness | error | default |
-| [matrix-invalid-exclude](#matrix-invalid-exclude) | correctness | error | default |
-| [max-run-lines](#max-run-lines) | style | error | all |
-| [merge-key](#merge-key) | correctness | error | default |
-| [misfeature](#misfeature) | security | warn | strict |
-| [misfeature-custom-shell](#misfeature-custom-shell) | style | info | all |
-| [missing-action-input](#missing-action-input) | correctness | error | default |
-| [missing-permissions](#missing-permissions) | policy | error | strict |
+| [local-action-checkout](#local-action-checkout) | correctness | error | correctness |
+| [matrix-duplicate-value](#matrix-duplicate-value) | correctness | error | correctness |
+| [matrix-invalid-exclude](#matrix-invalid-exclude) | correctness | error | correctness |
+| [max-run-lines](#max-run-lines) | style | error | pedantic |
+| [merge-key](#merge-key) | correctness | error | correctness |
+| [misfeature](#misfeature) | security | error | default |
+| [misfeature-custom-shell](#misfeature-custom-shell) | style | info | pedantic |
+| [missing-action-input](#missing-action-input) | correctness | error | correctness |
+| [missing-permissions](#missing-permissions) | policy | error | default |
 | [missing-timeout](#missing-timeout) | policy | error | default |
-| [missing-workflow-input](#missing-workflow-input) | correctness | error | default |
-| [missing-workflow-secret](#missing-workflow-secret) | correctness | error | default |
-| [mutable-runner-label](#mutable-runner-label) | policy | warn | strict |
-| [obfuscation](#obfuscation) | security | warn | strict |
-| [outdated-action-runner](#outdated-action-runner) | correctness | error | default |
-| [overprovisioned-secrets](#overprovisioned-secrets) | security | warn | strict |
+| [missing-workflow-input](#missing-workflow-input) | correctness | error | correctness |
+| [missing-workflow-secret](#missing-workflow-secret) | correctness | error | correctness |
+| [mutable-runner-label](#mutable-runner-label) | policy | warn | pedantic |
+| [obfuscation](#obfuscation) | security | error | default |
+| [outdated-action-runner](#outdated-action-runner) | correctness | error | correctness |
+| [overprovisioned-secrets](#overprovisioned-secrets) | security | error | default |
 | [pipeline-without-pipefail](#pipeline-without-pipefail) | correctness | error | default |
-| [pyflakes](#pyflakes) | correctness | error | default |
-| [recursive-alias](#recursive-alias) | correctness | error | default |
+| [pyflakes](#pyflakes) | correctness | error | correctness |
+| [recursive-alias](#recursive-alias) | correctness | error | correctness |
 | [ref-confusion](#ref-confusion) | security | warn | only with `-online` |
 | [ref-version-mismatch](#ref-version-mismatch) | security | warn | only with `-online` |
-| [require-expression-wrapping](#require-expression-wrapping) | style | error | all |
-| [require-shell](#require-shell) | style | error | all |
+| [require-expression-wrapping](#require-expression-wrapping) | style | error | pedantic |
+| [require-shell](#require-shell) | style | error | pedantic |
 | [required-actions](#required-actions) | policy | error | only when configured |
-| [secrets-inherit](#secrets-inherit) | security | warn | default |
-| [secrets-outside-env](#secrets-outside-env) | security | warn | all |
-| [self-hosted-runner](#self-hosted-runner) | security | info | all |
-| [self-repository](#self-repository) | security | info | strict |
-| [shellcheck](#shellcheck) | correctness | error | default |
+| [secrets-inherit](#secrets-inherit) | security | error | default |
+| [secrets-outside-env](#secrets-outside-env) | security | warn | pedantic |
+| [self-hosted-runner](#self-hosted-runner) | security | info | pedantic |
+| [self-repository](#self-repository) | security | info | pedantic |
+| [shellcheck](#shellcheck) | correctness | error | correctness |
 | [stale-action-refs](#stale-action-refs) | security | info | only with `-online` |
-| [superfluous-actions](#superfluous-actions) | security | warn | default |
-| [template-injection](#template-injection) | security | error | default |
-| [template-injection-expansion](#template-injection-expansion) | security | warn | strict |
-| [template-injection-trusted](#template-injection-trusted) | style | info | all |
+| [superfluous-actions](#superfluous-actions) | security | error | default |
+| [template-injection](#template-injection) | security | error | correctness |
+| [template-injection-expansion](#template-injection-expansion) | security | warn | pedantic |
+| [template-injection-trusted](#template-injection-trusted) | style | info | pedantic |
 | [timeout-too-long](#timeout-too-long) | policy | error | only when configured |
-| [typosquat-uses](#typosquat-uses) | security | warn | strict |
-| [undefined-function](#undefined-function) | correctness | error | default |
-| [undefined-job-needs](#undefined-job-needs) | correctness | error | default |
-| [undefined-property](#undefined-property) | correctness | error | default |
-| [undocumented-permissions](#undocumented-permissions) | policy | info | all |
-| [unknown-action-input](#unknown-action-input) | correctness | error | default |
-| [unknown-event](#unknown-event) | correctness | error | default |
-| [unknown-runner-label](#unknown-runner-label) | correctness | error | default |
-| [unknown-workflow-input](#unknown-workflow-input) | correctness | error | default |
-| [unknown-workflow-secret](#unknown-workflow-secret) | correctness | error | default |
-| [unlocked-install](#unlocked-install) | security | warn | default |
-| [unpinned-images](#unpinned-images) | security | warn | strict |
-| [unpinned-tools](#unpinned-tools) | security | warn | default |
-| [unpinned-uses](#unpinned-uses) | policy | error | strict |
-| [unredacted-secrets](#unredacted-secrets) | security | warn | strict |
-| [unsound-contains](#unsound-contains) | security | warn | default |
+| [typosquat-uses](#typosquat-uses) | security | error | default |
+| [undefined-function](#undefined-function) | correctness | error | correctness |
+| [undefined-job-needs](#undefined-job-needs) | correctness | error | correctness |
+| [undefined-property](#undefined-property) | correctness | error | correctness |
+| [undocumented-permissions](#undocumented-permissions) | policy | info | pedantic |
+| [unknown-action-input](#unknown-action-input) | correctness | error | correctness |
+| [unknown-event](#unknown-event) | correctness | error | correctness |
+| [unknown-runner-label](#unknown-runner-label) | correctness | error | correctness |
+| [unknown-workflow-input](#unknown-workflow-input) | correctness | error | correctness |
+| [unknown-workflow-secret](#unknown-workflow-secret) | correctness | error | correctness |
+| [unlocked-install](#unlocked-install) | security | error | default |
+| [unpinned-images](#unpinned-images) | security | error | default |
+| [unpinned-tools](#unpinned-tools) | security | error | default |
+| [unpinned-uses](#unpinned-uses) | policy | error | default |
+| [unredacted-secrets](#unredacted-secrets) | security | error | default |
+| [unsound-contains](#unsound-contains) | security | error | default |
 | [unsound-prefix-match](#unsound-prefix-match) | security | error | default |
-| [unsound-ternary](#unsound-ternary) | correctness | error | default |
+| [unsound-ternary](#unsound-ternary) | correctness | error | correctness |
 | [untrusted-artifact](#untrusted-artifact) | security | error | default |
 | [untrusted-checkout](#untrusted-checkout) | security | error | default |
-| [unused-anchor](#unused-anchor) | correctness | error | default |
-| [unused-baseline-entry](#unused-baseline-entry) | policy | info | default |
-| [unused-ignore](#unused-ignore) | policy | error | strict |
-| [unused-job-output](#unused-job-output) | policy | warn | default |
-| [unused-needs](#unused-needs) | style | info | strict |
-| [unused-workflow-input](#unused-workflow-input) | policy | warn | strict |
+| [unused-anchor](#unused-anchor) | correctness | error | correctness |
+| [unused-baseline-entry](#unused-baseline-entry) | policy | info | correctness |
+| [unused-ignore](#unused-ignore) | policy | error | pedantic |
+| [unused-job-output](#unused-job-output) | policy | error | default |
+| [unused-needs](#unused-needs) | style | info | pedantic |
+| [unused-workflow-input](#unused-workflow-input) | policy | warn | pedantic |
 | [unverified-download](#unverified-download) | security | error | default |
-| [use-trusted-publishing](#use-trusted-publishing) | security | warn | default |
-| [workflow-call-permissions](#workflow-call-permissions) | correctness | error | default |
-| [workflow-input-type](#workflow-input-type) | correctness | error | default |
-| [workflow-run-names](#workflow-run-names) | correctness | error | default |
-| [workflow-syntax](#workflow-syntax) | correctness | error | default |
-| [yaml-syntax](#yaml-syntax) | correctness | error | default |
+| [use-trusted-publishing](#use-trusted-publishing) | security | error | default |
+| [workflow-call-permissions](#workflow-call-permissions) | correctness | error | correctness |
+| [workflow-input-type](#workflow-input-type) | correctness | error | correctness |
+| [workflow-run-names](#workflow-run-names) | correctness | error | correctness |
+| [workflow-syntax](#workflow-syntax) | correctness | error | correctness |
+| [yaml-syntax](#yaml-syntax) | correctness | error | correctness |
 
 ## action-syntax
 
@@ -167,7 +172,7 @@ The action metadata does not follow the syntax of action.yml.
 
 - Group: correctness
 - Default level: error
-- Profile: default
+- Profile: correctness
 - Details and examples: [checks](./checks.md#check-composite-action-syntax)
 
 ## adhoc-packages
@@ -175,7 +180,7 @@ The action metadata does not follow the syntax of action.yml.
 A package is installed by name with npm, yarn, pnpm, bun, gem or bundle add outside of a lock file.
 
 - Group: security
-- Default level: warn
+- Default level: error
 - Profile: default
 - Details and examples: [checks](./checks.md#check-adhoc-packages)
 
@@ -195,7 +200,7 @@ A workflow has no top-level name:.
 
 - Group: policy
 - Default level: warn
-- Profile: strict
+- Profile: pedantic
 - Fixable: yes
 - Details and examples: [checks](./checks.md#check-anonymous-definition)
 
@@ -214,8 +219,8 @@ An action or reusable workflow is in an archived repository.
 actions/checkout persists the GITHUB_TOKEN credential in the git config.
 
 - Group: security
-- Default level: warn
-- Profile: strict
+- Default level: error
+- Profile: default
 - Fixable: yes
 - Details and examples: [checks](./checks.md#check-artipacked)
 
@@ -224,8 +229,8 @@ actions/checkout persists the GITHUB_TOKEN credential in the git config.
 A condition trusts a bot by github.actor, which can be spoofed.
 
 - Group: security
-- Default level: warn
-- Profile: strict
+- Default level: error
+- Profile: default
 - Fixable: yes
 - Details and examples: [checks](./checks.md#check-bot-conditions)
 
@@ -234,8 +239,8 @@ A condition trusts a bot by github.actor, which can be spoofed.
 A cache is restored in a release job or written by a privileged trigger.
 
 - Group: security
-- Default level: warn
-- Profile: strict
+- Default level: error
+- Profile: default
 - Details and examples: [checks](./checks.md#check-cache-poisoning)
 
 ## checkout-static-credentials
@@ -254,7 +259,7 @@ actions/checkout is given an SSH key or a token that does not expire.
 A concurrency group that cancels runs is shared by all pull requests, so unrelated pull requests cancel each other.
 
 - Group: correctness
-- Default level: warn
+- Default level: error
 - Profile: default
 - Details and examples: [checks](./checks.md#check-concurrency-cancels-prs)
 
@@ -263,7 +268,7 @@ A concurrency group that cancels runs is shared by all pull requests, so unrelat
 cancel-in-progress can cancel a release or a deployment which is still running.
 
 - Group: correctness
-- Default level: warn
+- Default level: error
 - Profile: default
 - Fixable: yes
 - Details and examples: [checks](./checks.md#check-concurrency-cancels-release)
@@ -273,8 +278,8 @@ cancel-in-progress can cancel a release or a deployment which is still running.
 A workflow does not cancel superseded runs with concurrency:.
 
 - Group: policy
-- Default level: warn
-- Profile: strict
+- Default level: error
+- Profile: default
 - Details and examples: [checks](./checks.md#check-concurrency-limits)
 
 ## conflicting-runner-labels
@@ -283,7 +288,7 @@ The runner labels of a job conflict with each other.
 
 - Group: correctness
 - Default level: error
-- Profile: default
+- Profile: correctness
 - Details and examples: [checks](./checks.md#check-runner-labels)
 
 ## constant-condition
@@ -292,7 +297,7 @@ An if: condition is a constant expression.
 
 - Group: correctness
 - Default level: error
-- Profile: default
+- Profile: correctness
 - Details and examples: [checks](./checks.md#if-cond-constant)
 
 ## context-availability
@@ -301,7 +306,7 @@ A context or special function is used where it is not available.
 
 - Group: correctness
 - Default level: error
-- Profile: default
+- Profile: correctness
 - Details and examples: [checks](./checks.md#ctx-spfunc-availability)
 
 ## continue-on-error
@@ -310,7 +315,7 @@ A job has continue-on-error: true, so its failure does not fail the workflow.
 
 - Group: policy
 - Default level: info
-- Profile: strict
+- Profile: pedantic
 - Option `steps` (bool, default false): Also report steps with continue-on-error: true. By default only jobs are reported.
 - Details and examples: [checks](./checks.md#check-continue-on-error)
 
@@ -320,7 +325,7 @@ A scheduled job runs more often than once every 5 minutes.
 
 - Group: correctness
 - Default level: error
-- Profile: default
+- Profile: correctness
 - Details and examples: [checks](./checks.md#check-cron-syntax-and-timezone)
 
 ## cyclic-job-needs
@@ -329,7 +334,7 @@ Jobs depend on each other in a cycle.
 
 - Group: correctness
 - Default level: error
-- Profile: default
+- Profile: correctness
 - Details and examples: [checks](./checks.md#check-job-deps)
 
 ## dangerous-triggers
@@ -337,8 +342,8 @@ Jobs depend on each other in a cycle.
 A workflow uses pull_request_target, workflow_run or issue_comment.
 
 - Group: security
-- Default level: warn
-- Profile: strict
+- Default level: error
+- Profile: default
 - Details and examples: [checks](./checks.md#check-dangerous-triggers)
 
 ## dependabot-cooldown
@@ -346,7 +351,7 @@ A workflow uses pull_request_target, workflow_run or issue_comment.
 An update in dependabot.yml has no cooldown or a cooldown shorter than the minimum.
 
 - Group: security
-- Default level: warn
+- Default level: error
 - Profile: default
 - Fixable: yes
 - Option `days` (int, default 7): The minimum number of days "cooldown.default-days" must be. Defaults to 7.
@@ -369,7 +374,7 @@ dependabot.yml has no github-actions update although the repository has workflow
 
 - Group: policy
 - Default level: warn
-- Profile: strict
+- Profile: pedantic
 - Details and examples: [checks](./checks.md#check-dependabot-missing-actions-update)
 
 ## dependabot-syntax
@@ -378,7 +383,7 @@ The Dependabot configuration does not follow the syntax of dependabot.yml.
 
 - Group: correctness
 - Default level: error
-- Profile: default
+- Profile: correctness
 - Details and examples: [checks](./checks.md#check-dependabot-syntax)
 
 ## deprecated-action-input
@@ -387,7 +392,7 @@ A deprecated input of an action is used.
 
 - Group: correctness
 - Default level: error
-- Profile: default
+- Profile: correctness
 - Details and examples: [checks](./checks.md#deprecated-inputs-usage)
 
 ## deprecated-commands
@@ -396,7 +401,7 @@ A deprecated workflow command such as ::set-output is used.
 
 - Group: correctness
 - Default level: error
-- Profile: default
+- Profile: correctness
 - Details and examples: [checks](./checks.md#check-deprecated-workflow-commands)
 
 ## duplicate-job-id
@@ -405,7 +410,7 @@ A job ID is defined more than once.
 
 - Group: correctness
 - Default level: error
-- Profile: default
+- Profile: correctness
 - Details and examples: [checks](./checks.md#check-job-deps)
 
 ## duplicate-job-needs
@@ -414,7 +419,7 @@ A job ID is listed more than once in needs.
 
 - Group: correctness
 - Default level: error
-- Profile: default
+- Profile: correctness
 - Details and examples: [checks](./checks.md#check-job-deps)
 
 ## duplicate-key
@@ -423,7 +428,7 @@ A key is defined more than once in a mapping.
 
 - Group: correctness
 - Default level: error
-- Profile: default
+- Profile: correctness
 - Details and examples: [checks](./checks.md#check-missing-required-duplicate-keys)
 
 ## duplicate-step-id
@@ -432,7 +437,7 @@ A step ID is not unique within its job.
 
 - Group: correctness
 - Default level: error
-- Profile: default
+- Profile: correctness
 - Details and examples: [checks](./checks.md#check-job-step-ids)
 
 ## duplicate-triggers
@@ -440,8 +445,8 @@ A step ID is not unique within its job.
 push and pull_request both run the workflow for the same commit.
 
 - Group: policy
-- Default level: warn
-- Profile: strict
+- Default level: error
+- Profile: default
 - Details and examples: [checks](./checks.md#check-duplicate-triggers)
 
 ## excessive-permissions
@@ -449,8 +454,8 @@ push and pull_request both run the workflow for the same commit.
 The GITHUB_TOKEN gets write access that is broader than needed.
 
 - Group: security
-- Default level: warn
-- Profile: strict
+- Default level: error
+- Profile: default
 - Option `require-workflow-permissions` (bool, default false): Also report a workflow which has no top-level permissions, even when its jobs set their own.
 - Details and examples: [checks](./checks.md#check-excessive-permissions)
 
@@ -460,7 +465,7 @@ An entry of "ignores" in the config file has expired or is about to.
 
 - Group: policy
 - Default level: error
-- Profile: default
+- Profile: correctness
 
 ## expression-syntax
 
@@ -468,7 +473,7 @@ A ${{ }} expression has a syntax error.
 
 - Group: correctness
 - Default level: error
-- Profile: default
+- Profile: correctness
 - Details and examples: [checks](./checks.md#check-syntax-expression)
 
 ## expression-type
@@ -477,7 +482,7 @@ A ${{ }} expression has a type error.
 
 - Group: correctness
 - Default level: error
-- Profile: default
+- Profile: correctness
 - Details and examples: [checks](./checks.md#check-type-check-expression)
 
 ## forbidden-uses
@@ -505,8 +510,8 @@ A job that reads the results of the jobs it needs is skipped when one of them fa
 A GitHub App token is issued with more access or a longer life than needed.
 
 - Group: security
-- Default level: warn
-- Profile: strict
+- Default level: error
+- Profile: default
 - Details and examples: [checks](./checks.md#check-github-app)
 
 ## github-env
@@ -524,7 +529,7 @@ Input that an outsider controls is written to GITHUB_ENV or GITHUB_PATH.
 
 - Group: security
 - Default level: error
-- Profile: default
+- Profile: pedantic
 - Details and examples: [checks](./checks.md#check-github-env)
 
 ## hardcoded-container-credentials
@@ -533,7 +538,7 @@ A password for a container registry is written directly in the workflow.
 
 - Group: security
 - Default level: error
-- Profile: default
+- Profile: correctness
 - Details and examples: [checks](./checks.md#check-hardcoded-credentials)
 
 ## if-always-true
@@ -542,7 +547,7 @@ An if: condition is always true because of the characters around ${{ }}.
 
 - Group: correctness
 - Default level: error
-- Profile: default
+- Profile: correctness
 - Details and examples: [checks](./checks.md#if-cond-constant)
 
 ## impostor-commit
@@ -590,7 +595,7 @@ An activity type is not available for the Webhook event.
 
 - Group: correctness
 - Default level: error
-- Profile: default
+- Profile: correctness
 - Details and examples: [checks](./checks.md#check-webhook-events)
 
 ## invalid-cron
@@ -599,7 +604,7 @@ A cron schedule has an invalid format.
 
 - Group: correctness
 - Default level: error
-- Profile: default
+- Profile: correctness
 - Details and examples: [checks](./checks.md#check-cron-syntax-and-timezone)
 
 ## invalid-env-var-name
@@ -608,7 +613,7 @@ An environment variable name contains characters which are not allowed.
 
 - Group: correctness
 - Default level: error
-- Profile: default
+- Profile: correctness
 - Details and examples: [checks](./checks.md#check-env-var-names)
 
 ## invalid-event-config
@@ -617,7 +622,7 @@ An event is configured with options it does not support.
 
 - Group: correctness
 - Default level: error
-- Profile: default
+- Profile: correctness
 - Details and examples: [checks](./checks.md#check-webhook-events)
 
 ## invalid-event-filter
@@ -626,7 +631,7 @@ An event filter is not available for the event or conflicts with another filter.
 
 - Group: correctness
 - Default level: error
-- Profile: default
+- Profile: correctness
 - Details and examples: [checks](./checks.md#check-webhook-events)
 
 ## invalid-function-call
@@ -635,7 +640,7 @@ A built-in function is called with wrong arguments.
 
 - Group: correctness
 - Default level: error
-- Profile: default
+- Profile: correctness
 - Details and examples: [checks](./checks.md#check-contexts-and-builtin-func)
 
 ## invalid-glob
@@ -644,7 +649,7 @@ A glob filter pattern is invalid.
 
 - Group: correctness
 - Default level: error
-- Profile: default
+- Profile: correctness
 - Details and examples: [checks](./checks.md#check-glob-pattern)
 
 ## invalid-id
@@ -653,7 +658,7 @@ A job or step ID does not follow the naming convention.
 
 - Group: correctness
 - Default level: error
-- Profile: default
+- Profile: correctness
 - Details and examples: [checks](./checks.md#id-naming-convention)
 
 ## invalid-ignore-comment
@@ -662,7 +667,7 @@ An inline ignore comment is invalid.
 
 - Group: correctness
 - Default level: error
-- Profile: default
+- Profile: correctness
 
 ## invalid-label-pattern
 
@@ -670,7 +675,7 @@ A runner label pattern in the configuration is not a valid glob.
 
 - Group: correctness
 - Default level: error
-- Profile: default
+- Profile: correctness
 - Details and examples: [checks](./checks.md#check-runner-labels)
 
 ## invalid-local-action
@@ -679,7 +684,7 @@ A local action cannot be loaded or its metadata is invalid.
 
 - Group: correctness
 - Default level: error
-- Profile: default
+- Profile: correctness
 - Details and examples: [checks](./checks.md#action-metadata-syntax)
 
 ## invalid-local-workflow
@@ -688,7 +693,7 @@ A local reusable workflow cannot be loaded or is invalid.
 
 - Group: correctness
 - Default level: error
-- Profile: default
+- Profile: correctness
 - Details and examples: [checks](./checks.md#check-reusable-workflows)
 
 ## invalid-parallel-step
@@ -697,7 +702,7 @@ A step is not allowed inside a parallel group or refers to a wrong step.
 
 - Group: correctness
 - Default level: error
-- Profile: default
+- Profile: correctness
 - Details and examples: [checks](./checks.md#check-parallel-step-refs)
 
 ## invalid-permissions
@@ -706,7 +711,7 @@ A permission scope or its value is invalid.
 
 - Group: correctness
 - Default level: error
-- Profile: default
+- Profile: correctness
 - Details and examples: [checks](./checks.md#check-permissions)
 
 ## invalid-shell-name
@@ -715,7 +720,7 @@ A shell name is not available on the runner.
 
 - Group: correctness
 - Default level: error
-- Profile: default
+- Profile: correctness
 - Details and examples: [checks](./checks.md#check-shell-names)
 
 ## invalid-timezone
@@ -724,7 +729,7 @@ A timezone of a schedule is not a valid IANA timezone name.
 
 - Group: correctness
 - Default level: error
-- Profile: default
+- Profile: correctness
 - Details and examples: [checks](./checks.md#check-cron-syntax-and-timezone)
 
 ## invalid-uses
@@ -733,7 +738,7 @@ A uses: value does not follow the format of an action or a Docker image.
 
 - Group: correctness
 - Default level: error
-- Profile: default
+- Profile: correctness
 - Details and examples: [checks](./checks.md#check-action-format)
 
 ## invalid-workflow-call
@@ -742,7 +747,7 @@ A reusable workflow call does not follow the format of a reusable workflow.
 
 - Group: correctness
 - Default level: error
-- Profile: default
+- Profile: correctness
 - Details and examples: [checks](./checks.md#check-reusable-workflows)
 
 ## invalid-workflow-call-input
@@ -751,7 +756,7 @@ An input of the workflow_call event is invalid.
 
 - Group: correctness
 - Default level: error
-- Profile: default
+- Profile: correctness
 - Details and examples: [checks](./checks.md#check-reusable-workflows)
 
 ## invalid-workflow-dispatch-input
@@ -760,7 +765,7 @@ An input of the workflow_dispatch event is invalid.
 
 - Group: correctness
 - Default level: error
-- Profile: default
+- Profile: correctness
 - Details and examples: [checks](./checks.md#check-workflow-dispatch-events)
 
 ## invisible-characters
@@ -790,7 +795,7 @@ A local action is used before any step checks out the repository.
 
 - Group: correctness
 - Default level: error
-- Profile: default
+- Profile: correctness
 - Details and examples: [checks](./checks.md#check-local-action-checkout)
 
 ## matrix-duplicate-value
@@ -799,7 +804,7 @@ A matrix has a duplicate value.
 
 - Group: correctness
 - Default level: error
-- Profile: default
+- Profile: correctness
 - Details and examples: [checks](./checks.md#check-matrix-values)
 
 ## matrix-invalid-exclude
@@ -808,7 +813,7 @@ An exclude entry of a matrix does not match the matrix.
 
 - Group: correctness
 - Default level: error
-- Profile: default
+- Profile: correctness
 - Details and examples: [checks](./checks.md#check-matrix-values)
 
 ## max-run-lines
@@ -817,7 +822,7 @@ A run: script has more lines than allowed.
 
 - Group: style
 - Default level: error
-- Profile: all
+- Profile: pedantic
 - Option `max` (int, default 100): The maximum number of non-blank lines of a run: script.
 - Details and examples: [checks](./checks.md#check-run-policy)
 
@@ -827,7 +832,7 @@ The YAML merge key << is used, which GitHub Actions does not support.
 
 - Group: correctness
 - Default level: error
-- Profile: default
+- Profile: correctness
 - Details and examples: [checks](./checks.md#yaml-anchors)
 
 ## misfeature
@@ -835,8 +840,8 @@ The YAML merge key << is used, which GitHub Actions does not support.
 A misfeature of GitHub Actions is used: the pip-install input of setup-python or the cmd shell.
 
 - Group: security
-- Default level: warn
-- Profile: strict
+- Default level: error
+- Profile: default
 - Details and examples: [checks](./checks.md#check-misfeature)
 
 ## misfeature-custom-shell
@@ -845,7 +850,7 @@ A shell which GitHub does not document is used.
 
 - Group: style
 - Default level: info
-- Profile: all
+- Profile: pedantic
 - Details and examples: [checks](./checks.md#check-misfeature)
 
 ## missing-action-input
@@ -854,7 +859,7 @@ A required input of an action is not specified.
 
 - Group: correctness
 - Default level: error
-- Profile: default
+- Profile: correctness
 - Details and examples: [checks](./checks.md#check-local-action-inputs)
 
 ## missing-permissions
@@ -863,7 +868,7 @@ Neither the workflow nor the job sets permissions:.
 
 - Group: policy
 - Default level: error
-- Profile: strict
+- Profile: default
 - Fixable: yes
 - Details and examples: [checks](./checks.md#permissions)
 
@@ -884,7 +889,7 @@ A required input of a reusable workflow is not specified.
 
 - Group: correctness
 - Default level: error
-- Profile: default
+- Profile: correctness
 - Details and examples: [checks](./checks.md#check-reusable-workflows)
 
 ## missing-workflow-secret
@@ -893,7 +898,7 @@ A required secret of a reusable workflow is not passed.
 
 - Group: correctness
 - Default level: error
-- Profile: default
+- Profile: correctness
 - Details and examples: [checks](./checks.md#check-reusable-workflows)
 
 ## mutable-runner-label
@@ -902,7 +907,7 @@ A runner label is an alias that GitHub moves to newer images, such as ubuntu-lat
 
 - Group: policy
 - Default level: warn
-- Profile: strict
+- Profile: pedantic
 - Fixable: yes
 - Option `pin` (string-map, no default): Maps a moving label to the fixed label that -fix writes in its place, e.g. ubuntu-latest: ubuntu-24.04. There is no default: without an entry the finding has no fix.
 - Details and examples: [checks](./checks.md#check-mutable-runner-label)
@@ -912,8 +917,8 @@ A runner label is an alias that GitHub moves to newer images, such as ubuntu-lat
 A path at uses: or an expression is written in an obfuscated way.
 
 - Group: security
-- Default level: warn
-- Profile: strict
+- Default level: error
+- Profile: default
 - Fixable: yes
 - Details and examples: [checks](./checks.md#check-obfuscation)
 
@@ -923,7 +928,7 @@ An action runs on a runtime which GitHub Actions no longer supports.
 
 - Group: correctness
 - Default level: error
-- Profile: default
+- Profile: correctness
 - Details and examples: [checks](./checks.md#detect-outdated-popular-actions)
 
 ## overprovisioned-secrets
@@ -931,8 +936,8 @@ An action runs on a runtime which GitHub Actions no longer supports.
 An expression uses the whole secrets context.
 
 - Group: security
-- Default level: warn
-- Profile: strict
+- Default level: error
+- Profile: default
 - Details and examples: [checks](./checks.md#check-overprovisioned-secrets)
 
 ## pipeline-without-pipefail
@@ -951,7 +956,7 @@ pyflakes reported an issue in a Python script.
 
 - Group: correctness
 - Default level: error
-- Profile: default
+- Profile: correctness
 - Details and examples: [checks](./checks.md#check-pyflakes-integ)
 
 ## recursive-alias
@@ -960,7 +965,7 @@ A YAML alias refers to itself.
 
 - Group: correctness
 - Default level: error
-- Profile: default
+- Profile: correctness
 - Details and examples: [checks](./checks.md#yaml-anchors)
 
 ## ref-confusion
@@ -989,7 +994,7 @@ An if: condition is not wrapped in ${{ }}.
 
 - Group: style
 - Default level: error
-- Profile: all
+- Profile: pedantic
 - Details and examples: [checks](./checks.md#check-require-expression-wrapping)
 
 ## require-shell
@@ -998,7 +1003,7 @@ A run: step does not set the shell explicitly.
 
 - Group: style
 - Default level: error
-- Profile: all
+- Profile: pedantic
 - Details and examples: [checks](./checks.md#check-run-policy)
 
 ## required-actions
@@ -1014,7 +1019,7 @@ An action listed in required-actions is not used by a workflow.
 A reusable workflow is called with secrets: inherit.
 
 - Group: security
-- Default level: warn
+- Default level: error
 - Profile: default
 - Details and examples: [checks](./checks.md#check-secrets-inherit)
 
@@ -1024,7 +1029,7 @@ A job uses a secret but has no environment.
 
 - Group: security
 - Default level: warn
-- Profile: all
+- Profile: pedantic
 - Option `allow` (strings, empty by default): Names of secrets which may be used outside of an environment. GITHUB_TOKEN is always allowed.
 - Details and examples: [checks](./checks.md#check-secrets-outside-env)
 
@@ -1034,7 +1039,7 @@ A job runs on a self-hosted runner.
 
 - Group: security
 - Default level: info
-- Profile: all
+- Profile: pedantic
 - Details and examples: [checks](./checks.md#check-self-hosted-runner)
 
 ## self-repository
@@ -1043,7 +1048,7 @@ A local action or workflow is referenced as ./path instead of $/path.
 
 - Group: security
 - Default level: info
-- Profile: strict
+- Profile: pedantic
 - Fixable: yes
 - Details and examples: [checks](./checks.md#check-self-repository)
 
@@ -1053,7 +1058,7 @@ shellcheck reported an issue in a shell script.
 
 - Group: correctness
 - Default level: error
-- Profile: default
+- Profile: correctness
 - Details and examples: [checks](./checks.md#check-shellcheck-integ)
 
 ## stale-action-refs
@@ -1071,9 +1076,9 @@ A hash-pinned action uses a commit which no tag of the repository points to.
 An action does what a tool of the runner image does as well, such as gh release create.
 
 - Group: security
-- Default level: warn
+- Default level: error
 - Profile: default
-- Option `pedantic` (bool, no default): Also report the pedantic checks, which are noisier. Unset, they run under the strict and all profiles.
+- Option `pedantic` (bool, no default): Also report the pedantic checks, which are noisier. Unset, they run under the pedantic profile.
 - Details and examples: [checks](./checks.md#check-superfluous-actions)
 
 ## template-injection
@@ -1082,7 +1087,7 @@ A potentially untrusted input is expanded in a script, a container option or the
 
 - Group: security
 - Default level: error
-- Profile: default
+- Profile: correctness
 - Fixable: yes
 - Details and examples: [checks](./checks.md#untrusted-inputs)
 
@@ -1092,7 +1097,7 @@ A ${{ }} expansion in a script is not an environment variable.
 
 - Group: security
 - Default level: warn
-- Profile: strict
+- Profile: pedantic
 - Fixable: yes
 - Details and examples: [checks](./checks.md#check-template-injection-expansion)
 
@@ -1102,7 +1107,7 @@ A ${{ }} expansion in a script is of a value that an attacker cannot control.
 
 - Group: style
 - Default level: info
-- Profile: all
+- Profile: pedantic
 - Fixable: yes
 - Details and examples: [checks](./checks.md#check-template-injection-expansion)
 
@@ -1121,8 +1126,8 @@ timeout-minutes of a job exceeds the configured maximum.
 An action is one typo away from a popular action of another owner.
 
 - Group: security
-- Default level: warn
-- Profile: strict
+- Default level: error
+- Profile: default
 - Option `allow` (strings, empty by default): Slugs (owner/repo) of actions which are never reported, e.g. a legitimate fork.
 - Details and examples: [checks](./checks.md#check-typosquat-uses)
 
@@ -1132,7 +1137,7 @@ An undefined function is called in an expression.
 
 - Group: correctness
 - Default level: error
-- Profile: default
+- Profile: correctness
 - Details and examples: [checks](./checks.md#check-contexts-and-builtin-func)
 
 ## undefined-job-needs
@@ -1141,7 +1146,7 @@ A job needs a job which does not exist.
 
 - Group: correctness
 - Default level: error
-- Profile: default
+- Profile: correctness
 - Details and examples: [checks](./checks.md#check-job-deps)
 
 ## undefined-property
@@ -1150,7 +1155,7 @@ An undefined variable or property is accessed in an expression.
 
 - Group: correctness
 - Default level: error
-- Profile: default
+- Profile: correctness
 - Details and examples: [checks](./checks.md#check-contexts-and-builtin-func)
 
 ## undocumented-permissions
@@ -1159,7 +1164,7 @@ A permission scope above read has no comment explaining it.
 
 - Group: policy
 - Default level: info
-- Profile: all
+- Profile: pedantic
 - Option `include-read` (bool, default false): Also require a comment for scopes granted with read, except contents: read.
 - Details and examples: [checks](./checks.md#check-undocumented-permissions)
 
@@ -1169,7 +1174,7 @@ An input which the action does not define is specified.
 
 - Group: correctness
 - Default level: error
-- Profile: default
+- Profile: correctness
 - Details and examples: [checks](./checks.md#check-local-action-inputs)
 
 ## unknown-event
@@ -1178,7 +1183,7 @@ An unknown Webhook event is used.
 
 - Group: correctness
 - Default level: error
-- Profile: default
+- Profile: correctness
 - Details and examples: [checks](./checks.md#check-webhook-events)
 
 ## unknown-runner-label
@@ -1187,7 +1192,7 @@ A runner label is unknown.
 
 - Group: correctness
 - Default level: error
-- Profile: default
+- Profile: correctness
 - Details and examples: [checks](./checks.md#check-runner-labels)
 
 ## unknown-workflow-input
@@ -1196,7 +1201,7 @@ An input which the reusable workflow does not define is specified.
 
 - Group: correctness
 - Default level: error
-- Profile: default
+- Profile: correctness
 - Details and examples: [checks](./checks.md#check-reusable-workflows)
 
 ## unknown-workflow-secret
@@ -1205,7 +1210,7 @@ A secret which the reusable workflow does not define is passed.
 
 - Group: correctness
 - Default level: error
-- Profile: default
+- Profile: correctness
 - Details and examples: [checks](./checks.md#check-reusable-workflows)
 
 ## unlocked-install
@@ -1213,10 +1218,10 @@ A secret which the reusable workflow does not define is passed.
 cargo install runs without --locked.
 
 - Group: security
-- Default level: warn
+- Default level: error
 - Profile: default
 - Fixable: yes
-- Option `pedantic` (bool, no default): Also report the pedantic checks, which are noisier. Unset, they run under the strict and all profiles.
+- Option `pedantic` (bool, no default): Also report the pedantic checks, which are noisier. Unset, they run under the pedantic profile.
 - Details and examples: [checks](./checks.md#check-unlocked-install)
 
 ## unpinned-images
@@ -1224,8 +1229,8 @@ cargo install runs without --locked.
 A container or service image is not pinned by a digest.
 
 - Group: security
-- Default level: warn
-- Profile: strict
+- Default level: error
+- Profile: default
 - Option `require-digest` (bool, default true): Report images pinned by a tag other than latest too. Turn it off to report only images without a tag or with the latest tag.
 - Details and examples: [checks](./checks.md#check-unpinned-images)
 
@@ -1234,9 +1239,9 @@ A container or service image is not pinned by a digest.
 An action installs the newest version of its tool because no version is set or it is latest.
 
 - Group: security
-- Default level: warn
+- Default level: error
 - Profile: default
-- Option `pedantic` (bool, no default): Also report the pedantic checks, which are noisier. Unset, they run under the strict and all profiles.
+- Option `pedantic` (bool, no default): Also report the pedantic checks, which are noisier. Unset, they run under the pedantic profile.
 - Details and examples: [checks](./checks.md#check-unpinned-tools)
 
 ## unpinned-uses
@@ -1245,7 +1250,7 @@ An action, reusable workflow or Docker image is not pinned to a commit SHA or di
 
 - Group: policy
 - Default level: error
-- Profile: strict
+- Profile: default
 - Option `policies` (string-map, default empty): How strongly to pin the actions matching a pattern: hash-pin (full commit SHA, the default for everything), ref-pin (any tag, branch or SHA) or any. The most specific pattern wins. Patterns are "*", "owner/*", "owner/repo" and "owner/repo/path". Docker images follow the "*" policy.
 - Details and examples: [checks](./checks.md#check-action-format)
 
@@ -1254,8 +1259,8 @@ An action, reusable workflow or Docker image is not pinned to a commit SHA or di
 A secret is parsed with fromJSON(), so the fields of it are not redacted in logs.
 
 - Group: security
-- Default level: warn
-- Profile: strict
+- Default level: error
+- Profile: default
 - Details and examples: [checks](./checks.md#check-unredacted-secrets)
 
 ## unsound-contains
@@ -1263,7 +1268,7 @@ A secret is parsed with fromJSON(), so the fields of it are not redacted in logs
 A condition uses contains() on a string literal, which also matches substrings.
 
 - Group: security
-- Default level: warn
+- Default level: error
 - Profile: default
 - Details and examples: [checks](./checks.md#check-unsound-contains)
 
@@ -1283,7 +1288,7 @@ The a && b || c idiom has a falsy b so it always evaluates to c.
 
 - Group: correctness
 - Default level: error
-- Profile: default
+- Profile: correctness
 - Details and examples: [checks](./checks.md#check-falsy-ternary)
 
 ## untrusted-artifact
@@ -1310,7 +1315,7 @@ A YAML anchor is defined but never used.
 
 - Group: correctness
 - Default level: error
-- Profile: default
+- Profile: correctness
 - Details and examples: [checks](./checks.md#yaml-anchors)
 
 ## unused-baseline-entry
@@ -1319,7 +1324,7 @@ A baseline entry matches no finding any more, so the baseline can shrink.
 
 - Group: policy
 - Default level: info
-- Profile: default
+- Profile: correctness
 
 ## unused-ignore
 
@@ -1327,14 +1332,14 @@ An ignore comment or an entry of "ignores" in the config file did not suppress a
 
 - Group: policy
 - Default level: error
-- Profile: strict
+- Profile: pedantic
 
 ## unused-job-output
 
 An output of a job is never read by another job or by a workflow_call output.
 
 - Group: policy
-- Default level: warn
+- Default level: error
 - Profile: default
 - Details and examples: [checks](./checks.md#check-unused-job-output)
 
@@ -1344,7 +1349,7 @@ A needs entry is neither read by the job nor needed for the order of jobs.
 
 - Group: style
 - Default level: info
-- Profile: strict
+- Profile: pedantic
 - Details and examples: [checks](./checks.md#check-unused-needs)
 
 ## unused-workflow-input
@@ -1353,7 +1358,7 @@ An input of workflow_dispatch or workflow_call is never used.
 
 - Group: policy
 - Default level: warn
-- Profile: strict
+- Profile: pedantic
 - Details and examples: [checks](./checks.md#check-unused-workflow-input)
 
 ## unverified-download
@@ -1371,7 +1376,7 @@ A script runs what it downloads without verifying it.
 A package is published with a long-lived credential although the registry supports trusted publishing.
 
 - Group: security
-- Default level: warn
+- Default level: error
 - Profile: default
 - Details and examples: [checks](./checks.md#check-use-trusted-publishing)
 
@@ -1381,7 +1386,7 @@ A caller job grants fewer permissions than a reusable workflow requires.
 
 - Group: correctness
 - Default level: error
-- Profile: default
+- Profile: correctness
 - Details and examples: [checks](./checks.md#check-reusable-workflows)
 
 ## workflow-input-type
@@ -1390,7 +1395,7 @@ The type of a value passed to a reusable workflow does not match its input.
 
 - Group: correctness
 - Default level: error
-- Profile: default
+- Profile: correctness
 - Details and examples: [checks](./checks.md#check-reusable-workflows)
 
 ## workflow-run-names
@@ -1399,7 +1404,7 @@ A workflow_run event refers to a workflow which does not exist in the repository
 
 - Group: correctness
 - Default level: error
-- Profile: default
+- Profile: correctness
 - Details and examples: [checks](./checks.md#check-workflow-run-names)
 
 ## workflow-syntax
@@ -1408,7 +1413,7 @@ The workflow does not follow the syntax of GitHub Actions workflows.
 
 - Group: correctness
 - Default level: error
-- Profile: default
+- Profile: correctness
 - Details and examples: [checks](./checks.md#check-unexpected-keys)
 
 ## yaml-syntax
@@ -1417,4 +1422,4 @@ The file is not valid YAML.
 
 - Group: correctness
 - Default level: error
-- Profile: default
+- Profile: correctness

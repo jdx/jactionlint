@@ -134,7 +134,7 @@ func lintAgentTest(t *testing.T, src string, enable ...string) []*Error {
 	if err != nil {
 		t.Fatal(err)
 	}
-	l.defaultConfig = fixtureConfig(enable...)
+	l.defaultConfig = fixtureConfig(append([]string{"agentic-actions"}, enable...)...)
 	errs, err := l.Lint("test.yaml", []byte(src), nil)
 	if err != nil {
 		t.Fatal(err)

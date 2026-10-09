@@ -19,7 +19,14 @@ func lintTimeoutCheck(t *testing.T, src string, cfg *Config) []*Error {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return errs
+	// Only the rule of this test: the profile of the configuration decides which other rules run
+	var ret []*Error
+	for _, e := range errs {
+		if e.Kind == "timeout-check" {
+			ret = append(ret, e)
+		}
+	}
+	return ret
 }
 
 func TestRuleTimeoutCheck(t *testing.T) {
@@ -34,8 +41,9 @@ func TestRuleTimeoutCheck(t *testing.T) {
 		cfg  *Config
 		want []string // substrings of messages, in order of lines
 	}{
-		{"nil config is the default profile", nil, []string{`"timeout-minutes" is not set at this job`}},
-		{"default profile requires the key", &Config{}, []string{`"timeout-minutes" is not set at this job`}},
+		{"nil config does not require the key under the correctness profile", nil, nil},
+		{"the correctness profile does not require the key", &Config{Profile: ProfileCorrectness}, nil},
+		{"default profile requires the key", &Config{Profile: ProfileDefault}, []string{`"timeout-minutes" is not set at this job`}},
 		{"the rule can be turned off", mustParseConfig(t, "rules:\n  missing-timeout: off\n"), nil},
 		{
 			"required",

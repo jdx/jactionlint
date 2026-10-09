@@ -90,7 +90,7 @@ func (rule *RuleUnusedNeeds) impliesSuccess(b, a string, seen map[string]bool) b
 
 func init() {
 	registerRules(
-		RuleInfo{ID: "unused-needs", Group: RuleGroupStyle, Summary: "A needs entry is neither read by the job nor needed for the order of jobs.", DefaultLevel: SeverityInfo, Profile: ProfileStrict, DocsAnchor: "check-unused-needs"},
+		RuleInfo{ID: "unused-needs", Group: RuleGroupStyle, Summary: "A needs entry is neither read by the job nor needed for the order of jobs.", DefaultLevel: SeverityInfo, Profile: ProfilePedantic, DocsAnchor: "check-unused-needs"},
 	)
 	registerRuleFactory("unused-needs", func(env *RuleEnv) []Rule {
 		return []Rule{NewRuleUnusedNeeds()}

@@ -168,9 +168,9 @@ func TestDependabotCooldownMinimum(t *testing.T) {
 	if len(errs) != 2 || errs[0].Line != 3 || errs[1].Line != 13 {
 		t.Fatal(errs)
 	}
-	// The profile "default" enables the rule at warning level
-	errs = lintDependabot(t, src, &Config{}, nil)
-	if len(errs) != 1 || errs[0].Severity != SeverityWarning {
+	// The profile "default" enables the rule at error level
+	errs = lintDependabot(t, src, defaultProfileConfig(), nil)
+	if len(errs) != 1 || errs[0].Severity != SeverityError {
 		t.Fatal(errs)
 	}
 	// And the rule can be turned off
@@ -182,7 +182,7 @@ func TestDependabotCooldownMinimum(t *testing.T) {
 func TestDependabotExecutionFix(t *testing.T) {
 	for _, value := range []string{"allow", `"allow"`, `'allow'`} {
 		src := "version: 2\nupdates:\n  - package-ecosystem: pip\n    directory: /\n    schedule:\n      interval: weekly\n    cooldown:\n      default-days: 7\n    insecure-external-code-execution: " + value + " # needed\n"
-		cfg := &Config{}
+		cfg := defaultProfileConfig()
 		errs := lintDependabot(t, src, cfg, nil)
 		if len(errs) != 1 || errs[0].ID != "dependabot-execution" || errs[0].Severity != SeverityError {
 			t.Fatalf("%s: %v", value, errs)
@@ -207,7 +207,7 @@ func TestDependabotExecutionFix(t *testing.T) {
 func TestDependabotMissingActionsUpdate(t *testing.T) {
 	const withoutActions = "version: 2\nupdates:\n  - package-ecosystem: npm\n    directory: /\n    schedule:\n      interval: weekly\n"
 	const withActions = withoutActions + "  - package-ecosystem: github-actions\n    directory: /\n    schedule:\n      interval: weekly\n"
-	cfg := &Config{Profile: ProfileStrict, Rules: map[string]RuleConfig{"dependabot-cooldown": {Level: SeverityOff}}}
+	cfg := &Config{Profile: ProfilePedantic, Rules: map[string]RuleConfig{"dependabot-cooldown": {Level: SeverityOff}}}
 
 	newProject := func(t *testing.T, files map[string]string) *Project {
 		t.Helper()
@@ -286,6 +286,7 @@ func TestDependabotFixesOfSeveralUpdates(t *testing.T) {
 		"  - package-ecosystem: pip\n    directory: /\n    schedule: {interval: weekly}\n    cooldown:\n      default-days: 9\n    insecure-external-code-execution: deny\n" +
 		"  - package-ecosystem: cargo\n    directory: /\n    schedule: {interval: weekly}\n    cooldown:\n      default-days: 9\n      semver-major-days: 5\n"
 	cfg := cooldownConfig(map[string]any{"default-days": 9})
+	cfg.Rules["dependabot-execution"] = RuleConfig{Level: SeverityError}
 	errs := lintDependabot(t, src, cfg, nil)
 	if len(errs) != 4 {
 		t.Fatal(errs)
@@ -307,7 +308,7 @@ func TestDependabotFixesOfSeveralUpdates(t *testing.T) {
 func TestFixRepositoryFixesDependabot(t *testing.T) {
 	src := "version: 2\nupdates:\n  - package-ecosystem: npm\n    directory: /\n    schedule:\n      interval: weekly\n    insecure-external-code-execution: allow\n"
 	root := makeDependabotProject(t, map[string]string{"dependabot.yml": src},
-		"rules:\n  dependabot-cooldown:\n    default-days: 7\n")
+		"rules:\n  dependabot-execution: error\n  dependabot-cooldown:\n    default-days: 7\n")
 	l, err := NewLinter(io.Discard, &LinterOptions{WorkingDir: root})
 	if err != nil {
 		t.Fatal(err)

@@ -384,7 +384,7 @@ func publishingReason(steps []*Step) string {
 
 func init() {
 	registerRules(
-		RuleInfo{ID: "cache-poisoning", Group: RuleGroupSecurity, Summary: "A cache is restored in a release job or written by a privileged trigger.", DefaultLevel: SeverityWarning, Profile: ProfileStrict, DocsAnchor: "check-cache-poisoning"},
+		RuleInfo{ID: "cache-poisoning", Group: RuleGroupSecurity, Summary: "A cache is restored in a release job or written by a privileged trigger.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-cache-poisoning"},
 	)
 	registerRuleFactory("cache-poisoning", func(env *RuleEnv) []Rule {
 		return []Rule{NewRuleCachePoisoning()}

@@ -173,7 +173,7 @@ func TestInvisibleCharactersOtherFiles(t *testing.T) {
 		t.Errorf("the rule is off but reported %v", got)
 	}
 	// It is on by default
-	l := lintFileWithConfig(t, nil, "ci.yaml", wfWithRun("echo \u200b"))
+	l := lintFileWithConfig(t, defaultProfileConfig(), "ci.yaml", wfWithRun("echo \u200b"))
 	if len(errsWithID(l, "invisible-characters")) != 1 {
 		t.Errorf("want a finding with the default configuration: %v", l)
 	}

@@ -293,7 +293,7 @@ func (rule *RuleUseTrustedPublishing) checkAction(e *ExecAction) {
 
 func init() {
 	registerRules(
-		RuleInfo{ID: "use-trusted-publishing", Group: RuleGroupSecurity, Summary: "A package is published with a long-lived credential although the registry supports trusted publishing.", DefaultLevel: SeverityWarning, Profile: ProfileDefault, DocsAnchor: "check-use-trusted-publishing"},
+		RuleInfo{ID: "use-trusted-publishing", Group: RuleGroupSecurity, Summary: "A package is published with a long-lived credential although the registry supports trusted publishing.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-use-trusted-publishing"},
 	)
 	registerRuleFactory("use-trusted-publishing", func(env *RuleEnv) []Rule {
 		if !env.config.RuleEnabled("use-trusted-publishing") {

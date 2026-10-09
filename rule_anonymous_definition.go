@@ -167,7 +167,7 @@ func (rule *RuleAnonymousDefinition) deriveName(n *Workflow) string {
 
 func init() {
 	registerRules(
-		RuleInfo{ID: "anonymous-definition", Group: RuleGroupPolicy, Summary: "A workflow has no top-level name:.", DefaultLevel: SeverityWarning, Profile: ProfileStrict, Fixable: true, DocsAnchor: "check-anonymous-definition"},
+		RuleInfo{ID: "anonymous-definition", Group: RuleGroupPolicy, Summary: "A workflow has no top-level name:.", DefaultLevel: SeverityWarning, Profile: ProfilePedantic, Fixable: true, DocsAnchor: "check-anonymous-definition"},
 	)
 	registerRuleFactory("anonymous-definition", func(env *RuleEnv) []Rule {
 		if !env.config.RuleEnabled("anonymous-definition") {

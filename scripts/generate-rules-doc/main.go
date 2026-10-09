@@ -53,13 +53,18 @@ Each rule has:
 - a **group**: ` + "`correctness`" + ` (mistakes which make a workflow fail or misbehave), ` + "`security`" + ` (insecure constructs), ` + "`policy`" + `
   (good practices which are not mistakes by themselves) or ` + "`style`" + `.
 - a **default level**: ` + "`error`" + `, ` + "`warn`" + ` or ` + "`info`" + `. Only errors make jactionlint exit with status 1 unless ` + "`-strict-exit`" + ` is given.
-- a **profile**: the first [profile](./config.md#profiles) which enables the rule. ` + "`default`" + ` is used when no profile is configured, and
-  ` + "`strict`" + ` and ` + "`all`" + ` include the rules of the profiles before them. Rules which no profile enables run only when the
-  configuration turns them on.
+- a **profile**: the first [profile](./config.md#profiles) which enables the rule. There are three, and each includes the rules
+  of the one before it: ` + "`correctness`" + ` (what actionlint checks and the bug detectors of jactionlint), ` + "`default`" + ` (adds the
+  security posture and policy rules, and is used when no profile is configured) and ` + "`pedantic`" + ` (adds the noisy and opinionated
+  rules). Rules which no profile enables run only when the configuration turns them on, and the rules marked "only with
+  ` + "`-online`" + `" run with that flag whatever the profile is. The profile comes from the ` + "`profile`" + ` key of the configuration or the
+  ` + "`-profile`" + ` flag.
+- a **pedantic option**: a few audits report their noisier findings too when the option ` + "`pedantic`" + ` is true. It is true under
+  the ` + "`pedantic`" + ` profile and false otherwise, and ` + "`rules: {<id>: {pedantic: true}}`" + ` turns it on for one audit.
 
 ` + "```yaml" + `
 # .github/jactionlint.yaml
-profile: strict
+profile: pedantic
 rules:
   unpinned-uses: warn # lower the level
   require-shell: off # turn a rule off

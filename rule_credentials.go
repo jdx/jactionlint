@@ -45,7 +45,7 @@ func (rule *RuleCredentials) checkContainer(where string, n *Container) {
 
 func init() {
 	registerRules(
-		RuleInfo{ID: "hardcoded-container-credentials", Group: RuleGroupSecurity, Summary: "A password for a container registry is written directly in the workflow.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-hardcoded-credentials"},
+		RuleInfo{ID: "hardcoded-container-credentials", Group: RuleGroupSecurity, Summary: "A password for a container registry is written directly in the workflow.", DefaultLevel: SeverityError, Profile: ProfileCorrectness, DocsAnchor: "check-hardcoded-credentials"},
 	)
 	registerRuleFactory("credentials", func(env *RuleEnv) []Rule {
 		return []Rule{NewRuleCredentials()}

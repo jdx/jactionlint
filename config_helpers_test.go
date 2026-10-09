@@ -73,10 +73,10 @@ func withFixtureRules(c *Config) *Config {
 }
 
 // withoutMissingTimeout turns off the missing-timeout rule, which the default profile enables, unless the
-// config sets it explicitly or selects the strict or all profile, which test it on purpose. Tests whose workflows do not set timeout-minutes use it to look at
+// config sets it explicitly or selects the pedantic profile, which tests it on purpose. Tests whose workflows do not set timeout-minutes use it to look at
 // the rule they are about.
 func withoutMissingTimeout(c *Config) *Config {
-	if c.Profile == ProfileStrict || c.Profile == ProfileAll {
+	if c.Profile == ProfilePedantic {
 		return c
 	}
 	if c.Rules == nil {
@@ -105,4 +105,19 @@ func fixtureConfigFile(t testing.TB, path string) *Config {
 		t.Fatalf("invalid configuration %q: %v", path, err)
 	}
 	return withFixtureRules(c)
+}
+
+// withDefaultProfile makes the configurations which set no profile use the real default profile for the
+// rest of the test. The other tests run with the correctness profile, see TestMain.
+func withDefaultProfile(t *testing.T) {
+	t.Helper()
+	prev := implicitProfile
+	implicitProfile = ProfileDefault
+	t.Cleanup(func() { implicitProfile = prev })
+}
+
+// defaultProfileConfig is a configuration which selects the default profile, for the tests of the rules
+// which the profile of the other tests (see TestMain) does not enable.
+func defaultProfileConfig() *Config {
+	return &Config{Profile: ProfileDefault}
 }

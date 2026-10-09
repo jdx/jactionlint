@@ -91,7 +91,7 @@ jobs:
       - uses: actions/checkout@v4
 `
 
-const ignoreConfigHead = "profile: strict\n"
+const ignoreConfigHead = "profile: pedantic\n"
 
 func unpinnedAt(errs []*Error) []int {
 	var lines []int
@@ -258,7 +258,7 @@ func TestConfigIgnoreUnused(t *testing.T) {
 	}
 
 	// The default profile does not enable unused-ignore
-	cfg = strings.Replace(cfg, "profile: strict", "profile: default", 1)
+	cfg = strings.Replace(cfg, "profile: pedantic", "profile: default", 1)
 	root = ignoreProject(t, cfg, map[string]string{"ci.yaml": ignoreWorkflow})
 	if got := ofRule(lintIgnoreProject(t, root, fixedNow), "unused-ignore"); len(got) != 0 {
 		t.Errorf("unused-ignore is a strict rule: %v", got)

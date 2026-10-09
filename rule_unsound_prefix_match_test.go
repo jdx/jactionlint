@@ -150,7 +150,7 @@ func TestUnsoundPrefixMatchSites(t *testing.T) {
 	src := "on: push\njobs:\n  a:\n    runs-on: ${{ startsWith(github.repository, 'jdx') && 'self-hosted' || 'ubuntu-latest' }}\n    env:\n      GOOS: ${{ contains(github.repository, 'windows_exporter') && 'windows' || '' }}\n      TRUSTED: ${{ startsWith(github.actor, 'jdx') }}\n    steps:\n      - uses: actions/checkout@v4\n        with:\n          token: ${{ startsWith(github.actor, 'jdx') && secrets.TOKEN }}\n      - run: echo\n        env:\n          T: ${{ endsWith(github.repository, '/x') && github.token || '' }}\n"
 	wantLines(t, lintFileWithConfig(t, cfg, "ci.yaml", src), "unsound-prefix-match", 4, 11, 14)
 	// On by default
-	if got := errsWithID(lintFileWithConfig(t, nil, "ci.yaml", prefixSrc("startsWith(github.actor, 'jdx')")), "unsound-prefix-match"); len(got) != 1 {
+	if got := errsWithID(lintFileWithConfig(t, defaultProfileConfig(), "ci.yaml", prefixSrc("startsWith(github.actor, 'jdx')")), "unsound-prefix-match"); len(got) != 1 {
 		t.Errorf("want a finding with the default configuration: %v", got)
 	}
 }

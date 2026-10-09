@@ -53,9 +53,15 @@ func (c *Config) RuleRuns(id string, online bool) bool {
 	return c.RuleEnabled(id)
 }
 
+// implicitProfile is the profile of a configuration which sets none. It is ProfileDefault. It is a variable
+// only so that the tests of the individual rules can run the way they were written, one rule at a time,
+// without every sample workflow also being judged on pinning and permissions: the tests set it to
+// ProfileCorrectness in TestMain, and the test of the default restores it.
+var implicitProfile = ProfileDefault
+
 func (c *Config) profile() Profile {
 	if c == nil || c.Profile == "" {
-		return ProfileDefault
+		return implicitProfile
 	}
 	return c.Profile
 }

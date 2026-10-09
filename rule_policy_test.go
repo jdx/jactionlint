@@ -402,17 +402,17 @@ func TestPolicyRulesAreOffByDefault(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, e := range lintWithConfig(t, withFixtureRules(&Config{}), string(src)) {
+	for _, e := range lintWithConfig(t, withFixtureRules(&Config{Profile: ProfileCorrectness}), string(src)) {
 		for _, id := range policyRuleIDs {
 			if e.ID == id {
 				t.Errorf("%s is reported with the default profile: %s", id, e.Error())
 			}
 		}
 	}
-	// ... and the strict profile enables them
-	cfg := withFixtureRules(&Config{Profile: ProfileStrict})
+	// ... and the default profile enables them, except the ones of the pedantic profile
+	cfg := withFixtureRules(&Config{Profile: ProfileDefault})
 	seen := map[string]bool{}
-	for _, f := range []string{"artipacked", "cache_poisoning_release", "excessive_permissions", "unpinned_images", "self_repository", "github_app"} {
+	for _, f := range []string{"artipacked", "cache_poisoning_release", "excessive_permissions", "unpinned_images", "github_app"} {
 		b, err := os.ReadFile(filepath.Join("testdata", "policy", f+".yaml"))
 		if err != nil {
 			t.Fatal(err)
@@ -421,21 +421,31 @@ func TestPolicyRulesAreOffByDefault(t *testing.T) {
 			seen[e.ID] = true
 		}
 	}
-	for _, id := range []string{"artipacked", "cache-poisoning", "excessive-permissions", "unpinned-images", "self-repository", "github-app"} {
+	for _, id := range []string{"artipacked", "cache-poisoning", "excessive-permissions", "unpinned-images", "github-app"} {
 		if !seen[id] {
-			t.Errorf("%s is not enabled by the strict profile", id)
+			t.Errorf("%s is not enabled by the default profile", id)
 		}
 	}
-	// undocumented-permissions is pedantic: only the all profile enables it
-	b, err := os.ReadFile(filepath.Join("testdata", "policy", "undocumented_permissions.yaml"))
+	b, err := os.ReadFile(filepath.Join("testdata", "policy", "self_repository.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n := len(policyErrorsOf(lintWithConfig(t, cfg, string(b)), "self-repository")); n != 0 {
+		t.Errorf("self-repository is reported with the default profile")
+	}
+	if n := len(policyErrorsOf(lintWithConfig(t, withFixtureRules(&Config{Profile: ProfilePedantic}), string(b)), "self-repository")); n == 0 {
+		t.Errorf("self-repository is not enabled by the pedantic profile")
+	}
+	// undocumented-permissions is pedantic: only the pedantic profile enables it
+	b, err = os.ReadFile(filepath.Join("testdata", "policy", "undocumented_permissions.yaml"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if n := len(policyErrorsOf(lintWithConfig(t, cfg, string(b)), "undocumented-permissions")); n != 0 {
-		t.Errorf("undocumented-permissions is reported with the strict profile")
+		t.Errorf("undocumented-permissions is reported with the default profile")
 	}
-	if n := len(policyErrorsOf(lintWithConfig(t, withFixtureRules(&Config{Profile: ProfileAll}), string(b)), "undocumented-permissions")); n == 0 {
-		t.Errorf("undocumented-permissions is not enabled by the all profile")
+	if n := len(policyErrorsOf(lintWithConfig(t, withFixtureRules(&Config{Profile: ProfilePedantic}), string(b)), "undocumented-permissions")); n == 0 {
+		t.Errorf("undocumented-permissions is not enabled by the pedantic profile")
 	}
 }
 

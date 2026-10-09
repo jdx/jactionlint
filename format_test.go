@@ -229,7 +229,7 @@ func TestInvalidFormat(t *testing.T) {
 	}
 	// The templates keep working, including the ones using the new functions
 	out, _ := lintFormat(t, `{{range $r := allRules}}{{if eq $r.ID "unpinned-uses"}}{{$r.ID}} {{$r.Group}} {{$r.DefaultLevel}} {{$r.Profile}} {{$r.URL}} {{$r.Name}}{{end}}{{end}}`, LinterOptions{}, nil, formatTestFile)
-	if want := "unpinned-uses policy error strict https://jactionlint.jdx.dev/rules#unpinned-uses UnpinnedUses"; out != want {
+	if want := "unpinned-uses policy error default https://jactionlint.jdx.dev/rules#unpinned-uses UnpinnedUses"; out != want {
 		t.Errorf("want %q but got %q", want, out)
 	}
 	out, _ = lintFormat(t, `{{range .}}{{.ID}}:{{.Severity}}:{{.EndLine}} {{end}}`, LinterOptions{}, nil, formatTestFile)

@@ -68,7 +68,7 @@ func onlyRunsLabeler(n *Workflow) bool {
 
 func init() {
 	registerRules(
-		RuleInfo{ID: "dangerous-triggers", Group: RuleGroupSecurity, Summary: "A workflow uses pull_request_target, workflow_run or issue_comment.", DefaultLevel: SeverityWarning, Profile: ProfileStrict, DocsAnchor: "check-dangerous-triggers"},
+		RuleInfo{ID: "dangerous-triggers", Group: RuleGroupSecurity, Summary: "A workflow uses pull_request_target, workflow_run or issue_comment.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-dangerous-triggers"},
 	)
 	registerRuleFactory("dangerous-triggers", func(env *RuleEnv) []Rule {
 		if !env.config.RuleEnabled("dangerous-triggers") {

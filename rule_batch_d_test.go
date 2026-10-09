@@ -423,12 +423,12 @@ func TestBatchDPedanticOption(t *testing.T) {
 			t.Errorf("%s: no pedantic finding with the option", id)
 		}
 		strict := on(nil)
-		strict.Profile = ProfileStrict
+		strict.Profile = ProfilePedantic
 		if n := count(strict, id); n == 0 {
 			t.Errorf("%s: no pedantic finding under the strict profile", id)
 		}
 		strictOff := on(map[string]any{"pedantic": false})
-		strictOff.Profile = ProfileStrict
+		strictOff.Profile = ProfilePedantic
 		if n := count(strictOff, id); n != 0 {
 			t.Errorf("%s: %d pedantic findings with pedantic: false under the strict profile", id, n)
 		}

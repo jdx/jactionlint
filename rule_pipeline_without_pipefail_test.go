@@ -15,7 +15,7 @@ func lintPipefail(t *testing.T, src string) []*Error {
 	if err != nil {
 		t.Fatal(err)
 	}
-	l.defaultConfig = fixtureConfig()
+	l.defaultConfig = fixtureConfig("pipeline-without-pipefail")
 	errs, err := l.Lint("test.yaml", []byte(src), nil)
 	if err != nil {
 		t.Fatal(err)
@@ -272,7 +272,7 @@ func TestRulePipelineWithoutPipefailFix(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				l.defaultConfig = fixtureConfig()
+				l.defaultConfig = fixtureConfig("pipeline-without-pipefail")
 				return l
 			}
 
@@ -323,7 +323,7 @@ func TestRulePipelineWithoutPipefailFixIsUnsafe(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	l.defaultConfig = fixtureConfig()
+	l.defaultConfig = fixtureConfig("pipeline-without-pipefail")
 	errs, err := l.Lint("test.yaml", []byte(pipefailWorkflow("", "run: |\n          make | tee out\n")), nil)
 	if err != nil {
 		t.Fatal(err)

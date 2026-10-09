@@ -95,8 +95,8 @@ func countScriptLines(s string) int {
 
 func init() {
 	registerRules(
-		RuleInfo{ID: "max-run-lines", Group: RuleGroupStyle, Summary: "A run: script has more lines than allowed.", DefaultLevel: SeverityError, Profile: ProfileAll, DocsAnchor: "check-run-policy", Options: []RuleOption{{Name: "max", Kind: RuleOptionInt, Default: DefaultMaxRunLines, Summary: "The maximum number of non-blank lines of a run: script."}}},
-		RuleInfo{ID: "require-shell", Group: RuleGroupStyle, Summary: "A run: step does not set the shell explicitly.", DefaultLevel: SeverityError, Profile: ProfileAll, DocsAnchor: "check-run-policy"},
+		RuleInfo{ID: "max-run-lines", Group: RuleGroupStyle, Summary: "A run: script has more lines than allowed.", DefaultLevel: SeverityError, Profile: ProfilePedantic, DocsAnchor: "check-run-policy", Options: []RuleOption{{Name: "max", Kind: RuleOptionInt, Default: DefaultMaxRunLines, Summary: "The maximum number of non-blank lines of a run: script."}}},
+		RuleInfo{ID: "require-shell", Group: RuleGroupStyle, Summary: "A run: step does not set the shell explicitly.", DefaultLevel: SeverityError, Profile: ProfilePedantic, DocsAnchor: "check-run-policy"},
 	)
 	registerRuleFactory("run-policy", func(env *RuleEnv) []Rule {
 		return []Rule{NewRuleRunPolicy()}

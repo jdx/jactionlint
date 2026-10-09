@@ -180,7 +180,7 @@ func (rule *RuleShellName) getPlatformFromRunner(runner *Runner) platformKind {
 
 func init() {
 	registerRules(
-		RuleInfo{ID: "invalid-shell-name", Group: RuleGroupCorrectness, Summary: "A shell name is not available on the runner.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-shell-names"},
+		RuleInfo{ID: "invalid-shell-name", Group: RuleGroupCorrectness, Summary: "A shell name is not available on the runner.", DefaultLevel: SeverityError, Profile: ProfileCorrectness, DocsAnchor: "check-shell-names"},
 	)
 	registerRuleFactory("shell-name", func(env *RuleEnv) []Rule {
 		return []Rule{NewRuleShellName()}

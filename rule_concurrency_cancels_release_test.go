@@ -80,7 +80,7 @@ func TestRuleConcurrencyCancelsRelease(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.what, func(t *testing.T) {
-			checkLines(t, lintBatchH(t, "", tc.src, "concurrency-cancels-release"), tc.want...)
+			checkLines(t, lintBatchH(t, "rules:\n  concurrency-cancels-release: error\n", tc.src, "concurrency-cancels-release"), tc.want...)
 		})
 	}
 }
@@ -101,7 +101,7 @@ func TestRuleConcurrencyCancelsReleaseFix(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.what, func(t *testing.T) {
 			src := head + "  " + tc.cancel + "\n" + tail
-			errs := lintBatchH(t, "", src, "concurrency-cancels-release")
+			errs := lintBatchH(t, "rules:\n  concurrency-cancels-release: error\n", src, "concurrency-cancels-release")
 			if len(errs) != 1 {
 				t.Fatalf("want 1 error but got %v", errs)
 			}
@@ -126,7 +126,7 @@ func TestRuleConcurrencyCancelsReleaseFix(t *testing.T) {
 			if string(out) != want {
 				t.Errorf("want\n%s\nbut got\n%s", want, out)
 			}
-			if again := lintBatchH(t, "", string(out), "concurrency-cancels-release"); len(again) != 0 {
+			if again := lintBatchH(t, "rules:\n  concurrency-cancels-release: error\n", string(out), "concurrency-cancels-release"); len(again) != 0 {
 				t.Errorf("the fixed workflow is still reported: %v", again)
 			}
 			if strings.Contains(string(out), "true") && !strings.Contains(tc.want, "true") {
@@ -139,7 +139,7 @@ func TestRuleConcurrencyCancelsReleaseFix(t *testing.T) {
 func TestRuleConcurrencyCancelsReleaseFixFlowAndCRLF(t *testing.T) {
 	for _, nl := range []string{"\n", "\r\n"} {
 		src := strings.ReplaceAll("on:\n  release:\nconcurrency: {group: release, cancel-in-progress: true}\njobs:\n  t:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo\n", "\n", nl)
-		errs := lintBatchH(t, "", src, "concurrency-cancels-release")
+		errs := lintBatchH(t, "rules:\n  concurrency-cancels-release: error\n", src, "concurrency-cancels-release")
 		if len(errs) != 1 || errs[0].Fix == nil {
 			t.Fatalf("want one fixable error but got %v", errs)
 		}

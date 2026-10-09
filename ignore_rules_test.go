@@ -133,7 +133,7 @@ jobs:
       - run: echo
       # jactionlint ignore=invalid-glob
 `
-	strict := mustParseConfig(t, "profile: strict\nrules:\n  missing-permissions: off\n  missing-timeout: off\n")
+	strict := mustParseConfig(t, "profile: pedantic\nrules:\n  missing-permissions: off\n  missing-timeout: off\n")
 
 	var got []*Error
 	l, err := NewLinter(io.Discard, &LinterOptions{})
@@ -201,7 +201,7 @@ jobs:
 
 	// An ignore of -ignore or "paths" suppresses an error first but the inline pattern still counts as used
 	l, _ = NewLinter(io.Discard, &LinterOptions{IgnorePatterns: []string{"template-injection"}})
-	l.defaultConfig = mustParseConfig(t, "profile: strict\nrules:\n  missing-permissions: off\n  missing-timeout: off\n  require-shell: off\n")
+	l.defaultConfig = mustParseConfig(t, "profile: pedantic\nrules:\n  missing-permissions: off\n  missing-timeout: off\n  require-shell: off\n")
 	got, _ = l.Lint("test.yaml", []byte(src), nil)
 	for _, e := range got {
 		if e.ID == "unused-ignore" && e.Line == 6 && e.Column == 28 {

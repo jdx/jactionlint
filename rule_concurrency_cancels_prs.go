@@ -148,7 +148,7 @@ func groupDiffersPerPullRequest(refs []exprRef, event string) bool {
 
 func init() {
 	registerRules(
-		RuleInfo{ID: "concurrency-cancels-prs", Group: RuleGroupCorrectness, Summary: "A concurrency group that cancels runs is shared by all pull requests, so unrelated pull requests cancel each other.", DefaultLevel: SeverityWarning, Profile: ProfileDefault, DocsAnchor: "check-concurrency-cancels-prs"},
+		RuleInfo{ID: "concurrency-cancels-prs", Group: RuleGroupCorrectness, Summary: "A concurrency group that cancels runs is shared by all pull requests, so unrelated pull requests cancel each other.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-concurrency-cancels-prs"},
 	)
 	registerRuleFactory("concurrency-cancels-prs", func(env *RuleEnv) []Rule {
 		return []Rule{NewRuleConcurrencyCancelsPRs()}

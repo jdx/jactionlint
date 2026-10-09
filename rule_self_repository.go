@@ -79,7 +79,7 @@ func (rule *RuleSelfRepository) VisitJobPre(n *Job) error {
 
 func init() {
 	registerRules(
-		RuleInfo{ID: "self-repository", Group: RuleGroupSecurity, Summary: "A local action or workflow is referenced as ./path instead of $/path.", DefaultLevel: SeverityInfo, Profile: ProfileStrict, Fixable: true, DocsAnchor: "check-self-repository"},
+		RuleInfo{ID: "self-repository", Group: RuleGroupSecurity, Summary: "A local action or workflow is referenced as ./path instead of $/path.", DefaultLevel: SeverityInfo, Profile: ProfilePedantic, Fixable: true, DocsAnchor: "check-self-repository"},
 	)
 	registerRuleFactory("self-repository", func(env *RuleEnv) []Rule {
 		return []Rule{NewRuleSelfRepository(env.Source())}

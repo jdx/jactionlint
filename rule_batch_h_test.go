@@ -23,7 +23,7 @@ var batchHFixtureOffRules = []string{
 }
 
 // pedanticCfg selects the profile with the pedantic rules of batch H.
-const pedanticCfg = "profile: strict\n"
+const pedanticCfg = "profile: pedantic\n"
 
 // lintBatchH lints the workflow with the configuration (YAML, "" for the default one) and returns
 // the errors with the ID given. An empty id returns all of them.

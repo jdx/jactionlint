@@ -62,7 +62,7 @@ func (rule *RuleGitHubApp) VisitStep(n *Step) error {
 
 func init() {
 	registerRules(
-		RuleInfo{ID: "github-app", Group: RuleGroupSecurity, Summary: "A GitHub App token is issued with more access or a longer life than needed.", DefaultLevel: SeverityWarning, Profile: ProfileStrict, DocsAnchor: "check-github-app"},
+		RuleInfo{ID: "github-app", Group: RuleGroupSecurity, Summary: "A GitHub App token is issued with more access or a longer life than needed.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-github-app"},
 	)
 	registerRuleFactory("github-app", func(env *RuleEnv) []Rule {
 		return []Rule{NewRuleGitHubApp()}

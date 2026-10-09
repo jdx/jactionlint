@@ -227,7 +227,7 @@ func TestUnusedTrailingIgnoreFix(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			src := "on: push\npermissions: {}\njobs:\n  a:\n    runs-on: ubuntu-latest\n    timeout-minutes: 5\n    steps:\n" + tc.line + "\n"
-			errs := lintWithConfig(t, &Config{Profile: ProfileStrict}, src)
+			errs := lintWithConfig(t, &Config{Profile: ProfilePedantic}, src)
 			var fixed []*Error
 			for _, e := range errs {
 				if e.ID == "unused-ignore" {

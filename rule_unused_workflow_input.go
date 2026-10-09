@@ -81,7 +81,7 @@ func (rule *RuleUnusedWorkflowInput) VisitWorkflowPre(n *Workflow) error {
 
 func init() {
 	registerRules(
-		RuleInfo{ID: "unused-workflow-input", Group: RuleGroupPolicy, Summary: "An input of workflow_dispatch or workflow_call is never used.", DefaultLevel: SeverityWarning, Profile: ProfileStrict, DocsAnchor: "check-unused-workflow-input"},
+		RuleInfo{ID: "unused-workflow-input", Group: RuleGroupPolicy, Summary: "An input of workflow_dispatch or workflow_call is never used.", DefaultLevel: SeverityWarning, Profile: ProfilePedantic, DocsAnchor: "check-unused-workflow-input"},
 	)
 	registerRuleFactory("unused-workflow-input", func(env *RuleEnv) []Rule {
 		return []Rule{NewRuleUnusedWorkflowInput()}

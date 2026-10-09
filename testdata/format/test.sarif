@@ -25,21 +25,6 @@
               "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
             },
             {
-              "id": "agentic-actions",
-              "name": "AgenticActions",
-              "defaultConfiguration": {
-                "level": "error"
-              },
-              "properties": {
-                "description": "Checks for AI agent actions which outsiders can steer or whose safeguards are off",
-                "queryURI": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
-              },
-              "fullDescription": {
-                "text": "Checks for AI agent actions which outsiders can steer or whose safeguards are off"
-              },
-              "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
-            },
-            {
               "id": "artipacked",
               "name": "Artipacked",
               "defaultConfiguration": {
@@ -81,21 +66,6 @@
               },
               "fullDescription": {
                 "text": "Checks for caches restored in release workflows and caches written by privileged triggers"
-              },
-              "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
-            },
-            {
-              "id": "checkout-static-credentials",
-              "name": "CheckoutStaticCredentials",
-              "defaultConfiguration": {
-                "level": "error"
-              },
-              "properties": {
-                "description": "Checks that actions/checkout is not given a static credential",
-                "queryURI": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
-              },
-              "fullDescription": {
-                "text": "Checks that actions/checkout is not given a static credential"
               },
               "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
             },
@@ -321,36 +291,6 @@
               },
               "fullDescription": {
                 "text": "Checks for if: conditions which are always true/false"
-              },
-              "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
-            },
-            {
-              "id": "insecure-ssh-keyscan",
-              "name": "InsecureSshKeyscan",
-              "defaultConfiguration": {
-                "level": "error"
-              },
-              "properties": {
-                "description": "Checks that SSH host keys are not collected with ssh-keyscan without being verified",
-                "queryURI": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
-              },
-              "fullDescription": {
-                "text": "Checks that SSH host keys are not collected with ssh-keyscan without being verified"
-              },
-              "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
-            },
-            {
-              "id": "insecure-url-scheme",
-              "name": "InsecureUrlScheme",
-              "defaultConfiguration": {
-                "level": "error"
-              },
-              "properties": {
-                "description": "Checks that downloads use https and not an unencrypted scheme like http, ftp or git",
-                "queryURI": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
-              },
-              "fullDescription": {
-                "text": "Checks that downloads use https and not an unencrypted scheme like http, ftp or git"
               },
               "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
             },
@@ -625,21 +565,6 @@
               "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
             },
             {
-              "id": "unsound-prefix-match",
-              "name": "UnsoundPrefixMatch",
-              "defaultConfiguration": {
-                "level": "error"
-              },
-              "properties": {
-                "description": "Checks expressions which identify an account or a repository by a prefix, a suffix or a part of its name",
-                "queryURI": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
-              },
-              "fullDescription": {
-                "text": "Checks expressions which identify an account or a repository by a prefix, a suffix or a part of its name"
-              },
-              "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
-            },
-            {
               "id": "untrusted-artifact",
               "name": "UntrustedArtifact",
               "defaultConfiguration": {
@@ -711,21 +636,6 @@
               },
               "fullDescription": {
                 "text": "Checks that every input of workflow_dispatch and workflow_call is used"
-              },
-              "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
-            },
-            {
-              "id": "unverified-download",
-              "name": "UnverifiedDownload",
-              "defaultConfiguration": {
-                "level": "error"
-              },
-              "properties": {
-                "description": "Checks that scripts do not run what they download without verifying it",
-                "queryURI": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
-              },
-              "fullDescription": {
-                "text": "Checks that scripts do not run what they download without verifying it"
               },
               "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
             },

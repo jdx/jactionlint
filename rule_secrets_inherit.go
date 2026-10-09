@@ -39,7 +39,7 @@ func (rule *RuleSecretsInherit) VisitJobPre(n *Job) error {
 
 func init() {
 	registerRules(
-		RuleInfo{ID: "secrets-inherit", Group: RuleGroupSecurity, Summary: "A reusable workflow is called with secrets: inherit.", DefaultLevel: SeverityWarning, Profile: ProfileDefault, DocsAnchor: "check-secrets-inherit"},
+		RuleInfo{ID: "secrets-inherit", Group: RuleGroupSecurity, Summary: "A reusable workflow is called with secrets: inherit.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-secrets-inherit"},
 	)
 	registerRuleFactory("secrets-inherit", func(env *RuleEnv) []Rule {
 		if !env.config.RuleEnabled("secrets-inherit") {

@@ -177,7 +177,7 @@ func (rule *RuleUnlockedInstall) checkManifest(s *runscript.Script, origin runsc
 
 func init() {
 	registerRules(
-		RuleInfo{ID: "unlocked-install", Group: RuleGroupSecurity, Summary: "cargo install runs without --locked.", DefaultLevel: SeverityWarning, Profile: ProfileDefault, Fixable: true, DocsAnchor: "check-unlocked-install", Options: []RuleOption{pedanticOption}},
+		RuleInfo{ID: "unlocked-install", Group: RuleGroupSecurity, Summary: "cargo install runs without --locked.", DefaultLevel: SeverityError, Profile: ProfileDefault, Fixable: true, DocsAnchor: "check-unlocked-install", Options: []RuleOption{pedanticOption}},
 	)
 	registerRuleFactory("unlocked-install", func(env *RuleEnv) []Rule {
 		if !env.config.RuleEnabled("unlocked-install") {

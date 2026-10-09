@@ -230,20 +230,35 @@ func TestProfileIncludes(t *testing.T) {
 		p, q Profile
 		want bool
 	}{
+		{ProfileCorrectness, ProfileCorrectness, true},
+		{ProfileCorrectness, ProfileDefault, false},
+		{ProfileCorrectness, ProfilePedantic, false},
+		{ProfileDefault, ProfileCorrectness, true},
 		{ProfileDefault, ProfileDefault, true},
-		{ProfileDefault, ProfileStrict, false},
-		{ProfileStrict, ProfileDefault, true},
-		{ProfileStrict, ProfileAll, false},
-		{ProfileAll, ProfileStrict, true},
-		{ProfileAll, "", false},
+		{ProfileDefault, ProfilePedantic, false},
+		{ProfilePedantic, ProfileCorrectness, true},
+		{ProfilePedantic, ProfileDefault, true},
+		{ProfilePedantic, ProfilePedantic, true},
+		{ProfilePedantic, "", false},
 	}
 	for _, tc := range tests {
 		if got := tc.p.Includes(tc.q); got != tc.want {
 			t.Errorf("%q.Includes(%q) = %v, want %v", tc.p, tc.q, got, tc.want)
 		}
 	}
-	if _, err := ParseProfile("strict"); err != nil {
-		t.Error(err)
+	for _, name := range []string{"correctness", "default", "pedantic"} {
+		if p, err := ParseProfile(name); err != nil || string(p) != name {
+			t.Errorf("ParseProfile(%q) = %q, %v", name, p, err)
+		}
+	}
+	// The retired names are read in the config file only
+	for _, name := range []string{"strict", "all"} {
+		if _, err := ParseProfile(name); err == nil {
+			t.Errorf("ParseProfile(%q) must fail: the name is retired", name)
+		}
+		if p, dep, err := parseConfigProfile(name); err != nil || p != ProfilePedantic || dep == "" {
+			t.Errorf("parseConfigProfile(%q) = %q, %q, %v", name, p, dep, err)
+		}
 	}
 	if _, err := ParseProfile("paranoid"); err == nil {
 		t.Error("unknown profile must be an error")

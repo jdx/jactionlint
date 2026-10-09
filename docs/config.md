@@ -85,8 +85,8 @@ ignores:
     reason: pinned by an organization ruleset
     expires: 2027-06-30
 
-# Profile: the set of rules which are enabled. 'default', 'strict' or 'all'. (default: default)
-profile: strict
+# Profile: the set of rules which are enabled. 'correctness', 'default' or 'pedantic'. (default: default)
+profile: pedantic
 
 # The level of each rule by its ID: 'error', 'warn', 'info' or 'off'. See https://jactionlint.jdx.dev/rules
 rules:
@@ -193,11 +193,23 @@ unknown key "self-hosted-runnr" in the configuration at line:3,col:1. did you me
 
 A profile is a named set of [rules](rules.md) which are enabled together. `profile` selects one of them:
 
-| Profile   | Enables                                                                                                                                                                                                                                          |
-| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `default` | All the correctness checks, the security errors with (almost) no false positives, the bug detectors `unsound-ternary`, `workflow-run-names` and `local-action-checkout`, and the policy check `missing-timeout`. Used when `profile` is omitted. |
-| `strict`  | `default` plus the posture and policy checks: `unpinned-uses`, `missing-permissions` and `unused-ignore`.                                                                                                                                        |
-| `all`     | `strict` plus the style checks: `require-shell`, `require-expression-wrapping` and `max-run-lines`.                                                                                                                                              |
+| Profile       | Enables                                                                                                                                                                                                                                                                                    |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `correctness` | What actionlint checks (syntax, expressions, actions, `workflow_call`, permissions, credentials, events, globs, runner labels, shell names, IDs, `needs`, matrix, `if:`, shellcheck, pyflakes), the untrusted inputs in a script (`template-injection`), and the bug detectors of jactionlint such as `unsound-ternary`, `workflow-run-names`, `local-action-checkout`, `action-syntax` and `dependabot-syntax`. No security posture or policy rule. |
+| `default`     | `correctness` plus the security and policy rules worth failing a build on: pinned actions and images, permissions, timeouts, concurrency, dangerous triggers, artifact and cache poisoning, injection sinks beyond scripts, trusted publishing and so on. Used when `profile` is omitted.        |
+| `pedantic`    | `default` plus the noisy and opinionated rules (`require-shell`, `max-run-lines`, `anonymous-definition`, `self-hosted-runner`, `unused-needs` and so on) and the pedantic findings of the audits that have them (see below).                                                                |
+
+Each profile includes the rules of the profile before it. `-profile NAME` on the command line overrides `profile` of the
+configuration file. Every rule of the `correctness` and `default` profiles reports at the level `error`; the rules of the
+`pedantic` profile keep their own levels (`info` for `self-hosted-runner`, for example).
+
+`strict` and `all`, the names of the profiles before 2.0, still work for one minor version and mean `pedantic`, with a
+deprecation warning. `jactionlint -migrate-config` rewrites them.
+
+A few audits have a noisier tier of findings, like the pedantic persona of zizmor. They are one rule with one ID, and the option
+`pedantic` turns the tier on. Unset, it is true under the `pedantic` profile and false otherwise, so `rules: {template-injection:
+{pedantic: true}}` reports the pedantic findings of that rule under the `default` profile and `pedantic: false` turns them off
+under the `pedantic` one.
 
 The profile of each rule is in [the list of rules](rules.md). Some rules belong to no profile and run only when the
 configuration turns them on: `required-actions` (when the `required-actions` list is not empty) and `timeout-too-long` (when
@@ -230,7 +242,7 @@ rules:
 
 | Rule                       | Option            | Description                                                                                                                                                                     |
 | -------------------------- | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `max-run-lines`            | `max`             | Maximum number of non-blank lines in a `run:` script. Default `100` when the rule is enabled by the `all` profile.                                                              |
+| `max-run-lines`            | `max`             | Maximum number of non-blank lines in a `run:` script. Default `100` when the rule is enabled by the `pedantic` profile.                                                              |
 | `missing-timeout`          | `default-minutes` | The `timeout-minutes` which `-fix` adds to a job without one. There is no default: without it the rule has no fix. Lowered to `max` of `timeout-too-long` when that is smaller. |
 | `timeout-too-long`         | `max`             | Maximum allowed `timeout-minutes` of a job in minutes. Values given by `${{ }}` are not checked. The rule does nothing without `max`.                                           |
 | `forbidden-uses`           | `allow`           | List of patterns of the only actions and reusable workflows that may be used, e.g. `actions/*`. See [forbidden actions](checks.md#check-forbidden-uses).                        |
@@ -251,7 +263,7 @@ repository or a submodule and extend it from every project.
 extends:
   - ../shared/jactionlint.yaml
   - /etc/jactionlint/org.yaml
-profile: strict
+profile: pedantic
 rules:
   require-shell: off
 ```
@@ -269,7 +281,7 @@ The `ignore` lists of `paths`, the `-ignore` command line option and the `# jact
 well as regular expressions. A pattern which is exactly a rule ID ignores all the errors of the rule; any other pattern is a
 regular expression matched to the error messages. See [the usage document](usage.md#ignore-some-errors).
 
-The [`unused-ignore`](rules.md#unused-ignore) rule (in the `strict` profile) reports ignore comments which did not suppress
+The [`unused-ignore`](rules.md#unused-ignore) rule (in the `pedantic` profile) reports ignore comments which did not suppress
 anything.
 
 ## Durable ignores
@@ -323,12 +335,12 @@ asks for `step` or `uses` does not match. An ignore never suppresses on a guess.
 ### Expiry and unused entries
 
 - On the day after `expires` the entry stops suppressing: the findings it hid come back, and the entry itself is reported as
-  [`expired-ignore`](rules.md#expired-ignore) (an error, in the `default` profile) at its position in the config file, with
+  [`expired-ignore`](rules.md#expired-ignore) (an error, in the `correctness` profile) at its position in the config file, with
   its `reason`. Either fix the findings or renew the date.
 - During the last 14 days the entry still works and is reported as `expired-ignore` with level `info`, so you are warned before the
   findings come back.
 - An entry which suppressed nothing is reported as [`unused-ignore`](rules.md#unused-ignore) (the same rule as the unused ignore
-  comments, so it is in the `strict` profile) at its position in the config file. Because a pre-commit hook lints only the
+  comments, so it is in the `pedantic` profile) at its position in the config file. Because a pre-commit hook lints only the
   changed files, an entry is called unused only when every file it could apply to was linted in the run. A run that lints a single
   file never reports an entry that also applies to others.
 

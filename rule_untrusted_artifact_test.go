@@ -159,10 +159,10 @@ jobs:
 	}
 	for _, tc := range tests {
 		t.Run(tc.what, func(t *testing.T) {
-			errs := onlyID(lintInProject(t, tc.others, tc.src, ""), "untrusted-artifact")
+			errs := onlyID(lintInProject(t, tc.others, tc.src, "rules:\n  untrusted-artifact: error\n"), "untrusted-artifact")
 			checkLines(t, errs, markedWantLines(tc.src)...)
 			crlf := strings.ReplaceAll(tc.src, "\n", "\r\n")
-			checkLines(t, onlyID(lintInProject(t, tc.others, crlf, ""), "untrusted-artifact"), markedWantLines(tc.src)...)
+			checkLines(t, onlyID(lintInProject(t, tc.others, crlf, "rules:\n  untrusted-artifact: error\n"), "untrusted-artifact"), markedWantLines(tc.src)...)
 		})
 	}
 }

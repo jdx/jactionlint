@@ -154,7 +154,7 @@ func init() {
 	registerRules(
 		RuleInfo{
 			ID: "excessive-permissions", Group: RuleGroupSecurity, Summary: "The GITHUB_TOKEN gets write access that is broader than needed.",
-			DefaultLevel: SeverityWarning, Profile: ProfileStrict, DocsAnchor: "check-excessive-permissions",
+			DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-excessive-permissions",
 			Options: []RuleOption{{Name: "require-workflow-permissions", Kind: RuleOptionBool, Default: false, Summary: "Also report a workflow which has no top-level permissions, even when its jobs set their own."}},
 		},
 	)

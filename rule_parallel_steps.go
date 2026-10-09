@@ -120,7 +120,7 @@ func isBackgroundStep(s *Step) bool {
 
 func init() {
 	registerRules(
-		RuleInfo{ID: "invalid-parallel-step", Group: RuleGroupCorrectness, Summary: "A step is not allowed inside a parallel group or refers to a wrong step.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-parallel-step-refs"},
+		RuleInfo{ID: "invalid-parallel-step", Group: RuleGroupCorrectness, Summary: "A step is not allowed inside a parallel group or refers to a wrong step.", DefaultLevel: SeverityError, Profile: ProfileCorrectness, DocsAnchor: "check-parallel-step-refs"},
 	)
 	registerRuleFactory("parallel-steps", func(env *RuleEnv) []Rule {
 		return []Rule{NewRuleParallelSteps()}

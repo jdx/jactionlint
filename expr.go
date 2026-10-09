@@ -27,6 +27,6 @@ func (e *ExprError) String() string {
 
 func init() {
 	registerRules(
-		RuleInfo{ID: "expression-syntax", Group: RuleGroupCorrectness, Summary: "A ${{ }} expression has a syntax error.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-syntax-expression"},
+		RuleInfo{ID: "expression-syntax", Group: RuleGroupCorrectness, Summary: "A ${{ }} expression has a syntax error.", DefaultLevel: SeverityError, Profile: ProfileCorrectness, DocsAnchor: "check-syntax-expression"},
 	)
 }

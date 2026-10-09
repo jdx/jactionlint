@@ -94,7 +94,7 @@ func onlyWorkflowCall(n *Workflow) bool {
 
 func init() {
 	registerRules(
-		RuleInfo{ID: "concurrency-limits", Group: RuleGroupPolicy, Summary: "A workflow does not cancel superseded runs with concurrency:.", DefaultLevel: SeverityWarning, Profile: ProfileStrict, DocsAnchor: "check-concurrency-limits"},
+		RuleInfo{ID: "concurrency-limits", Group: RuleGroupPolicy, Summary: "A workflow does not cancel superseded runs with concurrency:.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-concurrency-limits"},
 	)
 	registerRuleFactory("concurrency-limits", func(env *RuleEnv) []Rule {
 		if !env.config.RuleEnabled("concurrency-limits") {

@@ -445,7 +445,7 @@ func (rule *RuleConcurrencyCancelsRelease) cancelEdit(p *Pos) (TextEdit, bool) {
 
 func init() {
 	registerRules(
-		RuleInfo{ID: "concurrency-cancels-release", Group: RuleGroupCorrectness, Summary: "cancel-in-progress can cancel a release or a deployment which is still running.", DefaultLevel: SeverityWarning, Profile: ProfileDefault, Fixable: true, DocsAnchor: "check-concurrency-cancels-release"},
+		RuleInfo{ID: "concurrency-cancels-release", Group: RuleGroupCorrectness, Summary: "cancel-in-progress can cancel a release or a deployment which is still running.", DefaultLevel: SeverityError, Profile: ProfileDefault, Fixable: true, DocsAnchor: "check-concurrency-cancels-release"},
 	)
 	registerRuleFactory("concurrency-cancels-release", func(env *RuleEnv) []Rule {
 		return []Rule{NewRuleConcurrencyCancelsRelease(env.Source())}

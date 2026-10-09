@@ -89,8 +89,8 @@ func (rule *RuleMisfeature) checkShell(s *String) {
 
 func init() {
 	registerRules(
-		RuleInfo{ID: "misfeature", Group: RuleGroupSecurity, Summary: "A misfeature of GitHub Actions is used: the pip-install input of setup-python or the cmd shell.", DefaultLevel: SeverityWarning, Profile: ProfileStrict, DocsAnchor: "check-misfeature"},
-		RuleInfo{ID: "misfeature-custom-shell", Group: RuleGroupStyle, Summary: "A shell which GitHub does not document is used.", DefaultLevel: SeverityInfo, Profile: ProfileAll, DocsAnchor: "check-misfeature"},
+		RuleInfo{ID: "misfeature", Group: RuleGroupSecurity, Summary: "A misfeature of GitHub Actions is used: the pip-install input of setup-python or the cmd shell.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-misfeature"},
+		RuleInfo{ID: "misfeature-custom-shell", Group: RuleGroupStyle, Summary: "A shell which GitHub does not document is used.", DefaultLevel: SeverityInfo, Profile: ProfilePedantic, DocsAnchor: "check-misfeature"},
 	)
 	registerRuleFactory("misfeature", func(env *RuleEnv) []Rule {
 		return []Rule{NewRuleMisfeature()}

@@ -109,7 +109,7 @@ func init() {
 	registerRules(
 		RuleInfo{
 			ID: "undocumented-permissions", Group: RuleGroupPolicy, Summary: "A permission scope above read has no comment explaining it.",
-			DefaultLevel: SeverityInfo, Profile: ProfileAll, DocsAnchor: "check-undocumented-permissions",
+			DefaultLevel: SeverityInfo, Profile: ProfilePedantic, DocsAnchor: "check-undocumented-permissions",
 			Options: []RuleOption{{Name: "include-read", Kind: RuleOptionBool, Default: false, Summary: "Also require a comment for scopes granted with read, except contents: read."}},
 		},
 	)

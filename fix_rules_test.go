@@ -22,7 +22,7 @@ var fixerIDs = []string{"missing-timeout", "missing-permissions", "unused-ignore
 
 func fixerConfig(t *testing.T, extra string) *Config {
 	t.Helper()
-	return mustParseConfig(t, "rules:\n  missing-permissions: error\n  missing-timeout:\n    default-minutes: 30\n  unused-ignore: error\n"+extra)
+	return mustParseConfig(t, "profile: default\nrules:\n  missing-permissions: error\n  missing-timeout:\n    default-minutes: 30\n  unused-ignore: error\n"+extra)
 }
 
 // fixWith lints the source and applies the fixes of fixerIDs until nothing changes, like FixFiles does. It
@@ -111,10 +111,12 @@ func writeGolden(t *testing.T, path string, b []byte) {
 // not understand instead of guessing. The value is the number of findings left by ID.
 var unfixable = map[string]map[string]int{
 	"crafted_flow_style.yaml": {"missing-timeout": 3},
-	// Its zizmor comments name adhoc-packages and use-trusted-publishing, which are on by default now. The first
-	// one installs local tarballs, which jactionlint does not call ad hoc, so that comment is stale. There is no fix
-	// for the comment of another tool
-	"aube-bun-lock-import_node-addon-impl.yaml": {"unused-ignore": 1},
+	// Their zizmor comments name cache-poisoning, adhoc-packages and use-trusted-publishing, which the default
+	// profile enables. jactionlint reports nothing where the cache-poisoning comment sits, and the adhoc-packages
+	// comment of the first one is about local tarballs, which jactionlint does not call ad hoc, so these
+	// comments are stale for it. There is no fix for the comment of another tool
+	"aube-bun-lock-import_node-addon-impl.yaml": {"unused-ignore": 2},
+	"communique-cloudflare_release-plz.yaml":    {"unused-ignore": 1},
 }
 
 // TestFixers applies the fixes of missing-timeout, missing-permissions and unused-ignore to real
@@ -259,7 +261,7 @@ func TestFixTimeoutOptions(t *testing.T) {
 func TestNoFixForMissingTimeoutWithoutDefaultMinutes(t *testing.T) {
 	src := []byte("on: push\npermissions: {}\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo\n")
 	for _, rules := range []string{"", "  timeout-too-long:\n    max: 20\n"} {
-		cfg := mustParseConfig(t, "rules:\n"+rules+"  unused-ignore: error\n")
+		cfg := mustParseConfig(t, "rules:\n"+rules+"  missing-timeout: error\n  unused-ignore: error\n")
 		out, n, left := fixWith(t, src, cfg, FixModeUnsafe)
 		if n != 0 || string(out) != string(src) {
 			t.Errorf("%q: the file must not be changed without default-minutes: %d fixes\n%s", rules, n, out)

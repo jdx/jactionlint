@@ -253,7 +253,7 @@ func followPath(n *yaml.Node, path []int) *yaml.Node {
 
 func init() {
 	registerRules(
-		RuleInfo{ID: "artipacked", Group: RuleGroupSecurity, Summary: "actions/checkout persists the GITHUB_TOKEN credential in the git config.", DefaultLevel: SeverityWarning, Profile: ProfileStrict, Fixable: true, DocsAnchor: "check-artipacked"},
+		RuleInfo{ID: "artipacked", Group: RuleGroupSecurity, Summary: "actions/checkout persists the GITHUB_TOKEN credential in the git config.", DefaultLevel: SeverityError, Profile: ProfileDefault, Fixable: true, DocsAnchor: "check-artipacked"},
 	)
 	registerRuleFactory("artipacked", func(env *RuleEnv) []Rule {
 		return []Rule{NewRuleArtipacked(env.Source())}

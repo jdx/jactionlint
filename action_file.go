@@ -323,6 +323,6 @@ func (w *Workflow) IsComposite() bool {
 
 func init() {
 	registerRules(
-		RuleInfo{ID: actionSyntaxID, Group: RuleGroupCorrectness, Summary: "The action metadata does not follow the syntax of action.yml.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-composite-action-syntax"},
+		RuleInfo{ID: actionSyntaxID, Group: RuleGroupCorrectness, Summary: "The action metadata does not follow the syntax of action.yml.", DefaultLevel: SeverityError, Profile: ProfileCorrectness, DocsAnchor: "check-composite-action-syntax"},
 	)
 }

@@ -249,7 +249,7 @@ func preferredActor(name string) string {
 
 func init() {
 	registerRules(
-		RuleInfo{ID: "bot-conditions", Group: RuleGroupSecurity, Summary: "A condition trusts a bot by github.actor, which can be spoofed.", DefaultLevel: SeverityWarning, Profile: ProfileStrict, Fixable: true, DocsAnchor: "check-bot-conditions"},
+		RuleInfo{ID: "bot-conditions", Group: RuleGroupSecurity, Summary: "A condition trusts a bot by github.actor, which can be spoofed.", DefaultLevel: SeverityError, Profile: ProfileDefault, Fixable: true, DocsAnchor: "check-bot-conditions"},
 	)
 	registerRuleFactory("bot-conditions", func(env *RuleEnv) []Rule {
 		return []Rule{NewRuleBotConditions(env.src)}

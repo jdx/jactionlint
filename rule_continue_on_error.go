@@ -59,7 +59,7 @@ func (rule *RuleContinueOnError) VisitStep(n *Step) error {
 
 func init() {
 	registerRules(
-		RuleInfo{ID: "continue-on-error", Group: RuleGroupPolicy, Summary: "A job has continue-on-error: true, so its failure does not fail the workflow.", DefaultLevel: SeverityInfo, Profile: ProfileStrict, DocsAnchor: "check-continue-on-error",
+		RuleInfo{ID: "continue-on-error", Group: RuleGroupPolicy, Summary: "A job has continue-on-error: true, so its failure does not fail the workflow.", DefaultLevel: SeverityInfo, Profile: ProfilePedantic, DocsAnchor: "check-continue-on-error",
 			Options: []RuleOption{{Name: "steps", Kind: RuleOptionBool, Default: false, Summary: "Also report steps with continue-on-error: true. By default only jobs are reported."}}},
 	)
 	registerRuleFactory("continue-on-error", func(env *RuleEnv) []Rule {

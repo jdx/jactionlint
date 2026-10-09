@@ -72,7 +72,7 @@ func firstSecretIn(root ExprNode) (string, bool) {
 
 func init() {
 	registerRules(
-		RuleInfo{ID: "unredacted-secrets", Group: RuleGroupSecurity, Summary: "A secret is parsed with fromJSON(), so the fields of it are not redacted in logs.", DefaultLevel: SeverityWarning, Profile: ProfileStrict, DocsAnchor: "check-unredacted-secrets"},
+		RuleInfo{ID: "unredacted-secrets", Group: RuleGroupSecurity, Summary: "A secret is parsed with fromJSON(), so the fields of it are not redacted in logs.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-unredacted-secrets"},
 	)
 	registerRuleFactory("unredacted-secrets", func(env *RuleEnv) []Rule {
 		if !env.config.RuleEnabled("unredacted-secrets") {

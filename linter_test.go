@@ -27,6 +27,9 @@ func TestMain(m *testing.M) {
 		panic(err)
 	}
 	os.Setenv("XDG_CONFIG_HOME", dir)
+	// The tests of the rules and the golden files were written for the rules of the correctness profile. A
+	// test of the default profile selects it (see withDefaultProfile).
+	implicitProfile = ProfileCorrectness
 	code := m.Run()
 	os.RemoveAll(dir)
 	os.Exit(code)
@@ -232,7 +235,6 @@ func TestLinterLintError(t *testing.T) {
 				}
 
 				l.defaultConfig = fixtureConfig()
-
 				if strings.HasSuffix(testName, "_online") {
 					l.online = onlineSettings{enabled: true, client: onlineFixtureClient(t)}
 				}
@@ -248,6 +250,13 @@ func TestLinterLintError(t *testing.T) {
 				// A fixture can have the configuration it needs in a file next to it
 				if cfg := fixtureConfigFile(t, base+".config"); cfg != nil {
 					l.defaultConfig = cfg
+				}
+				// The example of a rule which the profile of the tests does not enable (see TestMain)
+				// runs with the rule on
+				if id := strings.ReplaceAll(strings.TrimSuffix(testName, "_example"), "_", "-"); ruleIndex[id] != nil && !ruleIndex[id].Online {
+					if _, ok := l.defaultConfig.Rules[id]; !ok {
+						l.defaultConfig.Rules[id] = RuleConfig{Level: SeverityError}
+					}
 				}
 
 				errs, err := l.Lint("test.yaml", b, proj)
@@ -299,7 +308,9 @@ func TestLinterLintAllErrorWorkflowsAtOnce(t *testing.T) {
 	}
 
 	// Opt-in lints are enabled so that every example (e.g. "*_security.yaml") causes an error
-	l.defaultConfig = fixtureConfig("unpinned-uses", "local-action-checkout")
+	cfg := fixtureConfig("unpinned-uses", "local-action-checkout")
+	cfg.Profile = ProfileDefault
+	l.defaultConfig = cfg
 
 	errs, err := l.LintFiles(files, proj)
 	if err != nil {

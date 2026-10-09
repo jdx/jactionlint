@@ -579,7 +579,7 @@ jobs:
 Output:
 
 ```
-test.yaml:7:7: warning: output "foo" of job "test" is never used: no other job reads "needs.test.outputs.foo". remove it [unused-job-output]
+test.yaml:7:7: output "foo" of job "test" is never used: no other job reads "needs.test.outputs.foo". remove it [unused-job-output]
   |
 7 |       foo: '${{ steps.get_value.outputs.name }}'
   |       ^~~~
@@ -2653,10 +2653,6 @@ test.yaml:8:48: a value that is not a literal is written to $GITHUB_ENV in a wor
   |
 8 |       - run: echo "VERSION=$(cat version.txt)" >> "$GITHUB_ENV"
   |                                                ^~
-test.yaml:9:34: untrusted input from the variable TITLE (github.event.pull_request.title) is written to $GITHUB_ENV. an attacker who controls the value can set LD_PRELOAD or NODE_OPTIONS (a newline adds another variable) and run code in the next steps. do not write input that an outsider controls to $GITHUB_ENV; validate it first or pass it to the next step with $GITHUB_OUTPUT [github-env-untrusted-input]
-  |
-9 |       - run: echo "TITLE=$TITLE" >> "$GITHUB_ENV"
-  |                                  ^~
 ```
 
 [Playground](https://jactionlint.jdx.dev/#eNp0z8FKw0AQBuB7n+In5KCH5AEW2oMQNCAVNPYiEpJ2aCPL7LozE5TSd5ckIB7saZj5v/8wgd0KiOZ9m+jTSLTVLh1JpzOg35HE4S1EYjq8rz5CL1PS2+APC0nGUgR2sN5YrfCdkugciVKURQHFJB1ofwrIdtXzS/20Xec3+04xUpIhcKlfepths0GW39fNw+tdW2132X/9pm4eq3U+j6sNgHh0vwswc4f8fMZx0JP1JY3EWv59v9RBPeFy+RkA2itTFQ==)
@@ -2707,11 +2703,11 @@ jobs:
 Output:
 
 ```
-test.yaml:6:14: warning: command "npm install" installs a package outside of a lock file: its version and its dependencies are resolved anew on every run. add the package to package.json and commit the package-lock.json and install with `npm ci` [adhoc-packages]
+test.yaml:6:14: command "npm install" installs a package outside of a lock file: its version and its dependencies are resolved anew on every run. add the package to package.json and commit the package-lock.json and install with `npm ci` [adhoc-packages]
   |
 6 |       - run: npm install eslint@9.0.0
   |              ^~~
-test.yaml:7:14: warning: command "gem install" installs a package outside of a lock file: its version and its dependencies are resolved anew on every run. add the package to a Gemfile and commit the Gemfile.lock and install with `bundle install` [adhoc-packages]
+test.yaml:7:14: command "gem install" installs a package outside of a lock file: its version and its dependencies are resolved anew on every run. add the package to a Gemfile and commit the Gemfile.lock and install with `bundle install` [adhoc-packages]
   |
 7 |       - run: gem install rake
   |              ^~~
@@ -2749,7 +2745,7 @@ jobs:
 Output:
 
 ```
-test.yaml:6:15: warning: action "aquasecurity/setup-trivy@e6c2c5e321ed9123bda567646e2f96565e34abe1" installs the newest version of its tool because the input "version" is not set. set "version" to an exact version [unpinned-tools]
+test.yaml:6:15: action "aquasecurity/setup-trivy@e6c2c5e321ed9123bda567646e2f96565e34abe1" installs the newest version of its tool because the input "version" is not set. set "version" to an exact version [unpinned-tools]
   |
 6 |       - uses: aquasecurity/setup-trivy@e6c2c5e321ed9123bda567646e2f96565e34abe1 # v0.2.4
   |               ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -2834,11 +2830,11 @@ jobs:
 Output:
 
 ```
-test.yaml:8:14: warning: "twine upload" publishes to PyPI with the long-lived credential TWINE_PASSWORD. prefer trusted publishing with pypa/gh-action-pypi-publish and the permission "id-token: write" [use-trusted-publishing]
+test.yaml:8:14: "twine upload" publishes to PyPI with the long-lived credential TWINE_PASSWORD. prefer trusted publishing with pypa/gh-action-pypi-publish and the permission "id-token: write" [use-trusted-publishing]
   |
 8 |       - run: twine upload dist/*
   |              ^~~~~
-test.yaml:13:21: warning: action "pypa/gh-action-pypi-publish@76f52bc884231f62b9a034ebfe128415bbaabdfc" publishes to PyPI but is given a password (input "password") instead of using trusted publishing. prefer trusted publishing with pypa/gh-action-pypi-publish and the permission "id-token: write" [use-trusted-publishing]
+test.yaml:13:21: action "pypa/gh-action-pypi-publish@76f52bc884231f62b9a034ebfe128415bbaabdfc" publishes to PyPI but is given a password (input "password") instead of using trusted publishing. prefer trusted publishing with pypa/gh-action-pypi-publish and the permission "id-token: write" [use-trusted-publishing]
    |
 13 |           password: ${{ secrets.PYPI_TOKEN }}
    |                     ^~~
@@ -2883,7 +2879,7 @@ jobs:
 Output:
 
 ```
-test.yaml:6:15: warning: action "softprops/action-gh-release@c95fe1489396fe8a9eb87c0abf8aa5b2ef267fda" is superfluous: the runner already has the tools to do this. use `gh release create` in a script step [superfluous-actions]
+test.yaml:6:15: action "softprops/action-gh-release@c95fe1489396fe8a9eb87c0abf8aa5b2ef267fda" is superfluous: the runner already has the tools to do this. use `gh release create` in a script step [superfluous-actions]
   |
 6 |       - uses: softprops/action-gh-release@c95fe1489396fe8a9eb87c0abf8aa5b2ef267fda # v2.2.1
   |               ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -2920,7 +2916,7 @@ jobs:
 Output:
 
 ```
-test.yaml:6:14: warning: "cargo install" without --locked builds with the newest dependencies that match the crate instead of the ones in its Cargo.lock, so a new release of any dependency reaches the workflow. add --locked [unlocked-install]
+test.yaml:6:14: "cargo install" without --locked builds with the newest dependencies that match the crate instead of the ones in its Cargo.lock, so a new release of any dependency reaches the workflow. add --locked [unlocked-install]
   |
 6 |       - run: cargo install cargo-nextest
   |              ^~~~~
@@ -3846,7 +3842,7 @@ test.yaml:7:20: property "imagetag" is not defined in object type {image_tag: st
   |
 7 |         value: ${{ jobs.gen-image-version.outputs.imagetag }}
   |                    ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-test.yaml:12:7: warning: output "image_tag" of job "gen-image-version" is never used: no other job reads "needs.gen-image-version.outputs.image_tag" and no output of the workflow uses it. remove it [unused-job-output]
+test.yaml:12:7: output "image_tag" of job "gen-image-version" is never used: no other job reads "needs.gen-image-version.outputs.image_tag" and no output of the workflow uses it. remove it [unused-job-output]
    |
 12 |       image_tag: "${{ steps.get_tag.outputs.tag }}"
    |       ^~~~~~~~~~
@@ -4732,7 +4728,7 @@ Output:
    |
 12 |     label: [dependencies]
    |     ^~~~~~
-.github/dependabot.yml:13:5: warning: "cooldown" is not set in this update, so Dependabot applies its implicit cooldown of 3 days. set "cooldown.default-days" to at least 7 to avoid updating to a version right after its release [dependabot-cooldown]
+.github/dependabot.yml:13:5: "cooldown" is not set in this update, so Dependabot applies its implicit cooldown of 3 days. set "cooldown.default-days" to at least 7 to avoid updating to a version right after its release [dependabot-cooldown]
    |
 13 |   - package-ecosystem: npm
    |     ^~~~~~~~~~~~~~~~~~
@@ -4740,7 +4736,7 @@ Output:
    |
 17 |       interval: hourly
    |                 ^~~~~~
-.github/dependabot.yml:19:5: warning: "cooldown" is not set in this update, so Dependabot applies its implicit cooldown of 3 days. set "cooldown.default-days" to at least 7 to avoid updating to a version right after its release [dependabot-cooldown]
+.github/dependabot.yml:19:5: "cooldown" is not set in this update, so Dependabot applies its implicit cooldown of 3 days. set "cooldown.default-days" to at least 7 to avoid updating to a version right after its release [dependabot-cooldown]
    |
 19 |   - package-ecosystem: cargo
    |     ^~~~~~~~~~~~~~~~~~
@@ -4792,11 +4788,11 @@ updates:
 Output:
 
 ```
-.github/dependabot.yml:4:5: warning: "cooldown" is not set in this update, so Dependabot applies its implicit cooldown of 3 days. set "cooldown.default-days" to at least 7 to avoid updating to a version right after its release [dependabot-cooldown]
+.github/dependabot.yml:4:5: "cooldown" is not set in this update, so Dependabot applies its implicit cooldown of 3 days. set "cooldown.default-days" to at least 7 to avoid updating to a version right after its release [dependabot-cooldown]
   |
 4 |   - package-ecosystem: github-actions
   |     ^~~~~~~~~~~~~~~~~~
-.github/dependabot.yml:14:21: warning: "cooldown.default-days" is 2, which is less than the minimum 7 days. set it to at least 7 [dependabot-cooldown]
+.github/dependabot.yml:14:21: "cooldown.default-days" is 2, which is less than the minimum 7 days. set it to at least 7 [dependabot-cooldown]
    |
 14 |       default-days: 2
    |                     ^
@@ -5099,7 +5095,7 @@ jobs:
 Output:
 
 ```
-test.yaml:4:11: warning: "secrets: inherit" passes every secret of this workflow to the reusable workflow "octo-org/octo-repo/.github/workflows/deploy.yaml@main". list only the secrets it needs in a "secrets:" mapping, e.g. "NAME: ${{ secrets.NAME }}" [secrets-inherit]
+test.yaml:4:11: "secrets: inherit" passes every secret of this workflow to the reusable workflow "octo-org/octo-repo/.github/workflows/deploy.yaml@main". list only the secrets it needs in a "secrets:" mapping, e.g. "NAME: ${{ secrets.NAME }}" [secrets-inherit]
   |
 4 |     uses: octo-org/octo-repo/.github/workflows/deploy.yaml@main
   |           ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -5486,7 +5482,7 @@ jobs:
 Output:
 
 ```
-test.yaml:7:13: warning: contains() with the string literal "refs/heads/main refs/heads/develop" as its first argument is true for any substring of it, not only for its words. to check membership in a list pass an array instead, e.g. contains(fromJSON('["a", "b"]'), value), or compare each value with == [unsound-contains]
+test.yaml:7:13: contains() with the string literal "refs/heads/main refs/heads/develop" as its first argument is true for any substring of it, not only for its words. to check membership in a list pass an array instead, e.g. contains(fromJSON('["a", "b"]'), value), or compare each value with == [unsound-contains]
   |
 7 |         if: contains('refs/heads/main refs/heads/develop', github.ref)
   |             ^~~~~~~~~~~~~~~~~~~~~~~~~
@@ -6556,7 +6552,7 @@ jobs:
 Output:
 
 ```
-test.yaml:4:10: warning: concurrency group "ci" is the same for every pull request (event "pull_request") and "cancel-in-progress" is enabled for them, so a new run for one pull request cancels the run of an unrelated one. add "github.head_ref" or "github.event.pull_request.number" to the group [concurrency-cancels-prs]
+test.yaml:4:10: concurrency group "ci" is the same for every pull request (event "pull_request") and "cancel-in-progress" is enabled for them, so a new run for one pull request cancels the run of an unrelated one. add "github.head_ref" or "github.event.pull_request.number" to the group [concurrency-cancels-prs]
   |
 4 |   group: ci
   |          ^~
@@ -6615,11 +6611,11 @@ jobs:
 Output:
 
 ```
-test.yaml:6:23: warning: "cancel-in-progress" is enabled here (job "publish" runs "cargo publish" and the workflow runs for pushes of tags), so a new run cancels a release or deployment which is still running and can leave it half done. set "cancel-in-progress: false" to let the running one finish first [concurrency-cancels-release]
+test.yaml:6:23: "cancel-in-progress" is enabled here (job "publish" runs "cargo publish" and the workflow runs for pushes of tags), so a new run cancels a release or deployment which is still running and can leave it half done. set "cancel-in-progress: false" to let the running one finish first [concurrency-cancels-release]
   |
 6 |   cancel-in-progress: true
   |                       ^~~~
-test.yaml:11:14: warning: "cargo publish" publishes to crates.io. prefer trusted publishing with rust-lang/crates-io-auth-action and the permission "id-token: write" [use-trusted-publishing]
+test.yaml:11:14: "cargo publish" publishes to crates.io. prefer trusted publishing with rust-lang/crates-io-auth-action and the permission "id-token: write" [use-trusted-publishing]
    |
 11 |       - run: cargo publish
    |              ^~~~~
@@ -6885,7 +6881,7 @@ jobs:
 Output:
 
 ```
-test.yaml:6:7: warning: output "version" of job "build" is never used: no other job reads "needs.build.outputs.version". remove it [unused-job-output]
+test.yaml:6:7: output "version" of job "build" is never used: no other job reads "needs.build.outputs.version". remove it [unused-job-output]
   |
 6 |       version: ${{ steps.v.outputs.version }}
   |       ^~~~~~~~

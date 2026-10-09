@@ -46,7 +46,17 @@ func MigrateConfig(src []byte) ([]byte, []string, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	if len(entries) == 0 {
+	// The retired profile names are rewritten to the profile they stand for
+	profileMigrated := false
+	for i := 0; i+1 < len(top.Content); i += 2 {
+		k, v := top.Content[i], top.Content[i+1]
+		if k.Value == "profile" && v.Kind == yaml.ScalarNode && (v.Value == deprecatedProfileStrict || v.Value == deprecatedProfileAll) {
+			v.Value = string(ProfilePedantic)
+			v.Tag, v.Style = "!!str", 0
+			profileMigrated = true
+		}
+	}
+	if len(entries) == 0 && !profileMigrated {
 		return src, nil, nil
 	}
 
@@ -83,7 +93,10 @@ func MigrateConfig(src []byte) ([]byte, []string, error) {
 			}
 		}
 	}
-	created := rules == nil
+	created := rules == nil && len(entries) > 0
+	if rules == nil && len(entries) == 0 {
+		rules = &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
+	}
 	if created {
 		rules = &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
 	}
@@ -107,6 +120,9 @@ func MigrateConfig(src []byte) ([]byte, []string, error) {
 		rules.Content[0].HeadComment = comment
 	}
 	top.Content = content
+	if profileMigrated {
+		migrated = append(migrated, "profile")
+	}
 
 	var buf bytes.Buffer
 	enc := yaml.NewEncoder(&buf)

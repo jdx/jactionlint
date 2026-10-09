@@ -268,7 +268,7 @@ func (rule *RuleShellcheck) runShellcheck(srcAst *String, shell string, pos *Pos
 
 func init() {
 	registerRules(
-		RuleInfo{ID: "shellcheck", Group: RuleGroupCorrectness, Summary: "shellcheck reported an issue in a shell script.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-shellcheck-integ"},
+		RuleInfo{ID: "shellcheck", Group: RuleGroupCorrectness, Summary: "shellcheck reported an issue in a shell script.", DefaultLevel: SeverityError, Profile: ProfileCorrectness, DocsAnchor: "check-shellcheck-integ"},
 	)
 	registerRuleFactory("shellcheck", func(env *RuleEnv) []Rule {
 		if env.shellcheck == "" {

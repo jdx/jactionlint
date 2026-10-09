@@ -39,7 +39,7 @@ func TestRuleGateJobSkippedOnFailure(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.what, func(t *testing.T) {
-			checkLines(t, lintBatchH(t, "", tc.src, "gate-job-skipped-on-failure"), tc.want...)
+			checkLines(t, lintBatchH(t, "rules:\n  gate-job-skipped-on-failure: error\n", tc.src, "gate-job-skipped-on-failure"), tc.want...)
 		})
 	}
 }

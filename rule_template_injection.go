@@ -123,7 +123,7 @@ func (rule *RuleTemplateInjection) VisitStep(n *Step) error {
 
 func init() {
 	registerRules(
-		RuleInfo{ID: "template-injection-trusted", Group: RuleGroupStyle, Summary: "A ${{ }} expansion in a script is of a value that an attacker cannot control.", DefaultLevel: SeverityInfo, Profile: ProfileAll, Fixable: true, DocsAnchor: "check-template-injection-expansion"},
-		RuleInfo{ID: "template-injection-expansion", Group: RuleGroupSecurity, Summary: "A ${{ }} expansion in a script is not an environment variable.", DefaultLevel: SeverityWarning, Profile: ProfileStrict, Fixable: true, DocsAnchor: "check-template-injection-expansion"},
+		RuleInfo{ID: "template-injection-trusted", Group: RuleGroupStyle, Summary: "A ${{ }} expansion in a script is of a value that an attacker cannot control.", DefaultLevel: SeverityInfo, Profile: ProfilePedantic, Fixable: true, DocsAnchor: "check-template-injection-expansion"},
+		RuleInfo{ID: "template-injection-expansion", Group: RuleGroupSecurity, Summary: "A ${{ }} expansion in a script is not an environment variable.", DefaultLevel: SeverityWarning, Profile: ProfilePedantic, Fixable: true, DocsAnchor: "check-template-injection-expansion"},
 	)
 }

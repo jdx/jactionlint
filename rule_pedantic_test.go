@@ -35,8 +35,11 @@ func TestRuleDuplicateTriggers(t *testing.T) {
 			if (len(errs) == 1) != tc.want || len(errs) > 1 {
 				t.Errorf("want report=%v but got %v", tc.want, errs)
 			}
-			if len(lintBatchH(t, "", tc.src, "duplicate-triggers")) != 0 {
-				t.Errorf("the rule must be off in the default profile")
+			if len(lintBatchH(t, "profile: correctness\n", tc.src, "duplicate-triggers")) != 0 {
+				t.Errorf("the rule must be off in the correctness profile")
+			}
+			if got := len(lintBatchH(t, "profile: default\n", tc.src, "duplicate-triggers")); (got == 1) != tc.want {
+				t.Errorf("the rule must be on in the default profile: want report=%v but got %d", tc.want, got)
 			}
 		})
 	}

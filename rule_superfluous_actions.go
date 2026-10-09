@@ -85,7 +85,7 @@ func (rule *RuleSuperfluousActions) VisitStep(n *Step) error {
 
 func init() {
 	registerRules(
-		RuleInfo{ID: "superfluous-actions", Group: RuleGroupSecurity, Summary: "An action does what a tool of the runner image does as well, such as gh release create.", DefaultLevel: SeverityWarning, Profile: ProfileDefault, DocsAnchor: "check-superfluous-actions", Options: []RuleOption{pedanticOption}},
+		RuleInfo{ID: "superfluous-actions", Group: RuleGroupSecurity, Summary: "An action does what a tool of the runner image does as well, such as gh release create.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-superfluous-actions", Options: []RuleOption{pedanticOption}},
 	)
 	registerRuleFactory("superfluous-actions", func(env *RuleEnv) []Rule {
 		if !env.config.RuleEnabled("superfluous-actions") {

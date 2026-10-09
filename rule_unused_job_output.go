@@ -66,7 +66,7 @@ func (rule *RuleUnusedJobOutput) VisitWorkflowPre(n *Workflow) error {
 
 func init() {
 	registerRules(
-		RuleInfo{ID: "unused-job-output", Group: RuleGroupPolicy, Summary: "An output of a job is never read by another job or by a workflow_call output.", DefaultLevel: SeverityWarning, Profile: ProfileDefault, DocsAnchor: "check-unused-job-output"},
+		RuleInfo{ID: "unused-job-output", Group: RuleGroupPolicy, Summary: "An output of a job is never read by another job or by a workflow_call output.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-unused-job-output"},
 	)
 	registerRuleFactory("unused-job-output", func(env *RuleEnv) []Rule {
 		return []Rule{NewRuleUnusedJobOutput()}

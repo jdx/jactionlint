@@ -384,7 +384,7 @@ func (rule *RuleGitHubEnv) judgeLine(rest string) data {
 func init() {
 	registerRules(
 		RuleInfo{ID: "github-env", Group: RuleGroupSecurity, Summary: "A value that is not a literal is written to GITHUB_ENV or GITHUB_PATH in a workflow triggered by pull_request_target or workflow_run.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-github-env"},
-		RuleInfo{ID: "github-env-untrusted-input", Group: RuleGroupSecurity, Summary: "Input that an outsider controls is written to GITHUB_ENV or GITHUB_PATH.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-github-env"},
+		RuleInfo{ID: "github-env-untrusted-input", Group: RuleGroupSecurity, Summary: "Input that an outsider controls is written to GITHUB_ENV or GITHUB_PATH.", DefaultLevel: SeverityError, Profile: ProfilePedantic, DocsAnchor: "check-github-env"},
 	)
 	registerRuleFactory("github-env", func(env *RuleEnv) []Rule {
 		if !env.config.RuleEnabled("github-env") && !env.config.RuleEnabled("github-env-untrusted-input") {

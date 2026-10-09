@@ -145,7 +145,7 @@ func TestOnlineRulesNeedTheFlag(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	l.defaultConfig = &Config{Profile: ProfileAll}
+	l.defaultConfig = &Config{Profile: ProfilePedantic}
 	src := workflowWith("uses: actions/checkout@v4", "uses: actions/checkout@2f547d07f23dec7f4a96fc091165260dcbe59529 # v1")
 	if _, err := l.Lint("test.yaml", []byte(src), &Project{root: t.TempDir()}); err != nil {
 		t.Fatal(err)
@@ -193,7 +193,7 @@ func TestOnlineRulesFollowRuleLevels(t *testing.T) {
 		t.Errorf("want only impostor-commit as a warning: %v", lineIDsOf(errs))
 	}
 	// Profiles do not matter for online rules
-	for _, p := range []Profile{ProfileDefault, ProfileStrict, ProfileAll} {
+	for _, p := range []Profile{ProfileDefault, ProfilePedantic, ProfilePedantic} {
 		errs, _ := lintOnline(t, c, &Config{Profile: p}, src)
 		var online []*Error
 		for _, e := range errs {
@@ -712,7 +712,7 @@ func TestRefVersionMismatchIsSilentWhenTheTagLookupFails(t *testing.T) {
 // An ignore for an online rule is not unused while the online checks are off: the rule did not run.
 func TestUnusedIgnoreOfOnlineRules(t *testing.T) {
 	src := "on: push\njobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      # jactionlint ignore=impostor-commit\n      - uses: actions/checkout@v4\n"
-	cfg := mustParseConfig(t, "profile: strict\nrules:\n  unused-ignore: error\n  missing-timeout: off\n  stale-action-refs: off\n")
+	cfg := mustParseConfig(t, "profile: pedantic\nrules:\n  unused-ignore: error\n  missing-timeout: off\n  stale-action-refs: off\n")
 	unused := func(errs []*Error) int { return len(errsWithID(errs, "unused-ignore")) }
 
 	l, err := NewLinter(io.Discard, &LinterOptions{})

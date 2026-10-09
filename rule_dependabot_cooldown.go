@@ -139,7 +139,7 @@ func init() {
 	registerRules(RuleInfo{
 		ID: "dependabot-cooldown", Group: RuleGroupSecurity,
 		Summary:      "An update in dependabot.yml has no cooldown or a cooldown shorter than the minimum.",
-		DefaultLevel: SeverityWarning, Profile: ProfileDefault, Fixable: true, DocsAnchor: "check-dependabot-cooldown",
+		DefaultLevel: SeverityError, Profile: ProfileDefault, Fixable: true, DocsAnchor: "check-dependabot-cooldown",
 		Options: []RuleOption{
 			{Name: "days", Kind: RuleOptionInt, Default: dependabotDefaultMinCooldownDays, Summary: "The minimum number of days \"cooldown.default-days\" must be. Defaults to 7."},
 			{Name: "default-days", Kind: RuleOptionInt, Summary: "The number of days -fix writes as \"cooldown.default-days\". It must be at least \"days\". There is no default: without it findings have no fix."},

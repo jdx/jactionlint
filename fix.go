@@ -564,14 +564,33 @@ func (l *Linter) lintSource(file string, src []byte, project *Project) (fileResu
 }
 
 // configFor returns the configuration which applies to files of the project.
+// The -profile option, when given, replaces the profile of the configuration.
 func (l *Linter) configFor(project *Project) *Config {
-	if l.defaultConfig != nil {
-		return l.defaultConfig
+	var cfg *Config
+	switch {
+	case l.defaultConfig != nil:
+		cfg = l.defaultConfig
+	case project != nil && project.Config() != nil:
+		cfg = project.Config()
+	default:
+		cfg = l.globalConfig
 	}
-	if project != nil && project.Config() != nil {
-		return project.Config()
+	if l.profile == "" {
+		return cfg
 	}
-	return l.globalConfig
+	if cfg == nil {
+		return &Config{Profile: l.profile}
+	}
+	if cfg.Profile == l.profile {
+		return cfg
+	}
+	if c, ok := l.profiled.Load(cfg); ok {
+		return c.(*Config)
+	}
+	c := *cfg
+	c.Profile = l.profile
+	actual, _ := l.profiled.LoadOrStore(cfg, &c)
+	return actual.(*Config)
 }
 
 // writeFileUnchanged writes the new text of the file unless the file changed since it was read.
