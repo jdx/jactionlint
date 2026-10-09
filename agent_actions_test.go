@@ -382,3 +382,73 @@ func TestAgentSettingsWithExpressions(t *testing.T) {
 		t.Fatalf("got %q", got)
 	}
 }
+
+// A limited agent still holds its secrets, and a steered agent can print them: the open gate is accepted
+// for a token that can only write issues, the secret in the environment is not.
+func TestAgenticActionsSecretsOfALimitedAgent(t *testing.T) {
+	const src = `on: issues
+jobs:
+  a:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - uses: anthropics/claude-code-action@v1
+        env:
+          DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}
+        with:
+          allowed_non_write_users: '*'
+`
+	got := messagesOfID(lintAgentTest(t, src), "agentic-actions")
+	if len(got) != 1 || !strings.Contains(got[0], "DEPLOY_KEY") {
+		t.Fatalf("want only the secret, got %q", got)
+	}
+}
+
+func TestAgenticActionsSecretsMessageNamesTheTrigger(t *testing.T) {
+	const src = `on:
+  workflow_run:
+    workflows: [CI]
+jobs:
+  a:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: anthropics/claude-code-action@v1
+        env:
+          DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}
+        with:
+          allowed_non_write_users: '*'
+`
+	var secret string
+	for _, m := range messagesOfID(lintAgentTest(t, src), "agentic-actions") {
+		if strings.Contains(m, "DEPLOY_KEY") {
+			secret = m
+		}
+	}
+	if !strings.Contains(secret, `"workflow_run" trigger`) {
+		t.Fatalf("the message must name the trigger: %q", secret)
+	}
+}
+
+func TestAgenticActionsSecretsInTheEnvInput(t *testing.T) {
+	const src = `on: issue_comment
+jobs:
+  a:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: anthropics/claude-code-action@v1
+        with:
+          allowed_non_write_users: '*'
+          claude_env: |
+            API_TOKEN: ${{ secrets.API_TOKEN }}
+`
+	var found bool
+	for _, m := range messagesOfID(lintAgentTest(t, src), "agentic-actions") {
+		if strings.Contains(m, "API_TOKEN") && strings.Contains(m, "claude_env") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("a secret in claude_env must be reported")
+	}
+}
