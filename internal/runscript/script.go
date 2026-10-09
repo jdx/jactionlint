@@ -61,6 +61,18 @@ func SupportsShell(shell string) bool {
 	return name == "bash" || name == "sh"
 }
 
+// InSplitList reports whether the byte offset is inside a word of the list of a `for` or `select` loop, or of the
+// elements of an array assignment (`a=(x y)`, `declare -a a=(x)`, `a+=(x)`). The shell splits an unquoted
+// expansion there into the items of the list on purpose, so quoting it would change the program.
+func (s *Script) InSplitList(offset int) bool {
+	for _, r := range s.splitWords {
+		if offset >= r[0] && offset < r[1] {
+			return true
+		}
+	}
+	return false
+}
+
 // Loc is the location of a node: byte offsets into the script and a 1-based line and column (in runes)
 // inside the script, before the YAML indentation is considered. See [Script.Position].
 type Loc struct {
@@ -95,6 +107,8 @@ type Script struct {
 	Redirects []*Redirect
 	// Assignments are all variable assignments (`A=1`, `A=1 cmd`, `export A=1`).
 	Assignments []*Assignment
+
+	splitWords [][2]int // byte ranges of the words of for/select lists and array assignments
 
 	lineStarts []int
 	tokens     []string    // placeholder token of the expression with the same index; "" if none

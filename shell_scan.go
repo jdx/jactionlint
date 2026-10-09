@@ -1,5 +1,7 @@
 package jactionlint
 
+import "github.com/jdx/jactionlint/v2/internal/runscript"
+
 // shQuote is how a position of a POSIX shell script is quoted.
 type shQuote int8
 
@@ -190,6 +192,19 @@ func analyzeShellPlaceholders(script string, spans []shSpan) []shPlace {
 	}
 	if globalBad {
 		for i := range places {
+			places[i].Cannot = true
+		}
+		return places
+	}
+	// The scanner above does not know the shell grammar. The parser does: an unquoted placeholder in the words
+	// of a for/select list or of an array assignment is meant to be split, wherever it sits (after braces,
+	// prefix assignments, ${var} words, ...). A script which does not parse is not touched.
+	parsed, err := runscript.Analyze(script, "bash")
+	for i := range places {
+		if places[i].Cannot || places[i].Quote != shUnquoted {
+			continue
+		}
+		if err != nil || parsed.InSplitList(spans[i].Start) {
 			places[i].Cannot = true
 		}
 	}
