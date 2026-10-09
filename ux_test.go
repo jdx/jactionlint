@@ -293,3 +293,28 @@ func TestUnpinnedUsesIsFixableWithOnline(t *testing.T) {
 		t.Error("unpinned-uses sets Error.Fix with -online but RuleInfo.Fixable is false")
 	}
 }
+
+// The $/ fix stays unsafe and says why: actionlint 1.7.12 and older reject the syntax (bug bash: the fix made
+// the repository fail the other linter).
+func TestSelfRepositoryFixIsUnsafeAndWarnsAboutOlderTools(t *testing.T) {
+	l, err := NewLinter(io.Discard, &LinterOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	l.defaultConfig = mustParseConfig(t, "rules:\n  self-repository: error\n")
+	src := []byte("on: push\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: ./.github/actions/x\n")
+	errs, err := l.Lint("test.yaml", src, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range errs {
+		if e.ID != "self-repository" {
+			continue
+		}
+		if e.Fix == nil || !e.Fix.Unsafe || !strings.Contains(e.Fix.Description, "actionlint") {
+			t.Fatalf("unexpected fix %+v", e.Fix)
+		}
+		return
+	}
+	t.Fatalf("no self-repository finding: %v", errs)
+}

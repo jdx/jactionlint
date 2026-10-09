@@ -3436,7 +3436,9 @@ rules:
 ```
 
 The rule has an unsafe fix, so `jactionlint -fix=unsafe` rewrites `./` to `$/`. It is unsafe because the two forms are not
-the same when a step replaces the workspace content, which is exactly the case the rule is about.
+the same when a step replaces the workspace content, which is exactly the case the rule is about, and because `$/` needs a
+recent runner and GitHub Enterprise Server: actionlint 1.7.12 and older reject it (`specifying action "$/..." in invalid format`),
+so a repository that also runs the original actionlint starts to fail there. Check which tools read your workflows before you apply it.
 
 `uses: $/path` needs no checkout step, and the [`local-action-checkout`](#check-local-action-checkout) rule does not report it.
 

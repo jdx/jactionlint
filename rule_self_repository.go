@@ -9,7 +9,8 @@ import "strings"
 // cannot be told apart from an arbitrary directory by a policy that requires pinning. The `$/` form
 // always resolves to the commit that runs the workflow.
 //
-// The fix is unsafe: `$/` is newer syntax which not every GitHub Enterprise Server understands, and
+// The fix is unsafe: `$/` is newer syntax which not every GitHub Enterprise Server or runner understands and
+// which actionlint 1.7.12 and older reject (the repository then fails the other linter), and
 // when a step replaces the workspace with another checkout `./` and `$/` are not the same code.
 type RuleSelfRepository struct {
 	RuleBase
@@ -48,7 +49,7 @@ func (rule *RuleSelfRepository) check(u *String) {
 	}
 	if edit, ok := rule.idx.selfRepositoryEdit(u.Pos); ok {
 		rule.errs[len(rule.errs)-1].Fix = &Fix{
-			Description: "Use the self-repository syntax \"$/\"",
+			Description: "Use the self-repository syntax \"$/\" (needs a recent runner and GitHub Enterprise Server; actionlint 1.7.12 and older reject it)",
 			Unsafe:      true,
 			Edits:       []TextEdit{edit},
 		}
