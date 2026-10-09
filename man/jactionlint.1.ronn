@@ -20,9 +20,16 @@ Features:
 - **Actions usage check** to check that inputs at `with:` and outputs in `steps.{id}.outputs` are
   correct
 - **shellcheck and pyflakes integrations** for scripts at `run:`
-- **Security checks**; script injection by untrusted inputs, hard-coded credentials
+- **Security and policy checks**; script injection by untrusted inputs, unpinned actions, excessive
+  permissions, dangerous triggers, hard-coded credentials, missing timeouts, ...
 - **Other several useful checks**; glob syntax validation, dependencies check for `needs:`, runner
   label validation, cron syntax validation, ...
+
+The checks are organized in three profiles, each including the one before it: **correctness** (what
+actionlint checks plus the bug detectors of jactionlint), **default** (adds the security posture and
+policy rules worth failing a build on; used when nothing is configured) and **pedantic** (adds the
+noisy and opinionated rules). Choose one with **-profile** or with `profile:` in the configuration
+file. Every finding has a stable rule ID such as `unpinned-uses`.
 
 
 ## USAGE
@@ -229,7 +236,20 @@ Docker image, and integrations with reviewdog, Problem Matchers, super-linter, p
 
 https://github.com/jdx/jactionlint/blob/main/docs/config.md
 
-How to configure jactionlint behavior by the configuration file `jactionlint.yaml`.
+How to configure jactionlint behavior by the configuration file `jactionlint.yaml`: the profile, the
+level of each rule, runner labels, ignores, the baseline and the online options.
+
+### Coming from actionlint
+
+https://github.com/jdx/jactionlint/blob/main/docs/actionlint.md
+
+How to get the checks of actionlint with `-profile correctness`.
+
+### Migrating to v2
+
+https://github.com/jdx/jactionlint/blob/main/docs/v2-migration.md
+
+What changed since v1 and what to do about it.
 
 ### Go API
 

@@ -1,18 +1,56 @@
 # Policy for jactionlint's features
 
 jactionlint started as a linter for mistakes only. It now has three tiers of checks, and every check belongs to exactly
-one of them:
+one of them. The tier says what the check is about. A separate decision, the profile, says whether the check runs for someone
+who configured nothing.
 
-| Tier            | What it finds                                                                          | Profile                                                                   |
-| --------------- | -------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
-| **Correctness** | Workflows that are broken or do not do what they say: syntax, types, bad inputs, etc.  | `correctness` (what actionlint checks and the bug detectors we added)     |
-| **Security**    | Workflows that are exploitable or weaken the supply chain: injection, unpinned actions | `default`; the noisy tier of an audit is in its `pedantic` option         |
-| **Policy**      | Project conventions: explicit `shell:`, run script length, `permissions:` set          | `default` when it is worth failing a build on, `pedantic` otherwise       |
+| Tier            | What it finds                                                                          | Group in [the rules](docs/rules.md) |
+| --------------- | -------------------------------------------------------------------------------------- | ----------------------------------- |
+| **Correctness** | Workflows that are broken or do not do what they say: syntax, types, bad inputs, etc.  | `correctness`                       |
+| **Security**    | Workflows that are exploitable or weaken the supply chain: injection, unpinned actions | `security`                          |
+| **Policy**      | Project conventions: pinned actions, explicit `permissions:`, timeouts, `shell:`       | `policy` (and `style`)              |
 
-The profile decides what runs for someone who chose nothing: `correctness` < `default` < `pedantic`, each including the one
-before it. Every rule of `correctness` and `default` reports `error`; a rule that cannot be an error belongs to `pedantic`.
-See [the configuration document](docs/config.md#profiles) for how checks are enabled, and
-[the v2 migration plan](docs/v2-migration.md) for where this is heading.
+## Profiles: what runs without configuration
+
+There are three [profiles](docs/config.md#profiles), and each includes the one before it:
+
+| Profile       | What it has                                                                                                                                  |
+| ------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `correctness` | What [actionlint](docs/actionlint.md) checks, plus jactionlint's bug detectors. No security posture or policy rule.                         |
+| `default`     | `correctness` plus the security and policy rules that are worth failing a build on. **This is what runs when nothing is configured.**       |
+| `pedantic`    | `default` plus the noisy and opinionated rules, and the pedantic findings of audits (the option `pedantic`).                                  |
+
+The default is deliberately stricter than the tool used to be: a repository that never configured jactionlint gets the security
+posture and policy rules, not only the mistakes. Someone who wants less chooses `profile: correctness`, and someone adopting the
+default on an existing repository records today's findings in a [baseline](docs/usage.md#baseline). The profile of every rule, with
+its group and level, is recorded in `testdata/profiles.txt`.
+
+Where a check goes:
+
+- **Correctness profile.** The check finds something that is wrong whatever the project's taste: it makes the workflow fail or
+  misbehave, or actionlint reports it. It has essentially no false positives. The `correctness` profile contains only rules of the
+  correctness group, with four documented exceptions that actionlint has too or that only act on what the user asked for
+  (`template-injection`, `hardcoded-container-credentials`, `expired-ignore`, `unused-baseline-entry`).
+- **Default profile.** The check finds an exploitable or weakening construct, or breaks a convention that is worth failing a build
+  on, and the corpus review (below) shows no false positives. Everything zizmor's regular persona reports belongs here unless the
+  review says otherwise.
+- **Pedantic profile.** The check is noisy, opinionated or informational: it has a real false-positive rate, or it reports something
+  many projects do on purpose, or it only matters to an auditor. zizmor's pedantic and auditor personas go here.
+- **Neither.** A check that needs configuration to mean anything (`forbidden-uses`, `required-actions`, `timeout-too-long`) runs only
+  when the configuration enables it. A check that needs the network runs only when the online checks are on (`-online` on the command
+  line, `online: true` in the config or `LinterOptions.Online` in the API).
+
+The tier does not depend on the false-positive rate: it follows what the check detects. A noisy security check is still a security
+check, it just lives in the `pedantic` profile.
+
+Two more rules keep the profiles simple:
+
+- **One ID per audit.** A noisier tier of an audit is the same rule ID with an option named `pedantic`, true under the `pedantic`
+  profile and false otherwise. Do not add an ID with a suffix such as `-expansion` or `-trusted`.
+- **Every rule of `correctness` and `default` reports `error`, with one documented exception** (`unused-baseline-entry` is `info`,
+  and only `-baseline-check` produces it). A rule that should not fail a build belongs to `pedantic` with its
+  own level. `TestRuleProfilesInvariants` enforces both this and the content of `correctness`. A fixer never invents a value
+  (a number of minutes, a number of days): offer the fix only when a rule option supplies it.
 
 ## Accepting a new check
 
@@ -22,18 +60,19 @@ A patch that adds a check (or a feature request for one) is accepted when all of
   of the equivalent [zizmor audit](docs/zizmor-parity.md) when there is one so users can map them.
 - **Tier and profile.** The check states which tier it belongs to and why, and which profile enables it. `testdata/profiles.txt`
   records the profile and level of every rule (`go test -run TestRuleProfilesSnapshot -update-profiles` writes it), so a new rule
-  or a changed profile shows in the diff. One audit is one ID: put its noisier findings behind the `pedantic` option instead of
-  adding an ID with a suffix.
+  or a changed profile shows in the diff of the pull request and gets reviewed.
 - **Docs section.** [The checks document](docs/checks.md) has a section for it with an example, the output and a
-  playground link. See [How to write checks document](#how-to-write-checks-document).
+  playground link. See [How to write checks document](#how-to-write-checks-document). The rule appears in the generated
+  [rules reference](docs/rules.md) through its `RuleInfo`.
 - **Golden tests.** There are tests under `testdata/` (`err`, `ok` and `examples` as appropriate) that show both what is
   reported and what is intentionally not reported.
 - **False-positive review.** The check was run on a corpus of real repositories (a set of well-known open source
   projects, not only the contributor's own) and every finding was reviewed. Please include the corpus and the numbers in
-  the pull request description.
-- **Default-on only with ~zero false positives.** A check is enabled by default only if the corpus review shows
-  essentially no false positives. Anything noisier must be opt-in. The tier does not depend on the false-positive
-  rate: it follows what the check detects, so a noisy security check is still a security check, just not on by default.
+  the pull request description, and say what you did not measure. A comparison with zizmor, if there is a matching audit, can use
+  [`scripts/zizmor-diff`](scripts/zizmor-diff/README.md).
+- **Default-on only with ~zero false positives.** A check is enabled in the `default` profile only if the corpus review shows
+  essentially no false positives. Anything noisier goes to `pedantic`, whatever its tier. A rule with no finding on the corpus has
+  no measured false-positive rate, which is not the same as zero: say so, and prefer `pedantic` until a real case exists.
 - **Configuration is acceptable when it is the point of the check.** Policy checks may need options (for example, an
   allow list of actions). Correctness checks should not require configuration to be useful.
 
@@ -118,24 +157,32 @@ file (`linter.go` and `rule_registry.go` stay untouched). A rule needs these fil
    }
    ```
 
+   `Profile` is the first profile that enables the rule (see [the policy](#profiles-what-runs-without-configuration)); leave it empty
+   for a rule that runs only when configured, and set `Online: true` for a rule that needs the online checks. `Fixable: true` marks a rule
+   that attaches a fix. `Options` lists the options of the rule, which `docs/rules.md` documents and the config validates.
+
 2. `rule_<name>_test.go` and golden files: an input in `testdata/err/<name>.yaml` with its expected output in
-   `testdata/err/<name>.out` (and `testdata/ok/` for inputs which must stay clean).
+   `testdata/err/<name>.out` (and `testdata/ok/` for inputs which must stay clean). Tests that lint with the implicit profile run
+   the `correctness` profile; a test of a rule of the `default` profile calls `withDefaultProfile(t)` or sets `profile:` in its config.
 3. A section with an `<a id="check-my-rule"></a>` anchor in `docs/checks.md` and an example in `testdata/examples`
    (`go run ./scripts/check-checks -fix ./docs/checks.md` writes the outputs).
 4. The new IDs recorded in the snapshot: `mise run rule-ids <batch-name>` (this runs
    `go test -run TestRuleIDsAreStable -update-rule-ids=<batch-name> .`) which writes the IDs missing from every file to
    `testdata/rule_ids.d/<batch-name>.txt`. Give each batch of rules its own name so parallel work never touches the same file.
    The test fails when a listed ID is no longer registered.
-5. `mise run rules-doc` regenerates `docs/rules.md`, which is generated from the registry and sorted by ID. `hk check --all`
+5. The decision of the profile recorded: `go test -run TestRuleProfilesSnapshot -update-profiles .` writes
+   `testdata/profiles.txt`. The rule appears as a line in the diff, which is where reviewers check its profile and level.
+   `TestRuleProfilesInvariants` fails when a `correctness` or `default` rule does not report `error`, or a `correctness` rule is
+   not of the correctness group.
+6. `mise run rules-doc` regenerates `docs/rules.md`, which is generated from the registry and sorted by ID. `hk check --all`
    (and so CI) fails when it is stale (`mise run rules-doc:check` checks only that).
-
-6. Whether the rule applies to `action.yml` files: add the name of its factory to `actionRuleScope` in `rule_action_scope.go`
+7. Whether the rule applies to `action.yml` files: add the name of its factory to `actionRuleScope` in `rule_action_scope.go`
    (`actionApplies` for rules that check steps, `actionCallerDependent` when the result depends on the trigger of the calling
    workflows, `actionNotApplicable` for rules about workflow or job settings) and list its IDs in the table of
    [composite actions](docs/checks.md#check-composite-actions). `TestActionScopeIsComplete` and `TestActionScopeIsDocumented` fail
    until both are done. A caller-dependent rule reads the trigger with `Workflow.TriggerEvents` instead of `Workflow.On`.
 
-An online rule (`Online: true` in its `RuleInfo`, enabled only by `-online`) takes the `onlineSession` from the `RuleEnv` in its
+An online rule (`Online: true` in its `RuleInfo`, enabled only when the online checks are on) takes the `onlineSession` from the `RuleEnv` in its
 factory and returns nothing when it is nil. It never talks to the network in tests: the golden files named `*_online` in
 `testdata/err` and `testdata/examples` are linted with the answers recorded in `testdata/online/github.json`, served by
 `NewFixtureGitHubClient`, and a lookup that is not in the file fails the test. Add the repositories your rule needs to the file;
@@ -145,8 +192,8 @@ of an online rule starts with the line `# requires -online` so that `scripts/che
 Tests also fail when a reported ID is not registered, a registered ID is never reported, or an anchor does not exist in
 `docs/checks.md`. Before pushing run `go build ./...`, `go vet ./...`, `go test -race ./...` and `hk check --all`.
 
-Rules with an automatic fix set `Error.Fix` (byte-range edits). Only safe fixes appear in the SARIF output and are applied by
-`-fix`; mark risky ones `Unsafe`. Never build YAML text by concatenating strings: use `RenderYAMLValue` (a whole new value of a
+Rules with an automatic fix set `Error.Fix` (byte-range edits) and `Fixable: true` in their `RuleInfo`. Only safe fixes appear in the SARIF output and are applied by
+`-fix`; mark risky ones `Unsafe`. A fix never invents a value such as a number of minutes: offer it only when a rule option supplies the value. Never build YAML text by concatenating strings: use `RenderYAMLValue` (a whole new value of a
 mapping entry: plain when that reads back as the same string, else double quoted) and `YAMLSiteAt` plus `YAMLSite.Insert` (text
 inserted into a scalar that exists: escaped for plain, flow, single quoted, double quoted and block scalars, or refused). `-fix`
 checks every pass (the result must be valid YAML which differs only where the edits are), so a fixer that breaks the file is refused
@@ -399,19 +446,22 @@ Please see [the readme of the script](./scripts/check-checks/README.md) for the 
 document format that this script assumes.
 
 The output block is what the CLI prints for the example, and the playground prints the same. Both lint the example with
-the configuration in [`internal/exampleconfig`](./internal/exampleconfig/exampleconfig.go), which uses the `default` profile and
-turns off the rules every minimal example breaks (`missing-timeout`, `missing-permissions`, `unpinned-uses`, `concurrency-limits`, `obfuscation`
-and a few more): the examples are minimal workflows. The playground tests
-(`mise run docs:test`) decode every permalink in the document, lint it with the real wasm build and compare the findings
-(message, `warning: `/`info: ` prefix and kind) with the output block above it. So:
+the configuration in [`internal/exampleconfig`](./internal/exampleconfig/exampleconfig.go), which is the `default` profile (the
+implicit one) with the rules that every minimal example breaks turned off: `artipacked`, `concurrency-limits`,
+`dangerous-triggers`, `excessive-permissions`, `missing-permissions`, `missing-timeout`, `obfuscation`, `unpinned-images` and
+`unpinned-uses`. The examples are minimal workflows, so they have no timeout, permissions, pinned actions or concurrency group.
+The playground tests (`mise run docs:test`) decode every permalink in the document, lint it with the real wasm build and compare
+the findings (message, `warning: `/`info: ` prefix and kind) with the output block above it. So:
 
 - A rule which the example configuration has on (the rules of the `correctness` and `default` profiles it does not turn off): write the example, run the script and keep both the generated output and the playground
   link. The output must be what the playground prints, so an example for one rule must not trigger another default-on rule
   (give a job `runs-on`, pin `uses:` and so on). If a new default-on rule fires on most examples, turn it off in
   `internal/exampleconfig`, which changes the CLI and the playground together.
-- A rule which the example configuration has off (the `pedantic` profile and the rules it turns off): the playground cannot enable it. Put `<!-- Skip update output -->` after
+- A rule which the example configuration has off (the `pedantic` profile, the rules it turns off and the rules that need configuration): the playground cannot enable it. Put `<!-- Skip update output -->` after
   `Output:` and `<!-- Skip playground link -->` instead of the link, write the output by hand, and show the `rules:` section of
   the configuration file that produces it right after the example. A Go test (`TestPolicyDocsExamples` for the policy rules) lints
   the example with that configuration and compares the output, so the hand-written output cannot go stale.
+- An online rule starts its example with `# requires -online` so that `scripts/check-checks` lints it with the recorded answers of
+  `testdata/online/github.json`, and has no playground link because the playground has no network.
 
 The tests count the permalinks in the document themselves, so there is no number to update when a section is added.

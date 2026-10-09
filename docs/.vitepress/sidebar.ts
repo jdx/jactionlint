@@ -22,10 +22,10 @@ export const sidebar: SidebarItem[] = [
     ],
   },
   {
-    text: "v2 roadmap",
+    text: "Moving to jactionlint",
     items: [
-      { text: "v2 migration (planned)", link: "/v2-migration" },
-      { text: "zizmor parity", link: "/zizmor-parity" },
+      { text: "Migrating to v2", link: "/v2-migration" },
+      { text: "jactionlint and zizmor", link: "/zizmor-parity" },
     ],
   },
   {
