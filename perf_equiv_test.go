@@ -94,7 +94,7 @@ func TestLineLookupsMatchScanning(t *testing.T) {
 		b := []byte(src)
 		for line := 0; line <= strings.Count(src, "\n")+3; line++ {
 			e := &Error{Line: line}
-			got, gok := e.getLine(b)
+			got, gok := e.getLine(newLineIndex(b))
 			want, wok := referenceGetLine(e, b)
 			if got != want || gok != wok {
 				t.Errorf("getLine(%q, %d) = %q, %v; want %q, %v", src, line, got, gok, want, wok)
@@ -109,20 +109,6 @@ func TestLineLookupsMatchScanning(t *testing.T) {
 			if gl != wl || gc != wc {
 				t.Errorf("offsetPosition(%q, %d) = %d:%d; want %d:%d", src, off, gl, gc, wl, wc)
 			}
-		}
-	}
-}
-
-// A different source of the same length must not be answered from the cache of the previous one.
-func TestLineStartsCacheKeysOnTheSource(t *testing.T) {
-	a := []byte("a\nb\nc\n")
-	b := []byte("aa\nbb\n")
-	for i := 0; i < 2; i++ {
-		if got, _ := (&Error{Line: 2}).getLine(a); got != "b" {
-			t.Fatalf("a: %q", got)
-		}
-		if got, _ := (&Error{Line: 2}).getLine(b); got != "bb" {
-			t.Fatalf("b: %q", got)
 		}
 	}
 }

@@ -111,12 +111,12 @@ type textPrinter struct {
 
 func (p textPrinter) print(w io.Writer, results []fileResult, _ []string) error {
 	for _, r := range results {
-		src := r.src
-		if p.oneline {
-			src = nil
+		var x *lineIndex
+		if !p.oneline && len(r.src) > 0 {
+			x = newLineIndex(r.src)
 		}
 		for _, e := range r.errs {
-			e.prettyPrint(w, src, p.showIDs)
+			e.prettyPrint(w, x, p.showIDs)
 		}
 	}
 	return nil
@@ -129,13 +129,8 @@ type templatePrinter struct {
 }
 
 func (p templatePrinter) print(w io.Writer, results []fileResult, _ []string) error {
-	var fields []*ErrorTemplateFields
-	for _, r := range results {
-		for _, e := range r.errs {
-			fields = append(fields, e.GetTemplateFields(r.src))
-		}
-	}
-	if fields == nil {
+	fields := allTemplateFields(results)
+	if len(fields) == 0 {
 		fields = []*ErrorTemplateFields{}
 	}
 	return p.f.Print(w, fields)
@@ -146,8 +141,12 @@ func (p templatePrinter) print(w io.Writer, results []fileResult, _ []string) er
 func allTemplateFields(results []fileResult) []*ErrorTemplateFields {
 	fields := []*ErrorTemplateFields{}
 	for _, r := range results {
+		var x *lineIndex
+		if len(r.src) > 0 && len(r.errs) > 0 {
+			x = newLineIndex(r.src)
+		}
 		for _, e := range r.errs {
-			fields = append(fields, e.GetTemplateFields(r.src))
+			fields = append(fields, e.templateFields(x))
 		}
 	}
 	return fields
@@ -379,11 +378,16 @@ func sarifURI(path string) string {
 // byte offset in the source. A carriage return before a line feed is not counted so that the end of a
 // line is the same position with LF and CRLF.
 func offsetPosition(src []byte, off int) (line, col int) {
+	return newLineIndex(src).position(off)
+}
+
+// position is offsetPosition for the source of the index.
+func (x *lineIndex) position(off int) (line, col int) {
+	src := x.src
 	off = min(max(off, 0), len(src))
-	starts := lineStartsOf(src)
-	line = sort.Search(len(starts), func(i int) bool { return starts[i] > off })
+	line = sort.Search(len(x.starts), func(i int) bool { return x.starts[i] > off })
 	col = 1
-	for i := starts[line-1]; i < off; {
+	for i := x.starts[line-1]; i < off; {
 		r, w := utf8.DecodeRune(src[i:])
 		if !(r == '\r' && i+1 < len(src) && src[i+1] == '\n') {
 			col++ // a carriage return before a line feed is not counted
@@ -461,9 +465,9 @@ func (s *editSet) add(e TextEdit) {
 // like "hk util sarif-diff" apply the fixes of all results together and give up when any of them is
 // broken, so a fix which could not be applied is better left out: the finding is then reported as one
 // which needs the fixer.
-func sarifFixes(e *Error, src []byte, accepted *editSet) []sarifFix {
+func sarifFixes(e *Error, x *lineIndex, accepted *editSet) []sarifFix {
 	f := e.Fix
-	if f == nil || f.Unsafe || !f.validFor(src) {
+	if f == nil || f.Unsafe || !f.validFor(x.src) {
 		return nil
 	}
 	for _, edit := range f.Edits {
@@ -482,8 +486,8 @@ func sarifFixes(e *Error, src []byte, accepted *editSet) []sarifFix {
 	})
 	change := sarifArtifactChange{ArtifactLocation: sarifArtifactLocation{URI: uri}}
 	for _, edit := range edits {
-		sl, sc := offsetPosition(src, edit.Start)
-		el, ec := offsetPosition(src, edit.End)
+		sl, sc := x.position(edit.Start)
+		el, ec := x.position(edit.End)
 		var r sarifReplacement
 		r.DeletedRegion = sarifRegion{StartLine: sl, StartColumn: sc, EndLine: el, EndColumn: ec}
 		r.InsertedContent.Text = edit.NewText
@@ -558,6 +562,7 @@ func (p sarifPrinter) print(w io.Writer, results []fileResult, notes []string) e
 
 	for _, r := range results {
 		var accepted editSet
+		x := newLineIndex(r.src)
 		for _, e := range r.errs {
 			res := sarifResult{
 				RuleID:  e.ID,
@@ -586,7 +591,7 @@ func (p sarifPrinter) print(w io.Writer, results []fileResult, notes []string) e
 				}
 				res.Locations[0].PhysicalLocation.Region = reg
 			}
-			res.Fixes = sarifFixes(e, r.src, &accepted)
+			res.Fixes = sarifFixes(e, x, &accepted)
 			run.Results = append(run.Results, res)
 		}
 	}

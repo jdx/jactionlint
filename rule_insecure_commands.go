@@ -13,7 +13,8 @@ const insecureCommandsEnvVar = "ACTIONS_ALLOW_UNSECURE_COMMANDS"
 // https://github.blog/changelog/2020-10-01-github-actions-deprecating-set-env-and-add-path-commands/
 type RuleInsecureCommands struct {
 	RuleBase
-	src []byte
+	src   []byte
+	lines *lineIndex // the lines of src, built when a fix needs them
 }
 
 // NewRuleInsecureCommands creates a new RuleInsecureCommands instance. The source is used to put a
@@ -78,7 +79,7 @@ func (rule *RuleInsecureCommands) fix(env *Env, v *EnvVar) *Fix {
 	if len(src) == 0 || v.Name == nil || v.Name.Pos == nil {
 		return nil
 	}
-	start := srcLineStart(src, v.Name.Pos.Line)
+	start := rule.lineIndex().startOf(v.Name.Pos.Line)
 	if start < 0 {
 		return nil
 	}
@@ -114,7 +115,7 @@ func (rule *RuleInsecureCommands) fix(env *Env, v *EnvVar) *Fix {
 		if v.Name.Pos.Line < 2 {
 			return nil
 		}
-		ps := srcLineStart(src, v.Name.Pos.Line-1)
+		ps := rule.lineIndex().startOf(v.Name.Pos.Line - 1)
 		pe := srcLineEnd(src, ps)
 		pl := src[ps:pe]
 		pi := len(pl) - len(bytes.TrimLeft(pl, " "))
@@ -169,4 +170,12 @@ func init() {
 		}
 		return []Rule{NewRuleInsecureCommands(env.src)}
 	})
+}
+
+// lineIndex returns the lines of the source of the file, which are found once for all the fixes.
+func (rule *RuleInsecureCommands) lineIndex() *lineIndex {
+	if rule.lines == nil {
+		rule.lines = newLineIndex(rule.src)
+	}
+	return rule.lines
 }
