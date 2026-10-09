@@ -152,3 +152,12 @@ func TestUnsoundPrefixMatchSites(t *testing.T) {
 		t.Errorf("want a finding with the default configuration: %v", got)
 	}
 }
+
+// The credentials reached by an index or as a whole are credentials too.
+func TestUnsoundPrefixMatchSelectsCredentialsByIndex(t *testing.T) {
+	cfg := ruleConfig("unsound-prefix-match")
+	for _, v := range []string{"secrets['TOKEN']", "github['token']", "toJSON(secrets)", "secrets[inputs.name]"} {
+		src := "on: push\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo\n        env:\n          T: ${{ startsWith(github.actor, 'jdx') && " + v + " }}\n"
+		wantLines(t, lintFileWithConfig(t, cfg, "ci.yaml", src), "unsound-prefix-match", 8)
+	}
+}

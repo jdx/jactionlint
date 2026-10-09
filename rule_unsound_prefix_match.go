@@ -95,10 +95,12 @@ func selectsSensitive(root ExprNode) bool {
 		switch n := n.(type) {
 		case *StringNode:
 			found = strings.Contains(strings.ToLower(n.Value), "self-hosted")
-		case *ObjectDerefNode:
+		case *VariableNode:
+			// secrets.X, secrets['X'] and a bare secrets (toJSON(secrets)) all reach the context
+			found = strings.EqualFold(n.Name, "secrets")
+		case *ObjectDerefNode, *IndexAccessNode:
 			if path, ok := derefPath(n); ok {
-				name := strings.Join(path, ".")
-				found = path[0] == "secrets" || name == "github.token"
+				found = strings.Join(path, ".") == "github.token"
 			}
 		}
 	})
