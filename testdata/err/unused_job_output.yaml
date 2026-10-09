@@ -1,0 +1,20 @@
+on: push
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      digest: ${{ steps.v.outputs.digest }}
+      all: ${{ steps.v.outputs.all }}
+    steps:
+      - id: v
+        run: |
+          echo "version=1.0.0" >> "$GITHUB_OUTPUT"
+          echo "digest=abc" >> "$GITHUB_OUTPUT"
+          echo "all=x" >> "$GITHUB_OUTPUT"
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo ${{ needs.build.outputs.version }}

@@ -1,0 +1,2 @@
+test.yaml:7:15: docker image must be pinned to a tag other than "latest" like "docker://{image}:{tag}" because the "unpinned-uses" rule is enabled: "docker://alpine" [action]
+test.yaml:8:15: docker image must be pinned to a tag other than "latest" like "docker://{image}:{tag}" because the "unpinned-uses" rule is enabled: "docker://alpine:latest" [action]

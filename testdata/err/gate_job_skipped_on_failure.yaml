@@ -1,0 +1,32 @@
+on: push
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo build
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo test
+  # This job is skipped when build or test fails, so the checks below never see a failure
+  final:
+    needs: [build, test]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check the results
+        run: test "${{ contains(needs.*.result, 'failure') }}" = false
+  notify:
+    needs: build
+    if: needs.build.result == 'failure'
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo build failed
+  report:
+    needs: [build, test]
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "$RESULTS"
+        if: always()
+        env:
+          RESULTS: ${{ toJSON(needs) }}

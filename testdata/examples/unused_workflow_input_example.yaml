@@ -1,0 +1,12 @@
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        type: string
+      dry-run:
+        type: boolean
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo ${{ inputs.version }}

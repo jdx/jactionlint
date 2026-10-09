@@ -1,0 +1,7 @@
+test.yaml:8:15: action "actions/checkout@v4" must be pinned to a full-length commit SHA like "{owner}/{repo}@{sha}" because the "unpinned-uses" rule is enabled [action]
+test.yaml:16:15: action "trusted-org/strict/sub/dir@v1" must be pinned to a full-length commit SHA like "{owner}/{repo}@{sha}" because the "unpinned-uses" rule is enabled [action]
+test.yaml:19:15: action "owner/repo@v1" must be pinned to a full-length commit SHA like "{owner}/{repo}@{sha}" because the "unpinned-uses" rule is enabled [action]
+test.yaml:22:15: docker image must be pinned to a digest like "docker://{image}@sha256:{digest}" because the "unpinned-uses" rule is enabled: "docker://alpine" [action]
+test.yaml:23:15: docker image must be pinned to a digest like "docker://{image}@sha256:{digest}" because the "unpinned-uses" rule is enabled: "docker://alpine:latest" [action]
+test.yaml:24:15: docker image must be pinned to a digest like "docker://{image}@sha256:{digest}" because the "unpinned-uses" rule is enabled: "docker://alpine:3.20" [action]
+test.yaml:31:11: reusable workflow call "owner/repo/.github/workflows/x.yml@v1" must be pinned to a full-length commit SHA like "owner/repo/path/to/workflow.yml@{sha}" because the "unpinned-uses" rule is enabled [workflow-call]

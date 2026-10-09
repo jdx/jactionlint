@@ -46,7 +46,7 @@ func TestCommandMain(t *testing.T) {
 func TestCommandMigrateIgnores(t *testing.T) {
 	dir := t.TempDir()
 	file := filepath.Join(dir, "w.yaml")
-	src := "on: push\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo ${{ github.event.issue.title }} # zizmor: ignore[template-injection] checked\n"
+	src := "on: push\njobs:\n  j:\n    runs-on: ubuntu-latest\n    timeout-minutes: 5\n    steps:\n      - run: echo ${{ github.event.issue.title }} # zizmor: ignore[template-injection] checked\n"
 	if err := os.WriteFile(file, []byte(src), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -62,7 +62,7 @@ func TestCommandMigrateIgnores(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := "on: push\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      # checked\n      # jactionlint ignore=template-injection\n      - run: echo ${{ github.event.issue.title }}\n"
+	want := "on: push\njobs:\n  j:\n    runs-on: ubuntu-latest\n    timeout-minutes: 5\n    steps:\n      # checked\n      # jactionlint ignore=template-injection\n      - run: echo ${{ github.event.issue.title }}\n"
 	if string(b) != want {
 		t.Errorf("unexpected content: %q", b)
 	}

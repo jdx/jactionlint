@@ -1,0 +1,14 @@
+on:
+  pull_request_target:
+    types: [opened, synchronize]
+
+concurrency:
+  # github.ref is the base branch for pull_request_target so every pull request has the same group
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  label:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo label

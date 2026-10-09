@@ -1,0 +1,20 @@
+# A release which is cancelled only by a run for the same tag, and a reusable workflow that decides by input
+on:
+  push:
+    tags: ["v*"]
+  workflow_call:
+    inputs:
+      tag:
+        type: string
+        default: ""
+
+concurrency:
+  group: release-${{ inputs.tag || github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'release' && inputs.tag == '' }}
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    steps:
+      - run: cargo publish
+        if: inputs.tag != ''

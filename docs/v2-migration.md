@@ -18,11 +18,14 @@ with stable rule IDs, severities and profiles. These changes are breaking, which
 | Strict config parsing | An unknown key in `jactionlint.yaml` becomes an error, with a suggestion for the closest known key. Today unknown keys are silently ignored. | planned |
 | Exit codes by severity | Findings of severity `error` exit with 1. `warn` and `info` findings do not fail the run unless `-strict-exit` is given. `-min-severity` hides lower severities. | planned |
 | `-format` changes | Built-in formats `text` (default), `oneline`, `json`, `jsonl`, `sarif`, `gcc` and `github`. Go templates keep working. `allKinds` still works and `allRules` is added to list every rule ID. SARIF output carries rule metadata, levels and fixes. | planned |
+| Online checks, `-online` | New, opt-in: six checks that query the GitHub API (impostor commits, known vulnerable actions, ref confusion, stale refs, archived repositories, version comments) and `-online -fix` pinning tags to commits. Nothing changes unless you pass the flag. See [the usage document](usage.md#online-checks). | planned |
 | Config booleans become `rules:` | Options such as `require-permissions` become entries in a `rules:` map (`<id>: off\|info\|warn\|error`), together with a `profile:` (`default`, `strict` or `all`) and `extends:` for shared config. | planned |
+| `missing-timeout` is on by default | A job without `timeout-minutes` is now reported by the default profile. It used to be opt-in. Set `rules.missing-timeout.default-minutes` and run `jactionlint -fix` to add that `timeout-minutes` to every job (there is no built-in number, so without the option the finding has no fix), or set `rules: {missing-timeout: off}` to keep the old behavior. A config that has the old `timeout-minutes:` key keeps its old meaning. | planned |
 
 ## Config migration
 
 The old boolean options keep working for one minor release of v2 and map onto rule IDs, printing a deprecation warning.
+`timeout-minutes: {max: N}` maps to `timeout-too-long` only: `missing-timeout` stays as the profile sets it. Only a written `required: true` or `required: false` turns `missing-timeout` on or off.
 A `migrate` command is planned to rewrite an existing configuration file:
 
 ```sh
@@ -38,11 +41,11 @@ the same ID. These audits are reported under another ID and are mapped:
 
 | zizmor audit | jactionlint rule | Note |
 | --- | --- | --- |
-| `excessive-permissions` | `missing-permissions` | jactionlint reports only a missing `permissions` block |
+| `excessive-permissions` | `missing-permissions` (and the rule of the same name) | the job-level report of zizmor is `missing-permissions` here |
 | `unpinned-images` | `unpinned-uses` | only the Docker image findings of the rule |
 
 Any other name is used as is when jactionlint has a rule with that ID and ignored otherwise. Run `jactionlint -migrate-ignores`
-to turn the comments into `# jactionlint ignore=` comments.
+to turn the comments into `# jactionlint ignore=` comments. A name with both a rule of its own and an alias is migrated to all of them.
 
 ## Planned: autofix and hk
 

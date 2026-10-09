@@ -90,6 +90,17 @@ are available. A custom Go template can be given too:
   * `-no-color`:
     Disable colorful output
 
+  * `-online`:
+    Enable the checks which query the GitHub API (`impostor-commit`, `known-vulnerable-actions`,
+    `ref-confusion`, `stale-action-refs`, `archived-uses` and `ref-version-mismatch`), and let `-fix`
+    pin tags to commit SHAs. The token is read from `GITHUB_TOKEN` or `GH_TOKEN`. Nothing uses the
+    network without this flag.
+
+  * `-online-cache-ttl` <DURATION>:
+    How long `-online` uses an answer of the GitHub API from the cache in
+    `$XDG_CACHE_HOME/jactionlint` without asking GitHub whether it changed (default 1h0m0s). 0 checks
+    every answer
+
   * `-oneline`:
     Use one line per one error. Useful for reading error messages from programs
 

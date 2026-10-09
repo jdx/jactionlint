@@ -1,0 +1,14 @@
+on: push
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v4
+      - uses: trusted-org/tool@main
+      - uses: actions/setup-node@v4
+      - uses: docker://alpine@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+      - uses: ./local
+      - uses: $/local
+  call:
+    uses: ./.github/workflows/x.yml

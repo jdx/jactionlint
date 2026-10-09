@@ -1,0 +1,10 @@
+# requires -online
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      # OK: the commit is v4.2.2
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      # ERROR: the commit is v4.2.2, not v3.0.0
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v3.0.0

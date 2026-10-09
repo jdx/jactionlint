@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -20,7 +21,7 @@ func lintIDs(t *testing.T, opts *LinterOptions, cfg *Config, src string) []strin
 	if err != nil {
 		t.Fatal(err)
 	}
-	l.defaultConfig = cfg
+	l.defaultConfig = withoutMissingTimeout(cfg)
 	errs, err := l.Lint("test.yaml", []byte(src), nil)
 	if err != nil {
 		t.Fatal(err)
@@ -122,7 +123,7 @@ func TestUnusedIgnoreDetection(t *testing.T) {
 	src := `on: push
 jobs:
   j:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       # jactionlint ignore=template-injection,expression-type
       - run: echo ${{ github.event.issue.title }}
@@ -146,6 +147,8 @@ jobs:
 	}
 
 	var have []string
+	// Findings of the other rules of the strict profile are not the point of the test
+	got = slices.DeleteFunc(got, func(e *Error) bool { return e.Kind != "ignore" })
 	for _, e := range got {
 		have = append(have, fmt.Sprintf("%d:%d %s", e.Line, e.Column, e.ID))
 		if e.Kind != "ignore" || e.Severity != SeverityError {
@@ -248,11 +251,11 @@ func TestCommandExitStatusBySeverity(t *testing.T) {
 		}
 		return p
 	}
-	errorCfg := write("error.yaml", "")
-	warnCfg := write("warn.yaml", "rules:\n  template-injection: warn\n  undefined-property: warn\n")
-	infoCfg := write("info.yaml", "rules:\n  template-injection: info\n  undefined-property: info\n")
-	mixedCfg := write("mixed.yaml", "rules:\n  template-injection: warn\n")
-	offCfg := write("off.yaml", "rules:\n  template-injection: off\n  undefined-property: off\n")
+	errorCfg := write("error.yaml", "rules:\n  missing-timeout: off\n")
+	warnCfg := write("warn.yaml", "rules:\n  missing-timeout: off\n  template-injection: warn\n  undefined-property: warn\n")
+	infoCfg := write("info.yaml", "rules:\n  missing-timeout: off\n  template-injection: info\n  undefined-property: info\n")
+	mixedCfg := write("mixed.yaml", "rules:\n  missing-timeout: off\n  template-injection: warn\n")
+	offCfg := write("off.yaml", "rules:\n  missing-timeout: off\n  template-injection: off\n  undefined-property: off\n")
 
 	tests := []struct {
 		name string

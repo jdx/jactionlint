@@ -1,0 +1,1 @@
+test.yaml:4:10: concurrency group "ci" is the same for every pull request (event "pull_request") and "cancel-in-progress" is enabled for them, so a new run for one pull request cancels the run of an unrelated one. add "github.head_ref" or "github.event.pull_request.number" to the group [concurrency-cancels-prs]

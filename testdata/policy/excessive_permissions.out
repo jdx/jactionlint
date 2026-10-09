@@ -1,0 +1,4 @@
+test.yaml:6:3: "contents: write" is granted to every job of the workflow, which lets any of them push commits and tags and create or delete releases. set "permissions: {}" at the workflow level and grant "contents: write" only to the job which needs it [excessive-permissions]
+test.yaml:7:3: "id-token: write" is granted to every job of the workflow, which lets any of them request OIDC tokens to authenticate to cloud providers and package registries. set "permissions: {}" at the workflow level and grant "id-token: write" only to the job which needs it [excessive-permissions]
+test.yaml:25:18: "write-all" gives the GITHUB_TOKEN write access to every scope for the whole job. list only the scopes which are needed and set the others to "read" or "none" [excessive-permissions]
+test.yaml:30:18: "read-all" gives the GITHUB_TOKEN read access to every scope for the whole job, including ones it never uses. list only the scopes which are needed [excessive-permissions]

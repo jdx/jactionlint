@@ -1,0 +1,29 @@
+on:
+  push:
+    tags: ["v*"]
+    branches: [main]
+  workflow_dispatch:
+
+# A new tag cancels the release of the previous one
+concurrency:
+  group: release
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: cargo publish
+  docs:
+    runs-on: ubuntu-latest
+    environment: github-pages
+    concurrency:
+      group: pages-${{ github.ref }}
+      cancel-in-progress: ${{ github.ref != 'refs/heads/gh-pages' }}
+    steps:
+      - run: echo deploy
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo test

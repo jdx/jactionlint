@@ -10,6 +10,8 @@ package jactionlint
 type RuleRequirePermissions struct {
 	RuleBase
 	workflowHasPermissions bool
+	// fix is the fix adding "permissions:" to the workflow. It is nil when it cannot be made.
+	fix *Fix
 }
 
 // NewRuleRequirePermissions creates new RuleRequirePermissions instance.
@@ -29,6 +31,10 @@ func (rule *RuleRequirePermissions) enabled() bool {
 // VisitWorkflowPre is callback when visiting Workflow node before visiting its children.
 func (rule *RuleRequirePermissions) VisitWorkflowPre(n *Workflow) error {
 	rule.workflowHasPermissions = n.Permissions != nil
+	rule.fix = nil
+	if rule.enabled() && !rule.workflowHasPermissions {
+		rule.fix = fixMissingPermissions(n)
+	}
 	return nil
 }
 
@@ -42,12 +48,14 @@ func (rule *RuleRequirePermissions) VisitJobPre(n *Job) error {
 		n.Pos,
 		"neither the workflow nor this job sets \"permissions:\" so the GITHUB_TOKEN gets the default permissions of the repository. set \"permissions:\" at workflow-level or job-level (use \"permissions: {}\" for no permissions) because the \"missing-permissions\" rule is enabled",
 	)
+	// Every job reports the same fix: it is applied once and the findings stay fixable together
+	rule.Errs()[len(rule.Errs())-1].Fix = rule.fix
 	return nil
 }
 
 func init() {
 	registerRules(
-		RuleInfo{ID: "missing-permissions", Group: RuleGroupPolicy, Summary: "Neither the workflow nor the job sets permissions:.", DefaultLevel: SeverityError, Profile: ProfileStrict, DocsAnchor: "permissions"},
+		RuleInfo{ID: "missing-permissions", Group: RuleGroupPolicy, Summary: "Neither the workflow nor the job sets permissions:.", DefaultLevel: SeverityError, Profile: ProfileStrict, Fixable: true, DocsAnchor: "permissions"},
 	)
 	registerRuleFactory("require-permissions", func(env *RuleEnv) []Rule {
 		return []Rule{NewRuleRequirePermissions()}

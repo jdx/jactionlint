@@ -79,14 +79,14 @@ func (b *builder) stmt(st *syntax.Stmt) {
 		red := b.redirect(r, owner)
 		if group && owner == nil {
 			red.Group = true
-			b.groups = append(b.groups, groupRedirect{red, int(st.Cmd.Pos().Offset()), int(st.Cmd.End().Offset())})
+			b.groups = append(b.groups, groupRedirect{red, b.off(st.Cmd.Pos()), b.offEnd(st.Cmd.End())})
 		}
 	}
 }
 
 func (b *builder) redirect(r *syntax.Redirect, owner *Command) *Redirect {
 	red := &Redirect{
-		Loc:    b.s.loc(int(r.Pos().Offset()), int(r.End().Offset())),
+		Loc:    b.s.loc(b.off(r.Pos()), b.offEnd(r.End())),
 		Op:     r.Op.String(),
 		Target: b.word(r.Word),
 		Cmd:    owner,
@@ -111,7 +111,7 @@ func (b *builder) redirect(r *syntax.Redirect, owner *Command) *Redirect {
 			h.Quoted = red.Target.Quoted
 		}
 		if r.Hdoc != nil {
-			start, end := int(r.Hdoc.Pos().Offset()), int(r.Hdoc.End().Offset())
+			start, end := b.off(r.Hdoc.Pos()), b.offEnd(r.Hdoc.End())
 			h.Body = b.src(start, end)
 			if i := strings.LastIndexByte(h.Body, '\n'); i >= 0 && strings.TrimLeft(h.Body[i+1:], "\t ") == h.Delim {
 				h.Body = h.Body[:i+1] // the line with the closing delimiter belongs to the here document in the tree
@@ -223,6 +223,10 @@ type Pipeline struct {
 	Loc
 	Stages  []*Stage
 	Negated bool
+	// Tested is whether the script looks at the exit status of the pipeline: it is the condition of `if`,
+	// `elif`, `while` or `until`, or an operand of `&&` or `||` which is not the last of the list. A failure is
+	// then not hidden but handled.
+	Tested bool
 }
 
 // Stage is one element of a pipeline. It is a single command or a compound command, so it can contain several
@@ -251,7 +255,7 @@ func (b *builder) pipeline(n *syntax.BinaryCmd) {
 		stmts = append(stmts, bc.Y)
 	}
 	flatten(n)
-	p := &Pipeline{Loc: b.s.loc(int(n.Pos().Offset()), int(n.End().Offset())), Negated: b.negated[n]}
+	p := &Pipeline{Loc: b.s.loc(b.off(n.Pos()), b.offEnd(n.End())), Negated: b.negated[n], Tested: b.tested[n]}
 	b.s.Pipelines = append(b.s.Pipelines, p)
 	b.pending = append(b.pending, pendingPipeline{p, stmts})
 }
@@ -259,10 +263,10 @@ func (b *builder) pipeline(n *syntax.BinaryCmd) {
 func (b *builder) finishPipelines() {
 	for _, pp := range b.pending {
 		for _, st := range pp.stages {
-			start, end := int(st.Pos().Offset()), int(st.End().Offset())
+			start, end := b.off(st.Pos()), b.offEnd(st.End())
 			cs, ce := start, end
 			if st.Cmd != nil { // a here document makes the statement extend over its body
-				cs, ce = int(st.Cmd.Pos().Offset()), int(st.Cmd.End().Offset())
+				cs, ce = b.off(st.Cmd.Pos()), b.offEnd(st.Cmd.End())
 			}
 			stage := &Stage{Loc: b.s.loc(start, end), Commands: b.directCommands(cs, ce)}
 			pp.p.Stages = append(pp.p.Stages, stage)
@@ -387,4 +391,29 @@ func (s *Script) WritesTo(varNames ...string) []*Write {
 		out = append(out, w)
 	}
 	return out
+}
+
+// markTested records that the script handles the exit status of the statements: the pipelines and commands in
+// them are Tested. It follows the places where the shell ignores `set -e`: the operands of `&&` and `||` (all but
+// the last one of the list, which the caller selects), and the commands of groups and subshells there.
+func (b *builder) markTested(stmts ...*syntax.Stmt) {
+	for _, st := range stmts {
+		if st == nil {
+			continue
+		}
+		switch c := st.Cmd.(type) {
+		case *syntax.BinaryCmd:
+			if isPipe(c.Op) {
+				b.tested[c] = true
+			} else {
+				b.markTested(c.X, c.Y)
+			}
+		case *syntax.CallExpr:
+			b.testedCalls[c] = true
+		case *syntax.Block:
+			b.markTested(c.Stmts...)
+		case *syntax.Subshell:
+			b.markTested(c.Stmts...)
+		}
+	}
 }

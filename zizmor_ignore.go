@@ -243,14 +243,16 @@ func MigrateZizmorIgnores(src []byte) ([]byte, []string) {
 		var ids, kept []string
 		var moved []string
 		for _, n := range c.names {
-			id := migrationID(n.name)
-			if id == "" {
+			found := migrationIDs(n.name)
+			if len(found) == 0 {
 				kept = append(kept, n.name)
 				continue
 			}
 			moved = append(moved, n.name)
-			if !containsString(ids, id) {
-				ids = append(ids, id)
+			for _, id := range found {
+				if !containsString(ids, id) {
+					ids = append(ids, id)
+				}
 			}
 		}
 		if len(moved) == 0 {
@@ -315,20 +317,24 @@ func MigrateZizmorIgnores(src []byte) ([]byte, []string) {
 	return res, migrated
 }
 
-// migrationID returns the ID of the jactionlint rule which replaces the zizmor audit in an ignore
-// comment, or "" when the audit cannot be migrated.
-func migrationID(name string) string {
+// migrationIDs returns the IDs of the jactionlint rules which replace the zizmor audit in an ignore
+// comment: the rule of the same name, and the rules it is reported under as well (excessive-permissions
+// covers missing-permissions). It is empty when the audit cannot be migrated. An alias that covers only some
+// diagnostics of its rule (unpinned-images) cannot be written as a rule ID, so such an audit stays in the zizmor comment.
+func migrationIDs(name string) []string {
+	var ret []string
 	if _, ok := LookupRule(name); ok {
-		return name
+		ret = append(ret, name)
 	}
 	for _, a := range zizmorAliases[name] {
-		if a.MessageContains == "" {
-			if _, ok := LookupRule(a.ID); ok {
-				return a.ID
-			}
+		if a.MessageContains != "" {
+			continue
+		}
+		if _, ok := LookupRule(a.ID); ok && !containsString(ret, a.ID) {
+			ret = append(ret, a.ID)
 		}
 	}
-	return ""
+	return ret
 }
 
 func containsString(list []string, s string) bool {

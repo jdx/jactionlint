@@ -359,7 +359,7 @@ func TestCommandFix(t *testing.T) {
 		code := cmd.Main(append([]string{"jactionlint", "-no-color", "-config-file", filepath.Join(root, "jactionlint.yaml")}, args...))
 		return code, stdout.String(), stderr.String()
 	}
-	if err := os.WriteFile(filepath.Join(root, "jactionlint.yaml"), []byte("rules:\n  local-action-checkout: off\n  unsound-ternary: off\n  workflow-run-names: off\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(root, "jactionlint.yaml"), []byte("rules:\n  local-action-checkout: off\n  unsound-ternary: off\n  workflow-run-names: off\n  missing-timeout: off\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -411,7 +411,7 @@ func TestCommandFix(t *testing.T) {
 	}
 
 	// Only warnings remain: exit status 0
-	if err := os.WriteFile(filepath.Join(root, "jactionlint.yaml"), []byte("rules:\n  undefined-property: warn\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(root, "jactionlint.yaml"), []byte("rules:\n  undefined-property: warn\n  missing-timeout: off\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	code, stdout, _ = run(nil, "-fix", path)
@@ -471,5 +471,69 @@ func TestFixFlag(t *testing.T) {
 	f.Set("safe")
 	if f.String() != "safe" {
 		t.Error(f.String())
+	}
+}
+
+// FixRepository must look at the same files as LintRepository, the Dependabot configuration included: the
+// errors of that file are part of the leftover diagnostics.
+func TestFixRepositoryIncludesTheDependabotConfiguration(t *testing.T) {
+	wf := "on: push\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo aaa\n"
+	root := writeProject(t, map[string]string{
+		".github/workflows/a.yaml": wf,
+		".github/dependabot.yml":   "version: 2\nupdates:\n  - package-ecosystem: npm\n    directory: /\n    unknown-key: 1\n",
+	})
+	var out bytes.Buffer
+	l, err := NewLinter(&out, &LinterOptions{WorkingDir: root, Format: FormatGCC, OnRulesCreated: func(rules []Rule) []Rule {
+		return append(rules, &wholeFileRule{RuleBase: NewRuleBase("whole", ""), dir: filepath.Join(root, ".github", "workflows")})
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	l.defaultConfig = fixtureConfig()
+
+	lint, err := l.LintRepository(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantDependabot := 0
+	for _, e := range lint {
+		if strings.HasSuffix(e.Filepath, "dependabot.yml") {
+			wantDependabot++
+		}
+	}
+	if wantDependabot == 0 {
+		t.Fatalf("LintRepository reports nothing for the broken dependabot.yml: %v", lint)
+	}
+
+	out.Reset()
+	res, err := l.FixRepository(root, FixModeSafe)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Applied != 1 {
+		t.Errorf("the workflow should be fixed: %+v", res)
+	}
+	got := 0
+	for _, e := range res.Errors {
+		if strings.HasSuffix(e.Filepath, "dependabot.yml") {
+			got++
+		}
+	}
+	if got != wantDependabot || !strings.Contains(out.String(), "dependabot.yml") {
+		t.Errorf("the errors of dependabot.yml are missing from the result of -fix: got %d, want %d\n%s", got, wantDependabot, out.String())
+	}
+}
+
+func TestCommandFixWithoutArgumentsReportsTheDependabotConfiguration(t *testing.T) {
+	root := writeProject(t, map[string]string{
+		".github/workflows/ci.yaml": "on: push\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo ok\n",
+		".github/dependabot.yml":    "version: 2\nupdates:\n  - package-ecosystem: npm\n    directory: /\n    unknown-key: 1\n",
+	})
+	t.Chdir(root)
+	var stdout, stderr bytes.Buffer
+	cmd := &Command{Stdin: strings.NewReader(""), Stdout: &stdout, Stderr: &stderr}
+	code := cmd.Main([]string{"jactionlint", "-no-color", "-fix"})
+	if code != ExitStatusSuccessProblemFound || !strings.Contains(stdout.String(), "dependabot.yml") {
+		t.Errorf("exit status %d\nstdout: %s\nstderr: %s", code, stdout.String(), stderr.String())
 	}
 }

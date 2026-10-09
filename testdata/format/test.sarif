@@ -25,6 +25,96 @@
               "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
             },
             {
+              "id": "artipacked",
+              "name": "Artipacked",
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "description": "Checks that actions/checkout does not persist the GITHUB_TOKEN credential in the git config",
+                "queryURI": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+              },
+              "fullDescription": {
+                "text": "Checks that actions/checkout does not persist the GITHUB_TOKEN credential in the git config"
+              },
+              "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+            },
+            {
+              "id": "bot-conditions",
+              "name": "BotConditions",
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "description": "Checks for conditions which trust a bot account by github.actor",
+                "queryURI": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+              },
+              "fullDescription": {
+                "text": "Checks for conditions which trust a bot account by github.actor"
+              },
+              "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+            },
+            {
+              "id": "cache-poisoning",
+              "name": "CachePoisoning",
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "description": "Checks for caches restored in release workflows and caches written by privileged triggers",
+                "queryURI": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+              },
+              "fullDescription": {
+                "text": "Checks for caches restored in release workflows and caches written by privileged triggers"
+              },
+              "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+            },
+            {
+              "id": "concurrency-cancels-prs",
+              "name": "ConcurrencyCancelsPrs",
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "description": "Checks that a concurrency group which cancels runs has a value that differs between pull requests",
+                "queryURI": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+              },
+              "fullDescription": {
+                "text": "Checks that a concurrency group which cancels runs has a value that differs between pull requests"
+              },
+              "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+            },
+            {
+              "id": "concurrency-cancels-release",
+              "name": "ConcurrencyCancelsRelease",
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "description": "Checks that cancel-in-progress does not cancel a release or a deployment which is running",
+                "queryURI": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+              },
+              "fullDescription": {
+                "text": "Checks that cancel-in-progress does not cancel a release or a deployment which is running"
+              },
+              "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+            },
+            {
+              "id": "continue-on-error",
+              "name": "ContinueOnError",
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "description": "Checks for jobs whose failure does not fail the workflow",
+                "queryURI": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+              },
+              "fullDescription": {
+                "text": "Checks for jobs whose failure does not fail the workflow"
+              },
+              "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+            },
+            {
               "id": "credentials",
               "name": "Credentials",
               "defaultConfiguration": {
@@ -51,6 +141,21 @@
               },
               "fullDescription": {
                 "text": "Checks for deprecated \"set-output\", \"save-state\", \"set-env\", and \"add-path\" commands at \"run:\""
+              },
+              "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+            },
+            {
+              "id": "duplicate-triggers",
+              "name": "DuplicateTriggers",
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "description": "Checks that push and pull_request do not both run the workflow for the same commit",
+                "queryURI": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+              },
+              "fullDescription": {
+                "text": "Checks that push and pull_request do not both run the workflow for the same commit"
               },
               "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
             },
@@ -85,6 +190,21 @@
               "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
             },
             {
+              "id": "excessive-permissions",
+              "name": "ExcessivePermissions",
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "description": "Checks for write permissions of the GITHUB_TOKEN which are broader than needed: \"write-all\" and write scopes at the workflow level",
+                "queryURI": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+              },
+              "fullDescription": {
+                "text": "Checks for write permissions of the GITHUB_TOKEN which are broader than needed: \"write-all\" and write scopes at the workflow level"
+              },
+              "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+            },
+            {
               "id": "expression",
               "name": "Expression",
               "defaultConfiguration": {
@@ -96,6 +216,36 @@
               },
               "fullDescription": {
                 "text": "Syntax and semantics checks for expressions embedded with ${{ }} syntax"
+              },
+              "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+            },
+            {
+              "id": "gate-job-skipped-on-failure",
+              "name": "GateJobSkippedOnFailure",
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "description": "Checks that a job which reads the result of the jobs it needs runs when they fail",
+                "queryURI": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+              },
+              "fullDescription": {
+                "text": "Checks that a job which reads the result of the jobs it needs runs when they fail"
+              },
+              "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+            },
+            {
+              "id": "github-app",
+              "name": "GithubApp",
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "description": "Checks the use of actions/create-github-app-token for tokens which live longer or can do more than needed",
+                "queryURI": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+              },
+              "fullDescription": {
+                "text": "Checks the use of actions/create-github-app-token for tokens which live longer or can do more than needed"
               },
               "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
             },
@@ -190,6 +340,51 @@
               "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
             },
             {
+              "id": "misfeature",
+              "name": "Misfeature",
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "description": "Checks for usages of GitHub Actions features which are considered misfeatures",
+                "queryURI": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+              },
+              "fullDescription": {
+                "text": "Checks for usages of GitHub Actions features which are considered misfeatures"
+              },
+              "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+            },
+            {
+              "id": "mutable-runner-label",
+              "name": "MutableRunnerLabel",
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "description": "Checks for runner labels that GitHub moves to newer images",
+                "queryURI": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+              },
+              "fullDescription": {
+                "text": "Checks for runner labels that GitHub moves to newer images"
+              },
+              "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+            },
+            {
+              "id": "obfuscation",
+              "name": "Obfuscation",
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "description": "Checks for obfuscated paths at \"uses:\"",
+                "queryURI": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+              },
+              "fullDescription": {
+                "text": "Checks for obfuscated paths at \"uses:\""
+              },
+              "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+            },
+            {
               "id": "parallel-steps",
               "name": "ParallelSteps",
               "defaultConfiguration": {
@@ -216,6 +411,21 @@
               },
               "fullDescription": {
                 "text": "Checks for permissions configuration in \"permissions:\". Permission names and permission scopes are checked"
+              },
+              "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+            },
+            {
+              "id": "pipeline-without-pipefail",
+              "name": "PipelineWithoutPipefail",
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "description": "Checks that failures of commands in pipelines in \"run:\" are not hidden by a shell without pipefail",
+                "queryURI": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+              },
+              "fullDescription": {
+                "text": "Checks that failures of commands in pipelines in \"run:\" are not hidden by a shell without pipefail"
               },
               "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
             },
@@ -265,6 +475,21 @@
               "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
             },
             {
+              "id": "self-repository",
+              "name": "SelfRepository",
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "description": "Checks that actions and reusable workflows of the same repository are referenced as \"$/path\" instead of \"./path\"",
+                "queryURI": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+              },
+              "fullDescription": {
+                "text": "Checks that actions and reusable workflows of the same repository are referenced as \"$/path\" instead of \"./path\""
+              },
+              "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+            },
+            {
               "id": "shell-name",
               "name": "ShellName",
               "defaultConfiguration": {
@@ -306,6 +531,111 @@
               },
               "fullDescription": {
                 "text": "Checks that timeout-minutes is set at jobs and does not exceed the configured maximum (opt-in by config)"
+              },
+              "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+            },
+            {
+              "id": "undocumented-permissions",
+              "name": "UndocumentedPermissions",
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "description": "Checks that a permission scope above \"read\" has a comment explaining why it is needed",
+                "queryURI": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+              },
+              "fullDescription": {
+                "text": "Checks that a permission scope above \"read\" has a comment explaining why it is needed"
+              },
+              "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+            },
+            {
+              "id": "unpinned-images",
+              "name": "UnpinnedImages",
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "description": "Checks that the container images of \"container:\" and \"services:\" are pinned by a digest",
+                "queryURI": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+              },
+              "fullDescription": {
+                "text": "Checks that the container images of \"container:\" and \"services:\" are pinned by a digest"
+              },
+              "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+            },
+            {
+              "id": "untrusted-artifact",
+              "name": "UntrustedArtifact",
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "description": "Checks that artifacts of the triggering run are validated before they are used",
+                "queryURI": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+              },
+              "fullDescription": {
+                "text": "Checks that artifacts of the triggering run are validated before they are used"
+              },
+              "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+            },
+            {
+              "id": "untrusted-checkout",
+              "name": "UntrustedCheckout",
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "description": "Checks that privileged workflows do not run the code of a pull request",
+                "queryURI": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+              },
+              "fullDescription": {
+                "text": "Checks that privileged workflows do not run the code of a pull request"
+              },
+              "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+            },
+            {
+              "id": "unused-job-output",
+              "name": "UnusedJobOutput",
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "description": "Checks that every output of a job is read by another job or by a workflow_call output",
+                "queryURI": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+              },
+              "fullDescription": {
+                "text": "Checks that every output of a job is read by another job or by a workflow_call output"
+              },
+              "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+            },
+            {
+              "id": "unused-needs",
+              "name": "UnusedNeeds",
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "description": "Checks for needs entries that are neither read nor needed for the order of jobs",
+                "queryURI": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+              },
+              "fullDescription": {
+                "text": "Checks for needs entries that are neither read nor needed for the order of jobs"
+              },
+              "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+            },
+            {
+              "id": "unused-workflow-input",
+              "name": "UnusedWorkflowInput",
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "description": "Checks that every input of workflow_dispatch and workflow_call is used",
+                "queryURI": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+              },
+              "fullDescription": {
+                "text": "Checks that every input of workflow_dispatch and workflow_call is used"
               },
               "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
             },

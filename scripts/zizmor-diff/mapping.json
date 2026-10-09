@@ -1,12 +1,68 @@
 {
   "zizmor": "1.30.1",
   "audits": {
+    "anonymous-definition": {
+      "coverage": "full",
+      "notes": "Workflows only. zizmor also checks action.yml, which jactionlint does not lint.",
+      "jactionlint": [{ "rule": "anonymous-definition" }]
+    },
+    "concurrency-limits": {
+      "coverage": "partial",
+      "notes": "Reports a missing concurrency block and cancel-in-progress left unset or false. Skips workflows started only by workflow_call and workflows where every job has its own concurrency.",
+      "jactionlint": [{ "rule": "concurrency-limits" }]
+    },
+    "dangerous-triggers": {
+      "coverage": "full",
+      "notes": "pull_request_target, workflow_run and issue_comment (zizmor 1.30.1 does not flag issue_comment yet). jactionlint reports at the trigger and zizmor at on:, so lines differ for multi-line on blocks.",
+      "jactionlint": [{ "rule": "dangerous-triggers" }]
+    },
+    "insecure-commands": {
+      "coverage": "partial",
+      "notes": "Workflow, job and step env, when the value is true. action.yml and container env are not checked.",
+      "jactionlint": [{ "rule": "insecure-commands" }]
+    },
+    "overprovisioned-secrets": {
+      "coverage": "full",
+      "notes": "The whole secrets context (toJSON(secrets), secrets[...], a bare secrets).",
+      "jactionlint": [{ "rule": "overprovisioned-secrets" }]
+    },
+    "secrets-inherit": {
+      "coverage": "full",
+      "notes": "Reports secrets: inherit at the calling job.",
+      "jactionlint": [{ "rule": "secrets-inherit" }]
+    },
+    "secrets-outside-env": {
+      "coverage": "full",
+      "notes": "Jobs with secrets but no environment. The allow option mirrors zizmor's.",
+      "jactionlint": [{ "rule": "secrets-outside-env" }]
+    },
+    "self-hosted-runner": {
+      "coverage": "partial",
+      "notes": "Literal labels and matrix values. Labels that come from other expressions are not resolved.",
+      "jactionlint": [{ "rule": "self-hosted-runner" }]
+    },
+    "typosquat-uses": {
+      "coverage": "partial",
+      "notes": "Slugs one edit away from a popular action of another owner. zizmor's typomania covers more transformations.",
+      "jactionlint": [{ "rule": "typosquat-uses" }]
+    },
+    "unredacted-secrets": {
+      "coverage": "full",
+      "notes": "Any fromJSON(secrets.X), with or without a field access.",
+      "jactionlint": [{ "rule": "unredacted-secrets" }]
+    },
+    "unsound-contains": {
+      "coverage": "full",
+      "notes": "contains() with a string literal as its first argument in if: conditions.",
+      "jactionlint": [{ "rule": "unsound-contains" }]
+    },
     "template-injection": {
       "coverage": "partial",
-      "notes": "jactionlint reports untrusted contexts in expressions. zizmor also covers env indirection, github-script and more contexts.",
+      "notes": "Placeholders in run:, github-script and the code inputs of some well-known actions: attacker controlled contexts and objects holding them (template-injection), env variables set from them, and every other non-constant expansion (template-injection-expansion).",
       "jactionlint": [
+        { "rule": "expression", "message_contains": "potentially untrusted" },
         { "rule": "template-injection" },
-        { "rule": "expression", "message_contains": "potentially untrusted" }
+        { "rule": "template-injection-expansion" }
       ]
     },
     "hardcoded-container-credentials": {
@@ -16,25 +72,18 @@
     },
     "excessive-permissions": {
       "coverage": "partial",
-      "notes": "Only the opt-in missing-permissions check (no permissions block at all). Broad write scopes are not reported yet.",
-      "jactionlint": [{ "rule": "missing-permissions" }, { "rule": "require-permissions" }]
+      "notes": "Workflow-level write scopes and write-all (excessive-permissions), and a job without any permissions (missing-permissions). Job-level write scopes are reported only on privileged triggers, while zizmor does not report job-level scopes.",
+      "jactionlint": [{ "rule": "excessive-permissions" }, { "rule": "missing-permissions" }]
     },
     "unpinned-uses": {
       "coverage": "partial",
-      "notes": "Only the opt-in unpinned-uses check (require-commit-hash in v1), for actions and for reusable workflows.",
-      "jactionlint": [
-        { "rule": "unpinned-uses", "message_contains": "must be pinned to a full-length commit SHA" },
-        { "rule": "action", "message_contains": "must be pinned to a full-length commit SHA" },
-        { "rule": "workflow-call", "message_contains": "must be pinned to a full-length commit SHA" }
-      ]
+      "notes": "The blanket hash-pin policy and the per-pattern policies (hash-pin, ref-pin, any) for actions, reusable workflows and docker:// images. Supported patterns are *, owner/*, owner/repo and owner/repo/path.",
+      "jactionlint": [{ "rule": "unpinned-uses" }]
     },
     "unpinned-images": {
       "coverage": "partial",
-      "notes": "Only docker:// action references under unpinned-uses. container: and services: images are not checked yet.",
-      "jactionlint": [
-        { "rule": "unpinned-uses", "message_contains": "docker image must be pinned to a digest" },
-        { "rule": "action", "message_contains": "docker image must be pinned to a digest" }
-      ]
+      "notes": "container: and services: images, by digest. Images in docker:// uses: are reported as unpinned-uses.",
+      "jactionlint": [{ "rule": "unpinned-images" }, { "rule": "unpinned-uses", "message_contains": "docker image must be pinned" }]
     },
     "unsound-ternary": {
       "coverage": "partial",
@@ -44,10 +93,120 @@
         { "rule": "expression", "message_contains": "always falsy" }
       ]
     },
+    "dependabot-cooldown": {
+      "coverage": "partial",
+      "notes": "jactionlint compares default-days (explicit or implicit) with the minimum, like zizmor, and checks every update. zizmor 1.30.1 stops at the first update which satisfies the minimum, so it can miss later ones. The semver-*-days keys are not checked by either.",
+      "jactionlint": [{ "rule": "dependabot-cooldown" }]
+    },
+    "dependabot-execution": {
+      "coverage": "full",
+      "notes": "Both report insecure-external-code-execution: allow on every update.",
+      "jactionlint": [{ "rule": "dependabot-execution" }]
+    },
+    "github-env": {
+      "coverage": "partial",
+      "notes": "Bash and sh scripts are parsed, pwsh and cmd are matched line by line. A write of an expression or variable that is trusted (github.sha, HOME, ...) is not reported, which zizmor reports in pull_request_target and workflow_run workflows. Untrusted input is also reported under other triggers.",
+      "jactionlint": [{ "rule": "github-env" }, { "rule": "github-env-untrusted-input" }]
+    },
+    "adhoc-packages": {
+      "coverage": "partial",
+      "notes": "npm, yarn, pnpm, gem and bundle add in bash and sh scripts, plus bun. pwsh scripts are not parsed.",
+      "jactionlint": [{ "rule": "adhoc-packages" }]
+    },
+    "unpinned-tools": {
+      "coverage": "full",
+      "notes": "The four actions zizmor knows. An input that is an expression is not reported, zizmor reports it with low confidence.",
+      "jactionlint": [{ "rule": "unpinned-tools" }]
+    },
+    "use-trusted-publishing": {
+      "coverage": "partial",
+      "notes": "Publish commands in bash and sh scripts and the four actions. A job with id-token: write is not reported, as in zizmor. pwsh scripts are not parsed and npm run publish is not recognized.",
+      "jactionlint": [{ "rule": "use-trusted-publishing" }]
+    },
+    "superfluous-actions": {
+      "coverage": "full",
+      "notes": "The same table of actions. The entries zizmor reports only with its pedantic persona are reported when the option pedantic of superfluous-actions is on, which it is under the strict and all profiles.",
+      "jactionlint": [{ "rule": "superfluous-actions" }]
+    },
     "forbidden-uses": {
       "coverage": "partial",
-      "notes": "required-actions enforces a required set of actions. zizmor's allow and deny lists are the inverse and are not covered yet.",
-      "jactionlint": [{ "rule": "required-actions" }]
+      "notes": "allow and deny lists of repository patterns (rules.forbidden-uses.allow and deny); not measured against zizmor yet. required-actions is the separate inverse check and does not cover these findings.",
+      "jactionlint": [{ "rule": "forbidden-uses" }]
+    },
+    "undocumented-permissions": {
+      "coverage": "partial",
+      "notes": "Scopes above read need a comment (read scopes too with include-read). Comments that only drive a tool do not count.",
+      "jactionlint": [{ "rule": "undocumented-permissions" }]
+    },
+    "self-repository": {
+      "coverage": "full",
+      "notes": "./ in uses: of steps and reusable workflow calls, with an unsafe fix to $/.",
+      "jactionlint": [{ "rule": "self-repository" }]
+    },
+    "github-app": {
+      "coverage": "partial",
+      "notes": "actions/create-github-app-token only: skip-token-revoke, owner without repositories and missing permission-* inputs.",
+      "jactionlint": [{ "rule": "github-app" }]
+    },
+    "artipacked": {
+      "coverage": "full",
+      "notes": "actions/checkout without persist-credentials: false, with a fix.",
+      "jactionlint": [{ "rule": "artipacked" }]
+    },
+    "cache-poisoning": {
+      "coverage": "partial",
+      "notes": "Caches restored in release workflows for a fixed table of cache actions, and cache-mode: write on privileged triggers.",
+      "jactionlint": [{ "rule": "cache-poisoning" }]
+    },
+    "bot-conditions": {
+      "coverage": "partial",
+      "notes": "github.actor and the other last-actor properties compared with bot accounts in job and step if: conditions, on events where the actor is not the author. No fixes for contexts other than a pull request.",
+      "jactionlint": [{ "rule": "bot-conditions" }]
+    },
+    "obfuscation": {
+      "coverage": "partial",
+      "notes": "Redundant path segments at uses:, fromJSON(toJSON(x)) and format() with literal arguments.",
+      "jactionlint": [{ "rule": "obfuscation" }]
+    },
+    "misfeature": {
+      "coverage": "partial",
+      "notes": "The pip-install input of setup-python and the cmd shell. Shells that are not well known are the separate misfeature-custom-shell rule, which zizmor reports in the auditor persona only.",
+      "jactionlint": [{ "rule": "misfeature" }]
+    },
+    "unsound-condition": {
+      "coverage": "full",
+      "notes": "if-always-true reports every condition with characters around ${{ }}, which includes the trailing newline of a block scalar.",
+      "jactionlint": [{ "rule": "if-always-true" }]
+    },
+    "impostor-commit": {
+      "coverage": "partial",
+      "notes": "Online (-online). Same definition: the commit is on no branch or tag. jactionlint compares with the tags and up to max-branches branches through the REST API, so a repository with more branches gives no verdict. zizmor reads the branch list of the commit page.",
+      "jactionlint": [{ "rule": "impostor-commit" }]
+    },
+    "known-vulnerable-actions": {
+      "coverage": "partial",
+      "notes": "Online (-online). Advisories of the actions ecosystem matched against the version of the tag, or of the most specific tag at the commit. A branch ref has no version and is not reported. The allow option lists advisory IDs to ignore.",
+      "jactionlint": [{ "rule": "known-vulnerable-actions" }]
+    },
+    "ref-confusion": {
+      "coverage": "partial",
+      "notes": "Online (-online). Reports a ref that is both a branch and a tag.",
+      "jactionlint": [{ "rule": "ref-confusion" }]
+    },
+    "stale-action-refs": {
+      "coverage": "partial",
+      "notes": "Online (-online). Reports a hash-pinned action that no tag points to. At most 1000 tags of a repository are read.",
+      "jactionlint": [{ "rule": "stale-action-refs" }]
+    },
+    "archived-uses": {
+      "coverage": "partial",
+      "notes": "Online (-online). Reports actions and reusable workflows in archived repositories.",
+      "jactionlint": [{ "rule": "archived-uses" }]
+    },
+    "ref-version-mismatch": {
+      "coverage": "partial",
+      "notes": "Online (-online). Reports a version comment that does not match the pinned commit. A missing comment is not reported and no comment fix is offered.",
+      "jactionlint": [{ "rule": "ref-version-mismatch" }]
     }
   }
 }

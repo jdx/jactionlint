@@ -61,6 +61,12 @@ const (
 	RuleOptionInt RuleOptionKind = "int"
 	// RuleOptionNumber is an option taking a non-negative number.
 	RuleOptionNumber RuleOptionKind = "number"
+	// RuleOptionBool is an option taking true or false.
+	RuleOptionBool RuleOptionKind = "bool"
+	// RuleOptionStringMap is an option taking a mapping from strings to strings.
+	RuleOptionStringMap RuleOptionKind = "string-map"
+	// RuleOptionStrings is an option taking a list of strings.
+	RuleOptionStrings RuleOptionKind = "strings"
 )
 
 // RuleOption describes one option which can be given to a rule in the "rules" mapping of the
@@ -75,6 +81,8 @@ type RuleOption struct {
 	Default any
 	// Summary describes the option.
 	Summary string
+	// Validate checks the value after it was normalized to the type of Kind. It can be nil.
+	Validate func(v any) error
 }
 
 // RuleInfo is the metadata of a rule. One rule implementation (a Rule, which is identified by the
@@ -173,6 +181,7 @@ func (r *RuleInfo) option(name string) (RuleOption, bool) {
 // one file. A factory registered with registerRuleFactory receives it.
 type RuleEnv struct {
 	path                   string
+	src                    []byte // the source of the file being linted
 	project                *Project
 	localActions           *LocalActionsCache
 	localReusableWorkflows *LocalReusableWorkflowCache
@@ -180,9 +189,16 @@ type RuleEnv struct {
 	shellcheck             string
 	pyflakes               string
 	proc                   *concurrentProcess
+	online                 *onlineSession // nil unless the online checks are on
 
 	log  func(args ...interface{})
 	name string // the factory being run
+}
+
+// Source returns the content of the file being linted. A rule which attaches a Fix needs it to turn
+// the positions of the syntax tree into byte offsets. The slice must not be modified.
+func (e *RuleEnv) Source() []byte {
+	return e.src
 }
 
 // Skip reports with the debug log that the rule being created is disabled for the reason. A factory

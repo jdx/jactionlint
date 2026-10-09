@@ -19,7 +19,7 @@ func lintZ(t *testing.T, cfg *Config, src string) []string {
 	if cfg == nil {
 		cfg = &Config{}
 	}
-	l.defaultConfig = cfg
+	l.defaultConfig = withoutMissingTimeout(cfg)
 	errs, err := l.Lint("test.yaml", []byte(src), nil)
 	if err != nil {
 		t.Fatal(err)
@@ -260,13 +260,19 @@ func TestMigrateZizmorIgnores(t *testing.T) {
 		{
 			"keeps another comment",
 			"a:\n  - uses: a/b@abc # v2.9.2 # zizmor: ignore[unpinned-uses,cache-poisoning]\n",
-			"a:\n  # jactionlint ignore=unpinned-uses\n  - uses: a/b@abc # v2.9.2 # zizmor: ignore[cache-poisoning]\n",
+			"a:\n  # jactionlint ignore=unpinned-uses,cache-poisoning\n  - uses: a/b@abc # v2.9.2\n",
+			"unpinned-uses, cache-poisoning",
+		},
+		{
+			"keeps a name without a counterpart",
+			"a:\n  - uses: a/b@abc # v2.9.2 # zizmor: ignore[unpinned-uses,no-such-audit]\n",
+			"a:\n  # jactionlint ignore=unpinned-uses\n  - uses: a/b@abc # v2.9.2 # zizmor: ignore[no-such-audit]\n",
 			"unpinned-uses",
 		},
 		{
 			"reason and alias",
 			"on: # zizmor: ignore[excessive-permissions,unpinned-uses] it is fine\n  push:\n",
-			"# it is fine\n# jactionlint ignore=missing-permissions,unpinned-uses\non:\n  push:\n",
+			"# it is fine\n# jactionlint ignore=excessive-permissions,missing-permissions,unpinned-uses\non:\n  push:\n",
 			"excessive-permissions, unpinned-uses",
 		},
 		{

@@ -1,0 +1,6 @@
+on: push
+jobs:
+  build:
+    runs-on: [self-hosted, linux]
+    steps:
+      - run: make

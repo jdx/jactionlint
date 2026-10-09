@@ -1,0 +1,1 @@
+test.yaml:7:13: contains() with the string literal "refs/heads/main refs/heads/develop" as its first argument is true for any substring of it, not only for its words. to check membership in a list pass an array instead, e.g. contains(fromJSON('["a", "b"]'), value), or compare each value with == [unsound-contains]

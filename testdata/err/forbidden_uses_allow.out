@@ -1,0 +1,2 @@
+test.yaml:8:15: action "docker/login-action@v3" is not allowed because it matches no pattern in the "allow" list of the "forbidden-uses" rule ("actions/*", "github/codeql-action/*"). use an allowed one or add a pattern to the configuration [forbidden-uses]
+test.yaml:12:11: reusable workflow "octo-org/shared/.github/workflows/ci.yaml@v1" is not allowed because it matches no pattern in the "allow" list of the "forbidden-uses" rule ("actions/*", "github/codeql-action/*"). use an allowed one or add a pattern to the configuration [forbidden-uses]

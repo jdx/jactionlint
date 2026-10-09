@@ -1,0 +1,19 @@
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      # ERROR: when curl fails, sh runs an empty script and the step succeeds
+      - run: curl -fsSL https://example.com/install.sh | sh
+      - run: |
+          # ERROR: a failure of 'make' is hidden by 'tee'
+          make 2>&1 | tee build.log
+          # OK: the pipeline is the condition of 'if'
+          if make | grep -q ready; then echo ready; fi
+      - run: |
+          set -o pipefail
+          # OK: pipefail is on
+          make 2>&1 | tee build.log
+      # OK: 'shell: bash' enables pipefail
+      - shell: bash
+        run: make 2>&1 | tee build.log
