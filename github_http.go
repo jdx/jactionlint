@@ -375,7 +375,7 @@ func (c *httpGitHubClient) get(ctx context.Context, target string) (*httpAnswer,
 		return nil, ctx.Err()
 	}
 
-	ans, err := c.do(ctx, u, token, entry, key, false)
+	ans, err := c.do(ctx, u, token, entry, key, false, false)
 	if err != nil && entry != nil && errors.Is(err, ErrGitHubRateLimited) {
 		return answerFromEntry(entry), nil
 	}
@@ -443,7 +443,10 @@ func retryableTransport(err error) bool {
 
 // do sends a request and repeats it as the answer calls for. retryAnon is true on the single repeat
 // without the token after the token was rejected.
-func (c *httpGitHubClient) do(ctx context.Context, u, token string, entry *cacheEntry, key string, retryAnon bool) (*httpAnswer, error) {
+//
+// probe marks the anonymous request that asks again after a token was refused for a repository: its rate
+// limit is not the one of the token, so it never changes what the client knows about the limit.
+func (c *httpGitHubClient) do(ctx context.Context, u, token string, entry *cacheEntry, key string, retryAnon, probe bool) (*httpAnswer, error) {
 	limitWaits := 0
 	for attempt := 0; ; attempt++ {
 		res, err := c.send(ctx, u, token, entry)
@@ -460,7 +463,9 @@ func (c *httpGitHubClient) do(ctx context.Context, u, token string, entry *cache
 			return nil, err
 		}
 
-		c.noteRateLimit(res, token != "")
+		if !probe {
+			c.noteRateLimit(res, token != "")
+		}
 		c.logf("GET %s: %d (rate limit remaining: %s)", u, res.status, res.header.Get("X-RateLimit-Remaining"))
 
 		switch st := res.status; {
@@ -478,7 +483,9 @@ func (c *httpGitHubClient) do(ctx context.Context, u, token string, entry *cache
 			return &httpAnswer{status: st}, nil
 		case st == http.StatusUnauthorized && token != "" && !retryAnon:
 			c.dropToken()
-			return c.do(ctx, u, "", nil, cacheKey(c.scope(""), u), true)
+			return c.do(ctx, u, "", nil, cacheKey(c.scope(""), u), true, false)
+		case probe && (st == http.StatusForbidden || st == http.StatusTooManyRequests):
+			// Whatever the reason, the caller keeps the first answer
 		case st == http.StatusForbidden || st == http.StatusTooManyRequests:
 			li := c.limitInfo(res)
 			if li.kind == limitNone {
@@ -486,7 +493,7 @@ func (c *httpGitHubClient) do(ctx context.Context, u, token string, entry *cache
 				// scoped to other repositories) is refused even for public data: ask without it
 				// once. The token is kept for the other requests.
 				if st == http.StatusForbidden && token != "" && !retryAnon {
-					if ans, err := c.do(ctx, u, "", nil, cacheKey(c.scope(""), u), true); err == nil && ans.status == http.StatusOK {
+					if ans, err := c.do(ctx, u, "", nil, cacheKey(c.scope(""), u), true, true); err == nil && ans.status == http.StatusOK {
 						return ans, nil
 					}
 				}
