@@ -1,0 +1,12 @@
+name: pr
+on:
+  pull_request_target:
+permissions: {}
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: ./.github/actions/run
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}

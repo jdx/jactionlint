@@ -301,7 +301,7 @@ func newScopeIndex(w *Workflow, src []byte) *scopeIndex {
 		if job == nil || job.Pos == nil || job.Pos.Line < 1 || job.Pos.Line > len(lines) {
 			continue
 		}
-		jr := jobRange{start: job.Pos.Line, end: blockEnd(lines, job.Pos.Line-1)}
+		jr := jobRange{start: job.Pos.Line, end: ignoreTargetEnd(lines, job.Pos.Line-1)}
 		if job.ID != nil {
 			jr.id = job.ID.Value
 		}

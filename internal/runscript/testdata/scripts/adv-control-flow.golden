@@ -19,7 +19,7 @@ cmd 9:3 name="cargo" tool=cargo
 cmd 11:3 name="go" tool=go
   pos "install" "in/else@v1"
   install tool=go eco=go verb=install run=false global=false locked=false manifest=false reqs=0
-    pkg "in/else@v1" name="in/else" ver="v1" kind=module pinned=true dyn=false local=false
+    pkg "in/else@v1" name="in/else" ver="v1" kind=module pinned=false dyn=false local=false
 cmd 13:18 name="pip" tool=pip
   pos "install" "$p"[var:p quoted]
   install tool=pip eco=pypi verb=install run=false global=false locked=false manifest=false reqs=0

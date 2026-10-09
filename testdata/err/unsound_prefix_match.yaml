@@ -1,0 +1,32 @@
+on: pull_request_target
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo trusted
+        if: startsWith(github.actor, 'jdx')
+      - run: echo from a fork of mise
+        if: endsWith(github.repository, '/mise')
+      - run: echo same owner
+        if: startsWith(github.repository, 'jdx')
+      - run: echo contains, in a value that selects a secret
+        env:
+          TOKEN: ${{ contains(github.event.pull_request.user.login, 'jdx') && secrets.TOKEN }}
+      # Complete names and other tests are not reported
+      - run: echo exact
+        if: github.actor == 'jdx'
+      - run: echo owner
+        if: startsWith(github.repository, 'jdx/')
+      - run: echo list
+        if: contains(fromJSON('["jdx", "jdy"]'), github.actor)
+      - run: echo bot
+        if: endsWith(github.actor, '[bot]')
+      - run: echo exact wins
+        if: github.actor == 'jdx' && startsWith(github.actor, 'j')
+      - run: echo denied
+        if: ${{ !startsWith(github.actor, 'evil') }}
+      - run: echo message
+        if: startsWith(github.event.head_commit.message, 'fix')
+      - run: echo not a trust decision
+        env:
+          GOOS: ${{ contains(github.repository, 'windows_exporter') && 'windows' || '' }}

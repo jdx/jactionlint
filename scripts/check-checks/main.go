@@ -25,7 +25,8 @@ import (
 const requiresOnlineMarker = "# requires -online\n"
 
 // Actionlint lints the example. The examples in the sections whose headings start with "Dependabot" are
-// Dependabot configuration files. The others are workflows.
+// Dependabot configuration files, and the ones in the sections whose headings start with "Composite action"
+// are the metadata of an action. The others are workflows.
 func Actionlint(src []byte, heading string) ([]byte, error) {
 	var out bytes.Buffer
 
@@ -37,6 +38,8 @@ func Actionlint(src []byte, heading string) ([]byte, error) {
 	name := "test.yaml"
 	if strings.HasPrefix(heading, "Dependabot") {
 		name = ".github/dependabot.yml"
+	} else if strings.HasPrefix(heading, "Composite action") {
+		name = ".github/actions/example/action.yml"
 	}
 
 	opts := &jactionlint.LinterOptions{

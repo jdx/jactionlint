@@ -1,0 +1,29 @@
+name: published
+description: Meant to be used from other repositories
+inputs:
+  token:
+    description: token
+    required: true
+outputs:
+  result:
+    description: result
+    value: ${{ steps.run.outputs.result }}
+  broken:
+    description: broken
+    value: ${{ steps.nope.outputs.result }}
+runs:
+  using: composite
+  steps:
+    - uses: actions/checkout@v4
+    - uses: actions/cache@v4
+      with:
+        path: ~/.cache
+        key: build
+    - id: run
+      run: echo "result=${{ inputs.token }}" >> "$GITHUB_OUTPUT"
+      shell: bash
+    - run: echo ${{ secrets.TOKEN }}
+      shell: bash
+    - run: echo ${{ vars.NAME }} ${{ runner.os }} ${{ job.status }}
+      shell: bash
+    - run: echo no shell

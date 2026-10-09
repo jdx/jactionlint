@@ -1,0 +1,13 @@
+name: inner
+description: Restores a cache and calls outer
+inputs:
+  flavor:
+    description: flavor
+runs:
+  using: composite
+  steps:
+    - uses: actions/cache@v4
+      with:
+        path: ~/.cache
+        key: ${{ inputs.flavor }}
+    - uses: ./.github/actions/outer

@@ -1,0 +1,1 @@
+test.yaml:7:3: job "final" reads "needs.test.result" but has no "if" with a status check function, so GitHub skips the job when a job it needs fails or is skipped, and a skipped job counts as passing for a required check. add "if: ${{ !cancelled() }}" (or "always()") to the job [gate-job-skipped-on-failure]

@@ -1,0 +1,53 @@
+# Privileged workflows which handle pull requests without running their code
+on:
+  pull_request_target:
+    types: [opened, synchronize, labeled]
+
+jobs:
+  label:
+    runs-on: ubuntu-24.04
+    steps:
+      # The base branch only
+      - uses: actions/checkout@v4
+      - run: npm ci
+  compare:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          path: pr
+      # The head of the pull request is data here
+      - run: diff -r docs pr/docs
+      - run: |
+          set -o pipefail
+          cat pr/README.md | wc -l
+      - run: gh pr comment ${{ github.event.number }} --body ok
+        env:
+          GH_TOKEN: ${{ github.token }}
+  maintainers-only:
+    # Someone reviewed the label
+    if: contains(github.event.pull_request.labels.*.name, 'safe to test')
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - run: npm ci
+  same-repository:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+      - run: npm ci
+  reviewed:
+    environment: untrusted-pull-requests
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - run: npm ci

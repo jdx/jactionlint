@@ -1,0 +1,103 @@
+on:
+  issue_comment:
+    types: [created]
+  pull_request_target:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  open-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          # ERROR: everybody can start the agent, not only users with write access
+          allowed_non_write_users: '*'
+          # ERROR: the same for every bot and GitHub App
+          allowed_bots: '*'
+
+  unsafe-settings:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: anthropics/claude-code-action@v1
+        with:
+          # ERROR: any code can run through python, and the permission checks are off
+          claude_args: >-
+            --allowedTools "Bash(python:*),Bash(git diff:*),Edit"
+            --dangerously-skip-permissions
+      - uses: anthropics/claude-code-action@v1
+        with:
+          # ERROR: every shell command and any URL
+          settings: '{"permissions": {"allow": ["Bash", "WebFetch", "Read"], "defaultMode": "bypassPermissions"}}'
+      - uses: openai/codex-action@v1
+        with:
+          # ERROR: Codex gets the privileges of the runner user, and no sandbox
+          safety-strategy: unsafe
+          sandbox: danger-full-access
+          # ERROR: everybody can start the agent
+          allow-users: '*'
+      - uses: google-github-actions/run-gemini-cli@v0
+        if: github.event.comment.author_association == 'OWNER'
+        with:
+          # ERROR: no confirmation for any shell command
+          settings: '{"tools": {"allowed": ["run_shell_command", "run_shell_command(git status)"]}}'
+      - uses: factory-ai/droid-action@v1
+        with:
+          # ERROR: all permission prompts are skipped
+          droid_args: --skip-permissions-unsafe
+      - uses: actions/ai-inference@v3
+        if: github.event.sender.login == 'octocat'
+        with:
+          # ERROR: any code runs through bash, and curl sends data to any host
+          copilot-allow-tools: shell(bash:*),shell(curl:*),shell(git:*),write
+
+  no-check-of-the-user:
+    runs-on: ubuntu-latest
+    steps:
+      # ERROR: the action does not check who started it
+      - uses: google-github-actions/run-gemini-cli@v0
+        with:
+          prompt: Review the pull request
+
+  pull-request-code:
+    runs-on: ubuntu-latest
+    env:
+      TITLE: ${{ github.event.issue.title }}
+      PLAIN: fixed
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refs/pull/${{ github.event.issue.number }}/head
+      # ERROR: the pull request can configure the agent (CLAUDE.md, .claude/settings.json, .mcp.json, ...)
+      # ERROR: the prompt makes the agent read the title
+      # ERROR: the secret can be printed by the shell of the agent (only when outsiders can reach the agent)
+      - uses: anthropics/claude-code-action@v1
+        with:
+          prompt: Read $TITLE and ${PLAIN}, then fix it
+          allowed_non_write_users: '*'
+        env:
+          DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ERROR: writing contents is more than triage needs, so the open gate is reported
+  triage-with-contents:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+    steps:
+      - uses: openai/codex-action@v1
+        with:
+          allow-users: '*'
+
+  # ERROR: the list of tools of Claude Code has a shell, so the agent is not limited by it
+  tools-with-a-shell:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: anthropics/claude-code-action@v1
+        with:
+          allowed_non_write_users: '*'
+          claude_args: --allowedTools "Bash(gh issue edit:*),Bash(bash:*)"

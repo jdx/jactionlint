@@ -15,5 +15,5 @@ jobs:
     outputs:
       imagetag: "${{ steps.hello.outputs.foo }}"
     steps:
-      - run: echo hello
+      - run: echo ${{ inputs.image-name }}
         id: hello

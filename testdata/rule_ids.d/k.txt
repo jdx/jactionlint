@@ -1,0 +1,4 @@
+checkout-static-credentials
+insecure-ssh-keyscan
+insecure-url-scheme
+unverified-download

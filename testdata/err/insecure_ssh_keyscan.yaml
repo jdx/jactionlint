@@ -1,0 +1,18 @@
+on: push
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - run: ssh-keyscan example.com >> ~/.ssh/known_hosts
+      - run: ssh-keyscan -t ed25519 ${{ secrets.DEPLOY_HOST }} | tee -a "$HOME/.ssh/known_hosts"
+      - run: |
+          mkdir -p ~/.ssh
+          { ssh-keyscan a.example.com; ssh-keyscan b.example.com; } >> ~/.ssh/known_hosts
+      # Not reported: the fingerprints are compared, a known key is written, nothing is stored
+      - run: |
+          ssh-keyscan example.com > keys.txt
+          ssh-keygen -lf keys.txt
+          cat keys.txt >> ~/.ssh/known_hosts
+      - run: echo "${{ secrets.KNOWN_HOSTS }}" >> ~/.ssh/known_hosts
+      - run: ssh-keyscan example.com
