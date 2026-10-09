@@ -18,6 +18,8 @@ type exprRef struct {
 	// node is the outermost node of the reference and parent is the node that contains it. parent is
 	// nil when the reference is the whole expression.
 	node, parent ExprNode
+	// negated is true when a `!` is applied to an expression that contains the reference.
+	negated bool
 }
 
 func (r exprRef) String() string { return strings.Join(r.chain, ".") }
@@ -86,7 +88,11 @@ func collectExprRefs(n, parent ExprNode, out *[]exprRef) {
 			}
 		}
 	case *NotOpNode:
+		start := len(*out)
 		collectExprRefs(n.Operand, n, out)
+		for i := start; i < len(*out); i++ {
+			(*out)[i].negated = true
+		}
 	case *CompareOpNode:
 		collectExprRefs(n.Left, n, out)
 		collectExprRefs(n.Right, n, out)

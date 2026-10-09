@@ -18,6 +18,7 @@ func TestRuleGateJobSkippedOnFailure(t *testing.T) {
 		{"index access", gate("    steps:\n      - run: echo\n        env:\n          R: ${{ needs['a'].result }}\n"), []string{"14"}},
 		{"outcome", gate("    steps:\n      - run: echo\n        env:\n          R: ${{ needs.a.outcome }}\n"), []string{"14"}},
 		{"not equal to success", gate("    steps:\n      - run: echo\n        if: needs.a.result != 'success'\n"), []string{"14"}},
+		{"negated equal to success", gate("    steps:\n      - run: echo\n        if: ${{ !(needs.a.result == 'success') }}\n"), []string{"14"}},
 		{"equal to failure in the job condition", head + "  final:\n    needs: a\n    if: needs.a.result == 'failure'\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo\n", []string{"16"}},
 		{"explicit success is the implicit one", gate("    if: success() && needs.a.result != 'skipped'\n    steps:\n      - run: echo\n"), []string{"17"}},
 		{"step always does not run the job", gate("    steps:\n      - run: echo\n        if: always() && needs.a.result == 'failure'\n"), []string{"14"}},

@@ -65,6 +65,8 @@ func TestRulePipelineWithoutPipefailDetection(t *testing.T) {
 		{"sh template", pipefailWorkflow("", "shell: sh -e {0}\n        run: make | tee out\n"), 1},
 		{"nested pipeline in a group", pipefailWorkflow("", "run: |\n          { echo a | echo b | make; } | wc -l\n"), 1},
 		{"nested pipeline that ends in head", pipefailWorkflow("", "run: |\n          { echo a | echo b | make; } | head -1\n"), 0},
+		{"head in a loop body does not end the stream", pipefailWorkflow("", "run: |\n          make | while read -r l; do echo \"$l\" | head -n 1; done\n"), 1},
+		{"head in a nested pipeline of a stage does not end the stream", pipefailWorkflow("", "run: |\n          make | { cat; echo x | head -n 1; }\n"), 1},
 		{"group that fails with the left side of &&", pipefailWorkflow("", "run: |\n          { make && echo OK; } | tee out\n"), 1},
 		{"group with || true", pipefailWorkflow("", "run: |\n          { make || true; } | tee out\n"), 0},
 		{"read in an if takes one line", pipefailWorkflow("", "run: |\n          make | { if read -r x; then echo \"$x\"; fi; }\n"), 0},
