@@ -158,3 +158,17 @@ func TestUserOwnedConfigs(t *testing.T) {
 		t.Error("a parsed repository config is not user owned")
 	}
 }
+
+// A bare -online on the command line replaces the mode of the configuration file.
+func TestOnlineModeSetByTheCommandLineWins(t *testing.T) {
+	cfg := OnlineOptions{Mode: OnlineModeCache}
+	if got := cfg.overlay(OnlineOptions{}).Mode; got != OnlineModeCache {
+		t.Errorf("nothing given on the command line keeps the mode of the file: %q", got)
+	}
+	if got := cfg.overlay(OnlineOptions{ModeSet: true}).Mode; got != OnlineModeDefault {
+		t.Errorf("-online must force the default mode: %q", got)
+	}
+	if got := cfg.overlay(OnlineOptions{Mode: OnlineModeStrict, ModeSet: true}).Mode; got != OnlineModeStrict {
+		t.Errorf("-online=strict must win: %q", got)
+	}
+}
