@@ -196,7 +196,7 @@ type Config struct {
 	// OnlineOptions tunes the online checks: the mode ("cache" for offline use from the disk cache,
 	// "strict" to fail when a lookup is skipped), the API URL of GitHub Enterprise Server, where the
 	// token comes from, which repositories may be looked up, and the cache and retry behavior. A mode
-	// of "cache" or "strict" turns the online checks on. They apply to the whole run: the first file
+	// of "cache" or "strict" turns the online checks on, unless "online: false" is written explicitly. They apply to the whole run: the first file
 	// checked decides.
 	OnlineOptions OnlineOptions `yaml:"online-options"`
 	// Rules sets the level and the options of each rule by rule ID. A rule not listed here follows the

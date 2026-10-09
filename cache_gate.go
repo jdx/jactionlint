@@ -11,7 +11,7 @@ type triggerScenario map[string]string
 // Both have a tag as the ref.
 var (
 	scenarioRelease = triggerScenario{"event_name": "release", "ref": "refs/tags/v1.0.0", "ref_type": "tag", "ref_name": "v1.0.0"}
-	scenarioTagPush = triggerScenario{"event_name": "push", "ref": "refs/tags/v1.0.0", "ref_type": "tag", "ref_name": "v1.0.0"}
+	scenarioTagPush = triggerScenario{"event_name": "push", "event.ref": "refs/tags/v1.0.0", "ref": "refs/tags/v1.0.0", "ref_type": "tag", "ref_name": "v1.0.0"}
 )
 
 // tri is a truth value of three states, because the condition of a job often depends on things which are not known
@@ -76,6 +76,14 @@ func evalGate(n ExprNode, sc triggerScenario) gateValue {
 		if v, ok := n.Receiver.(*VariableNode); ok && v.Name == "github" {
 			if s, ok := sc[n.Property]; ok {
 				return gateValue{kind: 2, s: s}
+			}
+		}
+		// github.event.ref: the payload of a push has the ref, other payloads do not
+		if d, ok := n.Receiver.(*ObjectDerefNode); ok && n.Property == "ref" && d.Property == "event" {
+			if v, ok := d.Receiver.(*VariableNode); ok && v.Name == "github" {
+				if s, ok := sc["event.ref"]; ok {
+					return gateValue{kind: 2, s: s}
+				}
 			}
 		}
 	case *NotOpNode:
@@ -205,9 +213,10 @@ func cacheCanRunOnReleaseTrigger(job *Job, s *Step, a *ExecAction, name string, 
 		}
 	}
 	// The automatic caching of setup-node v5 is switched off by "package-manager-cache"; an explicit "cache" is
-	// not affected by it, so it decides only when there is no explicit "cache"
+	// not affected by it, so it decides only when there is no explicit "cache" or the cache is off ("cache: false"
+	// or empty), where the automatic caching is what remains
 	if name == "actions/setup-node" {
-		if _, explicit := a.input("cache"); !explicit {
+		if c, explicit := a.input("cache"); !explicit || isFalseLiteral(strings.TrimSpace(c)) || strings.TrimSpace(c) == "" {
 			if v, ok := a.input("package-manager-cache"); ok && strings.Contains(v, "${{") && !gateAllows(v, scenarios, false) {
 				return false
 			}

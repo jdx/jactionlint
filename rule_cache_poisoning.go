@@ -19,9 +19,10 @@ type cacheAction struct {
 }
 
 // looksAtTrigger reports whether the text mentions the event or the ref which started the run:
-// github.event_name, github.ref, github.ref_name, github.ref_type or a tag ref.
+// github.event_name, github.ref, github.ref_name or github.ref_type. A tag ref in a text does not count: it
+// may be compared with a value which is not the ref of the run (github.event.ref in a release).
 func looksAtTrigger(v string) bool {
-	return strings.Contains(v, "github.event_name") || strings.Contains(v, "github.ref") || strings.Contains(v, "refs/tags")
+	return strings.Contains(v, "github.event_name") || strings.Contains(v, "github.ref")
 }
 
 // majorVersionRegex captures the major version of a tag such as v3.1.0.
@@ -485,7 +486,9 @@ func (rule *RuleCachePoisoning) cannotPublish(j *Job) bool {
 	return true
 }
 
-var secretRefRe = regexp.MustCompile(`(?i)\bsecrets(?:\.([a-z_][a-z0-9_-]*)|\s*\[|\b\s*\))`)
+// secretRefRe finds a read of a secret: secrets.NAME (group 1), secrets['NAME'] (group 2), or any other form
+// (secrets[expr], a bare secrets as an argument), which leave both groups empty.
+var secretRefRe = regexp.MustCompile(`(?i)\bsecrets(?:\.([a-z_][a-z0-9_-]*)|\s*\[\s*'([^']*)'\s*\]|\s*\[|\b\s*\))`)
 
 // usesOwnSecret reports whether the job, or the env: of the workflow, reads a secret other than GITHUB_TOKEN.
 func (rule *RuleCachePoisoning) usesOwnSecret(j *Job) bool {
@@ -494,7 +497,7 @@ func (rule *RuleCachePoisoning) usesOwnSecret(j *Job) bool {
 			return false
 		}
 		for _, m := range secretRefRe.FindAllStringSubmatch(s.Value, -1) {
-			if !strings.EqualFold(m[1], "github_token") {
+			if name := m[1] + m[2]; !strings.EqualFold(name, "github_token") {
 				return true
 			}
 		}
@@ -564,7 +567,8 @@ func (rule *RuleCachePoisoning) VisitJobPre(n *Job) error {
 		if why = publishingReason(steps); why == "" {
 			return nil
 		}
-		scenarios = rule.eventScenarios
+		// the tag push of a tag-only workflow is a run too, and the only one that has a tag as its ref
+		scenarios = append(slices.Clone(rule.eventScenarios), rule.scenarios...)
 	}
 	for _, s := range steps {
 		a, ref := stepAction(s)

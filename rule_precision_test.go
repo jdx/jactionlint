@@ -25,6 +25,12 @@ func TestAdhocPackagesArraysAndLerna(t *testing.T) {
 		{"lerna add with an expression", "yarn lerna add pkg@${{ matrix.v }}", 1},
 		{"npx lerna add", "npx lerna add left-pad", 1},
 		{"lerna add of a local path", "lerna add ./packages/a", 0},
+		{"lerna add of a local path with --scope", "lerna add ./packages/a --scope web", 0},
+		{"lerna add of a local path with --dev and --peer", "lerna add ./packages/a --dev --peer", 0},
+		{"lerna add with --scope before a local path", "lerna add --scope web ./packages/a", 0},
+		{"lerna add with --scope before a package", "lerna add --scope web left-pad", 1},
+		{"lerna add with a flag value after a registry package", "lerna add left-pad --scope web --dev", 1},
+		{"lerna add with --scope=value before a package", "lerna add --scope=web left-pad", 1},
 		{"lerna bootstrap", "yarn lerna bootstrap", 0},
 	}
 	for _, tc := range tests {
@@ -91,6 +97,62 @@ func TestUseTrustedPublishingPrecision(t *testing.T) {
           npm config set registry https://registry.npmjs.org/
           npm publish
         env:
+          NODE_AUTH_TOKEN: ${{ secrets.T }}
+`, 1},
+
+		{"reset to the public registry after a private one", noOIDC + `      - run: |
+          npm config set registry http://localhost:4873
+          npm config set registry https://registry.npmjs.org/
+          npm publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.T }}
+`, 1},
+		{"private registry set again after the public one", noOIDC + `      - run: |
+          npm config set registry https://registry.npmjs.org/
+          npm config set registry http://localhost:4873
+          npm publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.T }}
+`, 0},
+		{"setup-node private, then a script reset", lin + `      - uses: actions/setup-node@v6
+        with:
+          registry-url: https://npm.pkg.github.com
+      - run: |
+          npm config set registry https://registry.npmjs.org/
+          npm publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.T }}
+`, 1},
+		{"setup-node private, then setup-node public", lin + `      - uses: actions/setup-node@v6
+        with:
+          registry-url: https://npm.pkg.github.com
+      - uses: actions/setup-node@v6
+        with:
+          registry-url: https://registry.npmjs.org
+      - run: npm publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.T }}
+`, 1},
+		{"private registry set only in a branch, public before", noOIDC + `      - run: |
+          npm config set registry https://registry.npmjs.org/
+          if [ -n "$X" ]; then npm config set registry http://localhost:4873; fi
+          npm publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.T }}
+`, 0},
+		{"public registry on the publish command wins over a private config", noOIDC + `      - run: |
+          npm config set registry http://localhost:4873
+          npm publish --registry https://registry.npmjs.org/
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.T }}
+`, 1},
+		{"private registry on the publish command", noOIDC + `      - run: npm publish --registry http://localhost:4873
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.T }}
+`, 0},
+		{"step environment resets the workflow's private registry", "on: push\nenv:\n  NPM_CONFIG_REGISTRY: http://localhost:4873\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n" + `      - run: npm publish
+        env:
+          NPM_CONFIG_REGISTRY: https://registry.npmjs.org/
           NODE_AUTH_TOKEN: ${{ secrets.T }}
 `, 1},
 

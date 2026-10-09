@@ -83,6 +83,9 @@ type httpGitHubClient struct {
 	token       string
 	limit       *GitHubRateLimitError // set once the limit is reached
 	noticedAnon bool
+	// visibility remembers per repository ("owner/repo", lower case) whether it is public, as the answer of
+	// the repository endpoint said. A repository that is not in the map is unknown, which counts as private.
+	visibility map[string]bool
 }
 
 // httpGitHubOptions configures newHTTPGitHubClient.
@@ -354,32 +357,144 @@ func (c *httpGitHubClient) get(ctx context.Context, target string) (*httpAnswer,
 	if c.offline {
 		return nil, fmt.Errorf("%s: %w", strings.SplitN(target, "?", 2)[0], ErrGitHubNotCached)
 	}
-	if rl := c.rateLimited(); rl != nil {
-		wait := rl.Reset.Sub(c.now())
-		if rl.Reset.IsZero() || wait > c.maxWait {
-			if entry != nil {
-				return answerFromEntry(entry), nil // Stale data is better than none
-			}
-			return nil, rl
+	if rl, err := c.waitOutRateLimit(ctx); err != nil {
+		return nil, err
+	} else if rl != nil {
+		if entry != nil {
+			return answerFromEntry(entry), nil // Stale data is better than none
 		}
-		c.logf("rate limit reached: waiting %s", wait.Round(time.Millisecond))
-		if err := c.sleep(ctx, wait+time.Second); err != nil {
-			return nil, err
-		}
+		return nil, rl
 	}
 
+	ans, err := c.doLimited(ctx, u, token, entry, key)
+	if err != nil && entry != nil && errors.Is(err, ErrGitHubRateLimited) {
+		return answerFromEntry(entry), nil
+	}
+	if err == nil && ans.status == http.StatusOK && token != "" && c.currentToken() == token {
+		if owner, repo, self, ok := c.repoOf(u); ok {
+			c.shareIfPublic(ctx, u, key, owner, repo, self)
+		}
+	}
+	return ans, err
+}
+
+// doLimited sends the request while holding one of the slots for concurrent requests.
+func (c *httpGitHubClient) doLimited(ctx context.Context, u, token string, entry *cacheEntry, key string) (*httpAnswer, error) {
 	select {
 	case c.sem <- struct{}{}:
 		defer func() { <-c.sem }()
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	}
+	return c.do(ctx, u, token, entry, key, false, false)
+}
 
-	ans, err := c.do(ctx, u, token, entry, key, false, false)
-	if err != nil && entry != nil && errors.Is(err, ErrGitHubRateLimited) {
-		return answerFromEntry(entry), nil
+// repoOf tells which repository a URL of the API is about, and whether it is the repository endpoint itself
+// (/repos/{owner}/{repo}) and not something below it.
+func (c *httpGitHubClient) repoOf(u string) (owner, repo string, self, ok bool) {
+	pu, err := url.Parse(u)
+	if err != nil {
+		return "", "", false, false
 	}
-	return ans, err
+	rest, found := strings.CutPrefix(pu.EscapedPath(), strings.TrimRight(c.base.EscapedPath(), "/")+"/repos/")
+	if !found {
+		return "", "", false, false
+	}
+	segs := strings.Split(rest, "/")
+	if len(segs) < 2 || !validGitHubOwner(segs[0]) || !validGitHubRepo(segs[1]) {
+		return "", "", false, false
+	}
+	return segs[0], segs[1], len(segs) == 2, true
+}
+
+// repoBodyPublic reports whether the answer of the repository endpoint says the repository is public. An
+// answer that does not say so, or says it is private or internal, is not.
+func repoBodyPublic(body []byte) bool {
+	var r struct {
+		Private    *bool  `json:"private"`
+		Visibility string `json:"visibility"`
+	}
+	return json.Unmarshal(body, &r) == nil && r.Private != nil && !*r.Private && (r.Visibility == "" || r.Visibility == "public")
+}
+
+// shareIfPublic makes the answer which was just stored under the key of the token available to every other
+// token, when it is public data. The cache is keyed by credentials because a private repository answers
+// differently to different tokens, and an answer fetched with a token is not known to be public: a token
+// of another job of the same workflow (every CI job has its own GITHUB_TOKEN) would never find it.
+//
+// The rule that keeps private answers private: an answer is copied to the shared slot (the one of
+// requests without a token) only when the repository endpoint said that the repository is public. When
+// that is not known yet it is asked once per repository (a conditional, cacheable request). If the
+// repository is private, or the answer is not known, nothing is shared and an older shared copy of the
+// request is removed. A "not found" is never shared (a token may see more).
+func (c *httpGitHubClient) shareIfPublic(ctx context.Context, u, key, owner, repo string, self bool) {
+	if c.cache == nil {
+		return
+	}
+	e := c.cache.get(key, u)
+	if e == nil || e.Status != http.StatusOK {
+		return
+	}
+	id := strings.ToLower(owner + "/" + repo)
+	if self {
+		c.setVisibility(id, repoBodyPublic(e.Body))
+	} else if _, known := c.visibilityOf(id); !known {
+		if c.rateLimited() != nil {
+			return // sharing is an optimization: it never waits for the limit
+		}
+		path, err := repoURL(owner, repo)
+		if err != nil {
+			return
+		}
+		ans, err := c.get(ctx, path)
+		if err != nil {
+			return // unknown: not shared, and not remembered
+		}
+		c.setVisibility(id, ans.status == http.StatusOK && repoBodyPublic(ans.body))
+	}
+	anon := cacheKey(c.scope(""), u)
+	if public, _ := c.visibilityOf(id); public {
+		c.cache.put(anon, e)
+	} else {
+		c.cache.remove(anon)
+	}
+}
+
+func (c *httpGitHubClient) visibilityOf(id string) (public, known bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	public, known = c.visibility[id]
+	return public, known
+}
+
+func (c *httpGitHubClient) setVisibility(id string, public bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.visibility == nil {
+		c.visibility = map[string]bool{}
+	}
+	c.visibility[id] = public
+}
+
+// waitOutRateLimit applies the policy of the client to a request that is about to be sent while the rate
+// limit is used up: a limit that ends within the maximum wait is waited for, and the request goes on
+// (nil, nil). A limit that ends later, or at an unknown time, is returned and the request must not be
+// sent: the caller answers from its stale cache entry, if it has one, or fails with the error. The
+// error is for a wait that was cancelled.
+func (c *httpGitHubClient) waitOutRateLimit(ctx context.Context) (*GitHubRateLimitError, error) {
+	rl := c.rateLimited()
+	if rl == nil {
+		return nil, nil
+	}
+	wait := rl.Reset.Sub(c.now())
+	if rl.Reset.IsZero() || wait > c.maxWait {
+		return rl, nil
+	}
+	c.logf("rate limit reached: waiting %s", wait.Round(time.Millisecond))
+	if err := c.sleep(ctx, wait+time.Second); err != nil {
+		return nil, err
+	}
+	return nil, nil
 }
 
 // send sends one request and reads the whole answer.
@@ -1055,17 +1170,42 @@ func (c *httpGitHubClient) CommitOnAnyBranch(ctx context.Context, owner, repo, s
 	// The answer is cached like a GET under a name that cannot be a URL of the REST API
 	name := fmt.Sprintf("graphql:branch-scan:%s/%s@%s:%d", strings.ToLower(owner), strings.ToLower(repo), strings.ToLower(sha), limit)
 	key := cacheKey(c.scope(token), name)
-	if e := c.cache.get(key, name); e != nil && (c.offline || (c.ttl > 0 && c.now().Sub(e.Fetched) < c.ttl)) {
+	var stale *GitHubBranchScan // an expired answer, for when the rate limit leaves no choice
+	e := c.cache.get(key, name)
+	if e == nil {
+		// The answer of another token for a public repository (see shareIfPublic)
+		if shared := c.cache.get(cacheKey(c.scope(""), name), name); shared != nil && shared.Status == http.StatusOK {
+			e = shared
+		}
+	}
+	if e != nil {
 		var scan GitHubBranchScan
 		if json.Unmarshal(e.Body, &scan) == nil {
-			c.logf("GraphQL %s: from the cache", name)
-			return scan, nil
+			if c.offline || (c.ttl > 0 && c.now().Sub(e.Fetched) < c.ttl) {
+				c.logf("GraphQL %s: from the cache", name)
+				return scan, nil
+			}
+			stale = &scan
 		}
 	}
 	if c.offline {
 		return GitHubBranchScan{}, ErrGitHubBranchScanUnavailable // Compared one by one from the cache
 	}
-	if rl := c.rateLimited(); rl != nil {
+	// Sharing asks for the repository, which needs a slot of its own: it happens after this one is released
+	shared := false
+	defer func() {
+		if shared {
+			c.shareIfPublic(ctx, name, key, owner, repo, false)
+		}
+	}()
+	// The same policy as for the REST requests: wait for a limit that ends soon, otherwise stale data
+	// is better than none
+	if rl, err := c.waitOutRateLimit(ctx); err != nil {
+		return GitHubBranchScan{}, err
+	} else if rl != nil {
+		if stale != nil {
+			return *stale, nil
+		}
 		return GitHubBranchScan{}, rl
 	}
 
@@ -1135,7 +1275,8 @@ func (c *httpGitHubClient) CommitOnAnyBranch(ctx context.Context, owner, repo, s
 		after = &cursor
 	}
 	if b, err := json.Marshal(scan); err == nil {
-		c.cache.put(key, &cacheEntry{URL: name, Fetched: time.Now(), Status: http.StatusOK, Body: b})
+		c.cache.put(key, &cacheEntry{URL: name, Fetched: c.now(), Status: http.StatusOK, Body: b})
+		shared = true
 	}
 	return scan, nil
 }

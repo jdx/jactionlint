@@ -331,7 +331,7 @@ func toolUnavailable(cmd string) bool {
 func (l *Linter) ruleRanAsIs(id string, cfg *Config) bool {
 	// RuleRuns knows the level of the rule and whether it is an online rule while the online checks are off
 	// (--online, --no-online, "online" and "online-options" of the configuration all count)
-	if !cfg.RuleRuns(id, l.online.enabled || l.online.enabledBy(cfg)) {
+	if !cfg.RuleRuns(id, l.onlineOn(cfg)) {
 		return false
 	}
 	// A lookup that failed (rate limit, no network) left some online findings unreported: their entries are not

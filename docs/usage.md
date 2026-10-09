@@ -725,8 +725,11 @@ jactionlint --online
 - **Cache.** Answers are kept in `$XDG_CACHE_HOME/jactionlint` (`~/.cache/jactionlint`), at most 32 MiB, shared safely by parallel
   processes, keyed by API host and token. An answer is used for an hour (`--online-cache-ttl`, `cache-ttl`), then asked for again with
   its ETag, which costs no rate limit when it did not change. `--online-cache-ttl=0` checks every answer. A public answer fetched
-  without a token also serves a run with one, so the `GITHUB_TOKEN` of a CI job, which changes every run, does not empty the
-  cache.
+  without a token also serves a run with one. An answer fetched with a token is stored for that token, and also for every other
+  token (so the `GITHUB_TOKEN` of a CI job, which changes every run, does not empty a restored cache) when the repository is known to
+  be public: its repository endpoint said `"private": false`, which jactionlint asks once per repository if it has not been asked
+  yet. For a private or internal repository, or when that is not known, the answer is only ever served to the token that fetched it.
+  An answer that says "not found" is never shared.
 - **Offline.** `--online=cache` never uses the network: it answers from the cache whatever the age of the answers, and a lookup with
   nothing cached is skipped with one warning (run once with `--online` to fill the cache). `--online=cache,strict` fails on such a
   lookup. Good for a laptop on a plane or a sandboxed CI job that restores the cache directory.

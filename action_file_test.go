@@ -540,3 +540,30 @@ func TestActionBelowWorkflowsDirectory(t *testing.T) {
 		t.Errorf("the action below .github/workflows is no workflow: %s", got)
 	}
 }
+
+// An action has no jobs, but the steps option of continue-on-error applies to composite steps.
+func TestContinueOnErrorInACompositeAction(t *testing.T) {
+	src := "name: x\ndescription: x\nruns:\n  using: composite\n  steps:\n    - run: make\n      shell: bash\n      continue-on-error: true\n"
+	l, err := NewLinter(io.Discard, &LinterOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := ParseConfig([]byte("rules:\n  continue-on-error:\n    level: info\n    steps: true\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	l.defaultConfig = withFixtureRules(cfg)
+	errs, err := l.Lint(".github/actions/x/action.yml", []byte(src), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var n int
+	for _, e := range errs {
+		if e.ID == "continue-on-error" {
+			n++
+		}
+	}
+	if n != 1 {
+		t.Fatalf("want 1 continue-on-error finding, got %v", errs)
+	}
+}

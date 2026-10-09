@@ -787,3 +787,58 @@ func TestAffectedByPrefersThePackageOfTheSubdirectory(t *testing.T) {
 		t.Errorf("GHSA-1 = %+v %v, GHSA-2 = %+v %v", v1, f1, v2, f2)
 	}
 }
+
+// A default branch which shares no history with the commit does not end the search: the other branches can have it.
+func TestImpostorCommitSearchesOnWhenTheDefaultBranchHasNoCommonHistory(t *testing.T) {
+	sha := strings.Repeat("c", 40)
+	main, dev := strings.Repeat("a", 40), strings.Repeat("b", 40)
+	fx := func(devCompare string) string {
+		return `{"repos":{"o/r":{"repo":{"default_branch":"main"},"tags":{"tags":[]},
+		  "branches":{"branches":[{"name":"main","sha":"` + main + `"},{"name":"dev","sha":"` + dev + `"}]},
+		  "refs":{"heads/main":{"sha":"` + main + `","found":true}},
+		  "compare":{"` + main + `...` + sha + `":"not-found","` + dev + `...` + sha + `":"` + devCompare + `"}}}}`
+	}
+	cfg := &Config{Rules: map[string]RuleConfig{"stale-action-refs": {Level: SeverityOff, levelSet: true}, "known-vulnerable-actions": {Level: SeverityOff, levelSet: true}}}
+	run := func(devCompare string) []*Error {
+		c, err := NewFixtureGitHubClient([]byte(fx(devCompare)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		errs, _ := lintOnline(t, c, cfg, workflowWith("uses: o/r@"+sha))
+		return errs
+	}
+	if errs := run("behind"); len(errs) != 0 {
+		t.Errorf("the commit is on dev: %v", lineIDsOf(errs))
+	}
+	if errs := run("diverged"); len(errs) != 1 || errs[0].ID != "impostor-commit" {
+		t.Errorf("no branch has the commit: %v", lineIDsOf(errs))
+	}
+}
+
+// With more tags than were read the tag of the exact version may be missing, so the version is not known.
+func TestKnownVulnerableActionsIsSilentWhenTagsAreTruncated(t *testing.T) {
+	sha := strings.Repeat("c", 40)
+	adv := `{"id":"GHSA-trunc","summary":"leaks","severity":"high","url":"https://github.com/advisories/GHSA-trunc",
+	  "vulnerabilities":[{"package":"o/r","range":"< 4.2.0","first_patched":"4.2.0"}]}`
+	fx := func(truncated bool) string {
+		return `{"repos":{"o/r":{"repo":{"default_branch":"main"},
+		  "tags":{"tags":[{"name":"v4.1.0","sha":"` + sha + `"}],"truncated":` + fmt.Sprint(truncated) + `},
+		  "refs":{"tags/v4":{"sha":"` + sha + `","found":true}},
+		  "advisories":{"list":[` + adv + `]}}}}`
+	}
+	cfg := &Config{Rules: map[string]RuleConfig{"stale-action-refs": {Level: SeverityOff, levelSet: true}, "impostor-commit": {Level: SeverityOff, levelSet: true}}}
+	run := func(truncated bool) []*Error {
+		c, err := NewFixtureGitHubClient([]byte(fx(truncated)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		errs, _ := lintOnline(t, c, cfg, workflowWith("uses: o/r@"+sha))
+		return errs
+	}
+	if errs := run(false); len(errs) != 1 || errs[0].ID != "known-vulnerable-actions" {
+		t.Fatalf("with all the tags read the commit is v4.1.0: %v", lineIDsOf(errs))
+	}
+	if errs := run(true); len(errs) != 0 {
+		t.Errorf("the tag list is truncated: %v", lineIDsOf(errs))
+	}
+}

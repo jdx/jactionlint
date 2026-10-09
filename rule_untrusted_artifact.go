@@ -196,6 +196,19 @@ func refsRead(refs []exprRef, target []string) bool {
 // artifactUse reports whether the step runs or extracts something from the artifact, or writes its
 // content to the environment of later steps, and describes how.
 func artifactUse(s *Step, dl *artifactDownload) (string, bool) {
+	if a, ok := s.Exec.(*ExecAction); ok {
+		// an action below the download directory is code of the artifact
+		if a.Uses == nil || a.Uses.ContainsExpression() || ParseUses(a.Uses.Value).Kind != UsesLocal {
+			return "", false
+		}
+		v := normalizeDir(a.Uses.Value)
+		for _, p := range dl.prefixes {
+			if v == p || strings.HasPrefix(v, p+"/") {
+				return "runs the local action " + a.Uses.Value, true
+			}
+		}
+		return "", false
+	}
 	e, ok := s.Exec.(*ExecRun)
 	if !ok || e.Run == nil {
 		return "", false
@@ -239,12 +252,12 @@ func artifactUse(s *Step, dl *artifactDownload) (string, bool) {
 	}
 	for _, w := range script.WritesTo("GITHUB_ENV", "GITHUB_PATH", "GITHUB_OUTPUT") {
 		for _, p := range w.Producers {
-			if under(p) {
+			if under(p) || (inDir && readsRelativeFile(p)) {
 				return fmt.Sprintf("writes its content to $%s", w.Var), true
 			}
 			for _, word := range p.Words {
 				for _, sub := range word.Subs {
-					if under(sub) {
+					if under(sub) || (inDir && readsRelativeFile(sub)) {
 						return fmt.Sprintf("writes its content to $%s", w.Var), true
 					}
 				}
@@ -253,6 +266,9 @@ func artifactUse(s *Step, dl *artifactDownload) (string, bool) {
 		// read VAR < file; echo "VAR=$VAR" >> $GITHUB_ENV
 		for _, r := range script.Redirects {
 			if r.Op == "<" && r.Target != nil {
+				if inDir && !strings.HasPrefix(r.Target.Value, "/") && !strings.HasPrefix(r.Target.Value, "~") && !r.Target.Dynamic() {
+					return fmt.Sprintf("writes its content to $%s", w.Var), true
+				}
 				for _, p := range dl.prefixes {
 					if wordIsUnder(r.Target, p) {
 						return fmt.Sprintf("writes its content to $%s", w.Var), true
@@ -262,6 +278,25 @@ func artifactUse(s *Step, dl *artifactDownload) (string, bool) {
 		}
 	}
 	return "", false
+}
+
+// readsRelativeFile reports whether the command is one that reads a file named by a relative path, which
+// in the download directory is a file of the artifact.
+func readsRelativeFile(c *runscript.Command) bool {
+	switch c.Name {
+	case "cat", "head", "tail", "jq", "yq", "grep", "egrep", "fgrep", "sed", "awk", "cut", "tr", "sort", "uniq", "wc", "xargs", "tac", "rev", "nl":
+	default:
+		return false
+	}
+	for _, w := range c.Positional {
+		if w == nil {
+			continue
+		}
+		if v := w.Value; v != "" && !strings.HasPrefix(v, "/") && !strings.HasPrefix(v, "~") && !strings.HasPrefix(v, "-") {
+			return true
+		}
+	}
+	return false
 }
 
 // isExtraction reports whether the command unpacks an archive.

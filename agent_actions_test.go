@@ -39,7 +39,7 @@ func TestSplitToolList(t *testing.T) {
 func TestRiskyToolRule(t *testing.T) {
 	risky := []string{
 		"Bash", "Bash(*)", "Bash(:*)", "bash(*:*)", "Bash()", "Bash(python:*)", "Bash(python3 *)", "Bash(sh*)", "Bash(curl:*)",
-		"Bash(xargs:*)", "WebFetch", "WebFetch(*)", "WebFetch(domain:*)",
+		"Bash(xargs:*)", "Bash(python -c:*)", "Bash(node -e:*)", "Bash(bash -c *)", "Bash(curl -s:*)", "WebFetch", "WebFetch(*)", "WebFetch(domain:*)",
 	}
 	for _, r := range risky {
 		if riskyToolRule(r, "Bash", "WebFetch") == "" {
@@ -47,7 +47,7 @@ func TestRiskyToolRule(t *testing.T) {
 		}
 	}
 	fine := []string{
-		"Edit", "Read", "Bash(git diff:*)", "Bash(npm test)", "Bash(python -m pytest:*)", "Bash(python)", "Bash(npx prettier --check:*)",
+		"Edit", "Read", "Bash(git diff:*)", "Bash(npm test)", "Bash(python -m pytest:*)", "Bash(python)", "Bash(python script.py:*)", "Bash(git log --oneline:*)", "Bash(npx prettier --check:*)",
 		"WebFetch(domain:docs.github.com)", "Bashful", "Bash(gh issue view:*)", "mcp__github__get_issue",
 	}
 	for _, r := range fine {
@@ -450,5 +450,42 @@ jobs:
 	}
 	if !found {
 		t.Fatal("a secret in claude_env must be reported")
+	}
+}
+
+func TestAgenticActionsRestrictedByExpression(t *testing.T) {
+	const head = "on: issues\njobs:\n  a:\n    runs-on: ubuntu-latest\n    permissions:\n      contents: write\n    steps:\n      - uses: anthropics/claude-code-action@v1\n        with:\n          allowed_non_write_users: '*'\n"
+	tests := []struct {
+		name string
+		with string
+		want int
+	}{
+		{"exact rules", "          claude_args: --allowedTools Edit,Read\n", 0},
+		{"rules from an expression", "          claude_args: --allowedTools ${{ vars.TOOLS }}\n", 1},
+		{"expression among rules", "          claude_args: --allowedTools Edit,${{ vars.TOOLS }}\n", 1},
+		{"wildcard with a flag", "          claude_args: --allowedTools 'Bash(python -c:*)'\n", 1},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := messagesOfID(lintAgentTest(t, head+tc.with), "agentic-actions")
+			if len(got) < tc.want || (tc.want == 0 && len(got) != 0) {
+				t.Fatalf("want %d findings, got %q", tc.want, got)
+			}
+		})
+	}
+}
+
+func TestAgenticActionsSecretsExpressionEnv(t *testing.T) {
+	const head = "on: issues\njobs:\n  a:\n    runs-on: ubuntu-latest\n"
+	const step = "    steps:\n      - uses: anthropics/claude-code-action@v1\n        with:\n          allowed_non_write_users: '*'\n          claude_args: --allowedTools Edit\n"
+	for _, env := range []string{"    env: ${{ secrets }}\n", "    env:\n      K: ${{ secrets.FOO }}\n"} {
+		got := messagesOfID(lintAgentTest(t, head+env+step), "agentic-actions")
+		found := false
+		for _, m := range got {
+			found = found || strings.Contains(m, "in the environment of")
+		}
+		if !found {
+			t.Errorf("env %q: no secret finding in %q", env, got)
+		}
 	}
 }

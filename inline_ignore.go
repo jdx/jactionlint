@@ -295,8 +295,9 @@ func (ig inlineIgnore) covers(err *Error) bool {
 
 // unusedInlineIgnores returns an error for each pattern of the inline ignore comments which did not
 // suppress any error. A pattern for a rule which is off, or an online rule while the online checks are
-// off (online), is not reported because the rule could not report anything.
-func unusedInlineIgnores(ignores []inlineIgnore, orphans []*inlineIgnoreEntry, cfg *Config, online bool) []*Error {
+// off (online), or a rule which could not be created for the file (skipped: its external command is
+// missing), is not reported because the rule could not report anything.
+func unusedInlineIgnores(ignores []inlineIgnore, orphans []*inlineIgnoreEntry, cfg *Config, online bool, skipped map[string]bool) []*Error {
 	var errs []*Error
 	// stale tells whether the pattern is reported: it did nothing and could have done something
 	stale := func(e *inlineIgnoreEntry) bool {
@@ -311,12 +312,12 @@ func unusedInlineIgnores(ignores []inlineIgnore, orphans []*inlineIgnoreEntry, c
 			if on, _ := cfg.ruleOptionBool("unused-ignore", "zizmor"); !on {
 				return false
 			}
-			return zizmorEntryActive(e, cfg, online)
+			return zizmorEntryActive(e, cfg, online, skipped)
 		}
 		if rr, ok := lookupRenamed(e.pat.Retired); ok && rr.Option == pedanticOption.Name && !cfg.auditPedantic(rr.ID) {
 			return false // the findings of the retired ID are not reported without the pedantic option
 		}
-		return e.pat.ID == "" || cfg.RuleRuns(e.pat.ID, online)
+		return e.pat.ID == "" || (cfg.RuleRuns(e.pat.ID, online) && !skipped[e.pat.ID])
 	}
 	report := func(e *inlineIgnoreEntry, what string) {
 		if !stale(e) {

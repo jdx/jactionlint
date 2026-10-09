@@ -166,6 +166,9 @@ func normalizeOption(opt RuleOption, v any) (any, error) {
 				return int(v), nil
 			}
 		case uint64:
+			if v > math.MaxInt {
+				return nil, fmt.Errorf("it is too large: the greatest value is %d", math.MaxInt)
+			}
 			return int(v), nil
 		}
 		return nil, fmt.Errorf("it must be a non-negative integer")

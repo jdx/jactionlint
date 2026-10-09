@@ -206,7 +206,10 @@ func unpinnedToolInstall(c *runscript.Command, in *runscript.Install) bool {
 		if in.Run {
 			// `npx tsc` runs the binary of the project when there is one. Only the forms that ask for a download
 			// (npx -y, dlx) are known to fetch.
-			return c.Tool != "npx" && c.Tool != "bunx" || c.HasFlag("-y", "--yes", "-p", "--package")
+			// `npm exec`, `npm x` and `bun x` are the same as npx and bunx.
+			localFirst := c.Tool == "npx" || c.Tool == "bunx" ||
+				(c.Tool == "npm" && (in.Verb == "exec" || in.Verb == "x")) || (c.Tool == "bun" && in.Verb == "x")
+			return !localFirst || c.HasFlag("-y", "--yes", "-p", "--package")
 		}
 		return in.Global
 	}

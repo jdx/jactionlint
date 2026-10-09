@@ -35,7 +35,7 @@ var actionRuleScope = map[string]struct {
 	"checkout-static-credentials": {scope: actionApplies},         // the inputs of actions/checkout steps
 	"concurrency-cancels-prs":     {scope: actionNotApplicable},   // concurrency: belongs to the workflow
 	"concurrency-cancels-release": {scope: actionNotApplicable},   // concurrency: belongs to the workflow
-	"continue-on-error":           {scope: actionNotApplicable},   // a job setting; an action has no jobs
+	"continue-on-error":           {scope: actionApplies},         // the steps option; an action has no jobs
 	"duplicate-triggers":          {scope: actionNotApplicable},   // on: belongs to the workflow
 	"gate-job-skipped-on-failure": {scope: actionNotApplicable},   // needs: between the jobs of a workflow
 	"github-env":                  {scope: actionCallerDependent}, // privileged only for the events of the callers; its findings about untrusted input do not depend on them
