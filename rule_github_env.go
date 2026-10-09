@@ -20,16 +20,47 @@ import (
 //
 // Scripts of bash and sh are analyzed with the run-script analyzer, scripts of pwsh, powershell and cmd by
 // matching their lines.
+//
+// # The invariant
+//
+// A value written to $GITHUB_ENV or $GITHUB_PATH is trusted if and only if, at the write, every variable it uses
+// has a value that is provably harmless, where "the value of a variable" is decided in execution order by
+// rule_github_env_flow.go (judgeVar) and the rest of the analysis stays conservative: whatever it cannot prove is
+// untrusted.
+//
+//  1. The value of a variable at the write is its LAST assignment (or read, or for-loop item) before the write.
+//     Only an unconditional one ends the search; one in a branch, a loop, a function, a pipeline or the right side
+//     of && and || may not have happened, so it counts together with what was there before it. `+=` adds to the
+//     value, so it counts together with the earlier value as well. A write in a loop also sees the assignments
+//     after it. Anything that can set a variable unseen (eval, source, printf -v, mapfile) makes it unknown.
+//  2. An assignment is trusted when its value is: a literal, a trusted source (the runner, a variable of the
+//     workflow that holds no outsider's input, a command with fixed output such as date), or a value made safe by
+//     a sanitizer, which means for $GITHUB_ENV that it cannot hold a newline, and for $GITHUB_PATH also that it
+//     holds no ".", "/" or ":": `tr -d '\n'`, `head -n 1`, `${v//[^a-z0-9]/}`, `sed 's/[^a-z0-9-]/-/g'`.
+//  3. A pipeline is trusted only if every stage after its last sanitizer is known to keep it (keepsSanitized):
+//     head, tail, sort, uniq, cut, rev, wc, tee, a deletion with tr, a translation or substitution whose parts
+//     are plain text. sed, tr, awk, printf, xargs and the like can write a newline back, so they do not count
+//     unless proven harmless.
+//  4. A test counts as validation (runscript.Guard) only when the script cannot go on unless the value passed it:
+//     `[[ v =~ ^re$ ]] || exit`, `[[ ! v =~ ^re$ ]] && exit`, `if [[ ! ... ]]; then exit; fi`, a bare `[[ ]]` under
+//     the default -e, or a `case` whose last branch is `*) exit`. The polarity must be right (a negated test
+//     whose failure is the way on proves nothing), the exit must be the exit of the script (not of a subshell),
+//     the test must be at the top level of the script, and no assignment may follow it. The regular expression
+//     must be anchored and hold no character the destination cannot have.
+//
+// Every case of the table in rule_github_env_flow_test.go names the clause it checks.
 type RuleGitHubEnv struct {
 	RuleBase
 	runContext
 	step *Step
 	// dest is the file of the write that is judged ("GITHUB_ENV" or "GITHUB_PATH"), validated the variables the
 	// script has checked before it.
-	dest      string
-	validated map[string]bool
-	// writeAt is the offset of the write that is judged.
-	writeAt int
+	dest string
+	// at is the offset of the script where the value that is judged is read: the write, or the assignment whose
+	// value is judged.
+	at int
+	// loop is whether the write is in the body of a loop.
+	loop bool
 }
 
 // NewRuleGitHubEnv creates a new RuleGitHubEnv instance.
@@ -91,8 +122,11 @@ func (rule *RuleGitHubEnv) checkBash(run *ExecRun) {
 	}
 	for _, w := range s.WritesTo("GITHUB_ENV", "GITHUB_PATH") {
 		rule.dest = w.Var
-		rule.writeAt = w.Redirect.Offset
-		rule.validated = validatedVars(s, w.Redirect.Offset, w.Var)
+		rule.at = w.Redirect.Offset
+		rule.loop = false
+		for _, c := range w.Producers {
+			rule.loop = rule.loop || c.LoopBody
+		}
 		d := rule.judgeWrite(s, w)
 		rule.report(s, origin, w, d)
 	}
@@ -356,27 +390,6 @@ func (rule *RuleGitHubEnv) mintedByJob(e string) bool {
 	return false
 }
 
-// readFrom returns the value that the shell builtin read puts in the variable: `IFS=/ read -r OWNER NAME <<< "$X"`.
-// Only a read that runs before the offset counts: a read after the write has not happened yet.
-func readFrom(s *runscript.Script, name string, before int) (*runscript.Word, bool) {
-	for _, c := range s.Commands {
-		if c.Name != "read" || c.Offset >= before {
-			continue
-		}
-		for _, p := range c.Positional {
-			if p.Value != name {
-				continue
-			}
-			for _, r := range c.Redirects {
-				if r.Op == "<<<" && r.Target != nil {
-					return r.Target, true
-				}
-			}
-		}
-	}
-	return nil, false
-}
-
 // envContextVar returns NAME of an expression that is exactly `env.NAME`.
 func envContextVar(e string) (string, bool) {
 	n, ok := parseExprText(e).(*ObjectDerefNode)
@@ -387,50 +400,6 @@ func envContextVar(e string) (string, bool) {
 		return n.Property, true
 	}
 	return "", false
-}
-
-// judgeVar judges the value of a shell variable: an assignment of the script wins over the environment of the
-// step, which wins over the environment of the job and of the workflow.
-func (rule *RuleGitHubEnv) judgeVar(s *runscript.Script, name string, depth int) data {
-	if depth > 3 {
-		return data{kind: dataUnknown}
-	}
-	if rule.validated[name] {
-		return data{}
-	}
-	assigned := false
-	d := data{}
-	for _, a := range s.Assignments {
-		if a.Name != name {
-			continue
-		}
-		assigned = true
-		if a.Value == nil {
-			continue
-		}
-		if a.Append || a.Array {
-			d = d.worse(data{kind: dataUnknown})
-			continue
-		}
-		d = d.worse(rule.judgeWord(s, a.Value, depth+1))
-	}
-	if assigned {
-		return d
-	}
-	if src, ok := readFrom(s, name, rule.writeAt); ok {
-		return rule.judgeWord(s, src, depth+1)
-	}
-	if v, ok := rule.envValue(rule.step, name); ok {
-		ed := rule.judgeExprList(exprsIn(v.Value), depth+1)
-		if ed.kind == dataUntrusted && ed.via == "" {
-			ed.via = name
-		}
-		return ed
-	}
-	if runnerProvidedVars[name] {
-		return data{}
-	}
-	return data{kind: dataUnknown}
 }
 
 // --- pwsh, powershell and cmd ---------------------------------------------------------------------------
