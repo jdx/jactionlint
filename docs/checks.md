@@ -5327,7 +5327,9 @@ it first. Whoever controls the server, or the connection to it, then controls th
 
 A pipe into something that only reads the data (`curl ... | tar xz`, `| jq`, `| python3 -c '...'`) is not reported, and neither is a
 URL for a full commit on GitHub, GitLab, Codeberg or Bitbucket (`https://raw.githubusercontent.com/<owner>/<repo>/<40 hex digits>/install.sh`),
-because the URL fixes the content. A host that is not on the internet (`localhost`, a private address) is not reported either. A
+because the URL fixes the content. A file of this repository at the commit that runs the workflow is the same
+(`https://github.com/${GITHUB_REPOSITORY}/raw/${GITHUB_SHA}/tools/release.sh`, or with `${{ github.repository }}` and `${{ github.sha }}`): the
+repository checked it in itself. A host that is not on the internet (`localhost`, a private address) is not reported either. A
 script is analyzed when its shell is `bash` or `sh`; the default shell of Windows runners is `pwsh`, which is not analyzed.
 
 If the download installs a tool, install the tool with [mise](https://mise.jdx.dev) instead: use `jdx/mise-action` pinned by SHA,
