@@ -40,10 +40,26 @@ var (
 var dependabotTimeRegexp = regexp.MustCompile(`^([01][0-9]|2[0-3]):[0-5][0-9]$`)
 
 func (p *parser) unexpectedDependabotKey(k *String, sec string, expected ...string) {
+	if p.unexpectedAt == nil {
+		p.unexpectedAt = map[[2]int]bool{}
+	}
+	p.unexpectedAt[[2]int{k.Pos.Line, k.Pos.Col}] = true
+	if len(expected) == 1 {
+		// The message of the workflow parser ("expected X key but got Y") reads as two mistakes here
+		p.errorAt(k.Pos, fmt.Sprintf("unexpected key %q for %q section. the only key it takes is %q", k.Value, sec, expected[0]))
+		return
+	}
 	p.unexpectedKey(k, sec, slices.Clone(expected))
 }
 
+// missingDependabotKey reports a key which the mapping n lacks. It does not when the mapping has a key that was reported
+// as unexpected: that is most likely the same mistake (a misspelled key), and one mistake is one finding.
 func (p *parser) missingDependabotKey(n *yaml.Node, key, where string) {
+	for i := 0; i < len(n.Content); i += 2 {
+		if p.unexpectedAt[[2]int{n.Content[i].Line, n.Content[i].Column}] {
+			return
+		}
+	}
 	p.errorf(n, "%q key is missing in %s", key, where)
 }
 

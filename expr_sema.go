@@ -533,11 +533,12 @@ func (sema *ExprSemanticsChecker) SetContextAvailability(avail []string) {
 	sema.availableContexts = avail
 }
 
-func (sema *ExprSemanticsChecker) checkAvailableContext(n *VariableNode) {
+// checkAvailableContext reports a context which is not available here and returns whether it is.
+func (sema *ExprSemanticsChecker) checkAvailableContext(n *VariableNode) bool {
 	ctx := strings.ToLower(n.Name)
 	for _, c := range sema.availableContexts {
 		if c == ctx {
-			return
+			return true
 		}
 	}
 
@@ -557,6 +558,7 @@ func (sema *ExprSemanticsChecker) checkAvailableContext(n *VariableNode) {
 		n.Name,
 		notes,
 	)
+	return false
 }
 
 // SetSpecialFunctionAvailability sets names of available special functions while semantics checks.
@@ -621,7 +623,10 @@ func (sema *ExprSemanticsChecker) checkVariable(n *VariableNode) ExprType {
 		return AnyType{}
 	}
 
-	sema.checkAvailableContext(n)
+	if !sema.checkAvailableContext(n) {
+		// The context cannot be used here at all, which is the one finding. What is read from it is not looked at
+		return AnyType{}
+	}
 	return v
 }
 

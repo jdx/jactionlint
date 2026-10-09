@@ -117,6 +117,7 @@ profile the free text that is chosen from outside the workflow (`inputs.*` of ty
 `workflow-input-type` differs from actionlint in one point: a quoted `"true"` or `'1'` passed to a reusable workflow is a string,
 so it can be passed to an input of the type `string` (actionlint 1.7 reports it as a boolean or a number).
 A call of an overloaded function (`contains`) that fits no signature is one finding, about the signature that fits best, where actionlint reports one finding per signature.
+A context that is not available at a place (`runner` in a job-level `env` key, `inputs` in the `shell` of a composite step) is one finding; actionlint also reports the properties read from it.
 `workflow-syntax` accepts `needs: []` and a filter without a value (`tags:`), which GitHub runs and actionlint 1.7 reports as an empty section.
 
 The `default` profile adds the security and policy rules, such as `unpinned-uses`, `missing-permissions`, `missing-timeout`,

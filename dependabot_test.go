@@ -3,6 +3,7 @@ package jactionlint
 import (
 	"bytes"
 	"encoding/json"
+	"github.com/google/go-cmp/cmp"
 	"io"
 	"os"
 	"path/filepath"
@@ -667,5 +668,29 @@ func TestParseDependabotDoesNotPanic(t *testing.T) {
 		"version: 2\nupdates:\n  - <<: {a: b}",
 	} {
 		ParseDependabot([]byte(s))
+	}
+}
+
+// A misspelled key is one finding: not also a missing key, and the message does not read as two mistakes.
+func TestDependabotMisspelledKeyIsOneFinding(t *testing.T) {
+	root := makeDependabotProject(t, map[string]string{"dependabot.yml": `version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: monthly
+    pull-request-branch-name:
+      word-separator: "-"
+`}, "")
+	errs, _ := lintRepo(t, root, LinterOptions{})
+	var got []string
+	for _, e := range errs {
+		if e.ID == "dependabot-syntax" {
+			got = append(got, e.Message)
+		}
+	}
+	want := []string{`unexpected key "word-separator" for "pull-request-branch-name" section. the only key it takes is "separator"`}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("(-want +got): %s", diff)
 	}
 }

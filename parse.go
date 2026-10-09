@@ -111,6 +111,8 @@ type parser struct {
 	lines []string
 	// syntaxID is the ID of the syntax errors. It is "workflow-syntax" when empty.
 	syntaxID string
+	// unexpectedAt are the positions (line, column) of the keys reported as unexpected in a Dependabot configuration.
+	unexpectedAt map[[2]int]bool
 }
 
 // syntaxCheckKind is the kind of the errors which the parser reports.
