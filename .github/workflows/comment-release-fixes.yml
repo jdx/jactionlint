@@ -11,6 +11,10 @@ on:
           },
       },
   }
+concurrency:
+  # One run per tag: a second run for the same release waits instead of commenting twice
+  group: ${{ github.workflow }}-${{ inputs.tag || github.event.release.tag_name }}
+  cancel-in-progress: false
 jobs:
   comment:
     permissions:
