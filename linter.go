@@ -365,8 +365,8 @@ func (l *Linter) repositoryFiles(dir string) ([]string, *Project, error) {
 
 	l.log("Detected project:", p.RootDir())
 	files, err := walkWorkflowFiles(p.WorkflowsDir())
-	if err != nil {
-		return nil, nil, err
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return nil, nil, err // a repository with only actions has no workflows directory
 	}
 	files = append(files, p.DependabotFiles()...)
 	files = append(files, l.callGraphOf(p).actionPaths()...)
