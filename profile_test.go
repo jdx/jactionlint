@@ -399,3 +399,20 @@ func TestUnlockedInstallNeedsALockFileInTheRepository(t *testing.T) {
 		}
 	}
 }
+
+// The warning about a retired ID must not send the user to an ignore that is wider than the one they wrote.
+func TestRetiredIDWarningDoesNotRecommendAWiderIgnore(t *testing.T) {
+	for _, rr := range RenamedRules() {
+		p, err := ParseIgnorePattern(rr.Old)
+		if err != nil {
+			t.Fatal(err)
+		}
+		m := p.deprecation()
+		if strings.Contains(m, "write "+`"`+rr.ID+`"`+" instead") || !strings.Contains(m, "covers only the findings that the old rule reported") || !strings.Contains(m, "would ignore every finding of") {
+			t.Errorf("%s: %s", rr.Old, m)
+		}
+		if rr.Option != "" && !strings.Contains(m, rr.Option+": false") {
+			t.Errorf("%s: the warning should say how to turn the findings off: %s", rr.Old, m)
+		}
+	}
+}

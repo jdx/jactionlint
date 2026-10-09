@@ -206,7 +206,11 @@ func lookupRenamed(id string) (RenamedRule, bool) {
 
 // renamedMessage is the deprecation warning about the use of a retired rule ID in an ignore.
 func (r RenamedRule) renamedMessage() string {
-	return fmt.Sprintf("the rule ID %q was merged into %q before 2.0. the ignore still works for its findings; write %q instead", r.Old, r.ID, r.ID)
+	msg := fmt.Sprintf("the rule ID %q was merged into %q before 2.0. the ignore still works and covers only the findings that the old rule reported; %q would ignore every finding of %q", r.Old, r.ID, r.ID, r.ID)
+	if r.Option != "" {
+		msg += fmt.Sprintf(". to stop reporting them instead, set \"rules: {%s: {%s: false}}\"", r.ID, r.Option)
+	}
+	return msg
 }
 
 // DefaultMaxRunLines is the maximum number of lines of a run: script which the max-run-lines rule
