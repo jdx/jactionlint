@@ -170,30 +170,39 @@ func parseInlineIgnoresWithOrphans(src []byte) ([]inlineIgnore, []*inlineIgnoreE
 			continue
 		}
 
-		// This line is the target. Compute the indentation which the nested lines must exceed.
-		indent := len(line) - len(strings.TrimLeft(line, " \t"))
-		threshold := indent // for a sequence item, this makes the whole item the target
-		// YAML allows the items of a sequence to sit at the same column as the key holding it:
-		//   key:
-		//   - a
-		// When the target is a key, such items belong to it.
-		isKey := !isSequenceItem(line)
-		end := i + 1
-		for j := i + 1; j < len(lines); j++ {
-			// Comments are skipped like blank lines so that a comment does not cut a nested block short
-			if c, b := isCommentOrBlank(lines[j]); b || c {
-				continue
-			}
-			ind := len(lines[j]) - len(strings.TrimLeft(lines[j], " \t"))
-			if ind < threshold || (ind == threshold && !(isKey && isSequenceItem(lines[j]))) {
-				break
-			}
-			end = j + 1
-		}
+		// This line is the target
+		end := ignoreTargetEnd(lines, i)
 		ret = append(ret, inlineIgnore{start: i + 1, end: end, entries: pending})
 		pending = nil
 	}
 	return ret, pending, errs
+}
+
+// ignoreTargetEnd returns the last line (1-based) which an ignore comment above the line lines[i] covers: the line,
+// and the lines nested under it. When the line starts a sequence item ("- "), the whole item is covered.
+func ignoreTargetEnd(lines []string, i int) int {
+	line := lines[i]
+	// The indentation which the nested lines must exceed
+	indent := len(line) - len(strings.TrimLeft(line, " \t"))
+	threshold := indent // for a sequence item, this makes the whole item the target
+	// YAML allows the items of a sequence to sit at the same column as the key holding it:
+	//   key:
+	//   - a
+	// When the target is a key, such items belong to it.
+	isKey := !isSequenceItem(line)
+	end := i + 1
+	for j := i + 1; j < len(lines); j++ {
+		// Comments are skipped like blank lines so that a comment does not cut a nested block short
+		if c, b := isCommentOrBlank(lines[j]); b || c {
+			continue
+		}
+		ind := len(lines[j]) - len(strings.TrimLeft(lines[j], " \t"))
+		if ind < threshold || (ind == threshold && !(isKey && isSequenceItem(lines[j]))) {
+			break
+		}
+		end = j + 1
+	}
+	return end
 }
 
 // filterInlineIgnores removes errors suppressed by inline ignore comments and marks the patterns which

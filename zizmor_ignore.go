@@ -229,7 +229,8 @@ func zizmorEntryActive(e *inlineIgnoreEntry, cfg *Config, online bool) bool {
 // of a jactionlint diagnostic (unpinned-images), stays in the zizmor comment, which jactionlint
 // keeps honoring. Comments which are not trailing are left alone. The result is unchanged when
 // nothing can be migrated, so running it twice changes nothing. When the rewritten file would not
-// have the same YAML data as the original, the source is returned unchanged.
+// have the same YAML data as the original, the source is returned unchanged. A comment on a line which starts a
+// sequence item stays when the item has more lines, because the comment above would cover them too.
 func MigrateZizmorIgnores(src []byte) ([]byte, []string) {
 	if !bytes.Contains(src, []byte("zizmor")) {
 		return src, nil
@@ -261,6 +262,16 @@ func MigrateZizmorIgnores(src []byte) ([]byte, []string) {
 			}
 		}
 		if len(moved) == 0 {
+			continue
+		}
+		// A comment above a line covers what the line opens, and the whole item for a line which starts a sequence
+		// item. A zizmor comment covers only its line and the value it opens ("- uses: x # zizmor: ignore" does not
+		// cover the "with:" below it). When the two differ the comment stays, or the migration would suppress more.
+		wantEnd := c.line
+		if _, e, ok := zizmorHeaderRange(lines, c); ok {
+			wantEnd = e
+		}
+		if ignoreTargetEnd(lines, c.line-1) != wantEnd {
 			continue
 		}
 		migrated = append(migrated, moved...)

@@ -289,6 +289,42 @@ func TestMigrateZizmorIgnores(t *testing.T) {
 			"unpinned-uses, cache-poisoning",
 		},
 		{
+			"keeps the first key of a sequence item with more keys",
+			"a:\n  - uses: a/b@v1 # zizmor: ignore[unpinned-uses]\n    with:\n      x: 1\n",
+			"a:\n  - uses: a/b@v1 # zizmor: ignore[unpinned-uses]\n    with:\n      x: 1\n",
+			"",
+		},
+		{
+			"moves a later key of a sequence item",
+			"a:\n  - name: x\n    uses: a/b@v1 # zizmor: ignore[unpinned-uses]\n    with:\n      x: 1\n",
+			"a:\n  - name: x\n    # jactionlint ignore=unpinned-uses\n    uses: a/b@v1\n    with:\n      x: 1\n",
+			"unpinned-uses",
+		},
+		{
+			"moves the last key of a sequence item",
+			"a:\n  - name: x\n    uses: a/b@v1 # zizmor: ignore[unpinned-uses]\n",
+			"a:\n  - name: x\n    # jactionlint ignore=unpinned-uses\n    uses: a/b@v1\n",
+			"unpinned-uses",
+		},
+		{
+			"moves a key which opens a mapping",
+			"a:\n  - name: x\n    with: # zizmor: ignore[unpinned-uses]\n      x: 1\n",
+			"a:\n  - name: x\n    # jactionlint ignore=unpinned-uses\n    with:\n      x: 1\n",
+			"unpinned-uses",
+		},
+		{
+			"keeps the header of a block scalar in the first key of an item",
+			"a:\n  - run: | # zizmor: ignore[template-injection]\n      echo\n    shell: bash\n",
+			"a:\n  - run: | # zizmor: ignore[template-injection]\n      echo\n    shell: bash\n",
+			"",
+		},
+		{
+			"moves the header of a block scalar",
+			"a:\n  - name: x\n    run: | # zizmor: ignore[template-injection]\n      echo\n    shell: bash\n",
+			"a:\n  - name: x\n    # jactionlint ignore=template-injection\n    run: |\n      echo\n    shell: bash\n",
+			"template-injection",
+		},
+		{
 			"keeps unpinned-images, which covers only the Docker images of unpinned-uses",
 			"a:\n  - uses: docker://alpine:3 # zizmor: ignore[unpinned-images]\n",
 			"a:\n  - uses: docker://alpine:3 # zizmor: ignore[unpinned-images]\n",
