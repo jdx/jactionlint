@@ -13,6 +13,9 @@ const dependabotImplicitCooldownDays = 3
 // configured with the "days" option.
 const dependabotDefaultMinCooldownDays = 7
 
+// dependabotMaxCooldownDays is the largest number of days that Dependabot accepts in a cooldown.
+const dependabotMaxCooldownDays = 90
+
 // RuleDependabotCooldown is a rule to check that the updates of a Dependabot configuration wait for a
 // new version to age before proposing it.
 type RuleDependabotCooldown struct {
@@ -59,7 +62,7 @@ func (r *RuleDependabotCooldown) VisitDependabotUpdate(u *DependabotUpdate) erro
 
 	// The fix needs a number of days chosen by the user. There is no default on purpose.
 	fixDays := -1
-	if v, ok := cfg.ruleOptionNumber("dependabot-cooldown", "default-days"); ok && int(v) >= minDays {
+	if v, ok := cfg.ruleOptionNumber("dependabot-cooldown", "default-days"); ok && int(v) >= minDays && int(v) <= dependabotMaxCooldownDays {
 		fixDays = int(v)
 	}
 

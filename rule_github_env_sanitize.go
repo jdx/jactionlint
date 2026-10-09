@@ -150,8 +150,88 @@ func sedSanitizes(script string, nulSeparated bool, dest string) sanitizeKind {
 	return sanitizeNone
 }
 
-// pipelinePreserving are the commands that cannot bring a newline back: they select, cut or trim.
-var pipelinePreserving = map[string]bool{"cut": true, "head": true, "tail": true, "tee": true, "sort": true, "uniq": true, "wc": true, "rev": true, "sed": true, "tr": true}
+// keepsSanitized reports whether the stage of a pipeline, which comes after the sanitizing one, cannot bring back
+// what the sanitizer took out. Only stages that select, cut or reorder the lines they get qualify, and the
+// translations that are proven not to write a newline (or, for a path, anything but a deletion). sed, tr, awk,
+// printf, xargs and the like can write a newline or a dot whatever they read, so unless one of them is proven
+// harmless below the pipeline is not trusted.
+func keepsSanitized(c *runscript.Command, dest string) bool {
+	switch c.Name {
+	case "head", "tail", "sort", "uniq", "wc", "rev", "tee":
+		return true
+	case "cut":
+		return !c.HasFlag("--output-delimiter")
+	case "tr":
+		return trKeeps(c, dest)
+	case "sed":
+		return dest != "GITHUB_PATH" && sedKeeps(c)
+	}
+	return false
+}
+
+var reTrPlain = regexp.MustCompile(`^[A-Za-z0-9 _.,:;@/+=-]*$`)
+
+// trKeeps: `tr -d SET`, `tr -s SET` and, for the environment, `tr SET1 SET2` with plain sets: none of them can
+// write a newline that was not in the input.
+func trKeeps(c *runscript.Command, dest string) bool {
+	for _, f := range c.Flags {
+		if f.Name != "-d" && f.Name != "-s" && f.Name != "-c" && f.Name != "-C" && f.Name != "-ds" && f.Name != "-sd" {
+			return false
+		}
+	}
+	if len(c.Positional) == 0 || len(c.Positional) > 2 {
+		return false
+	}
+	for _, p := range c.Positional {
+		if p.Dynamic() || !reTrPlain.MatchString(p.Value) {
+			return false
+		}
+	}
+	if len(c.Positional) == 2 && (dest == "GITHUB_PATH" || c.HasFlag("-d")) {
+		return dest != "GITHUB_PATH" && !c.HasFlag("-d")
+	}
+	return true
+}
+
+var reSedFlags = regexp.MustCompile(`^[gIi0-9]*$`)
+
+// sedPlainSubstitution reports whether the script is one `s/old/new/flags` (any of / | # , as the delimiter) whose
+// parts write no newline: no `\n`, `\r`, `\t` or numbered escape, and no newline.
+func sedPlainSubstitution(script string) bool {
+	if len(script) < 4 || script[0] != 's' || !strings.ContainsRune("/|#,", rune(script[1])) {
+		return false
+	}
+	parts := strings.Split(script[2:], script[1:2])
+	if len(parts) != 3 || !reSedFlags.MatchString(parts[2]) {
+		return false
+	}
+	return !strings.Contains(script, "\n") && !reSedEscape.MatchString(script)
+}
+
+// reSedEscape matches the escapes of sed that stand for a control character or a character by number: a newline
+// (or a tab, a return) in the replacement, or one `\x0a` away.
+var reSedEscape = regexp.MustCompile(`\\[nrtfvaxocd0-9]`)
+
+// sedKeeps: only `s/old/new/flags` scripts whose parts hold no backslash and no newline; a newline in the input
+// is not possible (it was removed), so & cannot bring one either.
+func sedKeeps(c *runscript.Command) bool {
+	if c.HasFlag("-z", "-s", "-i", "-n", "--null-data", "--in-place") {
+		return false
+	}
+	scripts := c.FlagValues("-e", "--expression")
+	if len(scripts) == 0 && len(c.Positional) > 0 {
+		scripts = c.Positional[:1]
+	}
+	if len(scripts) == 0 {
+		return false
+	}
+	for _, w := range scripts {
+		if !staticWord(w) || !sedPlainSubstitution(w.Value) {
+			return false
+		}
+	}
+	return true
+}
 
 // sanitizedCommands returns the commands of the substitutions of the word whose output is made safe for the
 // destination: a pipeline with a sanitizing stage followed by commands that keep it, or a sanitizing command
@@ -184,7 +264,7 @@ func sanitizedCommands(w *runscript.Word, dest string) map[*runscript.Command]bo
 			ok := true
 			for _, st := range p.Stages[found+1:] {
 				for _, sc := range st.Commands {
-					if !pipelinePreserving[sc.Name] {
+					if !keepsSanitized(sc, dest) {
 						ok = false
 					}
 				}
@@ -282,40 +362,4 @@ func validatingRegex(re, dest string) bool {
 		return false
 	}
 	return !strings.Contains(inner, `\n`)
-}
-
-// reRegexTest matches `[[ "$v" =~ re ]]` and `[[ ! $v =~ re ]]`; the analyzer does not look into `[[ ]]`.
-var reRegexTest = regexp.MustCompile(`\[\[\s+(?:!\s+)?"?\$\{?([A-Za-z_][A-Za-z0-9_]*)\}?"?\s+=~\s+(\S+)\s+\]\]`)
-
-// validatedVars returns the variables that the script tests with an anchored regular expression before
-// the offset, and stops when the test fails: the failure ends the script (`exit` or `return` after the test,
-// or a bare test while the shell runs with -e, the default of GitHub).
-func validatedVars(s *runscript.Script, before int, dest string) map[string]bool {
-	var out map[string]bool
-	for _, m := range reRegexTest.FindAllStringSubmatchIndex(s.Source, -1) {
-		if m[1] > before {
-			continue
-		}
-		name, re := s.Source[m[2]:m[3]], s.Source[m[4]:m[5]]
-		if !validatingRegex(re, dest) {
-			continue
-		}
-		stops := false
-		for _, n := range s.Commands {
-			if n.Offset >= m[1] && n.Offset < before && (n.Name == "exit" || n.Name == "return") {
-				stops = true
-				break
-			}
-		}
-		if rest := strings.TrimLeft(s.Source[m[1]:], " \t"); !stops && (rest == "" || rest[0] == '\n') && !strings.Contains(s.Source, "set +e") {
-			stops = true // a bare test fails the script under -e
-		}
-		if stops {
-			if out == nil {
-				out = map[string]bool{}
-			}
-			out[name] = true
-		}
-	}
-	return out
 }

@@ -52,6 +52,13 @@ type RuleArtipacked struct {
 	// pending are the fixes which are not verified yet. VisitWorkflowPost checks them together so that a
 	// file with many checkouts is parsed once more, not once more for each.
 	pending []pendingPersistFix
+	wf      *Workflow
+}
+
+// VisitWorkflowPre is callback when visiting Workflow node before visiting its children.
+func (rule *RuleArtipacked) VisitWorkflowPre(n *Workflow) error {
+	rule.wf = n
+	return nil
 }
 
 // stepMapping is a mapping node of the document with the path of child indexes from the document to it.
@@ -96,7 +103,7 @@ func (rule *RuleArtipacked) VisitJobPre(n *Job) error {
 			// cannot be judged
 			continue
 		}
-		if checkoutV1Re.MatchString(ref.Ref) {
+		if checkoutV1Re.MatchString(ref.Ref) || rule.pinnedToV1(a, ref) {
 			// actions/checkout@v1 has no such input and always leaves the credential. The outdated runner
 			// check reports the version, and nothing here could be done (zizmor#1098)
 			continue
@@ -118,6 +125,20 @@ func (rule *RuleArtipacked) VisitJobPre(n *Job) error {
 	return nil
 }
 
+// pinnedToV1 reports whether the checkout is pinned to a commit and the version comment after it names the
+// first major version: `actions/checkout@<sha> # v1`.
+func (rule *RuleArtipacked) pinnedToV1(a *ExecAction, ref *UsesRef) bool {
+	if ref.RefKind != RefFullSHA || rule.wf == nil || rule.wf.Comments == nil || a.Uses.Pos == nil {
+		return false
+	}
+	c := rule.wf.Comments.Inline(a.Uses.Pos.Line)
+	if c == nil {
+		return false
+	}
+	v, ok := commentVersion(c.Text)
+	return ok && checkoutV1Re.MatchString(v)
+}
+
 // checkoutV1Re matches the refs of the first major version of actions/checkout.
 var checkoutV1Re = regexp.MustCompile(`^v?1(\.[0-9]+)*$`)
 
@@ -129,6 +150,9 @@ var gitPushRe = regexp.MustCompile(`(?m)\bgit\b[^\n]*\bpush\b`)
 // own is not told from a push here, so only the push counts.
 func pushesWithCredentials(steps []*Step) bool {
 	for _, s := range steps {
+		if isStaticallyFalse(s.If) {
+			continue // a step that never runs pushes and relies on nothing
+		}
 		switch e := s.Exec.(type) {
 		case *ExecRun:
 			if e.Run != nil && gitPushRe.MatchString(e.Run.Value) {
@@ -278,6 +302,9 @@ func suffixFlags(steps []*Step) *stepSuffixFlags {
 // persisted.
 func needsPersistedCredentials(steps []*Step) bool {
 	for _, s := range steps {
+		if isStaticallyFalse(s.If) {
+			continue // a step that never runs pushes and relies on nothing
+		}
 		switch e := s.Exec.(type) {
 		case *ExecRun:
 			if e.Run != nil && gitCredentialUseRegex.MatchString(e.Run.Value) {

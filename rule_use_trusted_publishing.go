@@ -129,20 +129,55 @@ func (rule *RuleUseTrustedPublishing) checkRun(step *Step, run *ExecRun) {
 var npmRegistrySettings = []string{"registry", "npmregistryserver", "npmpublishregistry"}
 
 // npmRegistryIsPrivate reports whether the publish goes to a registry other than the public one although the command
-// does not say so: the script set it with `npm config set registry URL` or `yarn config set npmRegistryServer URL`
-// before the command, the step, the job or the workflow set it in the environment, or a step before it ran
-// setup-node with another `registry-url` (GitHub Packages, a registry of your own). Those registries have no trusted
+// does not say so. The registry of the publish is decided in the order npm decides it, and the LAST word wins:
+//
+//  1. the `--registry` of the publish command itself (a public one here: a private one skipped the command already);
+//  2. the environment (`npm_config_registry`, `YARN_NPM_REGISTRY_SERVER`, `YARN_NPM_PUBLISH_REGISTRY`) of the step,
+//     else of the job, else of the workflow, which wins over every file;
+//  3. the files, written in the order the job runs: the `registry-url` of `actions/setup-node` in the steps before
+//     this one, then `npm config set registry URL`, `yarn config set npmRegistryServer URL` in this script before
+//     the publish. A later one replaces an earlier one, so a reset to the public registry counts; a set that may
+//     not run (in an `if`, a loop, after `||`) can leave either one, so it counts as private when either is.
+//
+// A value that is an expression or otherwise unknown is a private registry. Those registries have no trusted
 // publishing.
 func (rule *RuleUseTrustedPublishing) npmRegistryIsPrivate(step *Step, s *runscript.Script, publish *runscript.Command) bool {
+	for _, f := range publish.Flags {
+		if f.Name == "--registry" && f.Value != nil {
+			return !registryValueIsPublic(f.Value.Value)
+		}
+	}
 	for _, name := range []string{"npm_config_registry", "YARN_NPM_REGISTRY_SERVER", "YARN_NPM_PUBLISH_REGISTRY"} {
 		for _, env := range []*Env{step.Env, rule.jobEnv(), rule.workflowEnv()} {
 			if env == nil {
 				continue
 			}
+			found := false
 			for key, v := range env.Vars {
-				if strings.EqualFold(key, name) && v != nil && v.Value != nil && !registryValueIsPublic(v.Value.Value) {
-					return true
+				if strings.EqualFold(key, name) && v != nil && v.Value != nil {
+					found = true
+					if !registryValueIsPublic(v.Value.Value) {
+						return true
+					}
 				}
+			}
+			if found {
+				break // the nearest scope that sets it decides
+			}
+		}
+	}
+	private := false
+	if rule.job != nil {
+		for _, st := range rule.job.Steps {
+			if st == step {
+				break
+			}
+			e, ok := st.Exec.(*ExecAction)
+			if !ok || e.Uses == nil || e.Uses.ContainsExpression() || ParseUses(e.Uses.Value).CanonicalName() != "actions/setup-node" {
+				continue
+			}
+			if r, ok := inputValue(e, "registry-url"); ok && r != "" {
+				private = !registryValueIsPublic(r)
 			}
 		}
 	}
@@ -169,26 +204,16 @@ func (rule *RuleUseTrustedPublishing) npmRegistryIsPrivate(step *Step, s *runscr
 		if i := strings.LastIndex(k, ":"); i >= 0 {
 			k = k[i+1:] // @scope:registry
 		}
-		if !key.Dynamic() && slices.Contains(npmRegistrySettings, k) && !registryValueIsPublic(val[0].Value) {
-			return true
-		}
-	}
-	if rule.job == nil {
-		return false
-	}
-	for _, st := range rule.job.Steps {
-		if st == step {
-			break
-		}
-		e, ok := st.Exec.(*ExecAction)
-		if !ok || e.Uses == nil || e.Uses.ContainsExpression() || ParseUses(e.Uses.Value).CanonicalName() != "actions/setup-node" {
+		if key.Dynamic() || !slices.Contains(npmRegistrySettings, k) {
 			continue
 		}
-		if r, ok := inputValue(e, "registry-url"); ok && r != "" && !registryValueIsPublic(r) {
-			return true
+		if now := !registryValueIsPublic(val[0].Value); c.Cond {
+			private = private || now
+		} else {
+			private = now
 		}
 	}
-	return false
+	return private
 }
 
 // registryValueIsPublic reports whether the value is the public registry of npm or empty. An expression is not.

@@ -66,12 +66,33 @@ func NewRuleSuperfluousActions() *RuleSuperfluousActions {
 // VisitJobPre is callback when visiting Job node before visiting its children.
 func (rule *RuleSuperfluousActions) VisitJobPre(n *Job) error {
 	rule.selfHosted = false
-	if n.RunsOn != nil {
-		for _, l := range n.RunsOn.Labels {
-			if l != nil && strings.EqualFold(l.Value, "self-hosted") {
-				rule.selfHosted = true
-			}
+	if n.RunsOn == nil {
+		return nil
+	}
+	var m *Matrix
+	if n.Strategy != nil {
+		m = n.Strategy.Matrix
+	}
+	check := func(l *String) {
+		if l == nil {
+			return
 		}
+		if l.ContainsExpression() {
+			// a matrix entry may be self-hosted, which the whole job then has to be ready for
+			for _, v := range matrixLabels(l, m) {
+				if strings.EqualFold(v.Value, "self-hosted") {
+					rule.selfHosted = true
+				}
+			}
+			return
+		}
+		if strings.EqualFold(l.Value, "self-hosted") {
+			rule.selfHosted = true
+		}
+	}
+	check(n.RunsOn.LabelsExpr)
+	for _, l := range n.RunsOn.Labels {
+		check(l)
 	}
 	return nil
 }

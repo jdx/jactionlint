@@ -55,6 +55,10 @@ type Command struct {
 	// LoopBody is whether the command is in the body of a `for`, `while`, `until` or `select` loop. A command there
 	// runs for each round, so what it does with its input does not end the stream of the stage the loop is in.
 	LoopBody bool
+	// Cond is whether the command may not run, or runs in another shell than the one that holds the variables of
+	// the script: it is in a branch of `if` or `case`, a loop, the right operand of `&&` or `||`, a function, a
+	// subshell, a substitution, a pipeline or a background job.
+	Cond bool
 	// Decl is true for declaration builtins: export, declare, local, readonly, typeset. Their assignments are in
 	// Assigns.
 	Decl bool
@@ -79,6 +83,8 @@ type Assignment struct {
 	Value  *Word // nil for `A=` or `declare A`
 	Append bool  // +=
 	Array  bool  // A=(...)
+	// Cond is whether the assignment may not happen, or happens in another shell, see Command.Cond.
+	Cond bool
 	// Cmd is the command the assignment is a prefix of or the declaration builtin it belongs to, nil for a
 	// plain `A=1` statement.
 	Cmd *Command
@@ -297,6 +303,7 @@ func (b *builder) build(f *syntax.File) {
 			r.Target.Subs = b.commandsWithin(r.Target, nil)
 		}
 	}
+	b.flow(f)
 	b.finishPipelines()
 	b.finishGroups()
 	b.aliases()
