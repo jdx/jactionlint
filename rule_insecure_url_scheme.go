@@ -65,7 +65,9 @@ func insecureURL(v string) (string, bool) {
 	if !bad || host == "" || isLocalHost(host) {
 		return "", false
 	}
-	return secure + v[len(scheme):], true
+	// git+http://host is git+https://host
+	i := strings.Index(v, "://")
+	return v[:i-len(scheme)] + secure + v[i:], true
 }
 
 // VisitStep is callback when visiting Step node.
