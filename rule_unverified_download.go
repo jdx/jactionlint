@@ -3,6 +3,7 @@ package jactionlint
 import (
 	"path"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/jdx/jactionlint/v2/internal/runscript"
@@ -194,7 +195,7 @@ func isScriptInterpreter(c *runscript.Command) bool {
 // operand may be the module to load (node -r mod script.js), so every operand is looked at.
 func (t *fileTracker) interpreterScript(c *runscript.Command, match func(*runscript.Word) *download) {
 	ops := c.Positional
-	if len(ops) > 1 && !c.HasFlag("-r") {
+	if len(ops) > 1 && !hasExactFlag(c, "-r", "--require") {
 		ops = ops[:1]
 	}
 	for _, w := range ops {
@@ -203,6 +204,17 @@ func (t *fileTracker) interpreterScript(c *runscript.Command, match func(*runscr
 			return
 		}
 	}
+}
+
+// hasExactFlag reports whether the command has one of the flags as a word of its own. HasFlag also finds a
+// letter inside a cluster such as -Werror.
+func hasExactFlag(c *runscript.Command, names ...string) bool {
+	for _, f := range c.Flags {
+		if slices.Contains(names, f.Name) {
+			return true
+		}
+	}
+	return false
 }
 
 // interpreterRunsAScript reports whether the options of the interpreter leave the operand as the script to
@@ -214,9 +226,9 @@ func interpreterRunsAScript(c *runscript.Command) bool {
 	case c.Name == "perl":
 		return !c.HasFlag("-e", "-E")
 	case c.Name == "ruby":
-		return !c.HasFlag("-e")
+		return !c.HasFlag("-e") && !hasExactFlag(c, "-c") // -c only checks the syntax
 	case c.Name == "node":
-		return !c.HasFlag("-e", "--eval", "-p", "--print")
+		return !c.HasFlag("-e", "--eval", "-p", "--print") && !hasExactFlag(c, "-c", "--check")
 	case c.Name == "php":
 		return !c.HasFlag("-r")
 	}
