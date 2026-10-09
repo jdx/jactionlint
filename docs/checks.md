@@ -75,6 +75,7 @@ List of checks:
 - [Secrets outside an environment (pedantic)](#check-secrets-outside-env)
 - [Typosquatting of actions](#check-typosquat-uses)
 - [Forbidden actions (opt-in)](#check-forbidden-uses)
+- [Inputs, payloads, release names and branch names](#check-template-injection-inputs)
 - [Expansions in scripts (pedantic)](#check-template-injection-expansion)
 - [AI agent actions](#check-agentic-actions)
 - [Bots trusted by `github.actor`](#check-bot-conditions)
@@ -1790,6 +1791,10 @@ test.yaml:26:18: type of "age" input is "number" but its default value "teen" ca
    |
 26 |         default: teen
    |                  ^~~~
+test.yaml:33:24: "inputs.massage" is an input chosen by whoever runs this, which is not validated and can hold shell syntax. avoid using it directly in inline scripts. instead, pass it through an environment variable. see https://docs.github.com/en/actions/reference/security/secure-use#good-practices-for-mitigating-script-injection-attacks for more details [expression]
+   |
+33 |       - run: echo "${{ inputs.massage }}"
+   |                        ^~~~~~~~~~~~~~
 test.yaml:33:24: property "massage" is not defined in object type {age: number; id: any; kind: string; message: string; name: string; verbose: bool} [expression]
    |
 33 |       - run: echo "${{ inputs.massage }}"
@@ -1802,6 +1807,10 @@ test.yaml:37:28: property access of object must be type of string but got "numbe
    |
 37 |       - run: echo "${{ env[inputs.age] }}"
    |                            ^~~~~~~~~~~
+test.yaml:39:24: "github.event.inputs.massage" is an input chosen by whoever runs this, which is not validated and can hold shell syntax. avoid using it directly in inline scripts. instead, pass it through an environment variable. see https://docs.github.com/en/actions/reference/security/secure-use#good-practices-for-mitigating-script-injection-attacks for more details [expression]
+   |
+39 |       - run: echo "${{ github.event.inputs.massage }}"
+   |                        ^~~~~~~~~~~~~~~~~~~~~~~~~~~
 test.yaml:39:24: property "massage" is not defined in object type {age: string; id: string; kind: string; message: string; name: string; verbose: string} [expression]
    |
 39 |       - run: echo "${{ github.event.inputs.massage }}"
@@ -3670,6 +3679,18 @@ test.yaml:25:18: input "path" of workflow_call event has the default value "", b
    |
 25 |         default: ''
    |                  ^~
+test.yaml:31:24: "inputs.scheme" is an input chosen by whoever runs this, which is not validated and can hold shell syntax. avoid using it directly in inline scripts. instead, pass it through an environment variable. see https://docs.github.com/en/actions/reference/security/secure-use#good-practices-for-mitigating-script-injection-attacks for more details [expression]
+   |
+31 |       - run: echo "${{ inputs.scheme }}://${{ inputs.host }}:${{ inputs.port }}${{ inputs.path }}"
+   |                        ^~~~~~~~~~~~~
+test.yaml:31:47: "inputs.host" is an input chosen by whoever runs this, which is not validated and can hold shell syntax. avoid using it directly in inline scripts. instead, pass it through an environment variable. see https://docs.github.com/en/actions/reference/security/secure-use#good-practices-for-mitigating-script-injection-attacks for more details [expression]
+   |
+31 |       - run: echo "${{ inputs.scheme }}://${{ inputs.host }}:${{ inputs.port }}${{ inputs.path }}"
+   |                                               ^~~~~~~~~~~
+test.yaml:31:84: "inputs.path" is an input chosen by whoever runs this, which is not validated and can hold shell syntax. avoid using it directly in inline scripts. instead, pass it through an environment variable. see https://docs.github.com/en/actions/reference/security/secure-use#good-practices-for-mitigating-script-injection-attacks for more details [expression]
+   |
+31 |       - run: echo "${{ inputs.scheme }}://${{ inputs.host }}:${{ inputs.port }}${{ inputs.path }}"
+   |                                                                                    ^~~~~~~~~~~
 ```
 
 [Playground](https://jactionlint.jdx.dev/#eNp8kctu8yAQhff/U4yiX8oqiXpZ8Qxd9KKuK4zHxSlmyDAojSLevcJ2IsuNu4NvZg6HOeTVP4Aj8Vfj6PhhtHMFALQ+JInDGSAaix1ebgA1RsNtkJa8gre+CNTA++vTpKXRyYkCKxLiFcspoIIo3PrPEVqKon7P4bfugsOtoe6v6UAsC8aeiWXR1lrd3T88rmfSPnUV8ggPCfm0oP1SanPxQYOqPRq52NNil+xpsXMFxkNqGWsFwglvuF7f3sWeqj6smlTfwMnHTXkkVclL2jgtGAdPUTBcg92UTgVoLMHq//k85r4dAoec1W43wSWqAieo7B9ynpLyr5xXPwMAtTmuwA==)
@@ -3771,6 +3792,10 @@ jobs:
 Output:
 
 ```
+test.yaml:20:23: "inputs.uri" is an input chosen by whoever runs this, which is not validated and can hold shell syntax. avoid using it directly in inline scripts. instead, pass it through an environment variable. see https://docs.github.com/en/actions/reference/security/secure-use#good-practices-for-mitigating-script-injection-attacks for more details [expression]
+   |
+20 |         run: curl ${{ inputs.uri }} -d ${{ inputs.lucky_number }}
+   |                       ^~~~~~~~~~
 test.yaml:20:23: property "uri" is not defined in object type {lucky_number: number; url: string} [expression]
    |
 20 |         run: curl ${{ inputs.uri }} -d ${{ inputs.lucky_number }}
@@ -5834,6 +5859,74 @@ rules:
 The rule is for policy, so its default level is `error`. There is no automatic fix.
 
 
+<a id="check-template-injection-inputs"></a>
+## Inputs, payloads, release names and branch names
+
+Some values are not on the list of attacker controlled properties, but the person who chooses them is not the author of the
+workflow either, and GitHub does not validate them. `template-injection` reports them in the `default` profile (not in
+`correctness`, which is what actionlint reports), because a `${{ }}` of them in a script runs whatever the sender typed:
+
+- `inputs.*` and `github.event.inputs.*` of a `workflow_dispatch` workflow (anyone with write access can type anything), of a
+  reusable workflow (whatever the caller passes, which may be an attacker controlled value of the caller) and of a composite
+  action. An input of the type `boolean`, `number`, `choice` or `environment` is a fixed vocabulary and is not reported;
+- `github.event.client_payload.*`, which the sender of a `repository_dispatch` event chooses;
+- `github.event.release.tag_name`, `name`, `body` and `target_commitish`, and the names of the release assets;
+- `github.ref_name`, `github.base_ref` and `github.event.pull_request.base.ref`: a branch or tag name can hold shell syntax such
+  as `a$(cmd)`. Creating a branch takes write access, which is why zizmor reports them as well.
+
+`github.actor`, SHAs, numbers and the IDs of events are not reported: GitHub restricts their characters. `steps.*.outputs.*`,
+`needs.*.outputs.*`, `matrix.*` and `env.*` are values of the workflow itself, which the pedantic option of the
+[expansions](#check-template-injection-expansion) covers. The fix is the same as for the properties above.
+
+Example input:
+
+```yaml
+on:
+  workflow_dispatch:
+    inputs:
+      title:
+        type: string
+      dry-run:
+        type: boolean
+  repository_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      # ERROR: whoever starts the run types the title
+      - run: echo "${{ inputs.title }}"
+      # ERROR: the sender of the event chooses the payload
+      - run: echo "${{ github.event.client_payload.branch }}"
+      # ERROR: a branch name can hold shell syntax
+      - run: echo "${{ github.ref_name }}"
+      # OK: a boolean cannot hold anything else
+      - run: echo "${{ inputs.dry-run }}"
+      # OK: the shell expands the variable
+      - run: echo "$TITLE"
+        env:
+          TITLE: ${{ inputs.title }}
+```
+
+Output:
+
+```
+test.yaml:15:24: "inputs.title" is an input chosen by whoever runs this, which is not validated and can hold shell syntax. avoid using it directly in inline scripts. instead, pass it through an environment variable. see https://docs.github.com/en/actions/reference/security/secure-use#good-practices-for-mitigating-script-injection-attacks for more details [expression]
+   |
+15 |       - run: echo "${{ inputs.title }}"
+   |                        ^~~~~~~~~~~~
+test.yaml:17:24: "github.event.client_payload.branch" is the payload of a repository_dispatch event, which is not validated and can hold shell syntax. avoid using it directly in inline scripts. instead, pass it through an environment variable. see https://docs.github.com/en/actions/reference/security/secure-use#good-practices-for-mitigating-script-injection-attacks for more details [expression]
+   |
+17 |       - run: echo "${{ github.event.client_payload.branch }}"
+   |                        ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+test.yaml:19:24: "github.ref_name" is a branch or tag name, which is not validated and can hold shell syntax. avoid using it directly in inline scripts. instead, pass it through an environment variable. see https://docs.github.com/en/actions/reference/security/secure-use#good-practices-for-mitigating-script-injection-attacks for more details [expression]
+   |
+19 |       - run: echo "${{ github.ref_name }}"
+   |                        ^~~~~~~~~~~~~~~
+```
+
+[Playground](https://jactionlint.jdx.dev/#eNqMkLFu8zAMhHc/xSH4V/sBtP9DgY7ZDclmYrUqKVBUAiPIuxd2nLYomqKbxDviPp6wa4Cz6OshybkfY8nehmkZApFztXJ7AxYt0f0D2JzJoZhGPm7DUedWK3/3BJFEnhtAKUuJJjp/SWpeJKwhRsVuu1q5tMIONVS22ia/aKtUjPIHUrs4HWiYBLt/l8tG3K2ouF53j3zHaFMNHZ2IrRtSJLY++zmJH7ugnofpD9tKh579269BG9DWzEPn/mn//P8uAcSnzxKBVXX44cD3AQAr74WJ)
+
 <a id="check-template-injection-expansion"></a>
 ## Expansions in scripts (pedantic)
 
@@ -5842,8 +5935,9 @@ the `script` of github-script and in the inputs listed above is also a risk: the
 before it runs, so a value with quotes, `$(...)` or a newline changes the script. The option `pedantic` of the rule reports them
 too, in two kinds:
 
-- Values that are free text: `inputs.*` of type `string`, `steps.*.outputs.*`, `needs.*.outputs.*`, `matrix.*` with values from
-  `fromJSON`, `env.*` set from an expression and `github.ref_name`.
+- Values that are free text: `steps.*.outputs.*`, `needs.*.outputs.*`, `matrix.*` with values from `fromJSON` and `env.*` set
+  from an expression. (Free text inputs and `github.ref_name` are reported by the default profile, see
+  [above](#check-template-injection-inputs).)
 - Values that an attacker cannot control: `github.repository`, `github.sha`, `runner.*`, `secrets.*`, `vars.*`, boolean, number
   and choice inputs, a matrix whose values are written in the workflow, enumerations like `needs.*.result`, and expressions
   which only test a context. This is the "everything is a code smell" view of the pedantic persona of zizmor: a value that cannot
@@ -7343,6 +7437,10 @@ Output:
    |
 11 |     - run: ./publish.sh "${{ secrets.PUBLISH_TOKEN }}"
    |                              ^~~~~~~~~~~~~~~~~~~~~
+.github/actions/example/action.yml:14:28: "inputs.tokan" is an input chosen by whoever runs this, which is not validated and can hold shell syntax. avoid using it directly in inline scripts. instead, pass it through an environment variable. see https://docs.github.com/en/actions/reference/security/secure-use#good-practices-for-mitigating-script-injection-attacks for more details [expression]
+   |
+14 |     - run: ./build.sh "${{ inputs.tokan }}"
+   |                            ^~~~~~~~~~~~
 .github/actions/example/action.yml:14:28: property "tokan" is not defined in object type {token: string} [expression]
    |
 14 |     - run: ./build.sh "${{ inputs.tokan }}"
@@ -7392,6 +7490,10 @@ Output:
    |
 11 |     - run: echo "hello ${{ inputs.who }}"
    |       ^~~~
+.github/actions/example/action.yml:11:28: "inputs.who" is an input chosen by whoever runs this, which is not validated and can hold shell syntax. avoid using it directly in inline scripts. instead, pass it through an environment variable. see https://docs.github.com/en/actions/reference/security/secure-use#good-practices-for-mitigating-script-injection-attacks for more details [expression]
+   |
+11 |     - run: echo "hello ${{ inputs.who }}"
+   |                            ^~~~~~~~~~
 .github/actions/example/action.yml:14:7: unexpected key "shell" for step to execute action. expected one of "background", "continue-on-error", "env", "id", "if", "name", "timeout-minutes", "uses", "with" [syntax-check]
    |
 14 |       shell: bash

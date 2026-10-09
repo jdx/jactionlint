@@ -1,0 +1,41 @@
+on:
+  workflow_dispatch:
+    inputs:
+      title:
+        type: string
+      flag:
+        type: boolean
+      level:
+        type: choice
+        options: [a, b]
+      count:
+        type: number
+  workflow_call:
+    inputs:
+      name:
+        type: string
+  repository_dispatch:
+  release:
+    types: [published]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      # ERROR: a free text input is typed by whoever starts the run
+      - run: echo "${{ inputs.title }}"
+      # ERROR: the same value through the event
+      - run: echo "${{ github.event.inputs.title }}"
+      # ERROR: an input of a reusable workflow comes from the caller,
+      # ERROR: the payload is chosen by the sender of the event
+      - run: echo "${{ github.event.client_payload.branch }}"
+      # ERROR: the name of the release and its tag are free text
+      - run: echo "${{ github.event.release.tag_name }} ${{ github.event.release.name }}"
+      # ERROR: a branch or tag name can hold shell syntax
+      - run: echo "${{ github.ref_name }} ${{ github.base_ref }}"
+      # OK: booleans, numbers and choices are fixed vocabularies
+      - run: echo "${{ inputs.flag }} ${{ inputs.level }} ${{ inputs.count }} ${{ github.event.inputs.level }}"
+      # OK: the value reaches the script through an environment variable
+      - run: echo "$TITLE"
+        env:
+          TITLE: ${{ inputs.title }}

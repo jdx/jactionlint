@@ -103,6 +103,8 @@ func (rule *RuleTemplateInjection) VisitStep(n *Step) error {
 				rule.ReportIDf("template-injection", pos, "%q includes potentially untrusted properties such as %q. avoid expanding it in inline scripts. instead, pass the properties you need through environment variables", cl.Ref.Display(sp.Src), cl.Source)
 			case tiEnv:
 				rule.ReportIDf("template-injection", pos, "environment variable %q holds the potentially untrusted input %q. expanding it with ${{ }} in an inline script is as dangerous as using the input directly. instead, read it as a variable of the shell", cl.Ref.Display(sp.Src), cl.Source)
+			case tiInput:
+				rule.ReportIDf("template-injection", pos, "%q is %s, which is not validated and can hold shell syntax. avoid using it directly in inline scripts. instead, pass it through an environment variable. see https://docs.github.com/en/actions/reference/security/secure-use#good-practices-for-mitigating-script-injection-attacks for more details", cl.Ref.Display(sp.Src), cl.Source)
 			case tiTrusted:
 				rule.ReportIDf("template-injection", pos, "%q is expanded with ${{ }} into an inline script. its value is not controlled by an attacker, but an expansion in a script is easy to get wrong when the script changes. instead, read it as a variable of the shell", cl.Ref.Display(sp.Src))
 			default:

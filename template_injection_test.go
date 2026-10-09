@@ -35,10 +35,10 @@ func TestTemplateInjectionTiers(t *testing.T) {
 		want []string
 	}{
 		{"direct", "      - run: echo '${{ github.event.issue.title }}'\n", []string{"template-injection"}},
-		{"dispatch input named id", "      - run: echo '${{ github.event.inputs.id }}'\n", []string{"template-injection-expansion"}},
-		{"dispatch input named sha", "      - run: echo '${{ github.event.inputs.sha }}'\n", []string{"template-injection-expansion"}},
-		{"dispatch input named number", "      - run: echo '${{ github.event.inputs.number }}'\n", []string{"template-injection-expansion"}},
-		{"client payload named sha", "      - run: echo '${{ github.event.client_payload.sha }}'\n", []string{"template-injection-expansion"}},
+		{"dispatch input named id", "      - run: echo '${{ github.event.inputs.id }}'\n", []string{"template-injection"}},
+		{"dispatch input named sha", "      - run: echo '${{ github.event.inputs.sha }}'\n", []string{"template-injection"}},
+		{"dispatch input named number", "      - run: echo '${{ github.event.inputs.number }}'\n", []string{"template-injection"}},
+		{"client payload named sha", "      - run: echo '${{ github.event.client_payload.sha }}'\n", []string{"template-injection"}},
 		{"event id", "      - run: echo '${{ github.event.pull_request.id }}'\n", []string{"template-injection-trusted"}},
 		{"bracket access of the context", "      - run: echo '${{ github['event'].issue.title }}'\n", []string{"template-injection"}},
 		{"bracket access all the way", "      - run: echo \"${{ github['event']['issue']['Title'] }}\"\n", []string{"template-injection"}},
@@ -64,13 +64,13 @@ func TestTemplateInjectionTiers(t *testing.T) {
 		{"undefined env variable", "      - run: echo '${{ env.TITLE }}'\n", []string{"template-injection-expansion"}},
 		{"safe functions", "      - run: echo '${{ contains(github.event.issue.title, 'x') }}'\n", []string{"template-injection-trusted"}},
 		{"shell variable", "      - run: echo \"$TITLE\"\n        env:\n          TITLE: ${{ github.event.issue.title }}\n", nil},
-		{"free text input", "      - run: echo '${{ inputs.name }}'\n", []string{"template-injection-expansion"}},
+		{"free text input", "      - run: echo '${{ inputs.name }}'\n", []string{"template-injection"}},
 		{"step output", "      - id: s\n        run: echo x\n      - run: echo '${{ steps.s.outputs.v }}'\n", []string{"template-injection-expansion"}},
-		{"branch name", "      - run: echo '${{ github.ref_name }}'\n", []string{"template-injection-expansion"}},
+		{"branch name", "      - run: echo '${{ github.ref_name }}'\n", []string{"template-injection"}},
 		{"trusted", "      - run: echo '${{ github.repository }} ${{ runner.os }} ${{ secrets.TOKEN }}'\n", []string{"template-injection-trusted", "template-injection-trusted", "template-injection-trusted"}},
 		{"tested only", "      - run: echo '${{ github.event_name == 'push' && 'a' || 'b' }}'\n", []string{"template-injection-trusted"}},
 		{"and keeps only its right operand", "      - run: echo '${{ inputs.x && 'a' || 'b' }}'\n", []string{"template-injection-trusted"}},
-		{"or can return its left operand", "      - run: echo '${{ inputs.x || 'b' }}'\n", []string{"template-injection-expansion"}},
+		{"or can return its left operand", "      - run: echo '${{ inputs.x || 'b' }}'\n", []string{"template-injection"}},
 		{"unknown context", "      - run: echo '${{ unknown.x }}'\n", nil},
 		{"not a script", "      - name: ${{ github.event.issue.title }}\n        run: echo\n", nil},
 	}
@@ -136,7 +136,7 @@ jobs:
 	}
 	want := []string{
 		"template-injection-trusted inputs.flag", "template-injection-trusted inputs.pick", "template-injection-trusted github.event.inputs.flag",
-		"template-injection-expansion inputs.text", "template-injection-expansion inputs.loose", "template-injection-expansion inputs.undeclared",
+		"template-injection inputs.text", "template-injection inputs.loose", "template-injection inputs.undeclared",
 		"template-injection-trusted matrix.os", "template-injection-trusted matrix.extra",
 		"template-injection-expansion matrix.dyn",
 		"template-injection-trusted env.LITERAL",
@@ -248,6 +248,11 @@ func TestTemplateInjectionFixes(t *testing.T) {
 			name: "a name before run and a following step",
 			step: "      - name: a\n        run: |\n          echo \"${{ github.head_ref }} ${{ inputs.x }}\"\n\n      - run: echo ok\n",
 			safe: "      - name: a\n        run: |\n          echo \"${GITHUB_HEAD_REF} ${INPUTS_X}\"\n        env:\n          INPUTS_X: ${{ inputs.x }}\n\n      - run: echo ok\n",
+		},
+		{
+			name: "an input, a release tag and a payload field",
+			step: "      - run: echo \"${{ inputs.title }} ${{ github.event.release.tag_name }} ${{ github.event.client_payload.ref }}\"\n",
+			safe: "      - run: echo \"${INPUTS_TITLE} ${RELEASE_TAG_NAME} ${CLIENT_PAYLOAD_REF}\"\n        env:\n          INPUTS_TITLE: ${{ inputs.title }}\n          RELEASE_TAG_NAME: ${{ github.event.release.tag_name }}\n          CLIENT_PAYLOAD_REF: ${{ github.event.client_payload.ref }}\n",
 		},
 		{
 			name: "not provable: command substitution",
@@ -479,5 +484,26 @@ func TestTemplateInjectionFixAddsOnlyTheVariablesItUses(t *testing.T) {
 	}
 	if !strings.Contains(out, "\"${PULL_REQUEST_TITLE}\"") || !strings.Contains(out, "PULL_REQUEST_TITLE: ${{") {
 		t.Errorf("the expression that can be replaced is:\n%s", out)
+	}
+}
+
+// The correctness profile is what actionlint reports: free text inputs, payloads and branch names are
+// findings of the default profile, and an explicit entry for the rule turns them on anywhere.
+func TestTemplateInjectionInputsFollowTheProfile(t *testing.T) {
+	src := "on:\n  workflow_dispatch:\n    inputs:\n      t:\n        type: string\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo \"${{ inputs.t }} ${{ github.ref_name }}\"\n"
+	count := func(cfg string) int {
+		return len(idsOf(lintWithConfig(t, mustParseConfig(t, cfg), src), "template-injection"))
+	}
+	if n := count("profile: correctness\n"); n != 0 {
+		t.Errorf("correctness reports %d", n)
+	}
+	if n := count("profile: default\n"); n != 2 {
+		t.Errorf("default reports %d", n)
+	}
+	if n := count("profile: correctness\nrules:\n  template-injection: error\n"); n != 2 {
+		t.Errorf("an entry of the rule reports %d", n)
+	}
+	if n := count("profile: default\nrules:\n  template-injection: off\n"); n != 0 {
+		t.Errorf("off reports %d", n)
 	}
 }
