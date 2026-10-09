@@ -1781,7 +1781,7 @@ test.yaml:8:7: input type of "kind" is "choice" but "options" is not set [invali
   |
 8 |       kind:
   |       ^~~~~
-test.yaml:16:18: default value "Chobi" of "name" input is not included in its options "\"Tama\", \"Mike\"" [invalid-workflow-dispatch-input]
+test.yaml:16:18: default value "Chobi" of "name" input is not included in its options "Tama", "Mike" [invalid-workflow-dispatch-input]
    |
 16 |         default: Chobi
    |                  ^~~~~
