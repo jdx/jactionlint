@@ -718,3 +718,22 @@ func TestErrorFormatterRegisterRuleInParallel(t *testing.T) {
 		t.Fatalf("not all rules were registered. %d rules were registered", len(f.rules))
 	}
 }
+
+// The same step can be in several jobs through a YAML alias, and each job decides on its own whether the
+// fix is safe. The one that is kept must not depend on the order the jobs were checked in.
+func TestDuplicateErrorsKeepTheUnsafeFixWhateverTheOrder(t *testing.T) {
+	mk := func(unsafe bool) *Error {
+		return &Error{Filepath: "a.yml", Line: 3, Column: 4, Message: "m", Fix: &Fix{Description: "d", Unsafe: unsafe, Edits: []TextEdit{{Start: 1, End: 1, NewText: "x"}}}}
+	}
+	for _, order := range [][]bool{{false, true, false}, {true, false, false}, {false, false, true}} {
+		var errs []*Error
+		for _, u := range order {
+			errs = append(errs, mk(u))
+		}
+		slices.SortFunc(errs, compareErrors)
+		errs = slices.CompactFunc(errs, equalsErrors)
+		if len(errs) != 1 || !errs[0].Fix.Unsafe {
+			t.Errorf("order %v: want the unsafe fix, got %+v", order, errs[0].Fix)
+		}
+	}
+}
