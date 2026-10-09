@@ -95,10 +95,11 @@ func (rule *RulePipelineWithoutPipefail) VisitJobPost(n *Job) error {
 type pipefailShellKind int
 
 const (
-	pipefailShellOK       pipefailShellKind = iota // pipefail is on, or the shell is not analyzed
-	pipefailShellDefault                           // the default shell: bash -e {0}
-	pipefailShellSh                                // sh: sh -e {0}
-	pipefailShellTemplate                          // a custom template of bash or sh without pipefail
+	pipefailShellOK         pipefailShellKind = iota // pipefail is on, or the shell is not analyzed
+	pipefailShellDefault                             // the default shell: bash -e {0}
+	pipefailShellSh                                  // sh: sh -e {0}
+	pipefailShellTemplate                            // a custom template of bash without pipefail
+	pipefailShellShTemplate                          // a custom template of sh, which has no pipefail to turn on
 )
 
 // VisitStep is callback when visiting Step node.
@@ -126,7 +127,7 @@ func (rule *RulePipelineWithoutPipefail) VisitStep(n *Step) error {
 	if err != nil || len(script.Pipelines) == 0 {
 		return nil
 	}
-	if kind == pipefailShellTemplate && !templateErrexit(value) && !scriptSets(script, "errexit", 'e') {
+	if (kind == pipefailShellTemplate || kind == pipefailShellShTemplate) && !templateErrexit(value) && !scriptSets(script, "errexit", 'e') {
 		return nil // a failing command does not stop the step, so there is nothing to hide
 	}
 
@@ -199,7 +200,10 @@ func (rule *RulePipelineWithoutPipefail) classifyShell(s *String) (kind pipefail
 	if strings.Contains(strings.ToLower(s.Value), "pipefail") {
 		return pipefailShellOK, "", false
 	}
-	return pipefailShellTemplate, s.Value, name == "bash"
+	if name == "sh" {
+		return pipefailShellShTemplate, s.Value, false
+	}
+	return pipefailShellTemplate, s.Value, true
 }
 
 // templateErrexit returns whether the custom shell template turns errexit on (`-e`, `-eu`, `-o errexit`).
@@ -224,7 +228,7 @@ func shellWithoutPipefail(kind pipefailShellKind, value string) string {
 	switch kind {
 	case pipefailShellSh:
 		return `"shell: sh" runs "sh -e {0}" without pipefail`
-	case pipefailShellTemplate:
+	case pipefailShellTemplate, pipefailShellShTemplate:
 		return fmt.Sprintf("the custom shell %q does not enable pipefail", value)
 	default:
 		return `the default shell runs "bash -e {0}" without pipefail`
@@ -233,7 +237,7 @@ func shellWithoutPipefail(kind pipefailShellKind, value string) string {
 
 func pipefailAdvice(kind pipefailShellKind) string {
 	switch kind {
-	case pipefailShellSh:
+	case pipefailShellSh, pipefailShellShTemplate:
 		return `use "shell: bash", which runs with pipefail`
 	case pipefailShellTemplate:
 		return `add "-o pipefail" to the shell or "set -o pipefail" before the pipeline`
@@ -403,12 +407,22 @@ func hiddenFailure(p *runscript.Pipeline) *runscript.Command {
 	return found
 }
 
+// readsFile reports whether the command has its input redirected from a file (`cat < file`), which can fail.
+func readsFile(c *runscript.Command) bool {
+	for _, r := range c.Redirects {
+		if r.Op == "<" || r.Op == "<>" {
+			return true
+		}
+	}
+	return false
+}
+
 // failureMatters returns whether a failure of the command in the stage of the pipeline is worth reporting.
 func failureMatters(c *runscript.Command, stage int) bool {
 	switch {
 	case pipefailNoFail[c.Name], pipefailAnswers[c.Name]:
 		return false
-	case c.Name == "cat" && len(c.Positional) == 0:
+	case c.Name == "cat" && len(c.Positional) == 0 && !readsFile(c):
 		return false // copies a here document, a here string or the output of the previous stage
 	case stage > 0 && pipefailFilters[c.Name]:
 		return false
@@ -424,8 +438,11 @@ var awkExitRe = regexp.MustCompile(`\bexit\b`)
 // stopsReadingEarly returns whether the command can exit before its input ends.
 func stopsReadingEarly(c *runscript.Command) bool {
 	switch c.Name {
-	case "head", "read":
+	case "head":
 		return true
+	case "read":
+		// `cmd | read x` and `cmd | { read x; ...; }` take one line and leave. A `while read` loop reads to the end.
+		return !c.Tested
 	case "grep", "egrep", "fgrep", "rg":
 		for _, a := range c.Args {
 			v := a.Value

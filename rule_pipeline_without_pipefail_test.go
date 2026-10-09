@@ -56,6 +56,13 @@ func TestRulePipelineWithoutPipefailDetection(t *testing.T) {
 		{"template without errexit but script sets it", pipefailWorkflow("", "shell: bash {0}\n        run: |\n          set -e\n          make | tee out\n"), 1},
 		{"non-shell template", pipefailWorkflow("", "shell: python {0}\n        run: print(1)\n"), 0},
 		{"bash with arguments is not a name", pipefailWorkflow("", "shell: bash -e\n        run: make | tee out\n"), 0},
+		{"while read loop reads to the end", pipefailWorkflow("", "run: |\n          make | while read -r l; do echo \"$l\"; done\n"), 1},
+		{"while IFS read loop", pipefailWorkflow("", "run: |\n          make | while IFS= read -r l; do echo \"$l\"; done\n"), 1},
+		{"single read takes one line", pipefailWorkflow("", "run: |\n          make | { read -r first; echo \"$first\"; }\n"), 0},
+		{"cat of a file feeding a pipe", pipefailWorkflow("", "run: |\n          cat < in.txt | sort\n"), 1},
+		{"cat of the previous stage", pipefailWorkflow("", "run: |\n          make | cat | sort\n"), 1},
+		{"cat of a here document", pipefailWorkflow("", "run: |\n          cat <<EOF | sort\n          b\n          EOF\n"), 0},
+		{"sh template", pipefailWorkflow("", "shell: sh -e {0}\n        run: make | tee out\n"), 1},
 		{"set -o pipefail", pipefailWorkflow("", "run: |\n          set -o pipefail\n          make | tee out\n"), 0},
 		{"set -eo pipefail", pipefailWorkflow("", "run: |\n          set -eo pipefail\n          make | tee out\n"), 0},
 		{"set -euxo pipefail", pipefailWorkflow("", "run: |\n          set -euxo pipefail\n          make | tee out\n"), 0},
@@ -309,5 +316,22 @@ func TestRulePipelineWithoutPipefailFixIsUnsafe(t *testing.T) {
 	}
 	if len(errs) != 1 || errs[0].Fix == nil || !errs[0].Fix.Unsafe {
 		t.Fatalf("want one unsafe fix: %v", errs)
+	}
+}
+
+// The advice for a template of sh is the one of "shell: sh": dash has no pipefail, so neither "-o pipefail" nor
+// "set -o pipefail" works there.
+func TestRulePipelineWithoutPipefailAdviceForShTemplate(t *testing.T) {
+	errs := lintPipefail(t, pipefailWorkflow("", "shell: sh -e {0}\n        run: make | tee out\n"))
+	if len(errs) != 1 {
+		t.Fatalf("got %v", errs)
+	}
+	m := errs[0].Message
+	if strings.Contains(m, "-o pipefail") || !strings.Contains(m, `use "shell: bash"`) || errs[0].Fix != nil {
+		t.Errorf("unexpected message or fix: %q %v", m, errs[0].Fix)
+	}
+	bash := lintPipefail(t, pipefailWorkflow("", "shell: bash -e {0}\n        run: make | tee out\n"))
+	if len(bash) != 1 || !strings.Contains(bash[0].Message, "-o pipefail") {
+		t.Errorf("bash template: %v", bash)
 	}
 }
