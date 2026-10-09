@@ -187,8 +187,8 @@ var automaticCaches = map[string]func(a *ExecAction, u *UsesRef, root string) (b
 }
 
 // setupNodeCachesAutomatically tells whether actions/setup-node restores the cache of the package manager on its
-// own. From v5 it does when package.json names a package manager (`packageManager`, or `devEngines.packageManager`)
-// and "package-manager-cache" is not false; since v6 only for npm. The action reads package.json at the root of the
+// own. From v5 it does when package.json names a package manager and "package-manager-cache" is not false (see
+// packageManagerOf for what v5 and v6 read). The action reads package.json at the root of the
 // workspace, so the file of the repository decides: a repository without one (or without the field) gets no cache.
 // Without a repository to look at (the source of a workflow on its own) the answer is yes.
 func setupNodeCachesAutomatically(a *ExecAction, u *UsesRef, root string) (bool, string) {
@@ -203,22 +203,27 @@ func setupNodeCachesAutomatically(a *ExecAction, u *UsesRef, root string) (bool,
 	if root == "" {
 		return true, hint + ". the action caches on its own when package.json has a \"packageManager\" field"
 	}
-	pm := packageManagerOf(filepath.Join(root, "package.json"))
-	if pm == "" || (!known || major >= 6) && pm != "npm" {
+	pm := packageManagerOf(filepath.Join(root, "package.json"), !known || major >= 6)
+	if pm == "" {
 		return false, ""
 	}
 	return true, hint + ". package.json has \"packageManager\": \"" + pm + "\", so the action caches on its own"
 }
 
-// packageManagerOf returns the name of the package manager that package.json selects with the field packageManager
-// or devEngines.packageManager, or "" when the file does not exist or does not select one.
-func packageManagerOf(file string) string {
+// npmPackageManagerRe is the pattern with which setup-node v6 recognizes npm: "npm", "npm@10" or "^npm@10".
+var npmPackageManagerRe = regexp.MustCompile(`^(\^)?npm(@.*)?$`)
+
+// packageManagerOf returns the name of the package manager that package.json selects for the automatic caching of
+// setup-node, or "" when the file does not exist or does not select one. It follows the code of the action: v5 reads
+// only the top-level "packageManager" ("npm@10", "^pnpm@9" for npm, yarn and pnpm), v6 and later check every entry of
+// "devEngines.packageManager" and then the top-level field, and know npm only.
+func packageManagerOf(file string, v6 bool) string {
 	b, err := os.ReadFile(file)
 	if err != nil {
 		return ""
 	}
 	var pkg struct {
-		PackageManager string `json:"packageManager"`
+		PackageManager any `json:"packageManager"`
 		DevEngines     struct {
 			PackageManager json.RawMessage `json:"packageManager"`
 		} `json:"devEngines"`
@@ -226,20 +231,34 @@ func packageManagerOf(file string) string {
 	if json.Unmarshal(b, &pkg) != nil {
 		return ""
 	}
-	if name, _, _ := strings.Cut(pkg.PackageManager, "@"); name != "" {
-		return name
+	top, _ := pkg.PackageManager.(string)
+	if !v6 {
+		name, _, found := strings.Cut(strings.TrimPrefix(top, "^"), "@")
+		if found && (name == "npm" || name == "yarn" || name == "pnpm") {
+			return name
+		}
+		return ""
 	}
+	isNpm := npmPackageManagerRe.MatchString
 	var one struct {
-		Name string `json:"name"`
-	}
-	if json.Unmarshal(pkg.DevEngines.PackageManager, &one) == nil && one.Name != "" {
-		return one.Name
+		Name any `json:"name"`
 	}
 	var many []struct {
-		Name string `json:"name"`
+		Name any `json:"name"`
 	}
-	if json.Unmarshal(pkg.DevEngines.PackageManager, &many) == nil && len(many) > 0 {
-		return many[0].Name
+	if json.Unmarshal(pkg.DevEngines.PackageManager, &many) == nil {
+		for _, m := range many {
+			if s, ok := m.Name.(string); ok && isNpm(s) {
+				return "npm"
+			}
+		}
+	} else if json.Unmarshal(pkg.DevEngines.PackageManager, &one) == nil {
+		if s, ok := one.Name.(string); ok && isNpm(s) {
+			return "npm"
+		}
+	}
+	if isNpm(top) {
+		return "npm"
 	}
 	return ""
 }
