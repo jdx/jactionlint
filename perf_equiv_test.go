@@ -232,3 +232,29 @@ func TestSiblingWorkflowsAreReadOnce(t *testing.T) {
 		t.Error("a nil cache has none")
 	}
 }
+
+func referenceSrcLineStart(src []byte, line int) int {
+	if line < 1 {
+		return -1
+	}
+	off := 0
+	for i := 1; i < line; i++ {
+		j := bytes.IndexByte(src[off:], '\n')
+		if j < 0 {
+			return -1
+		}
+		off += j + 1
+	}
+	return off
+}
+
+func TestSrcLineStartMatchesScanning(t *testing.T) {
+	for _, src := range []string{"", "\n", "a", "a\n", "a\nb", "a\nb\n", "\n\n", "a\r\nb\r\n", "x\n\ny"} {
+		b := []byte(src)
+		for line := -1; line <= strings.Count(src, "\n")+3; line++ {
+			if got, want := srcLineStart(b, line), referenceSrcLineStart(b, line); got != want {
+				t.Errorf("srcLineStart(%q, %d) = %d, want %d", src, line, got, want)
+			}
+		}
+	}
+}

@@ -243,23 +243,49 @@ func (e *Error) getLine(source []byte) (string, bool) {
 	return string(line), true
 }
 
-// The printers ask for many lines of one source in a row. Scanning the source for each one is quadratic
-// in the number of findings, so the line starts of the last source are remembered.
+// The printers and the fixers ask for many lines of one source in a row, and files are linted in parallel.
+// Scanning the source for each line is quadratic in the number of findings, so the line starts of the
+// latest sources are remembered, keyed by the identity of the slice. A source which is changed in place
+// keeps its identity, so callers do not change a source they have asked about.
 var lineStartsCache struct {
 	sync.Mutex
-	src    []byte
-	starts []int
+	m map[lineStartsKey][]int
 }
 
+type lineStartsKey struct {
+	first *byte
+	n     int
+}
+
+// lineStartsCacheMax is how many sources are remembered; the cache is cleared when it is full.
+const lineStartsCacheMax = 64
+
 // lineStartsOf returns the byte offset where each line of the source starts. The text after a trailing
-// line break is a line (an empty one).
+// line break is a line (an empty one). The result must not be modified.
 func lineStartsOf(src []byte) []int {
+	if len(src) == 0 {
+		return []int{0}
+	}
+	key := lineStartsKey{&src[0], len(src)}
 	c := &lineStartsCache
 	c.Lock()
-	defer c.Unlock()
-	if c.starts != nil && len(c.src) == len(src) && (len(src) == 0 || &c.src[0] == &src[0]) {
-		return c.starts
+	if starts, ok := c.m[key]; ok {
+		c.Unlock()
+		return starts
 	}
+	c.Unlock()
+	starts := buildLineStarts(src)
+	c.Lock()
+	if c.m == nil || len(c.m) >= lineStartsCacheMax {
+		c.m = map[lineStartsKey][]int{}
+	}
+	c.m[key] = starts
+	c.Unlock()
+	return starts
+}
+
+// buildLineStarts returns the byte offset where each line of the source starts (see lineStartsOf).
+func buildLineStarts(src []byte) []int {
 	starts := []int{0}
 	for i := 0; i < len(src); {
 		j := bytes.IndexByte(src[i:], '\n')
@@ -269,7 +295,6 @@ func lineStartsOf(src []byte) []int {
 		i += j + 1
 		starts = append(starts, i)
 	}
-	c.src, c.starts = src, starts
 	return starts
 }
 

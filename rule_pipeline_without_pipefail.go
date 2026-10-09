@@ -44,6 +44,7 @@ import (
 type RulePipelineWithoutPipefail struct {
 	RuleBase
 	src           []byte
+	starts        []int // the line starts of src, see buildLineStarts
 	workflowShell *String
 	jobShell      *String
 	nonWindows    bool
@@ -516,7 +517,13 @@ func (rule *RulePipelineWithoutPipefail) buildFix(run *String) *Fix {
 	}
 	// The line of "run.Pos" is the one of the "|" header, the content starts at the next line.
 	lineNo := run.Pos.Line + 1 + first
-	start := pipefailLineStart(rule.src, lineNo)
+	if rule.starts == nil {
+		rule.starts = buildLineStarts(rule.src) // once for all the scripts of the file
+	}
+	start := -1
+	if lineNo >= 1 && lineNo <= len(rule.starts) && rule.starts[lineNo-1] < len(rule.src) {
+		start = rule.starts[lineNo-1]
+	}
 	if start < 0 {
 		return nil
 	}
@@ -541,25 +548,6 @@ func (rule *RulePipelineWithoutPipefail) buildFix(run *String) *Fix {
 		Unsafe:      true,
 		Edits:       []TextEdit{{Start: start, End: start, NewText: indent + "set -o pipefail" + nl}},
 	}
-}
-
-// pipefailLineStart returns the byte offset of the start of the 1-based line, -1 if there is no such line.
-func pipefailLineStart(src []byte, line int) int {
-	if line < 1 {
-		return -1
-	}
-	off := 0
-	for i := 1; i < line; i++ {
-		j := bytes.IndexByte(src[off:], '\n')
-		if j < 0 {
-			return -1
-		}
-		off += j + 1
-	}
-	if off >= len(src) {
-		return -1
-	}
-	return off
 }
 
 // runnerIsNotWindows returns whether the job is known to run on Linux or macOS: no label can be Windows and at

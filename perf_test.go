@@ -87,6 +87,8 @@ func TestScalingBudget(t *testing.T) {
 		{"ignore comments 4k steps", ProfileCorrectness, perfWorkflowIgnores(4000), 20 * time.Second},
 		{"zizmor ignore comments 4k steps", ProfileDefault, perfWorkflowZizmorIgnores(4000), 20 * time.Second},
 		{"matrix include pedantic 2k", ProfilePedantic, perfWorkflowMatrix(2000), 20 * time.Second},
+		{"checkouts of a pull request pedantic 3k", ProfilePedantic, perfWorkflowCheckouts(3000), 20 * time.Second},
+		{"jobs pedantic 3k", ProfilePedantic, perfWorkflowJobs(3000), 20 * time.Second},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -104,6 +106,23 @@ func TestScalingBudget(t *testing.T) {
 			t.Logf("took %s", time.Since(start))
 		})
 	}
+}
+
+func perfWorkflowCheckouts(n int) string {
+	b := perfHeader()
+	for i := 0; i < n; i++ {
+		fmt.Fprintf(b, "      - uses: actions/checkout@v4\n        with:\n          ref: ${{ github.event.pull_request.head.sha }}\n")
+	}
+	return "on: [pull_request_target]\n" + b.String()[len("name: t\non: push\n"):]
+}
+
+func perfWorkflowJobs(n int) string {
+	var b strings.Builder
+	b.WriteString("name: t\non: push\npermissions: {}\njobs:\n")
+	for i := 0; i < n; i++ {
+		fmt.Fprintf(&b, "  j%d:\n    runs-on: ubuntu-latest\n    permissions:\n      contents: write\n    steps:\n      - uses: actions/checkout@v4\n      - run: echo ${{ github.sha }}\n", i)
+	}
+	return b.String()
 }
 
 func benchmarkLint(b *testing.B, profile Profile, gen func(int) string, sizes ...int) {
@@ -217,4 +236,12 @@ func TestScalingBudgetBaselineWrite(t *testing.T) {
 	case <-time.After(15 * time.Second):
 		t.Fatal("writing the baseline did not finish within 15s")
 	}
+}
+
+func BenchmarkLintCheckoutsPedantic(b *testing.B) {
+	benchmarkLint(b, ProfilePedantic, perfWorkflowCheckouts, 1000, 4000)
+}
+
+func BenchmarkLintJobsPedantic(b *testing.B) {
+	benchmarkLint(b, ProfilePedantic, perfWorkflowJobs, 1000, 4000)
 }

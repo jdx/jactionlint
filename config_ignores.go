@@ -390,6 +390,8 @@ func newScopeIndex(w *Workflow, src []byte) *scopeIndex {
 		jr.ordered = rangesOrdered(len(jr.steps), func(i int) (int, int) { return jr.steps[i].start, jr.steps[i].end })
 		idx.jobs = append(idx.jobs, jr)
 	}
+	// The jobs come from a map, in any order
+	sort.Slice(idx.jobs, func(i, j int) bool { return idx.jobs[i].start < idx.jobs[j].start })
 	idx.ordered = rangesOrdered(len(idx.jobs), func(i int) (int, int) { return idx.jobs[i].start, idx.jobs[i].end })
 	return idx
 }

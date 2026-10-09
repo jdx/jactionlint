@@ -36,6 +36,7 @@ type RuleExpression struct {
 	// The following fields let a template-injection finding carry a fix (see template_injection.go).
 	src       *sourceIndex
 	curJob    *Job
+	tiMatrix  map[string]bool // template injection: the matrix of curJob is looked at once (see tiContext.matrix)
 	curStep   *Step
 	scriptRun *ExecRun // the step when the script being checked is its run: script
 	scriptStr *String  // the script being checked
@@ -221,7 +222,7 @@ func (rule *RuleExpression) VisitWorkflowPost(n *Workflow) error {
 
 // VisitJobPre is callback when visiting Job node before visiting its children.
 func (rule *RuleExpression) VisitJobPre(n *Job) error {
-	rule.curJob = n
+	rule.curJob, rule.tiMatrix = n, map[string]bool{}
 	// Type of needs must be resolved before resolving type of matrix because `needs` context can
 	// be used in matrix configuration.
 	rule.needsTy = rule.calcNeedsType(n)
@@ -300,7 +301,7 @@ func (rule *RuleExpression) VisitJobPre(n *Job) error {
 
 // VisitJobPost is callback when visiting Job node after visiting its children
 func (rule *RuleExpression) VisitJobPost(n *Job) error {
-	rule.curJob = nil
+	rule.curJob, rule.tiMatrix = nil, nil
 	// 'environment' and 'outputs' sections are evaluated after all steps are run
 	if n.Environment != nil {
 		rule.checkString(n.Environment.Name, "jobs.<job_id>.environment")
@@ -885,7 +886,7 @@ func (rule *RuleExpression) attachTemplateInjectionFix(nerrs, start int) {
 			rule.planned = true
 			rule.fixPlan = planTemplateInjectionFixes(tiFixInput{
 				idx: rule.src,
-				ctx: tiContext{wf: rule.workflow, job: rule.curJob, step: rule.curStep},
+				ctx: tiContext{wf: rule.workflow, job: rule.curJob, step: rule.curStep, matrix: rule.tiMatrix},
 				cfg: rule.config,
 				str: rule.scriptStr,
 				run: rule.scriptRun,

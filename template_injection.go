@@ -292,6 +292,18 @@ func (c *tiContext) isTrustedRef(path []string) bool {
 
 // matrixIsLiteral reports whether every value of the matrix variable is written in the workflow.
 func (c *tiContext) matrixIsLiteral(name string) bool {
+	if c.matrix != nil {
+		if v, ok := c.matrix[name]; ok {
+			return v
+		}
+		v := c.matrixIsLiteralUncached(name)
+		c.matrix[name] = v
+		return v
+	}
+	return c.matrixIsLiteralUncached(name)
+}
+
+func (c *tiContext) matrixIsLiteralUncached(name string) bool {
 	if c.job == nil || c.job.Strategy == nil || c.job.Strategy.Matrix == nil {
 		return false
 	}
@@ -377,6 +389,9 @@ type tiContext struct {
 	wf   *Workflow
 	job  *Job
 	step *Step
+	// matrix remembers matrixIsLiteral for the job, which looks at every combination of the matrix. It can
+	// be nil, then the answer is worked out each time.
+	matrix map[string]bool
 }
 
 // lookupEnv finds the definition of an environment variable for the step: the step, the job, then
@@ -962,7 +977,7 @@ func shellReplacement(q shQuote, name string) (string, bool) {
 func envInsertion(in tiFixInput, vars []string) (TextEdit, bool) {
 	idx := in.idx
 	nl := "\n"
-	if bytesContainsCRLF(idx.src) {
+	if idx.crlf {
 		nl = "\r\n"
 	}
 	step := in.ctx.step
@@ -1034,8 +1049,4 @@ func envInsertion(in tiFixInput, vars []string) (TextEdit, bool) {
 	// The last line has no terminator
 	at := len(idx.src)
 	return TextEdit{at, at, nl + strings.TrimSuffix(text, nl)}, true
-}
-
-func bytesContainsCRLF(src []byte) bool {
-	return strings.Contains(string(src), "\r\n")
 }
