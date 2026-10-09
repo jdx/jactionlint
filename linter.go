@@ -317,25 +317,36 @@ func (l *Linter) LintRepository(dir string) ([]*Error, error) {
 
 	l.log("Linting all workflow files and Dependabot configuration in repository:", dir)
 
-	p, err := l.projects.At(dir)
+	files, p, err := l.repositoryFiles(dir)
 	if err != nil {
 		return nil, err
 	}
+	l.log("Collected", len(files), "YAML files")
+	return l.LintFiles(files, p)
+}
+
+// repositoryFiles finds the nearest project of dir and returns its files which are linted: the workflow
+// files and the Dependabot configuration. LintRepository and FixRepository both use it, so what is fixed is always
+// what is linted.
+func (l *Linter) repositoryFiles(dir string) ([]string, *Project, error) {
+	p, err := l.projects.At(dir)
+	if err != nil {
+		return nil, nil, err
+	}
 	if p == nil {
-		return nil, fmt.Errorf("no project was found in any parent directories of %q. check workflows directory is put correctly in your Git repository", dir)
+		return nil, nil, fmt.Errorf("no project was found in any parent directories of %q. check workflows directory is put correctly in your Git repository", dir)
 	}
 
 	l.log("Detected project:", p.RootDir())
 	files, err := walkWorkflowFiles(p.WorkflowsDir())
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	files = append(files, p.DependabotFiles()...)
 	if len(files) == 0 {
-		return nil, fmt.Errorf("no YAML file was found in %q", p.WorkflowsDir())
+		return nil, nil, fmt.Errorf("no YAML file was found in %q", p.WorkflowsDir())
 	}
-	l.log("Collected", len(files), "YAML files")
-	return l.LintFiles(files, p)
+	return files, p, nil
 }
 
 // collectWorkflowFiles returns the paths of all YAML files in the directory recursively in sorted order.
