@@ -49,6 +49,9 @@ func tokenPos(idx *sourceIndex, str *String, base int, t *Token) *Pos {
 // literal block scalar it is the position in the block. For the other strings it assumes that the
 // value is on one line, which holds for the first line of a multi-line scalar only.
 func valuePos(s *String, off int) (line, col int) {
+	if l, c, ok := s.valueAt(off); ok {
+		return l, c
+	}
 	if s.Literal && s.Indent > 0 {
 		before := s.Value[:off]
 		nl := strings.Count(before, "\n")
@@ -148,6 +151,9 @@ func (x *sourceIndex) valueOffset(s *String, off int) (int, bool) {
 	if x == nil || s == nil || off < 0 || off > len(s.Value) {
 		return 0, false
 	}
+	if line, bcol, ok := s.valueByteAt(off); ok && line <= len(x.lineStarts) {
+		return x.lineStarts[line-1] + bcol, true
+	}
 	if s.Literal && s.Indent > 0 {
 		before := s.Value[:off]
 		line := s.Pos.Line + 1 + strings.Count(before, "\n")
@@ -210,6 +216,9 @@ func (x *sourceIndex) walkFolded(s *String, base, off int, blockIndent int) (int
 // valuePos it follows the line breaks of a scalar which spans several lines when the source is
 // known. The index can be nil.
 func (x *sourceIndex) valuePosition(s *String, off int) (line, col int) {
+	if l, c, ok := s.valueAt(off); ok {
+		return l, c
+	}
 	if x != nil && s.Literal && s.Indent > 0 {
 		return x.literalPosition(s, off)
 	}

@@ -134,10 +134,7 @@ func TestUnlockedInstallFix(t *testing.T) {
 func TestUnlockedInstallNoFix(t *testing.T) {
 	const head = "on: push\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n"
 	for name, step := range map[string]string{
-		"folded block":              "      - run: >\n          cargo\n          install ripgrep\n",
-		"multi-line plain scalar":   "      - run: cargo\n          install ripgrep\n",
-		"escape in a quoted scalar": "      - run: \"echo \\\"x\\\" && cargo install ripgrep\"\n",
-		"install is quoted":         "      - run: cargo 'install' ripgrep\n",
+		"install is quoted": "      - run: cargo 'install' ripgrep\n",
 	} {
 		t.Run(name, func(t *testing.T) {
 			errs := lintBatchD(t, "test.yaml", head+step, &Config{Rules: map[string]RuleConfig{"unlocked-install": {Level: SeverityError}}})
@@ -152,6 +149,40 @@ func TestUnlockedInstallNoFix(t *testing.T) {
 			}
 			if !found {
 				t.Errorf("no finding: %v", errs)
+			}
+		})
+	}
+}
+
+// The position of the word in a folded block, a multi-line plain scalar or a quoted scalar with escapes is
+// exact, so the fix is attached and inserts the flag right after "install".
+func TestUnlockedInstallFixInScalars(t *testing.T) {
+	const head = "on: push\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n"
+	for name, step := range map[string]string{
+		"folded block":              "      - run: >\n          cargo\n          install ripgrep\n",
+		"multi-line plain scalar":   "      - run: cargo\n          install ripgrep\n",
+		"escape in a quoted scalar": "      - run: \"echo \\\"x\\\" && cargo install ripgrep\"\n",
+		"single quote escape":       "      - run: 'echo ''x'' && cargo install ripgrep'\n",
+	} {
+		t.Run(name, func(t *testing.T) {
+			src := head + step
+			errs := lintBatchD(t, "test.yaml", src, &Config{Rules: map[string]RuleConfig{"unlocked-install": {Level: SeverityError}}})
+			n := 0
+			for _, e := range errs {
+				if e.ID != "unlocked-install" {
+					continue
+				}
+				n++
+				if e.Fix == nil || len(e.Fix.Edits) != 1 {
+					t.Fatalf("no fix: %+v", e)
+				}
+				at := e.Fix.Edits[0].Start
+				if !strings.HasSuffix(src[:at], "install") || !strings.HasPrefix(src[at:], " ripgrep") {
+					t.Errorf("the fix is not right after \"install\": %q|%q", src[max(0, at-10):at], src[at:min(len(src), at+10)])
+				}
+			}
+			if n != 1 {
+				t.Errorf("want 1 finding, got %v", errs)
 			}
 		})
 	}

@@ -312,11 +312,12 @@ Lines and columns are 1-based and columns count Unicode code points (a tab, an a
 a LF is not counted), in every format: the SARIF log says `columnKind: unicodeCodePoints`. The region of a finding in the SARIF log
 (and the `EndLine` and `EndColumn` of an error) ends just after its last character.
 
-A finding inside an expression of a multi-line scalar is on the line and at the column of the text in the file. This is exact for a
-literal block (`|`). For a folded block (`>`) and for a plain or quoted scalar over several lines, the position is found by following
-the lines of the scalar through the source, which is exact unless the scalar has escapes (`\n`, `\x41`) before the finding, in which
-case the position on the first line of the scalar is used. The `end_column` of `json` keeps the meaning it had in actionlint, the column
-of the last character of the `^~~~` indicator, but counts code points like `column`.
+A finding inside a string (an expression, a line of a `run:` script, a secret) is on the line and at the column of the text in the file,
+in every style of YAML scalar: plain, single quoted (`''`), double quoted (escapes such as `\n`, `\"`, `\x41`, `\u00e9` and `\<newline>`),
+literal blocks (`|`) and folded blocks (`>`), also over several lines. The text of a folded line break is at the end of its line.
+The region of a finding (`end_column` of `json`, the SARIF region) is the same in every format: the SARIF region ends just after the last
+character, and the `end_column` of `json` is the column of the last character of the `^~~~` indicator, which underlines the same region
+(it counts code points like `column`).
 
 Before explaining the template details, let's see some examples.
 

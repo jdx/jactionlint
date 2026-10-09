@@ -949,14 +949,14 @@ jobs:
 Output:
 
 ```
-test.yaml:6:9: shellcheck reported issue in this script: SC2086:info:1:6: Double quote to prevent globbing and word splitting [shellcheck]
+test.yaml:6:19: shellcheck reported issue in this script: SC2086:info:1:6: Double quote to prevent globbing and word splitting [shellcheck]
   |
 6 |       - run: echo $FOO
-  |         ^~~~
-test.yaml:14:9: shellcheck reported issue in this script: SC2086:info:1:6: Double quote to prevent globbing and word splitting [shellcheck]
+  |                   ^~~~
+test.yaml:14:19: shellcheck reported issue in this script: SC2086:info:1:6: Double quote to prevent globbing and word splitting [shellcheck]
    |
 14 |       - run: echo $FOO
-   |         ^~~~
+   |                   ^~~~
 ```
 
 <!-- Skip playground link -->
@@ -970,8 +970,7 @@ level or job level. Each step can configure shell to run scripts by `shell:`.
 
 In the above example output, `SC2086:info:1:6:` means that shellcheck reported SC2086 rule violation and the location is at
 line 1, column 6. Note that the location is relative to the script of the `run:` section.
-The reported source line is the line within the script when `run:` uses a literal block (`|`, `|-`, `|+`) and no `${{ }}`
-in the script spans multiple lines. Otherwise, the position of `run:` is reported. An [ignore comment](usage.md#ignore-some-errors) on the
+The finding is reported at the token of the script in the workflow file, whatever the style of the `run:` scalar. An [ignore comment](usage.md#ignore-some-errors) on the
 step or at the `run:` key covers the lines of the script ([details](actionlint.md#where-shellcheck-findings-are-reported)).
 
 jactionlint remembers the default shell and checks what OS the job runs on. Only when the shell is `bash` or `sh`, jactionlint
@@ -2672,11 +2671,11 @@ Output:
 test.yaml:8:48: a value that is not a literal is written to $GITHUB_ENV in a workflow triggered by "pull_request_target", which runs with secrets and a write token for events that may come from a fork. an attacker who controls the value can set LD_PRELOAD or NODE_OPTIONS (a newline adds another variable) and run code in the next steps. write only literal values and values computed from trusted sources, or pass state with $GITHUB_OUTPUT [github-env]
   |
 8 |       - run: echo "VERSION=$(cat version.txt)" >> "$GITHUB_ENV"
-  |                                                ^~
+  |                                                ^~~~~~~~~~~~~~~~
 test.yaml:9:34: untrusted input from the variable TITLE (github.event.pull_request.title) is written to $GITHUB_ENV. an attacker who controls the value can set LD_PRELOAD or NODE_OPTIONS (a newline adds another variable) and run code in the next steps. do not write input that an outsider controls to $GITHUB_ENV; validate it first or pass it to the next step with $GITHUB_OUTPUT [github-env]
   |
 9 |       - run: echo "TITLE=$TITLE" >> "$GITHUB_ENV"
-  |                                  ^~
+  |                                  ^~~~~~~~~~~~~~~~
 ```
 
 [Playground](https://jactionlint.jdx.dev/#eNp0z8FKw0AQBuB7n+In5KCH5AEW2oMQNCAVNPYiEpJ2aCPL7LozE5TSd5ckIB7saZj5v/8wgd0KiOZ9m+jTSLTVLh1JpzOg35HE4S1EYjq8rz5CL1PS2+APC0nGUgR2sN5YrfCdkugciVKURQHFJB1ofwrIdtXzS/20Xec3+04xUpIhcKlfepths0GW39fNw+tdW2132X/9pm4eq3U+j6sNgHh0vwswc4f8fMZx0JP1JY3EWv59v9RBPeFy+RkA2itTFQ==)
@@ -2732,11 +2731,11 @@ Output:
 test.yaml:6:14: command "npm install" installs a package outside of a lock file: its dependencies are resolved anew on every run, although its version is pinned. add the package to package.json and commit the package-lock.json and install with `npm ci` [adhoc-packages]
   |
 6 |       - run: npm install eslint@9.0.0
-  |              ^~~
+  |              ^~~~~~~~~~~~~~~~~~~~~~~~
 test.yaml:7:14: command "gem install" installs a package outside of a lock file: its version and its dependencies are resolved anew on every run. add the package to a Gemfile and commit the Gemfile.lock and install with `bundle install` [adhoc-packages]
   |
 7 |       - run: gem install rake
-  |              ^~~
+  |              ^~~~~~~~~~~~~~~~
 ```
 
 [Playground](https://jactionlint.jdx.dev/#eNpUyjEOAjEMRNF+TzEXyGpbUnGVrGRBwDhRxr4/MhSI6hf/DauYwfv2GCfrBrjQs8AKY8kfZ5hH0Zbvs+gy+VVASVlh84Vu9KYKoXbz62U/9uNf3eSnVnvKewDexCcZ)
@@ -2859,7 +2858,7 @@ Output:
 test.yaml:8:14: "twine upload" publishes to PyPI with the long-lived credential TWINE_PASSWORD. prefer trusted publishing with pypa/gh-action-pypi-publish and the permission "id-token: write" [use-trusted-publishing]
   |
 8 |       - run: twine upload dist/*
-  |              ^~~~~
+  |              ^~~~~~~~~~~~~~~~~~~
 test.yaml:13:21: action "pypa/gh-action-pypi-publish@76f52bc884231f62b9a034ebfe128415bbaabdfc" publishes to PyPI but is given a password (input "password") instead of using trusted publishing. prefer trusted publishing with pypa/gh-action-pypi-publish and the permission "id-token: write" [use-trusted-publishing]
    |
 13 |           password: ${{ secrets.PYPI_TOKEN }}
@@ -2958,7 +2957,7 @@ Output:
 test.yaml:6:14: "cargo install" without --locked builds with the newest dependencies that match the crate instead of the ones in its Cargo.lock, so a new release of any dependency reaches the workflow. add --locked [unlocked-install]
   |
 6 |       - run: cargo install cargo-nextest
-  |              ^~~~~
+  |              ^~~~~~~~~~~~~~~~~~~~~~~~~~~
 ```
 
 [Playground](https://jactionlint.jdx.dev/#eNoky90JwCAMxPF3p7gFsoDbaJF+IFG8BDp+SX0K4fe/oRnTeaVnVOYEWKPFBZYrJdyrq7n0EvYTrU3uCpAoM46yzoFbaaX3/Ym2NzbfAESiIIE=)
@@ -4335,7 +4334,7 @@ test.yaml:24:16: context "env" is not allowed here. available contexts are "gith
 test.yaml:30:20: context "env" is not allowed here. no context is available here. see https://docs.github.com/en/actions/learn-github-actions/contexts#context-availability for more details [expression]
    |
 30 |         shell: ${{ env.SHELL}}
-   |                    ^~~~~~~~~~~
+   |                    ^~~~~~~~~
 test.yaml:32:33: calling function "success" is not allowed here. "success" is only available in "jobs.<job_id>.if", "jobs.<job_id>.steps.if". see https://docs.github.com/en/actions/learn-github-actions/contexts#context-availability for more details [expression]
    |
 32 |         run: echo 'Success? ${{ success() }}'
@@ -6670,11 +6669,11 @@ Output:
 test.yaml:6:31: invisible character U+200B ZERO WIDTH SPACE in a uses: reference: it is not shown by editors or by the diff view of GitHub, so it can hide what the text really is. remove it [invisible-characters]
   |
 6 |       - uses: actions/checkout​@v4
-  |                               ^~~
+  |                               ^
 test.yaml:7:36: invisible character U+202E RIGHT-TO-LEFT OVERRIDE in a comment: it changes the order in which the text around it is displayed, so the code can run differently from how it reads. remove it [invisible-characters]
   |
 7 |       - run: echo "tests passed" # ‮success
-  |                                    ^~~~~~~
+  |                                    ^
 ```
 
 [Playground](https://jactionlint.jdx.dev/#eNo8zDsOwjAQhOE+pxiF2qKhcsVVnGUl85DXyuxSp+cuHConQQaJaorv11jL6ME63WxhngBX+lhgjcY0PJZoHulRhn2Jrp2/CkgIKjOK+NUaj1JV7ha+b6/z8/SP1mgZKtUwjx+iF1IvMw7YtzdDRMnPAKsALro=)
@@ -6903,7 +6902,7 @@ test.yaml:6:23: "cancel-in-progress" is enabled here (job "publish" runs "cargo 
 test.yaml:11:14: "cargo publish" publishes to crates.io. prefer trusted publishing with rust-lang/crates-io-auth-action and the permission "id-token: write" [use-trusted-publishing]
    |
 11 |       - run: cargo publish
-   |              ^~~~~
+   |              ^~~~~~~~~~~~~
 ```
 
 [Playground](https://jactionlint.jdx.dev/#eNo0zD2qwzAQxPFepxhcPtAFdJVHCnlZFAexK/YjkNsHx7iaYv78VFoBVvrzXCD68Ib/7f23PQqpUJqx0Od8h2muBuPJ3bkA1IV41kPqMh3G7g1hyeWlu1/uPo+bthSvKg25p0TW2YM9fpcHL78qoJ5lA3UbegvfAQA6LzT4)
@@ -7109,7 +7108,7 @@ Output:
 test.yaml:3:17: workflow "PR checks" specified at "workflows" of "workflow_run" event is not found in the repository. a workflow is specified by its "name:" or its file path when it has no name [workflow-run]
   |
 3 |     workflows: [PR checks]
-  |                 ^~
+  |                 ^~~~~~~~~
 test.yaml:9:15: this step downloads an artifact of the run that triggered the workflow, which ran the code of a pull request, and the step at line 15 writes its content to $GITHUB_ENV without validating its content first. the artifact is whatever the pull request wanted, and this workflow has a write token and secrets. match the content against a strict pattern (for example digits only) before you use it, and never run or extract it [untrusted-artifact]
   |
 9 |       - uses: actions/download-artifact@v4
@@ -7117,7 +7116,7 @@ test.yaml:9:15: this step downloads an artifact of the run that triggered the wo
 test.yaml:15:45: a value that is not a literal is written to $GITHUB_ENV in a workflow triggered by "workflow_run", which runs with secrets and a write token for events that may come from a fork. an attacker who controls the value can set LD_PRELOAD or NODE_OPTIONS (a newline adds another variable) and run code in the next steps. write only literal values and values computed from trusted sources, or pass state with $GITHUB_OUTPUT [github-env]
    |
 15 |       - run: echo "number=$(cat pr/number)" >> "$GITHUB_ENV"
-   |                                             ^~
+   |                                             ^~~~~~~~~~~~~~~~
 ```
 
 <!-- Skip playground link -->

@@ -61,6 +61,11 @@ type exprOccurrence struct {
 	Cond bool
 
 	baseLine, baseCol int
+	// valueOff is the byte offset in Str.Value where the text of the expression starts, and text is
+	// the rest of the value from there. They give the exact position of a token when the string
+	// knows where it is written in the file.
+	valueOff int
+	text     string
 }
 
 // PosOf returns the position in the source of the node.
@@ -68,6 +73,9 @@ func (o *exprOccurrence) PosOf(n ExprNode) *Pos {
 	t := n.Token()
 	if t == nil {
 		return o.Str.Pos
+	}
+	if l, c, ok := o.Str.valueAt(o.valueOff + exprTextOffset(o.text, t.Line, t.Column)); ok {
+		return &Pos{Line: l, Col: c}
 	}
 	p := &Pos{Line: t.Line - 1 + o.baseLine, Col: t.Column - 1 + o.baseCol}
 	if t.Line > 1 && o.Str.Indent > 0 {
@@ -88,7 +96,7 @@ func scanExpressions(s *String, cond bool, f func(o *exprOccurrence)) {
 		if err != nil || expr == nil {
 			return
 		}
-		o := &exprOccurrence{Root: expr, Str: s, Cond: true, baseLine: s.Pos.Line, baseCol: s.Pos.Col}
+		o := &exprOccurrence{Root: expr, Str: s, Cond: true, baseLine: s.Pos.Line, baseCol: s.Pos.Col, text: s.Value}
 		if s.Indent > 0 {
 			// The content of a literal block starts on the line after the "|"
 			o.baseLine, o.baseCol = s.Pos.Line+1, s.Indent+1
@@ -123,7 +131,7 @@ func scanExpressions(s *String, cond bool, f func(o *exprOccurrence)) {
 		if err != nil || expr == nil {
 			return
 		}
-		f(&exprOccurrence{Root: expr, Str: s, Cond: cond, baseLine: l, baseCol: c})
+		f(&exprOccurrence{Root: expr, Str: s, Cond: cond, baseLine: l, baseCol: c, valueOff: offset, text: rest})
 		n := lex.Offset()
 		if n == 0 {
 			return

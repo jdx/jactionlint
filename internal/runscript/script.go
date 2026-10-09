@@ -16,9 +16,10 @@
 // Every node has a [Loc] with byte offsets and a line/column inside the script. [Script.Position] maps that to
 // a position in the YAML file given the [Origin] of the `run:` string:
 //
-//   - literal blocks (`run: |`, `|-`, `|+`) map exactly when the indentation is known (Origin.Indent > 0);
-//   - folded blocks (`>`), plain and quoted scalars map approximately. Single-line scalars without escapes are
-//     in practice right, folded blocks can be off by the lines the YAML parser merged.
+//   - when the origin has a Locate function (the jactionlint AST gives one for every scalar it parsed from a file),
+//     the position is exact for every style of scalar: escapes, folded lines and block scalars are followed;
+//   - otherwise literal blocks (`run: |`, `|-`, `|+`) map exactly when the indentation is known (Origin.Indent > 0),
+//     and folded blocks (`>`), plain and quoted scalars map approximately.
 package runscript
 
 import (
@@ -313,18 +314,27 @@ type Origin struct {
 	Indent int
 	// Quoted is whether the string is a quoted scalar.
 	Quoted bool
+	// Locate, when set, maps a byte offset of the script to its line and column (in code points) in the
+	// YAML file, following the escapes, the folded lines and the indentation of the scalar. It is exact,
+	// so it is used instead of the estimate below whenever it knows the offset.
+	Locate func(offset int) (line, col int, ok bool)
 }
 
 // Position is a position in the YAML file.
 type Position struct {
 	Line, Col int
 	// Exact is true when the position is guaranteed to be the position of the text in the file: literal blocks
-	// with a known indentation. Otherwise it is a best effort which can be off.
+	// with a known indentation, or whatever Origin.Locate gave. Otherwise it is a best effort which can be off.
 	Exact bool
 }
 
 // Position maps a byte offset of the script to a position in the YAML file.
 func (s *Script) Position(o Origin, offset int) Position {
+	if o.Locate != nil {
+		if line, col, ok := o.Locate(offset); ok {
+			return Position{line, col, true}
+		}
+	}
 	l := s.loc(offset, offset)
 	return o.Map(l.Line, l.Col)
 }

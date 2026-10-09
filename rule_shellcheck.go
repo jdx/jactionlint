@@ -5,14 +5,18 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"unicode/utf8"
 )
 
 type shellcheckError struct {
-	Line    int    `json:"line"`
-	Column  int    `json:"column"`
-	Level   string `json:"level"`
-	Code    int    `json:"code"`
-	Message string `json:"message"`
+	Line   int `json:"line"`
+	Column int `json:"column"`
+	// EndLine and EndColumn are the end of the region; the column is the one just after it.
+	EndLine   int    `json:"endLine"`
+	EndColumn int    `json:"endColumn"`
+	Level     string `json:"level"`
+	Code      int    `json:"code"`
+	Message   string `json:"message"`
 }
 
 // RuleShellcheck is a rule to check shell scripts at 'run:' using shellcheck.
@@ -256,14 +260,81 @@ func (rule *RuleShellcheck) runShellcheck(srcAst *String, shell string, pos *Pos
 			// restorable because the indentation is stripped by the YAML parser, so the column of 'run:'
 			// is used.
 			errorLocation := *pos
-			if mapLines && line >= 1 {
+			var end *Pos
+			if start, e, ok := shellcheckRegion(srcAst, src, err); ok {
+				errorLocation, end = *start, e
+			} else if mapLines && line >= 1 {
 				errorLocation.Line = srcAst.Pos.Line + line
 			}
 			rule.ReportIDf("shellcheck", &errorLocation, "shellcheck reported issue in this script: SC%d:%s:%d:%d: %s", err.Code, err.Level, line, err.Column, msg)
+			if end != nil {
+				rule.errs[len(rule.errs)-1].endAt(end)
+			}
 		}
 
 		return nil
 	})
+}
+
+// shellcheckRegion maps the region which shellcheck reports to the file. The line and the column of
+// shellcheck are in the script it was given: the setup line and then the sanitized text of the string
+// (which is as long as the string, byte for byte), so the region is found in the text and then looked up
+// in the file.
+func shellcheckRegion(str *String, sanitized string, e shellcheckError) (start, end *Pos, ok bool) {
+	if str == nil || str.src == nil || e.Line < 2 {
+		return nil, nil, false
+	}
+	so, ok := shellcheckOffset(sanitized, e.Line-1, e.Column)
+	if !ok {
+		return nil, nil, false
+	}
+	l, c, ok := str.valueAt(so)
+	if !ok {
+		return nil, nil, false
+	}
+	start = &Pos{Line: l, Col: c}
+	eo := so
+	if e.EndLine >= 2 && (e.EndLine > e.Line || e.EndColumn > e.Column) {
+		if o, ok := shellcheckOffset(sanitized, e.EndLine-1, e.EndColumn); ok {
+			eo = o
+		}
+	}
+	if eo <= so && so < len(sanitized) && sanitized[so] != '\n' {
+		_, w := utf8.DecodeRuneInString(sanitized[so:])
+		eo = so + w // a region is at least one character
+	}
+	l, c, ok = str.valueAt(eo)
+	if !ok {
+		return start, nil, true
+	}
+	return start, &Pos{Line: l, Col: c}, true
+}
+
+// shellcheckOffset returns the byte offset in the text of the 1-based line and column of shellcheck. Its
+// columns count the characters of a line, and a tab moves to the next multiple of 8 (plus one).
+func shellcheckOffset(text string, line, col int) (int, bool) {
+	off := 0
+	for l := 1; l < line; l++ {
+		i := strings.IndexByte(text[off:], '\n')
+		if i < 0 {
+			return 0, false
+		}
+		off += i + 1
+	}
+	c := 1
+	for off < len(text) && text[off] != '\n' {
+		if c >= col {
+			break
+		}
+		r, w := utf8.DecodeRuneInString(text[off:])
+		if r == '\t' {
+			c += 8 - (c-1)%8
+		} else {
+			c++
+		}
+		off += w
+	}
+	return off, true
 }
 
 func init() {

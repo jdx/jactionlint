@@ -323,7 +323,9 @@ func TestTemplateInjectionFixes(t *testing.T) {
 		{
 			name: "yaml quoted string keeps working",
 			step: "      - run: \"echo \\\"${{ github.event.issue.title }}\\\"\"\n",
-			safe: "      - run: \"echo \\\"${{ github.event.issue.title }}\\\"\"\n", // escapes before the expression: left alone
+			// the position of the expression after the escapes is exact, so the fix applies
+			safe:   "      - run: \"echo \\\"${ISSUE_TITLE}\\\"\"\n        env:\n          ISSUE_TITLE: ${{ github.event.issue.title }}\n",
+			unsafe: "      - run: \"echo \\\"${ISSUE_TITLE}\\\"\"\n        env:\n          ISSUE_TITLE: ${{ github.event.issue.title }}\n",
 		},
 		{
 			name:   "bracket test",
