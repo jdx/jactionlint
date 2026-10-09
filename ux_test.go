@@ -418,7 +418,7 @@ func TestRunHintAfterManyFindings(t *testing.T) {
 
 	t.Setenv("CI", "true")
 	_, errOut := run("--profile", "default")
-	for _, want := range []string{"note: ", " findings in 1 file.", "--format summary", "--baseline-write", "--profile correctness", "--no-hints"} {
+	for _, want := range []string{"note: ", " findings in 1 file.", "--format summary", "rule ID", "--baseline-write", "--profile correctness", "--no-hints"} {
 		if !strings.Contains(errOut, want) {
 			t.Errorf("the hint must contain %q: %q", want, errOut)
 		}
@@ -517,5 +517,27 @@ func TestUTF16FileGetsOneInvisibleCharactersFinding(t *testing.T) {
 	}
 	if errs := checkInvisibleCharacters([]byte("\xEF\xBB\xBF"+text), mustParseConfig(t, "rules:\n  invisible-characters: error\n")); len(errs) != 0 {
 		t.Errorf("a UTF-8 byte order mark is not a finding here: %v", errs)
+	}
+}
+
+// An ignore pattern which is the legacy kind of a finding is no rule ID: a warning names the IDs.
+func TestIgnoreLegacyKindWarns(t *testing.T) {
+	cfg := mustParseConfig(t, "profile: default\n")
+	l, err := NewLinter(io.Discard, &LinterOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	l.defaultConfig = cfg
+	pat, err := ParseIgnorePattern("timeout-check")
+	if err != nil {
+		t.Fatal(err)
+	}
+	l.ignorePats = IgnorePatterns{pat}
+	if _, err := l.Lint("test.yaml", []byte("on: push\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo\n"), nil); err != nil {
+		t.Fatal(err)
+	}
+	notes := strings.Join(l.notifications(), "\n")
+	if !strings.Contains(notes, `"timeout-check" is a legacy kind`) || !strings.Contains(notes, "missing-timeout") {
+		t.Errorf("want a warning naming the rule ID: %q", notes)
 	}
 }

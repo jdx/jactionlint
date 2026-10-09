@@ -82,7 +82,7 @@ cat action.yml | jactionlint --stdin-filename action.yml -
 | --- | --- | --- |
 | `--format=FORMAT` | `-f` | Output format: text (default), oneline, json, jsonl, sarif, gcc, github, summary, or a Go template containing `{{ }}` |
 | `--oneline` |  | One line per finding; same as --format oneline |
-| `--rule-ids` |  | Show the rule ID instead of the kind at the end of each finding in text output |
+| `--rule-ids` |  | Accepted for compatibility. The text output always shows the rule ID at the end of each finding |
 | `--color[=WHEN]` |  | Colorize the output: always, never or auto (default). Bare --color means always |
 | `--no-color` |  | Same as --color=never |
 | `--no-hints` |  | Do not print the hint line after a text run with many findings |
@@ -171,7 +171,7 @@ about 60 findings, all of them errors). When a text run finds 20 or more finding
 what to do next, for example:
 
 ```
-note: 132 findings in 14 files. see --format summary for the counts per rule; adopt the checks gradually with --baseline-write; for the checks of actionlint only use --profile correctness. silence this note with --no-hints or JACTIONLINT_NO_HINTS=1
+note: 132 findings in 14 files. see --format summary for the counts per rule; the name at the end of a finding is its rule ID, which --ignore, the config and ignore comments accept; adopt the checks gradually with --baseline-write; for the checks of actionlint only use --profile correctness. silence this note with --no-hints or JACTIONLINT_NO_HINTS=1
 ```
 
 It is shown only when stderr is a terminal or the process runs in CI (`CI` or `GITHUB_ACTIONS` is set), never with `--format json`,
@@ -182,8 +182,7 @@ file); without it only `jactionlint --baseline` reads the file.
 
 ### Ignore some errors
 
-Every error has a stable [rule ID](rules.md) such as `unpinned-uses`. `--rule-ids` shows it at the end of each error instead of the
-kind, and the `id` field of `--format json` and the `ruleId` of `--format sarif` have it.
+Every error has a stable [rule ID](rules.md) such as `unpinned-uses`. The text output shows it at the end of each error (`--rule-ids` is accepted and does nothing), and the `id` field of `--format json` and the `ruleId` of `--format sarif` have it.
 
 ```
 .github/workflows/ci.yaml:12:15: action "actions/checkout@v4" must be pinned to a full-length commit SHA ... [unpinned-uses]
@@ -291,8 +290,7 @@ the structured formats goes to stdout and the logs (including the deprecation wa
 output can be piped to other tools safely.
 
 The text format of errors is the same as in the former versions. An error whose level is lowered to `warn` or `info` in
-[the configuration](config.md#rules) has `warning: ` or `info: ` before the message. `--rule-ids` shows the rule ID instead of
-the kind at the end of the line.
+[the configuration](config.md#rules) has `warning: ` or `info: ` before the message. The rule ID, not the legacy kind, is at the end of the line.
 
 An error object of `json` and `jsonl` has these fields.
 

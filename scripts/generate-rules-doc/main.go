@@ -46,7 +46,7 @@ func generate(w io.Writer) error {
 
 Every diagnostic of jactionlint has a stable ID such as ` + "`unpinned-uses`" + `. IDs are never renamed or reused, so they are safe to write in
 [the configuration](./config.md), in [ignore comments](./usage.md#ignore-some-errors) and in CI annotations. The ID of a
-finding is in the ` + "`id`" + ` field of ` + "`--format json`" + `, in the ` + "`ruleId`" + ` of ` + "`--format sarif`" + ` and in the output of ` + "`--rule-ids`" + `.
+finding is in the ` + "`id`" + ` field of ` + "`--format json`" + `, in the ` + "`ruleId`" + ` of ` + "`--format sarif`" + ` and at the end of each finding of the text format.
 
 Each rule has:
 

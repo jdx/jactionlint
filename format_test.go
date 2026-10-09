@@ -97,15 +97,15 @@ func TestTextFormats(t *testing.T) {
 
 	// The text format of errors keeps the former output
 	out, _ := lintFormat(t, "", LinterOptions{}, nil, formatTestFile)
-	want := `testdata/format/test.yaml:3:5: unexpected key "branch" for "push" section. expected one of "branches", "branches-ignore", "paths", "paths-ignore", "tags", "tags-ignore", "types", "workflows" [syntax-check]
+	want := `testdata/format/test.yaml:3:5: unexpected key "branch" for "push" section. expected one of "branches", "branches-ignore", "paths", "paths-ignore", "tags", "tags-ignore", "types", "workflows" [workflow-syntax]
   |
 3 |     branch: main
   |     ^~~~~~~
-testdata/format/test.yaml:9:23: property "msg" is not defined in object type {} [expression]
+testdata/format/test.yaml:9:23: property "msg" is not defined in object type {} [undefined-property]
   |
 9 |       - run: echo ${{ matrix.msg }}
   |                       ^~~~~~~~~~
-testdata/format/test.yaml:10:9: unexpected key "with" for step to run shell command. expected one of "background", "continue-on-error", "env", "id", "if", "name", "run", "shell", "timeout-minutes", "working-directory" [syntax-check]
+testdata/format/test.yaml:10:9: unexpected key "with" for step to run shell command. expected one of "background", "continue-on-error", "env", "id", "if", "name", "run", "shell", "timeout-minutes", "working-directory" [workflow-syntax]
    |
 10 |         with:
    |         ^~~~~
@@ -121,7 +121,7 @@ testdata/format/test.yaml:10:9: unexpected key "with" for step to run shell comm
 		t.Error("--format text must be the same as the default")
 	}
 
-	// Levels other than error are prefixed. The rule IDs can be shown
+	// Levels other than error are prefixed. --rule-ids changes nothing
 	out, _ = lintFormat(t, "", LinterOptions{ShowRuleIDs: true}, cfg, formatTestFile)
 	for _, w := range []string{
 		`: warning: unexpected key "branch"`, `[workflow-syntax]`,
@@ -133,6 +133,9 @@ testdata/format/test.yaml:10:9: unexpected key "with" for step to run shell comm
 	}
 	if strings.Contains(out, "[syntax-check]") || strings.Contains(out, "[expression]") {
 		t.Errorf("kinds must be replaced by IDs:\n%s", out)
+	}
+	if !strings.Contains(explicit, "[workflow-syntax]") || strings.Contains(explicit, "[syntax-check]") {
+		t.Errorf("the text format shows the rule ID without any option:\n%s", explicit)
 	}
 
 	// oneline: --oneline and --format oneline

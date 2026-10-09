@@ -23,7 +23,7 @@ If you want the new checks without a wall of findings on day one, record today's
 | [Rule IDs](#rule-ids-and-aliases) | Every finding has a stable ID such as `unpinned-uses`, usable in config, `--ignore` and ignore comments. |
 | [Config](#config) | `profile:`, `rules:` and `extends:` replace the booleans. Unknown keys are errors. |
 | [Exit codes](#exit-codes-and-severity) | Only `error` findings make the exit status 1. |
-| [Output formats](#output-formats) | `sarif`, `gcc`, `github`, `jsonl`, `summary` and `--rule-ids` are new. The text format is unchanged. |
+| [Output formats](#output-formats) | `sarif`, `gcc`, `github`, `jsonl`, `summary` and `--rule-ids` are new. The text format is the same except that the label at the end of a line is the rule ID instead of the kind. |
 | [`--fix`](#fix) | Many rules have a fix. `--fix` converges, checks each pass and has `--diff` and `--fix-rules`. |
 | [Baseline](#baseline) | `--baseline-write` and `--baseline` adopt the checks step by step. |
 | [Durable ignores](#durable-ignores-and-ignore-comments) | `ignores:` in the config accepts findings by rule, file, job, step and `uses:`, with an expiry. |
@@ -94,7 +94,7 @@ All options, with what each replaces. Environment variables and config keys are 
 | `--stdin-filename` |  | `NAME` | `-stdin-filename` | File name used in the output when reading stdin (default `<stdin>`) |
 | `--format` | `-f` | `FORMAT` | `-format` | Output format: text (default), oneline, json, jsonl, sarif, gcc, github, summary, or a Go template containing `{{ }}` |
 | `--oneline` |  |  | `-oneline` | One line per finding; same as --format oneline |
-| `--rule-ids` |  |  | `-rule-ids` | Show the rule ID instead of the kind at the end of each finding in text output |
+| `--rule-ids` |  |  | `-rule-ids` | Accepted for compatibility. The text output always shows the rule ID at the end of each finding |
 | `--color` |  | `WHEN` (only as `--color=WHEN`) | `-color` | Colorize the output: always, never or auto (default). Bare --color means always |
 | `--no-color` |  |  | `-no-color` | Same as --color=never |
 | `--no-hints` |  |  | `-no-hints` | Do not print the hint line after a text run with many findings |
@@ -130,7 +130,7 @@ All options, with what each replaces. Environment variables and config keys are 
 
 ## Rule IDs and aliases
 
-Every finding has a stable kebab-case ID. `--rule-ids` shows it at the end of the line instead of the legacy `kind`, and it is the
+Every finding has a stable kebab-case ID. The text output shows it at the end of the line instead of the legacy `kind` (`--rule-ids` is accepted and does nothing), and it is the
 `id` of `--format json`, the `ruleId` of `--format sarif`, the `title` of `--format github` and the last word of `--format gcc`. The
 list of the 131 rules, with group, level and profile, is [generated](rules.md). IDs are never renamed or reused.
 

@@ -46,7 +46,7 @@ var cliOptions = []cliOption{
 
 	{"Output", "format", "f", "FORMAT", false, "-format", "Output format: text (default), oneline, json, jsonl, sarif, gcc, github, summary, or a Go template containing {{ }}"},
 	{"Output", "oneline", "", "", false, "-oneline", "One line per finding; same as --format oneline"},
-	{"Output", "rule-ids", "", "", false, "-rule-ids", "Show the rule ID instead of the kind at the end of each finding in text output"},
+	{"Output", "rule-ids", "", "", false, "-rule-ids", "Accepted for compatibility. The text output always shows the rule ID at the end of each finding"},
 	{"Output", "color", "", "WHEN", true, "-color", "Colorize the output: always, never or auto (default). Bare --color means always"},
 	{"Output", "no-color", "", "", false, "-no-color", "Same as --color=never"},
 	{"Output", "no-hints", "", "", false, "-no-hints", "Do not print the hint line after a text run with many findings"},

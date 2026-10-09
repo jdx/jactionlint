@@ -192,7 +192,8 @@ func (e *Error) PrettyPrint(w io.Writer, source []byte) {
 	e.prettyPrint(w, x, false)
 }
 
-// prettyPrint is PrettyPrint which can show the rule ID instead of the kind. The output format of an
+// prettyPrint is PrettyPrint which can show the rule ID instead of the kind. The command line does; the
+// exported method keeps the kind of the library API of actionlint. The output format of an
 // error of error level is the one of the former versions. Errors of the other levels are prefixed
 // with their level so that they can be told apart from errors.
 func (e *Error) prettyPrint(w io.Writer, x *lineIndex, showID bool) {
@@ -210,6 +211,8 @@ func (e *Error) prettyPrint(w io.Writer, x *lineIndex, showID bool) {
 		prefix = "info: "
 	}
 	bold.Fprint(w, prefix+e.Message)
+	// The ID is what the configuration, --ignore and the ignore comments accept. The kind is shared by
+	// several rules ("action", "expression") or is no ID at all ("timeout-check")
 	label := e.Kind
 	if showID && e.ID != "" {
 		label = e.ID

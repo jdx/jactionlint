@@ -577,7 +577,7 @@ func TestDependabotOutputFormats(t *testing.T) {
 
 	t.Run("text", func(t *testing.T) {
 		_, out := lintRepo(t, root, LinterOptions{})
-		want := ".github/dependabot.yml:7:7: unexpected key \"dayy\" for \"schedule\" section. expected one of \"cronjob\", \"day\", \"interval\", \"time\", \"timezone\" [syntax-check]\n" +
+		want := ".github/dependabot.yml:7:7: unexpected key \"dayy\" for \"schedule\" section. expected one of \"cronjob\", \"day\", \"interval\", \"time\", \"timezone\" [dependabot-syntax]\n" +
 			"  |\n7 |       dayy: monday\n  |       ^~~~~\n"
 		if filepath.Separator == '/' && out != want {
 			t.Errorf("unexpected output:\n%s", out)

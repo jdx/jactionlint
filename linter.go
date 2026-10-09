@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"slices"
 	"sort"
@@ -65,8 +66,9 @@ type LinterOptions struct {
 	// line. It is useful when reading outputs from programs. It is the same as setting Format to
 	// "oneline" and it only affects the text format.
 	Oneline bool
-	// ShowRuleIDs makes the text format show the stable rule ID such as "unpinned-uses" at the end of
-	// each error instead of the kind such as "action".
+	// ShowRuleIDs is accepted for compatibility. The text format always shows the stable rule ID such as
+	// "unpinned-uses" at the end of each error, since that is what the configuration, the ignore
+	// comments and ignore patterns accept; the kind such as "action" is shared by several rules.
 	ShowRuleIDs bool
 	// Shellcheck is executable for running shellcheck external command. It can be command name like
 	// "shellcheck" or file path like "/path/to/shellcheck", "path/to/shellcheck". When this value
@@ -283,7 +285,7 @@ func NewLinter(out io.Writer, opts *LinterOptions) (*Linter, error) {
 		}
 		formatter = f
 	}
-	prn, err := newPrinter(opts.Format, opts.Oneline, opts.ShowRuleIDs, opts.SARIFHideBaselined, formatter)
+	prn, err := newPrinter(opts.Format, opts.Oneline, opts.SARIFHideBaselined, formatter)
 	if err != nil {
 		return nil, &usageError{err}
 	}
@@ -937,6 +939,13 @@ func (l *Linter) finishCheck(path string, content []byte, all []*Error, cfg *Con
 	for _, e := range orphans {
 		l.warnRetiredIgnores(e.pat)
 	}
+	var inlinePats IgnorePatterns
+	for _, ig := range inlineIgnores {
+		for _, e := range ig.entries {
+			inlinePats = append(inlinePats, e.pat)
+		}
+	}
+	l.warnKindPatterns(all, inlinePats)
 	inlineIgnores = append(inlineIgnores, parseZizmorIgnores(content)...)
 	all = l.filterInlineIgnores(all, inlineIgnores)
 	all = dropIgnored(all, cfgHit)
@@ -991,6 +1000,11 @@ func (l *Linter) filterErrors(errs []*Error, cfgs []PathConfig) []*Error {
 		return errs
 	}
 
+	l.warnKindPatterns(errs, l.ignorePats)
+	for _, c := range cfgs {
+		l.warnKindPatterns(errs, c.Ignore)
+	}
+
 	filtered := make([]*Error, 0, len(errs))
 Loop:
 	for _, err := range errs {
@@ -1010,6 +1024,31 @@ Loop:
 		l.log("Filtered", len(errs)-len(filtered), "error(s) due to \"--ignore\" command line option and \"ignore\" configuration")
 	}
 	return filtered
+}
+
+var kindWordRe = regexp.MustCompile(`^[a-z][a-z0-9-]*$`)
+
+// warnKindPatterns warns about an ignore pattern which is the legacy kind of some findings ("timeout-check",
+// "action") instead of a rule ID. Such a pattern is a regular expression on the messages, which the kind is
+// not part of, so it ignores nothing, and the kind is what former versions printed at the end of a finding.
+func (l *Linter) warnKindPatterns(errs []*Error, pats IgnorePatterns) {
+	for _, p := range pats {
+		if p.Regexp == nil || !kindWordRe.MatchString(p.Regexp.String()) {
+			continue
+		}
+		kind := p.Regexp.String()
+		var ids []string
+		for _, e := range errs {
+			if e.Kind == kind && e.ID != "" && e.ID != kind && !slices.Contains(ids, e.ID) {
+				ids = append(ids, e.ID)
+			}
+		}
+		if len(ids) == 0 {
+			continue
+		}
+		slices.Sort(ids)
+		l.warnOnce(fmt.Sprintf("the ignore pattern %q is a legacy kind, not a rule ID, so it is a regular expression on the messages, and it matches only a message that contains this text. use a rule ID: %s", kind, strings.Join(ids, ", ")))
+	}
 }
 
 // warnDeprecations reports the deprecated keys of the config to the log output. It reports each

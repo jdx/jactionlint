@@ -73,12 +73,12 @@ func structured(p printer) bool {
 }
 
 // newPrinter creates the printer for the format. A format with "{{" is a Go template.
-func newPrinter(format string, oneline, showIDs, hideBaselined bool, tmpl *ErrorFormatter) (printer, error) {
+func newPrinter(format string, oneline, hideBaselined bool, tmpl *ErrorFormatter) (printer, error) {
 	switch format {
 	case "", FormatText:
-		return textPrinter{oneline: oneline, showIDs: showIDs}, nil
+		return textPrinter{oneline: oneline}, nil
 	case FormatOneline:
-		return textPrinter{oneline: true, showIDs: showIDs}, nil
+		return textPrinter{oneline: true}, nil
 	case FormatJSON:
 		return jsonPrinter{}, nil
 	case FormatJSONL:
@@ -106,7 +106,7 @@ func isTemplateFormat(format string) bool {
 // --- text -----------------------------------------------------------------------------------
 
 type textPrinter struct {
-	oneline, showIDs bool
+	oneline bool
 }
 
 func (p textPrinter) print(w io.Writer, results []fileResult, _ []string) error {
@@ -116,7 +116,7 @@ func (p textPrinter) print(w io.Writer, results []fileResult, _ []string) error 
 			x = newLineIndex(r.src)
 		}
 		for _, e := range r.errs {
-			e.prettyPrint(w, x, p.showIDs)
+			e.prettyPrint(w, x, true)
 		}
 	}
 	return nil

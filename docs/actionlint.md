@@ -85,7 +85,7 @@ a key it does not know, so a file shared by both tools can keep `profile: correc
 | Deprecated workflow commands | `deprecated-commands` |
 | Ignore comments | `invalid-ignore-comment`, `expired-ignore` |
 
-[The list of rules](rules.md) has the group, level and profile of each. A finding prints its ID with `--rule-ids`, and the
+[The list of rules](rules.md) has the group, level and profile of each. A finding prints its ID at the end of the line, and the
 `id` field of `--format json` and the `ruleId` of `--format sarif` carry it. `--format` templates written for actionlint keep working:
 the fields of an error are the same, and `kind` is still there.
 
