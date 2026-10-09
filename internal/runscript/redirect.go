@@ -269,6 +269,7 @@ func (b *builder) finishPipelines() {
 				cs, ce = b.off(st.Cmd.Pos()), b.offEnd(st.Cmd.End())
 			}
 			stage := &Stage{Loc: b.s.loc(start, end), Commands: b.directCommands(cs, ce)}
+			b.clearOverwrittenAndOnly(st)
 			pp.p.Stages = append(pp.p.Stages, stage)
 			idx := len(pp.p.Stages) - 1
 			for _, c := range stage.Commands {
@@ -276,6 +277,32 @@ func (b *builder) finishPipelines() {
 			}
 		}
 	}
+}
+
+// clearOverwrittenAndOnly clears AndOnly for the commands of the stage which are in a `{ }` group or `( )` subshell
+// of the stage, in a statement which is not the last one of the group. The status of the group is the status of its
+// last statement, so a later statement overwrites the failure of the `&&` list.
+func (b *builder) clearOverwrittenAndOnly(stage *syntax.Stmt) {
+	syntax.Walk(stage, func(n syntax.Node) bool {
+		var stmts []*syntax.Stmt
+		switch g := n.(type) {
+		case *syntax.Block:
+			stmts = g.Stmts
+		case *syntax.Subshell:
+			stmts = g.Stmts
+		}
+		for i := 0; i+1 < len(stmts); i++ {
+			syntax.Walk(stmts[i], func(m syntax.Node) bool {
+				if call, ok := m.(*syntax.CallExpr); ok {
+					if c := b.cmds[call]; c != nil {
+						c.AndOnly = false
+					}
+				}
+				return true
+			})
+		}
+		return true
+	})
 }
 
 // aliases records `NAME=$VAR` assignments so that `>> $NAME` can be resolved to VAR.
