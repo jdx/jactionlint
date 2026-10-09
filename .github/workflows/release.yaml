@@ -152,16 +152,23 @@ jobs:
           fetch-depth: 0
           # main is protected: pushing the version bump commit needs the PAT, GITHUB_TOKEN cannot bypass it
           token: ${{ secrets.RELEASE_PLZ_TOKEN }}
-      - name: Update version in download script
+      # The docs cannot be bumped by the release pull request: they would name a tag which does not exist until this
+      # workflow has published the release. So the version bump commit after the release updates them, together with
+      # the default of the download script.
+      - name: Update version in download script and docs
         run: |
           set -x
           cd ./tmp-jactionlint-for-update-ver
           # -i.bak works with both GNU and BSD sed (this runs on macOS)
           sed -i.bak -E "s/version=\"[0-9]+\\.[0-9]+\\.[0-9]+\"/version=\"${VERSION}\"/" ./scripts/download-jactionlint.bash
           rm ./scripts/download-jactionlint.bash.bak
+          # The example of the action in the usage document names the latest release
+          sed -i.bak -E "s#(- uses: jdx/jactionlint@v)[0-9]+\.[0-9]+\.[0-9]+#\1${VERSION}#" ./docs/usage.md
+          rm ./docs/usage.md.bak
+          grep -q "uses: jdx/jactionlint@v${VERSION}" ./docs/usage.md
           git diff
-          git add ./scripts/download-jactionlint.bash
-          git -c user.email='41898282+github-actions[bot]@users.noreply.github.com' -c user.name='github-actions[bot]' commit -m "update version to $VERSION in download-jactionlint.bash"
+          git add ./scripts/download-jactionlint.bash ./docs/usage.md
+          git -c user.email='41898282+github-actions[bot]@users.noreply.github.com' -c user.name='github-actions[bot]' commit -m "update version to $VERSION in download-jactionlint.bash and the action example"
           git log -n 1
           git push
   docker:

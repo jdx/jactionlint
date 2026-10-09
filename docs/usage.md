@@ -841,7 +841,7 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           persist-credentials: false
-      - uses: jdx/jactionlint@v1.8.2  # x-release-please-version
+      - uses: jdx/jactionlint@v2.0.0
 ```
 
 Pin the action to a commit hash, like any other, if you want it immutable. These inputs are available:
