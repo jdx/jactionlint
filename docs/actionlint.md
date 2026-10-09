@@ -89,6 +89,16 @@ a key it does not know, so a file shared by both tools can keep `profile: correc
 `id` field of `-format json` and the `ruleId` of `-format sarif` carry it. `-format` templates written for actionlint keep working:
 the fields of an error are the same, and `kind` is still there.
 
+## Where findings are reported differently
+
+**shellcheck findings are reported at the line of the script where the problem is**, not at the line of the `run:` key
+as actionlint does. For a `run: |` script of five lines, a problem in its fourth line is reported at the line of that line (and the
+column of the problem), so an annotation lands on the code. If you compare the output of the two tools by position, or have a tool
+that maps findings to lines, expect the line numbers of these findings to move. Nothing else changes for them: the message is the
+same, `-ignore` patterns and `paths:` ignores match the message as before, and an [ignore comment](usage.md#ignore-some-errors) above
+or at the end of the first line of a step covers the whole step, scripts included, so it keeps working. A [baseline](usage.md#baseline)
+is written by jactionlint itself and has no line numbers, so it is not affected.
+
 ## What is stricter than actionlint
 
 The `correctness` profile also has bug detectors that actionlint does not: `unsound-ternary` (`a && b || c` where `b` can be
