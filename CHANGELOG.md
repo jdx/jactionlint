@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.0.1](https://github.com/jdx/jactionlint/compare/v2.0.0...v2.0.1) (2026-10-09)
+
+
+### Bug Fixes
+
+* **ci:** build the man page with ronn-ng in the release workflow ([#109](https://github.com/jdx/jactionlint/issues/109)) ([b18d845](https://github.com/jdx/jactionlint/commit/b18d845addef349d2648723cef51c8af2d77d2a2))
+
 ## [2.0.0](https://github.com/jdx/jactionlint/compare/v1.8.2...v2.0.0) (2026-10-09)
 
 

@@ -13,7 +13,7 @@
   language: docker_image
   types: ["yaml"]
   files: ^\.github/workflows/
-  entry: ghcr.io/jdx/jactionlint:2.0.0  # x-release-please-version
+  entry: ghcr.io/jdx/jactionlint:2.0.1  # x-release-please-version
 - id: jactionlint-system
   name: Lint GitHub Actions workflow files
   description: Runs system-installed jactionlint to lint GitHub Actions workflow files
