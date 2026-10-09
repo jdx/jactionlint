@@ -237,6 +237,10 @@ func isLiteralBranch(p string) bool {
 }
 
 // VisitWorkflowPre is callback when visiting Workflow node before visiting its children.
+// callerEvent stands for the event of the caller of a reusable workflow in a scenario. github.event_name is
+// the caller's event, which is not known here, so the scenario has to leave it unknown for the expressions.
+const callerEvent = ""
+
 func (rule *RuleConcurrencyCancelsRelease) VisitWorkflowPre(n *Workflow) error {
 	rule.scenarios, rule.wf = nil, n
 	if !rule.Config().RuleEnabled("concurrency-cancels-release") {
@@ -259,7 +263,7 @@ func (rule *RuleConcurrencyCancelsRelease) VisitWorkflowPre(n *Workflow) error {
 			rule.scenarios = append(rule.scenarios, releaseScenario{scenario{event: name}, false, true, "manual runs"})
 		case "workflow_call":
 			// github.event_name is the event of the caller, which is not known here
-			rule.scenarios = append(rule.scenarios, releaseScenario{scenario{}, false, false, "calls from other workflows"})
+			rule.scenarios = append(rule.scenarios, releaseScenario{scenario{event: callerEvent}, false, false, "calls from other workflows"})
 		default:
 			rule.scenarios = append(rule.scenarios, releaseScenario{scenario{event: name}, false, false, fmt.Sprintf("%q events", name)})
 		}
@@ -341,7 +345,7 @@ func groupIsScopedToRelease(refs []exprRef, event string) bool {
 			if refCovers(r.chain, []string{"github", "event", "release"}) {
 				return true
 			}
-		case "workflow_dispatch", "workflow_call":
+		case "workflow_dispatch", callerEvent:
 			for _, d := range [][]string{{"github", "event", "inputs"}, {"inputs"}} {
 				if refCovers(r.chain, d) {
 					return true

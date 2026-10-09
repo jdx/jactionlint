@@ -89,7 +89,7 @@ func (rule *RuleGateJobSkippedOnFailure) VisitJobPre(n *Job) error {
 // to see a failure.
 func isSuccessComparison(r exprRef) bool {
 	c, ok := r.parent.(*CompareOpNode)
-	if !ok || c.Kind != CompareOpNodeKindEq {
+	if !ok || r.negated || c.Kind != CompareOpNodeKindEq {
 		return false
 	}
 	other := c.Right
