@@ -304,6 +304,11 @@ func (c *tiContext) isTrustedRef(path []string) bool {
 //
 // github.actor, SHAs, numbers and the IDs of events stay with isFixedRef: GitHub restricts their characters.
 func (c *tiContext) externalText(path []string) string {
+	// Names of contexts and properties are case insensitive
+	path = slices.Clone(path)
+	for i := range path {
+		path[i] = strings.ToLower(path[i])
+	}
 	switch path[0] {
 	case "inputs":
 		if len(path) == 2 && c.inputIsNotText(path[1]) {
@@ -406,7 +411,7 @@ func (c *tiContext) inputIsNotText(name string) bool {
 	for _, e := range c.wf.On {
 		switch e := e.(type) {
 		case *WorkflowDispatchEvent:
-			if in, ok := e.Inputs[name]; ok {
+			if in, ok := e.Inputs[strings.ToLower(name)]; ok {
 				switch in.Type {
 				case WorkflowDispatchEventInputTypeNumber, WorkflowDispatchEventInputTypeBoolean,
 					WorkflowDispatchEventInputTypeChoice, WorkflowDispatchEventInputTypeEnvironment:
@@ -417,7 +422,7 @@ func (c *tiContext) inputIsNotText(name string) bool {
 			}
 		case *WorkflowCallEvent:
 			for _, in := range e.Inputs {
-				if in.ID == name {
+				if strings.EqualFold(in.ID, name) {
 					if in.Type != WorkflowCallEventInputTypeBoolean && in.Type != WorkflowCallEventInputTypeNumber {
 						return false
 					}

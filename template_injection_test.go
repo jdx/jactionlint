@@ -71,6 +71,8 @@ func TestTemplateInjectionTiers(t *testing.T) {
 		{"tested only", "      - run: echo '${{ github.event_name == 'push' && 'a' || 'b' }}'\n", []string{"template-injection-trusted"}},
 		{"and keeps only its right operand", "      - run: echo '${{ inputs.x && 'a' || 'b' }}'\n", []string{"template-injection-trusted"}},
 		{"or can return its left operand", "      - run: echo '${{ inputs.x || 'b' }}'\n", []string{"template-injection"}},
+		{"mixed case branch name", "      - run: echo '${{ GitHub.Ref_Name }}'\n", []string{"template-injection"}},
+		{"mixed case input", "      - run: echo '${{ Inputs.NAME }}'\n", []string{"template-injection"}},
 		{"unknown context", "      - run: echo '${{ unknown.x }}'\n", nil},
 		{"not a script", "      - name: ${{ github.event.issue.title }}\n        run: echo\n", nil},
 	}
