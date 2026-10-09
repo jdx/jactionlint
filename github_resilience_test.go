@@ -747,3 +747,35 @@ func TestForbiddenForTheTokenIsRetriedWithoutIt(t *testing.T) {
 		t.Errorf("a repository which is blocked for everyone stays a 403: %v", err)
 	}
 }
+
+func TestGHHostnameOfTheAPIHost(t *testing.T) {
+	for api, want := range map[string]string{
+		"api.github.com":   "github.com",
+		"api.acme.ghe.com": "acme.ghe.com",
+		"ghe.example.com":  "ghe.example.com",
+		"api.example.com":  "api.example.com",
+		"127.0.0.1:8080":   "127.0.0.1:8080",
+	} {
+		if got := ghHostname(api); got != want {
+			t.Errorf("ghHostname(%q) = %q, want %q", api, got, want)
+		}
+	}
+}
+
+// A 403 is a per-repository miss: the server answered, so it ends a run of timeouts and server errors.
+func TestForbiddenEndsTheStreakOfFailures(t *testing.T) {
+	s := newOnlineSession(context.Background(), scanErrClient{errors.New("x")}, nil)
+	timeout := &net.OpError{Op: "read", Err: os.ErrDeadlineExceeded}
+	s.record(timeout, "a/a")
+	s.record(timeout, "b/b")
+	s.record(&GitHubStatusError{Status: http.StatusForbidden}, "c/c")
+	s.record(timeout, "d/d")
+	s.record(timeout, "e/e")
+	if err := s.blockedErr(); err != nil {
+		t.Errorf("four timeouts that are not in a row must not skip the rest: %v", err)
+	}
+	s.record(timeout, "f/f")
+	if s.blockedErr() == nil {
+		t.Error("three in a row do")
+	}
+}

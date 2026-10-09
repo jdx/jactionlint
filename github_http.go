@@ -242,9 +242,7 @@ func newDefaultGitHubClient(o defaultClientOptions) (GitHubClient, error) {
 		tokenEnv: o.Options.TokenEnv, tokenFile: o.Options.TokenFile, useGH: useGH,
 		getenv: os.Getenv, readFile: readTokenFileLimited, runGH: runGHAuthToken,
 	}
-	if d.dotCom {
-		d.host = "github.com"
-	}
+	d.host = ghHostname(base.Host)
 	tok, notices := d.discover(ctx)
 	for _, n := range notices {
 		if o.Notify != nil {
@@ -1172,4 +1170,17 @@ func (c *httpGitHubClient) postGraphQL(ctx context.Context, token, query string,
 		}
 	}
 	return c.statusError(res)
+}
+
+// ghHostname is the host the gh command knows an API host by: api.github.com is github.com, and the API of
+// GitHub Enterprise Cloud with data residency, api.SUBDOMAIN.ghe.com, is SUBDOMAIN.ghe.com. The host of a
+// GitHub Enterprise Server is the same for both.
+func ghHostname(apiHost string) string {
+	if apiHost == "api.github.com" {
+		return "github.com"
+	}
+	if h, ok := strings.CutPrefix(apiHost, "api."); ok && strings.HasSuffix(h, ".ghe.com") {
+		return h
+	}
+	return apiHost
 }
