@@ -5140,8 +5140,9 @@ jactionlint reports a pipeline when all of the following hold:
   before the producer is done, which kills it with SIGPIPE. With `pipefail` such a pipeline fails although nothing went wrong,
   so such pipelines are not reported. That holds for a pipeline in the body of a loop as well
   (`for s in a b; do cmd "$s" | grep -Fq x; done`).
-- The script does not read `PIPESTATUS` in the command right after the pipeline (`make | tee log; rc=${PIPESTATUS[0]}`): it
-  looks at the status of every stage itself.
+- The script reads `PIPESTATUS` in the command right after the pipeline, for the stage that hides the failure
+  (`make | tee log; rc=${PIPESTATUS[0]}`) or for all of them (`${PIPESTATUS[@]}`): it looks at the status itself. The word
+  without a `$`, the count `${#PIPESTATUS[@]}` and the status of another stage do not count.
 - The pipeline is not inside a command substitution in the argument of a command (`echo "hash=$(sha256sum f | cut -d' ' -f1)"`):
   the status of the substitution is not the status of anything, so `pipefail` would change nothing. The value of an assignment
   (`hash=$(sha256sum f | cut -d' ' -f1)`) is the status of the assignment, and that pipeline is reported.

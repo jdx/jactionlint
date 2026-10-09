@@ -59,6 +59,8 @@ type RuleGitHubEnv struct {
 	// at is the offset of the script where the value that is judged is read: the write, or the assignment whose
 	// value is judged.
 	at int
+	// errexit is whether the shell of the step stops the script at a failing command (-e).
+	errexit bool
 	// loop is whether the write is in the body of a loop.
 	loop bool
 }
@@ -120,12 +122,13 @@ func (rule *RuleGitHubEnv) checkBash(run *ExecRun) {
 	if s == nil {
 		return
 	}
+	rule.errexit = rule.shellErrexit(run)
 	for _, w := range s.WritesTo("GITHUB_ENV", "GITHUB_PATH") {
 		rule.dest = w.Var
 		rule.at = w.Redirect.Offset
 		rule.loop = false
 		for _, c := range w.Producers {
-			rule.loop = rule.loop || c.LoopBody
+			rule.loop = rule.loop || c.LoopBody || c.InFunc
 		}
 		d := rule.judgeWrite(s, w)
 		rule.report(s, origin, w, d)
@@ -167,12 +170,18 @@ func quote(s string) string { return `"` + s + `"` }
 // judgeWrite judges the data written to the file.
 func (rule *RuleGitHubEnv) judgeWrite(s *runscript.Script, w *runscript.Write) data {
 	d := data{}
+	saved := rule.at
 	for _, c := range w.Producers {
+		// a producer in a group (`{ echo "$V"; V=x; } >> $GITHUB_ENV`) reads the variables where it runs, not
+		// where the redirect of the group is
+		rule.at = min(saved, c.Offset)
 		d = d.worse(rule.judgeCommand(s, c))
 		if d.kind == dataUntrusted {
+			rule.at = saved
 			return d
 		}
 	}
+	rule.at = saved
 	if w.Heredoc != nil {
 		d = d.worse(rule.judgeHeredoc(s, w.Heredoc))
 	}
@@ -246,12 +255,8 @@ var benignSubstitutionCommands = map[string]bool{
 	"arch": true, "dirname": true, "basename": true, "realpath": true,
 }
 
-// benignSubstitution reports whether the word has command substitutions and all their commands are benign. An
-// arithmetic expansion has no commands and is not judged.
-func benignSubstitution(w *runscript.Word) bool {
-	return benignSubs(w.Subs)
-}
-
+// benignSubs reports whether the commands are not empty and all of them are benign. An arithmetic expansion has no
+// commands and is not judged.
 func benignSubs(subs []*runscript.Command) bool {
 	if len(subs) == 0 {
 		return false
@@ -298,7 +303,7 @@ func (rule *RuleGitHubEnv) judgeWord(s *runscript.Script, w *runscript.Word, dep
 	if d.kind == dataUntrusted {
 		return d
 	}
-	if w.Subst && (len(subs) > 0 || len(w.Subs) == 0) && !benignSubstitution(w) {
+	if w.Subst && (len(w.Subs) == 0 || (len(subs) > 0 && !benignSubs(subs))) {
 		d = d.worse(data{kind: dataUnknown})
 	}
 	if w.Glob {
