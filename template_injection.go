@@ -14,26 +14,6 @@ import (
 // expansion into an environment variable. The checks themselves are in rule_expression.go (the
 // contexts known to be attacker controlled) and rule_template_injection.go (everything else).
 
-// codeExecInputs lists the inputs of well-known actions whose value is run as code, like the run:
-// of a step. An expression in them is expanded into the source code just as in a run: script. The
-// keys are lower case owner/repo and the values are lower case input names.
-var codeExecInputs = map[string][]string{
-	"actions/github-script":      {"script"},
-	"amadevus/pwsh-script":       {"script"},
-	"appleboy/ssh-action":        {"script"},
-	"addnab/docker-run-action":   {"options", "run"},
-	"azure/cli":                  {"inlinescript"},
-	"azure/powershell":           {"inlinescript"},
-	"borales/actions-yarn":       {"cmd"},
-	"cardinalby/js-eval-action":  {"expression"},
-	"cypress-io/github-action":   {"build", "command", "install-command", "start"},
-	"devcontainers/ci":           {"runcmd"},
-	"jannekem/run-python-action": {"code"},
-	"mathiasvr/command-output":   {"run"},
-	"matootie/dokku":             {"command"},
-	"nick-fields/retry":          {"command", "on_retry_command"},
-}
-
 // isCodeExecInput reports whether the input of the action given by the uses: value is run as code.
 // The input name must be lower case.
 func isCodeExecInput(uses, input string) bool {

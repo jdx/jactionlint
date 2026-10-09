@@ -72,6 +72,7 @@ List of checks:
 - [Typosquatting of actions (opt-in)](#check-typosquat-uses)
 - [Forbidden actions (opt-in)](#check-forbidden-uses)
 - [Expansions in scripts (opt-in)](#check-template-injection-expansion)
+- [AI agent actions](#check-agentic-actions)
 - [Bots trusted by `github.actor` (opt-in)](#check-bot-conditions)
 - [Obfuscated paths and expressions (opt-in)](#check-obfuscation)
 - [Misfeatures (opt-in)](#check-misfeature)
@@ -1236,8 +1237,12 @@ The rule `template-injection` does not stop at the properties above. It reports 
   `${{ env.TITLE }}`. Reading it as a variable of the shell (`"$TITLE"`) is the fix, and it is what the environment variable is for;
 - inputs of well-known actions which run their value as code are checked like `run:` and the `script` of github-script:
   `command` of nick-fields/retry, `inlineScript` of azure/cli and azure/powershell, `script` of appleboy/ssh-action,
-  `run` and `options` of addnab/docker-run-action, and a few more. They are listed in `codeExecInputs` of
-  [template_injection.go](https://github.com/jdx/jactionlint/blob/main/template_injection.go).
+  `run` and `options` of addnab/docker-run-action, `preCommands` and `postCommands` of cloudflare/wrangler-action, `cmd` of
+  mikefarah/yq, the `command` of several SSH actions, and a few more. They are listed in `codeExecTable` of
+  [injection_sinks.go](https://github.com/jdx/jactionlint/blob/main/injection_sinks.go), each with the place where its behavior can
+  be checked;
+- fields that GitHub passes to docker are checked too, see [below](#check-template-injection-sinks);
+- the prompt, the arguments and the settings of [AI agent actions](#check-agentic-actions) are checked too, see below.
 
 Example input:
 
@@ -1307,6 +1312,62 @@ in the `env:` of the step):
 
 When the expression is not in quotes, quoting it changes how the shell splits words and expands globs, so the fix needs
 `-fix=unsafe`. Scripts of other shells (PowerShell, cmd, Python) are not fixed.
+
+<a id="check-template-injection-sinks"></a>
+### Container options, Docker steps and AI agent inputs
+
+`template-injection` also reports an attacker controlled `${{ }}` in the places where a runner or an action reads a string as a
+command line or as the instructions of an agent, although they are not scripts:
+
+| Place | Why it matters |
+| --- | --- |
+| `container.options` and `services.<id>.options` | docker reads them as command line flags, so text can add `--privileged`, `--volume` or `--entrypoint` ([zizmor#1128](https://github.com/zizmorcore/zizmor/issues/1128)) |
+| `image`, `entrypoint`, `command` and `volumes` of `container` and of a service | the attacker chooses what runs, or which path of the runner is mounted |
+| `args` and `entrypoint` of a `docker://` step | they are the command line of the container |
+| `prompt`, `claude_args`, `settings` and the other inputs of [AI agent actions](#check-agentic-actions) | the agent reads the prompt as instructions, and the arguments and settings add tools, servers and hooks |
+
+Only contexts that an attacker controls are reported here, unlike in a script: `matrix.node` in an `image` is how containers are
+written. The environment variable is not a remedy for these places (the `env` context is not available in a container, and an agent
+reads the environment as it reads the prompt): use a fixed value, or one from a fixed list, and for an agent see
+[the advice below](#check-agentic-actions). `shell:` takes no expression, so it is not a sink.
+
+Example input:
+
+```yaml
+on: issues
+
+jobs:
+  triage:
+    runs-on: ubuntu-latest
+    container:
+      image: node:20
+      # ERROR: docker reads the options as command line flags
+      options: --user ${{ github.event.issue.title }}
+    steps:
+      # ERROR: the agent reads the prompt as instructions, and quoting cannot change that
+      - uses: anthropics/claude-code-action@v1
+        with:
+          prompt: Triage "${{ github.event.issue.title }}"
+      # OK: the number of the issue is not text
+      - uses: anthropics/claude-code-action@v1
+        with:
+          prompt: Triage the issue number ${{ github.event.issue.number }}
+```
+
+Output:
+
+```
+test.yaml:9:27: "github.event.issue.title" is potentially untrusted and is expanded into the options of the container of the job. docker reads them as command line flags, so text from an attacker can add flags such as --privileged, --volume or --entrypoint. use a fixed value, or choose one from a fixed list such as a matrix or an input of type choice [expression]
+  |
+9 |       options: --user ${{ github.event.issue.title }}
+  |                           ^~~~~~~~~~~~~~~~~~~~~~~~
+test.yaml:14:31: "github.event.issue.title" is potentially untrusted and is expanded into the "prompt" input of Claude Code Action. the agent reads the prompt as instructions, so text from an attacker can steer the agent, and quoting or escaping cannot prevent that. do not put event data in the prompt: let the agent read it with its own tools, and give the agent only the permissions, secrets and tools that the worst instruction could use [expression]
+   |
+14 |           prompt: Triage "${{ github.event.issue.title }}"
+   |                               ^~~~~~~~~~~~~~~~~~~~~~~~
+```
+
+[Playground](https://jactionlint.jdx.dev/#eNq0UDluxDAM7P2KwSKtnKNUlUfkA7JMrBXYpCCSm2Lhvwc+ki5ItZ3EucgRjiiqTtp1nzJo7ABrJV1pewHNWcNG8sHZPMzJSG2HsrClwtQOJlCWTQaWkeLbyzmUakVYI0JwpYan+x3XYpMPPd2Ird/Teys2E9Z1V6lR1R/XAFfSiMQ2Nakl63Oek48UsowUUt7832+vJx34KjbF3x9QmyzVIj72s3D5Z4PLg3JtoqNpsC/D302c6Lp+DwDREIHh)
 
 <a id="check-job-deps"></a>
 ## Job dependencies validation
@@ -5561,6 +5622,140 @@ rules:
 What is considered free text is a decision about the value, not the syntax. A boolean input, a matrix of literals and the `result` of
 a job cannot hold anything but a few words, and a `string` input can hold anything. When you know that a value is safe, set the
 level of the rule to `off` or ignore the line, for example with `# jactionlint ignore=template-injection-expansion`.
+
+<a id="check-agentic-actions"></a>
+## AI agent actions
+
+An AI agent action such as Claude Code Action, Gemini CLI or Codex reads text and then acts with the tools it was given, using the
+token and the secrets of the job. When an outsider wrote the text (an issue, a comment, the title of a pull request, the files of a
+pull request), the outsider writes the instructions of the agent. This is the AI form of [script injection](#untrusted-inputs), and
+it is worse in one respect: there is no escaping that makes text safe to read for an agent, so the remedy is to limit what a
+hijacked agent can do. Public attacks include "PromptPwnd" (an issue body that made an agent edit an issue with the token) and
+"Trusting Claude with a Knife" (a pull request that changed what the agent runs). zizmor has no audit for this yet
+([zizmor#1605](https://github.com/zizmorcore/zizmor/issues/1605)).
+
+The rule `agentic-actions` is enabled by the default profile and reports at error level. It looks at the steps that run an agent
+action it knows (the list is below) in a workflow that outsiders can reach, that is, one with an `issues`, `issue_comment`,
+`pull_request_target`, `pull_request_review`, `pull_request_review_comment`, `discussion` or `discussion_comment` trigger.
+`pull_request` is not on the list: a workflow that a pull request from a fork starts has a read-only token and no secrets.
+`workflow_run` is not either, because it is as safe as the workflow it follows, which the rule cannot see; it is checked only for an
+open gate and for a checkout of the code that the upstream run built.
+The rule reports:
+
+- **An open gate.** Claude Code Action, Codex and Droid run only for users with write access, but an input switches that off:
+  `allowed_non_write_users: '*'`, `allowed_bots: '*'` or `allow-users: '*'`. A list of named users is accepted.
+- **No check of the user.** The agent actions that do not check who started them (Gemini CLI, AI inference, OpenHands, Oz, PR-Agent
+  and others) run for everybody who can cause the trigger. The rule accepts a job that is restricted by an `if:` on
+  `author_association`, the actor, the sender or a label (also in a job it `needs`), by an `environment:` (reviewers can be required), or
+  by an earlier step that checks the permission of the actor. This is a heuristic: it cannot tell a correct condition from a
+  condition that mentions the actor.
+- **Settings that turn the safeguards off.** `--dangerously-skip-permissions`, `--permission-mode bypassPermissions` and allowed
+  tools that give a shell (`Bash`, `Bash(*)`, `Bash(python:*)`, `Bash(curl:*)`) or any URL (`WebFetch`) in `claude_args` and `settings`
+  of Claude Code; `safety-strategy: unsafe` (except on Windows, where Codex needs it), `sandbox: danger-full-access` and the
+  matching `codex-args` of Codex; `tools.allowed` with `run_shell_command` of the Gemini CLI; `shell(bash:*)` in `copilot-allow-tools`
+  of AI inference; `--skip-permissions-unsafe` of Droid. Exact commands like `Bash(git diff:*)` are not reported. With the option
+  `any-trigger` these are reported in every workflow.
+- **Code of a pull request in the workspace.** On `pull_request_target`, `issue_comment`, `workflow_run` and the review triggers, an
+  agent that runs after a checkout of the pull request reads `CLAUDE.md`, `AGENTS.md`, `.claude/settings.json`, `.mcp.json`
+  and the like from it, so the pull request configures the agent (hooks and servers run commands with the secrets of the job). Check
+  out the base branch in the workspace and the pull request in a subdirectory with `path:`, as
+  [the documentation of Claude Code Action](https://github.com/anthropics/claude-code-action/blob/main/docs/security.md) says.
+- **Untrusted data read from the environment.** A prompt that tells the agent to read `$TITLE` when `TITLE` is set from
+  `github.event.issue.title`. (`${{ env.TITLE }}` in a prompt is reported by `template-injection`.)
+- **A secret in the environment of the agent**, when outsiders can reach the agent by one of the reports above: the shell of the agent
+  can print its environment. `GITHUB_TOKEN` is not reported.
+
+The first two reports are skipped when a steered agent can do little: for a job whose `permissions:` are set explicitly and grant no
+write access except to `issues`, `pull-requests` and `discussions` (the setup the actions document for triage and labeling), and for an
+agent that is limited to a list of exact tools (`--allowedTools "Bash(gh issue edit:*)"` of Claude Code, `tools.core` of the Gemini CLI) or
+to a read-only sandbox (Codex). These are the shape of the architecture the vendors advise: an agent with a read-only token and a
+sandbox, and a second job that acts on its validated output. The agent still holds its API key, so keep every other secret away from it.
+The message names the scopes that the token can write when the workflow or the job sets `permissions:`.
+
+The known actions, their inputs and where each was checked (an action that is not in the table is not checked; the list changes quickly):
+
+| Action | Prompt inputs | Arguments and settings | Checks the user itself |
+| --- | --- | --- | --- |
+| `anthropics/claude-code-action` | `prompt` (v0: `direct_prompt`, `override_prompt`, `custom_instructions`) | `claude_args`, `settings` (v0: `allowed_tools`, `disallowed_tools`, `mcp_config`, `claude_env`) | yes |
+| `anthropics/claude-code-base-action` | `prompt` | `claude_args`, `settings` | no |
+| `anthropics/claude-code-security-review` | | | no |
+| `google-github-actions/run-gemini-cli` | `prompt` | `settings`, `extensions` | no |
+| `google-gemini/gemini-cli-action` | `prompt` | `settings_json` | no |
+| `openai/codex-action` | `prompt` | `codex-args` | yes |
+| `actions/ai-inference` | `prompt`, `system-prompt` | `copilot-allow-tools` | no |
+| `factory-ai/droid-action` | | `droid_args`, `settings` | yes |
+| `sst/opencode/github`, `anomalyco/opencode/github` | `prompt` | | yes |
+| `openhands/openhands-github-action` | `prompt` | | no |
+| `warpdotdev/oz-agent-action` | `prompt` | `mcp` | no |
+| `qodo-ai/pr-agent` | `artifact_instructions` | | no |
+
+What the rule cannot know, so a clean result is not a proof of safety:
+
+- What the prompt tells the agent to read. A prompt that says "triage the newest issue" and gives the agent `gh issue view` exposes it to
+  the text of the issue without any `${{ }}`. Limit the tools and the token.
+- Files of the repository that configure the agent (`.claude/settings.json`, `.gemini/settings.json`, `.mcp.json`). Only the inputs
+  of the workflow are read, and an input that is an expression is skipped.
+- A gate in another workflow. A workflow with only `workflow_call` has no trigger of its own, so it is not reported.
+- Whether the agent action of a version really has an input: the rule reads names, not versions.
+
+Example input:
+
+```yaml
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  assist:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refs/pull/${{ github.event.issue.number }}/head
+      - uses: anthropics/claude-code-action@v1
+        with:
+          allowed_non_write_users: '*'
+          claude_args: --allowedTools "Bash,Edit"
+  summarize:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: google-github-actions/run-gemini-cli@v0
+        with:
+          prompt: Summarize the discussion
+```
+
+Output:
+
+```
+test.yaml:16:15: Claude Code Action runs in a workspace that holds the code of a pull request (checked out in the step at line 13), and this workflow runs on "issue_comment", with the secrets of the base repository. the agent reads its instructions and configuration from the workspace (files such as CLAUDE.md, AGENTS.md, GEMINI.md, .claude/settings.json, .mcp.json and .gemini/settings.json), so the pull request can add instructions, hooks and tool servers. check out the base branch in the workspace and put the pull request in a subdirectory with "path:" [agentic-actions]
+   |
+16 |       - uses: anthropics/claude-code-action@v1
+   |               ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+test.yaml:18:36: "allowed_non_write_users" is "*", so everybody, including users without write access, can start Claude Code Action, although the action checks for write access otherwise. this workflow runs on "issue_comment", which anyone can cause on a public repository, and the text they write steers the agent, and its token can write contents, issues. list the users you trust instead of the wildcard [agentic-actions]
+   |
+18 |           allowed_non_write_users: '*'
+   |                                    ^~~
+test.yaml:19:24: Claude Code Action: the allowed tools of Claude Code: "Bash" lets the agent run any shell command. this workflow runs on "issue_comment", so outsiders steer the agent with the text they write. allow only the exact commands that the task needs, and keep the token and the secrets of the job to the minimum [agentic-actions]
+   |
+19 |           claude_args: --allowedTools "Bash,Edit"
+   |                        ^~~~~~~~~~~~~~
+test.yaml:23:15: run-gemini-cli does not check who started it, and this workflow runs on "issue_comment", which anyone can cause on a public repository. the text they write steers the agent, which has the secrets of the job, and its token can write contents, issues. restrict the job with an if: on github.event.comment.author_association (OWNER, MEMBER or COLLABORATOR) or on a label that only maintainers add, run it in an environment with required reviewers, or limit the agent to the few tools it needs [agentic-actions]
+   |
+23 |       - uses: google-github-actions/run-gemini-cli@v0
+   |               ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+```
+
+[Playground](https://jactionlint.jdx.dev/#eNqcks1q4zAQx+9+iiEsBJZVvAt70ikU+gTtrRQjy1NbraQxmhmHNuTdi+0klEIuvRjG+un/MYiyrQACs2LjKSXMMv8AkPcR2cKTL+gEu+eqGrGkwBwo84x4yoJZ2MKhBMGLynWuXqldQMcc+KxaNLOhbEFbzaImOkGW5YgFR14pAAPKs5TzMvvVfkD/Rir76f+ZADgEGex1Aij4YucP16PGWP86HqEPMmi7wwmz7JZ4u6ypxQKnUz2g677bZRkKjcFz7aPTDo2nDs2aYj/9u+ntYqQDdk2m3Cz1G2UsbGH7e/sFW0UbV3q2YMz51iNRZNjcOR7+3HdBNhUAa0quhA/82d56oj6iWfubyxaLZtNjCjkYH8N++nuzz1gojWLh4RIDZEDoAntdXsDnAGWMshM=)
+
+To restrict an agent, allow the exact commands it needs (`--allowedTools "Bash(gh issue view:*)"`), give the job `permissions:` with the
+least access (`permissions: {}` plus the one scope), keep the key of the agent the only secret in the job, and gate the job with an
+`if:` on `github.event.comment.author_association`. To turn the rule off for a step, ignore the line (`# jactionlint ignore=agentic-actions`)
+or set `rules: {agentic-actions: off}`; `rules: {agentic-actions: {any-trigger: true}}` also reports the unsafe settings in workflows that
+outsiders cannot trigger.
 
 <a id="check-bot-conditions"></a>
 ## Bots trusted by `github.actor` (opt-in)

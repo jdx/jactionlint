@@ -54,7 +54,7 @@ How to read the table:
 | `self-repository` | `self-repository` | 3 / B | strict (info) | full on the corpus, with an unsafe fix. [batch B measurements](#batch-b-corpus-measurements) |
 | `stale-action-refs` | `stale-action-refs` | 3 / G | online | partial: same findings except repositories with more than 1000 tags; see [online audits](#online-audits) |
 | `superfluous-actions` | `superfluous-actions` | 3 / D | default | full: the same 40 findings as zizmor on the corpus, split like its personas (7 regular, and the 33 pedantic ones with the option `pedantic`, which the `strict` profile turns on). jactionlint adds the archived `actions/create-release` and `actions/upload-release-asset`. See [the check](checks.md#check-superfluous-actions) |
-| `template-injection` | `template-injection` (default), `template-injection-expansion` (strict), `template-injection-trusted` (all) | 3 / C | default, strict, all | partial: attacker controlled contexts, objects holding them and env variables set from them in `run:`, github-script and the code inputs of well-known actions, every expression of a script (default). Every other expansion is `template-injection-expansion` (free text) or `template-injection-trusted` (values like `github.repository`), which together are zizmor's pedantic persona. See [batch C](#batch-c-measurements) for the numbers. Not covered: `action.yml`, knowledge about the outputs of popular actions, severity by trigger (the level is per rule ID). `-fix` moves a simple reference into `env:` for bash and sh |
+| `template-injection` | `template-injection` (default), `template-injection-expansion` (strict), `template-injection-trusted` (all) | 3 / C | default, strict, all | partial: attacker controlled contexts, objects holding them and env variables set from them in `run:`, github-script and the code inputs of well-known actions, every expression of a script (default). Every other expansion is `template-injection-expansion` (free text) or `template-injection-trusted` (values like `github.repository`), which together are zizmor's pedantic persona. See [batch C](#batch-c-measurements) for the numbers. Not covered: `action.yml`, knowledge about the outputs of popular actions, severity by trigger (the level is per rule ID). `-fix` moves a simple reference into `env:` for bash and sh. Batch J adds sinks that zizmor lacks: `container.options` and `services.<id>.options` ([zizmor#1128](https://github.com/zizmorcore/zizmor/issues/1128), still open), their image, entrypoint, command and volumes, `args` and `entrypoint` of `docker://` steps, more code inputs of well-known actions, and the prompt, arguments and settings of AI agent actions; see [batch J](#batch-j-measurements) |
 | `typosquat-uses` | `typosquat-uses` | 3 / A | strict | partial: one typo of the slug, not all of the transformations of zizmor |
 | `undocumented-permissions` | `undocumented-permissions` | 3 / B (needs YAML comments, Phase 2) | all | partial: a comment above a scope counts, `include-read` for zizmor's read scopes. [batch B measurements](#batch-b-corpus-measurements) |
 | `unpinned-images` | `unpinned-images` | 3 / B | strict | partial: no per-persona split, images in `docker://` are `unpinned-uses`. [batch B measurements](#batch-b-corpus-measurements) |
@@ -68,12 +68,16 @@ How to read the table:
 
 ## Beyond zizmor
 
+<a id="beyond-zizmor"></a>
+
 Rules of jactionlint which zizmor 1.30.1 has no audit for:
 
 | ID | Profile | What it reports |
 | --- | --- | --- |
 | `unlocked-install` | default | `cargo install` without `--locked`. Fixable (unsafe). With the option `pedantic` (on under `strict`): `npm install` instead of `npm ci`, `yarn` and `bun install` without a frozen lock file, `pnpm install --no-frozen-lockfile`, `pip install -r` without hashes or constraints. See [the check](checks.md#check-unlocked-install) |
 | `dependabot-missing-actions-update` | strict | `dependabot.yml` has no `github-actions` update although `.github/workflows` uses actions. It is skipped when the repository has a Renovate configuration. 20 findings in 193 repositories, all true positives (a Go module with only a `gomod` update). See [the check](checks.md#check-dependabot-missing-actions-update) |
+| `pipeline-without-pipefail` | default | A failure of a command in a pipeline of a `run:` script is hidden because the default shell (`bash -e {0}`) and `shell: sh` do not enable pipefail. |
+| `agentic-actions` | default | AI agent actions ([zizmor#1605](https://github.com/zizmorcore/zizmor/issues/1605) is a proposal): an agent that outsiders can steer without a check of the user, an open gate (`allowed_non_write_users: '*'`), settings that turn the safeguards off, and an agent that runs on the code of a pull request. See [AI agent actions](checks.md#check-agentic-actions) |
 
 ## Batch B corpus measurements
 
@@ -175,14 +179,6 @@ Gaps of the online rules that the corpus does not show, so they are not measured
 
 Cost: for the 173 `uses:` lines of this repository the first run makes 91 requests, a run within the hour none, and a later run
 only conditional requests (a 304 answer is free of rate limit for authenticated clients).
-
-## Beyond zizmor
-
-Rules of jactionlint which zizmor has no audit for:
-
-| Rule | Profile | What it finds |
-| --- | --- | --- |
-| `pipeline-without-pipefail` | default | A failure of a command in a pipeline of a `run:` script is hidden because the default shell (`bash -e {0}`) and `shell: sh` do not enable pipefail. |
 
 ## Ignore comments
 
@@ -310,6 +306,35 @@ in `default`.
 Behaviors of zizmor that were found only by this comparison, and are now reproduced: job names count for `anonymous-definition`;
 `concurrency-limits` skips workflows that only call reusable workflows; `secrets-outside-env` skips `workflow_call` workflows;
 `self-hosted-runner` reports the label only; `dangerous-triggers` exempts `actions/labeler` for `pull_request_target`.
+
+## Batch J measurements
+
+<a id="batch-j-measurements"></a>
+
+Batch J extends `template-injection` to the places that read a string as a command line or as the instructions of an agent, and adds
+`agentic-actions`. Measured with zizmor 1.30.1 (`--offline --persona pedantic`) and jactionlint on two corpora:
+
+- **jdx**: the workflows of 266 repository checkouts under `~/src` (worktrees included). Eight distinct workflow files use an AI agent action
+  (hk's `claude.yml` and copies of it) and 977 files have `container:` or `services:`.
+- **AI agent workflows**: 237 workflow files of 151 public repositories that use an agent action, found with GitHub code search for the
+  actions (`anthropics/claude-code-action`, `run-gemini-cli`, `gemini-cli-action`, `openai/codex-action`, `actions/ai-inference`, opencode
+  and others). It is a sample of what is on GitHub, not a random one.
+
+| Rule | jdx corpus | AI agent corpus | zizmor | Judgement |
+| --- | --- | --- | --- | --- |
+| `template-injection`: prompt, arguments and settings of agents | 0 | 78 findings in 33 files | 0 in the same files | all 78 are attacker controlled contexts (`github.event.issue.title`, `.body`, `pull_request.title`, `comment.body`) in a prompt; no false positive found |
+| `template-injection`: container and service options, image, entrypoint, command, volumes; args of a `docker://` step | 0 in 977 files | 0 (10 files found by code search for `options: ${{`) | 0 | the pattern is rare. Covered by golden tests, since no real finding was available |
+| `agentic-actions` | 0 | 13 findings in 9 workflows | no such audit | all 13 are true: 6 agents without a check of the user (no `if:`, `environment:` or permission step) with a token that can write contents, 4 agents that run on a pull request checkout, 3 allowed tools that give any code (`Bash(npx:*)`, `Bash(bunx:*)`, `Bash(xargs:*)`) |
+
+Findings of `agentic-actions` that the first version produced and that were false positives, and what was changed (the counts are of the
+same corpus): 60 findings fell to 13. A triage job with a read-only token and a Codex `sandbox: read-only` or a Gemini `tools.core`
+list is the architecture the vendors advise, and is no longer reported; `workflow_run` is no longer an outsider trigger for the checks of
+the user and of the settings (it is as safe as the workflow it follows); settings files with trailing commas (the example of the Gemini
+CLI action has one) or an expression in a detail of the JSON are read; Codex on Windows needs `safety-strategy: unsafe`.
+
+Differences from zizmor, on purpose: zizmor reports no `${{ }}` in the prompt of an agent, and nothing for container options; the
+rule reports at `error` level whatever the trigger (decision: every rule of the default profile does), where the proposal for zizmor
+would grade by trigger and persona; the actions are a table (`agent_actions.go`) that must be kept up to date.
 
 ## Rules of batch H
 

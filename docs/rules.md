@@ -26,6 +26,7 @@ rules:
 | ID | Group | Default level | Profile |
 | --- | --- | --- | --- |
 | [adhoc-packages](#adhoc-packages) | security | warn | default |
+| [agentic-actions](#agentic-actions) | security | error | default |
 | [anonymous-definition](#anonymous-definition) | policy | warn | strict |
 | [archived-uses](#archived-uses) | security | warn | only with `-online` |
 | [artipacked](#artipacked) | security | warn | strict |
@@ -159,6 +160,16 @@ A package is installed by name with npm, yarn, pnpm, bun, gem or bundle add outs
 - Default level: warn
 - Profile: default
 - Details and examples: [checks](./checks.md#check-adhoc-packages)
+
+## agentic-actions
+
+An AI agent action can be steered by outsiders, runs on code of a pull request, or has its safeguards turned off.
+
+- Group: security
+- Default level: error
+- Profile: default
+- Option `any-trigger` (bool, default false): Also report the unsafe settings of an agent (tools that allow any command, permission checks switched off) in a workflow that no outsider can trigger.
+- Details and examples: [checks](./checks.md#check-agentic-actions)
 
 ## anonymous-definition
 
@@ -1002,7 +1013,7 @@ An action does what a tool of the runner image does as well, such as gh release 
 
 ## template-injection
 
-A potentially untrusted input is expanded in a script.
+A potentially untrusted input is expanded in a script, a container option or the prompt of an AI agent.
 
 - Group: security
 - Default level: error
