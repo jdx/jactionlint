@@ -451,11 +451,14 @@ func (c *tiContext) inputIsNotText(name string) bool {
 }
 
 // inputsHoldText reports whether the whole inputs object can hold free text: an input of the workflow which
-// is not a boolean, a number, a choice or an environment, or any input of a composite action (c.wf is nil).
-// A workflow which declares no input at all has no text in it.
+// is not a boolean, a number, a choice or an environment, or any input of a composite action (c.wf.Action is set).
+// A workflow or an action which declares no input at all has no text in it.
 func (c *tiContext) inputsHoldText() bool {
 	if c.wf == nil {
 		return true
+	}
+	if c.wf.Action != nil {
+		return len(c.wf.Action.Inputs) > 0
 	}
 	for _, e := range c.wf.On {
 		switch e := e.(type) {
@@ -507,6 +510,29 @@ func (c *tiContext) lookupEnv(name string) *EnvVar {
 		}
 	}
 	return nil
+}
+
+// envKeySpelling returns the key of the env: entry which defines the variable for the step, spelled as it is
+// written, or "" when no entry defines it or the levels spell it differently (the shell variable is then not
+// known for sure).
+func (c *tiContext) envKeySpelling(name string) string {
+	name = strings.ToLower(name)
+	spelling := ""
+	for _, e := range []*Env{c.step.Env, c.jobEnv(), c.wfEnv()} {
+		if e == nil {
+			continue
+		}
+		v, ok := e.Vars[name]
+		if !ok || v == nil || v.Name == nil {
+			continue
+		}
+		if spelling == "" {
+			spelling = v.Name.Value
+		} else if spelling != v.Name.Value {
+			return ""
+		}
+	}
+	return spelling
 }
 
 func (c *tiContext) jobEnv() *Env {
@@ -981,8 +1007,10 @@ func planTemplateInjectionFixes(in tiFixInput) map[int]*Fix {
 				name = v
 			} else if c.path[0] == "env" && len(c.path) == 2 {
 				// The variable exists already: the shell can read it directly.
-				name = strings.Split(c.text, ".")[1]
-				if !envNameRe.MatchString(name) || in.ctx.lookupEnv(name) == nil {
+				// The expression is not case-sensitive, the shell is: the variable is the key as it is written in the
+				// env: which wins, and a fix which cannot be exact (another level spells it differently) is not made.
+				name = in.ctx.envKeySpelling(c.path[1])
+				if name == "" || !envNameRe.MatchString(name) {
 					continue
 				}
 			} else {

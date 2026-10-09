@@ -75,6 +75,9 @@ func TestCachePoisoningChecksThatCannotPublish(t *testing.T) {
 		{"an input with a secret", on + "permissions: read-all\n" + job("", "      - uses: some/action@v1\n        with:\n          t: ${{ secrets.X }}\n"), 1},
 		{"all the secrets", on + "permissions: read-all\n" + job("", "      - run: echo '${{ toJSON(secrets) }}'\n"), 1},
 		{"only the token of the workflow", on + "permissions: read-all\n" + job("", "      - run: ./check\n        env:\n          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}\n"), 0},
+		{"only the token of the workflow, in brackets", on + "permissions: read-all\n" + job("", "      - run: ./check\n        env:\n          GH_TOKEN: ${{ secrets['GITHUB_TOKEN'] }}\n"), 0},
+		{"another secret, in brackets", on + "permissions: read-all\n" + job("", "      - run: ./check\n        env:\n          GH_TOKEN: ${{ secrets['NPM_TOKEN'] }}\n"), 1},
+		{"a publishing job is judged with the tag of the run", on + "permissions: read-all\n" + "jobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - run: npm publish\n      - uses: actions/setup-node@v4\n        if: github.ref_type == 'tag'\n        with:\n          cache: npm\n", 1},
 		{"a publishing command", on + "permissions: read-all\n" + job("", "      - run: cargo publish\n"), 1},
 		{"a publishing action", on + "permissions: read-all\n" + job("", "      - uses: pypa/gh-action-pypi-publish@release/v1\n"), 1},
 		{"the release event always counts", "on:\n  release:\n    types: [published]\npermissions: read-all\n" + job("", ""), 1},
@@ -147,11 +150,94 @@ func TestCachePoisoningGatesOfRestoreSwitches(t *testing.T) {
 		{"buildx binary cache on", "      - uses: docker/setup-buildx-action@v3\n        with:\n          cache-binary: ${{ startsWith(github.ref, 'refs/tags/') }}\n", 1},
 		{"node automatic cache off on tags", "      - uses: actions/setup-node@v5\n        with:\n          package-manager-cache: " + off + "\n", 0},
 		{"node automatic cache on", "      - uses: actions/setup-node@v5\n        with:\n          package-manager-cache: ${{ startsWith(github.ref, 'refs/tags/') }}\n", 1},
+		{"node automatic cache off next to cache: false", "      - uses: actions/setup-node@v5\n        with:\n          cache: false\n          package-manager-cache: " + off + "\n", 0},
+		{"node automatic cache on next to cache: false", "      - uses: actions/setup-node@v5\n        with:\n          cache: false\n          package-manager-cache: ${{ startsWith(github.ref, 'refs/tags/') }}\n", 1},
+		{"the ref of a pushed tag from the payload", "      - uses: Swatinem/rust-cache@v2\n        if: startsWith(github.event.ref, 'refs/tags/')\n", 1},
+		{"the ref of a pushed tag from the payload, negated", "      - uses: Swatinem/rust-cache@v2\n        if: ${{ !startsWith(github.event.ref, 'refs/tags/') }}\n", 0},
 		{"node explicit cache is not switched off by it", "      - uses: actions/setup-node@v5\n        with:\n          cache: npm\n          package-manager-cache: " + off + "\n", 1},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			if got := lintCacheWorkflow(t, "", head+tc.step); len(got) != tc.want {
+				t.Errorf("want %d findings but got %v", tc.want, got)
+			}
+		})
+	}
+}
+
+func TestCachePoisoningUnknownPayloadRefDoesNotHideTheCache(t *testing.T) {
+	// the payload of a release has no ref, so the condition cannot be evaluated: it must not count as a gate
+	const head = "on:\n  release:\n    types: [published]\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n"
+	for _, cond := range []string{"startsWith(github.event.ref, 'refs/tags/')", "github.event.ref == 'refs/tags/v1'"} {
+		src := head + "      - uses: Swatinem/rust-cache@v2\n        if: " + cond + "\n"
+		if got := lintCacheWorkflow(t, "", src); len(got) != 1 {
+			t.Errorf("%s: want 1 finding but got %v", cond, got)
+		}
+	}
+}
+
+func TestCachePoisoningTagOnlyPushHasNoBranchRun(t *testing.T) {
+	// the only run of this workflow is a tag push, so a step kept away from tags never restores the cache
+	const head = "on:\n  push:\n    tags: ['v*']\npermissions: read-all\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n"
+	const tail = "      - run: docker push example/img\n"
+	step := "      - uses: Swatinem/rust-cache@v2\n        if: ${{ !startsWith(github.event.ref, 'refs/tags/') }}\n"
+	if got := lintCacheWorkflow(t, "", head+step+tail); len(got) != 0 {
+		t.Errorf("tag-only push: want no finding but got %v", got)
+	}
+	// with a branch filter a branch is pushed too, and the step runs there
+	branches := "on:\n  push:\n    branches: [main]\n    tags: ['v*']\n" + head[len("on:\n  push:\n    tags: ['v*']\n"):]
+	if got := lintCacheWorkflow(t, "", branches+step+tail); len(got) != 1 {
+		t.Errorf("branches and tags: want 1 finding but got %v", got)
+	}
+}
+
+func TestCachePoisoningBranchPushKnowsItsRefIsNotATag(t *testing.T) {
+	// a branch push has a ref of refs/heads/*: a condition which asks for a tag is false there, even though the
+	// name of the branch is not known
+	const head = "on:\n  push:\n    branches: [main]\njobs:\n  j:\n    runs-on: ubuntu-latest\n    permissions: read-all\n    steps:\n"
+	const tail = "      - run: docker push example/img\n"
+	tests := []struct {
+		name string
+		step string
+		want int
+	}{
+		{"step for tags only, payload ref", "      - uses: Swatinem/rust-cache@v2\n        if: startsWith(github.event.ref, 'refs/tags/')\n", 0},
+		{"step for tags only, ref", "      - uses: Swatinem/rust-cache@v2\n        if: startsWith(github.ref, 'refs/tags/')\n", 0},
+		{"input for tags only", "      - uses: docker/setup-buildx-action@v3\n        with:\n          cache-binary: ${{ startsWith(github.event.ref, 'refs/tags/') }}\n", 0},
+		{"step for tags only, equality", "      - uses: Swatinem/rust-cache@v2\n        if: github.event.ref == 'refs/tags/v1'\n", 0},
+		{"step for branches", "      - uses: Swatinem/rust-cache@v2\n        if: startsWith(github.event.ref, 'refs/heads/')\n", 1},
+		{"step for one branch", "      - uses: Swatinem/rust-cache@v2\n        if: github.event.ref == 'refs/heads/main'\n", 1},
+		{"step not for tags", "      - uses: Swatinem/rust-cache@v2\n        if: ${{ !startsWith(github.event.ref, 'refs/tags/') }}\n", 1},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := lintCacheWorkflow(t, "", head+tc.step+tail); len(got) != tc.want {
+				t.Errorf("want %d findings but got %v", tc.want, got)
+			}
+		})
+	}
+}
+
+func TestCachePoisoningPushWithoutRefFilterAlsoGetsTags(t *testing.T) {
+	// a push trigger without a ref filter runs for tags as well as branches: a cache kept for tags is restored
+	// by the tag push. A filter on one kind of ref keeps the other kind away.
+	const mid = "permissions: read-all\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n"
+	const step = "      - uses: Swatinem/rust-cache@v2\n        if: startsWith(github.ref, 'refs/tags/')\n      - run: docker push example/img\n"
+	tests := []struct {
+		name, on string
+		want     int
+	}{
+		{"no filter", "on: push\n", 1},
+		{"paths only", "on:\n  push:\n    paths: ['src/**']\n", 1},
+		{"branches only", "on:\n  push:\n    branches: [main]\n", 0},
+		{"branches-ignore only", "on:\n  push:\n    branches-ignore: [dev]\n", 0},
+		{"branches and tags", "on:\n  push:\n    branches: [main]\n    tags: ['v*']\n", 1},
+		{"tags-ignore only", "on:\n  push:\n    tags-ignore: ['v0*']\n", 1},
+		{"tags only", "on:\n  push:\n    tags: ['v*']\n", 1},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := lintCacheWorkflow(t, "", tc.on+mid+step); len(got) != tc.want {
 				t.Errorf("want %d findings but got %v", tc.want, got)
 			}
 		})

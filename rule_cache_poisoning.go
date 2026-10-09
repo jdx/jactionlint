@@ -19,9 +19,10 @@ type cacheAction struct {
 }
 
 // looksAtTrigger reports whether the text mentions the event or the ref which started the run:
-// github.event_name, github.ref, github.ref_name, github.ref_type or a tag ref.
+// github.event_name, github.ref, github.ref_name or github.ref_type. A tag ref in a text does not count: it
+// may be compared with a value which is not the ref of the run (github.event.ref in a release).
 func looksAtTrigger(v string) bool {
-	return strings.Contains(v, "github.event_name") || strings.Contains(v, "github.ref") || strings.Contains(v, "refs/tags")
+	return strings.Contains(v, "github.event_name") || strings.Contains(v, "github.ref")
 }
 
 // majorVersionRegex captures the major version of a tag such as v3.1.0.
@@ -395,11 +396,26 @@ func tagFilterMatches(f *WebhookEventFilter) bool {
 	return last == nil || strings.TrimSpace(last.Value) != "!**"
 }
 
-// eventScenarios lists one run per event.
+// eventScenarios lists one run per event. A push event runs for a branch push when it has a branch filter or
+// no ref filter at all, and for a tag push when it has a tag filter (which lets the tag through) or no ref
+// filter at all: a filter on one kind of ref keeps the other away. A run for a branch push is not a tag ref, a run
+// for a tag push is; a bare "push" run would let a condition on the ref pass as if a branch were pushed.
 func eventScenarios(events []Event) []triggerScenario {
 	var ret []triggerScenario
 	for _, e := range events {
-		ret = append(ret, triggerScenario{"event_name": e.EventName()})
+		ev, ok := e.(*WebhookEvent)
+		if !ok || e.EventName() != "push" {
+			ret = append(ret, triggerScenario{"event_name": e.EventName()})
+			continue
+		}
+		branchFilter := ev.Branches != nil || ev.BranchesIgnore != nil
+		tagFilter := ev.Tags != nil || ev.TagsIgnore != nil
+		if branchFilter || !tagFilter {
+			ret = append(ret, triggerScenario{"event_name": "push", refPrefixKey: "refs/heads/"})
+		}
+		if !branchFilter && !tagFilter || tagFilter && (ev.Tags == nil || tagFilterMatches(ev.Tags)) {
+			ret = append(ret, scenarioTagPush)
+		}
 	}
 	return ret
 }
@@ -485,7 +501,9 @@ func (rule *RuleCachePoisoning) cannotPublish(j *Job) bool {
 	return true
 }
 
-var secretRefRe = regexp.MustCompile(`(?i)\bsecrets(?:\.([a-z_][a-z0-9_-]*)|\s*\[|\b\s*\))`)
+// secretRefRe finds a read of a secret: secrets.NAME (group 1), secrets['NAME'] (group 2), or any other form
+// (secrets[expr], a bare secrets as an argument), which leave both groups empty.
+var secretRefRe = regexp.MustCompile(`(?i)\bsecrets(?:\.([a-z_][a-z0-9_-]*)|\s*\[\s*'([^']*)'\s*\]|\s*\[|\b\s*\))`)
 
 // usesOwnSecret reports whether the job, or the env: of the workflow, reads a secret other than GITHUB_TOKEN.
 func (rule *RuleCachePoisoning) usesOwnSecret(j *Job) bool {
@@ -494,7 +512,7 @@ func (rule *RuleCachePoisoning) usesOwnSecret(j *Job) bool {
 			return false
 		}
 		for _, m := range secretRefRe.FindAllStringSubmatch(s.Value, -1) {
-			if !strings.EqualFold(m[1], "github_token") {
+			if name := m[1] + m[2]; !strings.EqualFold(name, "github_token") {
 				return true
 			}
 		}
@@ -564,7 +582,8 @@ func (rule *RuleCachePoisoning) VisitJobPre(n *Job) error {
 		if why = publishingReason(steps); why == "" {
 			return nil
 		}
-		scenarios = rule.eventScenarios
+		// the tag push of a tag-only workflow is a run too, and the only one that has a tag as its ref
+		scenarios = append(slices.Clone(rule.eventScenarios), rule.scenarios...)
 	}
 	for _, s := range steps {
 		a, ref := stepAction(s)
