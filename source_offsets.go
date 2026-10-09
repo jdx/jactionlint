@@ -15,6 +15,10 @@ type sourceIndex struct {
 	// counts as a line break and this index does not, so positions cannot be converted reliably.
 	valid bool
 
+	// nl are the offsets of the line breaks in the value of the string nlOf (see literalPosition).
+	nlOf *String
+	nl   []int
+
 	sitesOnce sync.Once
 	sitesIdx  *yamlSiteIndex
 }

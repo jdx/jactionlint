@@ -89,6 +89,23 @@ a key it does not know, so a file shared by both tools can keep `profile: correc
 `id` field of `-format json` and the `ruleId` of `-format sarif` carry it. `-format` templates written for actionlint keep working:
 the fields of an error are the same, and `kind` is still there.
 
+## Where shellcheck findings are reported
+
+actionlint reports a shellcheck finding at the `run:` key of the step. jactionlint reports it at the line of the script that has
+the problem when `run:` is a literal block (`|`, `|-`, `|+`) and no `${{ }}` in the script spans several lines, which is more precise
+and puts the annotation of a pull request on the right line. For the other ways to write a script (`>`, a plain or quoted
+scalar) it still reports the `run:` line, like actionlint. The column is always that of `run:`, because the indentation of the
+script is not known to the parser; the script line and column from shellcheck are in the message (`SC2086:info:2:5:`).
+
+Things which key on the line of a finding see this difference when moving from actionlint:
+
+- **An ignore comment keeps working.** A `# jactionlint ignore=shellcheck` comment on the step (above it, or at the end of its first
+  line), above the `run:` key, or at the end of the `run: |` line covers every line of the script, because a comment covers the
+  line it belongs to and everything nested under it. A comment you moved to a script line to ignore one finding covers that line only.
+- **An `ignore:` pattern or `-ignore` is not tied to a line.** It matches the message or the rule ID, so it is not affected.
+- **A line-based tool needs the new lines.** A problem matcher or a script that keeps a list of `file:line` pairs written for
+  actionlint has to be refreshed once. A [baseline](usage.md#baseline) written by jactionlint does not use line numbers.
+
 ## What is stricter than actionlint
 
 The `correctness` profile also has bug detectors that actionlint does not: `unsound-ternary` (`a && b || c` where `b` can be

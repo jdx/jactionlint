@@ -198,3 +198,56 @@ func TestIndicatorCountsCodePoints(t *testing.T) {
 		e.indicator(line)
 	}
 }
+
+// A finding inside an expression of a multi-line scalar is on the line and at the column of the text
+// in the file, however the scalar is written and whichever line breaks and characters it has.
+func TestPositionsInMultiLineScalars(t *testing.T) {
+	scalars := map[string]string{
+		"literal":       "|\n        é ✓ 😀 ${{ format('a{0}', 'b') }}\n        next ${{ format('c{0}', 'd') }}\n",
+		"literal strip": "|-\n        é\n\n        ✓ 😀 ${{ format('a{0}', 'b') }}\n",
+		"folded":        ">\n        é ✓\n        😀 ${{ format('a{0}', 'b') }}\n        x ${{ format('c{0}', 'd') }}\n",
+		"folded strip":  ">-\n        é ✓ 😀\n        ${{ format('a{0}', 'b') }}\n",
+		"plain":         "é ✓ 😀\n        next ${{ format('a{0}', 'b') }}\n",
+		"double quoted": "\"é ✓ 😀\n        next ${{ format('a{0}', 'b') }}\"\n",
+		"single quoted": "'é ✓ 😀\n        next ${{ format(''a{0}'', ''b'') }}'\n",
+	}
+	for name, scalar := range scalars {
+		for _, nl := range []string{"\n", "\r\n"} {
+			t.Run(name+" "+strings.NewReplacer("\r", "CR", "\n", "LF").Replace(nl), func(t *testing.T) {
+				src := "on: push\njobs:\n  a:\n    runs-on: ubuntu-latest\n    env:\n      X: " + scalar
+				src = strings.ReplaceAll(src, "\n", nl)
+				var list []ErrorTemplateFields
+				if err := json.Unmarshal([]byte(lintFormatted(t, FormatJSON, "w.yaml", []byte(src))), &list); err != nil {
+					t.Fatal(err)
+				}
+				var got [][2]int
+				for _, e := range list {
+					if e.ID == "obfuscation" {
+						got = append(got, [2]int{e.Line, e.Column})
+					}
+				}
+				// Where "format(" is, as a line and a column counted in code points
+				var want [][2]int
+				for i, l := range strings.Split(src, "\n") {
+					l = strings.TrimSuffix(l, "\r")
+					for from := 0; ; {
+						j := strings.Index(l[from:], "format(")
+						if j < 0 {
+							break
+						}
+						want = append(want, [2]int{i + 1, utf8.RuneCountInString(l[:from+j]) + 1})
+						from += j + 1
+					}
+				}
+				if len(got) != len(want) {
+					t.Fatalf("want findings at %v but got %v in\n%s", want, got, src)
+				}
+				for i := range want {
+					if got[i] != want[i] {
+						t.Errorf("finding %d is at %v but format( is at %v in\n%s", i, got[i], want[i], src)
+					}
+				}
+			})
+		}
+	}
+}

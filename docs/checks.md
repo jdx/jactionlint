@@ -969,7 +969,8 @@ level or job level. Each step can configure shell to run scripts by `shell:`.
 In the above example output, `SC2086:info:1:6:` means that shellcheck reported SC2086 rule violation and the location is at
 line 1, column 6. Note that the location is relative to the script of the `run:` section.
 The reported source line is the line within the script when `run:` uses a literal block (`|`, `|-`, `|+`) and no `${{ }}`
-in the script spans multiple lines. Otherwise, the position of `run:` is reported.
+in the script spans multiple lines. Otherwise, the position of `run:` is reported. An [ignore comment](usage.md#ignore-some-errors) on the
+step or at the `run:` key covers the lines of the script ([details](actionlint.md#where-shellcheck-findings-are-reported)).
 
 jactionlint remembers the default shell and checks what OS the job runs on. Only when the shell is `bash` or `sh`, jactionlint
 applies shellcheck to scripts.
