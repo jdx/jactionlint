@@ -574,3 +574,39 @@ func TestConfigIgnoreForARuleThatDoesNotRunIsNotUnused(t *testing.T) {
 		t.Errorf("an online rule offline and a rule that is off: %v", got)
 	}
 }
+
+// A repository reference is judged by the pattern alone: the case of a ref matters.
+func TestConfigIgnoreRefCaseOfARepositoryReference(t *testing.T) {
+	ig := &ConfigIgnore{Rules: []string{"unpinned-uses"}, Uses: "actions/checkout@v4"}
+	if err := ig.validate(); err != nil {
+		t.Fatal(err)
+	}
+	if ig.matchUses("actions/checkout@V4") {
+		t.Error("@V4 is not @v4")
+	}
+	if !ig.matchUses("actions/checkout@v4") {
+		t.Error("@v4 is @v4")
+	}
+}
+
+// An action-only repository has no workflows directory, and its unused entries are still judged.
+func TestConfigIgnoreUnusedInAnActionOnlyRepository(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(root, ".github"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cfg := ignoreConfigHead + "ignores:\n  - {rule: unpinned-uses, uses: actions/cache}\n"
+	if err := os.WriteFile(filepath.Join(root, ".github", "jactionlint.yaml"), []byte(cfg), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	action := "name: x\ndescription: x\nruns:\n  using: composite\n  steps:\n    - run: echo hi\n      shell: bash\n"
+	if err := os.WriteFile(filepath.Join(root, "action.yml"), []byte(action), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := ofRule(lintIgnoreProject(t, root, fixedNow), "unused-ignore"); len(got) != 1 {
+		t.Errorf("want the unused entry: %v", got)
+	}
+}

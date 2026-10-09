@@ -51,7 +51,13 @@ func (rule *RuleTemplateInjection) reportSinks(ctx tiContext, sinks []injectionS
 		for i := range spans {
 			sp := &spans[i]
 			if h := ctx.sinkHitOf(sp); h != nil {
+				before := len(rule.errs)
 				rule.ReportID("template-injection", sp.TokPos(h.Ref.Node.Token()), h.message(sp.Src, s))
+				if note := rule.wf.callerWarning(); note != "" {
+					for _, e := range rule.errs[before:] {
+						e.Message += ". " + note
+					}
+				}
 			}
 		}
 	}

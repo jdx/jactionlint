@@ -3,6 +3,7 @@ package jactionlint
 import (
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -235,8 +236,12 @@ func (ig *ConfigIgnore) matchUses(value string) bool {
 	case ig.usesRe != nil:
 		return ig.usesRe.MatchString(value)
 	}
-	if ig.usesPat.Match(ParseUses(value)) {
+	ref := ParseUses(value)
+	if ig.usesPat.Match(ref) {
 		return true
+	}
+	if ref.Kind == UsesAction {
+		return false // a repository reference is judged by the pattern alone: its refs are case-sensitive
 	}
 	// Docker images and local paths are not repository references: compare the whole value
 	if ig.usesGlob {
@@ -676,12 +681,12 @@ func (rc *ignoreRunConfig) coveredFiles(l *Linter) map[string]bool {
 		return nil
 	}
 	all := map[string]bool{}
-	if files, err := walkWorkflowFiles(rc.project.WorkflowsDir()); err == nil {
-		for _, f := range files {
-			all[filepath.Clean(absPath(f))] = true
-		}
-	} else {
-		return nil
+	files, err := walkWorkflowFiles(rc.project.WorkflowsDir())
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return nil // a repository with only actions has no workflows directory
+	}
+	for _, f := range files {
+		all[filepath.Clean(absPath(f))] = true
 	}
 	for _, f := range rc.project.DependabotFiles() {
 		all[filepath.Clean(absPath(f))] = true
