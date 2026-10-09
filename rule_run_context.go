@@ -94,6 +94,30 @@ func (c *runContext) shellName(run *ExecRun) string {
 	return strings.TrimSuffix(strings.ToLower(name), ".exe")
 }
 
+// shellErrexit reports whether the shell that runs the step stops the script at a failing command: the default
+// shell and the names `bash` and `sh` run with -e, a custom template does when it says so.
+func (c *runContext) shellErrexit(run *ExecRun) bool {
+	var s *String
+	switch {
+	case run.Shell != nil:
+		s = run.Shell
+	case c.job != nil && c.job.Defaults != nil && c.job.Defaults.Run != nil && c.job.Defaults.Run.Shell != nil:
+		s = c.job.Defaults.Run.Shell
+	case c.wf != nil && c.wf.Defaults != nil && c.wf.Defaults.Run != nil && c.wf.Defaults.Run.Shell != nil:
+		s = c.wf.Defaults.Run.Shell
+	}
+	if s == nil {
+		return true
+	}
+	if s.ContainsExpression() {
+		return false
+	}
+	if len(strings.Fields(s.Value)) == 1 {
+		return true
+	}
+	return templateErrexit(s.Value)
+}
+
 // script analyzes the `run:` script of the step with the shell that runs it. It returns nil when the shell is not
 // bash or sh or when the script does not parse; such a script yields no findings.
 func (c *runContext) script(run *ExecRun) (*runscript.Script, runscript.Origin) {

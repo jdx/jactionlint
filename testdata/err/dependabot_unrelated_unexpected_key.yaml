@@ -1,0 +1,11 @@
+version: 2
+updates:
+  # ERROR: the unexpected key is unrelated to the missing schedule
+  - package-ecosystem: npm
+    directory: /
+    unexpected: true
+  # ERROR: only the misspelling is reported, the schedule is not missing twice
+  - package-ecosystem: pip
+    directory: /
+    schedlue:
+      interval: daily
