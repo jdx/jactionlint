@@ -638,3 +638,14 @@ func TestConfigLoadGlobalConfigOldDirectory(t *testing.T) {
 		t.Fatal(diff)
 	}
 }
+
+func TestConfigGeneratedFilesValues(t *testing.T) {
+	for _, in := range []string{"report", "skip-policy", "skip"} {
+		if _, err := parseConfig([]byte("generated-files: " + in + "\n")); err != nil {
+			t.Errorf("%s: %v", in, err)
+		}
+	}
+	if _, err := parseConfig([]byte("generated-files: no\n")); err == nil || !strings.Contains(err.Error(), `invalid value "no" for "generated-files"`) {
+		t.Errorf("an unknown value must be an error: %v", err)
+	}
+}

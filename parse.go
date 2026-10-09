@@ -113,6 +113,8 @@ type parser struct {
 	scalars *scalarSource
 	// syntaxID is the ID of the syntax errors. It is "workflow-syntax" when empty.
 	syntaxID string
+	// unexpectedAt are the positions (line, column) of the keys reported as unexpected in a Dependabot configuration.
+	unexpectedAt map[[2]int]bool
 }
 
 // syntaxCheckKind is the kind of the errors which the parser reports.
@@ -184,7 +186,7 @@ func (p *parser) resolveAliases(root *yaml.Node) {
 				} else {
 					// Don't resolve the recursive alias because it causes stack overflow on parsing the tree as
 					// `RawYAMLValue`. (#610)
-					p.errorID("recursive-alias", c, fmt.Sprintf("recursive alias %q is found. anchor was declared at line:%d, column:%d", c.Alias.Anchor, c.Alias.Line, c.Alias.Column))
+					p.errorID("recursive-alias", c, fmt.Sprintf("recursive alias %q is found. anchor was declared at line %d, column %d", c.Alias.Anchor, c.Alias.Line, c.Alias.Column))
 				}
 			}
 		}
@@ -554,6 +556,10 @@ func (p *parser) parseRepositoryDispatchEvent(pos *Pos, n *yaml.Node) *Repositor
 
 // https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions#using-filters
 func (p *parser) parseWebhookEventFilter(name *String, n *yaml.Node) *WebhookEventFilter {
+	// A filter with no value ("tags:") is accepted by GitHub. An empty list is still reported, like actionlint does
+	if n.Kind == yaml.ScalarNode && n.Tag == "!!null" {
+		return &WebhookEventFilter{name, []*String{}}
+	}
 	v := p.parseStringOrStringSequence(name.Value, n, false, false)
 	return &WebhookEventFilter{name, v}
 }
@@ -1570,7 +1576,7 @@ func (p *parser) parseJob(id *String, n *yaml.Node) *Job {
 				ret.Needs = []*String{p.parseString(v, false)}
 			} else {
 				// needs: [job1, job2]
-				ret.Needs = p.parseStringSequence("needs", v, false, false)
+				ret.Needs = p.parseStringSequence("needs", v, true, false)
 			}
 		case "runs-on":
 			ret.RunsOn = p.parseRunsOn(v)

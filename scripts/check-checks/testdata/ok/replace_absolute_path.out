@@ -14,7 +14,7 @@ jobs:
 Output:
 
 ```
-test.yaml:5:11: could not read reusable workflow file for "./.github/workflows/not-existing-workflow.yml": open /path/to/repo/.github/workflows/not-existing-workflow.yml: no such file or directory [workflow-call]
+test.yaml:5:11: could not read reusable workflow file for "./.github/workflows/not-existing-workflow.yml": open /path/to/repo/.github/workflows/not-existing-workflow.yml: no such file or directory [invalid-local-workflow]
   |
 5 |     uses: ./.github/workflows/not-existing-workflow.yml
   |           ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

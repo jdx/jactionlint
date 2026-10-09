@@ -269,7 +269,7 @@ func (rule *RuleEvents) checkWorkflowDispatchEvent(event *WorkflowDispatchEvent)
 					b.append(o.Value)
 				}
 				if _, ok := seen[i.Default.Value]; !ok {
-					rule.ReportIDf("invalid-workflow-dispatch-input", i.Default.Pos, "default value %q of %q input is not included in its options %q", i.Default.Value, n, b.build())
+					rule.ReportIDf("invalid-workflow-dispatch-input", i.Default.Pos, "default value %q of %q input is not included in its options %s", i.Default.Value, n, b.build())
 				}
 			}
 		} else {

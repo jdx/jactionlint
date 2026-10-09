@@ -191,8 +191,9 @@ single-dash long options of v1 are removed; the error names the replacement.
     Use one line per one error. Useful for reading error messages from programs
 
   * `--rule-ids`:
-    Show the stable rule ID such as `unpinned-uses` at the end of each error in the text format
-    instead of the kind
+    Accepted for compatibility. The text format always shows the stable rule ID such as
+    `unpinned-uses` at the end of each error, since that is what the configuration, `--ignore` and
+    the ignore comments accept
 
   * `--fix-rules` <ID>[,<ID>...]:
     With `--fix` or `--diff`, apply only the fixes of these rule IDs. The `fix.rules` key of the

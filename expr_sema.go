@@ -533,11 +533,12 @@ func (sema *ExprSemanticsChecker) SetContextAvailability(avail []string) {
 	sema.availableContexts = avail
 }
 
-func (sema *ExprSemanticsChecker) checkAvailableContext(n *VariableNode) {
+// checkAvailableContext reports a context which is not available here and returns whether it is.
+func (sema *ExprSemanticsChecker) checkAvailableContext(n *VariableNode) bool {
 	ctx := strings.ToLower(n.Name)
 	for _, c := range sema.availableContexts {
 		if c == ctx {
-			return
+			return true
 		}
 	}
 
@@ -557,6 +558,7 @@ func (sema *ExprSemanticsChecker) checkAvailableContext(n *VariableNode) {
 		n.Name,
 		notes,
 	)
+	return false
 }
 
 // SetSpecialFunctionAvailability sets names of available special functions while semantics checks.
@@ -621,7 +623,10 @@ func (sema *ExprSemanticsChecker) checkVariable(n *VariableNode) ExprType {
 		return AnyType{}
 	}
 
-	sema.checkAvailableContext(n)
+	if !sema.checkAvailableContext(n) {
+		// The context cannot be used here at all, which is the one finding. What is read from it is not looked at
+		return AnyType{}
+	}
 	return v
 }
 
@@ -992,10 +997,26 @@ func (sema *ExprSemanticsChecker) checkFuncCall(n *FuncCallNode) ExprType {
 		errs = append(errs, err)
 	}
 
-	// All candidates failed
-	sema.errs = append(sema.errs, errs...)
+	// All candidates failed. One call is one mistake, so one finding: the one of the candidate that got the
+	// furthest (a wrong number of arguments is the least far), the first one of equals
+	best := errs[0]
+	for _, e := range errs[1:] {
+		if overloadProgress(e) > overloadProgress(best) {
+			best = e
+		}
+	}
+	sema.errs = append(sema.errs, best)
 
 	return AnyType{}
+}
+
+// overloadProgress ranks the error of a function signature which did not fit the call: the later the argument
+// at fault, the better the signature fits.
+func overloadProgress(e *ExprError) int {
+	if strings.HasPrefix(e.Message, "number of arguments is wrong") {
+		return -1
+	}
+	return e.Offset
 }
 
 func (sema *ExprSemanticsChecker) checkNotOp(n *NotOpNode) ExprType {
@@ -1096,7 +1117,9 @@ func (sema *ExprSemanticsChecker) checkWithNarrowing(n ExprNode, isTruthy bool) 
 		}
 		return sema.checkLogicalOp(n)
 	case *NotOpNode:
-		return sema.checkWithNarrowing(n.Operand, !isTruthy)
+		// The operand is checked under the narrowing, but the value of `!x` is a boolean whatever x is
+		sema.checkWithNarrowing(n.Operand, !isTruthy)
+		return BoolType{}
 	default:
 		return sema.check(n)
 	}

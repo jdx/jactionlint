@@ -18,7 +18,7 @@ type Pos struct {
 }
 
 func (p *Pos) String() string {
-	return fmt.Sprintf("line:%d,col:%d", p.Line, p.Col)
+	return fmt.Sprintf("line %d, column %d", p.Line, p.Col)
 }
 
 // IsBefore returns if the position is before the other position. If they are equal, this function returns false.

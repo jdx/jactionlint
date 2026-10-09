@@ -117,7 +117,7 @@ var configIgnoreKeys = []string{"rule", "file", "uses", "job", "step", "reason",
 // UnmarshalYAML implements yaml.Unmarshaler.
 func (ig *ConfigIgnore) UnmarshalYAML(n *yaml.Node) error {
 	if n.Kind != yaml.MappingNode {
-		return fmt.Errorf("yaml: an item of \"ignores\" must be a mapping at line:%d,col:%d", n.Line, n.Column)
+		return fmt.Errorf("yaml: an item of \"ignores\" must be a mapping at line %d, column %d", n.Line, n.Column)
 	}
 	out := ConfigIgnore{Line: n.Line, Column: n.Column}
 	keys, vals := mappingPairs(n)
@@ -125,7 +125,7 @@ func (ig *ConfigIgnore) UnmarshalYAML(n *yaml.Node) error {
 		v := vals[i]
 		str := func() (string, error) {
 			if v.Kind != yaml.ScalarNode || v.Tag == "!!null" {
-				return "", fmt.Errorf("%q in \"ignores\" must be a string at line:%d,col:%d", k.Value, v.Line, v.Column)
+				return "", fmt.Errorf("%q in \"ignores\" must be a string at line %d, column %d", k.Value, v.Line, v.Column)
 			}
 			return v.Value, nil
 		}
@@ -138,12 +138,12 @@ func (ig *ConfigIgnore) UnmarshalYAML(n *yaml.Node) error {
 			case yaml.SequenceNode:
 				for _, c := range v.Content {
 					if c.Kind != yaml.ScalarNode {
-						return fmt.Errorf("\"rule\" in \"ignores\" must be a rule ID or a list of rule IDs at line:%d,col:%d", c.Line, c.Column)
+						return fmt.Errorf("\"rule\" in \"ignores\" must be a rule ID or a list of rule IDs at line %d, column %d", c.Line, c.Column)
 					}
 					out.Rules = append(out.Rules, c.Value)
 				}
 			default:
-				return fmt.Errorf("\"rule\" in \"ignores\" must be a rule ID or a list of rule IDs at line:%d,col:%d", v.Line, v.Column)
+				return fmt.Errorf("\"rule\" in \"ignores\" must be a rule ID or a list of rule IDs at line %d, column %d", v.Line, v.Column)
 			}
 		case "file":
 			out.File, err = str()
@@ -163,7 +163,7 @@ func (ig *ConfigIgnore) UnmarshalYAML(n *yaml.Node) error {
 		}
 	}
 	if err := out.validate(); err != nil {
-		return fmt.Errorf("%w at line:%d,col:%d", err, n.Line, n.Column)
+		return fmt.Errorf("%w at line %d, column %d", err, n.Line, n.Column)
 	}
 	*ig = out
 	return nil

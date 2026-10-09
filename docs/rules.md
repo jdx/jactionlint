@@ -4,7 +4,7 @@
 
 Every diagnostic of jactionlint has a stable ID such as `unpinned-uses`. IDs are never renamed or reused, so they are safe to write in
 [the configuration](./config.md), in [ignore comments](./usage.md#ignore-some-errors) and in CI annotations. The ID of a
-finding is in the `id` field of `--format json`, in the `ruleId` of `--format sarif` and in the output of `--rule-ids`.
+finding is in the `id` field of `--format json`, in the `ruleId` of `--format sarif` and at the end of each finding of the text format.
 
 Each rule has:
 
@@ -1301,6 +1301,7 @@ An ignore comment or an entry of "ignores" in the config file did not suppress a
 - Default level: error
 - Profile: pedantic
 - Fixable: yes
+- Option `zizmor` (bool, default false): Also report "# zizmor: ignore[...]" comments which suppressed nothing. Turn it on after zizmor is gone.
 - Details and examples: [checks](./checks.md#check-unused-ignore)
 
 ## unused-job-output

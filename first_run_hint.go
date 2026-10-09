@@ -54,7 +54,7 @@ func (l *Linter) reportRunHint(results []fileResult) {
 	if findings < runHintMinFindings {
 		return
 	}
-	tips := []string{"see --format summary for the counts per rule"}
+	tips := []string{"see --format summary for the counts per rule", "the name at the end of a finding is its rule ID, which --ignore, the config and ignore comments accept"}
 	if hidden == 0 && !l.hintBaseline.Load() {
 		tips = append(tips, "adopt the checks gradually with --baseline-write")
 	}

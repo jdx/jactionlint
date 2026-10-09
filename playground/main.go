@@ -23,7 +23,7 @@ func encodeErrorAsMap(err *jactionlint.Error) map[string]interface{} {
 	obj["message"] = err.Message
 	obj["line"] = err.Line
 	obj["column"] = err.Column
-	obj["kind"] = err.Kind
+	obj["id"] = err.ID
 	obj["severity"] = err.Severity.String()
 	return obj
 }

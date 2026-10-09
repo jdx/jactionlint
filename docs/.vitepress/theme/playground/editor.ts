@@ -130,7 +130,7 @@ export function createEditor(opts: EditorOptions): Editor {
         const from = position(e.line, e.column);
         const word = view.state.wordAt(from);
         const to = word && word.from <= from ? word.to : Math.min(from + 1, view.state.doc.length);
-        return { from, to: Math.max(to, from), severity: "error", message: e.message, source: e.kind };
+        return { from, to: Math.max(to, from), severity: "error", message: e.message, source: e.id };
       });
       view.dispatch(setDiagnostics(view.state, diagnostics));
     },

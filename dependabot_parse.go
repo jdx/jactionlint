@@ -40,11 +40,44 @@ var (
 var dependabotTimeRegexp = regexp.MustCompile(`^([01][0-9]|2[0-3]):[0-5][0-9]$`)
 
 func (p *parser) unexpectedDependabotKey(k *String, sec string, expected ...string) {
+	if p.unexpectedAt == nil {
+		p.unexpectedAt = map[[2]int]bool{}
+	}
+	p.unexpectedAt[[2]int{k.Pos.Line, k.Pos.Col}] = true
+	if len(expected) == 1 {
+		// The message of the workflow parser ("expected X key but got Y") reads as two mistakes here
+		p.errorAt(k.Pos, fmt.Sprintf("unexpected key %q for %q section. the only key it takes is %q", k.Value, sec, expected[0]))
+		return
+	}
 	p.unexpectedKey(k, sec, slices.Clone(expected))
 }
 
+// missingDependabotKey reports a key which the mapping n lacks. It does not when the mapping has a key that was reported
+// as unexpected and is a misspelling of the missing key ("interval" and "intervall"): one mistake is one finding. An
+// unrelated unexpected key is another mistake, and the missing key is reported as well.
 func (p *parser) missingDependabotKey(n *yaml.Node, key, where string) {
+	for i := 0; i < len(n.Content); i += 2 {
+		k := n.Content[i]
+		if p.unexpectedAt[[2]int{k.Line, k.Column}] && isMisspelling(k.Value, key) {
+			return
+		}
+	}
 	p.errorf(n, "%q key is missing in %s", key, where)
+}
+
+// isMisspelling reports whether got is close enough to want to be a typo of it: one edit for a short key, two for a
+// longer one, or the key with a word added, ignoring case and the difference between "-" and "_".
+func isMisspelling(got, want string) bool {
+	norm := func(s string) string { return strings.ReplaceAll(strings.ToLower(s), "_", "-") }
+	got, want = norm(got), norm(want)
+	if strings.HasSuffix(got, "-"+want) || strings.HasPrefix(got, want+"-") {
+		return true // "word-separator" for "separator"
+	}
+	limit := 1
+	if len(want) >= 8 {
+		limit = 2
+	}
+	return editDistance(got, want) <= limit
 }
 
 // notMapping reports whether the node cannot be parsed as a mapping with required keys. In that

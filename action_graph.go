@@ -177,8 +177,11 @@ type callGraph struct {
 
 	// callees maps a node to the nodes it calls. An action which does not exist on disk has no entry.
 	callees map[graphNode][]graphNode
-	// workflows are the parsed workflows by path.
-	workflows map[string]*Workflow
+	// workflowFiles are the files of the workflows by path relative to the root with "/". The parsed workflows are not
+	// kept: they hold the text of every file of the repository, and only the triggers of the callers of an action are
+	// read later (see workflow).
+	workflowFiles map[string]string
+	workflowOn    map[string][]Event
 	// actions are the parsed actions by directory, nil for a directory which has none.
 	actions map[string]*Workflow
 	// actionFiles are the files the actions were read from, relative to the root with "/".
@@ -214,13 +217,14 @@ func localTarget(value string) (graphNode, bool) {
 
 func newCallGraph(root string) *callGraph {
 	g := &callGraph{
-		root:        root,
-		callees:     map[graphNode][]graphNode{},
-		workflows:   map[string]*Workflow{},
-		actions:     map[string]*Workflow{},
-		actionFiles: map[string]string{},
-		callers:     map[graphNode][]graphNode{},
-		calls:       map[[2]graphNode][]*ExecAction{},
+		root:          root,
+		callees:       map[graphNode][]graphNode{},
+		workflowFiles: map[string]string{},
+		workflowOn:    map[string][]Event{},
+		actions:       map[string]*Workflow{},
+		actionFiles:   map[string]string{},
+		callers:       map[graphNode][]graphNode{},
+		calls:         map[[2]graphNode][]*ExecAction{},
 
 		notInheriting: map[[2]graphNode]bool{},
 		memo:          map[string]*ActionCallers{},
@@ -243,7 +247,7 @@ func newCallGraph(root string) *callGraph {
 		if w == nil {
 			continue
 		}
-		g.workflows[rel] = w
+		g.workflowFiles[rel] = f
 		n := graphNode{'w', rel}
 		for _, j := range w.Jobs {
 			if j == nil {
@@ -323,6 +327,9 @@ func (g *callGraph) addStepEdges(from graphNode, steps []*Step, queue *[]graphNo
 func (g *callGraph) loadAction(n graphNode, queue *[]graphNode) {
 	for _, name := range actionFileNames {
 		rel := path.Join(n.path, name)
+		if !IsActionPath(rel) {
+			continue // a file directly in the workflows directory is a workflow, which is linted as one
+		}
 		src, err := os.ReadFile(filepath.Join(g.root, filepath.FromSlash(rel)))
 		if err != nil {
 			continue
@@ -341,23 +348,33 @@ func (g *callGraph) loadAction(n graphNode, queue *[]graphNode) {
 	}
 }
 
-// standardActionDirs lists the directories of the actions in the places GitHub repositories keep them:
-// the root and any directory under .github/actions.
+// skippedActionSearchDirs are the directories which the search for actions does not enter: dependencies and
+// test fixtures hold action.yml files which are not the actions of the repository.
+var skippedActionSearchDirs = map[string]bool{
+	".git": true, "node_modules": true, "vendor": true, "testdata": true, "fixtures": true, ".venv": true, "venv": true,
+	"target": true, "dist": true,
+}
+
+// standardActionDirs lists the directories of the actions of the repository: the root, any directory
+// under .github/actions and any other directory with an action.yml or action.yaml, such as the actions
+// of a repository that keeps several of them in its subdirectories (`hassfest/action.yml`), also below
+// ".github/workflows". Dependencies and test fixtures are skipped; an action in one of them is still
+// linted when a `uses:` refers to it or its file is given.
 func standardActionDirs(root string) []string {
 	var dirs []string
-	for _, name := range actionFileNames {
-		if s, err := os.Stat(filepath.Join(root, name)); err == nil && !s.IsDir() {
-			dirs = append(dirs, ".")
-			break
-		}
-	}
-	base := filepath.Join(root, ".github", "actions")
-	_ = filepath.WalkDir(base, func(p string, d os.DirEntry, err error) error {
-		if err != nil || d.IsDir() {
+	_ = filepath.WalkDir(root, func(p string, d os.DirEntry, err error) error {
+		if err != nil {
 			return nil
 		}
-		if n := d.Name(); n == "action.yml" || n == "action.yaml" {
-			if rel, err := filepath.Rel(root, filepath.Dir(p)); err == nil {
+		if d.IsDir() {
+			if p != root && skippedActionSearchDirs[d.Name()] {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		// An action.yml directly in .github/workflows is a workflow for GitHub, which IsActionPath knows
+		if n := d.Name(); (n == "action.yml" || n == "action.yaml") && IsActionPath(filepath.ToSlash(p)) {
+			if rel, err := filepath.Rel(root, filepath.Dir(p)); err == nil && !slices.Contains(dirs, filepath.ToSlash(rel)) {
 				dirs = append(dirs, filepath.ToSlash(rel))
 			}
 		}
@@ -375,6 +392,22 @@ func (g *callGraph) actionPaths() []string {
 	}
 	sort.Strings(ret)
 	return ret
+}
+
+// triggersOf returns the events of the workflow, which is read again when the first caller of an action asks for them.
+// The caller holds g.mu.
+func (g *callGraph) triggersOf(rel string) []Event {
+	if on, ok := g.workflowOn[rel]; ok {
+		return on
+	}
+	var on []Event
+	if src, err := os.ReadFile(g.workflowFiles[rel]); err == nil {
+		if w, _ := Parse(src); w != nil {
+			on = w.On
+		}
+	}
+	g.workflowOn[rel] = on
+	return on
 }
 
 // callersOf returns the workflows which run the action in the directory (relative to the root with "/").
@@ -412,10 +445,10 @@ func (g *callGraph) callersOf(dir string) *ActionCallers {
 				queue = append(queue, item{from, via})
 				continue
 			}
-			w := g.workflows[from.path]
+			on := g.triggersOf(from.path)
 			called := len(g.callers[from]) > 0
 			var events []Event
-			for _, e := range w.On {
+			for _, e := range on {
 				if _, ok := e.(*WorkflowCallEvent); !ok {
 					events = append(events, e)
 				}

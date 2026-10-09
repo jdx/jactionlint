@@ -14,7 +14,7 @@ describe("main.wasm", () => {
   it("reports a missing runs-on", () => {
     const errs = lint("\non: push\n\njobs:\n  test:\n    steps:\n      - run: echo 'hi'");
     expect(errs).toEqual([
-      { kind: "syntax-check", message: '"runs-on" section is missing in job "test"', line: 5, column: 3, severity: "error" },
+      { id: "workflow-syntax", message: '"runs-on" section is missing in job "test"', line: 5, column: 3, severity: "error" },
     ]);
   });
 
@@ -22,7 +22,7 @@ describe("main.wasm", () => {
     const errs = lint("\non: foo\n\njobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo 'hi'");
     expect(errs).toHaveLength(1);
     expect(errs[0].message).toContain('unknown Webhook event "foo"');
-    expect([errs[0].line, errs[0].column, errs[0].kind]).toEqual([2, 5, "events"]);
+    expect([errs[0].line, errs[0].column, errs[0].id]).toEqual([2, 5, "unknown-event"]);
   });
 
   it("reports no error for a valid workflow", () => {
@@ -63,14 +63,14 @@ describe("permalinks in docs/checks.md", () => {
   it("every link decodes and reproduces the documented errors", () => {
     expect(links.length).toBeGreaterThan(0);
     const failures: string[] = [];
-    // Positions inside messages ("previously defined at line:7,col:9") shift as well
-    const norm = (s: string) => s.replace(/line:\d+,\s*col(?:umn)?:\d+/g, "line:N,col:N");
+    // Positions inside messages ("previously defined at line 7, column 9") shift as well
+    const norm = (s: string) => s.replace(/line[: ]\s*\d+,\s*col(?:umn)?[: ]\s*\d+/g, "line:N,col:N");
     for (const { output, hash } of links) {
       const errs = lint(decodeSource(hash));
       // The CLI prints "warning: " or "info: " before the message of a finding which is not an error and the
       // rule ID in brackets. The playground runs the default profile without a configuration file, so a
       // section whose rule is not on by default has to skip its playground link (see CONTRIBUTING.md).
-      const actual = errs.map((e) => norm(`${prefix(e.severity)}${e.message} [${e.kind}]`));
+      const actual = errs.map((e) => norm(`${prefix(e.severity)}${e.message} [${e.id}]`));
       const documented = [...output.matchAll(/^test\.yaml:\d+:\d+: (.*)$/gm)].map((m) => norm(m[1]))
         // The CLI reads local files, which the wasm build cannot
         .filter((m) => !m.includes("no such file or directory"));

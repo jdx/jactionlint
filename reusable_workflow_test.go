@@ -1,8 +1,10 @@
 package jactionlint
 
 import (
+	"bytes"
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -333,7 +335,7 @@ func TestReusableWorkflowUnmarshalEventNotFound(t *testing.T) {
 			if !strings.Contains(msg, "\"workflow_call\" event trigger is not found in \"on:\"") {
 				t.Fatal("Unexpected error:", msg)
 			}
-			loc := fmt.Sprintf("line:%d, column:%d", tc.line, tc.col)
+			loc := fmt.Sprintf("line %d, column %d", tc.line, tc.col)
 			if !strings.Contains(msg, loc) {
 				t.Fatalf("location is not %q: %s", loc, msg)
 			}
@@ -452,10 +454,10 @@ func TestReusableWorkflowCacheFindMetadataError(t *testing.T) {
 			if !strings.Contains(msg, tc.want) {
 				t.Fatalf("unexpected error. wanted %q but got %q", tc.want, msg)
 			}
-			// Trying to find metadata with the same spec later returns nil to avoid duplicate errors
+			// Finding it again fails the same way: every call of the workflow reports it, and the linter keeps one
 			m, err := c.FindMetadata(tc.spec)
-			if err != nil {
-				t.Fatal("error happens when finding metadata again:", err)
+			if err == nil || err.Error() != msg {
+				t.Fatalf("the same error is expected when finding metadata again: %v", err)
 			}
 			if m != nil {
 				t.Fatal("nil is not cached:", m)
@@ -996,5 +998,56 @@ func TestReusableWorkflowCacheFindMetadataSharesEntryBetweenUsesForms(t *testing
 				t.Errorf("%q did not hit the cache entry written by %q", tc.reads, tc.writes)
 			}
 		})
+	}
+}
+
+// A reusable workflow or an action which is broken is one finding, in the first file that calls it in the order of
+// the files, whichever goroutine searched first.
+func TestSharedFindingOfManyCallersIsDeterministic(t *testing.T) {
+	root := t.TempDir()
+	caller := func(uses string) string {
+		return "on: push\njobs:\n  x:\n    uses: " + uses + "\n"
+	}
+	stepCaller := "on: push\njobs:\n  x:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: ./.github/actions/broken\n"
+	files := map[string]string{
+		".github/workflows/lib.yml":         "on: push\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo\n",
+		".github/actions/broken/action.yml": "name: x\nruns:\n  using: composite\n  steps:\n    - run: echo\n      shell: bash\n",
+		".github/workflows/caller_d.yml":    stepCaller,
+		".github/workflows/caller_e.yml":    stepCaller,
+		".github/workflows/caller_f.yml":    stepCaller,
+	}
+	for _, n := range []string{"a", "b", "c", "d2", "e2"} {
+		files[".github/workflows/caller_"+n+".yml"] = caller("./.github/workflows/lib.yml")
+	}
+	writeTree(t, root, files)
+	if err := os.Mkdir(filepath.Join(root, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	var first string
+	for i := 0; i < 40; i++ {
+		var out bytes.Buffer
+		l, err := NewLinter(&out, &LinterOptions{Format: FormatGCC})
+		if err != nil {
+			t.Fatal(err)
+		}
+		l.defaultConfig = mustParseConfig(t, "profile: correctness\n")
+		if _, err := l.LintRepository(root); err != nil {
+			t.Fatal(err)
+		}
+		var lines []string
+		for _, line := range strings.Split(out.String(), "\n") {
+			if strings.Contains(line, "[invalid-local-workflow]") || strings.Contains(line, "[invalid-local-action]") {
+				lines = append(lines, strings.TrimPrefix(line, root))
+			}
+		}
+		got := strings.Join(lines, "\n")
+		if i == 0 {
+			first = got
+			if len(lines) != 2 || !strings.Contains(lines[0], "caller_a.yml") || !strings.Contains(lines[1], "caller_d.yml") {
+				t.Fatalf("want one finding of each, in the first file that calls it: %q", got)
+			}
+		} else if got != first {
+			t.Fatalf("run %d differs:\n%s\nfirst:\n%s", i, got, first)
+		}
 	}
 }

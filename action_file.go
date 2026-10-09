@@ -291,7 +291,9 @@ func (p *parser) checkCompositeShells(steps []*Step) {
 }
 
 // IsActionPath reports whether the path is the metadata file of an action: a file named action.yml or
-// action.yaml that is not under ".github/workflows" (where every YAML file is a workflow).
+// action.yaml that is not directly in ".github/workflows" (where every YAML file is a workflow). GitHub
+// loads only the files directly in that directory as workflows, so the file of a subdirectory is the
+// action which a `uses: ./.github/workflows/dir` refers to.
 func IsActionPath(p string) bool {
 	p = strings.ReplaceAll(p, `\`, "/")
 	switch path.Base(p) {
@@ -302,15 +304,11 @@ func IsActionPath(p string) bool {
 	return !isWorkflowsDir(path.Dir(p))
 }
 
-// isWorkflowsDir reports whether the slash-separated directory is ".github/workflows" or in it.
+// isWorkflowsDir reports whether the slash-separated directory is ".github/workflows".
 func isWorkflowsDir(dir string) bool {
 	parts := strings.Split(dir, "/")
-	for i := 0; i+1 < len(parts); i++ {
-		if parts[i] == ".github" && parts[i+1] == "workflows" {
-			return true
-		}
-	}
-	return false
+	n := len(parts)
+	return n >= 2 && parts[n-2] == ".github" && parts[n-1] == "workflows"
 }
 
 // actionFileNames are the names GitHub reads the metadata of an action from.

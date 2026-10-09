@@ -130,6 +130,10 @@ func TestLinterDiscoversActions(t *testing.T) {
 		".github/actions/x/action.yml": "runs:\n  using: node20\n  main: a.js\n",
 		"tools/custom/action.yml":      "runs:\n  using: node20\n  main: a.js\n",
 		"vendor/other/action.yml":      "runs:\n  using: node20\n  main: a.js\n", // nothing refers to it
+		"node_modules/p/action.yml":    "runs:\n  using: node20\n  main: a.js\n",
+		// An action monorepo keeps its actions in directories of the root, and an action may sit below the workflows
+		"hassfest/action.yml":               "runs:\n  using: node20\n  main: a.js\n",
+		".github/workflows/dir/action.yaml": "runs:\n  using: node20\n  main: a.js\n",
 	})
 	p := &Project{root: root}
 	var rel []string
@@ -137,7 +141,7 @@ func TestLinterDiscoversActions(t *testing.T) {
 		r, _ := filepath.Rel(root, f)
 		rel = append(rel, filepath.ToSlash(r))
 	}
-	want := []string{".github/actions/x/action.yml", "action.yaml", "tools/custom/action.yml"}
+	want := []string{".github/actions/x/action.yml", ".github/workflows/dir/action.yaml", "action.yaml", "hassfest/action.yml", "tools/custom/action.yml"}
 	if diff := cmp.Diff(want, rel); diff != "" {
 		t.Error(diff)
 	}
@@ -153,5 +157,34 @@ func TestCallGraphIsBuiltOncePerRun(t *testing.T) {
 	first := l.callGraphOf(p)
 	if second := l.callGraphOf(p); first != second {
 		t.Error("the call graph must be cached by the linter")
+	}
+}
+
+// A file named action.yml directly in .github/workflows is a workflow for GitHub. It is found once, as a
+// workflow, and not again as the metadata of an action.
+func TestWorkflowNamedActionYMLIsNotAnAction(t *testing.T) {
+	root := t.TempDir()
+	writeTree(t, root, map[string]string{
+		".git/HEAD":                        "ref: refs/heads/main\n",
+		".github/workflows/action.yml":     "on: push\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo hi\n",
+		".github/workflows/sub/action.yml": "runs:\n  using: composite\n  steps: []\n",
+	})
+	l, err := NewLinter(io.Discard, &LinterOptions{WorkingDir: root})
+	if err != nil {
+		t.Fatal(err)
+	}
+	files, _, err := l.repositoryFiles(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	seen := map[string]int{}
+	for _, f := range files {
+		seen[filepath.ToSlash(strings.TrimPrefix(f, root))]++
+	}
+	if n := seen["/.github/workflows/action.yml"]; n != 1 {
+		t.Errorf("the workflow is listed %d times: %v", n, files)
+	}
+	if n := seen["/.github/workflows/sub/action.yml"]; n != 1 {
+		t.Errorf("the action below the workflows directory is listed %d times: %v", n, files)
 	}
 }

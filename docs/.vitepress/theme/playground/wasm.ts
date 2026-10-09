@@ -8,7 +8,7 @@
 // node tests, which load the same wasm.
 
 export interface LintError {
-  kind: string;
+  id: string;
   message: string;
   line: number;
   column: number;

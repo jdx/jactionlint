@@ -70,7 +70,7 @@ describe("Playground component", () => {
     expect(rows).toHaveLength(1);
     expect(rows[0].textContent).toContain('unknown Webhook event "foo"');
     expect(rows[0].textContent).toContain("line:1, col:5");
-    expect(rows[0].textContent).toContain("events");
+    expect(rows[0].textContent).toContain("unknown-event");
     expect(root.querySelector(".jal-note")).toBeNull(); // loading note is gone
     await nextTick();
   });

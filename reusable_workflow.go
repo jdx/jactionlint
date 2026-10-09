@@ -13,7 +13,7 @@ import (
 
 func expectedMapping(where string, n *yaml.Node) error {
 	return fmt.Errorf(
-		"yaml: %s must be mapping node but %s node was found at line:%d, col:%d",
+		"yaml: %s must be mapping node but %s node was found at line %d, column %d",
 		where,
 		nodeKindName(n.Kind),
 		n.Line,
@@ -187,8 +187,12 @@ type LocalReusableWorkflowCache struct {
 	mu    sync.RWMutex
 	proj  *Project // maybe nil
 	cache map[string]*ReusableWorkflowMetadata
-	cwd   string
-	dbg   io.Writer
+	// failures are the causes why a workflow could not be loaded, by the key of the cache. Every search of
+	// that workflow fails again, so every workflow that calls it reports it and the linter keeps the first
+	// finding in the order of the files, instead of the one of whichever goroutine searched first.
+	failures map[string]reusableFailure
+	cwd      string
+	dbg      io.Writer
 }
 
 func (c *LocalReusableWorkflowCache) debug(format string, args ...interface{}) {
@@ -206,6 +210,36 @@ func (c *LocalReusableWorkflowCache) readCache(key string) (*ReusableWorkflowMet
 	return m, ok
 }
 
+// reusableFailure is why a reusable workflow could not be loaded. Exactly one field is set.
+type reusableFailure struct {
+	read  error  // the file could not be read
+	parse string // the file is invalid
+}
+
+func (f reusableFailure) err(spec string) error {
+	if f.read != nil {
+		return fmt.Errorf("could not read reusable workflow file for %q: %w", spec, f.read)
+	}
+	return fmt.Errorf("error while parsing reusable workflow %q: %s", spec, f.parse)
+}
+
+func (c *LocalReusableWorkflowCache) failure(key string) (reusableFailure, bool) {
+	c.mu.RLock()
+	f, ok := c.failures[key]
+	c.mu.RUnlock()
+	return f, ok
+}
+
+func (c *LocalReusableWorkflowCache) writeFailure(key string, f reusableFailure) {
+	c.mu.Lock()
+	if c.failures == nil {
+		c.failures = map[string]reusableFailure{}
+	}
+	c.failures[key] = f
+	c.cache[key] = nil
+	c.mu.Unlock()
+}
+
 func (c *LocalReusableWorkflowCache) writeCache(key string, val *ReusableWorkflowMetadata) {
 	c.mu.Lock()
 	c.cache[key] = val
@@ -215,10 +249,9 @@ func (c *LocalReusableWorkflowCache) writeCache(key string, val *ReusableWorkflo
 // FindMetadata finds/parses a reusable workflow metadata located by the 'spec' argument. When project
 // is not set to 'proj' field or the spec is not a local reference, this method immediately returns with nil.
 //
-// Note that an error is not cached. At first search, let's say this method returned an error since
-// the reusable workflow is invalid. In this case, calling this method with the same spec later will
-// not return the error again. It just will return nil. This behavior prevents repeating to report
-// the same error from multiple places.
+// An invalid workflow returns its error at every search. The linter keeps only the first of the findings
+// which describe a workflow and not the call of it (see sharedFindings), so the finding is in the first
+// file of the run which calls the workflow, whichever goroutine searched first.
 //
 // Calling this method is thread-safe.
 func (c *LocalReusableWorkflowCache) FindMetadata(spec string) (*ReusableWorkflowMetadata, error) {
@@ -232,6 +265,9 @@ func (c *LocalReusableWorkflowCache) FindMetadata(spec string) (*ReusableWorkflo
 		return nil, nil
 	}
 
+	if f, ok := c.failure(key); ok {
+		return nil, f.err(spec)
+	}
 	if m, ok := c.readCache(key); ok {
 		c.debug("Cache hit for %s: %v", spec, m)
 		return m, nil
@@ -240,15 +276,16 @@ func (c *LocalReusableWorkflowCache) FindMetadata(spec string) (*ReusableWorkflo
 	file := filepath.Join(c.proj.RootDir(), filepath.FromSlash(key))
 	src, err := os.ReadFile(file)
 	if err != nil {
-		c.writeCache(key, nil) // Remember the workflow file was not found
-		return nil, fmt.Errorf("could not read reusable workflow file for %q: %w", spec, err)
+		f := reusableFailure{read: err}
+		c.writeFailure(key, f) // Remember the workflow file was not found
+		return nil, f.err(spec)
 	}
 
 	m, err := parseReusableWorkflowMetadata(src)
 	if err != nil {
-		c.writeCache(key, nil) // Remember the workflow file was invalid
-		msg := strings.ReplaceAll(err.Error(), "\n", " ")
-		return nil, fmt.Errorf("error while parsing reusable workflow %q: %s", spec, msg)
+		f := reusableFailure{parse: strings.ReplaceAll(err.Error(), "\n", " ")}
+		c.writeFailure(key, f) // Remember the workflow file was invalid
+		return nil, f.err(spec)
 	}
 
 	c.debug("New reusable workflow metadata at %s: %v", file, m)
@@ -423,7 +460,7 @@ func parseReusableWorkflowMetadata(src []byte) (*ReusableWorkflowMetadata, error
 	}
 
 	if m == nil {
-		return nil, fmt.Errorf("\"workflow_call\" event trigger is not found in \"on:\" at line:%d, column:%d", n.Line, n.Column)
+		return nil, fmt.Errorf("\"workflow_call\" event trigger is not found in \"on:\" at line %d, column %d", n.Line, n.Column)
 	}
 
 	// Decode top-level permissions (if any).

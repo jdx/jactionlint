@@ -165,14 +165,8 @@ func upstreamWorkflowsTrusted(project *Project, sib *siblingWorkflows, we *Webho
 		if n == nil || n.ContainsExpression() || strings.ContainsAny(n.Value, "*?[]!+") {
 			return false
 		}
-		w, ok := byName[strings.ToLower(n.Value)]
-		if !ok || len(w.On) == 0 {
+		if !byName[strings.ToLower(n.Value)] {
 			return false
-		}
-		for _, e := range w.On {
-			if !trustedUpstreamEvents[e.EventName()] {
-				return false
-			}
 		}
 	}
 	return true
@@ -411,17 +405,18 @@ func untrustedEnvNames(wf *Workflow, j *Job, s *Step) map[string]bool {
 // the files are read when the first rule asks and not again.
 type siblingWorkflows struct {
 	parseOnce sync.Once
-	byName    map[string]*Workflow
+	byName    map[string]bool
 	parseOK   bool
 
 	namesOnce sync.Once
 	nameSet   workflowNames
 }
 
-// parsed returns the workflows of the project by their lower-cased names, and false when they could not
-// be determined: a file that cannot be read or parsed, or a name with an expression. A nil value reads
-// the files on every call.
-func (s *siblingWorkflows) parsed(project *Project) (map[string]*Workflow, bool) {
+// parsed returns, for the workflows of the project by their lower-cased names, whether they have events and all of
+// them are trusted ones. It returns false as the second value when they could not be determined: a file that cannot be
+// read or parsed, or a name with an expression. A nil value reads the files on every call. Only that is kept of a
+// workflow, not the workflow: a project with hundreds of large workflows would keep them all in memory for the run.
+func (s *siblingWorkflows) parsed(project *Project) (map[string]bool, bool) {
 	if s == nil {
 		return readParsedWorkflows(project)
 	}
@@ -438,13 +433,13 @@ func (s *siblingWorkflows) names(project *Project) workflowNames {
 	return s.nameSet
 }
 
-func readParsedWorkflows(project *Project) (map[string]*Workflow, bool) {
+func readParsedWorkflows(project *Project) (map[string]bool, bool) {
 	dir := project.WorkflowsDir()
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return nil, false
 	}
-	byName := map[string]*Workflow{}
+	byName := map[string]bool{}
 	for _, e := range entries {
 		ext := filepath.Ext(e.Name())
 		if e.IsDir() || (ext != ".yml" && ext != ".yaml") {
@@ -468,7 +463,13 @@ func readParsedWorkflows(project *Project) (map[string]*Workflow, bool) {
 		if strings.Contains(name, "${{") {
 			return nil, false
 		}
-		byName[strings.ToLower(name)] = w
+		trusted := len(w.On) > 0
+		for _, e := range w.On {
+			if !trustedUpstreamEvents[e.EventName()] {
+				trusted = false
+			}
+		}
+		byName[strings.ToLower(name)] = trusted
 	}
 	return byName, true
 }
