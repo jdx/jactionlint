@@ -24,6 +24,11 @@ builds:
     id: macos
     goos: [darwin]
     goarch: [amd64, arm64]
+    hooks:
+      # Sign before the binary is archived so the shipped file carries the signature. Apple will not notarize
+      # a binary without the hardened runtime and a secure timestamp. release.yaml notarizes the result.
+      post:
+        - cmd: codesign --sign "$APPLE_SIGNING_IDENTITY" --options runtime --timestamp --prefix dev.jdx. "{{ .Path }}"
 
   - <<: *build_defaults
     id: linux
