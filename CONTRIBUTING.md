@@ -37,7 +37,8 @@ Where a check goes:
 - **Pedantic profile.** The check is noisy, opinionated or informational: it has a real false-positive rate, or it reports something
   many projects do on purpose, or it only matters to an auditor. zizmor's pedantic and auditor personas go here.
 - **Neither.** A check that needs configuration to mean anything (`forbidden-uses`, `required-actions`, `timeout-too-long`) runs only
-  when the configuration enables it. A check that needs the network runs only with `-online`.
+  when the configuration enables it. A check that needs the network runs only when the online checks are on (`-online` on the command
+  line, `online: true` in the config or `LinterOptions.Online` in the API).
 
 The tier does not depend on the false-positive rate: it follows what the check detects. A noisy security check is still a security
 check, it just lives in the `pedantic` profile.
@@ -46,7 +47,8 @@ Two more rules keep the profiles simple:
 
 - **One ID per audit.** A noisier tier of an audit is the same rule ID with an option named `pedantic`, true under the `pedantic`
   profile and false otherwise. Do not add an ID with a suffix such as `-expansion` or `-trusted`.
-- **Every rule of `correctness` and `default` reports `error`.** A rule that should not fail a build belongs to `pedantic` with its
+- **Every rule of `correctness` and `default` reports `error`, with one documented exception** (`unused-baseline-entry` is `info`,
+  and only `-baseline-check` produces it). A rule that should not fail a build belongs to `pedantic` with its
   own level. `TestRuleProfilesInvariants` enforces both this and the content of `correctness`. A fixer never invents a value
   (a number of minutes, a number of days): offer the fix only when a rule option supplies it.
 
@@ -156,7 +158,7 @@ file (`linter.go` and `rule_registry.go` stay untouched). A rule needs these fil
    ```
 
    `Profile` is the first profile that enables the rule (see [the policy](#profiles-what-runs-without-configuration)); leave it empty
-   for a rule that runs only when configured, and set `Online: true` for a rule that needs `-online`. `Fixable: true` marks a rule
+   for a rule that runs only when configured, and set `Online: true` for a rule that needs the online checks. `Fixable: true` marks a rule
    that attaches a fix. `Options` lists the options of the rule, which `docs/rules.md` documents and the config validates.
 
 2. `rule_<name>_test.go` and golden files: an input in `testdata/err/<name>.yaml` with its expected output in
@@ -180,7 +182,7 @@ file (`linter.go` and `rule_registry.go` stay untouched). A rule needs these fil
    [composite actions](docs/checks.md#check-composite-actions). `TestActionScopeIsComplete` and `TestActionScopeIsDocumented` fail
    until both are done. A caller-dependent rule reads the trigger with `Workflow.TriggerEvents` instead of `Workflow.On`.
 
-An online rule (`Online: true` in its `RuleInfo`, enabled only by `-online`) takes the `onlineSession` from the `RuleEnv` in its
+An online rule (`Online: true` in its `RuleInfo`, enabled only when the online checks are on) takes the `onlineSession` from the `RuleEnv` in its
 factory and returns nothing when it is nil. It never talks to the network in tests: the golden files named `*_online` in
 `testdata/err` and `testdata/examples` are linted with the answers recorded in `testdata/online/github.json`, served by
 `NewFixtureGitHubClient`, and a lookup that is not in the file fails the test. Add the repositories your rule needs to the file;

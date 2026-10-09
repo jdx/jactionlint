@@ -687,7 +687,8 @@ runs when a finding has no fix. Add this step to `hk.pkl`:
 ## Use jactionlint on GitHub Actions
 
 The recommended way is [mise](https://mise.jdx.dev) with [`jdx/mise-action`](https://github.com/jdx/mise-action). `mise use jactionlint`
-records the version in the `mise.toml` of the project (and `mise.lock` records its checksum), so CI runs the version developers run.
+records the version in the `mise.toml` of the project, so CI runs the version developers run; `mise lock` also records its checksum in
+`mise.lock`, which you commit.
 The workflow below passes the `default` profile itself:
 
 ```yaml

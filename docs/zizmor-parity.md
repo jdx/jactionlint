@@ -92,7 +92,7 @@ time; the rules that were merged into one ID since (`template-injection-expansio
 ## Lessons applied
 
 The issue tracker of zizmor is a list of false positives and false negatives that a rule of the same shape can have. Each item below
-was reproduced with a fixture in `pitfalls_test.go` against jactionlint before anything was changed, so it is measured by a test, not on
+was tested with a fixture in `pitfalls_test.go` against jactionlint before anything was changed, so it is measured by a test, not on
 the corpus. "Fixed" means that the fixture failed on the code before; "Not reproduced" means that it passed, and it is kept as a fixture.
 
 | zizmor | What went wrong there | jactionlint |
@@ -122,7 +122,8 @@ These are choices, not gaps. Each says what is different and where the evidence 
 
 ### Rules of our own
 
-Rules that zizmor 1.30.1 has no audit for. They are not in the table above, `scripts/zizmor-diff` has no mapping for them, and a
+Rules that zizmor 1.30.1 has no audit for (`insecure-url-scheme` has the name of an audit of zizmor that checks `.pre-commit-config.yaml`; the
+workflow URL check has no counterpart there). They are not in the table above, except that one, `scripts/zizmor-diff` has no mapping for them, and a
 finding of one of them is always "only jactionlint" in its report. Their false-positive reviews are in the measurement sections named
 in the last column; the idea behind some of them is an open issue of zizmor.
 
