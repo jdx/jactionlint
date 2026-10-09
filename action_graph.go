@@ -173,8 +173,11 @@ type callGraph struct {
 
 	// callees maps a node to the nodes it calls. An action which does not exist on disk has no entry.
 	callees map[graphNode][]graphNode
-	// workflows are the parsed workflows by path.
-	workflows map[string]*Workflow
+	// workflowFiles are the files of the workflows by path relative to the root with "/". The parsed workflows are not
+	// kept: they hold the text of every file of the repository, and only the triggers of the callers of an action are
+	// read later (see workflow).
+	workflowFiles map[string]string
+	workflowOn    map[string][]Event
 	// actions are the parsed actions by directory, nil for a directory which has none.
 	actions map[string]*Workflow
 	// actionFiles are the files the actions were read from, relative to the root with "/".
@@ -205,13 +208,14 @@ func localTarget(value string) (graphNode, bool) {
 
 func newCallGraph(root string) *callGraph {
 	g := &callGraph{
-		root:        root,
-		callees:     map[graphNode][]graphNode{},
-		workflows:   map[string]*Workflow{},
-		actions:     map[string]*Workflow{},
-		actionFiles: map[string]string{},
-		callers:     map[graphNode][]graphNode{},
-		memo:        map[string]*ActionCallers{},
+		root:          root,
+		callees:       map[graphNode][]graphNode{},
+		workflowFiles: map[string]string{},
+		workflowOn:    map[string][]Event{},
+		actions:       map[string]*Workflow{},
+		actionFiles:   map[string]string{},
+		callers:       map[graphNode][]graphNode{},
+		memo:          map[string]*ActionCallers{},
 	}
 
 	wfDir := filepath.Join(root, ".github", "workflows")
@@ -231,7 +235,7 @@ func newCallGraph(root string) *callGraph {
 		if w == nil {
 			continue
 		}
-		g.workflows[rel] = w
+		g.workflowFiles[rel] = f
 		n := graphNode{'w', rel}
 		for _, j := range w.Jobs {
 			if j == nil {
@@ -370,6 +374,22 @@ func (g *callGraph) actionPaths() []string {
 	return ret
 }
 
+// triggersOf returns the events of the workflow, which is read again when the first caller of an action asks for them.
+// The caller holds g.mu.
+func (g *callGraph) triggersOf(rel string) []Event {
+	if on, ok := g.workflowOn[rel]; ok {
+		return on
+	}
+	var on []Event
+	if src, err := os.ReadFile(g.workflowFiles[rel]); err == nil {
+		if w, _ := Parse(src); w != nil {
+			on = w.On
+		}
+	}
+	g.workflowOn[rel] = on
+	return on
+}
+
 // callersOf returns the workflows which run the action in the directory (relative to the root with "/").
 func (g *callGraph) callersOf(dir string) *ActionCallers {
 	dir = path.Clean(dir)
@@ -405,10 +425,10 @@ func (g *callGraph) callersOf(dir string) *ActionCallers {
 				queue = append(queue, item{from, via})
 				continue
 			}
-			w := g.workflows[from.path]
+			on := g.triggersOf(from.path)
 			called := len(g.callers[from]) > 0
 			var events []Event
-			for _, e := range w.On {
+			for _, e := range on {
 				if _, ok := e.(*WorkflowCallEvent); !ok {
 					events = append(events, e)
 				}
