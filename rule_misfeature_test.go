@@ -21,6 +21,15 @@ func TestMisfeatureShells(t *testing.T) {
 		{"perl {0}", "misfeature-custom-shell"},
 		{"zsh", "misfeature-custom-shell"},
 		{"${{ matrix.shell }}", ""},
+		// A path to a shell is the shell
+		{"/usr/bin/bash {0}", ""},
+		{"/bin/sh -e {0}", ""},
+		{"bash.exe", ""},
+		{"C:\\Windows\\System32\\cmd.exe /c", "misfeature"},
+		{"/usr/bin/cmd", "misfeature"},
+		{"C:\\Program\\PWSH.EXE", ""},
+		{"./custom-shell", "misfeature-custom-shell"},
+		{"/opt/tools/zsh {0}", "misfeature-custom-shell"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.shell, func(t *testing.T) {
