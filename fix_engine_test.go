@@ -433,3 +433,27 @@ func TestFixRetriesTheFixesDroppedForARefusedOne(t *testing.T) {
 		t.Errorf("unexpected result: %+v", res)
 	}
 }
+
+// When no temporary file can be made next to the file, it is not written in place (a failure in the middle
+// would leave it empty): the error says so and the file is as it was.
+func TestWriteFileKeepingModeDoesNotTruncateWhenNoTempFileCanBeMade(t *testing.T) {
+	if runtime.GOOS == "windows" || os.Geteuid() == 0 {
+		t.Skip("needs a directory that cannot be written")
+	}
+	dir := t.TempDir()
+	path := filepath.Join(dir, "a.yaml")
+	if err := os.WriteFile(path, []byte("old\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(dir, 0o555); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chmod(dir, 0o755)
+	err := writeFileKeepingMode(path, []byte("new\n"))
+	if err == nil || !strings.Contains(err.Error(), "left as it was") {
+		t.Errorf("want an error that says the file is untouched: %v", err)
+	}
+	if b, _ := os.ReadFile(path); string(b) != "old\n" {
+		t.Errorf("the file changed: %q", b)
+	}
+}

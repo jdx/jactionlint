@@ -600,11 +600,8 @@ func writeFileKeepingMode(path string, b []byte) error {
 	}
 	tmp, err := os.CreateTemp(filepath.Dir(path), ".jactionlint-fix-*")
 	if err != nil {
-		// The directory may not be writable while the file is
-		if werr := os.WriteFile(path, b, mode); werr != nil {
-			return fmt.Errorf("could not write %q: %w", path, werr)
-		}
-		return nil
+		// Writing in place would truncate the file first, and a failure in the middle (a full disk) loses it
+		return fmt.Errorf("could not write %q: no temporary file can be made in its directory, so the file was left as it was: %w", path, err)
 	}
 	name := tmp.Name()
 	defer os.Remove(name) // No-op after the rename
@@ -623,10 +620,7 @@ func writeFileKeepingMode(path string, b []byte) error {
 		return fmt.Errorf("could not write %q: %w", path, err)
 	}
 	if err := os.Rename(name, path); err != nil {
-		// Renaming over a file can fail on some file systems (Windows with the file open)
-		if werr := os.WriteFile(path, b, mode); werr != nil {
-			return fmt.Errorf("could not write %q: %w", path, werr)
-		}
+		return fmt.Errorf("could not write %q, which was left as it was: %w", path, err)
 	}
 	return nil
 }
