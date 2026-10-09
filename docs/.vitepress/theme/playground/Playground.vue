@@ -255,7 +255,7 @@ onBeforeUnmount(() => {
                   ><span v-else>{{ p.text }}</span></template
                 ></span
               >
-              <span class="jal-kind">{{ e.kind }}</span>
+              <span class="jal-kind">{{ e.id }}</span>
             </button>
           </li>
         </ul>
