@@ -778,3 +778,38 @@ func TestBaselineCheckWithBaselineFalseInTheConfig(t *testing.T) {
 		t.Errorf("the stale entries must be reported:\n%s", out)
 	}
 }
+
+// baselineScopes must give what baselineScope gives for every line, for the fixtures of all kinds of
+// files and for lines which are not YAML at all.
+func TestBaselineScopesMatchBaselineScope(t *testing.T) {
+	var sources [][]byte
+	for _, pat := range []string{"testdata/ok/*.yaml", "testdata/err/*.yaml", "testdata/examples/*.yaml", "testdata/positions/*.yaml", "testdata/projects/*/.github/workflows/*.y*ml"} {
+		files, err := filepath.Glob(pat)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, f := range files {
+			b, err := os.ReadFile(f)
+			if err != nil {
+				t.Fatal(err)
+			}
+			sources = append(sources, b)
+		}
+	}
+	sources = append(sources,
+		[]byte("a: 1\nfoo\n  b: 2\n# c\nc:\n  d: 1\n---\n  e: 1\nf:\n\tg: 2\n...\nh:\n- i\n  j: 1\n \n"),
+		[]byte("   \n# x\n  indented: 1\ntop:\n    deep: 1\n  shallow: 2\n"),
+		[]byte("{a: 1}\n"), []byte(""), []byte("\n"))
+	if len(sources) < 100 {
+		t.Fatalf("too few sources: %d", len(sources))
+	}
+	for _, src := range sources {
+		lines := sourceLines(src)
+		got := baselineScopes(lines)
+		for i := range lines {
+			if want := baselineScope(lines, i+1); got[i] != want {
+				t.Fatalf("line %d %q: baselineScopes gives %q, baselineScope %q\n%s", i+1, lines[i], got[i], want, src)
+			}
+		}
+	}
+}
