@@ -113,6 +113,9 @@ type Script struct {
 	Totals []*Total
 	// ForVars are the variables of `for` loops.
 	ForVars []*ForVar
+	// Funcs are the names of the functions the script defines. A prefix assignment of a call to one of them
+	// (`V=x fn`) is visible in its body.
+	Funcs []string
 
 	splitWords [][2]int // byte ranges of the words of for/select lists and array assignments
 

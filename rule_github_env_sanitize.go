@@ -139,9 +139,11 @@ var (
 	reSedNewline   = regexp.MustCompile(`s/(\\n|\\r\\n|\\s|\[\[:space:\]\])/`)
 )
 
-// sedSanitizes judges the script of sed.
+// sedSanitizes judges the script of sed. sed works on one line at a time, so a whitelist replaces every character
+// of a line but never its newline (unless -z puts the whole input in one line): a set that holds `=` still lets a
+// value carry a second line `NAME=value`.
 func sedSanitizes(script string, nulSeparated bool, dest string) sanitizeKind {
-	if m := reSedWhitelist.FindStringSubmatch(script); m != nil && charsetSafe(m[1], dest == "GITHUB_PATH") && !setHasNewline(m[2]) && !strings.Contains(m[2], "&") {
+	if m := reSedWhitelist.FindStringSubmatch(script); m != nil && charsetSafe(m[1], dest == "GITHUB_PATH") && !setHasNewline(m[2]) && !strings.Contains(m[2], "&") && (nulSeparated || !strings.Contains(m[1], "=")) {
 		return sanitizeCharset
 	}
 	if reSedNewline.MatchString(script) && (nulSeparated || strings.Contains(script, "N")) {
