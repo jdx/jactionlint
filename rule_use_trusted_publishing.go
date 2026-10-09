@@ -106,6 +106,9 @@ func (rule *RuleUseTrustedPublishing) checkRun(step *Step, run *ExecRun) {
 		if !ok {
 			continue
 		}
+		if eco == "npm" && rule.npmRegistryIsPrivate(step, s, c) {
+			continue
+		}
 		info := trustedPublishing[eco]
 		cred := rule.credentialVar(step, eco)
 		for _, f := range c.Flags {
@@ -120,6 +123,119 @@ func (rule *RuleUseTrustedPublishing) checkRun(step *Step, run *ExecRun) {
 		start, end := commandRange(s, origin, c)
 		rule.errorIDAt("use-trusted-publishing", start, trustedPublishingMessage(cmd, info.registry, info.instead, cred, granted)).endAt(end)
 	}
+}
+
+// npmRegistrySettings are the keys of the configuration of npm, pnpm and yarn that choose the registry.
+var npmRegistrySettings = []string{"registry", "npmregistryserver", "npmpublishregistry"}
+
+// npmRegistryIsPrivate reports whether the publish goes to a registry other than the public one although the command
+// does not say so. The registry of the publish is decided in the order npm decides it, and the LAST word wins:
+//
+//  1. the `--registry` of the publish command itself (a public one here: a private one skipped the command already);
+//  2. the environment (`npm_config_registry`, `YARN_NPM_REGISTRY_SERVER`, `YARN_NPM_PUBLISH_REGISTRY`) of the step,
+//     else of the job, else of the workflow, which wins over every file;
+//  3. the files, written in the order the job runs: the `registry-url` of `actions/setup-node` in the steps before
+//     this one, then `npm config set registry URL`, `yarn config set npmRegistryServer URL` in this script before
+//     the publish. A later one replaces an earlier one, so a reset to the public registry counts; a set that may
+//     not run (in an `if`, a loop, after `||`) can leave either one, so it counts as private when either is.
+//
+// A value that is an expression or otherwise unknown is a private registry. Those registries have no trusted
+// publishing.
+func (rule *RuleUseTrustedPublishing) npmRegistryIsPrivate(step *Step, s *runscript.Script, publish *runscript.Command) bool {
+	for _, f := range publish.Flags {
+		if f.Name == "--registry" && f.Value != nil {
+			return !registryValueIsPublic(f.Value.Value)
+		}
+	}
+	envPublic := false
+	for _, name := range []string{"npm_config_registry", "YARN_NPM_REGISTRY_SERVER", "YARN_NPM_PUBLISH_REGISTRY"} {
+		for _, env := range []*Env{step.Env, rule.jobEnv(), rule.workflowEnv()} {
+			if env == nil {
+				continue
+			}
+			found := false
+			for key, v := range env.Vars {
+				if strings.EqualFold(key, name) && v != nil && v.Value != nil {
+					found = true
+					if !registryValueIsPublic(v.Value.Value) {
+						return true
+					}
+				}
+			}
+			if found {
+				// the nearest scope that sets it decides, and it is public here: a file cannot override the
+				// environment of the process
+				envPublic = envPublic || rule.registryEnvAppliesTo(name, publish.Tool)
+				break
+			}
+		}
+	}
+	if envPublic {
+		return false
+	}
+	private := false
+	if rule.job != nil {
+		for _, st := range rule.job.Steps {
+			if st == step {
+				break
+			}
+			e, ok := st.Exec.(*ExecAction)
+			if !ok || e.Uses == nil || e.Uses.ContainsExpression() || ParseUses(e.Uses.Value).CanonicalName() != "actions/setup-node" {
+				continue
+			}
+			if r, ok := inputValue(e, "registry-url"); ok && r != "" {
+				private = !registryValueIsPublic(r)
+			}
+		}
+	}
+	for _, c := range s.Commands {
+		if c.Offset >= publish.Offset {
+			break
+		}
+		if (c.Tool != "npm" && c.Tool != "yarn" && c.Tool != "pnpm") || len(c.Positional) < 3 {
+			continue
+		}
+		verb := 0
+		if c.Sub(0) == "config" && c.Sub(1) == "set" {
+			verb = 2
+		} else if c.Sub(0) == "set" {
+			verb = 1
+		} else {
+			continue
+		}
+		key, val := c.Positional[verb], c.Positional[verb+1:]
+		if len(val) == 0 {
+			continue
+		}
+		k := strings.ToLower(key.Value)
+		if i := strings.LastIndex(k, ":"); i >= 0 {
+			k = k[i+1:] // @scope:registry
+		}
+		if key.Dynamic() || !slices.Contains(npmRegistrySettings, k) {
+			continue
+		}
+		if now := !registryValueIsPublic(val[0].Value); c.Cond {
+			private = private || now
+		} else {
+			private = now
+		}
+	}
+	return private
+}
+
+// registryEnvAppliesTo reports whether the environment variable chooses the registry of the tool: `npm_config_*` is
+// read by npm, pnpm and yarn 1, `YARN_*` by yarn.
+func (rule *RuleUseTrustedPublishing) registryEnvAppliesTo(name, tool string) bool {
+	if strings.HasPrefix(name, "YARN_") {
+		return tool == "yarn"
+	}
+	return tool == "npm" || tool == "pnpm" || tool == "yarn"
+}
+
+// registryValueIsPublic reports whether the value is the public registry of npm or empty. An expression is not.
+func registryValueIsPublic(v string) bool {
+	v = strings.TrimSpace(strings.Trim(strings.TrimSpace(v), `"'`))
+	return v == "" || slices.Contains(publicRegistries, v)
 }
 
 // credentialVar returns the name of the variable of the step that holds a long-lived credential for the registry of
@@ -249,7 +365,7 @@ func (rule *RuleUseTrustedPublishing) checkPowerShell(step *Step, run *ExecRun, 
 				continue
 			}
 			cred := rule.credentialVar(step, p.eco)
-			if m := powerShellTokenRe.FindStringSubmatch(code); cred == "" && m != nil {
+			if m := powerShellTokenRe.FindStringSubmatch(code); cred == "" && m != nil && !rule.exchangedToken(expressionsOf(code)) {
 				cred = strings.ToLower(m[1])
 			}
 			if granted && cred == "" {
@@ -316,6 +432,10 @@ func publishCommand(c *runscript.Command) (eco, cmd string, ok bool) {
 		return "pypi", "uvx twine upload", true
 	case c.Tool == "uv" && pos(0) == "run" && has("twine", "upload"):
 		return "pypi", "uv run twine upload", true
+	case c.Tool == "uv" && pos(0) == "tool" && pos(1) == "run" && has("twine", "upload"):
+		return "pypi", "uv tool run twine upload", true
+	case c.Name == "cargo" && (pos(0) == "mono" || pos(0) == "workspaces") && pos(1) == "publish":
+		return "crates", "cargo " + pos(0) + " publish", true
 	case c.Tool == "pipx" && pos(0) == "run" && len(c.Positional) > 1 && strings.HasPrefix(c.Positional[1].Value, "twine") && has("upload"):
 		return "pypi", "pipx run twine upload", true
 	}

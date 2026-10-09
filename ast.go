@@ -1069,6 +1069,10 @@ type Workflow struct {
 	// ParseAction. The workflow then has no events, permissions or other workflow-level
 	// configuration. The steps of a composite action are in Jobs as one job with Composite set.
 	Action *ActionFile
+	// inheritedSecrets is true when the linter knows that the workflow is a reusable workflow which at least one
+	// workflow of the repository calls and every call passes "secrets: inherit". The secrets that the workflow
+	// declares are then not all it can read.
+	inheritedSecrets bool
 	// Source is the content of the source file. Rules which offer a fix (Error.Fix) read it to turn
 	// positions into byte offsets. It is never nil for a workflow returned by Parse. Do not modify it.
 	Source []byte

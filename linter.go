@@ -823,6 +823,9 @@ func (l *Linter) check(
 		}
 	} else {
 		w, all = Parse(content)
+		if w != nil && project != nil {
+			w.inheritedSecrets = l.callersInheritSecrets(project, l.absFilePath(path))
+		}
 	}
 
 	if l.logLevel >= LogLevelVerbose {
@@ -1111,6 +1114,16 @@ func (l *Linter) callGraphOf(p *Project) *callGraph {
 	lg := v.(*lazyCallGraph)
 	lg.once.Do(func() { lg.graph = newCallGraph(p.root) })
 	return lg.graph
+}
+
+// callersInheritSecrets reports whether the file is a reusable workflow of the project that every local caller
+// calls with "secrets: inherit".
+func (l *Linter) callersInheritSecrets(p *Project, file string) bool {
+	rel, err := filepath.Rel(absPath(p.root), absPath(file))
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return false
+	}
+	return l.callGraphOf(p).allCallersInheritSecrets(filepath.ToSlash(rel))
 }
 
 // actionCallers returns the local workflows which run the action defined in the file, or nil when the

@@ -20,10 +20,49 @@ import (
 //
 // Scripts of bash and sh are analyzed with the run-script analyzer, scripts of pwsh, powershell and cmd by
 // matching their lines.
+//
+// # The invariant
+//
+// A value written to $GITHUB_ENV or $GITHUB_PATH is trusted if and only if, at the write, every variable it uses
+// has a value that is provably harmless, where "the value of a variable" is decided in execution order by
+// rule_github_env_flow.go (judgeVar) and the rest of the analysis stays conservative: whatever it cannot prove is
+// untrusted.
+//
+//  1. The value of a variable at the write is its LAST assignment (or read, or for-loop item) before the write.
+//     Only an unconditional one ends the search; one in a branch, a loop, a function, a pipeline or the right side
+//     of && and || may not have happened, so it counts together with what was there before it. `+=` adds to the
+//     value, so it counts together with the earlier value as well. A write in a loop also sees the assignments
+//     after it. Anything that can set a variable unseen (eval, source, printf -v, mapfile) makes it unknown.
+//  2. An assignment is trusted when its value is: a literal, a trusted source (the runner, a variable of the
+//     workflow that holds no outsider's input, a command with fixed output such as date), or a value made safe by
+//     a sanitizer, which means for $GITHUB_ENV that it cannot hold a newline, and for $GITHUB_PATH also that it
+//     holds no ".", "/" or ":": `tr -d '\n'`, `head -n 1`, `${v//[^a-z0-9]/}`, `sed 's/[^a-z0-9-]/-/g'`.
+//  3. A pipeline is trusted only if every stage after its last sanitizer is known to keep it (keepsSanitized):
+//     head, tail, sort, uniq, cut, rev, wc, tee, a deletion with tr, a translation or substitution whose parts
+//     are plain text. sed, tr, awk, printf, xargs and the like can write a newline back, so they do not count
+//     unless proven harmless.
+//  4. A test counts as validation (runscript.Guard) only when the script cannot go on unless the value passed it:
+//     `[[ v =~ ^re$ ]] || exit`, `[[ ! v =~ ^re$ ]] && exit`, `if [[ ! ... ]]; then exit; fi`, a bare `[[ ]]` under
+//     the default -e, or a `case` whose last branch is `*) exit`. The polarity must be right (a negated test
+//     whose failure is the way on proves nothing), the exit must be the exit of the script (not of a subshell),
+//     the test must be at the top level of the script, and no assignment may follow it. The regular expression
+//     must be anchored and hold no character the destination cannot have.
+//
+// Every case of the table in rule_github_env_flow_test.go names the clause it checks.
 type RuleGitHubEnv struct {
 	RuleBase
 	runContext
 	step *Step
+	// dest is the file of the write that is judged ("GITHUB_ENV" or "GITHUB_PATH"), validated the variables the
+	// script has checked before it.
+	dest string
+	// at is the offset of the script where the value that is judged is read: the write, or the assignment whose
+	// value is judged.
+	at int
+	// errexit is whether the shell of the step stops the script at a failing command (-e).
+	errexit bool
+	// loop is whether the write is in the body of a loop.
+	loop bool
 }
 
 // NewRuleGitHubEnv creates a new RuleGitHubEnv instance.
@@ -83,7 +122,14 @@ func (rule *RuleGitHubEnv) checkBash(run *ExecRun) {
 	if s == nil {
 		return
 	}
+	rule.errexit = rule.shellErrexit(run)
 	for _, w := range s.WritesTo("GITHUB_ENV", "GITHUB_PATH") {
+		rule.dest = w.Var
+		rule.at = w.Redirect.Offset
+		rule.loop = false
+		for _, c := range w.Producers {
+			rule.loop = rule.loop || c.LoopBody || c.InFunc
+		}
 		d := rule.judgeWrite(s, w)
 		rule.report(s, origin, w, d)
 	}
@@ -124,12 +170,18 @@ func quote(s string) string { return `"` + s + `"` }
 // judgeWrite judges the data written to the file.
 func (rule *RuleGitHubEnv) judgeWrite(s *runscript.Script, w *runscript.Write) data {
 	d := data{}
+	saved := rule.at
 	for _, c := range w.Producers {
+		// a producer in a group (`{ echo "$V"; V=x; } >> $GITHUB_ENV`) reads the variables where it runs, not
+		// where the redirect of the group is
+		rule.at = min(saved, c.Offset)
 		d = d.worse(rule.judgeCommand(s, c))
 		if d.kind == dataUntrusted {
+			rule.at = saved
 			return d
 		}
 	}
+	rule.at = saved
 	if w.Heredoc != nil {
 		d = d.worse(rule.judgeHeredoc(s, w.Heredoc))
 	}
@@ -203,13 +255,13 @@ var benignSubstitutionCommands = map[string]bool{
 	"arch": true, "dirname": true, "basename": true, "realpath": true,
 }
 
-// benignSubstitution reports whether the word has command substitutions and all their commands are benign. An
-// arithmetic expansion has no commands and is not judged.
-func benignSubstitution(w *runscript.Word) bool {
-	if len(w.Subs) == 0 {
+// benignSubs reports whether the commands are not empty and all of them are benign. An arithmetic expansion has no
+// commands and is not judged.
+func benignSubs(subs []*runscript.Command) bool {
+	if len(subs) == 0 {
 		return false
 	}
-	for _, c := range w.Subs {
+	for _, c := range subs {
 		if !benignSubstitutionCommands[c.Name] || c.Name == "" {
 			return false
 		}
@@ -230,11 +282,28 @@ func (rule *RuleGitHubEnv) judgeWordArgs(s *runscript.Script, w *runscript.Word,
 // judgeWord judges a word of the script: its expressions, and the environment variables and variables of the
 // script it expands.
 func (rule *RuleGitHubEnv) judgeWord(s *runscript.Script, w *runscript.Word, depth int) data {
-	d := rule.judgeExprList(w.Exprs, depth)
+	exprs, vars, subs := w.Exprs, w.Vars, w.Subs
+	if rule.dest != "" {
+		// What a pipeline of the substitution or an expansion has made safe does not count.
+		if cover := sanitizedCommands(w, rule.dest); len(cover) > 0 {
+			subs = nil
+			for _, c := range w.Subs {
+				if !cover[c] {
+					subs = append(subs, c)
+					continue
+				}
+				for _, a := range c.Words {
+					exprs, vars = subtractOnce(exprs, a.Exprs), subtractOnce(vars, a.Vars)
+				}
+			}
+		}
+		vars = subtractOnce(vars, sanitizedExpansions(w.Raw, rule.dest))
+	}
+	d := rule.judgeExprList(exprs, depth)
 	if d.kind == dataUntrusted {
 		return d
 	}
-	if w.Subst && !benignSubstitution(w) {
+	if w.Subst && (len(w.Subs) == 0 || (len(subs) > 0 && !benignSubs(subs))) {
 		d = d.worse(data{kind: dataUnknown})
 	}
 	if w.Glob {
@@ -242,7 +311,7 @@ func (rule *RuleGitHubEnv) judgeWord(s *runscript.Script, w *runscript.Word, dep
 	}
 	if w.Subst {
 		// the arguments of the commands of a substitution decide what they print
-		for _, c := range w.Subs {
+		for _, c := range subs {
 			for _, a := range c.Args {
 				d = d.worse(rule.judgeWordArgs(s, a, depth))
 			}
@@ -251,7 +320,7 @@ func (rule *RuleGitHubEnv) judgeWord(s *runscript.Script, w *runscript.Word, dep
 	if len(w.Vars) == 0 && !w.Subst && strings.Contains(w.Raw, "$") && len(w.Exprs) == 0 {
 		return d.worse(data{kind: dataUnknown}) // $1, $@, $$ ...
 	}
-	for _, v := range w.Vars {
+	for _, v := range vars {
 		d = d.worse(rule.judgeVar(s, v, depth))
 		if d.kind == dataUntrusted {
 			return d
@@ -286,7 +355,44 @@ func (rule *RuleGitHubEnv) judgeExpr(e string) data {
 	if rule.wf != nil && rule.wf.Action != nil && exprReadsContext(e, "inputs") {
 		return data{kind: dataUntrusted, input: e}
 	}
+	if rule.mintedByJob(e) {
+		return data{}
+	}
 	return judgeExprs([]string{e})
+}
+
+// mintedTokenActions are actions that create a token of a GitHub App; the token is not data of the event.
+var mintedTokenActions = []string{
+	"actions/create-github-app-token", "tibdex/github-app-token", "peter-murray/workflow-application-token-action",
+	"getsentry/action-github-app-token", "wow-actions/use-app-token",
+}
+
+// mintedByJob reports whether the expression is the token output of a step of the job that mints an app token.
+func (rule *RuleGitHubEnv) mintedByJob(e string) bool {
+	n, ok := parseExprText(e).(*ObjectDerefNode)
+	if !ok || rule.job == nil {
+		return false
+	}
+	path, ok := chainPath(n)
+	parts := strings.Split(path, ".")
+	if !ok || len(parts) != 4 || parts[0] != "steps" || parts[2] != "outputs" || (parts[3] != "token" && parts[3] != "installation-token") {
+		return false
+	}
+	for _, st := range rule.job.Steps {
+		if st.ID == nil || !strings.EqualFold(st.ID.Value, parts[1]) {
+			continue
+		}
+		_, u := stepAction(st)
+		if u == nil {
+			return false
+		}
+		for _, a := range mintedTokenActions {
+			if u.isRepoAction(a) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // envContextVar returns NAME of an expression that is exactly `env.NAME`.
@@ -299,44 +405,6 @@ func envContextVar(e string) (string, bool) {
 		return n.Property, true
 	}
 	return "", false
-}
-
-// judgeVar judges the value of a shell variable: an assignment of the script wins over the environment of the
-// step, which wins over the environment of the job and of the workflow.
-func (rule *RuleGitHubEnv) judgeVar(s *runscript.Script, name string, depth int) data {
-	if depth > 3 {
-		return data{kind: dataUnknown}
-	}
-	assigned := false
-	d := data{}
-	for _, a := range s.Assignments {
-		if a.Name != name {
-			continue
-		}
-		assigned = true
-		if a.Value == nil {
-			continue
-		}
-		if a.Append || a.Array {
-			d = d.worse(data{kind: dataUnknown})
-			continue
-		}
-		d = d.worse(rule.judgeWord(s, a.Value, depth+1))
-	}
-	if assigned {
-		return d
-	}
-	if v, ok := rule.envValue(rule.step, name); ok {
-		ed := rule.judgeExprList(exprsIn(v.Value), depth+1)
-		if ed.kind == dataUntrusted && ed.via == "" {
-			ed.via = name
-		}
-		return ed
-	}
-	if runnerProvidedVars[name] {
-		return data{}
-	}
-	return data{kind: dataUnknown}
 }
 
 // --- pwsh, powershell and cmd ---------------------------------------------------------------------------

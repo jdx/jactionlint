@@ -52,6 +52,18 @@ func TestRuleUntrustedCheckout(t *testing.T) {
           ref: "${{ github.event.pull_request.head.sha }}" # want
       - run: ./build.sh
 `},
+		{"enable -f loads a shared object of the checkout", nil, prt + `    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }} # want
+      - run: enable -f ./mod.so mod
+`},
+		{"enable -n runs nothing", nil, prt + `    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - run: enable -n test
+`},
 		{"head_ref", nil, prt + `    steps:
       - uses: actions/checkout@v4
         with:
@@ -166,6 +178,27 @@ jobs:
       - run: npm ci
 `},
 
+		{"fetch of the head followed by a checkout of it", nil, prt + `    steps:
+      - run: | # want
+          git fetch origin "pull/${{ github.event.number }}/head" refs/pull/1/head
+          git checkout FETCH_HEAD
+      - run: make
+`},
+		{"head checkout in a job whose token has no scope", nil, prt + `    permissions: {}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }} # want
+      - run: make
+`},
+		{"interpreter that runs the checkout as its module", nil, prt + `    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }} # want
+          path: pr
+      - run: python3 -m pytest pr
+`},
+
 		// Not reported
 		{"base checkout", nil, prt + `    steps:
       - uses: actions/checkout@v4
@@ -265,6 +298,54 @@ jobs:
           ref: ${{ github.event.workflow_run.head_sha }}
       - run: npm ci
 `},
+		{"fetch of the head that is only diffed", nil, prt + `    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          git fetch origin "refs/pull/${{ github.event.number }}/head"
+          git diff --stat HEAD...FETCH_HEAD
+          for f in a b; do
+            if [ "$f" = a ]; then continue; fi
+            break
+          done
+          compgen -c > /dev/null
+          xxd -l 4 file
+      - run: npm ci
+`},
+		{"fetch in one step, checkout of FETCH_HEAD in the next", nil, prt + `    steps:
+      - uses: actions/checkout@v4
+      - run: git fetch origin ${{ github.event.pull_request.head.sha }} # want
+      - run: git checkout FETCH_HEAD
+      - run: make
+`},
+		{"fetch into a branch in one step, checkout of it in the next", nil, prt + `    steps:
+      - uses: actions/checkout@v4
+      - run: git fetch origin refs/pull/${{ github.event.number }}/head:pr # want
+      - run: git checkout pr
+      - run: make
+`},
+		{"fetch in one step, checkout of the base branch in the next", nil, prt + `    steps:
+      - uses: actions/checkout@v4
+      - run: git fetch origin ${{ github.event.pull_request.head.sha }}
+      - run: git checkout main
+      - run: make
+`},
+		{"fetch in one step, FETCH_HEAD only diffed in the next", nil, prt + `    steps:
+      - uses: actions/checkout@v4
+      - run: git fetch origin ${{ github.event.pull_request.head.sha }}
+      - run: git diff HEAD FETCH_HEAD
+      - run: make
+`},
+		{"head checkout in a directory that only a script of the base reads", nil, prt + `    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: base
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          path: pr-head
+      - run: python3 base/scripts/check.py --root pr-head
+      - run: sudo apt-get install -y valgrind
+`},
 	}
 	for _, tc := range tests {
 		t.Run(tc.what, func(t *testing.T) {
@@ -273,5 +354,16 @@ jobs:
 			crlf := strings.ReplaceAll(tc.src, "\n", "\r\n")
 			checkLines(t, onlyID(lintInProject(t, tc.others, crlf, "rules:\n  untrusted-checkout: error\n"), "untrusted-checkout"), markedWantLines(tc.src)...)
 		})
+	}
+}
+
+func TestRuleUntrustedCheckoutNoTokenMessage(t *testing.T) {
+	const src = "on: pull_request_target\njobs:\n  j:\n    runs-on: ubuntu-latest\n    permissions: {}\n    steps:\n      - uses: actions/checkout@v4\n        with:\n          ref: ${{ github.event.pull_request.head.sha }}\n      - run: make\n"
+	errs := onlyID(lintInProject(t, nil, src, "rules:\n  untrusted-checkout: error\n"), "untrusted-checkout")
+	if len(errs) != 1 {
+		t.Fatalf("want one finding, got %v", errs)
+	}
+	if strings.Contains(errs[0].Message, "write token") || !strings.Contains(errs[0].Message, "GITHUB_TOKEN has no permissions") {
+		t.Fatalf("message claims a token: %s", errs[0].Message)
 	}
 }

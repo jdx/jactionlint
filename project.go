@@ -3,6 +3,7 @@ package jactionlint
 import (
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 )
 
@@ -141,4 +142,30 @@ func (ps *Projects) At(path string) (*Project, error) {
 // It reads the workflows and the actions of the project on every call; the linter keeps what it read.
 func (p *Project) ActionFiles() []string {
 	return newCallGraph(p.root).actionPaths()
+}
+
+var reGitHubRemote = regexp.MustCompile(`(?i)github\.com[:/]+([^/\s]+)/([^/\s]+?)(?:\.git)?/?\s*$`)
+
+// githubRepositoryOf returns the "owner/repo" in lower case of the GitHub repository whose clone is at root, read
+// from the url of the remote "origin" in .git/config, and "" when there is none.
+func githubRepositoryOf(root string) string {
+	b, err := os.ReadFile(filepath.Join(root, ".git", "config"))
+	if err != nil {
+		return ""
+	}
+	inOrigin := false
+	for _, line := range strings.Split(string(b), "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "[") {
+			inOrigin = strings.HasPrefix(line, `[remote "origin"`)
+			continue
+		}
+		k, v, ok := strings.Cut(line, "=")
+		if inOrigin && ok && strings.TrimSpace(k) == "url" {
+			if m := reGitHubRemote.FindStringSubmatch(strings.TrimSpace(v)); m != nil {
+				return strings.ToLower(m[1] + "/" + m[2])
+			}
+		}
+	}
+	return ""
 }

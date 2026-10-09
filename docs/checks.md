@@ -2238,7 +2238,11 @@ Known limitations (use `ignore` in the configuration file when they matter):
 - A self-hosted runner may keep the workspace between jobs, so a job without a checkout step can work there.
 - A step which generates the action directory without checking out the repository is reported.
 - What a remote composite action does cannot be known without fetching it, so the name and the inputs are a heuristic: a wrapper
-  with an unrelated name and none of the inputs above is not taken for a checkout and the next local action is reported.
+  with an unrelated name and none of the inputs above is not taken for a checkout and the next local action is reported. A
+  composite action of the repository itself (`uses: owner/repo/.github/actions/prep@main`, where `owner/repo` is the `origin` of
+  the clone) counts as a wrapper that checks out, whatever its name.
+- A local action outside of `.github/` (`./sources/repo/.github/actions/build`) after a step that downloads an artifact or unpacks an
+  archive (`actions/download-artifact`, `tar`, `unzip`, ...) is not reported: the files may come from there.
 - `uses: $/path` (self-repository syntax) is never reported since it does not need a checkout. `uses:` of reusable workflows and
   composite action files are not checked.
 ### Require `${{ }}` in `if:` conditions (pedantic)
@@ -2700,6 +2704,13 @@ The rule `github-env` (in the `default` profile) reports two kinds of writes:
   In the metadata of a composite action, `inputs.*` counts as such an input (also through `env:`): the caller chooses it, and a
   workflow can pass it the title of an issue. This holds without a calling workflow, the action may be used by other repositories.
 
+A value that cannot carry what makes the write dangerous is accepted: for `$GITHUB_ENV` a value without newlines
+(`tr -d '\n'`, `tr '\n' ' '`, `head -n 1`, `sed ':a;N;$!ba;s/\n/ /g'`, `${v//$'\n'/}`), and for both files a value cut down to
+letters, digits and a few harmless characters (`sed 's/[^a-zA-Z0-9-]/-/g'`, `tr -cd 'a-z0-9'`, `${v//[^a-zA-Z0-9]/}`) or checked
+before the write with an anchored pattern such as `[[ "$v" =~ ^[a-z0-9.-]+$ ]] || exit 1`. A directory for `$GITHUB_PATH` also has
+to hold no dot, slash or colon. A token minted by an earlier step of the job (the `token` output of
+`actions/create-github-app-token`), the timestamps of the event and the parts of `$GITHUB_REPOSITORY` split with `read` are trusted.
+
 `echo "VERSION=1.0" >> "$GITHUB_ENV"` and `echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"` are fine. Use `$GITHUB_OUTPUT` to pass
 state between steps (`echo "version=$(cat version.txt)" >> "$GITHUB_OUTPUT"` is not reported) and validate or avoid the value
 otherwise. The rule understands `>>` and `>`, `tee`, groups (`{ ...; } >> "$GITHUB_ENV"`), here documents and a file name held
@@ -2743,7 +2754,8 @@ test.yaml:7:14: command "gem install" installs a package outside of a lock file:
 The rule `adhoc-packages` (in the `default` profile) reports a `run:` script that installs a package by name with `npm`, `yarn`,
 `pnpm`, `bun`, `gem` or `bundle add`. Such a package is usually not pinned, so the newest release (and so a compromised one)
 is picked up. Even with `eslint@9.0.0` the dependencies of the package are resolved anew on every run. Commands like
-`yarn add` and `bundle add` change the lock file of the run instead of using it.
+`yarn add`, `bundle add` and `lerna add` change the lock file of the run instead of using it. A list of arguments that the script
+builds (`pnpm install --frozen-lockfile "${filters[@]}"`) is not taken for package names.
 
 Add the package to a manifest that produces a lock file (`package.json`, a `Gemfile`), commit the lock file and install with
 a command that follows it: `npm ci`, `yarn install --immutable`, `pnpm install --frozen-lockfile`, `bun ci` or
@@ -2872,8 +2884,9 @@ trusts the OIDC token that GitHub issues for the workflow run, so no API token h
 token cannot publish. The rule `use-trusted-publishing` (in the `default` profile) reports
 
 - a `run:` script that publishes to the public registry: `twine upload`, `uv publish`, `poetry|flit|hatch|pdm publish`,
-  `cargo publish`, `npm|pnpm|yarn|bun publish`, `gem push`, `dotnet nuget push` and `nuget push`, also behind `sudo`,
-  `uvx`, `pipx run`, `uv run`, `bundle exec` and `python -m`. The message names the long-lived credential when the step,
+  `cargo publish`, `cargo mono publish`, `cargo workspaces publish`, `npm|pnpm|yarn|bun publish`, `gem push`,
+  `dotnet nuget push` and `nuget push`, also behind `sudo`, `uvx`, `uv tool run`, `pipx run`, `uv run`, `bundle exec` and
+  `python -m`. The message names the long-lived credential when the step,
   its job or the workflow sets one of the usual environment variables (`TWINE_PASSWORD`, `NODE_AUTH_TOKEN`,
   `CARGO_REGISTRY_TOKEN`, `GEM_HOST_API_KEY`, ...);
 - the actions `pypa/gh-action-pypi-publish` with `password`, `rubygems/configure-rubygems-credentials` with `api-token`,
@@ -2889,6 +2902,11 @@ or `npm publish` with that permission.
 provenance: a publish command that is given a long-lived credential (an environment variable such as `NODE_AUTH_TOKEN` or
 `CARGO_REGISTRY_TOKEN`, or `--token`) is reported even when the job can request the OIDC token. Scripts of `shell: pwsh` (the default
 shell of the Windows runners) and `powershell` are searched for the publish commands line by line.
+
+An npm publish to another registry than the public one is not reported even when the command does not say so: the script set it
+before (`npm config set registry URL`, `yarn config set npmRegistryServer URL`), the environment sets `npm_config_registry` or
+`YARN_NPM_REGISTRY_SERVER`, or an earlier `actions/setup-node` step has a `registry-url` of another registry (GitHub Packages,
+`npm.pkg.github.com`, has no trusted publishing). A key that is the output of `NuGet/login` is trusted publishing in a PowerShell script as well.
 
 A credential variable that does not hold a long-lived credential is not one: `NODE_AUTH_TOKEN: ''` blanks the placeholder token
 that `actions/setup-node` writes, so that npm falls back to the OIDC token (the documented way to publish to npm with provenance),
@@ -3452,7 +3470,7 @@ test.yaml:11:15: "./.github/actions/setup" is looked up in the workspace at run 
    |
 11 |       - uses: ./.github/actions/setup
    |               ^~~~~~~~~~~~~~~~~~~~~~~
-test.yaml:16:11: "./.github/workflows/reusable.yml" is looked up in the workspace at run time, where an earlier step can replace it. use the self-repository syntax "$/.github/workflows/reusable.yml" which always refers to the commit running the workflow [self-repository]
+test.yaml:16:11: "./.github/workflows/reusable.yml" is a path that cannot be told apart from an arbitrary directory by a policy that requires pinning. use the self-repository syntax "$/.github/workflows/reusable.yml", which names the reusable workflow of this repository at the commit running the workflow [self-repository]
    |
 16 |     uses: ./.github/workflows/reusable.yml
    |           ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -3672,7 +3690,10 @@ release job the rule reports the steps which restore a cache:
 | `jdx/mise-action` | `cache: false` |
 | `gradle/actions/setup-gradle` | `cache-disabled: true` |
 | `docker/build-push-action` | there is no `cache-from` with `type=gha` |
-| `hendrikmuhs/ccache-action`, `DeterminateSystems/magic-nix-cache-action` | never: remove the step |
+| `oven-sh/setup-bun` | `no-cache: true` (it caches the bun executable) |
+| `actions-rust-lang/setup-rust-toolchain` | `cache: false` |
+| `mlugg/setup-zig` | `use-cache: false` |
+| `hendrikmuhs/ccache-action`, `DeterminateSystems/magic-nix-cache-action`, `awalsh128/cache-apt-pkgs-action`, `nix-community/cache-nix-action` | never: remove the step |
 
 A `tags:` filter that lets no tag through is no tag trigger: `tags: ['!**']`, a list of negative patterns only (GitHub requires one
 positive pattern) and a list that ends with `!**`. A workflow that runs on pushed tags only to start checks is not a release
@@ -3685,13 +3706,20 @@ The list is not exhaustive: it has the actions whose caching behavior is known. 
 `github.event_name` or `github.ref`, or an input is an expression which does, since that is how caching is limited to
 non-release runs (`enable-cache: ${{ !startsWith(github.ref, 'refs/tags/') }}`).
 
+In a composite action, a step that is given `enable-cache: ${{ inputs.enable-cache }}` (or another switch of the table) is not reported
+when every release workflow of the repository that calls the action passes the input as a literal that switches the cache off, or leaves
+it out and the default of the action does.
+
 `cache-mode: none` on the workflow or on the job switches the cache off for the runner and suppresses these findings.
 
 The rule also reports `cache-mode: write` and `cache-mode: write-only` in a workflow which runs on `pull_request_target`,
 `workflow_run` or `issue_comment`: code of untrusted people writes the entries which privileged workflows restore later.
 
 Differences from [zizmor](https://docs.zizmor.sh/audits/#cache-poisoning): zizmor reports a release workflow once for the trigger and once
-for each step. jactionlint reports the steps (and the job-level publishing detection is jactionlint only).
+for each step. jactionlint reports the steps (and the job-level publishing detection is jactionlint only). zizmor also treats a push to
+a `release/**` branch as a release, takes `actions/setup-node` v5 and later for a cache whether or not `package.json` names a package manager,
+and does not look at `permissions:` to tell a check from a release on a tag. jactionlint does not, because those workflows are mostly
+checks; use `cache-mode: none` where one of them does publish.
 
 `astral-sh/setup-uv` from v10 on, with `enable-cache` unset or `auto`, does not restore a cache on the events that are open to cache
 poisoning, so it is not reported. The version is the tag of the `uses:`, or the version in the comment after a pinned commit
@@ -5112,6 +5140,9 @@ jactionlint reports a pipeline when all of the following hold:
   before the producer is done, which kills it with SIGPIPE. With `pipefail` such a pipeline fails although nothing went wrong,
   so such pipelines are not reported. That holds for a pipeline in the body of a loop as well
   (`for s in a b; do cmd "$s" | grep -Fq x; done`).
+- The script reads `PIPESTATUS` in the command right after the pipeline, for the stage that hides the failure
+  (`make | tee log; rc=${PIPESTATUS[0]}`) or for all of them (`${PIPESTATUS[@]}`): it looks at the status itself. The word
+  without a `$`, the count `${#PIPESTATUS[@]}` and the status of another stage do not count.
 - The pipeline is not inside a command substitution in the argument of a command (`echo "hash=$(sha256sum f | cut -d' ' -f1)"`):
   the status of the substitution is not the status of anything, so `pipefail` would change nothing. The value of an assignment
   (`hash=$(sha256sum f | cut -d' ' -f1)`) is the status of the assignment, and that pipeline is reported.
@@ -6302,7 +6333,9 @@ in the `default` profile and reports:
   reported by `constant-condition`);
 - `fromJSON(toJSON(x))`, unless `x` is a property of a context (`fromJSON(toJSON(matrix.container))` is a known way to turn the
   value into an object);
-- an index which is computed, like `vars[format('NAME_{0}', github.job)]`. It hides which property is read.
+- an index which is computed, like `vars[format('NAME_{0}', github.job)]`. It hides which property is read. An index that is a
+  value of the matrix (`secrets[matrix.provider.env_key]`, `fromJSON(needs.check.outputs.results)[matrix.tool].label`) is not
+  reported: the matrix is how a workflow selects a value by name.
 
 Example input:
 
@@ -7062,12 +7095,18 @@ A step is reported at its checkout when it puts untrusted code in the workspace 
 - `actions/checkout` with a `ref` or `repository` that names the head of a pull request or of the triggering run
   (`github.event.pull_request.head.*`, `github.head_ref`, `github.event.pull_request.merge_commit_sha`,
   `github.event.workflow_run.head_sha`, `head_branch`, `head_repository`, ...) or `refs/pull/...`.
-- `gh pr checkout`, and `git checkout`, `fetch`, `switch`, `merge`, `pull`, `clone` ... with such a reference in the arguments or
-  in an environment variable they use.
+- `gh pr checkout`, and `git checkout`, `switch`, `merge`, `pull`, `clone` ... with such a reference in the arguments or
+  in an environment variable they use. A `git fetch` of the head only downloads the objects: it counts when a later command
+  of the same script (`git checkout FETCH_HEAD`, `git merge`, `git reset --hard`, ...) puts them in the working tree.
 - "Runs it" is a later step with a `run:` command that can execute workspace code (a script, `npm`, `cargo`, `make`, an
   interpreter, ...), a local action (`uses: ./...`), or one of a few actions that build the workspace. Commands that only read or
-  move files (`cat`, `git diff`, `grep`, `jq`, `tar`, `gh`, ...) do not count. A checkout with `path:` only counts when a later
-  step works in that directory (`working-directory`, `cd`, or an argument below it).
+  move files (`cat`, `git diff`, `grep`, `jq`, `tar`, `gh`, ...) do not count, and neither do shell keywords and builtins
+  (`break`, `continue`, `compgen`, ...), programs that only print or convert data (`xxd`, `base64`, `seq`, ...) and the system package managers
+  (`apt-get install -y valgrind`) unless they are given a path or a package file. A checkout with `path:` only counts when a later
+  step works in that directory (`working-directory`, `cd`, or an argument below it); `python3 base/check.py --root pr-head` runs a
+  script from the base checkout and only reads `pr-head`, so it does not count either.
+
+In a job that sets `permissions: {}` the message does not claim a token, because the job has none.
 
 What is **not** reported: a checkout of the base (no `ref`, or `github.event.pull_request.base.*`), a checkout that nothing runs,
 a job with an `environment:` (its reviewers decide), and a job or step whose `if:` reads who or what started the workflow:
@@ -7245,7 +7284,8 @@ a value that is dropped.
 
 An input is read as `inputs.<name>`; for `workflow_dispatch` also as `github.event.inputs.<name>`. A read of the whole context
 (`toJSON(inputs)`, `inputs[matrix.name]`) counts as a read of every input, and when a script reads `$GITHUB_EVENT_PATH` the inputs
-of `workflow_dispatch` are not reported because the script can read them from the payload. A workflow where an expression does not
+of `workflow_dispatch` are not reported because the script can read them from the payload. The same goes for `context.payload.inputs`
+in a script of `actions/github-script`. A workflow where an expression does not
 parse is skipped.
 
 The rule is not in the `default` profile because an input can exist for someone else: GitHub refuses a manual run or a

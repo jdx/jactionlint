@@ -43,10 +43,11 @@ func (rule *RuleUnusedWorkflowInput) VisitWorkflowPre(n *Workflow) error {
 	if rs.unknown {
 		return nil
 	}
-	// A script can read the inputs of a manual run from the event payload
+	// A script can read the inputs of a manual run from the event payload: a file for a shell script, and
+	// context.payload.inputs for actions/github-script
 	readsPayload := false
 	walkStrings(n, func(s *String) {
-		if strings.Contains(s.Value, "GITHUB_EVENT_PATH") {
+		if strings.Contains(s.Value, "GITHUB_EVENT_PATH") || strings.Contains(s.Value, "payload.inputs") {
 			readsPayload = true
 		}
 	})

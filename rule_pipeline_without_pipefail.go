@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"fmt"
 	"regexp"
+	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/jdx/jactionlint/v2/internal/runscript"
@@ -146,7 +148,7 @@ func (rule *RulePipelineWithoutPipefail) VisitStep(n *Step) error {
 			continue
 		}
 		c := hiddenFailure(p)
-		if c == nil {
+		if c == nil || readsPipestatus(script, p, stageOf(p, c)) {
 			continue
 		}
 		pos := script.Position(origin, p.Offset)
@@ -191,6 +193,61 @@ func discardedSubstitutions(s *runscript.Script) map[*runscript.Command]bool {
 		}
 	}
 	return m
+}
+
+// stageOf returns the index of the stage of the pipeline that the command is in.
+func stageOf(p *runscript.Pipeline, c *runscript.Command) int {
+	for i, st := range p.Stages {
+		if slices.Contains(st.Commands, c) {
+			return i
+		}
+	}
+	return -1
+}
+
+// rePipestatusRef matches a use of PIPESTATUS: `$PIPESTATUS`, `${PIPESTATUS}`, `${PIPESTATUS[1]}`,
+// `${PIPESTATUS[@]}`. The `$` is required, and `${#PIPESTATUS[@]}` (the count) does not match.
+var rePipestatusRef = regexp.MustCompile(`\$\{?PIPESTATUS(?:\[([^\]]*)\])?`)
+
+// readsPipestatus reports whether the command right after the pipeline looks at the status of the stage that hides
+// a failure: `make | tee log; rc=${PIPESTATUS[0]}`. `$PIPESTATUS` is the first stage, an index is the stage it
+// names, `@` and `*` are all of them; an index that is not a number (`${PIPESTATUS[$i]}`) may name any stage. The
+// word without a `$` (`echo PIPESTATUS`) reads nothing.
+func readsPipestatus(s *runscript.Script, p *runscript.Pipeline, stage int) bool {
+	if stage < 0 {
+		return true
+	}
+	rest := s.Source[p.End:]
+	// the next statement: skip what ends the pipeline, blank lines and comments
+	for {
+		rest = strings.TrimLeft(rest, " \t\r\n;")
+		if !strings.HasPrefix(rest, "#") {
+			break
+		}
+		i := strings.IndexByte(rest, '\n')
+		if i < 0 {
+			return false
+		}
+		rest = rest[i:]
+	}
+	end := strings.IndexAny(rest, ";\n")
+	if end < 0 {
+		end = len(rest)
+	}
+	for _, m := range rePipestatusRef.FindAllStringSubmatch(rest[:end], -1) {
+		idx := strings.TrimSpace(m[1])
+		if m[1] == "" && !strings.HasSuffix(m[0], "]") {
+			idx = "0"
+		}
+		n, err := strconv.Atoi(idx)
+		switch {
+		case err != nil:
+			return true // @, * or an expression
+		case n == stage || (n < 0 && len(p.Stages)+n == stage):
+			return true
+		}
+	}
+	return false
 }
 
 // pipelineIsDiscarded reports whether the pipeline is one inside a substitution of discardedSubstitutions.
