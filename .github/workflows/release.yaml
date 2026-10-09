@@ -44,13 +44,21 @@ jobs:
         with:
           p12-file-base64: ${{ secrets.CERTIFICATES_P12 }}
           p12-password: ${{ secrets.CERTIFICATES_P12_PASS }}
+      # The certificate file holds two valid Developer ID certificates with the same name (a renewal), so signing
+      # by name fails with "ambiguous". The SHA-1 hash of one of them is unambiguous.
+      - name: Pick the signing identity
+        id: identity
+        run: |
+          hash="$(security find-identity -v -p codesigning signing_temp.keychain-db | awk '/Developer ID Application/ {print $2; exit}')"
+          test -n "$hash"
+          echo "hash=$hash" >> "$GITHUB_OUTPUT"
       - uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
         with:
           version: '~> v2'
           args: release --clean
         env:
           # Used by the codesign build hook (see .goreleaser.yaml)
-          APPLE_SIGNING_IDENTITY: "Developer ID Application: Jeffrey Dickey (4993Y37DX6)"
+          APPLE_SIGNING_IDENTITY: ${{ steps.identity.outputs.hash }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Used to push the Homebrew cask commit to the protected main branch (see .goreleaser.yaml)
           RELEASE_PLZ_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN }}
