@@ -47,6 +47,18 @@ func baselineNamesAFile(cfg *Config) bool {
 	return true
 }
 
+// baselineConfigured reports whether the configuration applies a baseline to every run.
+func baselineConfigured(cfg *Config) bool {
+	if cfg == nil {
+		return false
+	}
+	switch strings.ToLower(strings.TrimSpace(cfg.Baseline)) {
+	case "", "false", "off", "no":
+		return false
+	}
+	return true
+}
+
 // resolveBaselineSetting returns the path of the baseline to apply and whether it must exist. An
 // empty path means no baseline.
 func (l *Linter) resolveBaselineSetting(root string, cfg *Config) (path string, required bool) {
@@ -159,6 +171,16 @@ type WriteBaselineResult struct {
 	Files int
 	// Changed is false when the file already had this content.
 	Changed bool
+	// Applied is true when the configuration already applies the baseline ("baseline: auto" or the path of
+	// a file), so a plain run uses it. Otherwise only -baseline does.
+	Applied bool
+	// ConfigFile is the configuration file, relative to the repository, in which "baseline: auto" applies the
+	// baseline to every run. It is the file the repository has, else the default .github/jactionlint.yaml
+	// that -init-config creates.
+	ConfigFile string
+	// ConfigValue is the value of "baseline" in ConfigFile which applies this baseline: "auto" for the default
+	// file, else the path of the file relative to the repository.
+	ConfigValue string
 }
 
 // WriteBaseline records the current findings as the baseline. Without files it lints the whole
@@ -246,7 +268,22 @@ func (l *Linter) WriteBaseline(files []string, path string) (*WriteBaselineResul
 	if err != nil {
 		return nil, err
 	}
-	res := &WriteBaselineResult{Path: path, Entries: len(bl.Entries)}
+	res := &WriteBaselineResult{Path: path, Entries: len(bl.Entries), ConfigFile: ".github/jactionlint.yaml", ConfigValue: "auto"}
+	if path != filepath.Join(root, DefaultBaselineFile) {
+		if rel, err := filepath.Rel(root, path); err == nil {
+			res.ConfigValue = filepath.ToSlash(rel)
+		} else {
+			res.ConfigValue = filepath.ToSlash(path)
+		}
+	}
+	if cfg := l.configFor(project); cfg != nil {
+		res.Applied = baselineConfigured(cfg)
+		if cfg.Path != "" && project != nil {
+			if rel, err := filepath.Rel(project.RootDir(), cfg.Path); err == nil && !strings.HasPrefix(rel, "..") {
+				res.ConfigFile = filepath.ToSlash(rel)
+			}
+		}
+	}
 	fileSet := map[string]bool{}
 	for _, e := range bl.Entries {
 		fileSet[e.File] = true

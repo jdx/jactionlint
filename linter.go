@@ -1002,7 +1002,12 @@ Loop:
 // warnDeprecations reports the deprecated keys of the config to the log output. It reports each
 // config only once even if many files are linted with it.
 func (l *Linter) warnDeprecations(cfg *Config) {
-	if len(cfg.Deprecations) == 0 && len(cfg.Notices) == 0 {
+	notices := cfg.Notices
+	if l.profile == "" {
+		// -profile decides the profile, so a note about the profile of a config file that sets none is wrong then
+		notices = append(slices.Clone(notices), cfg.profileNotices...)
+	}
+	if len(cfg.Deprecations) == 0 && len(notices) == 0 {
 		return
 	}
 	if _, loaded := l.warned.LoadOrStore(cfg, struct{}{}); loaded {
@@ -1010,7 +1015,7 @@ func (l *Linter) warnDeprecations(cfg *Config) {
 	}
 	l.notesMu.Lock()
 	l.notes = append(l.notes, cfg.Deprecations...)
-	l.notes = append(l.notes, cfg.Notices...)
+	l.notes = append(l.notes, notices...)
 	l.notesMu.Unlock()
 	if structured(l.printer) {
 		return // The warnings are in the output document
@@ -1018,7 +1023,7 @@ func (l *Linter) warnDeprecations(cfg *Config) {
 	for _, d := range cfg.Deprecations {
 		fmt.Fprintln(l.logOut, "warning:", d)
 	}
-	for _, n := range cfg.Notices {
+	for _, n := range notices {
 		fmt.Fprintln(l.logOut, "note:", n)
 	}
 }

@@ -256,6 +256,9 @@ type Config struct {
 	// Notices are messages about the config file which are not warnings, for example that a file written
 	// for actionlint was read and which profile applies to it.
 	Notices []string `yaml:"-"`
+	// profileNotices are notices that are about the profile the config leaves to the default. They are
+	// dropped when -profile chooses one, because they would be wrong then (see Linter.warnDeprecations).
+	profileNotices []string
 
 	// present records which keys were written explicitly so that merging with the files listed in
 	// "extends" can tell a missing key from a zero value.
@@ -495,6 +498,7 @@ func (c *Config) merge(over *Config) {
 	}
 	c.Deprecations = append(c.Deprecations, over.Deprecations...)
 	c.Notices = append(c.Notices, over.Notices...)
+	c.profileNotices = append(c.profileNotices, over.profileNotices...)
 	for k := range over.present {
 		c.present[k] = true
 	}
@@ -541,7 +545,7 @@ func (c *Config) noteActionlintFile(name, shown string) {
 	if !strings.HasPrefix(name, "actionlint.") || c.present["profile"] {
 		return
 	}
-	c.Notices = append(c.Notices, fmt.Sprintf("config file %q was read as a jactionlint config. it sets no \"profile\", so the default profile applies, which has more rules than actionlint. add \"profile: correctness\" to the file or run with -profile correctness for the checks of actionlint. see https://jactionlint.jdx.dev/actionlint", shown))
+	c.profileNotices = append(c.profileNotices, fmt.Sprintf("config file %q was read as a jactionlint config. it sets no \"profile\", so the default profile applies, which has more rules than actionlint. add \"profile: correctness\" to the file or run with -profile correctness for the checks of actionlint. see https://jactionlint.jdx.dev/actionlint", shown))
 }
 
 // loadGlobalConfig reads the user-global config file from

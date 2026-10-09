@@ -318,3 +318,53 @@ func TestSelfRepositoryFixIsUnsafeAndWarnsAboutOlderTools(t *testing.T) {
 	}
 	t.Fatalf("no self-repository finding: %v", errs)
 }
+
+func TestActionlintConfigNoteIsNotPrintedWhenProfileIsGiven(t *testing.T) {
+	root := makeWorkflowRepo(t, map[string]string{"ci.yaml": validWorkflowSrc})
+	if err := os.WriteFile(filepath.Join(root, ".github", "actionlint.yaml"), []byte("self-hosted-runner:\n  labels: []\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(root)
+	run := func(args ...string) string {
+		var out, errOut strings.Builder
+		cmd := &Command{Stdin: strings.NewReader(""), Stdout: &out, Stderr: &errOut}
+		cmd.Main(append([]string{"jactionlint", "-no-color", "-shellcheck=", "-pyflakes="}, args...))
+		return errOut.String()
+	}
+	if got := run(); !strings.Contains(got, "the default profile applies") {
+		t.Errorf("without -profile the note is expected: %q", got)
+	}
+	for _, p := range []string{"correctness", "default", "pedantic"} {
+		if got := run("-profile", p); strings.Contains(got, "default profile applies") {
+			t.Errorf("-profile %s decides the profile, but the note was printed: %q", p, got)
+		}
+	}
+}
+
+func TestBaselineWriteSaysHowToApplyTheBaseline(t *testing.T) {
+	root := t.TempDir()
+	makeBrokenActionRepo(t, root)
+	t.Chdir(root)
+	run := func(args ...string) string {
+		var out, errOut strings.Builder
+		cmd := &Command{Stdin: strings.NewReader(""), Stdout: &out, Stderr: &errOut}
+		cmd.Main(append([]string{"jactionlint", "-no-color", "-shellcheck=", "-pyflakes=", "-profile", "correctness"}, args...))
+		return out.String()
+	}
+	got := run("-baseline-write")
+	if !strings.Contains(got, "baseline: auto") || !strings.Contains(got, ".github/jactionlint.yaml") || !strings.Contains(got, "-baseline") {
+		t.Errorf("the output must tell how to apply the baseline: %q", got)
+	}
+	got = run("-baseline-write=ci/baseline.json")
+	if !strings.Contains(got, "baseline: ci/baseline.json") {
+		t.Errorf("another file needs its path in the line: %q", got)
+	}
+
+	// Once the configuration applies it, nothing more is said
+	if err := os.WriteFile(filepath.Join(root, ".github", "jactionlint.yaml"), []byte("baseline: auto\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := run("-baseline-write"); strings.Contains(got, "baseline: auto") {
+		t.Errorf("the configuration already applies the baseline: %q", got)
+	}
+}

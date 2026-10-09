@@ -158,6 +158,10 @@ func (cmd *Command) runLinter(args []string, opts *LinterOptions, initConfig, mi
 			state = "Baseline is up to date:"
 		}
 		fmt.Fprintf(cmd.Stdout, "%s %s for %s in %s\n", state, countNoun(res.Entries, "entry"), countNoun(res.Files, "file"), displayPath(opts.WorkingDir, res.Path))
+		if !res.Applied {
+			// A plain run does not read the baseline unless the configuration or -baseline says so
+			fmt.Fprintf(cmd.Stdout, "A plain run does not use the baseline yet. Pass -baseline, or put this line in %s so that every run and hook does:\n\n  baseline: %s\n", res.ConfigFile, res.ConfigValue)
+		}
 		return nil, nil
 	}
 	if migrateIgnores {
