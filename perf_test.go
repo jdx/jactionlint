@@ -3,6 +3,8 @@ package jactionlint
 import (
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -129,4 +131,45 @@ func BenchmarkLintZizmorIgnores(b *testing.B) {
 
 func BenchmarkLintMatrixPedantic(b *testing.B) {
 	benchmarkLint(b, ProfilePedantic, perfWorkflowMatrix, 1000, 5000)
+}
+
+// A repository with many workflows which wait for another one (workflow_run) used to read and parse all
+// its workflows for each of them.
+func TestScalingBudgetWorkflowRunRepository(t *testing.T) {
+	if testing.Short() {
+		t.Skip("scaling budget tests are skipped in short mode")
+	}
+	const n = 2000
+	dir := t.TempDir()
+	wfDir := filepath.Join(dir, ".github", "workflows")
+	if err := os.MkdirAll(wfDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(dir, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < n; i++ {
+		src := fmt.Sprintf("name: W%d\non:\n  workflow_run:\n    workflows: [W%d]\n    types: [completed]\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo %d\n", i, (i+1)%n, i)
+		if err := os.WriteFile(filepath.Join(wfDir, fmt.Sprintf("w%d.yaml", i)), []byte(src), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		l, err := NewLinter(io.Discard, &LinterOptions{})
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		l.defaultConfig = &Config{Profile: ProfilePedantic}
+		if _, err := l.LintRepository(dir); err != nil {
+			t.Error(err)
+		}
+	}()
+	select {
+	case <-done:
+	case <-time.After(20 * time.Second):
+		t.Fatal("linting did not finish within 20s")
+	}
 }

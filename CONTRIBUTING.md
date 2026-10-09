@@ -203,6 +203,14 @@ and reported, but a fixer test should apply the fix and lint again anyway. If yo
 all safe fixes to a copy of the corpus and checks that the result is valid, that a second run changes nothing and that no rule
 (jactionlint or zizmor) reports more findings than before.
 
+A rule must take time linear in the size of the file. Do not parse the whole source, scan it from the start or walk the whole syntax tree
+once for each finding or each step: a workflow with thousands of steps or ignore comments then takes minutes (the pedantic
+`template-injection` and the ignore comments did, and were fixed). Parse once per file and look positions up through an index:
+`sourceIndex` (lines, byte offsets, `sites()` for `YAMLSiteAt` of many offsets, `valuePosition` for positions inside a multi-line scalar),
+`editSet` (conflicts between edits) and `lineStartsOf` (lines of a source). `TestScalingBudget` fails when a case gets slow again;
+`go test -run XXX -bench Lint .` measures 1k and 10k steps. A position is a line and a column counted in code points; `TestSARIFRegionsAreValid`
+checks every region of every fixture, so give a rule that sets positions of its own a fixture with non-ASCII text.
+
 Since jactionlint doesn't use any cgo features, setting `CGO_ENABLED=0` environment variable is recommended to avoid troubles
 around linking libc. `mise run build` does this by default.
 
@@ -249,6 +257,10 @@ Automated tests are as follows.
   - `testdata/projects/` contains 'Project' tests. Each directories represent a single project (meaning a repository on GitHub).
     Corresponding `*.out` files are expected error messages. Empty `*.out` file means the test case should cause no errors.
     'Project' test is used for use cases where multiple files are related (reusable workflows, local actions, config files, ...).
+
+- `positions_test.go` checks that every region of every fixture is valid in the SARIF log and in the JSON output, and that a finding in a
+  multi-line scalar is on the line and the column of the text. `perf_test.go` has the time budgets and the benchmarks, and
+  `robustness_test.go` lints the pathological inputs (huge, deeply nested, odd encodings and line breaks, aliases that expand) and fails on a panic or a hang.
 
 ## Linting
 

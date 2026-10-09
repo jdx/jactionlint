@@ -12,6 +12,7 @@ import (
 type RuleUntrustedCheckout struct {
 	RuleBase
 	project    *Project
+	siblings   *siblingWorkflows // nil reads the workflows of the project for each file
 	privileged []string
 	wf         *Workflow
 }
@@ -47,7 +48,7 @@ func (rule *RuleUntrustedCheckout) VisitWorkflowPre(n *Workflow) error {
 	if !rule.Config().RuleEnabled("untrusted-checkout") {
 		return nil
 	}
-	rule.privileged = privilegedEvents(n, rule.project)
+	rule.privileged = privilegedEvents(n, rule.project, rule.siblings)
 	return nil
 }
 
@@ -185,6 +186,8 @@ func init() {
 		RuleInfo{ID: "untrusted-checkout", Group: RuleGroupSecurity, Summary: "A pull_request_target or workflow_run workflow checks out the code of a pull request and runs it.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-untrusted-checkout"},
 	)
 	registerRuleFactory("untrusted-checkout", func(env *RuleEnv) []Rule {
-		return []Rule{NewRuleUntrustedCheckout(env.project)}
+		r := NewRuleUntrustedCheckout(env.project)
+		r.siblings = env.localActions.siblings()
+		return []Rule{r}
 	})
 }

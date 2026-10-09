@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 
 	"github.com/jdx/jactionlint/v2/internal/runscript"
 )
@@ -123,7 +124,7 @@ func untrustedValue(value string) (string, bool) {
 // privilegedEvents tells which of the events the workflow handles run with privileges for input that
 // someone else controls. A workflow_run event is not one when the workflows it waits for can only be
 // started by people with write access.
-func privilegedEvents(w *Workflow, project *Project) []string {
+func privilegedEvents(w *Workflow, project *Project, sib *siblingWorkflows) []string {
 	var ret []string
 	for _, event := range privilegedTriggers {
 		switch event {
@@ -133,7 +134,7 @@ func privilegedEvents(w *Workflow, project *Project) []string {
 			}
 		case "workflow_run":
 			for _, we := range webhookEvents(w, event) {
-				if !upstreamWorkflowsTrusted(project, we) {
+				if !upstreamWorkflowsTrusted(project, sib, we) {
 					ret = append(ret, event)
 					break
 				}
@@ -152,40 +153,13 @@ var trustedUpstreamEvents = map[string]bool{
 // upstreamWorkflowsTrusted reports whether every workflow that the workflow_run event waits for is
 // in the project and is started only by events that people with write access cause. It is false when
 // it cannot tell: no project, a pattern or an expression as a name, or a workflow that is missing.
-func upstreamWorkflowsTrusted(project *Project, we *WebhookEvent) bool {
+func upstreamWorkflowsTrusted(project *Project, sib *siblingWorkflows, we *WebhookEvent) bool {
 	if project == nil || len(we.Workflows) == 0 {
 		return false
 	}
-	dir := project.WorkflowsDir()
-	entries, err := os.ReadDir(dir)
-	if err != nil {
+	byName, ok := sib.parsed(project)
+	if !ok {
 		return false
-	}
-	byName := map[string]*Workflow{}
-	for _, e := range entries {
-		ext := filepath.Ext(e.Name())
-		if e.IsDir() || (ext != ".yml" && ext != ".yaml") {
-			continue
-		}
-		p := filepath.Join(dir, e.Name())
-		b, err := os.ReadFile(p)
-		if err != nil {
-			return false
-		}
-		w, _ := Parse(b)
-		if w == nil {
-			return false
-		}
-		name := ""
-		if w.Name != nil && w.Name.Value != "" {
-			name = w.Name.Value
-		} else if rel, err := filepath.Rel(project.RootDir(), p); err == nil {
-			name = filepath.ToSlash(rel)
-		}
-		if strings.Contains(name, "${{") {
-			return false
-		}
-		byName[strings.ToLower(name)] = w
 	}
 	for _, n := range we.Workflows {
 		if n == nil || n.ContainsExpression() || strings.ContainsAny(n.Value, "*?[]!+") {
@@ -378,4 +352,72 @@ func untrustedEnvNames(wf *Workflow, j *Job, s *Step) map[string]bool {
 		}
 	}
 	return names
+}
+
+// siblingWorkflows reads the workflows of a project for the rules that look at the workflows a
+// workflow_run event waits for. A project with hundreds of workflows would otherwise be read and parsed
+// again for each of them. One value serves the files linted in one run (LocalActionsCache.siblings), so
+// the files are read when the first rule asks and not again.
+type siblingWorkflows struct {
+	parseOnce sync.Once
+	byName    map[string]*Workflow
+	parseOK   bool
+
+	namesOnce sync.Once
+	nameSet   workflowNames
+}
+
+// parsed returns the workflows of the project by their lower-cased names, and false when they could not
+// be determined: a file that cannot be read or parsed, or a name with an expression. A nil value reads
+// the files on every call.
+func (s *siblingWorkflows) parsed(project *Project) (map[string]*Workflow, bool) {
+	if s == nil {
+		return readParsedWorkflows(project)
+	}
+	s.parseOnce.Do(func() { s.byName, s.parseOK = readParsedWorkflows(project) })
+	return s.byName, s.parseOK
+}
+
+// names returns the names of the workflows of the project (see readWorkflowNames).
+func (s *siblingWorkflows) names(project *Project) workflowNames {
+	if s == nil {
+		return readWorkflowNames(project.WorkflowsDir(), project.RootDir())
+	}
+	s.namesOnce.Do(func() { s.nameSet = readWorkflowNames(project.WorkflowsDir(), project.RootDir()) })
+	return s.nameSet
+}
+
+func readParsedWorkflows(project *Project) (map[string]*Workflow, bool) {
+	dir := project.WorkflowsDir()
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, false
+	}
+	byName := map[string]*Workflow{}
+	for _, e := range entries {
+		ext := filepath.Ext(e.Name())
+		if e.IsDir() || (ext != ".yml" && ext != ".yaml") {
+			continue
+		}
+		p := filepath.Join(dir, e.Name())
+		b, err := os.ReadFile(p)
+		if err != nil {
+			return nil, false
+		}
+		w, _ := Parse(b)
+		if w == nil {
+			return nil, false
+		}
+		name := ""
+		if w.Name != nil && w.Name.Value != "" {
+			name = w.Name.Value
+		} else if rel, err := filepath.Rel(project.RootDir(), p); err == nil {
+			name = filepath.ToSlash(rel)
+		}
+		if strings.Contains(name, "${{") {
+			return nil, false
+		}
+		byName[strings.ToLower(name)] = w
+	}
+	return byName, true
 }

@@ -4,6 +4,8 @@ import (
 	"bufio"
 	"bytes"
 	"math/rand"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"unicode/utf8"
@@ -182,5 +184,51 @@ func TestFindRange(t *testing.T) {
 	}
 	if got := findRange(2, false, func(i int) (int, int) { return overlap[i][0], overlap[i][1] }, 4); len(got) != 2 {
 		t.Errorf("line 4 is in both ranges: %v", got)
+	}
+}
+
+// The workflows next to a workflow are read once for all the files of a run, however many of them have
+// a workflow_run event (pytorch has 130), and a lookup without the shared value reads them again.
+func TestSiblingWorkflowsAreReadOnce(t *testing.T) {
+	dir := t.TempDir()
+	wfDir := filepath.Join(dir, ".github", "workflows")
+	if err := os.MkdirAll(wfDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(dir, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	up := filepath.Join(wfDir, "up.yaml")
+	if err := os.WriteFile(up, []byte("name: Up\non: push\njobs:\n  a:\n    runs-on: x\n    steps:\n      - run: y\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	project, err := NewProject(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	we := &WebhookEvent{Workflows: []*String{{Value: "Up"}}}
+
+	sib := &siblingWorkflows{}
+	if !upstreamWorkflowsTrusted(project, sib, we) {
+		t.Fatal("the upstream workflow runs on push only, so it is trusted")
+	}
+	// The file changes, but the run has read it already
+	if err := os.WriteFile(up, []byte("name: Up\non: pull_request\njobs:\n  a:\n    runs-on: x\n    steps:\n      - run: y\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if !upstreamWorkflowsTrusted(project, sib, we) {
+		t.Error("the files were read again")
+	}
+	if upstreamWorkflowsTrusted(project, nil, we) {
+		t.Error("without the shared value the file is read again and pull_request is not trusted")
+	}
+	// The cache of a run hands out one value
+	c := NewLocalActionsCache(project, nil)
+	if c.siblings() == nil || c.siblings() != c.siblings() {
+		t.Error("one value per cache")
+	}
+	var nilCache *LocalActionsCache
+	if nilCache.siblings() != nil {
+		t.Error("a nil cache has none")
 	}
 }
