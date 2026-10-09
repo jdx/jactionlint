@@ -5,6 +5,7 @@ package jactionlint
 import (
 	"bytes"
 	"encoding/json"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -723,5 +724,37 @@ func TestBaselineContextFallbackSkipsInvalidLocalAction(t *testing.T) {
 	s.match("a.yaml", []*Error{other}, map[*Error]*baselineInfo{other: {file: "a.yaml", fingerprint: "new", context: "c"}})
 	if !other.Baselined {
 		t.Error("a reworded message of another rule still matches")
+	}
+}
+
+// Whether an online rule ran for the unused entries follows -online, -online=false and the online keys.
+func TestBaselineRuleRanAsIsFollowsTheOnlineSettings(t *testing.T) {
+	newLinter := func(opts LinterOptions) *Linter {
+		l, err := NewLinter(io.Discard, &opts)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return l
+	}
+	mode, err := ParseConfig([]byte("online-options:\n  mode: cache\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	on, err := ParseConfig([]byte("online: true\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	const id = "archived-uses"
+	if !newLinter(LinterOptions{}).ruleRanAsIs(id, mode) {
+		t.Error("online-options.mode turns the online checks on")
+	}
+	if newLinter(LinterOptions{}).ruleRanAsIs(id, &Config{}) {
+		t.Error("offline by default")
+	}
+	if newLinter(LinterOptions{OnlineOff: true}).ruleRanAsIs(id, on) {
+		t.Error("-online=false wins over the config")
+	}
+	if !newLinter(LinterOptions{Online: true}).ruleRanAsIs(id, &Config{}) {
+		t.Error("-online turns them on")
 	}
 }

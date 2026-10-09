@@ -265,10 +265,9 @@ func toolUnavailable(cmd string) bool {
 // the rule is on and what it needs is available. A baseline written with -online, or in a
 // different environment, has entries this run cannot reproduce; those are not unused.
 func (l *Linter) ruleRanAsIs(id string, cfg *Config) bool {
-	if cfg.RuleLevel(id) == SeverityOff {
-		return false
-	}
-	if info, ok := ruleIndex[id]; ok && info.Online && !l.online.enabled && (cfg == nil || !cfg.Online) {
+	// RuleRuns knows the level of the rule and whether it is an online rule while the online checks are off
+	// (-online, -online=false, "online" and "online-options" of the configuration all count)
+	if !cfg.RuleRuns(id, l.online.enabled || l.online.enabledBy(cfg)) {
 		return false
 	}
 	switch id {
