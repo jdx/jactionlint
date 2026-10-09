@@ -920,7 +920,7 @@ func (rule *RuleExpression) checkSemanticsOfExprNode(expr ExprNode, line, col in
 		if len(ctx) == 0 {
 			rule.Debug("No context availability was found for workflow key %q", workflowKey)
 		}
-		if rule.workflow != nil && rule.workflow.Action != nil {
+		if rule.workflow != nil && rule.workflow.IsComposite() {
 			ctx = compositeContexts(ctx)
 		}
 		c.SetContextAvailability(ctx)
@@ -928,7 +928,7 @@ func (rule *RuleExpression) checkSemanticsOfExprNode(expr ExprNode, line, col in
 	}
 
 	ty, errs := c.Check(expr)
-	if rule.workflow != nil && rule.workflow.Action != nil {
+	if rule.workflow != nil && rule.workflow.IsComposite() {
 		errs = compositeExprErrors(errs)
 	}
 	ok := true
@@ -1323,7 +1323,7 @@ func compositeContexts(ctx []string) []string {
 // also sets the type of the "inputs" context for the steps: every input of an action is a string.
 func (rule *RuleExpression) visitActionPre(a *ActionFile) {
 	// The default of an input is evaluated before the inputs exist
-	rule.inputsTy = NewMapObjectType(StringType{})
+	rule.inputsTy = NewEmptyStrictObjectType()
 	for _, in := range a.Inputs {
 		rule.checkString(in.Default, "jobs.<job_id>.steps.run")
 	}
