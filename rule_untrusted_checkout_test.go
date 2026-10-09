@@ -12,6 +12,20 @@ func TestRuleUntrustedCheckout(t *testing.T) {
 		others map[string]string
 		src    string
 	}{
+		{"local action below the checkout directory", nil, prt + `    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }} # want
+          path: pr
+      - uses: ./pr/.github/actions/build
+`},
+		{"local action of the base repository next to a checkout in a subdirectory", nil, prt + `    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          path: pr
+      - uses: ./.github/actions/label
+`},
 		{"head sha then npm", nil, prt + `    steps:
       - uses: actions/checkout@v4
         with:
