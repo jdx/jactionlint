@@ -14,6 +14,47 @@ var (
 	scenarioTagPush = triggerScenario{"event_name": "push", "event.ref": "refs/tags/v1.0.0", "ref": "refs/tags/v1.0.0", "ref_type": "tag", "ref_name": "v1.0.0"}
 )
 
+// refPrefixKey names the scenario value which says what the ref of the run starts with when the ref itself is not
+// known: a pushed branch has a ref of "refs/heads/" and a name which is not known.
+const refPrefixKey = "ref_prefix"
+
+// refPrefix returns the known start of the ref which n reads (github.ref or github.event.ref) in the scenario, when
+// the ref itself is not known.
+func refPrefix(n ExprNode, sc triggerScenario) (string, bool) {
+	p, ok := sc[refPrefixKey]
+	d, isDeref := n.(*ObjectDerefNode)
+	if !ok || !isDeref || d.Property != "ref" {
+		return "", false
+	}
+	switch r := d.Receiver.(type) {
+	case *VariableNode:
+		return p, r.Name == "github"
+	case *ObjectDerefNode:
+		v, isVar := r.Receiver.(*VariableNode)
+		return p, isVar && v.Name == "github" && r.Property == "event"
+	}
+	return "", false
+}
+
+// prefixGate evaluates a comparison of a ref which is known by its start only with a literal. exact is true
+// for ==, false for startsWith. It is unknown when the literal is longer than the known start and agrees with it.
+func prefixGate(prefix, lit string, exact bool) gateValue {
+	prefix, lit = strings.ToLower(prefix), strings.ToLower(lit)
+	switch {
+	case strings.HasPrefix(lit, prefix):
+		if exact || lit != prefix {
+			return gateValue{}
+		}
+		return gateBool(true)
+	case strings.HasPrefix(prefix, lit):
+		if exact {
+			return gateBool(false)
+		}
+		return gateBool(true)
+	}
+	return gateBool(false)
+}
+
 // tri is a truth value of three states, because the condition of a job often depends on things which are not known
 // while linting (the result of another job, an input, the matrix).
 type tri int
@@ -120,6 +161,17 @@ func evalGate(n ExprNode, sc triggerScenario) gateValue {
 		if !n.Kind.IsEqualityOp() {
 			break
 		}
+		for _, side := range [][2]ExprNode{{n.Left, n.Right}, {n.Right, n.Left}} {
+			if p, ok := refPrefix(side[0], sc); ok {
+				if lit := evalGate(side[1], sc); lit.kind == 2 {
+					g := prefixGate(p, lit.s, true)
+					if g.kind == 1 && n.Kind != CompareOpNodeKindEq {
+						g = gateBool(!g.b)
+					}
+					return g
+				}
+			}
+		}
 		l, r := evalGate(n.Left, sc), evalGate(n.Right, sc)
 		if l.kind == 2 && r.kind == 2 {
 			eq := strings.EqualFold(l.s, r.s)
@@ -135,6 +187,11 @@ func evalGate(n ExprNode, sc triggerScenario) gateValue {
 		case "startswith", "endswith", "contains":
 			if len(n.Args) != 2 {
 				break
+			}
+			if p, ok := refPrefix(n.Args[0], sc); ok && strings.ToLower(n.Callee) == "startswith" {
+				if lit := evalGate(n.Args[1], sc); lit.kind == 2 {
+					return prefixGate(p, lit.s, false)
+				}
 			}
 			a, b := evalGate(n.Args[0], sc), evalGate(n.Args[1], sc)
 			if a.kind != 2 || b.kind != 2 {

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 	"sync"
+	"sync/atomic"
 )
 
 // DefaultImpostorMaxBranches is how many branches of an action repository the impostor-commit rule
@@ -95,11 +96,16 @@ func (s *onlineSession) findCommitOrigin(owner, repo, sha string, limit int) (co
 	if err != nil {
 		return originUnknown, err
 	}
+	// A 404 of a comparison means the commit shares no history with the branch, or that GitHub does not know
+	// the commit at all. Only a comparison which gave an answer shows that the commit exists, and without one
+	// there is no verdict: an unknown commit is not an impostor.
+	var exists atomic.Bool
 	reachable := func(branchHead string) (bool, error) {
 		st, err := s.Compare(owner, repo, branchHead, sha)
 		if err != nil {
 			return false, err
 		}
+		exists.Store(true)
 		return st == GitHubCompareBehind || st == GitHubCompareIdentical, nil
 	}
 
@@ -131,9 +137,11 @@ func (s *onlineSession) findCommitOrigin(owner, repo, sha string, limit int) (co
 		switch {
 		case err == nil && scan.Found:
 			return originOwn, nil
-		case err == nil && scan.Complete:
+		case err == nil && scan.Complete && exists.Load():
 			return verdict, nil
-		case err == nil:
+		case err == nil && scan.Complete:
+			// The commit is on no branch, but nothing shows that it exists: compare the branches
+		case err == nil && !scan.Complete:
 			return originUnknown, nil
 		}
 		// Otherwise compare the branches one by one
@@ -178,7 +186,7 @@ func (s *onlineSession) findCommitOrigin(owner, repo, sha string, limit int) (co
 		}
 		heads = heads[n:]
 	}
-	if branches.Truncated {
+	if branches.Truncated || !exists.Load() {
 		return originUnknown, nil
 	}
 	return verdict, nil
