@@ -341,12 +341,13 @@ func (c *Config) applyLegacy(l *legacyConfig) error {
 var (
 	configTopKeys = []string{
 		"profile", "extends", "rules", "online", "online-options", "baseline",
-		"self-hosted-runner", "config-variables", "config-secrets", "paths", "ignores", "required-actions", "assume-default-permissions",
+		"self-hosted-runner", "config-variables", "config-secrets", "paths", "ignores", "required-actions", "assume-default-permissions", "fix",
 		// Deprecated keys which are translated into rules
 		"timeout-minutes", "require-commit-hash", "require-permissions", "require-checkout-before-local-action",
 		"require-expression-wrapping", "check-falsy-ternary", "check-workflow-run-names", "require-shell", "max-run-lines",
 	}
 	selfHostedRunnerKeys   = []string{"labels", "strict-labels"}
+	fixConfigKeys          = []string{"rules"}
 	onlineOptionsKeys      = []string{"mode", "api-url", "token-env", "token-file", "allow", "deny", "cache-ttl", "max-rate-limit-wait", "retries", "concurrency", "gh-cli"}
 	pathConfigKeys         = []string{"ignore"}
 	requiredActionKeys     = []string{"action", "version"}
@@ -406,6 +407,18 @@ func validateConfigKeys(root *yaml.Node) error {
 		switch k.Value {
 		case "self-hosted-runner":
 			err = checkKeys(v, "\"self-hosted-runner\"", selfHostedRunnerKeys)
+		case "fix":
+			if err = checkKeys(v, "\"fix\"", fixConfigKeys); err != nil {
+				break
+			}
+			_, fvals := mappingPairs(v)
+			for _, fv := range fvals {
+				for _, id := range fv.Content {
+					if _, ok := ruleIndex[id.Value]; !ok {
+						return fmt.Errorf("unknown rule ID %q in \"fix.rules\" at line:%d,col:%d%s", id.Value, id.Line, id.Column, suggestRuleID(id.Value))
+					}
+				}
+			}
 		case "online-options":
 			err = checkKeys(v, "\"online-options\"", onlineOptionsKeys)
 		case "timeout-minutes":
@@ -467,6 +480,12 @@ func presentKeys(root *yaml.Node) map[string]bool {
 	keys, vals := mappingPairs(n)
 	for i, k := range keys {
 		ret[k.Value] = true
+		if k.Value == "fix" {
+			nk, _ := mappingPairs(vals[i])
+			for _, c := range nk {
+				ret["fix."+c.Value] = true
+			}
+		}
 		if k.Value == "self-hosted-runner" {
 			nk, _ := mappingPairs(vals[i])
 			for _, c := range nk {

@@ -788,7 +788,9 @@ func planTemplateInjectionFixes(in tiFixInput) map[int]*Fix {
 		var edits []TextEdit
 		var starts []int
 		defined := map[string]string{} // lower case expression text -> variable name
-		var newVars []string           // lines "NAME: ${{ expr }}"
+		newVar := map[string]string{}  // variable name -> line "NAME: ${{ expr }}", for those not in the env yet
+		var newOrder []string          // the names of newVar in the order they were made
+		usedNew := map[string]bool{}   // the new variables an edit reads: the others are not added
 		for _, c := range cands {
 			if (c.place.Unsafe != "") != unsafe {
 				continue
@@ -810,12 +812,13 @@ func planTemplateInjectionFixes(in tiFixInput) map[int]*Fix {
 					name = reuseEnvName(in.ctx.step.Env, key)
 					if name == "" {
 						name = uniqueEnvName(envNameFor(c.path), taken)
-						newVars = append(newVars, fmt.Sprintf("%s: ${{ %s }}", name, c.text))
+						newVar[name] = name + ": " + RenderYAMLValue("${{ "+c.text+" }}")
+						newOrder = append(newOrder, name)
 					}
 					defined[key] = name
 				}
 			}
-			repl, ok := shellReplacement(c.place.Quote, name, in.str.Quoted)
+			repl, ok := shellReplacement(c.place.Quote, name)
 			if !ok {
 				continue
 			}
@@ -826,11 +829,26 @@ func planTemplateInjectionFixes(in tiFixInput) map[int]*Fix {
 				// '${{ x }}' is the whole single quoted word: replace the quotes too
 				repl, start, end = `"${`+name+`}"`, start-1, end+1
 			}
+			// The text goes into a YAML scalar: escape it for the way the scalar is written
+			site, ok := YAMLSiteAt(in.idx.src, start)
+			if !ok {
+				continue
+			}
+			if repl, ok = site.Insert(repl); !ok {
+				continue
+			}
 			edits = append(edits, TextEdit{start, end, repl})
 			starts = append(starts, c.span.Start)
+			usedNew[name] = true
 		}
 		if len(edits) == 0 {
 			continue
+		}
+		var newVars []string
+		for _, name := range newOrder {
+			if usedNew[name] {
+				newVars = append(newVars, newVar[name])
+			}
 		}
 		if len(newVars) > 0 {
 			ins, ok := envInsertion(in, newVars)
@@ -911,7 +929,7 @@ func uniqueEnvName(base string, taken map[string]bool) string {
 }
 
 // shellReplacement is the text which replaces a placeholder so that the shell expands the variable.
-func shellReplacement(q shQuote, name string, yamlQuoted bool) (string, bool) {
+func shellReplacement(q shQuote, name string) (string, bool) {
 	var r string
 	switch q {
 	case shDouble:
@@ -920,9 +938,6 @@ func shellReplacement(q shQuote, name string, yamlQuoted bool) (string, bool) {
 		r = `"${` + name + `}"`
 	case shSingle:
 		r = `'"${` + name + `}"'`
-	}
-	if yamlQuoted && strings.ContainsAny(r, `"'\`) {
-		return "", false // would need YAML escapes
 	}
 	return r, true
 }

@@ -104,7 +104,15 @@ type Command struct {
 	onRulesCreated func([]Rule) []Rule
 }
 
-func (cmd *Command) runLinter(args []string, opts *LinterOptions, initConfig, migrateConfig, migrateIgnores bool, fix FixMode, baselineWrite *optionalValueFlag, onlineFailed *int) ([]*Error, error) {
+// fixRequest is what -fix, -diff and -rules ask for.
+type fixRequest struct {
+	mode   FixMode
+	diff   bool
+	rules  []string
+	result *FixResult
+}
+
+func (cmd *Command) runLinter(args []string, opts *LinterOptions, initConfig, migrateConfig, migrateIgnores bool, fix *fixRequest, baselineWrite *optionalValueFlag, onlineFailed *int) ([]*Error, error) {
 	l, err := NewLinter(cmd.Stdout, opts)
 	if err != nil {
 		return nil, err
@@ -126,7 +134,7 @@ func (cmd *Command) runLinter(args []string, opts *LinterOptions, initConfig, mi
 		if len(args) == 1 && args[0] == "-" {
 			return nil, errors.New("-baseline-write cannot be used with stdin because the baseline would not know the file")
 		}
-		if fix != 0 {
+		if fix.mode != 0 {
 			return nil, errors.New("-baseline-write cannot be combined with -fix")
 		}
 		if args == nil {
@@ -147,19 +155,21 @@ func (cmd *Command) runLinter(args []string, opts *LinterOptions, initConfig, mi
 		return nil, l.MigrateIgnores(args)
 	}
 
-	if fix != 0 {
+	if fix.mode != 0 {
 		if len(args) == 1 && args[0] == "-" {
 			return nil, errors.New("-fix cannot be used with stdin because the fixed file would not be saved")
 		}
+		fo := FixOptions{Mode: fix.mode, Rules: fix.rules, DryRun: fix.diff}
 		var res *FixResult
 		if len(args) == 0 {
-			res, err = l.FixRepository("", fix)
+			res, err = l.FixRepositoryWithOptions("", fo)
 		} else {
-			res, err = l.FixFiles(args, nil, fix)
+			res, err = l.FixFilesWithOptions(args, nil, fo)
 		}
 		if err != nil {
 			return nil, err
 		}
+		fix.result = res
 		return res.Errors, nil
 	}
 
@@ -277,6 +287,8 @@ func (cmd *Command) Main(args []string) int {
 	var ignorePats ignorePatternFlags
 	var initConfig bool
 	var fix fixFlag
+	var diff bool
+	var fixRules string
 	var migrateConfig bool
 	var migrateIgnores bool
 	var noColor bool
@@ -299,6 +311,8 @@ func (cmd *Command) Main(args []string) int {
 	flags.StringVar(&opts.ConfigFile, "config-file", "", "File path to config file")
 	flags.BoolVar(&initConfig, "init-config", false, "Generate default config file at .github/jactionlint.yaml in current project")
 	flags.Var(&fix, "fix", "Apply the safe automatic fixes to the files and report what remains. -fix=unsafe also applies the fixes which may change the behavior of the workflow. The files are rewritten in place")
+	flags.BoolVar(&diff, "diff", false, "Print the changes -fix would make as a unified diff on stdout and do not write the files (implies -fix). The errors which remain go to stderr. Exits with 1 when there is a diff or an error remains")
+	flags.StringVar(&fixRules, "rules", "", "With -fix or -diff, apply only the fixes of these rule IDs, separated by commas (e.g. -fix -rules missing-timeout,artipacked). The \"fix.rules\" key of the config file does the same")
 	flags.BoolVar(&migrateConfig, "migrate-config", false, "Rewrite the deprecated keys of the config file (.github/jactionlint.yaml or the file of -config-file) into the \"rules\" mapping")
 	flags.BoolVar(&migrateIgnores, "migrate-ignores", false, "Rewrite the trailing \"# zizmor: ignore[...]\" comments of the files (the workflows of the project by default) into \"# jactionlint ignore=...\" comments. jactionlint also honors the zizmor comments as they are")
 	var online onlineFlag
@@ -403,15 +417,42 @@ func (cmd *Command) Main(args []string) int {
 		opts.Color = ColorOptionKindNever
 	}
 
+	req := &fixRequest{mode: fix.mode, diff: diff}
+	if diff && req.mode == 0 {
+		req.mode = FixModeSafe
+	}
+	if fixRules != "" {
+		if req.mode == 0 {
+			fmt.Fprintln(cmd.Stderr, "-rules can be used only with -fix or -diff")
+			return ExitStatusInvalidCommandOption
+		}
+		for _, id := range strings.Split(fixRules, ",") {
+			id = strings.TrimSpace(id)
+			if id == "" {
+				continue
+			}
+			if _, ok := ruleIndex[id]; !ok {
+				fmt.Fprintf(cmd.Stderr, "unknown rule ID %q in -rules%s\n", id, suggestRuleID(id))
+				return ExitStatusInvalidCommandOption
+			}
+			req.rules = append(req.rules, id)
+		}
+	}
 	var onlineFailed int
-	errs, err := cmd.runLinter(flags.Args(), &opts, initConfig, migrateConfig, migrateIgnores, fix.mode, &baselineWrite, &onlineFailed)
+	errs, err := cmd.runLinter(flags.Args(), &opts, initConfig, migrateConfig, migrateIgnores, req, &baselineWrite, &onlineFailed)
 	if err != nil {
 		fmt.Fprintln(cmd.Stderr, err.Error())
+		return ExitStatusFailure
+	}
+	if req.result != nil && len(req.result.Failures) > 0 {
 		return ExitStatusFailure
 	}
 	if onlineFailed > 0 {
 		fmt.Fprintf(cmd.Stderr, "online=strict: %d GitHub lookups were skipped, so the online checks are incomplete\n", onlineFailed)
 		return ExitStatusFailure
+	}
+	if req.result != nil && diff && req.result.Diff != "" {
+		return ExitStatusSuccessProblemFound
 	}
 	return exitStatusOf(errs, strictExit)
 }

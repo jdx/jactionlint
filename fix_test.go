@@ -54,9 +54,15 @@ func TestApplyFixes(t *testing.T) {
 // of the replacements and offers a fix replacing it with the value.
 type replacingRule struct {
 	RuleBase
+	src          []byte
 	path         string
 	replacements map[string]string
 	unsafe       bool
+}
+
+func (r *replacingRule) VisitWorkflowPre(n *Workflow) error {
+	r.src = n.Source
+	return nil
 }
 
 func (r *replacingRule) VisitStep(n *Step) error {
@@ -64,10 +70,7 @@ func (r *replacingRule) VisitStep(n *Step) error {
 	if !ok || run.Run == nil {
 		return nil
 	}
-	b, err := os.ReadFile(r.path)
-	if err != nil {
-		return err
-	}
+	b := r.src
 	// Offset of the value: the position is a line and a column in code points
 	lines := strings.SplitAfter(string(b), "\n")
 	off := 0
@@ -228,8 +231,9 @@ func TestFixFilesRepeatsUntilNothingChanges(t *testing.T) {
 		t.Fatal(err)
 	}
 	// "aaa" -> "bbb" is applied in a pass and "bbb" -> "aaa" in the next pass
-	flip := &flipRule{RuleBase: NewRuleBase("flip", ""), path: path}
-	l, err = NewLinter(&out, &LinterOptions{WorkingDir: root, OnRulesCreated: func(rules []Rule) []Rule { return append(rules, flip) }})
+	l, err = NewLinter(&out, &LinterOptions{WorkingDir: root, OnRulesCreated: func(rules []Rule) []Rule {
+		return append(rules, &flipRule{RuleBase: NewRuleBase("flip", ""), path: path})
+	}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -238,19 +242,28 @@ func TestFixFilesRepeatsUntilNothingChanges(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.Applied != maxFixPasses {
-		t.Errorf("fixing must stop after %d passes but applied %d fixes", maxFixPasses, res.Applied)
+	// The fixes undo each other: the file is left as it was and the failure names the rule
+	if b, _ := os.ReadFile(path); !strings.Contains(string(b), "echo aaa") || res.Applied != 0 || len(res.Fixed) != 0 {
+		t.Errorf("a cycle must leave the file as it was: %+v\n%s", res, b)
+	}
+	if len(res.Failures) != 1 || res.Failures[0].Rules[0] != "fixable" || !strings.Contains(res.Failures[0].Reason, "undo each other") {
+		t.Errorf("the failure must name the rule: %+v", res.Failures)
 	}
 }
 
 type flipRule struct {
 	RuleBase
+	src  []byte
 	path string
 }
 
+func (r *flipRule) VisitWorkflowPre(n *Workflow) error {
+	r.src = n.Source
+	return nil
+}
+
 func (r *flipRule) VisitStep(n *Step) error {
-	b, _ := os.ReadFile(r.path)
-	s := string(b)
+	s := string(r.src)
 	for _, p := range [][2]string{{"aaa", "bbb"}, {"bbb", "aaa"}} {
 		if i := strings.Index(s, "echo "+p[0]); i >= 0 {
 			r.ReportID("fixable", n.Pos, "flip")
@@ -270,10 +283,9 @@ func TestFixRepositoryAndManyFiles(t *testing.T) {
 		".github/workflows/b.yaml": wf("zzz"),
 		".github/workflows/c.yaml": wf("aaa"),
 	})
-	// The rule reads the file by its path, so make a rule for each file through a shared lookup
 	var out bytes.Buffer
 	l, err := NewLinter(&out, &LinterOptions{WorkingDir: root, Format: FormatGCC, OnRulesCreated: func(rules []Rule) []Rule {
-		return append(rules, &wholeFileRule{RuleBase: NewRuleBase("whole", ""), dir: filepath.Join(root, ".github", "workflows")})
+		return append(rules, &wholeFileRule{RuleBase: NewRuleBase("whole", "")})
 	}})
 	if err != nil {
 		t.Fatal(err)
@@ -312,36 +324,33 @@ func TestFixRepositoryAndManyFiles(t *testing.T) {
 	}
 }
 
-// wholeFileRule fixes "aaa" in the "run:" of any file in the directory. It finds the file by the position.
+// wholeFileRule fixes "aaa" in the "run:" of any file.
 type wholeFileRule struct {
 	RuleBase
-	dir string
+	src []byte
+}
+
+func (r *wholeFileRule) VisitWorkflowPre(n *Workflow) error {
+	r.src = n.Source
+	return nil
 }
 
 func (r *wholeFileRule) VisitStep(n *Step) error {
 	run, ok := n.Exec.(*ExecRun)
-	if !ok {
+	if !ok || !strings.Contains(run.Run.Value, "aaa") {
 		return nil
 	}
-	if !strings.Contains(run.Run.Value, "aaa") {
+	lines := strings.SplitAfter(string(r.src), "\n")
+	if len(lines) < run.Run.Pos.Line || !strings.Contains(lines[run.Run.Pos.Line-1], "aaa") {
 		return nil
 	}
-	entries, _ := os.ReadDir(r.dir)
-	for _, e := range entries {
-		b, _ := os.ReadFile(filepath.Join(r.dir, e.Name()))
-		lines := strings.SplitAfter(string(b), "\n")
-		if len(lines) < run.Run.Pos.Line || !strings.Contains(lines[run.Run.Pos.Line-1], "aaa") {
-			continue
-		}
-		off := 0
-		for i := 0; i < run.Run.Pos.Line-1; i++ {
-			off += len(lines[i])
-		}
-		i := strings.Index(lines[run.Run.Pos.Line-1], "aaa")
-		r.ReportID("fixable", n.Pos, "aaa")
-		r.Errs()[len(r.Errs())-1].Fix = &Fix{Edits: []TextEdit{{off + i, off + i + 3, "AAA"}}}
-		return nil
+	off := 0
+	for i := 0; i < run.Run.Pos.Line-1; i++ {
+		off += len(lines[i])
 	}
+	i := strings.Index(lines[run.Run.Pos.Line-1], "aaa")
+	r.ReportID("fixable", n.Pos, "aaa")
+	r.Errs()[len(r.Errs())-1].Fix = &Fix{Edits: []TextEdit{{off + i, off + i + 3, "AAA"}}}
 	return nil
 }
 
@@ -484,7 +493,7 @@ func TestFixRepositoryIncludesTheDependabotConfiguration(t *testing.T) {
 	})
 	var out bytes.Buffer
 	l, err := NewLinter(&out, &LinterOptions{WorkingDir: root, Format: FormatGCC, OnRulesCreated: func(rules []Rule) []Rule {
-		return append(rules, &wholeFileRule{RuleBase: NewRuleBase("whole", ""), dir: filepath.Join(root, ".github", "workflows")})
+		return append(rules, &wholeFileRule{RuleBase: NewRuleBase("whole", "")})
 	}})
 	if err != nil {
 		t.Fatal(err)

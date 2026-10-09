@@ -3,7 +3,6 @@ package jactionlint
 import (
 	"bytes"
 	"path/filepath"
-	"regexp"
 	"strconv"
 	"strings"
 )
@@ -50,7 +49,7 @@ func (rule *RuleAnonymousDefinition) VisitWorkflowPre(n *Workflow) error {
 		return nil
 	}
 	at := srcLineStart(rule.src, line)
-	text := "name: " + yamlPlainOrQuoted(name) + srcLineBreak(rule.src)
+	text := "name: " + RenderYAMLValue(name) + srcLineBreak(rule.src)
 	reportWithFix(&rule.RuleBase, "anonymous-definition", pos, msg, &Fix{
 		Description: "Add name: " + name,
 		Edits:       []TextEdit{{Start: at, End: at, NewText: text}},
@@ -115,7 +114,7 @@ func (rule *RuleAnonymousDefinition) jobNameEdit(n *Job) (TextEdit, bool) {
 			return TextEdit{}, false
 		}
 		at := nextLineStart(src, end)
-		return TextEdit{Start: at, End: at, NewText: strings.Repeat(" ", childIndent) + "name: " + yamlPlainOrQuoted(n.ID.Value) + srcLineBreak(src)}, true
+		return TextEdit{Start: at, End: at, NewText: strings.Repeat(" ", childIndent) + "name: " + RenderYAMLValue(n.ID.Value) + srcLineBreak(src)}, true
 	}
 	return TextEdit{}, false
 }
@@ -164,23 +163,6 @@ func (rule *RuleAnonymousDefinition) deriveName(n *Workflow) string {
 		}
 	}
 	return ""
-}
-
-var plainYAMLName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9 _./()-]*$`)
-
-// yamlPlainOrQuoted returns the string as a YAML scalar, quoted when a plain scalar would not read
-// back as the same string.
-func yamlPlainOrQuoted(s string) string {
-	if plainYAMLName.MatchString(s) && !strings.HasSuffix(s, " ") {
-		switch strings.ToLower(s) {
-		case "true", "false", "null", "yes", "no", "on", "off", "y", "n":
-			return strconv.Quote(s)
-		}
-		if _, err := strconv.ParseFloat(s, 64); err != nil && !strings.HasPrefix(s, "0x") && !strings.HasPrefix(s, "0o") {
-			return s
-		}
-	}
-	return strconv.Quote(s)
 }
 
 func init() {

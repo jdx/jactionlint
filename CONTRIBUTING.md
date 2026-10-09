@@ -142,7 +142,15 @@ Tests also fail when a reported ID is not registered, a registered ID is never r
 `docs/checks.md`. Before pushing run `go build ./...`, `go vet ./...`, `go test -race ./...` and `hk check --all`.
 
 Rules with an automatic fix set `Error.Fix` (byte-range edits). Only safe fixes appear in the SARIF output and are applied by
-`-fix`; mark risky ones `Unsafe`.
+`-fix`; mark risky ones `Unsafe`. Never build YAML text by concatenating strings: use `RenderYAMLValue` (a whole new value of a
+mapping entry: plain when that reads back as the same string, else double quoted) and `YAMLSiteAt` plus `YAMLSite.Insert` (text
+inserted into a scalar that exists: escaped for plain, flow, single quoted, double quoted and block scalars, or refused). `-fix`
+checks every pass (the result must be valid YAML which differs only where the edits are), so a fixer that breaks the file is refused
+and reported, but a fixer test should apply the fix and lint again anyway. If your rule has a fixer, add its ID to `fixPriority` in
+`fix.go` when its edits can overlap with another rule's (see [Fix errors automatically](docs/usage.md#fix-errors-automatically)).
+`go build -o jactionlint ./cmd/jactionlint && go run ./scripts/fix-corpus -jactionlint ./jactionlint` (`mise run fix-corpus`) applies
+all safe fixes to a copy of the corpus and checks that the result is valid, that a second run changes nothing and that no rule
+(jactionlint or zizmor) reports more findings than before.
 
 Since jactionlint doesn't use any cgo features, setting `CGO_ENABLED=0` environment variable is recommended to avoid troubles
 around linking libc. `mise run build` does this by default.

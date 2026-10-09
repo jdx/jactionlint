@@ -177,6 +177,9 @@ extends:
   gradually. `auto` (or `true`) applies `.github/jactionlint-baseline.json` when the file exists, `false` or no key applies
   no baseline, and any other value is the path of the baseline file relative to the repository root, which must exist. The
   `-baseline` flag overrides it (`-baseline=false` turns it off). The file is written by `jactionlint -baseline-write`.
+- `fix`: Configuration of [`-fix`](usage.md#fix-errors-automatically).
+  - `rules`: A list of [rule IDs](rules.md). `-fix` applies only the fixes of these rules, like `-fix -rules a,b` on the command
+    line (which overrides it). The default, an empty list, applies the fixes of every rule. Unknown IDs are errors.
 - `profile`, `rules` and `extends`: See [Profiles](#profiles), [Rules](#rules) and [Extending config files](#extending-config-files).
 
 Unknown keys are errors. jactionlint reports the key with its position and suggests the closest known key when it looks

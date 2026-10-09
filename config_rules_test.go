@@ -115,7 +115,7 @@ func TestConfigParseStrictErrors(t *testing.T) {
 		in   string
 		want []string
 	}{
-		{"unknown top-level key", "foo: 1\n", []string{`unknown key "foo" in the configuration at line:1,col:1`, "available keys are"}},
+		{"unknown top-level key", "nothing-like-it: 1\n", []string{`unknown key "nothing-like-it" in the configuration at line:1,col:1`, "available keys are"}},
 		{"did you mean a key", "self-hosted-runnr:\n  labels: []\n", []string{`unknown key "self-hosted-runnr"`, `did you mean "self-hosted-runner"?`}},
 		{"did you mean a legacy key", "\nrequire-shel: true\n", []string{`line:2,col:1`, `did you mean "require-shell"?`}},
 		{"unknown nested key", "self-hosted-runner:\n  label: [a]\n", []string{`unknown key "label" in "self-hosted-runner" at line:2,col:3`, `did you mean "labels"?`}},
