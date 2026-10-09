@@ -34,7 +34,7 @@ jobs:
         with:
           bundler-cache: true
       - uses: actions/setup-python@v5
-        if: github.event_name != 'release'
+        if: github.event_name != 'push'
         with:
           cache: pip
   no-cache-job:
