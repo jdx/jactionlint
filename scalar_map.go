@@ -4,6 +4,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"unicode"
 	"unicode/utf8"
 )
 
@@ -293,7 +294,7 @@ func (d *scalarDecoder) escape(text string, i, line int) (int, bool) {
 		return 0, false
 	}
 	v, err := strconv.ParseUint(text[i+2:i+2+n], 16, 32)
-	if err != nil {
+	if err != nil || v > unicode.MaxRune {
 		return 0, false
 	}
 	d.emitRune(rune(v), line, i)
