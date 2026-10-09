@@ -66,6 +66,8 @@ func TestZizmorIgnorePlacements(t *testing.T) {
 		{"whole line above", "      # zizmor: ignore[template-injection]\n      - run: " + zInj + "\n", []string{"7 template-injection"}},
 		{"on the next step", "      - run: " + zInj + "\n      - run: echo # zizmor: ignore[template-injection]\n", []string{"6 template-injection"}},
 		{"header of a block scalar", "      - run: | # zizmor: ignore[template-injection]\n          " + zInj + "\n          echo b\n", nil},
+		{"header of a folded scalar", "      - run: > # zizmor: ignore[template-injection]\n          echo a\n          " + zInj + "\n", nil},
+		{"header of a block scalar after another key", "      - name: x\n        run: | # zizmor: ignore[template-injection]\n          echo a\n          " + zInj + "\n", nil},
 		{"header of a block scalar with a script line that starts with a hash", "      - run: | # zizmor: ignore[template-injection]\n          echo a\n          # " + zInj + "\n", nil},
 		{"header of a block scalar after another comment", "      - run: | # note # zizmor: ignore[template-injection]\n          " + zInj + "\n", nil},
 		{"header of a block scalar with indicator after another comment", "      - run: |- # keep # zizmor: ignore[template-injection]\n          " + zInj + "\n", nil},
