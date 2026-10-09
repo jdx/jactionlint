@@ -921,6 +921,13 @@ func (l *Linter) finishCheck(path string, content []byte, all []*Error, cfg *Con
 		all = dropUnreachable(all, ic.scopes)
 	}
 	all = l.annotateErrors(all, content, cfg)
+	if isGeneratedSource(content) {
+		mode := GeneratedFilesSkipPolicy
+		if cfg != nil && cfg.GeneratedFiles != nil {
+			mode = *cfg.GeneratedFiles
+		}
+		all = dropForGeneratedFile(all, mode)
+	}
 
 	// The ignores of the config file are matched first, without removing anything, so that the inline
 	// ignores see every error as well and neither is reported as unused for covering the same error.
