@@ -275,6 +275,10 @@ func (cmd *Command) Main(args []string) int {
 			}
 			req.rules = append(req.rules, id)
 		}
+		if len(req.rules) == 0 {
+			fmt.Fprintf(cmd.Stderr, "--fix-rules=%q lists no rule ID\n", f.fixRules)
+			return ExitStatusInvalidCommandOption
+		}
 	}
 	var onlineFailed int
 	errs, err := cmd.runLinter(flags.Args(), &opts, f.initConfig, f.migrateConfig, f.migrateIgnores, req, &baselineWrite, &onlineFailed)
@@ -286,11 +290,14 @@ func (cmd *Command) Main(args []string) int {
 		}
 		return ExitStatusFailure
 	}
+	if onlineFailed > 0 {
+		// Printed before the early return of a refused fix: the lookups were skipped either way
+		fmt.Fprintf(cmd.Stderr, "online=strict: %d GitHub lookups were skipped, so the online checks are incomplete\n", onlineFailed)
+	}
 	if req.result != nil && len(req.result.Failures) > 0 {
 		return ExitStatusFailure
 	}
 	if onlineFailed > 0 {
-		fmt.Fprintf(cmd.Stderr, "online=strict: %d GitHub lookups were skipped, so the online checks are incomplete\n", onlineFailed)
 		return ExitStatusFailure
 	}
 	if req.result != nil && diff && req.result.Diff != "" {

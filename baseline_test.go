@@ -714,7 +714,7 @@ func TestBaselineMatchForgetsEarlierLints(t *testing.T) {
 
 // A different problem of the same local action is not the old finding reworded.
 func TestBaselineContextFallbackSkipsInvalidLocalAction(t *testing.T) {
-	for _, id := range []string{"invalid-local-action", "invalid-local-workflow", "known-vulnerable-actions"} {
+	for _, id := range []string{"invalid-local-action", "invalid-local-workflow", "known-vulnerable-actions", "missing-action-input", "missing-workflow-input", "missing-workflow-secret", "workflow-call-permissions", "required-actions"} {
 		e := &BaselineEntry{File: "a.yaml", Rule: id, Fingerprint: "old", Context: "c"}
 		s := newBaselineState("b.json", t.TempDir(), &Baseline{Entries: []*BaselineEntry{e}})
 		finding := &Error{ID: id}
@@ -761,6 +761,16 @@ func TestBaselineRuleRanAsIsFollowsTheOnlineSettings(t *testing.T) {
 	}
 	if !newLinter(LinterOptions{Online: true}).ruleRanAsIs(id, &Config{}) {
 		t.Error("--online turns them on")
+	}
+	// A lookup which failed left findings unreported: their entries are not unused
+	l := newLinter(LinterOptions{Online: true})
+	l.online.sess = &onlineSession{}
+	l.online.sess.skipped = 1
+	if l.ruleRanAsIs(id, &Config{}) {
+		t.Error("an online rule with a skipped lookup did not run as is")
+	}
+	if !l.ruleRanAsIs("missing-action-input", &Config{}) {
+		t.Error("an offline rule is not affected by a skipped lookup")
 	}
 }
 
@@ -811,5 +821,47 @@ func TestBaselineScopesMatchBaselineScope(t *testing.T) {
 				t.Fatalf("line %d %q: baselineScopes gives %q, baselineScope %q\n%s", i+1, lines[i], got[i], want, src)
 			}
 		}
+	}
+}
+
+// Renaming the required input of a local action makes the call miss a different input: the baselined finding
+// of the old name must not accept it as a reworded one.
+func TestBaselineDoesNotHideAnotherMissingInput(t *testing.T) {
+	const wf = "name: CI\non: push\njobs:\n  build:\n    runs-on: ubuntu-latest\n    timeout-minutes: 5\n    steps:\n      - uses: ./.github/actions/greet\n"
+	root := baselineProject(t, wf, "")
+	action := filepath.Join(root, ".github", "actions", "greet", "action.yml")
+	writeTestFile(t, action, "name: greet\ndescription: d\ninputs:\n  a:\n    description: d\n    required: true\nruns:\n  using: composite\n  steps: []\n")
+	if status, out, errOut := baselineCmd(t, "--baseline-write"); status != 0 {
+		t.Fatalf("setup: %d\n%s%s", status, out, errOut)
+	}
+	if _, out, _ := baselineCmd(t, "--baseline"); strings.Contains(out, "missing-action-input") {
+		t.Fatalf("setup: the finding is baselined:\n%s", out)
+	}
+	writeTestFile(t, action, "name: greet\ndescription: d\ninputs:\n  c:\n    description: d\n    required: true\nruns:\n  using: composite\n  steps: []\n")
+	_, out, _ := baselineCmd(t, "--baseline")
+	if !strings.Contains(out, "missing-action-input") || !strings.Contains(out, `"c"`) {
+		t.Errorf("the new missing input must be reported:\n%s", out)
+	}
+}
+
+// The guidance names the configuration file which was selected, also one outside the repository.
+func TestBaselineWriteNamesTheSelectedConfigFile(t *testing.T) {
+	root := baselineProject(t, baselineWorkflow, "")
+	outside := filepath.Join(filepath.Dir(root), "outside-"+filepath.Base(root)+".yaml")
+	writeTestFile(t, outside, "rules:\n  missing-timeout: error\n")
+	status, out, errOut := baselineCmd(t, "--config-file", outside, "--baseline-write")
+	if status != 0 {
+		t.Fatalf("%d\n%s%s", status, out, errOut)
+	}
+	if !strings.Contains(out, "put this line in "+filepath.ToSlash(outside)+" ") {
+		t.Errorf("the selected file must be named:\n%s", out)
+	}
+	if strings.Contains(out, ".github/jactionlint.yaml") {
+		t.Errorf("another file is named:\n%s", out)
+	}
+	// Inside the repository it is still relative to it
+	_, out, _ = baselineCmd(t, "--baseline-write", "--config-file", filepath.Join(root, ".github", "jactionlint.yaml"))
+	if strings.Contains(out, root) {
+		t.Errorf("a file of the repository is named relative to it:\n%s", out)
 	}
 }

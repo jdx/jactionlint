@@ -275,17 +275,25 @@ func (x *yamlSiteIndex) at(off int) (YAMLSite, bool) {
 		if !ok {
 			return YAMLSite{}, false
 		}
-		crlf := false
-		if i := bytes.IndexByte(src[off:], '\n'); i > 0 {
-			crlf = src[off+i-1] == '\r'
-		}
-		return YAMLSite{Context: YAMLBlockScalar, Indent: ind, CRLF: crlf}, true
+		return YAMLSite{Context: YAMLBlockScalar, Indent: ind, CRLF: lineBreakIsCRLF(src, off)}, true
 	}
 	site := YAMLSite{Context: YAMLPlain, AtStart: off == t.start[best]}
 	if t.inFlow[best] {
 		site.Context = YAMLFlowPlain
 	}
 	return site, true
+}
+
+// lineBreakIsCRLF reports whether the line break which ends the line of the offset is "\r\n". The offset may be
+// on that break. A last line without a break takes the break of the line before it.
+func lineBreakIsCRLF(src []byte, off int) bool {
+	if i := bytes.IndexByte(src[off:], '\n'); i >= 0 {
+		return off+i > 0 && src[off+i-1] == '\r'
+	}
+	if i := bytes.LastIndexByte(src[:off], '\n'); i > 0 {
+		return src[i-1] == '\r'
+	}
+	return false
 }
 
 // blockScalarIndent returns the indentation of the first content line of the block scalar whose

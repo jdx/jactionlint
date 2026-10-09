@@ -419,6 +419,10 @@ func validateConfigKeys(root *yaml.Node) error {
 			}
 			_, fvals := mappingPairs(v)
 			for _, fv := range fvals {
+				// "rules: *ids" is a list defined elsewhere in the file: its entries are checked like a written one
+				for fv.Kind == yaml.AliasNode && fv.Alias != nil {
+					fv = fv.Alias
+				}
 				for _, id := range fv.Content {
 					if _, ok := ruleIndex[id.Value]; !ok {
 						return fmt.Errorf("unknown rule ID %q in \"fix.rules\" at line %d, column %d%s", id.Value, id.Line, id.Column, suggestRuleID(id.Value))

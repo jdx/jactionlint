@@ -333,3 +333,22 @@ func TestCommandOnlineFalseOverridesTheConfig(t *testing.T) {
 		t.Errorf("--no-online must keep the network away: %d requests\n%s", f.total()-n, stdout)
 	}
 }
+
+// A refused fix must not hide that a lookup of --online=strict was skipped: the note is printed and the
+// exit status stays the failure of the fix.
+func TestCommandStrictNoteIsPrintedWhenAFixIsRefused(t *testing.T) {
+	f := newFakeGitHub(t)
+	githubForActionsCheckout(f, false)
+	githubFailingFor(f, "corp/private", http.StatusInternalServerError)
+	setOnlineEnv(t, f, "tok")
+	_, wf := onlineProject(t, workflowWith("uses: actions/checkout@v4", "uses: corp/private@v1"), "")
+	var out, errOut bytes.Buffer
+	cmd := &Command{Stdin: strings.NewReader(""), Stdout: &out, Stderr: &errOut, onRulesCreated: newEditRule("bad-rule", "ubuntu-latest", "[ubuntu-latest")}
+	status := cmd.Main([]string{"jactionlint", "--no-color", "--shellcheck=", "--pyflakes=", "--fix", "--online=strict", wf})
+	if status != ExitStatusFailure || !strings.Contains(errOut.String(), "bad-rule") {
+		t.Fatalf("setup: the fix must be refused: %d\n%s", status, errOut.String())
+	}
+	if !strings.Contains(errOut.String(), "online=strict: ") {
+		t.Errorf("the skipped lookup must be reported:\n%s", errOut.String())
+	}
+}
