@@ -676,7 +676,7 @@ func init() {
 		RuleInfo{ID: "missing-action-input", Group: RuleGroupCorrectness, Summary: "A required input of an action is not specified.", DefaultLevel: SeverityError, Profile: ProfileCorrectness, DocsAnchor: "check-local-action-inputs"},
 		RuleInfo{ID: "outdated-action-runner", Group: RuleGroupCorrectness, Summary: "An action runs on a runtime which GitHub Actions no longer supports.", DefaultLevel: SeverityError, Profile: ProfileCorrectness, DocsAnchor: "detect-outdated-popular-actions"},
 		RuleInfo{ID: "unknown-action-input", Group: RuleGroupCorrectness, Summary: "An input which the action does not define is specified.", DefaultLevel: SeverityError, Profile: ProfileCorrectness, DocsAnchor: "check-local-action-inputs"},
-		RuleInfo{ID: "unpinned-uses", Group: RuleGroupPolicy, Summary: "An action, reusable workflow or Docker image is not pinned to a commit SHA or digest.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-action-format", Options: unpinnedUsesOptions},
+		RuleInfo{ID: "unpinned-uses", Group: RuleGroupPolicy, Summary: "An action, reusable workflow or Docker image is not pinned to a commit SHA or digest.", DefaultLevel: SeverityError, Profile: ProfileDefault, Fixable: true, DocsAnchor: "check-action-format", Options: unpinnedUsesOptions},
 	)
 	registerRuleFactory("action", func(env *RuleEnv) []Rule {
 		return []Rule{NewRuleAction(env.localActions)}

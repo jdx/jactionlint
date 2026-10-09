@@ -200,3 +200,96 @@ func TestBaselineSurvivesMovingTheCheckout(t *testing.T) {
 		}
 	}
 }
+
+// Every rule which sets Error.Fix must say so in RuleInfo.Fixable: the rules documentation, the SARIF rule
+// metadata and the docs of -fix are generated from it (bug bash: unused-ignore and the -online fix of
+// unpinned-uses produced fixes but were not marked). The fixers are found by linting the test data with every
+// rule on and watching which findings carry a fix.
+func TestEveryRuleWhichSetsAFixIsMarkedFixable(t *testing.T) {
+	cfg := mustParseConfig(t, `profile: pedantic
+rules:
+  missing-timeout:
+    default-minutes: 30
+  mutable-runner-label:
+    pin:
+      ubuntu-latest: ubuntu-24.04
+  unused-ignore: error
+  dependabot-cooldown:
+    default-days: 7
+`)
+	l, err := NewLinter(io.Discard, &LinterOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	l.defaultConfig = cfg
+	l.shellcheck, l.pyflakes = "", ""
+
+	seen := map[string]string{}
+	err = filepath.WalkDir("testdata", func(path string, d os.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return err
+		}
+		if ext := filepath.Ext(path); ext != ".yaml" && ext != ".yml" {
+			return nil
+		}
+		src, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		errs, err := l.Lint(path, src, nil)
+		if err != nil {
+			return nil // a fixture that is not meant to be linted
+		}
+		for _, e := range errs {
+			if e.Fix != nil {
+				if _, ok := seen[e.ID]; !ok {
+					seen[e.ID] = path
+				}
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(seen) < 10 {
+		t.Fatalf("the test data must show the fixers but only %d were found: %v", len(seen), seen)
+	}
+	for id, path := range seen {
+		info, ok := ruleIndex[id]
+		if !ok {
+			t.Errorf("%s: %q has a fix but is no registered rule", path, id)
+		} else if !info.Fixable {
+			t.Errorf("%s: rule %q sets Error.Fix but RuleInfo.Fixable is false", path, id)
+		}
+	}
+}
+
+// A rule has a section in docs/checks.md and says where: the rules documentation links to DocsAnchor. These are
+// documented elsewhere (the syntax of the YAML file in the sections about the structure, required-actions and the
+// baseline in config.md and usage.md).
+func TestEveryRuleHasADocsAnchor(t *testing.T) {
+	elsewhere := map[string]bool{"yaml-syntax": true, "required-actions": true, "unused-baseline-entry": true}
+	for _, info := range Rules() {
+		if info.DocsAnchor == "" && !elsewhere[info.ID] {
+			t.Errorf("rule %q has no DocsAnchor", info.ID)
+		}
+	}
+}
+
+// The pin fix of unpinned-uses exists only with -online, so the walk over the test data above cannot see it.
+func TestUnpinnedUsesIsFixableWithOnline(t *testing.T) {
+	errs, _ := lintOnline(t, onlineFixtureClient(t), unpinnedConfig(), workflowWith("uses: actions/checkout@v4"))
+	var fixed bool
+	for _, e := range errs {
+		if e.ID == "unpinned-uses" && e.Fix != nil {
+			fixed = true
+		}
+	}
+	if !fixed {
+		t.Fatalf("the online pin fix is gone: %v", errs)
+	}
+	if !ruleIndex["unpinned-uses"].Fixable {
+		t.Error("unpinned-uses sets Error.Fix with -online but RuleInfo.Fixable is false")
+	}
+}

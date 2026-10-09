@@ -734,6 +734,6 @@ func (rc *ignoreRunConfig) judgeUnused(ig *ConfigIgnore, covered map[string]bool
 
 func init() {
 	registerRules(
-		RuleInfo{ID: "expired-ignore", Group: RuleGroupPolicy, Summary: "An entry of \"ignores\" in the config file has expired or is about to.", DefaultLevel: SeverityError, Profile: ProfileCorrectness},
+		RuleInfo{ID: "expired-ignore", Group: RuleGroupPolicy, Summary: "An entry of \"ignores\" in the config file has expired or is about to.", DefaultLevel: SeverityError, Profile: ProfileCorrectness, DocsAnchor: "check-unused-ignore"},
 	)
 }

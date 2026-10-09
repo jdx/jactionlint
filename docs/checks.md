@@ -44,6 +44,7 @@ List of checks:
 - [Publishing with long-lived credentials](#check-use-trusted-publishing)
 - [Superfluous actions](#check-superfluous-actions)
 - [Installs without a lock file](#check-unlocked-install)
+- [Ignore comments that suppress nothing (pedantic)](#check-unused-ignore)
 - [Environment variable names](#check-env-var-names)
 - [Permissions](#permissions)
 - [Reusable workflows](#check-reusable-workflows)
@@ -2987,6 +2988,52 @@ This is the output with the option `pedantic`, or with a `package-lock.json` in 
 
 Installing named packages is covered by [adhoc packages](#check-adhoc-packages) and [unpinned tools](#check-unpinned-tools).
 These rules have no equivalent in zizmor.
+
+<a id="check-unused-ignore"></a>
+## Ignore comments that suppress nothing (pedantic)
+
+The rule `unused-ignore` reports an ignore that did not suppress a finding: a `# jactionlint ignore=...` comment or an entry of `ignores` in [the config file](config.md). An ignore outlives the code it was written for: the finding was fixed,
+the line moved, or the rule ID was mistyped, and what remains hides nothing and misleads the reader (and would hide a new finding at the
+same place). The rule is in the `pedantic` profile. Enable it alone in [the config file](config.md):
+
+```yaml
+rules:
+  unused-ignore: error
+```
+
+Example input:
+
+```yaml
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      # jactionlint ignore=shellcheck
+      - run: echo hello
+      # jactionlint ignore=no-such-rule
+      - run: echo bye
+```
+
+Output:
+<!-- Skip update output -->
+
+```
+test.yaml:6:28: ignore pattern "shellcheck" did not suppress any error. remove it [unused-ignore]
+  |
+6 |       # jactionlint ignore=shellcheck
+  |                            ^~~~~~~~~~
+test.yaml:8:28: ignore pattern "no-such-rule" did not suppress any error. remove it [unused-ignore]
+  |
+8 |       # jactionlint ignore=no-such-rule
+  |                            ^~~~~~~~~~~~
+```
+
+<!-- Skip playground link -->
+
+The finding has a safe fix: `jactionlint -fix` removes the pattern, or the whole comment when no other pattern is left, and keeps the
+patterns of the comment that were used. Two related findings are always on, from the `correctness` profile: `invalid-ignore-comment` (the
+comment cannot be parsed) and `expired-ignore` (an `expires` date of an entry in `ignores` has passed).
 
 <a id="check-env-var-names"></a>
 ## Environment variable names
