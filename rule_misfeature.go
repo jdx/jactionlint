@@ -60,6 +60,16 @@ func (rule *RuleMisfeature) VisitStep(n *Step) error {
 // wellKnownShells are the shells which GitHub documents for "shell:".
 var wellKnownShells = map[string]bool{"bash": true, "pwsh": true, "powershell": true, "python": true, "sh": true, "cmd": true}
 
+// shellBaseName returns the name of the shell program of the first word of "shell:", lower case, without the
+// directory (both / and \\ separate directories, whatever the runner) and without ".exe".
+func shellBaseName(program string) string {
+	program = strings.ToLower(program)
+	if i := strings.LastIndexAny(program, `/\\`); i >= 0 {
+		program = program[i+1:]
+	}
+	return strings.TrimSuffix(program, ".exe")
+}
+
 func (rule *RuleMisfeature) checkShell(s *String) {
 	if s == nil || s.ContainsExpression() {
 		return
@@ -68,7 +78,7 @@ func (rule *RuleMisfeature) checkShell(s *String) {
 	if len(fields) == 0 {
 		return
 	}
-	name := strings.TrimSuffix(fields[0], ".exe")
+	name := shellBaseName(fields[0])
 	switch {
 	case name == "cmd":
 		rule.ReportIDf("misfeature", s.Pos, "shell %q is the Windows cmd shell, which has no formal grammar so scripts cannot be analyzed reliably, and it has not been the default shell of Windows runners since 2019. use \"pwsh\", \"bash\" or another shell instead", s.Value)
