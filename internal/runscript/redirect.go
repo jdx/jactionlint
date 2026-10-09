@@ -393,10 +393,21 @@ func (s *Script) WritesTo(varNames ...string) []*Write {
 	return out
 }
 
+// testedKind says why the exit status of a statement is looked at.
+type testedKind int
+
+const (
+	testedOther testedKind = iota // `if`, `elif`, `||`, `!`
+	testedAnd                     // the left operand of `&&`
+	testedLoop                    // the condition of `while` or `until`
+)
+
 // markTested records that the script handles the exit status of the statements: the pipelines and commands in
 // them are Tested. It follows the places where the shell ignores `set -e`: the operands of `&&` and `||` (all but
 // the last one of the list, which the caller selects), and the commands of groups and subshells there.
-func (b *builder) markTested(stmts ...*syntax.Stmt) {
+func (b *builder) markTested(stmts ...*syntax.Stmt) { b.markTestedAs(testedOther, stmts...) }
+
+func (b *builder) markTestedAs(kind testedKind, stmts ...*syntax.Stmt) {
 	for _, st := range stmts {
 		if st == nil {
 			continue
@@ -406,14 +417,22 @@ func (b *builder) markTested(stmts ...*syntax.Stmt) {
 			if isPipe(c.Op) {
 				b.tested[c] = true
 			} else {
-				b.markTested(c.X, c.Y)
+				b.markTestedAs(kind, c.X, c.Y)
 			}
 		case *syntax.CallExpr:
 			b.testedCalls[c] = true
+			switch kind {
+			case testedAnd:
+				b.testedAnd[c] = true
+			case testedLoop:
+				b.testedLoop[c] = true
+			default:
+				b.testedOther[c] = true
+			}
 		case *syntax.Block:
-			b.markTested(c.Stmts...)
+			b.markTestedAs(kind, c.Stmts...)
 		case *syntax.Subshell:
-			b.markTested(c.Stmts...)
+			b.markTestedAs(kind, c.Stmts...)
 		}
 	}
 }

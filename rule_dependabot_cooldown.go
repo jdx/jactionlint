@@ -40,6 +40,12 @@ func (r *RuleDependabotCooldown) VisitDependabotUpdate(u *DependabotUpdate) erro
 		minDays = int(v)
 	}
 
+	// A "default-days" which is not a valid number is a syntax error of its own. Reporting a missing key and adding a
+	// second one would only leave two keys, of which the last one wins.
+	if u.Cooldown != nil && u.Cooldown.HasDefaultDays && u.Cooldown.DefaultDays == nil {
+		return nil
+	}
+
 	days := dependabotImplicitCooldownDays
 	if u.Cooldown != nil && u.Cooldown.DefaultDays != nil {
 		days = u.Cooldown.DefaultDays.Value

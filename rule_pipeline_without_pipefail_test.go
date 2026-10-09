@@ -63,6 +63,12 @@ func TestRulePipelineWithoutPipefailDetection(t *testing.T) {
 		{"cat of the previous stage", pipefailWorkflow("", "run: |\n          make | cat | sort\n"), 1},
 		{"cat of a here document", pipefailWorkflow("", "run: |\n          cat <<EOF | sort\n          b\n          EOF\n"), 0},
 		{"sh template", pipefailWorkflow("", "shell: sh -e {0}\n        run: make | tee out\n"), 1},
+		{"nested pipeline in a group", pipefailWorkflow("", "run: |\n          { echo a | echo b | make; } | wc -l\n"), 1},
+		{"nested pipeline that ends in head", pipefailWorkflow("", "run: |\n          { echo a | echo b | make; } | head -1\n"), 0},
+		{"group that fails with the left side of &&", pipefailWorkflow("", "run: |\n          { make && echo OK; } | tee out\n"), 1},
+		{"group with || true", pipefailWorkflow("", "run: |\n          { make || true; } | tee out\n"), 0},
+		{"read in an if takes one line", pipefailWorkflow("", "run: |\n          make | { if read -r x; then echo \"$x\"; fi; }\n"), 0},
+		{"read after && takes one line", pipefailWorkflow("", "run: |\n          make | { read -r x && echo \"$x\"; }\n"), 0},
 		{"set -o pipefail", pipefailWorkflow("", "run: |\n          set -o pipefail\n          make | tee out\n"), 0},
 		{"set -eo pipefail", pipefailWorkflow("", "run: |\n          set -eo pipefail\n          make | tee out\n"), 0},
 		{"set -euxo pipefail", pipefailWorkflow("", "run: |\n          set -euxo pipefail\n          make | tee out\n"), 0},
@@ -333,5 +339,17 @@ func TestRulePipelineWithoutPipefailAdviceForShTemplate(t *testing.T) {
 	bash := lintPipefail(t, pipefailWorkflow("", "shell: bash -e {0}\n        run: make | tee out\n"))
 	if len(bash) != 1 || !strings.Contains(bash[0].Message, "-o pipefail") {
 		t.Errorf("bash template: %v", bash)
+	}
+}
+
+// The fix turns pipefail on for the whole script, so a script with a pipeline that quits early is not fixed.
+func TestRulePipelineWithoutPipefailNoFixNextToEarlyExit(t *testing.T) {
+	both := lintPipefail(t, pipefailWorkflow("", "run: |\n          make | tee out\n          yes | head -1\n"))
+	if len(both) != 1 || both[0].Fix != nil {
+		t.Errorf("a script with a pipeline that ends in head must not get the fix: %v", both)
+	}
+	alone := lintPipefail(t, pipefailWorkflow("", "run: |\n          make | tee out\n"))
+	if len(alone) != 1 || alone[0].Fix == nil {
+		t.Errorf("a script without one gets the fix: %v", alone)
 	}
 }

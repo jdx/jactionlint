@@ -1088,3 +1088,32 @@ func TestCRLFScriptsAreAnalyzedLikeLF(t *testing.T) {
 		t.Errorf("continuation after a pipe: %d shell pipes", len(s.ShellPipes()))
 	}
 }
+
+func TestCommandTestedKinds(t *testing.T) {
+	tests := []struct {
+		src                      string
+		name                     string
+		tested, andOnly, loopCnd bool
+	}{
+		{"a && b", "a", true, true, false},
+		{"a || b", "a", true, false, false},
+		{"if a; then b; fi", "a", true, false, false},
+		{"while a; do b; done", "a", true, false, true},
+		{"until a; do b; done", "a", true, false, true},
+		{"! a", "a", true, false, false},
+		{"{ a && b; } || c", "a", true, false, false},
+		{"{ a && b; }", "a", true, true, false},
+		{"a && b", "b", false, false, false},
+	}
+	for _, tc := range tests {
+		s := mustAnalyze(t, tc.src)
+		for _, c := range s.Commands {
+			if c.Name != tc.name {
+				continue
+			}
+			if c.Tested != tc.tested || c.AndOnly != tc.andOnly || c.LoopCond != tc.loopCnd {
+				t.Errorf("%q: %s Tested=%v AndOnly=%v LoopCond=%v", tc.src, c.Name, c.Tested, c.AndOnly, c.LoopCond)
+			}
+		}
+	}
+}
