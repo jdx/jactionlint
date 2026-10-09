@@ -360,6 +360,11 @@ func (s *baselineState) match(fileKey string, errs []*Error, infos map[*Error]*b
 		rest = append(rest, e)
 	}
 	for _, e := range rest {
+		if e.ID == "invalid-local-action" {
+			// Its message is about the action, and the context is only the line that calls it: another problem
+			// of the same action is a new finding, not a reworded one
+			continue
+		}
 		for _, be := range entries {
 			if !used[be] && be.Rule == e.ID && be.Context != "" && be.Context == infos[e].context {
 				used[be] = true

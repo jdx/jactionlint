@@ -158,9 +158,23 @@ func isEmojiModifier(r rune) bool {
 	return (r >= 0x1F3FB && r <= 0x1F3FF) || r == 0xFE0F || r == 0xFE0E
 }
 
-// isEmojiBase reports whether the character can be an element of an emoji sequence.
+// isEmojiBase reports whether the character can be an element of an emoji sequence: a code point that
+// emoji-variation-sequences.txt of Unicode lists as taking a variation selector, which the ranges below
+// cover from above (all of them are outside ASCII: the digits, "#" and "*" take a selector only in a
+// keycap sequence, which legitimate() checks apart). Whole blocks are accepted for the pictographs and
+// the symbols and arrows blocks, so a rarely used code point of them passes, but never a spacing
+// modifier such as the backtick or the caret, which are the way to hide a character in a script.
 func isEmojiBase(r rune) bool {
-	return unicode.Is(unicode.So, r) || unicode.Is(unicode.Sk, r) || r == 0x203C || r == 0x2049 || r == 0x3030 || r == 0x303D || r == 0x2139
+	switch r {
+	case 0x00A9, 0x00AE, 0x203C, 0x2049, 0x2122, 0x2139, 0x3030, 0x303D, 0x3297, 0x3299:
+		return true
+	}
+	// Arrows, technical, shapes, miscellaneous and dingbat symbols, supplemental arrows and symbols
+	if r >= 0x2190 && r <= 0x2BFF {
+		return true
+	}
+	// Pictographs, emoticons, transport, supplemental and extended symbols
+	return r >= 0x1F000 && r <= 0x1FAFF
 }
 
 func runeBefore(src []byte, i int) (rune, int) {

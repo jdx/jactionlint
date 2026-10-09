@@ -190,6 +190,39 @@ func isScriptInterpreter(c *runscript.Command) bool {
 	return rePythonName.MatchString(c.Name) || c.Name == "perl" || c.Name == "ruby" || c.Name == "node" || c.Name == "php"
 }
 
+// interpreterScript reports a downloaded file that the interpreter runs as its script. With -r the first
+// operand may be the module to load (node -r mod script.js), so every operand is looked at.
+func (t *fileTracker) interpreterScript(c *runscript.Command, match func(*runscript.Word) *download) {
+	ops := c.Positional
+	if len(ops) > 1 && !c.HasFlag("-r") {
+		ops = ops[:1]
+	}
+	for _, w := range ops {
+		if d := match(w); d != nil {
+			t.report(d, w.Value, "is run by "+c.Name)
+			return
+		}
+	}
+}
+
+// interpreterRunsAScript reports whether the options of the interpreter leave the operand as the script to
+// run: with -c, -m, -e and the like the program is given in the options.
+func interpreterRunsAScript(c *runscript.Command) bool {
+	switch {
+	case rePythonName.MatchString(c.Name):
+		return !c.HasFlag("-c", "-m")
+	case c.Name == "perl":
+		return !c.HasFlag("-e", "-E")
+	case c.Name == "ruby":
+		return !c.HasFlag("-e")
+	case c.Name == "node":
+		return !c.HasFlag("-e", "--eval", "-p", "--print")
+	case c.Name == "php":
+		return !c.HasFlag("-r")
+	}
+	return false
+}
+
 var rePythonName = regexp.MustCompile(`^(python|py)[0-9.]*$`)
 
 // readsScriptFromStdin reports whether the command is an interpreter (other than the shells, which
@@ -437,14 +470,11 @@ func (t *fileTracker) event(c *runscript.Command) {
 	case strings.Contains(c.NameWord.Value, "/"):
 		if d := match(c.NameWord); d != nil {
 			t.report(d, c.NameWord.Value, "is run")
+		} else if isScriptInterpreter(c) && interpreterRunsAScript(c) {
+			t.interpreterScript(c, match) // /usr/bin/python3 install.py
 		}
-	case isScriptInterpreter(c) && !c.HasFlag("-c", "-m", "-e", "-r"):
-		// python3 install.py, node install.js, perl install.pl: the first operand is the script
-		if len(c.Positional) > 0 {
-			if d := match(c.Positional[0]); d != nil {
-				t.report(d, c.Positional[0].Value, "is run by "+c.Name)
-			}
-		}
+	case isScriptInterpreter(c) && interpreterRunsAScript(c):
+		t.interpreterScript(c, match)
 	case shellNames[c.Name] && !c.HasFlag("-c"):
 		if len(c.Positional) > 0 {
 			if d := match(c.Positional[0]); d != nil {

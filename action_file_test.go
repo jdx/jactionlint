@@ -440,3 +440,71 @@ func TestUseTrustedPublishingInACompositeAction(t *testing.T) {
 		}
 	}
 }
+
+func lintActionSource(t *testing.T, src string) []*Error {
+	t.Helper()
+	l, err := NewLinter(io.Discard, &LinterOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	l.defaultConfig = withFixtureRules(&Config{})
+	errs, err := l.Lint(".github/actions/x/action.yml", []byte(src), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return errs
+}
+
+// The default of an input is evaluated before the inputs exist.
+func TestActionInputDefaultCannotReadInputs(t *testing.T) {
+	src := "name: x\ndescription: x\ninputs:\n  a:\n    description: a\n    default: ${{ inputs.b }}\n  b:\n    description: b\nruns:\n  using: node20\n  main: index.js\n"
+	var found bool
+	for _, e := range lintActionSource(t, src) {
+		if strings.Contains(e.Message, `"b" is not defined`) {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("inputs.b in a default must be an error")
+	}
+}
+
+// Only a composite action is told that secrets are not passed to it.
+func TestSecretsMessageIsForCompositeActionsOnly(t *testing.T) {
+	src := "name: x\ndescription: x\ninputs:\n  a:\n    description: a\n    default: ${{ secrets.T }}\nruns:\n  using: node20\n  main: index.js\n"
+	for _, e := range lintActionSource(t, src) {
+		if strings.Contains(e.Message, "composite action") {
+			t.Errorf("not a composite action: %v", e)
+		}
+	}
+}
+
+// A repository that is only an action is linted without file arguments.
+func TestRepositoryWithOnlyAnAction(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	src := "name: x\ndescription: x\nruns:\n  using: composite\n  steps:\n    - run: echo hi\n"
+	if err := os.WriteFile(filepath.Join(root, "action.yml"), []byte(src), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	l, err := NewLinter(io.Discard, &LinterOptions{WorkingDir: root})
+	if err != nil {
+		t.Fatal(err)
+	}
+	l.defaultConfig = withFixtureRules(&Config{})
+	errs, err := l.LintRepository(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var found bool
+	for _, e := range errs {
+		if strings.Contains(e.Message, `"shell" is required`) {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("the action of the root must be linted: %v", errs)
+	}
+}

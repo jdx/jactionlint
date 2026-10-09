@@ -242,9 +242,7 @@ func newDefaultGitHubClient(o defaultClientOptions) (GitHubClient, error) {
 		tokenEnv: o.Options.TokenEnv, tokenFile: o.Options.TokenFile, useGH: useGH,
 		getenv: os.Getenv, readFile: readTokenFileLimited, runGH: runGHAuthToken,
 	}
-	if d.dotCom {
-		d.host = "github.com"
-	}
+	d.host = ghHostname(base.Host)
 	tok, notices := d.discover(ctx)
 	for _, n := range notices {
 		if o.Notify != nil {
@@ -1143,33 +1141,90 @@ func (c *httpGitHubClient) postGraphQL(ctx context.Context, token, query string,
 		return err
 	}
 	gu := c.graphqlURL()
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, gu, bytes.NewReader(body))
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("User-Agent", "jactionlint/"+getCommandVersion())
-	res, err := c.roundTrip(req)
-	if err != nil {
-		return err
-	}
-	c.noteRateLimit(res, true)
-	c.logf("POST %s: %d (rate limit remaining: %s)", gu, res.status, res.header.Get("X-RateLimit-Remaining"))
-	switch res.status {
-	case http.StatusOK:
-		return json.Unmarshal(res.body, out)
-	case http.StatusUnauthorized:
-		c.dropToken()
-		return ErrGitHubBranchScanUnavailable // GraphQL needs a token. The REST API does not
-	case http.StatusForbidden, http.StatusTooManyRequests:
-		if li := c.limitInfo(res); li.kind != limitNone {
+	limitWaits := 0
+	for attempt := 0; ; attempt++ {
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, gu, bytes.NewReader(body))
+		if err != nil {
+			return err
+		}
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+token)
+		req.Header.Set("User-Agent", "jactionlint/"+getCommandVersion())
+		res, err := c.roundTrip(req)
+		if err != nil {
+			// Like the REST requests: a timeout is repeated once
+			if attempt < min(c.retries, 1) && retryableTransport(err) && ctx.Err() == nil {
+				d := c.backoff(attempt)
+				c.logf("POST %s: %v. trying again in %s", gu, err, d.Round(time.Millisecond))
+				if serr := c.sleep(ctx, d); serr != nil {
+					return serr
+				}
+				continue
+			}
+			return err
+		}
+		c.noteRateLimit(res, true)
+		c.logf("POST %s: %d (rate limit remaining: %s)", gu, res.status, res.header.Get("X-RateLimit-Remaining"))
+		switch res.status {
+		case http.StatusOK:
+			return json.Unmarshal(res.body, out)
+		case http.StatusUnauthorized:
+			c.dropToken()
+			return ErrGitHubBranchScanUnavailable // GraphQL needs a token. The REST API does not
+		case http.StatusForbidden, http.StatusTooManyRequests:
+			li := c.limitInfo(res)
+			if li.kind == limitNone {
+				break
+			}
+			wait, ok := c.limitWait(li, attempt)
+			if ok && li.kind == limitPrimary {
+				ok = limitWaits < maxRateLimitWaits
+				limitWaits++
+			}
+			if ok && li.kind == limitSecondary {
+				ok = attempt < c.retries
+			}
+			if ok {
+				c.logf("POST %s: rate limited. trying again in %s", gu, wait.Round(time.Millisecond))
+				if serr := c.sleep(ctx, wait); serr != nil {
+					return serr
+				}
+				if li.kind == limitPrimary {
+					attempt-- // Waiting for a reset is not a retry
+				}
+				continue
+			}
 			reset := li.reset
 			if reset.IsZero() {
 				reset = c.now().Add(unknownLimitWait)
 			}
 			return c.setRateLimited(reset, true)
+		case http.StatusInternalServerError, http.StatusBadGateway, http.StatusServiceUnavailable, http.StatusGatewayTimeout:
+			if attempt < c.retries {
+				d := c.backoff(attempt)
+				if ra, ok := parseRetryAfter(res.header.Get("Retry-After"), c.now()); ok && ra <= c.maxWait {
+					d = ra
+				}
+				c.logf("POST %s: %d. trying again in %s", gu, res.status, d.Round(time.Millisecond))
+				if serr := c.sleep(ctx, d); serr != nil {
+					return serr
+				}
+				continue
+			}
 		}
+		return c.statusError(res)
 	}
-	return c.statusError(res)
+}
+
+// ghHostname is the host the gh command knows an API host by: api.github.com is github.com, and the API of
+// GitHub Enterprise Cloud with data residency, api.SUBDOMAIN.ghe.com, is SUBDOMAIN.ghe.com. The host of a
+// GitHub Enterprise Server is the same for both.
+func ghHostname(apiHost string) string {
+	if apiHost == "api.github.com" {
+		return "github.com"
+	}
+	if h, ok := strings.CutPrefix(apiHost, "api."); ok && strings.HasSuffix(h, ".ghe.com") {
+		return h
+	}
+	return apiHost
 }
