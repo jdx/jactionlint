@@ -168,31 +168,37 @@ func TestUnsoundPrefixMatchSelfHostedLiteral(t *testing.T) {
 // Where the expression sits decides: each of these contexts picks something a trust decision protects.
 func TestUnsoundPrefixMatchSensitiveContexts(t *testing.T) {
 	cfg := ruleConfig("unsound-prefix-match")
-	test := "startsWith(github.actor, 'jdx')"
-	for _, tc := range []struct{ what, job string }{
-		{"environment name", "    environment: ${{ " + test + " && 'production' || 'staging' }}\n    steps:\n      - run: echo\n"},
-		{"environment url", "    environment:\n      name: x\n      url: ${{ " + test + " && 'https://a' || 'https://b' }}\n    steps:\n      - run: echo\n"},
-		{"container image", "    container:\n      image: ${{ " + test + " && 'a:1' || 'b:1' }}\n    steps:\n      - run: echo\n"},
-		{"container credentials", "    container:\n      image: a:1\n      credentials:\n        username: ${{ " + test + " && 'u' || 'v' }}\n        password: x\n    steps:\n      - run: echo\n"},
-		{"service image", "    services:\n      db:\n        image: ${{ " + test + " && 'a:1' || 'b:1' }}\n    steps:\n      - run: echo\n"},
-		{"runs-on", "    runs-on: ${{ " + test + " && 'big' || 'small' }}\n    steps:\n      - run: echo\n"},
+	e := "${{ startsWith(github.actor, 'x') && 'a' || 'b' }}"
+	steps := "    steps:\n      - run: echo\n"
+	const runsOn = "    runs-on: ubuntu-latest\n"
+	head := "on: push\n"
+	for _, tc := range []struct{ what, src string }{
+		{"runs-on", head + "jobs:\n  a:\n    runs-on: " + e + "\n" + steps},
+		{"runs-on group", head + "jobs:\n  a:\n    runs-on:\n      group: " + e + "\n" + steps},
+		{"runs-on labels", head + "jobs:\n  a:\n    runs-on:\n      - " + e + "\n" + steps},
+		{"environment name", head + "jobs:\n  a:\n" + runsOn + "    environment: " + e + "\n" + steps},
+		{"environment name key", head + "jobs:\n  a:\n" + runsOn + "    environment:\n      name: " + e + "\n" + steps},
+		{"environment url", head + "jobs:\n  a:\n" + runsOn + "    environment:\n      name: x\n      url: " + e + "\n" + steps},
+		{"container image", head + "jobs:\n  a:\n" + runsOn + "    container:\n      image: " + e + "\n" + steps},
+		{"container username", head + "jobs:\n  a:\n" + runsOn + "    container:\n      image: a:1\n      credentials:\n        username: " + e + "\n        password: p\n" + steps},
+		{"container password", head + "jobs:\n  a:\n" + runsOn + "    container:\n      image: a:1\n      credentials:\n        username: u\n        password: " + e + "\n" + steps},
+		{"service image", head + "jobs:\n  a:\n" + runsOn + "    services:\n      db:\n        image: " + e + "\n" + steps},
+		{"service password", head + "jobs:\n  a:\n" + runsOn + "    services:\n      db:\n        image: a:1\n        credentials:\n          username: u\n          password: " + e + "\n" + steps},
+		{"workflow permissions", "on: push\npermissions: " + e + "\njobs:\n  a:\n" + runsOn + steps},
+		{"workflow permission scope", "on: push\npermissions:\n  contents: " + e + "\njobs:\n  a:\n" + runsOn + steps},
+		{"job permissions", head + "jobs:\n  a:\n" + runsOn + "    permissions: " + e + "\n" + steps},
+		{"job permission scope", head + "jobs:\n  a:\n" + runsOn + "    permissions:\n      contents: " + e + "\n" + steps},
+		{"workflow call secret", head + "jobs:\n  a:\n    uses: o/r/.github/workflows/x.yml@v1\n    secrets:\n      token: " + e + "\n"},
+		{"secret in env", head + "jobs:\n  a:\n" + runsOn + "    env:\n      X: ${{ startsWith(github.actor, 'x') && secrets.A || 'b' }}\n" + steps},
+		{"secret in with", head + "jobs:\n  a:\n" + runsOn + "    steps:\n      - uses: actions/checkout@v4\n        with:\n          token: ${{ startsWith(github.actor, 'x') && secrets.A || 'b' }}\n"},
 	} {
-		src := "on: push\njobs:\n  a:\n" + tc.job
-		if !strings.Contains(tc.job, "runs-on") {
-			src = "on: push\njobs:\n  a:\n    runs-on: ubuntu-latest\n" + tc.job
+		if got := errsWithID(lintFileWithConfig(t, cfg, "ci.yaml", tc.src), "unsound-prefix-match"); len(got) != 1 {
+			t.Errorf("%s: want one finding, got %v", tc.what, got)
 		}
-		if got := errsWithID(lintFileWithConfig(t, cfg, "ci.yaml", src), "unsound-prefix-match"); len(got) != 1 {
-			t.Errorf("%s: want a finding, got %v", tc.what, got)
-		}
-	}
-	// the secrets passed to a reusable workflow
-	call := "on: push\njobs:\n  a:\n    uses: o/r/.github/workflows/x.yml@v1\n    secrets:\n      token: ${{ " + test + " && 'a' || 'b' }}\n"
-	if got := errsWithID(lintFileWithConfig(t, cfg, "ci.yaml", call), "unsound-prefix-match"); len(got) != 1 {
-		t.Errorf("workflow call secret: want a finding, got %v", got)
 	}
 	// a plain name or env
-	for _, field := range []string{"    name: ${{ " + test + " && 'a' || 'b' }}\n", "    env:\n      X: ${{ " + test + " && 'a' || 'b' }}\n"} {
-		src := "on: push\njobs:\n  a:\n    runs-on: ubuntu-latest\n" + field + "    steps:\n      - run: echo\n"
+	for _, field := range []string{"    name: " + e + "\n", "    env:\n      X: " + e + "\n", "    timeout-minutes: " + "${{ startsWith(github.actor, 'x') && 5 || 6 }}\n"} {
+		src := head + "jobs:\n  a:\n" + runsOn + field + steps
 		if got := errsWithID(lintFileWithConfig(t, cfg, "ci.yaml", src), "unsound-prefix-match"); len(got) != 0 {
 			t.Errorf("%q: want no finding, got %v", field, got)
 		}
