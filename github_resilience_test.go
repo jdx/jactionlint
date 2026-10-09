@@ -813,3 +813,25 @@ func TestGraphQLRetriesAndWaitsLikeREST(t *testing.T) {
 		})
 	}
 }
+
+// The anonymous request that asks again after a refused token has a rate limit of its own: it must not
+// make the client think that the token is limited.
+func TestAnonymousProbeDoesNotPoisonTheRateLimit(t *testing.T) {
+	f := newFakeGitHub(t)
+	f.handle("/repos/o/private", func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") == "" {
+			w.Header().Set("X-RateLimit-Remaining", "0")
+			w.Header().Set("X-RateLimit-Reset", fmt.Sprint(time.Now().Add(time.Hour).Unix()))
+		}
+		w.WriteHeader(http.StatusForbidden)
+		fmt.Fprint(w, `{"message":"Resource not accessible by personal access token"}`)
+	})
+	f.handle("/repos/o/public", func(w http.ResponseWriter, r *http.Request) { okRepo(w) })
+	c := f.client(httpGitHubOptions{Token: secretToken})
+	if _, err := c.Repository(context.Background(), "o", "private"); err == nil {
+		t.Fatal("the private repository is refused")
+	}
+	if _, err := c.Repository(context.Background(), "o", "public"); err != nil {
+		t.Errorf("the token still has quota: %v", err)
+	}
+}
