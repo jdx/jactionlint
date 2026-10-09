@@ -192,7 +192,7 @@ type LocalReusableWorkflowCache struct {
 	// finding in the order of the files, instead of the one of whichever goroutine searched first.
 	failures map[string]reusableFailure
 	cwd      string
-	dbg   io.Writer
+	dbg      io.Writer
 }
 
 func (c *LocalReusableWorkflowCache) debug(format string, args ...interface{}) {
