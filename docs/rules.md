@@ -27,6 +27,7 @@ rules:
 | --- | --- | --- | --- |
 | [anonymous-definition](#anonymous-definition) | policy | warn | strict |
 | [artipacked](#artipacked) | security | warn | strict |
+| [bot-conditions](#bot-conditions) | security | warn | strict |
 | [cache-poisoning](#cache-poisoning) | security | warn | strict |
 | [concurrency-limits](#concurrency-limits) | policy | warn | strict |
 | [conflicting-runner-labels](#conflicting-runner-labels) | correctness | error | default |
@@ -75,11 +76,14 @@ rules:
 | [matrix-invalid-exclude](#matrix-invalid-exclude) | correctness | error | default |
 | [max-run-lines](#max-run-lines) | style | error | all |
 | [merge-key](#merge-key) | correctness | error | default |
+| [misfeature](#misfeature) | security | warn | strict |
+| [misfeature-custom-shell](#misfeature-custom-shell) | style | info | all |
 | [missing-action-input](#missing-action-input) | correctness | error | default |
 | [missing-permissions](#missing-permissions) | policy | error | strict |
 | [missing-timeout](#missing-timeout) | policy | error | strict |
 | [missing-workflow-input](#missing-workflow-input) | correctness | error | default |
 | [missing-workflow-secret](#missing-workflow-secret) | correctness | error | default |
+| [obfuscation](#obfuscation) | security | warn | strict |
 | [outdated-action-runner](#outdated-action-runner) | correctness | error | default |
 | [overprovisioned-secrets](#overprovisioned-secrets) | security | warn | strict |
 | [pyflakes](#pyflakes) | correctness | error | default |
@@ -93,6 +97,8 @@ rules:
 | [self-repository](#self-repository) | security | info | strict |
 | [shellcheck](#shellcheck) | correctness | error | default |
 | [template-injection](#template-injection) | security | error | default |
+| [template-injection-expansion](#template-injection-expansion) | security | warn | strict |
+| [template-injection-trusted](#template-injection-trusted) | style | info | all |
 | [timeout-too-long](#timeout-too-long) | policy | error | only when configured |
 | [typosquat-uses](#typosquat-uses) | security | warn | strict |
 | [undefined-function](#undefined-function) | correctness | error | default |
@@ -136,6 +142,16 @@ actions/checkout persists the GITHUB_TOKEN credential in the git config.
 - Profile: strict
 - Fixable: yes
 - Details and examples: [checks](./checks.md#check-artipacked)
+
+## bot-conditions
+
+A condition trusts a bot by github.actor, which can be spoofed.
+
+- Group: security
+- Default level: warn
+- Profile: strict
+- Fixable: yes
+- Details and examples: [checks](./checks.md#check-bot-conditions)
 
 ## cache-poisoning
 
@@ -573,6 +589,24 @@ The YAML merge key << is used, which GitHub Actions does not support.
 - Profile: default
 - Details and examples: [checks](./checks.md#yaml-anchors)
 
+## misfeature
+
+A misfeature of GitHub Actions is used: the pip-install input of setup-python or the cmd shell.
+
+- Group: security
+- Default level: warn
+- Profile: strict
+- Details and examples: [checks](./checks.md#check-misfeature)
+
+## misfeature-custom-shell
+
+A shell which GitHub does not document is used.
+
+- Group: style
+- Default level: info
+- Profile: all
+- Details and examples: [checks](./checks.md#check-misfeature)
+
 ## missing-action-input
 
 A required input of an action is not specified.
@@ -617,6 +651,16 @@ A required secret of a reusable workflow is not passed.
 - Default level: error
 - Profile: default
 - Details and examples: [checks](./checks.md#check-reusable-workflows)
+
+## obfuscation
+
+A path at uses: or an expression is written in an obfuscated way.
+
+- Group: security
+- Default level: warn
+- Profile: strict
+- Fixable: yes
+- Details and examples: [checks](./checks.md#check-obfuscation)
 
 ## outdated-action-runner
 
@@ -734,7 +778,28 @@ A potentially untrusted input is expanded in a script.
 - Group: security
 - Default level: error
 - Profile: default
+- Fixable: yes
 - Details and examples: [checks](./checks.md#untrusted-inputs)
+
+## template-injection-expansion
+
+A ${{ }} expansion in a script is not an environment variable.
+
+- Group: security
+- Default level: warn
+- Profile: strict
+- Fixable: yes
+- Details and examples: [checks](./checks.md#check-template-injection-expansion)
+
+## template-injection-trusted
+
+A ${{ }} expansion in a script is of a value that an attacker cannot control.
+
+- Group: style
+- Default level: info
+- Profile: all
+- Fixable: yes
+- Details and examples: [checks](./checks.md#check-template-injection-expansion)
 
 ## timeout-too-long
 

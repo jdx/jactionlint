@@ -40,6 +40,21 @@
               "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
             },
             {
+              "id": "bot-conditions",
+              "name": "BotConditions",
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "description": "Checks for conditions which trust a bot account by github.actor",
+                "queryURI": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+              },
+              "fullDescription": {
+                "text": "Checks for conditions which trust a bot account by github.actor"
+              },
+              "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+            },
+            {
               "id": "cache-poisoning",
               "name": "CachePoisoning",
               "defaultConfiguration": {
@@ -246,6 +261,36 @@
               },
               "fullDescription": {
                 "text": "Checks for matrix combinations in \"matrix:\""
+              },
+              "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+            },
+            {
+              "id": "misfeature",
+              "name": "Misfeature",
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "description": "Checks for usages of GitHub Actions features which are considered misfeatures",
+                "queryURI": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+              },
+              "fullDescription": {
+                "text": "Checks for usages of GitHub Actions features which are considered misfeatures"
+              },
+              "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+            },
+            {
+              "id": "obfuscation",
+              "name": "Obfuscation",
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "description": "Checks for obfuscated paths at \"uses:\"",
+                "queryURI": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+              },
+              "fullDescription": {
+                "text": "Checks for obfuscated paths at \"uses:\""
               },
               "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
             },
