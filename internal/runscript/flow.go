@@ -29,6 +29,9 @@ type Guard struct {
 	Var      string
 	Regex    string
 	Literals []string
+	// Bare is whether the guard is a test on its own, which stops the script only when errexit is on (the shell
+	// of the step runs with -e, or the script ran `set -e` before it).
+	Bare bool
 }
 
 // Total is an `if` (with an `else`) or a `case` (with a `*` branch) at the top level of the script that, on every
@@ -316,7 +319,8 @@ func (b *builder) literalWord(w *syntax.Word) (string, bool) {
 func (b *builder) guards(f *syntax.File) {
 	errexit := !strings.Contains(b.s.Source, "set +e") && !strings.Contains(b.s.Source, "set +o errexit")
 	emit := func(st *syntax.Stmt, sh testShape) {
-		b.s.Guards = append(b.s.Guards, &Guard{Loc: b.s.loc(b.off(st.Pos()), b.offEnd(st.End())), Var: sh.name, Regex: sh.regex, Literals: sh.literals})
+		_, bare := st.Cmd.(*syntax.TestClause)
+		b.s.Guards = append(b.s.Guards, &Guard{Loc: b.s.loc(b.off(st.Pos()), b.offEnd(st.End())), Var: sh.name, Regex: sh.regex, Literals: sh.literals, Bare: bare})
 	}
 	for _, st := range f.Stmts {
 		if st.Background {

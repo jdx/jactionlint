@@ -52,6 +52,18 @@ func TestRuleUntrustedCheckout(t *testing.T) {
           ref: "${{ github.event.pull_request.head.sha }}" # want
       - run: ./build.sh
 `},
+		{"enable -f loads a shared object of the checkout", nil, prt + `    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }} # want
+      - run: enable -f ./mod.so mod
+`},
+		{"enable -n runs nothing", nil, prt + `    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - run: enable -n test
+`},
 		{"head_ref", nil, prt + `    steps:
       - uses: actions/checkout@v4
         with:
@@ -299,6 +311,30 @@ jobs:
           xxd -l 4 file
       - run: npm ci
 `},
+		{"fetch in one step, checkout of FETCH_HEAD in the next", nil, prt + `    steps:
+      - uses: actions/checkout@v4
+      - run: git fetch origin ${{ github.event.pull_request.head.sha }} # want
+      - run: git checkout FETCH_HEAD
+      - run: make
+`},
+		{"fetch into a branch in one step, checkout of it in the next", nil, prt + `    steps:
+      - uses: actions/checkout@v4
+      - run: git fetch origin refs/pull/${{ github.event.number }}/head:pr # want
+      - run: git checkout pr
+      - run: make
+`},
+		{"fetch in one step, checkout of the base branch in the next", nil, prt + `    steps:
+      - uses: actions/checkout@v4
+      - run: git fetch origin ${{ github.event.pull_request.head.sha }}
+      - run: git checkout main
+      - run: make
+`},
+		{"fetch in one step, FETCH_HEAD only diffed in the next", nil, prt + `    steps:
+      - uses: actions/checkout@v4
+      - run: git fetch origin ${{ github.event.pull_request.head.sha }}
+      - run: git diff HEAD FETCH_HEAD
+      - run: make
+`},
 		{"head checkout in a directory that only a script of the base reads", nil, prt + `    steps:
       - uses: actions/checkout@v4
         with:
@@ -327,7 +363,7 @@ func TestRuleUntrustedCheckoutNoTokenMessage(t *testing.T) {
 	if len(errs) != 1 {
 		t.Fatalf("want one finding, got %v", errs)
 	}
-	if strings.Contains(errs[0].Message, "write token") || !strings.Contains(errs[0].Message, "no token") {
+	if strings.Contains(errs[0].Message, "write token") || !strings.Contains(errs[0].Message, "GITHUB_TOKEN has no permissions") {
 		t.Fatalf("message claims a token: %s", errs[0].Message)
 	}
 }
