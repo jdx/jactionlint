@@ -129,6 +129,8 @@ func TestUnsoundPrefixMatchRefsOption(t *testing.T) {
 	tests := map[string]int{
 		"startsWith(github.ref, 'refs/tags/v')":                                     1,
 		"startsWith(github.ref, 'refs/heads/release/')":                             0,
+		"contains(github.head_ref, 'dependabot/')":                                  1,
+		"endsWith(github.head_ref, '/dependabot/')":                                 1,
 		"startsWith(github.head_ref, 'renovate')":                                   1,
 		"endsWith(github.ref_name, '-rc')":                                          1,
 		"github.ref == 'refs/heads/main' && startsWith(github.ref, 'refs/heads/m')": 0,
