@@ -1,0 +1,2 @@
+test.yaml:6:25: "http://example.com/data.json" is fetched by "curl" without encryption or authentication of the server, so anyone on the connection can read or replace what is transferred. use "https://example.com/data.json" [insecure-url-scheme]
+test.yaml:9:19: the input "mirror" is "http://mirror.example.com/downloads", which is fetched without encryption or authentication of the server, so anyone on the connection can read or replace what is transferred. use "https://mirror.example.com/downloads" [insecure-url-scheme]

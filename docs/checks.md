@@ -63,6 +63,10 @@ List of checks:
 - [Concurrency limits (opt-in)](#check-concurrency-limits)
 - [Inherited secrets](#check-secrets-inherit)
 - [Insecure workflow commands](#check-insecure-commands)
+- [Unverified downloads](#check-unverified-download)
+- [Host keys collected with ssh-keyscan](#check-insecure-ssh-keyscan)
+- [Static credentials for actions/checkout](#check-checkout-static-credentials)
+- [Insecure URL schemes](#check-insecure-url-scheme)
 - [Dangerous triggers (opt-in)](#check-dangerous-triggers)
 - [Self-hosted runners (opt-in)](#check-self-hosted-runner)
 - [Unsound `contains()` on a string](#check-unsound-contains)
@@ -4913,8 +4917,8 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      # ERROR: when curl fails, sh runs an empty script and the step succeeds
-      - run: curl -fsSL https://example.com/install.sh | sh
+      # ERROR: when curl fails, jq reads an empty input and the step succeeds
+      - run: curl -fsSL https://example.com/data.json | jq .
       - run: |
           # ERROR: a failure of 'make' is hidden by 'tee'
           make 2>&1 | tee build.log
@@ -4932,9 +4936,9 @@ jobs:
 Output:
 
 ```
-test.yaml:7:14: failure of "curl" is hidden in the pipeline "curl -fsSL https://example.com/install.sh | sh" because the default shell runs "bash -e {0}" without pipefail. add "set -o pipefail" before the pipeline or use "shell: bash", which runs with pipefail [pipeline-without-pipefail]
+test.yaml:7:14: failure of "curl" is hidden in the pipeline "curl -fsSL https://example.com/data.json | jq ." because the default shell runs "bash -e {0}" without pipefail. add "set -o pipefail" before the pipeline or use "shell: bash", which runs with pipefail [pipeline-without-pipefail]
   |
-7 |       - run: curl -fsSL https://example.com/install.sh | sh
+7 |       - run: curl -fsSL https://example.com/data.json | jq .
   |              ^~~~
 test.yaml:10:11: failure of "make" is hidden in the pipeline "make 2>&1 | tee build.log" because the default shell runs "bash -e {0}" without pipefail. add "set -o pipefail" before the pipeline or use "shell: bash", which runs with pipefail [pipeline-without-pipefail]
    |
@@ -5154,6 +5158,219 @@ Write to the environment files instead (`$GITHUB_ENV`, `$GITHUB_PATH`) and remov
 
 The rule is fixable but the fix is **unsafe**: `jactionlint -fix=unsafe` removes the variable (and the `env:` mapping when it
 was the only entry). A step that still prints `::set-env` or `::add-path` stops working after that, so replace the commands first.
+
+<a id="check-unverified-download"></a>
+## Unverified downloads
+
+Example input:
+
+```yaml
+on: push
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    steps:
+      - shell: bash
+        run: curl -fsSL https://example.com/install.sh | sh
+      - run: |
+          curl -fsSLo tool https://example.com/dl/tool
+          chmod +x tool
+          ./tool --version
+```
+
+Output:
+
+```
+test.yaml:7:14: the script downloaded from "https://example.com/install.sh" is run by "sh" without being verified, so whoever controls that server or the connection to it controls this job. if it installs a tool, install the tool with mise instead (jdx/mise-action pinned by SHA, or "mise use" with a committed mise.lock, which records the version and checksum of each tool). otherwise download the file, check its checksum or signature (sha256sum -c, gpg --verify, cosign verify-blob or gh attestation verify) before running it, or use the package of the vendor [unverified-download]
+  |
+7 |         run: curl -fsSL https://example.com/install.sh | sh
+  |              ^~~~
+test.yaml:9:11: the file "tool" downloaded from "https://example.com/dl/tool" is made executable without a checksum or signature check in this script, so whatever the server (or anyone on the connection) sends is trusted. if it installs a tool, install the tool with mise instead (jdx/mise-action pinned by SHA, or "mise use" with a committed mise.lock, which records the version and checksum of each tool). otherwise download the file, check its checksum or signature (sha256sum -c, gpg --verify, cosign verify-blob or gh attestation verify) before running it, or use the package of the vendor [unverified-download]
+  |
+9 |           curl -fsSLo tool https://example.com/dl/tool
+  |           ^~~~
+```
+
+[Playground](https://jactionlint.jdx.dev/#eNpsjDEOgzAMRXdO8fcqZM8ZuvUEAVKFysQRtisGDl8BFUJVN8v/vccloJrk5sWdhAaQpFa3A5itiNsA66yoOYqaRPdJNFU5KMBBciIK6KLk72+3A3qbCe4pjzuyapXgfVriVCm1PU9+LKKRqJWMFafrDnc9U7h0GMpMf2sD+W27anniAbcFP/92B+HcO80ycvkMAGLeTWk=)
+
+The rule `unverified-download` (in the `default` profile) reports a `run:` script that runs what it has downloaded without checking
+it first. Whoever controls the server, or the connection to it, then controls the job, with its secrets and its token. It reports
+
+- a download piped into a shell or an interpreter: `curl ... | sh`, `wget -qO- ... | sudo bash`, `bash <(curl ...)`,
+  `sh -c "$(curl ...)"`, `eval "$(curl ...)"` and `curl ... | python3 -`;
+- a downloaded file that the same script makes executable (`chmod +x`, `install -m 755`), runs, sources or installs with `dpkg`,
+  `rpm` or `apt`, when no checksum or signature check (`sha256sum`, `shasum`, `gpg --verify`, `cosign verify-blob`,
+  `gh attestation verify`, `minisign`, ...) comes before the use. A file that is moved with `mv`, `cp` or `install` is followed;
+- a download made with TLS certificate verification turned off (`curl -k`, `curl --insecure`, `wget --no-check-certificate`).
+
+A pipe into something that only reads the data (`curl ... | tar xz`, `| jq`, `| python3 -c '...'`) is not reported, and neither is a
+URL for a full commit on GitHub, GitLab, Codeberg or Bitbucket (`https://raw.githubusercontent.com/<owner>/<repo>/<40 hex digits>/install.sh`),
+because the URL fixes the content. A host that is not on the internet (`localhost`, a private address) is not reported either. A
+script is analyzed when its shell is `bash` or `sh`; the default shell of Windows runners is `pwsh`, which is not analyzed.
+
+If the download installs a tool, install the tool with [mise](https://mise.jdx.dev) instead: use `jdx/mise-action` pinned by SHA,
+or `mise use` with a committed `mise.lock`, which records the version and the checksum of each tool. Otherwise download the
+installer to a file, check its checksum or signature and run the file, or use the package of the vendor.
+
+To accept a download, list the host or a URL prefix in `allow` (an entry with `://` is a prefix of the URL, anything else is a host
+name), or ignore one finding with `# jactionlint ignore=unverified-download`:
+
+```yaml
+rules:
+  unverified-download:
+    allow: [get.example.com, "https://example.org/install/"]
+```
+
+There is no fix, because whether a download is acceptable is a decision of its author. zizmor 1.30.1 has no equivalent audit; the
+idea is [zizmorcore/zizmor#711](https://github.com/zizmorcore/zizmor/issues/711). Downloads of archives that are extracted and then
+run, `npx`/`go install` of a remote script, and a verification that happens in a later step are not tracked.
+
+<a id="check-insecure-ssh-keyscan"></a>
+## Host keys collected with ssh-keyscan
+
+Example input:
+
+```yaml
+on: push
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - run: ssh-keyscan deploy.example.com >> ~/.ssh/known_hosts
+```
+
+Output:
+
+```
+test.yaml:6:14: "ssh-keyscan" writes the host key it receives to "~/.ssh/known_hosts", so the key of whoever answers the connection is trusted (trust on first use), and an attacker on the path to the server can take it over for every later ssh, scp or rsync. store the verified host key in a secret or variable and write that to the known_hosts file instead [insecure-ssh-keyscan]
+  |
+6 |       - run: ssh-keyscan deploy.example.com >> ~/.ssh/known_hosts
+  |              ^~~~~~~~~~~
+```
+
+[Playground](https://jactionlint.jdx.dev/#eNoszDEOwjAQRNE+p5gL2Old5CrICStZxNm1GK8gDWdHhnQjzdM3TWjOMj1sZZqAu7Rq51jA05VhCF9du4eau7D/LnZp/CsgDJlAlrDLyS3rlYnyzkerEjc7sCz4zJEs86720lsxdn4HAD7eKjU=)
+
+The rule `insecure-ssh-keyscan` (in the `default` profile) reports `ssh-keyscan` output that a `run:` script writes to a `known_hosts`
+file: `>>` and `>` redirections, `tee`, a command substitution and a group. `ssh-keyscan` asks the server for its key and trusts
+the answer (trust on first use), so anyone who can intercept the connection of the runner becomes the server for every later `ssh`, `scp` and `rsync` of the job.
+
+Keep the verified host key in a repository variable or secret and write that to the file instead:
+
+```yaml
+- run: echo "${{ secrets.KNOWN_HOSTS }}" >> ~/.ssh/known_hosts
+```
+
+A script that shows the fingerprints with
+`ssh-keygen -l`, to compare them with known ones, is not reported. The rule does not look at `ssh -o StrictHostKeyChecking=no`.
+
+There is no fix. Turn the rule off with `insecure-ssh-keyscan: off` in `rules` or ignore one finding with
+`# jactionlint ignore=insecure-ssh-keyscan`. zizmor 1.30.1 has no equivalent audit; the idea is
+[zizmorcore/zizmor#2012](https://github.com/zizmorcore/zizmor/issues/2012).
+
+<a id="check-checkout-static-credentials"></a>
+## Static credentials for actions/checkout
+
+Example input:
+
+```yaml
+on: push
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ssh-key: ${{ secrets.DEPLOY_SSH_KEY }}
+```
+
+Output:
+
+```
+test.yaml:8:11: actions/checkout is given secret "DEPLOY_SSH_KEY" as "ssh-key". this credential does not expire and can reach more than this job needs, and unless "persist-credentials: false" is set it is also left in the git config of the workspace for every later step to read. use the default GITHUB_TOKEN for this repository. to reach other repositories or to push something that starts other workflows, use a short-lived token from a GitHub App (actions/create-github-app-token) or a fine-grained personal access token limited to the repositories it needs, and keep it in a secret of a protected environment [checkout-static-credentials]
+  |
+8 |           ssh-key: ${{ secrets.DEPLOY_SSH_KEY }}
+  |           ^~~~~~~~
+```
+
+[Playground](https://jactionlint.jdx.dev/#eNo8yjGLwkAUxPE+n2KKa/euuWqrKy4gKCikShWS9cHGhN2QeU+RkO8uUbGb4f/LyWMyxuKSO/oC6Kwfz9sAZkt0G7DOkpobWxXqM1Fl4ksBDkahRxu0z4k/IUoYsunf9fctgFuv0X8eQEY3yN3ja1lACbMov//L0+FYN1W1a/ZljXV9DADQlS9a)
+
+The rule `checkout-static-credentials` (in the `default` profile) reports an `actions/checkout` step that is given a credential that
+does not expire: the `ssh-key` input, or a `token` written in the workflow. The default `GITHUB_TOKEN` lasts as long as the job and
+is limited to the repository, and the token of a GitHub App lasts an hour at most. An SSH key or a personal access token stays valid
+until somebody rotates it, usually reaches more than the job needs, and `actions/checkout` writes it to the git config of the
+workspace unless `persist-credentials: false` is set, where every later step can read it.
+
+Use the default token for the repository running the workflow. To reach other repositories or to push something that has to start
+other workflows, create a short-lived token with [actions/create-github-app-token](https://github.com/actions/create-github-app-token),
+or use a fine-grained personal access token that is limited to the repositories it needs and kept in a secret of a protected
+environment (one with required reviewers or a branch restriction).
+
+A `token` that comes from a secret is a personal access token in most cases, and workflows that release or push often have to use one,
+so it is a pedantic check: the option `secret-tokens` is on under the `strict` and `all` profiles and off under `default` (set it to
+`true` or `false` to decide). The `ssh-key` input and a literal `token` are always reported. Secrets named in `allow` (case-insensitive) are never reported. A `token`
+that is `secrets.GITHUB_TOKEN`, `github.token`, the output of a step, an input of a reusable workflow, or has a fallback to one
+of these, is not reported because the credential behind it is not known to be static.
+
+```yaml
+rules:
+  checkout-static-credentials:
+    secret-tokens: true
+    allow: [DEPLOY_KEY]
+```
+
+There is no fix. Turn the rule off with `checkout-static-credentials: off` in `rules` or ignore one finding with
+`# jactionlint ignore=checkout-static-credentials`. zizmor 1.30.1 has no equivalent audit; the idea is
+[zizmorcore/zizmor#1118](https://github.com/zizmorcore/zizmor/issues/1118).
+
+<a id="check-insecure-url-scheme"></a>
+## Insecure URL schemes
+
+Example input:
+
+```yaml
+on: push
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    steps:
+      - run: curl -fsSL http://example.com/data.json -o data.json
+      - uses: octo/repo@v1
+        with:
+          mirror: http://mirror.example.com/downloads
+```
+
+Output:
+
+```
+test.yaml:6:25: "http://example.com/data.json" is fetched by "curl" without encryption or authentication of the server, so anyone on the connection can read or replace what is transferred. use "https://example.com/data.json" [insecure-url-scheme]
+  |
+6 |       - run: curl -fsSL http://example.com/data.json -o data.json
+  |                         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~
+test.yaml:9:19: the input "mirror" is "http://mirror.example.com/downloads", which is fetched without encryption or authentication of the server, so anyone on the connection can read or replace what is transferred. use "https://mirror.example.com/downloads" [insecure-url-scheme]
+  |
+9 |           mirror: http://mirror.example.com/downloads
+  |                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+```
+
+[Playground](https://jactionlint.jdx.dev/#eNpUjUGOgzAMRfec4l8gRLP1ag4wuzlBAFeAQhzFdunxK0qL1J2f/pOfFEJ1nbtVBqUOUDavxwE0LxoOwQcv5iEnY7XXpMZVTwsIh0kYvWWEm/7/YTarFCM/0lYz96NscUqW+lWlIAguuD64shJkNImNq/zef94TsC8200XAtrQmjT6RE/uvluwlS5r0OQDNkEUr)
+
+The rule `insecure-url-scheme` (in the `default` profile) reports a location that is fetched over `http://`, `ftp://` or `git://`.
+These schemes send the request and the answer in the clear and do not prove who the server is, so anyone on the path can read or
+replace what the job downloads. The rule looks at
+
+- the URLs given to `curl`, `wget`, `git` (`clone`, `fetch`, `pull`, `push`, `remote`, `submodule`, `ls-remote`), `pip`, `uv`, `npm`,
+  `pnpm`, `yarn`, `bun`, `cargo`, `gem`, `go` and a few other download commands in `run:` scripts, including the values of options
+  such as `--index-url` and `--registry`;
+- inputs of actions in `with:` whose whole value is such a URL.
+
+The message names the same URL with `https://`. There is no fix, because the host may not serve the same content over HTTPS.
+
+URLs of hosts that are not on the internet are not reported: `localhost`, loopback, private and link-local addresses, names without
+a dot (the services of a job), and `.local`, `.internal`, `.svc`, `.lan` and `.test` names. A host that is a variable or an expression
+is not reported either, nor are proxies (`curl -x`), headers, request data and text printed by `echo`. This rule is not the audit of
+the same name in zizmor 1.30.1, which checks the `repo:` URLs of `.pre-commit-config.yaml` and is not covered here.
+
+Turn the rule off with `insecure-url-scheme: off` in `rules` or ignore one finding with `# jactionlint ignore=insecure-url-scheme`.
 
 <a id="check-dangerous-triggers"></a>
 ## Dangerous triggers (opt-in)

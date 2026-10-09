@@ -3,8 +3,8 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      # ERROR: when curl fails, sh runs an empty script and the step succeeds
-      - run: curl -fsSL https://example.com/install.sh | sh
+      # ERROR: when curl fails, jq reads an empty input and the step succeeds
+      - run: curl -fsSL https://example.com/data.json | jq .
       - run: |
           # ERROR: a failure of 'make' is hidden by 'tee'
           make 2>&1 | tee build.log

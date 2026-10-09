@@ -32,6 +32,7 @@ rules:
 | [artipacked](#artipacked) | security | warn | strict |
 | [bot-conditions](#bot-conditions) | security | warn | strict |
 | [cache-poisoning](#cache-poisoning) | security | warn | strict |
+| [checkout-static-credentials](#checkout-static-credentials) | security | error | default |
 | [concurrency-cancels-prs](#concurrency-cancels-prs) | correctness | warn | default |
 | [concurrency-cancels-release](#concurrency-cancels-release) | correctness | warn | default |
 | [concurrency-limits](#concurrency-limits) | policy | warn | strict |
@@ -65,6 +66,8 @@ rules:
 | [if-always-true](#if-always-true) | correctness | error | default |
 | [impostor-commit](#impostor-commit) | security | error | only with `-online` |
 | [insecure-commands](#insecure-commands) | security | error | default |
+| [insecure-ssh-keyscan](#insecure-ssh-keyscan) | security | error | default |
+| [insecure-url-scheme](#insecure-url-scheme) | security | error | default |
 | [invalid-activity-type](#invalid-activity-type) | correctness | error | default |
 | [invalid-cron](#invalid-cron) | correctness | error | default |
 | [invalid-env-var-name](#invalid-env-var-name) | correctness | error | default |
@@ -145,6 +148,7 @@ rules:
 | [unused-job-output](#unused-job-output) | policy | warn | default |
 | [unused-needs](#unused-needs) | style | info | strict |
 | [unused-workflow-input](#unused-workflow-input) | policy | warn | strict |
+| [unverified-download](#unverified-download) | security | error | default |
 | [use-trusted-publishing](#use-trusted-publishing) | security | warn | default |
 | [workflow-call-permissions](#workflow-call-permissions) | correctness | error | default |
 | [workflow-input-type](#workflow-input-type) | correctness | error | default |
@@ -219,6 +223,17 @@ A cache is restored in a release job or written by a privileged trigger.
 - Default level: warn
 - Profile: strict
 - Details and examples: [checks](./checks.md#check-cache-poisoning)
+
+## checkout-static-credentials
+
+actions/checkout is given an SSH key or a token that does not expire.
+
+- Group: security
+- Default level: error
+- Profile: default
+- Option `secret-tokens` (bool, no default): Also report a token input taken from a secret other than GITHUB_TOKEN (a personal access token). The ssh-key input is always reported. Unset, it is on under the strict and all profiles and off under the default one.
+- Option `allow` (strings, empty by default): Names of secrets which may be given to actions/checkout (for example a deploy key).
+- Details and examples: [checks](./checks.md#check-checkout-static-credentials)
 
 ## concurrency-cancels-prs
 
@@ -528,6 +543,24 @@ ACTIONS_ALLOW_UNSECURE_COMMANDS enables the deprecated set-env and add-path comm
 - Profile: default
 - Fixable: yes
 - Details and examples: [checks](./checks.md#check-insecure-commands)
+
+## insecure-ssh-keyscan
+
+ssh-keyscan output is trusted as the host key without verification.
+
+- Group: security
+- Default level: error
+- Profile: default
+- Details and examples: [checks](./checks.md#check-insecure-ssh-keyscan)
+
+## insecure-url-scheme
+
+A download uses http, ftp or git instead of https.
+
+- Group: security
+- Default level: error
+- Profile: default
+- Details and examples: [checks](./checks.md#check-insecure-url-scheme)
 
 ## invalid-activity-type
 
@@ -1272,6 +1305,16 @@ An input of workflow_dispatch or workflow_call is never used.
 - Default level: warn
 - Profile: strict
 - Details and examples: [checks](./checks.md#check-unused-workflow-input)
+
+## unverified-download
+
+A script runs what it downloads without verifying it.
+
+- Group: security
+- Default level: error
+- Profile: default
+- Option `allow` (strings, empty by default): Hosts, or URL prefixes (entries with "://"), whose downloads are accepted without verification.
+- Details and examples: [checks](./checks.md#check-unverified-download)
 
 ## use-trusted-publishing
 

@@ -17,7 +17,7 @@ jobs:
       run:
         shell: bash
     steps:
-      - run: curl -fsSL https://example.com/install.sh | sh
+      - run: curl -fsSL https://example.com/data.json | jq .
   job-shell-overrides:
     runs-on: ubuntu-latest
     steps:
