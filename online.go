@@ -13,6 +13,8 @@ import (
 // LinterOptions, apply to the whole run.
 type onlineSettings struct {
 	enabled bool
+	// off is LinterOptions.OnlineOff: the configuration cannot turn the online checks on.
+	off bool
 	client  GitHubClient
 	ttl     time.Duration
 	ctx     context.Context
@@ -25,16 +27,16 @@ type onlineSettings struct {
 	mode OnlineMode
 }
 
-// onlineEnabledBy reports whether the configuration turns the online checks on.
-func onlineEnabledBy(cfg *Config) bool {
-	return cfg != nil && (cfg.Online || cfg.OnlineOptions.Mode != OnlineModeDefault)
+// enabledBy reports whether the configuration turns the online checks on.
+func (o *onlineSettings) enabledBy(cfg *Config) bool {
+	return !o.off && cfg != nil && (cfg.Online || cfg.OnlineOptions.Mode != OnlineModeDefault)
 }
 
 // onlineSession returns the session of the online rules, or nil when the online checks are off for
 // the configuration. The error says the checks were asked for in a build that cannot make them.
 func (l *Linter) onlineSession(cfg *Config) (*onlineSession, error) {
 	o := &l.online
-	if !o.enabled && !onlineEnabledBy(cfg) {
+	if !o.enabled && !o.enabledBy(cfg) {
 		return nil, nil
 	}
 	o.once.Do(func() {
