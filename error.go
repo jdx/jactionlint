@@ -325,15 +325,18 @@ func (e *Error) indicator(line string) (string, int) {
 	// The region of the error is underlined when the rule gave it, so the text, the JSON and the SARIF
 	// output agree. Without one, it is the token which starts at the column. A region over several
 	// lines is underlined to the end of its first line.
+	// The text is cut after the padding is measured: a column in the trailing whitespace of the line
+	// leaves nothing to underline but keeps the caret.
 	limit := -1
+	text := line[start:]
 	switch {
 	case e.EndLine > e.Line:
-		line = strings.TrimRight(line, " \t")
+		text = strings.TrimRight(text, " \t")
 	case (e.EndLine == e.Line || e.EndLine == 0) && e.EndColumn > e.Column:
 		limit = e.EndColumn - e.Column
 	}
 	uw, chars := 0, 0
-	r := strings.NewReader(line[start:])
+	r := strings.NewReader(text)
 	for limit < 0 || chars < limit {
 		c, s, err := r.ReadRune()
 		if err != nil || s == 0 || (limit < 0 && e.EndLine <= e.Line && (c == ' ' || c == '\t')) || c == '\n' || c == '\r' {
