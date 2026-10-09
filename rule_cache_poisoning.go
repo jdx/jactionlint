@@ -396,10 +396,15 @@ func tagFilterMatches(f *WebhookEventFilter) bool {
 	return last == nil || strings.TrimSpace(last.Value) != "!**"
 }
 
-// eventScenarios lists one run per event.
+// eventScenarios lists one run per event. A push event whose filters let nothing but tags through has no run
+// without a tag: the tag push is added by the caller, and a bare "push" run would let a condition on the ref
+// pass as if a branch were pushed.
 func eventScenarios(events []Event) []triggerScenario {
 	var ret []triggerScenario
 	for _, e := range events {
+		if ev, ok := e.(*WebhookEvent); ok && e.EventName() == "push" && ev.Branches == nil && ev.BranchesIgnore == nil && tagFilterMatches(ev.Tags) {
+			continue
+		}
 		ret = append(ret, triggerScenario{"event_name": e.EventName()})
 	}
 	return ret

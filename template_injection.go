@@ -452,10 +452,13 @@ func (c *tiContext) inputIsNotText(name string) bool {
 
 // inputsHoldText reports whether the whole inputs object can hold free text: an input of the workflow which
 // is not a boolean, a number, a choice or an environment, or any input of a composite action (c.wf.Action is set).
-// A workflow which declares no input at all has no text in it.
+// A workflow or an action which declares no input at all has no text in it.
 func (c *tiContext) inputsHoldText() bool {
-	if c.wf == nil || c.wf.Action != nil {
+	if c.wf == nil {
 		return true
+	}
+	if c.wf.Action != nil {
+		return len(c.wf.Action.Inputs) > 0
 	}
 	for _, e := range c.wf.On {
 		switch e := e.(type) {
