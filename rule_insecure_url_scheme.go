@@ -84,6 +84,11 @@ func (rule *RuleInsecureURLScheme) VisitStep(n *Step) error {
 			if in == nil || in.Value == nil || strings.ContainsAny(strings.TrimSpace(in.Value.Value), " \t\n") {
 				continue
 			}
+			if strings.Contains(name, "timestamp") {
+				// The address of a timestamp authority (RFC 3161) is http by design: what it returns is signed, and the
+				// documented endpoints of the common authorities are http
+				continue
+			}
 			if secure, ok := insecureURL(in.Value.Value); ok {
 				pos := in.Value.Pos
 				if pos == nil {

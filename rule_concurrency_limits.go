@@ -38,7 +38,7 @@ func (rule *RuleConcurrencyLimits) VisitWorkflowPre(n *Workflow) error {
 	if c := n.Concurrency; c != nil {
 		// Whether runs are cancelled is a choice: serializing a release pipeline is as valid as cancelling
 		// the superseded runs of a test pipeline. Only the form which cannot cancel at all is reported.
-		if c.Bare && !onlyWorkflowCall(n) {
+		if c.Bare && !onlyWorkflowCall(n) && releaseReason(n) == "" {
 			rule.ReportID("concurrency-limits", c.Pos, "\"concurrency:\" is only a group name, so it cannot cancel superseded runs. use the mapping form with \"group:\" and \"cancel-in-progress: true\"")
 		}
 		return nil
@@ -72,7 +72,11 @@ func (rule *RuleConcurrencyLimits) VisitWorkflowPre(n *Workflow) error {
 		pos = &Pos{Line: line, Col: 1}
 	}
 	msg := "workflow has no \"concurrency:\", so every run of it executes at the same time even when a newer run supersedes the older ones. add a top-level \"concurrency:\" with a \"group:\" and \"cancel-in-progress: true\""
-	if startedByPullRequest(n) {
+	if why := releaseReason(n); why != "" {
+		// Cancelling a release or a deployment that is running leaves it half done (concurrency-cancels-release), so the
+		// group is there to make a new run wait for the running one
+		msg = "workflow has no \"concurrency:\", so every run of it executes at the same time even when a newer run is started while one is running (" + why + "). add a top-level \"concurrency:\" with a \"group:\" and \"cancel-in-progress: false\", so that a new run waits for the running release or deployment to finish instead of cancelling it"
+	} else if startedByPullRequest(n) {
 		msg += ". use a group per pull request such as \"" + pullRequestGroup + "\", so that a new push cancels only the older runs of the same pull request and not the runs of the others"
 	}
 	rule.ReportID("concurrency-limits", pos, msg)
@@ -80,6 +84,33 @@ func (rule *RuleConcurrencyLimits) VisitWorkflowPre(n *Workflow) error {
 		rule.errs[len(rule.errs)-1].Fix = fix
 	}
 	return nil
+}
+
+// releaseReason tells why the workflow releases or deploys something, or returns "" when it does not: it runs on the
+// release event or on pushed tags, or a job has an environment or publishes or deploys when the workflow is run by one
+// of its events. cancel-in-progress must not be recommended for such a workflow, see RuleConcurrencyCancelsRelease.
+func releaseReason(w *Workflow) string {
+	for _, e := range w.On {
+		switch ev := e.(type) {
+		case *WebhookEvent:
+			if ev.EventName() == "release" {
+				return "it runs for release events"
+			}
+			if ev.EventName() == "push" && tagFilterMatches(ev.Tags) {
+				return "it runs for pushed tags"
+			}
+		}
+	}
+	for _, e := range w.On {
+		for _, id := range jobIDsInOrder(w) {
+			if j := w.Jobs[id]; j != nil {
+				if why := releaseSignal(j, scenario{event: e.EventName()}); why != "" {
+					return why
+				}
+			}
+		}
+	}
+	return ""
 }
 
 // pullRequestGroup is the group that the fix writes: the runs of one pull request cancel each other and nothing else.

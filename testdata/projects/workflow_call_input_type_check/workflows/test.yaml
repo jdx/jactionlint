@@ -21,3 +21,16 @@ jobs:
       str_input:
       num_input:
       broken_input: 'hello'
+  caller4:
+    uses: ./workflows/reusable.yaml
+    with:
+      # quoted scalars are strings, whatever their text looks like
+      str_input: "true"
+      num_input: 1
+      broken_input: 'false'
+  caller5:
+    uses: ./workflows/reusable.yaml
+    with:
+      str_input: 'null'
+      num_input: "42"
+      broken_input: '1'

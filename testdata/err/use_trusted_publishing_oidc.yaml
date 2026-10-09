@@ -1,0 +1,57 @@
+on: push
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  npm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          registry-url: https://registry.npmjs.org
+      # OK: the placeholder token of setup-node is blanked, so npm uses the OIDC token
+      - run: npm publish --provenance
+        env:
+          NODE_AUTH_TOKEN: ''
+      # OK: the same for a blank expression
+      - run: npm publish
+        env:
+          NODE_AUTH_TOKEN: ${{ '' }}
+  crates:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: rust-lang/crates-io-auth-action@v1
+        id: auth
+      # OK: the token is the short-lived one of the action
+      - run: cargo publish
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+  nuget:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: NuGet/login@v1
+        id: login
+        with:
+          user: me
+      # OK: the key is the short-lived one of the action
+      - run: dotnet nuget push pkg.nupkg --api-key ${{ steps.login.outputs.NUGET_API_KEY }}
+  long-lived:
+    runs-on: ubuntu-latest
+    steps:
+      # ERROR: a secret next to id-token: write is a long-lived credential
+      - run: npm publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      # ERROR: the output of a step that is not an OIDC exchange
+      - id: other
+        run: echo "token=x" >> "$GITHUB_OUTPUT"
+      - run: cargo publish
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.other.outputs.token }}
+  cargo-package:
+    runs-on: ubuntu-latest
+    steps:
+      # OK: -p is the package of cargo and not a password, and the job can request the OIDC token
+      - run: cargo publish -p my-crate

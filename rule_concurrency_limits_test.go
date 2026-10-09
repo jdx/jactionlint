@@ -1,6 +1,10 @@
 package jactionlint
 
-import "testing"
+import (
+	"strconv"
+	"strings"
+	"testing"
+)
 
 func TestConcurrencyLimits(t *testing.T) {
 	cfg := ruleConfig("concurrency-limits")
@@ -51,5 +55,55 @@ func TestPathsWithoutNamesOrConcurrencyForCopilot(t *testing.T) {
 	errs := lintFileWithConfig(t, cfg, "other.yml", src)
 	if len(errsWithID(errs, "concurrency-limits")) != 1 || len(errsWithID(errs, "anonymous-definition")) == 0 {
 		t.Errorf("another file is reported: %v", errs)
+	}
+}
+
+// concurrency-limits and concurrency-cancels-release must not contradict each other: the block that the first
+// recommends must not be reported by the second (the packslip site.yml deployment of the bug bash).
+func TestConcurrencyLimitsAgreesWithCancelsRelease(t *testing.T) {
+	cfg := mustParseConfig(t, "profile: default\nrules:\n  missing-permissions: off\n  missing-timeout: off\n  unpinned-uses: off\n  excessive-permissions: off\n  artipacked: off\n  mutable-runner-label: off\n")
+	deploy := "jobs:\n  deploy:\n    runs-on: ubuntu-latest\n    environment: github-pages\n    steps:\n      - run: echo deploy\n"
+	tests := []struct {
+		what    string
+		src     string
+		cancels bool // the advice may say cancel-in-progress: true
+	}{
+		{"a deployment with an environment", "on:\n  push:\n    branches: [main]\n" + deploy, false},
+		{"an environment chosen by an expression", "on: push\njobs:\n  deploy:\n    runs-on: ubuntu-latest\n    environment: ${{ github.ref_name == 'main' && 'prod' || '' }}\n    steps:\n      - run: echo deploy\n", false},
+		{"a release event", "on:\n  release:\n    types: [published]\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo\n", false},
+		{"pushed tags", "on:\n  push:\n    tags: ['v*']\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo\n", false},
+		{"a publishing command", "on: push\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      - run: npm publish\n", false},
+		{"tags that no pattern lets through", "on:\n  push:\n    tags: ['!**']\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo\n", true},
+		{"a test workflow", "on: push\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo test\n", true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.what, func(t *testing.T) {
+			errs := errsWithID(lintWithConfig(t, cfg, tc.src), "concurrency-limits")
+			if len(errs) != 1 {
+				t.Fatalf("want one finding but got %v", errs)
+			}
+			msg := errs[0].Message
+			if got := strings.Contains(msg, "cancel-in-progress: true"); got != tc.cancels {
+				t.Errorf("advice to cancel: want %v but got %q", tc.cancels, msg)
+			}
+			if !tc.cancels && !strings.Contains(msg, "cancel-in-progress: false") {
+				t.Errorf("a release workflow is advised to queue: %q", msg)
+			}
+			if !tc.cancels && errs[0].Fix != nil {
+				t.Errorf("a release workflow must get no fix that cancels: %v", errs[0].Fix)
+			}
+			// The recommended block, applied, is not reported by the other rule
+			block := "concurrency:\n  group: g\n  cancel-in-progress: " + strconv.FormatBool(tc.cancels) + "\n"
+			fixed := strings.Replace(tc.src, "jobs:\n", block+"jobs:\n", 1)
+			for _, e := range lintWithConfig(t, cfg, fixed) {
+				if e.ID == "concurrency-cancels-release" || e.ID == "concurrency-limits" {
+					t.Errorf("after following the advice: %v", e)
+				}
+			}
+		})
+	}
+	// The bare form serializes the runs, which is what a release workflow wants
+	if got := errsWithID(lintWithConfig(t, cfg, "on:\n  release:\n    types: [published]\nconcurrency: release\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo\n"), "concurrency-limits"); len(got) != 0 {
+		t.Errorf("the bare group of a release workflow: %v", got)
 	}
 }

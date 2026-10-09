@@ -50,3 +50,17 @@ jobs:
           make | tee second
           set +o pipefail
           make | tee third
+  status-is-discarded:
+    runs-on: ubuntu-latest
+    steps:
+      # OK: the status of a substitution in an argument is not the status of anything, with or without pipefail
+      - run: |
+          echo "hash=$(sha256sum file | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+      # ERROR: the value of an assignment is the status of the assignment
+      - run: |
+          hash=$(sha256sum file | cut -d' ' -f1)
+      # OK: the consumer quits early, whatever loop the pipeline is in
+      - run: |
+          for shell in bash zsh; do
+            bin/tak completion "$shell" | grep -Fq -- 'run'
+          done

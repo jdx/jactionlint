@@ -53,7 +53,12 @@ func (rule *RuleAdhocPackages) VisitStep(n *Step) error {
 	for _, c := range s.Commands {
 		if tool, instead, ok := adhocInstall(c); ok {
 			start, end := commandRange(s, origin, c)
-			rule.errorIDAt("adhoc-packages", start, "command "+quote(c.Name+" "+c.Verb())+" installs a package outside of a lock file: its version and its dependencies are resolved anew on every run. add the package to "+tool+" and install with "+instead).endAt(end)
+			resolved := "its version and its dependencies are resolved anew on every run"
+			if in := c.Installs(); in != nil && registryPackagesPinned(in) {
+				// The version is fixed, but the packages it depends on are not
+				resolved = "its dependencies are resolved anew on every run, although its version is pinned"
+			}
+			rule.errorIDAt("adhoc-packages", start, "command "+quote(c.Name+" "+c.Verb())+" installs a package outside of a lock file: "+resolved+". add the package to "+tool+" and install with "+instead).endAt(end)
 		}
 	}
 	return nil
@@ -102,6 +107,22 @@ func hasRegistryPackage(in *runscript.Install) bool {
 		}
 	}
 	return false
+}
+
+// registryPackagesPinned reports whether every package of the install that comes from a registry is given an exact
+// version (`left-pad@1.3.0`, `gem install bundler -v 2.4.22`).
+func registryPackagesPinned(in *runscript.Install) bool {
+	n := 0
+	for _, p := range in.Packages {
+		if p.Local || p.Kind == runscript.KindPath {
+			continue
+		}
+		if !p.Pinned || p.Dynamic {
+			return false
+		}
+		n++
+	}
+	return n > 0
 }
 
 func init() {
