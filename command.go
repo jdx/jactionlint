@@ -214,6 +214,7 @@ func (f *optionalValueFlag) Set(v string) error {
 // onlineFlag is the -online flag: a boolean flag which also takes a mode, -online=cache or -online=strict.
 type onlineFlag struct {
 	set  bool
+	off  bool // -online=false: the configuration cannot turn the checks on either
 	mode OnlineMode
 }
 
@@ -230,7 +231,7 @@ func (f *onlineFlag) String() string {
 func (f *onlineFlag) Set(v string) error {
 	switch strings.ToLower(v) {
 	case "false", "off", "0":
-		*f = onlineFlag{}
+		*f = onlineFlag{off: true}
 		return nil
 	}
 	m, err := ParseOnlineMode(v)
@@ -370,6 +371,9 @@ func (cmd *Command) Main(args []string) int {
 			opts.OnlineOptions.MaxRateLimitWait = &onlineMaxWait
 		}
 	})
+	if online.off {
+		opts.OnlineOff = true
+	}
 	if online.set {
 		opts.Online = true
 		opts.OnlineOptions.Mode = online.mode

@@ -96,7 +96,8 @@ func TestOnlineModeOnTheConfigTurnsTheChecksOn(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !onlineEnabledBy(cfg) || onlineEnabledBy(&Config{}) || onlineEnabledBy(nil) {
+	on, off := &onlineSettings{}, &onlineSettings{off: true}
+	if !on.enabledBy(cfg) || on.enabledBy(&Config{}) || on.enabledBy(nil) || off.enabledBy(cfg) {
 		t.Error("only a mode or online: true turns the checks on")
 	}
 }
