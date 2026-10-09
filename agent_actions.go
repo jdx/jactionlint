@@ -39,6 +39,8 @@ type agentAction struct {
 	// Config are the lower case names of the inputs that are the command line arguments or the settings
 	// of the agent: an attacker who controls them can add tools, servers or hooks.
 	Config []string
+	// EnvInputs are the lower case names of the inputs that hold environment variables for the agent.
+	EnvInputs []string
 	// Gated is whether the action checks that the user who started it has write access, before it runs
 	// the agent. An action without the check runs for whoever can trigger the workflow.
 	Gated bool
@@ -64,16 +66,18 @@ var agentActions = []*agentAction{
 	{
 		Name: "anthropics/claude-code-action", Title: "Claude Code Action",
 		// direct_prompt, override_prompt, custom_instructions and mcp_config are inputs of the v0 releases.
-		Prompts: []string{"prompt", "direct_prompt", "override_prompt", "custom_instructions"},
-		Config:  []string{"claude_args", "settings", "allowed_tools", "disallowed_tools", "mcp_config", "claude_env"},
-		Gated:   true, OpenGate: claudeOpenGate, unsafe: unsafeClaude, restricted: restrictedClaude,
+		Prompts:   []string{"prompt", "direct_prompt", "override_prompt", "custom_instructions"},
+		Config:    []string{"claude_args", "settings", "allowed_tools", "disallowed_tools", "mcp_config", "claude_env"},
+		EnvInputs: []string{"claude_env"},
+		Gated:     true, OpenGate: claudeOpenGate, unsafe: unsafeClaude, restricted: restrictedClaude,
 		Source: "https://github.com/anthropics/claude-code-action/blob/main/action.yml and docs/security.md",
 	},
 	{
 		Name: "anthropics/claude-code-base-action", Title: "Claude Code Base Action",
-		Prompts: []string{"prompt", "direct_prompt", "custom_instructions"},
-		Config:  []string{"claude_args", "settings", "allowed_tools", "disallowed_tools", "mcp_config", "claude_env"},
-		unsafe:  unsafeClaude, restricted: restrictedClaude,
+		Prompts:   []string{"prompt", "direct_prompt", "custom_instructions"},
+		Config:    []string{"claude_args", "settings", "allowed_tools", "disallowed_tools", "mcp_config", "claude_env"},
+		EnvInputs: []string{"claude_env"},
+		unsafe:    unsafeClaude, restricted: restrictedClaude,
 		Source: "https://github.com/anthropics/claude-code-base-action/blob/main/action.yml",
 	},
 	{
