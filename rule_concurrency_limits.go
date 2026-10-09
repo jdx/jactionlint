@@ -47,6 +47,10 @@ func (rule *RuleConcurrencyLimits) VisitWorkflowPre(n *Workflow) error {
 		// The caller decides how many runs of a reusable workflow exist
 		return nil
 	}
+	if onlyScheduledOrManual(n) {
+		// Nothing supersedes a run of a timer or of a person who started it by hand
+		return nil
+	}
 	// Every job needs a limit, at the workflow or on the job itself. That includes the jobs which call a reusable
 	// workflow: a concurrency group in the called workflow can deadlock with the one of the caller, so the caller is
 	// where the limit belongs (zizmor#1619).
@@ -224,4 +228,20 @@ func init() {
 		}
 		return []Rule{NewRuleConcurrencyLimits(env.path, env.src)}
 	})
+}
+
+// onlyScheduledOrManual reports whether the workflow is started only by a schedule or by hand. A new commit does not
+// supersede such a run, so there is nothing for a concurrency group to cancel.
+func onlyScheduledOrManual(n *Workflow) bool {
+	if len(n.On) == 0 {
+		return false
+	}
+	for _, e := range n.On {
+		switch e.EventName() {
+		case "schedule", "workflow_dispatch":
+		default:
+			return false
+		}
+	}
+	return true
 }

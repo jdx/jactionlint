@@ -36,6 +36,14 @@ func TestAnalyzeShellPlaceholders(t *testing.T) {
 		{"double brackets closed", `[[ a == b ]]; echo "@"`, []shPlace{{Quote: shDouble}}},
 		{"two placeholders", `echo "@" '@' @`, []shPlace{{Quote: shDouble}, {Quote: shSingle}, {Quote: shUnquoted, Unsafe: "x"}}},
 		{"parameter expansion is fine", `echo "${A:-@}"`, []shPlace{{Quote: shDouble}}},
+		{"for list", "for f in @; do echo \"$f\"; done", []shPlace{{Cannot: true}}},
+		{"for list after other words", "for f in a @ b; do :; done", []shPlace{{Cannot: true}}},
+		{"for list in a block", "if x; then\n  for f in @\n  do :; done\nfi", []shPlace{{Cannot: true}}},
+		{"for list quoted is fine", "for f in \"@\"; do :; done", []shPlace{{Quote: shDouble}}},
+		{"for body is not the list", "for f in a b; do echo @; done", []shPlace{{Quote: shUnquoted, Unsafe: "x"}}},
+		{"select list", "select f in @; do break; done", []shPlace{{Cannot: true}}},
+		{"array assignment", "files=(a @)", []shPlace{{Cannot: true}}},
+		{"after an array assignment", "files=(a b); echo @", []shPlace{{Quote: shUnquoted, Unsafe: "x"}}},
 		{"line continuation", "echo \\\n  \"@\"", []shPlace{{Quote: shDouble}}},
 	}
 	for _, tc := range tests {

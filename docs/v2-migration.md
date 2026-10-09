@@ -277,6 +277,13 @@ With `--format sarif` stdout holds only the log and stderr is empty unless `--ve
 - `jactionlint --diff` prints what `--fix` would do as a unified diff and writes nothing (exit 1 when there is a diff).
 - `jactionlint --fix --fix-rules missing-timeout,artipacked` applies only the fixes of those rules, like `fix: {rules: [...]}` in the config.
 - `--fix` cannot read stdin and exits with status 2 if asked to.
+- `--fix=unsafe` of `self-repository` (in the `pedantic` profile) rewrites `uses: ./path` to `uses: $/path`. Every released
+  actionlint, up to and including 1.7.12, rejects the `$/` syntax (`specifying action "$/..." in invalid format`), so a repository that
+  also runs actionlint starts to fail there. That is why the fix is unsafe and never applied by `--fix` alone.
+- Some fixes are not offered where they would be wrong: `missing-permissions` writes nothing into a reusable workflow
+  (`workflow_call`), because the callers decide what the token can do and a callee asking for more than a caller grants is rejected
+  at startup; and `template-injection` leaves the expression in a word list (`for f in ${{ ... }}`, `files=(...)`) alone, because quoting
+  it would make one item of the list.
 
 ```console
 $ jactionlint --diff --fix-rules artipacked

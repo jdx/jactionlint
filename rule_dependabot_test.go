@@ -364,3 +364,30 @@ func TestDependabotCooldownWithInvalidDefaultDays(t *testing.T) {
 		}
 	}
 }
+
+func TestDependabotCooldownSkipsDisabledUpdates(t *testing.T) {
+	const head = "version: 2\nupdates:\n"
+	const tail = "    directory: /\n    schedule:\n      interval: weekly\n"
+	tests := []struct {
+		name string
+		body string
+		want int
+	}{
+		{"enabled", "  - package-ecosystem: npm\n" + tail, 1},
+		{"ignore all dependencies", "  - package-ecosystem: npm\n" + tail + "    ignore:\n      - dependency-name: \"*\"\n", 0},
+		{"ignore all update types", "  - package-ecosystem: npm\n" + tail + "    ignore:\n      - dependency-name: \"*\"\n        update-types: [\"version-update:semver-major\", \"version-update:semver-minor\", \"version-update:semver-patch\"]\n", 0},
+		{"ignore only major", "  - package-ecosystem: npm\n" + tail + "    ignore:\n      - dependency-name: \"*\"\n        update-types: [\"version-update:semver-major\"]\n", 1},
+		{"ignore with versions", "  - package-ecosystem: npm\n" + tail + "    ignore:\n      - dependency-name: \"*\"\n        versions: [\"1.x\"]\n", 1},
+		{"ignore one dependency", "  - package-ecosystem: npm\n" + tail + "    ignore:\n      - dependency-name: left-pad\n", 1},
+		{"zero pull requests", "  - package-ecosystem: pip\n" + tail + "    open-pull-requests-limit: 0\n", 0},
+		{"some pull requests", "  - package-ecosystem: pip\n" + tail + "    open-pull-requests-limit: 5\n", 1},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			errs := lintDependabot(t, head+tc.body, cooldownConfig(nil), nil)
+			if len(errs) != tc.want {
+				t.Fatalf("%d errors are expected: %v", tc.want, errs)
+			}
+		})
+	}
+}
