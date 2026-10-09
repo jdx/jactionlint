@@ -26,9 +26,9 @@ type sourceIndex struct {
 }
 
 // sites returns the YAML structure of the source, which is parsed once however many offsets are asked.
-func (idx *sourceIndex) sites() *yamlSiteIndex {
-	idx.sitesOnce.Do(func() { idx.sitesIdx = newYAMLSiteIndex(idx.src) })
-	return idx.sitesIdx
+func (x *sourceIndex) sites() *yamlSiteIndex {
+	x.sitesOnce.Do(func() { x.sitesIdx = newYAMLSiteIndex(x.src) })
+	return x.sitesIdx
 }
 
 // newSourceIndex indexes the lines of the source.

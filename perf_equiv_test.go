@@ -210,7 +210,8 @@ func TestSiblingWorkflowsAreReadOnce(t *testing.T) {
 	}
 	// The cache of a run hands out one value
 	c := NewLocalActionsCache(project, nil)
-	if c.siblings() == nil || c.siblings() != c.siblings() {
+	first := c.siblings()
+	if first == nil || c.siblings() != first {
 		t.Error("one value per cache")
 	}
 	var nilCache *LocalActionsCache

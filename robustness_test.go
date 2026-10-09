@@ -112,8 +112,8 @@ func robustCases() map[string]func() []byte {
 		"ignore comment on every step": b(robustBase + f(5000, func(i int) string {
 			return fmt.Sprintf("      - run: echo %d # jactionlint ignore=shellcheck\n", i)
 		})),
-		"zizmor comment on every step": b(robustBase + f(5000, func(i int) string {
-			return fmt.Sprintf("      - uses: actions/checkout@v4 # zizmor: ignore[unpinned-uses]\n")
+		"zizmor comment on every step": b(robustBase + f(5000, func(int) string {
+			return "      - uses: actions/checkout@v4 # zizmor: ignore[unpinned-uses]\n"
 		})),
 	}
 }
