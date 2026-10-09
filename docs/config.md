@@ -165,7 +165,8 @@ extends:
 - `online`: Turns on the [online checks](usage.md#online-checks) for the files this configuration applies to, like the `--online`
   flag does for the whole run. They query the GitHub API. The default is `false`: nothing uses the network.
 - <a id="online-options"></a>`online-options`: Tunes the online checks. Every key is optional. They apply to the whole run, decided by the first
-  file checked, and the command line flags win over them. A `mode` of `cache` or `strict` also turns the online checks on.
+  file checked, and the command line flags win over them. A `mode` of `cache` or `strict` also turns the online checks on,
+  unless the configuration says `online: false` explicitly: an explicit `false` wins over the mode.
   See [the usage document](usage.md#online-checks) for what each does.
   - `mode`: `cache` (never use the network, answer from the cache), `strict` (a skipped lookup makes the exit status 3) or
     `cache,strict`. Same as `--online=MODE`.
@@ -317,7 +318,7 @@ ignores:
 | --------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
 | `rule`    | Required. A [rule ID](rules.md) or a list of them. An unknown ID is an error.                                                                |
 | `file`    | A glob matched to the path relative to the project root (and to the path as printed). `**` crosses directories. The separator is always `/`. |
-| `job`     | The ID of the job (its key under `jobs`). Matches findings anywhere in the job, including its steps.                                         |
+| `job`     | The ID of the job (its key under `jobs`), without regard to case. Matches findings anywhere in the job, including its steps.               |
 | `step`    | The `id` or the `name` of the step, compared as written. Matches findings anywhere in the step.                                              |
 | `uses`    | The `uses:` value of the step, or of the job when it calls a reusable workflow. See below.                                                   |
 | `reason`  | Why the finding is accepted. It is free text for the readers of the file and appears in the messages about the entry.                        |
@@ -332,7 +333,8 @@ entry sets must match. Entries are not combined: two entries are two independent
   repository), `actions/*` (every action of the owner, including the ones in directories), `owner/repo/*`, `owner/repo/sub`.
   Names are case-insensitive. Without `@ref` any ref matches, so the entry keeps working when a tool changes the tag or SHA;
   with `@ref` (`actions/checkout@v4`) only that exact ref matches.
-- A glob with `*` for values which are not repository references: `docker://alpine*`, `./.github/actions/*`.
+- A glob with `*` for values which are not repository references: `docker://alpine*`, `./.github/actions/*`. A local path can be
+  written `./path` or `$/path`; the entry matches both spellings.
 - A regular expression between slashes, matched to the whole `uses:` value (not anchored unless you write `^` or `$`):
   `/^actions\/(checkout|cache)@/`. The syntax is [RE2][re2].
 
@@ -341,7 +343,8 @@ same blocks an [ignore comment](usage.md#ignore-some-errors) covers. A finding o
 step and job; a finding on the `jobs.<id>` line or on the job's `runs-on` belongs to the job and to no step; a finding about the
 workflow as a whole (`permissions`, `on`) belongs to neither, so only `rule` and `file` can match it. When the structure is
 ambiguous, for example two steps in one flow-style line (`steps: [{uses: a}, {uses: b}]`), the step is unknown and an entry that
-asks for `step` or `uses` does not match. An ignore never suppresses on a guess.
+asks for `step` or `uses` does not match. The steps of a `parallel:` group are steps like the others: an entry finds them by their
+`uses` and by their `id` or `name`. An ignore never suppresses on a guess.
 
 ### Expiry and unused entries
 
@@ -349,11 +352,13 @@ asks for `step` or `uses` does not match. An ignore never suppresses on a guess.
   [`expired-ignore`](rules.md#expired-ignore) (an error, in the `correctness` profile) at its position in the config file, with
   its `reason`. Either fix the findings or renew the date.
 - During the last 14 days the entry still works and is reported as `expired-ignore` with level `info`, so you are warned before the
-  findings come back.
+  findings come back. An entry that is about to expire and suppresses nothing is also reported as `unused-ignore`.
 - An entry which suppressed nothing is reported as [`unused-ignore`](rules.md#unused-ignore) (the same rule as the unused ignore
   comments, so it is in the `pedantic` profile) at its position in the config file. Because a pre-commit hook lints only the
   changed files, an entry is called unused only when every file it could apply to was linted in the run. A run that lints a single
-  file never reports an entry that also applies to others.
+  file never reports an entry that also applies to others. An entry for a rule that did not run (it is off, an online rule
+  without the online checks, or `shellcheck` and `pyflakes` without their command) is not unused. The findings about the entries
+  follow `--ignore` and `--fix` like any other finding.
 
 Entries of config files listed in `extends` are added to the entries of the file that extends them (extended files first), and a
 finding about an entry is reported in the file that contains it.

@@ -27,9 +27,23 @@ type onlineSettings struct {
 	mode OnlineMode
 }
 
-// enabledBy reports whether the configuration turns the online checks on.
+// enabledBy reports whether the configuration turns the online checks on: "online: true", or a
+// "mode" in "online-options" (a mode only makes sense online, so it turns them on). An explicit
+// "online: false" wins over the mode: the checks stay off unless --online asks for them.
 func (o *onlineSettings) enabledBy(cfg *Config) bool {
-	return !o.off && cfg != nil && (cfg.Online || cfg.OnlineOptions.Mode != OnlineModeDefault)
+	if o.off || cfg == nil {
+		return false
+	}
+	if cfg.present["online"] && !cfg.Online {
+		return false
+	}
+	return cfg.Online || cfg.OnlineOptions.Mode != OnlineModeDefault
+}
+
+// onlineOn reports whether the online checks run for a file linted with the configuration: --online, or
+// the configuration (see enabledBy).
+func (l *Linter) onlineOn(cfg *Config) bool {
+	return l.online.enabled || l.online.enabledBy(cfg)
 }
 
 // onlineSession returns the session of the online rules, or nil when the online checks are off for

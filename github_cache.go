@@ -33,6 +33,10 @@ type cacheEntry struct {
 	Status  int       `json:"status"`
 	Link    string    `json:"link,omitempty"`
 	Body    []byte    `json:"body,omitempty"`
+	// Shared is set on a copy that was made into the shared (token-less) slot from the answer of a token: the
+	// time at which the repository was last confirmed public. Such a copy is served only while that
+	// confirmation is younger than sharedVisibilityTTL (see shareIfPublic).
+	Shared time.Time `json:"shared,omitzero"`
 }
 
 // diskCache stores answers of the GitHub API in a directory, one file per URL, for the ETag
@@ -126,6 +130,14 @@ func (c *diskCache) put(key string, e *cacheEntry) {
 		return
 	}
 	c.grew(int64(len(b)))
+}
+
+// remove deletes the entry. Failures are ignored.
+func (c *diskCache) remove(key string) {
+	if c == nil {
+		return
+	}
+	os.Remove(c.path(key))
 }
 
 // grew accounts for written bytes and prunes the directory when it became too big. The first call
