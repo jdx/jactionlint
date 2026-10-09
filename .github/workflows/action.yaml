@@ -1,0 +1,87 @@
+name: Action
+on:
+  push:
+    branches: [main]
+    paths:
+      - action.yml
+      - scripts/action.bash
+      - .github/workflows/action.yaml
+  pull_request:
+    paths:
+      - action.yml
+      - scripts/action.bash
+      - .github/workflows/action.yaml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  action:
+    name: Test the action
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+      # The action downloads releases, and the options it passes only exist from v2 on, so it runs the executable
+      # built from this commit
+      - name: Build jactionlint
+        shell: bash
+        run: go build -o "${RUNNER_TEMP}/jactionlint-test" ./cmd/jactionlint
+      - name: Check the workflows of this repository
+        id: clean
+        uses: ./
+        with:
+          executable: ${{ runner.temp }}/jactionlint-test
+      - name: The executable output is set
+        shell: bash
+        run: test "${EXECUTABLE}" = "${RUNNER_TEMP}/jactionlint-test"
+        env:
+          EXECUTABLE: ${{ steps.clean.outputs.executable }}
+      - name: Check given files with options
+        uses: ./
+        with:
+          executable: ${{ runner.temp }}/jactionlint-test
+          files: .github/workflows/ci.yaml .github/workflows/action.yaml
+          profile: correctness
+          min-severity: error
+          annotations: "false"
+          color: "false"
+      - name: Check a file which has problems
+        id: broken
+        uses: ./
+        with:
+          executable: ${{ runner.temp }}/jactionlint-test
+          files: testdata/err/assign_expression.yaml
+          annotations: "false"
+        continue-on-error: true
+      - name: The problems fail the step
+        shell: bash
+        run: test "${OUTCOME}" = failure
+        env:
+          OUTCOME: ${{ steps.broken.outcome }}
+      - name: Write SARIF for a file which has problems
+        id: sarif
+        uses: ./
+        with:
+          executable: ${{ runner.temp }}/jactionlint-test
+          files: testdata/err/assign_expression.yaml
+          advanced-security: "true"
+        # Nothing to upload to from a fork, and the permission is not granted here anyway
+        continue-on-error: true
+      - name: The SARIF file has the findings
+        shell: bash
+        run: grep -q '"ruleId"' "${SARIF}"
+        env:
+          SARIF: ${{ steps.sarif.outputs.sarif-file }}

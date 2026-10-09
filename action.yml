@@ -1,0 +1,139 @@
+name: jactionlint
+description: Lint GitHub Actions workflows and Dependabot configuration with jactionlint, as annotations or code scanning alerts
+
+branding:
+  icon: shield
+  color: blue
+
+inputs:
+  version:
+    description: |
+      The version of jactionlint to download: an exact X.Y.Z version, or "latest" (the default), which is the newest
+      release this version of the action knows about.
+    required: false
+    default: latest
+  executable:
+    description: |
+      The path of a jactionlint executable to use instead of downloading one, for example one installed with mise or
+      built by an earlier step. Then "version" is ignored.
+    required: false
+    default: ""
+  files:
+    description: |
+      The files to check, separated by whitespace. By default jactionlint checks the workflows of the nearest
+      .github/workflows directory.
+    required: false
+    default: ""
+  profile:
+    description: |
+      The rule profile: correctness, default or pedantic. Without it the "profile" of the config file, or default,
+      applies.
+    required: false
+    default: ""
+  config-file:
+    description: The path of the config file, when it is not .github/jactionlint.yaml.
+    required: false
+    default: ""
+  min-severity:
+    description: Hide findings less severe than this level. One of info, warn or error.
+    required: false
+    default: ""
+  strict-exit:
+    description: Fail the step for findings of level warn and info too, not only for errors.
+    required: false
+    default: "false"
+  online:
+    description: |
+      Whether to run the checks which query the GitHub API. "true" runs them, "false" never uses the network, "cache" and
+      "strict" are the modes of --online, and empty leaves it to the config file.
+    required: false
+    default: ""
+  token:
+    description: The GitHub API token for the online checks. Only used when online checks run.
+    required: false
+    default: ${{ github.token }}
+  annotations:
+    description: |
+      Whether to annotate the files in the pull request with the findings. It has no effect when advanced-security is
+      true.
+    required: false
+    default: "true"
+  advanced-security:
+    description: |
+      Whether to upload the findings to code scanning as SARIF. The job needs the "security-events: write" permission.
+      It takes precedence over annotations.
+    required: false
+    default: "false"
+  color:
+    description: Whether to colorize the output of the text format.
+    required: false
+    default: "true"
+  args:
+    description: |
+      Further command line options, separated by whitespace (for example "--ignore=unpinned-images"). They are split
+      with the shell word splitting rules, without quote removal.
+    required: false
+    default: ""
+  working-directory:
+    description: The directory to run jactionlint in.
+    required: false
+    default: .
+
+outputs:
+  executable:
+    description: The path of the jactionlint executable the action used.
+    value: ${{ inputs.executable || steps.install.outputs.executable }}
+  sarif-file:
+    description: The path of the SARIF file, when advanced-security is true.
+    value: ${{ steps.run.outputs.sarif-file }}
+
+runs:
+  using: composite
+  steps:
+    - name: Install jactionlint
+      id: install
+      if: ${{ inputs.executable == '' }}
+      shell: bash
+      run: |
+        dir="${RUNNER_TEMP}/jactionlint"
+        mkdir -p "${dir}"
+        bash "${GITHUB_ACTION_PATH}/scripts/download-jactionlint.bash" "${JACTIONLINT_VERSION}" "${dir}"
+      env:
+        JACTIONLINT_VERSION: ${{ inputs.version }}
+
+    - name: Run jactionlint
+      id: run
+      shell: bash
+      run: bash "${GITHUB_ACTION_PATH}/scripts/action.bash"
+      env:
+        JACTIONLINT_EXECUTABLE: ${{ inputs.executable || steps.install.outputs.executable }}
+        JACTIONLINT_FILES: ${{ inputs.files }}
+        JACTIONLINT_PROFILE: ${{ inputs.profile }}
+        JACTIONLINT_CONFIG_FILE: ${{ inputs.config-file }}
+        JACTIONLINT_MIN_SEVERITY: ${{ inputs.min-severity }}
+        JACTIONLINT_STRICT_EXIT: ${{ inputs.strict-exit }}
+        JACTIONLINT_ONLINE: ${{ inputs.online }}
+        JACTIONLINT_TOKEN: ${{ inputs.token }}
+        JACTIONLINT_ANNOTATIONS: ${{ inputs.annotations }}
+        JACTIONLINT_ADVANCED_SECURITY: ${{ inputs.advanced-security }}
+        JACTIONLINT_COLOR: ${{ inputs.color }}
+        JACTIONLINT_ARGS: ${{ inputs.args }}
+        JACTIONLINT_WORKING_DIRECTORY: ${{ inputs.working-directory }}
+
+    # The run step succeeds in SARIF mode so that the findings are uploaded even when there are some. The step after
+    # the upload fails the job with the status of jactionlint.
+    - name: Upload SARIF file to code scanning
+      if: ${{ !cancelled() && inputs.advanced-security == 'true' && steps.run.outputs.sarif-file != '' }}
+      uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+      with:
+        sarif_file: ${{ steps.run.outputs.sarif-file }}
+        category: jactionlint
+
+    - name: Fail on findings
+      if: ${{ !cancelled() && inputs.advanced-security == 'true' && steps.run.outputs.exit-code != '' && steps.run.outputs.exit-code != '0' }}
+      shell: bash
+      run: |
+        echo "::error title=jactionlint::jactionlint exited with status ${EXIT_CODE}"
+        exit "${EXIT_CODE}"
+      env:
+        EXIT_CODE: ${{ steps.run.outputs.exit-code }}
