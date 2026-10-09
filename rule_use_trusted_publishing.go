@@ -2,8 +2,10 @@ package jactionlint
 
 import (
 	"fmt"
+	"regexp"
 	"slices"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/jdx/jactionlint/v2/internal/runscript"
 )
@@ -85,11 +87,18 @@ var publicRegistries = []string{
 }
 
 func (rule *RuleUseTrustedPublishing) checkRun(step *Step, run *ExecRun) {
-	if rule.grantsIDToken() || rule.permissionsComeFromCaller() {
+	if rule.permissionsComeFromCaller() {
 		return
 	}
+	// "id-token: write" is also asked for provenance or to sign in to a cloud provider, so it does not say that
+	// the publish uses it. A job that can request the token but passes a long-lived credential to the publish
+	// command is still publishing with the credential (zizmor#1848)
+	granted := rule.grantsIDToken()
 	s, origin := rule.script(run)
 	if s == nil {
+		if shell := rule.shellName(run); run != nil && run.Run != nil && (shell == "pwsh" || shell == "powershell") {
+			rule.checkPowerShell(step, run, run.Run.scriptOrigin(), granted)
+		}
 		return
 	}
 	for _, c := range s.Commands {
@@ -110,13 +119,81 @@ func (rule *RuleUseTrustedPublishing) checkRun(step *Step, run *ExecRun) {
 				cred = f.Name
 			}
 		}
-		msg := quote(cmd) + " publishes to " + info.registry
-		if cred != "" {
-			msg += " with the long-lived credential " + cred
+		if granted && cred == "" {
+			continue
 		}
-		msg += ". prefer " + info.instead
 		start, end := commandRange(s, origin, c)
-		rule.errorIDAt("use-trusted-publishing", start, msg).endAt(end)
+		rule.errorIDAt("use-trusted-publishing", start, trustedPublishingMessage(cmd, info.registry, info.instead, cred, granted)).endAt(end)
+	}
+}
+
+func trustedPublishingMessage(cmd, registry, instead, cred string, granted bool) string {
+	msg := quote(cmd) + " publishes to " + registry
+	if cred != "" {
+		msg += " with the long-lived credential " + cred
+	}
+	if granted {
+		msg += ", although the job can request an OIDC token (\"id-token: write\")"
+	}
+	return msg + ". prefer " + instead
+}
+
+// powerShellPublishes are the commands of the publish tools as they are written in a PowerShell script. The analyzer
+// understands bash and sh only, so these are matched on the words of a line.
+var powerShellPublishes = []struct {
+	eco, cmd string
+	re       *regexp.Regexp
+}{
+	{"crates", "cargo publish", regexp.MustCompile(`(?i)\bcargo\s+publish\b`)},
+	{"npm", "npm publish", regexp.MustCompile(`(?i)\b(?:npm|pnpm|bun)\s+publish\b`)},
+	{"npm", "yarn npm publish", regexp.MustCompile(`(?i)\byarn\s+npm\s+publish\b`)},
+	{"pypi", "twine upload", regexp.MustCompile(`(?i)\btwine\s+upload\b`)},
+	{"pypi", "uv publish", regexp.MustCompile(`(?i)\buv\s+publish\b`)},
+	{"pypi", "poetry publish", regexp.MustCompile(`(?i)\b(?:poetry|flit|hatch|pdm)\s+publish\b`)},
+	{"rubygems", "gem push", regexp.MustCompile(`(?i)\bgem\s+push\b`)},
+	{"nuget", "dotnet nuget push", regexp.MustCompile(`(?i)\bdotnet\s+nuget\s+push\b`)},
+	{"nuget", "nuget push", regexp.MustCompile(`(?i)\bnuget(?:\.exe)?\s+push\b`)},
+}
+
+var (
+	powerShellNoPublishRe = regexp.MustCompile(`(?i)(--dry-run|-dryrun|-whatif|--registry|--index-url|--repository-url|--repository\b|-source\b|--source\b|\s-r\s)`)
+	powerShellTokenRe     = regexp.MustCompile(`(?i)\s(--token|--password|--api-key|-apikey|-k)[\s=]`)
+)
+
+// checkPowerShell reports the publish commands of a PowerShell script. The default shell of the Windows runners is
+// pwsh, so the packages that are built on them are published from such a script (zizmor#1848).
+func (rule *RuleUseTrustedPublishing) checkPowerShell(step *Step, run *ExecRun, origin runscript.Origin, granted bool) {
+	for i, line := range strings.Split(strings.ReplaceAll(run.Run.Value, "\r\n", "\n"), "\n") {
+		code := line
+		if j := strings.Index(code, "#"); j >= 0 {
+			code = code[:j]
+		}
+		if strings.TrimSpace(code) == "" || powerShellNoPublishRe.MatchString(code) {
+			continue
+		}
+		for _, p := range powerShellPublishes {
+			loc := p.re.FindStringIndex(code)
+			if loc == nil {
+				continue
+			}
+			cred := ""
+			for _, name := range publishCredentialVars[p.eco] {
+				if _, ok := rule.envValue(step, name); ok {
+					cred = name
+					break
+				}
+			}
+			if m := powerShellTokenRe.FindStringSubmatch(code); cred == "" && m != nil {
+				cred = strings.ToLower(m[1])
+			}
+			if granted && cred == "" {
+				break
+			}
+			info := trustedPublishing[p.eco]
+			pos := origin.Map(i+1, utf8.RuneCountInString(code[:loc[0]])+1)
+			rule.errorIDAt("use-trusted-publishing", &Pos{Line: pos.Line, Col: pos.Col}, trustedPublishingMessage(p.cmd, info.registry, info.instead, cred, granted))
+			break
+		}
 	}
 }
 

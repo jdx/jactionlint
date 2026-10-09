@@ -13,23 +13,28 @@ import (
 // https://docs.github.com/en/actions/writing-workflows/workflow-syntax-for-github-actions#concurrency
 type RuleConcurrencyLimits struct {
 	RuleBase
-	src []byte
+	src  []byte
+	path string
 }
 
 // NewRuleConcurrencyLimits creates a new RuleConcurrencyLimits instance. The source is used to find
 // where to report a workflow without any concurrency setting. It can be empty.
-func NewRuleConcurrencyLimits(src []byte) *RuleConcurrencyLimits {
+func NewRuleConcurrencyLimits(path string, src []byte) *RuleConcurrencyLimits {
 	return &RuleConcurrencyLimits{
 		RuleBase: RuleBase{
 			name: "concurrency-limits",
 			desc: "Checks that workflows limit concurrent runs with \"concurrency:\"",
 		},
-		src: src,
+		src:  src,
+		path: path,
 	}
 }
 
 // VisitWorkflowPre is callback when visiting Workflow node before visiting its children.
 func (rule *RuleConcurrencyLimits) VisitWorkflowPre(n *Workflow) error {
+	if isCopilotSetupSteps(rule.path) {
+		return nil
+	}
 	if c := n.Concurrency; c != nil {
 		// Whether runs are cancelled is a choice: serializing a release pipeline is as valid as cancelling
 		// the superseded runs of a test pipeline. Only the form which cannot cancel at all is reported.
@@ -42,12 +47,13 @@ func (rule *RuleConcurrencyLimits) VisitWorkflowPre(n *Workflow) error {
 		// The caller decides how many runs of a reusable workflow exist
 		return nil
 	}
-	// Jobs which call a reusable workflow are limited by that workflow. Every other job needs a limit,
-	// at the workflow or on the job itself.
+	// Every job needs a limit, at the workflow or on the job itself. That includes the jobs which call a reusable
+	// workflow: a concurrency group in the called workflow can deadlock with the one of the caller, so the caller is
+	// where the limit belongs (zizmor#1619).
 	hasJob := false
 	limited := true
 	for _, j := range n.Jobs {
-		if j == nil || j.WorkflowCall != nil {
+		if j == nil {
 			continue
 		}
 		hasJob = true
@@ -181,6 +187,6 @@ func init() {
 		if !env.config.RuleEnabled("concurrency-limits") {
 			return nil
 		}
-		return []Rule{NewRuleConcurrencyLimits(env.src)}
+		return []Rule{NewRuleConcurrencyLimits(env.path, env.src)}
 	})
 }

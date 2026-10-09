@@ -15,15 +15,16 @@ func NewRuleRefConfusion(sess *onlineSession) *RuleRefConfusion {
 // VisitWorkflowPost implements Pass.
 func (r *RuleRefConfusion) VisitWorkflowPost(*Workflow) error {
 	for _, s := range r.sites {
-		if s.ref.RefKind != RefSemverTag && s.ref.RefKind != RefOther {
-			continue // A commit SHA is not a name. A short SHA could be, but it is not a name anybody means.
+		short := s.ref.RefKind == RefShortSHA
+		if s.ref.RefKind != RefSemverTag && s.ref.RefKind != RefOther && !short {
+			continue // A full commit SHA is read as the commit
 		}
 		_, isTag, err := r.sess.TagCommit(s.ref.Owner, s.ref.Repo, s.ref.Ref)
 		if err != nil {
 			r.skipped(s, "the tag", err)
 			continue
 		}
-		if !isTag {
+		if !isTag && !short {
 			continue
 		}
 		_, isBranch, err := r.sess.BranchCommit(s.ref.Owner, s.ref.Repo, s.ref.Ref)
@@ -31,7 +32,18 @@ func (r *RuleRefConfusion) VisitWorkflowPost(*Workflow) error {
 			r.skipped(s, "the branch", err)
 			continue
 		}
-		if isBranch {
+		switch {
+		case short && (isBranch || isTag):
+			// An abbreviated hash is a name like any other to GitHub, which prefers a branch or a tag of that name to
+			// the commit. Whoever creates one decides what runs (zizmor#2321)
+			kind := "branch"
+			if !isBranch {
+				kind = "tag"
+			}
+			r.ReportIDf("ref-confusion", s.pos,
+				"ref %q of %s %q looks like an abbreviated commit SHA but is also a %s of %s, and GitHub resolves the name before the commit. pin the action to a full-length commit SHA",
+				s.ref.Ref, s.what(), s.ref.Raw, kind, s.repoSlug())
+		case isTag && isBranch:
 			r.ReportIDf("ref-confusion", s.pos,
 				"ref %q of %s %q is both a branch and a tag of %s, so it is ambiguous what runs and whoever controls the other ref can change it. pin the action to a full-length commit SHA",
 				s.ref.Ref, s.what(), s.ref.Raw, s.repoSlug())

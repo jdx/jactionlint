@@ -62,6 +62,9 @@ Each rule has:
 - a **pedantic option**: a few audits report their noisier findings too when the option ` + "`pedantic`" + ` is true. It is true under
   the ` + "`pedantic`" + ` profile and false otherwise, and ` + "`rules: {<id>: {pedantic: true}}`" + ` turns it on for one audit.
 
+The rules of the security, policy and style groups do not look at a job or a step whose ` + "`if:`" + ` is the literal ` + "`false`" + `, because it
+never runs. The rules of the correctness group still do: a mistake in it breaks the file whether it runs or not.
+
 ` + "```yaml" + `
 # .github/jactionlint.yaml
 profile: pedantic

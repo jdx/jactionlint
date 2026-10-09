@@ -295,12 +295,14 @@ type jobRange struct {
 	id         string
 	uses       string
 	steps      []stepRange
+	dead       bool // the job never runs: its "if:" is the literal false
 }
 
 type stepRange struct {
 	start, end int
 	id, name   string
 	uses       string
+	dead       bool // the step never runs: its "if:" is the literal false
 }
 
 // lastStepEnd returns the 1-based last line of the step item which starts at the 0-based line i, for the
@@ -343,7 +345,7 @@ func newScopeIndex(w *Workflow, src []byte) *scopeIndex {
 		if job == nil || job.Pos == nil || job.Pos.Line < 1 || job.Pos.Line > len(lines) {
 			continue
 		}
-		jr := jobRange{start: job.Pos.Line, end: ignoreTargetEnd(lines, job.Pos.Line-1)}
+		jr := jobRange{start: job.Pos.Line, end: ignoreTargetEnd(lines, job.Pos.Line-1), dead: isStaticallyFalse(job.If)}
 		if job.ID != nil {
 			jr.id = job.ID.Value
 		}
@@ -369,6 +371,7 @@ func newScopeIndex(w *Workflow, src []byte) *scopeIndex {
 			if sr.end < sr.start {
 				sr.end = sr.start
 			}
+			sr.dead = isStaticallyFalse(step.If)
 			if step.ID != nil {
 				sr.id = step.ID.Value
 			}

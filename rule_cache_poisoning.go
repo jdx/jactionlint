@@ -24,6 +24,39 @@ func looksAtTrigger(v string) bool {
 // majorVersionRegex captures the major version of a tag such as v3.1.0.
 var majorVersionRegex = regexp.MustCompile(`^v?([0-9]+)`)
 
+// majorOf returns the major version of a ref that is a version tag.
+func majorOf(u *UsesRef) (int, bool) {
+	if u.RefKind != RefSemverTag {
+		return 0, false
+	}
+	m := majorVersionRegex.FindStringSubmatch(u.Ref)
+	if m == nil {
+		return 0, false
+	}
+	major, err := strconv.Atoi(m[1])
+	return major, err == nil
+}
+
+// withCommentVersion returns the reference of a step, as the version of its comment when the action is pinned to a
+// commit and the comment says which version that is ("# v10.0.0"). Rules that decide by the version of an action
+// can then tell it from a commit hash. The reference is returned as it is when there is no such comment.
+func withCommentVersion(w *Workflow, a *ExecAction, u *UsesRef) *UsesRef {
+	if u.RefKind != RefFullSHA || w == nil || w.Comments == nil || a.Uses == nil || a.Uses.Pos == nil {
+		return u
+	}
+	c := w.Comments.Inline(a.Uses.Pos.Line)
+	if c == nil {
+		return u
+	}
+	v, ok := commentVersion(c.Text)
+	if !ok {
+		return u
+	}
+	cp := *u
+	cp.Ref, cp.RefKind = v, RefSemverTag
+	return &cp
+}
+
 // inputEnabled returns the value of the input and whether it is set to something which is neither
 // empty nor a literal false.
 func inputEnabled(a *ExecAction, name string) (string, bool) {
@@ -84,10 +117,16 @@ var cacheActions = []cacheAction{
 		return ok, "remove the \"bundler-cache\" input"
 	}},
 	{"astral-sh/setup-uv", func(a *ExecAction, u *UsesRef) (bool, string) {
-		// "auto" is the default and enables the cache on GitHub-hosted runners
+		// "auto" is the default and enables the cache on GitHub-hosted runners. From v10 it does not on the
+		// events that are open to cache poisoning (zizmor#2320)
 		v, set := a.input("enable-cache")
 		if set && isFalseLiteral(v) {
 			return false, ""
+		}
+		if !set || strings.EqualFold(strings.TrimSpace(v), "auto") {
+			if major, ok := majorOf(u); ok && major >= 10 {
+				return false, ""
+			}
 		}
 		return true, "set \"enable-cache: false\""
 	}},
@@ -295,7 +334,7 @@ func (rule *RuleCachePoisoning) VisitJobPre(n *Job) error {
 		if i < 0 {
 			continue
 		}
-		reads, hint := cacheActions[i].reads(a, ref)
+		reads, hint := cacheActions[i].reads(a, withCommentVersion(rule.wf, a, ref))
 		if !reads || !cacheCanRunOnReleaseTrigger(n, s, a, name, scenarios) {
 			continue
 		}

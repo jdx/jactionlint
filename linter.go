@@ -815,6 +815,9 @@ func (l *Linter) isActionFile(p string) bool {
 // the file is a workflow, for which the online pin fixes are attached.
 func (l *Linter) finishCheck(path string, content []byte, all []*Error, cfg *Config, bl *baselineState, start time.Time, isWorkflow bool, ic *ignoreContext) []*Error {
 	all = append(all, checkSourceRules(content, cfg)...)
+	if ic != nil {
+		all = dropUnreachable(all, ic.scopes)
+	}
 	all = l.annotateErrors(all, content, cfg)
 
 	// The ignores of the config file are matched first, without removing anything, so that the inline

@@ -66,6 +66,50 @@ How to read the table:
 | `unsound-ternary` | `unsound-ternary` | 3 / C | correctness | not yet assessed |
 | `use-trusted-publishing` | `use-trusted-publishing` | 3 / D | default | partial: 2 of the 4 findings of zizmor on the corpus. The 2 others are in reusable workflows without `permissions:`, which jactionlint skips because the caller may grant `id-token: write`. No `pwsh` scripts and no `npm run publish`. See [the check](checks.md#check-use-trusted-publishing) |
 
+## Profiles and personas
+
+zizmor gives every finding a persona (`regular`, `pedantic` or `auditor`), read from the source of v1.30.1 (`Persona::` in
+`crates/zizmor/src/audit`). jactionlint has three [profiles](config.md#profiles), each including the one before it. The `regular`
+persona is the `default` profile, `pedantic` and `auditor` are the `pedantic` profile, and an audit with findings of both is one
+rule with the option `pedantic` for the noisier findings. The sections below that measure a batch name the profiles of the time:
+`strict` is today's `default` for the security rules and `all` is today's `pedantic`.
+
+| zizmor audit | Persona | jactionlint |
+| --- | --- | --- |
+| `anonymous-definition`, `undocumented-permissions` | pedantic | `pedantic` profile |
+| `self-hosted-runner`, `secrets-outside-env` | auditor | `pedantic` profile |
+| `concurrency-limits` | pedantic | `default` profile, a decision of the maintainer; it has a safe fix for workflows that only pull requests start |
+| `template-injection`, `superfluous-actions`, `unpinned-tools`, `unlocked-install` | regular and pedantic | `default` profile, the pedantic findings behind the option `pedantic` |
+| `misfeature` | regular, the custom shells auditor | `default` profile, custom shells behind the option `pedantic` |
+| `artipacked`, `excessive-permissions`, `obfuscation`, `unpinned-images`, `unpinned-uses`, `insecure-commands` | regular, with pedantic or auditor findings for special cases | `default` profile; the special cases are not separate findings yet |
+| `ref-version-mismatch`, `stale-action-refs` | pedantic | online (`-online`) |
+| every other audit | regular | `default` profile, or online |
+
+## Lessons applied
+
+The issue tracker of zizmor is a list of false positives and false negatives that a rule of the same shape can have. Each item below
+was reproduced with a fixture in `pitfalls_test.go` against jactionlint before anything was changed. "Fixed" means that the fixture failed on
+the code before.
+
+| zizmor | What went wrong there | jactionlint |
+| --- | --- | --- |
+| [#2219](https://github.com/zizmorcore/zizmor/issues/2219) | `github-app` flags `owner` without `repositories` although the token only has organization permissions | Fixed: no finding when every `permission-*` input is an organization permission |
+| [#1914](https://github.com/zizmorcore/zizmor/issues/1914) | `bot-conditions` flags `github.actor == 'dependabot[bot]'` next to a check of the pull request author | Fixed: a conjunction with a check of the author of the pull request is not reported |
+| [#2059](https://github.com/zizmorcore/zizmor/issues/2059) | findings in steps with `if: false` | Fixed for every rule outside the correctness group, in one place (the findings in a job or a step whose `if:` is the literal false are dropped) |
+| [#1098](https://github.com/zizmorcore/zizmor/issues/1098), [#1043](https://github.com/zizmorcore/zizmor/issues/1043) | `artipacked` flags a checkout that a later `git push` needs, and `actions/checkout@v1` | Fixed: neither is reported (a push next to an upload of the workspace still is). Two `# zizmor: ignore[artipacked]` comments of the fix corpus became stale |
+| [#2320](https://github.com/zizmorcore/zizmor/issues/2320) | `cache-poisoning` on `astral-sh/setup-uv` v10 with `enable-cache: auto` | Fixed: version aware, the version is read from the comment of a pinned commit too. The guard `if: github.event_name != 'release'` on a step was already honored |
+| [#1848](https://github.com/zizmorcore/zizmor/issues/1848) | `use-trusted-publishing` is silent when `id-token: write` is granted (for provenance or a cloud login), and misses PowerShell | Fixed: a long-lived credential next to `id-token: write` is reported, and `pwsh` scripts are searched line by line |
+| [#1479](https://github.com/zizmorcore/zizmor/issues/1479) | `dependabot-cooldown` on OpenTofu | Not a flaw: the options reference of GitHub lists `default-days` for every ecosystem, OpenTofu included, and only `semver-*-days` is limited. A test keeps every ecosystem reported |
+| [#1481](https://github.com/zizmorcore/zizmor/issues/1481) | `copilot-setup-steps.yml` is not an ordinary workflow | Fixed for `concurrency-limits` and `anonymous-definition`. `missing-timeout` still applies, because the file accepts `timeout-minutes` |
+| [#1619](https://github.com/zizmorcore/zizmor/issues/1619) | `concurrency-limits` skips a caller whose jobs all call reusable workflows | Fixed: the caller is reported, because the called workflow cannot hold the limit without deadlocking |
+| [#1865](https://github.com/zizmorcore/zizmor/issues/1865) | `superfluous-actions` on self-hosted runners | Fixed: not reported there |
+| [#2433](https://github.com/zizmorcore/zizmor/issues/2433) and the other `ref-version-mismatch` issues | a second comment after the version, prereleases, sibling tags | Not reproduced: the version is the first word of the comment. Kept as fixtures |
+| [#2321](https://github.com/zizmorcore/zizmor/issues/2321) | `ref-confusion` ignores hash-pinned refs, but a branch can be named like a hash | Fixed for abbreviated SHAs, which are names to GitHub. Full SHAs are read as commits and are not looked up |
+| [#2130](https://github.com/zizmorcore/zizmor/issues/2130) | `impostor-commit` and annotated tag objects | Not reproduced: the client dereferences annotated tags, and a SHA that GitHub cannot compare is no verdict, not an impostor |
+| [#1673](https://github.com/zizmorcore/zizmor/issues/1673) | `secrets: inherit` under `on.workflow_call` | Open: the documentation and the workflow schema of GitHub show only a mapping there, so the syntax error stays. Whether GitHub runs such a file was not tested |
+| [#2210](https://github.com/zizmorcore/zizmor/issues/2210) and others | one 403, 404 or 5xx stops the online run | Not reproduced: a failed lookup is skipped with one warning (`-verbose` lists them). A test covers 404, 403, 500 and 502 |
+| [GHSA-f42p-wjw5-97qh](https://github.com/zizmorcore/zizmor/security/advisories/GHSA-f42p-wjw5-97qh) | credentials in the debug log | Not reproduced: a test runs `-online -debug -verbose` with a token and finds it nowhere |
+
 ## Beyond zizmor
 
 <a id="beyond-zizmor"></a>

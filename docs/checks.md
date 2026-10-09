@@ -2862,6 +2862,11 @@ are dry runs and publishing to a registry of your own (`--registry`, `--reposito
 registry once, then use `pypa/gh-action-pypi-publish`, `rubygems/release-gem`, `rust-lang/crates-io-auth-action`, `NuGet/login`
 or `npm publish` with that permission.
 
+`id-token: write` does not silence the rule by itself, because jobs ask for it to sign in to a cloud provider or to publish with
+provenance: a publish command that is given a long-lived credential (an environment variable such as `NODE_AUTH_TOKEN` or
+`CARGO_REGISTRY_TOKEN`, or `--token`) is reported even when the job can request the OIDC token. Scripts of `shell: pwsh` (the default
+shell of the Windows runners) and `powershell` are searched for the publish commands line by line.
+
 <a id="check-superfluous-actions"></a>
 ## Superfluous actions
 
@@ -2900,6 +2905,9 @@ With the option `pedantic` (on under the `pedantic` profile) the rule reports th
 misses a feature: `peter-evans/create-pull-request`, `peter-evans/create-or-update-comment`, `dtolnay/rust-toolchain`,
 `stefanzweifel/git-auto-commit-action` and `EndBug/add-and-commit`. Each entry of the table `superfluousActions` in
 `rule_superfluous_actions.go` names its source (the audit of zizmor, or the README of the archived action).
+
+Nothing is reported for a job that runs on a `self-hosted` runner, because the tools of the GitHub-hosted images are not there and the
+action is what installs them.
 
 <a id="check-unlocked-install"></a>
 ## Installs without a lock file
@@ -3452,6 +3460,9 @@ Only `actions/create-github-app-token` is checked. Other actions which issue app
 
 [create-github-app-token]: https://github.com/actions/create-github-app-token
 
+`owner` without `repositories` is not reported when every `permission-*` input is an organization permission (`permission-members`,
+`permission-organization-*` and the like), because such a token has no repository to list.
+
 <a id="check-artipacked"></a>
 ## Persisted checkout credentials
 
@@ -3505,6 +3516,11 @@ later `run:` script has a `git` command that talks to a remote (`push`, `pull`, 
 `peter-evans/create-pull-request`), the fix is unsafe and needs `-fix=unsafe`. A script which pushes without a visible git
 command cannot be detected, so check the workflow after applying the fix. A step written in flow style (`- {uses: ...}`) is
 reported without a fix.
+
+A checkout is not reported when a later step of the job pushes with the credential it left (a `git push` in a script or an action
+such as `stefanzweifel/git-auto-commit-action`) and no step uploads the workspace (`path: .`, `..` or `${{ github.workspace }}`),
+because the credential is what the push needs and nothing publishes it. `actions/checkout@v1` is not reported either: it has no
+`persist-credentials` input to set.
 
 <a id="check-cache-poisoning"></a>
 ## Cache poisoning
@@ -3581,6 +3597,10 @@ The rule also reports `cache-mode: write` and `cache-mode: write-only` in a work
 
 Differences from [zizmor](https://docs.zizmor.sh/audits/#cache-poisoning): zizmor reports a release workflow once for the trigger and once
 for each step. jactionlint reports the steps (and the job-level publishing detection is jactionlint only).
+
+`astral-sh/setup-uv` from v10 on, with `enable-cache` unset or `auto`, does not restore a cache on the events that are open to cache
+poisoning, so it is not reported. The version is the tag of the `uses:`, or the version in the comment after a pinned commit
+(`# v10.0.0`).
 
 <a id="check-reusable-workflows"></a>
 ## Reusable workflows
@@ -5030,6 +5050,8 @@ only job; with several jobs it has no fix.
 To turn the rule off for a project, set `anonymous-definition: off` in `rules`. Single findings can be ignored with
 `# jactionlint ignore=anonymous-definition`.
 
+`copilot-setup-steps.yml` is not reported, see [concurrency limits](#check-concurrency-limits).
+
 <a id="check-concurrency-limits"></a>
 ## Concurrency limits
 
@@ -5084,14 +5106,19 @@ pull request and nothing else. A group that is the same for every pull request w
 [`concurrency-cancels-prs`](#check-concurrency-cancels-prs) reports.
 
 Whether to cancel is a choice, so a `concurrency:` mapping that does not cancel (to serialize releases, for example) is
-accepted, and so is a `queue:`. The rule skips workflows that only run through `workflow_call` (the caller decides), workflows
-whose jobs all call a reusable workflow, and workflows where every job sets its own `concurrency:`.
+accepted, and so is a `queue:`. The rule skips workflows that only run through `workflow_call` (the caller decides) and workflows where every job sets its own
+`concurrency:`.
 
 `jactionlint -fix` adds the block above after `on:` when it is safe to do so, that is, only for a workflow whose triggers are all
 events of a pull request (`pull_request`, `pull_request_target`, `pull_request_review` and `pull_request_review_comment`), in which
 no job has an `environment:` or publishes or deploys anything, no job has a `concurrency:` of its own, and the file has no
 anchors or aliases. It never adds the block to a workflow that a push, a tag, a release or a manual run starts, because cancelling
 those runs is a decision about the workflow: use the group of your choice there.
+
+The workflow `.github/workflows/copilot-setup-steps.yml` is not reported: GitHub runs it when the Copilot coding agent starts, from a
+job with a fixed ID, and a concurrency group has no use there. A caller workflow whose jobs all call reusable workflows is reported
+like any other, because a `concurrency:` in the called workflow can deadlock with the one of its caller, so the caller is where the
+limit belongs.
 
 <a id="check-secrets-inherit"></a>
 ## Inherited secrets
@@ -6037,6 +6064,10 @@ Use `github.event.pull_request.user.login` (or `.id`), the author of the pull re
 that somebody else pushed to, where it used to be false. The GitHub documentation also recommends not auto-merging from
 `pull_request_target`.
 
+A condition that also requires the author of the pull request to be the bot, such as
+`github.actor == 'dependabot[bot]' && github.event.pull_request.user.login == 'dependabot[bot]'`, is not reported: the author is
+what proves that the bot made the change, and the actor next to it only narrows the condition.
+
 <a id="check-obfuscation"></a>
 ## Obfuscated paths and expressions
 
@@ -6278,6 +6309,9 @@ test.yaml:8:15: warning: ref "v1" of action "example/confusing@v1" is both a bra
 <!-- Skip playground link -->
 
 Refs which are commit SHAs are never ambiguous and are not looked up.
+
+An abbreviated commit SHA (7 to 39 hexadecimal digits) is read as a name by GitHub, which prefers a branch or a tag of that name to the
+commit, so it is reported when the repository has one. A full-length SHA is read as the commit and is not looked up.
 
 <a id="check-stale-action-refs"></a>
 ## Stale action refs (online)
