@@ -237,11 +237,14 @@ func partialMatch(fn string, kind nameKind, lit string) (why, advice string, uns
 		}
 		return "a repository whose name only contains " + quote(lit), compare, true
 	case nameRef:
-		if strings.HasSuffix(lit, "/") {
+		if fn == "startswith" && strings.HasSuffix(lit, "/") {
 			return "", "", false // a namespace like release/ is meant to match every name in it
 		}
-		return "a branch or a tag whose name only " + map[string]string{"startswith": "begins with", "endswith": "ends with", "contains": "contains"}[fn] + " " + quote(lit),
-			"compare the whole name, or end the prefix with a slash if it is a namespace", true
+		fix := "compare the whole name"
+		if fn == "startswith" {
+			fix += ", or end the prefix with a slash if it is a namespace"
+		}
+		return "a branch or a tag whose name only " + map[string]string{"startswith": "begins with", "endswith": "ends with", "contains": "contains"}[fn] + " " + quote(lit), fix, true
 	}
 	return "", "", false
 }

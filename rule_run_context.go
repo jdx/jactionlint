@@ -172,13 +172,17 @@ func (c *runContext) grantsIDToken() bool {
 	return ok && s != nil && s.Value != nil && strings.EqualFold(s.Value.Value, "write")
 }
 
-// permissionsComeFromCaller reports whether the permissions of the job are not decided by this file: a reusable
+// permissionsComeFromCaller reports whether the permissions of the job are not decided by this file: a composite
+// action has none, and a reusable
 // workflow without `permissions:` runs with what its caller grants. That holds only when the caller is the only
 // way to start it: with another event next to workflow_call (push, release), a run of that event uses the default
 // token, which no caller can raise.
 func (c *runContext) permissionsComeFromCaller() bool {
 	if c.wf == nil || c.job == nil || c.job.Permissions != nil || c.wf.Permissions != nil {
 		return false
+	}
+	if c.wf.Action != nil {
+		return true // the steps of a composite action run with the token of the job that calls it
 	}
 	if _, ok := c.wf.FindWorkflowCallEvent(); !ok {
 		return false
