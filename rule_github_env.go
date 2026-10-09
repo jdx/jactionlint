@@ -172,15 +172,28 @@ var reExpressionSpan = regexp.MustCompile(`(?s)\$\{\{.*?\}\}`)
 
 func (rule *RuleGitHubEnv) judgeHeredoc(s *runscript.Script, h *runscript.Heredoc) data {
 	d := rule.judgeExprList(h.Exprs, 0)
-	if !h.Quoted && (strings.Contains(h.Body, "$") || strings.Contains(h.Body, "`")) {
-		// the body is expanded by the shell: `${{ }}` is already judged, other expansions are not literals
-		body := reExpressionSpan.ReplaceAllString(h.Body, "")
-		if strings.Contains(body, "$") || strings.Contains(body, "`") {
-			d = d.worse(data{kind: dataUnknown})
-		}
+	if h.Quoted || (!strings.Contains(h.Body, "$") && !strings.Contains(h.Body, "`")) {
+		return d
+	}
+	// The body is expanded by the shell: `${{ }}` is already judged. A plain variable ($NAME or ${NAME}) is judged
+	// by its value like in the argument of echo; any other expansion is not a literal.
+	body := reExpressionSpan.ReplaceAllString(h.Body, "")
+	if strings.Contains(body, "`") {
+		d = d.worse(data{kind: dataUnknown})
+	}
+	rest := reHeredocVar.ReplaceAllStringFunc(body, func(m string) string {
+		name := strings.Trim(m, "${}")
+		d = d.worse(rule.judgeVar(s, name, 0))
+		return ""
+	})
+	if strings.Contains(rest, "$") {
+		d = d.worse(data{kind: dataUnknown})
 	}
 	return d
 }
+
+// reHeredocVar matches a plain reference to a variable in the body of a here document.
+var reHeredocVar = regexp.MustCompile(`\$(?:[A-Za-z_][A-Za-z0-9_]*|\{[A-Za-z_][A-Za-z0-9_]*\})`)
 
 // benignSubstitutionCommands are commands whose output does not depend on anything an outsider controls when their
 // arguments do not: they print a fresh name, the time, the working directory or a property of the machine.
