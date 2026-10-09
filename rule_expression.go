@@ -615,10 +615,13 @@ func (rule *RuleExpression) checkWorkflowCall(c *WorkflowCall) {
 		var ty ExprType = StringType{}
 		switch len(ts) {
 		case 0:
-			switch v {
-			case "null":
+			switch {
+			case i.Value.Quoted:
+				// A quoted YAML scalar is a string even when its text reads like a bool, a number
+				// or null: "true" passed to a string input is fine.
+			case v == "null":
 				ty = NullType{}
-			case "true", "false":
+			case v == "true" || v == "false":
 				ty = BoolType{}
 			default:
 				if _, err := strconv.ParseFloat(v, 64); err == nil {
