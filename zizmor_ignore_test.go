@@ -225,6 +225,28 @@ func TestZizmorUnusedIgnore(t *testing.T) {
 		}
 	}
 
+	// Never for an online rule while the online checks are off: it could not have reported anything
+	offline := mustParseConfig(t, "rules:\n  unused-ignore: warn\n")
+	if have := lintZ(t, offline, step("# zizmor: ignore[impostor-commit]")); len(have) != 0 {
+		t.Errorf("an online rule must not be reported offline: %v", have)
+	}
+	// With -online the same comment is stale
+	{
+		l, err := NewLinter(io.Discard, &LinterOptions{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		l.defaultConfig = withoutMissingTimeout(offline)
+		l.online = onlineSettings{enabled: true, client: onlineFixtureClient(t)}
+		errs, err := l.Lint("test.yaml", []byte(step("# zizmor: ignore[impostor-commit]")), nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(errs) != 1 || errs[0].ID != "unused-ignore" {
+			t.Errorf("online, the comment is stale: %v", errs)
+		}
+	}
+
 	// A mix reports only the stale name of the mapped rules, with its position
 	l, err := NewLinter(io.Discard, &LinterOptions{})
 	if err != nil {
@@ -262,6 +284,12 @@ func TestMigrateZizmorIgnores(t *testing.T) {
 			"a:\n  - uses: a/b@abc # v2.9.2 # zizmor: ignore[unpinned-uses,cache-poisoning]\n",
 			"a:\n  # jactionlint ignore=unpinned-uses,cache-poisoning\n  - uses: a/b@abc # v2.9.2\n",
 			"unpinned-uses, cache-poisoning",
+		},
+		{
+			"keeps unpinned-images, which covers only the Docker images of unpinned-uses",
+			"a:\n  - uses: docker://alpine:3 # zizmor: ignore[unpinned-images]\n",
+			"a:\n  - uses: docker://alpine:3 # zizmor: ignore[unpinned-images]\n",
+			"",
 		},
 		{
 			"keeps a name without a counterpart",

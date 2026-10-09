@@ -208,9 +208,10 @@ func (e *inlineIgnoreEntry) matchesZizmor(err *Error) bool {
 
 // zizmorEntryActive returns whether a zizmor ignore could suppress anything with the configuration:
 // one of the diagnostics it stands for must be enabled.
-func zizmorEntryActive(e *inlineIgnoreEntry, cfg *Config) bool {
+func zizmorEntryActive(e *inlineIgnoreEntry, cfg *Config, online bool) bool {
 	for _, t := range e.targets {
-		if cfg.RuleEnabled(t.ID) {
+		// An online rule cannot report anything while the online checks are off
+		if cfg.RuleRuns(t.ID, online) {
 			return true
 		}
 	}
@@ -323,13 +324,15 @@ func MigrateZizmorIgnores(src []byte) ([]byte, []string) {
 // diagnostics of its rule (unpinned-images) cannot be written as a rule ID, so such an audit stays in the zizmor comment.
 func migrationIDs(name string) []string {
 	var ret []string
+	for _, a := range zizmorAliases[name] {
+		if a.MessageContains != "" {
+			return nil // covers only part of the findings of a rule: the zizmor comment stays
+		}
+	}
 	if _, ok := LookupRule(name); ok {
 		ret = append(ret, name)
 	}
 	for _, a := range zizmorAliases[name] {
-		if a.MessageContains != "" {
-			continue
-		}
 		if _, ok := LookupRule(a.ID); ok && !containsString(ret, a.ID) {
 			ret = append(ret, a.ID)
 		}

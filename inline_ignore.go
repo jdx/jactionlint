@@ -245,7 +245,7 @@ func unusedInlineIgnores(ignores []inlineIgnore, orphans []*inlineIgnoreEntry, c
 		}
 		if e.zizmor != "" {
 			// Only for an audit which maps onto a rule that is on: a rule which is off cannot report anything
-			return zizmorEntryActive(e, cfg)
+			return zizmorEntryActive(e, cfg, online)
 		}
 		return e.pat.ID == "" || cfg.RuleRuns(e.pat.ID, online)
 	}
