@@ -279,11 +279,27 @@ func (b *builder) finishPipelines() {
 	}
 }
 
-// clearOverwrittenAndOnly clears AndOnly for the commands of the stage which are in a `{ }` group or `( )` subshell
-// of the stage, in a statement which is not the last one of the group. The status of the group is the status of its
-// last statement, so a later statement overwrites the failure of the `&&` list.
+// clearOverwrittenAndOnly clears AndOnly for the commands of the stage which are in a `{ }` group or `( )` subshell of
+// the stage, in a statement which is not the last one of the group. The status of the group is the status of its last
+// statement, so a later statement overwrites the failure of the `&&` list. Pipelines and substitutions inside the
+// stage are not entered: their commands are judged for the stage of their own pipeline, and a group around them says
+// nothing about how that pipeline hides a failure.
 func (b *builder) clearOverwrittenAndOnly(stage *syntax.Stmt) {
-	syntax.Walk(stage, func(n syntax.Node) bool {
+	ownCommands := func(root syntax.Node, visit func(syntax.Node)) {
+		syntax.Walk(root, func(n syntax.Node) bool {
+			switch n := n.(type) {
+			case *syntax.BinaryCmd:
+				if isPipe(n.Op) {
+					return false
+				}
+			case *syntax.CmdSubst, *syntax.ProcSubst:
+				return false
+			}
+			visit(n)
+			return true
+		})
+	}
+	ownCommands(stage, func(n syntax.Node) {
 		var stmts []*syntax.Stmt
 		switch g := n.(type) {
 		case *syntax.Block:
@@ -292,16 +308,14 @@ func (b *builder) clearOverwrittenAndOnly(stage *syntax.Stmt) {
 			stmts = g.Stmts
 		}
 		for i := 0; i+1 < len(stmts); i++ {
-			syntax.Walk(stmts[i], func(m syntax.Node) bool {
+			ownCommands(stmts[i], func(m syntax.Node) {
 				if call, ok := m.(*syntax.CallExpr); ok {
 					if c := b.cmds[call]; c != nil {
 						c.AndOnly = false
 					}
 				}
-				return true
 			})
 		}
-		return true
 	})
 }
 
