@@ -5046,7 +5046,11 @@ jactionlint reports a pipeline when all of the following hold:
   followed by `|| true` in the first stage (`{ git show || true; cat note; } | sort`) is not blamed either.
 - No later stage stops reading early. `head`, `grep -q`, `grep -m`, `read`, `sed ... q` and `awk ... exit` end the pipeline
   before the producer is done, which kills it with SIGPIPE. With `pipefail` such a pipeline fails although nothing went wrong,
-  so such pipelines are not reported.
+  so such pipelines are not reported. That holds for a pipeline in the body of a loop as well
+  (`for s in a b; do cmd "$s" | grep -Fq x; done`).
+- The pipeline is not inside a command substitution in the argument of a command (`echo "hash=$(sha256sum f | cut -d' ' -f1)"`):
+  the status of the substitution is not the status of anything, so `pipefail` would change nothing. The value of an assignment
+  (`hash=$(sha256sum f | cut -d' ' -f1)`) is the status of the assignment, and that pipeline is reported.
 
 Add `set -o pipefail` before the pipeline or use `shell: bash`. `shell: sh` has no `pipefail` in dash (the `sh` of Ubuntu),
 so use `shell: bash` there. Be aware that turning `pipefail` on makes hidden failures fail the step, and that `grep` without a
