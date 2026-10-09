@@ -74,11 +74,8 @@ func deployCommand(c *runscript.Command) (string, bool) {
 		return "", false
 	}
 	if tool == "goreleaser" {
-		// A snapshot or a run that skips publishing releases nothing
-		for _, w := range words[i+1:] {
-			if strings.HasPrefix(w, "--snapshot") || strings.HasPrefix(w, "--skip") {
-				return "", false
-			}
+		if goreleaserReleasesNothing(words[i+1:]) {
+			return "", false
 		}
 	}
 	for _, w := range words[i+1:] {
@@ -87,6 +84,32 @@ func deployCommand(c *runscript.Command) (string, bool) {
 		}
 	}
 	return "", false
+}
+
+// goreleaserReleasesNothing reports whether the arguments of goreleaser make a run that publishes nothing: a snapshot, or
+// a run that skips the publish step (--skip-publish, --skip=publish, --skip publish, with other steps in the list as
+// well). Other skips (--skip=validate, --skip-validate, --skip=sign) still release.
+func goreleaserReleasesNothing(args []string) bool {
+	skipsPublish := func(list string) bool {
+		return slices.Contains(strings.Split(list, ","), "publish")
+	}
+	for i, w := range args {
+		switch {
+		case w == "--snapshot" || w == "--snapshot=true":
+			return true
+		case w == "--skip-publish" || w == "--skip-publish=true":
+			return true
+		case strings.HasPrefix(w, "--skip="):
+			if skipsPublish(strings.TrimPrefix(w, "--skip=")) {
+				return true
+			}
+		case w == "--skip" && i+1 < len(args):
+			if skipsPublish(args[i+1]) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // releaseActions are actions that publish a release or deploy something.
@@ -184,7 +207,7 @@ func releaseSignal(j *Job, sc scenario) string {
 				}
 			case name == "goreleaser/goreleaser-action":
 				// A check or a snapshot build does not release anything
-				if v, ok := e.input("args"); ok && slices.Contains(strings.Fields(v), "release") && !strings.Contains(v, "--snapshot") && !strings.Contains(v, "--skip") {
+				if v, ok := e.input("args"); ok && slices.Contains(strings.Fields(v), "release") && !goreleaserReleasesNothing(strings.Fields(strings.ToLower(v))) {
 					return fmt.Sprintf("job %q runs goreleaser release", j.ID.Value)
 				}
 			}

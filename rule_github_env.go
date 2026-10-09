@@ -167,14 +167,14 @@ func (rule *RuleGitHubEnv) judgeCommand(s *runscript.Script, c *runscript.Comman
 	return d.worse(data{kind: dataUnknown})
 }
 
+// reExpressionSpan matches a ${{ }} expression with any spacing, `${{github.sha}}` included.
+var reExpressionSpan = regexp.MustCompile(`(?s)\$\{\{.*?\}\}`)
+
 func (rule *RuleGitHubEnv) judgeHeredoc(s *runscript.Script, h *runscript.Heredoc) data {
 	d := rule.judgeExprList(h.Exprs, 0)
 	if !h.Quoted && (strings.Contains(h.Body, "$") || strings.Contains(h.Body, "`")) {
 		// the body is expanded by the shell: `${{ }}` is already judged, other expansions are not literals
-		body := h.Body
-		for _, e := range h.Exprs {
-			body = strings.ReplaceAll(body, "${{ "+e+" }}", "")
-		}
+		body := reExpressionSpan.ReplaceAllString(h.Body, "")
 		if strings.Contains(body, "$") || strings.Contains(body, "`") {
 			d = d.worse(data{kind: dataUnknown})
 		}
@@ -361,10 +361,7 @@ func (rule *RuleGitHubEnv) judgeLine(rest string) data {
 	if d.kind == dataUntrusted {
 		return d
 	}
-	stripped := rest
-	for _, e := range exprsIn(rest) {
-		stripped = strings.ReplaceAll(stripped, "${{ "+e+" }}", "")
-	}
+	stripped := reExpressionSpan.ReplaceAllString(rest, "")
 	if strings.ContainsAny(stripped, "$%`(") {
 		d = d.worse(data{kind: dataUnknown})
 	}

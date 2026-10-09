@@ -173,13 +173,22 @@ func (c *runContext) grantsIDToken() bool {
 }
 
 // permissionsComeFromCaller reports whether the permissions of the job are not decided by this file: a reusable
-// workflow without `permissions:` runs with what its caller grants.
+// workflow without `permissions:` runs with what its caller grants. That holds only when the caller is the only
+// way to start it: with another event next to workflow_call (push, release), a run of that event uses the default
+// token, which no caller can raise.
 func (c *runContext) permissionsComeFromCaller() bool {
 	if c.wf == nil || c.job == nil || c.job.Permissions != nil || c.wf.Permissions != nil {
 		return false
 	}
-	_, ok := c.wf.FindWorkflowCallEvent()
-	return ok
+	if _, ok := c.wf.FindWorkflowCallEvent(); !ok {
+		return false
+	}
+	for _, e := range c.wf.On {
+		if e.EventName() != "workflow_call" {
+			return false
+		}
+	}
+	return true
 }
 
 // scriptPos maps an offset of the analyzed script to a position in the workflow file.

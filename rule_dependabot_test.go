@@ -240,6 +240,11 @@ func TestDependabotMissingActionsUpdate(t *testing.T) {
 		{"only local actions and docker", withoutActions, map[string]string{".github/workflows/ci.yml": "on: push\njobs:\n  test:\n    runs-on: x\n    steps:\n      - uses: ./.github/actions/foo\n      - uses: docker://alpine:3\n"}, false},
 		{"commented uses", withoutActions, map[string]string{".github/workflows/ci.yml": "on: push\njobs:\n  test:\n    runs-on: x\n    steps:\n      # - uses: actions/checkout@v4\n      - run: echo\n"}, false},
 		{"renovate", withoutActions, map[string]string{".github/workflows/ci.yml": usesAction, "renovate.json": "{}"}, false},
+		{"uses in the text of a script", withoutActions, map[string]string{".github/workflows/ci.yml": "on: push\njobs:\n  test:\n    runs-on: x\n    steps:\n      - run: |\n          echo hello\n          uses: actions/checkout@v4\n"}, false},
+		{"uses on the next line", withoutActions, map[string]string{".github/workflows/ci.yml": "on: push\njobs:\n  test:\n    runs-on: x\n    steps:\n      - uses:\n          actions/checkout@v4\n"}, true},
+		{"uses in a flow mapping", withoutActions, map[string]string{".github/workflows/ci.yml": "on: push\njobs:\n  test:\n    runs-on: x\n    steps:\n      - {uses: actions/checkout@v4}\n"}, true},
+		{"renovate key of package.json", withoutActions, map[string]string{".github/workflows/ci.yml": usesAction, "package.json": "{\"name\": \"x\", \"renovate\": {\"extends\": [\"config:recommended\"]}}"}, false},
+		{"package.json without renovate", withoutActions, map[string]string{".github/workflows/ci.yml": usesAction, "package.json": "{\"name\": \"x\"}"}, true},
 		{"renovate in .github", withoutActions, map[string]string{".github/workflows/ci.yml": usesAction, ".github/renovate.json5": "{}"}, false},
 	}
 	for _, tc := range tests {
