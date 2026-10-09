@@ -60,7 +60,10 @@ func TestIsCheckoutActionSpec(t *testing.T) {
 		"docker://checkout:latest":  false,
 		"checkout":                  false,
 		"./checkout":                false,
-		"owner/repo/checkout@v1":    false,
+		// A wrapper in the path of a remote repository may check out (pytorch/pytorch/.github/actions/checkout-pytorch)
+		"owner/repo/checkout@v1":                                true,
+		"pytorch/pytorch/.github/actions/checkout-pytorch@main": true,
+		"owner/repo/.github/actions/setup@v1":                   false,
 	}
 	for spec, want := range tests {
 		if have := isCheckoutActionSpec(spec); have != want {

@@ -2218,7 +2218,10 @@ jobs:
 
 A job is considered to check out the repository when an earlier step in the same job
 
-- uses an action whose `owner/repo` name contains `checkout` (e.g. `actions/checkout`), or
+- uses an action whose name contains `checkout` (e.g. `actions/checkout`, or a wrapper such as
+  `pytorch/pytorch/.github/actions/checkout-pytorch`; the owner, the repository and the path in the repository count), or
+  uses a remote action with an input that only a checkout has (`fetch-depth`, `persist-credentials`, `submodules`,
+  `sparse-checkout`, `sparse-checkout-cone-mode`, `lfs`, `fetch-tags`, `set-safe-directory`), or
 - has a `run:` script with a line containing `git` and one of `clone`, `init`, `fetch`, `pull`, `checkout`, `worktree` or
   `submodule`, or `gh repo clone` / `gh pr checkout`.
 
@@ -2227,6 +2230,8 @@ Known limitations (use `ignore` in the configuration file when they matter):
 - Whether the checkout step actually runs (`if:`) is not considered.
 - A self-hosted runner may keep the workspace between jobs, so a job without a checkout step can work there.
 - A step which generates the action directory without checking out the repository is reported.
+- What a remote composite action does cannot be known without fetching it, so the name and the inputs are a heuristic: a wrapper
+  with an unrelated name and none of the inputs above is not taken for a checkout and the next local action is reported.
 - `uses: $/path` (self-repository syntax) is never reported since it does not need a checkout. `uses:` of reusable workflows and
   composite action files are not checked.
 ### Require `${{ }}` in `if:` conditions (pedantic)

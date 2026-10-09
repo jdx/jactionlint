@@ -1,0 +1,17 @@
+on: push
+
+jobs:
+  by-name:
+    runs-on: ubuntu-latest
+    steps:
+      # A remote composite action named like a checkout is taken for one
+      - uses: pytorch/pytorch/.github/actions/checkout-pytorch@main
+      - uses: ./.github/actions/foo
+  by-inputs:
+    runs-on: ubuntu-latest
+    steps:
+      # The inputs are those of a checkout, so is the action
+      - uses: owner/repo/.github/actions/prepare@v1
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/foo
