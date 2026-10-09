@@ -421,3 +421,22 @@ func TestActionScopeIsDocumented(t *testing.T) {
 		}
 	}
 }
+
+// A composite action cannot grant id-token: the calling job does, so a publish with a token is not reported.
+func TestUseTrustedPublishingInACompositeAction(t *testing.T) {
+	src := "name: publish\ndescription: publish\nruns:\n  using: composite\n  steps:\n    - run: npm publish\n      shell: bash\n"
+	l, err := NewLinter(io.Discard, &LinterOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	l.defaultConfig = withFixtureRules(&Config{Rules: map[string]RuleConfig{"use-trusted-publishing": {Level: SeverityError}}})
+	errs, err := l.Lint(".github/actions/publish/action.yml", []byte(src), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range errs {
+		if e.ID == "use-trusted-publishing" {
+			t.Errorf("the caller grants the token: %v", e)
+		}
+	}
+}
