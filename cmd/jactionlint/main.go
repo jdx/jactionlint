@@ -3,7 +3,7 @@ package main
 import (
 	"os"
 
-	"github.com/jdx/jactionlint"
+	"github.com/jdx/jactionlint/v2"
 
 	_ "time/tzdata"
 )

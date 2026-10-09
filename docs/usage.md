@@ -27,12 +27,32 @@ To know all flags and options, see an output of `jactionlint -h` or [the online 
 
 ### Ignore some errors
 
-To ignore some errors, `-ignore` option offers to filter errors by messages using regular expression. The option is repeatable.
-The regular expression syntax is the same as [RE2][re2].
+Every error has a stable [rule ID](rules.md) such as `unpinned-uses`. `-rule-ids` shows it at the end of each error instead of the
+kind, and the `id` field of `-format json` and the `ruleId` of `-format sarif` have it.
+
+```
+.github/workflows/ci.yaml:12:15: action "actions/checkout@v4" must be pinned to a full-length commit SHA ... [unpinned-uses]
+```
+
+To ignore some errors, `-ignore` option filters errors by rule IDs or by messages using regular expression. A pattern which is
+exactly a rule ID ignores all the errors of the rule. Any other pattern is a regular expression matched to the error messages. The
+regular expression syntax is the same as [RE2][re2]. The option is repeatable.
 
 ```sh
-jactionlint -ignore 'label ".+" is unknown' -ignore '".+" is potentially untrusted'
+jactionlint -ignore template-injection -ignore 'label ".+" is unknown'
 ```
+
+The same patterns are available in [the configuration file](config.md) (`paths.<glob>.ignore`) and in ignore comments.
+An ignore comment is a comment on its own line. It applies to the next line which is not a comment nor blank, and to the lines
+nested under it. Several patterns are separated with commas.
+
+```yaml
+steps:
+  # jactionlint ignore=template-injection,label ".+" is unknown
+  - run: echo '${{ github.event.pull_request.title }}'
+```
+
+A comment which suppresses nothing is reported by the [`unused-ignore`](rules.md#unused-ignore) rule of the `strict` profile.
 
 `-shellcheck` and `-pyflakes` specifies file paths of executables. Setting empty string to them disables `shellcheck` and
 `pyflakes` rules. As a bonus, disabling them makes jactionlint much faster Since these external linter integrations spawn many
@@ -45,15 +65,52 @@ jactionlint -shellcheck= -pyflakes=
 <a id="format"></a>
 ### Format error messages
 
-`-format` option can flexibly format error messages with [Go template syntax][go-template].
+`-format` option selects the output format. The available formats are as follows.
 
-Before explaining the formatting details, let's see some examples.
+| Format    | Description                                                                                                                                                              |
+|-----------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `text`    | The default. File path, position, message and kind followed by the source snippet and an indicator. `-oneline` or `oneline` omits the snippet.                           |
+| `oneline` | The same as `text` with one line per error.                                                                                                                              |
+| `json`    | A JSON array of error objects. It is the same as `-format '{{json .}}'`.                                                                                                 |
+| `jsonl`   | One error object per line ([JSON Lines][jsonl]).                                                                                                                         |
+| `sarif`   | A [SARIF][sarif] 2.1.0 log with the rule metadata, levels, regions and fixes. Useful for code scanning and for tools like [hk](#hk).                                     |
+| `gcc`     | `file:line:col: severity: message [id]` like GCC. `severity` is `error`, `warning` or `note`.                                                                            |
+| `github`  | [Workflow commands][ga-annotate-error] (`::error file=...,line=...,col=...,title=<id>::message`) which GitHub shows as annotations. Use `warning` and `notice` for lower levels. |
+
+Any other value which has `{{ }}` is a custom template in [Go template syntax][go-template] as explained below. The output of
+the structured formats goes to stdout and the logs (including the deprecation warnings of the configuration) go to stderr, so the
+output can be piped to other tools safely.
+
+The text format of errors is the same as in the former versions. An error whose level is lowered to `warn` or `info` in
+[the configuration](config.md#rules) has `warning: ` or `info: ` before the message. `-rule-ids` shows the rule ID instead of
+the kind at the end of the line.
+
+An error object of `json` and `jsonl` has these fields.
+
+| Field          | Description                                                                                                       |
+|----------------|-------------------------------------------------------------------------------------------------------------------|
+| `message`      | Body of the error message                                                                                         |
+| `filepath`     | Canonical relative file path. It may be omitted when the input is stdin                                           |
+| `line`         | Line number of the start of the error (1-based)                                                                   |
+| `column`       | Column number of the start of the error (1-based, counted in Unicode code points)                                 |
+| `end_line`     | Line number of the end of the region of the error                                                                 |
+| `end_column`   | Column of the last character of the indicator (legacy). SARIF has the exclusive end column of the region          |
+| `kind`         | The legacy group of the error such as `expression`                                                                |
+| `id`           | The stable [rule ID](rules.md) such as `template-injection`                                                       |
+| `severity`     | `error`, `warn` or `info`                                                                                         |
+| `doc_url`      | The URL of the documentation of the rule. It is omitted for custom rules                                          |
+| `snippet`      | Code snippet to indicate the position of the error                                                                |
+| `fix`          | The automatic fix of the error: its `description` and the byte-range `edits`. It is omitted when there is no fix  |
+
+Before explaining the template details, let's see some examples.
 
 #### Example: Serialized into JSON
 
 ```sh
 jactionlint -format '{{json .}}'
 ```
+
+This is the same as `jactionlint -format json`.
 
 Output:
 
@@ -113,11 +170,15 @@ Basically it is more recommended to use [Problem Matchers](#problem-matchers) or
 #### Example: [SARIF format][sarif]
 
 [The Static Analysis Results Interchange Format (SARIF)][sarif] is a standardized format for the results of static analysis tools.
+`jactionlint -format sarif` prints a SARIF 2.1.0 log. Each result has the rule ID (`ruleId`), the level (`error`, `warning` or
+`note`), the region of the error (`startLine`, `startColumn`, `endLine` and `endColumn`; `columnKind` is
+`unicodeCodePoints`) and, for the rules which have an automatic fix, `fixes` with `artifactChanges[].replacements[]`
+(`deletedRegion` and `insertedContent.text`). The `rules` of the driver describe the rules which appear in the results with
+their summary, group and a link to the documentation.
 
-Since this practical format is much more complex than the above examples, the template is not written here. Please read
-[the template file in test data](https://github.com/jdx/jactionlint/blob/main/testdata/format/sarif_template.txt).
-
-Outputs are also too large to be written here. Please read [the output example in test data](https://github.com/jdx/jactionlint/blob/main/testdata/format/test.sarif).
+A custom template still works. This is [the template file in test data](https://github.com/jdx/jactionlint/blob/main/testdata/format/sarif_template.txt)
+which was used before `-format sarif`. [The output example in test data](https://github.com/jdx/jactionlint/blob/main/testdata/format/test.sarif)
+is its output.
 
 #### Formatting syntax
 
@@ -136,10 +197,14 @@ The error object has the following fields.
 |----------------------|-------------------------------------------------------|------------------------------------------------------------------|
 | `{{$err.Message}}`   | Body of error message                                 | `property "platform" is not defined in object type {os: string}` |
 | `{{$err.Snippet}}`   | Code snippet to indicate error position               | `          node_version: 16.x\n          ^~~~~~~~~~~~~`          |
-| `{{$err.Kind}}`      | Name of rule the error belongs to                     | `expression`                                                     |
+| `{{$err.Kind}}`      | Name of rule the error belongs to (legacy)            | `expression`                                                     |
+| `{{$err.ID}}`        | Stable ID of the rule such as `unpinned-uses`         | `template-injection`                                             |
+| `{{$err.Severity}}`  | Level of the error: `error`, `warn` or `info`         | `error`                                                          |
+| `{{$err.DocURL}}`    | URL of the documentation of the rule                  | `https://jactionlint.jdx.dev/rules#template-injection`           |
 | `{{$err.Filepath}}`  | Canonical relative file path of the error position    | `.github/workflows/ci.yaml`                                      |
 | `{{$err.Line}}`      | Line number of the error position (1-based)           | `9`                                                              |
 | `{{$err.Column}}`    | Column number of the error's start position (1-based) | `11`                                                             |
+| `{{$err.EndLine}}`   | Line number of the error's end position (1-based)     | `9`                                                              |
 | `{{$err.EndColumn}}` | Column number of the error's end position (1-based)   | `23`                                                             |
 
 Functions called in `{{ }}` placeholder are template actions. There are many actions defined by Go standard library. In addition,
@@ -151,6 +216,7 @@ example. List of all custom actions are as follows:
 | `json x`         | Serialize `x` as JSON string followed by newline character                       | `{{json $err}}`                           |
 | `replace x y z`  | Replace string `y` with `z` in `x`                                               | `{{replace $err.Filepath "\\" "/"}}`      |
 | `toPascalCase x` | Convert `x` into PascalCase (e.g. 'foo-bar' to 'FooBar')                         | `{{toPascalCase $err.Kind}}`              |
+| `allRules`       | Return an array of rule objects (all rules with their IDs). Explained below      | `{{range $ = allRules}}{{$.ID}}{{end}}`   |
 | `allKinds`       | Return an array of kind objects. The kind object is explained in the below table | `{{range $ = allKinds}}{{$.Name}}{{end}}` |
 | `getVersion`     | Return the version of jactionlint as string                                       | `{{getVersion}}`                          |
 
@@ -160,6 +226,9 @@ The kind object returned from `allKinds` action has the following fields.
 |-------------------------|-------------------------------|---------------------------------------------|
 | `{{$kind.Name}}`        | Name of the kind              | `syntax-check`                              |
 | `{{$kind.Description}}` | Short description of the kind | `Checks for GitHub Actions workflow syntax` |
+
+The rule object returned from `allRules` action has the following fields: `ID`, `Name` (the ID in PascalCase),
+`Description`, `Group` (`correctness`, `security`, `policy` or `style`), `DefaultLevel`, `Profile` and `URL`.
 
 For example, the following simple iteration body
 
@@ -182,12 +251,63 @@ Note that special characters escaped with backslash like `\n` in the format stri
 
 `jactionlint` command exits with one of the following exit statuses.
 
-| Status | Description                                             |
-|--------|---------------------------------------------------------|
-| `0`    | The command ran successfully and no problem was found   |
-| `1`    | The command ran successfully and some problem was found |
-| `2`    | The command failed due to invalid command line option   |
-| `3`    | The command failed due to some fatal error              |
+| Status | Description                                                                                  |
+|--------|----------------------------------------------------------------------------------------------|
+| `0`    | The command ran successfully and no problem was found                                        |
+| `1`    | The command ran successfully and some problem was found                                      |
+| `2`    | The command failed due to invalid command line option                                        |
+| `3`    | The command failed due to some fatal error                                                   |
+
+Only the errors whose level is `error` count as problems. Every rule is an `error` unless [the configuration](config.md#rules)
+lowers it, so the exit status is `1` whenever something is reported by default. The findings of `warn` and `info` level are
+printed but the exit status stays `0` unless `-strict-exit` is given. `-min-severity warn` (or `error`) hides the findings
+below the level.
+
+```sh
+jactionlint -strict-exit                # warnings and infos fail, too
+jactionlint -min-severity error         # show only errors
+```
+
+### Fix errors automatically
+
+`-fix` applies the automatic fixes of the errors which have one, rewrites the files and reports the errors which remain.
+It repeats until nothing changes so running it twice makes no further change, and it exits with `1` when an error remains.
+Only the fixes which do not change the behavior of the workflow are applied; `-fix=unsafe` applies all of them.
+
+```sh
+jactionlint -fix
+jactionlint -fix .github/workflows/ci.yaml
+```
+
+Fixes arrive with the rules that can fix their findings mechanically. The errors of the rules without a fix are only reported.
+`-fix` cannot be used with stdin.
+
+<a id="hk"></a>
+### hk
+
+[hk][] runs linters and fixers as Git hooks and from the command line. `jactionlint -format sarif` gives hk the diagnostics
+with the rule IDs. `hk util sarif-diff` turns the fixes in the SARIF log into a patch, and `jactionlint -fix` is the fixer hk
+runs when a finding has no fix. Add this step to `hk.pkl`:
+
+```pkl
+["jactionlint"] {
+    glob = List(".github/workflows/*.yml", ".github/workflows/*.yaml")
+    batch = true
+    diagnostic_format = "sarif"
+    check = "jactionlint -format sarif {{files}}"
+    check_diff = "hk util sarif-diff -- jactionlint -format sarif {{files}}"
+    fix = "jactionlint -fix {{files}}"
+}
+```
+
+- Only the fixes which are safe, valid and do not conflict with each other are in the SARIF log. A finding which cannot be fixed
+  stays without a fix so hk runs `jactionlint -fix` and still reports it.
+- The log uses `columnKind: unicodeCodePoints` and file URIs relative to the directory where jactionlint ran.
+- The exit status is `0` for a clean run and `1` when errors were found. Other statuses are failures. Nothing but the SARIF log is
+  on stdout, and nothing is on stderr unless `-verbose` or `-debug` is given, because hk parses both together. The
+  deprecation warnings of the configuration are put in `invocations[].toolConfigurationNotifications` of the log instead of
+  stderr in this format.
+- To use the `strict` profile, set `profile: strict` in `.github/jactionlint.yaml`.
 
 <a id="on-github-actions"></a>
 ## Use jactionlint on GitHub Actions
@@ -464,6 +584,7 @@ You can also see actionlint issues inline in VS Code via the [Trunk VS Code exte
 [go-template]: https://pkg.go.dev/text/template
 [jsonl]: https://jsonlines.org/
 [ga-annotate-error]: https://docs.github.com/en/actions/learn-github-actions/workflow-commands-for-github-actions#setting-an-error-message
+[hk]: https://hk.jdx.dev/
 [sarif]: https://docs.oasis-open.org/sarif/sarif/v2.1.0/sarif-v2.1.0.html
 [problem-matchers]: https://github.com/actions/toolkit/blob/master/docs/problem-matchers.md
 [super-linter]: https://github.com/github/super-linter

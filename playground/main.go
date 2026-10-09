@@ -6,7 +6,7 @@ import (
 	"io"
 	"syscall/js"
 
-	"github.com/jdx/jactionlint"
+	"github.com/jdx/jactionlint/v2"
 )
 
 var (

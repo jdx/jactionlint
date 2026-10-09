@@ -44,7 +44,7 @@ func TestRequireExpressionWrapping(t *testing.T) {
 	for _, tc := range tests {
 		src := "on: push\njobs:\n  j:\n    if: " + tc.cond + "\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo\n        if: " + tc.cond + "\n"
 		for _, enabled := range []bool{false, true} {
-			errs := lintWithConfig(t, &Config{RequireExpressionWrapping: enabled}, src)
+			errs := lintWithConfig(t, ruleSwitch("require-expression-wrapping", enabled), src)
 			want := 0
 			if enabled {
 				want = tc.want * 2 // job and step
@@ -79,7 +79,7 @@ func TestCheckFalsyTernary(t *testing.T) {
 	for _, tc := range tests {
 		src := "on: push\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo ${{ " + tc.expr + " }}\n"
 		for _, enabled := range []bool{false, true} {
-			errs := lintWithConfig(t, &Config{CheckFalsyTernary: enabled}, src)
+			errs := lintWithConfig(t, ruleSwitch("unsound-ternary", enabled), src)
 			want := 0
 			if enabled {
 				want = tc.want
@@ -93,7 +93,7 @@ func TestCheckFalsyTernary(t *testing.T) {
 
 func TestCheckFalsyTernaryPosition(t *testing.T) {
 	src := "on: push\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo ${{ github.ref == 'x' && '' || 'y' }}\n"
-	errs := lintWithConfig(t, &Config{CheckFalsyTernary: true}, src)
+	errs := lintWithConfig(t, ruleSwitch("unsound-ternary", true), src)
 	if len(errs) != 1 {
 		t.Fatalf("want 1 error: %v", errs)
 	}
@@ -103,26 +103,29 @@ func TestCheckFalsyTernaryPosition(t *testing.T) {
 }
 
 func TestOptInRulesConfigParse(t *testing.T) {
-	c, err := ParseConfig([]byte("require-expression-wrapping: true\ncheck-falsy-ternary: true\n"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !c.RequireExpressionWrapping || !c.CheckFalsyTernary {
+	c := mustParseConfig(t, "rules:\n  require-expression-wrapping: error\n  unsound-ternary: error\n")
+	if !c.RuleEnabled("require-expression-wrapping") || !c.RuleEnabled("unsound-ternary") {
 		t.Errorf("not parsed: %+v", c)
 	}
-	c, err = ParseConfig([]byte("config-variables: null\n"))
-	if err != nil {
-		t.Fatal(err)
+	// The deprecated keys are translated to the rules
+	c = mustParseConfig(t, "require-expression-wrapping: true\ncheck-falsy-ternary: false\n")
+	if !c.RuleEnabled("require-expression-wrapping") || c.RuleEnabled("unsound-ternary") {
+		t.Errorf("deprecated keys were not translated: %+v", c)
 	}
-	if c.RequireExpressionWrapping || c.CheckFalsyTernary {
-		t.Error("must be disabled by default")
+	// Only the opt-ins which no profile enables are disabled by default
+	c = mustParseConfig(t, "config-variables: null\n")
+	if c.RuleEnabled("require-expression-wrapping") {
+		t.Error("require-expression-wrapping must be disabled by default")
+	}
+	if !c.RuleEnabled("unsound-ternary") {
+		t.Error("unsound-ternary must be enabled by default")
 	}
 }
 
 func TestCheckFalsyTernaryPositionInLiteralBlock(t *testing.T) {
 	// The column of a token on a later line of a literal block must account for the stripped indentation.
 	src := "on: push\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - run: |\n          echo ${{\n            github.ref == 'x' && '' || 'y'\n          }}\n"
-	errs := lintWithConfig(t, &Config{CheckFalsyTernary: true}, src)
+	errs := lintWithConfig(t, ruleSwitch("unsound-ternary", true), src)
 	if len(errs) != 1 {
 		t.Fatalf("want 1 error: %v", errs)
 	}

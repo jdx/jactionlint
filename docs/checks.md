@@ -22,7 +22,7 @@ List of checks:
 - [Job dependencies validation](#check-job-deps)
 - [Parallel steps](#check-parallel-step-refs)
 - [Timeout minutes of jobs (opt-in)](#check-timeout-minutes)
-- [Workflow names of `workflow_run` event (opt-in)](#check-workflow-run-names)
+- [Workflow names of `workflow_run` event](#check-workflow-run-names)
 - [Matrix values](#check-matrix-values)
 - [Webhook events validation](#check-webhook-events)
 - [Workflow dispatch event validation](#check-workflow-dispatch-events)
@@ -31,7 +31,7 @@ List of checks:
 - [Runner labels](#check-runner-labels)
 - [Action format in `uses:`](#check-action-format)
 - [Local action inputs validation at `with:`](#check-local-action-inputs)
-- [Local action used before checkout (opt-in)](#check-local-action-checkout)
+- [Local action used before checkout](#check-local-action-checkout)
 - [Popular action inputs validation at `with:`](#check-popular-action-inputs)
 - [Outdated popular actions detection at `uses:`](#detect-outdated-popular-actions)
 - [Shell name validation at `shell:`](#check-shell-names)
@@ -1310,24 +1310,25 @@ test.yaml:9:22: "timeout-minutes" is 120, which is greater than the maximum 60 m
 
 <!-- Skip playground link -->
 
-This check is disabled by default. The output above is from the following `timeout-minutes` section of the
-[configuration file](config.md):
+These are the rules `missing-timeout` (in the `strict` profile) and `timeout-too-long` (only when `max` is set). The output above
+is from the following `rules` section of the [configuration file](config.md):
 
 ```yaml
-timeout-minutes:
-  required: true
-  max: 60
+rules:
+  missing-timeout: error
+  timeout-too-long:
+    max: 60
 ```
 
-- `required: true` reports jobs which do not set [`timeout-minutes`][timeout-minutes-doc]. Without it, a hanging job runs until
+- `missing-timeout` reports jobs which do not set [`timeout-minutes`][timeout-minutes-doc]. Without it, a hanging job runs until
   the default timeout of 360 minutes. Jobs calling a reusable workflow are not checked since they do not support it.
-- `max` reports jobs whose `timeout-minutes` is larger than the value. It works without `required`. Values given by
-  expressions `${{ }}` are not checked.
+- `timeout-too-long` reports jobs whose `timeout-minutes` is larger than the `max` option. It works without `missing-timeout`.
+  Values given by expressions `${{ }}` are not checked.
 
 [timeout-minutes-doc]: https://docs.github.com/en/actions/writing-workflows/workflow-syntax-for-github-actions#jobsjob_idtimeout-minutes
 
 <a id="check-workflow-run-names"></a>
-## Workflow names of `workflow_run` event (opt-in)
+## Workflow names of `workflow_run` event
 
 Example input:
 
@@ -1355,8 +1356,8 @@ test.yaml:4:17: workflow "Biuld" specified at "workflows" of "workflow_run" even
 
 <!-- Skip playground link -->
 
-This check is disabled by default. Enable it with `check-workflow-run-names: true` in the [configuration file](config.md).
-Each name at `on.workflow_run.workflows` is compared (case-insensitively) with the `name:` of every workflow file in
+This is the rule `workflow-run-names`. It is enabled by the default profile; turn it off with `rules: {workflow-run-names: off}`
+in the [configuration file](config.md). Each name at `on.workflow_run.workflows` is compared (case-insensitively) with the `name:` of every workflow file in
 `.github/workflows` (or its file path when it has no `name:`). The check is skipped for names with `${{ }}` or glob
 characters, and entirely when a workflow file cannot be parsed or has a dynamic `name:`.
 
@@ -1909,11 +1910,12 @@ a common case where the action is managed in a separate repository and the actio
 ### Require pinning to a commit hash (opt-in)
 
 By default, jactionlint accepts any ref (tag, branch, or SHA) for actions at `uses:`. Since tags and branches are mutable,
-pinning to a full commit hash is recommended to mitigate supply chain attacks. This check is **disabled by default**. To
-enable it, set `require-commit-hash: true` in [the configuration file](config.md):
+pinning to a full commit hash is recommended to mitigate supply chain attacks. This is the rule `unpinned-uses`. It is **disabled
+by default** and enabled by the `strict` profile. To enable it alone, set it in [the configuration file](config.md):
 
 ```yaml
-require-commit-hash: true
+rules:
+  unpinned-uses: error
 ```
 
 When enabled, jactionlint reports the following at `uses:`:
@@ -1927,19 +1929,20 @@ Local actions and workflows (`./path`, `$/path`) are not reported because they a
 `uses:` values containing `${{ }}` expressions are skipped since they cannot be checked statically.
 
 <a id="check-local-action-checkout"></a>
-### Local action used before checkout (opt-in)
+### Local action used before checkout
 
 A local action (`uses: ./.github/actions/foo`) is loaded from the workspace of the runner. When the repository has not been
 checked out yet, the step fails at runtime with "Can't find 'action.yml'". This check reports the first local action of a job
-which is not preceded by a checkout step in the same job. It is **disabled by default** since jactionlint cannot know how your
-runner prepares the workspace. To enable it, set `require-checkout-before-local-action: true` in
-[the configuration file](config.md):
+which is not preceded by a checkout step in the same job. This is the rule `local-action-checkout`. It is enabled by the default
+profile. jactionlint cannot know how your runner prepares the workspace, so turn the rule off when it does not apply to your
+runners, in [the configuration file](config.md):
 
 ```yaml
-require-checkout-before-local-action: true
+rules:
+  local-action-checkout: off
 ```
 
-With this option, the following workflow is reported at `uses: ./.github/actions/foo`, because `actions/checkout` comes after it:
+With the rule enabled, the following workflow is reported at `uses: ./.github/actions/foo`, because `actions/checkout` comes after it:
 
 ```yaml
 jobs:
@@ -1967,28 +1970,30 @@ Known limitations (use `ignore` in the configuration file when they matter):
 <a id="check-require-expression-wrapping"></a>
 
 GitHub Actions allows omitting `${{ }}` in `if:` conditions of jobs and steps. Some projects prefer to always write it so
-that it is obvious an expression is used. This check is **disabled by default**. To enable it, set
-`require-expression-wrapping: true` in [the configuration file](config.md):
+that it is obvious an expression is used. This is the rule `require-expression-wrapping`. It is **disabled by default** and
+enabled by the `all` profile. To enable it alone, set it in [the configuration file](config.md):
 
 ```yaml
-require-expression-wrapping: true
+rules:
+  require-expression-wrapping: error
 ```
 
 When enabled, `if: github.ref == 'refs/heads/main'` is reported and `if: ${{ github.ref == 'refs/heads/main' }}` is accepted.
 Other keys are not affected because they always need `${{ }}` to evaluate an expression.
 
-### Falsy value in the `a && b || c` ternary idiom (opt-in)
+### Falsy value in the `a && b || c` ternary idiom
 <a id="check-falsy-ternary"></a>
 
 `cond && b || c` is commonly used as a ternary operator, but it works only when `b` is truthy. Otherwise the result is always
-`c`. This check is **disabled by default**. To enable it, set `check-falsy-ternary: true` in
+`c`. This is the rule `unsound-ternary`. It is enabled by the default profile. To turn it off, set it in
 [the configuration file](config.md):
 
 ```yaml
-check-falsy-ternary: true
+rules:
+  unsound-ternary: off
 ```
 
-When enabled, jactionlint reports the idiom when `b` is a literal which is always falsy: `''`, `0`, `false` or `null`.
+jactionlint reports the idiom when `b` is a literal which is always falsy: `''`, `0`, `false` or `null`.
 Non-literal values (e.g. `github.sha`) are not reported because whether they are falsy is unknown statically.
 
 ```yaml
@@ -2214,11 +2219,14 @@ configuration are properly using the available shells.
 <a id="check-run-policy"></a>
 ## Run script policy (opt-in)
 
-These checks are disabled by default. Enable them in [the config file](config.md).
+These are the rules `require-shell` and `max-run-lines`. They are disabled by default and enabled by the `all` profile. Enable
+them alone in [the config file](config.md).
 
 ```yaml
-require-shell: true
-max-run-lines: 3
+rules:
+  require-shell: error
+  max-run-lines:
+    max: 3
 ```
 
 Example input:
@@ -2272,7 +2280,8 @@ the shell is omitted, GitHub Actions runs `bash -e {0}` while `shell: bash` runs
 so the behavior differs (for example, a failure in the middle of a pipe is not detected). Note that composite actions always
 need `shell:` so they are not affected.
 
-`max-run-lines` counts non-blank lines in a `run:` script. Comment lines are counted.
+`max-run-lines` counts non-blank lines in a `run:` script. Comment lines are counted. Its default `max` is 100 lines when the rule
+is enabled by a profile.
 
 <a id="check-job-step-ids"></a>
 ## Job ID and step ID uniqueness
@@ -2458,11 +2467,12 @@ jactionlint checks permission scopes and access levels in a workflow are correct
 ### Require explicit permissions (opt-in)
 
 When `permissions:` is not set, `GITHUB_TOKEN` gets the default permissions of the repository or organization, which may be
-read-write. Setting permissions explicitly follows the principle of least privilege. This check is **disabled by default**.
-To enable it, set `require-permissions: true` in [the configuration file](config.md):
+read-write. Setting permissions explicitly follows the principle of least privilege. This is the rule `missing-permissions`. It is
+**disabled by default** and enabled by the `strict` profile. To enable it alone, set it in [the configuration file](config.md):
 
 ```yaml
-require-permissions: true
+rules:
+  missing-permissions: error
 ```
 
 When enabled, jactionlint reports every job that is not covered by `permissions:`, i.e. the workflow has no top-level
@@ -3110,7 +3120,7 @@ keys.
 jactionlint checks if these contexts and special functions are used correctly. It reports an error when it finds that some context
 or special function is not available in your workflow.
 
-<a id="#check-deprecated-workflow-commands"></a>
+<a id="check-deprecated-workflow-commands"></a>
 ## Check deprecated workflow commands
 
 Example input:

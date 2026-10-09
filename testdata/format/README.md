@@ -15,7 +15,7 @@ sed -i 's/(devel)//' test.sarif
 mv test.sarif testdata/format/
 ```
 
-How to generate other files:
+How to generate other files (`test.json` and `test.jsonl` are the output of the native `-format json` and `-format jsonl`, too):
 
 ```sh
 ./actionlint -pyflakes= -shellcheck= -format '{{json .}}' testdata/format/test.yaml > testdata/format/test.json

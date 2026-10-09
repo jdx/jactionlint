@@ -42,8 +42,8 @@ func (rule *RuleIfCond) checkIfCond(n *String) {
 	if s >= 0 && e >= 0 {
 		rule.checkPlaceholder(n, s, e)
 	} else {
-		if cfg := rule.Config(); cfg != nil && cfg.RequireExpressionWrapping && strings.TrimSpace(n.Value) != "" {
-			rule.Errorf(n.Pos, "if: condition %q must be wrapped in ${{ }} because \"require-expression-wrapping\" is enabled", n.Value)
+		if rule.Config().RuleEnabled("require-expression-wrapping") && strings.TrimSpace(n.Value) != "" {
+			rule.ReportIDf("require-expression-wrapping", n.Pos, "if: condition %q must be wrapped in ${{ }} because \"require-expression-wrapping\" is enabled", n.Value)
 		}
 		rule.checkExpression(n.Pos, n.Value)
 	}
@@ -52,7 +52,8 @@ func (rule *RuleIfCond) checkIfCond(n *String) {
 func (rule *RuleIfCond) checkPlaceholder(n *String, start, end int) {
 	// Check number of ${{ }} for conditions like `${{ false }} || ${{ true }}` which are always evaluated to true
 	if start > 0 || end+len("}}") < len(n.Value) || strings.Count(n.Value, "${{") > 1 {
-		rule.Errorf(
+		rule.ReportIDf(
+			"if-always-true",
 			n.Pos,
 			"if: condition %q is always evaluated to true because extra characters are around ${{ }}",
 			n.Value,
@@ -67,7 +68,7 @@ func (rule *RuleIfCond) checkExpression(pos *Pos, input string) {
 	l := NewExprLexer(i + "}}")
 	if e, err := NewExprParser().Parse(l); err == nil {
 		if NewExprSemanticsChecker(false, nil, nil).IsConstant(e) {
-			rule.Errorf(pos, "constant expression %q in condition. remove the if: section", i)
+			rule.ReportIDf("constant-condition", pos, "constant expression %q in condition. remove the if: section", i)
 		}
 	}
 }

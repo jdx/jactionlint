@@ -30,10 +30,80 @@ type Error struct {
 	Filepath string
 	// Line is a line number where the error occurred. This value is 1-based.
 	Line int
-	// Column is a column number where the error occurred. This value is 1-based.
+	// Column is a column number where the error occurred. This value is 1-based and counts Unicode
+	// code points.
 	Column int
-	// Kind is a string to represent kind of the error. Usually rule name which found the error.
+	// EndLine is the line number of the end of the problematic region. This value is 1-based. It is
+	// the same as Line unless the region spans several lines.
+	EndLine int
+	// EndColumn is the column number just after the end of the problematic region on EndLine. It is
+	// 1-based and counts Unicode code points, so a region of one character at column 5 has EndColumn
+	// 6. When a rule did not report where the region ends, the linter fills it with the end of the
+	// token which starts at Line and Column.
+	EndColumn int
+	// Kind is a string to represent kind of the error. Usually rule name which found the error. It is
+	// the legacy way to group errors. Use ID to tell which diagnostic was reported.
 	Kind string
+	// ID is the stable identifier of the diagnostic such as "unpinned-uses". See Rules for all IDs of
+	// jactionlint. Errors reported by custom rules through RuleBase.Error have the Kind as their ID.
+	ID string
+	// Severity is how serious the error is. It is determined by the configuration: the level of the
+	// rule or the default level of the rule.
+	Severity Severity
+	// DocURL is a URL of the documentation of the diagnostic. It is empty for custom rules.
+	DocURL string
+	// Fix is an automatic correction for the error. It is nil when the error cannot be fixed
+	// mechanically.
+	Fix *Fix
+}
+
+// Fix is an automatic correction for an Error. It is a list of edits to a single file. The edits
+// must not overlap each other.
+type Fix struct {
+	// Description describes what applying the fix does, e.g. "Add timeout-minutes".
+	Description string `json:"description"`
+	// Unsafe marks a fix which may change the behavior of the workflow. Unsafe fixes are applied
+	// only when requested explicitly and are not put in SARIF output.
+	Unsafe bool `json:"unsafe,omitempty"`
+	// Edits are the replacements to apply.
+	Edits []TextEdit `json:"edits"`
+}
+
+// TextEdit replaces the bytes in [Start, End) of a file with NewText. Offsets are byte offsets
+// from the beginning of the file. Start == End inserts the text, and an empty NewText deletes the
+// range.
+type TextEdit struct {
+	// Start is the byte offset where the replaced range starts.
+	Start int `json:"start"`
+	// End is the byte offset just after the replaced range.
+	End int `json:"end"`
+	// NewText is the text to put in place of the range.
+	NewText string `json:"new_text"`
+}
+
+// validFor reports whether all edits are inside the source and none of them overlap.
+func (f *Fix) validFor(src []byte) bool {
+	if f == nil || len(f.Edits) == 0 {
+		return false
+	}
+	edits := slices.Clone(f.Edits)
+	slices.SortFunc(edits, func(a, b TextEdit) int {
+		if a.Start != b.Start {
+			return a.Start - b.Start
+		}
+		return a.End - b.End
+	})
+	prevEnd := 0
+	for i, e := range edits {
+		if e.Start < 0 || e.End < e.Start || e.End > len(src) {
+			return false
+		}
+		if i > 0 && e.Start < prevEnd {
+			return false
+		}
+		prevEnd = e.End
+	}
+	return true
 }
 
 // Error returns summary of the error as string.
@@ -45,22 +115,18 @@ func (e *Error) String() string {
 	return e.Error()
 }
 
-func errorAt(pos *Pos, kind string, msg string) *Error {
+func errorAt(pos *Pos, kind string, id string, msg string) *Error {
 	return &Error{
 		Message: msg,
 		Line:    pos.Line,
 		Column:  pos.Col,
 		Kind:    kind,
+		ID:      id,
 	}
 }
 
-func errorfAt(pos *Pos, kind string, format string, args ...interface{}) *Error {
-	return &Error{
-		Message: fmt.Sprintf(format, args...),
-		Line:    pos.Line,
-		Column:  pos.Col,
-		Kind:    kind,
-	}
+func errorfAt(pos *Pos, kind string, id string, format string, args ...interface{}) *Error {
+	return errorAt(pos, kind, id, fmt.Sprintf(format, args...))
 }
 
 // GetTemplateFields fields for formatting this error with Go template.
@@ -79,6 +145,11 @@ func (e *Error) GetTemplateFields(source []byte) *ErrorTemplateFields {
 		}
 	}
 
+	endLine := e.EndLine
+	if endLine == 0 {
+		endLine = e.Line
+	}
+
 	return &ErrorTemplateFields{
 		Message:   e.Message,
 		Filepath:  e.Filepath,
@@ -87,6 +158,11 @@ func (e *Error) GetTemplateFields(source []byte) *ErrorTemplateFields {
 		Kind:      e.Kind,
 		Snippet:   snippet,
 		EndColumn: end,
+		ID:        e.ID,
+		Severity:  e.Severity,
+		DocURL:    e.DocURL,
+		EndLine:   endLine,
+		Fix:       e.Fix,
 	}
 }
 
@@ -94,14 +170,32 @@ func (e *Error) GetTemplateFields(source []byte) *ErrorTemplateFields {
 // message with colorful output and source snippet with indicator. When nil is set to source, no
 // source snippet is not printed. To disable colorful output, set true to fatih/color.NoColor.
 func (e *Error) PrettyPrint(w io.Writer, source []byte) {
+	e.prettyPrint(w, source, false)
+}
+
+// prettyPrint is PrettyPrint which can show the rule ID instead of the kind. The output format of an
+// error of error level is the one of the former versions. Errors of the other levels are prefixed
+// with their level so that they can be told apart from errors.
+func (e *Error) prettyPrint(w io.Writer, source []byte, showID bool) {
 	yellow.Fprint(w, e.Filepath)
 	gray.Fprint(w, ":")
 	fmt.Fprint(w, e.Line)
 	gray.Fprint(w, ":")
 	fmt.Fprint(w, e.Column)
 	gray.Fprint(w, ": ")
-	bold.Fprint(w, e.Message)
-	gray.Fprintf(w, " [%s]\n", e.Kind)
+	prefix := ""
+	switch e.Severity {
+	case SeverityWarning:
+		prefix = "warning: "
+	case SeverityInfo:
+		prefix = "info: "
+	}
+	bold.Fprint(w, prefix+e.Message)
+	label := e.Kind
+	if showID && e.ID != "" {
+		label = e.ID
+	}
+	gray.Fprintf(w, " [%s]\n", label)
 
 	if len(source) == 0 || e.Line <= 0 {
 		return
@@ -195,8 +289,23 @@ type ErrorTemplateFields struct {
 	// When encoding into JSON, this field may be omitted when the snippet is empty.
 	Snippet string `json:"snippet,omitempty"`
 	// EndColumn is a column number where the error indicator (^~~~~~~) ends. When no indicator
-	// can be shown, EndColumn is equal to Column.
+	// can be shown, EndColumn is equal to Column. Note that it is the column of the last character
+	// of the indicator and counts the display width of the characters, which differs from
+	// Error.EndColumn that is the exclusive end of the region counted in Unicode code points.
 	EndColumn int `json:"end_column"`
+	// ID is the stable ID of the rule which found the error such as "unpinned-uses".
+	ID string `json:"id"`
+	// Severity is "error", "warn" or "info".
+	Severity Severity `json:"severity"`
+	// DocURL is the URL of the documentation of the rule. When encoding into JSON, this field may be
+	// omitted when the error is not from a built-in rule.
+	DocURL string `json:"doc_url,omitempty"`
+	// EndLine is the line number where the region of the error ends. It is the same as Line unless the
+	// region spans several lines.
+	EndLine int `json:"end_line"`
+	// Fix is the automatic fix for the error. When encoding into JSON, this field is omitted when the
+	// error cannot be fixed automatically.
+	Fix *Fix `json:"fix,omitempty"`
 }
 
 func unescapeBackslash(s string) string {
@@ -233,6 +342,25 @@ func toPascalCase(s string) string {
 type ruleTemplateFields struct {
 	Name        string
 	Description string
+}
+
+// ruleInfoTemplateFields is the fields of a rule which a template for formatting errors can use through
+// the allRules function.
+type ruleInfoTemplateFields struct {
+	// ID is the stable ID of the rule such as "unpinned-uses".
+	ID string
+	// Name is the ID in Pascal case such as "UnpinnedUses".
+	Name string
+	// Description is a one-line description of the rule.
+	Description string
+	// Group is "correctness", "security", "policy" or "style".
+	Group string
+	// DefaultLevel is the severity of the rule when it is enabled without an explicit level.
+	DefaultLevel Severity
+	// Profile is the first profile which enables the rule. It is empty when no profile enables it.
+	Profile string
+	// URL is the URL of the documentation of the rule.
+	URL string
 }
 
 func compareRuleTemplateByName(lhs, rhs *ruleTemplateFields) int {
@@ -272,6 +400,22 @@ func NewErrorFormatter(format string) (*ErrorFormatter, error) {
 		},
 		"toPascalCase": toPascalCase,
 		"getVersion":   getCommandVersion,
+		"allRules": func() []*ruleInfoTemplateFields {
+			rules := Rules()
+			ret := make([]*ruleInfoTemplateFields, 0, len(rules))
+			for _, r := range rules {
+				ret = append(ret, &ruleInfoTemplateFields{
+					ID:           r.ID,
+					Name:         toPascalCase(r.ID),
+					Description:  r.Summary,
+					Group:        string(r.Group),
+					DefaultLevel: r.DefaultLevel,
+					Profile:      string(r.Profile),
+					URL:          r.DocURL(),
+				})
+			}
+			return ret
+		},
 		"allKinds": func() []*ruleTemplateFields {
 			ret := make([]*ruleTemplateFields, 0, len(r))
 			for _, e := range r {

@@ -19,8 +19,8 @@ env = { CGO_ENABLED = "0" }
 run = "go build ./cmd/jactionlint"
 
 [tasks.generate]
-description = "Regenerate popular_actions.go, all_webhooks.go and availability.go (fetches data from GitHub)"
-run = "go generate"
+description = "Regenerate popular_actions.go, all_webhooks.go and availability.go (fetches data from GitHub) and docs/rules.md"
+run = ["go generate", "go run ./scripts/generate-rules-doc"]
 
 [tasks.test]
 description = "Run all tests"

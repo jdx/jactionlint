@@ -111,12 +111,23 @@ type parser struct {
 	lines []string
 }
 
+// syntaxCheckKind is the kind of the errors which the parser reports.
+const syntaxCheckKind = "syntax-check"
+
 func (p *parser) error(n *yaml.Node, m string) {
-	p.errors = append(p.errors, &Error{m, "", n.Line, n.Column, "syntax-check"})
+	p.errorID("workflow-syntax", n, m)
+}
+
+func (p *parser) errorID(id string, n *yaml.Node, m string) {
+	p.errors = append(p.errors, &Error{Message: m, Line: n.Line, Column: n.Column, Kind: syntaxCheckKind, ID: id})
 }
 
 func (p *parser) errorAt(pos *Pos, m string) {
-	p.errors = append(p.errors, &Error{m, "", pos.Line, pos.Col, "syntax-check"})
+	p.errorIDAt("workflow-syntax", pos, m)
+}
+
+func (p *parser) errorIDAt(id string, pos *Pos, m string) {
+	p.errors = append(p.errors, &Error{Message: m, Line: pos.Line, Column: pos.Col, Kind: syntaxCheckKind, ID: id})
 }
 
 func (p *parser) errorfAt(pos *Pos, format string, args ...interface{}) {
@@ -157,7 +168,7 @@ func (p *parser) resolveAliases(root *yaml.Node) {
 				} else {
 					// Don't resolve the recursive alias because it causes stack overflow on parsing the tree as
 					// `RawYAMLValue`. (#610)
-					p.errorf(c, "recursive alias %q is found. anchor was declared at line:%d, column:%d", c.Alias.Anchor, c.Alias.Line, c.Alias.Column)
+					p.errorID("recursive-alias", c, fmt.Sprintf("recursive alias %q is found. anchor was declared at line:%d, column:%d", c.Alias.Anchor, c.Alias.Line, c.Alias.Column))
 				}
 			}
 		}
@@ -169,7 +180,7 @@ func (p *parser) resolveAliases(root *yaml.Node) {
 
 	for n, u := range anchors {
 		if !u.used {
-			p.errorf(n, "anchor %q is defined but not used", n.Anchor)
+			p.errorID("unused-anchor", n, fmt.Sprintf("anchor %q is defined but not used", n.Anchor))
 		}
 	}
 }
@@ -374,7 +385,7 @@ func (p *parser) parseMapping(where delayedSprintf, n *yaml.Node, allowEmpty, ca
 			k := p.parseString(n.Content[i], false)
 
 			if k.Value == "<<" {
-				p.errorAt(k.Pos, "GitHub Actions does not support YAML merge key \"<<\"")
+				p.errorIDAt("merge-key", k.Pos, "GitHub Actions does not support YAML merge key \"<<\"")
 				continue
 			}
 
@@ -393,7 +404,7 @@ func (p *parser) parseMapping(where delayedSprintf, n *yaml.Node, allowEmpty, ca
 				if !caseSensitive {
 					note = ". note that this key is case insensitive"
 				}
-				p.errorfAt(k.Pos, "key %q is duplicated in %s. previously defined at %s%s", k.Value, where.String(), pos.String(), note)
+				p.errorIDAt("duplicate-key", k.Pos, fmt.Sprintf("key %q is duplicated in %s. previously defined at %s%s", k.Value, where.String(), pos.String(), note))
 				continue
 			}
 
@@ -1771,7 +1782,8 @@ func handleYAMLUnmarshalError(err error) []*Error {
 				Message: fmt.Sprintf("could not parse as YAML: %s", e.Message),
 				Line:    e.Mark.Line,
 				Column:  e.Mark.Column,
-				Kind:    "syntax-check",
+				Kind:    syntaxCheckKind,
+				ID:      "yaml-syntax",
 			})
 		}
 		return errs
@@ -1790,7 +1802,8 @@ func handleYAMLUnmarshalError(err error) []*Error {
 	}
 	return []*Error{{
 		Message: fmt.Sprintf("could not parse as YAML: %s", m),
-		Kind:    "syntax-check",
+		Kind:    syntaxCheckKind,
+		ID:      "yaml-syntax",
 		Line:    l,
 		Column:  c,
 	}}

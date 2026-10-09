@@ -45,14 +45,14 @@ func TestRequireCommitHashOptIn(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			l.defaultConfig = &Config{RequireCommitHash: enabled}
+			l.defaultConfig = ruleSwitch("unpinned-uses", enabled)
 			errs, err := l.Lint("test.yaml", []byte(src), nil)
 			if err != nil {
 				t.Fatal(err)
 			}
 			found := false
 			for _, e := range errs {
-				if strings.Contains(e.Message, "require-commit-hash") {
+				if e.ID == "unpinned-uses" && strings.Contains(e.Message, "unpinned-uses") {
 					found = true
 				}
 			}
@@ -64,18 +64,19 @@ func TestRequireCommitHashOptIn(t *testing.T) {
 }
 
 func TestRequireCommitHashConfigParse(t *testing.T) {
-	c, err := ParseConfig([]byte("require-commit-hash: true\n"))
-	if err != nil {
-		t.Fatal(err)
+	c := mustParseConfig(t, "require-commit-hash: true\n")
+	if !c.RuleEnabled("unpinned-uses") {
+		t.Error("require-commit-hash: true was not translated to unpinned-uses")
 	}
-	if !c.RequireCommitHash {
-		t.Error("require-commit-hash: true was not parsed")
+	if len(c.Deprecations) != 1 || !strings.Contains(c.Deprecations[0], "require-commit-hash") {
+		t.Errorf("deprecation was not reported: %v", c.Deprecations)
 	}
-	c, err = ParseConfig([]byte("config-variables: null\n"))
-	if err != nil {
-		t.Fatal(err)
+	c = mustParseConfig(t, "rules:\n  unpinned-uses: warn\n")
+	if c.RuleLevel("unpinned-uses") != SeverityWarning {
+		t.Error("rules: unpinned-uses: warn was not parsed")
 	}
-	if c.RequireCommitHash {
-		t.Error("require-commit-hash must be disabled by default")
+	c = mustParseConfig(t, "config-variables: null\n")
+	if c.RuleEnabled("unpinned-uses") {
+		t.Error("unpinned-uses must be disabled by default")
 	}
 }

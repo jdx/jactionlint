@@ -18,7 +18,7 @@ before:
 builds:
   - <<: &build_defaults
       main: ./cmd/jactionlint
-      ldflags: -s -w -X github.com/jdx/jactionlint.version={{.Version}} -X "github.com/jdx/jactionlint.installedFrom=installed by downloading from release page"
+      ldflags: -s -w -X github.com/jdx/jactionlint/v2.version={{.Version}} -X "github.com/jdx/jactionlint/v2.installedFrom=installed by downloading from release page"
       env:
         - CGO_ENABLED=0
     id: macos

@@ -30,7 +30,7 @@ func (w testErrorWriter) Write(b []byte) (int, error) {
 func TestErrorErrorAt(t *testing.T) {
 	m := "message"
 	k := "kind"
-	err := errorAt(&Pos{1, 2}, k, m)
+	err := errorAt(&Pos{1, 2}, k, "id", m)
 	if err.Message != m {
 		t.Errorf("wanted %q but got %q", m, err.Message)
 	}
@@ -51,7 +51,7 @@ func TestErrorErrorAt(t *testing.T) {
 func TestErrorErrorfAt(t *testing.T) {
 	m := "this is message"
 	k := "kind"
-	err := errorfAt(&Pos{1, 2}, k, "%s is %s", "this", "message")
+	err := errorfAt(&Pos{1, 2}, k, "id", "%s is %s", "this", "message")
 	if err.Message != m {
 		t.Errorf("wanted %q but got %q", m, err.Message)
 	}
@@ -212,7 +212,7 @@ func TestErrorPrettyPrint(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.message, func(t *testing.T) {
-			err := errorAt(&Pos{tc.line, tc.column}, "kind", tc.message)
+			err := errorAt(&Pos{tc.line, tc.column}, "kind", "id", tc.message)
 			err.Filepath = "filename.txt"
 
 			var buf bytes.Buffer
@@ -367,7 +367,7 @@ func TestErrorGetTemplateFieldsOK(t *testing.T) {
 
 	for i, tc := range testCases {
 		t.Run(strconv.Itoa(i), func(t *testing.T) {
-			err := errorAt(&Pos{1, tc.column}, "kind", tc.message)
+			err := errorAt(&Pos{1, tc.column}, "kind", "id", tc.message)
 			err.Filepath = "filename.txt"
 			f := err.GetTemplateFields([]byte(tc.source))
 			if f.Message != tc.message {
@@ -397,7 +397,7 @@ func TestErrorGetTemplateFieldsOK(t *testing.T) {
 
 // Regression test for #128
 func TestErrorGetTemplateFieldsColumnIsOutOfBounds(t *testing.T) {
-	err := errorAt(&Pos{1, 9999}, "kind", "this is message")
+	err := errorAt(&Pos{1, 9999}, "kind", "id", "this is message")
 	err.Filepath = "filename.yaml"
 	f := err.GetTemplateFields([]byte("this is source"))
 	if strings.Contains(f.Snippet, "\n") {
@@ -487,8 +487,8 @@ func TestErrorPrintFormattedWithTemplateFields(t *testing.T) {
 
 func TestErrorPrintFormattedErrors(t *testing.T) {
 	errs := []*Error{
-		errorAt(&Pos{1, 1}, "kind1", "error1"),
-		errorAt(&Pos{1, 0}, "kind2", "error2"),
+		errorAt(&Pos{1, 1}, "kind1", "id", "error1"),
+		errorAt(&Pos{1, 0}, "kind2", "id", "error2"),
 	}
 
 	f, err := NewErrorFormatter("{{range $ = .}}({{$.Message | printf \"%q\"}},{{$.Snippet | printf \"%q\"}}){{end}}")

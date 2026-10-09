@@ -45,7 +45,7 @@ func TestRunPolicyRequireShell(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.what, func(t *testing.T) {
-			if got := lintRunPolicy(t, &Config{RequireShell: true}, tc.src); len(got) != tc.want {
+			if got := lintRunPolicy(t, ruleConfig("require-shell"), tc.src); len(got) != tc.want {
 				t.Errorf("want %d errors but got %v", tc.want, got)
 			}
 			if got := lintRunPolicy(t, &Config{}, tc.src); len(got) != 0 {
@@ -78,7 +78,7 @@ func TestRunPolicyMaxRunLines(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.what, func(t *testing.T) {
-			got := lintRunPolicy(t, &Config{MaxRunLines: tc.max}, wf(tc.run))
+			got := lintRunPolicy(t, maxRunLinesConfig(tc.max), wf(tc.run))
 			if len(got) != tc.want {
 				t.Errorf("want %d errors but got %v", tc.want, got)
 			}
@@ -92,18 +92,16 @@ func TestRunPolicyMaxRunLines(t *testing.T) {
 }
 
 func TestRunPolicyConfigParse(t *testing.T) {
-	c, err := ParseConfig([]byte("require-shell: true\nmax-run-lines: 5\n"))
-	if err != nil {
-		t.Fatal(err)
+	c := mustParseConfig(t, "require-shell: true\nmax-run-lines: 5\n")
+	if m, ok := c.ruleOptionNumber("max-run-lines", "max"); !c.RuleEnabled("require-shell") || !c.RuleEnabled("max-run-lines") || !ok || m != 5 {
+		t.Errorf("not translated: %+v", c)
 	}
-	if !c.RequireShell || c.MaxRunLines != 5 {
-		t.Errorf("not parsed: %+v", c)
+	c = mustParseConfig(t, "rules:\n  max-run-lines: {level: warn, max: 7}\n")
+	if m, ok := c.ruleOptionNumber("max-run-lines", "max"); c.RuleLevel("max-run-lines") != SeverityWarning || !ok || m != 7 {
+		t.Errorf("rules not parsed: %+v", c)
 	}
-	c, err = ParseConfig([]byte("config-variables: null\n"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if c.RequireShell || c.MaxRunLines != 0 {
+	c = mustParseConfig(t, "config-variables: null\n")
+	if c.RuleEnabled("require-shell") || c.RuleEnabled("max-run-lines") {
 		t.Errorf("must be disabled by default: %+v", c)
 	}
 	if _, err := ParseConfig([]byte("max-run-lines: -1\n")); err == nil {

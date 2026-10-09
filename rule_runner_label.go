@@ -216,14 +216,15 @@ func (rule *RuleRunnerLabel) verifyRunnerLabel(label *String) runnerOSCompat {
 		for _, k := range known {
 			m, err := path.Match(k, l)
 			if err != nil {
-				rule.Errorf(label.Pos, "label pattern %q is an invalid glob. kindly check list of labels in jactionlint.yaml config file: %v", k, err)
+				rule.ReportIDf("invalid-label-pattern", label.Pos, "label pattern %q is an invalid glob. kindly check list of labels in jactionlint.yaml config file: %v", k, err)
 				return compatInvalid
 			}
 			if m {
 				return defaultRunnerOSCompats[strings.ToLower(l)] // compatInvalid when not a built-in label
 			}
 		}
-		rule.Errorf(
+		rule.ReportIDf(
+			"unknown-runner-label",
 			label.Pos,
 			"label %q is not allowed. only the labels listed in \"self-hosted-runner.labels\" of jactionlint.yaml config file are allowed because \"self-hosted-runner.strict-labels\" is enabled. allowed labels are %s",
 			label.Value,
@@ -245,7 +246,7 @@ func (rule *RuleRunnerLabel) verifyRunnerLabel(label *String) runnerOSCompat {
 	for _, k := range known {
 		m, err := path.Match(k, l)
 		if err != nil {
-			rule.Errorf(label.Pos, "label pattern %q is an invalid glob. kindly check list of labels in jactionlint.yaml config file: %v", k, err)
+			rule.ReportIDf("invalid-label-pattern", label.Pos, "label pattern %q is an invalid glob. kindly check list of labels in jactionlint.yaml config file: %v", k, err)
 			return compatInvalid
 		}
 		if m {
@@ -253,7 +254,8 @@ func (rule *RuleRunnerLabel) verifyRunnerLabel(label *String) runnerOSCompat {
 		}
 	}
 
-	rule.Errorf(
+	rule.ReportIDf(
+		"unknown-runner-label",
 		label.Pos,
 		"label %q is unknown. available labels are %s. if it is a custom label for self-hosted runner, set list of labels in jactionlint.yaml config file",
 		label.Value,
@@ -328,7 +330,7 @@ func (rule *RuleRunnerLabel) tryToGetLabelsInMatrix(label *String, m *Matrix) []
 func (rule *RuleRunnerLabel) checkConflict(comp runnerOSCompat, label *String) bool {
 	for c, l := range rule.compats {
 		if c&comp == 0 {
-			rule.Errorf(label.Pos, "label %q conflicts with label %q defined at %s. note: to run your job on each workers, use matrix", label.Value, l.Value, l.Pos)
+			rule.ReportIDf("conflicting-runner-labels", label.Pos, "label %q conflicts with label %q defined at %s. note: to run your job on each workers, use matrix", label.Value, l.Value, l.Pos)
 			return false
 		}
 	}

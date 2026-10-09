@@ -3,7 +3,7 @@
 package jactionlint_fuzz
 
 import (
-	"github.com/jdx/jactionlint"
+	"github.com/jdx/jactionlint/v2"
 )
 
 func FuzzGlobGitRef(data []byte) int {

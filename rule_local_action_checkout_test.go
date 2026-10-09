@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-func TestRuleLocalActionCheckoutDisabledByDefault(t *testing.T) {
+func TestRuleLocalActionCheckoutEnabledByDefaultAndCanBeTurnedOff(t *testing.T) {
 	b, err := os.ReadFile("testdata/examples/local_action_before_checkout.yaml")
 	if err != nil {
 		t.Fatal(err)
@@ -20,18 +20,34 @@ func TestRuleLocalActionCheckoutDisabledByDefault(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if len(errs) == 0 {
+		t.Fatal("the rule must be enabled by the default profile")
+	}
+	for _, e := range errs {
+		if e.ID != "local-action-checkout" {
+			t.Errorf("unexpected error %v", e)
+		}
+	}
+
+	l.defaultConfig = ruleSwitch("local-action-checkout", false)
+	errs, err = l.Lint("test.yaml", b, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if len(errs) != 0 {
-		t.Fatalf("no error is expected when the option is not enabled but got: %v", errs)
+		t.Fatalf("no error is expected when the rule is off but got: %v", errs)
 	}
 }
 
 func TestRuleLocalActionCheckoutParseConfig(t *testing.T) {
-	c, err := ParseConfig([]byte("require-checkout-before-local-action: true\n"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !c.RequireCheckoutBeforeLocalAction {
+	c := mustParseConfig(t, "rules:\n  local-action-checkout: error\n")
+	if !c.RuleEnabled("local-action-checkout") {
 		t.Fatal("option was not parsed")
+	}
+	// The deprecated key is translated to the rule
+	c = mustParseConfig(t, "require-checkout-before-local-action: true\n")
+	if !c.RuleEnabled("local-action-checkout") || len(c.Deprecations) != 1 {
+		t.Fatalf("deprecated option was not translated: %+v", c)
 	}
 }
 

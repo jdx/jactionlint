@@ -63,7 +63,7 @@ func (rule *RuleEvents) checkCron(spec *String) {
 	p := cron.NewParser(cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow)
 	sched, err := p.Parse(spec.Value)
 	if err != nil {
-		rule.Errorf(spec.Pos, "invalid CRON format %q in schedule event: %s", spec.Value, err.Error())
+		rule.ReportIDf("invalid-cron", spec.Pos, "invalid CRON format %q in schedule event: %s", spec.Value, err.Error())
 		return
 	}
 
@@ -75,7 +75,7 @@ func (rule *RuleEvents) checkCron(spec *String) {
 	//
 	// > The shortest interval you can run scheduled workflows is once every 5 minutes.
 	if diff < 60.0*5 {
-		rule.Errorf(spec.Pos, "scheduled job runs too frequently. it runs once per %g seconds. the shortest interval is once every 5 minutes", diff)
+		rule.ReportIDf("cron-too-frequent", spec.Pos, "scheduled job runs too frequently. it runs once per %g seconds. the shortest interval is once every 5 minutes", diff)
 	}
 }
 
@@ -88,7 +88,7 @@ func (rule *RuleEvents) checkTimezone(tz *String) {
 		ok = err == nil
 	}
 	if !ok {
-		rule.Errorf(tz.Pos, "invalid timezone %q in schedule event. it must be a valid IANA timezone name", tz.Value)
+		rule.ReportIDf("invalid-timezone", tz.Pos, "invalid timezone %q in schedule event. it must be a valid IANA timezone name", tz.Value)
 	}
 }
 
@@ -97,7 +97,7 @@ func (rule *RuleEvents) filterNotAvailable(pos *Pos, filter, hook string, availa
 	if len(available) < 2 {
 		e = "event"
 	}
-	rule.Errorf(pos, "%q filter is not available for %s event. it is only for %s %s", filter, hook, strings.Join(available, ", "), e)
+	rule.ReportIDf("invalid-event-filter", pos, "%q filter is not available for %s event. it is only for %s %s", filter, hook, strings.Join(available, ", "), e)
 }
 
 func (rule *RuleEvents) checkExclusiveFilters(filter, ignore *WebhookEventFilter, hook string, available []string) {
@@ -115,7 +115,7 @@ func (rule *RuleEvents) checkExclusiveFilters(filter, ignore *WebhookEventFilter
 			if p.IsBefore(ignore.Name.Pos) {
 				p = ignore.Name.Pos
 			}
-			rule.Errorf(p, "both %q and %q filters cannot be used for the same event %q. note: use '!' to negate patterns", filter.Name.Value, ignore.Name.Value, hook)
+			rule.ReportIDf("invalid-event-filter", p, "both %q and %q filters cannot be used for the same event %q. note: use '!' to negate patterns", filter.Name.Value, ignore.Name.Value, hook)
 		}
 	} else {
 		if !filter.IsEmpty() {
@@ -133,7 +133,7 @@ func (rule *RuleEvents) checkWebhookEvent(event *WebhookEvent) {
 
 	types, ok := AllWebhookTypes[hook]
 	if !ok {
-		rule.Errorf(event.Pos, "unknown Webhook event %q. see https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#webhook-events for list of all Webhook event names", hook)
+		rule.ReportIDf("unknown-event", event.Pos, "unknown Webhook event %q. see https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#webhook-events for list of all Webhook event names", hook)
 		return
 	}
 
@@ -141,11 +141,11 @@ func (rule *RuleEvents) checkWebhookEvent(event *WebhookEvent) {
 
 	if hook == "workflow_run" {
 		if len(event.Workflows) == 0 {
-			rule.Error(event.Pos, "no workflow is configured for \"workflow_run\" event")
+			rule.ReportID("invalid-event-config", event.Pos, "no workflow is configured for \"workflow_run\" event")
 		}
 	} else {
 		if len(event.Workflows) != 0 {
-			rule.Errorf(event.Pos, "\"workflows\" cannot be configured for %q event. it is only for workflow_run event", hook)
+			rule.ReportIDf("invalid-event-config", event.Pos, "\"workflows\" cannot be configured for %q event. it is only for workflow_run event", hook)
 		}
 	}
 
@@ -177,7 +177,7 @@ func (rule *RuleEvents) checkWebhookEvent(event *WebhookEvent) {
 
 func (rule *RuleEvents) checkTypes(hook *String, types []*String, expected []string) {
 	if len(expected) == 0 && len(types) > 0 {
-		rule.Errorf(hook.Pos, "\"types\" cannot be specified for %q Webhook event", hook.Value)
+		rule.ReportIDf("invalid-event-config", hook.Pos, "\"types\" cannot be specified for %q Webhook event", hook.Value)
 		return
 	}
 
@@ -190,7 +190,8 @@ func (rule *RuleEvents) checkTypes(hook *String, types []*String, expected []str
 			}
 		}
 		if !valid {
-			rule.Errorf(
+			rule.ReportIDf(
+				"invalid-activity-type",
 				ty.Pos,
 				"invalid activity type %q for %q Webhook event. available types are %s",
 				ty.Value,
@@ -212,7 +213,8 @@ func (rule *RuleEvents) checkWorkflowCallEvent(event *WorkflowCallEvent) {
 			switch i.Type {
 			case WorkflowCallEventInputTypeNumber:
 				if _, err := strconv.ParseFloat(i.Default.Value, 64); err != nil {
-					rule.Errorf(
+					rule.ReportIDf(
+						"invalid-workflow-call-input",
 						i.Default.Pos,
 						"input of workflow_call event %q is typed as number but its default value %q cannot be parsed as a float number: %s",
 						i.Name.Value,
@@ -222,7 +224,8 @@ func (rule *RuleEvents) checkWorkflowCallEvent(event *WorkflowCallEvent) {
 				}
 			case WorkflowCallEventInputTypeBoolean:
 				if d := strings.ToLower(i.Default.Value); d != "true" && d != "false" {
-					rule.Errorf(
+					rule.ReportIDf(
+						"invalid-workflow-call-input",
 						i.Default.Pos,
 						"input of workflow_call event %q is typed as boolean. its default value must be true or false but got %q",
 						i.Name.Value,
@@ -232,7 +235,8 @@ func (rule *RuleEvents) checkWorkflowCallEvent(event *WorkflowCallEvent) {
 			}
 		}
 		if i.IsRequired() {
-			rule.Errorf(
+			rule.ReportIDf(
+				"invalid-workflow-call-input",
 				i.Default.Pos,
 				"input %q of workflow_call event has the default value %q, but it is also required. if an input is marked as required, its default value will never be used",
 				i.Name.Value,
@@ -248,13 +252,13 @@ func (rule *RuleEvents) checkWorkflowDispatchEvent(event *WorkflowDispatchEvent)
 	for n, i := range event.Inputs {
 		if i.Type == WorkflowDispatchEventInputTypeChoice {
 			if len(i.Options) == 0 {
-				rule.Errorf(i.Name.Pos, "input type of %q is \"choice\" but \"options\" is not set", n)
+				rule.ReportIDf("invalid-workflow-dispatch-input", i.Name.Pos, "input type of %q is \"choice\" but \"options\" is not set", n)
 				continue
 			}
 			seen := make(map[string]struct{}, len(i.Options))
 			for _, o := range i.Options {
 				if _, ok := seen[o.Value]; ok {
-					rule.Errorf(o.Pos, "option %q is duplicated in options of %q input", o.Value, n)
+					rule.ReportIDf("invalid-workflow-dispatch-input", o.Pos, "option %q is duplicated in options of %q input", o.Value, n)
 					continue
 				}
 				seen[o.Value] = struct{}{}
@@ -265,12 +269,12 @@ func (rule *RuleEvents) checkWorkflowDispatchEvent(event *WorkflowDispatchEvent)
 					b.append(o.Value)
 				}
 				if _, ok := seen[i.Default.Value]; !ok {
-					rule.Errorf(i.Default.Pos, "default value %q of %q input is not included in its options %q", i.Default.Value, n, b.build())
+					rule.ReportIDf("invalid-workflow-dispatch-input", i.Default.Pos, "default value %q of %q input is not included in its options %q", i.Default.Value, n, b.build())
 				}
 			}
 		} else {
 			if len(i.Options) > 0 {
-				rule.Errorf(i.Name.Pos, "\"options\" can not be set to %q input because its input type is not \"choice\"", n)
+				rule.ReportIDf("invalid-workflow-dispatch-input", i.Name.Pos, "\"options\" can not be set to %q input because its input type is not \"choice\"", n)
 			}
 			if i.Default != nil {
 				// TODO: Can some check be done for WorkflowDispatchEventInputTypeEnvironment?
@@ -278,7 +282,8 @@ func (rule *RuleEvents) checkWorkflowDispatchEvent(event *WorkflowDispatchEvent)
 				switch i.Type {
 				case WorkflowDispatchEventInputTypeNumber:
 					if _, err := strconv.ParseFloat(i.Default.Value, 64); err != nil {
-						rule.Errorf(
+						rule.ReportIDf(
+							"invalid-workflow-dispatch-input",
 							i.Default.Pos,
 							"type of %q input is \"number\" but its default value %q cannot be parsed as a float number: %s",
 							i.Name.Value,
@@ -288,7 +293,7 @@ func (rule *RuleEvents) checkWorkflowDispatchEvent(event *WorkflowDispatchEvent)
 					}
 				case WorkflowDispatchEventInputTypeBoolean:
 					if d := strings.ToLower(i.Default.Value); d != "true" && d != "false" {
-						rule.Errorf(i.Default.Pos, "type of %q input is \"boolean\". its default value %q must be \"true\" or \"false\"", n, i.Default.Value)
+						rule.ReportIDf("invalid-workflow-dispatch-input", i.Default.Pos, "type of %q input is \"boolean\". its default value %q must be \"true\" or \"false\"", n, i.Default.Value)
 					}
 				}
 			}
@@ -298,7 +303,8 @@ func (rule *RuleEvents) checkWorkflowDispatchEvent(event *WorkflowDispatchEvent)
 	// https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows#providing-inputs
 	// https://github.blog/changelog/2025-12-04-actions-workflow-dispatch-workflows-now-support-25-inputs
 	if len(event.Inputs) > 25 {
-		rule.Errorf(
+		rule.ReportIDf(
+			"invalid-workflow-dispatch-input",
 			event.Pos,
 			"maximum number of inputs for \"workflow_dispatch\" event is 25 but %d inputs are provided. see https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows#providing-inputs",
 			len(event.Inputs),

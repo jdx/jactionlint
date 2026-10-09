@@ -15,6 +15,7 @@ export const sidebar: SidebarItem[] = [
     text: "Reference",
     items: [
       { text: "Checks", link: "/checks" },
+      { text: "Rules", link: "/rules" },
       { text: "Go API", link: "/api" },
       { text: "References", link: "/reference" },
     ],

@@ -98,16 +98,16 @@ func (rule *RuleRequiredActions) VisitWorkflowPre(workflow *Workflow) error {
 		vers, ok := found[strings.ToLower(req.Action)]
 		if !ok {
 			if req.Version == "" {
-				rule.Errorf(pos, "required action %q is not used in this workflow", req.Action)
+				rule.ReportIDf("required-actions", pos, "required action %q is not used in this workflow", req.Action)
 			} else {
-				rule.Errorf(pos, "required action %q (version %q) is not used in this workflow", req.Action, req.Version)
+				rule.ReportIDf("required-actions", pos, "required action %q (version %q) is not used in this workflow", req.Action, req.Version)
 			}
 			continue
 		}
 		if req.Version == "" || slices.Contains(vers, req.Version) || slices.Contains(vers, dynamicVersion) {
 			continue
 		}
-		rule.Errorf(pos, "action %q must use version %q but found %s", req.Action, req.Version, quoteJoin(vers))
+		rule.ReportIDf("required-actions", pos, "action %q must use version %q but found %s", req.Action, req.Version, quoteJoin(vers))
 	}
 
 	return nil

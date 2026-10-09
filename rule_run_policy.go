@@ -54,24 +54,24 @@ func (rule *RuleRunPolicy) VisitJobPost(n *Job) error {
 // VisitStep is callback when visiting Step node.
 func (rule *RuleRunPolicy) VisitStep(n *Step) error {
 	cfg := rule.Config()
-	if cfg == nil {
-		return nil
-	}
 	run, ok := n.Exec.(*ExecRun)
 	if !ok || run.Run == nil {
 		return nil
 	}
 
-	if cfg.RequireShell && run.Shell == nil && rule.jobShell == nil && rule.workflowShell == nil {
-		rule.Error(
+	if cfg.RuleEnabled("require-shell") && run.Shell == nil && rule.jobShell == nil && rule.workflowShell == nil {
+		rule.ReportID(
+			"require-shell",
 			run.RunPos,
 			"shell is not set explicitly. set \"shell:\" at the step or \"defaults.run.shell\" because \"require-shell\" is enabled",
 		)
 	}
 
-	if max := cfg.MaxRunLines; max > 0 {
+	if m, ok := cfg.ruleOptionNumber("max-run-lines", "max"); ok && cfg.RuleEnabled("max-run-lines") && m > 0 {
+		max := int(m)
 		if lines := countScriptLines(run.Run.Value); lines > max {
-			rule.Errorf(
+			rule.ReportIDf(
+				"max-run-lines",
 				run.Run.Pos,
 				"script in \"run:\" has %d lines but at most %d lines are allowed because \"max-run-lines\" is set. consider moving it to a script file or an action",
 				lines,

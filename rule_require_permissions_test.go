@@ -29,7 +29,7 @@ func TestRequirePermissionsOptIn(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			l.defaultConfig = &Config{RequirePermissions: enabled}
+			l.defaultConfig = ruleSwitch("missing-permissions", enabled)
 			errs, err := l.Lint("test.yaml", []byte(tc.src), nil)
 			if err != nil {
 				t.Fatal(err)

@@ -109,10 +109,10 @@ Recent [Go][] toolchain is necessary to build jactionlint from source. Last two 
 
 ```sh
 # Install the latest stable version
-go install github.com/jdx/jactionlint/cmd/jactionlint@latest
+go install github.com/jdx/jactionlint/v2/cmd/jactionlint@latest
 
 # Install the head of the main branch
-go install github.com/jdx/jactionlint/cmd/jactionlint@main
+go install github.com/jdx/jactionlint/v2/cmd/jactionlint@main
 ```
 
 ---
