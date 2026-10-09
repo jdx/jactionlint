@@ -122,6 +122,11 @@ func TestPitfallArtipacked(t *testing.T) {
 		{"checkout v1 has no such input", pitfallJob("      - uses: actions/checkout@v1\n"), 0},
 		{"checkout v1.0.0", pitfallJob("      - uses: actions/checkout@v1.0.0\n"), 0},
 		{"checkout v2", pitfallJob("      - uses: actions/checkout@v2\n"), 1},
+		{"a push that never runs", pitfallJob("      - uses: actions/checkout@v4\n      - if: false\n        run: git push\n"), 1},
+		{"a push that runs next to one that does not", pitfallJob("      - uses: actions/checkout@v4\n      - if: false\n        run: git push\n      - run: git push\n"), 0},
+		{"checkout v1 pinned to a commit", pitfallJob("      - uses: actions/checkout@544eadc6bf3d226fd7a7a9f0dc5b5bf7ca0675b9 # v1\n"), 0},
+		{"checkout v1.0.0 pinned to a commit", pitfallJob("      - uses: actions/checkout@544eadc6bf3d226fd7a7a9f0dc5b5bf7ca0675b9 # v1.0.0\n"), 0},
+		{"checkout v4 pinned to a commit", pitfallJob("      - uses: actions/checkout@544eadc6bf3d226fd7a7a9f0dc5b5bf7ca0675b9 # v4.1.0\n"), 1},
 	}
 	for _, tc := range tests {
 		t.Run(tc.what, func(t *testing.T) {
@@ -319,6 +324,53 @@ func TestPitfallSuperfluousActionsOnSelfHostedRunners(t *testing.T) {
 	for _, runsOn := range []string{"[self-hosted, linux]", "self-hosted", "[Self-Hosted, x64]"} {
 		if got := errsWithID(lintFileWithConfig(t, cfg, "ci.yaml", job(runsOn)), "superfluous-actions"); len(got) != 0 {
 			t.Errorf("%s: %v", runsOn, got)
+		}
+	}
+}
+
+// A matrix entry that is self-hosted makes the job a self-hosted one.
+func TestPitfallSuperfluousActionsOnMatrixRunners(t *testing.T) {
+	cfg := pitfallConfig()
+	cfg.Rules["superfluous-actions"] = RuleConfig{Level: SeverityError, Options: map[string]any{"pedantic": true}}
+	job := func(rows string) string {
+		return "on: push\njobs:\n  j:\n    strategy:\n      matrix:\n        r: " + rows + "\n    runs-on: ${{ matrix.r }}\n    steps:\n      - uses: dtolnay/rust-toolchain@stable\n"
+	}
+	if got := errsWithID(lintFileWithConfig(t, cfg, "ci.yaml", job("[ubuntu-24.04, macos-14]")), "superfluous-actions"); len(got) != 1 {
+		t.Errorf("hosted matrix: %v", got)
+	}
+	if got := errsWithID(lintFileWithConfig(t, cfg, "ci.yaml", job("[self-hosted, ubuntu-24.04]")), "superfluous-actions"); len(got) != 0 {
+		t.Errorf("matrix with a self-hosted entry: %v", got)
+	}
+}
+
+// A runner that cannot be shown to be hosted is not reported: matrix arrays, include, nested lists and values
+// that are unknown statically.
+func TestPitfallSuperfluousActionsMayBeSelfHosted(t *testing.T) {
+	cfg := pitfallConfig()
+	cfg.Rules["superfluous-actions"] = RuleConfig{Level: SeverityError, Options: map[string]any{"pedantic": true}}
+	wf := func(strategy, runsOn string) string {
+		return "on: push\njobs:\n  j:\n    strategy:\n" + strategy + "    runs-on: " + runsOn + "\n    steps:\n      - uses: dtolnay/rust-toolchain@stable\n"
+	}
+	cases := []struct {
+		name, strategy, runsOn string
+		want                   int
+	}{
+		{"array row value", "      matrix:\n        r: [[self-hosted, linux], ubuntu-24.04]\n", "${{ matrix.r }}", 0},
+		{"nested array", "      matrix:\n        r: [[[self-hosted]]]\n", "${{ matrix.r }}", 0},
+		{"include string", "      matrix:\n        r: [ubuntu-24.04]\n        include:\n          - r: self-hosted\n", "${{ matrix.r }}", 0},
+		{"include array", "      matrix:\n        r: [ubuntu-24.04]\n        include:\n          - r: [self-hosted, linux]\n", "${{ matrix.r }}", 0},
+		{"include only", "      matrix:\n        include:\n          - r: [self-hosted, linux]\n", "${{ matrix.r }}", 0},
+		{"fromJSON matrix", "      matrix: ${{ fromJSON(needs.x.outputs.m) }}\n", "${{ matrix.r }}", 0},
+		{"fromJSON row", "      matrix:\n        r: ${{ fromJSON(needs.x.outputs.r) }}\n", "${{ matrix.r }}", 0},
+		{"expression in a value", "      matrix:\n        r: [ubuntu-24.04, \"${{ inputs.r }}\"]\n", "${{ matrix.r }}", 0},
+		{"label list with a matrix entry", "      matrix:\n        r: [[self-hosted, linux]]\n", "[${{ matrix.r }}]", 0},
+		{"self-hosted next to a matrix entry", "      matrix:\n        x: [ubuntu-24.04]\n", "[self-hosted, \"${{ matrix.x }}\"]", 0},
+		{"undefined property", "      matrix:\n        x: [ubuntu-24.04]\n", "${{ matrix.r }}", 0},
+		{"hosted arrays", "      matrix:\n        r: [[ubuntu-24.04, x64], macos-14]\n        include:\n          - r: windows-2025\n", "${{ matrix.r }}", 1},
+	}
+	for _, c := range cases {
+		if got := errsWithID(lintFileWithConfig(t, cfg, "ci.yaml", wf(c.strategy, c.runsOn)), "superfluous-actions"); len(got) != c.want {
+			t.Errorf("%s: want %d findings, got %v", c.name, c.want, got)
 		}
 	}
 }

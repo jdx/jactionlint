@@ -53,6 +53,24 @@ func TestRuleUntrustedArtifact(t *testing.T) {
       - run: npm ci
         working-directory: out
 `},
+		{"environment write with the working directory in the artifact", nil, head + dl + `          path: pr
+      - run: echo "n=$(cat number)" >> "$GITHUB_ENV"
+        working-directory: pr
+`},
+		{"environment write after cd into the artifact", nil, head + dl + `          path: pr
+      - run: |
+          cd pr
+          echo "n=$(cat number)" >> "$GITHUB_ENV"
+`},
+		{"read in the artifact directory", nil, head + dl + `          path: pr
+      - run: |
+          cd pr
+          read -r N < number
+          echo "N=$N" >> "$GITHUB_ENV"
+`},
+		{"local action of the artifact", nil, head + dl + `          path: pr
+      - uses: ./pr/action
+`},
 		{"cd into the artifact", nil, head + dl + `          path: out
       - run: |
           cd out
@@ -119,6 +137,15 @@ func TestRuleUntrustedArtifact(t *testing.T) {
       - uses: actions/checkout@v4
       - run: npm ci
       - run: bash scripts/ci.sh
+`},
+		{"working directory in the artifact validated", nil, head + dlN + `          path: pr
+      - run: |
+          grep -qE '^[0-9]+$' number
+          echo "n=$(cat number)" >> "$GITHUB_ENV"
+        working-directory: pr
+`},
+		{"local action outside the artifact", nil, head + dlN + `          path: pr
+      - uses: ./.github/actions/setup
 `},
 		{"root download without a name", nil, head + dlN + `      - run: echo "X=$(cat file)" >> "$GITHUB_ENV"
 `},

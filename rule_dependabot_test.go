@@ -114,6 +114,12 @@ func TestDependabotCooldownFix(t *testing.T) {
 			"",
 		},
 		{
+			"the fix value above the limit of Dependabot",
+			head + "  - package-ecosystem: npm\n    directory: /\n    schedule:\n      interval: weekly\n",
+			map[string]any{"days": 14, "default-days": 100},
+			"",
+		},
+		{
 			"the fix value must satisfy a raised minimum",
 			head + "  - package-ecosystem: npm\n    directory: /\n    schedule:\n      interval: weekly\n    cooldown:\n      default-days: 10\n",
 			map[string]any{"days": 14, "default-days": 10},
