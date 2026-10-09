@@ -434,3 +434,74 @@ func TestBatchDPedanticOption(t *testing.T) {
 		}
 	}
 }
+
+func countBatchD(t *testing.T, id, src string) int {
+	t.Helper()
+	n := 0
+	for _, e := range lintBatchD(t, "test.yaml", src, allBatchDRules()) {
+		if e.ID == id {
+			n++
+		}
+	}
+	return n
+}
+
+// The publish commands the analyzer does not know are skipped for a dry run and a registry of your own, like the ones it knows.
+func TestUseTrustedPublishingFallbackCommands(t *testing.T) {
+	const head = "on: push\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - run: "
+	for run, want := range map[string]int{
+		"pdm publish": 1,
+		"pdm publish --repository https://pypi.example.com/":                0,
+		"pdm publish -r https://pypi.example.com/":                          0,
+		"pdm publish --repository=https://pypi.example.com/":                0,
+		"pdm publish --repository pypi":                                     1,
+		"pdm publish --dry-run":                                             0,
+		"nuget push x.nupkg":                                                1,
+		"nuget push x.nupkg -Source https://feed.example.com/v3/index.json": 0,
+		"nuget push x.nupkg -Source https://api.nuget.org/v3/index.json":    1,
+		"dotnet nuget push x.nupkg":                                         1,
+		"dotnet nuget push x.nupkg --source https://feed.example.com":       0,
+		"dotnet nuget push x.nupkg -s https://feed.example.com":             0,
+		"dotnet nuget push x.nupkg --source ${{ vars.FEED }}":               0,
+		"uvx twine upload dist/*":                                           1,
+		"uvx twine upload --repository-url https://x.example.com dist/*":    0,
+	} {
+		if got := countBatchD(t, "use-trusted-publishing", head+run+"\n"); got != want {
+			t.Errorf("%q: %d findings, want %d", run, got, want)
+		}
+	}
+}
+
+// Another event next to workflow_call starts the workflow with the default token, which no caller can raise.
+func TestUseTrustedPublishingReusableWithOtherEvents(t *testing.T) {
+	const steps = "jobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - run: cargo publish\n"
+	for name, tc := range map[string]struct {
+		on   string
+		want int
+	}{
+		"only workflow_call":       {"on: workflow_call\n", 0},
+		"workflow_call and push":   {"on: [workflow_call, push]\n", 1},
+		"workflow_call, release":   {"on:\n  workflow_call:\n  release:\n    types: [published]\n", 1},
+		"workflow_call with input": {"on:\n  workflow_call:\n    inputs:\n      x:\n        type: string\n", 0},
+	} {
+		if got := countBatchD(t, "use-trusted-publishing", tc.on+steps); got != tc.want {
+			t.Errorf("%s: %d findings, want %d", name, got, tc.want)
+		}
+	}
+}
+
+// `${{github.sha}}` is the same expression as `${{ github.sha }}` for the files and the here documents.
+func TestGitHubEnvCompactExpressions(t *testing.T) {
+	const head = "on: pull_request_target\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n"
+	for name, step := range map[string]string{
+		"heredoc, spaced":    "      - run: |\n          cat <<EOF >> $GITHUB_ENV\n          SHA=${{ github.sha }}\n          EOF\n",
+		"heredoc, compact":   "      - run: |\n          cat <<EOF >> $GITHUB_ENV\n          SHA=${{github.sha}}\n          EOF\n",
+		"pwsh line, spaced":  "      - shell: pwsh\n        run: Add-Content $env:GITHUB_ENV \"SHA=${{ github.sha }}\"\n",
+		"pwsh line, compact": "      - shell: pwsh\n        run: Add-Content $env:GITHUB_ENV \"SHA=${{github.sha}}\"\n",
+		"cmd line, compact":  "      - shell: cmd\n        run: echo SHA=${{github.sha}}>> %GITHUB_ENV%\n",
+	} {
+		if got := countBatchD(t, "github-env", head+step); got != 0 {
+			t.Errorf("%s: %d findings for a trusted value, want 0", name, got)
+		}
+	}
+}
