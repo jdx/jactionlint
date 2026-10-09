@@ -33,6 +33,20 @@ A `migrate` command is planned to rewrite an existing configuration file:
 jactionlint -migrate-config
 ```
 
+## zizmor ignore comments
+
+jactionlint honors zizmor's `# zizmor: ignore[...]` comments (see [the usage document](usage.md#zizmor-ignore-comments)) so a
+repository moving from zizmor does not get its triaged findings back. A name in the list stands for the jactionlint rule of
+the same ID. These audits are reported under another ID and are mapped:
+
+| zizmor audit | jactionlint rule | Note |
+| --- | --- | --- |
+| `excessive-permissions` | `missing-permissions` (and the rule of the same name) | the job-level report of zizmor is `missing-permissions` here |
+| `unpinned-images` | `unpinned-uses` | only the Docker image findings of the rule |
+
+Any other name is used as is when jactionlint has a rule with that ID and ignored otherwise. Run `jactionlint -migrate-ignores`
+to turn the comments into `# jactionlint ignore=` comments. A name with both a rule of its own and an alias is migrated to all of them.
+
 ## Planned: autofix and hk
 
 v2 plans an autofix mode, `jactionlint -fix [files]`, which applies only safe, mechanical fixes, is idempotent and re-lints

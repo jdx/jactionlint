@@ -42,3 +42,33 @@ func TestCommandMain(t *testing.T) {
 		t.Errorf("runner-label rule should be ignored by -ignore but it is included in output: %q", out)
 	}
 }
+
+func TestCommandMigrateIgnores(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "w.yaml")
+	src := "on: push\njobs:\n  j:\n    runs-on: ubuntu-latest\n    timeout-minutes: 5\n    steps:\n      - run: echo ${{ github.event.issue.title }} # zizmor: ignore[template-injection] checked\n"
+	if err := os.WriteFile(file, []byte(src), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var output bytes.Buffer
+	cmd := Command{Stdin: os.Stdin, Stdout: &output, Stderr: &output}
+	if status := cmd.Main([]string{"jactionlint", "-migrate-ignores", file}); status != 0 {
+		t.Fatalf("exit status should be 0 but got %d: %s", status, output.String())
+	}
+	if !strings.Contains(output.String(), "migrated zizmor ignore comments: template-injection") {
+		t.Errorf("unexpected output: %q", output.String())
+	}
+	b, err := os.ReadFile(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "on: push\njobs:\n  j:\n    runs-on: ubuntu-latest\n    timeout-minutes: 5\n    steps:\n      # checked\n      # jactionlint ignore=template-injection\n      - run: echo ${{ github.event.issue.title }}\n"
+	if string(b) != want {
+		t.Errorf("unexpected content: %q", b)
+	}
+	// The migrated file lints clean
+	output.Reset()
+	if status := cmd.Main([]string{"jactionlint", "-shellcheck=", "-pyflakes=", file}); status != 0 {
+		t.Errorf("the migrated file must be clean but got %d: %s", status, output.String())
+	}
+}
