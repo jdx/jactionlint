@@ -818,7 +818,57 @@ runs when a finding has no fix. Add this step to `hk.pkl`:
 <a id="on-github-actions"></a>
 ## Use jactionlint on GitHub Actions
 
-The recommended way is [mise](https://mise.jdx.dev) with [`jdx/mise-action`](https://github.com/jdx/mise-action). `mise use jactionlint`
+<a id="action"></a>
+### The action
+
+`jdx/jactionlint` downloads jactionlint, runs it and annotates the changed files with the findings. The job fails when
+jactionlint reports an error:
+
+```yaml
+name: Lint GitHub Actions workflows
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions: {}
+jobs:
+  jactionlint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - uses: jdx/jactionlint@v2
+```
+
+Pin the action to a commit hash, like any other, if you want it immutable. These inputs are available:
+
+| Input | Default | Description |
+|-------|---------|-------------|
+| `version` | `latest` | An exact `X.Y.Z` version of jactionlint, or `latest` for the newest release the action knows about |
+| `executable` | | The path of a jactionlint executable to use instead of downloading one, for example one installed by mise |
+| `files` | | Files to check, separated by whitespace. Without it the nearest `.github/workflows` is checked |
+| `profile` | | `correctness`, `default` or `pedantic`. Without it the `profile` of the config file applies |
+| `config-file` | | The config file, when it is not `.github/jactionlint.yaml` |
+| `min-severity` | | Hide findings less severe than `info`, `warn` or `error` |
+| `strict-exit` | `false` | Fail for findings of level warn and info too |
+| `online` | | `true` runs the [online checks](#online-checks) with `token`, `false` never uses the network, `cache` and `strict` are the modes of `--online`. Empty leaves it to the config file |
+| `token` | `${{ github.token }}` | The GitHub API token of the online checks. It reaches jactionlint only when they run |
+| `annotations` | `true` | Annotate the files in the pull request (`--format github`) |
+| `advanced-security` | `false` | Upload the findings to code scanning as SARIF instead. The job needs `security-events: write`. It takes precedence over `annotations` |
+| `color` | `true` | Colorize the text output (when `annotations` is `false`) |
+| `args` | | More command line options, separated by whitespace |
+| `working-directory` | `.` | The directory to run jactionlint in |
+
+The `executable` output is the path of the executable the action used. With `advanced-security`, `sarif-file` is the path of the
+SARIF file. The findings are uploaded even when there are some, and the job fails afterwards.
+
+### mise
+
+The recommended way to install jactionlint in CI is [mise](https://mise.jdx.dev) with [`jdx/mise-action`](https://github.com/jdx/mise-action). `mise use jactionlint`
 records the version in the `mise.toml` of the project, so CI runs the version developers run; `mise lock` also records its checksum in
 `mise.lock`, which you commit.
 The workflow below passes the `default` profile itself:
