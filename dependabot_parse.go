@@ -53,14 +53,31 @@ func (p *parser) unexpectedDependabotKey(k *String, sec string, expected ...stri
 }
 
 // missingDependabotKey reports a key which the mapping n lacks. It does not when the mapping has a key that was reported
-// as unexpected: that is most likely the same mistake (a misspelled key), and one mistake is one finding.
+// as unexpected and is a misspelling of the missing key ("interval" and "intervall"): one mistake is one finding. An
+// unrelated unexpected key is another mistake, and the missing key is reported as well.
 func (p *parser) missingDependabotKey(n *yaml.Node, key, where string) {
 	for i := 0; i < len(n.Content); i += 2 {
-		if p.unexpectedAt[[2]int{n.Content[i].Line, n.Content[i].Column}] {
+		k := n.Content[i]
+		if p.unexpectedAt[[2]int{k.Line, k.Column}] && isMisspelling(k.Value, key) {
 			return
 		}
 	}
 	p.errorf(n, "%q key is missing in %s", key, where)
+}
+
+// isMisspelling reports whether got is close enough to want to be a typo of it: one edit for a short key, two for a
+// longer one, or the key with a word added, ignoring case and the difference between "-" and "_".
+func isMisspelling(got, want string) bool {
+	norm := func(s string) string { return strings.ReplaceAll(strings.ToLower(s), "_", "-") }
+	got, want = norm(got), norm(want)
+	if strings.HasSuffix(got, "-"+want) || strings.HasPrefix(got, want+"-") {
+		return true // "word-separator" for "separator"
+	}
+	limit := 1
+	if len(want) >= 8 {
+		limit = 2
+	}
+	return editDistance(got, want) <= limit
 }
 
 // notMapping reports whether the node cannot be parsed as a mapping with required keys. In that
