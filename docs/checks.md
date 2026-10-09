@@ -130,11 +130,11 @@ jobs:
 Output:
 
 ```
-test.yaml:6:5: unexpected key "default" for "job" section. expected one of "cache-mode", "concurrency", "container", "continue-on-error", "defaults", "env", "environment", "if", "name", "needs", "outputs", "permissions", "runs-on", "secrets", "services", "snapshot", "steps", "strategy", "timeout-minutes", "uses", "with" [syntax-check]
+test.yaml:6:5: unexpected key "default" for "job" section. expected one of "cache-mode", "concurrency", "container", "continue-on-error", "defaults", "env", "environment", "if", "name", "needs", "outputs", "permissions", "runs-on", "secrets", "services", "snapshot", "steps", "strategy", "timeout-minutes", "uses", "with" [workflow-syntax]
   |
 6 |     default:
   |     ^~~~~~~~
-test.yaml:12:9: unexpected key "Shell" for step to run shell command. expected one of "background", "continue-on-error", "env", "id", "if", "name", "run", "shell", "timeout-minutes", "working-directory" [syntax-check]
+test.yaml:12:9: unexpected key "Shell" for step to run shell command. expected one of "background", "continue-on-error", "env", "id", "if", "name", "run", "shell", "timeout-minutes", "working-directory" [workflow-syntax]
    |
 12 |         Shell: bash
    |         ^~~~~~
@@ -172,11 +172,11 @@ jobs:
 Output:
 
 ```
-test.yaml:3:3: "runs-on" section is missing in job "test" [syntax-check]
+test.yaml:3:3: "runs-on" section is missing in job "test" [workflow-syntax]
   |
 3 |   test:
   |   ^~~~~
-test.yaml:8:9: key "VERSION_NAME" is duplicated in "matrix" section. previously defined at line:7,col:9. note that this key is case insensitive [syntax-check]
+test.yaml:8:9: key "VERSION_NAME" is duplicated in "matrix" section. previously defined at line:7,col:9. note that this key is case insensitive [duplicate-key]
   |
 8 |         VERSION_NAME: [V1, V2]
   |         ^~~~~~~~~~~~~
@@ -204,7 +204,7 @@ jobs:
 Output:
 
 ```
-test.yaml:2:6: "jobs" section should not be empty. please remove this section if it's unnecessary [syntax-check]
+test.yaml:2:6: "jobs" section should not be empty. please remove this section if it's unnecessary [workflow-syntax]
   |
 2 | jobs:
   |      ^
@@ -241,15 +241,15 @@ jobs:
 Output:
 
 ```
-test.yaml:6:18: expecting a single ${{...}} expression or boolean literal "true" or "false", but found plain text node [syntax-check]
+test.yaml:6:18: expecting a single ${{...}} expression or boolean literal "true" or "false", but found plain text node [workflow-syntax]
   |
 6 |       fail-fast: off
   |                  ^~~
-test.yaml:8:21: expected scalar node for integer value but found scalar node with "!!float" tag [syntax-check]
+test.yaml:8:21: expected scalar node for integer value but found scalar node with "!!float" tag [workflow-syntax]
   |
 8 |       max-parallel: 1.5
   |                     ^~~
-test.yaml:13:26: expecting a single ${{...}} expression or float number literal, but found plain text node [syntax-check]
+test.yaml:13:26: expecting a single ${{...}} expression or float number literal, but found plain text node [workflow-syntax]
    |
 13 |         timeout-minutes: two minutes
    |                          ^~~
@@ -287,19 +287,19 @@ jobs:
 Output:
 
 ```
-test.yaml:7:24: got unexpected character '"' while lexing expression, expecting 'a'..'z', 'A'..'Z', '_', '0'..'9', ''', '}', '(', ')', '[', ']', '.', '!', '<', '>', '=', '&', '|', '*', ',', ' '. do you mean string literals? only single quotes are available for string delimiter [expression]
+test.yaml:7:24: got unexpected character '"' while lexing expression, expecting 'a'..'z', 'A'..'Z', '_', '0'..'9', ''', '}', '(', ')', '[', ']', '.', '!', '<', '>', '=', '&', '|', '*', ',', ' '. do you mean string literals? only single quotes are available for string delimiter [expression-syntax]
   |
 7 |       - run: echo '${{ "hello" }}'
   |                        ^~~~~~~
-test.yaml:9:26: got unexpected character '+' while lexing expression, expecting 'a'..'z', 'A'..'Z', '_', '0'..'9', ''', '}', '(', ')', '[', ']', '.', '!', '<', '>', '=', '&', '|', '*', ',', ' ' [expression]
+test.yaml:9:26: got unexpected character '+' while lexing expression, expecting 'a'..'z', 'A'..'Z', '_', '0'..'9', ''', '}', '(', ')', '[', ']', '.', '!', '<', '>', '=', '&', '|', '*', ',', ' ' [expression-syntax]
   |
 9 |       - run: echo '${{ 1 + 1 }}'
   |                          ^
-test.yaml:11:65: unexpected end of input while parsing arguments of function call. expecting ",", ")" [expression]
+test.yaml:11:65: unexpected end of input while parsing arguments of function call. expecting ",", ")" [expression-syntax]
    |
 11 |       - run: echo "${{ toJson(hashFiles('**/lock', '**/cache/') }}"
    |                                                                 ^~~
-test.yaml:13:38: unexpected end of input while parsing object property dereference like 'a.b' or array element dereference like 'a.*'. expecting "IDENT", "*" [expression]
+test.yaml:13:38: unexpected end of input while parsing object property dereference like 'a.b' or array element dereference like 'a.*'. expecting "IDENT", "*" [expression-syntax]
    |
 13 |       - run: echo '${{ github.event. }}'
    |                                      ^~~
@@ -355,19 +355,19 @@ jobs:
 Output:
 
 ```
-test.yaml:7:28: property access of object must be type of string but got "number" [expression]
+test.yaml:7:28: property access of object must be type of string but got "number" [expression-type]
   |
 7 |       - run: echo '${{ env[0] }}'
   |                            ^~
-test.yaml:9:24: property "os" is not defined in object type {id: string; network: string} [expression]
+test.yaml:9:24: property "os" is not defined in object type {id: string; network: string} [undefined-property]
   |
 9 |       - run: echo '${{ job.container.os }}'
   |                        ^~~~~~~~~~~~~~~~
-test.yaml:11:24: receiver of object dereference "owner" must be type of object but got "string" [expression]
+test.yaml:11:24: receiver of object dereference "owner" must be type of object but got "string" [expression-type]
    |
 11 |       - run: echo '${{ github.repository.owner }}'
    |                        ^~~~~~~~~~~~~~~~~~~~~~~
-test.yaml:13:20: object, array, and null values should not be evaluated in template with ${{ }} but evaluating the value of type {string => string} [expression]
+test.yaml:13:20: object, array, and null values should not be evaluated in template with ${{ }} but evaluating the value of type {string => string} [expression-type]
    |
 13 |       - run: echo '${{ env }}'
    |                    ^~~
@@ -423,7 +423,7 @@ jobs:
 Output:
 
 ```
-test.yaml:19:14: type of expression at "env" must be object but found type string [expression]
+test.yaml:19:14: type of expression at "env" must be object but found type string [expression-type]
    |
 19 |         env: ${{ matrix.env_string }}
    |              ^~~
@@ -462,23 +462,23 @@ jobs:
 Output:
 
 ```
-test.yaml:7:24: undefined variable "unknown_context". available variables are "env", "github", "inputs", "job", "matrix", "needs", "runner", "secrets", "steps", "strategy", "vars" [expression]
+test.yaml:7:24: undefined variable "unknown_context". available variables are "env", "github", "inputs", "job", "matrix", "needs", "runner", "secrets", "steps", "strategy", "vars" [undefined-property]
   |
 7 |       - run: echo '${{ unknown_context }}'
   |                        ^~~~~~~~~~~~~~~
-test.yaml:9:24: property "events" is not defined in object type {action: string; action_path: string; action_ref: string; action_repository: string; action_status: string; actor: string; actor_id: string; api_url: string; artifact_cache_size_limit: number; base_ref: string; env: string; event: object; event_name: string; event_path: string; graphql_url: string; head_ref: string; job: string; job_workflow_sha: string; output: string; path: string; ref: string; ref_name: string; ref_protected: bool; ref_type: string; repository: string; repository_id: string; repository_owner: string; repository_owner_id: string; repository_visibility: string; repositoryurl: string; retention_days: number; run_attempt: string; run_id: string; run_number: string; secret_source: string; server_url: string; sha: string; state: string; step_summary: string; token: string; triggering_actor: string; workflow: string; workflow_ref: string; workflow_sha: string; workspace: string} [expression]
+test.yaml:9:24: property "events" is not defined in object type {action: string; action_path: string; action_ref: string; action_repository: string; action_status: string; actor: string; actor_id: string; api_url: string; artifact_cache_size_limit: number; base_ref: string; env: string; event: object; event_name: string; event_path: string; graphql_url: string; head_ref: string; job: string; job_workflow_sha: string; output: string; path: string; ref: string; ref_name: string; ref_protected: bool; ref_type: string; repository: string; repository_id: string; repository_owner: string; repository_owner_id: string; repository_visibility: string; repositoryurl: string; retention_days: number; run_attempt: string; run_id: string; run_number: string; secret_source: string; server_url: string; sha: string; state: string; step_summary: string; token: string; triggering_actor: string; workflow: string; workflow_ref: string; workflow_sha: string; workspace: string} [undefined-property]
   |
 9 |       - run: echo '${{ github.events }}'
   |                        ^~~~~~~~~~~~~
-test.yaml:11:24: undefined function "startWith". available functions are "always", "cancelled", "case", "contains", "endswith", "failure", "format", "fromjson", "hashfiles", "join", "startswith", "success", "tojson" [expression]
+test.yaml:11:24: undefined function "startWith". available functions are "always", "cancelled", "case", "contains", "endswith", "failure", "format", "fromjson", "hashfiles", "join", "startswith", "success", "tojson" [undefined-function]
    |
 11 |       - run: echo "${{ startWith('hello, world', 'lo,') }}"
    |                        ^~~~~~~~~~~~~~~~~
-test.yaml:13:24: number of arguments is wrong. function "startsWith(string, string) -> bool" takes 2 parameters but 1 arguments are given [expression]
+test.yaml:13:24: number of arguments is wrong. function "startsWith(string, string) -> bool" takes 2 parameters but 1 arguments are given [invalid-function-call]
    |
 13 |       - run: echo "${{ startsWith('hello, world') }}"
    |                        ^~~~~~~~~~~~~~~~~~
-test.yaml:15:51: 2nd argument of function call is not assignable. "object" cannot be assigned to "string". called function type is "startsWith(string, string) -> bool" [expression]
+test.yaml:15:51: 2nd argument of function call is not assignable. "object" cannot be assigned to "string". called function type is "startsWith(string, string) -> bool" [invalid-function-call]
    |
 15 |       - run: echo "${{ startsWith('hello, world', github.event) }}"
    |                                                   ^~~~~~~~~~~~~
@@ -525,19 +525,19 @@ jobs:
 Output:
 
 ```
-test.yaml:6:18: property "mac" is not defined in object type {linux: string; win: string} [expression]
+test.yaml:6:18: property "mac" is not defined in object type {linux: string; win: string} [undefined-property]
   |
 6 |     runs-on: ${{ fromJSON('{"win":"windows-latest","linux":"ubuntul-latest"}')['mac'] }}
   |                  ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-test.yaml:9:24: format string "{0}{1}" does not contain placeholder {2}. remove argument which is unused in the format string [expression]
+test.yaml:9:24: format string "{0}{1}" does not contain placeholder {2}. remove argument which is unused in the format string [invalid-function-call]
   |
 9 |       - run: echo "${{ format('{0}{1}', 1, 2, 3) }}"
   |                        ^~~~~~~~~~~~~~~~
-test.yaml:11:24: format string "{0}{1}{2}" contains placeholder {2} but only 2 arguments are given to format [expression]
+test.yaml:11:24: format string "{0}{1}{2}" contains placeholder {2} but only 2 arguments are given to format [invalid-function-call]
    |
 11 |       - run: echo "${{ format('{0}{1}{2}', 1, 2) }}"
    |                        ^~~~~~~~~~~~~~~~~~~
-test.yaml:14:31: broken JSON string is passed to fromJSON() at offset 23: unexpected end of JSON input [expression]
+test.yaml:14:31: broken JSON string is passed to fromJSON() at offset 23: unexpected end of JSON input [invalid-function-call]
    |
 14 |         if: contains(fromJson('["main","release","dev"'), github.ref_name)
    |                               ^~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -585,11 +585,11 @@ test.yaml:7:7: output "foo" of job "test" is never used: no other job reads "nee
   |
 7 |       foo: '${{ steps.get_value.outputs.name }}'
   |       ^~~~
-test.yaml:10:24: property "get_value" is not defined in object type {} [expression]
+test.yaml:10:24: property "get_value" is not defined in object type {} [undefined-property]
    |
 10 |       - run: echo '${{ steps.get_value.outputs.name }}'
    |                        ^~~~~~~~~~~~~~~~~~~~~~~~~~~~
-test.yaml:22:24: property "get_value" is not defined in object type {} [expression]
+test.yaml:22:24: property "get_value" is not defined in object type {} [undefined-property]
    |
 22 |       - run: echo '${{ steps.get_value.outputs.name }}'
    |                        ^~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -633,11 +633,11 @@ jobs:
 Output:
 
 ```
-test.yaml:8:23: property "cache" is not defined in object type {} [expression]
+test.yaml:8:23: property "cache" is not defined in object type {} [undefined-property]
   |
 8 |       - run: echo ${{ steps.cache.outputs.cache-hit }}
   |                       ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-test.yaml:18:23: property "cache_hit" is not defined in object type {cache-hit: string} [expression]
+test.yaml:18:23: property "cache_hit" is not defined in object type {cache-hit: string} [undefined-property]
    |
 18 |       - run: echo ${{ steps.cache.outputs.cache_hit }}
    |                       ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -691,11 +691,11 @@ Output:
 <!-- Skip update output -->
 
 ```
-test.yaml:8:23: property "my_action" is not defined in object type {} [expression]
+test.yaml:8:23: property "my_action" is not defined in object type {} [undefined-property]
   |
 8 |       - run: echo ${{ steps.my_action.outputs.some_value }}
   |                       ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-test.yaml:15:23: property "some-value" is not defined in object type {some_value: string} [expression]
+test.yaml:15:23: property "some-value" is not defined in object type {some_value: string} [undefined-property]
    |
 15 |       - run: echo ${{ steps.my_action.outputs.some-value }}
    |                       ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -751,15 +751,15 @@ jobs:
 Output:
 
 ```
-test.yaml:19:24: property "platform" is not defined in object type {node: number; npm: string; os: string; package: {name: string; optional: bool}} [expression]
+test.yaml:19:24: property "platform" is not defined in object type {node: number; npm: string; os: string; package: {name: string; optional: bool}} [undefined-property]
    |
 19 |       - run: echo '${{ matrix.platform }}'
    |                        ^~~~~~~~~~~~~~~
-test.yaml:21:24: property "dev" is not defined in object type {name: string; optional: bool} [expression]
+test.yaml:21:24: property "dev" is not defined in object type {name: string; optional: bool} [undefined-property]
    |
 21 |       - run: echo '${{ matrix.package.dev }}'
    |                        ^~~~~~~~~~~~~~~~~~
-test.yaml:34:24: property "os" is not defined in object type {} [expression]
+test.yaml:34:24: property "os" is not defined in object type {} [undefined-property]
    |
 34 |       - run: echo '${{ matrix.os }}'
    |                        ^~~~~~~~~
@@ -838,7 +838,7 @@ jobs:
 Output:
 
 ```
-test.yaml:16:24: property "prepare" is not defined in object type {} [expression]
+test.yaml:16:24: property "prepare" is not defined in object type {} [undefined-property]
    |
 16 |       - run: echo '${{ needs.prepare.outputs.prepared }}'
    |                        ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -846,15 +846,15 @@ test.yaml:17:3: job "build" reads "needs.some_job" but has no "if" with a status
    |
 17 |   build:
    |   ^~~~~~
-test.yaml:26:24: property "foo" is not defined in object type {installed: string} [expression]
+test.yaml:26:24: property "foo" is not defined in object type {installed: string} [undefined-property]
    |
 26 |       - run: echo '${{ needs.install.outputs.foo }}'
    |                        ^~~~~~~~~~~~~~~~~~~~~~~~~
-test.yaml:28:24: property "some_job" is not defined in object type {install: {outputs: {installed: string}; result: string}; prepare: {outputs: {prepared: string}; result: string}} [expression]
+test.yaml:28:24: property "some_job" is not defined in object type {install: {outputs: {installed: string}; result: string}; prepare: {outputs: {prepared: string}; result: string}} [undefined-property]
    |
 28 |       - run: echo '${{ needs.some_job }}'
    |                        ^~~~~~~~~~~~~~
-test.yaml:33:24: property "build" is not defined in object type {} [expression]
+test.yaml:33:24: property "build" is not defined in object type {} [undefined-property]
    |
 33 |       - run: echo '${{ needs.build.outputs.built }}'
    |                        ^~~~~~~~~~~~~~~~~~~~~~~~~
@@ -894,11 +894,11 @@ jobs:
 Output:
 
 ```
-test.yaml:13:17: "object" value cannot be compared to "string" value with "==" operator [expression]
+test.yaml:13:17: "object" value cannot be compared to "string" value with "==" operator [expression-type]
    |
 13 |         if: ${{ github.event == 'workflow_call' }}
    |                 ^~~~~~~~~~~~
-test.yaml:16:17: "bool" value cannot be compared to "number" value with ">" operator [expression]
+test.yaml:16:17: "bool" value cannot be compared to "number" value with ">" operator [expression-type]
    |
 16 |         if: ${{ inputs.timeout > 60 }}
    |                 ^~~~~~~~~~~~~~
@@ -1137,15 +1137,15 @@ jobs:
 Output:
 
 ```
-test.yaml:10:24: "github.event.pull_request.title" is potentially untrusted. avoid using it directly in inline scripts. instead, pass it through an environment variable. see https://docs.github.com/en/actions/reference/security/secure-use#good-practices-for-mitigating-script-injection-attacks for more details [expression]
+test.yaml:10:24: "github.event.pull_request.title" is potentially untrusted. avoid using it directly in inline scripts. instead, pass it through an environment variable. see https://docs.github.com/en/actions/reference/security/secure-use#good-practices-for-mitigating-script-injection-attacks for more details [template-injection]
    |
 10 |         run: echo '${{ github.event.pull_request.title }}'
    |                        ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-test.yaml:19:36: "github.event.head_commit.author.name" is potentially untrusted. avoid using it directly in inline scripts. instead, pass it through an environment variable. see https://docs.github.com/en/actions/reference/security/secure-use#good-practices-for-mitigating-script-injection-attacks for more details [expression]
+test.yaml:19:36: "github.event.head_commit.author.name" is potentially untrusted. avoid using it directly in inline scripts. instead, pass it through an environment variable. see https://docs.github.com/en/actions/reference/security/secure-use#good-practices-for-mitigating-script-injection-attacks for more details [template-injection]
    |
 19 |           script: console.log('${{ github.event.head_commit.author.name }}')
    |                                    ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-test.yaml:22:31: object filter extracts potentially untrusted properties "github.event.comment.body", "github.event.discussion.body", "github.event.issue.body", "github.event.pull_request.body", "github.event.review.body", "github.event.review_comment.body". avoid using the value directly in inline scripts. instead, pass the value through an environment variable. see https://docs.github.com/en/actions/reference/security/secure-use#good-practices-for-mitigating-script-injection-attacks for more details [expression]
+test.yaml:22:31: object filter extracts potentially untrusted properties "github.event.comment.body", "github.event.discussion.body", "github.event.issue.body", "github.event.pull_request.body", "github.event.review.body", "github.event.review_comment.body". avoid using the value directly in inline scripts. instead, pass the value through an environment variable. see https://docs.github.com/en/actions/reference/security/secure-use#good-practices-for-mitigating-script-injection-attacks for more details [template-injection]
    |
 22 |         run: echo '${{ toJSON(github.event.*.body) }}'
    |                               ^~~~~~~~~~~~~~~~~~~~
@@ -1286,23 +1286,23 @@ jobs:
 Output:
 
 ```
-test.yaml:11:24: environment variable "env.TITLE" holds the potentially untrusted input "github.event.issue.title". expanding it with ${{ }} in an inline script is as dangerous as using the input directly. instead, read it as a variable of the shell [expression]
+test.yaml:11:24: environment variable "env.TITLE" holds the potentially untrusted input "github.event.issue.title". expanding it with ${{ }} in an inline script is as dangerous as using the input directly. instead, read it as a variable of the shell [template-injection]
    |
 11 |       - run: echo '${{ env.TITLE }}'
    |                        ^~~~~~~~~
-test.yaml:14:21: "github.head_ref" is potentially untrusted. avoid using it directly in inline scripts. instead, pass it through an environment variable. see https://docs.github.com/en/actions/reference/security/secure-use#good-practices-for-mitigating-script-injection-attacks for more details [expression]
+test.yaml:14:21: "github.head_ref" is potentially untrusted. avoid using it directly in inline scripts. instead, pass it through an environment variable. see https://docs.github.com/en/actions/reference/security/secure-use#good-practices-for-mitigating-script-injection-attacks for more details [template-injection]
    |
 14 |           echo '${{ github.head_ref }}'
    |                     ^~~~~~~~~~~~~~~
-test.yaml:15:21: "github.event.comment.body" is potentially untrusted. avoid using it directly in inline scripts. instead, pass it through an environment variable. see https://docs.github.com/en/actions/reference/security/secure-use#good-practices-for-mitigating-script-injection-attacks for more details [expression]
+test.yaml:15:21: "github.event.comment.body" is potentially untrusted. avoid using it directly in inline scripts. instead, pass it through an environment variable. see https://docs.github.com/en/actions/reference/security/secure-use#good-practices-for-mitigating-script-injection-attacks for more details [template-injection]
    |
 15 |           echo '${{ github.event.comment.body }}'
    |                     ^~~~~~~~~~~~~~~~~~~~~~~~~
-test.yaml:17:31: "github.event" includes potentially untrusted properties such as "github.event.comment.body". avoid expanding it in inline scripts. instead, pass the properties you need through environment variables [expression]
+test.yaml:17:31: "github.event" includes potentially untrusted properties such as "github.event.comment.body". avoid expanding it in inline scripts. instead, pass the properties you need through environment variables [template-injection]
    |
 17 |       - run: echo '${{ toJSON(github.event) }}'
    |                               ^~~~~~~~~~~~~
-test.yaml:21:29: "github.head_ref" is potentially untrusted. avoid using it directly in inline scripts. instead, pass it through an environment variable. see https://docs.github.com/en/actions/reference/security/secure-use#good-practices-for-mitigating-script-injection-attacks for more details [expression]
+test.yaml:21:29: "github.head_ref" is potentially untrusted. avoid using it directly in inline scripts. instead, pass it through an environment variable. see https://docs.github.com/en/actions/reference/security/secure-use#good-practices-for-mitigating-script-injection-attacks for more details [template-injection]
    |
 21 |           command: echo ${{ github.head_ref }}
    |                             ^~~~~~~~~~~~~~~
@@ -1368,11 +1368,11 @@ jobs:
 Output:
 
 ```
-test.yaml:9:27: "github.event.issue.title" is potentially untrusted and is expanded into the options of the container of the job. docker reads them as command line flags, so text from an attacker can add flags such as --privileged, --volume or --entrypoint. use a fixed value, or choose one from a fixed list such as a matrix or an input of type choice [expression]
+test.yaml:9:27: "github.event.issue.title" is potentially untrusted and is expanded into the options of the container of the job. docker reads them as command line flags, so text from an attacker can add flags such as --privileged, --volume or --entrypoint. use a fixed value, or choose one from a fixed list such as a matrix or an input of type choice [template-injection]
   |
 9 |       options: --user ${{ github.event.issue.title }}
   |                           ^~~~~~~~~~~~~~~~~~~~~~~~
-test.yaml:14:31: "github.event.issue.title" is potentially untrusted and is expanded into the "prompt" input of Claude Code Action. the agent reads the prompt as instructions, so text from an attacker can steer the agent, and quoting or escaping cannot prevent that. do not put event data in the prompt: let the agent read it with its own tools, and give the agent only the permissions, secrets and tools that the worst instruction could use [expression]
+test.yaml:14:31: "github.event.issue.title" is potentially untrusted and is expanded into the "prompt" input of Claude Code Action. the agent reads the prompt as instructions, so text from an attacker can steer the agent, and quoting or escaping cannot prevent that. do not put event data in the prompt: let the agent read it with its own tools, and give the agent only the permissions, secrets and tools that the worst instruction could use [template-injection]
    |
 14 |           prompt: Triage "${{ github.event.issue.title }}"
    |                               ^~~~~~~~~~~~~~~~~~~~~~~~
@@ -1408,7 +1408,7 @@ jobs:
 Output:
 
 ```
-test.yaml:3:3: cyclic dependencies in "needs" job configurations are detected. detected cycle is "prepare" -> "build" -> "install" -> "prepare" [job-needs]
+test.yaml:3:3: cyclic dependencies in "needs" job configurations are detected. detected cycle is "prepare" -> "build" -> "install" -> "prepare" [cyclic-job-needs]
   |
 3 |   prepare:
   |   ^~~~~~~~
@@ -1441,11 +1441,11 @@ jobs:
 Output:
 
 ```
-test.yaml:4:18: job ID "BAR" duplicates in "needs" section. note that job ID is case insensitive [job-needs]
+test.yaml:4:18: job ID "BAR" duplicates in "needs" section. note that job ID is case insensitive [duplicate-job-needs]
   |
 4 |     needs: [bar, BAR]
   |                  ^~~~
-test.yaml:8:3: job "bar" needs job "unknown" which does not exist in this workflow [job-needs]
+test.yaml:8:3: job "bar" needs job "unknown" which does not exist in this workflow [undefined-job-needs]
   |
 8 |   bar:
   |   ^~~~
@@ -1475,7 +1475,7 @@ jobs:
 Output:
 
 ```
-test.yaml:11:17: "serverr" is not the ID of a preceding background step. "wait" and "cancel" steps can only refer to an earlier step that has "background: true" [parallel-steps]
+test.yaml:11:17: "serverr" is not the ID of a preceding background step. "wait" and "cancel" steps can only refer to an earlier step that has "background: true" [invalid-parallel-step]
    |
 11 |       - cancel: serverr
    |                 ^~~~~~~
@@ -1505,11 +1505,11 @@ jobs:
 Output:
 <!-- Skip update output -->
 ```
-test.yaml:3:3: "timeout-minutes" is not set at this job. Set it to avoid wasting runner minutes when the job hangs [timeout-check]
+test.yaml:3:3: "timeout-minutes" is not set at this job. Set it to avoid wasting runner minutes when the job hangs [missing-timeout]
   |
 3 |   no-timeout:
   |   ^~~~~~~~~~~
-test.yaml:9:22: "timeout-minutes" is 120, which is greater than the maximum 60 minutes allowed by the configuration [timeout-check]
+test.yaml:9:22: "timeout-minutes" is 120, which is greater than the maximum 60 minutes allowed by the configuration [timeout-too-long]
   |
 9 |     timeout-minutes: 120
   |                      ^~~
@@ -1619,15 +1619,15 @@ jobs:
 Output:
 
 ```
-test.yaml:6:28: duplicate value "14" is found in matrix "node". the same value is at line:6,col:24 [matrix]
+test.yaml:6:28: duplicate value "14" is found in matrix "node". the same value is at line:6,col:24 [matrix-duplicate-value]
   |
 6 |         node: [10, 12, 14, 14]
   |                            ^~~
-test.yaml:9:19: value "13" in "exclude" does not match in matrix "node" combinations. possible values are "10", "12", "14", "14" [matrix]
+test.yaml:9:19: value "13" in "exclude" does not match in matrix "node" combinations. possible values are "10", "12", "14", "14" [matrix-invalid-exclude]
   |
 9 |           - node: 13
   |                   ^~
-test.yaml:12:13: "platform" in "exclude" section does not exist in matrix. available matrix configurations are "node", "os" [matrix]
+test.yaml:12:13: "platform" in "exclude" section does not exist in matrix. available matrix configurations are "node", "os" [matrix-invalid-exclude]
    |
 12 |             platform: ubuntu-latest
    |             ^~~~~~~~~
@@ -1673,23 +1673,23 @@ jobs:
 Output:
 
 ```
-test.yaml:4:5: unexpected key "branch" for "push" section. expected one of "branches", "branches-ignore", "paths", "paths-ignore", "tags", "tags-ignore", "types", "workflows" [syntax-check]
+test.yaml:4:5: unexpected key "branch" for "push" section. expected one of "branches", "branches-ignore", "paths", "paths-ignore", "tags", "tags-ignore", "types", "workflows" [workflow-syntax]
   |
 4 |     branch: foo
   |     ^~~~~~~
-test.yaml:7:5: both "paths" and "paths-ignore" filters cannot be used for the same event "push". note: use '!' to negate patterns [events]
+test.yaml:7:5: both "paths" and "paths-ignore" filters cannot be used for the same event "push". note: use '!' to negate patterns [invalid-event-filter]
   |
 7 |     paths-ignore: path/to/foo
   |     ^~~~~~~~~~~~~
-test.yaml:10:12: invalid activity type "created" for "issues" Webhook event. available types are "assigned", "closed", "deleted", "demilestoned", "edited", "labeled", "locked", "milestoned", "opened", "pinned", "reopened", "transferred", "typed", "unassigned", "unlabeled", "unlocked", "unpinned", "untyped" [events]
+test.yaml:10:12: invalid activity type "created" for "issues" Webhook event. available types are "assigned", "closed", "deleted", "demilestoned", "edited", "labeled", "locked", "milestoned", "opened", "pinned", "reopened", "transferred", "typed", "unassigned", "unlabeled", "unlocked", "unpinned", "untyped" [invalid-activity-type]
    |
 10 |     types: created
    |            ^~~~~~~
-test.yaml:13:5: "tags" filter is not available for release event. it is only for push event [events]
+test.yaml:13:5: "tags" filter is not available for release event. it is only for push event [invalid-event-filter]
    |
 13 |     tags: v*.*.*
    |     ^~~~~
-test.yaml:15:3: unknown Webhook event "pullreq". see https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#webhook-events for list of all Webhook event names [events]
+test.yaml:15:3: unknown Webhook event "pullreq". see https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#webhook-events for list of all Webhook event names [unknown-event]
    |
 15 |   pullreq:
    |   ^~~~~~~~
@@ -1773,47 +1773,47 @@ jobs:
 Output:
 
 ```
-test.yaml:6:15: input type of workflow_dispatch event must be one of "string", "number", "boolean", "choice", "environment" but got "text" [syntax-check]
+test.yaml:6:15: input type of workflow_dispatch event must be one of "string", "number", "boolean", "choice", "environment" but got "text" [workflow-syntax]
   |
 6 |         type: text
   |               ^~~~
-test.yaml:8:7: input type of "kind" is "choice" but "options" is not set [events]
+test.yaml:8:7: input type of "kind" is "choice" but "options" is not set [invalid-workflow-dispatch-input]
   |
 8 |       kind:
   |       ^~~~~
-test.yaml:16:18: default value "Chobi" of "name" input is not included in its options "\"Tama\", \"Mike\"" [events]
+test.yaml:16:18: default value "Chobi" of "name" input is not included in its options "\"Tama\", \"Mike\"" [invalid-workflow-dispatch-input]
    |
 16 |         default: Chobi
    |                  ^~~~~
-test.yaml:22:18: type of "verbose" input is "boolean". its default value "yes" must be "true" or "false" [events]
+test.yaml:22:18: type of "verbose" input is "boolean". its default value "yes" must be "true" or "false" [invalid-workflow-dispatch-input]
    |
 22 |         default: yes
    |                  ^~~
-test.yaml:26:18: type of "age" input is "number" but its default value "teen" cannot be parsed as a float number: strconv.ParseFloat: parsing "teen": invalid syntax [events]
+test.yaml:26:18: type of "age" input is "number" but its default value "teen" cannot be parsed as a float number: strconv.ParseFloat: parsing "teen": invalid syntax [invalid-workflow-dispatch-input]
    |
 26 |         default: teen
    |                  ^~~~
-test.yaml:33:24: "inputs.massage" is an input chosen by whoever runs this, which is not validated and can hold shell syntax. avoid using it directly in inline scripts. instead, pass it through an environment variable. see https://docs.github.com/en/actions/reference/security/secure-use#good-practices-for-mitigating-script-injection-attacks for more details [expression]
+test.yaml:33:24: "inputs.massage" is an input chosen by whoever runs this, which is not validated and can hold shell syntax. avoid using it directly in inline scripts. instead, pass it through an environment variable. see https://docs.github.com/en/actions/reference/security/secure-use#good-practices-for-mitigating-script-injection-attacks for more details [template-injection]
    |
 33 |       - run: echo "${{ inputs.massage }}"
    |                        ^~~~~~~~~~~~~~
-test.yaml:33:24: property "massage" is not defined in object type {age: number; id: any; kind: string; message: string; name: string; verbose: bool} [expression]
+test.yaml:33:24: property "massage" is not defined in object type {age: number; id: any; kind: string; message: string; name: string; verbose: bool} [undefined-property]
    |
 33 |       - run: echo "${{ inputs.massage }}"
    |                        ^~~~~~~~~~~~~~
-test.yaml:35:28: property access of object must be type of string but got "bool" [expression]
+test.yaml:35:28: property access of object must be type of string but got "bool" [expression-type]
    |
 35 |       - run: echo "${{ env[inputs.verbose] }}"
    |                            ^~~~~~~~~~~~~~~
-test.yaml:37:28: property access of object must be type of string but got "number" [expression]
+test.yaml:37:28: property access of object must be type of string but got "number" [expression-type]
    |
 37 |       - run: echo "${{ env[inputs.age] }}"
    |                            ^~~~~~~~~~~
-test.yaml:39:24: "github.event.inputs.massage" is an input chosen by whoever runs this, which is not validated and can hold shell syntax. avoid using it directly in inline scripts. instead, pass it through an environment variable. see https://docs.github.com/en/actions/reference/security/secure-use#good-practices-for-mitigating-script-injection-attacks for more details [expression]
+test.yaml:39:24: "github.event.inputs.massage" is an input chosen by whoever runs this, which is not validated and can hold shell syntax. avoid using it directly in inline scripts. instead, pass it through an environment variable. see https://docs.github.com/en/actions/reference/security/secure-use#good-practices-for-mitigating-script-injection-attacks for more details [template-injection]
    |
 39 |       - run: echo "${{ github.event.inputs.massage }}"
    |                        ^~~~~~~~~~~~~~~~~~~~~~~~~~~
-test.yaml:39:24: property "massage" is not defined in object type {age: string; id: string; kind: string; message: string; name: string; verbose: string} [expression]
+test.yaml:39:24: property "massage" is not defined in object type {age: string; id: string; kind: string; message: string; name: string; verbose: string} [undefined-property]
    |
 39 |       - run: echo "${{ github.event.inputs.massage }}"
    |                        ^~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1910,19 +1910,19 @@ jobs:
 Output:
 
 ```
-test.yaml:6:10: character '^' is invalid for branch and tag names. ref name cannot contain spaces, ~, ^, :, [, ?, *. see `man git-check-ref-format` for more details. note that regular expression is unavailable. note: filter pattern syntax is explained at https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions#filter-pattern-cheat-sheet [glob]
+test.yaml:6:10: character '^' is invalid for branch and tag names. ref name cannot contain spaces, ~, ^, :, [, ?, *. see `man git-check-ref-format` for more details. note that regular expression is unavailable. note: filter pattern syntax is explained at https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions#filter-pattern-cheat-sheet [invalid-glob]
   |
 6 |       - '^foo-'
   |          ^~~~~~
-test.yaml:9:12: invalid glob pattern. unexpected character '+' while checking special character + (one or more). the preceding character must not be special character. note: filter pattern syntax is explained at https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions#filter-pattern-cheat-sheet [glob]
+test.yaml:9:12: invalid glob pattern. unexpected character '+' while checking special character + (one or more). the preceding character must not be special character. note: filter pattern syntax is explained at https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions#filter-pattern-cheat-sheet [invalid-glob]
   |
 9 |       - 'v*+'
   |            ^~
-test.yaml:11:14: invalid glob pattern. unexpected character '1' while checking character range in []. start of range '9' (57) is larger than end of range '1' (49). note: filter pattern syntax is explained at https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions#filter-pattern-cheat-sheet [glob]
+test.yaml:11:14: invalid glob pattern. unexpected character '1' while checking character range in []. start of range '9' (57) is larger than end of range '1' (49). note: filter pattern syntax is explained at https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions#filter-pattern-cheat-sheet [invalid-glob]
    |
 11 |       - 'v[9-1]'
    |              ^~~
-test.yaml:14:9: '.' and '..' are not allowed in glob path. note: filter pattern syntax is explained at https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions#filter-pattern-cheat-sheet [glob]
+test.yaml:14:9: '.' and '..' are not allowed in glob path. note: filter pattern syntax is explained at https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions#filter-pattern-cheat-sheet [invalid-glob]
    |
 14 |       - ./foo/bar.txt
    |         ^~~~~~~~~~~~~
@@ -1969,15 +1969,15 @@ jobs:
 Output:
 
 ```
-test.yaml:4:13: invalid CRON format "0 */3 * *" in schedule event: expected exactly 5 fields, found 4: [0 */3 * *] [events]
+test.yaml:4:13: invalid CRON format "0 */3 * *" in schedule event: expected exactly 5 fields, found 4: [0 */3 * *] [invalid-cron]
   |
 4 |     - cron: '0 */3 * *'
   |             ^~
-test.yaml:6:13: scheduled job runs too frequently. it runs once per 60 seconds. the shortest interval is once every 5 minutes [events]
+test.yaml:6:13: scheduled job runs too frequently. it runs once per 60 seconds. the shortest interval is once every 5 minutes [cron-too-frequent]
   |
 6 |     - cron: '* */3 * * *'
   |             ^~
-test.yaml:9:17: invalid timezone "Asia/Somewhere" in schedule event. it must be a valid IANA timezone name [events]
+test.yaml:9:17: invalid timezone "Asia/Somewhere" in schedule event. it must be a valid IANA timezone name [invalid-timezone]
   |
 9 |       timezone: 'Asia/Somewhere'
   |                 ^~~~~~~~~~~~~~~~
@@ -2031,15 +2031,15 @@ jobs:
 Output:
 
 ```
-test.yaml:10:13: label "linux-latest" is unknown. available labels are "windows-latest", "windows-latest-8-cores", "windows-2025", "windows-2025-vs2026", "windows-2022", "windows-11-arm", "windows-11-vs2026-arm", "ubuntu-slim", "ubuntu-latest", "ubuntu-latest-4-cores", "ubuntu-latest-8-cores", "ubuntu-latest-16-cores", "ubuntu-26.04", "ubuntu-26.04-arm", "ubuntu-24.04", "ubuntu-24.04-arm", "ubuntu-22.04", "ubuntu-22.04-arm", "macos-latest", "macos-latest-xlarge", "macos-latest-large", "macos-26-intel", "macos-26-xlarge", "macos-26-large", "macos-26", "macos-15-intel", "macos-15-xlarge", "macos-15-large", "macos-15", "macos-14-xlarge", "macos-14-large", "macos-14", "xcode-27", "xcode-27-xlarge", "self-hosted", "x64", "arm", "arm64", "linux", "macos", "windows". if it is a custom label for self-hosted runner, set list of labels in jactionlint.yaml config file [runner-label]
+test.yaml:10:13: label "linux-latest" is unknown. available labels are "windows-latest", "windows-latest-8-cores", "windows-2025", "windows-2025-vs2026", "windows-2022", "windows-11-arm", "windows-11-vs2026-arm", "ubuntu-slim", "ubuntu-latest", "ubuntu-latest-4-cores", "ubuntu-latest-8-cores", "ubuntu-latest-16-cores", "ubuntu-26.04", "ubuntu-26.04-arm", "ubuntu-24.04", "ubuntu-24.04-arm", "ubuntu-22.04", "ubuntu-22.04-arm", "macos-latest", "macos-latest-xlarge", "macos-latest-large", "macos-26-intel", "macos-26-xlarge", "macos-26-large", "macos-26", "macos-15-intel", "macos-15-xlarge", "macos-15-large", "macos-15", "macos-14-xlarge", "macos-14-large", "macos-14", "xcode-27", "xcode-27-xlarge", "self-hosted", "x64", "arm", "arm64", "linux", "macos", "windows". if it is a custom label for self-hosted runner, set list of labels in jactionlint.yaml config file [unknown-runner-label]
    |
 10 |           - linux-latest
    |             ^~~~~~~~~~~~
-test.yaml:16:13: label "gpu" is unknown. available labels are "windows-latest", "windows-latest-8-cores", "windows-2025", "windows-2025-vs2026", "windows-2022", "windows-11-arm", "windows-11-vs2026-arm", "ubuntu-slim", "ubuntu-latest", "ubuntu-latest-4-cores", "ubuntu-latest-8-cores", "ubuntu-latest-16-cores", "ubuntu-26.04", "ubuntu-26.04-arm", "ubuntu-24.04", "ubuntu-24.04-arm", "ubuntu-22.04", "ubuntu-22.04-arm", "macos-latest", "macos-latest-xlarge", "macos-latest-large", "macos-26-intel", "macos-26-xlarge", "macos-26-large", "macos-26", "macos-15-intel", "macos-15-xlarge", "macos-15-large", "macos-15", "macos-14-xlarge", "macos-14-large", "macos-14", "xcode-27", "xcode-27-xlarge", "self-hosted", "x64", "arm", "arm64", "linux", "macos", "windows". if it is a custom label for self-hosted runner, set list of labels in jactionlint.yaml config file [runner-label]
+test.yaml:16:13: label "gpu" is unknown. available labels are "windows-latest", "windows-latest-8-cores", "windows-2025", "windows-2025-vs2026", "windows-2022", "windows-11-arm", "windows-11-vs2026-arm", "ubuntu-slim", "ubuntu-latest", "ubuntu-latest-4-cores", "ubuntu-latest-8-cores", "ubuntu-latest-16-cores", "ubuntu-26.04", "ubuntu-26.04-arm", "ubuntu-24.04", "ubuntu-24.04-arm", "ubuntu-22.04", "ubuntu-22.04-arm", "macos-latest", "macos-latest-xlarge", "macos-latest-large", "macos-26-intel", "macos-26-xlarge", "macos-26-large", "macos-26", "macos-15-intel", "macos-15-xlarge", "macos-15-large", "macos-15", "macos-14-xlarge", "macos-14-large", "macos-14", "xcode-27", "xcode-27-xlarge", "self-hosted", "x64", "arm", "arm64", "linux", "macos", "windows". if it is a custom label for self-hosted runner, set list of labels in jactionlint.yaml config file [unknown-runner-label]
    |
 16 |           - gpu
    |             ^~~
-test.yaml:23:14: label "macos-10.13" is unknown. available labels are "windows-latest", "windows-latest-8-cores", "windows-2025", "windows-2025-vs2026", "windows-2022", "windows-11-arm", "windows-11-vs2026-arm", "ubuntu-slim", "ubuntu-latest", "ubuntu-latest-4-cores", "ubuntu-latest-8-cores", "ubuntu-latest-16-cores", "ubuntu-26.04", "ubuntu-26.04-arm", "ubuntu-24.04", "ubuntu-24.04-arm", "ubuntu-22.04", "ubuntu-22.04-arm", "macos-latest", "macos-latest-xlarge", "macos-latest-large", "macos-26-intel", "macos-26-xlarge", "macos-26-large", "macos-26", "macos-15-intel", "macos-15-xlarge", "macos-15-large", "macos-15", "macos-14-xlarge", "macos-14-large", "macos-14", "xcode-27", "xcode-27-xlarge", "self-hosted", "x64", "arm", "arm64", "linux", "macos", "windows". if it is a custom label for self-hosted runner, set list of labels in jactionlint.yaml config file [runner-label]
+test.yaml:23:14: label "macos-10.13" is unknown. available labels are "windows-latest", "windows-latest-8-cores", "windows-2025", "windows-2025-vs2026", "windows-2022", "windows-11-arm", "windows-11-vs2026-arm", "ubuntu-slim", "ubuntu-latest", "ubuntu-latest-4-cores", "ubuntu-latest-8-cores", "ubuntu-latest-16-cores", "ubuntu-26.04", "ubuntu-26.04-arm", "ubuntu-24.04", "ubuntu-24.04-arm", "ubuntu-22.04", "ubuntu-22.04-arm", "macos-latest", "macos-latest-xlarge", "macos-latest-large", "macos-26-intel", "macos-26-xlarge", "macos-26-large", "macos-26", "macos-15-intel", "macos-15-xlarge", "macos-15-large", "macos-15", "macos-14-xlarge", "macos-14-large", "macos-14", "xcode-27", "xcode-27-xlarge", "self-hosted", "x64", "arm", "arm64", "linux", "macos", "windows". if it is a custom label for self-hosted runner, set list of labels in jactionlint.yaml config file [unknown-runner-label]
    |
 23 |     runs-on: macos-10.13
    |              ^~~~~~~~~~~
@@ -2079,7 +2079,7 @@ jobs:
 Output:
 
 ```
-test.yaml:4:30: label "windows-latest" conflicts with label "ubuntu-latest" defined at line:4,col:15. note: to run your job on each workers, use matrix [runner-label]
+test.yaml:4:30: label "windows-latest" conflicts with label "ubuntu-latest" defined at line:4,col:15. note: to run your job on each workers, use matrix [conflicting-runner-labels]
   |
 4 |     runs-on: [ubuntu-latest, windows-latest]
   |                              ^~~~~~~~~~~~~~~
@@ -2114,19 +2114,19 @@ jobs:
 Output:
 
 ```
-test.yaml:7:15: specifying action "actions/checkout" in invalid format because ref is missing. available formats are "{owner}/{repo}@{ref}" or "{owner}/{repo}/{path}@{ref}" [action]
+test.yaml:7:15: specifying action "actions/checkout" in invalid format because ref is missing. available formats are "{owner}/{repo}@{ref}" or "{owner}/{repo}/{path}@{ref}" [invalid-uses]
   |
 7 |       - uses: actions/checkout
   |               ^~~~~~~~~~~~~~~~
-test.yaml:9:15: specifying action "checkout@v2" in invalid format because owner is missing. available formats are "{owner}/{repo}@{ref}" or "{owner}/{repo}/{path}@{ref}" [action]
+test.yaml:9:15: specifying action "checkout@v2" in invalid format because owner is missing. available formats are "{owner}/{repo}@{ref}" or "{owner}/{repo}/{path}@{ref}" [invalid-uses]
   |
 9 |       - uses: checkout@v2
   |               ^~~~~~~~~~~
-test.yaml:11:15: tag of Docker action should not be empty: "docker://image" [action]
+test.yaml:11:15: tag of Docker action should not be empty: "docker://image" [invalid-uses]
    |
 11 |       - uses: 'docker://image:'
    |               ^~~~~~~~~~~~~~~~~
-test.yaml:13:15: specifying action ".github/my-actions/do-something" in invalid format because ref is missing. available formats are "{owner}/{repo}@{ref}" or "{owner}/{repo}/{path}@{ref}" [action]
+test.yaml:13:15: specifying action ".github/my-actions/do-something" in invalid format because ref is missing. available formats are "{owner}/{repo}@{ref}" or "{owner}/{repo}/{path}@{ref}" [invalid-uses]
    |
 13 |       - uses: .github/my-actions/do-something
    |               ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -2323,11 +2323,11 @@ Output:
 <!-- Skip update output -->
 
 ```
-test.yaml:7:15: missing input "message" which is required by action "My action" defined at "./.github/actions/my-action". all required inputs are "message" [action]
+test.yaml:7:15: missing input "message" which is required by action "My action" defined at "./.github/actions/my-action". all required inputs are "message" [missing-action-input]
   |
 7 |       - uses: ./.github/actions/my-action
   |               ^~~~~~~~~~~~~~~~~~~~~~~~~~~
-test.yaml:13:11: input "additions" is not defined in action "My action" defined at "./.github/actions/my-action". available inputs are "addition", "message", "name" [action]
+test.yaml:13:11: input "additions" is not defined in action "My action" defined at "./.github/actions/my-action". available inputs are "addition", "message", "name" [unknown-action-input]
    |
 13 |           additions: foo, bar
    |           ^~~~~~~~~~
@@ -2363,11 +2363,11 @@ jobs:
 Output:
 
 ```
-test.yaml:7:15: missing input "key" which is required by action "actions/cache@v4". all required inputs are "key", "path" [action]
+test.yaml:7:15: missing input "key" which is required by action "actions/cache@v4". all required inputs are "key", "path" [missing-action-input]
   |
 7 |       - uses: actions/cache@v4
   |               ^~~~~~~~~~~~~~~~
-test.yaml:9:11: input "keys" is not defined in action "actions/cache@v4". available inputs are "enableCrossOsArchive", "fail-on-cache-miss", "key", "lookup-only", "path", "restore-keys", "save-always", "upload-chunk-size" [action]
+test.yaml:9:11: input "keys" is not defined in action "actions/cache@v4". available inputs are "enableCrossOsArchive", "fail-on-cache-miss", "key", "lookup-only", "path", "restore-keys", "save-always", "upload-chunk-size" [unknown-action-input]
   |
 9 |           keys: |
   |           ^~~~~
@@ -2409,7 +2409,7 @@ jobs:
 Output:
 
 ```
-test.yaml:8:15: the runner of "actions/checkout@v3" action is too old to run on GitHub Actions. update the action's version to fix this issue [action]
+test.yaml:8:15: the runner of "actions/checkout@v3" action is too old to run on GitHub Actions. update the action's version to fix this issue [outdated-action-runner]
   |
 8 |       - uses: actions/checkout@v3
   |               ^~~~~~~~~~~~~~~~~~~
@@ -2466,19 +2466,19 @@ jobs:
 Output:
 
 ```
-test.yaml:8:16: shell name "dash" is invalid. available names are "bash", "pwsh", "python", "sh" [shell-name]
+test.yaml:8:16: shell name "dash" is invalid. available names are "bash", "pwsh", "python", "sh" [invalid-shell-name]
   |
 8 |         shell: dash
   |                ^~~~
-test.yaml:11:16: shell name "powershell" is invalid on macOS or Linux. available names are "bash", "pwsh", "python", "sh" [shell-name]
+test.yaml:11:16: shell name "powershell" is invalid on macOS or Linux. available names are "bash", "pwsh", "python", "sh" [invalid-shell-name]
    |
 11 |         shell: powershell
    |                ^~~~~~~~~~
-test.yaml:17:16: shell name "fish" is invalid. available names are "bash", "pwsh", "python", "sh" [shell-name]
+test.yaml:17:16: shell name "fish" is invalid. available names are "bash", "pwsh", "python", "sh" [invalid-shell-name]
    |
 17 |         shell: fish
    |                ^~~~
-test.yaml:27:16: shell name "sh" is invalid on Windows. available names are "bash", "cmd", "powershell", "pwsh", "python" [shell-name]
+test.yaml:27:16: shell name "sh" is invalid on Windows. available names are "bash", "cmd", "powershell", "pwsh", "python" [invalid-shell-name]
    |
 27 |         shell: sh
    |                ^~
@@ -2584,11 +2584,11 @@ jobs:
 Output:
 
 ```
-test.yaml:10:13: step ID "STEP_ID" duplicates. previously defined at line:7,col:13. step ID must be unique within a job. note that step ID is case insensitive [id]
+test.yaml:10:13: step ID "STEP_ID" duplicates. previously defined at line:7,col:13. step ID must be unique within a job. note that step ID is case insensitive [duplicate-step-id]
    |
 10 |         id: STEP_ID
    |             ^~~~~~~
-test.yaml:12:3: key "TEST" is duplicated in "jobs" section. previously defined at line:3,col:3. note that this key is case insensitive [syntax-check]
+test.yaml:12:3: key "TEST" is duplicated in "jobs" section. previously defined at line:3,col:3. note that this key is case insensitive [duplicate-key]
    |
 12 |   TEST:
    |   ^~~~~
@@ -2629,11 +2629,11 @@ jobs:
 Output:
 
 ```
-test.yaml:10:19: "password" section in "container" section should be specified via secrets. do not put password value directly [credentials]
+test.yaml:10:19: "password" section in "container" section should be specified via secrets. do not put password value directly [hardcoded-container-credentials]
    |
 10 |         password: pass
    |                   ^~~~
-test.yaml:17:21: "password" section in "redis" service should be specified via secrets. do not put password value directly [credentials]
+test.yaml:17:21: "password" section in "redis" service should be specified via secrets. do not put password value directly [hardcoded-container-credentials]
    |
 17 |           password: pass
    |                     ^~~~
@@ -3084,11 +3084,11 @@ jobs:
 Output:
 
 ```
-test.yaml:6:7: environment variable name "FOO=BAR" is invalid. '&', '=' and spaces should not be contained [env-var]
+test.yaml:6:7: environment variable name "FOO=BAR" is invalid. '&', '=' and spaces should not be contained [invalid-env-var-name]
   |
 6 |       FOO=BAR: foo
   |       ^~~~~~~~
-test.yaml:7:7: environment variable name "FOO BAR" is invalid. '&', '=' and spaces should not be contained [env-var]
+test.yaml:7:7: environment variable name "FOO BAR" is invalid. '&', '=' and spaces should not be contained [invalid-env-var-name]
   |
 7 |       FOO BAR: foo
   |       ^~~
@@ -3130,19 +3130,19 @@ jobs:
 Output:
 
 ```
-test.yaml:4:14: "write" is invalid for permission for all the scopes. available values are "read-all", "write-all" or {} [permissions]
+test.yaml:4:14: "write" is invalid for permission for all the scopes. available values are "read-all", "write-all" or {} [invalid-permissions]
   |
 4 | permissions: write
   |              ^~~~~
-test.yaml:11:7: unknown permission scope "check". all available permission scopes are "actions", "artifact-metadata", "attestations", "checks", "code-quality", "contents", "copilot-requests", "deployments", "discussions", "id-token", "issues", "models", "packages", "pages", "pull-requests", "repository-projects", "security-events", "statuses", "vulnerability-alerts" [permissions]
+test.yaml:11:7: unknown permission scope "check". all available permission scopes are "actions", "artifact-metadata", "attestations", "checks", "code-quality", "contents", "copilot-requests", "deployments", "discussions", "id-token", "issues", "models", "packages", "pages", "pull-requests", "repository-projects", "security-events", "statuses", "vulnerability-alerts" [invalid-permissions]
    |
 11 |       check: write
    |       ^~~~~~
-test.yaml:13:15: "readable" is invalid as permission of scope "issues". available values are "read", "write", "none" [permissions]
+test.yaml:13:15: "readable" is invalid as permission of scope "issues". available values are "read", "write", "none" [invalid-permissions]
    |
 13 |       issues: readable
    |               ^~~~~~~~
-test.yaml:15:15: "write" is invalid as permission of scope "models". available values are "read", "none" [permissions]
+test.yaml:15:15: "write" is invalid as permission of scope "models". available values are "read", "none" [invalid-permissions]
    |
 15 |       models: write
    |               ^~~~~
@@ -3745,27 +3745,27 @@ jobs:
 Output:
 
 ```
-test.yaml:15:18: input of workflow_call event "port" is typed as number but its default value ":1234" cannot be parsed as a float number: strconv.ParseFloat: parsing ":1234": invalid syntax [events]
+test.yaml:15:18: input of workflow_call event "port" is typed as number but its default value ":1234" cannot be parsed as a float number: strconv.ParseFloat: parsing ":1234": invalid syntax [invalid-workflow-call-input]
    |
 15 |         default: ':1234'
    |                  ^~~~~~~
-test.yaml:20:15: invalid value "object" for input type of workflow_call event. it must be one of "boolean", "number", or "string" [syntax-check]
+test.yaml:20:15: invalid value "object" for input type of workflow_call event. it must be one of "boolean", "number", or "string" [workflow-syntax]
    |
 20 |         type: object
    |               ^~~~~~
-test.yaml:25:18: input "path" of workflow_call event has the default value "", but it is also required. if an input is marked as required, its default value will never be used [events]
+test.yaml:25:18: input "path" of workflow_call event has the default value "", but it is also required. if an input is marked as required, its default value will never be used [invalid-workflow-call-input]
    |
 25 |         default: ''
    |                  ^~
-test.yaml:31:24: "inputs.scheme" is an input chosen by whoever runs this, which is not validated and can hold shell syntax. avoid using it directly in inline scripts. instead, pass it through an environment variable. see https://docs.github.com/en/actions/reference/security/secure-use#good-practices-for-mitigating-script-injection-attacks for more details [expression]
+test.yaml:31:24: "inputs.scheme" is an input chosen by whoever runs this, which is not validated and can hold shell syntax. avoid using it directly in inline scripts. instead, pass it through an environment variable. see https://docs.github.com/en/actions/reference/security/secure-use#good-practices-for-mitigating-script-injection-attacks for more details [template-injection]
    |
 31 |       - run: echo "${{ inputs.scheme }}://${{ inputs.host }}:${{ inputs.port }}${{ inputs.path }}"
    |                        ^~~~~~~~~~~~~
-test.yaml:31:47: "inputs.host" is an input chosen by whoever runs this, which is not validated and can hold shell syntax. avoid using it directly in inline scripts. instead, pass it through an environment variable. see https://docs.github.com/en/actions/reference/security/secure-use#good-practices-for-mitigating-script-injection-attacks for more details [expression]
+test.yaml:31:47: "inputs.host" is an input chosen by whoever runs this, which is not validated and can hold shell syntax. avoid using it directly in inline scripts. instead, pass it through an environment variable. see https://docs.github.com/en/actions/reference/security/secure-use#good-practices-for-mitigating-script-injection-attacks for more details [template-injection]
    |
 31 |       - run: echo "${{ inputs.scheme }}://${{ inputs.host }}:${{ inputs.port }}${{ inputs.path }}"
    |                                               ^~~~~~~~~~~
-test.yaml:31:84: "inputs.path" is an input chosen by whoever runs this, which is not validated and can hold shell syntax. avoid using it directly in inline scripts. instead, pass it through an environment variable. see https://docs.github.com/en/actions/reference/security/secure-use#good-practices-for-mitigating-script-injection-attacks for more details [expression]
+test.yaml:31:84: "inputs.path" is an input chosen by whoever runs this, which is not validated and can hold shell syntax. avoid using it directly in inline scripts. instead, pass it through an environment variable. see https://docs.github.com/en/actions/reference/security/secure-use#good-practices-for-mitigating-script-injection-attacks for more details [template-injection]
    |
 31 |       - run: echo "${{ inputs.scheme }}://${{ inputs.host }}:${{ inputs.port }}${{ inputs.path }}"
    |                                                                                    ^~~~~~~~~~~
@@ -3805,19 +3805,19 @@ jobs:
 Output:
 
 ```
-test.yaml:6:5: when a reusable workflow is called with "uses", "runs-on" is not available. only following keys are allowed: "name", "uses", "with", "secrets", "needs", "if", "permissions", and "cache-mode" in job "job1" [syntax-check]
+test.yaml:6:5: when a reusable workflow is called with "uses", "runs-on" is not available. only following keys are allowed: "name", "uses", "with", "secrets", "needs", "if", "permissions", and "cache-mode" in job "job1" [workflow-syntax]
   |
 6 |     runs-on: ubuntu-latest
   |     ^~~~~~~~
-test.yaml:9:11: reusable workflow call "./.github/workflows/ci.yml@main" at "uses" is not following the format "owner/repo/path/to/workflow.yml@ref" nor "./path/to/workflow.yml" nor "$/path/to/workflow.yml". see https://docs.github.com/en/actions/learn-github-actions/reusing-workflows for more details [workflow-call]
+test.yaml:9:11: reusable workflow call "./.github/workflows/ci.yml@main" at "uses" is not following the format "owner/repo/path/to/workflow.yml@ref" nor "./path/to/workflow.yml" nor "$/path/to/workflow.yml". see https://docs.github.com/en/actions/learn-github-actions/reusing-workflows for more details [invalid-workflow-call]
   |
 9 |     uses: ./.github/workflows/ci.yml@main
   |           ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-test.yaml:12:5: "with" is only available for a reusable workflow call with "uses" but "uses" is not found in job "job3" [syntax-check]
+test.yaml:12:5: "with" is only available for a reusable workflow call with "uses" but "uses" is not found in job "job3" [workflow-syntax]
    |
 12 |     with:
    |     ^~~~~
-test.yaml:19:11: could not read reusable workflow file for "./.github/workflows/not-existing.yml": open /path/to/repo/.github/workflows/not-existing.yml: no such file or directory [workflow-call]
+test.yaml:19:11: could not read reusable workflow file for "./.github/workflows/not-existing.yml": open /path/to/repo/.github/workflows/not-existing.yml: no such file or directory [invalid-local-workflow]
    |
 19 |     uses: ./.github/workflows/not-existing.yml
    |           ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -3870,15 +3870,15 @@ jobs:
 Output:
 
 ```
-test.yaml:20:23: "inputs.uri" is an input chosen by whoever runs this, which is not validated and can hold shell syntax. avoid using it directly in inline scripts. instead, pass it through an environment variable. see https://docs.github.com/en/actions/reference/security/secure-use#good-practices-for-mitigating-script-injection-attacks for more details [expression]
+test.yaml:20:23: "inputs.uri" is an input chosen by whoever runs this, which is not validated and can hold shell syntax. avoid using it directly in inline scripts. instead, pass it through an environment variable. see https://docs.github.com/en/actions/reference/security/secure-use#good-practices-for-mitigating-script-injection-attacks for more details [template-injection]
    |
 20 |         run: curl ${{ inputs.uri }} -d ${{ inputs.lucky_number }}
    |                       ^~~~~~~~~~
-test.yaml:20:23: property "uri" is not defined in object type {lucky_number: number; url: string} [expression]
+test.yaml:20:23: property "uri" is not defined in object type {lucky_number: number; url: string} [undefined-property]
    |
 20 |         run: curl ${{ inputs.uri }} -d ${{ inputs.lucky_number }}
    |                       ^~~~~~~~~~
-test.yaml:23:22: property "credentials" is not defined in object type {actions_runner_debug: string; actions_step_debug: string; credential: string; github_token: string} [expression]
+test.yaml:23:22: property "credentials" is not defined in object type {actions_runner_debug: string; actions_step_debug: string; credential: string; github_token: string} [undefined-property]
    |
 23 |           TOKEN: ${{ secrets.credentials }}
    |                      ^~~~~~~~~~~~~~~~~~~
@@ -3966,7 +3966,7 @@ jobs:
 Output:
 
 ```
-test.yaml:7:20: property "imagetag" is not defined in object type {image_tag: string} [expression]
+test.yaml:7:20: property "imagetag" is not defined in object type {image_tag: string} [undefined-property]
   |
 7 |         value: ${{ jobs.gen-image-version.outputs.imagetag }}
   |                    ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -4044,27 +4044,27 @@ Output:
 <!-- Skip update output -->
 
 ```
-test.yaml:6:11: input "name" is required by "./.github/workflows/reusable.yaml" reusable workflow [workflow-call]
+test.yaml:6:11: input "name" is required by "./.github/workflows/reusable.yaml" reusable workflow [missing-workflow-input]
   |
 6 |     uses: ./.github/workflows/reusable.yaml
   |           ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-test.yaml:6:11: secret "password" is required by "./.github/workflows/reusable.yaml" reusable workflow [workflow-call]
+test.yaml:6:11: secret "password" is required by "./.github/workflows/reusable.yaml" reusable workflow [missing-workflow-secret]
   |
 6 |     uses: ./.github/workflows/reusable.yaml
   |           ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-test.yaml:9:7: input "user" is not defined in "./.github/workflows/reusable.yaml" reusable workflow. defined inputs are "id", "message", "name" [workflow-call]
+test.yaml:9:7: input "user" is not defined in "./.github/workflows/reusable.yaml" reusable workflow. defined inputs are "id", "message", "name" [unknown-workflow-input]
   |
 9 |       user: rhysd
   |       ^~~~~
-test.yaml:13:7: secret "credentials" is not defined in "./.github/workflows/reusable.yaml" reusable workflow. defined secret is "password" [workflow-call]
+test.yaml:13:7: secret "credentials" is not defined in "./.github/workflows/reusable.yaml" reusable workflow. defined secret is "password" [unknown-workflow-secret]
    |
 13 |       credentials: my-token
    |       ^~~~~~~~~~~~
-test.yaml:22:11: input "id" is typed as number by reusable workflow "./.github/workflows/reusable.yaml". bool value cannot be assigned [expression]
+test.yaml:22:11: input "id" is typed as number by reusable workflow "./.github/workflows/reusable.yaml". bool value cannot be assigned [workflow-input-type]
    |
 22 |       id: true
    |           ^~~~
-test.yaml:24:16: input "message" is typed as string by reusable workflow "./.github/workflows/reusable.yaml". null value cannot be assigned [expression]
+test.yaml:24:16: input "message" is typed as string by reusable workflow "./.github/workflows/reusable.yaml". null value cannot be assigned [workflow-input-type]
    |
 24 |       message: null
    |                ^~~~
@@ -4126,7 +4126,7 @@ Output:
 <!-- Skip update output -->
 
 ```
-test.yaml:13:24: property "tag" is not defined in object type {version: string} [expression]
+test.yaml:13:24: property "tag" is not defined in object type {version: string} [undefined-property]
    |
 13 |       - run: echo '${{ needs.get_build_info.outputs.tag }}'
    |                        ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -4183,7 +4183,7 @@ Output:
 <!-- Skip update output -->
 
 ```
-test.yaml:10:11: nested job "snapshot" of "./.github/workflows/reusable.yaml" requires "pull-requests: write" but the calling job grants "pull-requests: none" [workflow-call]
+test.yaml:10:11: nested job "snapshot" of "./.github/workflows/reusable.yaml" requires "pull-requests: write" but the calling job grants "pull-requests: none" [workflow-call-permissions]
    |
 10 |     uses: ./.github/workflows/reusable.yaml
    |           ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -4243,19 +4243,19 @@ jobs:
 Output:
 
 ```
-test.yaml:5:3: invalid job ID "foo-v1.2.3". job ID must start with a letter or _ and contain only alphanumeric characters, -, or _ [id]
+test.yaml:5:3: invalid job ID "foo-v1.2.3". job ID must start with a letter or _ and contain only alphanumeric characters, -, or _ [invalid-id]
   |
 5 |   foo-v1.2.3:
   |   ^~~~~~~~~~~
-test.yaml:10:13: invalid step ID "echo for test". step ID must start with a letter or _ and contain only alphanumeric characters, -, or _ [id]
+test.yaml:10:13: invalid step ID "echo for test". step ID must start with a letter or _ and contain only alphanumeric characters, -, or _ [invalid-id]
    |
 10 |         id: echo for test
    |             ^~~~
-test.yaml:12:3: invalid job ID "-hello-world-". job ID must start with a letter or _ and contain only alphanumeric characters, -, or _ [id]
+test.yaml:12:3: invalid job ID "-hello-world-". job ID must start with a letter or _ and contain only alphanumeric characters, -, or _ [invalid-id]
    |
 12 |   -hello-world-:
    |   ^~~~~~~~~~~~~~
-test.yaml:17:3: invalid job ID "2d-game". job ID must start with a letter or _ and contain only alphanumeric characters, -, or _ [id]
+test.yaml:17:3: invalid job ID "2d-game". job ID must start with a letter or _ and contain only alphanumeric characters, -, or _ [invalid-id]
    |
 17 |   2d-game:
    |   ^~~~~~~~
@@ -4311,23 +4311,23 @@ jobs:
 Output:
 
 ```
-test.yaml:6:16: context "env" is not allowed here. no context is available here. see https://docs.github.com/en/actions/learn-github-actions/contexts#context-availability for more details [expression]
+test.yaml:6:16: context "env" is not allowed here. no context is available here. see https://docs.github.com/en/actions/learn-github-actions/contexts#context-availability for more details [context-availability]
   |
 6 |     shell: ${{ env.SHELL }}
   |                ^~~~~~~~~
-test.yaml:16:17: context "runner" is not allowed here. available contexts are "github", "inputs", "needs", "vars". see https://docs.github.com/en/actions/learn-github-actions/contexts#context-availability for more details [expression]
+test.yaml:16:17: context "runner" is not allowed here. available contexts are "github", "inputs", "needs", "vars". see https://docs.github.com/en/actions/learn-github-actions/contexts#context-availability for more details [context-availability]
    |
 16 |           - ${{ runner.temp }}
    |                 ^~~~~~~~~~~
-test.yaml:24:16: context "env" is not allowed here. available contexts are "github", "inputs", "matrix", "needs", "secrets", "strategy", "vars". see https://docs.github.com/en/actions/learn-github-actions/contexts#context-availability for more details [expression]
+test.yaml:24:16: context "env" is not allowed here. available contexts are "github", "inputs", "matrix", "needs", "secrets", "strategy", "vars". see https://docs.github.com/en/actions/learn-github-actions/contexts#context-availability for more details [context-availability]
    |
 24 |       FOO: ${{ env.BAR }}
    |                ^~~~~~~
-test.yaml:30:20: context "env" is not allowed here. no context is available here. see https://docs.github.com/en/actions/learn-github-actions/contexts#context-availability for more details [expression]
+test.yaml:30:20: context "env" is not allowed here. no context is available here. see https://docs.github.com/en/actions/learn-github-actions/contexts#context-availability for more details [context-availability]
    |
 30 |         shell: ${{ env.SHELL}}
    |                    ^~~~~~~~~~~
-test.yaml:32:33: calling function "success" is not allowed here. "success" is only available in "jobs.<job_id>.if", "jobs.<job_id>.steps.if". see https://docs.github.com/en/actions/learn-github-actions/contexts#context-availability for more details [expression]
+test.yaml:32:33: calling function "success" is not allowed here. "success" is only available in "jobs.<job_id>.if", "jobs.<job_id>.steps.if". see https://docs.github.com/en/actions/learn-github-actions/contexts#context-availability for more details [context-availability]
    |
 32 |         run: echo 'Success? ${{ success() }}'
    |                                 ^~~~~~~~~
@@ -4435,19 +4435,19 @@ jobs:
 Output:
 
 ```
-test.yaml:9:13: constant expression "false" in condition. remove the if: section [if-cond]
+test.yaml:9:13: constant expression "false" in condition. remove the if: section [constant-condition]
   |
 9 |         if: false
   |             ^~~~~
-test.yaml:19:13: if: condition "${{ github.event_name == 'push' }}\n" is always evaluated to true because extra characters are around ${{ }} [if-cond]
+test.yaml:19:13: if: condition "${{ github.event_name == 'push' }}\n" is always evaluated to true because extra characters are around ${{ }} [if-always-true]
    |
 19 |         if: |
    |             ^
-test.yaml:23:13: if: condition "${{ github.event_name == 'push' }} " is always evaluated to true because extra characters are around ${{ }} [if-cond]
+test.yaml:23:13: if: condition "${{ github.event_name == 'push' }} " is always evaluated to true because extra characters are around ${{ }} [if-always-true]
    |
 23 |         if: "${{ github.event_name == 'push' }} "
    |             ^~~~
-test.yaml:29:13: if: condition "${{ github.event_name == 'push' }} && ${{ github.ref_name == 'main' }}" is always evaluated to true because extra characters are around ${{ }} [if-cond]
+test.yaml:29:13: if: condition "${{ github.event_name == 'push' }} && ${{ github.ref_name == 'main' }}" is always evaluated to true because extra characters are around ${{ }} [if-always-true]
    |
 29 |         if: ${{ github.event_name == 'push' }} && ${{ github.ref_name == 'main' }}
    |             ^~~
@@ -4535,27 +4535,27 @@ Output:
 <!-- Skip update output -->
 
 ```
-test.yaml:8:15: description is required in metadata of "My action" action at "/Users/jdx/src/github.com/jdx/jactionlint/.github/actions/my-invalid-action/action.yml" [action]
+test.yaml:8:15: description is required in metadata of "My action" action at "/Users/jdx/src/github.com/jdx/jactionlint/.github/actions/my-invalid-action/action.yml" [invalid-local-action]
   |
 8 |       - uses: ./.github/actions/my-invalid-action
   |               ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-test.yaml:8:15: incorrect icon name "dog" at branding.icon in metadata of "My action" action at "/Users/jdx/src/github.com/jdx/jactionlint/.github/actions/my-invalid-action/action.yml". see the official document to know the exhaustive list of supported icons: https://docs.github.com/en/actions/creating-actions/metadata-syntax-for-github-actions#brandingicon [action]
+test.yaml:8:15: incorrect icon name "dog" at branding.icon in metadata of "My action" action at "/Users/jdx/src/github.com/jdx/jactionlint/.github/actions/my-invalid-action/action.yml". see the official document to know the exhaustive list of supported icons: https://docs.github.com/en/actions/creating-actions/metadata-syntax-for-github-actions#brandingicon [invalid-local-action]
   |
 8 |       - uses: ./.github/actions/my-invalid-action
   |               ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-test.yaml:8:15: incorrect color "gray-white" at branding.icon in metadata of "My action" action at "/Users/jdx/src/github.com/jdx/jactionlint/.github/actions/my-invalid-action/action.yml". see the official document to know the exhaustive list of supported colors: https://docs.github.com/en/actions/creating-actions/metadata-syntax-for-github-actions#brandingcolor [action]
+test.yaml:8:15: incorrect color "gray-white" at branding.icon in metadata of "My action" action at "/Users/jdx/src/github.com/jdx/jactionlint/.github/actions/my-invalid-action/action.yml". see the official document to know the exhaustive list of supported colors: https://docs.github.com/en/actions/creating-actions/metadata-syntax-for-github-actions#brandingcolor [invalid-local-action]
   |
 8 |       - uses: ./.github/actions/my-invalid-action
   |               ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-test.yaml:8:15: invalid runner name "node16" at runs.using in "My action" action defined at "/Users/jdx/src/github.com/jdx/jactionlint/.github/actions/my-invalid-action". valid runners are "composite", "docker", "node20", and "node24". see https://docs.github.com/en/actions/creating-actions/metadata-syntax-for-github-actions#runs [action]
+test.yaml:8:15: invalid runner name "node16" at runs.using in "My action" action defined at "/Users/jdx/src/github.com/jdx/jactionlint/.github/actions/my-invalid-action". valid runners are "composite", "docker", "node20", and "node24". see https://docs.github.com/en/actions/creating-actions/metadata-syntax-for-github-actions#runs [invalid-local-action]
   |
 8 |       - uses: ./.github/actions/my-invalid-action
   |               ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-test.yaml:8:15: file "this-file-does-not-exist.js" does not exist in "/Users/jdx/src/github.com/jdx/jactionlint/.github/actions/my-invalid-action". it is specified at "main" key in "runs" section in "My action" action [action]
+test.yaml:8:15: file "this-file-does-not-exist.js" does not exist in "/Users/jdx/src/github.com/jdx/jactionlint/.github/actions/my-invalid-action". it is specified at "main" key in "runs" section in "My action" action [invalid-local-action]
   |
 8 |       - uses: ./.github/actions/my-invalid-action
   |               ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-test.yaml:8:15: "env" is not allowed in "runs" section because "My action" is a JavaScript action. the action is defined at "/Users/jdx/src/github.com/jdx/jactionlint/.github/actions/my-invalid-action" [action]
+test.yaml:8:15: "env" is not allowed in "runs" section because "My action" is a JavaScript action. the action is defined at "/Users/jdx/src/github.com/jdx/jactionlint/.github/actions/my-invalid-action" [invalid-local-action]
   |
 8 |       - uses: ./.github/actions/my-invalid-action
   |               ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -4603,7 +4603,7 @@ jobs:
 Output:
 
 ```
-test.yaml:9:11: avoid using deprecated input "fail_on_error" in action "reviewdog/action-actionlint@v1": Deprecated, use `fail_level` instead [action]
+test.yaml:9:11: avoid using deprecated input "fail_on_error" in action "reviewdog/action-actionlint@v1": Deprecated, use `fail_level` instead [deprecated-action-input]
   |
 9 |           fail_on_error: true
   |           ^~~~~~~~~~~~~~
@@ -4657,11 +4657,11 @@ Output:
 <!-- Skip update output -->
 
 ```
-test.yaml:6:15: input "empty-message" is deprecated but "deprecationMessage" is empty in metadata of "My action" action at "/path/to/.github/actions/my-action/action.yaml" [action]
+test.yaml:6:15: input "empty-message" is deprecated but "deprecationMessage" is empty in metadata of "My action" action at "/path/to/.github/actions/my-action/action.yaml" [invalid-local-action]
   |
 6 |       - uses: ./.github/actions/my-action
   |               ^~~~~~~~~~~~~~~~~~~~~~~~~~~
-test.yaml:9:11: avoid using deprecated input "old-input" in action "My action" defined at "./.github/actions/my-action": This input is deprecated. Use new-input instead [action]
+test.yaml:9:11: avoid using deprecated input "old-input" in action "My action" defined at "./.github/actions/my-action": This input is deprecated. Use new-input instead [deprecated-action-input]
   |
 9 |           old-input: some value
   |           ^~~~~~~~~~
@@ -4709,15 +4709,15 @@ jobs:
 Output:
 
 ```
-test.yaml:11:21: "password" section in "nginx" service should be specified via secrets. do not put password value directly [credentials]
+test.yaml:11:21: "password" section in "nginx" service should be specified via secrets. do not put password value directly [hardcoded-container-credentials]
    |
 11 |           password: P@ssw0rd
    |                     ^~~~~~~~
-test.yaml:11:21: "password" section in "redis" service should be specified via secrets. do not put password value directly [credentials]
+test.yaml:11:21: "password" section in "redis" service should be specified via secrets. do not put password value directly [hardcoded-container-credentials]
    |
 11 |           password: P@ssw0rd
    |                     ^~~~~~~~
-test.yaml:13:11: unexpected key "email" for "credentials" section. expected one of "password", "username" [syntax-check]
+test.yaml:13:11: unexpected key "email" for "credentials" section. expected one of "password", "username" [workflow-syntax]
    |
 13 |           email: me@example.com
    |           ^~~~~~
@@ -4758,19 +4758,19 @@ jobs:
 Output:
 
 ```
-test.yaml:18:14: anchor "credentials" is defined but not used [syntax-check]
+test.yaml:18:14: anchor "credentials" is defined but not used [unused-anchor]
    |
 18 |         env: &credentials
    |              ^~~~~~~~~~~~
-test.yaml:18:14: expecting a single ${{...}} expression or mapping value for "env" section, but found plain text node [syntax-check]
+test.yaml:18:14: expecting a single ${{...}} expression or mapping value for "env" section, but found plain text node [workflow-syntax]
    |
 18 |         env: &credentials
    |              ^~~~~~~~~~~~
-test.yaml:22:14: "env" section is alias node but mapping node is expected [syntax-check]
+test.yaml:22:14: "env" section is alias node but mapping node is expected [workflow-syntax]
    |
 22 |         env: *recursive
    |              ^~~~~~~~~~
-test.yaml:22:14: recursive alias "recursive" is found. anchor was declared at line:19, column:9 [syntax-check]
+test.yaml:22:14: recursive alias "recursive" is found. anchor was declared at line:19, column:9 [recursive-alias]
    |
 22 |         env: *recursive
    |              ^~~~~~~~~~
@@ -4799,7 +4799,7 @@ jobs:
 Output:
 
 ```
-test.yaml:9:14: could not parse as YAML: unknown anchor 'credentials' referenced [syntax-check]
+test.yaml:9:14: could not parse as YAML: unknown anchor 'credentials' referenced [yaml-syntax]
   |
 9 |         env: *credentials
   |              ^~~~~~~~~~~~
@@ -4853,11 +4853,11 @@ updates:
 Output:
 
 ```
-.github/dependabot.yml:10:7: unexpected key "dayy" for "schedule" section. expected one of "cronjob", "day", "interval", "time", "timezone" [syntax-check]
+.github/dependabot.yml:10:7: unexpected key "dayy" for "schedule" section. expected one of "cronjob", "day", "interval", "time", "timezone" [dependabot-syntax]
    |
 10 |       dayy: monday
    |       ^~~~~
-.github/dependabot.yml:12:5: unexpected key "label" for "updates" section. expected one of "allow", "assignees", "commit-message", "cooldown", "directories", "directory", "exclude-paths", "groups", "ignore", "insecure-external-code-execution", "labels", "milestone", "multi-ecosystem-group", "open-pull-requests-limit", "package-ecosystem", "patterns", "pull-request-branch-name", "rebase-strategy", "registries", "reviewers", "schedule", "target-branch", "vendor", "versioning-strategy" [syntax-check]
+.github/dependabot.yml:12:5: unexpected key "label" for "updates" section. expected one of "allow", "assignees", "commit-message", "cooldown", "directories", "directory", "exclude-paths", "groups", "ignore", "insecure-external-code-execution", "labels", "milestone", "multi-ecosystem-group", "open-pull-requests-limit", "package-ecosystem", "patterns", "pull-request-branch-name", "rebase-strategy", "registries", "reviewers", "schedule", "target-branch", "vendor", "versioning-strategy" [dependabot-syntax]
    |
 12 |     label: [dependencies]
    |     ^~~~~~
@@ -4865,7 +4865,7 @@ Output:
    |
 13 |   - package-ecosystem: npm
    |     ^~~~~~~~~~~~~~~~~~
-.github/dependabot.yml:17:17: schedule interval "hourly" is invalid. expected one of "daily", "weekly", "monthly", "quarterly", "semiannually", "yearly", "cron" [syntax-check]
+.github/dependabot.yml:17:17: schedule interval "hourly" is invalid. expected one of "daily", "weekly", "monthly", "quarterly", "semiannually", "yearly", "cron" [dependabot-syntax]
    |
 17 |       interval: hourly
    |                 ^~~~~~
@@ -4873,7 +4873,7 @@ Output:
    |
 19 |   - package-ecosystem: cargo
    |     ^~~~~~~~~~~~~~~~~~
-.github/dependabot.yml:19:5: "schedule" key is missing in "updates" item [syntax-check]
+.github/dependabot.yml:19:5: "schedule" key is missing in "updates" item [dependabot-syntax]
    |
 19 |   - package-ecosystem: cargo
    |     ^~~~~~~~~~~~~~~~~~
@@ -6009,15 +6009,15 @@ jobs:
 Output:
 
 ```
-test.yaml:15:24: "inputs.title" is an input chosen by whoever runs this, which is not validated and can hold shell syntax. avoid using it directly in inline scripts. instead, pass it through an environment variable. see https://docs.github.com/en/actions/reference/security/secure-use#good-practices-for-mitigating-script-injection-attacks for more details [expression]
+test.yaml:15:24: "inputs.title" is an input chosen by whoever runs this, which is not validated and can hold shell syntax. avoid using it directly in inline scripts. instead, pass it through an environment variable. see https://docs.github.com/en/actions/reference/security/secure-use#good-practices-for-mitigating-script-injection-attacks for more details [template-injection]
    |
 15 |       - run: echo "${{ inputs.title }}"
    |                        ^~~~~~~~~~~~
-test.yaml:17:24: "github.event.client_payload.branch" is the payload of a repository_dispatch event, which is not validated and can hold shell syntax. avoid using it directly in inline scripts. instead, pass it through an environment variable. see https://docs.github.com/en/actions/reference/security/secure-use#good-practices-for-mitigating-script-injection-attacks for more details [expression]
+test.yaml:17:24: "github.event.client_payload.branch" is the payload of a repository_dispatch event, which is not validated and can hold shell syntax. avoid using it directly in inline scripts. instead, pass it through an environment variable. see https://docs.github.com/en/actions/reference/security/secure-use#good-practices-for-mitigating-script-injection-attacks for more details [template-injection]
    |
 17 |       - run: echo "${{ github.event.client_payload.branch }}"
    |                        ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-test.yaml:19:24: "github.ref_name" is a branch or tag name, which is not validated and can hold shell syntax. avoid using it directly in inline scripts. instead, pass it through an environment variable. see https://docs.github.com/en/actions/reference/security/secure-use#good-practices-for-mitigating-script-injection-attacks for more details [expression]
+test.yaml:19:24: "github.ref_name" is a branch or tag name, which is not validated and can hold shell syntax. avoid using it directly in inline scripts. instead, pass it through an environment variable. see https://docs.github.com/en/actions/reference/security/secure-use#good-practices-for-mitigating-script-injection-attacks for more details [template-injection]
    |
 19 |       - run: echo "${{ github.ref_name }}"
    |                        ^~~~~~~~~~~~~~~
@@ -6072,11 +6072,11 @@ The output is with the option `pedantic` of `template-injection` on.
 
 <!-- Skip update output -->
 ```
-test.yaml:10:32: "steps.version.outputs.tag" is expanded with ${{ }} into an inline script, so a value with shell syntax changes what the script does. instead, pass it through an environment variable and read it as a variable of the shell [expression]
+test.yaml:10:32: "steps.version.outputs.tag" is expanded with ${{ }} into an inline script, so a value with shell syntax changes what the script does. instead, pass it through an environment variable and read it as a variable of the shell [template-injection]
    |
 10 |       - run: ./release.sh '${{ steps.version.outputs.tag }}'
    |                                ^~~~~~~~~~~~~~~~~~~~~~~~~
-test.yaml:16:33: "github.repository" is expanded with ${{ }} into an inline script. its value is not controlled by an attacker, but an expansion in a script is easy to get wrong when the script changes. instead, read it as a variable of the shell [expression]
+test.yaml:16:33: "github.repository" is expanded with ${{ }} into an inline script. its value is not controlled by an attacker, but an expansion in a script is easy to get wrong when the script changes. instead, read it as a variable of the shell [template-injection]
    |
 16 |       - run: echo "Building ${{ github.repository }}"
    |                                 ^~~~~~~~~~~~~~~~~
@@ -6318,15 +6318,15 @@ test.yaml:7:15: warning: path of "actions/checkout/./sub@v4" has redundant or em
   |
 7 |       - uses: actions/checkout/./sub@v4
   |               ^~~~~~~~~~~~~~~~~~~~~~~~~
-test.yaml:10:27: warning: format() is called with literal arguments only so its result is the constant "octocat/hello-world". write the string itself [expression]
+test.yaml:10:27: warning: format() is called with literal arguments only so its result is the constant "octocat/hello-world". write the string itself [obfuscation]
    |
 10 |           repository: ${{ format('{0}/{1}', 'octocat', 'hello-world') }}
    |                           ^~~~~~~~~~~~~~~~~
-test.yaml:11:24: warning: fromJSON(toJSON(...)) returns its argument unchanged. remove both calls [expression]
+test.yaml:11:24: warning: fromJSON(toJSON(...)) returns its argument unchanged. remove both calls [obfuscation]
    |
 11 |       - run: echo '${{ fromJSON(toJSON('[1]'))[0] }}'
    |                        ^~~~~~~~~~~~~~~~~~~~~~~~~~
-test.yaml:12:29: warning: the index is computed, which hides which property is read from tools that look for it. use a literal property name or a matrix to select the value [expression]
+test.yaml:12:29: warning: the index is computed, which hides which property is read from tools that look for it. use a literal property name or a matrix to select the value [obfuscation]
    |
 12 |       - run: echo '${{ vars[format('NAME_{0}', github.job)] }}'
    |                             ^~~~~~~~~~~~~~~~~~
@@ -7081,7 +7081,7 @@ jobs:
 Output:
 
 ```
-test.yaml:3:17: workflow "PR checks" specified at "workflows" of "workflow_run" event is not found in the repository. a workflow is specified by its "name:" or its file path when it has no name [workflow-run]
+test.yaml:3:17: workflow "PR checks" specified at "workflows" of "workflow_run" event is not found in the repository. a workflow is specified by its "name:" or its file path when it has no name [workflow-run-names]
   |
 3 |     workflows: [PR checks]
   |                 ^~
@@ -7540,15 +7540,15 @@ runs:
 Output:
 
 ```
-.github/actions/example/action.yml:11:30: context "secrets" is not allowed in a composite action because secrets are not passed to it. declare an input and let the workflow pass the secret with "with:". available contexts are "env", "github", "inputs", "job", "matrix", "needs", "runner", "steps", "strategy", "vars". see https://docs.github.com/en/actions/learn-github-actions/contexts#context-availability for more details [expression]
+.github/actions/example/action.yml:11:30: context "secrets" is not allowed in a composite action because secrets are not passed to it. declare an input and let the workflow pass the secret with "with:". available contexts are "env", "github", "inputs", "job", "matrix", "needs", "runner", "steps", "strategy", "vars". see https://docs.github.com/en/actions/learn-github-actions/contexts#context-availability for more details [context-availability]
    |
 11 |     - run: ./publish.sh "${{ secrets.PUBLISH_TOKEN }}"
    |                              ^~~~~~~~~~~~~~~~~~~~~
-.github/actions/example/action.yml:14:28: "inputs.tokan" is an input chosen by whoever runs this, which is not validated and can hold shell syntax. avoid using it directly in inline scripts. instead, pass it through an environment variable. see https://docs.github.com/en/actions/reference/security/secure-use#good-practices-for-mitigating-script-injection-attacks for more details [expression]
+.github/actions/example/action.yml:14:28: "inputs.tokan" is an input chosen by whoever runs this, which is not validated and can hold shell syntax. avoid using it directly in inline scripts. instead, pass it through an environment variable. see https://docs.github.com/en/actions/reference/security/secure-use#good-practices-for-mitigating-script-injection-attacks for more details [template-injection]
    |
 14 |     - run: ./build.sh "${{ inputs.tokan }}"
    |                            ^~~~~~~~~~~~
-.github/actions/example/action.yml:14:28: property "tokan" is not defined in object type {token: string} [expression]
+.github/actions/example/action.yml:14:28: property "tokan" is not defined in object type {token: string} [undefined-property]
    |
 14 |     - run: ./build.sh "${{ inputs.tokan }}"
    |                            ^~~~~~~~~~~~
@@ -7589,23 +7589,23 @@ runs:
 Output:
 
 ```
-.github/actions/example/action.yml:6:5: unexpected key "descriptions" for input "who". expected one of "default", "deprecationMessage", "description", "required" [syntax-check]
+.github/actions/example/action.yml:6:5: unexpected key "descriptions" for input "who". expected one of "default", "deprecationMessage", "description", "required" [action-syntax]
   |
 6 |     descriptions: Who to greet
   |     ^~~~~~~~~~~~~
-.github/actions/example/action.yml:11:7: "shell" is required for a "run" step of a composite action, which has no default shell. for example, add "shell: bash" [syntax-check]
+.github/actions/example/action.yml:11:7: "shell" is required for a "run" step of a composite action, which has no default shell. for example, add "shell: bash" [action-syntax]
    |
 11 |     - run: echo "hello ${{ inputs.who }}"
    |       ^~~~
-.github/actions/example/action.yml:11:28: "inputs.who" is an input chosen by whoever runs this, which is not validated and can hold shell syntax. avoid using it directly in inline scripts. instead, pass it through an environment variable. see https://docs.github.com/en/actions/reference/security/secure-use#good-practices-for-mitigating-script-injection-attacks for more details [expression]
+.github/actions/example/action.yml:11:28: "inputs.who" is an input chosen by whoever runs this, which is not validated and can hold shell syntax. avoid using it directly in inline scripts. instead, pass it through an environment variable. see https://docs.github.com/en/actions/reference/security/secure-use#good-practices-for-mitigating-script-injection-attacks for more details [template-injection]
    |
 11 |     - run: echo "hello ${{ inputs.who }}"
    |                            ^~~~~~~~~~
-.github/actions/example/action.yml:14:7: unexpected key "shell" for step to execute action. expected one of "background", "continue-on-error", "env", "id", "if", "name", "timeout-minutes", "uses", "with" [syntax-check]
+.github/actions/example/action.yml:14:7: unexpected key "shell" for step to execute action. expected one of "background", "continue-on-error", "env", "id", "if", "name", "timeout-minutes", "uses", "with" [action-syntax]
    |
 14 |       shell: bash
    |       ^~~~~~
-.github/actions/example/action.yml:16:3: "main" is not available in "runs" section of the composite action. it is for JavaScript and Docker actions [syntax-check]
+.github/actions/example/action.yml:16:3: "main" is not available in "runs" section of the composite action. it is for JavaScript and Docker actions [action-syntax]
    |
 16 |   main: dist/index.js
    |   ^~~~~
