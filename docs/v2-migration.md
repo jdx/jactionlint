@@ -274,7 +274,7 @@ With `--format sarif` stdout holds only the log and stderr is empty unless `--ve
   fix is refused and the exit status is 3 with the rule named.
 - `jactionlint --diff` prints what `--fix` would do as a unified diff and writes nothing (exit 1 when there is a diff).
 - `jactionlint --fix --fix-rules missing-timeout,artipacked` applies only the fixes of those rules, like `fix: {rules: [...]}` in the config.
-- `--fix` cannot read stdin and exits with status 3 if asked to.
+- `--fix` cannot read stdin and exits with status 2 if asked to.
 
 ```console
 $ jactionlint --diff --fix-rules artipacked

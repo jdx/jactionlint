@@ -978,7 +978,7 @@ jactionlint remembers the default shell and checks what OS the job runs on. Only
 applies shellcheck to scripts.
 
 By default, jactionlint checks if `shellcheck` command exists in your system and uses it when it is found. The `--shellcheck`
-option on running `jactionlint` command specifies the executable path of shellcheck. Setting empty string by `shellcheck=`
+option on running `jactionlint` command specifies the executable path of shellcheck. Setting empty string by `--shellcheck=`
 disables shellcheck integration explicitly.
 
 Since both `${{ }}` expression syntax and ShellScript's variable access `$FOO` use `$`, the remaining `${{ }}` confuses
@@ -1094,7 +1094,7 @@ jactionlint runs pyflakes for scripts at `run:` steps in a workflow and reports 
 Python scripts in a workflow by checking `shell: python` at each step and `defaults:` configurations at workflows and jobs.
 
 By default, jactionlint checks if `pyflakes` command exists in your system and uses it when found. The `--pyflakes` option
-of `jactionlint` command allows to specify the executable path of pyflakes. Setting empty string by `pyflakes=` disables
+of `jactionlint` command allows to specify the executable path of pyflakes. Setting empty string by `--pyflakes=` disables
 pyflakes integration explicitly.
 
 Since both `${{ }}` expression syntax is invalid as Python, remaining `${{ }}` might confuse pyflakes. To avoid it,

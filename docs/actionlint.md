@@ -1,6 +1,6 @@
 # Coming from actionlint
 
-jactionlint is a maintained fork of [actionlint][actionlint]. It reads the same workflows, takes the same flags and finds the same
+jactionlint is a maintained fork of [actionlint][actionlint]. It reads the same workflows, takes the same options, spelled the POSIX/GNU way (see the [migration table](v2-migration.md#command-line-options)) and finds the same
 mistakes, and it adds checks for security and policy on top. This page is for a repository that used actionlint and wants either
 the same result as before or to see what else it can have.
 
