@@ -155,6 +155,18 @@ func TestUnsoundPrefixMatchSites(t *testing.T) {
 	}
 }
 
+// A "self-hosted" inside the pattern being tested does not select a runner; runs-on and a comparison
+// with runner.* do.
+func TestUnsoundPrefixMatchSelfHostedLiteral(t *testing.T) {
+	cfg := ruleConfig("unsound-prefix-match")
+	env := "on: push\njobs:\n  a:\n    runs-on: ubuntu-latest\n    env:\n      BUILD: ${{ startsWith(matrix.os, 'self-hosted-') && 'fast' || 'slow' }}\n      B2: ${{ contains(github.repository, 'self-hosted') }}\n    steps:\n      - run: echo\n"
+	wantLines(t, lintFileWithConfig(t, cfg, "ci.yaml", env), "unsound-prefix-match")
+	runsOn := "on: push\njobs:\n  a:\n    runs-on: ${{ startsWith(github.repository, 'jdx') && matrix.os || 'ubuntu-latest' }}\n    steps:\n      - run: echo\n"
+	wantLines(t, lintFileWithConfig(t, cfg, "ci.yaml", runsOn), "unsound-prefix-match", 4)
+	cmp := "on: push\njobs:\n  a:\n    runs-on: ubuntu-latest\n    env:\n      X: ${{ startsWith(github.actor, 'jdx') && runner.environment == 'self-hosted' }}\n    steps:\n      - run: echo\n"
+	wantLines(t, lintFileWithConfig(t, cfg, "ci.yaml", cmp), "unsound-prefix-match", 6)
+}
+
 // The credentials reached by an index or as a whole are credentials too.
 func TestUnsoundPrefixMatchSelectsCredentialsByIndex(t *testing.T) {
 	cfg := ruleConfig("unsound-prefix-match")
