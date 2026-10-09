@@ -1,0 +1,17 @@
+version: 2
+multi-ecosystem-groups:
+  infra:
+    schedule:
+      interval: weekly
+    labels: [infra]
+    commit-message:
+      prefix: "chore"
+updates:
+  - package-ecosystem: docker
+    directory: "/"
+    multi-ecosystem-group: infra
+    patterns: ["*"]
+  - package-ecosystem: terraform
+    directory: "/tf"
+    multi-ecosystem-group: infra
+    patterns: ["*"]

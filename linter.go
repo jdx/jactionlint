@@ -101,6 +101,9 @@ type LinterOptions struct {
 	// function should return the modified rules.
 	// Note that syntax errors may be reported even if this function returns nil or an empty slice.
 	OnRulesCreated func([]Rule) []Rule
+	// OnDependabotRulesCreated is like OnRulesCreated but for the rules which check Dependabot
+	// configuration files (.github/dependabot.yml).
+	OnDependabotRulesCreated func([]DependabotRule) []DependabotRule
 	// More options will come here
 }
 
@@ -120,6 +123,7 @@ type Linter struct {
 	errFmt         *ErrorFormatter
 	cwd            string
 	onRulesCreated func([]Rule) []Rule
+	onDependabot   func([]DependabotRule) []DependabotRule
 	configFile     string
 	minSeverity    Severity
 	warned         sync.Map // *Config -> struct{}: configs whose deprecations were already reported
@@ -226,6 +230,7 @@ func NewLinter(out io.Writer, opts *LinterOptions) (*Linter, error) {
 		errFmt:         formatter,
 		cwd:            cwd,
 		onRulesCreated: opts.OnRulesCreated,
+		onDependabot:   opts.OnDependabotRulesCreated,
 		configFile:     opts.ConfigFile,
 		minSeverity:    opts.MinSeverity,
 	}
@@ -304,23 +309,55 @@ func (l *Linter) LintRepository(dir string) ([]*Error, error) {
 		dir = l.cwd
 	}
 
-	l.log("Linting all workflow files in repository:", dir)
+	l.log("Linting all workflow files and Dependabot configuration in repository:", dir)
 
-	p, err := l.projects.At(dir)
+	files, p, err := l.repositoryFiles(dir)
 	if err != nil {
 		return nil, err
 	}
+	l.log("Collected", len(files), "YAML files")
+	return l.LintFiles(files, p)
+}
+
+// repositoryFiles finds the nearest project of dir and returns its files which are linted: the workflow
+// files and the Dependabot configuration. LintRepository and FixRepository both use it, so what is fixed is always
+// what is linted.
+func (l *Linter) repositoryFiles(dir string) ([]string, *Project, error) {
+	p, err := l.projects.At(dir)
+	if err != nil {
+		return nil, nil, err
+	}
 	if p == nil {
-		return nil, fmt.Errorf("no project was found in any parent directories of %q. check workflows directory is put correctly in your Git repository", dir)
+		return nil, nil, fmt.Errorf("no project was found in any parent directories of %q. check workflows directory is put correctly in your Git repository", dir)
 	}
 
 	l.log("Detected project:", p.RootDir())
-	wd := p.WorkflowsDir()
-	return l.LintDir(wd, p)
+	files, err := walkWorkflowFiles(p.WorkflowsDir())
+	if err != nil {
+		return nil, nil, err
+	}
+	files = append(files, p.DependabotFiles()...)
+	if len(files) == 0 {
+		return nil, nil, fmt.Errorf("no YAML file was found in %q", p.WorkflowsDir())
+	}
+	return files, p, nil
 }
 
 // collectWorkflowFiles returns the paths of all YAML files in the directory recursively in sorted order.
+// It is an error that the directory has no YAML file.
 func collectWorkflowFiles(dir string) ([]string, error) {
+	files, err := walkWorkflowFiles(dir)
+	if err != nil {
+		return nil, err
+	}
+	if len(files) == 0 {
+		return nil, fmt.Errorf("no YAML file was found in %q", dir)
+	}
+	return files, nil
+}
+
+// walkWorkflowFiles returns the paths of all YAML files in the directory recursively in sorted order.
+func walkWorkflowFiles(dir string) ([]string, error) {
 	files := []string{}
 	if err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
@@ -335,10 +372,6 @@ func collectWorkflowFiles(dir string) ([]string, error) {
 		return nil
 	}); err != nil {
 		return nil, fmt.Errorf("could not read files in %q: %w", dir, err)
-	}
-
-	if len(files) == 0 {
-		return nil, fmt.Errorf("no YAML file was found in %q", dir)
 	}
 
 	// To make output deterministic, sort order of file paths
@@ -583,6 +616,10 @@ func (l *Linter) check(
 		l.debug("No config was found")
 	}
 
+	if l.isDependabotFile(path) {
+		return l.checkDependabot(path, content, project, cfg, start)
+	}
+
 	w, all := Parse(content)
 
 	if l.logLevel >= LogLevelVerbose {
@@ -641,6 +678,12 @@ func (l *Linter) check(
 		}
 	}
 
+	return l.finishCheck(path, content, all, cfg, start), nil
+}
+
+// finishCheck post-processes the errors found in one file: it fills the fields derived from the
+// rule IDs, applies the ignores and the minimum severity, and sorts the errors.
+func (l *Linter) finishCheck(path string, content []byte, all []*Error, cfg *Config, start time.Time) []*Error {
 	all = l.annotateErrors(all, content, cfg)
 
 	// Inline ignores are applied first so that every pattern sees all errors, which tells whether it
@@ -674,7 +717,7 @@ func (l *Linter) check(
 		l.log("Found total", len(all), "errors in", elapsed.Milliseconds(), "ms for", path)
 	}
 
-	return all, nil
+	return all
 }
 
 func (l *Linter) filterErrors(errs []*Error, cfgs []PathConfig) []*Error {

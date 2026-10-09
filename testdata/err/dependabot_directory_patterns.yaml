@@ -1,0 +1,21 @@
+version: 2
+updates:
+  # directory and directories are mutually exclusive
+  - package-ecosystem: npm
+    directory: /
+    directories: [/a, /b]
+    schedule:
+      interval: weekly
+  # a wrong type is reported once, not as missing as well
+  - package-ecosystem: npm
+    directories: /a
+    schedule:
+      interval: weekly
+  # a multi-ecosystem group member needs patterns
+  - package-ecosystem: docker
+    directory: /
+    multi-ecosystem-group: infra
+multi-ecosystem-groups:
+  infra:
+    schedule:
+      interval: weekly
