@@ -251,3 +251,45 @@ func TestGitHubEnvTotalBranches(t *testing.T) {
 		})
 	}
 }
+
+// TestGitHubEnvReviewRound3 covers cases where the untrusted value must be seen on a trigger that is not
+// privileged (only a known-untrusted write is reported there, so a value judged "unknown" hides the finding) and
+// cases that must stay quiet on pull_request_target.
+func TestGitHubEnvReviewRound3(t *testing.T) {
+	mk := func(trigger, extra, script string) string {
+		src := "on: " + trigger + "\npermissions: {}\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - env:\n          TITLE: ${{ github.event.pull_request.title }}\n          CMD: ${{ github.event.comment.body }}\n" + extra + "        run: |\n"
+		for _, l := range strings.Split(script, "\n") {
+			src += "          " + l + "\n"
+		}
+		return src
+	}
+	const env = `echo "V=$V" >> "$GITHUB_ENV"`
+	tests := []struct {
+		what, trigger, extra, script string
+		want                         int
+	}{
+		{"assignment in the branch of the write", "issue_comment", "", "if [ -n \"$X\" ]; then V=$TITLE; " + env + "; else V=a; fi", 1},
+		{"assignment in the case branch of the write", "issue_comment", "", "case \"$X\" in\n  a) V=$TITLE; " + env + " ;;\n  *) V=b ;;\nesac", 1},
+		{"trusted assignment in the branch of the write", "issue_comment", "", "if [ -n \"$X\" ]; then V=a; " + env + "; else V=$TITLE; fi", 0},
+		{"assignment after the group write", "issue_comment", "", `{ echo "T=$TITLE"; TITLE=safe; } >> "$GITHUB_ENV"`, 1},
+		{"function body sees the prefix assignment", "issue_comment", "", "w() { " + env + "; }\nV=$TITLE w", 1},
+		{"function body sees a later assignment", "issue_comment", "", "w() { " + env + "; }\nV=$TITLE\nw", 1},
+		{"sed whitelist that keeps = and the newline", "issue_comment", "", "V=$(echo \"$CMD\" | sed 's/[^A-Za-z0-9_=./-]/-/g')\n" + env, 1},
+		{"sed whitelist without = is harmless", "issue_comment", "", "V=$(echo \"$CMD\" | sed 's/[^A-Za-z0-9_./-]/-/g')\n" + env, 0},
+		{"sed -z whitelist with =", "issue_comment", "", "V=$(echo \"$CMD\" | sed -z 's/[^A-Za-z0-9_=./-]/-/g')\n" + env, 0},
+		{"bare test under a template without -e", "issue_comment", "        shell: bash {0}\n", "V=$TITLE\n[[ \"$V\" =~ ^[a-z]+$ ]]\n" + env, 1},
+		{"bare test under a template with -e", "issue_comment", "        shell: bash -e {0}\n", "V=$TITLE\n[[ \"$V\" =~ ^[a-z]+$ ]]\n" + env, 0},
+		{"bare test after set -e in a template", "issue_comment", "        shell: bash {0}\n", "set -e\nV=$TITLE\n[[ \"$V\" =~ ^[a-z]+$ ]]\n" + env, 0},
+		{"bare test under shell: bash", "issue_comment", "        shell: bash\n", "V=$TITLE\n[[ \"$V\" =~ ^[a-z]+$ ]]\n" + env, 0},
+		{"benign substitution next to a sanitized one", "pull_request_target", "", `echo "B=$(date +%s)-$(echo "$TITLE" | tr -d '\n')" >> "$GITHUB_ENV"`, 0},
+		{"benign substitution next to a raw one", "pull_request_target", "", `echo "B=$(date +%s)-$(echo "$TITLE" | sed s/a/b/)" >> "$GITHUB_ENV"`, 1},
+	}
+	for _, tc := range tests {
+		t.Run(tc.what, func(t *testing.T) {
+			src := mk(tc.trigger, tc.extra, tc.script)
+			if got := countGitHubEnv(t, src); got != tc.want {
+				t.Errorf("%d findings, want %d\n%s", got, tc.want, src)
+			}
+		})
+	}
+}

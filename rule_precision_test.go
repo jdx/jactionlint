@@ -24,6 +24,8 @@ func TestAdhocPackagesArraysAndLerna(t *testing.T) {
 		{"yarn lerna add", "yarn lerna add left-pad --scope web", 1},
 		{"lerna add with an expression", "yarn lerna add pkg@${{ matrix.v }}", 1},
 		{"npx lerna add", "npx lerna add left-pad", 1},
+		{"echo of a lerna add", "echo lerna add left-pad", 0},
+		{"grep for lerna add", "grep lerna add README.md", 0},
 		{"lerna add of a local path", "lerna add ./packages/a", 0},
 		{"lerna add of a local path with --scope", "lerna add ./packages/a --scope web", 0},
 		{"lerna add of a local path with --dev and --peer", "lerna add ./packages/a --dev --peer", 0},
@@ -151,6 +153,21 @@ func TestUseTrustedPublishingPrecision(t *testing.T) {
           NODE_AUTH_TOKEN: ${{ secrets.T }}
 `, 0},
 		{"step environment resets the workflow's private registry", "on: push\nenv:\n  NPM_CONFIG_REGISTRY: http://localhost:4873\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n" + `      - run: npm publish
+        env:
+          NPM_CONFIG_REGISTRY: https://registry.npmjs.org/
+          NODE_AUTH_TOKEN: ${{ secrets.T }}
+`, 1},
+		{"public registry in the environment wins over a private registry-url", lin + `      - uses: actions/setup-node@v6
+        with:
+          registry-url: http://localhost:4873
+      - run: npm publish
+        env:
+          NPM_CONFIG_REGISTRY: https://registry.npmjs.org/
+          NODE_AUTH_TOKEN: ${{ secrets.T }}
+`, 1},
+		{"public registry in the environment wins over a private npm config set", noOIDC + `      - run: |
+          npm config set registry http://localhost:4873
+          npm publish
         env:
           NPM_CONFIG_REGISTRY: https://registry.npmjs.org/
           NODE_AUTH_TOKEN: ${{ secrets.T }}

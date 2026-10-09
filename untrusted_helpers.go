@@ -243,6 +243,14 @@ func commandRunsCode(c *runscript.Command) bool {
 		}
 		return false
 	}
+	if c.Name == "enable" {
+		// `enable -f ./lib.so name` loads a shared object, whose code then runs in the shell
+		for _, a := range c.Args {
+			if !a.Dynamic() && strings.HasPrefix(a.Value, "-") && !strings.HasPrefix(a.Value, "--") && strings.Contains(a.Value, "f") {
+				return true
+			}
+		}
+	}
 	return !nonExecutingCommands[c.Name]
 }
 

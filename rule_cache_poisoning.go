@@ -396,20 +396,26 @@ func tagFilterMatches(f *WebhookEventFilter) bool {
 	return last == nil || strings.TrimSpace(last.Value) != "!**"
 }
 
-// eventScenarios lists one run per event. A push event whose filters let nothing but tags through has no run
-// without a tag: the tag push is added by the caller, and a bare "push" run would let a condition on the ref
-// pass as if a branch were pushed.
+// eventScenarios lists one run per event. A push event runs for a branch push when it has a branch filter or
+// no ref filter at all, and for a tag push when it has a tag filter (which lets the tag through) or no ref
+// filter at all: a filter on one kind of ref keeps the other away. A run for a branch push is not a tag ref, a run
+// for a tag push is; a bare "push" run would let a condition on the ref pass as if a branch were pushed.
 func eventScenarios(events []Event) []triggerScenario {
 	var ret []triggerScenario
 	for _, e := range events {
-		if ev, ok := e.(*WebhookEvent); ok && e.EventName() == "push" && ev.Branches == nil && ev.BranchesIgnore == nil && tagFilterMatches(ev.Tags) {
+		ev, ok := e.(*WebhookEvent)
+		if !ok || e.EventName() != "push" {
+			ret = append(ret, triggerScenario{"event_name": e.EventName()})
 			continue
 		}
-		sc := triggerScenario{"event_name": e.EventName()}
-		if e.EventName() == "push" {
-			sc[refPrefixKey] = "refs/heads/" // the run which is not a tag push is a branch push
+		branchFilter := ev.Branches != nil || ev.BranchesIgnore != nil
+		tagFilter := ev.Tags != nil || ev.TagsIgnore != nil
+		if branchFilter || !tagFilter {
+			ret = append(ret, triggerScenario{"event_name": "push", refPrefixKey: "refs/heads/"})
 		}
-		ret = append(ret, sc)
+		if !branchFilter && !tagFilter || tagFilter && (ev.Tags == nil || tagFilterMatches(ev.Tags)) {
+			ret = append(ret, scenarioTagPush)
+		}
 	}
 	return ret
 }
