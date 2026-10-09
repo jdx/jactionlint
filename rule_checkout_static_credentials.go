@@ -7,8 +7,9 @@ import (
 // RuleCheckoutStaticCredentials is a rule checker which reports actions/checkout steps that are given a
 // credential that does not expire: the "ssh-key" input, or a "token" input written in the workflow. With
 // the "secret-tokens" option it also reports a "token" taken from a secret other than GITHUB_TOKEN (a
-// personal access token, in most cases). That is off by default because workflows that have to push
-// something that triggers other workflows, or reach other repositories, use one on purpose. The default
+// personal access token, in most cases). That is a pedantic check: it is on under the strict and all
+// profiles and off under the default one, because workflows that have to push something that triggers
+// other workflows, or reach other repositories, use one on purpose. The default
 // GITHUB_TOKEN lives as long as the job and is limited to the repository, and a token created by a GitHub
 // App lives for an hour at most. A static credential is valid until somebody rotates it, can usually
 // reach much more than the job needs, and checkout writes it to the git config of the workspace (unless
@@ -34,7 +35,11 @@ func NewRuleCheckoutStaticCredentials() *RuleCheckoutStaticCredentials {
 // VisitJobPre is callback when visiting Job node before visiting its children.
 func (rule *RuleCheckoutStaticCredentials) VisitJobPre(n *Job) error {
 	allow := rule.Config().ruleOptionStrings("checkout-static-credentials", "allow")
-	secretTokens, _ := rule.Config().ruleOptionBool("checkout-static-credentials", "secret-tokens")
+	// Unset, secret-tokens follows the pedantic personas: on under the strict and all profiles, off otherwise.
+	secretTokens := rule.pedantic("checkout-static-credentials")
+	if v, ok := rule.Config().ruleOptionBool("checkout-static-credentials", "secret-tokens"); ok {
+		secretTokens = v
+	}
 	for _, s := range flattenSteps(n.Steps) {
 		a, ref := stepAction(s)
 		if a == nil || !ref.isRepoAction("actions/checkout") {
@@ -53,7 +58,7 @@ func (rule *RuleCheckoutStaticCredentials) VisitJobPre(n *Job) error {
 			if pos == nil {
 				pos = in.Value.Pos
 			}
-			rule.ReportIDf("checkout-static-credentials", pos, "actions/checkout is given %s as %q. this credential does not expire and can reach more than this job needs, and unless \"persist-credentials: false\" is set it is also left in the git config of the workspace for every later step to read. use the default GITHUB_TOKEN for this repository, or a short-lived token from a GitHub App (actions/create-github-app-token) to reach other repositories", src, name)
+			rule.ReportIDf("checkout-static-credentials", pos, "actions/checkout is given %s as %q. this credential does not expire and can reach more than this job needs, and unless \"persist-credentials: false\" is set it is also left in the git config of the workspace for every later step to read. use the default GITHUB_TOKEN for this repository. to reach other repositories or to push something that starts other workflows, use a short-lived token from a GitHub App (actions/create-github-app-token) or a fine-grained personal access token limited to the repositories it needs, and keep it in a secret of a protected environment", src, name)
 		}
 	}
 	return nil
@@ -122,7 +127,7 @@ func init() {
 		ID: "checkout-static-credentials", Group: RuleGroupSecurity, Summary: "actions/checkout is given an SSH key or a token that does not expire.",
 		DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-checkout-static-credentials",
 		Options: []RuleOption{
-			{Name: "secret-tokens", Kind: RuleOptionBool, Default: false, Summary: "Also report a token input taken from a secret other than GITHUB_TOKEN (a personal access token). The ssh-key input is always reported."},
+			{Name: "secret-tokens", Kind: RuleOptionBool, Summary: "Also report a token input taken from a secret other than GITHUB_TOKEN (a personal access token). The ssh-key input is always reported. Unset, it is on under the strict and all profiles and off under the default one."},
 			{Name: "allow", Kind: RuleOptionStrings, Summary: "Names of secrets which may be given to actions/checkout (for example a deploy key)."},
 		},
 	})

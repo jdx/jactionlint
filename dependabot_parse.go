@@ -186,6 +186,7 @@ func (p *parser) parseDependabotCooldown(pos *Pos, n *yaml.Node) *DependabotCool
 		k, v := e.key, e.val
 		switch e.id {
 		case "default-days":
+			c.HasDefaultDays = true
 			c.DefaultDays = p.parseDependabotInt(v, "default-days", 0, 90)
 		case "semver-major-days":
 			c.SemverMajorDays = p.parseDependabotInt(v, "semver-major-days", 0, 90)

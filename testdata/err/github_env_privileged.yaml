@@ -1,0 +1,62 @@
+on:
+  pull_request_target:
+    types: [opened]
+env:
+  LABEL: release
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      TITLE: ${{ github.event.pull_request.title }}
+      CHANNEL: stable
+    steps:
+      # Values that are not literals
+      - run: echo "VERSION=$(cat version.txt)" >> $GITHUB_ENV
+      - run: echo "REF=$GITHUB_REF_NAME" >> "${GITHUB_ENV}"
+      - run: echo "N=${{ github.event.pull_request.user.login }}" >> $GITHUB_ENV
+      - run: ./generate.sh | tee -a "$GITHUB_PATH"
+      - run: cat version.txt >> "$GITHUB_ENV"
+      - run: |
+          {
+            echo "A=1"
+            echo "B=$(date)"
+          } >> "$GITHUB_ENV"
+      - run: |
+          F=$GITHUB_ENV
+          echo "X=$(git log -1 --format=%s)" >> "$F"
+      - run: |
+          cat <<EOF2 >> $GITHUB_ENV
+          A=$OTHER
+          EOF2
+      - run: echo "D=$(basename "$GITHUB_REF")" >> "$GITHUB_ENV"
+      - run: echo "A=$LABEL" >> $GITHUB_ENV
+        env:
+          LABEL: ${{ github.event.pull_request.user.login }}-x
+      # Input that an outsider controls
+      - run: echo "T=$TITLE" >> $GITHUB_ENV
+      - run: echo "T=${{ github.event.pull_request.head.ref }}" >> $GITHUB_ENV
+      - run: echo "$HEAD/bin" >> $GITHUB_PATH
+        env:
+          HEAD: ${{ github.head_ref }}
+      # Literals and values the workflow author decides
+      - run: echo "FOO=bar" >> $GITHUB_ENV
+      - run: printf 'FOO=%s\n' bar >> "$GITHUB_ENV"
+      - run: echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+      - run: echo "$RUNNER_TEMP/bin" >> $GITHUB_PATH
+      - run: echo "SHA=${{ github.sha }}" >> $GITHUB_ENV
+      - run: echo "HEAD=${{ github.event.pull_request.head.sha }}" >> $GITHUB_ENV
+      - run: echo "N=${{ github.event.pull_request.number }}" >> $GITHUB_ENV
+      - run: echo "C=$CHANNEL" >> $GITHUB_ENV
+      - run: echo "C=${{ env.LABEL }}" >> $GITHUB_ENV
+      - run: |
+          cat <<'EOF2' >> "$GITHUB_ENV"
+          A=$NOT_EXPANDED
+          EOF2
+      - run: |
+          dir="$(mktemp -d "$RUNNER_TEMP/work.XXXXXX")"
+          {
+            echo "DIR=$dir/data"
+            echo "NOW=$(date -u +%s)"
+          } >> "$GITHUB_ENV"
+      - run: echo "key=$(date +%s)" >> "$GITHUB_OUTPUT"
+      - run: echo "$(date)" > other.txt

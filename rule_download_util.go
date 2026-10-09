@@ -72,12 +72,6 @@ func (s *shellScope) analyze(run *ExecRun) (*runscript.Script, runscript.Origin)
 	return sc, run.Run.scriptOrigin()
 }
 
-// scriptPos returns the position in the workflow file of the offset in the script.
-func scriptPos(sc *runscript.Script, o runscript.Origin, offset int) *Pos {
-	p := sc.Position(o, offset)
-	return &Pos{Line: p.Line, Col: p.Col}
-}
-
 // urlParts splits a URL which starts with one of the schemes. ok is false when v is not such a URL.
 // host is lower case, without the user information and the port, and empty when it is not known
 // statically (it contains an expression or a variable).

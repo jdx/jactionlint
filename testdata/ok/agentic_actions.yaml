@@ -1,0 +1,91 @@
+on:
+  issue_comment:
+    types: [created]
+  pull_request_target:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  # The action checks for write access by default
+  gated:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          # Named users are fine, and so are commands that are exact
+          allowed_non_write_users: octocat,hubot
+          allowed_bots: dependabot[bot]
+          claude_args: --allowedTools "Bash(gh issue view:*),Bash(git diff:*),Bash(python3 -m pytest:*),WebFetch(domain:docs.github.com)"
+          settings: '{"permissions": {"allow": ["Bash(npm test)", "Read"], "defaultMode": "plan"}}'
+      - uses: openai/codex-action@v1
+        with:
+          prompt: Review the pull request
+          allow-users: octocat
+  # An action without a check, but the job is restricted to members
+  members-only:
+    runs-on: ubuntu-latest
+    if: contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association)
+    steps:
+      - uses: google-github-actions/run-gemini-cli@v0
+        with:
+          settings: '{"tools": {"allowed": ["run_shell_command(git status)"]}}'
+  # The environment needs the approval of a reviewer
+  approved:
+    runs-on: ubuntu-latest
+    environment: agents
+    steps:
+      - uses: actions/ai-inference@v3
+  # The pull request goes to a subdirectory and the base branch is the workspace
+  subdirectory:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          path: pr-head
+      - uses: anthropics/claude-code-action@v1
+        with:
+          claude_args: --add-dir pr-head
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  # Windows runners need safety-strategy: unsafe
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: openai/codex-action@v1
+        with:
+          safety-strategy: unsafe
+  # The token of the job can only write issues, which is the setup for triage: the agent can do little with it
+  triage:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: openai/codex-action@v1
+        with:
+          allow-users: '*'
+          sandbox: read-only
+      - uses: google-github-actions/run-gemini-cli@v0
+  # The agent can only edit labels, and Codex can only read
+  restricted:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: google-github-actions/run-gemini-cli@v0
+        with:
+          settings: '{"tools": {"core": ["run_shell_command(gh label list)", "run_shell_command(gh issue edit)"]}}'
+      - uses: openai/codex-action@v1
+        with:
+          sandbox: read-only
+          allow-users: '*'
+      - uses: anthropics/claude-code-action@v1
+        with:
+          allowed_non_write_users: '*'
+          claude_args: --allowedTools "Bash(gh issue edit:*)" --max-turns 3

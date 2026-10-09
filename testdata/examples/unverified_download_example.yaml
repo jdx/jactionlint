@@ -3,7 +3,8 @@ jobs:
   setup:
     runs-on: ubuntu-latest
     steps:
-      - run: curl -fsSL https://example.com/install.sh | sh
+      - shell: bash
+        run: curl -fsSL https://example.com/install.sh | sh
       - run: |
           curl -fsSLo tool https://example.com/dl/tool
           chmod +x tool

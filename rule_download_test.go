@@ -241,12 +241,16 @@ func TestCheckoutStaticCredentials(t *testing.T) {
 		return "on: push\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n        with:\n" + with
 	}
 	cfg := mustParseConfig(t, "rules:\n  checkout-static-credentials:\n    secret-tokens: true\n    allow: [Deploy_Key]\n")
+	strict := mustParseConfig(t, "profile: strict\n")
+	strictOff := mustParseConfig(t, "profile: strict\nrules:\n  checkout-static-credentials:\n    secret-tokens: false\n")
 	tests := []struct {
 		what  string
 		src   string
 		cfg   *Config
 		lines []int
 	}{
+		{"token under the strict profile", wf("          token: ${{ secrets.PAT }}\n"), strict, []int{8}},
+		{"token under the strict profile, option off", wf("          token: ${{ secrets.PAT }}\n"), strictOff, nil},
 		{"ssh key", wf("          ssh-key: ${{ secrets.SSH_KEY }}\n"), nil, []int{8}},
 		{"ssh key literal", wf("          ssh-key: |\n            -----BEGIN OPENSSH PRIVATE KEY-----\n"), nil, []int{8}},
 		{"ssh key not a secret", wf("          ssh-key: ${{ steps.keys.outputs.key }}\n"), nil, nil},

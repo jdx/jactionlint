@@ -1,0 +1,34 @@
+on: issues
+
+jobs:
+  triage:
+    runs-on: ubuntu-latest
+    env:
+      TITLE: ${{ github.event.issue.title }}
+    steps:
+      # ERROR: the agent follows instructions in the title, whatever the quoting is
+      - uses: anthropics/claude-code-action@v1
+        with:
+          prompt: |
+            Triage this issue: "${{ github.event.issue.title }}"
+            ${{ github.event.issue.body }}
+      # ERROR: the environment variable has the title
+      - uses: google-github-actions/run-gemini-cli@v0
+        with:
+          prompt: Summarize ${{ env.TITLE }}
+      # ERROR: arguments and settings are read by the CLI of the agent
+      - uses: anthropics/claude-code-action@v1
+        with:
+          prompt: Triage this issue
+          claude_args: --model ${{ github.event.issue.title }}
+      # ERROR: the same for the other agents
+      - uses: openai/codex-action@v1
+        with:
+          prompt: ${{ toJSON(github.event.issue) }}
+      - uses: actions/ai-inference@v3
+        with:
+          system-prompt: ${{ github.event.issue.body }}
+      # OK: values that no attacker controls
+      - uses: anthropics/claude-code-action@v1
+        with:
+          prompt: Review the repository ${{ github.repository }} issue number ${{ github.event.issue.number }}

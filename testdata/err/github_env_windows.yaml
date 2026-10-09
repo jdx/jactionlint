@@ -1,0 +1,23 @@
+on:
+  workflow_run:
+    workflows: [build]
+    types: [completed]
+jobs:
+  test:
+    runs-on: windows-latest
+    steps:
+      # The default shell of a Windows runner is pwsh
+      - run: Add-Content -Path $env:GITHUB_ENV -Value "A=$env:RUNNER_OS"
+      - run: |
+          "PATH=$(Get-Location)" | Out-File -FilePath $env:GITHUB_PATH -Append
+      - run: echo "A=${{ github.event.workflow_run.head_branch }}" >> $env:GITHUB_ENV
+      - run: echo "A=%OS%" >> %GITHUB_ENV%
+        shell: cmd
+      - run: echo A=1 >> "%GITHUB_ENV%"
+        shell: cmd
+      # Literals
+      - run: Add-Content -Path $env:GITHUB_ENV -Value "A=1"
+      - run: echo "A=1" >> $env:GITHUB_ENV
+      - run: echo "A=1" > $env:GITHUB_PATH
+      - run: echo "B=${{ github.sha }}" >> $env:GITHUB_ENV
+      - run: Write-Output "ok" > out.txt
