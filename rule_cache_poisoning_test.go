@@ -75,6 +75,9 @@ func TestCachePoisoningChecksThatCannotPublish(t *testing.T) {
 		{"an input with a secret", on + "permissions: read-all\n" + job("", "      - uses: some/action@v1\n        with:\n          t: ${{ secrets.X }}\n"), 1},
 		{"all the secrets", on + "permissions: read-all\n" + job("", "      - run: echo '${{ toJSON(secrets) }}'\n"), 1},
 		{"only the token of the workflow", on + "permissions: read-all\n" + job("", "      - run: ./check\n        env:\n          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}\n"), 0},
+		{"only the token of the workflow, in brackets", on + "permissions: read-all\n" + job("", "      - run: ./check\n        env:\n          GH_TOKEN: ${{ secrets['GITHUB_TOKEN'] }}\n"), 0},
+		{"another secret, in brackets", on + "permissions: read-all\n" + job("", "      - run: ./check\n        env:\n          GH_TOKEN: ${{ secrets['NPM_TOKEN'] }}\n"), 1},
+		{"a publishing job is judged with the tag of the run", on + "permissions: read-all\n" + "jobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - run: npm publish\n      - uses: actions/setup-node@v4\n        if: github.ref_type == 'tag'\n        with:\n          cache: npm\n", 1},
 		{"a publishing command", on + "permissions: read-all\n" + job("", "      - run: cargo publish\n"), 1},
 		{"a publishing action", on + "permissions: read-all\n" + job("", "      - uses: pypa/gh-action-pypi-publish@release/v1\n"), 1},
 		{"the release event always counts", "on:\n  release:\n    types: [published]\npermissions: read-all\n" + job("", ""), 1},
@@ -147,6 +150,10 @@ func TestCachePoisoningGatesOfRestoreSwitches(t *testing.T) {
 		{"buildx binary cache on", "      - uses: docker/setup-buildx-action@v3\n        with:\n          cache-binary: ${{ startsWith(github.ref, 'refs/tags/') }}\n", 1},
 		{"node automatic cache off on tags", "      - uses: actions/setup-node@v5\n        with:\n          package-manager-cache: " + off + "\n", 0},
 		{"node automatic cache on", "      - uses: actions/setup-node@v5\n        with:\n          package-manager-cache: ${{ startsWith(github.ref, 'refs/tags/') }}\n", 1},
+		{"node automatic cache off next to cache: false", "      - uses: actions/setup-node@v5\n        with:\n          cache: false\n          package-manager-cache: " + off + "\n", 0},
+		{"node automatic cache on next to cache: false", "      - uses: actions/setup-node@v5\n        with:\n          cache: false\n          package-manager-cache: ${{ startsWith(github.ref, 'refs/tags/') }}\n", 1},
+		{"the ref of a pushed tag from the payload", "      - uses: Swatinem/rust-cache@v2\n        if: startsWith(github.event.ref, 'refs/tags/')\n", 1},
+		{"the ref of a pushed tag from the payload, negated", "      - uses: Swatinem/rust-cache@v2\n        if: ${{ !startsWith(github.event.ref, 'refs/tags/') }}\n", 0},
 		{"node explicit cache is not switched off by it", "      - uses: actions/setup-node@v5\n        with:\n          cache: npm\n          package-manager-cache: " + off + "\n", 1},
 	}
 	for _, tc := range tests {
@@ -155,5 +162,16 @@ func TestCachePoisoningGatesOfRestoreSwitches(t *testing.T) {
 				t.Errorf("want %d findings but got %v", tc.want, got)
 			}
 		})
+	}
+}
+
+func TestCachePoisoningUnknownPayloadRefDoesNotHideTheCache(t *testing.T) {
+	// the payload of a release has no ref, so the condition cannot be evaluated: it must not count as a gate
+	const head = "on:\n  release:\n    types: [published]\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n"
+	for _, cond := range []string{"startsWith(github.event.ref, 'refs/tags/')", "github.event.ref == 'refs/tags/v1'"} {
+		src := head + "      - uses: Swatinem/rust-cache@v2\n        if: " + cond + "\n"
+		if got := lintCacheWorkflow(t, "", src); len(got) != 1 {
+			t.Errorf("%s: want 1 finding but got %v", cond, got)
+		}
 	}
 }
