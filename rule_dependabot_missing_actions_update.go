@@ -1,9 +1,9 @@
 package jactionlint
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 )
 
@@ -13,9 +13,6 @@ var renovateConfigFiles = []string{
 	"renovate.json", "renovate.json5", ".renovaterc", ".renovaterc.json", ".renovaterc.json5",
 	".github/renovate.json", ".github/renovate.json5", ".gitlab/renovate.json", ".gitlab/renovate.json5",
 }
-
-// externalUsesPattern matches a "uses:" key (of a step or a job) and captures its value.
-var externalUsesPattern = regexp.MustCompile(`(?m)^[ \t]*(?:-[ \t]+)?uses[ \t]*:[ \t]*["']?([^\s"'#]+)`)
 
 // RuleDependabotMissingActionsUpdate is a rule to check that a repository which has workflows and
 // uses Dependabot also keeps its actions up to date with Dependabot.
@@ -57,15 +54,33 @@ func usesRenovate(root string) bool {
 			return true
 		}
 	}
+	// Renovate also reads the "renovate" key of package.json
+	if b, err := os.ReadFile(filepath.Join(root, "package.json")); err == nil {
+		var pkg map[string]json.RawMessage
+		if json.Unmarshal(b, &pkg) == nil {
+			if _, ok := pkg["renovate"]; ok {
+				return true
+			}
+		}
+	}
 	return false
 }
 
 // hasExternalActions reports whether a workflow in the directory uses an action or a reusable
-// workflow which Dependabot can update: not a local path and not a docker:// image.
+// workflow which Dependabot can update: not a local path and not a docker:// image. The workflows are
+// parsed, so a `uses:` in the text of a script does not count and a value on the next line does. A file
+// that does not parse is skipped.
 func hasExternalActions(dir string) bool {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return false
+	}
+	external := func(uses *String) bool {
+		if uses == nil {
+			return false
+		}
+		u := ParseUses(uses.Value)
+		return !u.Dynamic && (u.Kind == UsesAction || u.Kind == UsesReusableWorkflow)
 	}
 	for _, e := range entries {
 		n := e.Name()
@@ -76,10 +91,21 @@ func hasExternalActions(dir string) bool {
 		if err != nil {
 			continue
 		}
-		for _, m := range externalUsesPattern.FindAllSubmatch(b, -1) {
-			v := string(m[1])
-			if !strings.HasPrefix(v, "./") && !strings.HasPrefix(v, "docker://") && !strings.HasPrefix(v, "${{") {
+		w, _ := Parse(b)
+		if w == nil {
+			continue
+		}
+		for _, j := range w.Jobs {
+			if j == nil {
+				continue
+			}
+			if j.WorkflowCall != nil && external(j.WorkflowCall.Uses) {
 				return true
+			}
+			for _, s := range flattenSteps(j.Steps) {
+				if a, ok := s.Exec.(*ExecAction); ok && external(a.Uses) {
+					return true
+				}
 			}
 		}
 	}
