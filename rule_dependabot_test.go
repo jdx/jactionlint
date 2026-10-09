@@ -346,3 +346,20 @@ func TestFixRepositoryKeepsSyntaxErrorsOfDependabot(t *testing.T) {
 		t.Errorf("the cooldown was not added: %s", b)
 	}
 }
+
+// A default-days which is not an integer is a syntax error. The rule does not call it a missing key, and the fix does
+// not write a second key above it.
+func TestDependabotCooldownWithInvalidDefaultDays(t *testing.T) {
+	for _, value := range []string{`"7"`, "null", "", "seven", "[7]"} {
+		src := "version: 2\nupdates:\n  - package-ecosystem: npm\n    directory: /\n    schedule:\n      interval: weekly\n    cooldown:\n      default-days: " + value + "\n"
+		cfg := cooldownConfig(map[string]any{"default-days": 7})
+		errs := lintDependabot(t, src, cfg, nil)
+		if len(errs) != 1 || errs[0].ID != "dependabot-syntax" {
+			t.Errorf("default-days: %s: want the syntax error only, got %v", value, errs)
+			continue
+		}
+		if got, n := applyFixes([]byte(src), errs, FixModeUnsafe); n != 0 || string(got) != src {
+			t.Errorf("default-days: %s: the file changed: %q", value, got)
+		}
+	}
+}
