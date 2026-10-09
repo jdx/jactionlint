@@ -2,6 +2,7 @@ package jactionlint
 
 import (
 	"slices"
+	"strings"
 )
 
 // RuleDuplicateTriggers reports workflows that run twice for a commit pushed to a branch with an
@@ -71,8 +72,16 @@ func (rule *RuleDuplicateTriggers) VisitWorkflowPre(n *Workflow) error {
 		return nil
 	}
 	what := "has no branch filter"
+	if !push.BranchesIgnore.IsEmpty() {
+		what = "ignores only some branches (\"branches-ignore\")"
+	}
 	if !push.Branches.IsEmpty() {
 		what = "matches every branch (the filter \"**\")"
+		for _, b := range push.Branches.Values {
+			if strings.HasPrefix(b.Value, "!") {
+				what = "matches all branches but a few (the filter \"**\" with exceptions)"
+			}
+		}
 	}
 	rule.ReportID(
 		"duplicate-triggers",
