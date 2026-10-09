@@ -251,3 +251,27 @@ func TestPositionsInMultiLineScalars(t *testing.T) {
 		}
 	}
 }
+
+// Every (line, start, end) of odd lines, with the region on one line and over several, draws a caret
+// without panicking and never reports an end before the column. A column in the trailing whitespace of
+// the first line of a multi-line region used to slice past the trimmed line.
+func TestIndicatorNeverPanics(t *testing.T) {
+	lines := []string{"", "   ", "\t\t", "a b", "  x  ", "x \t ", "日本語 テスト  ", "é ✓ 😀   ", "a\r"}
+	for _, line := range lines {
+		n := len([]rune(line))
+		for col := -1; col <= n+2; col++ {
+			for endLine := 0; endLine <= 3; endLine++ {
+				for endCol := -1; endCol <= n+3; endCol++ {
+					e := &Error{Line: 2, Column: col, EndLine: endLine, EndColumn: endCol}
+					ind, last := e.indicator(line)
+					if ind != "" && !strings.Contains(ind, "^") {
+						t.Fatalf("%q %+v: no caret in %q", line, e, ind)
+					}
+					if ind != "" && last < col {
+						t.Fatalf("%q %+v: end %d before column", line, e, last)
+					}
+				}
+			}
+		}
+	}
+}
