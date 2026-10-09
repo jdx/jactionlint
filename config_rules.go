@@ -340,7 +340,7 @@ func (c *Config) applyLegacy(l *legacyConfig) error {
 
 var (
 	configTopKeys = []string{
-		"profile", "extends", "rules", "online", "online-options",
+		"profile", "extends", "rules", "online", "online-options", "baseline",
 		"self-hosted-runner", "config-variables", "config-secrets", "paths", "ignores", "required-actions", "assume-default-permissions",
 		// Deprecated keys which are translated into rules
 		"timeout-minutes", "require-commit-hash", "require-permissions", "require-checkout-before-local-action",

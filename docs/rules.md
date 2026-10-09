@@ -148,6 +148,7 @@ rules:
 | [untrusted-artifact](#untrusted-artifact) | security | error | default |
 | [untrusted-checkout](#untrusted-checkout) | security | error | default |
 | [unused-anchor](#unused-anchor) | correctness | error | default |
+| [unused-baseline-entry](#unused-baseline-entry) | policy | info | default |
 | [unused-ignore](#unused-ignore) | policy | error | strict |
 | [unused-job-output](#unused-job-output) | policy | warn | default |
 | [unused-needs](#unused-needs) | style | info | strict |
@@ -1311,6 +1312,14 @@ A YAML anchor is defined but never used.
 - Default level: error
 - Profile: default
 - Details and examples: [checks](./checks.md#yaml-anchors)
+
+## unused-baseline-entry
+
+A baseline entry matches no finding any more, so the baseline can shrink.
+
+- Group: policy
+- Default level: info
+- Profile: default
 
 ## unused-ignore
 

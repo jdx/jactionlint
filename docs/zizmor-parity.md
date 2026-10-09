@@ -85,6 +85,22 @@ Rules of jactionlint which zizmor 1.30.1 has no audit for:
 | `invisible-characters` | default | invisible and bidirectional control characters ([zizmor#914](https://github.com/zizmorcore/zizmor/issues/914)), in workflows and in `dependabot.yml`, also in a file that does not parse. Safe `-fix` |
 | `unsound-prefix-match` | default | `startsWith()`, `endsWith()` and `contains()` on the name of an account or a repository ([zizmor#1533](https://github.com/zizmorcore/zizmor/issues/1533)). `unsound-contains` is the sibling for a literal haystack |
 
+Features of jactionlint that zizmor does not have:
+
+- **Baseline for gradual adoption** ([zizmor#2282](https://github.com/zizmorcore/zizmor/issues/2282), declined there). `jactionlint -baseline-write` records
+  the current findings and `-baseline` hides them, so a repository can adopt the stricter default and fail only on new findings.
+  Entries are keyed by file, rule ID and a fingerprint (not by line numbers), `unused-baseline-entry` and `-baseline-check` tell
+  when the baseline can shrink, `-format summary` counts findings per rule and file, and SARIF marks baselined results as
+  suppressed. See [the usage document](usage.md#baseline).
+- **Durable ignores** (`ignores:` in the config file, rules `expired-ignore` and `unused-ignore`). zizmor ignores a finding with
+  a `# zizmor: ignore[audit]` comment or with a `rules.<audit>.ignore` entry of `file:line:col` in `zizmor.yml`. Both break when
+  a tool rewrites the line or when lines shift ([zizmor#1086](https://github.com/zizmorcore/zizmor/issues/1086)).
+  jactionlint matches by rule plus file glob, job ID, step ID or name, and the `uses:` value (so a Renovate bump of the SHA keeps the
+  entry working), with an optional reason and expiry date. This is not measured against zizmor, since zizmor has no equivalent.
+  See [durable ignores](config.md#durable-ignores).
+- Ignore comments at the end of a line (`# jactionlint ignore=...`) cover the whole step when they are on its first line. A
+  `# zizmor: ignore[...]` comment is honored as well, and applies to the findings whose region holds the comment.
+
 ## Batch B corpus measurements
 
 Batch B (permissions, pinning, checkout) was measured against zizmor 1.30.1 (`--offline --persona pedantic`) over 38
@@ -134,18 +150,6 @@ Known gaps of batch B, which the table does not show because the corpus does not
 - `github-app` knows `actions/create-github-app-token` only.
 - `cache-poisoning` knows the cache actions in a fixed table. Cache modes of the dangerous-write half (`cache-mode: write` on a
   privileged trigger) were added after zizmor 1.30.1, so that half has no zizmor measurement.
-- Findings are not suppressed by `# zizmor: ignore[...]` comments.
-
-## Beyond zizmor
-
-- **Durable ignores** (`ignores:` in the config file, rules `expired-ignore` and `unused-ignore`). zizmor ignores a finding with
-  a `# zizmor: ignore[audit]` comment or with a `rules.<audit>.ignore` entry of `file:line:col` in `zizmor.yml`. Both break when
-  a tool rewrites the line or when lines shift ([zizmor#1086](https://github.com/zizmorcore/zizmor/issues/1086)).
-  jactionlint matches by rule plus file glob, job ID, step ID or name, and the `uses:` value (so a Renovate bump of the SHA keeps the
-  entry working), with an optional reason and expiry date. This is not measured against zizmor, since zizmor has no equivalent.
-  See [durable ignores](config.md#durable-ignores).
-- Ignore comments at the end of a line cover the whole step when they are on its first line. jactionlint reads
-  `# jactionlint ignore=...` only, not `# zizmor: ignore[...]`.
 
 ## Online audits
 

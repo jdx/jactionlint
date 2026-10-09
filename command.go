@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"regexp"
 	"runtime"
 	"runtime/debug"
@@ -103,7 +104,7 @@ type Command struct {
 	onRulesCreated func([]Rule) []Rule
 }
 
-func (cmd *Command) runLinter(args []string, opts *LinterOptions, initConfig, migrateConfig, migrateIgnores bool, fix FixMode, onlineFailed *int) ([]*Error, error) {
+func (cmd *Command) runLinter(args []string, opts *LinterOptions, initConfig, migrateConfig, migrateIgnores bool, fix FixMode, baselineWrite *optionalValueFlag, onlineFailed *int) ([]*Error, error) {
 	l, err := NewLinter(cmd.Stdout, opts)
 	if err != nil {
 		return nil, err
@@ -121,6 +122,27 @@ func (cmd *Command) runLinter(args []string, opts *LinterOptions, initConfig, mi
 		return nil, l.MigrateConfig("")
 	}
 
+	if baselineWrite.set {
+		if len(args) == 1 && args[0] == "-" {
+			return nil, errors.New("-baseline-write cannot be used with stdin because the baseline would not know the file")
+		}
+		if fix != 0 {
+			return nil, errors.New("-baseline-write cannot be combined with -fix")
+		}
+		if args == nil {
+			args = []string{}
+		}
+		res, err := l.WriteBaseline(args, baselineWrite.value)
+		if err != nil {
+			return nil, err
+		}
+		state := "Wrote"
+		if !res.Changed {
+			state = "Baseline is up to date:"
+		}
+		fmt.Fprintf(cmd.Stdout, "%s %s for %s in %s\n", state, countNoun(res.Entries, "entry"), countNoun(res.Files, "file"), displayPath(opts.WorkingDir, res.Path))
+		return nil, nil
+	}
 	if migrateIgnores {
 		return nil, l.MigrateIgnores(args)
 	}
@@ -150,6 +172,43 @@ func (cmd *Command) runLinter(args []string, opts *LinterOptions, initConfig, mi
 	}
 
 	return l.LintFiles(args, nil)
+}
+
+// optionalValueFlag is a flag which can be given without a value (-baseline), with one
+// (-baseline=FILE) or turned off (-baseline=false).
+type optionalValueFlag struct {
+	set   bool
+	off   bool
+	value string
+}
+
+func (f *optionalValueFlag) String() string {
+	switch {
+	case f.off:
+		return "false"
+	case f.set && f.value != "":
+		return f.value
+	case f.set:
+		return "true"
+	}
+	return ""
+}
+
+// IsBoolFlag lets the flag be given without a value.
+func (f *optionalValueFlag) IsBoolFlag() bool { return true }
+
+func (f *optionalValueFlag) Set(v string) error {
+	switch v {
+	case "true":
+		*f = optionalValueFlag{set: true}
+	case "false":
+		*f = optionalValueFlag{off: true}
+	case "":
+		return errors.New("the value must not be empty. omit it to use the default file")
+	default:
+		*f = optionalValueFlag{set: true, value: v}
+	}
+	return nil
 }
 
 // onlineFlag is the -online flag: a boolean flag which also takes a mode, -online=cache or -online=strict.
@@ -225,6 +284,7 @@ func (cmd *Command) Main(args []string) int {
 	var minSeverity string
 	var strictExit bool
 	var onlineTTL time.Duration
+	var baseline, baselineWrite optionalValueFlag
 
 	flags := flag.NewFlagSet(args[0], flag.ContinueOnError)
 	flags.SetOutput(cmd.Stderr)
@@ -234,7 +294,7 @@ func (cmd *Command) Main(args []string) int {
 	flags.StringVar(&opts.Shellcheck, "shellcheck", "shellcheck", "Command name or file path of \"shellcheck\" external command. If empty, shellcheck integration will be disabled")
 	flags.StringVar(&opts.Pyflakes, "pyflakes", "pyflakes", "Command name or file path of \"pyflakes\" external command. If empty, pyflakes integration will be disabled")
 	flags.BoolVar(&opts.Oneline, "oneline", false, "Use one line per one error. Useful for reading error messages from programs")
-	flags.StringVar(&opts.Format, "format", "", "Output format: text (default), oneline, json, jsonl, sarif, gcc or github. A custom template in Go template syntax which has {{ }} is also accepted. See the usage documentation for more details")
+	flags.StringVar(&opts.Format, "format", "", "Output format: text (default), oneline, json, jsonl, sarif, gcc, github or summary. A custom template in Go template syntax which has {{ }} is also accepted. See the usage documentation for more details")
 	flags.BoolVar(&opts.ShowRuleIDs, "rule-ids", false, "Show the stable rule ID such as unpinned-uses at the end of each error in the text format instead of the kind. The ID is used in the rules of the config file and in -ignore")
 	flags.StringVar(&opts.ConfigFile, "config-file", "", "File path to config file")
 	flags.BoolVar(&initConfig, "init-config", false, "Generate default config file at .github/jactionlint.yaml in current project")
@@ -252,6 +312,10 @@ func (cmd *Command) Main(args []string) int {
 	flags.Var(&onlineAllow, "online-allow", "Look up only the repositories matching this \"owner/repo\" pattern (\"*\" is a wildcard, e.g. \"actions/*\"). This flag is repeatable")
 	flags.Var(&onlineDeny, "online-deny", "Never look up the repositories matching this \"owner/repo\" pattern, e.g. private or internal actions. This flag is repeatable")
 	flags.DurationVar(&onlineMaxWait, "online-max-wait", defaultOnlineMaxWait, "The longest to wait for a GitHub rate limit to reset. A limit which resets later skips the lookups. 0 never waits")
+	flags.Var(&baseline, "baseline", "Hide the findings recorded in the baseline file (default "+DefaultBaselineFile+" in the repository). -baseline=FILE reads another file and -baseline=false ignores a baseline that the config enables. See -baseline-write")
+	flags.Var(&baselineWrite, "baseline-write", "Record the current findings as the baseline (default file "+DefaultBaselineFile+") and exit with status 0. -baseline-write=FILE writes another file. With file arguments only the entries of those files are refreshed. Run it in the same environment as the CI (rules, -online, shellcheck)")
+	flags.BoolVar(&opts.BaselineCheck, "baseline-check", false, "Report the baseline entries which match no finding any more as unused-baseline-entry (info; set its level to error in \"rules\" to fail on them). Implies -baseline")
+	flags.BoolVar(&opts.SARIFHideBaselined, "sarif-hide-baselined", false, "Leave the findings accepted by the baseline out of -format sarif. By default they are in the log as suppressed results. Use it for tools like hk which do not read suppressions")
 	flags.BoolVar(&noColor, "no-color", false, "Disable colorful output")
 	flags.BoolVar(&color, "color", false, "Always enable colorful output. This is useful to force colorful outputs")
 	flags.BoolVar(&opts.Verbose, "verbose", false, "Enable verbose output")
@@ -289,6 +353,13 @@ func (cmd *Command) Main(args []string) int {
 		return ExitStatusInvalidCommandOption
 	}
 	opts.MinSeverity = sev
+	if baselineWrite.set && (baseline.set || baseline.off || opts.BaselineCheck) {
+		fmt.Fprintln(cmd.Stderr, "-baseline-write cannot be combined with -baseline or -baseline-check: it records every finding")
+		return ExitStatusInvalidCommandOption
+	}
+	opts.Baseline = baseline.set
+	opts.BaselineFile = baseline.value
+	opts.NoBaseline = baseline.off
 	opts.IgnorePatterns = ignorePats
 	opts.OnRulesCreated = cmd.onRulesCreated
 	opts.LogWriter = cmd.Stderr
@@ -333,7 +404,7 @@ func (cmd *Command) Main(args []string) int {
 	}
 
 	var onlineFailed int
-	errs, err := cmd.runLinter(flags.Args(), &opts, initConfig, migrateConfig, migrateIgnores, fix.mode, &onlineFailed)
+	errs, err := cmd.runLinter(flags.Args(), &opts, initConfig, migrateConfig, migrateIgnores, fix.mode, &baselineWrite, &onlineFailed)
 	if err != nil {
 		fmt.Fprintln(cmd.Stderr, err.Error())
 		return ExitStatusFailure
@@ -354,4 +425,15 @@ func exitStatusOf(errs []*Error, strict bool) int {
 		}
 	}
 	return ExitStatusSuccessNoProblem
+}
+
+// displayPath shows a path relative to the working directory when it is inside it.
+func displayPath(wd, p string) string {
+	if wd == "" {
+		wd, _ = os.Getwd()
+	}
+	if r, err := filepath.Rel(wd, p); wd != "" && err == nil && !strings.HasPrefix(r, "..") {
+		return r
+	}
+	return p
 }

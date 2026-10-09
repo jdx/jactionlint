@@ -138,6 +138,21 @@ type LinterOptions struct {
 	// OnDependabotRulesCreated is like OnRulesCreated but for the rules which check Dependabot
 	// configuration files (.github/dependabot.yml).
 	OnDependabotRulesCreated func([]DependabotRule) []DependabotRule
+	// Baseline applies the baseline file (BaselineFile, or .github/jactionlint-baseline.json in the
+	// repository when empty) even if the configuration does not ask for it: the findings it accepts
+	// are not returned or printed. The file must exist.
+	Baseline bool
+	// BaselineFile is the path of the baseline file to apply with Baseline. A relative path is relative
+	// to the working directory.
+	BaselineFile string
+	// NoBaseline ignores the baseline even if the configuration asks for it.
+	NoBaseline bool
+	// BaselineCheck reports the baseline entries which match no finding as unused-baseline-entry. It
+	// implies Baseline unless the configuration selects a baseline.
+	BaselineCheck bool
+	// SARIFHideBaselined leaves the findings which the baseline accepts out of the SARIF log. By default
+	// they are in it as results with a suppression of the kind "external".
+	SARIFHideBaselined bool
 	// More options will come here
 }
 
@@ -165,6 +180,7 @@ type Linter struct {
 	configFile     string
 	minSeverity    Severity
 	online         onlineSettings
+	baseline       linterBaseline
 	warned         sync.Map // *Config -> struct{}: configs whose deprecations were already reported
 	graphs         sync.Map // root directory -> *sync.Once-guarded *callGraph, see callGraphOf
 	notesMu        sync.Mutex
@@ -249,7 +265,7 @@ func NewLinter(out io.Writer, opts *LinterOptions) (*Linter, error) {
 		}
 		formatter = f
 	}
-	prn, err := newPrinter(opts.Format, opts.Oneline, opts.ShowRuleIDs, formatter)
+	prn, err := newPrinter(opts.Format, opts.Oneline, opts.ShowRuleIDs, opts.SARIFHideBaselined, formatter)
 	if err != nil {
 		return nil, err
 	}
@@ -286,6 +302,18 @@ func NewLinter(out io.Writer, opts *LinterOptions) (*Linter, error) {
 		configFile:     opts.ConfigFile,
 		minSeverity:    opts.MinSeverity,
 		online:         onlineSettings{off: opts.OnlineOff, enabled: !opts.OnlineOff && (opts.Online || opts.OnlineOptions.Mode != OnlineModeDefault), client: opts.GitHubClient, ttl: opts.OnlineCacheTTL, ctx: opts.Context, opts: opts.OnlineOptions},
+	}
+	l.baseline.on = opts.Baseline
+	l.baseline.off = opts.NoBaseline
+	l.baseline.check = opts.BaselineCheck
+	l.baseline.hideInSARIF = opts.SARIFHideBaselined
+	if opts.BaselineFile != "" {
+		f := opts.BaselineFile
+		if !filepath.IsAbs(f) {
+			f = filepath.Join(cwd, f)
+		}
+		l.baseline.file = f
+		l.baseline.on = true
 	}
 	if l.online.enabled && opts.GitHubClient == nil && !onlineSupported {
 		return nil, errOnlineUnsupported
@@ -464,6 +492,7 @@ func (l *Linter) LintFiles(filepaths []string, project *Project) ([]*Error, erro
 		return nil, err
 	}
 
+	results = l.finishRun(results)
 	total := 0
 	for _, r := range results {
 		total += len(r.errs)
@@ -472,18 +501,20 @@ func (l *Linter) LintFiles(filepaths []string, project *Project) ([]*Error, erro
 	for _, r := range results {
 		all = append(all, r.errs...)
 	}
-	results = l.finishIgnoreRun(results)
-	for _, r := range results[n:] {
-		total += len(r.errs)
-		all = append(all, r.errs...)
-	}
 	if err := l.printer.print(l.out, results, l.notifications()); err != nil {
 		return nil, err
 	}
+	l.reportBaselineNote(results)
 
 	l.log("Found", total, "errors in", n, "files")
 
 	return all, nil
+}
+
+// finishRun adds the results which belong to the run and not to a file: the problems of the ignores of
+// the config files (expired and unused entries) and the unused entries of the baseline files.
+func (l *Linter) finishRun(results []fileResult) []fileResult {
+	return l.withBaselineResults(l.finishIgnoreRun(results))
 }
 
 // lintFilesQuietly lints the files in parallel and returns the results without printing them. The
@@ -541,8 +572,7 @@ func (l *Linter) lintFilesQuietly(filepaths []string, project *Project) ([]fileR
 			if err != nil {
 				return fmt.Errorf("fatal error while checking %s: %w", w.path, err)
 			}
-			w.src = src
-			w.errs = errs
+			*w = newFileResult(w.file, w.path, src, errs)
 			return nil
 		})
 	}
@@ -595,14 +625,7 @@ func (l *Linter) LintFile(path string, project *Project) ([]*Error, error) {
 		return nil, err
 	}
 
-	results := l.finishIgnoreRun([]fileResult{{file: origPath, path: path, src: src, errs: errs}})
-	for _, r := range results[1:] {
-		errs = append(errs, r.errs...)
-	}
-	if err := l.printer.print(l.out, results, l.notifications()); err != nil {
-		return nil, err
-	}
-	return errs, nil
+	return l.printOne(newFileResult(origPath, path, src, errs))
 }
 
 // LintStdin lints the content read from STDIN. The stdin parameter is a reader to read from STDIN,
@@ -639,14 +662,7 @@ func (l *Linter) Lint(path string, content []byte, project *Project) ([]*Error, 
 	if err != nil {
 		return nil, err
 	}
-	results := l.finishIgnoreRun([]fileResult{{file: path, path: path, src: content, errs: errs}})
-	for _, r := range results[1:] {
-		errs = append(errs, r.errs...)
-	}
-	if err := l.printer.print(l.out, results, l.notifications()); err != nil {
-		return nil, err
-	}
-	return errs, nil
+	return l.printOne(newFileResult(path, path, content, errs))
 }
 
 func (l *Linter) check(
@@ -686,8 +702,13 @@ func (l *Linter) check(
 		l.debug("No config was found")
 	}
 
+	bl, err := l.baselineFor(project, cfg)
+	if err != nil {
+		return nil, err
+	}
+
 	if l.isDependabotFile(path) {
-		return l.checkDependabot(path, content, project, cfg, start)
+		return l.checkDependabot(path, content, project, cfg, bl, start)
 	}
 
 	isAction := l.isActionFile(path)
@@ -768,7 +789,7 @@ func (l *Linter) check(
 		}
 	}
 
-	return l.finishCheck(path, content, all, cfg, start, w != nil, &ignoreContext{project: project, scopes: newScopeIndex(w, content)}), nil
+	return l.finishCheck(path, content, all, cfg, bl, start, w != nil, &ignoreContext{project: project, scopes: newScopeIndex(w, content)}), nil
 }
 
 // isActionFile reports whether the path is the metadata file of an action (see IsActionPath). The path
@@ -784,7 +805,7 @@ func (l *Linter) isActionFile(p string) bool {
 // finishCheck post-processes the errors found in one file: it fills the fields derived from the
 // rule IDs, applies the ignores and the minimum severity, and sorts the errors. isWorkflow tells that
 // the file is a workflow, for which the online pin fixes are attached.
-func (l *Linter) finishCheck(path string, content []byte, all []*Error, cfg *Config, start time.Time, isWorkflow bool, ic *ignoreContext) []*Error {
+func (l *Linter) finishCheck(path string, content []byte, all []*Error, cfg *Config, bl *baselineState, start time.Time, isWorkflow bool, ic *ignoreContext) []*Error {
 	all = append(all, checkSourceRules(content, cfg)...)
 	all = l.annotateErrors(all, content, cfg)
 
@@ -814,6 +835,21 @@ func (l *Linter) finishCheck(path string, content []byte, all []*Error, cfg *Con
 		}
 	}
 
+	for _, err := range all {
+		err.Filepath = path // Populate filename in the error
+	}
+
+	slices.SortFunc(all, compareErrors)
+	all = slices.CompactFunc(all, equalsErrors) // Alias may duplicate errors
+
+	// The baseline identifies findings by their order among identical ones, so it sees all of them,
+	// also those below the minimum severity
+	var project *Project
+	if ic != nil {
+		project = ic.project
+	}
+	l.baselineStage(path, content, project, bl, all)
+
 	if l.minSeverity > SeverityInfo {
 		kept := all[:0]
 		for _, err := range all {
@@ -823,13 +859,6 @@ func (l *Linter) finishCheck(path string, content []byte, all []*Error, cfg *Con
 		}
 		all = kept
 	}
-
-	for _, err := range all {
-		err.Filepath = path // Populate filename in the error
-	}
-
-	slices.SortFunc(all, compareErrors)
-	all = slices.CompactFunc(all, equalsErrors) // Alias may duplicate errors
 
 	if l.logLevel >= LogLevelVerbose {
 		elapsed := time.Since(start)

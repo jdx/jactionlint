@@ -195,7 +195,7 @@ func (p *Project) DependabotFiles() []string {
 }
 
 // checkDependabot checks the content of a Dependabot configuration file.
-func (l *Linter) checkDependabot(path string, content []byte, project *Project, cfg *Config, start time.Time) ([]*Error, error) {
+func (l *Linter) checkDependabot(path string, content []byte, project *Project, cfg *Config, bl *baselineState, start time.Time) ([]*Error, error) {
 	d, all := ParseDependabot(content)
 
 	if l.logLevel >= LogLevelVerbose {
@@ -238,7 +238,7 @@ func (l *Linter) checkDependabot(path string, content []byte, project *Project, 
 		}
 	}
 
-	return l.finishCheck(path, content, all, cfg, start, false, &ignoreContext{project: project}), nil
+	return l.finishCheck(path, content, all, cfg, bl, start, false, &ignoreContext{project: project}), nil
 }
 
 func init() {

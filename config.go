@@ -167,6 +167,11 @@ type Config struct {
 	// Online turns on the online checks (see LinterOptions.Online) for the files this configuration
 	// applies to, like the -online flag does for the whole run. They query the GitHub API.
 	Online bool `yaml:"online"`
+	// Baseline controls the baseline of accepted findings (see "jactionlint -baseline-write"). "auto" (or
+	// true) applies the file .github/jactionlint-baseline.json when it exists, false or empty does not
+	// apply a baseline, and any other value is the path of the baseline file relative to the root of the
+	// repository, which must exist. The -baseline flag overrides it.
+	Baseline string `yaml:"baseline"`
 	// OnlineOptions tunes the online checks: the mode ("cache" for offline use from the disk cache,
 	// "strict" to fail when a lookup is skipped), the API URL of GitHub Enterprise Server, where the
 	// token comes from, which repositories may be looked up, and the cache and retry behavior. A mode
@@ -409,6 +414,9 @@ func (c *Config) merge(over *Config) {
 	}
 	if over.present["online"] {
 		c.Online = over.Online
+	}
+	if over.present["baseline"] {
+		c.Baseline = over.Baseline
 	}
 	if over.present["online-options"] {
 		c.OnlineOptions = c.OnlineOptions.overlay(over.OnlineOptions)
