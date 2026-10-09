@@ -82,6 +82,8 @@ Rules of jactionlint which zizmor 1.30.1 has no audit for:
 | `insecure-ssh-keyscan` | default | `ssh-keyscan` output written to a `known_hosts` file (error). Closest zizmor audit: none; the idea is zizmor [#2012](https://github.com/zizmorcore/zizmor/issues/2012) |
 | `checkout-static-credentials` | default | `actions/checkout` given an `ssh-key` or a literal `token` (and, with `secret-tokens` (on under `strict` and `all`), a token from a secret other than `GITHUB_TOKEN`) (error). Closest zizmor audit: none; the idea is zizmor [#1118](https://github.com/zizmorcore/zizmor/issues/1118) |
 | `insecure-url-scheme` | default | `http://`, `ftp://` and `git://` locations in `run:` downloads and in `with:` inputs (error). Closest zizmor audit: `insecure-url-scheme`, which only checks `repo:` URLs of `.pre-commit-config.yaml` |
+| `invisible-characters` | default | invisible and bidirectional control characters ([zizmor#914](https://github.com/zizmorcore/zizmor/issues/914)), in workflows and in `dependabot.yml`, also in a file that does not parse. Safe `-fix` |
+| `unsound-prefix-match` | default | `startsWith()`, `endsWith()` and `contains()` on the name of an account or a repository ([zizmor#1533](https://github.com/zizmorcore/zizmor/issues/1533)). `unsound-contains` is the sibling for a literal haystack |
 
 ## Batch B corpus measurements
 
@@ -451,3 +453,15 @@ environment, so that part is behind the option and `ssh-key` is not.
 
 jactionlint-only means all of them here. Gaps: archives that are downloaded, extracted and run, `go install` or `npx` of a remote
 package, `ssh -o StrictHostKeyChecking=no`, and a download whose verification is in another step are not reported.
+## Batch L measurements
+
+Both rules were run (default profile, `-shellcheck= -pyflakes=`) over two corpora of unique files (by content hash): the 1020
+workflows and Dependabot configurations of every checkout under `~/src` (the `*-jactionlint` worktrees, other worktrees and
+repositories), and 1315 files of third party repositories (the Go module cache checkouts in the scratchpad corpus). zizmor has no
+equivalent audit, so there is nothing to match against; the numbers are findings and reviewed false positives.
+
+| Rule | jdx corpus | OSS corpus | Judgement |
+| --- | --- | --- | --- |
+| `invisible-characters` | 0 | 0 | An independent scan of the raw bytes (every format, control, variation selector and filler character) finds such characters in 30 files, and all of them are `U+FE0F` after `ℹ`, `✏`, `⚠` or `🌡` (emoji, mostly in CodeQL templates and comments). The first version of the rule reported `ℹ️` (the information symbol is a letter for Unicode, not a symbol), which the corpus found; it is fixed and tested. No true positive exists in the corpus, so the detection is covered by the unit tests and fixtures only |
+| `unsound-prefix-match` | 0 | 1 | `GOOS: ${{ contains(github.repository, 'windows_exporter') && 'windows' || '' }}`: a real partial match, but it selects a build setting and not a credential. The first version reported it. The rule now reports an expression outside `if:` only when it sits in a runner, environment, container, service or workflow-call-secret context, or reads a secret or `github.token`, so this is a non-report. No condition in 2335 files tests a name by a prefix, a suffix or a part (the `endsWith(.., '[bot]')` and `!contains(github.actor, '[bot]')` tests are not reported on purpose) |
+| `unsound-prefix-match` option `refs` | not run | not run | opt-in, so not measured; a prefix test of a ref is usually meant |

@@ -97,6 +97,8 @@ List of checks:
 - [Duplicate triggers (pedantic)](#check-duplicate-triggers)
 - [Failures hidden by continue-on-error (pedantic)](#check-continue-on-error)
 - [Mutable runner labels (pedantic)](#check-mutable-runner-label)
+- [Invisible characters](#check-invisible-characters)
+- [Unsound prefix matches on names](#check-unsound-prefix-match)
 
 Note that jactionlint focuses on catching mistakes in workflow files. If you want some general code style checks, please consider
 using a general YAML checker like [yamllint][].
@@ -6373,6 +6375,152 @@ test.yaml:10:15: warning: the version comment "# v3.0.0" does not match the comm
 <!-- Skip playground link -->
 
 The `-online -fix` option can pin tags to commits and add this comment for you, see [the usage document](usage.md#online-checks).
+
+<a id="check-invisible-characters"></a>
+## Invisible characters
+
+Example input:
+
+```yaml
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout​@v4
+      - run: echo "tests passed" # ‮success
+```
+
+Output:
+
+```
+test.yaml:6:31: invisible character U+200B ZERO WIDTH SPACE in a uses: reference: it is not shown by editors or by the diff view of GitHub, so it can hide what the text really is. remove it [invisible-characters]
+  |
+6 |       - uses: actions/checkout​@v4
+  |                               ^~~
+test.yaml:7:36: invisible character U+202E RIGHT-TO-LEFT OVERRIDE in a comment: it changes the order in which the text around it is displayed, so the code can run differently from how it reads. remove it [invisible-characters]
+  |
+7 |       - run: echo "tests passed" # ‮success
+  |                                    ^~~~~~~
+```
+
+[Playground](https://jactionlint.jdx.dev/#eNo8zDsOwjAQhOE+pxiF2qKhcsVVnGUl85DXyuxSp+cuHConQQaJaorv11jL6ME63WxhngBX+lhgjcY0PJZoHulRhn2Jrp2/CkgIKjOK+NUaj1JV7ha+b6/z8/SP1mgZKtUwjx+iF1IvMw7YtzdDRMnPAKsALro=)
+
+The rule `invisible-characters` (in the `default` profile, as an error) reports characters which are displayed as nothing, or which
+change how the text around them is displayed, in a workflow or a Dependabot configuration. The example above has a zero width
+space in the `uses:` reference and a right-to-left override in the comment. Neither is visible in an editor, and GitHub does not
+show them in the diff view of a pull request either, so a change that adds one looks like a change of nothing, or of a comment. They
+can make a value differ from what a reviewer reads (an action, a branch, a condition) or reorder the text so that code reads
+differently from how it runs ([Trojan Source][trojan-source]).
+
+The rule reports these characters, wherever they are in the file (code, a key, a string or a comment, and also in a file that does
+not parse):
+
+- bidirectional controls: embeddings, overrides and isolates (`U+202A` to `U+202E`, `U+2066` to `U+2069`), and the marks
+  `U+061C`, `U+200E` and `U+200F` unless they are next to right-to-left text
+- zero width characters: `U+200B`, `U+2060`, `U+180E`, the invisible operators `U+2061` to `U+2064`, the soft hyphen `U+00AD`, the
+  deprecated format characters `U+206A` to `U+206F`, `U+FEFF` anywhere except at the start of the file, and the joiners
+  `U+200C` and `U+200D` where they are not part of correct spelling
+- tag characters (`U+E0000` block), which can smuggle text, and variation selectors that do not follow a character they can modify
+- fillers that are drawn as blanks (`U+115F`, `U+1160`, `U+3164`, `U+FFA0`), line and paragraph separators (`U+2028`, `U+2029`) and
+  control characters other than tab, line feed and carriage return (such as the escape character)
+
+Letters, combining marks and symbols of any language are never reported, so non-English text is fine. These legitimate uses are
+not reported either: the byte order mark at the start of a file, emoji sequences (a zero width joiner or a variation selector
+between emoji, keycaps, flags made from tag characters), the zero width (non-)joiner in scripts which are spelled with it (Persian,
+Devanagari and other Indic scripts, and others), the variation selectors of CJK ideographs and Mongolian, and direction marks
+next to Arabic or Hebrew letters.
+
+One finding is reported for a run of adjacent characters. The message says where the character is (a `run:` script, an
+expression, a `uses:` reference, a comment, a value or a key). Every finding is an error, also in a comment: a comment is how the
+change is made to look harmless.
+
+`-fix` removes the characters of the finding. This is a safe fix: what is left is what the reader of the file already saw. If the
+character is meant to be in a string, write it as an escape in a double quoted YAML string (`"\u200b"`) or in the shell
+(`$'\u200b'`), where it is visible in the source. To silence a finding, put `# jactionlint ignore=invisible-characters` on the line above it,
+or turn the rule off with `rules: invisible-characters: off`.
+
+zizmor has no audit for this (the request is [zizmor#914][zizmor-914]). `action.yml` files are not checked yet, because jactionlint
+does not lint them as files.
+
+<a id="check-unsound-prefix-match"></a>
+## Unsound prefix matches on names
+
+Example input:
+
+```yaml
+on: pull_request_target
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - run: ./trusted.sh
+        if: startsWith(github.actor, 'jdx')
+```
+
+Output:
+
+```
+test.yaml:7:13: startsWith(github.actor, "jdx") is also true for an account whose name only begins with "jdx", such as "jdx-evil", which anybody can create. compare the whole name with == or, for several names, test a list with contains(fromJSON('["a", "b"]'), value) [unsound-prefix-match]
+  |
+7 |         if: startsWith(github.actor, 'jdx')
+  |             ^~~~~~~~~~~~~~~~~~~~~~~~
+```
+
+[Playground](https://jactionlint.jdx.dev/#eNosyjGuwjAQRdE+q3hd/pdI6L0RysghQ+zIssPMG4nlIwPVLe5pNeD0UhaVp4txYdRdOBxttTAAFGMvoF5t6txXr/SpxP4+yyinfRUwdRkwX6lulG229DtAfgQYo9Jumelvz0y+zvHOpheMx/Ya/98DAIFtLiE=)
+
+The rule `unsound-prefix-match` (in the `default` profile, as an error) reports `startsWith()`, `endsWith()` and `contains()` calls
+which test an account, an organization or a repository by a part of its name. Names are chosen by whoever registers them, so
+`startsWith(github.actor, 'jdx')` is also true for `jdx-evil`, and `endsWith(github.repository, '/mise')` is true for the fork of
+`mise` by every owner. When the condition decides whether a privileged step runs, this is a bypass of the check.
+
+Compare the whole name, or test a list of whole names:
+
+```yaml
+if: github.actor == 'jdx'
+# or
+if: contains(fromJSON('["jdx", "jdy"]'), github.actor)
+```
+
+The properties which are checked are the names of the actor, the sender, the repository owner and the authors of pull requests,
+issues and comments (`github.actor`, `github.triggering_actor`, `github.repository_owner`, `github.event.sender.login`,
+`github.event.pull_request.user.login`, and similar ones), and the full name of a repository (`github.repository`,
+`github.event.repository.full_name`, `github.event.pull_request.head.repo.full_name`). The literal must be the second argument; a
+literal first argument of `contains()` is the business of [`unsound-contains`](#check-unsound-contains).
+
+Not reported:
+
+- a prefix which ends with a slash on a repository name, as in `startsWith(github.repository, 'jdx/')`, or which has a slash in it
+  (`jdx/mise`): the owner is complete, so only the owner can create the repository
+- a name ending with `[bot]`: GitHub appends it, so `startsWith(github.actor, 'dependabot[bot]')` is a whole name. The comparison of
+  `github.actor` with a bot in a condition is reported by [`bot-conditions`](#check-bot-conditions) when that rule is on, so it is not
+  reported twice
+- a negated test (`!startsWith(github.actor, 'bot-')`): it only excludes names, nobody gets in through it
+- an expression where the same property is also compared exactly in an `&&` chain
+  (`github.actor == 'jdx' && startsWith(github.actor, 'j')`) or tested against a list of whole names, because the exact test decides.
+  An exact test in a different `if:` (a job and a step) is not understood
+- values that are not literals, such as `startsWith(github.actor, inputs.user)`
+- an expression outside a condition (`env:`, `with:`, `runs-on:`), unless it also refers to a secret, `github.token` or a
+  `self-hosted` runner: `GOOS: ${{ contains(github.repository, 'windows_exporter') && 'windows' || '' }}` selects a setting, not a
+  credential, but `token: ${{ startsWith(github.actor, 'jdx') && secrets.TOKEN }}` decides who gets one
+
+The names of branches and tags (`github.ref`, `github.head_ref`, ...) are not checked by default, since `startsWith(github.ref,
+'refs/tags/v')` is usually a pattern someone means. Set the option `refs` to check them as well, except for prefixes ending with a
+slash:
+
+```yaml
+rules:
+  unsound-prefix-match:
+    level: error
+    refs: true
+```
+
+There is no automatic fix, because the right comparison depends on what you mean to trust. zizmor has no audit for this yet (the
+request is [zizmor#1533][zizmor-1533]).
+
+[trojan-source]: https://trojansource.codes/
+[zizmor-914]: https://github.com/zizmorcore/zizmor/issues/914
+[zizmor-1533]: https://github.com/zizmorcore/zizmor/issues/1533
 
 [zizmor-impostor-commit]: https://docs.zizmor.sh/audits/#impostor-commit
 [zizmor-known-vulnerable-actions]: https://docs.zizmor.sh/audits/#known-vulnerable-actions

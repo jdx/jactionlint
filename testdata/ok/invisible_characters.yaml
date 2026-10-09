@@ -1,0 +1,9 @@
+﻿name: Release 🚀 ❤️
+# Legitimate characters in text are not reported
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "テスト Привет café 👨‍👩‍👧 1️⃣"
+      - run: echo "می‌خواهم שלום‏"

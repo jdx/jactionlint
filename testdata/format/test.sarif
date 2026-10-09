@@ -625,6 +625,21 @@
               "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
             },
             {
+              "id": "unsound-prefix-match",
+              "name": "UnsoundPrefixMatch",
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "description": "Checks expressions which identify an account or a repository by a prefix, a suffix or a part of its name",
+                "queryURI": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+              },
+              "fullDescription": {
+                "text": "Checks expressions which identify an account or a repository by a prefix, a suffix or a part of its name"
+              },
+              "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+            },
+            {
               "id": "untrusted-artifact",
               "name": "UntrustedArtifact",
               "defaultConfiguration": {
