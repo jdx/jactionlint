@@ -197,3 +197,80 @@ func TestHTTPClientDoesNotShareWhenVisibilityCannotBeRefreshed(t *testing.T) {
 		t.Errorf("shared although the visibility could not be refreshed: %v", err)
 	}
 }
+
+// A copy that a token made for everybody must not replace, hide or take along what the server answered to a
+// request without a token.
+func TestHTTPClientSharingKeepsTheAnonymousSlot(t *testing.T) {
+	f := newFakeGitHub(t)
+	repoBody := `{"private":false,"default_branch":"main"}`
+	f.handle("/repos/o/r", func(w http.ResponseWriter, r *http.Request) { fmt.Fprint(w, repoBody) })
+	f.handle("/repos/o/r/tags", func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") == "" {
+			fmt.Fprint(w, `[{"name":"anon","commit":{"sha":"`+strings.Repeat("a", 40)+`"}}]`)
+			return
+		}
+		fmt.Fprint(w, `[{"name":"auth1","commit":{"sha":"`+strings.Repeat("b", 40)+`"}},{"name":"auth2","commit":{"sha":"`+strings.Repeat("c", 40)+`"}}]`)
+	})
+	dir := t.TempDir()
+	ctx := context.Background()
+	tagNames := func(c *httpGitHubClient) string {
+		t.Helper()
+		tags, err := c.Tags(ctx, "o", "r")
+		if err != nil {
+			t.Fatal(err)
+		}
+		var names []string
+		for _, tag := range tags.Tags {
+			names = append(names, tag.Name)
+		}
+		return strings.Join(names, ",")
+	}
+
+	if got := tagNames(f.client(httpGitHubOptions{CacheDir: dir, TTL: time.Hour})); got != "anon" {
+		t.Fatalf("anonymous: %q", got)
+	}
+	// A token asks again (no TTL) and shares its answer
+	if got := tagNames(f.client(httpGitHubOptions{CacheDir: dir, Token: "a"})); got != "auth1,auth2" {
+		t.Fatalf("token: %q", got)
+	}
+	// The anonymous answer is still the anonymous one
+	if got := tagNames(f.client(httpGitHubOptions{CacheDir: dir, TTL: time.Hour, Offline: true})); got != "anon" {
+		t.Errorf("the answer of a token replaced the anonymous one: %q", got)
+	}
+	// The repository turns private: the shared copy goes, the anonymous answer stays
+	repoBody = `{"private":true,"default_branch":"main"}`
+	if _, err := f.client(httpGitHubOptions{CacheDir: dir, Token: "a"}).Repository(ctx, "o", "r"); err != nil {
+		t.Fatal(err)
+	}
+	if got := tagNames(f.client(httpGitHubOptions{CacheDir: dir, TTL: time.Hour, Offline: true})); got != "anon" {
+		t.Errorf("purging the shared copy took the anonymous answer along: %q", got)
+	}
+}
+
+// Only the status codes that the client reports as errors reach the caller of the repository endpoint: a 403
+// (not a rate limit) must purge the shared copy too.
+func TestHTTPClientRepositoryForbiddenPurgesTheSharedCopy(t *testing.T) {
+	f := newFakeGitHub(t)
+	f.handle("/repos/o/r", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{"private":false,"default_branch":"main"}`)
+	})
+	dir := t.TempDir()
+	ctx := context.Background()
+	if _, err := f.client(httpGitHubOptions{CacheDir: dir, Token: "a"}).Repository(ctx, "o", "r"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.client(httpGitHubOptions{CacheDir: dir, Offline: true}).Repository(ctx, "o", "r"); err != nil {
+		t.Fatalf("a fresh public copy is shared: %v", err)
+	}
+	// Now every request is refused, with or without a token
+	f.handle("/repos/o/r", func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, `{"message":"Resource not accessible"}`, http.StatusForbidden)
+	})
+	_, err := f.client(httpGitHubOptions{CacheDir: dir, Token: "a"}).Repository(ctx, "o", "r")
+	if err == nil {
+		t.Fatal("want the 403")
+	}
+	if _, err := f.client(httpGitHubOptions{CacheDir: dir, Offline: true}).Repository(ctx, "o", "r"); !errors.Is(err, ErrGitHubNotCached) {
+		t.Errorf("the shared copy survived a 403: %v", err)
+	}
+}
