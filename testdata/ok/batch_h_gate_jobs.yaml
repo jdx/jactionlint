@@ -1,0 +1,61 @@
+# Fan-in jobs like the ones of real repositories: they run when a needed job fails
+on: push
+
+jobs:
+  changes:
+    runs-on: ubuntu-24.04
+    outputs:
+      docs_only: ${{ steps.filter.outputs.docs_only }}
+    steps:
+      - id: filter
+        run: echo "docs_only=false" >> "$GITHUB_OUTPUT"
+  trusted:
+    needs: changes
+    if: ${{ needs.changes.outputs.docs_only != 'true' }}
+    runs-on: ubuntu-24.04
+    steps:
+      - run: echo test
+  untrusted:
+    needs: changes
+    if: ${{ needs.changes.outputs.docs_only != 'true' && github.actor != 'octocat' }}
+    runs-on: ubuntu-24.04
+    steps:
+      - run: echo test
+  final:
+    name: final
+    if: ${{ always() && !cancelled() && needs.trusted.result != 'cancelled' && needs.untrusted.result != 'cancelled' }}
+    needs: [changes, trusted, untrusted]
+    runs-on: ubuntu-24.04
+    steps:
+      - env:
+          CHANGES_RESULT: ${{ needs.changes.result }}
+          TRUSTED_RESULT: ${{ needs.trusted.result }}
+          UNTRUSTED_RESULT: ${{ needs.untrusted.result }}
+        run: |
+          [[ "$CHANGES_RESULT" == success ]] || exit 1
+          [[ "$TRUSTED_RESULT" == success || "$UNTRUSTED_RESULT" == success ]]
+  ci-gate:
+    needs: [trusted, untrusted]
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-24.04
+    steps:
+      - run: test "${{ contains(needs.*.result, 'failure') }}" = false
+  report:
+    needs: [trusted]
+    if: failure()
+    runs-on: ubuntu-24.04
+    steps:
+      - run: echo "${{ needs.trusted.result }}"
+  # A check that only compares the result with success does not expect a failure
+  deploy:
+    needs: [trusted]
+    if: needs.trusted.result == 'success'
+    runs-on: ubuntu-24.04
+    steps:
+      - run: echo deploy
+  # Outputs are not results
+  consume:
+    needs: [changes]
+    runs-on: ubuntu-24.04
+    steps:
+      - run: echo ${{ needs.changes.outputs.docs_only }}

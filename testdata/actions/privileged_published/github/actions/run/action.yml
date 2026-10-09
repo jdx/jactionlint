@@ -1,0 +1,17 @@
+name: run
+description: Checks out a ref and runs it
+inputs:
+  ref:
+    description: The ref to build
+    required: true
+runs:
+  using: composite
+  steps:
+    # github-env: the action runs in a privileged workflow, so the value in GITHUB_ENV is dangerous
+    - run: echo "REF=${{ inputs.ref }}" >> "$GITHUB_ENV"
+      shell: bash
+    - uses: actions/checkout@v4
+      with:
+        ref: ${{ github.event.pull_request.head.sha }}
+    - run: make test
+      shell: bash

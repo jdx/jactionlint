@@ -1,0 +1,16 @@
+on: push
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - run: echo lint
+  nightly:
+    runs-on: ubuntu-latest
+    continue-on-error: ${{ matrix.experimental }}
+    strategy:
+      matrix:
+        experimental: [true]
+    steps:
+      - run: echo nightly

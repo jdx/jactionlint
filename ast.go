@@ -1022,6 +1022,11 @@ type Job struct {
 	// Snapshot is a custom image snapshot.
 	// https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#jobsjob_idsnapshot
 	Snapshot *Snapshot
+	// Composite is true for the synthetic job which holds the steps of a composite action (see
+	// ParseAction). Such a job has no runs-on, needs, permissions or timeout-minutes of its own: they
+	// belong to the job of the workflow which calls the action. Unlike in a workflow job, every run
+	// step of a composite action must set shell.
+	Composite bool
 	// Pos is a position in source.
 	Pos *Pos
 }
@@ -1056,6 +1061,10 @@ type Workflow struct {
 	// Comments holds the YAML comments of the source file. Look a node up by the line of its Pos.
 	// It is never nil for a workflow returned by Parse.
 	Comments *CommentIndex
+	// Action is set instead of On when the file is the metadata of an action (action.yml) parsed with
+	// ParseAction. The workflow then has no events, permissions or other workflow-level
+	// configuration. The steps of a composite action are in Jobs as one job with Composite set.
+	Action *ActionFile
 	// Source is the content of the source file. Rules which offer a fix (Error.Fix) read it to turn
 	// positions into byte offsets. It is never nil for a workflow returned by Parse. Do not modify it.
 	Source []byte

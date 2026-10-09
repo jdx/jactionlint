@@ -1,0 +1,49 @@
+# A workflow_run workflow which checks the artifact before it uses it
+on:
+  workflow_run:
+    workflows: [Build]
+    types: [completed]
+  workflow_dispatch:
+
+jobs:
+  comment:
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: pr
+          path: pr
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+      - id: pr
+        run: |
+          NUMBER=$(cat pr/number)
+          [[ "$NUMBER" =~ ^[0-9]+$ ]] || exit 1
+          echo "number=$NUMBER" >> "$GITHUB_OUTPUT"
+      - run: gh pr comment ${{ steps.pr.outputs.number }} --body "Thanks"
+        env:
+          GH_TOKEN: ${{ github.token }}
+  show:
+    if: github.event.workflow_run.event == 'push'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: site
+          path: site
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+      - run: bash site/deploy.sh
+  same-run:
+    runs-on: ubuntu-24.04
+    steps:
+      - run: echo artifact
+      - uses: actions/download-artifact@v4
+        with:
+          name: local
+          path: local
+      - run: bash local/run.sh

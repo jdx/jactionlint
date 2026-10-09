@@ -12,7 +12,7 @@ jobs:
       - run: echo '${{ bar }}'
       # ERROR: the comment applies only to the next step
       - run: echo '${{ baz }}'
-      # ERROR: trailing comments are not supported
+      # a comment at the end of the line applies to the step
       - run: echo '${{ qux }}' # actionlint ignore=undefined variable
       # ERROR: invalid regular expression
       # actionlint ignore=undefined variable (

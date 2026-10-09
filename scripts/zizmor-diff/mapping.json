@@ -3,7 +3,7 @@
   "audits": {
     "anonymous-definition": {
       "coverage": "full",
-      "notes": "Workflows only. zizmor also checks action.yml, which jactionlint does not lint.",
+      "notes": "Workflows only. zizmor also reports action.yml, where the rule does not apply: GitHub requires its name.",
       "jactionlint": [{ "rule": "anonymous-definition" }]
     },
     "concurrency-limits": {
@@ -18,7 +18,7 @@
     },
     "insecure-commands": {
       "coverage": "partial",
-      "notes": "Workflow, job and step env, when the value is true. action.yml and container env are not checked.",
+      "notes": "Workflow, job and step env, when the value is true. Step env of composite actions is checked; container env is not.",
       "jactionlint": [{ "rule": "insecure-commands" }]
     },
     "overprovisioned-secrets": {
@@ -58,7 +58,7 @@
     },
     "template-injection": {
       "coverage": "partial",
-      "notes": "Placeholders in run:, github-script and the code inputs of some well-known actions: attacker controlled contexts and objects holding them (template-injection), env variables set from them, and every other non-constant expansion (template-injection-expansion).",
+      "notes": "Placeholders in run:, github-script and the code inputs of some well-known actions: attacker controlled contexts and objects holding them (template-injection), env variables set from them, and every other non-constant expansion (template-injection-expansion). jactionlint also reports attacker controlled placeholders in container and service options, in the args of docker:// steps and in the prompt, arguments and settings of AI agent actions, which zizmor does not.",
       "jactionlint": [
         { "rule": "expression", "message_contains": "potentially untrusted" },
         { "rule": "template-injection" },
@@ -93,10 +93,45 @@
         { "rule": "expression", "message_contains": "always falsy" }
       ]
     },
-    "forbidden-uses": {
+    "dependabot-cooldown": {
+      "coverage": "partial",
+      "notes": "jactionlint compares default-days (explicit or implicit) with the minimum, like zizmor, and checks every update. zizmor 1.30.1 stops at the first update which satisfies the minimum, so it can miss later ones. The semver-*-days keys are not checked by either.",
+      "jactionlint": [{ "rule": "dependabot-cooldown" }]
+    },
+    "dependabot-execution": {
       "coverage": "full",
-      "notes": "allow and deny lists of repository patterns (rules.forbidden-uses.allow and deny). required-actions is the separate inverse check.",
-      "jactionlint": [{ "rule": "forbidden-uses" }, { "rule": "required-actions" }]
+      "notes": "Both report insecure-external-code-execution: allow on every update.",
+      "jactionlint": [{ "rule": "dependabot-execution" }]
+    },
+    "github-env": {
+      "coverage": "partial",
+      "notes": "Bash and sh scripts are parsed, pwsh and cmd are matched line by line. A write of an expression or variable that is trusted (github.sha, HOME, ...) is not reported, which zizmor reports in pull_request_target and workflow_run workflows. Untrusted input is also reported under other triggers.",
+      "jactionlint": [{ "rule": "github-env" }, { "rule": "github-env-untrusted-input" }]
+    },
+    "adhoc-packages": {
+      "coverage": "partial",
+      "notes": "npm, yarn, pnpm, gem and bundle add in bash and sh scripts, plus bun. pwsh scripts are not parsed.",
+      "jactionlint": [{ "rule": "adhoc-packages" }]
+    },
+    "unpinned-tools": {
+      "coverage": "full",
+      "notes": "The four actions zizmor knows. An input that is an expression is not reported, zizmor reports it with low confidence.",
+      "jactionlint": [{ "rule": "unpinned-tools" }]
+    },
+    "use-trusted-publishing": {
+      "coverage": "partial",
+      "notes": "Publish commands in bash and sh scripts and the four actions. A job with id-token: write is not reported, as in zizmor. pwsh scripts are not parsed and npm run publish is not recognized.",
+      "jactionlint": [{ "rule": "use-trusted-publishing" }]
+    },
+    "superfluous-actions": {
+      "coverage": "full",
+      "notes": "The same table of actions. The entries zizmor reports only with its pedantic persona are reported when the option pedantic of superfluous-actions is on, which it is under the strict and all profiles.",
+      "jactionlint": [{ "rule": "superfluous-actions" }]
+    },
+    "forbidden-uses": {
+      "coverage": "partial",
+      "notes": "allow and deny lists of repository patterns (rules.forbidden-uses.allow and deny); not measured against zizmor yet. required-actions is the separate inverse check and does not cover these findings.",
+      "jactionlint": [{ "rule": "forbidden-uses" }]
     },
     "undocumented-permissions": {
       "coverage": "partial",
@@ -172,6 +207,11 @@
       "coverage": "partial",
       "notes": "Online (-online). Reports a version comment that does not match the pinned commit. A missing comment is not reported and no comment fix is offered.",
       "jactionlint": [{ "rule": "ref-version-mismatch" }]
+    },
+    "insecure-url-scheme": {
+      "coverage": "partial",
+      "notes": "Different scope. zizmor 1.30.1 checks the repo: URLs of .pre-commit-config.yaml, which jactionlint does not lint. jactionlint checks http, ftp and git locations in run: scripts and with: inputs of workflows, so the two never report the same finding.",
+      "jactionlint": [{ "rule": "insecure-url-scheme" }]
     }
   }
 }

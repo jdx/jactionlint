@@ -60,7 +60,7 @@ func (summaryPrinter) print(w io.Writer, results []fileResult, _ []string) error
 		}
 	}
 	showBaseline := baselineSeen || total.baselined > 0
-	fmt.Fprintf(w, "%s in %d of %d files", plural(total.total(), "finding"), filesWithFindings, files)
+	fmt.Fprintf(w, "%s in %d of %d files", countNoun(total.total(), "finding"), filesWithFindings, files)
 	if showBaseline {
 		fmt.Fprintf(w, ": %d new, %d baselined", total.fresh, total.baselined)
 	}
@@ -70,7 +70,7 @@ func (summaryPrinter) print(w io.Writer, results []fileResult, _ []string) error
 		if unused == 1 {
 			verb = "matches"
 		}
-		fmt.Fprintf(w, "%s %s nothing any more\n", plural(unused, "baseline entry"), verb)
+		fmt.Fprintf(w, "%s %s nothing any more\n", countNoun(unused, "baseline entry"), verb)
 	}
 	if total.total() == 0 {
 		return nil
@@ -111,7 +111,7 @@ func (summaryPrinter) print(w io.Writer, results []fileResult, _ []string) error
 	return nil
 }
 
-func plural(n int, noun string) string {
+func countNoun(n int, noun string) string {
 	if n == 1 {
 		return fmt.Sprintf("%d %s", n, noun)
 	}

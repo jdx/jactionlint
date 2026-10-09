@@ -1,6 +1,7 @@
 package jactionlint
 
 import (
+	"fmt"
 	"regexp"
 	"slices"
 	"strconv"
@@ -12,15 +13,6 @@ import (
 type cacheAction struct {
 	name  string
 	reads func(a *ExecAction, u *UsesRef) (bool, string)
-}
-
-// cacheDisabledByExpression reports whether the value of an input is an expression which looks at
-// the trigger, which is the usual way of caching only outside of releases.
-func cacheDisabledByExpression(v string) bool {
-	if !strings.Contains(v, "${{") {
-		return false
-	}
-	return looksAtTrigger(v)
 }
 
 // looksAtTrigger reports whether the text mentions the event or the ref which started the run:
@@ -168,6 +160,9 @@ type RuleCachePoisoning struct {
 	wf         *Workflow
 	releaseWhy string // why the workflow is a release workflow, or ""
 	privileged string // the privileged trigger of the workflow, or ""
+	// scenarios are the runs of a release workflow that publish; eventScenarios one run per event of the workflow,
+	// for a job that publishes in a workflow which is not triggered by a release
+	scenarios, eventScenarios []triggerScenario
 }
 
 // NewRuleCachePoisoning creates a new RuleCachePoisoning instance.
@@ -180,23 +175,63 @@ func NewRuleCachePoisoning() *RuleCachePoisoning {
 	}
 }
 
+// releaseTrigger tells how the events publish a release ("runs on the release event" or "runs on
+// pushed tags"), or returns "" when they do not. scenarios are the runs of the events that publish.
+func releaseTrigger(events []Event) (why string, scenarios []triggerScenario) {
+	for _, e := range events {
+		ev, ok := e.(*WebhookEvent)
+		if !ok {
+			continue
+		}
+		if e.EventName() == "release" {
+			why = "runs on the release event"
+			scenarios = append(scenarios, scenarioRelease)
+		}
+		if e.EventName() == "push" && !ev.Tags.IsEmpty() {
+			if why == "" {
+				why = "runs on pushed tags"
+			}
+			scenarios = append(scenarios, scenarioTagPush)
+		}
+	}
+	return why, scenarios
+}
+
+// eventScenarios lists one run per event.
+func eventScenarios(events []Event) []triggerScenario {
+	var ret []triggerScenario
+	for _, e := range events {
+		ret = append(ret, triggerScenario{"event_name": e.EventName()})
+	}
+	return ret
+}
+
 // VisitWorkflowPre is callback when visiting Workflow node before visiting its children.
 func (rule *RuleCachePoisoning) VisitWorkflowPre(n *Workflow) error {
 	rule.wf = n
 	rule.releaseWhy, rule.privileged = "", ""
+	rule.scenarios, rule.eventScenarios = nil, nil
 	for _, e := range n.On {
-		name := e.EventName()
-		if slices.Contains(privilegedTriggers, name) && rule.privileged == "" {
+		if name := e.EventName(); slices.Contains(privilegedTriggers, name) && rule.privileged == "" {
 			rule.privileged = name
 		}
-		switch ev := e.(type) {
-		case *WebhookEvent:
-			if name == "release" {
-				rule.releaseWhy = "the workflow runs on the release event"
+	}
+	if n.Action == nil {
+		if why, sc := releaseTrigger(n.On); why != "" {
+			rule.releaseWhy, rule.scenarios = "the workflow "+why, sc
+		}
+		rule.eventScenarios = eventScenarios(n.On)
+	} else if c := n.Action.Callers; c.Known() {
+		// The action runs in the context of the workflow which calls it. A caller which releases is enough:
+		// a cache restored there ends up in the published artifacts.
+		for _, cl := range c.Callers {
+			if why, sc := releaseTrigger(cl.Events); why != "" {
+				if rule.releaseWhy == "" {
+					rule.releaseWhy = fmt.Sprintf("%s %s and calls this action", cl.describe(), why)
+				}
+				rule.scenarios = append(rule.scenarios, sc...)
 			}
-			if name == "push" && !ev.Tags.IsEmpty() && rule.releaseWhy == "" {
-				rule.releaseWhy = "the workflow runs on pushed tags"
-			}
+			rule.eventScenarios = append(rule.eventScenarios, eventScenarios(cl.Events)...)
 		}
 	}
 	if !rule.Config().RuleEnabled("cache-poisoning") {
@@ -246,6 +281,10 @@ func (rule *RuleCachePoisoning) VisitJobPre(n *Job) error {
 		return nil
 	}
 
+	scenarios := rule.scenarios
+	if rule.releaseWhy == "" {
+		scenarios = rule.eventScenarios // a publishing job in a workflow which is not a release workflow
+	}
 	for _, s := range steps {
 		a, ref := stepAction(s)
 		if a == nil || ref.Kind != UsesAction {
@@ -257,31 +296,61 @@ func (rule *RuleCachePoisoning) VisitJobPre(n *Job) error {
 			continue
 		}
 		reads, hint := cacheActions[i].reads(a, ref)
-		if !reads || stepCacheIsConditional(s, a) {
+		if !reads || !cacheCanRunOnReleaseTrigger(n, s, a, name, scenarios) {
 			continue
 		}
 		rule.ReportIDf(
 			"cache-poisoning",
 			a.Uses.Pos,
-			"%s restores a cache although %s, so a poisoned cache entry can end up in the published artifacts. %s, or set \"cache-mode: none\" on the job",
-			name, why, hint,
+			"%s restores a cache although %s, so a poisoned cache entry can end up in the published artifacts. %s, or set \"cache-mode: none\" on the job%s",
+			name, why, hint, callerJob(rule.wf),
 		)
 	}
 	return nil
 }
 
-// stepCacheIsConditional reports whether the step or the cache setting depends on the trigger, which
-// is how a workflow caches outside of releases only.
-func stepCacheIsConditional(s *Step, a *ExecAction) bool {
-	if s.If != nil && looksAtTrigger(s.If.Value) {
-		return true
-	}
-	for _, in := range a.Inputs {
-		if in != nil && in.Value != nil && cacheDisabledByExpression(in.Value.Value) {
-			return true
-		}
-	}
-	return false
+// cacheGate is an input which decides whether an action uses the cache. offWhenTrue is set for the inputs that
+// switch the cache off ("lookup-only: true"); for the others a value that is empty or false switches it off.
+type cacheGate struct {
+	input       string
+	offWhenTrue bool
+}
+
+// cacheGateInputs lists, for the actions of cacheActions, the inputs which decide whether the action
+// restores the cache at all, because `reads` reports exactly the cases they switch on. Only an expression
+// in one of these can make the caching conditional on the trigger. Everything else (key, restore-keys,
+// versions, paths) is ignored: a release workflow often has github.ref in a key or in node-version
+// without the cache being off. Sources are the action.yml files of the actions.
+//
+// Left out on purpose: setup-node's "package-manager-cache" only turns off the automatic detection of v5 and
+// leaves an explicit "cache" as it is, and rust-cache's "save-if" and gradle's "cache-read-only" only
+// stop saving, the restore still happens.
+var cacheGateInputs = map[string][]cacheGate{
+	// "cache" names the package manager to cache: empty or false means none
+	"actions/setup-node":   {{input: "cache"}},
+	"actions/setup-python": {{input: "cache"}},
+	"actions/setup-java":   {{input: "cache"}},
+	"actions/setup-dotnet": {{input: "cache"}},
+	"actions/setup-go":     {{input: "cache"}}, // "cache: false" turns off the default
+	// "bundler-cache: true" runs bundle install with a cache
+	"ruby/setup-ruby": {{input: "bundler-cache"}},
+	// "enable-cache: false" turns off the default
+	"astral-sh/setup-uv": {{input: "enable-cache"}},
+	// "lookup-only: true" checks for a cache without restoring it
+	"swatinem/rust-cache": {{input: "lookup-only", offWhenTrue: true}},
+	// "cache: false" turns off the cache of mise-action
+	"jdx/mise-action": {{input: "cache"}},
+	// "cache-disabled: true" turns off all caching of the action
+	"gradle/actions/setup-gradle": {{input: "cache-disabled", offWhenTrue: true}},
+	"gradle/gradle-build-action":  {{input: "cache-disabled", offWhenTrue: true}},
+	// "cache-from" with type=gha is what restores the cache; empty means none
+	"docker/build-push-action": {{input: "cache-from"}},
+	// the next ones have no switch: only the "if:" of the step can gate them (actions/cache has "lookup-only",
+	// which `reads` handles as a literal)
+	"actions/cache":                             nil,
+	"actions/cache/restore":                     nil,
+	"hendrikmuhs/ccache-action":                 nil,
+	"determinatesystems/magic-nix-cache-action": nil,
 }
 
 // publishingReason tells why the steps publish something, or returns "".
@@ -320,4 +389,12 @@ func init() {
 	registerRuleFactory("cache-poisoning", func(env *RuleEnv) []Rule {
 		return []Rule{NewRuleCachePoisoning()}
 	})
+}
+
+// callerJob completes "on the job" for the metadata of an action, which has no job of its own.
+func callerJob(w *Workflow) string {
+	if w.Action != nil {
+		return " that calls this action"
+	}
+	return ""
 }

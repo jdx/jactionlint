@@ -165,22 +165,13 @@ func (l *Linter) WriteBaseline(files []string, path string) (*WriteBaselineResul
 	var project *Project
 	partial := len(files) > 0
 	if !partial {
-		p, err := l.projects.At(l.cwd)
+		var p *Project
+		var err error
+		files, p, err = l.repositoryFiles(l.cwd)
 		if err != nil {
 			return nil, err
-		}
-		if p == nil {
-			return nil, fmt.Errorf("no project was found in any parent directories of %q. check workflows directory is put correctly in your Git repository", l.cwd)
 		}
 		project = p
-		files, err = walkWorkflowFiles(p.WorkflowsDir())
-		if err != nil {
-			return nil, err
-		}
-		files = append(files, p.DependabotFiles()...)
-		if len(files) == 0 {
-			return nil, fmt.Errorf("no YAML file was found in %q", p.WorkflowsDir())
-		}
 	} else {
 		p, err := l.projects.At(files[0])
 		if err != nil {
@@ -403,7 +394,7 @@ func (l *Linter) reportBaselineNote(results []fileResult) {
 // printOne prints the result of one file, with the baseline file result if the baseline has unused
 // entries, and returns the errors to report.
 func (l *Linter) printOne(r fileResult) ([]*Error, error) {
-	results := l.withBaselineResults([]fileResult{r})
+	results := l.finishRun([]fileResult{r})
 	if err := l.printer.print(l.out, results, l.notifications()); err != nil {
 		return nil, err
 	}

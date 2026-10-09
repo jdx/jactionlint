@@ -24,27 +24,27 @@ How to read the table:
 
 | zizmor audit | Planned ID | Phase / batch | Profile | Parity |
 | --- | --- | --- | --- | --- |
-| `adhoc-packages` | `adhoc-packages` | 3 / D | strict | not yet assessed |
-| `anonymous-definition` | `anonymous-definition` | 3 / A | strict | full for workflows and jobs (action.yml is not linted); fixable |
+| `adhoc-packages` | `adhoc-packages` | 3 / D | default | partial: 7 of the 10 findings of zizmor on the corpus. The 3 others are 2 installs of local tarballs (`npm install ../pkg/*.tgz`), which jactionlint does not call ad hoc, and a position difference in a folded block. jactionlint reports installs behind `sudo` that zizmor misses. No `pwsh` scripts. See [the check](checks.md#check-adhoc-packages) |
+| `anonymous-definition` | `anonymous-definition` | 3 / A | strict | full for workflows and jobs; not applicable to `action.yml` (GitHub requires its `name`); fixable |
 | `archived-uses` | `archived-uses` | 3 / G | online | partial: all archived repositories are found; see [online audits](#online-audits) |
 | `artipacked` | `artipacked` | 3 / B | strict | full on the corpus, with a fix. [batch B measurements](#batch-b-corpus-measurements) |
-| `bot-conditions` | `bot-conditions` | 3 / C | strict | partial: `github.actor`, `github.triggering_actor`, `github.actor_id` and `github.event.sender.*` compared with a bot (`==`, `contains()`, `startsWith()`, `endsWith()`) in job and step `if:`. `!=` and negated tests are not reported, as in zizmor. Measured, see [batch C](#batch-c-measurements). `-fix=unsafe` only for workflows with `pull_request`/`pull_request_target` events. Bot names without `[bot]` are known by ID and prefix only. No composite actions yet |
+| `bot-conditions` | `bot-conditions` | 3 / C | strict | partial: `github.actor`, `github.triggering_actor`, `github.actor_id` and `github.event.sender.*` compared with a bot (`==`, `contains()`, `startsWith()`, `endsWith()`) in job and step `if:`. `!=` and negated tests are not reported, as in zizmor. Measured, see [batch C](#batch-c-measurements). `-fix=unsafe` only for workflows with `pull_request`/`pull_request_target` events. Bot names without `[bot]` are known by ID and prefix only. Composite actions: the fix needs every local caller to run on a pull request event |
 | `cache-poisoning` | `cache-poisoning` | 3 / B | strict | partial: a fixed table of cache actions, `tags-ignore` is not a release trigger. [batch B measurements](#batch-b-corpus-measurements) |
 | `concurrency-limits` | `concurrency-limits` | 3 / A | strict | full: only a missing `concurrency:` and the bare group form are reported; see [measurements](#batch-a-measurements) |
 | `dangerous-triggers` | `dangerous-triggers` | 3 / A | strict | full; adds `issue_comment`, which zizmor flags from 1.31; reported at the trigger, zizmor reports at `on:` |
-| `dependabot-cooldown` | `dependabot-cooldown` | 3 / E | strict | not yet assessed |
-| `dependabot-execution` | `dependabot-execution` | 3 / E | strict | not yet assessed |
+| `dependabot-cooldown` | `dependabot-cooldown` | 3 / E | default | full on the corpus: 386 of 386 zizmor findings in 193 repositories, plus 3 true positives zizmor 1.30.1 misses (it stops at the first update which satisfies the minimum). `-fix` needs the `default-days` option; zizmor has a built-in 7. The `semver-*-days` keys are checked by neither |
+| `dependabot-execution` | `dependabot-execution` | 3 / E | default | not measured: no `allow` in the 193 repositories of the corpus, so both tools report 0. Covered by unit tests only. The fix is unsafe (zizmor offers it too) |
 | `excessive-permissions` | `excessive-permissions` | 3 / B | strict | partial: write scopes, `write-all`, `read-all`, workflow-level default permissions (option) and, with `missing-permissions`, job-level default permissions. [batch B measurements](#batch-b-corpus-measurements), [missing-permissions measurements](#measured-missing-permissions-and-missing-timeout) |
 | `forbidden-uses` | `forbidden-uses` | 3 / A | opt-in (allow/deny config) | partial: patterns follow zizmor documentation but were not measured against zizmor |
 | `github-app` | `github-app` | 3 / B and E | strict | partial: `actions/create-github-app-token` only, no dependabot side yet. [batch B measurements](#batch-b-corpus-measurements) |
-| `github-env` | `github-env` | 3 / D | default | not yet assessed |
+| `github-env` | `github-env`, `github-env-untrusted-input` | 3 / D | default | partial: zizmor and jactionlint both have no finding on the corpus. jactionlint accepts values of trusted contexts (`github.sha`, `runner.*`) and `mktemp`/`date` substitutions that zizmor reports in `pull_request_target` and `workflow_run` workflows, and reports untrusted input under every trigger. `pwsh` and `cmd` are matched line by line. See [the check](checks.md#check-github-env) |
 | `hardcoded-container-credentials` | existing check, [Hardcoded credentials](checks.md#check-hardcoded-credentials); ID assigned in Phase 1 | exists today, ID in Phase 1 | default | not yet assessed |
 | `impostor-commit` | `impostor-commit` | 3 / G | online | partial: same findings on the corpus; a repository with more than 1000 branches gives no verdict (100 without a token); see [online audits](#online-audits) |
-| `insecure-commands` | `insecure-commands` | 3 / A | default | partial: workflow, job and step `env` (not action.yml); fixable (unsafe) |
-| `insecure-url-scheme` | `insecure-url-scheme` (where applicable to dependabot.yml) | 3 / E | strict | not yet assessed |
+| `insecure-commands` | `insecure-commands` | 3 / A | default | partial: workflow, job and step `env` (step `env` in `action.yml` too); fixable (unsafe) |
+| `insecure-url-scheme` | `insecure-url-scheme` | 3 / K | default | none to compare: zizmor 1.30.1 applies it to the `repo:` URLs of `.pre-commit-config.yaml` only, which jactionlint does not lint. jactionlint's rule is a different one with the same ID: `http://`, `ftp://` and `git://` locations in `run:` scripts and `with:` inputs. [batch K measurements](#batch-k-measurements) |
 | `known-vulnerable-actions` | `known-vulnerable-actions` | 3 / G | online | partial: same findings on the corpus; branch refs are not judged; see [online audits](#online-audits) |
-| `misfeature` | `misfeature`, `misfeature-custom-shell` | 3 / C | strict, all | partial: `pip-install` of setup-python and `shell: cmd` (`misfeature`, 18 of 18 zizmor findings of the corpus). Shells that are not well known are `misfeature-custom-shell` (`all`, info), which zizmor reports in the auditor persona only and which is not compared. No composite actions yet |
-| `obfuscation` | `obfuscation` | 3 / C | strict | partial: redundant segments at `uses:`, constant expressions and `format()` of literals outside `if:`, `fromJSON(toJSON(x))` and computed indices. All zizmor findings of the corpus are reported (see [batch C](#batch-c-measurements)). Constants in `if:` are `constant-condition`; `fromJSON(toJSON(context))` is deliberately not reported; the `uses:` fix is unsafe. No composite actions yet |
+| `misfeature` | `misfeature`, `misfeature-custom-shell` | 3 / C | strict, all | partial: `pip-install` of setup-python and `shell: cmd` (`misfeature`, 18 of 18 zizmor findings of the corpus). Shells that are not well known are `misfeature-custom-shell` (`all`, info), which zizmor reports in the auditor persona only and which is not compared. Composite actions: checked |
+| `obfuscation` | `obfuscation` | 3 / C | strict | partial: redundant segments at `uses:`, constant expressions and `format()` of literals outside `if:`, `fromJSON(toJSON(x))` and computed indices. All zizmor findings of the corpus are reported (see [batch C](#batch-c-measurements)). Constants in `if:` are `constant-condition`; `fromJSON(toJSON(context))` is deliberately not reported; the `uses:` fix is unsafe. Composite actions: checked |
 | `overprovisioned-secrets` | `overprovisioned-secrets` | 3 / A | strict | full on the synthetic cases; 0 findings on the corpus |
 | `ref-confusion` | `ref-confusion` | 3 / G | online | partial: no finding on the corpus by either tool; see [online audits](#online-audits) |
 | `ref-version-mismatch` | `ref-version-mismatch` | 3 / G | online | partial: every mismatch of a tag comment found; a missing or version-less comment and a branch comment are not reported; see [online audits](#online-audits) |
@@ -53,18 +53,53 @@ How to read the table:
 | `self-hosted-runner` | `self-hosted-runner` | 3 / A | all (info) | partial: literal `self-hosted` labels and matrix values; labels from other expressions are not resolved |
 | `self-repository` | `self-repository` | 3 / B | strict (info) | full on the corpus, with an unsafe fix. [batch B measurements](#batch-b-corpus-measurements) |
 | `stale-action-refs` | `stale-action-refs` | 3 / G | online | partial: same findings except repositories with more than 1000 tags; see [online audits](#online-audits) |
-| `superfluous-actions` | `superfluous-actions` | 3 / D | strict | not yet assessed |
-| `template-injection` | `template-injection` (default), `template-injection-expansion` (strict), `template-injection-trusted` (all) | 3 / C | default, strict, all | partial: attacker controlled contexts, objects holding them and env variables set from them in `run:`, github-script and the code inputs of well-known actions, every expression of a script (default). Every other expansion is `template-injection-expansion` (free text) or `template-injection-trusted` (values like `github.repository`), which together are zizmor's pedantic persona. See [batch C](#batch-c-measurements) for the numbers. Not covered: `action.yml`, knowledge about the outputs of popular actions, severity by trigger (the level is per rule ID). `-fix` moves a simple reference into `env:` for bash and sh |
+| `superfluous-actions` | `superfluous-actions` | 3 / D | default | full: the same 40 findings as zizmor on the corpus, split like its personas (7 regular, and the 33 pedantic ones with the option `pedantic`, which the `strict` profile turns on). jactionlint adds the archived `actions/create-release` and `actions/upload-release-asset`. See [the check](checks.md#check-superfluous-actions) |
+| `template-injection` | `template-injection` (default), `template-injection-expansion` (strict), `template-injection-trusted` (all) | 3 / C | default, strict, all | partial: attacker controlled contexts, objects holding them and env variables set from them in `run:`, github-script and the code inputs of well-known actions, every expression of a script (default). Every other expansion is `template-injection-expansion` (free text) or `template-injection-trusted` (values like `github.repository`), which together are zizmor's pedantic persona. See [batch C](#batch-c-measurements) for the numbers. Not covered: knowledge about the outputs of popular actions, severity by trigger (the level is per rule ID). `-fix` moves a simple reference into `env:` for bash and sh. Batch J adds sinks that zizmor lacks: `container.options` and `services.<id>.options` ([zizmor#1128](https://github.com/zizmorcore/zizmor/issues/1128), still open), their image, entrypoint, command and volumes, `args` and `entrypoint` of `docker://` steps, more code inputs of well-known actions, and the prompt, arguments and settings of AI agent actions; see [batch J](#batch-j-measurements) |
 | `typosquat-uses` | `typosquat-uses` | 3 / A | strict | partial: one typo of the slug, not all of the transformations of zizmor |
 | `undocumented-permissions` | `undocumented-permissions` | 3 / B (needs YAML comments, Phase 2) | all | partial: a comment above a scope counts, `include-read` for zizmor's read scopes. [batch B measurements](#batch-b-corpus-measurements) |
 | `unpinned-images` | `unpinned-images` | 3 / B | strict | partial: no per-persona split, images in `docker://` are `unpinned-uses`. [batch B measurements](#batch-b-corpus-measurements) |
-| `unpinned-tools` | `unpinned-tools` | 3 / D | strict | not yet assessed |
+| `unpinned-tools` | `unpinned-tools` | 3 / D | default | full for the 4 actions zizmor knows (no finding on the corpus in either tool). The option `pedantic` (on under `strict`) adds `run:` installs without an exact version and three more actions. An input that is an expression is not reported, zizmor reports it with low confidence. See [the check](checks.md#check-unpinned-tools) |
 | `unpinned-uses` | `unpinned-uses` | 3 / B | strict | partial: `hash-pin`, `ref-pin`, `any` policies with a subset of zizmor's patterns. [batch B measurements](#batch-b-corpus-measurements) |
 | `unredacted-secrets` | `unredacted-secrets` | 3 / A | strict | full on the synthetic cases; 0 findings on the corpus |
 | `unsound-condition` | `if-always-true` (existing) | 3 / C | default | full for workflows: `if-always-true` reports every `if:` with characters around `${{ }}`, a block scalar's trailing newline included. Matches all 5 zizmor findings of the corpus. No new rule. Composite action steps are not checked yet |
 | `unsound-contains` | `unsound-contains` | 3 / A | default | full on the synthetic cases; 0 findings on the corpus |
 | `unsound-ternary` | `unsound-ternary` | 3 / C | default | not yet assessed |
-| `use-trusted-publishing` | `use-trusted-publishing` | 3 / D | strict | not yet assessed |
+| `use-trusted-publishing` | `use-trusted-publishing` | 3 / D | default | partial: 2 of the 4 findings of zizmor on the corpus. The 2 others are in reusable workflows without `permissions:`, which jactionlint skips because the caller may grant `id-token: write`. No `pwsh` scripts and no `npm run publish`. See [the check](checks.md#check-use-trusted-publishing) |
+
+## Beyond zizmor
+
+<a id="beyond-zizmor"></a>
+
+Rules of jactionlint which zizmor 1.30.1 has no audit for:
+
+| ID | Profile | What it reports |
+| --- | --- | --- |
+| `unlocked-install` | default | `cargo install` without `--locked`. Fixable (unsafe). With the option `pedantic` (on under `strict`): `npm install` instead of `npm ci`, `yarn` and `bun install` without a frozen lock file, `pnpm install --no-frozen-lockfile`, `pip install -r` without hashes or constraints. See [the check](checks.md#check-unlocked-install) |
+| `dependabot-missing-actions-update` | strict | `dependabot.yml` has no `github-actions` update although `.github/workflows` uses actions. It is skipped when the repository has a Renovate configuration. 20 findings in 193 repositories, all true positives (a Go module with only a `gomod` update). See [the check](checks.md#check-dependabot-missing-actions-update) |
+| `pipeline-without-pipefail` | default | A failure of a command in a pipeline of a `run:` script is hidden because the default shell (`bash -e {0}`) and `shell: sh` do not enable pipefail. |
+| `agentic-actions` | default | AI agent actions ([zizmor#1605](https://github.com/zizmorcore/zizmor/issues/1605) is a proposal): an agent that outsiders can steer without a check of the user, an open gate (`allowed_non_write_users: '*'`), settings that turn the safeguards off, and an agent that runs on the code of a pull request. See [AI agent actions](checks.md#check-agentic-actions) |
+| `unverified-download` | default | a download piped into a shell or an interpreter, a downloaded file made executable and run without a checksum or signature check, and TLS verification turned off for a download (error). Closest zizmor audit: none; the idea is zizmor [#711](https://github.com/zizmorcore/zizmor/issues/711) |
+| `insecure-ssh-keyscan` | default | `ssh-keyscan` output written to a `known_hosts` file (error). Closest zizmor audit: none; the idea is zizmor [#2012](https://github.com/zizmorcore/zizmor/issues/2012) |
+| `checkout-static-credentials` | default | `actions/checkout` given an `ssh-key` or a literal `token` (and, with `secret-tokens` (on under `strict` and `all`), a token from a secret other than `GITHUB_TOKEN`) (error). Closest zizmor audit: none; the idea is zizmor [#1118](https://github.com/zizmorcore/zizmor/issues/1118) |
+| `insecure-url-scheme` | default | `http://`, `ftp://` and `git://` locations in `run:` downloads and in `with:` inputs (error). Closest zizmor audit: `insecure-url-scheme`, which only checks `repo:` URLs of `.pre-commit-config.yaml` |
+| `invisible-characters` | default | invisible and bidirectional control characters ([zizmor#914](https://github.com/zizmorcore/zizmor/issues/914)), in workflows and in `dependabot.yml`, also in a file that does not parse. Safe `-fix` |
+| `unsound-prefix-match` | default | `startsWith()`, `endsWith()` and `contains()` on the name of an account or a repository ([zizmor#1533](https://github.com/zizmorcore/zizmor/issues/1533)). `unsound-contains` is the sibling for a literal haystack |
+
+Features of jactionlint that zizmor does not have:
+
+- **Baseline for gradual adoption** ([zizmor#2282](https://github.com/zizmorcore/zizmor/issues/2282), declined there). `jactionlint -baseline-write` records
+  the current findings and `-baseline` hides them, so a repository can adopt the stricter default and fail only on new findings.
+  Entries are keyed by file, rule ID and a fingerprint (not by line numbers), `unused-baseline-entry` and `-baseline-check` tell
+  when the baseline can shrink, `-format summary` counts findings per rule and file, and SARIF marks baselined results as
+  suppressed. See [the usage document](usage.md#baseline).
+- **Durable ignores** (`ignores:` in the config file, rules `expired-ignore` and `unused-ignore`). zizmor ignores a finding with
+  a `# zizmor: ignore[audit]` comment or with a `rules.<audit>.ignore` entry of `file:line:col` in `zizmor.yml`. Both break when
+  a tool rewrites the line or when lines shift ([zizmor#1086](https://github.com/zizmorcore/zizmor/issues/1086)).
+  jactionlint matches by rule plus file glob, job ID, step ID or name, and the `uses:` value (so a Renovate bump of the SHA keeps the
+  entry working), with an optional reason and expiry date. This is not measured against zizmor, since zizmor has no equivalent.
+  See [durable ignores](config.md#durable-ignores).
+- Ignore comments at the end of a line (`# jactionlint ignore=...`) cover the whole step when they are on its first line. A
+  `# zizmor: ignore[...]` comment is honored as well, and applies to the findings whose region holds the comment.
 
 ## Batch B corpus measurements
 
@@ -115,7 +150,6 @@ Known gaps of batch B, which the table does not show because the corpus does not
 - `github-app` knows `actions/create-github-app-token` only.
 - `cache-poisoning` knows the cache actions in a fixed table. Cache modes of the dangerous-write half (`cache-mode: write` on a
   privileged trigger) were added after zizmor 1.30.1, so that half has no zizmor measurement.
-- Findings are not suppressed by `# zizmor: ignore[...]` comments.
 
 ## Online audits
 
@@ -162,10 +196,38 @@ Gaps of the online rules that the corpus does not show, so they are not measured
   history of a tag (a deleted release branch) is reported.
 - Without a token jactionlint cannot use GraphQL, compares at most 100 branches one request at a time, and says nothing for a larger
   repository where no branch has the commit.
-- Reusable workflows are checked like actions; composite action files (`action.yml`) are not linted by jactionlint yet.
+- Reusable workflows are checked like actions; composite action files (`action.yml`) are checked too, with the steps of a composite action treated like workflow steps.
 
 Cost: for the 173 `uses:` lines of this repository the first run makes 91 requests, a run within the hour none, and a later run
 only conditional requests (a 304 answer is free of rate limit for authenticated clients).
+
+### Online client: where it differs from zizmor
+
+Not compatible by design; the client answers zizmor issues [#1350](https://github.com/zizmorcore/zizmor/issues/1350) and
+[#2210](https://github.com/zizmorcore/zizmor/issues/2210) (one failed lookup aborts the audit) and the credentials in debug logs of
+[GHSA-f42p-wjw5-97qh](https://github.com/zizmorcore/zizmor/security/advisories/GHSA-f42p-wjw5-97qh). Measured by unit tests against an
+`httptest` server for every failure mode, not against zizmor.
+
+- A lookup which fails (404, 403, 5xx, timeout, DNS) is skipped for that `uses:` only. One warning per kind of failure, exit status
+  unchanged unless `-online=strict`.
+- Rate limits are read from `X-RateLimit-*` and `Retry-After`; a reset within 30 seconds is waited for, a later one skips with the
+  reset time in the message. 5xx and secondary limits are retried with exponential backoff and jitter, at most twice.
+- `allow` and `deny` lists of `owner/repo` patterns, a GitHub Enterprise Server host from `GITHUB_API_URL`, `GITHUB_SERVER_URL`, `GH_HOST`
+  or `-online-api-url`, and a token from a named variable, a file, the usual variables or `gh auth token`.
+- The token is sent to the API host only, is redacted from all output, and is never sent to a host that a repository's own config file chose.
+- `-online=cache` answers from the disk cache only, without the network.
+
+Not done: zizmor's precomputed snapshot of tags and advisories, which would cut the first-run cost further.
+
+## Ignore comments
+
+jactionlint honors zizmor's `# zizmor: ignore[...]` comments for the audits that map onto one of its rules, so a repository
+that already triaged its zizmor findings keeps them triaged. This is measured only for the rules that exist: on the corpus of
+520 workflow files with a zizmor comment, 2 name a mapped audit today (`template-injection`) and the rest name audits (such as
+`cache-poisoning` and `dangerous-triggers`) that have no jactionlint rule yet, so they are inert until those rules land. For
+`template-injection`, jactionlint reports fewer contexts than zizmor, so a comment can be stale for jactionlint (the
+`unused-ignore` rule says so). See [the usage document](usage.md#zizmor-ignore-comments) and
+[the alias table](v2-migration.md#zizmor-ignore-comments).
 
 See [CONTRIBUTING.md](https://github.com/jdx/jactionlint/blob/main/CONTRIBUTING.md#policy-for-jactionlints-features) for the
 criteria a rule must meet before it is added.
@@ -244,8 +306,8 @@ Rows of other rules:
   expressions in `if:` that zizmor reports (`${{ false }}`) are reported by `constant-condition` and `if-always-true`.
 - **`misfeature`** and **`unsound-condition`** match exactly.
 
-Known differences that are not measured: the position of a finding in a double-quoted multi-line YAML string is the first line, and
-composite actions (`action.yml`) are not analyzed at all.
+Known differences that are not measured: the position of a finding in a double-quoted multi-line YAML string is the first line.
+Composite actions are measured in [composite actions](#composite-actions-measurements).
 <a id="batch-a-measurements"></a>
 ## Batch A measurements
 
@@ -284,12 +346,182 @@ Behaviors of zizmor that were found only by this comparison, and are now reprodu
 `concurrency-limits` skips workflows that only call reusable workflows; `secrets-outside-env` skips `workflow_call` workflows;
 `self-hosted-runner` reports the label only; `dangerous-triggers` exempts `actions/labeler` for `pull_request_target`.
 
-## Beyond zizmor
+## Batch J measurements
 
-Features of jactionlint that zizmor does not have.
+<a id="batch-j-measurements"></a>
 
-- **Baseline for gradual adoption** ([zizmor#2282](https://github.com/zizmorcore/zizmor/issues/2282), declined there). `jactionlint -baseline-write` records
-  the current findings and `-baseline` hides them, so a repository can adopt the stricter default and fail only on new findings.
-  Entries are keyed by file, rule ID and a fingerprint (not by line numbers), `unused-baseline-entry` and `-baseline-check` tell
-  when the baseline can shrink, `-format summary` counts findings per rule and file, and SARIF marks baselined results as
-  suppressed. See [the usage document](usage.md#baseline).
+Batch J extends `template-injection` to the places that read a string as a command line or as the instructions of an agent, and adds
+`agentic-actions`. Measured with zizmor 1.30.1 (`--offline --persona pedantic`) and jactionlint on two corpora:
+
+- **jdx**: the workflows of 266 repository checkouts under `~/src` (worktrees included). Eight distinct workflow files use an AI agent action
+  (hk's `claude.yml` and copies of it) and 977 files have `container:` or `services:`.
+- **AI agent workflows**: 237 workflow files of 151 public repositories that use an agent action, found with GitHub code search for the
+  actions (`anthropics/claude-code-action`, `run-gemini-cli`, `gemini-cli-action`, `openai/codex-action`, `actions/ai-inference`, opencode
+  and others). It is a sample of what is on GitHub, not a random one.
+
+| Rule | jdx corpus | AI agent corpus | zizmor | Judgement |
+| --- | --- | --- | --- | --- |
+| `template-injection`: prompt, arguments and settings of agents | 0 | 78 findings in 33 files | 0 in the same files | all 78 are attacker controlled contexts (`github.event.issue.title`, `.body`, `pull_request.title`, `comment.body`) in a prompt; no false positive found |
+| `template-injection`: container and service options, image, entrypoint, command, volumes; args of a `docker://` step | 0 in 977 files | 0 (10 files found by code search for `options: ${{`) | 0 | the pattern is rare. Covered by golden tests, since no real finding was available |
+| `agentic-actions` | 0 | 13 findings in 9 workflows | no such audit | all 13 are true: 6 agents without a check of the user (no `if:`, `environment:` or permission step) with a token that can write contents, 4 agents that run on a pull request checkout, 3 allowed tools that give any code (`Bash(npx:*)`, `Bash(bunx:*)`, `Bash(xargs:*)`) |
+
+Findings of `agentic-actions` that the first version produced and that were false positives, and what was changed (the counts are of the
+same corpus): 60 findings fell to 13. A triage job with a read-only token and a Codex `sandbox: read-only` or a Gemini `tools.core`
+list is the architecture the vendors advise, and is no longer reported; `workflow_run` is no longer an outsider trigger for the checks of
+the user and of the settings (it is as safe as the workflow it follows); settings files with trailing commas (the example of the Gemini
+CLI action has one) or an expression in a detail of the JSON are read; Codex on Windows needs `safety-strategy: unsafe`.
+
+Differences from zizmor, on purpose: zizmor reports no `${{ }}` in the prompt of an agent, and nothing for container options; the
+rule reports at `error` level whatever the trigger (decision: every rule of the default profile does), where the proposal for zizmor
+would grade by trigger and persona; the actions are a table (`agent_actions.go`) that must be kept up to date.
+
+## Rules of batch H
+
+These rules have no equivalent audit in zizmor 1.30.1. They are rules of jactionlint's own, so they are not part of the parity
+table above, and the differential harness (`scripts/zizmor-diff`) has no mapping for them. A finding of one of them is always
+"only jactionlint" in its report.
+
+| Rule | Profile | Level | What it finds | Closest zizmor audit |
+| --- | --- | --- | --- | --- |
+| [`concurrency-cancels-prs`](checks.md#check-concurrency-cancels-prs) | default | warn | a `cancel-in-progress` group that all pull requests share | `concurrency-limits` asks for a missing `concurrency`, not for a wrong group |
+| [`concurrency-cancels-release`](checks.md#check-concurrency-cancels-release) | default | warn | `cancel-in-progress` on tag pushes, releases and jobs that publish or deploy (fixable, unsafe) | none |
+| [`gate-job-skipped-on-failure`](checks.md#check-gate-job-skipped-on-failure) | default | error | a job that reads `needs.*.result` but is skipped when a needed job fails | none |
+| [`untrusted-checkout`](checks.md#check-untrusted-checkout) | default | error | `pull_request_target` and `workflow_run` workflows that check out the pull request and run it | `dangerous-triggers` reports the trigger alone, not what the workflow does with the code |
+| [`untrusted-artifact`](checks.md#check-untrusted-artifact) | default | error | `workflow_run` workflows that run, extract or export the artifact of the triggering run unchecked | none |
+| [`unused-job-output`](checks.md#check-unused-job-output) | default | warn | a job output that no job or `workflow_call` output reads | none |
+| [`unused-workflow-input`](checks.md#check-unused-workflow-input) | strict | warn | an input of `workflow_dispatch` or `workflow_call` that is never read | none |
+| [`unused-needs`](checks.md#check-unused-needs) | strict | info | a `needs` entry that is neither read nor needed for the order of jobs | none |
+| [`duplicate-triggers`](checks.md#check-duplicate-triggers) | strict | warn | `push` without a branch filter next to `pull_request` | none |
+| [`continue-on-error`](checks.md#check-continue-on-error) | strict | info | a job with `continue-on-error: true` | none |
+| [`mutable-runner-label`](checks.md#check-mutable-runner-label) | strict | warn | `ubuntu-latest` and the other labels that GitHub moves (fixable with the `pin` option) | none |
+
+The profile column follows the policy of the maintainer: `default` for what has (almost) no false positives, and `strict` (the
+pedantic tier) for the opinionated checks, whatever the volume.
+
+## Batch H measurements
+
+The rules above ran with `profile: all` over two corpora, without network access: 231 directories of `~/src` with
+`.github/workflows` (jdx repositories and their worktrees: 804 distinct workflow files, found by their content) and the
+workflows of 1158 distinct repositories in the Go module cache, the cargo registry and the other caches of the machine (2649
+distinct files). A finding of a file that occurs in several worktrees is counted once. zizmor 1.30.1 has no audit to compare with,
+so nothing is claimed about parity; the table says what jactionlint found and how the findings were judged by reading the
+workflow.
+
+| Rule | jdx: findings (files) | OSS: findings (files) | True | False |
+| --- | --- | --- | --- | --- |
+| `concurrency-cancels-prs` | 0 | 1 (1) | 1 | 0 |
+| `concurrency-cancels-release` | 11 (11) | 4 (4) | 15 | 0 |
+| `gate-job-skipped-on-failure` | 0 | 0 | 0 | 0 |
+| `untrusted-checkout` | 0 | 1 (1) | 1 | 0 |
+| `untrusted-artifact` | 0 | 2 (1) | 2 | 0 |
+| `unused-job-output` | 6 (6) | 70 (10) | 76 | 0 |
+| `unused-workflow-input` | 0 | 7 (6) | 6 | 1 file |
+| `unused-needs` | 37 (18) | 45 (17) | 82 | 0 |
+| `duplicate-triggers` | 0 | 512 (512) | 512 | 0 |
+| `continue-on-error` | 18 (18) | 17 (15) | 35 | 0 |
+| `mutable-runner-label` | 1885 (638) | 6089 (2264) | all | 0 |
+
+What the review found:
+
+- Several versions of the rules reported false positives and were changed before the table was made. The first
+  `concurrency-cancels-release` took the name of a workflow or a job ("release-window", "minimum_release_age", "Check for a new
+  release") as a sign of a release, flagged CI workflows that run for tags, and flagged `goreleaser --snapshot` and `goreleaser check`
+  jobs. Names are no longer a signal, a tag only counts when the group does not name the ref, and a job or step whose `if:` is
+  false for the trigger is ignored. It also reported the `${{ github.event_name != 'release' && inputs.tag == '' }}` idiom of the
+  aube workflows; an expression is now reported only when the event and the ref decide that it is true.
+  `untrusted-checkout` reported a release workflow whose job runs only when an earlier job found that the commit has a version tag
+  (`needs.*.outputs`); conditions on `needs` and `steps` are guards now.
+- `unused-workflow-input` is in the pedantic tier because of the one file that is a false positive by design: an input that a
+  dispatching tool requires (`distinct_id` for `return-dispatch`). GitHub rejects a dispatch with an input the workflow does not
+  declare, so an unused input can be needed. The other five files are real: a `webhook-url` input that the workflow documents
+  but never passes on, and a `branch` input that nothing reads.
+- `untrusted-checkout`: the one finding is a `pull_request_target` workflow that checks out the head of the pull request into
+  `PR_BRANCH` and runs `cargo check` in it. zizmor reports `dangerous-triggers` on the same file, for the trigger.
+- `untrusted-artifact`: both findings are the `unzip artifact.zip` step of the pattern in GitHub's own documentation, in a workflow
+  that then reads a pull request number. They are true by the definition of the rule; the impact is low, the number is
+  converted with `Number()`.
+- `gate-job-skipped-on-failure` found nothing: the fan-in jobs of the jdx repositories (`final`, `test-ci`) use
+  `always() && !cancelled()`.
+- `unused-job-output`: 66 of the 70 OSS findings are in the generated `*.lock.yml` workflows of one repository. They are true, and
+  exclude generated files with `paths: ... ignore:` if you do not want them.
+- `duplicate-triggers`: 12 findings read by hand, all real (`on: [push, pull_request]` for a test workflow).
+- `continue-on-error` finds jobs that are advisory on purpose (`api-stability`, `enhance-release`). That is why it is info.
+
+Gaps, honestly:
+
+- `untrusted-checkout` follows `actions/checkout`, `gh pr checkout` and `git` commands with a literal reference. A ref that comes
+  from an output of an earlier step is not followed, and "runs it" is a list of commands, so an unusual build tool that is not
+  in the list of commands that only read files is counted as running code, while an action that builds the workspace and is not
+  in the short list is not.
+- `untrusted-artifact` links the use to the download by the `path` of the artifact, or its `name` (a file in the root of the
+  workspace that has another name is not linked), and it takes any `=~`, numeric test or checksum as validation.
+- `concurrency-cancels-release` knows a fixed list of publish and deploy actions and commands. A release done by a script of the
+  repository (`./scripts/release.sh`) is not recognized; the workflow is only reported for tag pushes and `release` events then.
+- `unused-needs` finds only the entries that another needed job makes redundant. An entry that was forgotten and is not redundant
+  is indistinguishable from one that sets the order, so it is left out on purpose.
+- None of the rules reads the called reusable workflows: a job output or input that a caller in another repository uses is not
+  known (for `unused-job-output` it cannot be used from outside, for `unused-workflow-input` it can).
+
+## Batch K measurements
+
+Batch K (downloads and credentials) was run over the workflows of the jdx repositories under `~/src` (146 distinct sets of
+workflows, 826 distinct files, many of them worktrees of the same repositories) and 1794 distinct workflow files of open source Go
+modules and other repositories. zizmor 1.30.1 (`--offline --persona pedantic`) was run over the first set too: it has no audit
+that overlaps with these rules (its `insecure-url-scheme` looks at `.pre-commit-config.yaml` only), so there is nothing to
+compare and no zizmor-only finding. All numbers are findings with the rules at their defaults, every finding was read.
+
+| Rule | jdx repositories (distinct) | other repositories | judged true | judged false |
+| --- | --: | --: | --: | --: |
+| `unverified-download` | 8 (`mise.run \| sh` 4, `setup.deb.sh \| bash`, a pinned `yq` and a `hugo.deb` without a checksum) | 29 (installer scripts piped into a shell, `releases/latest` binaries, `.deb` files installed without a checksum) | all | 0 |
+| `insecure-ssh-keyscan` | 0 | 2 (both `ssh-keyscan >> ~/.ssh/known_hosts`) | all | 0 |
+| `insecure-url-scheme` | 0 | 0 | n/a | n/a |
+| `checkout-static-credentials`, default | 0 | 0 | n/a | n/a |
+| `checkout-static-credentials`, `secret-tokens: true` | 12 (the `token:` of the release-plz and release workflows) | 0 | all, as designed | 0 |
+
+`checkout-static-credentials` reports a token from a secret only with `secret-tokens`, which is off under the default profile and on
+under `strict` and `all` (a pedantic check): every one of the 12 distinct findings is a release workflow that has to push with a
+personal access token so that the push starts other workflows, which is deliberate. They are correct findings of the rule, but
+reporting them for everybody would be noise for workflows whose alternative is a GitHub App or a fine-grained token in a protected
+environment, so that part is behind the option and `ssh-key` is not.
+
+jactionlint-only means all of them here. Gaps: archives that are downloaded, extracted and run, `go install` or `npx` of a remote
+package, `ssh -o StrictHostKeyChecking=no`, and a download whose verification is in another step are not reported.
+## Batch L measurements
+
+Both rules were run (default profile, `-shellcheck= -pyflakes=`) over two corpora of unique files (by content hash): the 1020
+workflows and Dependabot configurations of every checkout under `~/src` (the `*-jactionlint` worktrees, other worktrees and
+repositories), and 1315 files of third party repositories (the Go module cache checkouts in the scratchpad corpus). zizmor has no
+equivalent audit, so there is nothing to match against; the numbers are findings and reviewed false positives.
+
+| Rule | jdx corpus | OSS corpus | Judgement |
+| --- | --- | --- | --- |
+| `invisible-characters` | 0 | 0 | An independent scan of the raw bytes (every format, control, variation selector and filler character) finds such characters in 30 files, and all of them are `U+FE0F` after `ℹ`, `✏`, `⚠` or `🌡` (emoji, mostly in CodeQL templates and comments). The first version of the rule reported `ℹ️` (the information symbol is a letter for Unicode, not a symbol), which the corpus found; it is fixed and tested. No true positive exists in the corpus, so the detection is covered by the unit tests and fixtures only |
+| `unsound-prefix-match` | 0 | 1 | `GOOS: ${{ contains(github.repository, 'windows_exporter') && 'windows' || '' }}`: a real partial match, but it selects a build setting and not a credential. The first version reported it. The rule now reports an expression outside `if:` only when it selects a secret, `github.token` or a self-hosted runner, so this is a non-report. No condition in 2335 files tests a name by a prefix, a suffix or a part (the `endsWith(.., '[bot]')` and `!contains(github.actor, '[bot]')` tests are not reported on purpose) |
+| `unsound-prefix-match` option `refs` | not run | not run | opt-in, so not measured; a prefix test of a ref is usually meant |
+
+<a id="composite-actions-measurements"></a>
+## Composite actions
+
+zizmor audits `action.yml` files with the same audits as workflows, but it has no knowledge of who calls an action
+([#1424](https://github.com/zizmorcore/zizmor/issues/1424), [#678](https://github.com/zizmorcore/zizmor/issues/678)).
+jactionlint checks the steps with the same rules, takes the trigger of an action from the local workflows that call it, and
+documents which rules apply in [composite actions](checks.md#check-composite-actions).
+
+Measured with zizmor 1.30.1 (`--offline --persona pedantic`) and jactionlint with `profile: all` on the action files of
+the jdx repositories (35 distinct files; the `*-jactionlint` and other worktrees were de-duplicated by content) and of the 39 OSS projects
+of the corpus above (103 action files). A finding matches when both tools report the same audit in the same file within 8 lines (a
+multi-line expression is reported at its first line by jactionlint and at another line by zizmor):
+
+| Audit | jdx corpus | OSS corpus | Differences |
+| --- | --- | --- | --- |
+| `template-injection` | 12 / 11 / 11 | 263 / 295 / 263 | jactionlint reports the `template-injection-expansion` and `template-injection-trusted` tiers, which together are zizmor's pedantic persona; the extra OSS findings are expansions of values zizmor does not list. The one jdx miss is a second line of one multi-line expression |
+| `unpinned-uses` | 4 / 3 / 3 | 0 / 7 / 0 | the extra findings are `actions/*@tag` refs, which zizmor's default policy allows |
+| `github-app` | 1 / 1 / 1 | 0 / 0 / 0 | none |
+| `self-repository` | 0 / 0 / 0 | 15 / 21 / 15 | the six extra findings are the repeated `uses: ./.github/actions/...` of the same local action in two Apache Airflow files, of which zizmor reported none |
+| `github-env`, `adhoc-packages` | 6 / 0 / 0 | 13 / 0 / 0 | zizmor-only when these were measured, before batch D (`github-env`, `adhoc-packages`) was in the stack; both rules now run on composite actions (`github-env` with the events of the callers) and this row was not measured again |
+
+The jactionlint-only findings were reviewed: `action-syntax` (7 jdx / 3 OSS) are `type:` keys on action inputs, which GitHub ignores;
+`undefined-property` (2, cilium) is a step of the calling job read through `steps`, which a composite action cannot see; `cache-poisoning`
+(2 jdx / 1 OSS) is a cache restored by an action called from a workflow on pushed tags. The first run found a real false positive,
+the `${{ github.token }}` default of an input (context availability of defaults), which is fixed. No false positive remains in the
+reviewed sets.

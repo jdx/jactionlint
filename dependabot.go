@@ -122,6 +122,8 @@ type dependabotRuleContext struct {
 	path    string
 	project *Project
 	config  *Config
+	// src is the content of the file. Rules with an automatic fix compute byte offsets from it.
+	src []byte
 }
 
 // dependabotRuleFactory creates one rule implementation for Dependabot configurations. A factory
@@ -203,7 +205,7 @@ func (l *Linter) checkDependabot(path string, content []byte, project *Project, 
 	if d != nil {
 		dbg := l.debugWriter()
 
-		rules := newDependabotRules(&dependabotRuleContext{path: path, project: project, config: cfg}, l.log)
+		rules := newDependabotRules(&dependabotRuleContext{path: path, project: project, config: cfg, src: content}, l.log)
 		if l.onDependabot != nil {
 			rules = l.onDependabot(rules)
 		}
@@ -236,7 +238,7 @@ func (l *Linter) checkDependabot(path string, content []byte, project *Project, 
 		}
 	}
 
-	return l.finishCheck(path, content, all, cfg, project, bl, start, false), nil
+	return l.finishCheck(path, content, all, cfg, bl, start, false, &ignoreContext{project: project}), nil
 }
 
 func init() {

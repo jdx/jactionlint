@@ -172,6 +172,12 @@ type Config struct {
 	// apply a baseline, and any other value is the path of the baseline file relative to the root of the
 	// repository, which must exist. The -baseline flag overrides it.
 	Baseline string `yaml:"baseline"`
+	// OnlineOptions tunes the online checks: the mode ("cache" for offline use from the disk cache,
+	// "strict" to fail when a lookup is skipped), the API URL of GitHub Enterprise Server, where the
+	// token comes from, which repositories may be looked up, and the cache and retry behavior. A mode
+	// of "cache" or "strict" turns the online checks on. They apply to the whole run: the first file
+	// checked decides.
+	OnlineOptions OnlineOptions `yaml:"online-options"`
 	// Rules sets the level and the options of each rule by rule ID. A rule not listed here follows the
 	// profile.
 	Rules map[string]RuleConfig `yaml:"rules"`
@@ -198,6 +204,11 @@ type Config struct {
 	// And the values are corresponding configurations applied to the file paths.
 	Paths map[string]PathConfig `yaml:"paths"`
 
+	// Ignores is the "ignores" list: findings to accept, matched by rule and by where they are (file,
+	// job, step, uses) instead of by line, so that they survive tools rewriting the workflow. See
+	// ConfigIgnore. The lists of the files listed in "extends" are concatenated, the extended files first.
+	Ignores []ConfigIgnore `yaml:"ignores"`
+
 	// RequiredActions is a "required-actions" list in the configuration file. Each item is an action (or
 	// reusable workflow) which must be used at least once in every checked workflow. The check is disabled
 	// when the list is empty.
@@ -222,6 +233,11 @@ type Config struct {
 	// present records which keys were written explicitly so that merging with the files listed in
 	// "extends" can tell a missing key from a zero value.
 	present map[string]bool
+	// userOwned is true for a config the user chose (the user-global file, -config-file or
+	// LinterOptions.Config) and false for the file of a repository, which anyone who can open a pull
+	// request controls. Only a user-owned config may point the online checks at a host which receives
+	// the token.
+	userOwned bool
 }
 
 // AssumeDefaultPermissionsRestricted is the config value enabling the restricted-default assumption.
@@ -312,6 +328,9 @@ func parseConfig(b []byte) (*Config, error) {
 			return nil, fmt.Errorf("invalid value %q for \"assume-default-permissions\". available values are %q and %q", *c.AssumeDefaultPermissions, AssumeDefaultPermissionsRestricted, AssumeDefaultPermissionsPermissive)
 		}
 	}
+	if err := c.OnlineOptions.validate(); err != nil {
+		return nil, fmt.Errorf("%w in \"online-options\"", err)
+	}
 	if err := c.normalizeRules(); err != nil {
 		return nil, err
 	}
@@ -340,6 +359,9 @@ func readConfigFile(path string, stack []string) (*Config, error) {
 		return nil, fmt.Errorf("could not parse config file %q: %w", path, err)
 	}
 	c.Path = path
+	for i := range c.Ignores {
+		c.Ignores[i].Path = path
+	}
 	for i, d := range c.Deprecations {
 		c.Deprecations[i] = fmt.Sprintf("config file %q: %s", path, d)
 	}
@@ -396,6 +418,9 @@ func (c *Config) merge(over *Config) {
 	if over.present["baseline"] {
 		c.Baseline = over.Baseline
 	}
+	if over.present["online-options"] {
+		c.OnlineOptions = c.OnlineOptions.overlay(over.OnlineOptions)
+	}
 	if over.present["self-hosted-runner.labels"] {
 		c.SelfHostedRunner.Labels = over.SelfHostedRunner.Labels
 	}
@@ -414,6 +439,7 @@ func (c *Config) merge(over *Config) {
 	for p, pc := range over.Paths {
 		c.Paths[p] = pc
 	}
+	c.Ignores = append(c.Ignores, over.Ignores...)
 	if over.present["required-actions"] {
 		c.RequiredActions = over.RequiredActions
 	}
@@ -542,6 +568,20 @@ config-secrets: null
 paths:
 #  .github/workflows/**/*.yml:
 #    ignore: [unpinned-uses, 'some message']
+
+# Durable ignores. Each item accepts the findings of rule(s) "rule" in the places
+# matched by "file" (glob), "job" (ID), "step" (id or name) and "uses" (a pattern
+# like "actions/checkout", "actions/*" or "/regex/"). At least one of them is
+# required. They are matched by the structure of the workflow, not by line, so a
+# tool rewriting a "uses:" line (Renovate, Dependabot) does not drop them.
+# "reason" is for readers. After the day "expires" (YYYY-MM-DD) the entry stops
+# ignoring and is reported by the expired-ignore rule.
+#ignores:
+#  - rule: unpinned-uses
+#    uses: actions/checkout
+#    file: .github/workflows/release.yaml
+#    reason: pinned by an organization ruleset
+#    expires: 2027-06-30
 
 # Controls what permissions are assumed for a caller workflow that declares no
 # "permissions:" block at all when checking reusable workflow calls. Set to

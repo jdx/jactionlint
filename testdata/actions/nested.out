@@ -1,0 +1,2 @@
+.github/actions/inner/action.yml:9:13: actions/cache restores a cache although .github/workflows/release.yaml (through .github/workflows/build.yaml and .github/actions/outer) runs on pushed tags and calls this action, so a poisoned cache entry can end up in the published artifacts. remove this step or set "lookup-only: true", or set "cache-mode: none" on the job that calls this action [cache-poisoning]
+.github/actions/outer/action.yml:15:21: property "undeclared" is not defined in object type {flavor: string} [expression]

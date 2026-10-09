@@ -6,7 +6,8 @@ This document describes how to use [jactionlint](https://github.com/jdx/jactionl
 ## `jactionlint` command
 
 With no argument, jactionlint finds all workflow files in the current repository and checks them. It checks the Dependabot
-configuration `.github/dependabot.yml` (or `.github/dependabot.yaml`) of the repository as well.
+configuration `.github/dependabot.yml` (or `.github/dependabot.yaml`) of the repository and its [composite actions](checks.md#check-composite-actions)
+(`action.yml` in the root, under `.github/actions`, and the directories which a local `uses: ./path` refers to) as well.
 
 ```sh
 jactionlint
@@ -33,6 +34,17 @@ jactionlint .github/dependabot.yml
 cat dependabot.yml | jactionlint -stdin-filename .github/dependabot.yml -
 ```
 
+The metadata of an action is recognized by its name: a file named `action.yml` or `action.yaml` is an action anywhere except under
+`.github/workflows`. Give it as an argument (this is what the `.github/actions/**/action.y*ml` glob of hk does) or use
+`-stdin-filename` to check it. The steps of a composite action are checked with the rules for workflow steps, and the rules which
+depend on how the action is run use the local workflows that call it. Ignore comments, `paths:`, `-format sarif` and `-fix` work as
+for workflows. See [composite actions](checks.md#check-composite-actions).
+
+```sh
+jactionlint .github/actions/setup/action.yml
+cat action.yml | jactionlint -stdin-filename action.yml -
+```
+
 To know all flags and options, see an output of `jactionlint -h` or [the online command manual][cmd-manual].
 
 ### Ignore some errors
@@ -52,9 +64,11 @@ regular expression syntax is the same as [RE2][re2]. The option is repeatable.
 jactionlint -ignore template-injection -ignore 'label ".+" is unknown'
 ```
 
-The same patterns are available in [the configuration file](config.md) (`paths.<glob>.ignore`) and in ignore comments.
-An ignore comment is a comment on its own line. It applies to the next line which is not a comment nor blank, and to the lines
-nested under it. Several patterns are separated with commas.
+The same patterns are available in [the configuration file](config.md) (`paths.<glob>.ignore`) and in ignore comments. Several
+patterns are separated with commas. There are two forms of an ignore comment, and each covers a precise range of lines.
+
+**A comment on its own line** covers the next line which is not a comment nor blank, and the lines nested under it (comments and
+blank lines inside do not end the range). Several such comments can be stacked above the same line.
 
 ```yaml
 steps:
@@ -62,7 +76,53 @@ steps:
   - run: echo '${{ github.event.pull_request.title }}'
 ```
 
+**A comment at the end of a line** covers that line and the lines nested under it. It can follow other comment text, so it can sit
+after the version comment of a pinned action:
+
+```yaml
+steps:
+  - uses: actions/checkout@v4 # jactionlint ignore=unpinned-uses
+  - uses: actions/cache@0c45773b623bea8c8e75f6c82b208c3cf94ea4f9 # v4.0.2 # jactionlint ignore=forbidden-uses
+```
+
+In both forms, when the line it covers starts a sequence item (`- `), the whole item is covered. A comment above a step, or at the
+end of the step's first line (`- uses: ...` or `- name: ...`), therefore covers the whole step, including its `with:` and `env:`
+but not the next step. The same comment on a key (`build:  # jactionlint ignore=...`) covers the key and everything nested under
+it, for example a whole job. A `#` inside a quoted string or in a `run: |` script is not a comment and is never read as a directive.
+
+Which form to use: an ignore comment is right next to the code it is about, but a tool that rewrites the line (Renovate, Dependabot
+bumping an action) drops the comment at the end of it. Put an ignore on a line that such tools manage in the config file instead, where
+it matches by rule, file, job, step and `uses:` and survives the rewrite: see [durable ignores](config.md#durable-ignores).
+
 A comment which suppresses nothing is reported by the [`unused-ignore`](rules.md#unused-ignore) rule of the `strict` profile.
+
+### zizmor ignore comments
+
+A repository which used [zizmor](https://docs.zizmor.sh/usage/#ignoring-results) keeps the findings it has already triaged:
+jactionlint honors `# zizmor: ignore[rule-a,rule-b]` comments for the rule IDs it shares with zizmor, with zizmor's rules.
+
+```yaml
+steps:
+  - uses: actions/checkout@v4 # zizmor: ignore[unpinned-uses] pinned by the mirror
+  - run: | # zizmor: ignore[template-injection]
+      echo '${{ github.event.pull_request.title }}'
+```
+
+- The comment must be a YAML comment spelled exactly `# zizmor: ignore[...]` (one space after `#` and after `:`). A reason may
+  follow the closing bracket after white space. The comment may follow another comment (`# v4.1.0 # zizmor: ignore[...]`).
+- Several names are separated with commas. A name that jactionlint has no rule for (an audit it lacks) is skipped, not an error.
+  `# zizmor: ignore` without a rule list does nothing, as in zizmor.
+- Like in zizmor, the comment applies to the findings whose region contains the comment, so it sits on the flagged line
+  (a comment on a line of its own above does not apply). A comment on the line which opens a value, such as `on:`,
+  `permissions:` or `run: |`, applies to everything inside that value, because zizmor reports those findings over the whole value.
+  Text inside a block scalar or a quoted string is never a comment.
+- Audit names that differ from the jactionlint rule ID are mapped by [a short table](v2-migration.md#zizmor-ignore-comments).
+- With [`unused-ignore`](rules.md#unused-ignore), a zizmor comment is reported as stale only when its audit maps to a rule
+  that is enabled, never for an audit jactionlint does not have.
+
+`jactionlint -migrate-ignores [files]` rewrites the trailing zizmor comments (of the workflows of the project when no file is
+given) into `# jactionlint ignore=` comments on the line above and moves the reason to a plain comment line. Names with no
+jactionlint counterpart stay in the zizmor comment, and running it again changes nothing.
 
 `-shellcheck` and `-pyflakes` specifies file paths of executables. Setting empty string to them disables `shellcheck` and
 `pyflakes` rules. As a bonus, disabling them makes jactionlint much faster Since these external linter integrations spawn many
@@ -420,17 +480,43 @@ export GITHUB_TOKEN=$(gh auth token)   # or GH_TOKEN
 jactionlint -online
 ```
 
-- **Token.** `GITHUB_TOKEN` or `GH_TOKEN` is used when set. Without one the requests are unauthenticated, which works but GitHub
-  allows only 60 an hour; jactionlint says so once. A token that GitHub rejects is dropped with a warning and the run goes on
-  without it. `GITHUB_API_URL` selects a GitHub Enterprise Server.
+- **A failed lookup does not fail the run.** When GitHub answers 404 (a private action, or one that does not exist), 403, a server
+  error, or does not answer in time, or the DNS lookup fails, that lookup is skipped and the other actions are checked as usual.
+  jactionlint prints **one warning per kind of failure** (on stderr, or in the SARIF notifications with `-format sarif`) and the
+  exit status does not change. `-verbose` lists every skipped lookup. `-online=strict` turns a skipped lookup into exit status 3,
+  for a pipeline where a check that could not run must not pass silently.
+- **Token.** The first of these is used: the variable named by `-online-token-env`, the file named by `-online-token-file`,
+  `GITHUB_TOKEN`, `GH_TOKEN` (for a GitHub Enterprise Server `GITHUB_ENTERPRISE_TOKEN` and `GH_ENTERPRISE_TOKEN` come first), and
+  finally the output of `gh auth token --hostname HOST` when `gh` is installed (set `gh-cli: false` in
+  [`online-options`](config.md#online-options) to never run it). Without a token the requests are unauthenticated, which works but
+  GitHub allows only 60 an hour; jactionlint says so once. `-verbose` says which source supplied the token, never the token. A token
+  that GitHub rejects (401) is dropped with a warning and the run goes on without it; one that cannot read a repository (403) is
+  tried again without it for that repository.
+- **The token never leaves the API host.** It is sent to the host of the API only, over https (plain http only to localhost), and
+  a redirect to another host is refused. It is replaced by `[redacted]` in `-debug` output, warnings and errors, even when a server
+  echoes it. A host named by the `online-options` of a *repository's* `.github/jactionlint.yaml` gets **no token**, because a pull
+  request could otherwise send your token to any server: name the host with `-online-api-url`, `GITHUB_API_URL`, your own
+  `-config-file` or your user-global config.
+- **GitHub Enterprise Server.** The API is `-online-api-url`, else `$GITHUB_API_URL` (set by GitHub Actions), else derived from
+  `$GITHUB_SERVER_URL` or `$GH_HOST` (`https://HOST/api/v3`, or `https://api.NAME.ghe.com` for data residency), else
+  `api.github.com`. Answers are cached per host.
+- **Rate limits.** `X-RateLimit-*` and `Retry-After` are read. A limit which resets within 30 seconds (`-online-max-wait`) is waited
+  for; one which resets later skips the remaining lookups with a message naming the reset time, and answers in the cache are still
+  used. Server errors (500, 502, 503, 504), a secondary rate limit and a request which timed out once are repeated with
+  exponential backoff and jitter, at most twice (`retries`).
+- **Skip private or internal actions.** `-online-deny 'mycorp/*'` (repeatable, or `deny:` in `online-options`) never asks
+  about matching repositories, `-online-allow 'actions/*'` asks only about matching ones. They are not failures and not warned about.
 - **Cache.** Answers are kept in `$XDG_CACHE_HOME/jactionlint` (`~/.cache/jactionlint`), at most 32 MiB, shared safely by parallel
-  processes. An answer is used for an hour (`-online-cache-ttl`), then asked for again with its ETag, which costs no rate limit
-  when it did not change. `-online-cache-ttl=0` checks every answer.
+  processes, keyed by API host and token. An answer is used for an hour (`-online-cache-ttl`, `cache-ttl`), then asked for again with
+  its ETag, which costs no rate limit when it did not change. `-online-cache-ttl=0` checks every answer. A public answer fetched
+  without a token also serves a run with one, so the `GITHUB_TOKEN` of a CI job, which changes every run, does not empty the
+  cache.
+- **Offline.** `-online=cache` never uses the network: it answers from the cache whatever the age of the answers, and a lookup with
+  nothing cached is skipped with one warning (run once with `-online` to fill the cache). `-online=cache,strict` fails on such a
+  lookup. Good for a laptop on a plane or a sandboxed CI job that restores the cache directory.
 - **Few requests.** Every repository, tag and commit is asked for once per run however often it is used, and the checks share what
-  they learn. The number of requests grows with the number of different actions, not steps.
-- **Rate limit and failures.** When GitHub refuses (rate limit), is unreachable, or fails repeatedly, the online checks stop for the
-  rest of the run with one warning on stderr (in the SARIF log with `-format sarif`) and the findings that needed
-  GitHub are missing. Nothing is retried and the exit status does not change. Interrupting with Ctrl-C stops the lookups.
+  they learn. At most six requests are in flight (`concurrency`). The number of requests grows with the number of different
+  actions, not steps. Interrupting with Ctrl-C stops the lookups.
 - **Levels.** The online rules do not belong to a profile; `-online` turns them on at their own level (`impostor-commit` and
   `known-vulnerable-actions` are errors, `ref-confusion`, `archived-uses` and `ref-version-mismatch` warnings, `stale-action-refs` is
   informational). Set a level or `off` in `rules` as for any rule.

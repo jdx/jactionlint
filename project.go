@@ -118,3 +118,11 @@ func (ps *Projects) At(path string) (*Project, error) {
 
 	return p, nil
 }
+
+// ActionFiles returns the paths of the metadata files (action.yml or action.yaml) of the local actions
+// of the project: the one in the root, the ones under ".github/actions" and the ones which a local
+// `uses: ./path` of a workflow or of another action refers to. The paths are absolute and sorted.
+// It reads the workflows and the actions of the project on every call; the linter keeps what it read.
+func (p *Project) ActionFiles() []string {
+	return newCallGraph(p.root).actionPaths()
+}
