@@ -117,6 +117,12 @@ func TestRuleRunnerLabelCheckLabels(t *testing.T) {
 			matrix: []string{"ubuntu-latest"},
 		},
 		{
+			what:   "self-hosted is one value of the matrix and the other value is a job of its own",
+			labels: []string{"${{matrix.os}}"},
+			matrix: []string{"self-hosted", "ubntu-latest"},
+			errs:   []string{`"ubntu-latest" is unknown`},
+		},
+		{
 			what:   "user-defined label with matrix",
 			labels: []string{"self-hosted", "${{matrix.os}}"},
 			matrix: []string{"foo", "bar"},

@@ -186,10 +186,14 @@ func (rule *RuleRunnerLabel) VisitJobPre(n *Job) error {
 			rule.selfHosted = true
 		}
 	}
-	if n.RunsOn.LabelsExpr != nil {
-		for _, l := range rule.tryToGetLabelsInMatrix(n.RunsOn.LabelsExpr, m) {
-			if strings.EqualFold(l.Value, "self-hosted") {
-				rule.selfHosted = true
+	// A matrix value which is all of runs-on makes one job each: "self-hosted" in the matrix does not make the job of
+	// the other values self-hosted. Only the value of a label which is next to others is a label of the same job.
+	if n.RunsOn.LabelsExpr == nil && len(n.RunsOn.Labels) > 1 {
+		for _, label := range n.RunsOn.Labels {
+			for _, l := range rule.tryToGetLabelsInMatrix(label, m) {
+				if strings.EqualFold(l.Value, "self-hosted") {
+					rule.selfHosted = true
+				}
 			}
 		}
 	}
