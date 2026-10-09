@@ -36,7 +36,6 @@ forbidden-uses configured policy error
 gate-job-skipped-on-failure default correctness error
 github-app default security error
 github-env default security error
-github-env-untrusted-input pedantic security error
 hardcoded-container-credentials correctness security error
 if-always-true correctness correctness error
 impostor-commit online security error
@@ -71,7 +70,6 @@ matrix-invalid-exclude correctness correctness error
 max-run-lines pedantic style error
 merge-key correctness correctness error
 misfeature default security error
-misfeature-custom-shell pedantic style info
 missing-action-input correctness correctness error
 missing-permissions default policy error
 missing-timeout default policy error
@@ -97,8 +95,6 @@ shellcheck correctness correctness error
 stale-action-refs online security info
 superfluous-actions default security error
 template-injection correctness security error
-template-injection-expansion pedantic security warn
-template-injection-trusted pedantic style info
 timeout-too-long configured policy error
 typosquat-uses default security error
 undefined-function correctness correctness error

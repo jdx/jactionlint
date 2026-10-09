@@ -503,6 +503,12 @@ func presentKeys(root *yaml.Node) map[string]bool {
 }
 
 func suggestRuleID(id string) string {
+	if rr, ok := lookupRenamed(id); ok {
+		if rr.Option != "" {
+			return fmt.Sprintf(". the rule ID %q was merged into %q before 2.0: its findings are the ones of %q with the option %q, which the pedantic profile turns on. write \"rules: {%s: {%s: true}}\" to turn them on", id, rr.ID, rr.ID, rr.Option, rr.ID, rr.Option)
+		}
+		return fmt.Sprintf(". the rule ID %q was merged into %q before 2.0. use %q", id, rr.ID, rr.ID)
+	}
 	ids := make([]string, 0, len(ruleRegistry))
 	for _, r := range ruleRegistry {
 		ids = append(ids, r.ID)

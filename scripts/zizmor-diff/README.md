@@ -27,7 +27,7 @@ mise run zizmor-diff
 ```
 
 builds jactionlint and runs the script over [corpus.txt](./corpus.txt) with
-[strict-v1.yaml](./strict-v1.yaml). Run the program directly for more control.
+[pedantic.yaml](./pedantic.yaml). Run the program directly for more control.
 
 ```sh
 go build -o jactionlint ./cmd/jactionlint
@@ -43,7 +43,7 @@ go run ./scripts/zizmor-diff \
 | `--repos DIR` | a repository directory or `label=DIR`. Repeatable. Replaces the corpus file |
 | `--jactionlint EXE` | the jactionlint executable. Default `jactionlint` from `PATH` |
 | `--jactionlint-config FILE` | config used instead of each repository's own (`-config-file`) |
-| `--jactionlint-arg ARG` | extra jactionlint argument, for example `-profile` and `strict` later. Repeatable |
+| `--jactionlint-arg ARG` | extra jactionlint argument, for example `-profile=correctness`. Repeatable |
 | `--zizmor CMD` | command that runs zizmor. Default `mise x zizmor@1.30.1 -- zizmor` |
 | `--online` | compare the online audits (`impostor-commit`, `known-vulnerable-actions`, ...): jactionlint runs with `-online` and zizmor without `--offline`. Needs `GITHUB_TOKEN` or `GH_TOKEN` in the environment and makes GitHub API requests |
 | `--mapping FILE` | audit mapping instead of the embedded `mapping.json` |
@@ -60,10 +60,10 @@ directory that does not exist is reported as skipped.
 ### Config of the repositories
 
 jactionlint reads the `.github/jactionlint.yaml` of each repository. Most corpus repositories already pass the
-default checks, so with their own config the report shows almost nothing in common. `mise run zizmor-diff`
-therefore replaces the config with `strict-v1.yaml`, which turns on the opt-in checks that overlap with zizmor
-(`require-permissions`, `require-commit-hash`, `check-falsy-ternary`). That also drops repository specific
-settings such as self-hosted runner labels, so unrelated `runner-label` findings show up in "jactionlint only".
+rules their config chose, so with their own config the report would show almost nothing in common.
+`mise run zizmor-diff` therefore replaces the config with `pedantic.yaml`, which selects the `pedantic` profile to
+match `zizmor --persona pedantic`. That also drops repository specific settings such as self-hosted runner labels,
+so unrelated `runner-label` findings show up in "jactionlint only".
 
 ## How findings are compared
 

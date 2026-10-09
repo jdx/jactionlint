@@ -22,7 +22,7 @@ func idsOf(errs []*Error, prefix string) []string {
 	var ret []string
 	for _, e := range errs {
 		if strings.HasPrefix(e.ID, prefix) {
-			ret = append(ret, e.ID)
+			ret = append(ret, findingName(e))
 		}
 	}
 	return ret
@@ -80,7 +80,7 @@ func TestTemplateInjectionTiers(t *testing.T) {
 			var got []string
 			for _, e := range errs {
 				if strings.HasPrefix(e.ID, "template-injection") {
-					got = append(got, e.ID)
+					got = append(got, findingName(e))
 				}
 			}
 			if diff := cmp.Diff(tc.want, got); diff != "" {
@@ -131,7 +131,7 @@ jobs:
 	var got []string
 	for _, e := range errs {
 		if strings.HasPrefix(e.ID, "template-injection") {
-			got = append(got, e.ID+" "+strings.SplitN(e.Message, `"`, 3)[1])
+			got = append(got, findingName(e)+" "+strings.SplitN(e.Message, `"`, 3)[1])
 		}
 	}
 	want := []string{

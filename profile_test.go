@@ -197,3 +197,153 @@ func TestSARIFRulesHaveTheirProfile(t *testing.T) {
 		t.Errorf("profiles in the SARIF rules: %v", got)
 	}
 }
+
+// A workflow with a finding of each pedantic tier that was a rule of its own before the audits were merged.
+const retiredIDsWorkflow = `name: CI
+on: pull_request_target
+permissions: {}
+concurrency:
+  group: ci
+  cancel-in-progress: true
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - run: echo ${{ github.event.pull_request.title }}
+      - run: echo ${{ inputs.name }}
+      - run: echo ${{ github.repository }}
+        shell: zsh
+`
+
+func countTemplateInjection(t *testing.T, args ...string) (tiers map[string]int, stderr string) {
+	t.Helper()
+	status, out, errOut := baselineCmd(t, append([]string{"-format", "json"}, args...)...)
+	if status == ExitStatusFailure {
+		t.Fatalf("status %d: %s", status, errOut)
+	}
+	var errs []struct {
+		ID      string `json:"id"`
+		Message string `json:"message"`
+	}
+	if strings.TrimSpace(out) != "" {
+		if err := json.Unmarshal([]byte(out), &errs); err != nil {
+			t.Fatalf("%v: %q", err, out)
+		}
+	}
+	tiers = map[string]int{}
+	for _, e := range errs {
+		switch {
+		case e.ID == "template-injection" && strings.Contains(e.Message, "is potentially untrusted"):
+			tiers["direct"]++
+		case e.ID == "template-injection" && strings.Contains(e.Message, "so a value with shell syntax"):
+			tiers["expansion"]++
+		case e.ID == "template-injection" && strings.Contains(e.Message, "is not controlled by an attacker"):
+			tiers["trusted"]++
+		case e.ID == "misfeature":
+			tiers["shell"]++
+		}
+	}
+	return tiers, errOut
+}
+
+func TestPedanticOptionOfTheMergedAudits(t *testing.T) {
+	baselineProject(t, retiredIDsWorkflow, "profile: default\n")
+
+	tiers, _ := countTemplateInjection(t)
+	if tiers["direct"] != 1 || tiers["expansion"] != 0 || tiers["trusted"] != 0 || tiers["shell"] != 0 {
+		t.Errorf("the default profile reports the untrusted input only: %v", tiers)
+	}
+	tiers, _ = countTemplateInjection(t, "-profile", "pedantic")
+	if tiers["direct"] != 1 || tiers["expansion"] != 1 || tiers["trusted"] != 1 || tiers["shell"] != 1 {
+		t.Errorf("the pedantic profile reports every tier: %v", tiers)
+	}
+
+	// The option turns the tiers on in one audit under the default profile, and off under the pedantic one
+	baselineProject(t, retiredIDsWorkflow, "profile: default\nrules:\n  template-injection:\n    pedantic: true\n")
+	tiers, _ = countTemplateInjection(t)
+	if tiers["expansion"] != 1 || tiers["trusted"] != 1 || tiers["shell"] != 0 {
+		t.Errorf("pedantic: true on template-injection: %v", tiers)
+	}
+	baselineProject(t, retiredIDsWorkflow, "profile: pedantic\nrules:\n  template-injection:\n    pedantic: false\n")
+	tiers, _ = countTemplateInjection(t)
+	if tiers["direct"] != 1 || tiers["expansion"] != 0 || tiers["trusted"] != 0 || tiers["shell"] != 1 {
+		t.Errorf("pedantic: false on template-injection: %v", tiers)
+	}
+}
+
+func TestRetiredRuleIDsInIgnores(t *testing.T) {
+	baselineProject(t, retiredIDsWorkflow, "profile: pedantic\n")
+
+	// -ignore with a retired ID drops only the findings it had, and warns once
+	tiers, stderr := countTemplateInjection(t, "-ignore", "template-injection-expansion")
+	if tiers["direct"] != 1 || tiers["expansion"] != 0 || tiers["trusted"] != 1 || tiers["shell"] != 1 {
+		t.Errorf("-ignore=template-injection-expansion: %v", tiers)
+	}
+	if strings.Count(stderr, `the rule ID "template-injection-expansion" was merged into "template-injection"`) != 1 {
+		t.Errorf("want one deprecation warning: %q", stderr)
+	}
+	tiers, _ = countTemplateInjection(t, "-ignore", "template-injection-trusted", "-ignore", "misfeature-custom-shell")
+	if tiers["direct"] != 1 || tiers["expansion"] != 1 || tiers["trusted"] != 0 || tiers["shell"] != 0 {
+		t.Errorf("-ignore of two retired IDs: %v", tiers)
+	}
+	// The new ID ignores the whole audit
+	tiers, stderr = countTemplateInjection(t, "-ignore", "template-injection")
+	if tiers["direct"] != 0 || tiers["expansion"] != 0 || tiers["trusted"] != 0 || strings.Contains(stderr, "warning") {
+		t.Errorf("-ignore=template-injection: %v %q", tiers, stderr)
+	}
+
+	// "paths" ignores warn when the config is read
+	baselineProject(t, retiredIDsWorkflow, "profile: pedantic\npaths:\n  \".github/workflows/*.yaml\":\n    ignore: [template-injection-trusted]\n")
+	tiers, stderr = countTemplateInjection(t)
+	if tiers["trusted"] != 0 || tiers["expansion"] != 1 || !strings.Contains(stderr, `"paths": the rule ID "template-injection-trusted" was merged`) {
+		t.Errorf("paths ignore: %v %q", tiers, stderr)
+	}
+
+	// Inline comments too
+	wf := strings.Replace(retiredIDsWorkflow, "      - run: echo ${{ github.repository }}\n", "      # jactionlint ignore=template-injection-trusted\n      - run: echo ${{ github.repository }}\n", 1)
+	baselineProject(t, wf, "profile: pedantic\n")
+	tiers, stderr = countTemplateInjection(t)
+	if tiers["trusted"] != 0 || tiers["expansion"] != 1 || tiers["shell"] != 1 || !strings.Contains(stderr, `was merged into "template-injection"`) {
+		t.Errorf("inline ignore: %v %q", tiers, stderr)
+	}
+}
+
+func TestRetiredRuleIDsAreNotRules(t *testing.T) {
+	for _, rr := range RenamedRules() {
+		if _, ok := LookupRule(rr.Old); ok {
+			t.Errorf("%q is a rule", rr.Old)
+		}
+		cfg := "rules:\n  " + rr.Old + ": warn\n"
+		_, err := ParseConfig([]byte(cfg))
+		if err == nil || !strings.Contains(err.Error(), `"`+rr.Old+`" was merged into "`+rr.ID+`"`) {
+			t.Errorf("%q in rules must say where it went: %v", rr.Old, err)
+		}
+		if _, err := ParseConfig([]byte("ignores:\n  - rule: " + rr.Old + "\n    file: x.yaml\n")); err == nil || !strings.Contains(err.Error(), "was merged into") {
+			t.Errorf("%q in ignores: %v", rr.Old, err)
+		}
+	}
+}
+
+func TestUnusedInlineIgnoreOfARetiredID(t *testing.T) {
+	wf := strings.Replace(retiredIDsWorkflow, "      - run: echo ${{ github.repository }}\n", "      # jactionlint ignore=template-injection-trusted\n      - run: echo ${{ github.repository }}\n", 1)
+	// Without the pedantic option the tier reports nothing, so the comment is not called unused
+	baselineProject(t, wf, "profile: default\nrules:\n  unused-ignore: error\n")
+	_, ids, _ := profileCmd(t)
+	if countID(ids, "unused-ignore") != 0 {
+		t.Errorf("an ignore of a tier that does not run is not unused: %v", ids)
+	}
+	// With it the comment is used
+	baselineProject(t, wf, "profile: pedantic\n")
+	_, ids, _ = profileCmd(t)
+	if countID(ids, "unused-ignore") != 0 {
+		t.Errorf("used: %v", ids)
+	}
+	// A comment for a tier with nothing to suppress is unused
+	wf2 := strings.Replace(retiredIDsWorkflow, "      - run: echo ${{ inputs.name }}\n", "      # jactionlint ignore=template-injection-trusted\n      - run: echo ${{ inputs.name }}\n", 1)
+	baselineProject(t, wf2, "profile: pedantic\n")
+	_, ids, _ = profileCmd(t)
+	if countID(ids, "unused-ignore") != 1 {
+		t.Errorf("unused: %v", ids)
+	}
+}

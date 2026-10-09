@@ -82,15 +82,15 @@ func (rule *RuleMisfeature) checkShell(s *String) {
 	switch {
 	case name == "cmd":
 		rule.ReportIDf("misfeature", s.Pos, "shell %q is the Windows cmd shell, which has no formal grammar so scripts cannot be analyzed reliably, and it has not been the default shell of Windows runners since 2019. use \"pwsh\", \"bash\" or another shell instead", s.Value)
-	case !wellKnownShells[name]:
-		rule.ReportIDf("misfeature-custom-shell", s.Pos, "shell %q is not one of the shells documented by GitHub (bash, pwsh, powershell, python, sh and cmd). it may not exist on every runner and scripts for it cannot be analyzed", s.Value)
+	case !wellKnownShells[name] && rule.pedantic("misfeature"):
+		rule.ReportIDf("misfeature", s.Pos, "shell %q is not one of the shells documented by GitHub (bash, pwsh, powershell, python, sh and cmd). it may not exist on every runner and scripts for it cannot be analyzed", s.Value)
+		rule.errs[len(rule.errs)-1].RetiredID = "misfeature-custom-shell"
 	}
 }
 
 func init() {
 	registerRules(
-		RuleInfo{ID: "misfeature", Group: RuleGroupSecurity, Summary: "A misfeature of GitHub Actions is used: the pip-install input of setup-python or the cmd shell.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-misfeature"},
-		RuleInfo{ID: "misfeature-custom-shell", Group: RuleGroupStyle, Summary: "A shell which GitHub does not document is used.", DefaultLevel: SeverityInfo, Profile: ProfilePedantic, DocsAnchor: "check-misfeature"},
+		RuleInfo{ID: "misfeature", Group: RuleGroupSecurity, Summary: "A misfeature of GitHub Actions is used: the pip-install input of setup-python or the cmd shell. With the option pedantic, a shell that GitHub does not document too.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-misfeature", Options: []RuleOption{pedanticOption}},
 	)
 	registerRuleFactory("misfeature", func(env *RuleEnv) []Rule {
 		return []Rule{NewRuleMisfeature()}

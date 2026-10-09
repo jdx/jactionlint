@@ -35,7 +35,7 @@ List of checks:
 - [Popular action inputs validation at `with:`](#check-popular-action-inputs)
 - [Outdated popular actions detection at `uses:`](#detect-outdated-popular-actions)
 - [Shell name validation at `shell:`](#check-shell-names)
-- [Run script policy (opt-in)](#check-run-policy)
+- [Run script policy (pedantic)](#check-run-policy)
 - [Job ID and step ID uniqueness](#check-job-step-ids)
 - [Hardcoded credentials](#check-hardcoded-credentials)
 - [Dangerous writes to `GITHUB_ENV` and `GITHUB_PATH`](#check-github-env)
@@ -57,29 +57,29 @@ List of checks:
 - [Dependabot configuration syntax](#check-dependabot-syntax)
 - [Dependabot cooldown](#check-dependabot-cooldown)
 - [Dependabot insecure code execution](#check-dependabot-execution)
-- [Dependabot updates of actions (opt-in)](#check-dependabot-missing-actions-update)
+- [Dependabot updates of actions (pedantic)](#check-dependabot-missing-actions-update)
 - [Pipelines that hide failures](#check-pipeline-without-pipefail)
-- [Workflow and job names (opt-in)](#check-anonymous-definition)
-- [Concurrency limits (opt-in)](#check-concurrency-limits)
+- [Workflow and job names (pedantic)](#check-anonymous-definition)
+- [Concurrency limits](#check-concurrency-limits)
 - [Inherited secrets](#check-secrets-inherit)
 - [Insecure workflow commands](#check-insecure-commands)
 - [Unverified downloads](#check-unverified-download)
 - [Host keys collected with ssh-keyscan](#check-insecure-ssh-keyscan)
 - [Static credentials for actions/checkout](#check-checkout-static-credentials)
 - [Insecure URL schemes](#check-insecure-url-scheme)
-- [Dangerous triggers (opt-in)](#check-dangerous-triggers)
-- [Self-hosted runners (opt-in)](#check-self-hosted-runner)
+- [Dangerous triggers](#check-dangerous-triggers)
+- [Self-hosted runners (pedantic)](#check-self-hosted-runner)
 - [Unsound `contains()` on a string](#check-unsound-contains)
-- [Overprovisioned secrets (opt-in)](#check-overprovisioned-secrets)
-- [Unredacted secrets (opt-in)](#check-unredacted-secrets)
-- [Secrets outside an environment (opt-in)](#check-secrets-outside-env)
-- [Typosquatting of actions (opt-in)](#check-typosquat-uses)
+- [Overprovisioned secrets](#check-overprovisioned-secrets)
+- [Unredacted secrets](#check-unredacted-secrets)
+- [Secrets outside an environment (pedantic)](#check-secrets-outside-env)
+- [Typosquatting of actions](#check-typosquat-uses)
 - [Forbidden actions (opt-in)](#check-forbidden-uses)
-- [Expansions in scripts (opt-in)](#check-template-injection-expansion)
+- [Expansions in scripts (pedantic)](#check-template-injection-expansion)
 - [AI agent actions](#check-agentic-actions)
-- [Bots trusted by `github.actor` (opt-in)](#check-bot-conditions)
-- [Obfuscated paths and expressions (opt-in)](#check-obfuscation)
-- [Misfeatures (opt-in)](#check-misfeature)
+- [Bots trusted by `github.actor`](#check-bot-conditions)
+- [Obfuscated paths and expressions](#check-obfuscation)
+- [Misfeatures](#check-misfeature)
 - [Impostor commits (online)](#check-impostor-commit)
 - [Known vulnerable actions (online)](#check-known-vulnerable-actions)
 - [Ref confusion (online)](#check-ref-confusion)
@@ -94,7 +94,7 @@ List of checks:
 - [Unused job outputs](#check-unused-job-output)
 - [Unused workflow inputs (pedantic)](#check-unused-workflow-input)
 - [Needs entries that do nothing (pedantic)](#check-unused-needs)
-- [Duplicate triggers (pedantic)](#check-duplicate-triggers)
+- [Duplicate triggers](#check-duplicate-triggers)
 - [Failures hidden by continue-on-error (pedantic)](#check-continue-on-error)
 - [Mutable runner labels (pedantic)](#check-mutable-runner-label)
 - [Invisible characters](#check-invisible-characters)
@@ -2136,11 +2136,10 @@ Note that jactionlint does not report any error when a directory for a local act
 a common case where the action is managed in a separate repository and the action directory is cloned at running the workflow.
 (See [#25][issue-25] and [#40][issue-40] for more details).
 
-### Require pinning to a commit hash (opt-in)
+### Require pinning to a commit hash
 
 By default, jactionlint accepts any ref (tag, branch, or SHA) for actions at `uses:`. Since tags and branches are mutable,
-pinning to a full commit hash is recommended to mitigate supply chain attacks. This is the rule `unpinned-uses`. It is **disabled
-by default** and enabled by the `strict` profile. To enable it alone, set it in [the configuration file](config.md):
+pinning to a full commit hash is recommended to mitigate supply chain attacks. This is the rule `unpinned-uses`. It is in the `default` profile. To set its level or turn it off, use [the configuration file](config.md):
 
 ```yaml
 rules:
@@ -2221,12 +2220,11 @@ Known limitations (use `ignore` in the configuration file when they matter):
 - A step which generates the action directory without checking out the repository is reported.
 - `uses: $/path` (self-repository syntax) is never reported since it does not need a checkout. `uses:` of reusable workflows and
   composite action files are not checked.
-### Require `${{ }}` in `if:` conditions (opt-in)
+### Require `${{ }}` in `if:` conditions (pedantic)
 <a id="check-require-expression-wrapping"></a>
 
 GitHub Actions allows omitting `${{ }}` in `if:` conditions of jobs and steps. Some projects prefer to always write it so
-that it is obvious an expression is used. This is the rule `require-expression-wrapping`. It is **disabled by default** and
-enabled by the `all` profile. To enable it alone, set it in [the configuration file](config.md):
+that it is obvious an expression is used. This is the rule `require-expression-wrapping`. It is in the `pedantic` profile, so it is off unless you choose that profile. To turn it on alone, set it in [the configuration file](config.md):
 
 ```yaml
 rules:
@@ -2472,9 +2470,9 @@ Available shells for runners are defined in [the documentation][shell-doc]. jact
 configuration are properly using the available shells.
 
 <a id="check-run-policy"></a>
-## Run script policy (opt-in)
+## Run script policy (pedantic)
 
-These are the rules `require-shell` and `max-run-lines`. They are disabled by default and enabled by the `all` profile. Enable
+These are the rules `require-shell` and `max-run-lines`. They are in the `pedantic` profile, so they are off unless you choose that profile. Enable
 them alone in [the config file](config.md).
 
 ```yaml
@@ -2653,6 +2651,10 @@ test.yaml:8:48: a value that is not a literal is written to $GITHUB_ENV in a wor
   |
 8 |       - run: echo "VERSION=$(cat version.txt)" >> "$GITHUB_ENV"
   |                                                ^~
+test.yaml:9:34: untrusted input from the variable TITLE (github.event.pull_request.title) is written to $GITHUB_ENV. an attacker who controls the value can set LD_PRELOAD or NODE_OPTIONS (a newline adds another variable) and run code in the next steps. do not write input that an outsider controls to $GITHUB_ENV; validate it first or pass it to the next step with $GITHUB_OUTPUT [github-env]
+  |
+9 |       - run: echo "TITLE=$TITLE" >> "$GITHUB_ENV"
+  |                                  ^~
 ```
 
 [Playground](https://jactionlint.jdx.dev/#eNp0z8FKw0AQBuB7n+In5KCH5AEW2oMQNCAVNPYiEpJ2aCPL7LozE5TSd5ckIB7saZj5v/8wgd0KiOZ9m+jTSLTVLh1JpzOg35HE4S1EYjq8rz5CL1PS2+APC0nGUgR2sN5YrfCdkugciVKURQHFJB1ofwrIdtXzS/20Xec3+04xUpIhcKlfepths0GW39fNw+tdW2132X/9pm4eq3U+j6sNgHh0vwswc4f8fMZx0JP1JY3EWv59v9RBPeFy+RkA2itTFQ==)
@@ -2663,26 +2665,26 @@ steps: a value with a newline sets another variable, and `LD_PRELOAD` or `NODE_O
 directory in front of the `PATH` can shadow a program such as `ssh`. See
 [Keeping your GitHub Actions and workflows secure: preventing pwn requests](https://securitylab.github.com/resources/github-actions-preventing-pwn-requests/).
 
-There are two rules, both in the `default` profile:
+The rule `github-env` (in the `default` profile) reports two kinds of writes:
 
-- `github-env` reports a write of something that is not a literal in a workflow started by `pull_request_target` or
+- A write of something that is not a literal in a workflow started by `pull_request_target` or
   `workflow_run`. These run with secrets and a write token while the event may come from a fork, so anything computed from the
   checked out code, its artifacts or the event is suspect. Values that the workflow author or GitHub decide are accepted:
   literals, the `HOME` and `RUNNER_*` variables, `github.sha`, `github.run_id`, `github.event.pull_request.head.sha`, the
   `runner`, `matrix`, `vars` and `secrets` contexts, command substitutions of `mktemp`, `date`, `pwd`, `uname` and the like with
   such arguments, and variables of `env:` or of the script that are set to such values.
-- `github-env-untrusted-input` reports a write of input that an outsider controls, whatever the trigger: an expression such
+- A write of input that an outsider controls, whatever the trigger: an expression such
   as `github.event.issue.title` or `github.head_ref`, or an environment variable that was set to one (as `TITLE` is in the
   example above; a template injection check does not see that one).
 
 `echo "VERSION=1.0" >> "$GITHUB_ENV"` and `echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"` are fine. Use `$GITHUB_OUTPUT` to pass
 state between steps (`echo "version=$(cat version.txt)" >> "$GITHUB_OUTPUT"` is not reported) and validate or avoid the value
-otherwise. The rules understand `>>` and `>`, `tee`, groups (`{ ...; } >> "$GITHUB_ENV"`), here documents and a file name held
+otherwise. The rule understands `>>` and `>`, `tee`, groups (`{ ...; } >> "$GITHUB_ENV"`), here documents and a file name held
 in another variable. Scripts of `bash` and `sh` are parsed; for `pwsh`, `powershell` and `cmd` the rules look at the lines that
 mention `$env:GITHUB_ENV` or `%GITHUB_ENV%` together with a redirection or `Out-File`, `Add-Content`, `Set-Content` and
 `Tee-Object`.
 
-To turn a rule off, put `github-env: off` in the `rules` section of the [configuration file](config.md) or write
+To turn the rule off, put `github-env: off` in the `rules` section of the [configuration file](config.md) or write
 `# jactionlint ignore=github-env` after a reason.
 
 <a id="check-adhoc-packages"></a>
@@ -2759,7 +2761,7 @@ of these actions (`aquasecurity/setup-trivy`, `1password/load-secrets-action`, `
 `extractions/setup-crate`, the ones zizmor knows) and does not set the input that selects the version, or sets it to
 `latest` (`*` for the last two). Set the input to an exact version. A value that is an expression is not judged.
 
-With the option `pedantic` (on under `profile: strict` and `profile: all`, or `rules: {unpinned-tools: {level: warn, pedantic: true}}`) the
+With the option `pedantic` (on under `profile: pedantic`, or `rules: {unpinned-tools: {level: warn, pedantic: true}}`) the
 rule reports more:
 
 Example input:
@@ -2894,7 +2896,7 @@ actions (`softprops/action-gh-release`, `ncipollo/release-action`, `elgohr/Githu
 `gh release` replaces, `dacbd/create-issue-action`, `actions-ecosystem/action-add-labels` and `action-remove-labels` (`gh issue`,
 `gh pr`), `addnab/docker-run-action` (`docker run`) and `sergeysova/jq-action` (`jq`).
 
-With the option `pedantic` (on under the `strict` and `all` profiles) the rule reports the ones whose replacement takes several commands or
+With the option `pedantic` (on under the `pedantic` profile) the rule reports the ones whose replacement takes several commands or
 misses a feature: `peter-evans/create-pull-request`, `peter-evans/create-or-update-comment`, `dtolnay/rust-toolchain`,
 `stefanzweifel/git-auto-commit-action` and `EndBug/add-and-commit`. Each entry of the table `superfluousActions` in
 `rule_superfluous_actions.go` names its source (the audit of zizmor, or the README of the archived action).
@@ -2932,7 +2934,7 @@ The rule is fixable. `jactionlint -fix=unsafe` inserts `--locked`. The fix is **
 succeeded, for example when the lock file of the crate is out of date. It is only offered when the position of `install` in the
 file is known for sure.
 
-With the option `pedantic` (on under the `strict` and `all` profiles) the rule reports installs from a manifest that the lock file does not bind:
+With the option `pedantic` (on under the `pedantic` profile) the rule reports installs from a manifest that the lock file does not bind:
 
 Example input:
 
@@ -3062,11 +3064,10 @@ Each permission scopes have their access levels. The default levels and availabl
 
 jactionlint checks permission scopes and access levels in a workflow are correct.
 
-### Require explicit permissions (opt-in)
+### Require explicit permissions
 
 When `permissions:` is not set, `GITHUB_TOKEN` gets the default permissions of the repository or organization, which may be
-read-write. Setting permissions explicitly follows the principle of least privilege. This is the rule `missing-permissions`. It is
-**disabled by default** and enabled by the `strict` profile. To enable it alone, set it in [the configuration file](config.md):
+read-write. Setting permissions explicitly follows the principle of least privilege. This is the rule `missing-permissions`. It is in the `default` profile. To set its level or turn it off, use [the configuration file](config.md):
 
 ```yaml
 rules:
@@ -3098,7 +3099,7 @@ workflow runs and that pushes with the credentials left by `actions/checkout` is
 accepting the safe fix.
 
 <a id="check-excessive-permissions"></a>
-## Excessive permissions (opt-in)
+## Excessive permissions
 
 Example input:
 
@@ -3153,8 +3154,7 @@ test.yaml:27:18: "write-all" gives the GITHUB_TOKEN write access to every scope 
 
 <!-- Skip playground link -->
 
-The rule `excessive-permissions` reports write access that the `GITHUB_TOKEN` gets without a narrow need. It is **disabled by
-default** and enabled by the `strict` profile. The output above is from the following `rules` section of [the configuration
+The rule `excessive-permissions` reports write access that the `GITHUB_TOKEN` gets without a narrow need. It is in the `default` profile. The output above is from the following `rules` section of [the configuration
 file](config.md):
 
 ```yaml
@@ -3191,7 +3191,7 @@ To silence one finding, put `# jactionlint ignore=excessive-permissions` above t
 of the configuration for workflows which need it (a release workflow with a single job, for example).
 
 <a id="check-undocumented-permissions"></a>
-## Undocumented permissions (opt-in)
+## Undocumented permissions (pedantic)
 
 Example input:
 
@@ -3231,7 +3231,7 @@ test.yaml:14:7: permission "id-token: write" has no comment explaining why it is
 
 The rule `undocumented-permissions` requires a comment which explains why a permission scope above `read` is granted. Permissions
 are easy to add and never revisited, so a sentence next to each one keeps the list honest and makes a review of the workflow
-quick. It is **disabled by default** and enabled by the `all` profile because it is a style check. The output above is from the
+quick. It is in the `pedantic` profile because it is a style check. The output above is from the
 following `rules` section of [the configuration file](config.md):
 
 ```yaml
@@ -3257,7 +3257,7 @@ rules:
 [zizmor](https://docs.zizmor.sh/audits/#undocumented-permissions) behaves like `include-read: true`, and counts only a comment at the end of the line.
 
 <a id="check-unpinned-images"></a>
-## Unpinned container images (opt-in)
+## Unpinned container images
 
 Example input:
 
@@ -3297,7 +3297,7 @@ test.yaml:11:16: image "postgres:16" of service "db" is pinned by a tag, which c
 
 The rule `unpinned-images` reports `container:` and `services:` images which are not pinned by a digest. A tag can be moved to
 another image by whoever controls the registry repository, and an image without a tag is `latest`, so what runs in your job can
-change without any change to the workflow. It is **disabled by default** and enabled by the `strict` profile. The output above is
+change without any change to the workflow. It is in the `default` profile. The output above is
 from the following `rules` section of [the configuration file](config.md):
 
 ```yaml
@@ -3323,7 +3323,7 @@ Images written with an expression (`image: ${{ vars.IMAGE }}`) are skipped since
 images used as actions (`uses: docker://alpine:3.20`) are checked by the [`unpinned-uses`](#check-action-format) rule.
 
 <a id="check-self-repository"></a>
-## Self-repository syntax (opt-in)
+## Self-repository syntax (pedantic)
 
 Example input:
 
@@ -3364,8 +3364,7 @@ test.yaml:16:11: "./.github/workflows/reusable.yml" is looked up in the workspac
 The rule `self-repository` reports `uses: ./path` and asks for `uses: $/path`. Both name an action or reusable workflow of the
 repository that runs the workflow. `./path` is looked up in the workspace of the runner, so any earlier step can change what it
 runs (a checkout of another ref or repository, or a script writing an `action.yml`), and a policy cannot tell it from an
-arbitrary directory. `$/path` always resolves to the commit that runs the workflow. It is **disabled by default**, enabled by the
-`strict` profile and reported as `info`, because the syntax is new and some GitHub Enterprise Server versions do not understand
+arbitrary directory. `$/path` always resolves to the commit that runs the workflow. It is in the `pedantic` profile and reported as `info`, because the syntax is new and some GitHub Enterprise Server versions do not understand
 it. The output above is from the following `rules` section of [the configuration file](config.md):
 
 ```yaml
@@ -3379,7 +3378,7 @@ the same when a step replaces the workspace content, which is exactly the case t
 `uses: $/path` needs no checkout step, and the [`local-action-checkout`](#check-local-action-checkout) rule does not report it.
 
 <a id="check-github-app"></a>
-## GitHub App tokens (opt-in)
+## GitHub App tokens
 
 Example input:
 
@@ -3426,7 +3425,7 @@ test.yaml:19:30: "skip-token-revoke: true" keeps the GitHub App token valid afte
 
 The rule `github-app` reports uses of [`actions/create-github-app-token`][create-github-app-token] which issue a token that is
 more powerful or lives longer than the job needs. An installation token is not a problem by itself, but the defaults of the
-action are generous. It is **disabled by default** and enabled by the `strict` profile. The output above is from the following
+action are generous. It is in the `default` profile. The output above is from the following
 `rules` section of [the configuration file](config.md):
 
 ```yaml
@@ -3446,7 +3445,7 @@ Only `actions/create-github-app-token` is checked. Other actions which issue app
 [create-github-app-token]: https://github.com/actions/create-github-app-token
 
 <a id="check-artipacked"></a>
-## Persisted checkout credentials (opt-in)
+## Persisted checkout credentials
 
 Example input:
 
@@ -3481,8 +3480,7 @@ test.yaml:8:15: actions/checkout leaves the GITHUB_TOKEN in the git config of th
 The rule `artipacked` reports `actions/checkout` steps which do not set `persist-credentials`. The checkout action stores the
 `GITHUB_TOKEN` in the git config of the workspace so that later `git` commands can push. Any later step can read it, and a step
 that copies the workspace, such as `actions/upload-artifact` with `path: .`, publishes it in the artifact (the
-[ArtiPACKED](https://unit42.paloaltonetworks.com/github-repo-artifacts-leak-tokens/) attack). It is **disabled by default** and
-enabled by the `strict` profile. The output above is from the following `rules` section of [the configuration file](config.md):
+[ArtiPACKED](https://unit42.paloaltonetworks.com/github-repo-artifacts-leak-tokens/) attack). It is in the `default` profile. The output above is from the following `rules` section of [the configuration file](config.md):
 
 ```yaml
 rules:
@@ -3501,7 +3499,7 @@ command cannot be detected, so check the workflow after applying the fix. A step
 reported without a fix.
 
 <a id="check-cache-poisoning"></a>
-## Cache poisoning (opt-in)
+## Cache poisoning
 
 Example input:
 
@@ -3538,8 +3536,7 @@ test.yaml:13:15: swatinem/rust-cache restores a cache although the workflow runs
 <!-- Skip playground link -->
 
 The rule `cache-poisoning` reports caches which an attacker can use to get code into a release. Whoever can write a GitHub Actions
-cache entry can make a later workflow restore it, so a job that publishes artifacts should not read caches at all. It is
-**disabled by default** and enabled by the `strict` profile. The output above is from the following `rules` section of [the
+cache entry can make a later workflow restore it, so a job that publishes artifacts should not read caches at all. It is in the `default` profile. The output above is from the following `rules` section of [the
 configuration file](config.md):
 
 ```yaml
@@ -4800,7 +4797,7 @@ Output:
 
 <!-- Skip playground link -->
 
-The rule is `dependabot-cooldown`. It is enabled by default as a warning. Change the minimum with the `days` option and let
+The rule is `dependabot-cooldown`. It is in the `default` profile. Change the minimum with the `days` option and let
 `-fix` write the cooldown by setting `default-days`:
 
 ```yaml
@@ -4855,7 +4852,7 @@ working. If you need `allow` for a registry, ignore the finding for that file wi
 or with an [ignore comment](usage.md).
 
 <a id="check-dependabot-missing-actions-update"></a>
-## Dependabot updates of actions (opt-in)
+## Dependabot updates of actions (pedantic)
 
 A repository which uses Dependabot for its dependencies often forgets that the actions in its workflows are dependencies too:
 they are never updated, or updated by hand when someone notices. This check reports a `dependabot.yml` which has no update with
@@ -4892,7 +4889,7 @@ Output:
 
 <!-- Skip playground link -->
 
-The rule is `dependabot-missing-actions-update`. It is enabled by the `strict` profile as a warning, or explicitly with
+The rule is `dependabot-missing-actions-update`. It is in the `pedantic` profile as a warning, or enabled explicitly with
 `rules: {dependabot-missing-actions-update: warn}`.
 
 <a id="check-pipeline-without-pipefail"></a>
@@ -4977,7 +4974,7 @@ The fix is unsafe because failures which used to be ignored now fail the step. T
 for `shell: sh` and for shells which are not bash.
 
 <a id="check-anonymous-definition"></a>
-## Workflow and job names (opt-in)
+## Workflow and job names (pedantic)
 
 Example input:
 
@@ -5012,7 +5009,7 @@ rules:
   anonymous-definition: warn
 ```
 
-The rule `anonymous-definition` (in the `strict` profile) reports workflows without a top-level `name:` and jobs without a
+The rule `anonymous-definition` (in the `pedantic` profile) reports workflows without a top-level `name:` and jobs without a
 `name:`. GitHub shows the file path of a workflow without a name, and the ID of a job without one, in the Actions UI, in the
 checks of a pull request and in notifications. Names make it clear which definition is running, and a name can be changed
 without breaking the `needs:` of other jobs, which refer to the job ID. Jobs that call a reusable workflow are not reported
@@ -5026,7 +5023,7 @@ To turn the rule off for a project, set `anonymous-definition: off` in `rules`. 
 `# jactionlint ignore=anonymous-definition`.
 
 <a id="check-concurrency-limits"></a>
-## Concurrency limits (opt-in)
+## Concurrency limits
 
 Example input:
 
@@ -5060,7 +5057,7 @@ rules:
   concurrency-limits: warn
 ```
 
-The rule `concurrency-limits` (in the `strict` profile) reports a workflow without a `concurrency:` setting, and a workflow whose
+The rule `concurrency-limits` (in the `default` profile) reports a workflow without a `concurrency:` setting, and a workflow whose
 `concurrency:` is written as a plain group name (`concurrency: my-group`), which cannot cancel anything. By default GitHub runs
 every instance of a workflow at the same time even when a new run supersedes the old ones. That wastes runner minutes (an
 attacker can use it to burn the billed minutes of a repository) and can make workflows race when they look for artifacts by
@@ -5103,7 +5100,7 @@ test.yaml:4:11: "secrets: inherit" passes every secret of this workflow to the r
 
 [Playground](https://jactionlint.jdx.dev/#eNoky7ERgzAMBdCeKbRAcK8qqwBRsBLj75Pk49g+F9O95qEyte55+mB1nohe0gquv4i6izNhCzxgexowaUjzrpH7mk7Y911werrbfC1HeR6L1vFdNpNwJq1ZTOM3AOpyJd8=)
 
-The rule `secrets-inherit` (in the `default` profile, as a warning) reports a job that calls a reusable workflow with
+The rule `secrets-inherit` (in the `default` profile) reports a job that calls a reusable workflow with
 `secrets: inherit`. The called workflow receives every secret that the caller can see, so it breaks the principle of least
 privilege and makes it impossible to tell from the caller which secrets the called workflow gets.
 
@@ -5306,7 +5303,7 @@ or use a fine-grained personal access token that is limited to the repositories 
 environment (one with required reviewers or a branch restriction).
 
 A `token` that comes from a secret is a personal access token in most cases, and workflows that release or push often have to use one,
-so it is a pedantic check: the option `secret-tokens` is on under the `strict` and `all` profiles and off under `default` (set it to
+so it is a pedantic check: the option `secret-tokens` is on under the `pedantic` profile and off under `default` (set it to
 `true` or `false` to decide). The `ssh-key` input and a literal `token` are always reported. Secrets named in `allow` (case-insensitive) are never reported. A `token`
 that is `secrets.GITHUB_TOKEN`, `github.token`, the output of a step, an input of a reusable workflow, or has a fallback to one
 of these, is not reported because the credential behind it is not known to be static.
@@ -5373,7 +5370,7 @@ the same name in zizmor 1.30.1, which checks the `repo:` URLs of `.pre-commit-co
 Turn the rule off with `insecure-url-scheme: off` in `rules` or ignore one finding with `# jactionlint ignore=insecure-url-scheme`.
 
 <a id="check-dangerous-triggers"></a>
-## Dangerous triggers (opt-in)
+## Dangerous triggers
 
 Example input:
 
@@ -5406,7 +5403,7 @@ rules:
   dangerous-triggers: warn
 ```
 
-The rule `dangerous-triggers` (in the `strict` profile) reports the triggers `pull_request_target`, `workflow_run` and
+The rule `dangerous-triggers` (in the `default` profile) reports the triggers `pull_request_target`, `workflow_run` and
 `issue_comment`. They run with the secrets and the write token of the repository (in the context of the default branch) while
 a fork, or any commenter, controls part of the event. Making them safe is hard: it is not enough to avoid checking out the
 pull request, because arguments, environment variables and files that come from the event can still lead to code execution. See
@@ -5421,7 +5418,7 @@ The rule only looks at the trigger, so a workflow that uses one of them safely i
 `issue_comment` yet.
 
 <a id="check-self-hosted-runner"></a>
-## Self-hosted runners (opt-in)
+## Self-hosted runners (pedantic)
 
 Example input:
 
@@ -5452,7 +5449,7 @@ rules:
   self-hosted-runner: info
 ```
 
-The rule `self-hosted-runner` (in the `all` profile, at the `info` level) points out jobs that have the `self-hosted` label in
+The rule `self-hosted-runner` (in the `pedantic` profile, at the `info` level) points out jobs that have the `self-hosted` label in
 `runs-on:`, also when it comes from a literal value of the matrix. [Self-hosted runners][self-hosted-runner-security] are hard
 to secure: unless they are ephemeral, a job can leave something behind for the next one, and GitHub does not recommend them for
 public repositories, where any pull request can run code on them. The rule is informational because it cannot see how a runner
@@ -5490,7 +5487,7 @@ test.yaml:7:13: contains() with the string literal "refs/heads/main refs/heads/d
 
 [Playground](https://jactionlint.jdx.dev/#eNpMy8GuAiEMheH9PMXZzb2JM7PnbUCKYLAQ2pr49gbHhbs2/3caO3STvNxbELcAkXptr3kBw1i2KSwYq23VK4l+kih1ORWwTemwH+d4l/wNQEkO18bqC8vfOijJkclHOR6+MH7+SE+qra8X3IpmC/ug9P8eABuBMf8=)
 
-The rule `unsound-contains` (in the `default` profile, as a warning) reports a condition in `if:` that calls `contains()` with a
+The rule `unsound-contains` (in the `default` profile) reports a condition in `if:` that calls `contains()` with a
 string literal as the first argument and something else as the second. People write it to test that a value is one of a list
 of words, but `contains()` on strings tests for a substring, so `contains('refs/heads/main refs/heads/develop', github.ref)` is
 also true for a branch named `mai` or `heads/dev`. When the condition guards a deployment or a privileged step, that is a
@@ -5508,7 +5505,7 @@ Calls where the first argument is not a literal (`contains(github.event.head_com
 There is no automatic fix.
 
 <a id="check-overprovisioned-secrets"></a>
-## Overprovisioned secrets (opt-in)
+## Overprovisioned secrets
 
 Example input:
 
@@ -5541,7 +5538,7 @@ rules:
   overprovisioned-secrets: warn
 ```
 
-The rule `overprovisioned-secrets` (in the `strict` profile) reports expressions that use the whole `secrets` context:
+The rule `overprovisioned-secrets` (in the `default` profile) reports expressions that use the whole `secrets` context:
 `toJSON(secrets)`, `secrets[<computed name>]`, `secrets.*` or a bare `secrets` passed to a function. GitHub passes to the
 runner only the secrets that a job refers to by name. An expression like the above makes it pass all of them, even if the
 step needs one.
@@ -5557,7 +5554,7 @@ env:
 `secrets.NAME` and `secrets['NAME']` are fine. There is no automatic fix.
 
 <a id="check-unredacted-secrets"></a>
-## Unredacted secrets (opt-in)
+## Unredacted secrets
 
 Example input:
 
@@ -5590,7 +5587,7 @@ rules:
   unredacted-secrets: warn
 ```
 
-The rule `unredacted-secrets` (in the `strict` profile) reports a field that is extracted from a secret parsed with `fromJSON()`,
+The rule `unredacted-secrets` (in the `default` profile) reports a field that is extracted from a secret parsed with `fromJSON()`,
 as in `fromJSON(secrets.CREDENTIALS).password`. The runner redacts the exact value of each secret from the logs, but it does
 not know that a field of a JSON document is a secret too, so the extracted value can show up in the logs in clear.
 
@@ -5598,7 +5595,7 @@ Store each field in its own secret (`secrets.CREDENTIALS_PASSWORD`). Passing the
 without a property access) is not reported. There is no automatic fix.
 
 <a id="check-secrets-outside-env"></a>
-## Secrets outside an environment (opt-in)
+## Secrets outside an environment (pedantic)
 
 Example input:
 
@@ -5631,7 +5628,7 @@ rules:
   secrets-outside-env: warn
 ```
 
-The rule `secrets-outside-env` (in the `all` profile) reports a use of a secret in a job that has no `environment:`. Secrets of a
+The rule `secrets-outside-env` (in the `pedantic` profile) reports a use of a secret in a job that has no `environment:`. Secrets of a
 repository or an organization are exposed to every job that asks for them. The secrets of an
 [environment](https://docs.github.com/en/actions/managing-workflow-runs-and-deployments/managing-deployments/managing-environments-for-deployment)
 are only available to jobs that meet its protection rules (required reviewers, branch restrictions), which limits the damage of
@@ -5654,7 +5651,7 @@ rules:
 The line of a secret in a folded block scalar (`>-`) is the line where the block starts. There is no automatic fix.
 
 <a id="check-typosquat-uses"></a>
-## Typosquatting of actions (opt-in)
+## Typosquatting of actions
 
 Example input:
 
@@ -5685,7 +5682,7 @@ rules:
   typosquat-uses: warn
 ```
 
-The rule `typosquat-uses` (in the `strict` profile) reports an action whose `owner/repo` is one typo away from a popular action
+The rule `typosquat-uses` (in the `default` profile) reports an action whose `owner/repo` is one typo away from a popular action
 of another owner, like `action/checkout` instead of `actions/checkout` or `dokcer/login-action` instead of
 `docker/login-action`. An attacker can register the misspelled account and serve malicious code to everyone who copied the typo.
 One typo means a character added, removed, replaced or two neighboring characters swapped. The popular actions are the ones
@@ -5775,19 +5772,23 @@ The rule is for policy, so its default level is `error`. There is no automatic f
 
 
 <a id="check-template-injection-expansion"></a>
-## Expansions in scripts (opt-in)
+## Expansions in scripts (pedantic)
 
 The rule `template-injection` reports the contexts that an attacker controls. Every other `${{ }}` in a `run:` script, in
 the `script` of github-script and in the inputs listed above is also a risk: the value is pasted into the source of the script
-before it runs, so a value with quotes, `$(...)` or a newline changes the script. These rules report them:
+before it runs, so a value with quotes, `$(...)` or a newline changes the script. The option `pedantic` of the rule reports them
+too, in two kinds:
 
-| Rule | Reports | Profile | Level |
-| --- | --- | --- | --- |
-| `template-injection-expansion` | Values that are free text: `inputs.*` of type `string`, `steps.*.outputs.*`, `needs.*.outputs.*`, `matrix.*` with values from `fromJSON`, `env.*` set from an expression and `github.ref_name` | `strict` | warn |
-| `template-injection-trusted` | Values that an attacker cannot control: `github.repository`, `github.sha`, `runner.*`, `secrets.*`, `vars.*`, boolean, number and choice inputs, a matrix whose values are written in the workflow, enumerations like `needs.*.result`, and expressions which only test a context | `all` | info |
+- Values that are free text: `inputs.*` of type `string`, `steps.*.outputs.*`, `needs.*.outputs.*`, `matrix.*` with values from
+  `fromJSON`, `env.*` set from an expression and `github.ref_name`.
+- Values that an attacker cannot control: `github.repository`, `github.sha`, `runner.*`, `secrets.*`, `vars.*`, boolean, number
+  and choice inputs, a matrix whose values are written in the workflow, enumerations like `needs.*.result`, and expressions
+  which only test a context. This is the "everything is a code smell" view of the pedantic persona of zizmor: a value that cannot
+  be attacked still breaks when somebody later changes it to something that can.
 
-`template-injection-trusted` is the "everything is a code smell" view of the pedantic persona of zizmor. A value that cannot be
-attacked still breaks when somebody later changes it to something that can. Both rules fix as the previous section describes.
+The option is on under the `pedantic` profile and off otherwise, and you can set it for the rule alone. Both kinds fix as the
+previous section describes. They are the findings that the retired rules `template-injection-expansion` and
+`template-injection-trusted` reported: an ignore of one of those IDs still works for its kind and prints a deprecation warning.
 
 Example input:
 
@@ -5812,15 +5813,15 @@ jobs:
 
 Output:
 
-The output is with `template-injection-expansion` and `template-injection-trusted` enabled.
+The output is with the option `pedantic` of `template-injection` on.
 
 <!-- Skip update output -->
 ```
-test.yaml:10:32: warning: "steps.version.outputs.tag" is expanded with ${{ }} into an inline script, so a value with shell syntax changes what the script does. instead, pass it through an environment variable and read it as a variable of the shell [expression]
+test.yaml:10:32: "steps.version.outputs.tag" is expanded with ${{ }} into an inline script, so a value with shell syntax changes what the script does. instead, pass it through an environment variable and read it as a variable of the shell [expression]
    |
 10 |       - run: ./release.sh '${{ steps.version.outputs.tag }}'
    |                                ^~~~~~~~~~~~~~~~~~~~~~~~~
-test.yaml:16:33: info: "github.repository" is expanded with ${{ }} into an inline script. its value is not controlled by an attacker, but an expansion in a script is easy to get wrong when the script changes. instead, read it as a variable of the shell [expression]
+test.yaml:16:33: "github.repository" is expanded with ${{ }} into an inline script. its value is not controlled by an attacker, but an expansion in a script is easy to get wrong when the script changes. instead, read it as a variable of the shell [expression]
    |
 16 |       - run: echo "Building ${{ github.repository }}"
    |                                 ^~~~~~~~~~~~~~~~~
@@ -5828,17 +5829,17 @@ test.yaml:16:33: info: "github.repository" is expanded with ${{ }} into an inlin
 
 <!-- Skip playground link -->
 
-To enable them, use the `strict` or `all` profile or set them in [the configuration file](config.md):
+To enable them, use the `pedantic` profile or set the option in [the configuration file](config.md):
 
 ```yaml
 rules:
-  template-injection-expansion: warn
-  template-injection-trusted: info
+  template-injection:
+    pedantic: true
 ```
 
 What is considered free text is a decision about the value, not the syntax. A boolean input, a matrix of literals and the `result` of
 a job cannot hold anything but a few words, and a `string` input can hold anything. When you know that a value is safe, set the
-level of the rule to `off` or ignore the line, for example with `# jactionlint ignore=template-injection-expansion`.
+option to `false` or ignore the line, for example with `# jactionlint ignore=template-injection`.
 
 <a id="check-agentic-actions"></a>
 ## AI agent actions
@@ -5975,12 +5976,12 @@ or set `rules: {agentic-actions: off}`; `rules: {agentic-actions: {any-trigger: 
 outsiders cannot trigger.
 
 <a id="check-bot-conditions"></a>
-## Bots trusted by `github.actor` (opt-in)
+## Bots trusted by `github.actor`
 
 Workflows trust bots like Dependabot with a condition such as `github.actor == 'dependabot[bot]'`. But `github.actor` is the
 account of the last event, not the author of the pull request. An attacker can build a pull request whose last commit event is
-made by the bot while the rest of the branch is theirs, and the condition passes. This is the rule `bot-conditions`. It is enabled
-by the `strict` profile. It reports `github.actor`, `github.triggering_actor`, `github.actor_id` and `github.event.sender.*`
+made by the bot while the rest of the branch is theirs, and the condition passes. This is the rule `bot-conditions`. It is in
+the `default` profile. It reports `github.actor`, `github.triggering_actor`, `github.actor_id` and `github.event.sender.*`
 compared with a bot account (a name with `[bot]`, or the ID of Dependabot, Renovate and github-actions) with `==`, `contains()`,
 `startsWith()` and `endsWith()`. A negative check like `github.actor != 'dependabot[bot]'` is not reported since it only skips what
 the condition guards.
@@ -6020,10 +6021,10 @@ that somebody else pushed to, where it used to be false. The GitHub documentatio
 `pull_request_target`.
 
 <a id="check-obfuscation"></a>
-## Obfuscated paths and expressions (opt-in)
+## Obfuscated paths and expressions
 
 Some constructs work but hide what they do from the people and the tools reading the workflow. This is the rule `obfuscation`. It is
-enabled by the `strict` profile and reports:
+in the `default` profile and reports:
 
 - a path at `uses:` with empty, `.` or `..` segments, like `actions/checkout/./sub` or `./.github/actions/../actions/x`. A leading
   `../` of a local path is not reported because it refers to a repository checked out next to the workspace;
@@ -6078,16 +6079,16 @@ test.yaml:12:29: warning: the index is computed, which hides which property is r
 action.
 
 <a id="check-misfeature"></a>
-## Misfeatures (opt-in)
+## Misfeatures
 
-Some features of GitHub Actions are best avoided. The rule `misfeature` is enabled by the `strict` profile and reports
+Some features of GitHub Actions are best avoided. The rule `misfeature` (in the `default` profile) reports
 
 - the `pip-install` input of actions/setup-python. It installs packages into the global Python environment, which is hard to audit
   and can break the resolution of dependencies. Create a virtual environment in a `run:` step instead;
 - the Windows `cmd` shell (`shell: cmd`). It has no formal grammar, so a script cannot be analyzed reliably, and it has not been the
   default shell of Windows runners since 2019.
 
-The rule `misfeature-custom-shell` is enabled by the `all` profile. It reports a shell that GitHub does not document (`bash`, `pwsh`,
+With the option `pedantic` (on under the `pedantic` profile) the rule also reports a shell that GitHub does not document (`bash`, `pwsh`,
 `powershell`, `python`, `sh` and `cmd`), like `shell: perl {0}`. Such a shell may not exist on every runner and its scripts cannot be
 analyzed. The shell names which GitHub does not accept at all are reported by the correctness check [shell names](#check-shell-names).
 
@@ -6560,7 +6561,7 @@ test.yaml:4:10: concurrency group "ci" is the same for every pull request (event
 
 [Playground](https://jactionlint.jdx.dev/#eNokzLsNwzAMhOFeU9wCWoDLBDZBOA4EUuGjyPaB5Pr/7kypAbPGeLl8SyKpsSmXuyj/VrzcahL4bgAfyjL6rX26XS4RhPSS9rEzFs79AABeGt2UUGdpVh/HajtFyoxHAX1JgvDb9vo/APykLz4=)
 
-The rule `concurrency-cancels-prs` (in the `default` profile, as a warning) reports a `concurrency` block (of the workflow or
+The rule `concurrency-cancels-prs` (in the `default` profile) reports a `concurrency` block (of the workflow or
 of a job) of a workflow that is triggered by `pull_request`, `pull_request_target`, `pull_request_review` or
 `pull_request_review_comment`, when `cancel-in-progress` is on and the `group` has nothing that differs between pull requests.
 All pull requests share the group, so a push to one of them cancels the run of another one that has nothing to do with it.
@@ -6623,7 +6624,7 @@ test.yaml:11:14: "cargo publish" publishes to crates.io. prefer trusted publishi
 
 [Playground](https://jactionlint.jdx.dev/#eNo0zD2qwzAQxPFepxhcPtAFdJVHCnlZFAexK/YjkNsHx7iaYv78VFoBVvrzXCD68Ib/7f23PQqpUJqx0Od8h2muBuPJ3bkA1IV41kPqMh3G7g1hyeWlu1/uPo+bthSvKg25p0TW2YM9fpcHL78qoJ5lA3UbegvfAQA6LzT4)
 
-The rule `concurrency-cancels-release` (in the `default` profile, as a warning) reports `cancel-in-progress` that cancels a
+The rule `concurrency-cancels-release` (in the `default` profile) reports `cancel-in-progress` that cancels a
 release or a deployment which is still running: a new push, tag or manual run must not kill an in-flight release. Cancelling
 the run of a publish half way can leave a tag without its packages, a registry with some of the files or a deployment half
 rolled out.
@@ -6889,7 +6890,7 @@ test.yaml:6:7: output "version" of job "build" is never used: no other job reads
 
 [Playground](https://jactionlint.jdx.dev/#eNqEjrHKgzAUhXef4hBcDf5r4Hfo0nZqB51LrQEtkoj3Xhfx3UtiSqFLt4TznXs+7wwmoT57+pZMBrQyjF14ALM4KgIgrTiWYryzJY6RF56EaeeAxc40BDJfVxDbifSiE6NTiG2LdIzfxQJDZ7CkX5w0sI/eQ6Xa/58udalQVVD58VyfmsPt0tTXplYZEIT2W87ajsyu/8v+S+EzGojXALG2Uaw=)
 
-The rule `unused-job-output` (in the `default` profile, as a warning) reports an entry of `jobs.<id>.outputs` that nothing reads:
+The rule `unused-job-output` (in the `default` profile) reports an entry of `jobs.<id>.outputs` that nothing reads:
 no job reads `needs.<id>.outputs.<name>` and no output of a reusable workflow (`on.workflow_call.outputs`) uses
 `jobs.<id>.outputs.<name>`. The output is dead code, and it makes a reader look for a consumer that does not exist.
 
@@ -6938,7 +6939,7 @@ rules:
   unused-workflow-input: warn
 ```
 
-The rule `unused-workflow-input` (in the `strict` profile, as a warning) reports an input of `workflow_dispatch` or
+The rule `unused-workflow-input` (in the `pedantic` profile, as a warning) reports an input of `workflow_dispatch` or
 `workflow_call` that no expression of the workflow reads. A manual run asks for a value that does nothing, or a caller passes
 a value that is dropped.
 
@@ -6995,7 +6996,7 @@ rules:
   unused-needs: info
 ```
 
-The rule `unused-needs` (in the `strict` profile, as info) reports an entry of `needs` that has no effect: the job never reads
+The rule `unused-needs` (in the `pedantic` profile, as info) reports an entry of `needs` that has no effect: the job never reads
 the outputs or the result of the needed job, and another job it needs already depends on it, so the entry changes neither the order
 of the jobs nor whether the job runs.
 
@@ -7007,7 +7008,7 @@ such a job runs even when its needs failed, and then the entry changes the resul
 There is no automatic fix.
 
 <a id="check-duplicate-triggers"></a>
-## Duplicate triggers (pedantic)
+## Duplicate triggers
 
 Example input:
 
@@ -7038,7 +7039,7 @@ rules:
   duplicate-triggers: warn
 ```
 
-The rule `duplicate-triggers` (in the `strict` profile, as a warning) reports a workflow that is triggered by `push` and by
+The rule `duplicate-triggers` (in the `default` profile) reports a workflow that is triggered by `push` and by
 `pull_request` when `push` has no branch filter. A commit pushed to a branch of the repository that has a pull request starts the
 workflow twice, once for each event, and both runs say the same thing.
 
@@ -7092,7 +7093,7 @@ rules:
   continue-on-error: info
 ```
 
-The rule `continue-on-error` (in the `strict` profile, as info) reports a job with a literal `continue-on-error: true`. The workflow
+The rule `continue-on-error` (in the `pedantic` profile, as info) reports a job with a literal `continue-on-error: true`. The workflow
 succeeds when the job fails, so nobody sees the failure unless they open the job. Some jobs are meant to be advisory; for those
 the finding is a reminder to keep it deliberate.
 
@@ -7139,7 +7140,7 @@ rules:
   mutable-runner-label: warn
 ```
 
-The rule `mutable-runner-label` (in the `strict` profile, as a warning) reports the labels of GitHub-hosted runners that GitHub
+The rule `mutable-runner-label` (in the `pedantic` profile, as a warning) reports the labels of GitHub-hosted runners that GitHub
 moves to a newer image over time: `ubuntu-latest`, `windows-latest`, `macos-latest` and their sized variants. A job on
 such a label can start to fail on the day GitHub switches the image, without any change in the repository. The message names the fixed label that the
 alias is today, according to the label table of jactionlint.
@@ -7223,7 +7224,7 @@ the workflow, for example `.github/workflows/release.yml runs on the release eve
 - `cache-poisoning` reports a restored cache when a calling workflow runs on `release` or on pushed tags.
 - `bot-conditions` offers its fix (which needs a pull request event) only when every caller runs on a pull request event.
 - `github-env`, `untrusted-checkout`, `untrusted-artifact` and `agentic-actions` look at the events of the callers like they look at the events of a workflow: `github-env` and `untrusted-checkout` need a caller that runs on `pull_request_target` (or `workflow_run`), `untrusted-artifact` one that runs on `workflow_run`, and `agentic-actions` one that outsiders can steer.
-- `template-injection`, `template-injection-expansion` and `template-injection-trusted` add the calling workflow to the message when it
+- `template-injection` adds the calling workflow to the message when it
   runs on a trigger that an outsider controls (`pull_request_target`, `workflow_run`, `issue_comment`, `issues`, comments and reviews).
 
 When no local workflow calls the action (it is published for other repositories, or used by a workflow that is not in the repository)
@@ -7233,8 +7234,8 @@ way because any caller can pass attacker-controlled text. jactionlint does not l
 
 How the rules treat actions:
 
-- **Applies** to the steps (and the metadata) of an action: `action-syntax`, `adhoc-packages`, `archived-uses`, `artipacked`, `checkout-static-credentials`, `constant-condition`, `context-availability`, `deprecated-action-input`, `deprecated-commands`, `duplicate-key`, `duplicate-step-id`, `expired-ignore`, `expression-syntax`, `expression-type`, `forbidden-uses`, `github-app`, `if-always-true`, `impostor-commit`, `insecure-commands`, `insecure-ssh-keyscan`, `insecure-url-scheme`, `invalid-env-var-name`, `invalid-function-call`, `invalid-id`, `invalid-ignore-comment`, `invalid-local-action`, `invalid-parallel-step`, `invalid-shell-name`, `invalid-uses`, `invisible-characters`, `known-vulnerable-actions`, `max-run-lines`, `merge-key`, `misfeature`, `misfeature-custom-shell`, `missing-action-input`, `obfuscation`, `outdated-action-runner`, `pipeline-without-pipefail`, `pyflakes`, `recursive-alias`, `ref-confusion`, `ref-version-mismatch`, `require-expression-wrapping`, `self-repository`, `shellcheck`, `stale-action-refs`, `superfluous-actions`, `template-injection`, `template-injection-expansion`, `template-injection-trusted`, `typosquat-uses`, `undefined-function`, `undefined-property`, `unknown-action-input`, `unlocked-install`, `unpinned-images`, `unpinned-tools`, `unpinned-uses`, `unsound-contains`, `unsound-prefix-match`, `unsound-ternary`, `unused-anchor`, `unused-ignore`, `unverified-download`, `use-trusted-publishing`, `yaml-syntax`.
-- **Caller-dependent**: `agentic-actions`, `bot-conditions`, `cache-poisoning`, `github-env` (`github-env-untrusted-input` does not depend on the caller), `untrusted-artifact` and `untrusted-checkout`.
+- **Applies** to the steps (and the metadata) of an action: `action-syntax`, `adhoc-packages`, `archived-uses`, `artipacked`, `checkout-static-credentials`, `constant-condition`, `context-availability`, `deprecated-action-input`, `deprecated-commands`, `duplicate-key`, `duplicate-step-id`, `expired-ignore`, `expression-syntax`, `expression-type`, `forbidden-uses`, `github-app`, `if-always-true`, `impostor-commit`, `insecure-commands`, `insecure-ssh-keyscan`, `insecure-url-scheme`, `invalid-env-var-name`, `invalid-function-call`, `invalid-id`, `invalid-ignore-comment`, `invalid-local-action`, `invalid-parallel-step`, `invalid-shell-name`, `invalid-uses`, `invisible-characters`, `known-vulnerable-actions`, `max-run-lines`, `merge-key`, `misfeature`, `missing-action-input`, `obfuscation`, `outdated-action-runner`, `pipeline-without-pipefail`, `pyflakes`, `recursive-alias`, `ref-confusion`, `ref-version-mismatch`, `require-expression-wrapping`, `self-repository`, `shellcheck`, `stale-action-refs`, `superfluous-actions`, `template-injection`, `typosquat-uses`, `undefined-function`, `undefined-property`, `unknown-action-input`, `unlocked-install`, `unpinned-images`, `unpinned-tools`, `unpinned-uses`, `unsound-contains`, `unsound-prefix-match`, `unsound-ternary`, `unused-anchor`, `unused-ignore`, `unverified-download`, `use-trusted-publishing`, `yaml-syntax`.
+- **Caller-dependent**: `agentic-actions`, `bot-conditions`, `cache-poisoning`, `github-env` (its findings about untrusted input do not depend on the caller), `untrusted-artifact` and `untrusted-checkout`.
 - **Not applicable** because an action does not have what the rule checks, or because only the calling job can decide (`unused-baseline-entry` is about the baseline file, not about a workflow or an action): `anonymous-definition`, `concurrency-cancels-prs`, `concurrency-cancels-release`, `concurrency-limits`, `conflicting-runner-labels`, `continue-on-error`, `cron-too-frequent`, `cyclic-job-needs`, `dangerous-triggers`, `dependabot-cooldown`, `dependabot-execution`, `dependabot-missing-actions-update`, `dependabot-syntax`, `duplicate-job-id`, `duplicate-job-needs`, `duplicate-triggers`, `excessive-permissions`, `gate-job-skipped-on-failure`, `hardcoded-container-credentials`, `invalid-activity-type`, `invalid-cron`, `invalid-event-config`, `invalid-event-filter`, `invalid-glob`, `invalid-label-pattern`, `invalid-local-workflow`, `invalid-permissions`, `invalid-timezone`, `invalid-workflow-call`, `invalid-workflow-call-input`, `invalid-workflow-dispatch-input`, `local-action-checkout`, `matrix-duplicate-value`, `matrix-invalid-exclude`, `missing-permissions`, `missing-timeout`, `missing-workflow-input`, `missing-workflow-secret`, `mutable-runner-label`, `overprovisioned-secrets`, `require-shell`, `required-actions`, `secrets-inherit`, `secrets-outside-env`, `self-hosted-runner`, `timeout-too-long`, `undefined-job-needs`, `undocumented-permissions`, `unknown-event`, `unknown-runner-label`, `unknown-workflow-input`, `unknown-workflow-secret`, `unredacted-secrets`, `unused-baseline-entry`, `unused-job-output`, `unused-needs`, `unused-workflow-input`, `workflow-call-permissions`, `workflow-input-type`, `workflow-run-names`, `workflow-syntax`.
 
 Example input:

@@ -80,6 +80,9 @@ func TestRuleRegistryIsWellFormed(t *testing.T) {
 	}
 }
 
+// removedBeforeReleaseFile lists the IDs which were merged into another rule before the first release.
+const removedBeforeReleaseFile = "removed-before-release.txt"
+
 var updateRuleIDs = flag.String("update-rule-ids", "", "write the rule IDs which are in no testdata/rule_ids.d/*.txt to testdata/rule_ids.d/<value>.txt")
 
 // Rule IDs are public API: they are written in configuration files, ignore comments and CI
@@ -98,21 +101,45 @@ func TestRuleIDsAreStable(t *testing.T) {
 	}
 
 	snapshot := map[string]string{}
+	retired := map[string]bool{} // the IDs of removed-before-release.txt
 	for _, name := range files {
 		b, err := os.ReadFile(name)
 		if err != nil {
 			t.Fatal(err)
 		}
 		for _, line := range strings.Split(string(b), "\n") {
-			if id := strings.TrimSpace(line); id != "" {
-				snapshot[id] = name
+			id := strings.TrimSpace(line)
+			if id == "" || strings.HasPrefix(id, "#") {
+				continue
+			}
+			snapshot[id] = name
+			if filepath.Base(name) == removedBeforeReleaseFile {
+				retired[id] = true
 			}
 		}
 	}
 
 	for id, file := range snapshot {
+		if retired[id] {
+			// Merged into another rule before the release. It must stay accepted as an alias
+			if _, ok := LookupRule(id); ok {
+				t.Errorf("rule ID %q is listed in %s but is registered again. a retired ID is never reused", id, file)
+			}
+			rr, ok := lookupRenamed(id)
+			if !ok {
+				t.Errorf("rule ID %q (listed in %s) was merged into another rule but is not in renamedRules, so ignores of it stop working", id, file)
+			} else if _, ok := LookupRule(rr.ID); !ok {
+				t.Errorf("retired rule ID %q points to %q, which is not registered", id, rr.ID)
+			}
+			continue
+		}
 		if _, ok := LookupRule(id); !ok {
 			t.Errorf("rule ID %q (listed in %s) was removed or renamed. IDs are stable; keep it registered", id, file)
+		}
+	}
+	for _, rr := range renamedRules {
+		if !retired[rr.Old] {
+			t.Errorf("renamedRules has %q, which testdata/rule_ids.d/%s does not list", rr.Old, removedBeforeReleaseFile)
 		}
 	}
 

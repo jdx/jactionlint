@@ -1,0 +1,5 @@
+# The configuration which the corpus run uses instead of the repositories' own (the mise task passes it with
+# --jactionlint-config). zizmor runs with --persona pedantic, so jactionlint runs with the profile of the same
+# name: otherwise the report would say nothing for repositories that are clean under their own configuration, and
+# repository specific settings such as self-hosted runner labels would be dropped by a smaller config anyway.
+profile: pedantic

@@ -68,7 +68,6 @@ rules:
 | [gate-job-skipped-on-failure](#gate-job-skipped-on-failure) | correctness | error | default |
 | [github-app](#github-app) | security | error | default |
 | [github-env](#github-env) | security | error | default |
-| [github-env-untrusted-input](#github-env-untrusted-input) | security | error | pedantic |
 | [hardcoded-container-credentials](#hardcoded-container-credentials) | security | error | correctness |
 | [if-always-true](#if-always-true) | correctness | error | correctness |
 | [impostor-commit](#impostor-commit) | security | error | only with `-online` |
@@ -103,7 +102,6 @@ rules:
 | [max-run-lines](#max-run-lines) | style | error | pedantic |
 | [merge-key](#merge-key) | correctness | error | correctness |
 | [misfeature](#misfeature) | security | error | default |
-| [misfeature-custom-shell](#misfeature-custom-shell) | style | info | pedantic |
 | [missing-action-input](#missing-action-input) | correctness | error | correctness |
 | [missing-permissions](#missing-permissions) | policy | error | default |
 | [missing-timeout](#missing-timeout) | policy | error | default |
@@ -129,8 +127,6 @@ rules:
 | [stale-action-refs](#stale-action-refs) | security | info | only with `-online` |
 | [superfluous-actions](#superfluous-actions) | security | error | default |
 | [template-injection](#template-injection) | security | error | correctness |
-| [template-injection-expansion](#template-injection-expansion) | security | warn | pedantic |
-| [template-injection-trusted](#template-injection-trusted) | style | info | pedantic |
 | [timeout-too-long](#timeout-too-long) | policy | error | only when configured |
 | [typosquat-uses](#typosquat-uses) | security | error | default |
 | [undefined-function](#undefined-function) | correctness | error | correctness |
@@ -516,20 +512,11 @@ A GitHub App token is issued with more access or a longer life than needed.
 
 ## github-env
 
-A value that is not a literal is written to GITHUB_ENV or GITHUB_PATH in a workflow triggered by pull_request_target or workflow_run.
+Input that an outsider controls, or a value that is not a literal in a workflow triggered by pull_request_target or workflow_run, is written to GITHUB_ENV or GITHUB_PATH.
 
 - Group: security
 - Default level: error
 - Profile: default
-- Details and examples: [checks](./checks.md#check-github-env)
-
-## github-env-untrusted-input
-
-Input that an outsider controls is written to GITHUB_ENV or GITHUB_PATH.
-
-- Group: security
-- Default level: error
-- Profile: pedantic
 - Details and examples: [checks](./checks.md#check-github-env)
 
 ## hardcoded-container-credentials
@@ -837,20 +824,12 @@ The YAML merge key << is used, which GitHub Actions does not support.
 
 ## misfeature
 
-A misfeature of GitHub Actions is used: the pip-install input of setup-python or the cmd shell.
+A misfeature of GitHub Actions is used: the pip-install input of setup-python or the cmd shell. With the option pedantic, a shell that GitHub does not document too.
 
 - Group: security
 - Default level: error
 - Profile: default
-- Details and examples: [checks](./checks.md#check-misfeature)
-
-## misfeature-custom-shell
-
-A shell which GitHub does not document is used.
-
-- Group: style
-- Default level: info
-- Profile: pedantic
+- Option `pedantic` (bool, no default): Also report the pedantic checks, which are noisier. Unset, they run under the pedantic profile.
 - Details and examples: [checks](./checks.md#check-misfeature)
 
 ## missing-action-input
@@ -1083,33 +1062,14 @@ An action does what a tool of the runner image does as well, such as gh release 
 
 ## template-injection
 
-A potentially untrusted input is expanded in a script, a container option or the prompt of an AI agent.
+A potentially untrusted input is expanded in a script, a container option or the prompt of an AI agent. With the option pedantic, so is any other expression.
 
 - Group: security
 - Default level: error
 - Profile: correctness
 - Fixable: yes
+- Option `pedantic` (bool, no default): Also report the pedantic checks, which are noisier. Unset, they run under the pedantic profile.
 - Details and examples: [checks](./checks.md#untrusted-inputs)
-
-## template-injection-expansion
-
-A ${{ }} expansion in a script is not an environment variable.
-
-- Group: security
-- Default level: warn
-- Profile: pedantic
-- Fixable: yes
-- Details and examples: [checks](./checks.md#check-template-injection-expansion)
-
-## template-injection-trusted
-
-A ${{ }} expansion in a script is of a value that an attacker cannot control.
-
-- Group: style
-- Default level: info
-- Profile: pedantic
-- Fixable: yes
-- Details and examples: [checks](./checks.md#check-template-injection-expansion)
 
 ## timeout-too-long
 
@@ -1423,3 +1383,17 @@ The file is not valid YAML.
 - Group: correctness
 - Default level: error
 - Profile: correctness
+
+## Retired rule IDs
+
+An audit is one rule with one ID. These IDs existed while 2.0 was in development, before the first release, and were merged into
+the rule that reports their findings now. `-ignore`, the `ignore` lists of `paths` and the `# jactionlint ignore=` comments still
+take them: such an ignore matches only the findings that had the old ID, and jactionlint warns that the ID is deprecated.
+`rules`, `ignores`, `fix.rules` and `-rules` do not take them.
+
+| Retired ID | Rule | Findings are on with |
+| --- | --- | --- |
+| `github-env-untrusted-input` | [github-env](#github-env) | always |
+| `misfeature-custom-shell` | [misfeature](#misfeature) | the option `pedantic` |
+| `template-injection-expansion` | [template-injection](#template-injection) | the option `pedantic` |
+| `template-injection-trusted` | [template-injection](#template-injection) | the option `pedantic` |

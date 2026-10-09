@@ -3,7 +3,7 @@ package jactionlint
 import "testing"
 
 func TestMisfeatureShells(t *testing.T) {
-	cfg := mustParseConfig(t, "rules:\n  misfeature: warn\n  misfeature-custom-shell: info\n")
+	cfg := mustParseConfig(t, "rules:\n  misfeature:\n    level: warn\n    pedantic: true\n")
 	tests := []struct {
 		shell string
 		want  string // the ID of the finding, if any
@@ -36,8 +36,8 @@ func TestMisfeatureShells(t *testing.T) {
 			src := "on: push\njobs:\n  j:\n    runs-on: ${{ matrix.os }}\n    strategy:\n      matrix:\n        os: [a]\n        shell: [b]\n    steps:\n      - run: echo\n        shell: '" + tc.shell + "'\n"
 			var got []string
 			for _, e := range lintWithConfig(t, cfg, src) {
-				if e.ID == "misfeature" || e.ID == "misfeature-custom-shell" {
-					got = append(got, e.ID)
+				if e.ID == "misfeature" {
+					got = append(got, findingName(e))
 				}
 			}
 			switch {

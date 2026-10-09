@@ -22,6 +22,9 @@ type IgnorePattern struct {
 	ID string
 	// Regexp is the regular expression to match error messages. It is nil when the pattern is a rule ID.
 	Regexp *regexp.Regexp
+	// Retired is the retired rule ID the pattern was written with (see RenamedRule), or empty. ID is then
+	// the rule it was merged into, and the pattern matches only the findings which had the retired ID.
+	Retired string
 }
 
 // ParseIgnorePattern parses a pattern of -ignore, "paths.*.ignore" and inline ignore comments. When the
@@ -30,6 +33,9 @@ type IgnorePattern struct {
 func ParseIgnorePattern(s string) (IgnorePattern, error) {
 	if _, ok := LookupRule(s); ok {
 		return IgnorePattern{ID: s}, nil
+	}
+	if rr, ok := lookupRenamed(s); ok {
+		return IgnorePattern{ID: rr.ID, Retired: rr.Old}, nil
 	}
 	r, err := regexp.Compile(s)
 	if err != nil {
@@ -43,7 +49,18 @@ func (p IgnorePattern) String() string {
 	if p.Regexp != nil {
 		return p.Regexp.String()
 	}
+	if p.Retired != "" {
+		return p.Retired
+	}
 	return p.ID
+}
+
+// deprecation returns the warning about a retired rule ID, or an empty string.
+func (p IgnorePattern) deprecation() string {
+	if rr, ok := lookupRenamed(p.Retired); ok {
+		return rr.renamedMessage()
+	}
+	return ""
 }
 
 // Match returns whether the pattern matches the error.
@@ -51,7 +68,10 @@ func (p IgnorePattern) Match(err *Error) bool {
 	if p.Regexp != nil {
 		return p.Regexp.MatchString(err.Message)
 	}
-	return p.ID != "" && p.ID == err.ID
+	if p.ID == "" || p.ID != err.ID {
+		return false
+	}
+	return p.Retired == "" || p.Retired == err.RetiredID
 }
 
 // IgnorePatterns is a list of patterns. These patterns are used for filtering errors by matching the
@@ -327,9 +347,14 @@ func parseConfig(b []byte) (*Config, error) {
 			c.Deprecations = append(c.Deprecations, dep)
 		}
 	}
-	for pat := range c.Paths {
+	for pat, pc := range c.Paths {
 		if !doublestar.ValidatePattern(pat) {
 			return nil, fmt.Errorf("invalid glob pattern %q in \"paths\"", pat)
+		}
+		for _, ig := range pc.Ignore {
+			if m := ig.deprecation(); m != "" {
+				c.Deprecations = append(c.Deprecations, fmt.Sprintf("\"paths\": %s", m))
+			}
 		}
 	}
 	for i, r := range c.RequiredActions {

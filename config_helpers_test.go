@@ -121,3 +121,12 @@ func withDefaultProfile(t *testing.T) {
 func defaultProfileConfig() *Config {
 	return &Config{Profile: ProfileDefault}
 }
+
+// findingName is the name a finding had before the audits with a noisier tier were merged into one rule: the
+// retired ID when the finding has one, else its ID. The tests that were written for the split IDs use it.
+func findingName(e *Error) string {
+	if e.RetiredID != "" {
+		return e.RetiredID
+	}
+	return e.ID
+}

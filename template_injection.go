@@ -477,11 +477,23 @@ type tiClass struct {
 	Source string
 }
 
-// ID returns the rule ID of the finding. tiNone has none.
+// ID returns the rule ID of the finding. tiNone has none. The tiers are one rule: the expansion and the
+// trusted tier are its pedantic findings.
 func (t tiTier) ID() string {
+	if t == tiNone {
+		return ""
+	}
+	return "template-injection"
+}
+
+// pedantic reports whether the tier is one of the pedantic findings, which the option "pedantic" turns on.
+func (t tiTier) pedantic() bool {
+	return t == tiExpansion || t == tiTrusted
+}
+
+// retiredID is the ID that the findings of the tier had before the audit was one rule (see RenamedRule).
+func (t tiTier) retiredID() string {
 	switch t {
-	case tiDirect, tiSubtree, tiEnv:
-		return "template-injection"
 	case tiExpansion:
 		return "template-injection-expansion"
 	case tiTrusted:
@@ -556,7 +568,10 @@ func (c *tiContext) classify(sp *exprSpan) tiClass {
 // tiEnabled reports whether the configuration reports the findings of the tier.
 func tiEnabled(cfg *Config, t tiTier) bool {
 	id := t.ID()
-	return id != "" && cfg.RuleEnabled(id)
+	if id == "" || !cfg.RuleEnabled(id) {
+		return false
+	}
+	return !t.pedantic() || cfg.auditPedantic(id)
 }
 
 // --- fixes ---------------------------------------------------------------------------------------

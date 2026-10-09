@@ -83,19 +83,17 @@ func (f FixFailure) String() string {
 // metadata, and the removal of unused ignore comments last. IDs which are not listed (custom rules)
 // come after the listed ones, in alphabetical order. A fix of a safe kind always wins over an unsafe one.
 var fixPriority = map[string]int{
-	"template-injection":           10,
-	"template-injection-trusted":   11,
-	"template-injection-expansion": 12,
-	"insecure-commands":            20,
-	"artipacked":                   30,
-	"bot-conditions":               40,
-	"unpinned-uses":                50,
-	"self-repository":              60,
-	"obfuscation":                  70,
-	"missing-permissions":          80,
-	"missing-timeout":              90,
-	"anonymous-definition":         100,
-	"unused-ignore":                900,
+	"template-injection":   10,
+	"insecure-commands":    20,
+	"artipacked":           30,
+	"bot-conditions":       40,
+	"unpinned-uses":        50,
+	"self-repository":      60,
+	"obfuscation":          70,
+	"missing-permissions":  80,
+	"missing-timeout":      90,
+	"anonymous-definition": 100,
+	"unused-ignore":        900,
 }
 
 func fixRank(id string) int {

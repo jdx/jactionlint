@@ -296,6 +296,9 @@ func unusedInlineIgnores(ignores []inlineIgnore, orphans []*inlineIgnoreEntry, c
 			// Only for an audit which maps onto a rule that is on: a rule which is off cannot report anything
 			return zizmorEntryActive(e, cfg, online)
 		}
+		if rr, ok := lookupRenamed(e.pat.Retired); ok && rr.Option == pedanticOption.Name && !cfg.auditPedantic(rr.ID) {
+			return false // the findings of the retired ID are not reported without the pedantic option
+		}
 		return e.pat.ID == "" || cfg.RuleRuns(e.pat.ID, online)
 	}
 	report := func(e *inlineIgnoreEntry, what string) {

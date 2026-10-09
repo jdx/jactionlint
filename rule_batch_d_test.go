@@ -366,7 +366,7 @@ func TestGitHubEnvTriggersAndNames(t *testing.T) {
 	count := func(src string) int {
 		n := 0
 		for _, e := range lintBatchD(t, "test.yaml", src, cfg) {
-			if e.ID == "github-env" || e.ID == "github-env-untrusted-input" {
+			if e.ID == "github-env" {
 				n++
 			}
 		}
@@ -439,7 +439,7 @@ func countBatchD(t *testing.T, id, src string) int {
 	t.Helper()
 	n := 0
 	for _, e := range lintBatchD(t, "test.yaml", src, allBatchDRules()) {
-		if e.ID == id {
+		if findingName(e) == id {
 			n++
 		}
 	}

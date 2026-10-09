@@ -185,6 +185,7 @@ type Linter struct {
 	minSeverity    Severity
 	online         onlineSettings
 	baseline       linterBaseline
+	warnedOnce     sync.Map // string -> struct{}: the messages warnOnce printed
 	profile        Profile  // the -profile override, empty when the configuration decides
 	profiled       sync.Map // *Config -> *Config: the configs with the profile override applied
 	warned         sync.Map // *Config -> struct{}: configs whose deprecations were already reported
@@ -309,6 +310,7 @@ func NewLinter(out io.Writer, opts *LinterOptions) (*Linter, error) {
 		minSeverity:    opts.MinSeverity,
 		online:         onlineSettings{off: opts.OnlineOff, enabled: !opts.OnlineOff && (opts.Online || opts.OnlineOptions.Mode != OnlineModeDefault), client: opts.GitHubClient, ttl: opts.OnlineCacheTTL, ctx: opts.Context, opts: opts.OnlineOptions},
 	}
+	l.warnRetiredIgnores(ignore...)
 	if opts.Profile != "" {
 		p, err := ParseProfile(string(opts.Profile))
 		if err != nil {
@@ -826,6 +828,14 @@ func (l *Linter) finishCheck(path string, content []byte, all []*Error, cfg *Con
 	// Inline ignores are applied first so that every pattern sees all errors, which tells whether it
 	// is used. The order of the filters does not change which errors remain.
 	inlineIgnores, orphans, ignoreErrs := parseInlineIgnoresWithOrphans(content)
+	for _, ig := range inlineIgnores {
+		for _, e := range ig.entries {
+			l.warnRetiredIgnores(e.pat)
+		}
+	}
+	for _, e := range orphans {
+		l.warnRetiredIgnores(e.pat)
+	}
 	inlineIgnores = append(inlineIgnores, parseZizmorIgnores(content)...)
 	all = l.filterInlineIgnores(all, inlineIgnores)
 	all = dropIgnored(all, cfgHit)
@@ -921,6 +931,28 @@ func (l *Linter) warnDeprecations(cfg *Config) {
 	}
 	for _, n := range cfg.Notices {
 		fmt.Fprintln(l.logOut, "note:", n)
+	}
+}
+
+// warnOnce reports a warning about the run once, however many files cause it.
+func (l *Linter) warnOnce(msg string) {
+	if _, loaded := l.warnedOnce.LoadOrStore(msg, struct{}{}); loaded {
+		return
+	}
+	l.notesMu.Lock()
+	l.notes = append(l.notes, msg)
+	l.notesMu.Unlock()
+	if !structured(l.printer) {
+		fmt.Fprintln(l.logOut, "warning:", msg)
+	}
+}
+
+// warnRetiredIgnores warns about the ignore patterns written with a retired rule ID.
+func (l *Linter) warnRetiredIgnores(pats ...IgnorePattern) {
+	for _, p := range pats {
+		if m := p.deprecation(); m != "" {
+			l.warnOnce(m)
+		}
 	}
 }
 

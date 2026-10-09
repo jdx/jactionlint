@@ -105,6 +105,24 @@ rules:
 		b.WriteString("\n")
 	}
 
+	b.WriteString(`## Retired rule IDs
+
+An audit is one rule with one ID. These IDs existed while 2.0 was in development, before the first release, and were merged into
+the rule that reports their findings now. ` + "`-ignore`" + `, the ` + "`ignore`" + ` lists of ` + "`paths`" + ` and the ` + "`# jactionlint ignore=`" + ` comments still
+take them: such an ignore matches only the findings that had the old ID, and jactionlint warns that the ID is deprecated.
+` + "`rules`" + `, ` + "`ignores`" + `, ` + "`fix.rules`" + ` and ` + "`-rules`" + ` do not take them.
+
+| Retired ID | Rule | Findings are on with |
+| --- | --- | --- |
+`)
+	for _, rr := range jactionlint.RenamedRules() {
+		on := "always"
+		if rr.Option != "" {
+			on = "the option `" + rr.Option + "`"
+		}
+		fmt.Fprintf(&b, "| `%s` | [%s](#%s) | %s |\n", rr.Old, rr.ID, rr.ID, on)
+	}
+
 	out := strings.TrimRight(b.String(), "\n") + "\n"
 	_, err := io.WriteString(w, out)
 	return err

@@ -167,6 +167,48 @@ func registerRules(infos ...RuleInfo) {
 	}
 }
 
+// RenamedRule is a rule ID which was merged into the ID of another rule before 2.0 was released, when one audit
+// was split in several IDs. The old ID is not a rule any more: its findings are the ones of ID with the
+// option Option on. Ignores of the old ID (-ignore, "ignore" of "paths" and inline ignore comments) still
+// work, matching only the findings that had the old ID, and print a deprecation warning. Everything else
+// that takes a rule ID (rules, ignores, fix.rules, -rules) refuses it and names the new place.
+type RenamedRule struct {
+	// Old is the retired ID.
+	Old string
+	// ID is the ID of the rule which reports the findings now.
+	ID string
+	// Option is the option of ID that turns the findings on, or empty when ID reports them always.
+	Option string
+}
+
+// renamedRules are the retired IDs, sorted by Old. testdata/rule_ids.d/removed-before-release.txt lists them.
+var renamedRules = []RenamedRule{
+	{Old: "github-env-untrusted-input", ID: "github-env"},
+	{Old: "misfeature-custom-shell", ID: "misfeature", Option: "pedantic"},
+	{Old: "template-injection-expansion", ID: "template-injection", Option: "pedantic"},
+	{Old: "template-injection-trusted", ID: "template-injection", Option: "pedantic"},
+}
+
+// RenamedRules returns the retired rule IDs and the rules that report their findings now.
+func RenamedRules() []RenamedRule {
+	return slices.Clone(renamedRules)
+}
+
+// lookupRenamed returns the retired rule with the ID.
+func lookupRenamed(id string) (RenamedRule, bool) {
+	for _, r := range renamedRules {
+		if r.Old == id {
+			return r, true
+		}
+	}
+	return RenamedRule{}, false
+}
+
+// renamedMessage is the deprecation warning about the use of a retired rule ID in an ignore.
+func (r RenamedRule) renamedMessage() string {
+	return fmt.Sprintf("the rule ID %q was merged into %q before 2.0. the ignore still works for its findings; write %q instead", r.Old, r.ID, r.ID)
+}
+
 // DefaultMaxRunLines is the maximum number of lines of a run: script which the max-run-lines rule
 // allows when it is enabled by a profile without the "max" option.
 const DefaultMaxRunLines = 100
