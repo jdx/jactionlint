@@ -217,3 +217,29 @@ func TestCachePoisoningBranchPushKnowsItsRefIsNotATag(t *testing.T) {
 		})
 	}
 }
+
+func TestCachePoisoningPushWithoutRefFilterAlsoGetsTags(t *testing.T) {
+	// a push trigger without a ref filter runs for tags as well as branches: a cache kept for tags is restored
+	// by the tag push. A filter on one kind of ref keeps the other kind away.
+	const mid = "permissions: read-all\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n"
+	const step = "      - uses: Swatinem/rust-cache@v2\n        if: startsWith(github.ref, 'refs/tags/')\n      - run: docker push example/img\n"
+	tests := []struct {
+		name, on string
+		want     int
+	}{
+		{"no filter", "on: push\n", 1},
+		{"paths only", "on:\n  push:\n    paths: ['src/**']\n", 1},
+		{"branches only", "on:\n  push:\n    branches: [main]\n", 0},
+		{"branches-ignore only", "on:\n  push:\n    branches-ignore: [dev]\n", 0},
+		{"branches and tags", "on:\n  push:\n    branches: [main]\n    tags: ['v*']\n", 1},
+		{"tags-ignore only", "on:\n  push:\n    tags-ignore: ['v0*']\n", 1},
+		{"tags only", "on:\n  push:\n    tags: ['v*']\n", 1},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := lintCacheWorkflow(t, "", tc.on+mid+step); len(got) != tc.want {
+				t.Errorf("want %d findings but got %v", tc.want, got)
+			}
+		})
+	}
+}
