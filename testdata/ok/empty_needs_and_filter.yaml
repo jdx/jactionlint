@@ -1,0 +1,14 @@
+name: x
+on:
+  push:
+    tags:
+    branches: [main]
+permissions: {}
+jobs:
+  a:
+    runs-on: ubuntu-latest
+    needs: []
+    timeout-minutes: 5
+    steps:
+      - run: echo
+        shell: bash

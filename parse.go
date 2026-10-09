@@ -548,6 +548,10 @@ func (p *parser) parseRepositoryDispatchEvent(pos *Pos, n *yaml.Node) *Repositor
 
 // https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions#using-filters
 func (p *parser) parseWebhookEventFilter(name *String, n *yaml.Node) *WebhookEventFilter {
+	// A filter with no value ("tags:") is accepted by GitHub. An empty list is still reported, like actionlint does
+	if n.Kind == yaml.ScalarNode && n.Tag == "!!null" {
+		return &WebhookEventFilter{name, []*String{}}
+	}
 	v := p.parseStringOrStringSequence(name.Value, n, false, false)
 	return &WebhookEventFilter{name, v}
 }
@@ -1564,7 +1568,7 @@ func (p *parser) parseJob(id *String, n *yaml.Node) *Job {
 				ret.Needs = []*String{p.parseString(v, false)}
 			} else {
 				// needs: [job1, job2]
-				ret.Needs = p.parseStringSequence("needs", v, false, false)
+				ret.Needs = p.parseStringSequence("needs", v, true, false)
 			}
 		case "runs-on":
 			ret.RunsOn = p.parseRunsOn(v)
