@@ -177,6 +177,9 @@ func releaseSignal(j *Job, sc scenario) string {
 		return ""
 	}
 	if j.Environment != nil && j.Environment.Name != nil && j.Environment.Name.Value != "" {
+		if j.Environment.Name.ContainsExpression() {
+			return fmt.Sprintf("job %q uses an environment that an expression chooses", j.ID.Value)
+		}
 		return fmt.Sprintf("job %q uses the environment %q", j.ID.Value, j.Environment.Name.Value)
 	}
 	windows := false
@@ -294,7 +297,7 @@ func anyJobConcurrency(n *Workflow) bool {
 }
 
 func (rule *RuleConcurrencyCancelsRelease) addPushScenarios(we *WebhookEvent) {
-	hasTags, hasBranches := !we.Tags.IsEmpty(), !we.Branches.IsEmpty()
+	hasTags, hasBranches := tagFilterMatches(we.Tags), !we.Branches.IsEmpty()
 	if hasTags {
 		rule.scenarios = append(rule.scenarios, releaseScenario{scenario{event: "push", refPrefix: "refs/tags/"}, true, true, "pushes of tags"})
 	}

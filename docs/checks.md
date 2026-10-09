@@ -5175,6 +5175,13 @@ For a workflow that pull requests start, the group above is per pull request: a 
 pull request and nothing else. A group that is the same for every pull request would cancel the runs of unrelated ones, which
 [`concurrency-cancels-prs`](#check-concurrency-cancels-prs) reports.
 
+A workflow that releases or deploys is told the opposite: when it runs on the `release` event or on pushed tags, or a job has an
+`environment:`, publishes a package or deploys, cancelling a run that is half done leaves a half done release
+([`concurrency-cancels-release`](#check-concurrency-cancels-release) reports exactly that). The advice is then `cancel-in-progress: false`,
+so that a new run waits for the running one, there is no fix for it, and the plain group name (`concurrency: release`), which
+queues runs and cancels none, is accepted. The two rules never contradict each other: the block that one recommends is not reported
+by the other.
+
 Whether to cancel is a choice, so a `concurrency:` mapping that does not cancel (to serialize releases, for example) is
 accepted, and so is a `queue:`. The rule skips workflows that only run through `workflow_call` (the caller decides) and workflows where every job sets its own
 `concurrency:`.
