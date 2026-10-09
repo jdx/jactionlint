@@ -69,7 +69,7 @@ func baselineCmd(t *testing.T, args ...string) (status int, stdout, stderr strin
 	t.Helper()
 	var out, errOut bytes.Buffer
 	cmd := &Command{Stdin: strings.NewReader(""), Stdout: &out, Stderr: &errOut}
-	status = cmd.Main(append([]string{"jactionlint", "-no-color", "-shellcheck=", "-pyflakes=", "-rule-ids", "-format", "oneline"}, args...))
+	status = cmd.Main(append([]string{"jactionlint", "--no-color", "--shellcheck=", "--pyflakes=", "--rule-ids", "--format", "oneline"}, args...))
 	return status, out.String(), errOut.String()
 }
 
@@ -106,9 +106,9 @@ func TestBaselineWriteThenLintIsClean(t *testing.T) {
 		t.Fatalf("the workflow must have findings before the baseline: %d %q", status, out)
 	}
 
-	status, out, errOut := baselineCmd(t, "-baseline-write")
+	status, out, errOut := baselineCmd(t, "--baseline-write")
 	if status != 0 {
-		t.Fatalf("-baseline-write exit status is %d: %q %q", status, out, errOut)
+		t.Fatalf("--baseline-write exit status is %d: %q %q", status, out, errOut)
 	}
 	if !strings.Contains(out, "Wrote 3 entries for 1 file") {
 		t.Fatalf("unexpected output %q", out)
@@ -117,7 +117,7 @@ func TestBaselineWriteThenLintIsClean(t *testing.T) {
 		t.Fatalf("the default baseline file was not written: %v", err)
 	}
 
-	status, out, errOut = baselineCmd(t, "-baseline")
+	status, out, errOut = baselineCmd(t, "--baseline")
 	if status != 0 || out != "" {
 		t.Fatalf("every finding is baselined but got status %d: %q", status, out)
 	}
@@ -127,17 +127,17 @@ func TestBaselineWriteThenLintIsClean(t *testing.T) {
 
 	// The file is not applied unless asked
 	if status, _, _ := baselineCmd(t); status != ExitStatusSuccessProblemFound {
-		t.Errorf("without -baseline the findings are reported, got status %d", status)
+		t.Errorf("without --baseline the findings are reported, got status %d", status)
 	}
 }
 
 func TestBaselineIsIdempotentAndHasNoLineNumbers(t *testing.T) {
 	root := baselineProject(t, baselineWorkflow, "")
 	path := filepath.Join(root, DefaultBaselineFile)
-	baselineCmd(t, "-baseline-write")
+	baselineCmd(t, "--baseline-write")
 	first := readTestFile(t, path)
 
-	_, out, _ := baselineCmd(t, "-baseline-write")
+	_, out, _ := baselineCmd(t, "--baseline-write")
 	if !strings.Contains(out, "up to date") {
 		t.Errorf("a second write must say nothing changed: %q", out)
 	}
@@ -147,7 +147,7 @@ func TestBaselineIsIdempotentAndHasNoLineNumbers(t *testing.T) {
 
 	// An unrelated edit which moves every line does not change the file
 	writeTestFile(t, filepath.Join(root, ".github", "workflows", "ci.yaml"), "# a new comment\n# another one\n"+baselineWorkflow)
-	baselineCmd(t, "-baseline-write")
+	baselineCmd(t, "--baseline-write")
 	if third := readTestFile(t, path); third != first {
 		t.Errorf("a shift of the lines changed the baseline:\n%s\n%s", first, third)
 	}
@@ -158,27 +158,27 @@ func TestBaselineIsIdempotentAndHasNoLineNumbers(t *testing.T) {
 
 func TestBaselineSurvivesLineShifts(t *testing.T) {
 	root := baselineProject(t, baselineWorkflow, "")
-	baselineCmd(t, "-baseline-write")
+	baselineCmd(t, "--baseline-write")
 	wf := filepath.Join(root, ".github", "workflows", "ci.yaml")
 
 	// Comments and a new step which is clean move the findings
 	shifted := strings.Replace(baselineWorkflow, "    steps:\n      - uses: actions/checkout@v4", "    # explain\n    steps:\n      - name: Setup\n        run: echo setup\n      - uses: actions/checkout@v4", 1)
 	writeTestFile(t, wf, "# top\n\n"+shifted)
-	status, out, _ := baselineCmd(t, "-baseline")
+	status, out, _ := baselineCmd(t, "--baseline")
 	if status != 0 || out != "" {
 		t.Fatalf("a shifted finding must stay baselined: %d %q", status, out)
 	}
 
 	// The indentation changes with a reformatting
 	writeTestFile(t, wf, "name: CI\non: push\njobs:\n    build:\n        runs-on: ubuntu-latest\n        steps:\n            - uses: actions/checkout@v4\n            - run: echo ${{ github.event.head_commit.message }}\n    test:\n        runs-on: ubuntu-latest\n        steps:\n            - run: echo hi\n")
-	if status, out, _ := baselineCmd(t, "-baseline"); status != 0 || out != "" {
+	if status, out, _ := baselineCmd(t, "--baseline"); status != 0 || out != "" {
 		t.Fatalf("a reindented finding must stay baselined: %d %q", status, out)
 	}
 }
 
 func TestBaselineReportsNewFindings(t *testing.T) {
 	root := baselineProject(t, baselineWorkflow, "")
-	baselineCmd(t, "-baseline-write")
+	baselineCmd(t, "--baseline-write")
 	wf := filepath.Join(root, ".github", "workflows", "ci.yaml")
 
 	// A new job above the old ones, with the same kind of findings
@@ -189,7 +189,7 @@ func TestBaselineReportsNewFindings(t *testing.T) {
       - run: echo ${{ github.event.head_commit.message }}
 `, 1)
 	writeTestFile(t, wf, added)
-	status, out, _ := baselineCmd(t, "-baseline")
+	status, out, _ := baselineCmd(t, "--baseline")
 	ids := reportedIDs(t, out)
 	if status != ExitStatusSuccessProblemFound || countID(ids, "template-injection") != 1 || countID(ids, "missing-timeout") != 1 || len(ids) != 2 {
 		t.Fatalf("only the findings of the new job must be reported: %d %q", status, out)
@@ -201,10 +201,10 @@ func TestBaselineReportsNewFindings(t *testing.T) {
 
 func TestBaselineChangedLineResurfaces(t *testing.T) {
 	root := baselineProject(t, baselineWorkflow, "")
-	baselineCmd(t, "-baseline-write")
+	baselineCmd(t, "--baseline-write")
 	wf := filepath.Join(root, ".github", "workflows", "ci.yaml")
 	writeTestFile(t, wf, strings.Replace(baselineWorkflow, "echo ${{ github.event.head_commit.message }}", "echo \"${{ github.event.head_commit.message }}\"", 1))
-	status, out, _ := baselineCmd(t, "-baseline")
+	status, out, _ := baselineCmd(t, "--baseline")
 	ids := reportedIDs(t, out)
 	if status != ExitStatusSuccessProblemFound || len(ids) != 1 || ids[0] != "template-injection" {
 		t.Fatalf("an edited line is code to review again: %d %q", status, out)
@@ -224,7 +224,7 @@ jobs:
 func TestBaselineDuplicatedFindings(t *testing.T) {
 	root := baselineProject(t, duplicateWorkflow, "")
 	wf := filepath.Join(root, ".github", "workflows", "ci.yaml")
-	baselineCmd(t, "-baseline-write")
+	baselineCmd(t, "--baseline-write")
 
 	var bl Baseline
 	if err := json.Unmarshal([]byte(readTestFile(t, filepath.Join(root, DefaultBaselineFile))), &bl); err != nil {
@@ -234,20 +234,20 @@ func TestBaselineDuplicatedFindings(t *testing.T) {
 		t.Fatalf("identical findings share a fingerprint and differ by occurrence: %+v", bl.Entries)
 	}
 
-	if status, out, _ := baselineCmd(t, "-baseline"); status != 0 || out != "" {
+	if status, out, _ := baselineCmd(t, "--baseline"); status != 0 || out != "" {
 		t.Fatalf("both are baselined: %d %q", status, out)
 	}
 
 	// A third identical finding is new
 	writeTestFile(t, wf, duplicateWorkflow+"      - run: echo ${{ github.event.issue.title }}\n")
-	status, out, _ := baselineCmd(t, "-baseline")
+	status, out, _ := baselineCmd(t, "--baseline")
 	if status != ExitStatusSuccessProblemFound || len(reportedIDs(t, out)) != 1 {
 		t.Fatalf("exactly one of three identical findings is new: %d %q", status, out)
 	}
 
 	// One of the two was fixed: the other stays accepted and one entry is unused
 	writeTestFile(t, wf, strings.Replace(duplicateWorkflow, "      - run: echo ${{ github.event.issue.title }}\n", "      - run: echo fixed\n", 1))
-	status, out, _ = baselineCmd(t, "-baseline-check")
+	status, out, _ = baselineCmd(t, "--baseline-check")
 	if status != 0 {
 		t.Fatalf("an unused entry is info and does not fail: %d %q", status, out)
 	}
@@ -259,19 +259,19 @@ func TestBaselineDuplicatedFindings(t *testing.T) {
 
 func TestBaselineUnusedEntries(t *testing.T) {
 	root := baselineProject(t, baselineWorkflow, "")
-	baselineCmd(t, "-baseline-write")
+	baselineCmd(t, "--baseline-write")
 	wf := filepath.Join(root, ".github", "workflows", "ci.yaml")
 	writeTestFile(t, wf, strings.Replace(baselineWorkflow, "      - run: echo ${{ github.event.head_commit.message }}\n", "", 1))
 
-	// Not reported without -baseline-check, but the note says so
-	status, out, errOut := baselineCmd(t, "-baseline")
+	// Not reported without --baseline-check, but the note says so
+	status, out, errOut := baselineCmd(t, "--baseline")
 	if status != 0 || out != "" || !strings.Contains(errOut, "1 baseline entr") {
 		t.Fatalf("unused entries are only mentioned: %d %q %q", status, out, errOut)
 	}
 
-	status, out, _ = baselineCmd(t, "-baseline-check")
+	status, out, _ = baselineCmd(t, "--baseline-check")
 	if status != 0 || !strings.Contains(out, "unused-baseline-entry") || !strings.Contains(out, "jactionlint-baseline.json") {
-		t.Fatalf("-baseline-check must list the entry in the baseline file: %d %q", status, out)
+		t.Fatalf("--baseline-check must list the entry in the baseline file: %d %q", status, out)
 	}
 	// The finding points at the entry in the baseline file
 	if !strings.Contains(out, `rule "template-injection"`) {
@@ -284,19 +284,19 @@ func TestBaselineUnusedEntries(t *testing.T) {
 
 	// The ratchet: a project can make unused entries fail the build
 	writeTestFile(t, filepath.Join(root, ".github", "jactionlint.yaml"), "rules:\n  unused-baseline-entry: error\n")
-	if status, _, _ := baselineCmd(t, "-baseline-check"); status != ExitStatusSuccessProblemFound {
+	if status, _, _ := baselineCmd(t, "--baseline-check"); status != ExitStatusSuccessProblemFound {
 		t.Errorf("unused-baseline-entry: error must fail the run, got %d", status)
 	}
 	writeTestFile(t, filepath.Join(root, ".github", "jactionlint.yaml"), "rules:\n  unused-baseline-entry: off\n")
-	if status, out, _ := baselineCmd(t, "-baseline-check"); status != 0 || out != "" {
+	if status, out, _ := baselineCmd(t, "--baseline-check"); status != 0 || out != "" {
 		t.Errorf("unused-baseline-entry: off must hide it: %d %q", status, out)
 	}
 	writeTestFile(t, filepath.Join(root, ".github", "jactionlint.yaml"), "")
 	os.Remove(filepath.Join(root, ".github", "jactionlint.yaml"))
 
 	// Writing again shrinks the file
-	baselineCmd(t, "-baseline-write")
-	if status, out, _ := baselineCmd(t, "-baseline-check"); status != 0 || out != "" {
+	baselineCmd(t, "--baseline-write")
+	if status, out, _ := baselineCmd(t, "--baseline-check"); status != 0 || out != "" {
 		t.Errorf("a fresh baseline has no unused entry: %d %q", status, out)
 	}
 	if strings.Contains(readTestFile(t, filepath.Join(root, DefaultBaselineFile)), "template-injection") {
@@ -306,7 +306,7 @@ func TestBaselineUnusedEntries(t *testing.T) {
 
 func TestBaselineRenamedFile(t *testing.T) {
 	root := baselineProject(t, baselineWorkflow, "")
-	baselineCmd(t, "-baseline-write")
+	baselineCmd(t, "--baseline-write")
 	old := filepath.Join(root, ".github", "workflows", "ci.yaml")
 	renamed := filepath.Join(root, ".github", "workflows", "build.yaml")
 	if err := os.Rename(old, renamed); err != nil {
@@ -314,14 +314,14 @@ func TestBaselineRenamedFile(t *testing.T) {
 	}
 
 	// The entries are keyed by file: the findings come back and the old entries are unused
-	status, out, _ := baselineCmd(t, "-baseline-check")
+	status, out, _ := baselineCmd(t, "--baseline-check")
 	ids := reportedIDs(t, out)
 	if status != ExitStatusSuccessProblemFound || countID(ids, "template-injection") != 1 || countID(ids, "unused-baseline-entry") != 3 {
 		t.Fatalf("a renamed file loses its baseline: %d %q", status, out)
 	}
 
-	baselineCmd(t, "-baseline-write")
-	if status, out, _ := baselineCmd(t, "-baseline-check"); status != 0 || out != "" {
+	baselineCmd(t, "--baseline-write")
+	if status, out, _ := baselineCmd(t, "--baseline-check"); status != 0 || out != "" {
 		t.Fatalf("writing the baseline again follows the rename: %d %q", status, out)
 	}
 	if strings.Contains(readTestFile(t, filepath.Join(root, DefaultBaselineFile)), "ci.yaml") {
@@ -332,15 +332,15 @@ func TestBaselineRenamedFile(t *testing.T) {
 func TestBaselineCRLF(t *testing.T) {
 	root := baselineProject(t, baselineWorkflow, "")
 	wf := filepath.Join(root, ".github", "workflows", "ci.yaml")
-	baselineCmd(t, "-baseline-write")
+	baselineCmd(t, "--baseline-write")
 	lf := readTestFile(t, filepath.Join(root, DefaultBaselineFile))
 
 	// A checkout with CRLF line endings is the same code
 	writeTestFile(t, wf, strings.ReplaceAll(baselineWorkflow, "\n", "\r\n"))
-	if status, out, _ := baselineCmd(t, "-baseline-check"); status != 0 || out != "" {
+	if status, out, _ := baselineCmd(t, "--baseline-check"); status != 0 || out != "" {
 		t.Fatalf("CRLF must not resurface findings or leave unused entries: %d %q", status, out)
 	}
-	baselineCmd(t, "-baseline-write")
+	baselineCmd(t, "--baseline-write")
 	if got := readTestFile(t, filepath.Join(root, DefaultBaselineFile)); got != lf {
 		t.Errorf("the baseline written from CRLF differs:\n%s\n%s", lf, got)
 	}
@@ -365,7 +365,7 @@ func TestBaselineScopeSeparatesJobs(t *testing.T) {
 
 func TestBaselineMatchesAfterMessageIsReworded(t *testing.T) {
 	root := baselineProject(t, baselineWorkflow, "")
-	baselineCmd(t, "-baseline-write")
+	baselineCmd(t, "--baseline-write")
 	path := filepath.Join(root, DefaultBaselineFile)
 	// Another release words the messages differently: the fingerprints (which include the message)
 	// change but the contexts (which do not) are the same
@@ -381,7 +381,7 @@ func TestBaselineMatchesAfterMessageIsReworded(t *testing.T) {
 		t.Fatal(err)
 	}
 	writeTestFile(t, path, string(out))
-	if status, out, _ := baselineCmd(t, "-baseline"); status != 0 || out != "" {
+	if status, out, _ := baselineCmd(t, "--baseline"); status != 0 || out != "" {
 		t.Fatalf("the context must keep the entries working: %d %q", status, out)
 	}
 }
@@ -392,15 +392,15 @@ func TestBaselineFromConfig(t *testing.T) {
 	if status, _, _ := baselineCmd(t); status != ExitStatusSuccessProblemFound {
 		t.Fatalf("auto without a file reports findings, got %d", status)
 	}
-	// -baseline-write is not affected by the config
-	if status, _, _ := baselineCmd(t, "-baseline-write"); status != 0 {
+	// --baseline-write is not affected by the config
+	if status, _, _ := baselineCmd(t, "--baseline-write"); status != 0 {
 		t.Fatalf("write failed: %d", status)
 	}
 	if status, out, _ := baselineCmd(t); status != 0 || out != "" {
 		t.Fatalf("auto applies the default file: %d %q", status, out)
 	}
-	if status, _, _ := baselineCmd(t, "-baseline=false"); status != ExitStatusSuccessProblemFound {
-		t.Errorf("-baseline=false must ignore the baseline, got %d", status)
+	if status, _, _ := baselineCmd(t, "--no-baseline"); status != ExitStatusSuccessProblemFound {
+		t.Errorf("--no-baseline must ignore the baseline, got %d", status)
 	}
 
 	// A path is relative to the repository and must exist
@@ -426,36 +426,36 @@ func TestBaselineFromConfig(t *testing.T) {
 
 func TestBaselineFlagsAndErrors(t *testing.T) {
 	root := baselineProject(t, baselineWorkflow, "")
-	if status, _, errOut := baselineCmd(t, "-baseline"); status != ExitStatusFailure || !strings.Contains(errOut, "-baseline-write") {
+	if status, _, errOut := baselineCmd(t, "--baseline"); status != ExitStatusFailure || !strings.Contains(errOut, "--baseline-write") {
 		t.Errorf("a missing baseline must say how to create it: %d %q", status, errOut)
 	}
-	if status, _, _ := baselineCmd(t, "-baseline-write", "-baseline"); status != ExitStatusInvalidCommandOption {
-		t.Errorf("-baseline-write -baseline is invalid, got %d", status)
+	if status, _, _ := baselineCmd(t, "--baseline-write", "--baseline"); status != ExitStatusInvalidCommandOption {
+		t.Errorf("--baseline-write --baseline is invalid, got %d", status)
 	}
-	if status, _, _ := baselineCmd(t, "-baseline-write", "-fix"); status != ExitStatusInvalidCommandOption {
-		t.Errorf("-baseline-write -fix is invalid, got %d", status)
+	if status, _, _ := baselineCmd(t, "--baseline-write", "--fix"); status != ExitStatusInvalidCommandOption {
+		t.Errorf("--baseline-write --fix is invalid, got %d", status)
 	}
-	if status, _, _ := baselineCmd(t, "-baseline-write", "-"); status != ExitStatusInvalidCommandOption {
-		t.Errorf("-baseline-write with stdin is invalid, got %d", status)
+	if status, _, _ := baselineCmd(t, "--baseline-write", "-"); status != ExitStatusInvalidCommandOption {
+		t.Errorf("--baseline-write with stdin is invalid, got %d", status)
 	}
 
 	// An explicit file
-	if status, _, _ := baselineCmd(t, "-baseline-write=ci/base.json"); status != 0 {
-		t.Fatalf("-baseline-write=FILE failed: %d", status)
+	if status, _, _ := baselineCmd(t, "--baseline-write=ci/base.json"); status != 0 {
+		t.Fatalf("--baseline-write=FILE failed: %d", status)
 	}
 	if _, err := os.Stat(filepath.Join(root, "ci", "base.json")); err != nil {
 		t.Errorf("the file was not written: %v", err)
 	}
-	if status, out, _ := baselineCmd(t, "-baseline=ci/base.json"); status != 0 || out != "" {
-		t.Errorf("-baseline=FILE applies it: %d %q", status, out)
+	if status, out, _ := baselineCmd(t, "--baseline=ci/base.json"); status != 0 || out != "" {
+		t.Errorf("--baseline=FILE applies it: %d %q", status, out)
 	}
 
 	writeTestFile(t, filepath.Join(root, "bad.json"), `{"version": 99, "entries": []}`)
-	if status, _, errOut := baselineCmd(t, "-baseline=bad.json"); status != ExitStatusFailure || !strings.Contains(errOut, "unsupported baseline version") {
+	if status, _, errOut := baselineCmd(t, "--baseline=bad.json"); status != ExitStatusFailure || !strings.Contains(errOut, "unsupported baseline version") {
 		t.Errorf("an unknown version is an error: %d %q", status, errOut)
 	}
 	writeTestFile(t, filepath.Join(root, "bad.json"), `[]`)
-	if status, _, _ := baselineCmd(t, "-baseline=bad.json"); status != ExitStatusFailure {
+	if status, _, _ := baselineCmd(t, "--baseline=bad.json"); status != ExitStatusFailure {
 		t.Errorf("a malformed baseline is an error, got %d", status)
 	}
 }
@@ -464,7 +464,7 @@ func TestBaselineWriteForFilesKeepsOthers(t *testing.T) {
 	root := baselineProject(t, baselineWorkflow, "")
 	other := filepath.Join(root, ".github", "workflows", "other.yaml")
 	writeTestFile(t, other, strings.Replace(baselineWorkflow, "name: CI", "name: Other", 1))
-	baselineCmd(t, "-baseline-write")
+	baselineCmd(t, "--baseline-write")
 	full := readTestFile(t, filepath.Join(root, DefaultBaselineFile))
 	if strings.Count(full, `"file"`) != 6 {
 		t.Fatalf("expected 6 entries:\n%s", full)
@@ -472,7 +472,7 @@ func TestBaselineWriteForFilesKeepsOthers(t *testing.T) {
 
 	// Fix other.yaml and refresh only it
 	writeTestFile(t, other, "on: push\njobs:\n  a:\n    runs-on: ubuntu-latest\n    timeout-minutes: 1\n    steps:\n      - run: echo hi\n")
-	status, out, _ := baselineCmd(t, "-baseline-write", ".github/workflows/other.yaml")
+	status, out, _ := baselineCmd(t, "--baseline-write", ".github/workflows/other.yaml")
 	if status != 0 || !strings.Contains(out, "3 entries") {
 		t.Fatalf("partial write: %d %q", status, out)
 	}
@@ -485,7 +485,7 @@ func TestBaselineWriteForFilesKeepsOthers(t *testing.T) {
 	if err := os.Remove(filepath.Join(root, ".github", "workflows", "ci.yaml")); err != nil {
 		t.Fatal(err)
 	}
-	baselineCmd(t, "-baseline-write", ".github/workflows/other.yaml")
+	baselineCmd(t, "--baseline-write", ".github/workflows/other.yaml")
 	if got := readTestFile(t, filepath.Join(root, DefaultBaselineFile)); strings.Contains(got, `"file"`) {
 		t.Errorf("entries of a deleted file must go:\n%s", got)
 	}
@@ -496,7 +496,7 @@ func TestBaselineWriteOrderIsDeterministic(t *testing.T) {
 	for _, n := range []string{"z.yaml", "a.yaml", "m.yaml"} {
 		writeTestFile(t, filepath.Join(root, ".github", "workflows", n), baselineWorkflow)
 	}
-	baselineCmd(t, "-baseline-write")
+	baselineCmd(t, "--baseline-write")
 	var bl Baseline
 	if err := json.Unmarshal([]byte(readTestFile(t, filepath.Join(root, DefaultBaselineFile))), &bl); err != nil {
 		t.Fatal(err)
@@ -515,9 +515,9 @@ func TestBaselineWriteOrderIsDeterministic(t *testing.T) {
 
 func TestBaselineSARIFSuppressions(t *testing.T) {
 	baselineProject(t, baselineWorkflow, "")
-	baselineCmd(t, "-baseline-write")
+	baselineCmd(t, "--baseline-write")
 
-	_, out, _ := baselineCmd(t, "-baseline", "-format", "sarif")
+	_, out, _ := baselineCmd(t, "--baseline", "--format", "sarif")
 	var log struct {
 		Runs []struct {
 			Results []struct {
@@ -540,21 +540,21 @@ func TestBaselineSARIFSuppressions(t *testing.T) {
 		}
 	}
 
-	status, out, _ := baselineCmd(t, "-baseline", "-format", "sarif", "-sarif-hide-baselined")
+	status, out, _ := baselineCmd(t, "--baseline", "--format", "sarif", "--sarif-hide-baselined")
 	if status != 0 {
 		t.Errorf("status is %d", status)
 	}
 	if err := json.Unmarshal([]byte(out), &log); err != nil || len(log.Runs[0].Results) != 0 {
-		t.Errorf("-sarif-hide-baselined must leave them out: %v %s", err, out)
+		t.Errorf("--sarif-hide-baselined must leave them out: %v %s", err, out)
 	}
 }
 
 func TestBaselineSARIFMixesNewAndSuppressed(t *testing.T) {
 	root := baselineProject(t, baselineWorkflow, "")
-	baselineCmd(t, "-baseline-write")
+	baselineCmd(t, "--baseline-write")
 	wf := filepath.Join(root, ".github", "workflows", "ci.yaml")
 	writeTestFile(t, wf, baselineWorkflow+"  third:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo hi\n")
-	status, out, _ := baselineCmd(t, "-baseline", "-format", "sarif")
+	status, out, _ := baselineCmd(t, "--baseline", "--format", "sarif")
 	if status != ExitStatusSuccessProblemFound {
 		t.Errorf("a new finding fails the run: %d", status)
 	}
@@ -568,7 +568,7 @@ func TestBaselineSARIFMixesNewAndSuppressed(t *testing.T) {
 
 func TestBaselineSummaryFormat(t *testing.T) {
 	root := baselineProject(t, baselineWorkflow, "")
-	status, out, _ := baselineCmd(t, "-format", "summary")
+	status, out, _ := baselineCmd(t, "--format", "summary")
 	if status != ExitStatusSuccessProblemFound {
 		t.Errorf("status %d", status)
 	}
@@ -581,10 +581,10 @@ func TestBaselineSummaryFormat(t *testing.T) {
 		t.Errorf("without a baseline the summary has no baselined column:\n%s", out)
 	}
 
-	baselineCmd(t, "-baseline-write")
+	baselineCmd(t, "--baseline-write")
 	wf := filepath.Join(root, ".github", "workflows", "ci.yaml")
 	writeTestFile(t, wf, strings.Replace(strings.Replace(baselineWorkflow, "      - run: echo hi\n", "      - run: echo ${{ github.event.issue.title }}\n", 1), "echo ${{ github.event.head_commit.message }}", "echo fixed", 1))
-	status, out, _ = baselineCmd(t, "-baseline", "-format", "summary")
+	status, out, _ = baselineCmd(t, "--baseline", "--format", "summary")
 	if status != ExitStatusSuccessProblemFound {
 		t.Errorf("status %d", status)
 	}
@@ -598,15 +598,15 @@ func TestBaselineSummaryFormat(t *testing.T) {
 func TestBaselineWithFixFixesBaselinedFindings(t *testing.T) {
 	cfg := "rules:\n  missing-timeout:\n    default-minutes: 10\n"
 	root := baselineProject(t, baselineWorkflow, cfg)
-	baselineCmd(t, "-baseline-write")
-	status, _, _ := baselineCmd(t, "-baseline", "-fix")
+	baselineCmd(t, "--baseline-write")
+	status, _, _ := baselineCmd(t, "--baseline", "--fix")
 	if status != 0 {
 		t.Fatalf("every remaining finding is baselined: %d", status)
 	}
 	if got := readTestFile(t, filepath.Join(root, ".github", "workflows", "ci.yaml")); strings.Count(got, "timeout-minutes: 10") != 2 {
-		t.Errorf("-fix must fix the baselined findings, too:\n%s", got)
+		t.Errorf("--fix must fix the baselined findings, too:\n%s", got)
 	}
-	status, out, _ := baselineCmd(t, "-baseline-check")
+	status, out, _ := baselineCmd(t, "--baseline-check")
 	if status != 0 || countID(reportedIDs(t, out), "unused-baseline-entry") != 2 {
 		t.Errorf("the fixed findings leave unused entries: %d %q", status, out)
 	}
@@ -614,22 +614,22 @@ func TestBaselineWithFixFixesBaselinedFindings(t *testing.T) {
 
 func TestBaselineIgnoresMinSeverityForOccurrences(t *testing.T) {
 	root := baselineProject(t, duplicateWorkflow, "rules:\n  template-injection: warn\n")
-	baselineCmd(t, "-baseline-write")
+	baselineCmd(t, "--baseline-write")
 	_ = root
-	if status, out, _ := baselineCmd(t, "-baseline", "-min-severity", "error"); status != 0 || out != "" {
+	if status, out, _ := baselineCmd(t, "--baseline", "--min-severity", "error"); status != 0 || out != "" {
 		t.Errorf("%d %q", status, out)
 	}
-	if status, out, _ := baselineCmd(t, "-baseline", "-strict-exit"); status != 0 || out != "" {
+	if status, out, _ := baselineCmd(t, "--baseline", "--strict-exit"); status != 0 || out != "" {
 		t.Errorf("%d %q", status, out)
 	}
 }
 
 func TestBaselineStdinUsesFilename(t *testing.T) {
 	root := baselineProject(t, baselineWorkflow, "")
-	baselineCmd(t, "-baseline-write")
+	baselineCmd(t, "--baseline-write")
 	var out, errOut bytes.Buffer
 	cmd := &Command{Stdin: strings.NewReader(baselineWorkflow), Stdout: &out, Stderr: &errOut}
-	status := cmd.Main([]string{"jactionlint", "-no-color", "-shellcheck=", "-pyflakes=", "-baseline", "-stdin-filename", ".github/workflows/ci.yaml", "-"})
+	status := cmd.Main([]string{"jactionlint", "--no-color", "--shellcheck=", "--pyflakes=", "--baseline", "--stdin-filename", ".github/workflows/ci.yaml", "-"})
 	if status != 0 || out.String() != "" {
 		t.Errorf("stdin with the file name is matched against the baseline: %d %q %q", status, out.String(), errOut.String())
 	}
@@ -680,7 +680,7 @@ func TestBaselineIsPortableAcrossCheckouts(t *testing.T) {
 	if !strings.Contains(out, root) {
 		t.Skipf("the message does not contain the path of the repository any more: %q", out)
 	}
-	baselineCmd(t, "-baseline-write")
+	baselineCmd(t, "--baseline-write")
 
 	other := t.TempDir()
 	if resolved, err := filepath.EvalSymlinks(other); err == nil {
@@ -691,12 +691,12 @@ func TestBaselineIsPortableAcrossCheckouts(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Chdir(other)
-	if status, out, _ := baselineCmd(t, "-baseline"); status != 0 || out != "" {
+	if status, out, _ := baselineCmd(t, "--baseline"); status != 0 || out != "" {
 		t.Fatalf("a baseline must work in another checkout: %d %q", status, out)
 	}
 }
 
-// A file that is linted again in the same run (the passes of -fix) is judged by its last lint: an entry
+// A file that is linted again in the same run (the passes of --fix) is judged by its last lint: an entry
 // whose finding was fixed in between is not seen.
 func TestBaselineMatchForgetsEarlierLints(t *testing.T) {
 	e := &BaselineEntry{File: "a.yaml", Rule: "r", Fingerprint: "f", Context: "c"}
@@ -732,7 +732,7 @@ func TestBaselineContextFallbackSkipsInvalidLocalAction(t *testing.T) {
 	}
 }
 
-// Whether an online rule ran for the unused entries follows -online, -online=false and the online keys.
+// Whether an online rule ran for the unused entries follows --online, --no-online and the online keys.
 func TestBaselineRuleRanAsIsFollowsTheOnlineSettings(t *testing.T) {
 	newLinter := func(opts LinterOptions) *Linter {
 		l, err := NewLinter(io.Discard, &opts)
@@ -757,23 +757,23 @@ func TestBaselineRuleRanAsIsFollowsTheOnlineSettings(t *testing.T) {
 		t.Error("offline by default")
 	}
 	if newLinter(LinterOptions{OnlineOff: true}).ruleRanAsIs(id, on) {
-		t.Error("-online=false wins over the config")
+		t.Error("--no-online wins over the config")
 	}
 	if !newLinter(LinterOptions{Online: true}).ruleRanAsIs(id, &Config{}) {
-		t.Error("-online turns them on")
+		t.Error("--online turns them on")
 	}
 }
 
-// -baseline-check asks for the baseline although the configuration switches it off.
+// --baseline-check asks for the baseline although the configuration switches it off.
 func TestBaselineCheckWithBaselineFalseInTheConfig(t *testing.T) {
 	baselineProject(t, baselineWorkflow, "baseline: false\n")
-	if status, _, _ := baselineCmd(t, "-baseline-write"); status != 0 {
+	if status, _, _ := baselineCmd(t, "--baseline-write"); status != 0 {
 		t.Fatalf("setup: %d", status)
 	}
 	// Fix everything the baseline knows about so that all of its entries are stale
 	root, _ := os.Getwd()
 	writeTestFile(t, filepath.Join(root, ".github", "workflows", "ci.yaml"), "name: ci\non: push\npermissions: {}\njobs: {}\n")
-	_, out, _ := baselineCmd(t, "-baseline-check", "-rule-ids")
+	_, out, _ := baselineCmd(t, "--baseline-check", "--rule-ids")
 	if !strings.Contains(out, "unused-baseline-entry") {
 		t.Errorf("the stale entries must be reported:\n%s", out)
 	}

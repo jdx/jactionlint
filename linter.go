@@ -28,7 +28,7 @@ type LogLevel int
 const (
 	// LogLevelNone does not output any log output.
 	LogLevelNone LogLevel = 0
-	// LogLevelVerbose shows verbose log output. This is equivalent to specifying -verbose option
+	// LogLevelVerbose shows verbose log output. This is equivalent to specifying --verbose option
 	// to jactionlint command.
 	LogLevelVerbose = 1
 	// LogLevelDebug shows all log output including debug information.
@@ -111,11 +111,11 @@ type LinterOptions struct {
 	// applies to.
 	Online bool
 	// Profile selects the profile (ProfileCorrectness, ProfileDefault or ProfilePedantic) for every file,
-	// whatever the configuration says: it is what -profile asks for. The empty value leaves the choice to
+	// whatever the configuration says: it is what --profile asks for. The empty value leaves the choice to
 	// the configuration.
 	Profile Profile
 	// OnlineOff turns the online checks off although the configuration file turns them on: it is what
-	// -online=false asks for. It wins over Online and over the configuration.
+	// --no-online asks for. It wins over Online and over the configuration.
 	OnlineOff bool
 	// GitHubClient replaces the built-in client of the GitHub API, which sends REST requests and caches
 	// the answers in $XDG_CACHE_HOME/jactionlint. It is used by tests (see NewFixtureGitHubClient)
@@ -161,7 +161,7 @@ type LinterOptions struct {
 	// RunHints lets a run of the text format that finds many findings print one line to LogWriter about how
 	// to count them, adopt them gradually and get the checks of actionlint only. It is printed only when
 	// LogWriter is a terminal or the process runs in CI, and never with another format. The jactionlint
-	// command sets it unless -no-hints or JACTIONLINT_NO_HINTS is given.
+	// command sets it unless --no-hints or JACTIONLINT_NO_HINTS is given.
 	RunHints bool
 	// More options will come here
 }
@@ -193,7 +193,7 @@ type Linter struct {
 	online         onlineSettings
 	baseline       linterBaseline
 	warnedOnce     sync.Map    // string -> struct{}: the messages warnOnce printed
-	profile        Profile     // the -profile override, empty when the configuration decides
+	profile        Profile     // the --profile override, empty when the configuration decides
 	profiled       sync.Map    // *Config -> *Config: the configs with the profile override applied
 	warned         sync.Map    // *Config -> struct{}: configs whose deprecations were already reported
 	graphs         sync.Map    // root directory -> *sync.Once-guarded *callGraph, see callGraphOf
@@ -248,7 +248,7 @@ func NewLinter(out io.Writer, opts *LinterOptions) (*Linter, error) {
 	}
 
 	// Load the user-global config as a fallback for projects which have no
-	// .github/jactionlint.yaml. The -config-file option takes precedence over it.
+	// .github/jactionlint.yaml. The --config-file option takes precedence over it.
 	var globalCfg *Config
 	var globalCfgPath string
 	if opts.ConfigFile == "" && opts.Config == nil {
@@ -795,7 +795,7 @@ func (l *Linter) check(
 		l.log("Using project at", project.RootDir())
 	}
 
-	// Config priority: -config-file option, then repository config, then user-global config
+	// Config priority: --config-file option, then repository config, then user-global config
 	cfg := l.configFor(project)
 	if cfg != nil {
 		l.debug("Config: %#v", cfg)
@@ -995,7 +995,7 @@ func (l *Linter) filterErrors(errs []*Error, cfgs []PathConfig) []*Error {
 Loop:
 	for _, err := range errs {
 		if l.ignorePats.Match(err) {
-			l.debug("Error %q is ignored due to -ignore command line option", err.Message)
+			l.debug("Error %q is ignored due to --ignore command line option", err.Message)
 			continue Loop
 		}
 		for _, c := range cfgs {
@@ -1007,7 +1007,7 @@ Loop:
 		filtered = append(filtered, err)
 	}
 	if len(filtered) != len(errs) {
-		l.log("Filtered", len(errs)-len(filtered), "error(s) due to \"-ignore\" command line option and \"ignore\" configuration")
+		l.log("Filtered", len(errs)-len(filtered), "error(s) due to \"--ignore\" command line option and \"ignore\" configuration")
 	}
 	return filtered
 }
@@ -1017,7 +1017,7 @@ Loop:
 func (l *Linter) warnDeprecations(cfg *Config) {
 	notices := cfg.Notices
 	if l.profile == "" {
-		// -profile decides the profile, so a note about the profile of a config file that sets none is wrong then
+		// --profile decides the profile, so a note about the profile of a config file that sets none is wrong then
 		notices = append(slices.Clone(notices), cfg.profileNotices...)
 	}
 	if len(cfg.Deprecations) == 0 && len(notices) == 0 {

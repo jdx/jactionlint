@@ -35,7 +35,7 @@ type linterBaseline struct {
 }
 
 // baselineNamesAFile reports whether the configuration gives the path of a baseline file, which
-// -baseline-check then checks, instead of a switch (auto, true, false) or nothing.
+// --baseline-check then checks, instead of a switch (auto, true, false) or nothing.
 func baselineNamesAFile(cfg *Config) bool {
 	if cfg == nil {
 		return false
@@ -130,7 +130,7 @@ func (l *Linter) baselineFor(project *Project, cfg *Config) (*baselineState, err
 			return nil, nil
 		}
 		if errors.Is(err, os.ErrNotExist) {
-			return nil, fmt.Errorf("baseline file %q does not exist. create it with jactionlint -baseline-write", path)
+			return nil, fmt.Errorf("baseline file %q does not exist. create it with jactionlint --baseline-write", path)
 		}
 		return nil, fmt.Errorf("could not read baseline file %q: %w", path, err)
 	}
@@ -182,11 +182,11 @@ type WriteBaselineResult struct {
 	// Changed is false when the file already had this content.
 	Changed bool
 	// Applied is true when the configuration already applies the baseline ("baseline: auto" or the path of
-	// a file), so a plain run uses it. Otherwise only -baseline does.
+	// a file), so a plain run uses it. Otherwise only --baseline does.
 	Applied bool
 	// ConfigFile is the configuration file, relative to the repository, in which "baseline: auto" applies the
 	// baseline to every run. It is the file the repository has, else the default .github/jactionlint.yaml
-	// that -init-config creates.
+	// that --init-config creates.
 	ConfigFile string
 	// ConfigValue is the value of "baseline" in ConfigFile which applies this baseline: "auto" for the default
 	// file, else the path of the file relative to the repository.
@@ -322,11 +322,11 @@ func toolUnavailable(cmd string) bool {
 }
 
 // ruleRanAsIs reports whether the findings of the rule can be compared with a baseline in this run:
-// the rule is on and what it needs is available. A baseline written with -online, or in a
+// the rule is on and what it needs is available. A baseline written with --online, or in a
 // different environment, has entries this run cannot reproduce; those are not unused.
 func (l *Linter) ruleRanAsIs(id string, cfg *Config) bool {
 	// RuleRuns knows the level of the rule and whether it is an online rule while the online checks are off
-	// (-online, -online=false, "online" and "online-options" of the configuration all count)
+	// (--online, --no-online, "online" and "online-options" of the configuration all count)
 	if !cfg.RuleRuns(id, l.online.enabled || l.online.enabledBy(cfg)) {
 		return false
 	}
@@ -358,7 +358,7 @@ func (l *Linter) unusedBaselineEntries(s *baselineState) []*BaselineEntry {
 }
 
 // withBaselineResults appends one result per baseline file which lists its unused entries. They are
-// reported as errors only with -baseline-check; the summary counts them either way.
+// reported as errors only with --baseline-check; the summary counts them either way.
 func (l *Linter) withBaselineResults(results []fileResult) []fileResult {
 	l.baseline.mu.Lock()
 	var states []*baselineState
@@ -380,7 +380,7 @@ func (l *Linter) withBaselineResults(results []fileResult) []fileResult {
 		var stale []*Error
 		for _, e := range unused {
 			stale = append(stale, &Error{
-				Message: fmt.Sprintf("baseline entry for rule %q in %q matches no finding any more: it was fixed, changed or moved. run jactionlint -baseline-write to remove it", e.Rule, e.File),
+				Message: fmt.Sprintf("baseline entry for rule %q in %q matches no finding any more: it was fixed, changed or moved. run jactionlint --baseline-write to remove it", e.Rule, e.File),
 				Line:    e.line, Column: 1, Kind: "unused-baseline-entry", ID: "unused-baseline-entry", Filepath: path,
 			})
 		}
@@ -445,7 +445,7 @@ func (l *Linter) reportBaselineNote(results []fileResult) {
 	}
 	msg := fmt.Sprintf("%d finding(s) are hidden by the baseline", hidden)
 	if unused > 0 && !l.baseline.check {
-		msg += fmt.Sprintf("; %d baseline entr(ies) match nothing any more (-baseline-check lists them)", unused)
+		msg += fmt.Sprintf("; %d baseline entr(ies) match nothing any more (--baseline-check lists them)", unused)
 	}
 	fmt.Fprintln(l.logOut, "note:", msg)
 }

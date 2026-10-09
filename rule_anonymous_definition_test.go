@@ -12,7 +12,7 @@ func TestAnonymousDefinition(t *testing.T) {
 		path  string
 		src   string
 		lines []int
-		fixed string // the source after -fix; empty means no fix
+		fixed string // the source after --fix; empty means no fix
 	}{
 		{
 			what:  "workflow and job",

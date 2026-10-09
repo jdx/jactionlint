@@ -14,7 +14,7 @@ import (
 	"unicode/utf8"
 )
 
-// Output formats which -format and LinterOptions.Format accept besides Go templates.
+// Output formats which --format and LinterOptions.Format accept besides Go templates.
 const (
 	// FormatText is the default format. Each error is printed with its source snippet and an indicator.
 	FormatText = "text"
@@ -50,7 +50,7 @@ type fileResult struct {
 	// baselined are the findings which the baseline accepts.
 	baselined []*Error
 	// baselineFile is true for the result which stands for the baseline file itself. Its stale are the
-	// entries which match nothing, and errs has them only with -baseline-check.
+	// entries which match nothing, and errs has them only with --baseline-check.
 	baselineFile    bool
 	baselineEntries int
 	stale           []*Error
@@ -613,7 +613,7 @@ func (p sarifPrinter) print(w io.Writer, results []fileResult, notes []string) e
 }
 
 // sarifRuleProperties are the properties of a rule in a SARIF log: the tags (the group) and the profile
-// that enables the rule ("online" for the rules that run with -online, none when the configuration has to
+// that enables the rule ("online" for the rules that run with --online, none when the configuration has to
 // turn the rule on), so that a consumer can tell the rules of the correctness profile from the others.
 func sarifRuleProperties(info *RuleInfo) map[string]any {
 	props := map[string]any{"tags": []string{string(info.Group)}}

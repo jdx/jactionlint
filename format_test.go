@@ -118,7 +118,7 @@ testdata/format/test.yaml:10:9: unexpected key "with" for step to run shell comm
 	}
 	explicit, _ := lintFormat(t, FormatText, LinterOptions{}, nil, formatTestFile)
 	if explicit != out && !runtimeIsWindows() {
-		t.Error("-format text must be the same as the default")
+		t.Error("--format text must be the same as the default")
 	}
 
 	// Levels other than error are prefixed. The rule IDs can be shown
@@ -135,7 +135,7 @@ testdata/format/test.yaml:10:9: unexpected key "with" for step to run shell comm
 		t.Errorf("kinds must be replaced by IDs:\n%s", out)
 	}
 
-	// oneline: -oneline and -format oneline
+	// oneline: --oneline and --format oneline
 	for _, o := range []struct {
 		format string
 		opts   LinterOptions
@@ -380,7 +380,7 @@ func TestSARIFFormatHasNoOutputBesidesTheLog(t *testing.T) {
 	}
 	var stdout, stderr bytes.Buffer
 	cmd := &Command{Stdin: strings.NewReader(""), Stdout: &stdout, Stderr: &stderr}
-	code := cmd.Main([]string{"jactionlint", "-format", "sarif", "-config-file", p, formatTestFile, formatTestFile})
+	code := cmd.Main([]string{"jactionlint", "--format", "sarif", "--config-file", p, formatTestFile, formatTestFile})
 	if code != ExitStatusSuccessProblemFound {
 		t.Errorf("exit status %d", code)
 	}
@@ -404,7 +404,7 @@ func TestSARIFFormatHasNoOutputBesidesTheLog(t *testing.T) {
 	// Other formats keep writing the warning to stderr
 	stdout.Reset()
 	stderr.Reset()
-	cmd.Main([]string{"jactionlint", "-format", "json", "-config-file", p, formatTestFile})
+	cmd.Main([]string{"jactionlint", "--format", "json", "--config-file", p, formatTestFile})
 	if !strings.Contains(stderr.String(), `"require-shell" is deprecated`) {
 		t.Errorf("stderr: %q", stderr.String())
 	}
@@ -415,7 +415,7 @@ func TestSARIFFormatHasNoOutputBesidesTheLog(t *testing.T) {
 
 	// Without deprecations the document has no invocation
 	stdout.Reset()
-	cmd.Main([]string{"jactionlint", "-format", "sarif", formatTestFile})
+	cmd.Main([]string{"jactionlint", "--format", "sarif", formatTestFile})
 	if _, ok := sarifRunOf(t, stdout.String())["invocations"]; ok {
 		t.Error("invocations must be omitted when there is nothing to tell")
 	}

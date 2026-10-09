@@ -152,7 +152,7 @@ func TestUserOwnedConfigs(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !l.defaultConfig.userOwned {
-		t.Error("-config-file is the user's")
+		t.Error("--config-file is the user's")
 	}
 	repo, err := ParseConfig([]byte("online: true\n"))
 	if err != nil || repo.userOwned {
@@ -160,16 +160,16 @@ func TestUserOwnedConfigs(t *testing.T) {
 	}
 }
 
-// A bare -online on the command line replaces the mode of the configuration file.
+// A bare --online on the command line replaces the mode of the configuration file.
 func TestOnlineModeSetByTheCommandLineWins(t *testing.T) {
 	cfg := OnlineOptions{Mode: OnlineModeCache}
 	if got := cfg.overlay(OnlineOptions{}).Mode; got != OnlineModeCache {
 		t.Errorf("nothing given on the command line keeps the mode of the file: %q", got)
 	}
 	if got := cfg.overlay(OnlineOptions{ModeSet: true}).Mode; got != OnlineModeDefault {
-		t.Errorf("-online must force the default mode: %q", got)
+		t.Errorf("--online must force the default mode: %q", got)
 	}
 	if got := cfg.overlay(OnlineOptions{Mode: OnlineModeStrict, ModeSet: true}).Mode; got != OnlineModeStrict {
-		t.Errorf("-online=strict must win: %q", got)
+		t.Errorf("--online=strict must win: %q", got)
 	}
 }

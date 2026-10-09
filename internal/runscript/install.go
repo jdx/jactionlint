@@ -335,7 +335,9 @@ func (in *Install) uv(c *Command) bool {
 			in.Requirements = append(in.Requirements, c.FlagValues("-r", "--requirement")...)
 			return true
 		case "sync":
+			// `uv pip sync reqs.txt` installs exactly the listed requirement files, not the project lock file
 			in.Verb, in.Locked = "sync", true
+			in.Requirements = append(in.Requirements, pos[2:]...)
 			return true
 		}
 	case "tool":

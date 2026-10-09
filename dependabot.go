@@ -160,7 +160,7 @@ var dependabotFileNames = []string{"dependabot.yml", "dependabot.yaml"}
 // isDependabotPath reports whether the path is a Dependabot configuration file, which is checked
 // with different rules from workflows. The decision is made only from the path: the file is named
 // dependabot.yml or dependabot.yaml, and it is in a ".github" directory or has no directory (e.g. the
-// name given to -stdin-filename). ".github/workflows/dependabot.yml" is a workflow.
+// name given to --stdin-filename). ".github/workflows/dependabot.yml" is a workflow.
 func isDependabotPath(p string) bool {
 	p = strings.ReplaceAll(p, `\`, "/")
 	base := path.Base(p)

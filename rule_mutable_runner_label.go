@@ -188,7 +188,7 @@ func init() {
 			DefaultLevel: SeverityWarning, Profile: ProfilePedantic, Fixable: true, DocsAnchor: "check-mutable-runner-label",
 			Options: []RuleOption{{
 				Name: "pin", Kind: RuleOptionStringMap, Validate: validateRunnerPins,
-				Summary: "Maps a moving label to the fixed label that -fix writes in its place, e.g. ubuntu-latest: ubuntu-24.04. There is no default: without an entry the finding has no fix.",
+				Summary: "Maps a moving label to the fixed label that --fix writes in its place, e.g. ubuntu-latest: ubuntu-24.04. There is no default: without an entry the finding has no fix.",
 			}},
 		},
 	)

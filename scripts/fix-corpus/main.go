@@ -1,10 +1,10 @@
-// Command fix-corpus checks that -fix is safe on real workflows.
+// Command fix-corpus checks that --fix is safe on real workflows.
 //
 // It copies the .github directory of each repository into a scratch directory, applies the fixes of
 // jactionlint there and reports, for every repository:
 //
 //  1. whether all YAML files are still valid YAML,
-//  2. whether a second run of -fix changes nothing (and -diff prints nothing),
+//  2. whether a second run of --fix changes nothing (and --diff prints nothing),
 //  3. whether the number of findings went up for any rule (it must only go down),
 //  4. whether the number of findings of zizmor (--persona pedantic --offline) went up for any audit.
 //
@@ -59,7 +59,7 @@ func main() {
 	cfg := flag.String("config", "", "config file for jactionlint (default: config.yaml next to this program's source)")
 	zizmor := flag.String("zizmor", "mise x zizmor@1.30.1 -- zizmor", "command that runs zizmor")
 	noZizmor := flag.Bool("no-zizmor", false, "do not compare with zizmor")
-	unsafe := flag.Bool("unsafe", false, "apply the unsafe fixes too (-fix=unsafe)")
+	unsafe := flag.Bool("unsafe", false, "apply the unsafe fixes too (--fix=unsafe)")
 	keep := flag.String("keep", "", "keep the fixed copies in this directory instead of a temporary one")
 	flag.Parse()
 
@@ -97,9 +97,9 @@ func main() {
 		fatal(err)
 	}
 
-	mode := "-fix"
+	mode := "--fix"
 	if *unsafe {
-		mode = "-fix=unsafe"
+		mode = "--fix=unsafe"
 	}
 	var reports []*repoReport
 	failed := false
@@ -195,14 +195,14 @@ func run(r *repoReport, exe, cfg, zizmor string, withZizmor bool, mode, src, wor
 		r.Problems = append(r.Problems, fmt.Sprintf("second fix failed: %v %s", err, firstLines(out2.stderr, 4)))
 	}
 	if again := hashAll(files); !equalMaps(again, after) {
-		r.Problems = append(r.Problems, "a second -fix changed files: "+strings.Join(diffKeys(work, after, again), ", "))
+		r.Problems = append(r.Problems, "a second --fix changed files: "+strings.Join(diffKeys(work, after, again), ", "))
 	}
 	if out2.applied(&r.Applied) != 0 {
-		r.Problems = append(r.Problems, "a second -fix reported fixes")
+		r.Problems = append(r.Problems, "a second --fix reported fixes")
 	}
-	diffOut, _, err := runJL(exe, cfg, work, "-diff")
+	diffOut, _, err := runJL(exe, cfg, work, "--diff")
 	if err == nil && strings.Contains("\n"+diffOut.stdout, "\n--- ") {
-		r.Problems = append(r.Problems, "-diff still prints changes after fixing")
+		r.Problems = append(r.Problems, "--diff still prints changes after fixing")
 	}
 
 	// 3. findings of jactionlint never go up
@@ -263,7 +263,7 @@ func parseSummary(stderr string, applied *int) map[string]int {
 }
 
 func runJL(exe, cfg, dir string, args ...string) (jlOutput, int, error) {
-	cmd := exec.Command(exe, append([]string{"-no-color", "-config-file", cfg, "-format", "jsonl"}, args...)...)
+	cmd := exec.Command(exe, append([]string{"--no-color", "--config-file", cfg, "--format", "jsonl"}, args...)...)
 	cmd.Dir = dir
 	var so, se bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &so, &se

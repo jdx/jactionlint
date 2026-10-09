@@ -41,9 +41,9 @@ if [ -n "$GITHUB_ACTION" ]; then
         echo "'executable' step output is not set: '${out}'" >&2
     fi
 fi
-out="$(./"${bin}" -version)"
+out="$(./"${bin}" --version)"
 if [[ "$out" != *'installed by downloading from release page'* ]]; then
-    echo "Output from ./${bin} -version is unexpected: '${out}'" >&2
+    echo "Output from ./${bin} --version is unexpected: '${out}'" >&2
     exit 1
 fi
 rm -f ./"${bin}"
@@ -51,7 +51,7 @@ rm -f ./"${bin}"
 # Specify only version
 use_original_releases
 bash "$script" '1.6.12'
-out="$(./"${bin}" -version | head -n 1)"
+out="$(./"${bin}" --version | head -n 1)"
 if [[ "$out" != '1.6.12' ]]; then
     echo "Unexpected version: '${out}'" 1>&2
     exit 1
@@ -62,9 +62,9 @@ rm -f ./"${bin}"
 use_own_releases
 mkdir ./test1
 bash "$script" latest ./test1
-out="$(./test1/"${bin}" -version)"
+out="$(./test1/"${bin}" --version)"
 if [[ "$out" != *'installed by downloading from release page'* ]]; then
-    echo "Output from ./${bin} -version is unexpected: '${out}'" >&2
+    echo "Output from ./${bin} --version is unexpected: '${out}'" >&2
     exit 1
 fi
 rm -rf ./test1
@@ -73,7 +73,7 @@ rm -rf ./test1
 use_original_releases
 mkdir ./test2
 bash "$script" '1.6.12' ./test2
-out="$(./test2/"${bin}" -version | head -n 1)"
+out="$(./test2/"${bin}" --version | head -n 1)"
 if [[ "$out" != '1.6.12' ]]; then
     echo "Unexpected version: '${out}'" 1>&2
     exit 1

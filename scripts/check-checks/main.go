@@ -22,7 +22,7 @@ import (
 // requiresOnlineMarker is the first line of the examples of the online checks. Those checks need the
 // GitHub API, so the example is run with the recorded answers in testdata/online/github.json
 // instead (the same ones the tests of the checks use).
-const requiresOnlineMarker = "# requires -online\n"
+const requiresOnlineMarker = "# requires --online\n"
 
 // Actionlint lints the example. The examples in the sections whose headings start with "Dependabot" are
 // Dependabot configuration files, and the ones in the sections whose headings start with "Composite action"

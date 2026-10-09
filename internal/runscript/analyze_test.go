@@ -513,6 +513,8 @@ func TestInstalls(t *testing.T) {
 		{"sudo pip3 install x", "pip", "install", false, false, false, false, 0, []pkg{p("x", "x", "", KindRegistry, false)}},
 		// uv, pipx
 		{"uv pip install --system a==1 b", "uv", "install", false, false, false, false, 0, []pkg{p("a==1", "a", "==1", KindRegistry, true), p("b", "b", "", KindRegistry, false)}},
+		{"uv pip sync r.txt dev.txt", "uv", "sync", false, false, true, false, 2, nil},
+		{"uv pip sync", "uv", "sync", false, false, true, true, 0, nil},
 		{"uv tool install ruff", "uv", "install", false, false, false, false, 0, []pkg{p("ruff", "ruff", "", KindRegistry, false)}},
 		{"uv tool install --from 'ruff==0.4' ruff", "uv", "install", false, false, false, false, 0, []pkg{p("ruff==0.4", "ruff", "==0.4", KindRegistry, true)}},
 		{"uv tool run --from ruff==1 ruff check", "uv", "run", true, false, false, false, 0, []pkg{p("ruff==1", "ruff", "==1", KindRegistry, true)}},

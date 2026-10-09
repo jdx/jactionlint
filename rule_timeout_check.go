@@ -102,7 +102,7 @@ func (rule *RuleTimeoutCheck) VisitJobPre(n *Job) error {
 
 func init() {
 	registerRules(
-		RuleInfo{ID: "missing-timeout", Group: RuleGroupPolicy, Summary: "A job does not set timeout-minutes.", DefaultLevel: SeverityError, Profile: ProfileDefault, Fixable: true, DocsAnchor: "check-timeout-minutes", Options: []RuleOption{{Name: "default-minutes", Kind: RuleOptionInt, Summary: "The timeout-minutes which -fix adds to a job. There is no default: the rule has no fix unless this is set. It is lowered to the max of timeout-too-long when that is smaller."}}},
+		RuleInfo{ID: "missing-timeout", Group: RuleGroupPolicy, Summary: "A job does not set timeout-minutes.", DefaultLevel: SeverityError, Profile: ProfileDefault, Fixable: true, DocsAnchor: "check-timeout-minutes", Options: []RuleOption{{Name: "default-minutes", Kind: RuleOptionInt, Summary: "The timeout-minutes which --fix adds to a job. There is no default: the rule has no fix unless this is set. It is lowered to the max of timeout-too-long when that is smaller."}}},
 		RuleInfo{ID: "timeout-too-long", Group: RuleGroupPolicy, Summary: "timeout-minutes of a job exceeds the configured maximum.", DefaultLevel: SeverityError, DocsAnchor: "check-timeout-minutes", Options: []RuleOption{{Name: "max", Kind: RuleOptionNumber, Summary: "The maximum allowed timeout-minutes. The rule does nothing without it."}}},
 	)
 	registerRuleFactory("timeout-check", func(env *RuleEnv) []Rule {

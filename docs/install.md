@@ -14,7 +14,7 @@ This document describes how to install [jactionlint](https://github.com/jdx/jact
 
 ```sh
 mise use -g jactionlint
-jactionlint -version
+jactionlint --version
 ```
 
 `mise use jactionlint` without `-g` adds it to the `mise.toml` of the current project, so everyone working on the
@@ -60,7 +60,7 @@ To install these binaries [`gh`][gh] command is useful. The following command is
 ```sh
 gh release download --repo jdx/jactionlint --pattern '*_linux_amd64.tar.gz' v1.7.12
 tar xf jactionlint_1.7.12_linux_amd64.tar.gz
-./jactionlint -version
+./jactionlint --version
 ```
 
 Optionally you can verify the [attestation][attestations] of the downloaded artifact. This is highly recommended in terms of

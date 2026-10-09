@@ -301,7 +301,7 @@ func TestSessionSkipsFailedLookupsAndWarnsOncePerKind(t *testing.T) {
 				t.Errorf("every lookup of the 20 is skipped and counted. got %d", got)
 			}
 			if len(details) != 20 {
-				t.Errorf("-verbose names every skipped lookup: got %d lines", len(details))
+				t.Errorf("--verbose names every skipped lookup: got %d lines", len(details))
 			}
 			if (s.blockedErr() != nil) != tc.blocks {
 				t.Errorf("blocked = %v. want %v", s.blockedErr() != nil, tc.blocks)

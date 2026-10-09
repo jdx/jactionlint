@@ -51,7 +51,7 @@ func TestMainGenerateOK(t *testing.T) {
 	in.Close()
 	tmp.Close()
 
-	if err := Main([]string{"exe", "-fix", path}); err != nil {
+	if err := Main([]string{"exe", "--fix", path}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -83,7 +83,7 @@ func TestMainCheckQuietOK(t *testing.T) {
 }
 
 func TestMainPrintHelp(t *testing.T) {
-	if err := Main([]string{"exe", "-help"}); err != nil {
+	if err := Main([]string{"exe", "--help"}); err != nil {
 		t.Fatal(err)
 	}
 }

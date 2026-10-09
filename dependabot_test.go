@@ -550,7 +550,7 @@ func TestDependabotIgnores(t *testing.T) {
 			t.Errorf("unexpected errors %v", errs)
 		}
 	})
-	t.Run("-ignore option", func(t *testing.T) {
+	t.Run("--ignore option", func(t *testing.T) {
 		root := makeDependabotProject(t, map[string]string{"dependabot.yml": brokenDependabot}, "")
 		if errs, _ := lintRepo(t, root, LinterOptions{IgnorePatterns: []string{`unexpected key`}}); len(errs) != 0 {
 			t.Errorf("unexpected errors %v", errs)

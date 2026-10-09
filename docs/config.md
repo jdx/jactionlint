@@ -16,7 +16,7 @@ Configuration file `jactionlint.yaml` or `jactionlint.yml` can be put in `.githu
 
 > [!NOTE]
 > The file names used by the original actionlint (`.github/actionlint.yaml` and `.github/actionlint.yml`) are also accepted, so
-> an existing configuration keeps working. When both exist, `jactionlint.yaml` is used first. `jactionlint -init-config`
+> an existing configuration keeps working. When both exist, `jactionlint.yaml` is used first. `jactionlint --init-config`
 > generates `.github/jactionlint.yaml`.
 
 Note: If you're using [Super-Linter][], the file should be placed in a different directory. Please check the project's document.
@@ -151,18 +151,18 @@ extends:
     `.yaml` file extension). For the glob syntax, please read the [doublestar][] library's documentation.
     - `ignore`: The configuration to ignore (filter) the errors. This is an array of [rule IDs](rules.md) and regular
       expressions. A rule ID ignores all the errors of the rule. A regular expression ignores the errors whose message
-      matches it. It's similar to the `-ignore` command line option.
+      matches it. It's similar to the `--ignore` command line option.
 - `ignores`: Findings to accept, matched by rule and by where they are. See [Durable ignores](#durable-ignores).
-- `online`: Turns on the [online checks](usage.md#online-checks) for the files this configuration applies to, like the `-online`
+- `online`: Turns on the [online checks](usage.md#online-checks) for the files this configuration applies to, like the `--online`
   flag does for the whole run. They query the GitHub API. The default is `false`: nothing uses the network.
 - <a id="online-options"></a>`online-options`: Tunes the online checks. Every key is optional. They apply to the whole run, decided by the first
   file checked, and the command line flags win over them. A `mode` of `cache` or `strict` also turns the online checks on.
   See [the usage document](usage.md#online-checks) for what each does.
   - `mode`: `cache` (never use the network, answer from the cache), `strict` (a skipped lookup makes the exit status 3) or
-    `cache,strict`. Same as `-online=MODE`.
-  - `api-url`: The REST API of a GitHub Enterprise Server such as `https://ghe.example.com/api/v3`. Same as `-online-api-url`.
+    `cache,strict`. Same as `--online=MODE`.
+  - `api-url`: The REST API of a GitHub Enterprise Server such as `https://ghe.example.com/api/v3`. Same as `--online-api-url`.
     **A token is not sent to a host named here when the file is a repository's `.github/jactionlint.yaml`**, only when it is your
-    user-global config or the file of `-config-file`.
+    user-global config or the file of `--config-file`.
   - `token-env`, `token-file`: The variable and the file which hold the token, read before `GITHUB_TOKEN` and `GH_TOKEN`.
   - `allow`, `deny`: Patterns `owner/repo` with `*` wildcards (`mycorp/*`, `*/setup-*`; case does not matter) of the repositories
     which may or may not be looked up. `deny` wins.
@@ -178,9 +178,9 @@ extends:
 - `baseline`: Hides the findings recorded in a [baseline file](usage.md#baseline) so that a repository can adopt the checks
   gradually. `auto` (or `true`) applies `.github/jactionlint-baseline.json` when the file exists, `false` or no key applies
   no baseline, and any other value is the path of the baseline file relative to the repository root, which must exist. The
-  `-baseline` flag overrides it (`-baseline=false` turns it off). The file is written by `jactionlint -baseline-write`.
-- `fix`: Configuration of [`-fix`](usage.md#fix-errors-automatically).
-  - `rules`: A list of [rule IDs](rules.md). `-fix` applies only the fixes of these rules, like `-fix -rules a,b` on the command
+  `--baseline` flag overrides it (`--no-baseline` turns it off). The file is written by `jactionlint --baseline-write`.
+- `fix`: Configuration of [`--fix`](usage.md#fix-errors-automatically).
+  - `rules`: A list of [rule IDs](rules.md). `--fix` applies only the fixes of these rules, like `--fix --fix-rules a,b` on the command
     line (which overrides it). The default, an empty list, applies the fixes of every rule. Unknown IDs are errors.
 - `profile`, `rules` and `extends`: See [Profiles](#profiles), [Rules](#rules) and [Extending config files](#extending-config-files).
 
@@ -201,12 +201,12 @@ A profile is a named set of [rules](rules.md) which are enabled together. `profi
 | `default`     | `correctness` plus the security and policy rules worth failing a build on: pinned actions and images, permissions, timeouts, concurrency, dangerous triggers, artifact and cache poisoning, unverified downloads, trusted publishing and so on. Used when `profile` is omitted.        |
 | `pedantic`    | `default` plus the noisy and opinionated rules (`require-shell`, `max-run-lines`, `anonymous-definition`, `self-hosted-runner`, `unused-needs` and so on) and the pedantic findings of the audits that have them (see below).                                                                |
 
-Each profile includes the rules of the profile before it. `-profile NAME` on the command line overrides `profile` of the
+Each profile includes the rules of the profile before it. `--profile NAME` on the command line overrides `profile` of the
 configuration file. Every rule of the `correctness` and `default` profiles reports at the level `error`; the rules of the
 `pedantic` profile keep their own levels (`info` for `self-hosted-runner`, for example).
 
 `strict` and `all`, the names of the profiles before 2.0, still work for one minor version and mean `pedantic`, with a
-deprecation warning. `jactionlint -migrate-config` rewrites them.
+deprecation warning. `jactionlint --migrate-config` rewrites them.
 
 A few audits have a noisier tier of findings, like the pedantic persona of zizmor. They are one rule with one ID, and the option
 `pedantic` turns the tier on. Unset, it is true under the `pedantic` profile and false otherwise, so `rules: {template-injection:
@@ -223,8 +223,8 @@ the online checks are on.
 `rules` sets the level of each rule by its stable [rule ID](rules.md). The level is one of:
 
 - `error`: The finding is printed and makes jactionlint exit with status 1.
-- `warn` and `info`: The finding is printed with a `warning:` or `info:` prefix (or the corresponding level in `-format sarif`,
-  `gcc` and `github`). It does not change the exit status unless `-strict-exit` is given.
+- `warn` and `info`: The finding is printed with a `warning:` or `info:` prefix (or the corresponding level in `--format sarif`,
+  `gcc` and `github`). It does not change the exit status unless `--strict-exit` is given.
 - `off`: The rule is disabled.
 
 A rule not listed in `rules` follows the profile: it runs at its default level if the profile includes it and is off otherwise.
@@ -245,7 +245,7 @@ rules:
 | Rule                       | Option            | Description                                                                                                                                                                     |
 | -------------------------- | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `max-run-lines`            | `max`             | Maximum number of non-blank lines in a `run:` script. Default `100` when the rule is enabled by the `pedantic` profile.                                                              |
-| `missing-timeout`          | `default-minutes` | The `timeout-minutes` which `-fix` adds to a job without one. There is no default: without it the rule has no fix. Lowered to `max` of `timeout-too-long` when that is smaller. |
+| `missing-timeout`          | `default-minutes` | The `timeout-minutes` which `--fix` adds to a job without one. There is no default: without it the rule has no fix. Lowered to `max` of `timeout-too-long` when that is smaller. |
 | `timeout-too-long`         | `max`             | Maximum allowed `timeout-minutes` of a job in minutes. Values given by `${{ }}` are not checked. The rule does nothing without `max`.                                           |
 | `forbidden-uses`           | `allow`           | List of patterns of the only actions and reusable workflows that may be used, e.g. `actions/*`. See [forbidden actions](checks.md#check-forbidden-uses).                        |
 | `forbidden-uses`           | `deny`            | List of patterns of actions and reusable workflows that must not be used. The rule does nothing without `allow` or `deny`.                                                      |
@@ -253,7 +253,7 @@ rules:
 | `typosquat-uses`           | `allow`           | List of `owner/repo` slugs that are never reported, e.g. a legitimate fork of a popular action.                                                                                 |
 | `impostor-commit`          | `max-branches`    | How many branches of an action repository a pinned commit is compared with before giving up without a verdict. Default `1000`; without a token at most 100 are compared.        |
 | `known-vulnerable-actions` | `allow`           | List of advisory IDs (`GHSA-...`) which are not reported: `allow: [GHSA-mrrh-fwg8-r2c3]`. Default none.                                                                         |
-| `mutable-runner-label`     | `pin`             | Mapping from a moving label to the fixed label that `-fix` writes in its place (`ubuntu-latest: ubuntu-24.04`). There is no default: without an entry the finding has no fix.   |
+| `mutable-runner-label`     | `pin`             | Mapping from a moving label to the fixed label that `--fix` writes in its place (`ubuntu-latest: ubuntu-24.04`). There is no default: without an entry the finding has no fix.   |
 | `continue-on-error`        | `steps`           | `true` also reports steps with `continue-on-error: true`. Default `false`: only jobs are reported.                                                                              |
 
 ## Extending config files
@@ -279,7 +279,7 @@ rules:
 
 ## Ignoring errors by rule ID
 
-The `ignore` lists of `paths`, the `-ignore` command line option and the `# jactionlint ignore=` comments take rule IDs as
+The `ignore` lists of `paths`, the `--ignore` command line option and the `# jactionlint ignore=` comments take rule IDs as
 well as regular expressions. A pattern which is exactly a rule ID ignores all the errors of the rule; any other pattern is a
 regular expression matched to the error messages. See [the usage document](usage.md#ignore-some-errors).
 
@@ -356,7 +356,7 @@ of `# zizmor: ignore[...]` comments).
 ## Deprecated keys
 
 The following keys were replaced by `rules`. They still work for now: jactionlint translates them into rules and prints a
-deprecation warning to stderr once per config file (in `-format sarif` it is in the log's `toolConfigurationNotifications`). `jactionlint -migrate-config` rewrites the file (keeping the comments
+deprecation warning to stderr once per config file (in `--format sarif` it is in the log's `toolConfigurationNotifications`). `jactionlint --migrate-config` rewrites the file (keeping the comments
 and the other keys) into the `rules` mapping.
 
 | Deprecated key                               | Replacement                                                                                    |
@@ -381,7 +381,7 @@ which are on by default in the old format. A rule written in `rules` wins over t
 jactionlint looks for a configuration file in the following order and uses the **first** one found. Configurations
 are not merged:
 
-1. The file passed via the `-config-file` command line option.
+1. The file passed via the `--config-file` command line option.
 2. `jactionlint.yaml` (or `jactionlint.yml`) in the repository's `.github` directory, then `actionlint.yaml` (or
    `actionlint.yml`) in the same directory as used by the original actionlint. jactionlint locates the project by
    searching upwards from the linted file's directory.
@@ -397,22 +397,22 @@ so per-repository settings are never overridden by the global defaults.
 
 `$XDG_CONFIG_HOME` must be an absolute path. A relative path is ignored as the specification requires. `$HOME/.config`
 is used on all platforms including Windows and macOS (`%USERPROFILE%\.config` on Windows). The global
-configuration is not used when `-config-file` is given.
+configuration is not used when `--config-file` is given.
 
 ## Generate the initial configuration
 
 You don't need to write the first configuration file by your hand. `jactionlint` command can generate a default configuration
-with `-init-config` flag.
+with `--init-config` flag.
 
 ```sh
-jactionlint -init-config
+jactionlint --init-config
 vim .github/jactionlint.yaml
 ```
 
 To rewrite an existing configuration which uses the [deprecated keys](#deprecated-keys):
 
 ```sh
-jactionlint -migrate-config
+jactionlint --migrate-config
 ```
 
 ---

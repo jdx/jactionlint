@@ -1,6 +1,6 @@
 # Rule IDs that existed in the unreleased 2.0 branch and were merged into another rule before the first
 # release, when the one-ID-per-audit rule was decided. They never shipped, so removing them breaks nobody, but
-# they stay accepted as retired IDs: -ignore, "paths" ignores and inline ignore comments still take them (with a
+# they stay accepted as retired IDs: --ignore, "paths" ignores and inline ignore comments still take them (with a
 # deprecation warning) and match only the findings that had the ID. See renamedRules in rule_registry.go.
 #
 # Once 2.0 is released this file must not grow: a released ID is never removed.

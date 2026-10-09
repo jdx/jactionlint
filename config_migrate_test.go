@@ -206,7 +206,7 @@ func TestLinterMigrateConfig(t *testing.T) {
 		t.Errorf("unexpected output %q", out.String())
 	}
 
-	// -config-file wins
+	// --config-file wins
 	other := filepath.Join(t.TempDir(), "other.yaml")
 	if err := os.WriteFile(other, []byte("require-shell: true\n"), 0o644); err != nil {
 		t.Fatal(err)
@@ -232,7 +232,7 @@ func TestCommandMigrateConfig(t *testing.T) {
 	}
 	var stdout, stderr bytes.Buffer
 	cmd := &Command{Stdin: strings.NewReader(""), Stdout: &stdout, Stderr: &stderr}
-	if code := cmd.Main([]string{"jactionlint", "-config-file", p, "-migrate-config"}); code != ExitStatusSuccessNoProblem {
+	if code := cmd.Main([]string{"jactionlint", "--config-file", p, "--migrate-config"}); code != ExitStatusSuccessNoProblem {
 		t.Fatalf("exit status %d: %s", code, stderr.String())
 	}
 	b, _ := os.ReadFile(p)

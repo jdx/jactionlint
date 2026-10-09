@@ -31,26 +31,116 @@ cat path/to/workflow.yaml | jactionlint -
 ```
 
 The Dependabot configuration is recognized by its path: a file named `dependabot.yml` or `dependabot.yaml` in a `.github`
-directory. Give it as an argument or use `-stdin-filename` to check it. Workflow rules are not applied to it. See
+directory. Give it as an argument or use `--stdin-filename` to check it. Workflow rules are not applied to it. See
 [the check of its syntax](checks.md#check-dependabot-syntax).
 
 ```sh
 jactionlint .github/dependabot.yml
-cat dependabot.yml | jactionlint -stdin-filename .github/dependabot.yml -
+cat dependabot.yml | jactionlint --stdin-filename .github/dependabot.yml -
 ```
 
 The metadata of an action is recognized by its name: a file named `action.yml` or `action.yaml` is an action anywhere except under
 `.github/workflows`. Give it as an argument (this is what the `.github/actions/**/action.y*ml` glob of hk does) or use
-`-stdin-filename` to check it. The steps of a composite action are checked with the rules for workflow steps, and the rules which
-depend on how the action is run use the local workflows that call it. Ignore comments, `paths:`, `-format sarif` and `-fix` work as
+`--stdin-filename` to check it. The steps of a composite action are checked with the rules for workflow steps, and the rules which
+depend on how the action is run use the local workflows that call it. Ignore comments, `paths:`, `--format sarif` and `--fix` work as
 for workflows. See [composite actions](checks.md#check-composite-actions).
 
 ```sh
 jactionlint .github/actions/setup/action.yml
-cat action.yml | jactionlint -stdin-filename action.yml -
+cat action.yml | jactionlint --stdin-filename action.yml -
 ```
 
-To know all flags and options, see an output of `jactionlint -h` or [the online command manual][cmd-manual].
+<a id="command-line-options"></a>
+### Command line options
+
+`jactionlint --help` prints the list below, and `man jactionlint` has the same in the manual. jactionlint uses POSIX/GNU options only:
+
+- `--long-name` options are kebab-case and take a value as `--format=json` or `--format json`. A boolean option takes no value.
+- Short options are one letter, can be bundled and take a value attached or separate: `-vfjson`, `-cfile.yaml`, `-c file.yaml`. Only
+  the most used options have one; the rest are long only.
+- `--` ends the options (`jactionlint -- -odd.yaml`). A lone `-` is not an option: it reads stdin.
+- An option with an optional value (`--fix`, `--color`, `--online`, `--baseline`, `--baseline-write`) takes it only with `=`:
+  `--fix=unsafe`, `--online=cache`. `--fix unsafe` is `--fix` plus a file named `unsafe`.
+- A default that is on is turned off with `--no-X` (`--no-online`, `--no-baseline`); `--no-color` and `--no-hints` also exist.
+- Abbreviations (`--form`) are not accepted. An unknown option or an invalid value exits with status 2 and a one-line message.
+- The single-dash long options of v1 are not accepted any more; the error names the replacement. See the
+  [migration table](v2-migration.md#command-line-options).
+
+**General**
+
+| Option | Short | Description |
+| --- | --- | --- |
+| `--help` | `-h` | Show this help and exit |
+| `--version` | `-V` | Show the version and how this binary was installed, then exit |
+| `--verbose` | `-v` | Print verbose logs to stderr |
+| `--debug` |  | Print debug logs to stderr (for development) |
+| `--stdin-filename=NAME` |  | File name used in the output when reading stdin (default `<stdin>`) |
+
+**Output**
+
+| Option | Short | Description |
+| --- | --- | --- |
+| `--format=FORMAT` | `-f` | Output format: text (default), oneline, json, jsonl, sarif, gcc, github, summary, or a Go template containing `{{ }}` |
+| `--oneline` |  | One line per finding; same as --format oneline |
+| `--rule-ids` |  | Show the rule ID instead of the kind at the end of each finding in text output |
+| `--color[=WHEN]` |  | Colorize the output: always, never or auto (default). Bare --color means always |
+| `--no-color` |  | Same as --color=never |
+| `--no-hints` |  | Do not print the hint line after a text run with many findings |
+| `--min-severity=LEVEL` |  | Hide findings less severe than LEVEL: info (default), warn or error |
+| `--strict-exit` |  | Exit with status 1 also for findings of level warn and info |
+
+**Rules and configuration**
+
+| Option | Short | Description |
+| --- | --- | --- |
+| `--profile=NAME` | `-p` | Rule profile: correctness, default or pedantic. Overrides "profile" of the config file |
+| `--config-file=FILE` | `-c` | Use this config file instead of .github/jactionlint.yaml |
+| `--ignore=PATTERN` | `-i` | Ignore findings whose rule ID or message matches PATTERN (a rule ID or a regular expression). Repeatable |
+| `--init-config` |  | Write a default config file .github/jactionlint.yaml and exit |
+| `--migrate-config` |  | Rewrite the deprecated keys of the config file and exit |
+| `--migrate-ignores` |  | Rewrite "# zizmor: ignore[...]" comments into "# jactionlint ignore=..." comments and exit |
+
+**Fixing**
+
+| Option | Short | Description |
+| --- | --- | --- |
+| `--fix[=unsafe]` |  | Apply the safe automatic fixes in place. --fix=unsafe also applies the fixes that may change behavior |
+| `--diff` |  | Print what --fix would change as a unified diff and write nothing (implies --fix) |
+| `--fix-rules=RULES` |  | With --fix or --diff: apply only the fixes of these comma separated rule IDs |
+
+**Baseline**
+
+| Option | Short | Description |
+| --- | --- | --- |
+| `--baseline[=FILE]` |  | Hide the findings recorded in the baseline (default .github/jactionlint-baseline.json). --baseline=FILE reads another file |
+| `--no-baseline` |  | Ignore the baseline even when the config file enables it |
+| `--baseline-write[=FILE]` |  | Record the current findings as the baseline and exit 0. --baseline-write=FILE writes another file |
+| `--baseline-check` |  | Report baseline entries which match no finding any more (implies --baseline) |
+| `--sarif-hide-baselined` |  | Leave baselined findings out of --format sarif instead of marking them suppressed |
+
+**GitHub API (online checks)**
+
+| Option | Short | Description |
+| --- | --- | --- |
+| `--online[=MODE]` |  | Run the checks which query the GitHub API. MODE: cache (cache only, no network), strict (fail when a lookup is skipped) or cache,strict |
+| `--no-online` |  | Never use the network, even when the config file enables the online checks |
+| `--online-api-url=URL` |  | REST API URL of a GitHub Enterprise Server, e.g. https://ghe.example.com/api/v3 |
+| `--online-token-env=NAME` |  | Name of the environment variable that holds the GitHub token |
+| `--online-token-file=FILE` |  | File that holds the GitHub token |
+| `--online-allow=PATTERN` |  | Look up only repositories matching owner/repo PATTERN ("*" is a wildcard). Repeatable |
+| `--online-deny=PATTERN` |  | Never look up repositories matching owner/repo PATTERN. Repeatable |
+| `--online-cache-ttl=DURATION` |  | How long a cached GitHub answer is used without revalidation (default 1h; 0 always revalidates) |
+| `--online-max-wait=DURATION` |  | The longest to wait for a GitHub rate limit to reset (default 30s; 0 never waits) |
+
+**External tools**
+
+| Option | Short | Description |
+| --- | --- | --- |
+| `--shellcheck=CMD` |  | Command or path of shellcheck (default shellcheck). Empty disables the integration |
+| `--pyflakes=CMD` |  | Command or path of pyflakes (default pyflakes). Empty disables the integration |
+
+Exit status: 0 no problem, 1 problems found, 2 invalid command line, 3 failure.
+
 
 <a id="profile"></a>
 ### Choose a profile
@@ -60,8 +150,8 @@ the bug detectors of jactionlint), `default` (adds the security posture and poli
 `pedantic` (adds the noisy and opinionated rules). Pick one in the config file, or on the command line, which wins:
 
 ```sh
-jactionlint -profile correctness   # only mistakes, like actionlint
-jactionlint -profile pedantic      # everything
+jactionlint --profile correctness   # only mistakes, like actionlint
+jactionlint --profile pedantic      # everything
 ```
 
 ```yaml
@@ -81,30 +171,30 @@ about 60 findings, all of them errors). When a text run finds 20 or more finding
 what to do next, for example:
 
 ```
-note: 132 findings in 14 files. see -format summary for the counts per rule; adopt the checks gradually with -baseline-write; for the checks of actionlint only use -profile correctness. silence this note with -no-hints or JACTIONLINT_NO_HINTS=1
+note: 132 findings in 14 files. see --format summary for the counts per rule; adopt the checks gradually with --baseline-write; for the checks of actionlint only use --profile correctness. silence this note with --no-hints or JACTIONLINT_NO_HINTS=1
 ```
 
-It is shown only when stderr is a terminal or the process runs in CI (`CI` or `GITHUB_ACTIONS` is set), never with `-format json`,
-`sarif`, `summary`, `github`, `gcc` or a template, never with `-profile correctness` (those findings are mistakes, not something to
-adopt), and not at all with `-no-hints` or `JACTIONLINT_NO_HINTS=1`. The advice to write a baseline is left out once a baseline is
-applied. After `-baseline-write` the command prints the line that makes plain runs use the baseline (`baseline: auto` in the config
-file); without it only `jactionlint -baseline` reads the file.
+It is shown only when stderr is a terminal or the process runs in CI (`CI` or `GITHUB_ACTIONS` is set), never with `--format json`,
+`sarif`, `summary`, `github`, `gcc` or a template, never with `--profile correctness` (those findings are mistakes, not something to
+adopt), and not at all with `--no-hints` or `JACTIONLINT_NO_HINTS=1`. The advice to write a baseline is left out once a baseline is
+applied. After `--baseline-write` the command prints the line that makes plain runs use the baseline (`baseline: auto` in the config
+file); without it only `jactionlint --baseline` reads the file.
 
 ### Ignore some errors
 
-Every error has a stable [rule ID](rules.md) such as `unpinned-uses`. `-rule-ids` shows it at the end of each error instead of the
-kind, and the `id` field of `-format json` and the `ruleId` of `-format sarif` have it.
+Every error has a stable [rule ID](rules.md) such as `unpinned-uses`. `--rule-ids` shows it at the end of each error instead of the
+kind, and the `id` field of `--format json` and the `ruleId` of `--format sarif` have it.
 
 ```
 .github/workflows/ci.yaml:12:15: action "actions/checkout@v4" must be pinned to a full-length commit SHA ... [unpinned-uses]
 ```
 
-To ignore some errors, `-ignore` option filters errors by rule IDs or by messages using regular expression. A pattern which is
+To ignore some errors, `--ignore` option filters errors by rule IDs or by messages using regular expression. A pattern which is
 exactly a rule ID ignores all the errors of the rule. Any other pattern is a regular expression matched to the error messages. The
 regular expression syntax is the same as [RE2][re2]. The option is repeatable.
 
 ```sh
-jactionlint -ignore template-injection -ignore 'label ".+" is unknown'
+jactionlint --ignore template-injection --ignore 'label ".+" is unknown'
 ```
 
 The same patterns are available in [the configuration file](config.md) (`paths.<glob>.ignore`) and in ignore comments. Several
@@ -163,28 +253,28 @@ steps:
 - With [`unused-ignore`](rules.md#unused-ignore), a zizmor comment is reported as stale only when its audit maps to a rule
   that is enabled, never for an audit jactionlint does not have.
 
-`jactionlint -migrate-ignores [files]` rewrites the trailing zizmor comments (of the workflows of the project when no file is
+`jactionlint --migrate-ignores [files]` rewrites the trailing zizmor comments (of the workflows of the project when no file is
 given) into `# jactionlint ignore=` comments on the line above and moves the reason to a plain comment line. Names with no
 jactionlint counterpart stay in the zizmor comment, and running it again changes nothing.
 
-`-shellcheck` and `-pyflakes` specifies file paths of executables. Setting empty string to them disables `shellcheck` and
+`--shellcheck` and `--pyflakes` specifies file paths of executables. Setting empty string to them disables `shellcheck` and
 `pyflakes` rules. As a bonus, disabling them makes jactionlint much faster Since these external linter integrations spawn many
 processes.
 
 ```sh
-jactionlint -shellcheck= -pyflakes=
+jactionlint --shellcheck= --pyflakes=
 ```
 
 <a id="format"></a>
 ### Format error messages
 
-`-format` option selects the output format. The available formats are as follows.
+`--format` option selects the output format. The available formats are as follows.
 
 | Format    | Description                                                                                                                                                              |
 |-----------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `text`    | The default. File path, position, message and kind followed by the source snippet and an indicator. `-oneline` or `oneline` omits the snippet.                           |
+| `text`    | The default. File path, position, message and kind followed by the source snippet and an indicator. `--oneline` or `oneline` omits the snippet.                           |
 | `oneline` | The same as `text` with one line per error.                                                                                                                              |
-| `json`    | A JSON array of error objects. It is the same as `-format '{{json .}}'`.                                                                                                 |
+| `json`    | A JSON array of error objects. It is the same as `--format '{{json .}}'`.                                                                                                 |
 | `jsonl`   | One error object per line ([JSON Lines][jsonl]).                                                                                                                         |
 | `sarif`   | A [SARIF][sarif] 2.1.0 log with the rule metadata, levels, regions and fixes. Useful for code scanning and for tools like [hk](#hk).                                     |
 | `gcc`     | `file:line:col: severity: message [id]` like GCC. `severity` is `error`, `warning` or `note`.                                                                            |
@@ -196,7 +286,7 @@ the structured formats goes to stdout and the logs (including the deprecation wa
 output can be piped to other tools safely.
 
 The text format of errors is the same as in the former versions. An error whose level is lowered to `warn` or `info` in
-[the configuration](config.md#rules) has `warning: ` or `info: ` before the message. `-rule-ids` shows the rule ID instead of
+[the configuration](config.md#rules) has `warning: ` or `info: ` before the message. `--rule-ids` shows the rule ID instead of
 the kind at the end of the line.
 
 An error object of `json` and `jsonl` has these fields.
@@ -233,10 +323,10 @@ Before explaining the template details, let's see some examples.
 #### Example: Serialized into JSON
 
 ```sh
-jactionlint -format '{{json .}}'
+jactionlint --format '{{json .}}'
 ```
 
-This is the same as `jactionlint -format json`.
+This is the same as `jactionlint --format json`.
 
 Output:
 
@@ -247,7 +337,7 @@ Output:
 #### Example: Markdown
 
 ````sh
-jactionlint -format '{{range $err := .}}### Error at line {{$err.Line}}, col {{$err.Column}} of `{{$err.Filepath}}`\n\n{{$err.Message}}\n\n```\n{{$err.Snippet}}\n```\n\n{{end}}'
+jactionlint --format '{{range $err := .}}### Error at line {{$err.Line}}, col {{$err.Column}} of `{{$err.Filepath}}`\n\n{{$err.Message}}\n\n```\n{{$err.Snippet}}\n```\n\n{{end}}'
 ````
 
 Output:
@@ -266,7 +356,7 @@ property "platform" is not defined in object type {os: string}
 #### Example: Serialized in [JSON Lines][jsonl]
 
 ```sh
-jactionlint -format '{{range $err := .}}{{json $err}}{{end}}'
+jactionlint --format '{{range $err := .}}{{json $err}}{{end}}'
 ```
 
 Output:
@@ -280,7 +370,7 @@ Output:
 #### Example: [Error annotation][ga-annotate-error] on GitHub Actions
 
 ````sh
-jactionlint -format '{{range $err := .}}::error file={{$err.Filepath}},line={{$err.Line}},col={{$err.Column}}::{{$err.Message}}%0A```%0A{{replace $err.Snippet "\\n" "%0A"}}%0A```\n{{end}}' -ignore 'SC2016:'
+jactionlint --format '{{range $err := .}}::error file={{$err.Filepath}},line={{$err.Line}},col={{$err.Column}}::{{$err.Message}}%0A```%0A{{replace $err.Snippet "\\n" "%0A"}}%0A```\n{{end}}' --ignore 'SC2016:'
 ````
 
 Output:
@@ -296,14 +386,14 @@ Basically it is more recommended to use [Problem Matchers](#problem-matchers) or
 #### Example: [SARIF format][sarif]
 
 [The Static Analysis Results Interchange Format (SARIF)][sarif] is a standardized format for the results of static analysis tools.
-`jactionlint -format sarif` prints a SARIF 2.1.0 log. Each result has the rule ID (`ruleId`), the level (`error`, `warning` or
+`jactionlint --format sarif` prints a SARIF 2.1.0 log. Each result has the rule ID (`ruleId`), the level (`error`, `warning` or
 `note`), the region of the error (`startLine`, `startColumn`, `endLine` and `endColumn`; `columnKind` is
 `unicodeCodePoints`) and, for the rules which have an automatic fix, `fixes` with `artifactChanges[].replacements[]`
 (`deletedRegion` and `insertedContent.text`). The `rules` of the driver describe the rules which appear in the results with
 their summary, group and a link to the documentation.
 
 A custom template still works. This is [the template file in test data](https://github.com/jdx/jactionlint/blob/main/testdata/format/sarif_template.txt)
-which was used before `-format sarif`. [The output example in test data](https://github.com/jdx/jactionlint/blob/main/testdata/format/test.sarif)
+which was used before `--format sarif`. [The output example in test data](https://github.com/jdx/jactionlint/blob/main/testdata/format/test.sarif)
 is its output.
 
 #### Formatting syntax
@@ -381,19 +471,19 @@ Note that special characters escaped with backslash like `\n` in the format stri
 |--------|----------------------------------------------------------------------------------------------|
 | `0`    | The command ran successfully and no problem was found                                        |
 | `1`    | The command ran successfully and some problem was found                                      |
-| `2`    | The command failed due to invalid command line option or flag value (`-profile`, `-format`, `-ignore`, ...) |
+| `2`    | The command failed due to invalid command line option or flag value (`--profile`, `--format`, `--ignore`, ...) |
 | `3`    | The command failed due to some fatal error (no project, an unreadable file or config)        |
 
 With a [baseline](#baseline) the findings it accepts do not count.
 
 Only the errors whose level is `error` count as problems. Every rule is an `error` unless [the configuration](config.md#rules)
 lowers it, so the exit status is `1` whenever something is reported by default. The findings of `warn` and `info` level are
-printed but the exit status stays `0` unless `-strict-exit` is given. `-min-severity warn` (or `error`) hides the findings
+printed but the exit status stays `0` unless `--strict-exit` is given. `--min-severity warn` (or `error`) hides the findings
 below the level.
 
 ```sh
-jactionlint -strict-exit                # warnings and infos fail, too
-jactionlint -min-severity error         # show only errors
+jactionlint --strict-exit                # warnings and infos fail, too
+jactionlint --min-severity error         # show only errors
 ```
 
 <a id="baseline"></a>
@@ -403,10 +493,10 @@ The default profile has the security posture and policy rules, so the first run 
 lets you adopt the checks without fixing everything first: it records today's findings, hides them, and fails the build only on
 findings that are new. Then you pay the debt down at your own pace.
 
-1. **See what you are facing.** `-format summary` prints counts per rule and per file instead of the findings:
+1. **See what you are facing.** `--format summary` prints counts per rule and per file instead of the findings:
 
    ```sh
-   jactionlint -format summary
+   jactionlint --format summary
    ```
 
    ```
@@ -421,18 +511,18 @@ findings that are new. Then you pay the debt down at your own pace.
 2. **Write the baseline.**
 
    ```sh
-   jactionlint -baseline-write
+   jactionlint --baseline-write
    ```
 
    This lints the whole repository (like running without arguments) and writes `.github/jactionlint-baseline.json`. It exits
-   with `0`. Use `-baseline-write=FILE` for another path. Write it in the environment your CI runs in: the same configuration,
-   `-online` if CI uses it, and the same `shellcheck` and `pyflakes`. A finding that your machine cannot produce (no
-   `shellcheck`, no `-online`) is not recorded, so CI would report it as new.
+   with `0`. Use `--baseline-write=FILE` for another path. Write it in the environment your CI runs in: the same configuration,
+   `--online` if CI uses it, and the same `shellcheck` and `pyflakes`. A finding that your machine cannot produce (no
+   `shellcheck`, no `--online`) is not recorded, so CI would report it as new.
 
 3. **Commit it and apply it.** The baseline is only used when you ask for it, with the flag or with the configuration:
 
    ```sh
-   jactionlint -baseline            # hides the findings of the baseline
+   jactionlint --baseline            # hides the findings of the baseline
    ```
 
    ```yaml
@@ -441,18 +531,18 @@ findings that are new. Then you pay the debt down at your own pace.
    ```
 
    `baseline` takes `auto` (or `true`), `false`, or the path of the file relative to the repository root (the file must exist
-   then). On the command line `-baseline` uses the default file, `-baseline=FILE` another one and `-baseline=false` ignores a
+   then). On the command line `--baseline` uses the default file, `--baseline=FILE` another one and `--no-baseline` ignores a
    baseline that the configuration enables. With the baseline applied the exit status depends only on the findings that are not
    in it, so the build fails on new findings and nothing else. The text formats print a note on stderr with the number of hidden
    findings.
 
-4. **Ratchet down.** Fix findings (`jactionlint -fix` also fixes the baselined ones), then shrink the file:
+4. **Ratchet down.** Fix findings (`jactionlint --fix` also fixes the baselined ones), then shrink the file:
 
    ```sh
-   jactionlint -baseline-write      # drops the entries of fixed findings
+   jactionlint --baseline-write      # drops the entries of fixed findings
    ```
 
-   `-baseline-check` lists the entries which match nothing any more as [`unused-baseline-entry`](rules.md#unused-baseline-entry)
+   `--baseline-check` lists the entries which match nothing any more as [`unused-baseline-entry`](rules.md#unused-baseline-entry)
    findings located in the baseline file. They are `info`, so they are only shown. To make the build fail until the file is
    shrunk, set the level in the configuration:
 
@@ -461,13 +551,13 @@ findings that are new. Then you pay the debt down at your own pace.
      unused-baseline-entry: error
    ```
 
-   and run `jactionlint -baseline-check` in CI. A baseline can only get smaller this way: a fixed finding leaves an unused
+   and run `jactionlint --baseline-check` in CI. A baseline can only get smaller this way: a fixed finding leaves an unused
    entry, a new finding is reported, and the one thing that cannot happen is a silent regression.
 
 How an entry matches a finding, so that you know what an edit does to the baseline:
 
 - An entry is the file, the rule ID, a fingerprint and an occurrence index, **not a line number**. Adding a step, moving a job
-  or reformatting does not resurrect baselined findings, and `-baseline-write` after an unrelated edit gives the same file
+  or reformatting does not resurrect baselined findings, and `--baseline-write` after an unrelated edit gives the same file
   byte for byte (CRLF and LF checkouts are the same, too).
 - The fingerprint is a hash of the rule, the enclosing job (or top-level key), the whitespace-normalized source line of the
   finding and the normalized message. **Editing the line of a finding makes it new again**, which is the point: the changed
@@ -482,35 +572,35 @@ How an entry matches a finding, so that you know what an edit does to the baseli
   `action.yml` is broken, a file it names is missing) is reported once, at its first use in the order of the files, however
   many workflows use the action.
 - **A renamed file loses its entries**: they are keyed by the path relative to the repository root. The findings of the new
-  path are reported and the old entries are unused. Run `jactionlint -baseline-write` after the rename (it follows the rename
+  path are reported and the old entries are unused. Run `jactionlint --baseline-write` after the rename (it follows the rename
   and is the only step needed).
-- `-baseline-write file1.yaml file2.yaml` refreshes only the entries of those files and keeps the entries of the other files
+- `--baseline-write file1.yaml file2.yaml` refreshes only the entries of those files and keeps the entries of the other files
   that still exist; it is what a pre-commit hook can run for the changed files.
-- The baseline records the findings after `-ignore`, the `ignore` configuration, inline ignore comments, rules that are `off`
-  and `-min-severity`, so change these first and write the baseline last. It never records `unused-baseline-entry`.
-- Entries of rules that this run cannot reproduce (an `-online` rule without `-online`, `shellcheck` or `pyflakes` that is not
+- The baseline records the findings after `--ignore`, the `ignore` configuration, inline ignore comments, rules that are `off`
+  and `--min-severity`, so change these first and write the baseline last. It never records `unused-baseline-entry`.
+- Entries of rules that this run cannot reproduce (an `--online` rule without `--online`, `shellcheck` or `pyflakes` that is not
   installed, a rule that is `off`) are not reported as unused, because nothing says they are fixed.
-- `-format sarif` keeps the baselined findings in the log as results with a `suppressions` entry of kind `external`, which
-  GitHub code scanning shows as closed. `-sarif-hide-baselined` leaves them out, for tools like [hk](#hk) that do not read
-  suppressions. `-format summary` counts them as baselined. The other formats do not print them.
+- `--format sarif` keeps the baselined findings in the log as results with a `suppressions` entry of kind `external`, which
+  GitHub code scanning shows as closed. `--sarif-hide-baselined` leaves them out, for tools like [hk](#hk) that do not read
+  suppressions. `--format summary` counts them as baselined. The other formats do not print them.
 
-`-baseline` and `-baseline-write` do not take the file as a separate argument: write `-baseline=FILE`, because a following
+`--baseline` and `--baseline-write` do not take the file as a separate argument: write `--baseline=FILE`, because a following
 argument is a workflow file to check.
 
 ### Fix errors automatically
 
-`-fix` applies the automatic fixes of the errors which have one, rewrites the files and reports the errors which remain.
+`--fix` applies the automatic fixes of the errors which have one, rewrites the files and reports the errors which remain.
 It repeats until nothing changes so running it twice makes no further change, and it exits with `1` when an error remains.
-Only the fixes which do not change the behavior of the workflow are applied; `-fix=unsafe` applies all of them.
+Only the fixes which do not change the behavior of the workflow are applied; `--fix=unsafe` applies all of them.
 
 ```sh
-jactionlint -fix
-jactionlint -fix .github/workflows/ci.yaml
-jactionlint -fix -rules missing-timeout,artipacked   # only the fixes of these rules
-jactionlint -diff                                    # show the changes as a unified diff, write nothing
+jactionlint --fix
+jactionlint --fix .github/workflows/ci.yaml
+jactionlint --fix --fix-rules missing-timeout,artipacked   # only the fixes of these rules
+jactionlint --diff                                    # show the changes as a unified diff, write nothing
 ```
 
-When it is done `-fix` says what it changed, per rule, on stderr:
+When it is done `--fix` says what it changed, per rule, on stderr:
 
 ```
 Fixed 12 problem(s) in 3 file(s)
@@ -518,11 +608,11 @@ Fixed 12 problem(s) in 3 file(s)
   artipacked: 4
 ```
 
-- **`-rules <id>[,<id>...]`** restricts `-fix` (and `-diff`) to the fixes of the listed rules; the other findings are still
+- **`--fix-rules <id>[,<id>...]`** restricts `--fix` (and `--diff`) to the fixes of the listed rules; the other findings are still
   reported. The same list can be set with [`fix.rules`](config.md#configuration-file) in the configuration file. An unknown ID is
   an error.
-- **`-diff`** computes the fixes like `-fix` (safe ones, or `-diff -fix=unsafe`) but writes nothing. The unified diff is on
-  stdout, so `jactionlint -diff | patch -p1` applies it, and the remaining errors are on stderr. The exit status is `1` when there is a
+- **`--diff`** computes the fixes like `--fix` (safe ones, or `--diff --fix=unsafe`) but writes nothing. The unified diff is on
+  stdout, so `jactionlint --diff | patch -p1` applies it, and the remaining errors are on stderr. The exit status is `1` when there is a
   diff or an error remains.
 - **Several fixes in one run.** Fixing happens in memory and the file is written once, atomically (a temporary file in the same
   directory is renamed over it), with its permission bits, its line breaks (CRLF stays CRLF) and a symbolic link kept. A file that
@@ -553,10 +643,10 @@ Each pass lints the text, chooses fixes that do not overlap, applies them and li
   quote in a double quoted scalar, a quote in a single quoted one, indentation in a block scalar, and an environment variable
   value that is not a plain-safe string is quoted. A fix that cannot represent its text in the place offers no fix.
 
-Only the rules that can fix their findings mechanically have a fix; the errors of the other rules are only reported. `-fix` cannot be
+Only the rules that can fix their findings mechanically have a fix; the errors of the other rules are only reported. `--fix` cannot be
 used with stdin. These rules have a fix:
 
-| Rule                                  | What `-fix` does                                                                                                                  | Safe                                                              |
+| Rule                                  | What `--fix` does                                                                                                                  | Safe                                                              |
 | ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
 | `anonymous-definition`                | Adds a `name:` to the workflow and to jobs.                                                                                       | Yes                                                               |
 | `artipacked`                          | Sets `persist-credentials: false` on `actions/checkout`.                                                                          | Unless a later step pushes or needs the credentials               |
@@ -575,7 +665,7 @@ used with stdin. These rules have a fix:
 | `self-repository`                     | Writes `$/` for `./` in `uses:`; needs a recent runner and GHES, and actionlint 1.7.12 and older reject it.                      | No                                                                |
 | `template-injection`                  | Moves a simple `${{ }}` reference of a bash or sh script into `env:`.                                                             | For plain references; the others are `unsafe`                     |
 | `unlocked-install`                    | Adds `--locked` to `cargo install`.                                                                                               | No                                                                |
-| `unpinned-uses`                       | With `-online`, replaces a tag with its commit and names the tag in a comment (see below).                                        | Yes                                                               |
+| `unpinned-uses`                       | With `--online`, replaces a tag with its commit and names the tag in a comment (see below).                                        | Yes                                                               |
 | `unused-ignore`                       | Removes the ignore comment, or only its patterns which did nothing when the comment has others.                                   | Yes                                                               |
 
 A finding in a shape the fix does not understand (a job written as `job: {runs-on: ...}`, a job with a YAML anchor, a file with
@@ -585,7 +675,7 @@ and why an unsafe one is unsafe.
 <a id="online-checks"></a>
 ### Online checks
 
-Six checks need to ask GitHub about the actions a workflow uses, so they are off unless you give `-online` (or set `online: true` in
+Six checks need to ask GitHub about the actions a workflow uses, so they are off unless you give `--online` (or set `online: true` in
 [the configuration](config.md#configuration-file)). **Without it jactionlint never uses the network.**
 
 | Rule | What it finds |
@@ -599,54 +689,54 @@ Six checks need to ask GitHub about the actions a workflow uses, so they are off
 
 ```sh
 export GITHUB_TOKEN=$(gh auth token)   # or GH_TOKEN
-jactionlint -online
+jactionlint --online
 ```
 
 - **A failed lookup does not fail the run.** When GitHub answers 404 (a private action, or one that does not exist), 403, a server
   error, or does not answer in time, or the DNS lookup fails, that lookup is skipped and the other actions are checked as usual.
-  jactionlint prints **one warning per kind of failure** (on stderr, or in the SARIF notifications with `-format sarif`) and the
-  exit status does not change. `-verbose` lists every skipped lookup. `-online=strict` turns a skipped lookup into exit status 3,
+  jactionlint prints **one warning per kind of failure** (on stderr, or in the SARIF notifications with `--format sarif`) and the
+  exit status does not change. `--verbose` lists every skipped lookup. `--online=strict` turns a skipped lookup into exit status 3,
   for a pipeline where a check that could not run must not pass silently.
-- **Token.** The first of these is used: the variable named by `-online-token-env`, the file named by `-online-token-file`,
+- **Token.** The first of these is used: the variable named by `--online-token-env`, the file named by `--online-token-file`,
   `GITHUB_TOKEN`, `GH_TOKEN` (for a GitHub Enterprise Server `GITHUB_ENTERPRISE_TOKEN` and `GH_ENTERPRISE_TOKEN` come first), and
   finally the output of `gh auth token --hostname HOST` when `gh` is installed (set `gh-cli: false` in
   [`online-options`](config.md#online-options) to never run it). Without a token the requests are unauthenticated, which works but
-  GitHub allows only 60 an hour; jactionlint says so once. `-verbose` says which source supplied the token, never the token. A token
+  GitHub allows only 60 an hour; jactionlint says so once. `--verbose` says which source supplied the token, never the token. A token
   that GitHub rejects (401) is dropped with a warning and the run goes on without it; one that cannot read a repository (403) is
   tried again without it for that repository.
 - **The token never leaves the API host.** It is sent to the host of the API only, over https (plain http only to localhost), and
-  a redirect to another host is refused. It is replaced by `[redacted]` in `-debug` output, warnings and errors, even when a server
+  a redirect to another host is refused. It is replaced by `[redacted]` in `--debug` output, warnings and errors, even when a server
   echoes it. A host named by the `online-options` of a *repository's* `.github/jactionlint.yaml` gets **no token**, because a pull
-  request could otherwise send your token to any server: name the host with `-online-api-url`, `GITHUB_API_URL`, your own
-  `-config-file` or your user-global config.
-- **GitHub Enterprise Server.** The API is `-online-api-url`, else `$GITHUB_API_URL` (set by GitHub Actions), else derived from
+  request could otherwise send your token to any server: name the host with `--online-api-url`, `GITHUB_API_URL`, your own
+  `--config-file` or your user-global config.
+- **GitHub Enterprise Server.** The API is `--online-api-url`, else `$GITHUB_API_URL` (set by GitHub Actions), else derived from
   `$GITHUB_SERVER_URL` or `$GH_HOST` (`https://HOST/api/v3`, or `https://api.NAME.ghe.com` for data residency), else
   `api.github.com`. Answers are cached per host.
-- **Rate limits.** `X-RateLimit-*` and `Retry-After` are read. A limit which resets within 30 seconds (`-online-max-wait`) is waited
+- **Rate limits.** `X-RateLimit-*` and `Retry-After` are read. A limit which resets within 30 seconds (`--online-max-wait`) is waited
   for; one which resets later skips the remaining lookups with a message naming the reset time, and answers in the cache are still
   used. Server errors (500, 502, 503, 504), a secondary rate limit and a request which timed out once are repeated with
   exponential backoff and jitter, at most twice (`retries`).
-- **Skip private or internal actions.** `-online-deny 'mycorp/*'` (repeatable, or `deny:` in `online-options`) never asks
-  about matching repositories, `-online-allow 'actions/*'` asks only about matching ones. They are not failures and not warned about.
+- **Skip private or internal actions.** `--online-deny 'mycorp/*'` (repeatable, or `deny:` in `online-options`) never asks
+  about matching repositories, `--online-allow 'actions/*'` asks only about matching ones. They are not failures and not warned about.
 - **Cache.** Answers are kept in `$XDG_CACHE_HOME/jactionlint` (`~/.cache/jactionlint`), at most 32 MiB, shared safely by parallel
-  processes, keyed by API host and token. An answer is used for an hour (`-online-cache-ttl`, `cache-ttl`), then asked for again with
-  its ETag, which costs no rate limit when it did not change. `-online-cache-ttl=0` checks every answer. A public answer fetched
+  processes, keyed by API host and token. An answer is used for an hour (`--online-cache-ttl`, `cache-ttl`), then asked for again with
+  its ETag, which costs no rate limit when it did not change. `--online-cache-ttl=0` checks every answer. A public answer fetched
   without a token also serves a run with one, so the `GITHUB_TOKEN` of a CI job, which changes every run, does not empty the
   cache.
-- **Offline.** `-online=cache` never uses the network: it answers from the cache whatever the age of the answers, and a lookup with
-  nothing cached is skipped with one warning (run once with `-online` to fill the cache). `-online=cache,strict` fails on such a
+- **Offline.** `--online=cache` never uses the network: it answers from the cache whatever the age of the answers, and a lookup with
+  nothing cached is skipped with one warning (run once with `--online` to fill the cache). `--online=cache,strict` fails on such a
   lookup. Good for a laptop on a plane or a sandboxed CI job that restores the cache directory.
 - **Few requests.** Every repository, tag and commit is asked for once per run however often it is used, and the checks share what
   they learn. At most six requests are in flight (`concurrency`). The number of requests grows with the number of different
   actions, not steps. Interrupting with Ctrl-C stops the lookups.
-- **Levels.** The online rules do not belong to a profile; `-online` turns them on at their own level (`impostor-commit` and
+- **Levels.** The online rules do not belong to a profile; `--online` turns them on at their own level (`impostor-commit` and
   `known-vulnerable-actions` are errors, `ref-confusion`, `archived-uses` and `ref-version-mismatch` warnings, `stale-action-refs` is
   informational). Set a level or `off` in `rules` as for any rule.
-- **Not in the playground.** The WebAssembly build has no network access, so `-online` is an error there.
+- **Not in the playground.** The WebAssembly build has no network access, so `--online` is an error there.
 
-#### Pin tags to commits with `-online -fix`
+#### Pin tags to commits with `--online --fix`
 
-With the online checks, `-fix` can repair `unpinned-uses` findings (a rule of the `default` profile) by replacing a tag with the commit
+With the online checks, `--fix` can repair `unpinned-uses` findings (a rule of the `default` profile) by replacing a tag with the commit
 it points to and naming the tag in a comment, the format Dependabot and Renovate keep up to date:
 
 ```yaml
@@ -655,19 +745,19 @@ it points to and naming the tag in a comment, the format Dependabot and Renovate
 - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 ```
 
-The fix is applied by plain `-fix` because it keeps the code the same: it is offered only when the ref is the name of a tag
+The fix is applied by plain `--fix` because it keeps the code the same: it is offered only when the ref is the name of a tag
 (annotated tags are followed to the commit) and no branch has the same name. A branch, an unknown tag, an abbreviated SHA, a Docker
 image or a line with a comment that does not name the ref is left to you.
 
 ```sh
-jactionlint -online -fix
+jactionlint --online --fix
 ```
 
 <a id="hk"></a>
 ### hk
 
-[hk][] runs linters and fixers as Git hooks and from the command line. `jactionlint -format sarif` gives hk the diagnostics
-with the rule IDs. `hk util sarif-diff` turns the fixes in the SARIF log into a patch, and `jactionlint -fix` is the fixer hk
+[hk][] runs linters and fixers as Git hooks and from the command line. `jactionlint --format sarif` gives hk the diagnostics
+with the rule IDs. `hk util sarif-diff` turns the fixes in the SARIF log into a patch, and `jactionlint --fix` is the fixer hk
 runs when a finding has no fix. Add this step to `hk.pkl`:
 
 ```pkl
@@ -675,35 +765,35 @@ runs when a finding has no fix. Add this step to `hk.pkl`:
     glob = List(".github/workflows/*.yml", ".github/workflows/*.yaml")
     batch = true
     diagnostic_format = "sarif"
-    check = "jactionlint -format sarif {{files}}"
-    check_diff = "hk util sarif-diff -- jactionlint -format sarif {{files}}"
-    fix = "jactionlint -fix {{files}}"
+    check = "jactionlint --format sarif {{files}}"
+    check_diff = "hk util sarif-diff -- jactionlint --format sarif {{files}}"
+    fix = "jactionlint --fix {{files}}"
 }
 ```
 
 - Only the fixes which are safe, valid and do not conflict with each other are in the SARIF log. A finding which cannot be fixed
-  stays without a fix so hk runs `jactionlint -fix` and still reports it.
+  stays without a fix so hk runs `jactionlint --fix` and still reports it.
 - The log uses `columnKind: unicodeCodePoints` and file URIs relative to the directory where jactionlint ran.
 - The exit status is `0` for a clean run and `1` when errors were found. Other statuses are failures. Nothing but the SARIF log is
-  on stdout, and nothing is on stderr unless `-verbose` or `-debug` is given, because hk parses both together. The
+  on stdout, and nothing is on stderr unless `--verbose` or `--debug` is given, because hk parses both together. The
   deprecation warnings of the configuration are put in `invocations[].toolConfigurationNotifications` of the log instead of
   stderr in this format.
 - To adopt the checks gradually, record a [baseline](#baseline) and apply it in the commands. hk parses the SARIF log and does
   not know suppressions, so leave the baselined findings out of it:
 
   ```pkl
-  check = "jactionlint -baseline -sarif-hide-baselined -format sarif {{files}}"
-  check_diff = "hk util sarif-diff -- jactionlint -baseline -sarif-hide-baselined -format sarif {{files}}"
+  check = "jactionlint --baseline --sarif-hide-baselined --format sarif {{files}}"
+  check_diff = "hk util sarif-diff -- jactionlint --baseline --sarif-hide-baselined --format sarif {{files}}"
   ```
 
-  or set `baseline: auto` in the configuration and pass only `-sarif-hide-baselined`. Refresh the file with
-  `jactionlint -baseline-write` (not through hk) when you pay findings down.
-- To follow another profile, set `profile: correctness` or `profile: pedantic` in `.github/jactionlint.yaml`, or pass `-profile NAME` in the hk command. `correctness` is what actionlint checks; see [coming from actionlint](actionlint.md).
+  or set `baseline: auto` in the configuration and pass only `--sarif-hide-baselined`. Refresh the file with
+  `jactionlint --baseline-write` (not through hk) when you pay findings down.
+- To follow another profile, set `profile: correctness` or `profile: pedantic` in `.github/jactionlint.yaml`, or pass `--profile NAME` in the hk command. `correctness` is what actionlint checks; see [coming from actionlint](actionlint.md).
 - `missing-timeout` is in the default profile, so the first `hk check` on a repository whose jobs have no `timeout-minutes` fails
   on every job. Its fix exists only when `rules.missing-timeout.default-minutes` is set (there is no built-in
-  number). The fix is safe and is in the SARIF log, so `hk fix` adds the timeout without running `jactionlint -fix`. `missing-permissions` (`default`) is only in the log when the fix is safe; otherwise hk runs
-  `jactionlint -fix`, which leaves the unsafe fix alone and still reports the finding, and you decide whether to run
-  `jactionlint -fix=unsafe`.
+  number). The fix is safe and is in the SARIF log, so `hk fix` adds the timeout without running `jactionlint --fix`. `missing-permissions` (`default`) is only in the log when the fix is safe; otherwise hk runs
+  `jactionlint --fix`, which leaves the unsafe fix alone and still reports the finding, and you decide whether to run
+  `jactionlint --fix=unsafe`.
 - To add the [online checks](#online-checks) put the flag in the commands. A second step keeps them apart from the offline checks, so
   you can run it on demand or in CI, where a token is at hand:
 
@@ -712,9 +802,9 @@ runs when a finding has no fix. Add this step to `hk.pkl`:
       glob = List(".github/workflows/*.yml", ".github/workflows/*.yaml")
       batch = true
       diagnostic_format = "sarif"
-      check = "jactionlint -online -format sarif {{files}}"
-      check_diff = "hk util sarif-diff -- jactionlint -online -format sarif {{files}}"
-      fix = "jactionlint -online -fix {{files}}"
+      check = "jactionlint --online --format sarif {{files}}"
+      check_diff = "hk util sarif-diff -- jactionlint --online --format sarif {{files}}"
+      fix = "jactionlint --online --fix {{files}}"
   }
   ```
 
@@ -750,10 +840,10 @@ jobs:
         with:
           persist-credentials: false
       - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
-      - run: jactionlint -color
+      - run: jactionlint --color
 ```
 
-Add `-format github` to annotate the changed files with the findings, or `-format sarif` to upload them to code scanning.
+Add `--format github` to annotate the changed files with the findings, or `--format sarif` to upload them to code scanning.
 
 Preparing the `jactionlint` executable with the download script is another option. See [the instruction](install.md#download-script) for
 more details. It sets an absolute file path of downloaded executable to `executable` output in order to use the executable in the
@@ -768,7 +858,7 @@ accepts it with an ignore comment; prefer a pinned release and its checksum when
   run: bash <(curl https://raw.githubusercontent.com/jdx/jactionlint/main/scripts/download-jactionlint.bash)
   shell: bash
 - name: Check workflow files
-  run: ${{ steps.get_jactionlint.outputs.executable }} -color
+  run: ${{ steps.get_jactionlint.outputs.executable }} --color
   shell: bash
 ```
 
@@ -778,7 +868,7 @@ to the script for more usage details.
 If you want to enable [shellcheck integration](checks.md#check-shellcheck-integ), install `shellcheck` command. Note that
 shellcheck is [pre-installed on Ubuntu worker][preinstall-ubuntu].
 
-If you want to [annotate errors][ga-annotate-error] from jactionlint on GitHub, consider using `-format github` or
+If you want to [annotate errors][ga-annotate-error] from jactionlint on GitHub, consider using `--format github` or
 [Problem Matchers](#problem-matchers).
 
 If you prefer Docker image to running a downloaded executable, using [jactionlint Docker image](#docker) is another option:
@@ -787,7 +877,7 @@ If you prefer Docker image to running a downloaded executable, using [jactionlin
 - name: Check workflow files
   uses: docker://ghcr.io/jdx/jactionlint:latest
   with:
-    args: -color
+    args: --color
 ```
 
 The `default` profile asks for a pinned image here too (`unpinned-uses`): use the digest of the image you tested.
@@ -816,26 +906,26 @@ Available tags are:
 Just run the image with `docker run`:
 
 ```sh
-docker run --rm ghcr.io/jdx/jactionlint:latest -version
+docker run --rm ghcr.io/jdx/jactionlint:latest --version
 ```
 
 To check all workflows in your repository, mount your repository's root directory as a volume and run jactionlint in the mounted
 directory. When you are at a root directory of your repository:
 
 ```sh
-docker run --rm -v $(pwd):/repo --workdir /repo ghcr.io/jdx/jactionlint:latest -color
+docker run --rm -v $(pwd):/repo --workdir /repo ghcr.io/jdx/jactionlint:latest --color
 ```
 
 To check a file with jactionlint in a Docker container, pass the file content via stdin and use `-` argument:
 
 ```sh
-cat /path/to/workflow.yml | docker run --rm -i ghcr.io/jdx/jactionlint:latest -color -
+cat /path/to/workflow.yml | docker run --rm -i ghcr.io/jdx/jactionlint:latest --color -
 ```
 
 Or mount the workflows directory and pass the paths as arguments:
 
 ```sh
-docker run --rm -v /path/to/workflows:/workflows ghcr.io/jdx/jactionlint:latest -color /workflows/ci.yml
+docker run --rm -v /path/to/workflows:/workflows ghcr.io/jdx/jactionlint:latest --color /workflows/ci.yml
 ```
 
 ## Using jactionlint from Go program
@@ -878,7 +968,7 @@ Then enable the matcher using `add-matcher` command before running `jactionlint`
   run: |
     echo "::add-matcher::.github/jactionlint-matcher.json"
     bash <(curl https://raw.githubusercontent.com/jdx/jactionlint/main/scripts/download-jactionlint.bash)
-    ./jactionlint -color
+    ./jactionlint --color
   shell: bash
 ```
 
@@ -891,7 +981,7 @@ When you change your workflow and the changed line causes a new error, CI will a
 [super-linter][] is a Bash script for a simple combination of various linters, provided by GitHub. It has support for jactionlint.
 Running super-linter in your repository automatically runs jactionlint.
 
-To ignore some errors, please add `-ignore` option by using [`GITHUB_ACTIONS_COMMAND_ARGS` environment variable][super-linter-env-var].
+To ignore some errors, please add `--ignore` option by using [`GITHUB_ACTIONS_COMMAND_ARGS` environment variable][super-linter-env-var].
 Please see [super-linter/super-linter#1852](https://github.com/super-linter/super-linter/issues/1852) for the discussion.
 
 ### MegaLinter

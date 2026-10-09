@@ -235,7 +235,7 @@ func TestZizmorUnusedIgnore(t *testing.T) {
 	if have := lintZ(t, offline, step("# zizmor: ignore[impostor-commit]")); len(have) != 0 {
 		t.Errorf("an online rule must not be reported offline: %v", have)
 	}
-	// With -online the same comment is stale
+	// With --online the same comment is stale
 	{
 		l, err := NewLinter(io.Discard, &LinterOptions{})
 		if err != nil {

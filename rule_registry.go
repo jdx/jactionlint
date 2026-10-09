@@ -110,7 +110,7 @@ type RuleOption struct {
 // CI annotations.
 type RuleInfo struct {
 	// ID is the stable kebab-case identifier of the diagnostic, e.g. "unpinned-uses". It appears in
-	// Error.ID, in the "rules" mapping of the configuration and in -ignore.
+	// Error.ID, in the "rules" mapping of the configuration and in --ignore.
 	ID string
 	// Group is the category of the rule.
 	Group RuleGroup
@@ -121,7 +121,7 @@ type RuleInfo struct {
 	// Profile is the first profile which enables the rule. The empty value means that no profile
 	// enables the rule; it only runs when the configuration turns it on.
 	Profile Profile
-	// Online is whether the rule needs network access. Online rules run only with -online and are
+	// Online is whether the rule needs network access. Online rules run only with --online and are
 	// independent of the profile.
 	Online bool
 	// Fixable is whether the rule can attach an automatic fix (Error.Fix) to its findings.
@@ -169,9 +169,9 @@ func registerRules(infos ...RuleInfo) {
 
 // RenamedRule is a rule ID which was merged into the ID of another rule before 2.0 was released, when one audit
 // was split in several IDs. The old ID is not a rule any more: its findings are the ones of ID with the
-// option Option on. Ignores of the old ID (-ignore, "ignore" of "paths" and inline ignore comments) still
+// option Option on. Ignores of the old ID (--ignore, "ignore" of "paths" and inline ignore comments) still
 // work, matching only the findings that had the old ID, and print a deprecation warning. Everything else
-// that takes a rule ID (rules, ignores, fix.rules, -rules) refuses it and names the new place.
+// that takes a rule ID (rules, ignores, fix.rules, --fix-rules) refuses it and names the new place.
 type RenamedRule struct {
 	// Old is the retired ID.
 	Old string

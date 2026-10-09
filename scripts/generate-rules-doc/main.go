@@ -26,7 +26,7 @@ func profileText(p jactionlint.Profile) string {
 // when the online checks are on.
 func ruleProfileText(r jactionlint.RuleInfo) string {
 	if r.Online {
-		return "only with `-online`"
+		return "only with `--online`"
 	}
 	return profileText(r.Profile)
 }
@@ -46,19 +46,19 @@ func generate(w io.Writer) error {
 
 Every diagnostic of jactionlint has a stable ID such as ` + "`unpinned-uses`" + `. IDs are never renamed or reused, so they are safe to write in
 [the configuration](./config.md), in [ignore comments](./usage.md#ignore-some-errors) and in CI annotations. The ID of a
-finding is in the ` + "`id`" + ` field of ` + "`-format json`" + `, in the ` + "`ruleId`" + ` of ` + "`-format sarif`" + ` and in the output of ` + "`-rule-ids`" + `.
+finding is in the ` + "`id`" + ` field of ` + "`--format json`" + `, in the ` + "`ruleId`" + ` of ` + "`--format sarif`" + ` and in the output of ` + "`--rule-ids`" + `.
 
 Each rule has:
 
 - a **group**: ` + "`correctness`" + ` (mistakes which make a workflow fail or misbehave), ` + "`security`" + ` (insecure constructs), ` + "`policy`" + `
   (good practices which are not mistakes by themselves) or ` + "`style`" + `.
-- a **default level**: ` + "`error`" + `, ` + "`warn`" + ` or ` + "`info`" + `. Only errors make jactionlint exit with status 1 unless ` + "`-strict-exit`" + ` is given.
+- a **default level**: ` + "`error`" + `, ` + "`warn`" + ` or ` + "`info`" + `. Only errors make jactionlint exit with status 1 unless ` + "`--strict-exit`" + ` is given.
 - a **profile**: the first [profile](./config.md#profiles) which enables the rule. There are three, and each includes the rules
   of the one before it: ` + "`correctness`" + ` (what actionlint checks and the bug detectors of jactionlint), ` + "`default`" + ` (adds the
   security posture and policy rules, and is used when no profile is configured) and ` + "`pedantic`" + ` (adds the noisy and opinionated
   rules). Rules which no profile enables run only when the configuration turns them on, and the rules marked "only with
-  ` + "`-online`" + `" run with that flag whatever the profile is. The profile comes from the ` + "`profile`" + ` key of the configuration or the
-  ` + "`-profile`" + ` flag.
+  ` + "`--online`" + `" run with that flag whatever the profile is. The profile comes from the ` + "`profile`" + ` key of the configuration or the
+  ` + "`--profile`" + ` flag.
 - a **pedantic option**: a few audits report their noisier findings too when the option ` + "`pedantic`" + ` is true. It is true under
   the ` + "`pedantic`" + ` profile and false otherwise, and ` + "`rules: {<id>: {pedantic: true}}`" + ` turns it on for one audit.
 
@@ -86,7 +86,7 @@ rules:
 		fmt.Fprintf(&b, "## %s\n\n%s\n\n", r.ID, r.Summary)
 		fmt.Fprintf(&b, "- Group: %s\n- Default level: %s\n- Profile: %s\n", r.Group, levelText(r.DefaultLevel), ruleProfileText(r))
 		if r.Online {
-			b.WriteString("- Needs network access: yes (only with `-online`)\n")
+			b.WriteString("- Needs network access: yes (only with `--online`)\n")
 		}
 		if r.Fixable {
 			fmt.Fprintf(&b, "- Fixable: %s\n", yesNo(r.Fixable))
@@ -111,9 +111,9 @@ rules:
 	b.WriteString(`## Retired rule IDs
 
 An audit is one rule with one ID. These IDs existed while 2.0 was in development, before the first release, and were merged into
-the rule that reports their findings now. ` + "`-ignore`" + `, the ` + "`ignore`" + ` lists of ` + "`paths`" + ` and the ` + "`# jactionlint ignore=`" + ` comments still
+the rule that reports their findings now. ` + "`--ignore`" + `, the ` + "`ignore`" + ` lists of ` + "`paths`" + ` and the ` + "`# jactionlint ignore=`" + ` comments still
 take them: such an ignore matches only the findings that had the old ID, and jactionlint warns that the ID is deprecated.
-` + "`rules`" + `, ` + "`ignores`" + `, ` + "`fix.rules`" + ` and ` + "`-rules`" + ` do not take them.
+` + "`rules`" + `, ` + "`ignores`" + `, ` + "`fix.rules`" + ` and ` + "`--fix-rules`" + ` do not take them.
 
 | Retired ID | Rule | Findings are on with |
 | --- | --- | --- |

@@ -20,7 +20,7 @@ func TestCommandMain(t *testing.T) {
 
 	// Run the command end-to-end. Note that given args should contain program name
 	workflow := filepath.Join("testdata", "examples", "main.yaml")
-	status := cmd.Main([]string{"jactionlint", "-shellcheck=", "-pyflakes=", "-ignore", `label .+ is unknown\.`, workflow})
+	status := cmd.Main([]string{"jactionlint", "--shellcheck=", "--pyflakes=", "--ignore", `label .+ is unknown\.`, workflow})
 
 	if status != 1 {
 		t.Fatal("exit status should be 1 but got", status)
@@ -39,7 +39,7 @@ func TestCommandMain(t *testing.T) {
 	}
 
 	if strings.Contains(out, "[runner-label]") {
-		t.Errorf("runner-label rule should be ignored by -ignore but it is included in output: %q", out)
+		t.Errorf("runner-label rule should be ignored by --ignore but it is included in output: %q", out)
 	}
 }
 
@@ -52,7 +52,7 @@ func TestCommandMigrateIgnores(t *testing.T) {
 	}
 	var output bytes.Buffer
 	cmd := Command{Stdin: os.Stdin, Stdout: &output, Stderr: &output}
-	if status := cmd.Main([]string{"jactionlint", "-migrate-ignores", file}); status != 0 {
+	if status := cmd.Main([]string{"jactionlint", "--migrate-ignores", file}); status != 0 {
 		t.Fatalf("exit status should be 0 but got %d: %s", status, output.String())
 	}
 	if !strings.Contains(output.String(), "migrated zizmor ignore comments: template-injection") {
@@ -68,7 +68,7 @@ func TestCommandMigrateIgnores(t *testing.T) {
 	}
 	// The migrated file lints clean
 	output.Reset()
-	if status := cmd.Main([]string{"jactionlint", "-shellcheck=", "-pyflakes=", file}); status != 0 {
+	if status := cmd.Main([]string{"jactionlint", "--shellcheck=", "--pyflakes=", file}); status != 0 {
 		t.Errorf("the migrated file must be clean but got %d: %s", status, output.String())
 	}
 }

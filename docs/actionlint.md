@@ -1,6 +1,6 @@
 # Coming from actionlint
 
-jactionlint is a maintained fork of [actionlint][actionlint]. It reads the same workflows, takes the same flags and finds the same
+jactionlint is a maintained fork of [actionlint][actionlint]. It reads the same workflows, takes the same options, spelled the POSIX/GNU way (see the [migration table](v2-migration.md#command-line-options)) and finds the same
 mistakes, and it adds checks for security and policy on top. This page is for a repository that used actionlint and wants either
 the same result as before or to see what else it can have.
 
@@ -16,7 +16,7 @@ profile: correctness
 or pass it on the command line, which wins over the file:
 
 ```sh
-jactionlint -profile correctness
+jactionlint --profile correctness
 ```
 
 Without a profile you get the `default` one, which also has rules such as `unpinned-uses`, `missing-permissions`,
@@ -28,7 +28,7 @@ setting, and requires every error their `.out` files expect to be reported. The 
 
 ### Turn rules off on top of it
 
-A rule is off with its [rule ID](rules.md) in the `rules` mapping, and a finding can be ignored by ID with `-ignore` and
+A rule is off with its [rule ID](rules.md) in the `rules` mapping, and a finding can be ignored by ID with `--ignore` and
 `# jactionlint ignore=` comments, like actionlint ignores by regular expression (regular expressions work too):
 
 ```yaml
@@ -40,7 +40,7 @@ rules:
 ```
 
 Every rule of the profile reports at `error`, so the exit status is 1 when anything is found, as with actionlint. A rule you set to
-`warn` or `info` does not fail the run unless `-strict-exit` is given.
+`warn` or `info` does not fail the run unless `--strict-exit` is given.
 
 ## A config file written for actionlint
 
@@ -50,7 +50,7 @@ global files under `$XDG_CONFIG_HOME/actionlint`. The keys `self-hosted-runner`,
 says so once per run:
 
 ```
-note: config file ".github/actionlint.yaml" was read as a jactionlint config. it sets no "profile", so the default profile applies, which has more rules than actionlint. add "profile: correctness" to the file or run with -profile correctness for the checks of actionlint. see https://jactionlint.jdx.dev/actionlint
+note: config file ".github/actionlint.yaml" was read as a jactionlint config. it sets no "profile", so the default profile applies, which has more rules than actionlint. add "profile: correctness" to the file or run with --profile correctness for the checks of actionlint. see https://jactionlint.jdx.dev/actionlint
 ```
 
 Add `profile: correctness` to the file, or move it to `.github/jactionlint.yaml` and add the key there. actionlint itself ignores
@@ -85,8 +85,8 @@ a key it does not know, so a file shared by both tools can keep `profile: correc
 | Deprecated workflow commands | `deprecated-commands` |
 | Ignore comments | `invalid-ignore-comment`, `expired-ignore` |
 
-[The list of rules](rules.md) has the group, level and profile of each. A finding prints its ID with `-rule-ids`, and the
-`id` field of `-format json` and the `ruleId` of `-format sarif` carry it. `-format` templates written for actionlint keep working:
+[The list of rules](rules.md) has the group, level and profile of each. A finding prints its ID with `--rule-ids`, and the
+`id` field of `--format json` and the `ruleId` of `--format sarif` carry it. `--format` templates written for actionlint keep working:
 the fields of an error are the same, and `kind` is still there.
 
 ## Where shellcheck findings are reported
@@ -102,7 +102,7 @@ Things which key on the line of a finding see this difference when moving from a
 - **An ignore comment keeps working.** A `# jactionlint ignore=shellcheck` comment on the step (above it, or at the end of its first
   line), above the `run:` key, or at the end of the `run: |` line covers every line of the script, because a comment covers the
   line it belongs to and everything nested under it. A comment you moved to a script line to ignore one finding covers that line only.
-- **An `ignore:` pattern or `-ignore` is not tied to a line.** It matches the message or the rule ID, so it is not affected.
+- **An `ignore:` pattern or `--ignore` is not tied to a line.** It matches the message or the rule ID, so it is not affected.
 - **A line-based tool needs the new lines.** A problem matcher or a script that keeps a list of `file:line` pairs written for
   actionlint has to be refreshed once. A [baseline](usage.md#baseline) written by jactionlint does not use line numbers.
 
@@ -131,9 +131,9 @@ hides today's findings and fails only on new ones.
     glob = List(".github/workflows/*.yml", ".github/workflows/*.yaml")
     batch = true
     diagnostic_format = "sarif"
-    check = "jactionlint -profile correctness -format sarif {{files}}"
-    check_diff = "hk util sarif-diff -- jactionlint -profile correctness -format sarif {{files}}"
-    fix = "jactionlint -profile correctness -fix {{files}}"
+    check = "jactionlint --profile correctness --format sarif {{files}}"
+    check_diff = "hk util sarif-diff -- jactionlint --profile correctness --format sarif {{files}}"
+    fix = "jactionlint --profile correctness --fix {{files}}"
 }
 ```
 

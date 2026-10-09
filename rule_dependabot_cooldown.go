@@ -142,7 +142,7 @@ func init() {
 		DefaultLevel: SeverityError, Profile: ProfileDefault, Fixable: true, DocsAnchor: "check-dependabot-cooldown",
 		Options: []RuleOption{
 			{Name: "days", Kind: RuleOptionInt, Default: dependabotDefaultMinCooldownDays, Summary: "The minimum number of days \"cooldown.default-days\" must be. Defaults to 7."},
-			{Name: "default-days", Kind: RuleOptionInt, Summary: "The number of days -fix writes as \"cooldown.default-days\". It must be at least \"days\". There is no default: without it findings have no fix."},
+			{Name: "default-days", Kind: RuleOptionInt, Summary: "The number of days --fix writes as \"cooldown.default-days\". It must be at least \"days\". There is no default: without it findings have no fix."},
 		},
 	})
 	dependabotRuleFactories = append(dependabotRuleFactories, dependabotRuleFactory{

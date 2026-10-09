@@ -92,9 +92,9 @@ run = "node ./scripts/generate-jactionlint-matcher/main.mjs .github/jactionlint-
 description = "Update the test data of generate-jactionlint-matcher after the default error format changes"
 depends = ["build"]
 run = [
-  "./jactionlint -color ./testdata/err/one_error.yaml > ./scripts/generate-jactionlint-matcher/test/escape.txt || true",
-  "./jactionlint -no-color ./testdata/err/one_error.yaml > ./scripts/generate-jactionlint-matcher/test/no_escape.txt || true",
-  "./jactionlint -format '{% raw %}{{json .}}{% endraw %}' ./testdata/err/one_error.yaml > ./scripts/generate-jactionlint-matcher/test/want.json || true",
+  "./jactionlint --color ./testdata/err/one_error.yaml > ./scripts/generate-jactionlint-matcher/test/escape.txt || true",
+  "./jactionlint --no-color ./testdata/err/one_error.yaml > ./scripts/generate-jactionlint-matcher/test/no_escape.txt || true",
+  "./jactionlint --format '{% raw %}{{json .}}{% endraw %}' ./testdata/err/one_error.yaml > ./scripts/generate-jactionlint-matcher/test/want.json || true",
 ]
 
 [tasks.zizmor-diff]

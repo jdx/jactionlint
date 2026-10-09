@@ -37,7 +37,7 @@ Where a check goes:
 - **Pedantic profile.** The check is noisy, opinionated or informational: it has a real false-positive rate, or it reports something
   many projects do on purpose, or it only matters to an auditor. zizmor's pedantic and auditor personas go here.
 - **Neither.** A check that needs configuration to mean anything (`forbidden-uses`, `required-actions`, `timeout-too-long`) runs only
-  when the configuration enables it. A check that needs the network runs only when the online checks are on (`-online` on the command
+  when the configuration enables it. A check that needs the network runs only when the online checks are on (`--online` on the command
   line, `online: true` in the config or `LinterOptions.Online` in the API).
 
 The tier does not depend on the false-positive rate: it follows what the check detects. A noisy security check is still a security
@@ -48,7 +48,7 @@ Two more rules keep the profiles simple:
 - **One ID per audit.** A noisier tier of an audit is the same rule ID with an option named `pedantic`, true under the `pedantic`
   profile and false otherwise. Do not add an ID with a suffix such as `-expansion` or `-trusted`.
 - **Every rule of `correctness` and `default` reports `error`, with one documented exception** (`unused-baseline-entry` is `info`,
-  and only `-baseline-check` produces it). A rule that should not fail a build belongs to `pedantic` with its
+  and only `--baseline-check` produces it). A rule that should not fail a build belongs to `pedantic` with its
   own level. `TestRuleProfilesInvariants` enforces both this and the content of `correctness`. A fixer never invents a value
   (a number of minutes, a number of days): offer the fix only when a rule option supplies it.
 
@@ -187,7 +187,7 @@ factory and returns nothing when it is nil. It never talks to the network in tes
 `testdata/err` and `testdata/examples` are linted with the answers recorded in `testdata/online/github.json`, served by
 `NewFixtureGitHubClient`, and a lookup that is not in the file fails the test. Add the repositories your rule needs to the file;
 `NewRecordingGitHubClient` records the answers of the real client in the same format (trim the tag lists by hand). A docs example
-of an online rule starts with the line `# requires -online` so that `scripts/check-checks` uses the same fixtures.
+of an online rule starts with the line `# requires --online` so that `scripts/check-checks` uses the same fixtures.
 
 The workflows of this repository must pass the default profile (CI, `hk check --all` and `TestOwnWorkflowsPassTheDefaultProfile` run it): pin every action to a commit SHA with a version comment (renovate keeps it current), and set `permissions`, `timeout-minutes` and `concurrency`.
 
@@ -195,9 +195,9 @@ Tests also fail when a reported ID is not registered, a registered ID is never r
 `docs/checks.md`. Before pushing run `go build ./...`, `go vet ./...`, `go test -race ./...` and `hk check --all`.
 
 Rules with an automatic fix set `Error.Fix` (byte-range edits) and `Fixable: true` in their `RuleInfo`. Only safe fixes appear in the SARIF output and are applied by
-`-fix`; mark risky ones `Unsafe`. A fix never invents a value such as a number of minutes: offer it only when a rule option supplies the value. Never build YAML text by concatenating strings: use `RenderYAMLValue` (a whole new value of a
+`--fix`; mark risky ones `Unsafe`. A fix never invents a value such as a number of minutes: offer it only when a rule option supplies the value. Never build YAML text by concatenating strings: use `RenderYAMLValue` (a whole new value of a
 mapping entry: plain when that reads back as the same string, else double quoted) and `YAMLSiteAt` plus `YAMLSite.Insert` (text
-inserted into a scalar that exists: escaped for plain, flow, single quoted, double quoted and block scalars, or refused). `-fix`
+inserted into a scalar that exists: escaped for plain, flow, single quoted, double quoted and block scalars, or refused). `--fix`
 checks every pass (the result must be valid YAML which differs only where the edits are), so a fixer that breaks the file is refused
 and reported, but a fixer test should apply the fix and lint again anyway. If your rule has a fixer, add its ID to `fixPriority` in
 `fix.go` when its edits can overlap with another rule's (see [Fix errors automatically](docs/usage.md#fix-errors-automatically)).
@@ -475,7 +475,7 @@ the findings (message, `warning: `/`info: ` prefix and kind) with the output blo
   `Output:` and `<!-- Skip playground link -->` instead of the link, write the output by hand, and show the `rules:` section of
   the configuration file that produces it right after the example. A Go test (`TestPolicyDocsExamples` for the policy rules) lints
   the example with that configuration and compares the output, so the hand-written output cannot go stale.
-- An online rule starts its example with `# requires -online` so that `scripts/check-checks` lints it with the recorded answers of
+- An online rule starts its example with `# requires --online` so that `scripts/check-checks` lints it with the recorded answers of
   `testdata/online/github.json`, and has no playground link because the playground has no network.
 
 The tests count the permalinks in the document themselves, so there is no number to update when a section is added.

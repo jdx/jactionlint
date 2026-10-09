@@ -11,7 +11,7 @@ func TestInsecureCommands(t *testing.T) {
 		what  string
 		src   string
 		lines []int
-		fixed string // the source after -fix=unsafe, empty when there is no fix
+		fixed string // the source after --fix=unsafe, empty when there is no fix
 	}{
 		{"true", step("        env:\n          ACTIONS_ALLOW_UNSECURE_COMMANDS: true\n"), []int{8}, step("")},
 		{"1 does not enable the commands", step("        env:\n          ACTIONS_ALLOW_UNSECURE_COMMANDS: '1'\n"), nil, ""},

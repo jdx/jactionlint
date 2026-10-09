@@ -54,12 +54,12 @@ func (l *Linter) reportRunHint(results []fileResult) {
 	if findings < runHintMinFindings {
 		return
 	}
-	tips := []string{"see -format summary for the counts per rule"}
+	tips := []string{"see --format summary for the counts per rule"}
 	if hidden == 0 && !l.hintBaseline.Load() {
-		tips = append(tips, "adopt the checks gradually with -baseline-write")
+		tips = append(tips, "adopt the checks gradually with --baseline-write")
 	}
-	tips = append(tips, "for the checks of actionlint only use -profile correctness")
-	fmt.Fprintf(l.logOut, "note: %s in %s. %s. silence this note with -no-hints or JACTIONLINT_NO_HINTS=1\n",
+	tips = append(tips, "for the checks of actionlint only use --profile correctness")
+	fmt.Fprintf(l.logOut, "note: %s in %s. %s. silence this note with --no-hints or JACTIONLINT_NO_HINTS=1\n",
 		countNoun(findings, "finding"), countNoun(files, "file"), strings.Join(tips, "; "))
 }
 
