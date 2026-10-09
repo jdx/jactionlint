@@ -547,3 +547,30 @@ func TestConfigIgnoreUnusedCountsTheActionFiles(t *testing.T) {
 		t.Errorf("the entry suppresses the cache in the action: %v", got)
 	}
 }
+
+// An exact docker image or local path matches as it is written.
+func TestConfigIgnoreExactDockerImage(t *testing.T) {
+	wf := "name: ci\non: push\npermissions: {}\njobs:\n  a:\n    runs-on: ubuntu-latest\n    timeout-minutes: 5\n    steps:\n      - uses: docker://alpine:3.20\n"
+	root := ignoreProject(t, ignoreConfigHead, map[string]string{"ci.yaml": wf})
+	if got := unpinnedAt(lintIgnoreProject(t, root, fixedNow)); len(got) != 1 {
+		t.Fatalf("setup: the image is not pinned: %v", got)
+	}
+	cfg := ignoreConfigHead + "ignores:\n  - {rule: unpinned-uses, uses: 'docker://alpine:3.20'}\n"
+	root = ignoreProject(t, cfg, map[string]string{"ci.yaml": wf})
+	errs := lintIgnoreProject(t, root, fixedNow)
+	if got := unpinnedAt(errs); len(got) != 0 {
+		t.Errorf("the exact image is ignored: %v", got)
+	}
+	if got := ofRule(errs, "unused-ignore"); len(got) != 0 {
+		t.Errorf("and the entry is used: %v", got)
+	}
+}
+
+// An entry for a rule that did not run cannot have matched anything, so it is not unused.
+func TestConfigIgnoreForARuleThatDoesNotRunIsNotUnused(t *testing.T) {
+	cfg := ignoreConfigHead + "ignores:\n  - {rule: stale-action-refs, uses: actions/checkout}\n  - {rule: missing-permissions, uses: actions/cache}\nrules:\n  missing-permissions: off\n"
+	root := ignoreProject(t, cfg, map[string]string{"ci.yaml": ignoreWorkflow})
+	if got := ofRule(lintIgnoreProject(t, root, fixedNow), "unused-ignore"); len(got) != 0 {
+		t.Errorf("an online rule offline and a rule that is off: %v", got)
+	}
+}
