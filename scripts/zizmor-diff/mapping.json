@@ -124,7 +124,7 @@
     },
     "superfluous-actions": {
       "coverage": "full",
-      "notes": "The same table of actions. The entries zizmor reports only with its pedantic persona are reported when the option pedantic of superfluous-actions is on, which it is under the strict and all profiles.",
+      "notes": "The same table of actions. The entries zizmor reports only with its pedantic persona are reported when the option pedantic of superfluous-actions is on, which it is under the pedantic profile.",
       "jactionlint": [{ "rule": "superfluous-actions" }]
     },
     "forbidden-uses": {

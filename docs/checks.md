@@ -5001,6 +5001,25 @@ match exits with 1, so check pipelines like `cmd | grep pattern | wc -l` when yo
 The fix is unsafe because failures which used to be ignored now fail the step. There is no fix for a script on a single line,
 for `shell: sh` and for shells which are not bash.
 
+### Known limits of this rule
+
+This is the most intricate rule that is on by default, and it decides from the words of a script without running it. It is wrong in
+these ways, and a finding that is one of them can be silenced with `# jactionlint ignore=pipeline-without-pipefail`, or the rule can
+be turned off with `rules: {pipeline-without-pipefail: off}`:
+
+- It cannot tell whether the first stage fails in practice. A producer that never fails (a command of your own) is reported like
+  `curl`, unless it is in the list of commands that cannot fail.
+- Functions, aliases and sourced files are not followed: `pipefail` set in a script that is `source`d, or a pipeline inside a shell
+  function that is called with `set -o pipefail` already on, is judged by the lines in front of it.
+- A shell that is chosen with an expression, a runner chosen with an expression, and a script with a `${{ }}` in the shell
+  syntax that makes it unparsable are skipped: no finding is made on a guess.
+- A program that exits early without being one of the known commands (`mysql -e`, a pager, your own reader) can get SIGPIPE
+  under `pipefail`, so a fix may turn a pipeline that worked into a failing one. That is why the fix is unsafe.
+- `grep`, `rg` and `diff` as the first stage are never blamed, although a failure of `grep` that is an error (status 2) is hidden too.
+
+There is no `conservative` mode: it would have to guess which of these a finding is, and the guesses are the ones above.
+
+
 <a id="check-anonymous-definition"></a>
 ## Workflow and job names (pedantic)
 

@@ -274,8 +274,8 @@ func TestCheckoutStaticCredentials(t *testing.T) {
 		cfg   *Config
 		lines []int
 	}{
-		{"token under the strict profile", wf("          token: ${{ secrets.PAT }}\n"), strict, []int{8}},
-		{"token under the strict profile, option off", wf("          token: ${{ secrets.PAT }}\n"), strictOff, nil},
+		{"token under the pedantic profile", wf("          token: ${{ secrets.PAT }}\n"), strict, []int{8}},
+		{"token under the pedantic profile, option off", wf("          token: ${{ secrets.PAT }}\n"), strictOff, nil},
 		{"ssh key", wf("          ssh-key: ${{ secrets.SSH_KEY }}\n"), defaultProfileConfig(), []int{8}},
 		{"ssh key literal", wf("          ssh-key: |\n            -----BEGIN OPENSSH PRIVATE KEY-----\n"), defaultProfileConfig(), []int{8}},
 		{"ssh key not a secret", wf("          ssh-key: ${{ steps.keys.outputs.key }}\n"), nil, nil},

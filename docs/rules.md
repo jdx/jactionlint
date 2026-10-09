@@ -249,7 +249,7 @@ actions/checkout is given an SSH key or a token that does not expire.
 - Group: security
 - Default level: error
 - Profile: default
-- Option `secret-tokens` (bool, no default): Also report a token input taken from a secret other than GITHUB_TOKEN (a personal access token). The ssh-key input is always reported. Unset, it is on under the strict and all profiles and off under the default one.
+- Option `secret-tokens` (bool, no default): Also report a token input taken from a secret other than GITHUB_TOKEN (a personal access token). The ssh-key input is always reported. Unset, it is on under the pedantic profile and off otherwise.
 - Option `allow` (strings, empty by default): Names of secrets which may be given to actions/checkout (for example a deploy key).
 - Details and examples: [checks](./checks.md#check-checkout-static-credentials)
 

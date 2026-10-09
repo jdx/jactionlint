@@ -9,6 +9,7 @@ export const sidebar: SidebarItem[] = [
       { text: "Installation", link: "/install" },
       { text: "Usage", link: "/usage" },
       { text: "Configuration", link: "/config" },
+      { text: "Coming from actionlint", link: "/actionlint" },
     ],
   },
   {
