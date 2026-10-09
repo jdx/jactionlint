@@ -64,15 +64,35 @@ regular expression syntax is the same as [RE2][re2]. The option is repeatable.
 jactionlint -ignore template-injection -ignore 'label ".+" is unknown'
 ```
 
-The same patterns are available in [the configuration file](config.md) (`paths.<glob>.ignore`) and in ignore comments.
-An ignore comment is a comment on its own line. It applies to the next line which is not a comment nor blank, and to the lines
-nested under it. Several patterns are separated with commas.
+The same patterns are available in [the configuration file](config.md) (`paths.<glob>.ignore`) and in ignore comments. Several
+patterns are separated with commas. There are two forms of an ignore comment, and each covers a precise range of lines.
+
+**A comment on its own line** covers the next line which is not a comment nor blank, and the lines nested under it (comments and
+blank lines inside do not end the range). Several such comments can be stacked above the same line.
 
 ```yaml
 steps:
   # jactionlint ignore=template-injection,label ".+" is unknown
   - run: echo '${{ github.event.pull_request.title }}'
 ```
+
+**A comment at the end of a line** covers that line and the lines nested under it. It can follow other comment text, so it can sit
+after the version comment of a pinned action:
+
+```yaml
+steps:
+  - uses: actions/checkout@v4 # jactionlint ignore=unpinned-uses
+  - uses: actions/cache@0c45773b623bea8c8e75f6c82b208c3cf94ea4f9 # v4.0.2 # jactionlint ignore=forbidden-uses
+```
+
+In both forms, when the line it covers starts a sequence item (`- `), the whole item is covered. A comment above a step, or at the
+end of the step's first line (`- uses: ...` or `- name: ...`), therefore covers the whole step, including its `with:` and `env:`
+but not the next step. The same comment on a key (`build:  # jactionlint ignore=...`) covers the key and everything nested under
+it, for example a whole job. A `#` inside a quoted string or in a `run: |` script is not a comment and is never read as a directive.
+
+Which form to use: an ignore comment is right next to the code it is about, but a tool that rewrites the line (Renovate, Dependabot
+bumping an action) drops the comment at the end of it. Put an ignore on a line that such tools manage in the config file instead, where
+it matches by rule, file, job, step and `uses:` and survives the rewrite: see [durable ignores](config.md#durable-ignores).
 
 A comment which suppresses nothing is reported by the [`unused-ignore`](rules.md#unused-ignore) rule of the `strict` profile.
 

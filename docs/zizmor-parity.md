@@ -136,6 +136,17 @@ Known gaps of batch B, which the table does not show because the corpus does not
   privileged trigger) were added after zizmor 1.30.1, so that half has no zizmor measurement.
 - Findings are not suppressed by `# zizmor: ignore[...]` comments.
 
+## Beyond zizmor
+
+- **Durable ignores** (`ignores:` in the config file, rules `expired-ignore` and `unused-ignore`). zizmor ignores a finding with
+  a `# zizmor: ignore[audit]` comment or with a `rules.<audit>.ignore` entry of `file:line:col` in `zizmor.yml`. Both break when
+  a tool rewrites the line or when lines shift ([zizmor#1086](https://github.com/zizmorcore/zizmor/issues/1086)).
+  jactionlint matches by rule plus file glob, job ID, step ID or name, and the `uses:` value (so a Renovate bump of the SHA keeps the
+  entry working), with an optional reason and expiry date. This is not measured against zizmor, since zizmor has no equivalent.
+  See [durable ignores](config.md#durable-ignores).
+- Ignore comments at the end of a line cover the whole step when they are on its first line. jactionlint reads
+  `# jactionlint ignore=...` only, not `# zizmor: ignore[...]`.
+
 ## Online audits
 
 The six online audits (batch G) run only with `-online`. They were measured on 2026-10-08 against zizmor 1.30.1 (`--persona

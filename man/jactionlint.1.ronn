@@ -74,7 +74,10 @@ are available. A custom Go template can be given too:
   * `-ignore` <PATTERN>:
     Rule ID (e.g. `unpinned-uses`) or regular expression matching to error messages you want to
     ignore. This flag is repeatable. For example, `-ignore A -ignore B` ignores errors whose message
-    includes "A" OR "B".
+    includes "A" OR "B". To accept a finding in one place, an ignore comment (`# jactionlint
+    ignore=<PATTERN>` above a line or at its end) or an entry of `ignores:` in the config file can be
+    used. The latter matches by rule, file, job, step and `uses:` and survives tools such as
+    Renovate rewriting the line. It can expire (`expires: YYYY-MM-DD`).
 
   * `-init-config`:
     Generate default config file at `.github/jactionlint.yaml` in current project

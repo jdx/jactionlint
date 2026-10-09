@@ -56,6 +56,7 @@ rules:
 | [duplicate-step-id](#duplicate-step-id) | correctness | error | default |
 | [duplicate-triggers](#duplicate-triggers) | policy | warn | strict |
 | [excessive-permissions](#excessive-permissions) | security | warn | strict |
+| [expired-ignore](#expired-ignore) | policy | error | default |
 | [expression-syntax](#expression-syntax) | correctness | error | default |
 | [expression-type](#expression-type) | correctness | error | default |
 | [forbidden-uses](#forbidden-uses) | policy | error | only when configured |
@@ -451,6 +452,14 @@ The GITHUB_TOKEN gets write access that is broader than needed.
 - Profile: strict
 - Option `require-workflow-permissions` (bool, default false): Also report a workflow which has no top-level permissions, even when its jobs set their own.
 - Details and examples: [checks](./checks.md#check-excessive-permissions)
+
+## expired-ignore
+
+An entry of "ignores" in the config file has expired or is about to.
+
+- Group: policy
+- Default level: error
+- Profile: default
 
 ## expression-syntax
 
@@ -1305,7 +1314,7 @@ A YAML anchor is defined but never used.
 
 ## unused-ignore
 
-An inline ignore comment did not suppress anything.
+An ignore comment or an entry of "ignores" in the config file did not suppress anything.
 
 - Group: policy
 - Default level: error
