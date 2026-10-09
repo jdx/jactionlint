@@ -223,6 +223,10 @@ type Pipeline struct {
 	Loc
 	Stages  []*Stage
 	Negated bool
+	// Tested is whether the script looks at the exit status of the pipeline: it is the condition of `if`,
+	// `elif`, `while` or `until`, or an operand of `&&` or `||` which is not the last of the list. A failure is
+	// then not hidden but handled.
+	Tested bool
 }
 
 // Stage is one element of a pipeline. It is a single command or a compound command, so it can contain several
@@ -251,7 +255,7 @@ func (b *builder) pipeline(n *syntax.BinaryCmd) {
 		stmts = append(stmts, bc.Y)
 	}
 	flatten(n)
-	p := &Pipeline{Loc: b.s.loc(b.off(n.Pos()), b.offEnd(n.End())), Negated: b.negated[n]}
+	p := &Pipeline{Loc: b.s.loc(b.off(n.Pos()), b.offEnd(n.End())), Negated: b.negated[n], Tested: b.tested[n]}
 	b.s.Pipelines = append(b.s.Pipelines, p)
 	b.pending = append(b.pending, pendingPipeline{p, stmts})
 }
@@ -265,6 +269,7 @@ func (b *builder) finishPipelines() {
 				cs, ce = b.off(st.Cmd.Pos()), b.offEnd(st.Cmd.End())
 			}
 			stage := &Stage{Loc: b.s.loc(start, end), Commands: b.directCommands(cs, ce)}
+			b.clearOverwrittenAndOnly(st)
 			pp.p.Stages = append(pp.p.Stages, stage)
 			idx := len(pp.p.Stages) - 1
 			for _, c := range stage.Commands {
@@ -272,6 +277,46 @@ func (b *builder) finishPipelines() {
 			}
 		}
 	}
+}
+
+// clearOverwrittenAndOnly clears AndOnly for the commands of the stage which are in a `{ }` group or `( )` subshell of
+// the stage, in a statement which is not the last one of the group. The status of the group is the status of its last
+// statement, so a later statement overwrites the failure of the `&&` list. Pipelines and substitutions inside the
+// stage are not entered: their commands are judged for the stage of their own pipeline, and a group around them says
+// nothing about how that pipeline hides a failure.
+func (b *builder) clearOverwrittenAndOnly(stage *syntax.Stmt) {
+	ownCommands := func(root syntax.Node, visit func(syntax.Node)) {
+		syntax.Walk(root, func(n syntax.Node) bool {
+			switch n := n.(type) {
+			case *syntax.BinaryCmd:
+				if isPipe(n.Op) {
+					return false
+				}
+			case *syntax.CmdSubst, *syntax.ProcSubst:
+				return false
+			}
+			visit(n)
+			return true
+		})
+	}
+	ownCommands(stage, func(n syntax.Node) {
+		var stmts []*syntax.Stmt
+		switch g := n.(type) {
+		case *syntax.Block:
+			stmts = g.Stmts
+		case *syntax.Subshell:
+			stmts = g.Stmts
+		}
+		for i := 0; i+1 < len(stmts); i++ {
+			ownCommands(stmts[i], func(m syntax.Node) {
+				if call, ok := m.(*syntax.CallExpr); ok {
+					if c := b.cmds[call]; c != nil {
+						c.AndOnly = false
+					}
+				}
+			})
+		}
+	})
 }
 
 // aliases records `NAME=$VAR` assignments so that `>> $NAME` can be resolved to VAR.
@@ -387,4 +432,48 @@ func (s *Script) WritesTo(varNames ...string) []*Write {
 		out = append(out, w)
 	}
 	return out
+}
+
+// testedKind says why the exit status of a statement is looked at.
+type testedKind int
+
+const (
+	testedOther testedKind = iota // `if`, `elif`, `||`, `!`
+	testedAnd                     // the left operand of `&&`
+	testedLoop                    // the condition of `while` or `until`
+)
+
+// markTested records that the script handles the exit status of the statements: the pipelines and commands in
+// them are Tested. It follows the places where the shell ignores `set -e`: the operands of `&&` and `||` (all but
+// the last one of the list, which the caller selects), and the commands of groups and subshells there.
+func (b *builder) markTested(stmts ...*syntax.Stmt) { b.markTestedAs(testedOther, stmts...) }
+
+func (b *builder) markTestedAs(kind testedKind, stmts ...*syntax.Stmt) {
+	for _, st := range stmts {
+		if st == nil {
+			continue
+		}
+		switch c := st.Cmd.(type) {
+		case *syntax.BinaryCmd:
+			if isPipe(c.Op) {
+				b.tested[c] = true
+			} else {
+				b.markTestedAs(kind, c.X, c.Y)
+			}
+		case *syntax.CallExpr:
+			b.testedCalls[c] = true
+			switch kind {
+			case testedAnd:
+				b.testedAnd[c] = true
+			case testedLoop:
+				b.testedLoop[c] = true
+			default:
+				b.testedOther[c] = true
+			}
+		case *syntax.Block:
+			b.markTestedAs(kind, c.Stmts...)
+		case *syntax.Subshell:
+			b.markTestedAs(kind, c.Stmts...)
+		}
+	}
 }

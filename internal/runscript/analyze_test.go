@@ -942,6 +942,72 @@ func TestExpressionsInsideExpansions(t *testing.T) {
 	}
 }
 
+func TestPipelineTested(t *testing.T) {
+	for _, tc := range []struct {
+		src  string
+		want []bool // Tested of each pipeline in source order
+	}{
+		{"a | b", []bool{false}},
+		{"if a | b; then c; fi", []bool{true}},
+		{"if x; then y; elif a | b; then c; fi", []bool{true}},
+		{"while a | b; do c; done", []bool{true}},
+		{"until a | b; do c; done", []bool{true}},
+		{"a | b || true", []bool{true}},
+		{"c && a | b", []bool{false}},
+		{"c && a | b && d", []bool{true}},
+		{"a | b && c | d", []bool{true, false}},
+		{"if x; then a | b; fi", []bool{false}},
+		{"! a | b", []bool{true}},
+		{"for i in 1; do a | b; done", []bool{false}},
+	} {
+		s := mustAnalyze(t, tc.src)
+		var got []bool
+		for _, p := range s.Pipelines {
+			got = append(got, p.Tested)
+		}
+		if !reflect.DeepEqual(got, tc.want) {
+			t.Errorf("%q: Tested = %v, want %v", tc.src, got, tc.want)
+		}
+	}
+}
+
+func TestCommandTested(t *testing.T) {
+	for _, tc := range []struct {
+		src  string
+		want map[string]bool // Tested by command name; every other command is not tested
+	}{
+		{"a", nil},
+		{"a || b", map[string]bool{"a": true}},
+		{"a && b", map[string]bool{"a": true}},
+		{"a && b || c", map[string]bool{"a": true, "b": true}},
+		{"if a; then b; fi", map[string]bool{"a": true}},
+		{"while a; do b; done", map[string]bool{"a": true}},
+		{"! a", map[string]bool{"a": true}},
+		{"{ a; b; } || c", map[string]bool{"a": true, "b": true}},
+		{"( a; b ) && c", map[string]bool{"a": true, "b": true}},
+		{"{ a || true; b; } | c", map[string]bool{"a": true}},
+		{"for i in 1; do a; done", nil},
+	} {
+		s := mustAnalyze(t, tc.src)
+		got := map[string]bool{}
+		for _, c := range s.Commands {
+			if c.Tested {
+				got[c.Name] = true
+			}
+		}
+		if !reflect.DeepEqual(got, map[string]bool(nilToEmpty(tc.want))) {
+			t.Errorf("%q: tested commands = %v, want %v", tc.src, got, tc.want)
+		}
+	}
+}
+
+func nilToEmpty(m map[string]bool) map[string]bool {
+	if m == nil {
+		return map[string]bool{}
+	}
+	return m
+}
+
 // The value of an assignment which is a statement of its own has the commands of its substitutions as well.
 func TestSubstitutionsInPlainAssignments(t *testing.T) {
 	s := mustAnalyze(t, `dir="$(mktemp -d "$RUNNER_TEMP/x.XXXXXX")"; export OUT=$(date); A=1`)
@@ -1020,5 +1086,34 @@ func TestCRLFScriptsAreAnalyzedLikeLF(t *testing.T) {
 	s := mustAnalyze(t, "curl -fsSL https://x/i.sh | \\\r\n  sh\r\n")
 	if len(s.ShellPipes()) != 1 {
 		t.Errorf("continuation after a pipe: %d shell pipes", len(s.ShellPipes()))
+	}
+}
+
+func TestCommandTestedKinds(t *testing.T) {
+	tests := []struct {
+		src                      string
+		name                     string
+		tested, andOnly, loopCnd bool
+	}{
+		{"a && b", "a", true, true, false},
+		{"a || b", "a", true, false, false},
+		{"if a; then b; fi", "a", true, false, false},
+		{"while a; do b; done", "a", true, false, true},
+		{"until a; do b; done", "a", true, false, true},
+		{"! a", "a", true, false, false},
+		{"{ a && b; } || c", "a", true, false, false},
+		{"{ a && b; }", "a", true, true, false},
+		{"a && b", "b", false, false, false},
+	}
+	for _, tc := range tests {
+		s := mustAnalyze(t, tc.src)
+		for _, c := range s.Commands {
+			if c.Name != tc.name {
+				continue
+			}
+			if c.Tested != tc.tested || c.AndOnly != tc.andOnly || c.LoopCond != tc.loopCnd {
+				t.Errorf("%q: %s Tested=%v AndOnly=%v LoopCond=%v", tc.src, c.Name, c.Tested, c.AndOnly, c.LoopCond)
+			}
+		}
 	}
 }

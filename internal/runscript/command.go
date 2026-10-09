@@ -41,6 +41,20 @@ type Command struct {
 	// Pipeline is the pipeline the command is a stage of, nil if it is not in one. Stage is the index.
 	Pipeline *Pipeline
 	Stage    int
+	// Tested is whether the script handles the exit status of the command, so a failure does not stop it under
+	// `set -e`: the command is in the condition of `if`, `elif`, `while` or `until`, is negated with `!`, or
+	// is the operand of `&&` or `||` that is not the last one (`cmd || true`). It is also set for the commands of
+	// a `{ }` group or `( )` subshell in such a place.
+	Tested bool
+	// AndOnly is whether Tested is only because the command is the left operand of `&&`. Its failure is then the
+	// status of the list, which a group or a subshell passes on. It is cleared for a command in a pipeline stage when
+	// a later statement of the same group overwrites that status.
+	AndOnly bool
+	// LoopCond is whether the command is in the condition of `while` or `until`.
+	LoopCond bool
+	// LoopBody is whether the command is in the body of a `for`, `while`, `until` or `select` loop. A command there
+	// runs for each round, so what it does with its input does not end the stream of the stage the loop is in.
+	LoopBody bool
 	// Decl is true for declaration builtins: export, declare, local, readonly, typeset. Their assignments are in
 	// Assigns.
 	Decl bool
@@ -131,12 +145,28 @@ type builder struct {
 	omap []int // offsets of the text the parser saw -> offsets of the script; nil when they are the same
 	cmds map[syntax.Command]*Command
 	// pipes whose chain is already collected by the outermost BinaryCmd; negated pipelines
-	seenPipe map[*syntax.BinaryCmd]bool
-	negated  map[*syntax.BinaryCmd]bool
-	pending  []pendingPipeline
-	groups   []groupRedirect
-	done     map[syntax.Node]bool
-	sorted   []*Command // commands by offset
+	seenPipe                           map[*syntax.BinaryCmd]bool
+	negated                            map[*syntax.BinaryCmd]bool
+	tested                             map[*syntax.BinaryCmd]bool // pipelines whose status is tested, see Pipeline.Tested
+	testedCalls                        map[*syntax.CallExpr]bool  // commands whose status is tested, see Command.Tested
+	testedAnd, testedLoop, testedOther map[*syntax.CallExpr]bool  // why, see Command.AndOnly and Command.LoopCond
+	loopBody                           map[*syntax.CallExpr]bool  // see Command.LoopBody
+	pending                            []pendingPipeline
+	groups                             []groupRedirect
+	done                               map[syntax.Node]bool
+	sorted                             []*Command // commands by offset
+}
+
+// markLoopBody records the commands of the body of a loop, see Command.LoopBody.
+func (b *builder) markLoopBody(body []*syntax.Stmt) {
+	for _, st := range body {
+		syntax.Walk(st, func(n syntax.Node) bool {
+			if call, ok := n.(*syntax.CallExpr); ok {
+				b.loopBody[call] = true
+			}
+			return true
+		})
+	}
 }
 
 // off is the offset of a position of the parser in the original script.
@@ -177,23 +207,52 @@ func (b *builder) src(start, end int) string {
 func (b *builder) build(f *syntax.File) {
 	b.seenPipe = map[*syntax.BinaryCmd]bool{}
 	b.negated = map[*syntax.BinaryCmd]bool{}
+	b.tested = map[*syntax.BinaryCmd]bool{}
+	b.testedCalls = map[*syntax.CallExpr]bool{}
+	b.testedAnd, b.testedLoop, b.testedOther = map[*syntax.CallExpr]bool{}, map[*syntax.CallExpr]bool{}, map[*syntax.CallExpr]bool{}
+	b.loopBody = map[*syntax.CallExpr]bool{}
 	b.done = map[syntax.Node]bool{}
 	s := b.s
 	syntax.Walk(f, func(n syntax.Node) bool {
 		switch n := n.(type) {
 		case *syntax.Stmt:
+			if n.Negated {
+				b.markTested(n)
+			}
 			b.stmt(n)
 		case *syntax.CallExpr:
 			b.call(n)
 		case *syntax.DeclClause:
 			b.decl(n)
+		case *syntax.IfClause:
+			b.markTested(n.Cond...)
+		case *syntax.WhileClause:
+			b.markTestedAs(testedLoop, n.Cond...)
+			b.markLoopBody(n.Do)
+		case *syntax.ForClause:
+			b.markLoopBody(n.Do)
 		case *syntax.BinaryCmd:
+			if n.Op == syntax.AndStmt {
+				b.markTestedAs(testedAnd, n.X)
+			} else if n.Op == syntax.OrStmt {
+				b.markTested(n.X)
+			}
 			if (n.Op == syntax.Pipe || n.Op == syntax.PipeAll) && !b.seenPipe[n] {
 				b.pipeline(n)
 			}
 		}
 		return true
 	})
+	for n, c := range b.cmds {
+		if call, ok := n.(*syntax.CallExpr); ok && b.loopBody[call] {
+			c.LoopBody = true
+		}
+		if call, ok := n.(*syntax.CallExpr); ok && b.testedCalls[call] {
+			c.Tested = true
+			c.AndOnly = b.testedAnd[call] && !b.testedOther[call] && !b.testedLoop[call]
+			c.LoopCond = b.testedLoop[call]
+		}
+	}
 	b.sorted = slices.Clone(s.Commands)
 	slices.SortStableFunc(b.sorted, func(x, y *Command) int { return x.Offset - y.Offset })
 	// link substitution commands to the words they are in

@@ -101,6 +101,7 @@ rules:
 | [obfuscation](#obfuscation) | security | warn | strict |
 | [outdated-action-runner](#outdated-action-runner) | correctness | error | default |
 | [overprovisioned-secrets](#overprovisioned-secrets) | security | warn | strict |
+| [pipeline-without-pipefail](#pipeline-without-pipefail) | correctness | error | default |
 | [pyflakes](#pyflakes) | correctness | error | default |
 | [recursive-alias](#recursive-alias) | correctness | error | default |
 | [ref-confusion](#ref-confusion) | security | warn | only with `-online` |
@@ -857,6 +858,16 @@ An expression uses the whole secrets context.
 - Default level: warn
 - Profile: strict
 - Details and examples: [checks](./checks.md#check-overprovisioned-secrets)
+
+## pipeline-without-pipefail
+
+A failing command in a pipeline of a run: script is hidden because the shell does not enable pipefail.
+
+- Group: correctness
+- Default level: error
+- Profile: default
+- Fixable: yes
+- Details and examples: [checks](./checks.md#check-pipeline-without-pipefail)
 
 ## pyflakes
 

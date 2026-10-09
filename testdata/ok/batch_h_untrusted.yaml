@@ -20,7 +20,9 @@ jobs:
           path: pr
       # The head of the pull request is data here
       - run: diff -r docs pr/docs
-      - run: cat pr/README.md | wc -l
+      - run: |
+          set -o pipefail
+          cat pr/README.md | wc -l
       - run: gh pr comment ${{ github.event.number }} --body ok
         env:
           GH_TOKEN: ${{ github.token }}

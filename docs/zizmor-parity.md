@@ -176,6 +176,14 @@ Gaps of the online rules that the corpus does not show, so they are not measured
 Cost: for the 173 `uses:` lines of this repository the first run makes 91 requests, a run within the hour none, and a later run
 only conditional requests (a 304 answer is free of rate limit for authenticated clients).
 
+## Beyond zizmor
+
+Rules of jactionlint which zizmor has no audit for:
+
+| Rule | Profile | What it finds |
+| --- | --- | --- |
+| `pipeline-without-pipefail` | default | A failure of a command in a pipeline of a `run:` script is hidden because the default shell (`bash -e {0}`) and `shell: sh` do not enable pipefail. |
+
 See [CONTRIBUTING.md](https://github.com/jdx/jactionlint/blob/main/CONTRIBUTING.md#policy-for-jactionlints-features) for the
 criteria a rule must meet before it is added.
 
