@@ -116,7 +116,7 @@ func newTagIndex(l *GitHubTagList) *tagIndex {
 //     steps and files mention it,
 //   - skips a lookup which failed (404, 403, a server error, a timeout, no DNS) and remembers the
 //     failure for the run, so the other lookups and their findings are not affected. It warns once per
-//     kind of failure and counts the skipped lookups (see skippedLookups, which -online=strict turns
+//     kind of failure and counts the skipped lookups (see skippedLookups, which --online=strict turns
 //     into a failing exit status),
 //   - stops asking when asking again cannot work: the rate limit is reached (until it resets), the
 //     token was rejected, the API failed several lookups in a row, or the run was interrupted,
@@ -127,7 +127,7 @@ type onlineSession struct {
 	client GitHubClient
 	ctx    context.Context
 	warn   func(msg string)
-	// detail receives one line for every skipped lookup (-verbose). It can be nil.
+	// detail receives one line for every skipped lookup (--verbose). It can be nil.
 	detail func(format string, args ...any)
 	allow  []string
 	deny   []string
@@ -278,7 +278,7 @@ func failureMessage(kind failureKind, what string, err error) string {
 		where = " for " + what
 		lookup = fmt.Sprintf("could not look up %s: %s", what, err)
 	}
-	const tail = " -verbose lists every skipped lookup."
+	const tail = " --verbose lists every skipped lookup."
 	switch kind {
 	case failRateLimit:
 		return fmt.Sprintf("online: %s. the lookups which need GitHub are skipped until then, so some findings may be missing.", err) + tail
@@ -293,9 +293,9 @@ func failureMessage(kind failureKind, what string, err error) string {
 	case failTimeout:
 		return fmt.Sprintf("online: the GitHub API did not answer in time%s (%s). the lookup was skipped.", where, err) + tail
 	case failNetwork:
-		return fmt.Sprintf("online: %s. the lookup was skipped; -online=cache works from the cache without the network.", err) + tail
+		return fmt.Sprintf("online: %s. the lookup was skipped; --online=cache works from the cache without the network.", err) + tail
 	case failNotCached:
-		return fmt.Sprintf("online: %s has no cached answer and -online=cache does not use the network. run once with -online to fill the cache.", orSomething(what)) + tail
+		return fmt.Sprintf("online: %s has no cached answer and --online=cache does not use the network. run once with --online to fill the cache.", orSomething(what)) + tail
 	}
 	return fmt.Sprintf("online: %s. the lookup was skipped.", lookup) + tail
 }

@@ -53,7 +53,7 @@ type Baseline struct {
 	Entries []*BaselineEntry `json:"entries"`
 }
 
-// ReadBaselineFile reads a baseline file written by "jactionlint -baseline-write".
+// ReadBaselineFile reads a baseline file written by "jactionlint --baseline-write".
 func ReadBaselineFile(path string) (*Baseline, error) {
 	b, err := os.ReadFile(path)
 	if err != nil {
@@ -118,7 +118,7 @@ func ParseBaseline(b []byte) (*Baseline, error) {
 		}
 	}
 	if bl.Version != baselineVersion {
-		return nil, fmt.Errorf("unsupported baseline version %d. this jactionlint reads version %d. regenerate the file with -baseline-write", bl.Version, baselineVersion)
+		return nil, fmt.Errorf("unsupported baseline version %d. this jactionlint reads version %d. regenerate the file with --baseline-write", bl.Version, baselineVersion)
 	}
 	return bl, nil
 }
@@ -380,7 +380,7 @@ func (s *baselineState) match(fileKey string, errs []*Error, infos map[*Error]*b
 	if len(entries) == 0 {
 		return
 	}
-	// The file may be linted again in the same run (the passes of -fix): what the last lint saw counts
+	// The file may be linted again in the same run (the passes of --fix): what the last lint saw counts
 	s.mu.Lock()
 	for _, be := range entries {
 		delete(s.seen, be)

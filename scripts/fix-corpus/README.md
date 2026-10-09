@@ -1,14 +1,14 @@
 fix-corpus
 ==========
 
-This is the corpus test of `jactionlint -fix`. It applies the fixes to a copy of real workflows and checks that
+This is the corpus test of `jactionlint --fix`. It applies the fixes to a copy of real workflows and checks that
 fixing is safe. The repositories are never modified.
 
-For each repository it copies `.github/`, runs `jactionlint -fix` there (with [config.yaml](./config.yaml), not the
+For each repository it copies `.github/`, runs `jactionlint --fix` there (with [config.yaml](./config.yaml), not the
 repository's own config, so that as many fixers as possible run) and checks:
 
 1. every YAML file is still valid YAML,
-2. a second `-fix` changes nothing (and `-diff` prints nothing),
+2. a second `--fix` changes nothing (and `--diff` prints nothing),
 3. the number of findings does not go up for any jactionlint rule,
 4. the number of findings of zizmor (`--persona pedantic --offline`) does not go up for any audit,
 
@@ -31,7 +31,7 @@ go run ./scripts/fix-corpus -jactionlint ./jactionlint [-unsafe] [-no-zizmor] [-
 | `-config FILE` | jactionlint config used for every repository. Default `scripts/fix-corpus/config.yaml` |
 | `-zizmor CMD` | command that runs zizmor. Default `mise x zizmor@1.30.1 -- zizmor` |
 | `-no-zizmor` | skip check 4 |
-| `-unsafe` | apply the unsafe fixes too (`-fix=unsafe`) |
+| `-unsafe` | apply the unsafe fixes too (`--fix=unsafe`) |
 | `-keep DIR` | keep the fixed copies in DIR, to read the changes with `diff -ru` |
 
 Directories are repositories (a directory with `.github/`). Without arguments the script uses `~/src/*-jactionlint` and

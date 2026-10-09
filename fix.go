@@ -562,7 +562,7 @@ func (l *Linter) lintSource(file string, src []byte, project *Project) (fileResu
 }
 
 // configFor returns the configuration which applies to files of the project.
-// The -profile option, when given, replaces the profile of the configuration.
+// The --profile option, when given, replaces the profile of the configuration.
 func (l *Linter) configFor(project *Project) *Config {
 	var cfg *Config
 	switch {
@@ -638,38 +638,6 @@ func writeFileKeepingMode(path string, b []byte) error {
 	}
 	if err := os.Rename(name, path); err != nil {
 		return fmt.Errorf("could not write %q, which was left as it was: %w", path, err)
-	}
-	return nil
-}
-
-// fixFlag is the value of the -fix flag: -fix applies the safe fixes and -fix=unsafe applies all.
-type fixFlag struct {
-	mode FixMode
-}
-
-func (f *fixFlag) String() string {
-	switch f.mode {
-	case FixModeSafe:
-		return "safe"
-	case FixModeUnsafe:
-		return "unsafe"
-	}
-	return "false"
-}
-
-// IsBoolFlag lets the flag be given without a value.
-func (f *fixFlag) IsBoolFlag() bool { return true }
-
-func (f *fixFlag) Set(v string) error {
-	switch strings.ToLower(v) {
-	case "true", "safe":
-		f.mode = FixModeSafe
-	case "unsafe":
-		f.mode = FixModeUnsafe
-	case "false":
-		f.mode = 0
-	default:
-		return fmt.Errorf("invalid value %q. use -fix or -fix=unsafe", v)
 	}
 	return nil
 }

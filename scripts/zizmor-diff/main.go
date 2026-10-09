@@ -82,7 +82,7 @@ type Config struct {
 	Mapping         *Mapping
 	LineTolerance   int
 	Jobs            int
-	// Online runs jactionlint with -online and zizmor without --offline, so that the online audits can be
+	// Online runs jactionlint with --online and zizmor without --offline, so that the online audits can be
 	// compared. Both tools read the token from the environment (GITHUB_TOKEN or GH_TOKEN).
 	Online bool
 }
@@ -109,7 +109,7 @@ func analyze(ctx context.Context, run Runner, c *Config, repo Repo) (RepoInput, 
 
 	jl := append([]string{}, c.Jactionlint...)
 	if c.Online {
-		jl = append(jl, "-online")
+		jl = append(jl, "--online")
 	}
 	jl = append(append(jl, c.JactionlintArgs...), jactionlintArgs...)
 	out, stderr, code, err := run(ctx, repo.Dir, jl)
@@ -188,13 +188,13 @@ func realMain(args []string, stdout, stderr io.Writer) int {
 	corpusFile := fs.String("corpus-file", "", "file listing repository directories, one per line (default: scripts/zizmor-diff/corpus.txt)")
 	fs.Var(&repoFlags, "repos", "repository directory, or label=directory. Repeatable. Replaces the corpus file")
 	jl := fs.String("jactionlint", "jactionlint", "jactionlint executable")
-	jlConfig := fs.String("jactionlint-config", "", "jactionlint config file used instead of each repository's own (passed as -config-file)")
+	jlConfig := fs.String("jactionlint-config", "", "jactionlint config file used instead of each repository's own (passed as --config-file)")
 	var jlArgs listFlag
 	fs.Var(&jlArgs, "jactionlint-arg", "extra jactionlint argument. Repeatable")
 	zz := fs.String("zizmor", "mise x zizmor@1.30.1 -- zizmor", "zizmor command (split on spaces)")
 	mapPath := fs.String("mapping", "", "audit mapping file (default: the embedded mapping.json)")
 	tol := fs.Int("line-tolerance", 0, "lines of distance allowed between a zizmor finding and the jactionlint finding covering it")
-	online := fs.Bool("online", false, "compare the online audits: run jactionlint with -online and zizmor without --offline. Needs GITHUB_TOKEN or GH_TOKEN and makes GitHub API requests")
+	online := fs.Bool("online", false, "compare the online audits: run jactionlint with --online and zizmor without --offline. Needs GITHUB_TOKEN or GH_TOKEN and makes GitHub API requests")
 	jobs := fs.Int("jobs", 4, "repositories analyzed in parallel")
 	mdOut := fs.String("markdown", "", "write the markdown report to this file (default: stdout)")
 	jsonOut := fs.String("json", "", "write the JSON report to this file")
@@ -251,7 +251,7 @@ func realMain(args []string, stdout, stderr io.Writer) int {
 		if err != nil {
 			return fail(err)
 		}
-		extra = append(extra, "-config-file", abs)
+		extra = append(extra, "--config-file", abs)
 	}
 	zzCmd := strings.Fields(*zz)
 	if len(zzCmd) == 0 {

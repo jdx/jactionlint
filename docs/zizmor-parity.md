@@ -16,7 +16,7 @@ How to read the table:
 
 - **jactionlint rule** is the stable [rule ID](rules.md) that reports the audit. IDs reuse zizmor's audit names so users can map them.
 - **Profile** is where the rule runs: `correctness`, `default` or `pedantic` (see [profiles](config.md#profiles) and the table of
-  [personas](#profiles-and-personas)), `online` for the rules that run only with the opt-in `-online` flag whatever the profile, and
+  [personas](#profiles-and-personas)), `online` for the rules that run only with the opt-in `--online` flag whatever the profile, and
   `configured` for a rule that does nothing until you configure an allow or deny list.
 - **Status** says how the rule compares with the audit: `full` (same findings on the measured corpus or on every synthetic case),
   `partial` (with what is missing), `different` (same ID, another meaning), or `not measured`. The sections that measure a batch name
@@ -28,11 +28,11 @@ How to read the table:
 | `anonymous-definition` | `anonymous-definition` | pedantic | full for workflows and jobs; not applicable to `action.yml` (GitHub requires its `name`); fixable |
 | `archived-uses` | `archived-uses` | online | partial: all archived repositories are found; see [online audits](#online-audits) |
 | `artipacked` | `artipacked` | default | full on the corpus, with a fix. [batch B measurements](#batch-b-corpus-measurements) |
-| `bot-conditions` | `bot-conditions` | default | partial: `github.actor`, `github.triggering_actor`, `github.actor_id` and `github.event.sender.*` compared with a bot (`==`, `contains()`, `startsWith()`, `endsWith()`) in job and step `if:`. `!=` and negated tests are not reported, as in zizmor. Measured, see [batch C](#batch-c-measurements). `-fix=unsafe` only for workflows with `pull_request`/`pull_request_target` events. Bot names without `[bot]` are known by ID and prefix only. Composite actions: the fix needs every local caller to run on a pull request event |
+| `bot-conditions` | `bot-conditions` | default | partial: `github.actor`, `github.triggering_actor`, `github.actor_id` and `github.event.sender.*` compared with a bot (`==`, `contains()`, `startsWith()`, `endsWith()`) in job and step `if:`. `!=` and negated tests are not reported, as in zizmor. Measured, see [batch C](#batch-c-measurements). `--fix=unsafe` only for workflows with `pull_request`/`pull_request_target` events. Bot names without `[bot]` are known by ID and prefix only. Composite actions: the fix needs every local caller to run on a pull request event |
 | `cache-poisoning` | `cache-poisoning` | default | partial: a fixed table of cache actions, `tags-ignore` is not a release trigger, and neither is a `tags:` filter that lets no tag through or a tag-triggered workflow whose token is read-only and whose job publishes nothing (zizmor reports both). `setup-node` v5 and later and `docker/setup-buildx-action` are covered; the automatic cache of `setup-node` is judged by the `package.json` of the repository. [batch B measurements](#batch-b-corpus-measurements), [bug bash fixes](#bug-bash-fixes-of-rules) |
 | `concurrency-limits` | `concurrency-limits` | default | full: only a missing `concurrency:` and the bare group form are reported; see [measurements](#batch-a-measurements) |
 | `dangerous-triggers` | `dangerous-triggers` | default | full; adds `issue_comment`, which zizmor flags from 1.31; reported at the trigger, zizmor reports at `on:` |
-| `dependabot-cooldown` | `dependabot-cooldown` | default | full on the corpus: 386 of 386 zizmor findings in 193 repositories, plus 3 true positives zizmor 1.30.1 misses (it stops at the first update which satisfies the minimum). `-fix` needs the `default-days` option; zizmor has a built-in 7. The `semver-*-days` keys are checked by neither |
+| `dependabot-cooldown` | `dependabot-cooldown` | default | full on the corpus: 386 of 386 zizmor findings in 193 repositories, plus 3 true positives zizmor 1.30.1 misses (it stops at the first update which satisfies the minimum). `--fix` needs the `default-days` option; zizmor has a built-in 7. The `semver-*-days` keys are checked by neither |
 | `dependabot-execution` | `dependabot-execution` | default | not measured: no `allow` in the 193 repositories of the corpus, so both tools report 0. Covered by unit tests only. The fix is unsafe (zizmor offers it too) |
 | `excessive-permissions` | `excessive-permissions` | default | partial: write scopes, `write-all`, `read-all`, workflow-level default permissions (option) and, with `missing-permissions`, job-level default permissions. [batch B measurements](#batch-b-corpus-measurements), [missing-permissions measurements](#measured-missing-permissions-and-missing-timeout) |
 | `forbidden-uses` | `forbidden-uses` | configured | partial: patterns follow zizmor documentation but were not measured against zizmor |
@@ -54,7 +54,7 @@ How to read the table:
 | `self-repository` | `self-repository` | pedantic (info) | full on the corpus, with an unsafe fix. [batch B measurements](#batch-b-corpus-measurements) |
 | `stale-action-refs` | `stale-action-refs` | online | partial: same findings except repositories with more than 1000 tags; see [online audits](#online-audits) |
 | `superfluous-actions` | `superfluous-actions` | default | full: the same 40 findings as zizmor on the corpus, split like its personas (7 regular, and the 33 pedantic ones with the option `pedantic`, which the `pedantic` profile turns on). jactionlint adds the archived `actions/create-release` and `actions/upload-release-asset`. See [the check](checks.md#check-superfluous-actions) |
-| `template-injection` | `template-injection` | correctness | partial: attacker controlled contexts, objects holding them and env variables set from them in `run:`, github-script and the code inputs of well-known actions, every expression of a script. Free text that is not validated and chosen from outside the workflow is reported by the default profile too: `inputs.*` of type string, `github.event.inputs.*`, `github.event.client_payload.*`, `github.event.release.tag_name` and the like, `github.ref_name` and `github.base_ref`; booleans, numbers and choices are fixed vocabularies and are not reported. Every other expansion (step outputs, matrix values, and values like `github.repository`) is reported with the option `pedantic`, which is zizmor's pedantic persona. See [batch C](#batch-c-measurements) for the numbers. Not covered: knowledge about the outputs of popular actions, severity by trigger (the level is per rule ID). `-fix` moves a simple reference into `env:` for bash and sh. Batch J adds sinks that zizmor lacks: `container.options` and `services.<id>.options` ([zizmor#1128](https://github.com/zizmorcore/zizmor/issues/1128), still open), their image, entrypoint, command and volumes, `args` and `entrypoint` of `docker://` steps, more code inputs of well-known actions, and the prompt, arguments and settings of AI agent actions; see [batch J](#batch-j-measurements) |
+| `template-injection` | `template-injection` | correctness | partial: attacker controlled contexts, objects holding them and env variables set from them in `run:`, github-script and the code inputs of well-known actions, every expression of a script. Free text that is not validated and chosen from outside the workflow is reported by the default profile too: `inputs.*` of type string, `github.event.inputs.*`, `github.event.client_payload.*`, `github.event.release.tag_name` and the like, `github.ref_name` and `github.base_ref`; booleans, numbers and choices are fixed vocabularies and are not reported. Every other expansion (step outputs, matrix values, and values like `github.repository`) is reported with the option `pedantic`, which is zizmor's pedantic persona. See [batch C](#batch-c-measurements) for the numbers. Not covered: knowledge about the outputs of popular actions, severity by trigger (the level is per rule ID). `--fix` moves a simple reference into `env:` for bash and sh. Batch J adds sinks that zizmor lacks: `container.options` and `services.<id>.options` ([zizmor#1128](https://github.com/zizmorcore/zizmor/issues/1128), still open), their image, entrypoint, command and volumes, `args` and `entrypoint` of `docker://` steps, more code inputs of well-known actions, and the prompt, arguments and settings of AI agent actions; see [batch J](#batch-j-measurements) |
 | `typosquat-uses` | `typosquat-uses` | default | partial: one typo of the slug, not all of the transformations of zizmor |
 | `undocumented-permissions` | `undocumented-permissions` | pedantic | partial: a comment above a scope counts, `include-read` for zizmor's read scopes. [batch B measurements](#batch-b-corpus-measurements) |
 | `unpinned-images` | `unpinned-images` | default | partial: no per-persona split, images in `docker://` are `unpinned-uses`. [batch B measurements](#batch-b-corpus-measurements) |
@@ -86,7 +86,7 @@ time; the rules that were merged into one ID since (`template-injection-expansio
 | `template-injection`, `superfluous-actions`, `unpinned-tools`, `unlocked-install` | regular and pedantic | `default` profile, the pedantic findings behind the option `pedantic` |
 | `misfeature` | regular, the custom shells auditor | `default` profile, custom shells behind the option `pedantic` |
 | `artipacked`, `excessive-permissions`, `obfuscation`, `unpinned-images`, `unpinned-uses`, `insecure-commands` | regular, with pedantic or auditor findings for special cases | `default` profile; the special cases are not separate findings yet |
-| `ref-version-mismatch`, `stale-action-refs` | pedantic | online (`-online`) |
+| `ref-version-mismatch`, `stale-action-refs` | pedantic | online (`--online`) |
 | every other audit | regular | `default` profile, or online |
 
 ## Lessons applied
@@ -111,8 +111,8 @@ the corpus. "Fixed" means that the fixture failed on the code before; "Not repro
 | [#2321](https://github.com/zizmorcore/zizmor/issues/2321) | `ref-confusion` ignores hash-pinned refs, but a branch can be named like a hash | Fixed for abbreviated SHAs, which are names to GitHub. Full SHAs are read as commits and are not looked up |
 | [#2130](https://github.com/zizmorcore/zizmor/issues/2130) | `impostor-commit` and annotated tag objects | Not reproduced: the client dereferences annotated tags, and a SHA that GitHub cannot compare is no verdict, not an impostor |
 | [#1673](https://github.com/zizmorcore/zizmor/issues/1673) | `secrets: inherit` under `on.workflow_call` | Open: the documentation and the workflow schema of GitHub show only a mapping there, so the syntax error stays. Whether GitHub runs such a file was not tested |
-| [#2210](https://github.com/zizmorcore/zizmor/issues/2210) and others | one 403, 404 or 5xx stops the online run | Not reproduced: a failed lookup is skipped with one warning (`-verbose` lists them). A test covers 404, 403, 500 and 502 |
-| [GHSA-f42p-wjw5-97qh](https://github.com/zizmorcore/zizmor/security/advisories/GHSA-f42p-wjw5-97qh) | credentials in the debug log | Not reproduced: a test runs `-online -debug -verbose` with a token and finds it nowhere |
+| [#2210](https://github.com/zizmorcore/zizmor/issues/2210) and others | one 403, 404 or 5xx stops the online run | Not reproduced: a failed lookup is skipped with one warning (`--verbose` lists them). A test covers 404, 403, 500 and 502 |
+| [GHSA-f42p-wjw5-97qh](https://github.com/zizmorcore/zizmor/security/advisories/GHSA-f42p-wjw5-97qh) | credentials in the debug log | Not reproduced: a test runs `--online --debug --verbose` with a token and finds it nowhere |
 
 ## Intentional differences: where jactionlint goes beyond zizmor
 
@@ -162,9 +162,9 @@ actions ([batch J](#batch-j-measurements)).
   jactionlint takes the triggers of an action from the local workflows that call it, and judges a published action that no local
   workflow calls by its own steps only. [Measured](#composite-actions) on the action files of the corpus.
 - **A baseline for gradual adoption** ([zizmor#2282](https://github.com/zizmorcore/zizmor/issues/2282), declined there).
-  `jactionlint -baseline-write` records the current findings and `-baseline` hides them, so a repository can adopt the stricter
+  `jactionlint --baseline-write` records the current findings and `--baseline` hides them, so a repository can adopt the stricter
   default and fail only on new findings. Entries are keyed by file, rule ID and a fingerprint, not by line numbers;
-  `-baseline-check` lists the entries that match nothing any more, `-format summary` counts findings per rule and file, and SARIF marks
+  `--baseline-check` lists the entries that match nothing any more, `--format summary` counts findings per rule and file, and SARIF marks
   baselined results as suppressed. Tested with unit tests and by hand; no comparison is possible. See [the usage document](usage.md#baseline).
 - **Durable ignores** (`ignores:` in the config file, rules `expired-ignore` and `unused-ignore`). zizmor ignores a finding with a
   `# zizmor: ignore[audit]` comment or a `file:line:col` entry in `zizmor.yml`, and both break when a tool rewrites the line or when
@@ -173,8 +173,8 @@ actions ([batch J](#batch-j-measurements)).
   date. Not measured against zizmor, which has no equivalent. See [durable ignores](config.md#durable-ignores).
 - **Ignore comments at the end of a line** (`# jactionlint ignore=...`) cover the whole step when they are on its first line. A
   `# zizmor: ignore[...]` comment is honored as well ([measured below](#ignore-comments)).
-- **Fixes that converge.** `-fix` lints, fixes and lints again until nothing is left, writes each file once and atomically, and checks
-  every pass (valid YAML, only the edits changed); a fix that breaks a file is refused. `-diff` shows the change, `-fix -rules` limits
+- **Fixes that converge.** `--fix` lints, fixes and lints again until nothing is left, writes each file once and atomically, and checks
+  every pass (valid YAML, only the edits changed); a fix that breaks a file is refused. `--diff` shows the change, `--fix --fix-rules` limits
   it, and SARIF carries the safe fixes so [hk](usage.md#hk) can apply them. A fixer never invents a value (`missing-timeout` and
   `dependabot-cooldown` need `default-minutes` and `default-days`), where zizmor's `dependabot-cooldown` fix has a built-in 7.
   Measured with `scripts/fix-corpus` on 955 files: [missing-timeout and missing-permissions](#measured-missing-permissions-and-missing-timeout).
@@ -200,11 +200,11 @@ From the 2026-10-08 survey of the zizmor tracker, these ideas are **not built**:
 `actions/checkout` and of code that a pull request controls (zizmor [#2134](https://github.com/zizmorcore/zizmor/issues/2134)), TOCTOU
 refs ([#935](https://github.com/zizmorcore/zizmor/issues/935)), shell syntax errors without shellcheck
 ([#2322](https://github.com/zizmorcore/zizmor/issues/2322)), a rule for a SHA without a version comment
-([#2316](https://github.com/zizmorcore/zizmor/issues/2316)), immutable releases under `-online`
+([#2316](https://github.com/zizmorcore/zizmor/issues/2316)), immutable releases under `--online`
 ([#766](https://github.com/zizmorcore/zizmor/issues/766)), credentials in the `registries` of `dependabot.yml`
 ([#1222](https://github.com/zizmorcore/zizmor/issues/1222)), a repojacking check by owner lookup
 ([#479](https://github.com/zizmorcore/zizmor/issues/479)), and zizmor's precomputed snapshot of tags and advisories, which would cut the
-first-run cost of `-online`. The registry of rules, [rules.md](rules.md), is the list of what exists.
+first-run cost of `--online`. The registry of rules, [rules.md](rules.md), is the list of what exists.
 
 ## Batch B corpus measurements
 
@@ -259,7 +259,7 @@ Known gaps of batch B, which the table does not show because the corpus does not
 
 ## Online audits
 
-The six online audits (batch G) run only with `-online`. They were measured on 2026-10-08 against zizmor 1.30.1 (`--persona
+The six online audits (batch G) run only with `--online`. They were measured on 2026-10-08 against zizmor 1.30.1 (`--persona
 pedantic`, with a token, so not `--offline`) with `go run ./scripts/zizmor-diff --online`, and by running both tools on every
 workflow file of the corpus: 38 repositories under `~/src` (the jdx repositories, `oxc-project/oxc` and `renovatebot/renovate`
 among them) plus this repository's worktree. A finding is shared when both tools report the same audit in the same file within two
@@ -315,13 +315,13 @@ Not compatible by design; the client answers zizmor issues [#1350](https://githu
 `httptest` server for every failure mode, not against zizmor.
 
 - A lookup which fails (404, 403, 5xx, timeout, DNS) is skipped for that `uses:` only. One warning per kind of failure, exit status
-  unchanged unless `-online=strict`.
+  unchanged unless `--online=strict`.
 - Rate limits are read from `X-RateLimit-*` and `Retry-After`; a reset within 30 seconds is waited for, a later one skips with the
   reset time in the message. 5xx and secondary limits are retried with exponential backoff and jitter, at most twice.
 - `allow` and `deny` lists of `owner/repo` patterns, a GitHub Enterprise Server host from `GITHUB_API_URL`, `GITHUB_SERVER_URL`, `GH_HOST`
-  or `-online-api-url`, and a token from a named variable, a file, the usual variables or `gh auth token`.
+  or `--online-api-url`, and a token from a named variable, a file, the usual variables or `gh auth token`.
 - The token is sent to the API host only, is redacted from all output, and is never sent to a host that a repository's own config file chose.
-- `-online=cache` answers from the disk cache only, without the network.
+- `--online=cache` answers from the disk cache only, without the network.
 
 Not done: zizmor's precomputed snapshot of tags and advisories, which would cut the first-run cost further.
 
@@ -340,7 +340,7 @@ comments and with the comments stripped, the comments hide 97 findings (`dangero
 215 of them `cache-poisoning`. Stale means that jactionlint reports nothing there; it is not necessarily a gap: for the one file checked
 by hand, zizmor 1.30.1 reports no `cache-poisoning` finding either once the comments are removed (the comments are older than the
 current rules of both tools). The other 214 were not compared with zizmor, and `impostor-commit` comments are only exercised
-with `-online`, which this run did not use.
+with `--online`, which this run did not use.
 
 ## Measured: missing-permissions and missing-timeout
 
@@ -355,11 +355,11 @@ all 955 distinct workflow files of the 139 worktrees there (the "all" numbers). 
 
 `missing-timeout` and `missing-permissions` are in the `default` profile by decision of the maintainer. `missing-timeout` has no false
 positives by the definition above, but it is noisy for a repository that never set the key (270 findings in 27 of the 35
-repositories); `jactionlint -fix` with `default-minutes` clears all of them. (`missing-permissions` was in `strict` when it was
+repositories); `jactionlint --fix` with `default-minutes` clears all of them. (`missing-permissions` was in `strict` when it was
 measured.)
 
-The fixers were measured on the 955 files: `jactionlint -fix` (with `default-minutes: 30` configured for the measurement) adds exactly 1010 `timeout-minutes: 30` lines and 28 `permissions:` blocks
-(the safe ones) and changes no other line (`diff -r` shows added lines only); `-fix=unsafe` adds 137 blocks; after either run
+The fixers were measured on the 955 files: `jactionlint --fix` (with `default-minutes: 30` configured for the measurement) adds exactly 1010 `timeout-minutes: 30` lines and 28 `permissions:` blocks
+(the safe ones) and changes no other line (`diff -r` shows added lines only); `--fix=unsafe` adds 137 blocks; after either run
 the rules report nothing that has a fix, and a second run changes nothing.
 ## Batch C measurements
 
@@ -602,7 +602,7 @@ jactionlint-only means all of them here. Gaps: archives that are downloaded, ext
 package, `ssh -o StrictHostKeyChecking=no`, and a download whose verification is in another step are not reported.
 ## Batch L measurements
 
-Both rules were run (default profile, `-shellcheck= -pyflakes=`) over two corpora of unique files (by content hash): the 1020
+Both rules were run (default profile, `--shellcheck= --pyflakes=`) over two corpora of unique files (by content hash): the 1020
 workflows and Dependabot configurations of every checkout under `~/src` (the `*-jactionlint` worktrees, other worktrees and
 repositories), and 1315 files of third party repositories (the Go module cache checkouts in the scratchpad corpus). zizmor has no
 equivalent audit, so there is nothing to match against; the numbers are findings and reviewed false positives.

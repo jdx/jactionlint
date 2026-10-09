@@ -301,13 +301,13 @@ func TestLogOutput(t *testing.T) {
 func TestHelpOutput(t *testing.T) {
 	stdout := io.Discard
 	stderr := &bytes.Buffer{}
-	status := newGen(stdout, stderr, io.Discard).run([]string{"test", "-help"})
+	status := newGen(stdout, stderr, io.Discard).run([]string{"test", "--help"})
 	if status != 0 {
 		t.Fatal("exit status is non-zero:", status)
 	}
 	out := stderr.String()
 	if !strings.Contains(out, "Usage:") {
-		t.Fatalf("usage header is not included in -help output: %q", out)
+		t.Fatalf("usage header is not included in --help output: %q", out)
 	}
 }
 

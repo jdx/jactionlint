@@ -33,7 +33,7 @@ func (m OnlineMode) Offline() bool { return m == OnlineModeCache || m == OnlineM
 // Strict reports whether a skipped lookup fails the run.
 func (m OnlineMode) Strict() bool { return m == OnlineModeStrict || m == OnlineModeCacheStrict }
 
-// ParseOnlineMode parses the value of -online and of "online-options.mode": "true" (or "on", or
+// ParseOnlineMode parses the value of --online and of "online-options.mode": "true" (or "on", or
 // empty), "cache", "strict", or "cache,strict" for both. Order does not matter.
 func ParseOnlineMode(s string) (OnlineMode, error) {
 	var cache, strict bool
@@ -66,7 +66,7 @@ type OnlineOptions struct {
 	// Mode selects how the network is used. See OnlineMode. Setting it to "cache" or "strict" in the
 	// configuration also turns the online checks on.
 	Mode OnlineMode `yaml:"mode"`
-	// ModeSet says that Mode was chosen explicitly, also when it is the default mode: a bare -online
+	// ModeSet says that Mode was chosen explicitly, also when it is the default mode: a bare --online
 	// then replaces the "cache" or "strict" mode of a configuration file instead of leaving it in force.
 	ModeSet bool `yaml:"-"`
 	// APIURL is the URL of the REST API of a GitHub Enterprise Server such as
@@ -74,7 +74,7 @@ type OnlineOptions struct {
 	// $GITHUB_SERVER_URL or $GH_HOST, else https://api.github.com.
 	//
 	// A token is sent only to hosts which the user chose: github.com, a host named by the
-	// environment, or a host set by -online-api-url, the user-global config file or -config-file. An
+	// environment, or a host set by --online-api-url, the user-global config file or --config-file. An
 	// APIURL in the config file of a repository gets no token, because a pull request could
 	// otherwise send your token to any server.
 	APIURL string `yaml:"api-url"`

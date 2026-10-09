@@ -29,7 +29,7 @@ func (c *Config) RuleLevel(id string) Severity {
 	}
 	if info.Online {
 		// Online rules do not follow the profile. They exist only when the online checks are on
-		// (-online or "online: true"), and then run at their own level.
+		// (--online or "online: true"), and then run at their own level.
 		return info.DefaultLevel
 	}
 	if info.Profile != "" && c.profile().Includes(info.Profile) {
@@ -335,7 +335,7 @@ func (c *Config) applyLegacy(l *legacyConfig) error {
 			c.Rules[e.rule] = e.rc
 		}
 		if e.key != prev {
-			c.Deprecations = append(c.Deprecations, fmt.Sprintf("%q is deprecated and will be removed in a future version. use %s instead. run \"jactionlint -migrate-config\" to rewrite the file", e.key, e.instead))
+			c.Deprecations = append(c.Deprecations, fmt.Sprintf("%q is deprecated and will be removed in a future version. use %s instead. run \"jactionlint --migrate-config\" to rewrite the file", e.key, e.instead))
 			prev = e.key
 		}
 	}

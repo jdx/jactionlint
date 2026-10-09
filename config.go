@@ -27,7 +27,7 @@ type IgnorePattern struct {
 	Retired string
 }
 
-// ParseIgnorePattern parses a pattern of -ignore, "paths.*.ignore" and inline ignore comments. When the
+// ParseIgnorePattern parses a pattern of --ignore, "paths.*.ignore" and inline ignore comments. When the
 // pattern is exactly the ID of a rule listed in Rules, it ignores the errors of that rule. Otherwise it
 // is compiled as a regular expression which is matched against the error messages.
 func ParseIgnorePattern(s string) (IgnorePattern, error) {
@@ -112,7 +112,7 @@ func (pats *IgnorePatterns) UnmarshalYAML(n *yaml.Node) error {
 // in the configuration file.
 type PathConfig struct {
 	// Ignore is a list of patterns. They are used for ignoring errors by matching to the error messages.
-	// It is similar to the "-ignore" command line option.
+	// It is similar to the "--ignore" command line option.
 	Ignore IgnorePatterns `yaml:"ignore"`
 }
 
@@ -186,12 +186,12 @@ type Config struct {
 	// wins over all of them. ReadConfigFile loads them and merges them into the returned Config.
 	Extends []string `yaml:"extends"`
 	// Online turns on the online checks (see LinterOptions.Online) for the files this configuration
-	// applies to, like the -online flag does for the whole run. They query the GitHub API.
+	// applies to, like the --online flag does for the whole run. They query the GitHub API.
 	Online bool `yaml:"online"`
-	// Baseline controls the baseline of accepted findings (see "jactionlint -baseline-write"). "auto" (or
+	// Baseline controls the baseline of accepted findings (see "jactionlint --baseline-write"). "auto" (or
 	// true) applies the file .github/jactionlint-baseline.json when it exists, false or empty does not
 	// apply a baseline, and any other value is the path of the baseline file relative to the root of the
-	// repository, which must exist. The -baseline flag overrides it.
+	// repository, which must exist. The --baseline flag overrides it.
 	Baseline string `yaml:"baseline"`
 	// OnlineOptions tunes the online checks: the mode ("cache" for offline use from the disk cache,
 	// "strict" to fail when a lookup is skipped), the API URL of GitHub Enterprise Server, where the
@@ -245,7 +245,7 @@ type Config struct {
 	// runs against it.
 	AssumeDefaultPermissions *string `yaml:"assume-default-permissions"`
 
-	// Fix configures "jactionlint -fix".
+	// Fix configures "jactionlint --fix".
 	Fix FixConfig `yaml:"fix"`
 
 	// Path is the path of the file which the config was read from. It is empty when the config was
@@ -253,19 +253,19 @@ type Config struct {
 	Path string `yaml:"-"`
 	// Deprecations are messages about deprecated keys the config file uses, for example the old
 	// "require-shell: true" which is replaced by the "rules" mapping. The config still works.
-	// "jactionlint -migrate-config" rewrites the file.
+	// "jactionlint --migrate-config" rewrites the file.
 	Deprecations []string `yaml:"-"`
 	// Notices are messages about the config file which are not warnings, for example that a file written
 	// for actionlint was read and which profile applies to it.
 	Notices []string `yaml:"-"`
 	// profileNotices are notices that are about the profile the config leaves to the default. They are
-	// dropped when -profile chooses one, because they would be wrong then (see Linter.warnDeprecations).
+	// dropped when --profile chooses one, because they would be wrong then (see Linter.warnDeprecations).
 	profileNotices []string
 
 	// present records which keys were written explicitly so that merging with the files listed in
 	// "extends" can tell a missing key from a zero value.
 	present map[string]bool
-	// userOwned is true for a config the user chose (the user-global file, -config-file or
+	// userOwned is true for a config the user chose (the user-global file, --config-file or
 	// LinterOptions.Config) and false for the file of a repository, which anyone who can open a pull
 	// request controls. Only a user-owned config may point the online checks at a host which receives
 	// the token.
@@ -274,7 +274,7 @@ type Config struct {
 
 // FixConfig is the "fix" mapping of the config file.
 type FixConfig struct {
-	// Rules restricts -fix to the fixes of the rules with these IDs. The -rules flag overrides it. When
+	// Rules restricts --fix to the fixes of the rules with these IDs. The --fix-rules flag overrides it. When
 	// the list is empty, the fixes of all rules are applied.
 	Rules []string `yaml:"rules"`
 }
@@ -547,7 +547,7 @@ func (c *Config) noteActionlintFile(name, shown string) {
 	if !strings.HasPrefix(name, "actionlint.") || c.present["profile"] {
 		return
 	}
-	c.profileNotices = append(c.profileNotices, fmt.Sprintf("config file %q was read as a jactionlint config. it sets no \"profile\", so the default profile applies, which has more rules than actionlint. add \"profile: correctness\" to the file or run with -profile correctness for the checks of actionlint. see https://jactionlint.jdx.dev/actionlint", shown))
+	c.profileNotices = append(c.profileNotices, fmt.Sprintf("config file %q was read as a jactionlint config. it sets no \"profile\", so the default profile applies, which has more rules than actionlint. add \"profile: correctness\" to the file or run with --profile correctness for the checks of actionlint. see https://jactionlint.jdx.dev/actionlint", shown))
 }
 
 // loadGlobalConfig reads the user-global config file from
@@ -588,12 +588,12 @@ func writeDefaultConfigFile(path string) error {
 	b := []byte(`# Rules are enabled by profile, and each profile includes the one before it.
 # "correctness" is what actionlint checks plus the bug detectors of jactionlint.
 # "default" adds the security posture and policy rules worth failing a build on.
-# "pedantic" adds the noisy and opinionated rules. The -profile flag overrides
+# "pedantic" adds the noisy and opinionated rules. The --profile flag overrides
 # this. See https://jactionlint.jdx.dev/rules for all rule IDs.
 #profile: default
 
 # Turn on the checks which query the GitHub API (impostor commits, known
-# vulnerable actions, archived repositories, ...). Same as the -online flag.
+# vulnerable actions, archived repositories, ...). Same as the --online flag.
 # See https://jactionlint.jdx.dev/usage#online-checks
 #online: false
 
@@ -631,7 +631,7 @@ config-secrets: null
 #
 # "ignore" is an array of rule IDs or regular expression patterns. Errors of the
 # rules and errors with matched messages are ignored. This is similar to the
-# "-ignore" command line option.
+# "--ignore" command line option.
 paths:
 #  .github/workflows/**/*.yml:
 #    ignore: [unpinned-uses, 'some message']

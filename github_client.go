@@ -166,7 +166,7 @@ func (e *GitHubRateLimitError) Error() string {
 // Is makes errors.Is(err, ErrGitHubRateLimited) true.
 func (e *GitHubRateLimitError) Is(target error) bool { return target == ErrGitHubRateLimited }
 
-// ErrGitHubNotCached is returned (wrapped) by the built-in client in the offline mode (-online=cache)
+// ErrGitHubNotCached is returned (wrapped) by the built-in client in the offline mode (--online=cache)
 // when the disk cache has no answer for a request. Nothing is sent to the network in that mode.
 var ErrGitHubNotCached = errors.New("not in the cache of GitHub answers")
 

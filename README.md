@@ -19,9 +19,9 @@ Features:
   [zizmor][zizmor] audits, with [rules and fixes of its own](docs/zizmor-parity.md)
 - **Composite actions and `dependabot.yml`** are checked together with the workflows
 - **Profiles** (`correctness`, `default`, `pedantic`) to choose how much is checked, and [the checks of actionlint][from-actionlint] with one line
-- **Automatic fixes** (`-fix`, `-diff`), a **baseline** to adopt the checks step by step, **durable ignores** that survive Renovate, and
+- **Automatic fixes** (`--fix`, `--diff`), a **baseline** to adopt the checks step by step, **durable ignores** that survive Renovate, and
   SARIF, GCC and GitHub output formats
-- **Online checks** (opt-in, `-online`) for impostor commits, known vulnerable actions, archived repositories and stale refs
+- **Online checks** (opt-in, `--online`) for impostor commits, known vulnerable actions, archived repositories and stale refs
 - **Other several useful checks**; [glob syntax][filter-pattern-doc] validation, dependencies check for `needs:`,
   runner label validation, cron syntax validation, ...
 
@@ -127,11 +127,11 @@ The default is stricter than a plain linter on purpose, so a repository that nev
 and it can fail on its first run. To get only the checks of actionlint, see [Coming from actionlint][from-actionlint]:
 
 ```sh
-jactionlint -profile correctness
+jactionlint --profile correctness
 ```
 
-or put `profile: correctness` in `.github/jactionlint.yaml`. To adopt the `default` profile step by step, `jactionlint -baseline-write`
-records today's findings and `jactionlint -baseline` fails only on new ones ([baseline](docs/usage.md#baseline)). `jactionlint -fix`
+or put `profile: correctness` in `.github/jactionlint.yaml`. To adopt the `default` profile step by step, `jactionlint --baseline-write`
+records today's findings and `jactionlint --baseline` fails only on new ones ([baseline](docs/usage.md#baseline)). `jactionlint --fix`
 fixes what can be fixed mechanically. See [the configuration document][config] and [the migration guide](docs/v2-migration.md) if you used v1.
 
 ### In CI with mise
@@ -165,7 +165,7 @@ jobs:
 
 ### With hk
 
-[hk](https://hk.jdx.dev) runs jactionlint as a Git hook and fixer. With `-format sarif` it gets the diagnostics with their rule IDs and
+[hk](https://hk.jdx.dev) runs jactionlint as a Git hook and fixer. With `--format sarif` it gets the diagnostics with their rule IDs and
 the fixes. Add this step to `hk.pkl` (see [the usage document][usage-hk] for baselines and the online checks):
 
 ```pkl
@@ -173,9 +173,9 @@ the fixes. Add this step to `hk.pkl` (see [the usage document][usage-hk] for bas
     glob = List(".github/workflows/*.yml", ".github/workflows/*.yaml")
     batch = true
     diagnostic_format = "sarif"
-    check = "jactionlint -format sarif {{files}}"
-    check_diff = "hk util sarif-diff -- jactionlint -format sarif {{files}}"
-    fix = "jactionlint -fix {{files}}"
+    check = "jactionlint --format sarif {{files}}"
+    check_diff = "hk util sarif-diff -- jactionlint --format sarif {{files}}"
+    fix = "jactionlint --fix {{files}}"
 }
 ```
 

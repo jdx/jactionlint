@@ -202,7 +202,7 @@ timeout-minutes:
 		t.Errorf("want one deprecation per key: %v", c.Deprecations)
 	}
 	for _, d := range c.Deprecations {
-		if !strings.Contains(d, "is deprecated") || !strings.Contains(d, "-migrate-config") {
+		if !strings.Contains(d, "is deprecated") || !strings.Contains(d, "--migrate-config") {
 			t.Errorf("unexpected deprecation message %q", d)
 		}
 	}

@@ -354,7 +354,7 @@ func TestRun(t *testing.T) {
 	c := &Config{
 		Repos:           []Repo{{"r", dir}, {"gone", filepath.Join(dir, "nope")}},
 		Jactionlint:     []string{"jl"},
-		JactionlintArgs: []string{"-config-file", "/c.yaml"},
+		JactionlintArgs: []string{"--config-file", "/c.yaml"},
 		Zizmor:          []string{"zz", "x"},
 		Mapping:         testMapping(t),
 		Jobs:            2,
@@ -367,7 +367,7 @@ func TestRun(t *testing.T) {
 		t.Errorf("repos = %+v", rep.Repos)
 	}
 	want := []string{
-		dir + ": jl -config-file /c.yaml -format {{json .}}",
+		dir + ": jl --config-file /c.yaml --format {{json .}}",
 		dir + ": zz x --offline --persona pedantic --format sarif .",
 	}
 	if diff := cmp.Diff(want, calls); diff != "" {

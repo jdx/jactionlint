@@ -566,7 +566,7 @@ func (c *httpGitHubClient) noticeAnonymous() {
 	c.noticedAnon = true
 	c.mu.Unlock()
 	if first {
-		c.noticef("no token found (GITHUB_TOKEN, GH_TOKEN, -online-token-file or gh auth login) so the online checks use unauthenticated requests, which GitHub limits to 60 per hour. set a token to raise the limit")
+		c.noticef("no token found (GITHUB_TOKEN, GH_TOKEN, --online-token-file or gh auth login) so the online checks use unauthenticated requests, which GitHub limits to 60 per hour. set a token to raise the limit")
 	}
 }
 

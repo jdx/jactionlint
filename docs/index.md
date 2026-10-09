@@ -44,7 +44,7 @@ features:
     details: 'Choose how much is checked: <code>correctness</code> (what actionlint checks), <code>default</code> or <code>pedantic</code>.'
     link: /config#profiles
   - title: Fixes and a baseline
-    details: 'Apply the safe fixes with <code>-fix</code> and adopt the stricter checks step by step with a baseline.'
+    details: 'Apply the safe fixes with <code>--fix</code> and adopt the stricter checks step by step with a baseline.'
     link: /usage#fix-errors-automatically
   - title: Other useful checks
     details: 'Glob syntax validation, dependencies check for <code>needs:</code>, runner label validation, cron syntax validation and more.'
@@ -59,7 +59,7 @@ features:
 
 ```sh
 mise use -g jactionlint
-jactionlint -version
+jactionlint --version
 ```
 
 Then run it in your repository. jactionlint finds all workflow files and checks them.

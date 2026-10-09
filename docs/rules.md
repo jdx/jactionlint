@@ -4,19 +4,19 @@
 
 Every diagnostic of jactionlint has a stable ID such as `unpinned-uses`. IDs are never renamed or reused, so they are safe to write in
 [the configuration](./config.md), in [ignore comments](./usage.md#ignore-some-errors) and in CI annotations. The ID of a
-finding is in the `id` field of `-format json`, in the `ruleId` of `-format sarif` and in the output of `-rule-ids`.
+finding is in the `id` field of `--format json`, in the `ruleId` of `--format sarif` and in the output of `--rule-ids`.
 
 Each rule has:
 
 - a **group**: `correctness` (mistakes which make a workflow fail or misbehave), `security` (insecure constructs), `policy`
   (good practices which are not mistakes by themselves) or `style`.
-- a **default level**: `error`, `warn` or `info`. Only errors make jactionlint exit with status 1 unless `-strict-exit` is given.
+- a **default level**: `error`, `warn` or `info`. Only errors make jactionlint exit with status 1 unless `--strict-exit` is given.
 - a **profile**: the first [profile](./config.md#profiles) which enables the rule. There are three, and each includes the rules
   of the one before it: `correctness` (what actionlint checks and the bug detectors of jactionlint), `default` (adds the
   security posture and policy rules, and is used when no profile is configured) and `pedantic` (adds the noisy and opinionated
   rules). Rules which no profile enables run only when the configuration turns them on, and the rules marked "only with
-  `-online`" run with that flag whatever the profile is. The profile comes from the `profile` key of the configuration or the
-  `-profile` flag.
+  `--online`" run with that flag whatever the profile is. The profile comes from the `profile` key of the configuration or the
+  `--profile` flag.
 - a **pedantic option**: a few audits report their noisier findings too when the option `pedantic` is true. It is true under
   the `pedantic` profile and false otherwise, and `rules: {<id>: {pedantic: true}}` turns it on for one audit.
 
@@ -37,7 +37,7 @@ rules:
 | [adhoc-packages](#adhoc-packages) | security | error | default |
 | [agentic-actions](#agentic-actions) | security | error | default |
 | [anonymous-definition](#anonymous-definition) | policy | warn | pedantic |
-| [archived-uses](#archived-uses) | security | warn | only with `-online` |
+| [archived-uses](#archived-uses) | security | warn | only with `--online` |
 | [artipacked](#artipacked) | security | error | default |
 | [bot-conditions](#bot-conditions) | security | error | default |
 | [cache-poisoning](#cache-poisoning) | security | error | default |
@@ -73,7 +73,7 @@ rules:
 | [github-env](#github-env) | security | error | default |
 | [hardcoded-container-credentials](#hardcoded-container-credentials) | security | error | correctness |
 | [if-always-true](#if-always-true) | correctness | error | correctness |
-| [impostor-commit](#impostor-commit) | security | error | only with `-online` |
+| [impostor-commit](#impostor-commit) | security | error | only with `--online` |
 | [insecure-commands](#insecure-commands) | security | error | default |
 | [insecure-ssh-keyscan](#insecure-ssh-keyscan) | security | error | default |
 | [insecure-url-scheme](#insecure-url-scheme) | security | error | default |
@@ -98,7 +98,7 @@ rules:
 | [invalid-workflow-call-input](#invalid-workflow-call-input) | correctness | error | correctness |
 | [invalid-workflow-dispatch-input](#invalid-workflow-dispatch-input) | correctness | error | correctness |
 | [invisible-characters](#invisible-characters) | security | error | default |
-| [known-vulnerable-actions](#known-vulnerable-actions) | security | error | only with `-online` |
+| [known-vulnerable-actions](#known-vulnerable-actions) | security | error | only with `--online` |
 | [local-action-checkout](#local-action-checkout) | correctness | error | correctness |
 | [matrix-duplicate-value](#matrix-duplicate-value) | correctness | error | correctness |
 | [matrix-invalid-exclude](#matrix-invalid-exclude) | correctness | error | correctness |
@@ -117,8 +117,8 @@ rules:
 | [pipeline-without-pipefail](#pipeline-without-pipefail) | correctness | error | default |
 | [pyflakes](#pyflakes) | correctness | error | correctness |
 | [recursive-alias](#recursive-alias) | correctness | error | correctness |
-| [ref-confusion](#ref-confusion) | security | warn | only with `-online` |
-| [ref-version-mismatch](#ref-version-mismatch) | security | warn | only with `-online` |
+| [ref-confusion](#ref-confusion) | security | warn | only with `--online` |
+| [ref-version-mismatch](#ref-version-mismatch) | security | warn | only with `--online` |
 | [require-expression-wrapping](#require-expression-wrapping) | style | error | pedantic |
 | [require-shell](#require-shell) | style | error | pedantic |
 | [required-actions](#required-actions) | policy | error | only when configured |
@@ -127,7 +127,7 @@ rules:
 | [self-hosted-runner](#self-hosted-runner) | security | info | pedantic |
 | [self-repository](#self-repository) | security | info | pedantic |
 | [shellcheck](#shellcheck) | correctness | error | correctness |
-| [stale-action-refs](#stale-action-refs) | security | info | only with `-online` |
+| [stale-action-refs](#stale-action-refs) | security | info | only with `--online` |
 | [superfluous-actions](#superfluous-actions) | security | error | default |
 | [template-injection](#template-injection) | security | error | correctness |
 | [timeout-too-long](#timeout-too-long) | policy | error | only when configured |
@@ -209,8 +209,8 @@ An action or reusable workflow is in an archived repository.
 
 - Group: security
 - Default level: warn
-- Profile: only with `-online`
-- Needs network access: yes (only with `-online`)
+- Profile: only with `--online`
+- Needs network access: yes (only with `--online`)
 - Details and examples: [checks](./checks.md#check-archived-uses)
 
 ## artipacked
@@ -355,7 +355,7 @@ An update in dependabot.yml has no cooldown or a cooldown shorter than the minim
 - Profile: default
 - Fixable: yes
 - Option `days` (int, default 7): The minimum number of days "cooldown.default-days" must be. Defaults to 7.
-- Option `default-days` (int, no default): The number of days -fix writes as "cooldown.default-days". It must be at least "days". There is no default: without it findings have no fix.
+- Option `default-days` (int, no default): The number of days --fix writes as "cooldown.default-days". It must be at least "days". There is no default: without it findings have no fix.
 - Details and examples: [checks](./checks.md#check-dependabot-cooldown)
 
 ## dependabot-execution
@@ -548,8 +548,8 @@ A hash-pinned action uses a commit which is not part of the repository's own his
 
 - Group: security
 - Default level: error
-- Profile: only with `-online`
-- Needs network access: yes (only with `-online`)
+- Profile: only with `--online`
+- Needs network access: yes (only with `--online`)
 - Option `max-branches` (int, default 1000): How many branches of the action repository a commit is compared with before giving up without a verdict. Without a token each branch costs a request, so at most 100 are compared.
 - Details and examples: [checks](./checks.md#check-impostor-commit)
 
@@ -777,8 +777,8 @@ An action version is affected by a published GitHub security advisory.
 
 - Group: security
 - Default level: error
-- Profile: only with `-online`
-- Needs network access: yes (only with `-online`)
+- Profile: only with `--online`
+- Needs network access: yes (only with `--online`)
 - Option `allow` (strings, empty by default): Advisory IDs (GHSA-...) which are not reported.
 - Details and examples: [checks](./checks.md#check-known-vulnerable-actions)
 
@@ -865,7 +865,7 @@ A job does not set timeout-minutes.
 - Default level: error
 - Profile: default
 - Fixable: yes
-- Option `default-minutes` (int, no default): The timeout-minutes which -fix adds to a job. There is no default: the rule has no fix unless this is set. It is lowered to the max of timeout-too-long when that is smaller.
+- Option `default-minutes` (int, no default): The timeout-minutes which --fix adds to a job. There is no default: the rule has no fix unless this is set. It is lowered to the max of timeout-too-long when that is smaller.
 - Details and examples: [checks](./checks.md#check-timeout-minutes)
 
 ## missing-workflow-input
@@ -894,7 +894,7 @@ A runner label is an alias that GitHub moves to newer images, such as ubuntu-lat
 - Default level: warn
 - Profile: pedantic
 - Fixable: yes
-- Option `pin` (string-map, no default): Maps a moving label to the fixed label that -fix writes in its place, e.g. ubuntu-latest: ubuntu-24.04. There is no default: without an entry the finding has no fix.
+- Option `pin` (string-map, no default): Maps a moving label to the fixed label that --fix writes in its place, e.g. ubuntu-latest: ubuntu-24.04. There is no default: without an entry the finding has no fix.
 - Details and examples: [checks](./checks.md#check-mutable-runner-label)
 
 ## obfuscation
@@ -959,8 +959,8 @@ The ref of an action is both a branch and a tag of its repository.
 
 - Group: security
 - Default level: warn
-- Profile: only with `-online`
-- Needs network access: yes (only with `-online`)
+- Profile: only with `--online`
+- Needs network access: yes (only with `--online`)
 - Details and examples: [checks](./checks.md#check-ref-confusion)
 
 ## ref-version-mismatch
@@ -969,8 +969,8 @@ The version comment of a hash-pinned action does not match the pinned commit.
 
 - Group: security
 - Default level: warn
-- Profile: only with `-online`
-- Needs network access: yes (only with `-online`)
+- Profile: only with `--online`
+- Needs network access: yes (only with `--online`)
 - Details and examples: [checks](./checks.md#check-ref-version-mismatch)
 
 ## require-expression-wrapping
@@ -1052,8 +1052,8 @@ A hash-pinned action uses a commit which no tag of the repository points to.
 
 - Group: security
 - Default level: info
-- Profile: only with `-online`
-- Needs network access: yes (only with `-online`)
+- Profile: only with `--online`
+- Needs network access: yes (only with `--online`)
 - Details and examples: [checks](./checks.md#check-stale-action-refs)
 
 ## superfluous-actions
@@ -1396,9 +1396,9 @@ The file is not valid YAML.
 ## Retired rule IDs
 
 An audit is one rule with one ID. These IDs existed while 2.0 was in development, before the first release, and were merged into
-the rule that reports their findings now. `-ignore`, the `ignore` lists of `paths` and the `# jactionlint ignore=` comments still
+the rule that reports their findings now. `--ignore`, the `ignore` lists of `paths` and the `# jactionlint ignore=` comments still
 take them: such an ignore matches only the findings that had the old ID, and jactionlint warns that the ID is deprecated.
-`rules`, `ignores`, `fix.rules` and `-rules` do not take them.
+`rules`, `ignores`, `fix.rules` and `--fix-rules` do not take them.
 
 | Retired ID | Rule | Findings are on with |
 | --- | --- | --- |

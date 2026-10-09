@@ -365,7 +365,7 @@ func TestCommandFix(t *testing.T) {
 	run := func(hook func([]Rule) []Rule, args ...string) (int, string, string) {
 		var stdout, stderr bytes.Buffer
 		cmd := &Command{Stdin: strings.NewReader(""), Stdout: &stdout, Stderr: &stderr, onRulesCreated: hook}
-		code := cmd.Main(append([]string{"jactionlint", "-no-color", "-config-file", filepath.Join(root, "jactionlint.yaml")}, args...))
+		code := cmd.Main(append([]string{"jactionlint", "--no-color", "--config-file", filepath.Join(root, "jactionlint.yaml")}, args...))
 		return code, stdout.String(), stderr.String()
 	}
 	if err := os.WriteFile(filepath.Join(root, "jactionlint.yaml"), []byte("rules:\n  local-action-checkout: off\n  unsound-ternary: off\n  workflow-run-names: off\n  missing-timeout: off\n"), 0o644); err != nil {
@@ -373,7 +373,7 @@ func TestCommandFix(t *testing.T) {
 	}
 
 	// Unfixable errors remain: exit status 1
-	code, stdout, stderr := run(hook(map[string]string{"aaa": "AAA"}, false), "-fix", path)
+	code, stdout, stderr := run(hook(map[string]string{"aaa": "AAA"}, false), "--fix", path)
 	if code != ExitStatusSuccessProblemFound || !strings.Contains(stdout, "undefined variable") || !strings.Contains(stderr, "Fixed 1 problem(s) in 1 file(s)") {
 		t.Errorf("exit status %d\nstdout: %s\nstderr: %s", code, stdout, stderr)
 	}
@@ -382,7 +382,7 @@ func TestCommandFix(t *testing.T) {
 	}
 
 	// Run again: nothing to fix. The exit status stays 1 because of the remaining error
-	code, stdout, stderr = run(hook(map[string]string{"aaa": "AAA"}, false), "-fix", path)
+	code, stdout, stderr = run(hook(map[string]string{"aaa": "AAA"}, false), "--fix", path)
 	if code != ExitStatusSuccessProblemFound || strings.Contains(stderr, "Fixed") || !strings.Contains(stdout, "undefined variable") {
 		t.Errorf("exit status %d\nstdout: %s\nstderr: %s", code, stdout, stderr)
 	}
@@ -391,7 +391,7 @@ func TestCommandFix(t *testing.T) {
 	if err := os.WriteFile(path, []byte(strings.Replace(fixWorkflow, "\n      - run: echo ${{ undefined_var }}", "", 1)), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	code, stdout, stderr = run(hook(map[string]string{"aaa": "AAA"}, false), "-fix", path)
+	code, stdout, stderr = run(hook(map[string]string{"aaa": "AAA"}, false), "--fix", path)
 	if code != ExitStatusSuccessNoProblem || stdout != "" || !strings.Contains(stderr, "Fixed 1 problem(s)") {
 		t.Errorf("exit status %d\nstdout: %s\nstderr: %s", code, stdout, stderr)
 	}
@@ -400,30 +400,30 @@ func TestCommandFix(t *testing.T) {
 	if err := os.WriteFile(path, []byte(fixWorkflow), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	code, stdout, _ = run(hook(map[string]string{"aaa": "AAA"}, false), "-fix", "-format", "sarif", path)
+	code, stdout, _ = run(hook(map[string]string{"aaa": "AAA"}, false), "--fix", "--format", "sarif", path)
 	results := sarifRunOf(t, stdout)["results"].([]any)
 	if code != ExitStatusSuccessProblemFound || len(results) != 1 || results[0].(sarifDoc)["ruleId"] != "undefined-property" {
 		t.Errorf("exit status %d, results %v", code, results)
 	}
 
-	// -fix=unsafe
+	// --fix=unsafe
 	if err := os.WriteFile(path, []byte(fixWorkflow), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	code, _, _ = run(hook(map[string]string{"aaa": "AAA"}, true), "-fix", path)
+	code, _, _ = run(hook(map[string]string{"aaa": "AAA"}, true), "--fix", path)
 	if b, _ := os.ReadFile(path); strings.Contains(string(b), "echo AAA") || code != ExitStatusSuccessProblemFound {
-		t.Errorf("an unsafe fix must not be applied by -fix: %s", b)
+		t.Errorf("an unsafe fix must not be applied by --fix: %s", b)
 	}
-	run(hook(map[string]string{"aaa": "AAA"}, true), "-fix=unsafe", path)
+	run(hook(map[string]string{"aaa": "AAA"}, true), "--fix=unsafe", path)
 	if b, _ := os.ReadFile(path); !strings.Contains(string(b), "echo AAA") {
-		t.Errorf("-fix=unsafe must apply it: %s", b)
+		t.Errorf("--fix=unsafe must apply it: %s", b)
 	}
 
 	// Only warnings remain: exit status 0
 	if err := os.WriteFile(filepath.Join(root, "jactionlint.yaml"), []byte("rules:\n  undefined-property: warn\n  missing-timeout: off\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	code, stdout, _ = run(nil, "-fix", path)
+	code, stdout, _ = run(nil, "--fix", path)
 	if code != ExitStatusSuccessNoProblem || !strings.Contains(stdout, "warning:") {
 		t.Errorf("exit status %d, stdout %s", code, stdout)
 	}
@@ -439,39 +439,40 @@ func TestCommandFix(t *testing.T) {
 	if err := os.Chdir(root); err != nil {
 		t.Fatal(err)
 	}
-	cmd.Main([]string{"jactionlint", "-no-color", "-fix"})
+	cmd.Main([]string{"jactionlint", "--no-color", "--fix"})
 	if b, _ := os.ReadFile(path); !strings.Contains(string(b), "echo AAA") {
 		t.Errorf("the project was not fixed: %s\n%s", b, stderr2.String())
 	}
 
 	// Invalid usage
-	code, _, stderr = run(nil, "-fix", "-")
+	code, _, stderr = run(nil, "--fix", "-")
 	if code != ExitStatusInvalidCommandOption || !strings.Contains(stderr, "stdin") {
-		t.Errorf("-fix with stdin: %d %q", code, stderr)
+		t.Errorf("--fix with stdin: %d %q", code, stderr)
 	}
-	code, _, stderr = run(nil, "-fix=maybe", path)
-	if code != ExitStatusInvalidCommandOption || !strings.Contains(stderr, "-fix") {
-		t.Errorf("-fix=maybe: %d %q", code, stderr)
+	code, _, stderr = run(nil, "--fix=maybe", path)
+	if code != ExitStatusInvalidCommandOption || !strings.Contains(stderr, "--fix") {
+		t.Errorf("--fix=maybe: %d %q", code, stderr)
 	}
-	code, _, _ = run(nil, "-fix=false", path)
-	if code != ExitStatusSuccessNoProblem && code != ExitStatusSuccessProblemFound {
-		t.Errorf("-fix=false: %d", code)
+	code, _, stderr = run(nil, "--fix=false", path)
+	if code != ExitStatusInvalidCommandOption || !strings.Contains(stderr, "--fix=unsafe") {
+		t.Errorf("--fix=false: %d %q", code, stderr)
 	}
 }
 
 func TestFixFlag(t *testing.T) {
 	var f fixFlag
-	if f.String() != "false" || !f.IsBoolFlag() {
+	if f.String() != "" {
 		t.Errorf("unexpected default: %q", f.String())
 	}
-	for in, want := range map[string]FixMode{"true": FixModeSafe, "safe": FixModeSafe, "UNSAFE": FixModeUnsafe, "false": 0} {
+	for in, want := range map[string]FixMode{"safe": FixModeSafe, "UNSAFE": FixModeUnsafe} {
 		if err := f.Set(in); err != nil || f.mode != want {
 			t.Errorf("Set(%q): %v %v", in, f.mode, err)
 		}
 	}
-	f.Set("false")
-	if f.String() != "false" {
-		t.Error(f.String())
+	for _, in := range []string{"true", "false", ""} {
+		if err := f.Set(in); err == nil {
+			t.Errorf("Set(%q) did not fail", in)
+		}
 	}
 	f.Set("unsafe")
 	if f.String() != "unsafe" {
@@ -529,7 +530,7 @@ func TestFixRepositoryIncludesTheDependabotConfiguration(t *testing.T) {
 		}
 	}
 	if got != wantDependabot || !strings.Contains(out.String(), "dependabot.yml") {
-		t.Errorf("the errors of dependabot.yml are missing from the result of -fix: got %d, want %d\n%s", got, wantDependabot, out.String())
+		t.Errorf("the errors of dependabot.yml are missing from the result of --fix: got %d, want %d\n%s", got, wantDependabot, out.String())
 	}
 }
 
@@ -541,7 +542,7 @@ func TestCommandFixWithoutArgumentsReportsTheDependabotConfiguration(t *testing.
 	t.Chdir(root)
 	var stdout, stderr bytes.Buffer
 	cmd := &Command{Stdin: strings.NewReader(""), Stdout: &stdout, Stderr: &stderr}
-	code := cmd.Main([]string{"jactionlint", "-no-color", "-fix"})
+	code := cmd.Main([]string{"jactionlint", "--no-color", "--fix"})
 	if code != ExitStatusSuccessProblemFound || !strings.Contains(stdout.String(), "dependabot.yml") {
 		t.Errorf("exit status %d\nstdout: %s\nstderr: %s", code, stdout.String(), stderr.String())
 	}

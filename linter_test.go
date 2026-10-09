@@ -861,11 +861,11 @@ func BenchmarkLintWorkflowFiles(b *testing.B) {
 	for _, bm := range bms {
 		sc := ""
 		if bm.shellcheck != "" {
-			sc = "-shellcheck"
+			sc = "--shellcheck"
 		}
 		fm := ""
 		if bm.format != "" {
-			fm = "-format"
+			fm = "--format"
 		}
 		b.Run(fmt.Sprintf("%s%s%s-%d", bm.what, sc, fm, len(bm.files)), func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
@@ -1057,7 +1057,7 @@ jobs:
 	if err != nil {
 		t.Fatal(err)
 	}
-	// The config from -config-file lists no labels, so the label must remain
+	// The config from --config-file lists no labels, so the label must remain
 	// unknown even though the global config lists it
 	linter.defaultConfig = withoutMissingTimeout(&Config{})
 	linter.globalConfig = &Config{}
@@ -1074,7 +1074,7 @@ jobs:
 		}
 	}
 	if !found {
-		t.Fatalf("label should remain unknown since -config-file takes priority over global config but got: %v", errs)
+		t.Fatalf("label should remain unknown since --config-file takes priority over global config but got: %v", errs)
 	}
 }
 

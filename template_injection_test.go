@@ -153,7 +153,7 @@ jobs:
 	}
 }
 
-// fixAll applies fixes like -fix does: it lints, applies and lints again until nothing changes.
+// fixAll applies fixes like --fix does: it lints, applies and lints again until nothing changes.
 func fixAll(t *testing.T, cfg *Config, src string, mode FixMode) (string, []*Error) {
 	t.Helper()
 	for i := 0; i < 10; i++ {

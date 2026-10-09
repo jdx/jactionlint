@@ -199,7 +199,7 @@ jobs:
 		t.Errorf("want 3 unused ignores but got %d: %v", n, got)
 	}
 
-	// An ignore of -ignore or "paths" suppresses an error first but the inline pattern still counts as used
+	// An ignore of --ignore or "paths" suppresses an error first but the inline pattern still counts as used
 	l, _ = NewLinter(io.Discard, &LinterOptions{IgnorePatterns: []string{"template-injection"}})
 	l.defaultConfig = mustParseConfig(t, "profile: pedantic\nrules:\n  missing-permissions: off\n  missing-timeout: off\n  require-shell: off\n")
 	got, _ = l.Lint("test.yaml", []byte(src), nil)
@@ -234,7 +234,7 @@ func runCommand(t *testing.T, args ...string) (int, string, string) {
 	t.Helper()
 	var stdout, stderr bytes.Buffer
 	cmd := &Command{Stdin: strings.NewReader(""), Stdout: &stdout, Stderr: &stderr}
-	code := cmd.Main(append([]string{"jactionlint", "-no-color"}, args...))
+	code := cmd.Main(append([]string{"jactionlint", "--no-color"}, args...))
 	return code, stdout.String(), stderr.String()
 }
 
@@ -263,18 +263,18 @@ func TestCommandExitStatusBySeverity(t *testing.T) {
 		want int
 		out  string // substring of stdout. empty means no output
 	}{
-		{"errors", []string{"-config-file", errorCfg}, 1, "potentially untrusted"},
-		{"warnings do not fail", []string{"-config-file", warnCfg}, 0, "potentially untrusted"},
-		{"warnings fail with -strict-exit", []string{"-strict-exit", "-config-file", warnCfg}, 1, "potentially untrusted"},
-		{"infos do not fail", []string{"-config-file", infoCfg}, 0, "potentially untrusted"},
-		{"infos fail with -strict-exit", []string{"-strict-exit", "-config-file", infoCfg}, 1, "potentially untrusted"},
-		{"one error among warnings", []string{"-config-file", mixedCfg}, 1, "undefined variable"},
-		{"min-severity hides warnings", []string{"-min-severity", "error", "-config-file", warnCfg}, 0, ""},
-		{"min-severity error with -strict-exit", []string{"-min-severity", "error", "-strict-exit", "-config-file", warnCfg}, 0, ""},
-		{"min-severity warn shows warnings", []string{"-min-severity", "warn", "-config-file", warnCfg}, 0, "potentially untrusted"},
-		{"min-severity warn hides infos", []string{"-min-severity", "warn", "-strict-exit", "-config-file", infoCfg}, 0, ""},
-		{"rules which are off", []string{"-strict-exit", "-config-file", offCfg}, 0, ""},
-		{"ignore by ID", []string{"-ignore", "template-injection", "-ignore", "undefined-property", "-config-file", errorCfg}, 0, ""},
+		{"errors", []string{"--config-file", errorCfg}, 1, "potentially untrusted"},
+		{"warnings do not fail", []string{"--config-file", warnCfg}, 0, "potentially untrusted"},
+		{"warnings fail with --strict-exit", []string{"--strict-exit", "--config-file", warnCfg}, 1, "potentially untrusted"},
+		{"infos do not fail", []string{"--config-file", infoCfg}, 0, "potentially untrusted"},
+		{"infos fail with --strict-exit", []string{"--strict-exit", "--config-file", infoCfg}, 1, "potentially untrusted"},
+		{"one error among warnings", []string{"--config-file", mixedCfg}, 1, "undefined variable"},
+		{"min-severity hides warnings", []string{"--min-severity", "error", "--config-file", warnCfg}, 0, ""},
+		{"min-severity error with --strict-exit", []string{"--min-severity", "error", "--strict-exit", "--config-file", warnCfg}, 0, ""},
+		{"min-severity warn shows warnings", []string{"--min-severity", "warn", "--config-file", warnCfg}, 0, "potentially untrusted"},
+		{"min-severity warn hides infos", []string{"--min-severity", "warn", "--strict-exit", "--config-file", infoCfg}, 0, ""},
+		{"rules which are off", []string{"--strict-exit", "--config-file", offCfg}, 0, ""},
+		{"ignore by ID", []string{"--ignore", "template-injection", "--ignore", "undefined-property", "--config-file", errorCfg}, 0, ""},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -292,9 +292,9 @@ func TestCommandExitStatusBySeverity(t *testing.T) {
 	}
 
 	for _, v := range []string{"fatal", "off", ""} {
-		code, _, stderr := runCommand(t, "-min-severity", v, wf)
-		if code != ExitStatusInvalidCommandOption || !strings.Contains(stderr, "-min-severity") {
-			t.Errorf("-min-severity %q: exit status %d, stderr %q", v, code, stderr)
+		code, _, stderr := runCommand(t, "--min-severity", v, wf)
+		if code != ExitStatusInvalidCommandOption || !strings.Contains(stderr, "--min-severity") {
+			t.Errorf("--min-severity %q: exit status %d, stderr %q", v, code, stderr)
 		}
 	}
 }

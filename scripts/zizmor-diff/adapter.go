@@ -10,12 +10,12 @@ import (
 // its JSON and adds SARIF, so retargeting the harness means editing parseJactionlint only.
 
 // jactionlintArgs are the flags which make jactionlint print machine-readable output.
-var jactionlintArgs = []string{"-format", "{{json .}}"}
+var jactionlintArgs = []string{"--format", "{{json .}}"}
 
 // zizmorArgs are the flags after the zizmor command. The directory to audit is appended.
 var zizmorArgs = []string{"--offline", "--persona", "pedantic", "--format", "sarif"}
 
-// parseJactionlint reads the output of `jactionlint -format '{{json .}}'`. The v1 output has only a coarse
+// parseJactionlint reads the output of `jactionlint --format '{{json .}}'`. The v1 output has only a coarse
 // "kind". When a stable "id" is present (v2) it wins.
 func parseJactionlint(repo, repoDir string, out []byte) ([]Finding, error) {
 	if len(strings.TrimSpace(string(out))) == 0 {

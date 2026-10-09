@@ -56,7 +56,7 @@ func runOnlineCommand(t *testing.T, args ...string) (status int, stdout, stderr 
 	t.Helper()
 	var out, errOut bytes.Buffer
 	cmd := &Command{Stdin: strings.NewReader(""), Stdout: &out, Stderr: &errOut}
-	status = cmd.Main(append([]string{"jactionlint", "-no-color", "-shellcheck=", "-pyflakes="}, args...))
+	status = cmd.Main(append([]string{"jactionlint", "--no-color", "--shellcheck=", "--pyflakes="}, args...))
 	return status, out.String(), errOut.String()
 }
 
@@ -79,12 +79,12 @@ func TestCommandNeverUsesTheNetworkWithoutOnline(t *testing.T) {
 	githubForActionsCheckout(f, true)
 	setOnlineEnv(t, f, "tok")
 	_, wf := onlineProject(t, workflowWith("uses: actions/checkout@v4", "uses: actions/checkout@"+testSHAv422+" # v3"), "profile: pedantic\n")
-	status, stdout, stderr := runOnlineCommand(t, "-rule-ids", wf)
+	status, stdout, stderr := runOnlineCommand(t, "--rule-ids", wf)
 	if n := f.total(); n != 0 {
-		t.Fatalf("%d requests were made without -online", n)
+		t.Fatalf("%d requests were made without --online", n)
 	}
 	if strings.Contains(stdout+stderr, "archived") {
-		t.Errorf("online findings without -online:\n%s%s", stdout, stderr)
+		t.Errorf("online findings without --online:\n%s%s", stdout, stderr)
 	}
 	_ = status
 }
@@ -95,7 +95,7 @@ func TestCommandOnlineFindsAndCaches(t *testing.T) {
 	setOnlineEnv(t, f, "tok")
 	_, wf := onlineProject(t, workflowWith("uses: actions/checkout@"+testSHAv422+" # v3"), "")
 
-	status, stdout, stderr := runOnlineCommand(t, "-online", "-rule-ids", wf)
+	status, stdout, stderr := runOnlineCommand(t, "--online", "--rule-ids", wf)
 	if status != ExitStatusSuccessProblemFound && status != ExitStatusSuccessNoProblem {
 		t.Fatalf("status %d\n%s%s", status, stdout, stderr)
 	}
@@ -109,19 +109,19 @@ func TestCommandOnlineFindsAndCaches(t *testing.T) {
 	}
 	first := f.total()
 	if first == 0 {
-		t.Fatal("-online made no request")
+		t.Fatal("--online made no request")
 	}
 
 	// A second run reads the cache (the default TTL is one hour)
-	runOnlineCommand(t, "-online", "-rule-ids", wf)
+	runOnlineCommand(t, "--online", "--rule-ids", wf)
 	if f.total() != first {
 		t.Errorf("a second run made %d requests", f.total()-first)
 	}
 
 	// With a TTL of zero everything is revalidated, and nothing changed (304)
-	_, stdout2, _ := runOnlineCommand(t, "-online", "-online-cache-ttl=0", "-rule-ids", wf)
+	_, stdout2, _ := runOnlineCommand(t, "--online", "--online-cache-ttl=0", "--rule-ids", wf)
 	if f.total() <= first {
-		t.Error("-online-cache-ttl=0 should revalidate")
+		t.Error("--online-cache-ttl=0 should revalidate")
 	}
 	if !strings.Contains(stdout2, "[archived-uses]") {
 		t.Errorf("the findings must be the same:\n%s", stdout2)
@@ -149,7 +149,7 @@ func TestCommandOnlineRateLimitedWarnsOnce(t *testing.T) {
 		steps = append(steps, fmt.Sprintf("uses: actions/checkout@%040x", i+1))
 	}
 	_, wf := onlineProject(t, workflowWith(steps...), "")
-	status, stdout, stderr := runOnlineCommand(t, "-online", wf)
+	status, stdout, stderr := runOnlineCommand(t, "--online", wf)
 	if status != ExitStatusSuccessNoProblem {
 		t.Errorf("a rate limit is not a failure of the run (status %d)\n%s%s", status, stdout, stderr)
 	}
@@ -166,7 +166,7 @@ func TestCommandOnlineUnauthenticatedSaysSo(t *testing.T) {
 	githubForActionsCheckout(f, false)
 	setOnlineEnv(t, f, "")
 	_, wf := onlineProject(t, workflowWith("uses: actions/checkout@v4"), "")
-	_, _, stderr := runOnlineCommand(t, "-online", wf)
+	_, _, stderr := runOnlineCommand(t, "--online", wf)
 	if n := strings.Count(stderr, "unauthenticated"); n != 1 {
 		t.Errorf("want one notice about the missing token:\n%s", stderr)
 	}
@@ -182,9 +182,9 @@ func TestCommandOnlineWarningsGoToStructuredOutput(t *testing.T) {
 	githubForActionsCheckout(f, false)
 	setOnlineEnv(t, f, "")
 	_, wf := onlineProject(t, workflowWith("uses: actions/checkout@v4"), "")
-	_, stdout, stderr := runOnlineCommand(t, "-online", "-format", "sarif", wf)
+	_, stdout, stderr := runOnlineCommand(t, "--online", "--format", "sarif", wf)
 	if stderr != "" {
-		t.Errorf("hk parses stdout and stderr together, so stderr must stay empty with -format sarif:\n%s", stderr)
+		t.Errorf("hk parses stdout and stderr together, so stderr must stay empty with --format sarif:\n%s", stderr)
 	}
 	if !strings.Contains(stdout, "unauthenticated") {
 		t.Errorf("the notice should be in the SARIF notifications:\n%s", stdout)
@@ -192,7 +192,7 @@ func TestCommandOnlineWarningsGoToStructuredOutput(t *testing.T) {
 }
 
 func TestCommandInvalidOnlineFlags(t *testing.T) {
-	status, _, stderr := runOnlineCommand(t, "-online-cache-ttl=soon")
+	status, _, stderr := runOnlineCommand(t, "--online-cache-ttl=soon")
 	if status != ExitStatusInvalidCommandOption {
 		t.Errorf("status %d\n%s", status, stderr)
 	}

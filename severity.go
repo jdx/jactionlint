@@ -16,7 +16,7 @@ const (
 	SeverityOff Severity = iota
 	// SeverityInfo is for findings which are worth knowing but never fail a run.
 	SeverityInfo
-	// SeverityWarning is for findings which should be fixed but do not fail a run unless -strict-exit
+	// SeverityWarning is for findings which should be fixed but do not fail a run unless --strict-exit
 	// is given.
 	SeverityWarning
 	// SeverityError is for findings which fail a run.

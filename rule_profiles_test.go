@@ -12,7 +12,7 @@ import (
 var updateProfiles = flag.Bool("update-profiles", false, "rewrite testdata/profiles.txt from the rule registry")
 
 // profileSnapshotLine is the line of testdata/profiles.txt for a rule: "id profile group level". The profile
-// is "online" for the rules which only run with -online and "configured" for the ones no profile enables.
+// is "online" for the rules which only run with --online and "configured" for the ones no profile enables.
 func profileSnapshotLine(r RuleInfo) string {
 	profile := string(r.Profile)
 	switch {
@@ -73,11 +73,11 @@ func TestRuleProfilesInvariants(t *testing.T) {
 		"template-injection":              "actionlint reports the untrusted inputs in a script too",
 		"hardcoded-container-credentials": "actionlint has the check (credentials)",
 		"expired-ignore":                  "it reports the config's own ignores that expired, which the user asked for with until",
-		"unused-baseline-entry":           "it only runs with -baseline-check, which the user asked for",
+		"unused-baseline-entry":           "it only runs with --baseline-check, which the user asked for",
 	}
 	// Rules of the correctness and default profiles that are not errors
 	notError := map[string]string{
-		"unused-baseline-entry": "an info finding by design; only -baseline-check produces it",
+		"unused-baseline-entry": "an info finding by design; only --baseline-check produces it",
 	}
 	for _, r := range Rules() {
 		if r.Online || r.Profile == "" {

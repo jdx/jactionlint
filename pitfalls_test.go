@@ -331,7 +331,7 @@ func TestPitfallTokenNeverInTheLogs(t *testing.T) {
 	githubFailingFor(f, "corp/private", 403)
 	setOnlineEnv(t, f, token)
 	_, wf := onlineProject(t, workflowWith("uses: corp/private@v1", "uses: actions/checkout@v4"), "")
-	_, stdout, stderr := runOnlineCommand(t, "-online", "-debug", "-verbose", wf)
+	_, stdout, stderr := runOnlineCommand(t, "--online", "--debug", "--verbose", wf)
 	for name, text := range map[string]string{"stdout": stdout, "stderr": stderr} {
 		if strings.Contains(text, token) {
 			t.Errorf("the token is in %s", name)

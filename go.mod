@@ -12,6 +12,7 @@ require (
 	github.com/mattn/go-runewidth v0.0.21
 	github.com/mattn/go-shellwords v1.0.12
 	github.com/robfig/cron/v3 v3.0.1
+	github.com/spf13/pflag v1.0.10
 	github.com/yuin/goldmark v1.7.17
 	go.yaml.in/yaml/v4 v4.0.0-rc.6
 	golang.org/x/net v0.60.0

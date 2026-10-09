@@ -43,13 +43,13 @@ func TestProfileFlagOverridesConfig(t *testing.T) {
 	if countID(ids, "unpinned-uses") != 0 || countID(ids, "undefined-property") != 1 {
 		t.Errorf("the correctness profile of the config must not report the unpinned action: %v", ids)
 	}
-	_, ids, _ = profileCmd(t, "-profile", "default")
+	_, ids, _ = profileCmd(t, "--profile", "default")
 	if countID(ids, "unpinned-uses") != 1 || countID(ids, "undefined-property") != 1 {
-		t.Errorf("-profile default must win over the config: %v", ids)
+		t.Errorf("--profile default must win over the config: %v", ids)
 	}
-	_, ids, _ = profileCmd(t, "-profile=pedantic")
+	_, ids, _ = profileCmd(t, "--profile=pedantic")
 	if countID(ids, "unpinned-uses") != 1 {
-		t.Errorf("-profile pedantic: %v", ids)
+		t.Errorf("--profile pedantic: %v", ids)
 	}
 }
 
@@ -61,18 +61,18 @@ func TestProfileFlagWithoutConfig(t *testing.T) {
 	if countID(ids, "unpinned-uses") != 1 {
 		t.Errorf("the default profile must report the unpinned action: %v", ids)
 	}
-	_, ids, _ = profileCmd(t, "-profile", "correctness")
+	_, ids, _ = profileCmd(t, "--profile", "correctness")
 	if countID(ids, "unpinned-uses") != 0 || countID(ids, "undefined-property") != 1 {
-		t.Errorf("-profile correctness: %v", ids)
+		t.Errorf("--profile correctness: %v", ids)
 	}
 }
 
 func TestProfileFlagInvalid(t *testing.T) {
 	baselineProject(t, profileWorkflow, "")
 	for _, name := range []string{"strict", "all", "paranoid"} {
-		status, _, stderr := profileCmd(t, "-profile", name)
-		if status != ExitStatusInvalidCommandOption || !strings.Contains(stderr, `invalid value "`+name+`" for -profile`) || !strings.Contains(stderr, `"correctness", "default" and "pedantic"`) {
-			t.Errorf("-profile %s: %d %q", name, status, stderr)
+		status, _, stderr := profileCmd(t, "--profile", name)
+		if status != ExitStatusInvalidCommandOption || !strings.Contains(stderr, `invalid value "`+name+`" for --profile`) || !strings.Contains(stderr, `"correctness", "default" and "pedantic"`) {
+			t.Errorf("--profile %s: %d %q", name, status, stderr)
 		}
 	}
 }
@@ -148,10 +148,10 @@ func TestActionlintConfigNotice(t *testing.T) {
 		t.Errorf("want one notice naming the file and the profile for actionlint: %q", stderr)
 	}
 
-	// -profile makes the notice true to its word
-	_, ids, _ = profileCmd(t, "-profile", "correctness")
+	// --profile makes the notice true to its word
+	_, ids, _ = profileCmd(t, "--profile", "correctness")
 	if countID(ids, "unpinned-uses") != 0 {
-		t.Errorf("-profile correctness: %v", ids)
+		t.Errorf("--profile correctness: %v", ids)
 	}
 
 	// A file that chooses a profile needs no notice
@@ -170,7 +170,7 @@ func TestActionlintConfigNotice(t *testing.T) {
 
 func TestSARIFRulesHaveTheirProfile(t *testing.T) {
 	baselineProject(t, profileWorkflow, "")
-	status, out, _ := baselineCmd(t, "-profile", "default", "-format", "sarif")
+	status, out, _ := baselineCmd(t, "--profile", "default", "--format", "sarif")
 	if status != ExitStatusSuccessProblemFound {
 		t.Fatalf("status %d", status)
 	}
@@ -218,7 +218,7 @@ jobs:
 
 func countTemplateInjection(t *testing.T, args ...string) (tiers map[string]int, stderr string) {
 	t.Helper()
-	status, out, errOut := baselineCmd(t, append([]string{"-format", "json"}, args...)...)
+	status, out, errOut := baselineCmd(t, append([]string{"--format", "json"}, args...)...)
 	if status == ExitStatusFailure {
 		t.Fatalf("status %d: %s", status, errOut)
 	}
@@ -254,7 +254,7 @@ func TestPedanticOptionOfTheMergedAudits(t *testing.T) {
 	if tiers["direct"] != 1 || tiers["expansion"] != 0 || tiers["trusted"] != 0 || tiers["shell"] != 0 {
 		t.Errorf("the default profile reports the untrusted input only: %v", tiers)
 	}
-	tiers, _ = countTemplateInjection(t, "-profile", "pedantic")
+	tiers, _ = countTemplateInjection(t, "--profile", "pedantic")
 	if tiers["direct"] != 1 || tiers["expansion"] != 1 || tiers["trusted"] != 1 || tiers["shell"] != 1 {
 		t.Errorf("the pedantic profile reports every tier: %v", tiers)
 	}
@@ -275,22 +275,22 @@ func TestPedanticOptionOfTheMergedAudits(t *testing.T) {
 func TestRetiredRuleIDsInIgnores(t *testing.T) {
 	baselineProject(t, retiredIDsWorkflow, "profile: pedantic\n")
 
-	// -ignore with a retired ID drops only the findings it had, and warns once
-	tiers, stderr := countTemplateInjection(t, "-ignore", "template-injection-expansion")
+	// --ignore with a retired ID drops only the findings it had, and warns once
+	tiers, stderr := countTemplateInjection(t, "--ignore", "template-injection-expansion")
 	if tiers["direct"] != 1 || tiers["expansion"] != 0 || tiers["trusted"] != 1 || tiers["shell"] != 1 {
-		t.Errorf("-ignore=template-injection-expansion: %v", tiers)
+		t.Errorf("--ignore=template-injection-expansion: %v", tiers)
 	}
 	if strings.Count(stderr, `the rule ID "template-injection-expansion" was merged into "template-injection"`) != 1 {
 		t.Errorf("want one deprecation warning: %q", stderr)
 	}
-	tiers, _ = countTemplateInjection(t, "-ignore", "template-injection-trusted", "-ignore", "misfeature-custom-shell")
+	tiers, _ = countTemplateInjection(t, "--ignore", "template-injection-trusted", "--ignore", "misfeature-custom-shell")
 	if tiers["direct"] != 1 || tiers["expansion"] != 1 || tiers["trusted"] != 0 || tiers["shell"] != 0 {
-		t.Errorf("-ignore of two retired IDs: %v", tiers)
+		t.Errorf("--ignore of two retired IDs: %v", tiers)
 	}
 	// The new ID ignores the whole audit
-	tiers, stderr = countTemplateInjection(t, "-ignore", "template-injection")
+	tiers, stderr = countTemplateInjection(t, "--ignore", "template-injection")
 	if tiers["direct"] != 0 || tiers["expansion"] != 0 || tiers["trusted"] != 0 || strings.Contains(stderr, "warning") {
-		t.Errorf("-ignore=template-injection: %v %q", tiers, stderr)
+		t.Errorf("--ignore=template-injection: %v %q", tiers, stderr)
 	}
 
 	// "paths" ignores warn when the config is read

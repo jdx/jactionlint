@@ -3,9 +3,9 @@ jactionlint(1) -- static checker for GitHub Actions workflow files
 
 ## SYNOPSIS
 
-`jactionlint` [<flags>] <br>
-`jactionlint` [<flags>] <file>...<br>
-`jactionlint` [<flags>] -<br>
+`jactionlint` [<options>] <br>
+`jactionlint` [<options>] <file>...<br>
+`jactionlint` [<options>] -<br>
 
 
 ## DESCRIPTION
@@ -28,7 +28,7 @@ Features:
 The checks are organized in three profiles, each including the one before it: **correctness** (what
 actionlint checks plus the bug detectors of jactionlint), **default** (adds the security posture and
 policy rules worth failing a build on; used when nothing is configured) and **pedantic** (adds the
-noisy and opinionated rules). Choose one with **-profile** or with `profile:` in the configuration
+noisy and opinionated rules). Choose one with **--profile** or with `profile:` in the configuration
 file. Every finding has a stable rule ID such as `unpinned-uses`.
 
 
@@ -51,164 +51,176 @@ argument. It reads stdin and checks it as workflow file:
 
     $ jactionlint -
 
-To serialize errors, use **-format** option. **json**, **jsonl**, **sarif**, **gcc** and **github**
+To serialize errors, use **--format** option. **json**, **jsonl**, **sarif**, **gcc** and **github**
 are available. A custom Go template can be given too:
 
-    $ jactionlint -format sarif
-    $ jactionlint -format '{{json .}}'
+    $ jactionlint --format sarif
+    $ jactionlint --format '{{json .}}'
 
 
-## FLAGS
+## OPTIONS
 
-  * `-color`:
-    Always enable colorful output. This is useful to force colorful outputs
+jactionlint uses POSIX/GNU command line options. A long option is `--name` and takes its value as
+`--name=VALUE` or `--name VALUE`. A short option is one letter, can be bundled with others and takes its
+value attached or separate (`-vfjson`, `-cfile`, `-c file`). `--` ends the options and a lone `-` means
+stdin. An option whose value is optional (`--color`, `--fix`, `--online`, `--baseline`,
+`--baseline-write`) takes it only as `--name=VALUE`. Abbreviations of long options are not accepted. The
+single-dash long options of v1 are removed; the error names the replacement.
 
-  * `-config-file` <PATH>:
+  * `--color`[=<WHEN>]:
+    Colorize the output: `always`, `never` or `auto` (default). A bare `--color` means `always`, which is
+    useful to force colorful outputs
+
+  * `-c`, `--config-file` <PATH>:
     File path to config file
 
-  * `-debug`:
+  * `--debug`:
     Enable debug output (for development)
 
-  * `-baseline`, `-baseline=`<FILE>, `-baseline=false`:
+  * `--baseline`[=<FILE>], `--no-baseline`:
     Hide the findings recorded in the baseline file (`.github/jactionlint-baseline.json` in the
-    repository by default). `-baseline=false` ignores a baseline which the configuration enables
+    repository by default). `--no-baseline` ignores a baseline which the configuration enables
     (`baseline: auto`). The exit status counts only the findings which are not in the baseline.
 
-  * `-baseline-check`:
+  * `--baseline-check`:
     Report the baseline entries which match no finding any more as `unused-baseline-entry` (level
-    `info`). Implies `-baseline`.
+    `info`). Implies `--baseline`.
 
-  * `-baseline-write`, `-baseline-write=`<FILE>:
+  * `--baseline-write`[=<FILE>]:
     Record the current findings as the baseline and exit with 0. A plain run does not read the
-    baseline until the configuration says `baseline: auto` or `-baseline` is given; the command
+    baseline until the configuration says `baseline: auto` or `--baseline` is given; the command
     prints the line to put in the configuration file. With file arguments only the
     entries of those files are refreshed. The file has no line numbers, so writing it again
     without a change in the findings gives the same bytes. Write it in the environment of the CI.
 
-  * `-diff`:
-    Print the changes `-fix` would make as a unified diff on stdout and do not write the files. Implies
-    `-fix`. The errors which remain are printed on stderr. Exits with 1 when there is a diff or an error
+  * `--diff`:
+    Print the changes `--fix` would make as a unified diff on stdout and do not write the files. Implies
+    `--fix`. The errors which remain are printed on stderr. Exits with 1 when there is a diff or an error
     remains.
 
-  * `-fix`, `-fix=unsafe`:
-    Apply the automatic fixes to the files and report what remains. `-fix=unsafe` also applies the
+  * `--fix`[=`unsafe`]:
+    Apply the automatic fixes to the files and report what remains. `--fix=unsafe` also applies the
     fixes which may change the behavior of the workflow. Every pass is checked: the result must be valid
     YAML which differs from the original only where the edits are, or the fix is refused and the exit
     status is 3. Exits with 1 when an error remains.
 
-  * `-sarif-hide-baselined`:
-    Leave the findings accepted by the baseline out of `-format sarif`. By default they are in the
+  * `--sarif-hide-baselined`:
+    Leave the findings accepted by the baseline out of `--format sarif`. By default they are in the
     log as results with a suppression of the kind `external`.
 
-  * `-format` <FORMAT>:
+  * `-f`, `--format` <FORMAT>:
     Output format: `text` (default), `oneline`, `json`, `jsonl`, `sarif`, `gcc`, `github` or `summary`. A custom
     template in Go template syntax which has `{{ }}` is also accepted. See the usage documentation
     for more details.
 
-  * `-ignore` <PATTERN>:
+  * `-i`, `--ignore` <PATTERN>:
     Rule ID (e.g. `unpinned-uses`) or regular expression matching to error messages you want to
-    ignore. This flag is repeatable. For example, `-ignore A -ignore B` ignores errors whose message
+    ignore. This option is repeatable. For example, `--ignore A --ignore B` ignores errors whose message
     includes "A" OR "B". To accept a finding in one place, an ignore comment (`# jactionlint
     ignore=<PATTERN>` above a line or at its end) or an entry of `ignores:` in the config file can be
     used. The latter matches by rule, file, job, step and `uses:` and survives tools such as
     Renovate rewriting the line. It can expire (`expires: YYYY-MM-DD`).
 
-  * `-init-config`:
+  * `--init-config`:
     Generate default config file at `.github/jactionlint.yaml` in current project
 
-  * `-migrate-config`:
+  * `--migrate-config`:
     Rewrite the deprecated keys of the config file (`.github/jactionlint.yaml` or the file of
-    `-config-file`) into the `rules` mapping
+    `--config-file`) into the `rules` mapping
 
-  * `-migrate-ignores`:
+  * `--migrate-ignores`:
     Rewrite the trailing `# zizmor: ignore[...]` comments of the files (the workflows of the project
     by default) into `# jactionlint ignore=...` comments. zizmor comments are also honored as they are
 
-  * `-min-severity` <LEVEL>:
+  * `--min-severity` <LEVEL>:
     Hide the errors less severe than this level: `info` (default), `warn` or `error`
 
-  * `-profile` <NAME>:
+  * `-p`, `--profile` <NAME>:
     Rule profile: `correctness` (what actionlint checks plus the bug detectors of jactionlint),
     `default` (adds the security posture and policy rules) or `pedantic` (adds the noisy and
     opinionated rules). Each profile includes the one before it. It overrides `profile` of the
     config file. `strict` and `all`, the former names, are accepted in the config file only and
     mean `pedantic`
 
-  * `-no-hints`:
+  * `--no-hints`:
     Do not print the line at the end of a text run with many findings (20 or more) that says how to
-    count them (`-format summary`), adopt them gradually (`-baseline-write`) and get the checks of
-    actionlint only (`-profile correctness`). It is printed to stderr only when stderr is a terminal
+    count them (`--format summary`), adopt them gradually (`--baseline-write`) and get the checks of
+    actionlint only (`--profile correctness`). It is printed to stderr only when stderr is a terminal
     or `CI` or `GITHUB_ACTIONS` is set, and never with another format. `JACTIONLINT_NO_HINTS=1`
     does the same.
 
-  * `-no-color`:
-    Disable colorful output
+  * `--no-color`:
+    Disable colorful output. The same as `--color=never`
 
-  * `-online`[=<MODE>]:
+  * `--no-online`:
+    Never use the network, even when the configuration turns the online checks on (`online: true`).
+    Cannot be combined with `--online`.
+
+  * `--online`[=<MODE>]:
     Enable the checks which query the GitHub API (`impostor-commit`, `known-vulnerable-actions`,
-    `ref-confusion`, `stale-action-refs`, `archived-uses` and `ref-version-mismatch`), and let `-fix`
-    pin tags to commit SHAs. `-online=cache` uses only the answers in the disk cache and never the
-    network. `-online=strict` exits with status 3 when a lookup had to be skipped (`cache,strict`
+    `ref-confusion`, `stale-action-refs`, `archived-uses` and `ref-version-mismatch`), and let `--fix`
+    pin tags to commit SHAs. `--online=cache` uses only the answers in the disk cache and never the
+    network. `--online=strict` exits with status 3 when a lookup had to be skipped (`cache,strict`
     does both). A lookup which fails (404, 403, server error, timeout, rate limit) is skipped with
     one warning per kind of failure and does not change the exit status. The token is read from
-    `-online-token-env`, `-online-token-file`, `GITHUB_TOKEN`, `GH_TOKEN` or `gh auth token`, and
-    is sent only to the API host. Nothing uses the network without this flag.
+    `--online-token-env`, `--online-token-file`, `GITHUB_TOKEN`, `GH_TOKEN` or `gh auth token`, and
+    is sent only to the API host. Nothing uses the network without this option.
 
-  * `-online-allow` <PATTERN>, `-online-deny` <PATTERN>:
+  * `--online-allow` <PATTERN>, `--online-deny` <PATTERN>:
     Look up only (allow), or never look up (deny), the repositories matching `owner/repo`, where `*`
-    is a wildcard, for example `-online-deny 'mycorp/*'` for private actions. Repeatable. Deny wins.
+    is a wildcard, for example `--online-deny 'mycorp/*'` for private actions. Repeatable. Deny wins.
 
-  * `-online-api-url` <URL>:
+  * `--online-api-url` <URL>:
     The REST API of a GitHub Enterprise Server such as `https://ghe.example.com/api/v3`. The default
     is `$GITHUB_API_URL`, else derived from `$GITHUB_SERVER_URL` or `$GH_HOST`, else `api.github.com`
 
-  * `-online-token-env` <NAME>, `-online-token-file` <PATH>:
+  * `--online-token-env` <NAME>, `--online-token-file` <PATH>:
     The environment variable and the file which hold the GitHub token, read before `GITHUB_TOKEN`
     and `GH_TOKEN`
 
-  * `-online-max-wait` <DURATION>:
+  * `--online-max-wait` <DURATION>:
     The longest to wait for a GitHub rate limit to reset (default 30s). A limit which resets later
     skips the lookups. 0 never waits
 
-  * `-online-cache-ttl` <DURATION>:
-    How long `-online` uses an answer of the GitHub API from the cache in
+  * `--online-cache-ttl` <DURATION>:
+    How long `--online` uses an answer of the GitHub API from the cache in
     `$XDG_CACHE_HOME/jactionlint` without asking GitHub whether it changed (default 1h0m0s). 0 checks
     every answer
 
-  * `-oneline`:
+  * `--oneline`:
     Use one line per one error. Useful for reading error messages from programs
 
-  * `-rule-ids`:
+  * `--rule-ids`:
     Show the stable rule ID such as `unpinned-uses` at the end of each error in the text format
     instead of the kind
 
-  * `-rules` <ID>[,<ID>...]:
-    With `-fix` or `-diff`, apply only the fixes of these rule IDs. The `fix.rules` key of the
+  * `--fix-rules` <ID>[,<ID>...]:
+    With `--fix` or `--diff`, apply only the fixes of these rule IDs. The `fix.rules` key of the
     configuration file does the same.
 
-  * `-pyflakes` <EXECUTABLE>:
+  * `--pyflakes` <EXECUTABLE>:
     Command name or file path of "pyflakes" external command. If empty, pyflakes integration will be
     disabled (default "pyflakes")
 
-  * `-shellcheck` <EXECUTABLE>:
+  * `--shellcheck` <EXECUTABLE>:
     Command name or file path of "shellcheck" external command. If empty, shellcheck integration will
     be disabled (default "shellcheck")
 
-  * `-strict-exit`:
+  * `--strict-exit`:
     Exit with status 1 also when only errors of `warn` or `info` level are found. By default only
     errors of `error` level make the exit status 1
 
-  * `-verbose`:
+  * `-v`, `--verbose`:
     Enable verbose output
 
-  * `-stdin-filename` <NAME>:
+  * `--stdin-filename` <NAME>:
     File name when reading input from stdin (default "&lt;stdin&gt;")
 
-  * `-version`:
+  * `-V`, `--version`:
     Show version and how this binary was installed
 
-  * `-help`, `-h`:
-    Show help
+  * `-h`, `--help`:
+    Show the help and exit with status 0
 
 
 ## DOCUMENTS
@@ -252,7 +264,7 @@ level of each rule, runner labels, ignores, the baseline and the online options.
 
 https://github.com/jdx/jactionlint/blob/main/docs/actionlint.md
 
-How to get the checks of actionlint with `-profile correctness`.
+How to get the checks of actionlint with `--profile correctness`.
 
 ### Migrating to v2
 
@@ -299,7 +311,7 @@ jobs:
         run: bash <(curl https://raw.githubusercontent.com/jdx/jactionlint/main/scripts/download-jactionlint.bash)
         shell: bash
       - name: Check workflow files
-        run: ${{ steps.get_jactionlint.outputs.executable }} -color
+        run: ${{ steps.get_jactionlint.outputs.executable }} --color
         shell: bash
 ```
 
@@ -309,7 +321,7 @@ or simply run
 - name: Check workflow files
   run: |
     bash <(curl https://raw.githubusercontent.com/jdx/jactionlint/main/scripts/download-jactionlint.bash)
-    ./jactionlint -color
+    ./jactionlint --color
   shell: bash
 ```
 
@@ -320,9 +332,9 @@ or simply run
 
   - **0**: It ran successfully and no problem was found.
   - **1**: It ran successfully and some problem was found. Only errors of `error` level count unless
-    `-strict-exit` is given.
-  - **2**: It failed due to an invalid command line option or flag value (**-profile**, **-format**,
-    **-ignore**, ...).
+    `--strict-exit` is given.
+  - **2**: It failed due to an invalid command line option or option value (**--profile**, **--format**,
+    **--ignore**, ...).
   - **3**: It failed due to some fatal error such as no project or an unreadable file or config.
 
 

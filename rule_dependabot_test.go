@@ -331,7 +331,7 @@ func TestFixRepositoryFixesDependabot(t *testing.T) {
 	}
 }
 
-// -fix without files fixes the Dependabot configuration and still reports what it cannot fix, a syntax error
+// --fix without files fixes the Dependabot configuration and still reports what it cannot fix, a syntax error
 // included, so that the exit status stays 1.
 func TestFixRepositoryKeepsSyntaxErrorsOfDependabot(t *testing.T) {
 	src := "version: 2\nupdates:\n  - package-ecosystem: npm\n    directory: /\n    schedule:\n      interval: weekly\n    unknown-key: 1\n"
@@ -339,7 +339,7 @@ func TestFixRepositoryKeepsSyntaxErrorsOfDependabot(t *testing.T) {
 		"rules:\n  dependabot-cooldown:\n    default-days: 7\n")
 	t.Chdir(root)
 	var stdout, stderr bytes.Buffer
-	code := (&Command{Stdin: strings.NewReader(""), Stdout: &stdout, Stderr: &stderr}).Main([]string{"jactionlint", "-no-color", "-fix"})
+	code := (&Command{Stdin: strings.NewReader(""), Stdout: &stdout, Stderr: &stderr}).Main([]string{"jactionlint", "--no-color", "--fix"})
 	if code != ExitStatusSuccessProblemFound || !strings.Contains(stdout.String(), "unknown-key") {
 		t.Errorf("exit status %d\nstdout: %s\nstderr: %s", code, stdout.String(), stderr.String())
 	}

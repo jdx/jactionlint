@@ -16,7 +16,9 @@ a workflow file parser built on top of `yaml/go-yaml` library, expression `${{ }
 Followings are unexhaustive list of interesting APIs.
 
 - `Command` struct represents entire `jactionlint` command. `Command.Main` takes command line arguments and runs command
-  until the end and returns exit status.
+  until the end and returns exit status. Its signature is the same in v2. Only the parsing changed: the arguments are POSIX/GNU
+  options (`--format`, `-f`), and a single-dash long option of v1 is an error that names the replacement. See the
+  [migration table](v2-migration.md#command-line-options). `LinterOptions` is unchanged.
 - `Linter` manages linter lifecycle and applies checks to given files. If you want to run jactionlint checks in your
   program, please use this struct.
 - `Project` and `Projects` detect a project (Git repository) in a given directory path and find configuration in it.
@@ -28,7 +30,7 @@ Followings are unexhaustive list of interesting APIs.
   finds one by its ID. The IDs are stable. `RuleDocURL()` returns the URL of the documentation of a rule.
 - `Severity` is the level of a finding: `SeverityInfo`, `SeverityWarning` or `SeverityError`. `SeverityOff` disables a rule.
   `Profile` is the set of rules enabled by the configuration: `ProfileCorrectness`, `ProfileDefault` or `ProfilePedantic`, each
-  including the one before it. `LinterOptions.Profile` overrides the profile of the configuration, like `-profile`.
+  including the one before it. `LinterOptions.Profile` overrides the profile of the configuration, like `--profile`.
 - `Linter.FixFiles()` and `Linter.FixRepository()` apply the fixes of the errors (`FixModeSafe` or `FixModeUnsafe`; the `...WithOptions`
   variants take `FixOptions`, for example to restrict the rules). `MigrateConfig()` and `MigrateConfigFile()` rewrite the deprecated
   keys of a config into the `rules` mapping, `Linter.MigrateIgnores()` and `MigrateZizmorIgnores()` rewrite `# zizmor: ignore[...]` comments,

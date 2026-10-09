@@ -83,7 +83,7 @@ func (l *Linter) onlineSession(cfg *Config) (*onlineSession, error) {
 	return o.sess, o.err
 }
 
-// logf writes a line to the log output with -verbose.
+// logf writes a line to the log output with --verbose.
 func (l *Linter) logf(format string, args ...any) {
 	l.log(fmt.Sprintf(format, args...))
 }

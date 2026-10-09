@@ -311,34 +311,34 @@ func TestCommandDiffAndRules(t *testing.T) {
 	run := func(args ...string) (int, string, string) {
 		var stdout, stderr bytes.Buffer
 		cmd := &Command{Stdin: strings.NewReader(""), Stdout: &stdout, Stderr: &stderr, onRulesCreated: chain(newEditRule("template-injection", "aaa", "AAA"), newEditRule("insecure-commands", "ccc", "CCC"))}
-		code := cmd.Main(append([]string{"jactionlint", "-no-color", "-config-file", filepath.Join(root, "jactionlint.yaml")}, args...))
+		code := cmd.Main(append([]string{"jactionlint", "--no-color", "--config-file", filepath.Join(root, "jactionlint.yaml")}, args...))
 		return code, stdout.String(), stderr.String()
 	}
 
-	code, stdout, stderr := run("-diff", path)
+	code, stdout, stderr := run("--diff", path)
 	if code != ExitStatusSuccessProblemFound || !strings.Contains(stdout, "-      - run: echo aaa") || !strings.Contains(stdout, "+      - run: echo CCC") {
-		t.Errorf("-diff: %d\nstdout: %s\nstderr: %s", code, stdout, stderr)
+		t.Errorf("--diff: %d\nstdout: %s\nstderr: %s", code, stdout, stderr)
 	}
 	if b, _ := os.ReadFile(path); string(b) != engineWorkflow {
-		t.Error("-diff must not write")
+		t.Error("--diff must not write")
 	}
 	// The remaining errors do not mix with the diff on stdout
-	code, stdout, _ = run("-diff", "-rules", "template-injection", path)
+	code, stdout, _ = run("--diff", "--fix-rules", "template-injection", path)
 	if code != ExitStatusSuccessProblemFound || strings.Contains(stdout, "CCC") || !strings.Contains(stdout, "AAA") || strings.Contains(stdout, "[edit-insecure-commands]") {
-		t.Errorf("-diff -rules: %d\nstdout: %s", code, stdout)
+		t.Errorf("--diff --fix-rules: %d\nstdout: %s", code, stdout)
 	}
 
-	code, _, stderr = run("-fix", "-rules", "insecure-commands", path)
+	code, _, stderr = run("--fix", "--fix-rules", "insecure-commands", path)
 	b, _ := os.ReadFile(path)
 	if code != ExitStatusSuccessProblemFound || !strings.Contains(string(b), "echo CCC") || !strings.Contains(string(b), "echo aaa") || !strings.Contains(stderr, "insecure-commands: 1") {
-		t.Errorf("-fix -rules: %d\n%s\n%s", code, b, stderr)
+		t.Errorf("--fix --fix-rules: %d\n%s\n%s", code, b, stderr)
 	}
 
-	code, _, stderr = run("-rules", "insecure-commands", path)
-	if code != ExitStatusInvalidCommandOption || !strings.Contains(stderr, "-fix or -diff") {
-		t.Errorf("-rules without -fix: %d %q", code, stderr)
+	code, _, stderr = run("--fix-rules", "insecure-commands", path)
+	if code != ExitStatusInvalidCommandOption || !strings.Contains(stderr, "--fix or --diff") {
+		t.Errorf("--fix-rules without --fix: %d %q", code, stderr)
 	}
-	code, _, stderr = run("-fix", "-rules", "missing-timout", path)
+	code, _, stderr = run("--fix", "--fix-rules", "missing-timout", path)
 	if code != ExitStatusInvalidCommandOption || !strings.Contains(stderr, `did you mean "missing-timeout"`) {
 		t.Errorf("unknown rule: %d %q", code, stderr)
 	}

@@ -8,7 +8,7 @@ import (
 )
 
 // A stale "-X <module path>.version" in the release build settings silently blanks the output of
-// "jactionlint -version", so check that they point at the real module path of go.mod.
+// "jactionlint --version", so check that they point at the real module path of go.mod.
 func TestLdflagsUseModulePath(t *testing.T) {
 	mod, err := os.ReadFile("go.mod")
 	if err != nil {

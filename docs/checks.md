@@ -977,7 +977,7 @@ step or at the `run:` key covers the lines of the script ([details](actionlint.m
 jactionlint remembers the default shell and checks what OS the job runs on. Only when the shell is `bash` or `sh`, jactionlint
 applies shellcheck to scripts.
 
-By default, jactionlint checks if `shellcheck` command exists in your system and uses it when it is found. The `-shellcheck`
+By default, jactionlint checks if `shellcheck` command exists in your system and uses it when it is found. The `--shellcheck`
 option on running `jactionlint` command specifies the executable path of shellcheck. Setting empty string by `shellcheck=`
 disables shellcheck integration explicitly.
 
@@ -1093,7 +1093,7 @@ by `pip install pyflakes`.
 jactionlint runs pyflakes for scripts at `run:` steps in a workflow and reports errors found by pyflakes. jactionlint detects
 Python scripts in a workflow by checking `shell: python` at each step and `defaults:` configurations at workflows and jobs.
 
-By default, jactionlint checks if `pyflakes` command exists in your system and uses it when found. The `-pyflakes` option
+By default, jactionlint checks if `pyflakes` command exists in your system and uses it when found. The `--pyflakes` option
 of `jactionlint` command allows to specify the executable path of pyflakes. Setting empty string by `pyflakes=` disables
 pyflakes integration explicitly.
 
@@ -1310,7 +1310,7 @@ test.yaml:21:29: "github.head_ref" is potentially untrusted. avoid using it dire
 
 [Playground](https://jactionlint.jdx.dev/#eNpskL1OAzEQhHs/xSiKFCjOFHSuaChACArSR/ez4QyXNbpdH4rCvTvyxcqPODfWar/xzDiwgxeJtKnDbkesxhAPzgDrp/XLo8PycMCH1zZWlgZitRNt1WtHGEdjPkMliVcSTTfQR5YiPRyryBqLrky7aSVK33KkgCKRDlS3AavkQzzYyRbjuLqGfvOYzlmQg7VUNpuetheyWe5YIBe1VWj2/43OIg3P72+vN5fa2ys+CokD+/qr2HrqGrnrSfv9w3B/CvHjtXWnCUjeJTfZZr7CTJ7FcvqWxd8A3hV//w==)
 
-`-fix` fixes the findings in `run:` scripts of bash and sh when it can show that the fix does the same: the `${{ }}` is in double
+`--fix` fixes the findings in `run:` scripts of bash and sh when it can show that the fix does the same: the `${{ }}` is in double
 quotes or single quotes, and the script has no here-document, command substitution or comment around it. The expression is replaced
 with a shell variable (the `GITHUB_*` and `RUNNER_*` variables which the runner sets already, like `$GITHUB_HEAD_REF`, or a new one
 in the `env:` of the step):
@@ -1322,7 +1322,7 @@ in the `env:` of the step):
 ```
 
 When the expression is not in quotes, quoting it changes how the shell splits words and expands globs, so the fix needs
-`-fix=unsafe`. Scripts of other shells (PowerShell, cmd, Python) are not fixed.
+`--fix=unsafe`. Scripts of other shells (PowerShell, cmd, Python) are not fixed.
 
 <a id="check-template-injection-sinks"></a>
 ### Container options, Docker steps and AI agent inputs
@@ -1540,7 +1540,7 @@ hangs. Turn it off with `missing-timeout: off` in `rules`, or ignore one job wit
 #### Fixing missing timeouts
 
 jactionlint has no built-in number of minutes, because the right limit depends on your jobs. The finding tells you to set
-`timeout-minutes`, and `jactionlint -fix` adds it only when you configure the number with the `default-minutes` option:
+`timeout-minutes`, and `jactionlint --fix` adds it only when you configure the number with the `default-minutes` option:
 
 ```yaml
 rules:
@@ -1548,7 +1548,7 @@ rules:
     default-minutes: 15
 ```
 
-Then `-fix` adds `timeout-minutes: 15` to every job which has none. It is a safe fix: a job which is cancelled after that time
+Then `--fix` adds `timeout-minutes: 15` to every job which has none. It is a safe fix: a job which is cancelled after that time
 is the only way it can change a workflow, and one which really needs longer sets its own value. The line goes right after
 `runs-on:` (or after `name:`, or as the first key of the job when it has neither), with the indentation of the job's other keys
 and the line endings of the file. Without `default-minutes` the finding has no fix.
@@ -2965,7 +2965,7 @@ An install that does not use a lock file resolves the dependencies anew on every
 dependency, a compromised one included, reaches the workflow. The rule `unlocked-install` (in the `default` profile) reports
 `cargo install` without `--locked` (or `--frozen`): the crate was published with a `Cargo.lock`, and `--locked` builds with it.
 
-The rule is fixable. `jactionlint -fix=unsafe` inserts `--locked`. The fix is **unsafe** because the build can fail where it
+The rule is fixable. `jactionlint --fix=unsafe` inserts `--locked`. The fix is **unsafe** because the build can fail where it
 succeeded, for example when the lock file of the crate is out of date. It is only offered when the position of `install` in the
 file is known for sure.
 
@@ -3057,7 +3057,7 @@ test.yaml:8:28: ignore pattern "no-such-rule" did not suppress any error. remove
 
 <!-- Skip playground link -->
 
-The finding has a safe fix: `jactionlint -fix` removes the pattern, or the whole comment when no other pattern is left, and keeps the
+The finding has a safe fix: `jactionlint --fix` removes the pattern, or the whole comment when no other pattern is left, and keeps the
 patterns of the comment that were used. Two related findings are always on, from the `correctness` profile: `invalid-ignore-comment` (the
 comment cannot be parsed) and `expired-ignore` (an `expires` date of an entry in `ignores` has passed).
 
@@ -3170,7 +3170,7 @@ permissions of the callee. The error is reported at the job so that it is easy t
 
 #### Fixing missing permissions
 
-`jactionlint -fix` adds this to the workflow, right after the `on:` block:
+`jactionlint --fix` adds this to the workflow, right after the `on:` block:
 
 ```yaml
 permissions:
@@ -3179,11 +3179,11 @@ permissions:
 
 `contents: read` takes every other permission away from `GITHUB_TOKEN`, so it breaks a job which comments on a pull request,
 pushes a commit, publishes a package or a release and so on. jactionlint cannot see inside the actions and scripts a job runs, so
-the fix is only **safe** (applied by `-fix`) when the workflow gives no sign that the token is needed: every action of the jobs
+the fix is only **safe** (applied by `--fix`) when the workflow gives no sign that the token is needed: every action of the jobs
 which have no `permissions:` is a well-known one that only reads the repository (`actions/checkout`, `actions/setup-*`,
 `actions/cache`, `actions/upload-artifact`, `jdx/mise-action` and a few more), the jobs do not call reusable workflows, and
 the text of the workflow does not mention `GITHUB_TOKEN`, `github.token`, `GH_TOKEN`, the `gh` command, `git push` or
-`api.github.com`. In every other case the fix is **unsafe** and `-fix=unsafe` applies it; review the result. A script file that the
+`api.github.com`. In every other case the fix is **unsafe** and `--fix=unsafe` applies it; review the result. A script file that the
 workflow runs and that pushes with the credentials left by `actions/checkout` is not visible, so check such a workflow before
 accepting the safe fix.
 
@@ -3461,7 +3461,7 @@ rules:
   self-repository: error
 ```
 
-The rule has an unsafe fix, so `jactionlint -fix=unsafe` rewrites `./` to `$/`. It is unsafe because the two forms are not
+The rule has an unsafe fix, so `jactionlint --fix=unsafe` rewrites `./` to `$/`. It is unsafe because the two forms are not
 the same when a step replaces the workspace content, which is exactly the case the rule is about, and because `$/` needs a
 recent runner and GitHub Enterprise Server: actionlint 1.7.12 and older reject it (`specifying action "$/..." in invalid format`),
 so a repository that also runs the original actionlint starts to fail there. Check which tools read your workflows before you apply it.
@@ -3584,11 +3584,11 @@ rules:
 Set `persist-credentials: false` unless a later step needs to push. An explicit `persist-credentials: true` says that the
 credential is needed, so it is not reported, and neither is a value given by an expression.
 
-The rule has a fix: `jactionlint -fix` adds `persist-credentials: false` under `with:` of the step, and creates `with:` when
-the step has none. The fix is applied by `-fix` only when no later step of the job looks like it needs the credential. When a
+The rule has a fix: `jactionlint --fix` adds `persist-credentials: false` under `with:` of the step, and creates `with:` when
+the step has none. The fix is applied by `--fix` only when no later step of the job looks like it needs the credential. When a
 later `run:` script has a `git` command that talks to a remote (`push`, `pull`, `fetch`, `clone`, `remote`, `submodule`, `lfs`,
 `ls-remote`, `commit` or `tag`) or a later step uses an action known to push (such as `stefanzweifel/git-auto-commit-action` or
-`peter-evans/create-pull-request`), the fix is unsafe and needs `-fix=unsafe`. A script which pushes without a visible git
+`peter-evans/create-pull-request`), the fix is unsafe and needs `--fix=unsafe`. A script which pushes without a visible git
 command cannot be detected, so check the workflow after applying the fix. A step written in flow style (`- {uses: ...}`) is
 reported without a fix.
 
@@ -4809,7 +4809,7 @@ test.yaml:9:14: could not parse as YAML: unknown anchor 'credentials' referenced
 
 jactionlint checks the Dependabot configuration file `.github/dependabot.yml` (or `.github/dependabot.yaml`) of the repository
 together with the workflows. It is checked when the repository is linted without file arguments, and when the file is given
-explicitly (`jactionlint .github/dependabot.yml`) or with `-stdin-filename .github/dependabot.yml`. The file is recognized by its
+explicitly (`jactionlint .github/dependabot.yml`) or with `--stdin-filename .github/dependabot.yml`. The file is recognized by its
 path only. The rules for workflows are not applied to it, and `.github/workflows/dependabot.yml` is still a workflow.
 
 The syntax is [the version 2 of the options reference][dependabot-options-doc]. Like for workflows, jactionlint reports unknown
@@ -4931,7 +4931,7 @@ Output:
 <!-- Skip playground link -->
 
 The rule is `dependabot-cooldown`. It is in the `default` profile. Change the minimum with the `days` option and let
-`-fix` write the cooldown by setting `default-days`:
+`--fix` write the cooldown by setting `default-days`:
 
 ```yaml
 rules:
@@ -4941,7 +4941,7 @@ rules:
 ```
 
 jactionlint never makes up the number of days: without the `default-days` option the findings have no fix. With it,
-`-fix` adds a `cooldown` section, adds `default-days` to a `cooldown` section without it, or raises a smaller value. The fix
+`--fix` adds a `cooldown` section, adds `default-days` to a `cooldown` section without it, or raises a smaller value. The fix
 is offered only when the number is at least `days`, and not when the update is written in flow style (`{...}`). To turn the
 check off, set `dependabot-cooldown: off`.
 
@@ -4980,7 +4980,7 @@ Output:
 <!-- Skip playground link -->
 
 The rule is `dependabot-execution`. It is enabled by default as an error. Remove the key or set it to `deny` (the default).
-`-fix=unsafe` sets the value to `deny`. The fix is unsafe because updates of dependencies which need the code to run stop
+`--fix=unsafe` sets the value to `deny`. The fix is unsafe because updates of dependencies which need the code to run stop
 working. If you need `allow` for a registry, ignore the finding for that file with `paths:` in [the configuration](config.md)
 or with an [ignore comment](usage.md).
 
@@ -5106,7 +5106,7 @@ Add `set -o pipefail` before the pipeline or use `shell: bash`. `shell: sh` has 
 so use `shell: bash` there. Be aware that turning `pipefail` on makes hidden failures fail the step, and that `grep` without a
 match exits with 1, so check pipelines like `cmd | grep pattern | wc -l` when you enable it.
 
-`-fix=unsafe` inserts `set -o pipefail` as the first line of a `run: |` script (default shell and custom bash templates only).
+`--fix=unsafe` inserts `set -o pipefail` as the first line of a `run: |` script (default shell and custom bash templates only).
 The fix is unsafe because failures which used to be ignored now fail the step. There is no fix for a script on a single line,
 for `shell: sh` and for shells which are not bash.
 
@@ -5171,7 +5171,7 @@ checks of a pull request and in notifications. Names make it clear which definit
 without breaking the `needs:` of other jobs, which refer to the job ID. Jobs that call a reusable workflow are not reported
 since GitHub shows them as `caller / called job`.
 
-The rule is fixable. `jactionlint -fix` adds `name: <file name without the extension>` to the workflow and `name: <job ID>` to
+The rule is fixable. `jactionlint --fix` adds `name: <file name without the extension>` to the workflow and `name: <job ID>` to
 a job, which shows the job exactly as it was shown before. Both fixes are safe. A workflow read from stdin gets the ID of its
 only job; with several jobs it has no fix.
 
@@ -5244,7 +5244,7 @@ Whether to cancel is a choice, so a `concurrency:` mapping that does not cancel 
 accepted, and so is a `queue:`. The rule skips workflows that only run through `workflow_call` (the caller decides) and workflows where every job sets its own
 `concurrency:`.
 
-`jactionlint -fix` adds the block above after `on:` when it is safe to do so, that is, only for a workflow whose triggers are all
+`jactionlint --fix` adds the block above after `on:` when it is safe to do so, that is, only for a workflow whose triggers are all
 events of a pull request (`pull_request`, `pull_request_target`, `pull_request_review` and `pull_request_review_comment`), in which
 no job has an `environment:` or publishes or deploys anything, no job has a `concurrency:` of its own, and the file has no
 anchors or aliases. It never adds the block to a workflow that a push, a tag, a release or a manual run starts, because cancelling
@@ -5332,7 +5332,7 @@ check reports the commands themselves.
 
 Write to the environment files instead (`$GITHUB_ENV`, `$GITHUB_PATH`) and remove the variable.
 
-The rule is fixable but the fix is **unsafe**: `jactionlint -fix=unsafe` removes the variable (and the `env:` mapping when it
+The rule is fixable but the fix is **unsafe**: `jactionlint --fix=unsafe` removes the variable (and the `env:` mapping when it
 was the only entry). A step that still prints `::set-env` or `::add-path` stops working after that, so replace the commands first.
 
 <a id="check-unverified-download"></a>
@@ -6268,7 +6268,7 @@ test.yaml:7:9: warning: "github.actor" holds the account of the last event and n
 <!-- Skip playground link -->
 
 Use `github.event.pull_request.user.login` (or `.id`), the author of the pull request. When the workflow runs on `pull_request` or
-`pull_request_target` only, `-fix=unsafe` makes the change. It is unsafe because the condition is true for a pull request of the bot
+`pull_request_target` only, `--fix=unsafe` makes the change. It is unsafe because the condition is true for a pull request of the bot
 that somebody else pushed to, where it used to be false. The GitHub documentation also recommends not auto-merging from
 `pull_request_target`.
 
@@ -6331,7 +6331,7 @@ test.yaml:12:29: warning: the index is computed, which hides which property is r
 
 <!-- Skip playground link -->
 
-`-fix=unsafe` rewrites the paths of `uses:`. It is unsafe because the plain path is expected, but not guaranteed, to name the same
+`--fix=unsafe` rewrites the paths of `uses:`. It is unsafe because the plain path is expected, but not guaranteed, to name the same
 action.
 
 <a id="check-misfeature"></a>
@@ -6384,7 +6384,7 @@ test.yaml:11:16: warning: shell "cmd" is the Windows cmd shell, which has no for
 ## Impostor commits (online)
 
 The checks in this section and the five that follow query the GitHub API, so they run only when you ask for it with
-`jactionlint -online` or `online: true` in [the configuration](config.md#online-options). Nothing in jactionlint uses the network
+`jactionlint --online` or `online: true` in [the configuration](config.md#online-options). Nothing in jactionlint uses the network
 otherwise. How the token, the cache and the rate limit work is in [the usage document](usage.md#online-checks). The online
 checks are not available in the playground, so their examples have no playground link.
 
@@ -6402,7 +6402,7 @@ could verify. A commit that is in the history of a tag only (for example of a de
 Example input:
 
 ```yaml
-# requires -online
+# requires --online
 on: push
 jobs:
   test:
@@ -6430,7 +6430,7 @@ test.yaml:10:15: info: action "actions/checkout@2f547d07f23dec7f4a96fc091165260d
 <!-- Skip playground link -->
 
 The same commit is also reported by `stale-action-refs`, because no tag points to it. To accept a finding, ignore it by rule ID
-(`jactionlint -ignore impostor-commit`) or lower its level in the configuration. The fix is to pin a commit of the action's own
+(`jactionlint --ignore impostor-commit`) or lower its level in the configuration. The fix is to pin a commit of the action's own
 history, preferably the one of a release tag.
 
 <a id="check-known-vulnerable-actions"></a>
@@ -6448,7 +6448,7 @@ version when there is one.
 Example input:
 
 ```yaml
-# requires -online
+# requires --online
 on: push
 jobs:
   test:
@@ -6493,7 +6493,7 @@ The fix is to pin the action to a full-length commit SHA.
 Example input:
 
 ```yaml
-# requires -online
+# requires --online
 on: push
 jobs:
   test:
@@ -6532,7 +6532,7 @@ informational: some repositories release from a rolling branch, where the findin
 Example input:
 
 ```yaml
-# requires -online
+# requires --online
 on: push
 jobs:
   test:
@@ -6568,7 +6568,7 @@ actions are thin wrappers around the `gh` CLI, which is on the GitHub-hosted run
 Example input:
 
 ```yaml
-# requires -online
+# requires --online
 on: push
 jobs:
   test:
@@ -6609,7 +6609,7 @@ comment no longer describes what is pinned.
 Example input:
 
 ```yaml
-# requires -online
+# requires --online
 on: push
 jobs:
   test:
@@ -6632,7 +6632,7 @@ test.yaml:10:15: warning: the version comment "# v3.0.0" does not match the comm
 
 <!-- Skip playground link -->
 
-The `-online -fix` option can pin tags to commits and add this comment for you, see [the usage document](usage.md#online-checks).
+The `--online --fix` option can pin tags to commits and add this comment for you, see [the usage document](usage.md#online-checks).
 
 <a id="check-invisible-characters"></a>
 ## Invisible characters
@@ -6699,7 +6699,7 @@ change is made to look harmless.
 A file encoded as UTF-16 or UTF-32 (it starts with the byte order mark `FF FE` or `FE FF`) has NUL bytes in every character. It gets one
 finding at its start, without a fix, instead of one per NUL: save it as UTF-8 without a byte order mark.
 
-`-fix` removes the characters of the finding. This is a safe fix: what is left is what the reader of the file already saw. If the
+`--fix` removes the characters of the finding. This is a safe fix: what is left is what the reader of the file already saw. If the
 character is meant to be in a string, write it as an escape in a double quoted YAML string (`"\u200b"`) or in the shell
 (`$'\u200b'`), where it is visible in the source. To silence a finding, put `# jactionlint ignore=invisible-characters` on the line above it,
 or turn the rule off with `rules: invisible-characters: off`.
@@ -6913,7 +6913,7 @@ and tags) and other expressions that are false for the trigger; an expression th
 and manual runs, a group that names the ref, because then only a second run for the same ref replaces the first one; and
 workflows that only run for pull requests. Names of workflows and jobs are not taken as a signal.
 
-The fix sets a literal `cancel-in-progress: true` to `false`. It is **unsafe** (`-fix=unsafe`) because the runs of a group queue
+The fix sets a literal `cancel-in-progress: true` to `false`. It is **unsafe** (`--fix=unsafe`) because the runs of a group queue
 instead of replacing each other, which changes when and how often the workflow runs. Expressions are not fixed.
 
 What to write for a release:
@@ -7470,9 +7470,9 @@ jactionlint checks the metadata of actions (`action.yml` or `action.yaml`) toget
 linted without file arguments it checks the action in the root of the repository, every action under `.github/actions`, and every
 directory which a local `uses: ./path` of a workflow or of another action refers to. An action is also checked when its file is given
 explicitly (`jactionlint .github/actions/setup/action.yml`, which is what the [hk][hk] step does for `.github/actions/**/action.y*ml`)
-or with `-stdin-filename`. The file is recognized by its name: `action.yml` and `action.yaml` are actions anywhere except under
+or with `--stdin-filename`. The file is recognized by its name: `action.yml` and `action.yaml` are actions anywhere except under
 `.github/workflows`. Output formats, [ignore comments](usage.md#ignore-some-errors), `paths:` in [the configuration](config.md),
-SARIF and `-fix` work for them like for workflows.
+SARIF and `--fix` work for them like for workflows.
 
 The `steps` of a composite action (`runs.using: composite`) are checked with the same rules as the steps of a workflow job, and
 the rule IDs are the same. Actions that run JavaScript (`node20`, `node24`, ...) or a container (`docker`) have no steps: only their

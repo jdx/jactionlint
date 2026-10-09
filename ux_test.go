@@ -85,21 +85,21 @@ func TestRepositoryModeWithOnlySubdirectoriesHasNothingToLint(t *testing.T) {
 }
 
 // A wrong value of a flag is a usage error (2) whichever flag it is; a failure of the run itself is 3
-// (bug bash: -profile bogus exited with 2 but -format bogus with 3).
+// (bug bash: --profile bogus exited with 2 but --format bogus with 3).
 func TestFlagValueErrorsExitWithUsageStatus(t *testing.T) {
 	root := makeWorkflowRepo(t, map[string]string{"ci.yaml": validWorkflowSrc})
 	for _, args := range [][]string{
-		{"-profile", "bogus"},
-		{"-format", "bogus"},
-		{"-format", "{{ .Nope"},
-		{"-ignore", "(unclosed"},
-		{"-min-severity", "loud"},
-		{"-online=maybe"},
+		{"--profile", "bogus"},
+		{"--format", "bogus"},
+		{"--format", "{{ .Nope"},
+		{"--ignore", "(unclosed"},
+		{"--min-severity", "loud"},
+		{"--online=maybe"},
 	} {
 		t.Run(strings.Join(args, " "), func(t *testing.T) {
 			var out, errOut strings.Builder
 			cmd := &Command{Stdin: strings.NewReader(""), Stdout: &out, Stderr: &errOut}
-			status := cmd.Main(append(append([]string{"jactionlint", "-shellcheck=", "-pyflakes="}, args...), filepath.Join(root, ".github", "workflows", "ci.yaml")))
+			status := cmd.Main(append(append([]string{"jactionlint", "--shellcheck=", "--pyflakes="}, args...), filepath.Join(root, ".github", "workflows", "ci.yaml")))
 			if status != ExitStatusInvalidCommandOption {
 				t.Errorf("want %d but got %d: %s", ExitStatusInvalidCommandOption, status, errOut.String())
 			}
@@ -109,7 +109,7 @@ func TestFlagValueErrorsExitWithUsageStatus(t *testing.T) {
 	// An unreadable file is a failure of the run
 	var errOut strings.Builder
 	cmd := &Command{Stdin: strings.NewReader(""), Stdout: io.Discard, Stderr: &errOut}
-	if status := cmd.Main([]string{"jactionlint", "-shellcheck=", "-pyflakes=", filepath.Join(root, "missing.yaml")}); status != ExitStatusFailure {
+	if status := cmd.Main([]string{"jactionlint", "--shellcheck=", "--pyflakes=", filepath.Join(root, "missing.yaml")}); status != ExitStatusFailure {
 		t.Errorf("a missing file must exit with %d but got %d", ExitStatusFailure, status)
 	}
 }
@@ -175,7 +175,7 @@ func TestBaselineSurvivesMovingTheCheckout(t *testing.T) {
 	parent := t.TempDir()
 	first := filepath.Join(parent, "first")
 	makeBrokenActionRepo(t, first)
-	args := []string{"jactionlint", "-no-color", "-shellcheck=", "-pyflakes=", "-profile", "correctness"}
+	args := []string{"jactionlint", "--no-color", "--shellcheck=", "--pyflakes=", "--profile", "correctness"}
 	run := func(dir string, extra ...string) (int, string) {
 		t.Helper()
 		var out, errOut strings.Builder
@@ -184,7 +184,7 @@ func TestBaselineSurvivesMovingTheCheckout(t *testing.T) {
 		st := cmd.Main(append(append([]string{}, args...), extra...))
 		return st, out.String() + errOut.String()
 	}
-	if st, out := run(first, "-baseline-write"); st != 0 {
+	if st, out := run(first, "--baseline-write"); st != 0 {
 		t.Fatalf("%d %s", st, out)
 	}
 	// Copy the checkout to another place instead of renaming it: Windows refuses to rename a directory in which
@@ -198,7 +198,7 @@ func TestBaselineSurvivesMovingTheCheckout(t *testing.T) {
 		t.Log(err)
 	}
 	for i := 0; i < 8; i++ {
-		st, out := run(second, "-baseline", "-baseline-check")
+		st, out := run(second, "--baseline", "--baseline-check")
 		if st != 0 || strings.Contains(out, "invalid-local-action") || strings.Contains(out, "unused-baseline-entry") {
 			t.Fatalf("run %d: the moved checkout must match its baseline: %d\n%s", i, st, out)
 		}
@@ -206,7 +206,7 @@ func TestBaselineSurvivesMovingTheCheckout(t *testing.T) {
 }
 
 // Every rule which sets Error.Fix must say so in RuleInfo.Fixable: the rules documentation, the SARIF rule
-// metadata and the docs of -fix are generated from it (bug bash: unused-ignore and the -online fix of
+// metadata and the docs of --fix are generated from it (bug bash: unused-ignore and the --online fix of
 // unpinned-uses produced fixes but were not marked). The fixers are found by linting the test data with every
 // rule on and watching which findings carry a fix.
 func TestEveryRuleWhichSetsAFixIsMarkedFixable(t *testing.T) {
@@ -281,7 +281,7 @@ func TestEveryRuleHasADocsAnchor(t *testing.T) {
 	}
 }
 
-// The pin fix of unpinned-uses exists only with -online, so the walk over the test data above cannot see it.
+// The pin fix of unpinned-uses exists only with --online, so the walk over the test data above cannot see it.
 func TestUnpinnedUsesIsFixableWithOnline(t *testing.T) {
 	errs, _ := lintOnline(t, onlineFixtureClient(t), unpinnedConfig(), workflowWith("uses: actions/checkout@v4"))
 	var fixed bool
@@ -294,7 +294,7 @@ func TestUnpinnedUsesIsFixableWithOnline(t *testing.T) {
 		t.Fatalf("the online pin fix is gone: %v", errs)
 	}
 	if !ruleIndex["unpinned-uses"].Fixable {
-		t.Error("unpinned-uses sets Error.Fix with -online but RuleInfo.Fixable is false")
+		t.Error("unpinned-uses sets Error.Fix with --online but RuleInfo.Fixable is false")
 	}
 }
 
@@ -332,15 +332,15 @@ func TestActionlintConfigNoteIsNotPrintedWhenProfileIsGiven(t *testing.T) {
 	run := func(args ...string) string {
 		var out, errOut strings.Builder
 		cmd := &Command{Stdin: strings.NewReader(""), Stdout: &out, Stderr: &errOut}
-		cmd.Main(append([]string{"jactionlint", "-no-color", "-shellcheck=", "-pyflakes="}, args...))
+		cmd.Main(append([]string{"jactionlint", "--no-color", "--shellcheck=", "--pyflakes="}, args...))
 		return errOut.String()
 	}
 	if got := run(); !strings.Contains(got, "the default profile applies") {
-		t.Errorf("without -profile the note is expected: %q", got)
+		t.Errorf("without --profile the note is expected: %q", got)
 	}
 	for _, p := range []string{"correctness", "default", "pedantic"} {
-		if got := run("-profile", p); strings.Contains(got, "default profile applies") {
-			t.Errorf("-profile %s decides the profile, but the note was printed: %q", p, got)
+		if got := run("--profile", p); strings.Contains(got, "default profile applies") {
+			t.Errorf("--profile %s decides the profile, but the note was printed: %q", p, got)
 		}
 	}
 }
@@ -352,14 +352,14 @@ func TestBaselineWriteSaysHowToApplyTheBaseline(t *testing.T) {
 	run := func(args ...string) string {
 		var out, errOut strings.Builder
 		cmd := &Command{Stdin: strings.NewReader(""), Stdout: &out, Stderr: &errOut}
-		cmd.Main(append([]string{"jactionlint", "-no-color", "-shellcheck=", "-pyflakes=", "-profile", "correctness"}, args...))
+		cmd.Main(append([]string{"jactionlint", "--no-color", "--shellcheck=", "--pyflakes=", "--profile", "correctness"}, args...))
 		return out.String()
 	}
-	got := run("-baseline-write")
-	if !strings.Contains(got, "baseline: auto") || !strings.Contains(got, ".github/jactionlint.yaml") || !strings.Contains(got, "-baseline") {
+	got := run("--baseline-write")
+	if !strings.Contains(got, "baseline: auto") || !strings.Contains(got, ".github/jactionlint.yaml") || !strings.Contains(got, "--baseline") {
 		t.Errorf("the output must tell how to apply the baseline: %q", got)
 	}
-	got = run("-baseline-write=ci/baseline.json")
+	got = run("--baseline-write=ci/baseline.json")
 	if !strings.Contains(got, "baseline: ci/baseline.json") {
 		t.Errorf("another file needs its path in the line: %q", got)
 	}
@@ -368,21 +368,21 @@ func TestBaselineWriteSaysHowToApplyTheBaseline(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, ".github", "jactionlint.yaml"), []byte("baseline: auto\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if got := run("-baseline-write"); strings.Contains(got, "baseline: auto") {
+	if got := run("--baseline-write"); strings.Contains(got, "baseline: auto") {
 		t.Errorf("the configuration already applies the baseline: %q", got)
 	}
 
 	// A baseline written to another file than the one the configuration applies is not applied by a plain run
-	if got := run("-baseline-write=ci/other.json"); !strings.Contains(got, "baseline: ci/other.json") {
+	if got := run("--baseline-write=ci/other.json"); !strings.Contains(got, "baseline: ci/other.json") {
 		t.Errorf("the configuration applies another file, so the line for this one must be shown: %q", got)
 	}
 	if err := os.WriteFile(filepath.Join(root, ".github", "jactionlint.yaml"), []byte("baseline: ci/other.json\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if got := run("-baseline-write=ci/other.json"); strings.Contains(got, "baseline: ci/other.json") {
+	if got := run("--baseline-write=ci/other.json"); strings.Contains(got, "baseline: ci/other.json") {
 		t.Errorf("the configuration names this very file: %q", got)
 	}
-	if got := run("-baseline-write"); !strings.Contains(got, "baseline: auto") {
+	if got := run("--baseline-write"); !strings.Contains(got, "baseline: auto") {
 		t.Errorf("the configuration names another file than the default one: %q", got)
 	}
 }
@@ -404,7 +404,7 @@ func TestRunHintAfterManyFindings(t *testing.T) {
 		t.Helper()
 		var out, errOut strings.Builder
 		cmd := &Command{Stdin: strings.NewReader(""), Stdout: &out, Stderr: &errOut}
-		cmd.Main(append([]string{"jactionlint", "-no-color", "-shellcheck=", "-pyflakes="}, args...))
+		cmd.Main(append([]string{"jactionlint", "--no-color", "--shellcheck=", "--pyflakes="}, args...))
 		return out.String(), errOut.String()
 	}
 	t.Setenv("CI", "")
@@ -412,13 +412,13 @@ func TestRunHintAfterManyFindings(t *testing.T) {
 	t.Setenv("JACTIONLINT_NO_HINTS", "")
 
 	// Neither a terminal nor CI: a script or a pipe reads the output
-	if _, errOut := run("-profile", "default"); strings.Contains(errOut, "note:") {
+	if _, errOut := run("--profile", "default"); strings.Contains(errOut, "note:") {
 		t.Errorf("no hint for a pipe: %q", errOut)
 	}
 
 	t.Setenv("CI", "true")
-	_, errOut := run("-profile", "default")
-	for _, want := range []string{"note: ", " findings in 1 file.", "-format summary", "-baseline-write", "-profile correctness", "-no-hints"} {
+	_, errOut := run("--profile", "default")
+	for _, want := range []string{"note: ", " findings in 1 file.", "--format summary", "--baseline-write", "--profile correctness", "--no-hints"} {
 		if !strings.Contains(errOut, want) {
 			t.Errorf("the hint must contain %q: %q", want, errOut)
 		}
@@ -428,28 +428,28 @@ func TestRunHintAfterManyFindings(t *testing.T) {
 	}
 
 	// Never in a structured format, and the flag and the variable silence it
-	for _, args := range [][]string{{"-format", "json"}, {"-format", "sarif"}, {"-format", "summary"}, {"-format", "github"}, {"-no-hints"}} {
-		if out, errOut := run(append([]string{"-profile", "default"}, args...)...); strings.Contains(errOut, "silence this note") || strings.Contains(out, "silence this note") {
+	for _, args := range [][]string{{"--format", "json"}, {"--format", "sarif"}, {"--format", "summary"}, {"--format", "github"}, {"--no-hints"}} {
+		if out, errOut := run(append([]string{"--profile", "default"}, args...)...); strings.Contains(errOut, "silence this note") || strings.Contains(out, "silence this note") {
 			t.Errorf("%v: no hint expected: %q", args, errOut)
 		}
 	}
 	t.Setenv("JACTIONLINT_NO_HINTS", "1")
-	if _, errOut := run("-profile", "default"); strings.Contains(errOut, "silence this note") {
+	if _, errOut := run("--profile", "default"); strings.Contains(errOut, "silence this note") {
 		t.Errorf("JACTIONLINT_NO_HINTS must silence the hint: %q", errOut)
 	}
 	t.Setenv("JACTIONLINT_NO_HINTS", "")
 
-	// The checks of actionlint are what -profile correctness asks for: there is nothing to suggest
-	if _, errOut := run("-profile", "correctness"); strings.Contains(errOut, "silence this note") {
+	// The checks of actionlint are what --profile correctness asks for: there is nothing to suggest
+	if _, errOut := run("--profile", "correctness"); strings.Contains(errOut, "silence this note") {
 		t.Errorf("no hint with the correctness profile: %q", errOut)
 	}
 
-	// With a baseline applied the advice to write one is left out, and -profile correctness is not suggested
+	// With a baseline applied the advice to write one is left out, and --profile correctness is not suggested
 	// to someone who already uses it
-	if out, _ := run("-profile", "default", "-baseline-write"); !strings.Contains(out, "Wrote") {
+	if out, _ := run("--profile", "default", "--baseline-write"); !strings.Contains(out, "Wrote") {
 		t.Fatal(out)
 	}
-	_, errOut = run("-profile", "default", "-baseline")
+	_, errOut = run("--profile", "default", "--baseline")
 	if strings.Contains(errOut, "silence this note") {
 		t.Errorf("everything is accepted by the baseline, so there is no hint: %q", errOut)
 	}

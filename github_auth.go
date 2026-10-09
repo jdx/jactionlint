@@ -64,8 +64,8 @@ func validToken(s string) bool {
 
 // discover returns the first token found, in this order:
 //
-//  1. the variable named by token-env (-online-token-env),
-//  2. the file named by token-file (-online-token-file),
+//  1. the variable named by token-env (--online-token-env),
+//  2. the file named by token-file (--online-token-file),
 //  3. $GITHUB_TOKEN, $GH_TOKEN (on an Enterprise Server $GITHUB_ENTERPRISE_TOKEN and $GH_ENTERPRISE_TOKEN first),
 //  4. the output of "gh auth token --hostname HOST", only when gh is installed and nothing above had a token.
 //
@@ -73,7 +73,7 @@ func validToken(s string) bool {
 // to the next source. A token found in the wrong shape is a notice too, and never printed.
 func (d tokenDiscovery) discover(ctx context.Context) (tok discoveredToken, notices []string) {
 	if !d.trusted {
-		return discoveredToken{}, []string{"the API URL comes from the config file of the repository, so no token is sent to it. set GITHUB_API_URL or pass -online-api-url to choose the host yourself"}
+		return discoveredToken{}, []string{"the API URL comes from the config file of the repository, so no token is sent to it. set GITHUB_API_URL or pass --online-api-url to choose the host yourself"}
 	}
 	if d.tokenEnv != "" {
 		v := strings.TrimSpace(d.getenv(d.tokenEnv))
