@@ -373,6 +373,7 @@ func (cmd *Command) Main(args []string) int {
 	if online.set {
 		opts.Online = true
 		opts.OnlineOptions.Mode = online.mode
+		opts.OnlineOptions.ModeSet = true
 	}
 	if len(onlineAllow) > 0 {
 		opts.OnlineOptions.Allow = onlineAllow

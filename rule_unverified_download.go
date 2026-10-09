@@ -406,12 +406,15 @@ func (t *fileTracker) event(c *runscript.Command) {
 		}
 	case c.Name == "install":
 		// install is not a tool the analyzer knows, so its option values are positional words
-		mode, args := installOperands(c)
-		if len(args) < 2 {
-			return
+		mode, args, dst := installOperands(c)
+		srcs := args
+		if dst == "" {
+			if len(args) < 2 {
+				return
+			}
+			dst, srcs = args[len(args)-1].Value, args[:len(args)-1]
 		}
-		dst := args[len(args)-1].Value
-		for _, w := range args[:len(args)-1] {
+		for _, w := range srcs {
 			if d := match(w); d != nil {
 				t.tracked[normPath(dst)] = d
 				t.tracked[normPath(strings.TrimSuffix(dst, "/")+"/"+path.Base(w.Value))] = d
@@ -457,15 +460,18 @@ func (t *fileTracker) report(d *download, file, what string) {
 // isVerification reports whether the command checks a checksum or a signature.
 func isVerification(c *runscript.Command) bool {
 	switch c.Name {
-	case "sha256sum", "sha512sum", "sha1sum", "sha224sum", "sha384sum", "b2sum", "b3sum", "shasum", "sha256", "sha512",
-		"minisign", "slsa-verifier", "gpgv", "gpgv2", "signify", "rekor-cli", "notation":
+	case "sha256sum", "sha512sum", "sha1sum", "sha224sum", "sha384sum", "b2sum", "b3sum", "shasum", "sha256", "sha512":
+		// Without -c these only print the hash
+		return c.HasFlag("-c") || c.HasFlag("--check")
+	case "minisign", "slsa-verifier", "gpgv", "gpgv2", "signify", "rekor-cli", "notation":
 		return true
 	case "gpg", "gpg2":
 		return c.HasFlag("--verify")
 	case "cosign":
 		return strings.HasPrefix(c.Verb(), "verify")
 	case "openssl":
-		return c.Verb() == "dgst" || c.Verb() == "sha256" || c.Verb() == "sha512" || c.Verb() == "sha1"
+		// Hashing alone prints the digest; a signature is checked with -verify
+		return c.Verb() == "dgst" && c.HasFlag("-verify")
 	case "gh":
 		return (c.Sub(0) == "attestation" || c.Sub(0) == "release") && c.Sub(1) == "verify"
 	case "ssh-keygen":
@@ -488,28 +494,57 @@ func init() {
 	})
 }
 
-// installOperands returns the mode given to install(1) and its operands (sources and destination).
-func installOperands(c *runscript.Command) (string, []*runscript.Word) {
-	mode := ""
-	var args []*runscript.Word
+// installOperands returns the mode given to install(1), its operands (sources and destination) and the
+// directory given with -t, which is then the destination of all the operands.
+func installOperands(c *runscript.Command) (mode string, args []*runscript.Word, target string) {
 	for i := 0; i < len(c.Args); i++ {
 		v := c.Args[i].Value
-		switch {
-		case v == "-m" || v == "--mode":
+		// value takes the value of an option: the rest of the cluster, or the next word
+		value := func(rest string) string {
+			if rest != "" {
+				return rest
+			}
 			if i+1 < len(c.Args) {
 				i++
-				mode = c.Args[i].Value
+				return c.Args[i].Value
+			}
+			return ""
+		}
+		switch {
+		case v == "--mode" || v == "--target-directory":
+			if v == "--mode" {
+				mode = value("")
+			} else {
+				target = value("")
 			}
 		case strings.HasPrefix(v, "--mode="):
 			mode = strings.TrimPrefix(v, "--mode=")
-		case strings.HasPrefix(v, "-m") && len(v) > 2 && !strings.HasPrefix(v, "--"):
-			mode = v[2:]
-		case v == "-o" || v == "-g" || v == "-t" || v == "-S":
-			i++
+		case strings.HasPrefix(v, "--target-directory="):
+			target = strings.TrimPrefix(v, "--target-directory=")
+		case strings.HasPrefix(v, "--owner") || strings.HasPrefix(v, "--group"):
+			if !strings.Contains(v, "=") {
+				i++
+			}
+		case strings.HasPrefix(v, "--"):
 		case strings.HasPrefix(v, "-") && v != "-":
+			// A cluster of short options such as -Dm755 or -m 755 -t dir
+		cluster:
+			for j := 1; j < len(v); j++ {
+				switch v[j] {
+				case 'm':
+					mode = value(v[j+1:])
+					break cluster
+				case 't':
+					target = value(v[j+1:])
+					break cluster
+				case 'o', 'g', 'S':
+					value(v[j+1:])
+					break cluster
+				}
+			}
 		default:
 			args = append(args, c.Args[i])
 		}
 	}
-	return mode, args
+	return mode, args, target
 }
