@@ -28,7 +28,12 @@ func TestGuards(t *testing.T) {
 		{"case with default exit", "case \"$v\" in\n a|b) ;;\n *) exit 1 ;;\nesac", 1},
 		{"case without default", "case \"$v\" in\n a|b) ;;\nesac", 0},
 		{"case with glob", "case \"$v\" in\n a*) ;;\n *) exit 1 ;;\nesac", 0},
-		{"inside an if", "if [ -n \"$CI\" ]; then\n[[ \"$v\" =~ ^[a-z]+$ ]] || exit 1\nfi", 0},
+		{"inside an if", "if [ -n \"$CI\" ]; then\n[[ \"$v\" =~ ^[a-z]+$ ]] || exit 1\nfi", 1},
+		{"inside an else", "if [ -n \"$CI\" ]; then :; else\n[[ \"$v\" =~ ^[a-z]+$ ]] || exit 1\nfi", 1},
+		{"bare test inside an if", "if [ -n \"$CI\" ]; then\n[[ \"$v\" =~ ^[a-z]+$ ]]\nfi", 0},
+		{"inside a loop", "for i in 1; do\n[[ \"$v\" =~ ^[a-z]+$ ]] || exit 1\ndone", 0},
+		{"inside a function", "f() {\n[[ \"$v\" =~ ^[a-z]+$ ]] || exit 1\n}", 0},
+		{"inside an if in a pipeline", "if [ -n \"$CI\" ]; then\n[[ \"$v\" =~ ^[a-z]+$ ]] || exit 1\nfi | cat", 0},
 		{"two variables", `[[ "$v$w" =~ ^[a-z]+$ ]] || exit 1`, 0},
 		{"background", `[[ "$v" =~ ^[a-z]+$ ]] || exit 1 &`, 0},
 	}
