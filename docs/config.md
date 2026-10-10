@@ -163,7 +163,8 @@ extends:
       matches it. It's similar to the `--ignore` command line option.
 - `ignores`: Findings to accept, matched by rule and by where they are. See [Durable ignores](#durable-ignores).
 - `online`: Turns on the [online checks](usage.md#online-checks) for the files this configuration applies to, like the `--online`
-  flag does for the whole run. They query the GitHub API. The default is `false`: nothing uses the network.
+  flag does for the whole run. They query the GitHub API. The default is `false`: nothing uses the network. The environment
+  variable `JACTIONLINT_ONLINE` (`1`, a mode, or `0`) overrides this key, and the `--online` and `--no-online` flags override both.
 - <a id="online-options"></a>`online-options`: Tunes the online checks. Every key is optional. They apply to the whole run, decided by the first
   file checked, and the command line flags win over them. A `mode` of `cache` or `strict` also turns the online checks on,
   unless the configuration says `online: false` explicitly: an explicit `false` wins over the mode.

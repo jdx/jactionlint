@@ -70,7 +70,7 @@ var cliOptions = []cliOption{
 	{"Baseline", "baseline-check", "", "", false, "-baseline-check", "Report baseline entries which match no finding any more (implies --baseline)"},
 	{"Baseline", "sarif-hide-baselined", "", "", false, "-sarif-hide-baselined", "Leave baselined findings out of --format sarif instead of marking them suppressed"},
 
-	{"GitHub API (online checks)", "online", "", "MODE", true, "-online", "Run the checks which query the GitHub API. MODE: cache (cache only, no network), strict (fail when a lookup is skipped) or cache,strict"},
+	{"GitHub API (online checks)", "online", "", "MODE", true, "-online", "Run the checks which query the GitHub API. MODE: cache (cache only, no network), strict (fail when a lookup is skipped) or cache,strict. The environment variable JACTIONLINT_ONLINE sets the default"},
 	{"GitHub API (online checks)", "no-online", "", "", false, "-online=false", "Never use the network, even when the config file enables the online checks"},
 	{"GitHub API (online checks)", "online-api-url", "", "URL", false, "-online-api-url", "REST API URL of a GitHub Enterprise Server, e.g. https://ghe.example.com/api/v3"},
 	{"GitHub API (online checks)", "online-token-env", "", "NAME", false, "-online-token-env", "Name of the environment variable that holds the GitHub token"},

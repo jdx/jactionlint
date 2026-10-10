@@ -122,7 +122,7 @@ cat action.yml | jactionlint --stdin-filename action.yml -
 
 | Option | Short | Description |
 | --- | --- | --- |
-| `--online[=MODE]` |  | Run the checks which query the GitHub API. MODE: cache (cache only, no network), strict (fail when a lookup is skipped) or cache,strict |
+| `--online[=MODE]` |  | Run the checks which query the GitHub API. MODE: cache (cache only, no network), strict (fail when a lookup is skipped) or cache,strict. The environment variable JACTIONLINT_ONLINE sets the default |
 | `--no-online` |  | Never use the network, even when the config file enables the online checks |
 | `--online-api-url=URL` |  | REST API URL of a GitHub Enterprise Server, e.g. https://ghe.example.com/api/v3 |
 | `--online-token-env=NAME` |  | Name of the environment variable that holds the GitHub token |
@@ -697,7 +697,22 @@ and why an unsafe one is unsafe.
 ### Online checks
 
 Six checks need to ask GitHub about the actions a workflow uses, so they are off unless you give `--online` (or set `online: true` in
-[the configuration](config.md#configuration-file)). **Without it jactionlint never uses the network.**
+[the configuration](config.md#configuration-file), or `JACTIONLINT_ONLINE=1` in the environment). **Without it jactionlint never uses
+the network.**
+
+To use them in CI only, leave the command as it is and set the environment variable in the CI job (a pre-commit hook on a laptop does
+not have it): `JACTIONLINT_ONLINE=1` is the same as `--online`, `JACTIONLINT_ONLINE=cache`, `strict` and `cache,strict` are the modes of
+`--online=MODE`, and `JACTIONLINT_ONLINE=0` (or `false`, `off`, `no`) is the same as `--no-online`. An empty variable is not set. The
+command line wins over the variable (`--online`, `--no-online`), and the variable wins over `online:` of the configuration file. An
+invalid value is an error (exit status 2). In GitHub Actions the job also has to hand the token to the step, since the runner does not
+export it by itself:
+
+```yaml
+- run: hk check --all
+  env:
+    JACTIONLINT_ONLINE: 1
+    GITHUB_TOKEN: ${{ github.token }}
+```
 
 | Rule | What it finds |
 | --- | --- |

@@ -274,3 +274,24 @@ type defaultClientOptions struct {
 	// Context bounds "gh auth token".
 	Context context.Context
 }
+
+// onlineEnvName is the environment variable which gives the default of --online and --no-online.
+const onlineEnvName = "JACTIONLINT_ONLINE"
+
+// parseOnlineEnv reads the value of JACTIONLINT_ONLINE. An empty value means nothing is set. "0", "false", "off" and "no"
+// turn the online checks off like --no-online does. Anything else is a mode like the one of --online: "1", "true" or "on"
+// for a plain --online, and "cache", "strict" or "cache,strict".
+func parseOnlineEnv(v string) (set, off bool, mode OnlineMode, err error) {
+	v = strings.TrimSpace(v)
+	switch strings.ToLower(v) {
+	case "":
+		return false, false, OnlineModeDefault, nil
+	case "0", "false", "off", "no":
+		return false, true, OnlineModeDefault, nil
+	}
+	mode, err = ParseOnlineMode(v)
+	if err != nil {
+		return false, false, OnlineModeDefault, fmt.Errorf("invalid value for %s: %w", onlineEnvName, err)
+	}
+	return true, false, mode, nil
+}
