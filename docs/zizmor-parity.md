@@ -114,15 +114,14 @@ the corpus. "Fixed" means that the fixture failed on the code before; "Not repro
 | [#2210](https://github.com/zizmorcore/zizmor/issues/2210) and others | one 403, 404 or 5xx stops the online run | Not reproduced: a failed lookup is skipped with one warning (`--verbose` lists them). A test covers 404, 403, 500 and 502 |
 | [GHSA-f42p-wjw5-97qh](https://github.com/zizmorcore/zizmor/security/advisories/GHSA-f42p-wjw5-97qh) | credentials in the debug log | Not reproduced: a test runs `--online --debug --verbose` with a token and finds it nowhere |
 
-## Re-run of the differential harness (2026-10-10)
+## Differential harness
 
-`mise run zizmor-diff` was run again on 2026-10-10 against zizmor 1.30.1, which is still the latest release (published 2026-09-09), with
-jactionlint built from `main` (`fec2e750`), the `pedantic` profile of `scripts/zizmor-diff/pedantic.yaml` and zizmor `--offline --persona
-pedantic`. 23 of the 24 repositories of `scripts/zizmor-diff/corpus.txt` were analyzed; `omapac` is not checked out on this machine and
-was skipped. Neither tool failed on a repository. Online audits (`--online`) were **not** run, so the rows marked online in the table
-above were not re-measured, and no other zizmor version was compared. Only workflow files are compared; zizmor had nothing out of scope.
+`mise run zizmor-diff` compares jactionlint with zizmor 1.30.1 on the repositories of `scripts/zizmor-diff/corpus.txt`, with the
+`pedantic` profile of `scripts/zizmor-diff/pedantic.yaml` and zizmor `--offline --persona pedantic`. The numbers below come from the 23
+repositories of the corpus that are checked out (`omapac` is not); neither tool failed on one. The online audits (`--online`) are not
+part of this run, so the rows marked online in the table above are not measured here. Only workflow files are compared.
 
-zizmor reported 999 findings on the corpus and jactionlint reports 831 of them. Audits with a finding:
+zizmor reports 999 findings on the corpus and jactionlint reports 831 of them. Audits with a finding:
 
 | zizmor audit | zizmor | also reported by jactionlint | missed |
 | --- | --: | --: | --: |
@@ -138,17 +137,16 @@ zizmor reported 999 findings on the corpus and jactionlint reports 831 of them. 
 | `superfluous-actions` | 2 | 2 | 0 |
 | `unpinned-images`, `unpinned-uses`, `use-trusted-publishing` | 1 each | 1 each | 0 |
 
-Every other mapped audit has 0 findings on both sides. The 168 misses were **not analyzed** in this run, so this page does not say
-whether they are known gaps (`excessive-permissions` is `partial` by design, and the harness maps `missing-permissions` to it too) or
-regressions since the batches above; they are the first thing to look at. The per-audit statements in the table above come from the
-earlier batches and were not changed by this run, and the corpus differs from the one of those batches.
+Every other mapped audit has 0 findings on both sides. The 168 misses are not analyzed: `excessive-permissions` is `partial` by design
+(and the harness maps `missing-permissions` to it too), but the rest may be gaps worth a look. The per-audit statements in the table above
+come from the earlier batches, whose corpus differs from this one.
 
 jactionlint reports findings that zizmor does not on this corpus: `require-shell` 915, `require-expression-wrapping` 436,
 `mutable-runner-label` 433, `secrets-outside-env` 262, `missing-timeout` 216, `pipeline-without-pipefail` 50, `unknown-runner-label` 22,
 `checkout-static-credentials` 16, `self-hosted-runner` 16, `workflow-secret-scope` 10, `unverified-download` 6, `shellcheck` 7,
 `max-run-lines` 5, `continue-on-error` 4, `concurrency-cancels-release` 1, `unused-job-output` 1 and `unused-needs` 1, plus surplus
 findings of mapped rules (`undocumented-permissions` 86, `concurrency-limits` 21, `template-injection` 11, `cache-poisoning` 8,
-`artipacked` 7, `bot-conditions` 2, `unpinned-tools` 2). Those surplus findings were not reviewed one by one in this run.
+`artipacked` 7, `bot-conditions` 2, `unpinned-tools` 2). Those surplus findings are not reviewed one by one.
 
 ## Intentional differences: where jactionlint goes beyond zizmor
 
@@ -173,7 +171,7 @@ in the last column; the idea behind some of them is an open issue of zizmor.
 | `unverified-download` | default | a download piped into a shell or an interpreter, a downloaded file made executable and run without a checksum or signature check, TLS verification turned off. The idea is zizmor [#711](https://github.com/zizmorcore/zizmor/issues/711) | [batch K](#batch-k-measurements) |
 | `insecure-ssh-keyscan` | default | `ssh-keyscan` output written to a `known_hosts` file. The idea is zizmor [#2012](https://github.com/zizmorcore/zizmor/issues/2012) | [batch K](#batch-k-measurements) |
 | `checkout-static-credentials` | default | `actions/checkout` given an `ssh-key` or a literal `token`; with the option `secret-tokens` (on under the `pedantic` profile) also a token from a secret other than `GITHUB_TOKEN`. The idea is zizmor [#1118](https://github.com/zizmorcore/zizmor/issues/1118) | [batch K](#batch-k-measurements) |
-| `workflow-secret-scope` | pedantic | a secret assigned to the workflow-level `env` that reaches several jobs | [the check](checks.md#check-workflow-secret-scope); 10 findings in the [2026-10-10 re-run](#re-run-of-the-differential-harness-2026-10-10), not reviewed |
+| `workflow-secret-scope` | pedantic | a secret assigned to the workflow-level `env` that reaches several jobs | [the check](checks.md#check-workflow-secret-scope); 10 findings in the [differential run](#differential-harness), not reviewed |
 | `insecure-url-scheme` | default | `http://`, `ftp://` and `git://` locations in `run:` downloads and `with:` inputs. zizmor's audit of this name looks at `.pre-commit-config.yaml` only | [batch K](#batch-k-measurements) |
 | `invisible-characters` | default | invisible and bidirectional control characters ([zizmor#914](https://github.com/zizmorcore/zizmor/issues/914)), in workflows and `dependabot.yml`, also in a file that does not parse. Safe fix | [batch L](#batch-l-measurements): no true positive in the corpus, unit tests only |
 | `unsound-prefix-match` | default | `startsWith()`, `endsWith()` and `contains()` on the name of an account or repository ([zizmor#1533](https://github.com/zizmorcore/zizmor/issues/1533)); `unsound-contains` is the sibling for a literal haystack | [batch L](#batch-l-measurements) |
