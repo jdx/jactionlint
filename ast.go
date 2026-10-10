@@ -1073,6 +1073,9 @@ type Workflow struct {
 	// workflow of the repository calls and every call passes "secrets: inherit". The secrets that the workflow
 	// declares are then not all it can read.
 	inheritedSecrets bool
+	// callerEvents are the events of the local workflows which run this reusable workflow, directly or through other
+	// reusable workflows. It is nil when the linter did not look (no project), and then nothing is known about the callers.
+	callerEvents *WorkflowCallers
 	// Source is the content of the source file. Rules which offer a fix (Error.Fix) read it to turn
 	// positions into byte offsets. It is never nil for a workflow returned by Parse. Do not modify it.
 	Source []byte

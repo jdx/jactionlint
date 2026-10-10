@@ -322,7 +322,7 @@ func TestFixerErrorsCarryTheFix(t *testing.T) {
 func TestFixNoTrailingNewline(t *testing.T) {
 	src := []byte("on: push\njobs:\n  a:\n    runs-on: ubuntu-latest")
 	out, n, _ := fixWith(t, src, fixerConfig(t, ""), FixModeUnsafe)
-	want := "on: push\npermissions:\n  contents: read\njobs:\n  a:\n    runs-on: ubuntu-latest\n    timeout-minutes: 30"
+	want := "on: push\n\npermissions:\n  contents: read\njobs:\n  a:\n    runs-on: ubuntu-latest\n    timeout-minutes: 30"
 	if diff := cmp.Diff(want, string(out)); n != 2 || diff != "" {
 		t.Errorf("%d fixes (-want +got):\n%s", n, diff)
 	}

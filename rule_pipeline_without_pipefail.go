@@ -172,7 +172,8 @@ func (rule *RulePipelineWithoutPipefail) VisitStep(n *Step) error {
 	return nil
 }
 
-// discardedSubstitutions returns the commands inside the command substitutions in the arguments of commands, like the
+// discardedSubstitutions returns the commands inside the substitutions in the arguments of commands and the process
+// substitutions in redirections (`done < <(cmd | jq)`), like the
 // `sha256sum f | cut -d' ' -f1` of `echo "hash=$(sha256sum f | cut -d' ' -f1)"`. The status of such a substitution is
 // not the status of anything: the command that gets the argument runs and has its own status, with or without
 // pipefail, so a failure in the pipeline cannot stop the step. The value of an assignment (`x=$(a | b)`) is different, it
@@ -190,6 +191,19 @@ func discardedSubstitutions(s *runscript.Script) map[*runscript.Command]bool {
 				}
 				m[sub] = true
 			}
+		}
+	}
+	// `done < <(a | b)`, `mapfile < <(a | b)` and `> >(a | b)`: the shell never waits for the status of a process
+	// substitution, so pipefail cannot make a failure observable.
+	for _, r := range s.Redirects {
+		if r.Target == nil || !r.Target.ProcSubst {
+			continue
+		}
+		for _, sub := range r.Target.Subs {
+			if m == nil {
+				m = map[*runscript.Command]bool{}
+			}
+			m[sub] = true
 		}
 	}
 	return m

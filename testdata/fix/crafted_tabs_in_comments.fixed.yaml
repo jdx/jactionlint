@@ -2,6 +2,7 @@
 on:
   push:	# trailing comment with a tab
     branches: [main]	
+
 permissions:
   contents: read
 jobs:

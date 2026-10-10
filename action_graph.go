@@ -502,3 +502,85 @@ func (g *callGraph) allCallersInheritSecrets(rel string) bool {
 	}
 	return len(froms) > 0
 }
+
+// WorkflowCallers are the events of the local workflows which run a reusable workflow. Unlike the callers of an
+// action they are not judged by the most dangerous one: a rule asks which events can reach the workflow.
+type WorkflowCallers struct {
+	// Events are the events of the workflows which call it, directly or through other reusable workflows, without
+	// workflow_call.
+	Events []Event
+	// Known is true when every chain of calls ends in a local workflow with its own events. It is false when the
+	// workflow has no local caller, or a caller which is itself only called (by workflows of other repositories,
+	// which are not known).
+	Known bool
+}
+
+// callerEventsOf returns the events of the workflows which call the reusable workflow at the path (relative to the
+// root with "/").
+func (g *callGraph) callerEventsOf(rel string) *WorkflowCallers {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	ret := &WorkflowCallers{Known: true}
+	start := graphNode{'w', rel}
+	if len(g.callers[start]) == 0 {
+		ret.Known = false
+		return ret
+	}
+	visited := map[graphNode]bool{start: true}
+	queue := []graphNode{start}
+	for len(queue) > 0 {
+		n := queue[0]
+		queue = queue[1:]
+		for _, from := range g.callers[n] {
+			if visited[from] {
+				continue
+			}
+			visited[from] = true
+			if from.kind != 'w' {
+				ret.Known = false
+				continue
+			}
+			own := 0
+			for _, e := range g.triggersOf(from.path) {
+				if _, ok := e.(*WorkflowCallEvent); !ok {
+					ret.Events = append(ret.Events, e)
+					own++
+				}
+			}
+			if len(g.callers[from]) > 0 {
+				queue = append(queue, from)
+			} else if own == 0 {
+				// Only called, and nothing in the repository calls it
+				ret.Known = false
+			}
+		}
+	}
+	return ret
+}
+
+// actorEvents returns the events which can start the run of the workflow and whether they are known. For the
+// metadata of an action they are the events of the workflows which call it. For a reusable workflow they are its
+// own events and those of its callers, and the callers must be known: a workflow that nothing in the repository
+// calls may be called by another repository on any event.
+func (w *Workflow) actorEvents() ([]Event, bool) {
+	if w.Action != nil {
+		ev := w.Action.Callers.Events()
+		return ev, len(ev) > 0
+	}
+	var ret []Event
+	called := false
+	for _, e := range w.On {
+		if _, ok := e.(*WorkflowCallEvent); ok {
+			called = true
+		} else {
+			ret = append(ret, e)
+		}
+	}
+	if called {
+		if w.callerEvents == nil || !w.callerEvents.Known {
+			return nil, false
+		}
+		ret = append(ret, w.callerEvents.Events...)
+	}
+	return ret, len(ret) > 0
+}

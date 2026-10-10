@@ -14,6 +14,7 @@ type RuleBotConditions struct {
 	RuleBase
 	src    *sourceIndex
 	prOnly bool // the only events are pull_request and pull_request_target, which have the PR author
+	events botEvents
 }
 
 // NewRuleBotConditions creates a new RuleBotConditions instance. The source of the file lets the
@@ -49,18 +50,93 @@ var botAccountRe = regexp.MustCompile(`[A-Za-z0-9_.-]+\[bot\]`)
 
 var botNamePrefixes = []string{"dependabot", "renovate", "github-actions", "copilot"}
 
-// VisitWorkflowPre is callback when visiting Workflow node before visiting its children.
-func (rule *RuleBotConditions) VisitWorkflowPre(n *Workflow) error {
-	// For the metadata of an action the events are those of the workflows which call it; none are known
-	// when no local workflow calls it, which makes the suggestions that need a pull request unavailable.
-	events := n.TriggerEvents()
-	rule.prOnly = len(events) > 0
+// botEvents says what the known events of the workflow tell about the account which started the run.
+type botEvents int
+
+const (
+	// botEventsUnknown: the events are not known (a reusable workflow or an action nothing in the repository calls),
+	// so nothing is assumed about the payload.
+	botEventsUnknown botEvents = iota
+	// botEventsPROnly: every event is pull_request or pull_request_target, which have the author of the pull request.
+	botEventsPROnly
+	// botEventsMixed: a pull request event can start the run next to others, so the author exists on some runs.
+	botEventsMixed
+	// botEventsNoPR: the events are known and none has a pull request. There is no author to check instead.
+	botEventsNoPR
+	// botEventsPushLike: every event is started by an account with write access (push, a manual run, a release...),
+	// so the actor is the person who made it and there is nothing to spoof.
+	botEventsPushLike
+)
+
+// pushLikeEvents are the events which only people with write access to the repository start (or the repository
+// itself, for a schedule), so the actor of the run is not somebody who sent a change from outside.
+var pushLikeEvents = map[string]bool{
+	"push": true, "schedule": true, "workflow_dispatch": true, "repository_dispatch": true,
+	"release": true, "create": true, "delete": true,
+}
+
+// prPayloadEvents are the events whose payload has github.event.pull_request.
+var prPayloadEvents = map[string]bool{
+	"pull_request": true, "pull_request_target": true, "pull_request_review": true, "pull_request_review_comment": true,
+}
+
+// onlyPullRequestEvents reports whether every event is pull_request or pull_request_target.
+func onlyPullRequestEvents(events []Event) bool {
 	for _, e := range events {
 		name := strings.ToLower(e.EventName())
 		if name != "pull_request" && name != "pull_request_target" {
-			rule.prOnly = false
+			return false
 		}
 	}
+	return true
+}
+
+// classifyBotEvents sorts the events which can start the run by what the rule can say about the author.
+func classifyBotEvents(events []Event) botEvents {
+	allPR, anyPR, pushLike := true, false, true
+	for _, e := range events {
+		name := strings.ToLower(e.EventName())
+		if prPayloadEvents[name] {
+			anyPR = true
+		} else {
+			allPR = false
+		}
+		if !pushLikeEvents[name] {
+			pushLike = false
+		}
+	}
+	switch {
+	case allPR:
+		// Every event has the pull request payload, so the author exists on all of them.
+		return botEventsPROnly
+	case anyPR:
+		return botEventsMixed
+	case pushLike:
+		return botEventsPushLike
+	default:
+		return botEventsNoPR
+	}
+}
+
+// botConditionsSilent reports whether bot-conditions has nothing to say about the workflow because every event
+// that can start it is started by an account with write access.
+func (w *Workflow) botConditionsSilent() bool {
+	events, known := w.actorEvents()
+	return known && classifyBotEvents(events) == botEventsPushLike
+}
+
+// VisitWorkflowPre is callback when visiting Workflow node before visiting its children.
+func (rule *RuleBotConditions) VisitWorkflowPre(n *Workflow) error {
+	// For a reusable workflow and for the metadata of an action the events are those of the workflows which call it;
+	// they are unknown when no local workflow calls it. Then the rule judges the condition alone.
+	events, known := n.actorEvents()
+	rule.events = botEventsUnknown
+	rule.prOnly = false
+	if !known {
+		return nil
+	}
+	rule.events = classifyBotEvents(events)
+	rule.prOnly = rule.events == botEventsPROnly && onlyPullRequestEvents(events)
 	return nil
 }
 
@@ -241,9 +317,22 @@ func (rule *RuleBotConditions) checkBot(s *String, text string, base int, ref, o
 	}
 	path, _ := derefPath(ref)
 	name := strings.Join(path, ".")
+	if rule.events == botEventsPushLike {
+		// The run of a push has no pull request, and the pusher has write access: the issue is about the author
+		// of a pull request, which no event of this workflow has.
+		return true
+	}
 	tok := ref.Token()
 	pos := tokenPos(rule.src, s, base, tok)
-	rule.ReportIDf("bot-conditions", pos, "%q holds the account of the last event and not the author of the change, so it can be spoofed and comparing it with the bot %q does not prove that the bot made the change. check the author of the pull request instead, e.g. %q", name, bot, preferredActor(name))
+	const head = "%q holds the account of the last event and not the author of the change, so it can be spoofed and comparing it with the bot %q does not prove that the bot made the change. "
+	switch {
+	case rule.events == botEventsNoPR:
+		rule.ReportIDf("bot-conditions", pos, head+"no event of this workflow has a pull request, so there is no author of a pull request to check: check who made the change from the payload of the event", name, bot)
+	case rule.events == botEventsMixed:
+		rule.ReportIDf("bot-conditions", pos, head+"on a pull request check the author of the pull request instead, e.g. %q. this field does not exist on the other events of the workflow, where the condition needs another test", name, bot, preferredActor(name))
+	default:
+		rule.ReportIDf("bot-conditions", pos, head+"check the author of the pull request instead, e.g. %q", name, bot, preferredActor(name))
+	}
 	// The author of the pull request is a different account from the actor when somebody else pushed
 	// to the branch. The condition then holds where it did not, so the fix is unsafe.
 	repl := spoofableActors[name]

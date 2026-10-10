@@ -109,13 +109,21 @@ func TestUnsoundPrefixMatchPositionsAndMessages(t *testing.T) {
 
 func TestUnsoundPrefixMatchBotConditions(t *testing.T) {
 	// A comparison with a bot in a condition is reported by bot-conditions when it is enabled
-	src := prefixSrc("startsWith(github.actor, 'dependabot')")
+	src := strings.Replace(prefixSrc("startsWith(github.actor, 'dependabot')"), "on: push", "on: [push, pull_request]", 1)
 	both := ruleConfig("unsound-prefix-match", "bot-conditions")
 	if got := errsWithID(lintFileWithConfig(t, both, "ci.yaml", src), "unsound-prefix-match"); len(got) != 0 {
 		t.Errorf("bot-conditions is on but got %v", got)
 	}
 	if got := errsWithID(lintFileWithConfig(t, both, "ci.yaml", src), "bot-conditions"); len(got) != 1 {
 		t.Errorf("want a bot-conditions error but got %v", got)
+	}
+	// On push alone bot-conditions is silent, so the prefix test is reported here
+	push := prefixSrc("startsWith(github.actor, 'dependabot')")
+	if got := errsWithID(lintFileWithConfig(t, both, "ci.yaml", push), "unsound-prefix-match"); len(got) != 1 {
+		t.Errorf("bot-conditions is silent on push, want 1 unsound-prefix-match error but got %v", got)
+	}
+	if got := errsWithID(lintFileWithConfig(t, both, "ci.yaml", push), "bot-conditions"); len(got) != 0 {
+		t.Errorf("want no bot-conditions error on push but got %v", got)
 	}
 	// Other names are still reported
 	src = prefixSrc("startsWith(github.actor, 'jdx')")

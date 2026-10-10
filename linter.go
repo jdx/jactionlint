@@ -560,7 +560,7 @@ func (l *Linter) LintFiles(filepaths []string, project *Project) ([]*Error, erro
 	for _, r := range results {
 		all = append(all, r.errs...)
 	}
-	if err := l.printer.print(l.out, results, l.notifications()); err != nil {
+	if err := l.printer.print(l.out, results, l.runInfo()); err != nil {
 		return nil, err
 	}
 	l.reportBaselineNote(results)
@@ -827,6 +827,7 @@ func (l *Linter) check(
 		w, all = Parse(content)
 		if w != nil && project != nil {
 			w.inheritedSecrets = l.callersInheritSecrets(project, l.absFilePath(path))
+			w.callerEvents = l.workflowCallers(project, l.absFilePath(path))
 		}
 	}
 
@@ -1130,6 +1131,12 @@ func (l *Linter) notifications() []string {
 	return slices.Compact(ret)
 }
 
+// runInfo returns what the printers know about the run itself: the notifications and the coverage of the
+// online checks.
+func (l *Linter) runInfo() runInfo {
+	return runInfo{notes: l.notifications(), online: l.OnlineCoverage()}
+}
+
 // annotateErrors fills the fields of the errors which are derived from the diagnostic ID: the
 // severity, the documentation URL and the end position of the region. Errors of rules which the
 // config turns off are removed.
@@ -1178,6 +1185,16 @@ func (l *Linter) callersInheritSecrets(p *Project, file string) bool {
 		return false
 	}
 	return l.callGraphOf(p).allCallersInheritSecrets(filepath.ToSlash(rel))
+}
+
+// workflowCallers returns the events of the local workflows which call the reusable workflow in the file, or nil
+// when the file is not in the project.
+func (l *Linter) workflowCallers(p *Project, file string) *WorkflowCallers {
+	rel, err := filepath.Rel(absPath(p.root), absPath(file))
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return nil
+	}
+	return l.callGraphOf(p).callerEventsOf(filepath.ToSlash(rel))
 }
 
 // actionCallers returns the local workflows which run the action defined in the file, or nil when the

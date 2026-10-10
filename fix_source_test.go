@@ -111,7 +111,7 @@ func TestFixesInAnIndentedRootMapping(t *testing.T) {
 	if after.Permissions == nil || len(after.Jobs) != 1 || after.Jobs["a"].TimeoutMinutes == nil {
 		t.Errorf("permissions or the job are wrong after the fixes:\n%s", out)
 	}
-	want := "  on: push\n  permissions:\n    contents: read\n  jobs:\n"
+	want := "  on: push\n\n  permissions:\n    contents: read\n  jobs:\n"
 	if !strings.HasPrefix(string(out), want) {
 		t.Errorf("want the file to start with %q but got\n%s", want, out)
 	}

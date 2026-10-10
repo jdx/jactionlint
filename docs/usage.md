@@ -257,9 +257,11 @@ steps:
   and decides what its comments suppress. Once zizmor is gone, turn on its `zizmor` option to find the comments left over;
   then a comment is reported only when its audit maps to a rule that is enabled.
 
-`jactionlint --migrate-ignores [files]` rewrites the trailing zizmor comments (of the workflows of the project when no file is
-given) into `# jactionlint ignore=` comments on the line above and moves the reason to a plain comment line. Names with no
-jactionlint counterpart stay in the zizmor comment, and running it again changes nothing.
+`jactionlint --migrate-ignores [files]` rewrites the trailing zizmor comments (of the workflows and the root `action.yml` of the
+project when no file is given) into `# jactionlint ignore=` comments on the line above and moves the reason to a plain comment line.
+A version after the comment on a `uses:` line (`# zizmor: ignore[artipacked] v6`) stays on that line as `# v6`. Names with no
+jactionlint counterpart stay in the zizmor comment, and running it again changes nothing. A comment which is not migrated is listed
+with the reason, for instance a comment on the first key of a step with more keys, where a comment above would cover the whole step.
 
 `--shellcheck` and `--pyflakes` specifies file paths of executables. Setting empty string to them disables `shellcheck` and
 `pyflakes` rules. As a bonus, disabling them makes jactionlint much faster Since these external linter integrations spawn many
@@ -715,6 +717,11 @@ jactionlint --online
   jactionlint prints **one warning per kind of failure** (on stderr, or in the SARIF notifications with `--format sarif`) and the
   exit status does not change. `--verbose` lists every skipped lookup. `--online=strict` turns a skipped lookup into exit status 3,
   for a pipeline where a check that could not run must not pass silently.
+- **Coverage in SARIF.** With `--format sarif` and the online checks on, the run has `properties.onlineCoverage`:
+  `status` (`complete`, or `incomplete` when `skippedLookups` is not zero), `mode`, `skippedLookups`, `excludedRepositories` (left out
+  on purpose by `allow`/`deny`) and `evidence` (`network` or `cache`). The property is absent when the online checks were off, so
+  "not checked" is distinguishable from "checked, nothing found". It is evidence about the run, not a trust guarantee: a resolved ref
+  or a timestamp does not prove that a tag was never repointed.
 - **Token.** The first of these is used: the variable named by `--online-token-env`, the file named by `--online-token-file`,
   `GITHUB_TOKEN`, `GH_TOKEN` (for a GitHub Enterprise Server `GITHUB_ENTERPRISE_TOKEN` and `GH_ENTERPRISE_TOKEN` come first), and
   finally the output of `gh auth token --hostname HOST` when `gh` is installed (set `gh-cli: false` in
