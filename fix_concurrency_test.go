@@ -7,7 +7,7 @@ import (
 
 func TestFixConcurrencyLimits(t *testing.T) {
 	const group = "${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}"
-	block := "concurrency:\n  group: " + group + "\n  cancel-in-progress: true\n"
+	block := "\nconcurrency:\n  group: " + group + "\n  cancel-in-progress: true\n"
 	tests := []struct {
 		what string
 		src  string
@@ -26,7 +26,7 @@ func TestFixConcurrencyLimits(t *testing.T) {
 		{
 			"pull_request_target, after permissions, with four spaces",
 			"on:\n    pull_request_target:\npermissions: {}\njobs:\n    test:\n        runs-on: ubuntu-latest\n        steps:\n            - run: make\n",
-			"on:\n    pull_request_target:\nconcurrency:\n    group: " + group + "\n    cancel-in-progress: true\npermissions: {}\njobs:\n    test:\n        runs-on: ubuntu-latest\n        steps:\n            - run: make\n",
+			"on:\n    pull_request_target:\n\nconcurrency:\n    group: " + group + "\n    cancel-in-progress: true\npermissions: {}\njobs:\n    test:\n        runs-on: ubuntu-latest\n        steps:\n            - run: make\n",
 		},
 		{
 			"comment after the trigger stays with it",

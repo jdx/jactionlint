@@ -2,6 +2,7 @@ name: On sequence
 on:
 - push
 - pull_request
+
 permissions:
   contents: read
 env:
