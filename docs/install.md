@@ -21,6 +21,8 @@ jactionlint --version
 project (and CI, for example with [`jdx/mise-action`](https://github.com/jdx/mise-action)) uses the same version.
 `mise upgrade jactionlint` updates it.
 
+With mise's default `minimum_release_age` of 24 hours, `mise lock` and `mise up` see a new jactionlint 2.0.x release only after that time has passed.
+
 ## macOS
 
 ### Homebrew

@@ -90,7 +90,11 @@ func (rule *RuleTimeoutCheck) VisitJobPre(n *Job) error {
 
 	if n.TimeoutMinutes == nil {
 		if required {
-			rule.ReportID("missing-timeout", n.Pos, "\"timeout-minutes\" is not set at this job. Set it to avoid wasting runner minutes when the job hangs")
+			msg := "\"timeout-minutes\" is not set at this job. Set it to avoid wasting runner minutes when the job hangs"
+			if _, set := cfg.ruleOptionNumber("missing-timeout", "default-minutes"); !set {
+				msg += ". Set \"default-minutes\" in the \"missing-timeout\" rule options of the configuration to turn on the --fix fix"
+			}
+			rule.ReportID("missing-timeout", n.Pos, msg)
 			last := rule.Errs()[len(rule.Errs())-1]
 			last.Fix, last.NoFix = rule.fixMissing(n)
 		}

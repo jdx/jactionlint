@@ -674,6 +674,18 @@ used with stdin. These rules have a fix:
 | `unpinned-uses`                       | With `--online`, replaces a tag with its commit and names the tag in a comment (see below).                                        | Yes                                                               |
 | `unused-ignore`                       | Removes the ignore comment, or only its patterns which did nothing when the comment has others.                                   | Yes                                                               |
 
+Two of these fixes write a number which jactionlint does not choose, so they are off until you set it in `.github/jactionlint.yaml`:
+
+```yaml
+rules:
+  missing-timeout:
+    default-minutes: 15   # --fix adds timeout-minutes: 15 to jobs without one
+  dependabot-cooldown:
+    default-days: 7       # --fix adds cooldown.default-days: 7 to Dependabot updates
+```
+
+The findings of `missing-timeout` and `dependabot-cooldown` say so while the option is not set.
+
 A finding in a shape the fix does not understand (a job written as `job: {runs-on: ...}`, a job with a YAML anchor, a file with
 a bare carriage return) is reported without a fix. The section of each rule in [the checks document](checks.md) says when its fix applies
 and why an unsafe one is unsafe.
