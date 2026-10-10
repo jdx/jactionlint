@@ -28,9 +28,9 @@ func TestTemplateInjectionFixUsesTheSpellingOfTheEnvKey(t *testing.T) {
 		src  string
 		want string // text of the fixed run, "" for no fix
 	}{
-		{"the key spelled in mixed case", head + "    env:\n      Foo: ${{ github.event.issue.title }}\n    steps:\n      - run: echo ${{ env.FOO }}\n", `echo "${Foo}"`},
-		{"the key spelled in upper case", head + "    env:\n      FOO: ${{ github.event.issue.title }}\n    steps:\n      - run: echo ${{ env.foo }}\n", `echo "${FOO}"`},
-		{"levels which spell the key differently", head + "    env:\n      Foo: ${{ github.event.issue.title }}\n    steps:\n      - run: echo ${{ env.FOO }}\n        env:\n          FOO: ${{ github.event.issue.title }}\n", ""},
+		{"the key spelled in mixed case", head + "    env:\n      Foo: ${{ github.event.issue.title }}\n    steps:\n      - run: X=${{ env.FOO }}\n", `X="${Foo}"`},
+		{"the key spelled in upper case", head + "    env:\n      FOO: ${{ github.event.issue.title }}\n    steps:\n      - run: X=${{ env.foo }}\n", `X="${FOO}"`},
+		{"levels which spell the key differently", head + "    env:\n      Foo: ${{ github.event.issue.title }}\n    steps:\n      - run: X=${{ env.FOO }}\n        env:\n          FOO: ${{ github.event.issue.title }}\n", ""},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

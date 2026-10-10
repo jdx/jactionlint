@@ -73,6 +73,19 @@ func (s *Script) InSplitList(offset int) bool {
 	return false
 }
 
+// InAssignValue reports whether the byte offset is inside the value of a scalar assignment (`A=x`, `A=1 cmd`,
+// `A+=x`), where the shell does not split the value into words. The arguments of a declaration builtin
+// (`export A=x`, `local A=x`) are not counted, and the value of an array assignment is not one: see
+// [Script.InSplitList].
+func (s *Script) InAssignValue(offset int) bool {
+	for _, a := range s.Assignments {
+		if !a.Array && (a.Cmd == nil || !a.Cmd.Decl) && a.Value != nil && offset >= a.Value.Offset && offset < a.Value.End {
+			return true
+		}
+	}
+	return false
+}
+
 // Loc is the location of a node: byte offsets into the script and a 1-based line and column (in runes)
 // inside the script, before the YAML indentation is considered. See [Script.Position].
 type Loc struct {

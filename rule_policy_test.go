@@ -220,8 +220,58 @@ func TestArtipackedFix(t *testing.T) {
 			fixed: true,
 		},
 		{
-			name: "flow mapping is not fixed",
-			src:  "on: push\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - {uses: actions/checkout@v4}\n",
+			name:  "flow step",
+			src:   "on: push\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - {uses: actions/checkout@v4}\n",
+			want:  "on: push\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - {with: {persist-credentials: false}, uses: actions/checkout@v4}\n",
+			fixed: true,
+		},
+		{
+			name:  "flow step with other keys",
+			src:   "on: push\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - { name: co, uses: actions/checkout@v4, id: c }\n",
+			want:  "on: push\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - { with: {persist-credentials: false}, name: co, uses: actions/checkout@v4, id: c }\n",
+			fixed: true,
+		},
+		{
+			name:  "flow step with a flow with",
+			src:   "on: push\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - {uses: actions/checkout@v4, with: {fetch-depth: 0}}\n",
+			want:  "on: push\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - {uses: actions/checkout@v4, with: {persist-credentials: false, fetch-depth: 0}}\n",
+			fixed: true,
+		},
+		{
+			name:  "flow step over several lines",
+			src:   "on: push\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - {\n          uses: actions/checkout@v4,\n          with: {\n            # history\n            fetch-depth: 0,\n          },\n        }\n",
+			want:  "on: push\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - {\n          uses: actions/checkout@v4,\n          with: {\n            # history\n            persist-credentials: false, fetch-depth: 0,\n          },\n        }\n",
+			fixed: true,
+		},
+		{
+			name:  "flow step in a flow sequence",
+			src:   "on: push\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps: [{uses: actions/checkout@v4}]\n",
+			want:  "on: push\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps: [{with: {persist-credentials: false}, uses: actions/checkout@v4}]\n",
+			fixed: true,
+		},
+		{
+			name:  "multi-line flow with in a block step",
+			src:   "on: push\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n        with: {\n          fetch-depth: 0,\n          submodules: true\n        }\n",
+			want:  "on: push\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n        with: {\n          persist-credentials: false, fetch-depth: 0,\n          submodules: true\n        }\n",
+			fixed: true,
+		},
+		{
+			name:  "multi-line empty flow with",
+			src:   "on: push\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n        with: {\n        }\n",
+			want:  "on: push\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n        with: { persist-credentials: false \n        }\n",
+			fixed: true,
+		},
+		{
+			name: "flow step with an anchored with",
+			src:  "on: push\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - {uses: actions/checkout@v4, with: &w {fetch-depth: 0}}\n",
+		},
+		{
+			name: "flow step whose first key is an anchor",
+			src:  "on: push\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - {&k uses: actions/checkout@v4}\n",
+		},
+		{
+			name: "flow step with an empty with",
+			src:  "on: push\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - {uses: actions/checkout@v4, with: }\n",
 		},
 		{
 			name:  "flow with gets the entry first",
@@ -271,6 +321,9 @@ func TestArtipackedFix(t *testing.T) {
 				for _, e := range found {
 					if e.Fix != nil {
 						t.Errorf("an unfixable finding must not carry a fix: %+v", e.Fix)
+					}
+					if e.NoFix == nil || e.NoFix.Code != NoFixUnsupportedShape {
+						t.Errorf("an unfixable finding says why: %+v", e.NoFix)
 					}
 				}
 				return

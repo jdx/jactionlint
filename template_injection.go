@@ -932,13 +932,41 @@ type tiFixInput struct {
 //
 // Fixes which are not provably equivalent (the value is not in quotes, so quoting it changes word
 // splitting) are separate and marked unsafe. Only run: scripts for bash and sh are fixed.
-func planTemplateInjectionFixes(in tiFixInput) map[int]*Fix {
+func planTemplateInjectionFixes(in tiFixInput) *tiFixPlan {
+	plan := &tiFixPlan{Fixes: map[int]*Fix{}, NoFix: map[int]*NoFix{}}
+	planTemplateInjectionFixesInto(in, plan)
+	return plan
+}
+
+// tiFixPlan is the result of planTemplateInjectionFixes. Both maps are by the byte offset of the "${{" in the string.
+type tiFixPlan struct {
+	// Fixes are the fixes of the expansions which can be fixed.
+	Fixes map[int]*Fix
+	// NoFix says why an expansion is left alone although the rule fixes expansions in general: it is an unquoted
+	// argument which is not provably a single word.
+	NoFix map[int]*NoFix
+}
+
+// apply sets the fix, or else the reason why there is none, on the finding of the expansion.
+func (p *tiFixPlan) apply(e *Error, start int) {
+	if p == nil {
+		return
+	}
+	if f := p.Fixes[start]; f != nil {
+		e.Fix = f
+	} else if n := p.NoFix[start]; n != nil {
+		e.NoFix = n
+	}
+}
+
+func planTemplateInjectionFixesInto(in tiFixInput, plan *tiFixPlan) {
+	fixes := plan.Fixes
 	if in.idx == nil || in.run == nil || in.str == nil || !posixShell(in.ctx.wf, in.ctx.job, in.run) {
-		return nil
+		return
 	}
 	spans := in.idx.scanExprs(in.str)
 	if len(spans) == 0 {
-		return nil
+		return
 	}
 	shSpans := make([]shSpan, len(spans))
 	for i, sp := range spans {
@@ -957,6 +985,9 @@ func planTemplateInjectionFixes(in tiFixInput) map[int]*Fix {
 	for i := range spans {
 		sp := &spans[i]
 		if places[i].Cannot {
+			if places[i].Split != "" {
+				plan.NoFix[sp.Start] = &NoFix{Code: NoFixNeedsJudgment, Reason: places[i].Split}
+			}
 			continue
 		}
 		if !tiEnabled(in.cfg, in.ctx.classify(sp).Tier) {
@@ -973,7 +1004,7 @@ func planTemplateInjectionFixes(in tiFixInput) map[int]*Fix {
 		cands = append(cands, candidate{sp, places[i], path, text, off})
 	}
 	if len(cands) == 0 {
-		return nil
+		return
 	}
 
 	taken := map[string]bool{}
@@ -989,7 +1020,6 @@ func planTemplateInjectionFixes(in tiFixInput) map[int]*Fix {
 	addTaken(in.ctx.jobEnv())
 	addTaken(in.ctx.wfEnv())
 
-	fixes := map[int]*Fix{}
 	for _, unsafe := range []bool{false, true} {
 		var edits []TextEdit
 		var starts []int
@@ -1074,7 +1104,6 @@ func planTemplateInjectionFixes(in tiFixInput) map[int]*Fix {
 			fixes[s] = f
 		}
 	}
-	return fixes
 }
 
 // defaultEnvVars maps the properties of the github and runner contexts to the environment variables

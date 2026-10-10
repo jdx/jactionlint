@@ -194,10 +194,14 @@ func uploadsWorkspace(steps []*Step) bool {
 	return false
 }
 
+// artipackedNoFix is the reason for a checkout whose YAML the fix does not edit.
+var artipackedNoFix = &NoFix{Code: NoFixUnsupportedShape, Reason: "the step is not written in a way the fix can edit exactly, add persist-credentials: false under with: by hand"}
+
 func (rule *RuleArtipacked) attachFix(a *ExecAction, unsafe bool) {
 	if rule.src == nil {
 		return
 	}
+	e := rule.errs[len(rule.errs)-1]
 	if rule.idx == nil {
 		rule.idx = newSourceIndex(rule.src)
 	}
@@ -210,6 +214,7 @@ func (rule *RuleArtipacked) attachFix(a *ExecAction, unsafe bool) {
 		}
 	}
 	if rule.bad {
+		e.NoFix = artipackedNoFix
 		return
 	}
 	if rule.steps == nil {
@@ -218,9 +223,9 @@ func (rule *RuleArtipacked) attachFix(a *ExecAction, unsafe bool) {
 	}
 	edit, path, ok := persistCredentialsEdit(rule.steps, rule.src, rule.idx, a)
 	if !ok {
+		e.NoFix = artipackedNoFix
 		return
 	}
-	e := rule.errs[len(rule.errs)-1]
 	e.Fix = &Fix{
 		Description: "Set persist-credentials: false",
 		Unsafe:      unsafe,
@@ -244,6 +249,7 @@ func (rule *RuleArtipacked) VisitWorkflowPost(n *Workflow) error {
 		}
 		if len(set) == 1 {
 			set[0].err.Fix = nil
+			set[0].err.NoFix = artipackedNoFix
 			return
 		}
 		check(set[:len(set)/2])
@@ -334,12 +340,16 @@ func persistCredentialsEdit(steps map[[2]int]stepMapping, src []byte, idx *sourc
 	}
 	found, ok := steps[[2]int{a.Uses.Pos.Line, a.Uses.Pos.Col}]
 	step, path := found.node, found.path
-	if !ok || step == nil || step.Style&yaml.FlowStyle != 0 {
+	if !ok || step == nil {
 		return TextEdit{}, nil, false
 	}
 	usesKey, usesVal := mappingEntry(step, "uses")
 	if usesKey == nil {
 		return TextEdit{}, nil, false
+	}
+	if step.Style&yaml.FlowStyle != 0 {
+		edit, ok := persistCredentialsFlowStepEdit(src, idx, step)
+		return edit, path, ok
 	}
 	nl := idx.newline()
 	withKey, withVal := mappingEntry(step, "with")
@@ -353,7 +363,7 @@ func persistCredentialsEdit(steps map[[2]int]stepMapping, src []byte, idx *sourc
 		at := idx.lineEnd(usesVal.Line)
 		pad := strings.Repeat(" ", usesKey.Column-1)
 		edit = TextEdit{Start: at, End: at, NewText: nl + pad + "with:" + nl + pad + "  persist-credentials: false"}
-	case withVal.Kind == yaml.ScalarNode && withVal.Tag == "!!null":
+	case withVal.Kind == yaml.ScalarNode && withVal.Tag == "!!null" && withVal.Value == "":
 		if withVal.Line != withKey.Line {
 			return TextEdit{}, nil, false
 		}
@@ -377,26 +387,48 @@ func persistCredentialsEdit(steps map[[2]int]stepMapping, src []byte, idx *sourc
 		pad := strings.Repeat(" ", first.Column-1)
 		edit = TextEdit{Start: at, End: at, NewText: pad + "persist-credentials: false" + nl}
 	case withVal.Kind == yaml.MappingNode && withVal.Style&yaml.FlowStyle != 0:
-		// with: { fetch-depth: 0 }. The entry goes first, where the braces start on the line of the key
-		open, ok := idx.offset(withVal.Line, withVal.Column)
-		if !ok || withVal.Line != withKey.Line || open >= len(src) || src[open] != '{' {
+		// with: { fetch-depth: 0 }, also over several lines. The entry goes first, in front of the first key
+		// (so that comments and line breaks between the entries stay where they are)
+		var ok bool
+		if edit, ok = persistCredentialsFlowEdit(src, idx, withVal, "persist-credentials: false"); !ok {
 			return TextEdit{}, nil, false
 		}
-		if len(withVal.Content) == 0 {
-			edit = TextEdit{Start: open + 1, End: open + 1, NewText: " persist-credentials: false "}
-			break
-		}
-		first := withVal.Content[0]
-		at, ok := idx.offset(first.Line, first.Column)
-		if !ok || first.Line != withVal.Line || at <= open {
-			return TextEdit{}, nil, false
-		}
-		edit = TextEdit{Start: at, End: at, NewText: "persist-credentials: false, "}
 	default:
 		return TextEdit{}, nil, false
 	}
 
 	return edit, path, true
+}
+
+// persistCredentialsFlowEdit computes the edit which puts the entry first in the flow mapping, in front of its first key,
+// or right after the braces of an empty one.
+func persistCredentialsFlowEdit(src []byte, idx *sourceIndex, m *yaml.Node, entry string) (TextEdit, bool) {
+	open, ok := idx.offset(m.Line, m.Column)
+	if !ok || open >= len(src) || src[open] != '{' || m.Anchor != "" {
+		return TextEdit{}, false
+	}
+	if len(m.Content) == 0 {
+		return TextEdit{Start: open + 1, End: open + 1, NewText: " " + entry + " "}, true
+	}
+	first := m.Content[0]
+	at, ok := idx.offset(first.Line, first.Column)
+	if !ok || at <= open || first.Anchor != "" || first.Kind != yaml.ScalarNode || first.Tag != "!!str" {
+		return TextEdit{}, false
+	}
+	return TextEdit{Start: at, End: at, NewText: entry + ", "}, true
+}
+
+// persistCredentialsFlowStepEdit is the edit for a step written as a flow mapping, `- {uses: actions/checkout@v4}`. A
+// flow mapping is the whole step then, and a `with:` of it is a flow mapping too.
+func persistCredentialsFlowStepEdit(src []byte, idx *sourceIndex, step *yaml.Node) (TextEdit, bool) {
+	withKey, withVal := mappingEntry(step, "with")
+	switch {
+	case withKey == nil:
+		return persistCredentialsFlowEdit(src, idx, step, "with: {persist-credentials: false}")
+	case withVal.Kind == yaml.MappingNode && withVal.Style&yaml.FlowStyle != 0:
+		return persistCredentialsFlowEdit(src, idx, withVal, "persist-credentials: false")
+	}
+	return TextEdit{}, false
 }
 
 // mappingEntry returns the key and the value node of the key in a mapping node, or nils.

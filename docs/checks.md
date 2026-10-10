@@ -1322,10 +1322,13 @@ in the `env:` of the step):
     TITLE: ${{ github.event.issue.title }}
 ```
 
-When the expression is not in quotes, quoting it changes how the shell splits words and expands globs, so the fix needs
-`--fix=unsafe`. An expression in a list of words, such as `for f in ${{ inputs.files }}; do` or `files=(${{ inputs.files }})`, is
-not fixed at all: the shell splits the value into the items of the list, and quoting it would make one item of it. Pass the value
-through `env:` yourself and decide how the script splits it. Scripts of other shells (PowerShell, cmd, Python) are not fixed.
+An unquoted expression is quoted only where the shell cannot split it into several words: the value of an assignment such
+as `TITLE=${{ github.event.issue.title }}`. Because the text of the script changes, that fix needs `--fix=unsafe`. An unquoted
+expression anywhere else, such as an argument of a command (`echo ${{ github.event.issue.title }}`), a redirection target, a
+word list like `for f in ${{ inputs.files }}; do` or an array like `files=(${{ inputs.files }})`, is not fixed in any mode: the
+value may be meant to expand to several words, and quoting it would make one word of it. The finding says so in its `no_fix`
+reason (code `needs-judgment`). Pass the value through `env:` yourself and decide how the script splits it. A script that does
+not parse gets no fix for its unquoted expressions either. Scripts of other shells (PowerShell, cmd, Python) are not fixed.
 
 <a id="check-template-injection-sinks"></a>
 ### Container options, Docker steps and AI agent inputs
@@ -3666,9 +3669,11 @@ the step has none. The fix is applied by `--fix` only when no later step of the 
 later `run:` script has a `git` command that talks to a remote (`push`, `pull`, `fetch`, `clone`, `remote`, `submodule`, `lfs`,
 `ls-remote`, `commit` or `tag`) or a later step uses an action known to push (such as `stefanzweifel/git-auto-commit-action` or
 `peter-evans/create-pull-request`), the fix is unsafe and needs `--fix=unsafe`. A script which pushes without a visible git
-command cannot be detected, so check the workflow after applying the fix. A `with:` written in flow style on the line of the key
-(`with: { fetch-depth: 0 }`) gets the entry first. A step written in flow style (`- {uses: ...}`) is reported without a fix, and so
-is a flow `with:` that spans lines: write `persist-credentials: false` there by hand.
+command cannot be detected, so check the workflow after applying the fix. A `with:` written in flow style (`with: { fetch-depth: 0 }`), also over several lines, gets the entry first. A
+step written in flow style (`- {uses: actions/checkout@v4}`) gets `with: {persist-credentials: false}` in front of its first key,
+or the entry first in its flow `with:`. Every such edit is verified: the fixed file must parse and the step must have
+`persist-credentials: false`. A step the edit cannot be exact for (an anchored mapping or first key, an alias or an empty value
+for `with:`) is reported without a fix and with a `no_fix` reason: write `persist-credentials: false` there by hand.
 
 A checkout is not reported when a later step of the job pushes with the credential it left (a `git push` in a script or an action
 such as `stefanzweifel/git-auto-commit-action`) and no step uploads the workspace (`path: .`, `..` or `${{ github.workspace }}`),
