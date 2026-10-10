@@ -868,7 +868,7 @@ func TestSARIFOnlineCoverage(t *testing.T) {
 }
 
 func TestExcludedRepositoriesIgnoreCase(t *testing.T) {
-	s := newOnlineSession(nil, nil, nil)
+	s := newOnlineSession(context.TODO(), nil, nil)
 	s.deny = []string{"Foo/*"}
 	s.allows("Foo", "Bar")
 	s.allows("foo", "bar")
