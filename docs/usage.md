@@ -257,9 +257,11 @@ steps:
   and decides what its comments suppress. Once zizmor is gone, turn on its `zizmor` option to find the comments left over;
   then a comment is reported only when its audit maps to a rule that is enabled.
 
-`jactionlint --migrate-ignores [files]` rewrites the trailing zizmor comments (of the workflows of the project when no file is
-given) into `# jactionlint ignore=` comments on the line above and moves the reason to a plain comment line. Names with no
-jactionlint counterpart stay in the zizmor comment, and running it again changes nothing.
+`jactionlint --migrate-ignores [files]` rewrites the trailing zizmor comments (of the workflows and the root `action.yml` of the
+project when no file is given) into `# jactionlint ignore=` comments on the line above and moves the reason to a plain comment line.
+A version after the comment on a `uses:` line (`# zizmor: ignore[artipacked] v6`) stays on that line as `# v6`. Names with no
+jactionlint counterpart stay in the zizmor comment, and running it again changes nothing. A comment which is not migrated is listed
+with the reason, for instance a comment on the first key of a step with more keys, where a comment above would cover the whole step.
 
 `--shellcheck` and `--pyflakes` specifies file paths of executables. Setting empty string to them disables `shellcheck` and
 `pyflakes` rules. As a bonus, disabling them makes jactionlint much faster Since these external linter integrations spawn many

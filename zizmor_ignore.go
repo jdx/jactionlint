@@ -2,8 +2,11 @@ package jactionlint
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
+	"path/filepath"
 	"reflect"
 	"regexp"
 	"strings"
@@ -240,9 +243,29 @@ func zizmorEntryActive(e *inlineIgnoreEntry, cfg *Config, online bool, skipped m
 // have the same YAML data as the original, the source is returned unchanged. A comment on a line which starts a
 // sequence item stays when the item has more lines, because the comment above would cover them too.
 func MigrateZizmorIgnores(src []byte) ([]byte, []string) {
+	out, migrated, _ := migrateZizmorIgnores(src)
+	return out, migrated
+}
+
+// zizmorSkip is a zizmor ignore comment which was not migrated, or not entirely, and why.
+type zizmorSkip struct {
+	line   int
+	reason string
+}
+
+// zizmorVersionRe matches the version which follows a zizmor ignore comment on a "uses:" line
+// ("# zizmor: ignore[artipacked] v6"). It is a version comment for Renovate and Dependabot, not a reason.
+var zizmorVersionRe = regexp.MustCompile(`^v?\d[\w.+-]*$`)
+
+// zizmorUsesRe matches a "uses:" key in the content before a comment.
+var zizmorUsesRe = regexp.MustCompile(`(?:^|[\s-])uses:\s`)
+
+// migrateZizmorIgnores is MigrateZizmorIgnores which also returns the comments which it did not migrate.
+func migrateZizmorIgnores(src []byte) ([]byte, []string, []zizmorSkip) {
 	if !bytes.Contains(src, []byte("zizmor")) {
-		return src, nil
+		return src, nil, nil
 	}
+	var skipped []zizmorSkip
 	// Keep the line terminators to leave CRLF files as they are
 	raw := strings.SplitAfter(string(src), "\n")
 	lines := splitSourceLines(src)
@@ -252,6 +275,7 @@ func MigrateZizmorIgnores(src []byte) ([]byte, []string) {
 	replaced := map[int]string{} // line => new line content without terminator
 	for _, c := range scanZizmorComments(src, lines) {
 		if !c.inline {
+			skipped = append(skipped, zizmorSkip{c.line, "the comment is on a line of its own, and only a trailing comment is migrated"})
 			continue
 		}
 		var ids, kept []string
@@ -270,6 +294,7 @@ func MigrateZizmorIgnores(src []byte) ([]byte, []string) {
 			}
 		}
 		if len(moved) == 0 {
+			skipped = append(skipped, zizmorSkip{c.line, "jactionlint has no rule for " + strings.Join(kept, ", ") + ", so the zizmor comment stays"})
 			continue
 		}
 		// A comment above a line covers what the line opens, and the whole item for a line which starts a sequence
@@ -280,31 +305,41 @@ func MigrateZizmorIgnores(src []byte) ([]byte, []string) {
 			wantEnd = e
 		}
 		if ignoreTargetEnd(lines, c.line-1) != wantEnd {
+			skipped = append(skipped, zizmorSkip{c.line, "the comment is on the first key of a step with more keys, and a comment above would cover the whole step. Move it to a later key of the step (for instance \"name:\") or keep it"})
 			continue
 		}
 		migrated = append(migrated, moved...)
+		if len(kept) > 0 {
+			skipped = append(skipped, zizmorSkip{c.line, "jactionlint has no rule for " + strings.Join(kept, ", ") + ", so these names stay in the zizmor comment"})
+		}
 
 		line := lines[c.line-1]
 		head := strings.TrimRight(line[:c.start], " \t")
+		// The version after the comment of a "uses:" line is the version comment of Renovate and Dependabot. It stays on the line.
+		reason := c.reason
 		var tail string
+		if first, rest, _ := strings.Cut(reason, " "); zizmorVersionRe.MatchString(first) && zizmorUsesRe.MatchString(head+" ") {
+			tail = " # " + first
+			reason = strings.TrimSpace(rest)
+		}
 		if len(kept) > 0 {
-			tail = " # zizmor: ignore[" + strings.Join(kept, ",") + "]"
-			if c.reason != "" {
-				tail += " " + c.reason
+			tail += " # zizmor: ignore[" + strings.Join(kept, ",") + "]"
+			if reason != "" {
+				tail += " " + reason
 			}
 		}
 		replaced[c.line] = head + tail
 
 		indent := line[:indentOf(line)]
 		var ins []string
-		if c.reason != "" && len(kept) == 0 {
-			ins = append(ins, indent+"# "+c.reason)
+		if reason != "" && len(kept) == 0 {
+			ins = append(ins, indent+"# "+reason)
 		}
 		ins = append(ins, indent+"# jactionlint ignore="+strings.Join(ids, ","))
 		byLine[c.line] = ins
 	}
 	if len(migrated) == 0 {
-		return src, nil
+		return src, nil, skipped
 	}
 
 	var out strings.Builder
@@ -336,9 +371,9 @@ func MigrateZizmorIgnores(src []byte) ([]byte, []string) {
 
 	res := []byte(out.String())
 	if !sameYAMLData(src, res) {
-		return src, nil
+		return src, nil, append(skipped, zizmorSkip{0, "the rewritten file would not have the same YAML data, so the file was not changed"})
 	}
-	return res, migrated
+	return res, migrated, skipped
 }
 
 // migrationIDs returns the IDs of the jactionlint rules which replace the zizmor audit in an ignore
@@ -387,26 +422,36 @@ func sameYAMLData(a, b []byte) bool {
 // MigrateZizmorIgnoreFiles runs MigrateZizmorIgnores on the files and writes the files which changed.
 // It returns the migrated audit names by file path, only for the files which changed.
 func MigrateZizmorIgnoreFiles(paths []string) (map[string][]string, error) {
+	ret, _, err := migrateZizmorIgnoreFiles(paths)
+	return ret, err
+}
+
+// migrateZizmorIgnoreFiles is MigrateZizmorIgnoreFiles which also returns the comments which were not migrated by file path.
+func migrateZizmorIgnoreFiles(paths []string) (map[string][]string, map[string][]zizmorSkip, error) {
 	ret := map[string][]string{}
+	skips := map[string][]zizmorSkip{}
 	for _, p := range paths {
 		src, err := os.ReadFile(p)
 		if err != nil {
-			return nil, fmt.Errorf("could not read %q: %w", p, err)
+			return nil, nil, fmt.Errorf("could not read %q: %w", p, err)
 		}
-		out, names := MigrateZizmorIgnores(src)
+		out, names, skipped := migrateZizmorIgnores(src)
+		if len(skipped) > 0 {
+			skips[p] = skipped
+		}
 		if len(names) == 0 {
 			continue
 		}
 		if err := writeFileKeepingMode(p, out); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		ret[p] = names
 	}
-	return ret, nil
+	return ret, skips, nil
 }
 
-// MigrateIgnores runs MigrateZizmorIgnoreFiles on the given files, or on the workflow files of the
-// project when none is given, and reports what changed.
+// MigrateIgnores runs MigrateZizmorIgnoreFiles on the given files, or on the workflow files and the root
+// action.yml of the project when none is given, and reports what changed and which comments were skipped.
 func (l *Linter) MigrateIgnores(paths []string) error {
 	if len(paths) == 0 {
 		p, err := l.projects.At(l.cwd)
@@ -417,23 +462,39 @@ func (l *Linter) MigrateIgnores(paths []string) error {
 			return fmt.Errorf("no project was found in any parent directories of %q. check workflows directory is put correctly in your Git repository", l.cwd)
 		}
 		if paths, err = projectWorkflowFiles(p.WorkflowsDir()); err != nil {
-			return err
+			// A repository of an action may have no workflows directory
+			if !errors.Is(err, fs.ErrNotExist) {
+				return err
+			}
+			paths = nil
+		}
+		for _, name := range actionFileNames {
+			a := filepath.Join(p.RootDir(), name)
+			if s, err := os.Stat(a); err == nil && !s.IsDir() {
+				paths = append(paths, a)
+			}
 		}
 		if len(paths) == 0 {
 			return fmt.Errorf("no YAML file was found in %q", p.WorkflowsDir())
 		}
 	}
-	res, err := MigrateZizmorIgnoreFiles(paths)
+	res, skips, err := migrateZizmorIgnoreFiles(paths)
 	if err != nil {
 		return err
 	}
 	if len(res) == 0 {
 		fmt.Fprintln(l.out, "No zizmor ignore comment could be migrated. Nothing was changed")
-		return nil
 	}
 	for _, p := range paths {
 		if names, ok := res[p]; ok {
 			fmt.Fprintf(l.out, "%s: migrated zizmor ignore comments: %s\n", p, strings.Join(names, ", "))
+		}
+		for _, s := range skips[p] {
+			if s.line > 0 {
+				fmt.Fprintf(l.out, "%s:%d: not migrated: %s\n", p, s.line, s.reason)
+			} else {
+				fmt.Fprintf(l.out, "%s: not migrated: %s\n", p, s.reason)
+			}
 		}
 	}
 	return nil

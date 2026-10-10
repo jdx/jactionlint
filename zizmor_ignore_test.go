@@ -3,6 +3,8 @@ package jactionlint
 import (
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -329,6 +331,30 @@ func TestMigrateZizmorIgnores(t *testing.T) {
 			"unpinned-uses",
 		},
 		{
+			"keeps the version comment on the uses line when the zizmor comment comes first",
+			"a:\n  - name: x\n    uses: a/b@abc # zizmor: ignore[unpinned-uses] v6\n",
+			"a:\n  - name: x\n    # jactionlint ignore=unpinned-uses\n    uses: a/b@abc # v6\n",
+			"unpinned-uses",
+		},
+		{
+			"keeps the version and moves the rest of the reason",
+			"a:\n  - uses: a/b@abc # zizmor: ignore[unpinned-uses] v6.0.1 pinned on purpose\n",
+			"a:\n  # pinned on purpose\n  # jactionlint ignore=unpinned-uses\n  - uses: a/b@abc # v6.0.1\n",
+			"unpinned-uses",
+		},
+		{
+			"keeps the version before the zizmor comment which stays",
+			"a:\n  - uses: a/b@abc # zizmor: ignore[unpinned-uses,no-such-audit] v6\n",
+			"a:\n  # jactionlint ignore=unpinned-uses\n  - uses: a/b@abc # v6 # zizmor: ignore[no-such-audit]\n",
+			"unpinned-uses",
+		},
+		{
+			"a version on a line which is not a uses line is a reason",
+			"a:\n  - run: x # zizmor: ignore[template-injection] v6\n",
+			"a:\n  # v6\n  # jactionlint ignore=template-injection\n  - run: x\n",
+			"template-injection",
+		},
+		{
 			"keeps the header of a block scalar in the first key of an item",
 			"a:\n  - run: | # zizmor: ignore[template-injection]\n      echo\n    shell: bash\n",
 			"a:\n  - run: | # zizmor: ignore[template-injection]\n      echo\n    shell: bash\n",
@@ -509,5 +535,51 @@ func TestZizmorIgnoreScopes(t *testing.T) {
 				t.Errorf("(-want +got): %s\nall: %v", diff, have)
 			}
 		})
+	}
+}
+
+func TestMigrateZizmorIgnoresReportsSkips(t *testing.T) {
+	src := "a:\n  - uses: a/b@v1 # zizmor: ignore[unpinned-uses]\n    with:\n      x: 1\n" +
+		"  - run: x # zizmor: ignore[no-such-audit]\n" +
+		"  - name: y\n    run: x # zizmor: ignore[template-injection,no-such-audit]\n"
+	_, names, skips := migrateZizmorIgnores([]byte(src))
+	if len(names) != 1 {
+		t.Fatalf("unexpected names: %v", names)
+	}
+	want := map[int]string{2: "first key of a step", 5: "no rule for no-such-audit", 7: "no rule for no-such-audit"}
+	if len(skips) != len(want) {
+		t.Fatalf("unexpected skips: %v", skips)
+	}
+	for _, s := range skips {
+		if !strings.Contains(s.reason, want[s.line]) {
+			t.Errorf("line %d: want %q in %q", s.line, want[s.line], s.reason)
+		}
+	}
+}
+
+func TestLinterMigrateIgnoresRootAction(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.Mkdir(filepath.Join(dir, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	action := filepath.Join(dir, "action.yml")
+	src := "name: x\ndescription: y\nruns:\n  using: composite\n  steps:\n    - name: z\n      run: echo # zizmor: ignore[use-trusted-publishing]\n"
+	if err := os.WriteFile(action, []byte(src), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var out strings.Builder
+	l, err := NewLinter(&out, &LinterOptions{WorkingDir: dir})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := l.MigrateIgnores(nil); err != nil {
+		t.Fatal(err)
+	}
+	b, err := os.ReadFile(action)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(b), "zizmor") || !strings.Contains(string(b), "# jactionlint ignore=use-trusted-publishing") {
+		t.Errorf("the root action.yml must be migrated: %q\n%s", b, out.String())
 	}
 }
