@@ -78,12 +78,7 @@ func followsPipestatus(s *runscript.Script, p *runscript.Pipeline, stage int) (s
 		le := off + strings.IndexByte(src[off:]+"\n", '\n')
 		// the check may follow the use on the same line (`rc=${PIPESTATUS[0]}; exit $rc`): only the statement that
 		// holds the use counts, so cut at the last separator before it
-		start := ls
-		for _, sep := range []string{";", "&&", "||"} {
-			if i := strings.LastIndex(src[ls:off], sep); i >= 0 && ls+i+len(sep) > start {
-				start = ls + i + len(sep)
-			}
-		}
+		start := ls + statementStart(src[ls:off])
 		if reCheckLine.MatchString(src[start:le]) {
 			return true, true
 		}
@@ -98,4 +93,33 @@ func statusHandled(s *runscript.Script, p *runscript.Pipeline, stage int) bool {
 		return checked
 	}
 	return readsPipestatus(s, p, stage)
+}
+
+// statementStart returns where the last statement of a line prefix begins: after the last `;`, `&&` or `||` that is
+// not inside a test (`[[ a && b ]]`, `[ a ] ...`, `(( a || b ))`).
+func statementStart(seg string) int {
+	start, depth := 0, 0
+	for i := 0; i < len(seg); i++ {
+		rest := seg[i:]
+		switch {
+		case strings.HasPrefix(rest, "[["), strings.HasPrefix(rest, "(("):
+			depth++
+			i++
+		case strings.HasPrefix(rest, "]]"), strings.HasPrefix(rest, "))"):
+			if depth > 0 {
+				depth--
+			}
+			i++
+		case rest[0] == '[' && (i == 0 || strings.IndexByte(" \t;&|", seg[i-1]) >= 0) && len(rest) > 1 && (rest[1] == ' ' || rest[1] == '\t'):
+			depth++
+		case rest[0] == ']' && depth > 0 && i > 0 && (seg[i-1] == ' ' || seg[i-1] == '\t'):
+			depth--
+		case depth == 0 && rest[0] == ';':
+			start = i + 1
+		case depth == 0 && (strings.HasPrefix(rest, "&&") || strings.HasPrefix(rest, "||")):
+			start = i + 2
+			i++
+		}
+	}
+	return start
 }
