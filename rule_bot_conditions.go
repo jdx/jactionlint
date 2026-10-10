@@ -80,6 +80,51 @@ var prPayloadEvents = map[string]bool{
 	"pull_request": true, "pull_request_target": true, "pull_request_review": true, "pull_request_review_comment": true,
 }
 
+// onlyPullRequestEvents reports whether every event is pull_request or pull_request_target.
+func onlyPullRequestEvents(events []Event) bool {
+	for _, e := range events {
+		name := strings.ToLower(e.EventName())
+		if name != "pull_request" && name != "pull_request_target" {
+			return false
+		}
+	}
+	return true
+}
+
+// classifyBotEvents sorts the events which can start the run by what the rule can say about the author.
+func classifyBotEvents(events []Event) botEvents {
+	allPR, anyPR, pushLike := true, false, true
+	for _, e := range events {
+		name := strings.ToLower(e.EventName())
+		if prPayloadEvents[name] {
+			anyPR = true
+		} else {
+			allPR = false
+		}
+		if !pushLikeEvents[name] {
+			pushLike = false
+		}
+	}
+	switch {
+	case allPR:
+		// Every event has the pull request payload, so the author exists on all of them.
+		return botEventsPROnly
+	case anyPR:
+		return botEventsMixed
+	case pushLike:
+		return botEventsPushLike
+	default:
+		return botEventsNoPR
+	}
+}
+
+// botConditionsSilent reports whether bot-conditions has nothing to say about the workflow because every event
+// that can start it is started by an account with write access.
+func (w *Workflow) botConditionsSilent() bool {
+	events, known := w.actorEvents()
+	return known && classifyBotEvents(events) == botEventsPushLike
+}
+
 // VisitWorkflowPre is callback when visiting Workflow node before visiting its children.
 func (rule *RuleBotConditions) VisitWorkflowPre(n *Workflow) error {
 	// For a reusable workflow and for the metadata of an action the events are those of the workflows which call it;
@@ -90,29 +135,8 @@ func (rule *RuleBotConditions) VisitWorkflowPre(n *Workflow) error {
 	if !known {
 		return nil
 	}
-	prOnly, anyPR, pushLike := true, false, true
-	for _, e := range events {
-		name := strings.ToLower(e.EventName())
-		if name != "pull_request" && name != "pull_request_target" {
-			prOnly = false
-		}
-		if prPayloadEvents[name] {
-			anyPR = true
-		}
-		if !pushLikeEvents[name] {
-			pushLike = false
-		}
-	}
-	switch {
-	case prOnly:
-		rule.events, rule.prOnly = botEventsPROnly, true
-	case anyPR:
-		rule.events = botEventsMixed
-	case pushLike:
-		rule.events = botEventsPushLike
-	default:
-		rule.events = botEventsNoPR
-	}
+	rule.events = classifyBotEvents(events)
+	rule.prOnly = rule.events == botEventsPROnly && onlyPullRequestEvents(events)
 	return nil
 }
 

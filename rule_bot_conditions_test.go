@@ -1,6 +1,7 @@
 package jactionlint
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -111,5 +112,21 @@ func TestBotConditionsBracketAccess(t *testing.T) {
 		if got := len(errsWithID(lintWithConfig(t, botConfig(t), src), "bot-conditions")); got != want {
 			t.Errorf("%s: want %d findings but got %d", cond, want, got)
 		}
+	}
+}
+
+func TestBotConditionsAllPullRequestPayloads(t *testing.T) {
+	// pull_request_review has the pull request payload like pull_request, so the author exists on every event:
+	// the plain message applies, without the note about other events, and there is no fix
+	src := "on: [pull_request, pull_request_review]\njobs:\n  a:\n    if: github.event.sender.id == 49699333\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo\n"
+	errs := errsWithID(lintFileWithConfig(t, botConfig(t), "ci.yaml", src), "bot-conditions")
+	if len(errs) != 1 {
+		t.Fatalf("want 1 error but got %v", errs)
+	}
+	if strings.Contains(errs[0].Message, "does not exist on the other events") {
+		t.Errorf("unexpected note about other events: %q", errs[0].Message)
+	}
+	if errs[0].Fix != nil {
+		t.Errorf("want no fix but got %v", errs[0].Fix)
 	}
 }
