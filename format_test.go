@@ -205,7 +205,7 @@ func TestGitHubFormat(t *testing.T) {
 	err := githubPrinter{}.print(&b, []fileResult{{errs: []*Error{{
 		Filepath: "a,b:c%.yaml", Line: 1, Column: 2, EndLine: 1, EndColumn: 3, ID: "x:y", Severity: SeverityError,
 		Message: "100%\nnext\r",
-	}}}}, nil)
+	}}}}, runInfo{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -429,7 +429,7 @@ func TestSARIFOrdersFilesByPath(t *testing.T) {
 	err := sarifPrinter{}.print(&b, []fileResult{
 		{path: "b.yaml", errs: []*Error{{Filepath: "b.yaml", Line: 1, Column: 1, ID: "invalid-glob", Severity: SeverityError, Message: "b"}}},
 		{path: "a.yaml", errs: []*Error{{Filepath: "a.yaml", Line: 1, Column: 1, ID: "invalid-glob", Severity: SeverityError, Message: "a"}}},
-	}, nil)
+	}, runInfo{})
 	if err != nil {
 		t.Fatal(err)
 	}

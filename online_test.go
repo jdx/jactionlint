@@ -846,3 +846,23 @@ func TestKnownVulnerableActionsIsSilentWhenTagsAreTruncated(t *testing.T) {
 		t.Errorf("the tag list is truncated: %v", lineIDsOf(errs))
 	}
 }
+
+func TestSARIFOnlineCoverage(t *testing.T) {
+	var b bytes.Buffer
+	cov := &OnlineCoverage{Status: "incomplete", Mode: "strict", SkippedLookups: 2, Evidence: "network"}
+	if err := (sarifPrinter{}).print(&b, nil, runInfo{online: cov}); err != nil {
+		t.Fatal(err)
+	}
+	props, _ := sarifRunOf(t, b.String())["properties"].(sarifDoc)
+	got, _ := props["onlineCoverage"].(sarifDoc)
+	if got["status"] != "incomplete" || got["skippedLookups"] != float64(2) {
+		t.Errorf("onlineCoverage = %v", props)
+	}
+	b.Reset()
+	if err := (sarifPrinter{}).print(&b, nil, runInfo{}); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := sarifRunOf(t, b.String())["properties"]; ok {
+		t.Error("no coverage expected when the online checks are off")
+	}
+}

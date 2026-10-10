@@ -701,6 +701,11 @@ jactionlint --online
   jactionlint prints **one warning per kind of failure** (on stderr, or in the SARIF notifications with `--format sarif`) and the
   exit status does not change. `--verbose` lists every skipped lookup. `--online=strict` turns a skipped lookup into exit status 3,
   for a pipeline where a check that could not run must not pass silently.
+- **Coverage in SARIF.** With `--format sarif` and the online checks on, the run has `properties.onlineCoverage`:
+  `status` (`complete`, or `incomplete` when `skippedLookups` is not zero), `mode`, `skippedLookups`, `excludedRepositories` (left out
+  on purpose by `allow`/`deny`) and `evidence` (`network` or `cache`). The property is absent when the online checks were off, so
+  "not checked" is distinguishable from "checked, nothing found". It is evidence about the run, not a trust guarantee: a resolved ref
+  or a timestamp does not prove that a tag was never repointed.
 - **Token.** The first of these is used: the variable named by `--online-token-env`, the file named by `--online-token-file`,
   `GITHUB_TOKEN`, `GH_TOKEN` (for a GitHub Enterprise Server `GITHUB_ENTERPRISE_TOKEN` and `GH_ENTERPRISE_TOKEN` come first), and
   finally the output of `gh auth token --hostname HOST` when `gh` is installed (set `gh-cli: false` in

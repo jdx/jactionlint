@@ -138,6 +138,7 @@ type onlineSession struct {
 	blockUntil time.Time
 	transient  int // lookups in a row which failed in a way that suggests an outage
 	skipped    int
+	excluded   map[string]bool // repositories left out by the allow and deny lists
 	seen       map[failureKind]bool
 
 	repos      memo[repoKey, *GitHubRepo]
@@ -177,6 +178,19 @@ func (s *onlineSession) skippedLookups() int {
 // allows reports whether the repository may be looked up.
 func (s *onlineSession) allows(owner, repo string) bool {
 	slug := owner + "/" + repo
+	if s.matchesLists(slug) {
+		return true
+	}
+	s.mu.Lock()
+	if s.excluded == nil {
+		s.excluded = map[string]bool{}
+	}
+	s.excluded[slug] = true
+	s.mu.Unlock()
+	return false
+}
+
+func (s *onlineSession) matchesLists(slug string) bool {
 	for _, p := range s.deny {
 		if matchRepoPattern(p, slug) {
 			return false
@@ -191,6 +205,12 @@ func (s *onlineSession) allows(owner, repo string) bool {
 		}
 	}
 	return false
+}
+
+func (s *onlineSession) excludedRepos() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return len(s.excluded)
 }
 
 // stopped returns the reason why the online rules stopped for the rest of the run (an interruption), or nil.

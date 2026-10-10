@@ -113,6 +113,55 @@ func (l *Linter) OnlineSkipped() int {
 	return l.online.sess.skippedLookups()
 }
 
+// OnlineCoverage says how complete the online checks of a run were, so that a consumer can tell "checked
+// and nothing found" from "not checked". It is evidence about the run, not a trust guarantee: a resolved
+// ref or a timestamp says what GitHub (or the cache) answered, not that the ref was never repointed.
+type OnlineCoverage struct {
+	// Status is "complete" (every lookup the checks made was answered, apart from the excluded
+	// repositories) or "incomplete" (SkippedLookups is not zero). The struct is absent when the online
+	// checks were not turned on.
+	Status string `json:"status"`
+	// Mode is "online" (the network was used), "cache" (only the disk cache was used) and
+	// "strict" or "cache,strict" for the modes which fail the run on a skipped lookup.
+	Mode string `json:"mode,omitempty"`
+	// SkippedLookups counts the lookups which failed (see OnlineSkipped). The checks which needed them
+	// reported nothing for those actions.
+	SkippedLookups int `json:"skippedLookups"`
+	// ExcludedRepositories counts the repositories which the allow and deny lists left out. They were
+	// not checked, on purpose.
+	ExcludedRepositories int `json:"excludedRepositories"`
+	// Evidence says where the answers came from. "cache" means that they may be older than the cache
+	// TTL of the run allows to tell: the cache has no freshness guarantee in this mode.
+	Evidence string `json:"evidence,omitempty"`
+}
+
+// OnlineCoverage returns the coverage of the online checks, or nil when they were not turned on.
+func (l *Linter) OnlineCoverage() *OnlineCoverage {
+	if l.online.sess == nil {
+		if l.online.enabled {
+			return &OnlineCoverage{Status: "complete", Mode: "online"} // nothing needed a lookup
+		}
+		return nil
+	}
+	c := &OnlineCoverage{
+		Status:               "complete",
+		Mode:                 string(l.online.mode),
+		SkippedLookups:       l.online.sess.skippedLookups(),
+		ExcludedRepositories: l.online.sess.excludedRepos(),
+		Evidence:             "network",
+	}
+	if c.Mode == "" {
+		c.Mode = "online"
+	}
+	if l.online.mode.Offline() {
+		c.Evidence = "cache"
+	}
+	if c.SkippedLookups > 0 {
+		c.Status = "incomplete"
+	}
+	return c
+}
+
 // OnlineFailed reports whether the run was asked to fail (the "strict" online mode) and a lookup was
 // skipped, so that a check which could not run does not pass silently.
 func (l *Linter) OnlineFailed() bool {
