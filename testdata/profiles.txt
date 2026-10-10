@@ -127,5 +127,6 @@ use-trusted-publishing default security error
 workflow-call-permissions correctness correctness error
 workflow-input-type correctness correctness error
 workflow-run-names correctness correctness error
+workflow-secret-scope pedantic security warn
 workflow-syntax correctness correctness error
 yaml-syntax correctness correctness error

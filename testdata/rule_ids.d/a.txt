@@ -10,3 +10,4 @@ self-hosted-runner
 typosquat-uses
 unredacted-secrets
 unsound-contains
+workflow-secret-scope
