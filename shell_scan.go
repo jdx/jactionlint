@@ -75,17 +75,24 @@ func analyzeShellPlaceholders(script string, spans []shSpan) []shPlace {
 		globalBad bool
 		// cmd are the words of the current simple command, a placeholder or a quoted part makes the word "\x00" ("\x00=" for an assignment)
 		cmd []string
+		// redirNext is true after a redirection operator until the word of its target is complete
+		redirNext bool
 		// arrays is the depth of the array assignments, name=( ... ), the scanner is in
 		arrays int
 	)
 	endWord := func() {
 		if len(word) > 0 || !wordPlain {
-			if wordPlain {
+			switch {
+			case redirNext:
+				// the target of a redirection is not an assignment, whatever it looks like
+				cmd = append(cmd, "\x00>")
+				redirNext = false
+			case wordPlain:
 				cmd = append(cmd, string(word))
-			} else if assignmentWordRe.Match(word) {
+			case assignmentWordRe.Match(word):
 				// an assignment with a placeholder or a quoted part in its value
 				cmd = append(cmd, nulAssignment)
-			} else {
+			default:
 				cmd = append(cmd, "\x00")
 			}
 		}
@@ -118,7 +125,7 @@ func analyzeShellPlaceholders(script string, spans []shSpan) []shPlace {
 				// asked for, so there is nothing to change but the script
 				p.Cannot = true
 				p.Split = splitReason
-			case quote == shUnquoted && wordPlain && assignmentValue(cmd, word):
+			case quote == shUnquoted && wordPlain && !redirNext && assignmentValue(cmd, word):
 				p.Unsafe = "the value is not quoted so quoting it changes the text of the script"
 			case quote == shUnquoted:
 				p.Cannot = true
@@ -177,6 +184,7 @@ func analyzeShellPlaceholders(script string, spans []shSpan) []shPlace {
 		case '\n', ';', '&', '|', '(', ')', '{', '}':
 			endWord()
 			cmd = cmd[:0]
+			redirNext = false
 			switch {
 			case c == '(' && i > 0 && script[i-1] == '=':
 				arrays++
@@ -191,8 +199,10 @@ func analyzeShellPlaceholders(script string, spans []shSpan) []shPlace {
 				globalBad = true // here-document and here-string
 			}
 			endWord()
+			redirNext = true
 		case '>':
 			endWord()
+			redirNext = true
 		case '#':
 			if len(word) == 0 && wordPlain {
 				inComment = true

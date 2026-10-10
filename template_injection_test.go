@@ -214,6 +214,13 @@ func TestTemplateInjectionFixes(t *testing.T) {
 			unsafe: "      - run: TITLE=\"${ISSUE_TITLE}\"\n        env:\n          ISSUE_TITLE: ${{ github.event.issue.title }}\n",
 		},
 		{
+			// the word after a redirection operator is its target, even when it looks like NAME=value
+			name:   "a redirection target that looks like an assignment is not fixed",
+			step:   "      - run: A=1 > FILE=${{ github.event.issue.title }}\n",
+			safe:   "      - run: A=1 > FILE=${{ github.event.issue.title }}\n",
+			unsafe: "      - run: A=1 > FILE=${{ github.event.issue.title }}\n",
+		},
+		{
 			name: "block scalar with several expressions and one variable",
 			step: "      - name: x\n        run: |\n          echo \"${{ github.event.issue.title }}\"\n          echo \"title is ${{ github.event.issue.title }}\" \"${{ github.event.issue.body }}\"\n",
 			safe: "      - name: x\n        run: |\n          echo \"${ISSUE_TITLE}\"\n          echo \"title is ${ISSUE_TITLE}\" \"${ISSUE_BODY}\"\n        env:\n          ISSUE_TITLE: ${{ github.event.issue.title }}\n          ISSUE_BODY: ${{ github.event.issue.body }}\n",
