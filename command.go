@@ -213,6 +213,21 @@ func (cmd *Command) Main(args []string) int {
 		fmt.Fprintln(cmd.Stderr, "--online and --no-online cannot be combined")
 		return ExitStatusInvalidCommandOption
 	}
+	// JACTIONLINT_ONLINE is the default of --online and --no-online: the command line wins. It lets a CI job turn the
+	// online checks on without a different command, for example `hk check` in a pre-commit hook and in CI
+	if !online.set && !f.noOnline {
+		set, off, mode, err := parseOnlineEnv(os.Getenv(onlineEnvName))
+		if err != nil {
+			fmt.Fprintln(cmd.Stderr, err)
+			return ExitStatusInvalidCommandOption
+		}
+		if set {
+			online = onlineFlag{set: true, mode: mode}
+		}
+		if off {
+			f.noOnline = true
+		}
+	}
 	opts.IgnorePatterns = f.ignorePats
 	opts.OnRulesCreated = cmd.onRulesCreated
 	opts.RunHints = !f.noHints && !HintsDisabledByEnv()

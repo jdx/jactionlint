@@ -153,8 +153,8 @@ single-dash long options of v1 are removed; the error names the replacement.
     Disable colorful output. The same as `--color=never`
 
   * `--no-online`:
-    Never use the network, even when the configuration turns the online checks on (`online: true`).
-    Cannot be combined with `--online`.
+    Never use the network, even when the configuration turns the online checks on (`online: true`)
+    or `JACTIONLINT_ONLINE` does. Cannot be combined with `--online`.
 
   * `--online`[=<MODE>]:
     Enable the checks which query the GitHub API (`impostor-commit`, `known-vulnerable-actions`,
@@ -164,7 +164,8 @@ single-dash long options of v1 are removed; the error names the replacement.
     does both). A lookup which fails (404, 403, server error, timeout, rate limit) is skipped with
     one warning per kind of failure and does not change the exit status. The token is read from
     `--online-token-env`, `--online-token-file`, `GITHUB_TOKEN`, `GH_TOKEN` or `gh auth token`, and
-    is sent only to the API host. Nothing uses the network without this option.
+    is sent only to the API host. Nothing uses the network without this option, `online: true` in the
+    configuration, or `JACTIONLINT_ONLINE` in the environment (`1`, or a mode; `0` turns it off).
 
   * `--online-allow` <PATTERN>, `--online-deny` <PATTERN>:
     Look up only (allow), or never look up (deny), the repositories matching `owner/repo`, where `*`
