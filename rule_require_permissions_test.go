@@ -2,6 +2,7 @@ package jactionlint
 
 import (
 	"io"
+	"strings"
 	"testing"
 )
 
@@ -21,6 +22,11 @@ func TestRequirePermissionsOptIn(t *testing.T) {
 		{"two jobs none", "on: push\njobs:\n  a:\n" + job + "  b:\n" + job, 2},
 		{"workflow call", "on: push\njobs:\n  a:\n    uses: o/r/.github/workflows/w.yml@v1\n", 1},
 		{"workflow call with permissions", "on: push\njobs:\n  a:\n    uses: o/r/.github/workflows/w.yml@v1\n    permissions:\n      contents: read\n", 0},
+		{"workflow_call only", "on:\n  workflow_call:\njobs:\n  a:\n" + job, 0},
+		{"workflow_call only string form", "on: workflow_call\njobs:\n  a:\n" + job, 0},
+		{"workflow_call only calling reusable", "on:\n  workflow_call:\njobs:\n  a:\n    uses: o/r/.github/workflows/w.yml@v1\n", 0},
+		{"workflow_call and push", "on:\n  workflow_call:\n  push:\njobs:\n  a:\n" + job, 1},
+		{"workflow_call and push with permissions", "on:\n  workflow_call:\n  push:\npermissions: {}\njobs:\n  a:\n" + job, 0},
 		{"workflow call covered at workflow level", "on: push\npermissions: {}\njobs:\n  a:\n    uses: o/r/.github/workflows/w.yml@v1\n", 0},
 	}
 	for _, tc := range tests {
@@ -42,5 +48,41 @@ func TestRequirePermissionsOptIn(t *testing.T) {
 				t.Errorf("%s (enabled=%v): want %d errors but got %d: %v", tc.what, enabled, want, len(errs), errs)
 			}
 		}
+	}
+}
+
+// TestRequirePermissionsReusableMessage checks that a workflow which is also reusable reports a finding
+// without a fix and says why, and that a workflow which is only reusable reports nothing.
+func TestRequirePermissionsReusableMessage(t *testing.T) {
+	const job = "jobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo\n"
+	lint := func(src string) []*Error {
+		l, err := NewLinter(io.Discard, &LinterOptions{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		l.defaultConfig = ruleSwitch("missing-permissions", true)
+		errs, err := l.Lint("test.yaml", []byte(src), nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return errs
+	}
+	if errs := lint("on:\n  workflow_call:\n" + job); len(errs) != 0 {
+		t.Errorf("workflow_call only: want no errors but got %v", errs)
+	}
+	errs := lint("on:\n  workflow_call:\n  push:\n" + job)
+	if len(errs) != 1 {
+		t.Fatalf("workflow_call and push: want 1 error but got %v", errs)
+	}
+	if errs[0].Fix != nil {
+		t.Errorf("workflow_call and push: want no fix but got %+v", errs[0].Fix)
+	}
+	if !strings.Contains(errs[0].Message, "no automatic fix") || !strings.Contains(errs[0].Message, "workflow_call") {
+		t.Errorf("message does not explain the missing fix: %q", errs[0].Message)
+	}
+	// A workflow that is not reusable keeps its fix and its plain message
+	errs = lint("on: push\n" + job)
+	if len(errs) != 1 || errs[0].Fix == nil || strings.Contains(errs[0].Message, "workflow_call") {
+		t.Errorf("push only: want 1 fixable plain error but got %v", errs)
 	}
 }
