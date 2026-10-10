@@ -3255,9 +3255,10 @@ asks for more than its caller grants makes GitHub reject the run:
 - A workflow whose only event is `workflow_call:` is **not checked**. The callers set `permissions:` (and `missing-permissions`
   checks them when they are in the repository), and a value in the callee cannot suit callers that grant different permissions.
 - A workflow with `workflow_call:` and another event (such as `push:`) is also run directly, so it is still checked. Its finding
-  has **no fix**: a `contents: read` written into the callee breaks every caller with `permissions: {}` or fewer permissions. The
-  message says so, and the permissions have to be chosen by hand, after looking at the callers. Set them at job level, or
-  use `permissions: {}` if the jobs need nothing, and make sure no caller grants less than the jobs request.
+  has a fix, but it is always **unsafe** (applied with `--fix=unsafe` only): a `contents: read` written into the callee breaks
+  every caller with `permissions: {}` or fewer permissions, and the callers are in other files. The message says so. Look at the
+  callers before applying it, or set the permissions by hand at job level (or `permissions: {}` if the jobs need nothing), and
+  make sure no caller grants less than the jobs request.
 
 <a id="check-excessive-permissions"></a>
 ## Excessive permissions
@@ -3332,9 +3333,10 @@ It reports:
 - `write-all` and `read-all`, at the workflow level or on a job. They grant a level to every scope, including scopes which the
   job never uses.
 
-In a workflow with exactly one job the scope is not reported: the job gets it either way, so "grant it only to the job" would change
-nothing (zizmor does not report it either). On `pull_request_target`, `workflow_run` or `issue_comment` it still is, with a message
-that asks whether the job needs the scope instead of asking to move it.
+In a workflow with exactly one job the scope is reported too, although the job gets it either way today: a job added later
+inherits a workflow-level scope silently, so the message says that and asks to grant the scope on the job. On
+`pull_request_target`, `workflow_run` or `issue_comment` the message asks whether the job needs the scope instead of asking to
+move it.
 
 Write scopes on a job are not reported: that is where the access should be granted. The best practice is `permissions: {}` at
 the workflow level and the scopes a job needs on that job. Read scopes and `none` are not reported either.

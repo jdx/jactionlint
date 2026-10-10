@@ -46,11 +46,11 @@ var tokenUseRe = regexp.MustCompile(`(?i)github_token|github\.token|\bgh_token\b
 // "contents: read" removes every other permission from the GITHUB_TOKEN, which breaks a job
 // commenting on a pull request, publishing a package and so on.
 func fixMissingPermissions(w *Workflow) *Fix {
-	if _, ok := w.FindWorkflowCallEvent(); ok {
-		// A reusable workflow (also one with another event, which the rule still reports, with a message
-		// saying that there is no fix) gets at most the permissions its caller grants. Setting "contents: read"
-		// in the callee makes GitHub reject every caller which grants less, and the callers are in
-		// other files, so there is no value that is right to write. The finding stays without a fix.
+	_, callable := w.FindWorkflowCallEvent()
+	if callable && len(w.On) == 1 {
+		// A reusable-only workflow gets at most the permissions its caller grants. Setting "contents: read"
+		// in the callee makes GitHub reject every caller which grants less, and the callers are in other
+		// files, so there is no value that is right to write. The rule does not report it, and no fix exists.
 		return nil
 	}
 	d := newSrcDoc(w.Source)
@@ -77,8 +77,10 @@ func fixMissingPermissions(w *Workflow) *Fix {
 	unit := strings.Repeat(" ", d.indentUnit())
 	return &Fix{
 		Description: "Add permissions: contents: read",
-		Unsafe:      !onlyReadsRepository(w),
-		Edits:       []TextEdit{d.insertAfterLine(line, "", pad+"permissions:", pad+unit+"contents: read")},
+		// A workflow which is also called (workflow_call) gets the permissions its callers grant when they call
+		// it, which the callee cannot know, so the fix is never safe there.
+		Unsafe: callable || !onlyReadsRepository(w),
+		Edits:  []TextEdit{d.insertAfterLine(line, "", pad+"permissions:", pad+unit+"contents: read")},
 	}
 }
 

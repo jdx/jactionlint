@@ -74,10 +74,10 @@ func TestRequirePermissionsReusableMessage(t *testing.T) {
 	if len(errs) != 1 {
 		t.Fatalf("workflow_call and push: want 1 error but got %v", errs)
 	}
-	if errs[0].Fix != nil {
-		t.Errorf("workflow_call and push: want no fix but got %+v", errs[0].Fix)
+	if errs[0].Fix == nil || !errs[0].Fix.Unsafe {
+		t.Errorf("workflow_call and push: want an unsafe fix but got %+v", errs[0].Fix)
 	}
-	if !strings.Contains(errs[0].Message, "no automatic fix") || !strings.Contains(errs[0].Message, "workflow_call") {
+	if !strings.Contains(errs[0].Message, "fix is unsafe") || !strings.Contains(errs[0].Message, "workflow_call") {
 		t.Errorf("message does not explain the missing fix: %q", errs[0].Message)
 	}
 	// A workflow that is not reusable keeps its fix and its plain message
