@@ -320,6 +320,23 @@ var publishingActions = []string{
 	"crazy-max/ghaction-github-release",
 	"haaleo/publish-vscode-extension",
 	"elgohr/publish-docker-github-action",
+	"rust-lang/crates-io-auth-action",
+	"redhat-actions/push-to-registry",
+	"taiki-e/upload-rust-binary-action",
+	"taiki-e/create-gh-release-action",
+	"shogo82148/actions-upload-release-asset",
+	"mislav/bump-homebrew-formula-action",
+	"dawidd6/action-homebrew-bump-formula",
+	"azure/webapps-deploy",
+	"azure/functions-action",
+	"azure/static-web-apps-deploy",
+	"google-github-actions/deploy-cloudrun",
+	"google-github-actions/deploy-appengine",
+	"aws-actions/amazon-ecs-deploy-task-definition",
+	"amondnet/vercel-action",
+	"nwtgck/actions-netlify",
+	"r0adkll/upload-google-play",
+	"apple-actions/upload-testflight-build",
 }
 
 // publishCommandRegex matches a command of a `run:` script that publishes a release or a package.
@@ -336,7 +353,7 @@ type RuleCachePoisoning struct {
 	RuleBase
 	root       string // the root of the repository, "" when unknown
 	wf         *Workflow
-	tagOnly    bool   // the workflow is a release workflow only because it runs on pushed tags
+	tagOnly    bool   // the workflow is a release workflow only because it runs on pushed tags or release branches (no release event)
 	releaseWhy string // why the workflow is a release workflow, or ""
 	privileged string // the privileged trigger of the workflow, or ""
 	// scenarios are the runs of a release workflow that publish; eventScenarios one run per event of the workflow,
@@ -372,8 +389,42 @@ func releaseTrigger(events []Event) (why string, scenarios []triggerScenario) {
 			}
 			scenarios = append(scenarios, scenarioTagPush)
 		}
+		if e.EventName() == "push" && releaseBranchFilter(ev.Branches) {
+			if why == "" {
+				why = "runs on pushes to release branches"
+			}
+			scenarios = append(scenarios, scenarioBranchPush)
+		}
 	}
 	return why, scenarios
+}
+
+// releaseBranchRe matches the name of a branch that is made to release: "release", "releases/**", "release/v1.x",
+// "release-*". A name that only starts with the word ("releaser", "release_notes") does not count.
+var releaseBranchRe = regexp.MustCompile(`^releases?(?:[/-].*)?$`)
+
+// releaseBranchFilter reports whether a `branches` filter names release branches and nothing else: every positive
+// pattern is one (see releaseBranchRe). A filter that also lists main or a wildcard is the filter of the ordinary
+// checks, which run on the release branches as well as on the others, so it does not make a release workflow.
+func releaseBranchFilter(f *WebhookEventFilter) bool {
+	if f.IsEmpty() {
+		return false
+	}
+	positive := 0
+	for _, v := range f.Values {
+		if v == nil {
+			continue
+		}
+		pat := strings.ToLower(strings.TrimSpace(v.Value))
+		if strings.HasPrefix(pat, "!") {
+			continue
+		}
+		if !releaseBranchRe.MatchString(pat) {
+			return false
+		}
+		positive++
+	}
+	return positive > 0
 }
 
 // tagFilterMatches reports whether the `tags` filter of a push event lets a pushed tag through. A filter of
