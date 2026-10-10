@@ -1,0 +1,6 @@
+test.yaml:13:32: outputs and results of the background step "bg" are not available until a "wait" or "wait-all" step covers it, so this evaluates to an empty string [parallel-steps]
+test.yaml:13:68: outputs and results of the background step "bg" are not available until a "wait" or "wait-all" step covers it, so this evaluates to an empty string [parallel-steps]
+test.yaml:14:13: outputs and results of the background step "other" are not available until a "wait" or "wait-all" step covers it, so this evaluates to an empty string [parallel-steps]
+test.yaml:17:18: outputs and results of the background step "bg" are not available until a "wait" or "wait-all" step covers it, so this evaluates to an empty string [parallel-steps]
+test.yaml:20:31: outputs and results of the background step "other" are not available until a "wait" or "wait-all" step covers it, so this evaluates to an empty string [parallel-steps]
+test.yaml:26:24: outputs and results of the background step "my-bg" are not available until a "wait" or "wait-all" step covers it, so this evaluates to an empty string [parallel-steps]

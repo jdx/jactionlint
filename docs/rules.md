@@ -39,6 +39,7 @@ rules:
 | [anonymous-definition](#anonymous-definition) | policy | warn | pedantic |
 | [archived-uses](#archived-uses) | security | warn | only with `--online` |
 | [artipacked](#artipacked) | security | error | default |
+| [background-step-not-waited](#background-step-not-waited) | correctness | error | correctness |
 | [bot-conditions](#bot-conditions) | security | error | default |
 | [cache-poisoning](#cache-poisoning) | security | error | default |
 | [checkout-static-credentials](#checkout-static-credentials) | security | error | default |
@@ -222,6 +223,15 @@ actions/checkout persists the GITHUB_TOKEN credential in the git config.
 - Profile: default
 - Fixable: yes
 - Details and examples: [checks](./checks.md#check-artipacked)
+
+## background-step-not-waited
+
+Outputs or results of a background step are read before a wait step covers it.
+
+- Group: correctness
+- Default level: error
+- Profile: correctness
+- Details and examples: [checks](./checks.md#check-background-step-not-waited)
 
 ## bot-conditions
 

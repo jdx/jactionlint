@@ -4,6 +4,7 @@ agentic-actions default security error
 anonymous-definition pedantic policy warn
 archived-uses online security warn
 artipacked default security error
+background-step-not-waited correctness correctness error
 bot-conditions default security error
 cache-poisoning default security error
 checkout-static-credentials default security error
