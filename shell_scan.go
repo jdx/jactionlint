@@ -1,8 +1,6 @@
 package jactionlint
 
 import (
-	"regexp"
-
 	"github.com/jdx/jactionlint/v2/internal/runscript"
 )
 
@@ -35,27 +33,6 @@ type shPlace struct {
 // splitReason explains why an unquoted placeholder is not quoted by a fix.
 const splitReason = "the expression is an unquoted argument of the script, so quoting it would change word splitting and globbing when the value is meant to expand to several words. quote it by hand, or pass it through an environment variable and expand it the way the script needs"
 
-// nulAssignment stands in the words of a command for an assignment whose value holds a placeholder or a quoted part.
-const nulAssignment = "\x00="
-
-// assignmentWordRe matches a word which starts an assignment, NAME=.
-var assignmentWordRe = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*=`)
-
-// assignmentValue reports whether the placeholder after the word is in the value of an assignment (`NAME=${{ x }}`,
-// also after other assignments of the same command), where the shell does not split the value, so the position is a
-// single word.
-func assignmentValue(cmd []string, word []byte) bool {
-	if !assignmentWordRe.Match(word) {
-		return false
-	}
-	for _, w := range cmd {
-		if w != nulAssignment && !assignmentWordRe.MatchString(w) {
-			return false
-		}
-	}
-	return true
-}
-
 // shSpan is the byte range [Start, End) of a placeholder in a script.
 type shSpan struct{ Start, End int }
 
@@ -73,29 +50,16 @@ func analyzeShellPlaceholders(script string, spans []shSpan) []shPlace {
 		word      []byte
 		wordPlain = true // the current word has no quote or placeholder
 		globalBad bool
-		// cmd are the words of the current simple command, a placeholder or a quoted part makes the word "\x00" ("\x00=" for an assignment)
+		// cmd are the words of the current simple command, a placeholder or a quoted part makes the word "\x00"
 		cmd []string
-		// expanded is true after a ${var} in the current command, expDepth is the depth of the ${ } the scanner is in
-		expanded bool
-		expDepth int
-		// redirNext is true after a redirection operator until the word of its target is complete
-		redirNext bool
 		// arrays is the depth of the array assignments, name=( ... ), the scanner is in
 		arrays int
 	)
 	endWord := func() {
 		if len(word) > 0 || !wordPlain {
-			switch {
-			case redirNext:
-				// the target of a redirection is not an assignment, whatever it looks like
-				cmd = append(cmd, "\x00>")
-				redirNext = false
-			case wordPlain:
+			if wordPlain {
 				cmd = append(cmd, string(word))
-			case assignmentWordRe.Match(word):
-				// an assignment with a placeholder or a quoted part in its value
-				cmd = append(cmd, nulAssignment)
-			default:
+			} else {
 				cmd = append(cmd, "\x00")
 			}
 		}
@@ -128,8 +92,6 @@ func analyzeShellPlaceholders(script string, spans []shSpan) []shPlace {
 				// asked for, so there is nothing to change but the script
 				p.Cannot = true
 				p.Split = splitReason
-			case quote == shUnquoted && wordPlain && !redirNext && !expanded && assignmentValue(cmd, word):
-				p.Unsafe = "the value is not quoted so quoting it changes the text of the script"
 			case quote == shUnquoted:
 				p.Cannot = true
 				p.Split = splitReason
@@ -187,18 +149,6 @@ func analyzeShellPlaceholders(script string, spans []shSpan) []shPlace {
 		case '\n', ';', '&', '|', '(', ')', '{', '}':
 			endWord()
 			cmd = cmd[:0]
-			redirNext = false
-			switch {
-			case c == '{' && i > 0 && script[i-1] == '$':
-				// ${var}: a parameter expansion, not a group. It clears the words of the command above, so
-				// the scanner no longer knows which word the command is and assignmentValue stays false
-				expDepth++
-				expanded = true
-			case c == '}' && expDepth > 0:
-				expDepth--
-			case c == '\n' || c == ';' || c == '&' || c == '|' || c == '(' || c == ')' || c == '{' || c == '}':
-				expanded = false
-			}
 			switch {
 			case c == '(' && i > 0 && script[i-1] == '=':
 				arrays++
@@ -213,10 +163,8 @@ func analyzeShellPlaceholders(script string, spans []shSpan) []shPlace {
 				globalBad = true // here-document and here-string
 			}
 			endWord()
-			redirNext = true
 		case '>':
 			endWord()
-			redirNext = true
 		case '#':
 			if len(word) == 0 && wordPlain {
 				inComment = true
@@ -265,13 +213,22 @@ func analyzeShellPlaceholders(script string, spans []shSpan) []shPlace {
 	// prefix assignments, ${var} words, ...). A script which does not parse is not touched.
 	parsed, err := runscript.Analyze(script, "bash")
 	for i := range places {
-		if places[i].Cannot || places[i].Quote != shUnquoted {
+		p := &places[i]
+		if p.Quote != shUnquoted || (p.Cannot && p.Split == "") {
 			continue
 		}
-		if err != nil || parsed.InSplitList(spans[i].Start) {
-			places[i].Cannot = true
-			if places[i].Unsafe == "" {
-				places[i].Split = splitReason
+		switch {
+		case err != nil:
+			// A script which does not parse is not touched: the scanner's verdict stays
+		case parsed.InSplitList(spans[i].Start):
+			p.Cannot, p.Split = true, splitReason
+		case parsed.InAssignValue(spans[i].Start):
+			// The value of an assignment is not split, so the position is a single word. The parser knows
+			// what is an assignment (prefix assignments, redirection targets, ${var} and the like are
+			// not mistaken for one)
+			p.Cannot, p.Split = false, ""
+			if p.Unsafe == "" {
+				p.Unsafe = "the value is not quoted so quoting it changes the text of the script"
 			}
 		}
 	}
