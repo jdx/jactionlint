@@ -1,5 +1,43 @@
 # Changelog
 
+## [2.1.0](https://github.com/jdx/jactionlint/compare/v2.0.2...v2.1.0) (2026-10-10)
+
+
+### Features
+
+* add JACTIONLINT_ONLINE to turn the online checks on from the environment ([#155](https://github.com/jdx/jactionlint/issues/155)) ([a17b716](https://github.com/jdx/jactionlint/commit/a17b71618b9caf3c2412415cdde8bc946f17088b))
+* add the workflow-secret-scope rule ([#136](https://github.com/jdx/jactionlint/issues/136)) ([2885719](https://github.com/jdx/jactionlint/commit/2885719286122bfbfe1aecec731b6bb77a1dec2d))
+* explain why a finding has no fix ([#135](https://github.com/jdx/jactionlint/issues/135)) ([5a65169](https://github.com/jdx/jactionlint/commit/5a651697ccbf2a484acb2e50f021e3e18c21a108))
+* **parallel-steps:** flag reads of a background step's outputs before its wait ([#132](https://github.com/jdx/jactionlint/issues/132)) ([540e948](https://github.com/jdx/jactionlint/commit/540e94882f0590df1880b6aa707bdffab583e255))
+* **pipeline-without-pipefail:** follow PIPESTATUS into a later check ([#145](https://github.com/jdx/jactionlint/issues/145)) ([40d579e](https://github.com/jdx/jactionlint/commit/40d579edb67985d5d56101fd2aeac7db08a4d4ed))
+* report online check coverage in SARIF ([#140](https://github.com/jdx/jactionlint/issues/140)) ([ba654bb](https://github.com/jdx/jactionlint/commit/ba654bb63b5fec3deb11d8c0195edd12238e9a34))
+* revisit three v2 defaults from [#106](https://github.com/jdx/jactionlint/issues/106) ([#152](https://github.com/jdx/jactionlint/issues/152)) ([aa19b18](https://github.com/jdx/jactionlint/commit/aa19b18727f62815439fd8373ed201e990d2f9bd))
+
+
+### Bug Fixes
+
+* allow runs.env in composite actions ([#123](https://github.com/jdx/jactionlint/issues/123)) ([e0a95fc](https://github.com/jdx/jactionlint/commit/e0a95fc3170292f65b919524a313886c3e86f4d0))
+* **bot-conditions:** suggest advice that matches the caller's actual event ([#141](https://github.com/jdx/jactionlint/issues/141)) ([a8dad0e](https://github.com/jdx/jactionlint/commit/a8dad0ef78c4af72a528d967eda570100f4efe28))
+* **cache-poisoning:** evaluate the caller's input expression for composite actions ([#139](https://github.com/jdx/jactionlint/issues/139)) ([48ba93d](https://github.com/jdx/jactionlint/commit/48ba93ddc6cff1111301024fb7a4f2710456126a))
+* **cache-poisoning:** treat release branch pushes as releases and know more publishers ([#150](https://github.com/jdx/jactionlint/issues/150)) ([981e623](https://github.com/jdx/jactionlint/commit/981e623e222919be9557018993f4e41812a07574))
+* **ci:** fix problem matcher test and run it on PRs ([#134](https://github.com/jdx/jactionlint/issues/134)) ([80b358a](https://github.com/jdx/jactionlint/commit/80b358ae99b12d0e8d6a6b39183ef8005fd30673))
+* **concurrency-limits:** avoid caller group collisions and cancelling release workflows ([#142](https://github.com/jdx/jactionlint/issues/142)) ([3f543aa](https://github.com/jdx/jactionlint/commit/3f543aaf9c86671d1c602ff6f581ffe8da63e83e))
+* **docs:** say that default-minutes and default-days turn on the --fix fix ([#147](https://github.com/jdx/jactionlint/issues/147)) ([1c43358](https://github.com/jdx/jactionlint/commit/1c43358670d85e4fdb1072064914aa0bd4e938ba))
+* **events:** accept field_added/field_removed for issues ([#130](https://github.com/jdx/jactionlint/issues/130)) ([c5ec59a](https://github.com/jdx/jactionlint/commit/c5ec59a9246d6ce3cc9ad17ac3b62a4cd056f9b0))
+* **fix:** refuse risky unquoted template-injection fixes, fix flow-style artipacked ([#154](https://github.com/jdx/jactionlint/issues/154)) ([ac7f40a](https://github.com/jdx/jactionlint/commit/ac7f40a60f311a31529347881236760eb258bb3c))
+* **migrate-ignores:** migrate the root action.yml, report skipped comments, keep version comments ([#146](https://github.com/jdx/jactionlint/issues/146)) ([fec2e75](https://github.com/jdx/jactionlint/commit/fec2e750981d6fc2df902d0ce37b4a7789c5136e))
+* **missing-permissions:** do not require permissions in reusable-only workflows ([#138](https://github.com/jdx/jactionlint/issues/138)) ([387fb67](https://github.com/jdx/jactionlint/commit/387fb677b8bf8f1d9ca2aa9e19f809997a9e297f))
+* **parallel-steps:** allow redundant background: true inside a parallel group ([#131](https://github.com/jdx/jactionlint/issues/131)) ([b1023d8](https://github.com/jdx/jactionlint/commit/b1023d8409c4000a6163d5b0f93afe9733294e8d))
+* **pipeline-without-pipefail:** ignore pipelines in process substitutions ([#143](https://github.com/jdx/jactionlint/issues/143)) ([f8b0184](https://github.com/jdx/jactionlint/commit/f8b0184b5e30e3f808d1b7cb302a56f684c7cd8f))
+* reject the keys GitHub refuses on wait, wait-all, cancel and parallel steps ([#128](https://github.com/jdx/jactionlint/issues/128)) ([85ee9dd](https://github.com/jdx/jactionlint/commit/85ee9dd3ea5f126b7c927b65b79310c7766fc0c0))
+* **rules:** scoped npm registries and same-branch guards (use-trusted-publishing, github-env) ([#151](https://github.com/jdx/jactionlint/issues/151)) ([92b5064](https://github.com/jdx/jactionlint/commit/92b506457c3991d3cea13d815f52386b60ebf466))
+* **untrusted-checkout:** follow a fetched pull request into a script of the repository ([#149](https://github.com/jdx/jactionlint/issues/149)) ([3eed721](https://github.com/jdx/jactionlint/commit/3eed721c2f1db15af1dccd7ba8b1200137b3a185))
+
+
+### Performance Improvements
+
+* parse each expression once and lex without allocating a scanner ([#153](https://github.com/jdx/jactionlint/issues/153)) ([6910e8b](https://github.com/jdx/jactionlint/commit/6910e8bb4f3642cd7272828c342a0541b39c7886))
+
 ## [2.0.2](https://github.com/jdx/jactionlint/compare/v2.0.1...v2.0.2) (2026-10-09)
 
 
