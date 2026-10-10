@@ -73,15 +73,19 @@ func (r *RuleDependabotCooldown) VisitDependabotUpdate(u *DependabotUpdate) erro
 		fixDays = int(v)
 	}
 	r.why = why
+	hint := ""
+	if why != nil && why.Code == NoFixOptionRequired {
+		hint = ". set \"default-days\" in the \"dependabot-cooldown\" rule options of the configuration to turn on the --fix fix"
+	}
 
 	switch {
 	case u.Cooldown == nil:
-		r.report(u.Pos, r.addCooldown(u, fixDays), "\"cooldown\" is not set in this update, so Dependabot applies its implicit cooldown of %d days. set \"cooldown.default-days\" to at least %d to avoid updating to a version right after its release", dependabotImplicitCooldownDays, minDays)
+		r.report(u.Pos, r.addCooldown(u, fixDays), "\"cooldown\" is not set in this update, so Dependabot applies its implicit cooldown of %d days. set \"cooldown.default-days\" to at least %d to avoid updating to a version right after its release%s", dependabotImplicitCooldownDays, minDays, hint)
 	case u.Cooldown.DefaultDays == nil:
-		r.report(u.Cooldown.Pos, r.addDefaultDays(u, fixDays), "\"cooldown\" does not set \"default-days\", so Dependabot applies its implicit cooldown of %d days. set \"default-days\" to at least %d", dependabotImplicitCooldownDays, minDays)
+		r.report(u.Cooldown.Pos, r.addDefaultDays(u, fixDays), "\"cooldown\" does not set \"default-days\", so Dependabot applies its implicit cooldown of %d days. set \"default-days\" to at least %d%s", dependabotImplicitCooldownDays, minDays, hint)
 	default:
 		d := u.Cooldown.DefaultDays
-		r.report(d.Pos, r.raiseDefaultDays(u, fixDays), "\"cooldown.default-days\" is %d, which is less than the minimum %d days. set it to at least %d", d.Value, minDays, minDays)
+		r.report(d.Pos, r.raiseDefaultDays(u, fixDays), "\"cooldown.default-days\" is %d, which is less than the minimum %d days. set it to at least %d%s", d.Value, minDays, minDays, hint)
 	}
 	return nil
 }

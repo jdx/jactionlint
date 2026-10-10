@@ -2,7 +2,7 @@
   |
 1 | on: [push]
   | ^~~
-./testdata/err/one_error.yaml:3:3: "timeout-minutes" is not set at this job. Set it to avoid wasting runner minutes when the job hangs [missing-timeout]
+./testdata/err/one_error.yaml:3:3: "timeout-minutes" is not set at this job. Set it to avoid wasting runner minutes when the job hangs. Set "default-minutes" in the "missing-timeout" rule options of the configuration to turn on the --fix fix [missing-timeout]
   |
 3 |   test:
   |   ^~~~~

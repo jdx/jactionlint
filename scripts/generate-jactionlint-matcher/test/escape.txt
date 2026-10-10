@@ -2,7 +2,7 @@
 [0m[90m  |
 [0m[90m1 | [0mon: [push]
 [90m  | [0m[32m^~~[0m
-[33m./testdata/err/one_error.yaml[0m[90m:[0m3[90m:[0m3[90m: [0m[1m"timeout-minutes" is not set at this job. Set it to avoid wasting runner minutes when the job hangs[0m[90m [missing-timeout]
+[33m./testdata/err/one_error.yaml[0m[90m:[0m3[90m:[0m3[90m: [0m[1m"timeout-minutes" is not set at this job. Set it to avoid wasting runner minutes when the job hangs. Set "default-minutes" in the "missing-timeout" rule options of the configuration to turn on the --fix fix[0m[90m [missing-timeout]
 [0m[90m  |
 [0m[90m3 | [0m  test:
 [90m  | [0m[32m  ^~~~~[0m
