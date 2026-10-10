@@ -5005,7 +5005,7 @@ Output:
   |
 4 |   - package-ecosystem: github-actions
   |     ^~~~~~~~~~~~~~~~~~
-.github/dependabot.yml:14:21: "cooldown.default-days" is 2, which is less than the minimum 7 days. set it to at least 7 [dependabot-cooldown]
+.github/dependabot.yml:14:21: "cooldown.default-days" is 2, which is less than the minimum 7 days. set it to at least 7. set "default-days" in the "dependabot-cooldown" rule options of the configuration to turn on the --fix fix [dependabot-cooldown]
    |
 14 |       default-days: 2
    |                     ^
