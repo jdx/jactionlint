@@ -28,6 +28,10 @@ func TestParseOnlineEnv(t *testing.T) {
 		{in: "no", off: true},
 		{in: "maybe", err: true},
 		{in: "cache,fast", err: true},
+		{in: ",", err: true},
+		{in: "+", err: true},
+		{in: ", ,", err: true},
+		{in: "true,", set: true},
 	}
 	for _, tc := range tests {
 		set, off, mode, err := parseOnlineEnv(tc.in)
