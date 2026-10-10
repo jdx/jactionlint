@@ -382,7 +382,7 @@ func (l *Linter) FixFilesWithOptions(filepaths []string, project *Project, opts 
 	if opts.DryRun {
 		out = l.logOut // stdout has the diff
 	}
-	if err := l.printer.print(out, results, l.notifications()); err != nil {
+	if err := l.printer.print(out, results, l.runInfo()); err != nil {
 		return nil, err
 	}
 	l.printFixSummary(res, opts.DryRun)

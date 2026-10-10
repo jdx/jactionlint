@@ -61,7 +61,14 @@ type printer interface {
 	// print prints the results. The notes are messages about the run itself, e.g. deprecation warnings
 	// of the configuration. Formats which have a place for them print them there. The other formats
 	// ignore them because the linter has already written them to the log.
-	print(w io.Writer, results []fileResult, notes []string) error
+	print(w io.Writer, results []fileResult, info runInfo) error
+}
+
+// runInfo is what is known about the run itself, as opposed to the findings: the warnings (deprecated keys of
+// the configuration, failed lookups) and the coverage of the online checks.
+type runInfo struct {
+	notes  []string
+	online *OnlineCoverage
 }
 
 // structured reports whether the printer makes a document which other tools parse. For such a format the
@@ -109,7 +116,7 @@ type textPrinter struct {
 	oneline bool
 }
 
-func (p textPrinter) print(w io.Writer, results []fileResult, _ []string) error {
+func (p textPrinter) print(w io.Writer, results []fileResult, _ runInfo) error {
 	for _, r := range results {
 		var x *lineIndex
 		if !p.oneline && len(r.src) > 0 {
@@ -128,7 +135,7 @@ type templatePrinter struct {
 	f *ErrorFormatter
 }
 
-func (p templatePrinter) print(w io.Writer, results []fileResult, _ []string) error {
+func (p templatePrinter) print(w io.Writer, results []fileResult, _ runInfo) error {
 	fields := allTemplateFields(results)
 	if len(fields) == 0 {
 		fields = []*ErrorTemplateFields{}
@@ -159,13 +166,13 @@ func encodeJSON(w io.Writer, v any) error {
 
 type jsonPrinter struct{}
 
-func (jsonPrinter) print(w io.Writer, results []fileResult, _ []string) error {
+func (jsonPrinter) print(w io.Writer, results []fileResult, _ runInfo) error {
 	return encodeJSON(w, allTemplateFields(results))
 }
 
 type jsonlPrinter struct{}
 
-func (jsonlPrinter) print(w io.Writer, results []fileResult, _ []string) error {
+func (jsonlPrinter) print(w io.Writer, results []fileResult, _ runInfo) error {
 	for _, f := range allTemplateFields(results) {
 		if err := encodeJSON(w, f); err != nil {
 			return err
@@ -178,7 +185,7 @@ func (jsonlPrinter) print(w io.Writer, results []fileResult, _ []string) error {
 
 type gccPrinter struct{}
 
-func (gccPrinter) print(w io.Writer, results []fileResult, _ []string) error {
+func (gccPrinter) print(w io.Writer, results []fileResult, _ runInfo) error {
 	for _, r := range results {
 		for _, e := range r.errs {
 			fmt.Fprintf(w, "%s:%d:%d: %s: %s [%s]\n", e.Filepath, e.Line, e.Column, e.Severity.gccName(), e.Message, e.ID)
@@ -204,7 +211,7 @@ var (
 	githubPropertyEscaper = strings.NewReplacer("%", "%25", "\r", "%0D", "\n", "%0A", ":", "%3A", ",", "%2C")
 )
 
-func (githubPrinter) print(w io.Writer, results []fileResult, _ []string) error {
+func (githubPrinter) print(w io.Writer, results []fileResult, _ runInfo) error {
 	for _, r := range results {
 		for _, e := range r.errs {
 			cmd := "error"
@@ -351,6 +358,7 @@ type sarifRun struct {
 	Artifacts   []sarifArtifact   `json:"artifacts,omitempty"`
 	ColumnKind  string            `json:"columnKind"`
 	Results     []sarifResult     `json:"results"`
+	Properties  map[string]any    `json:"properties,omitempty"`
 }
 
 type sarifLog struct {
@@ -512,7 +520,7 @@ func sarifFixes(e *Error, x *lineIndex, accepted *editSet) []sarifFix {
 	return []sarifFix{{Description: sarifMessage{desc}, ArtifactChanges: []sarifArtifactChange{change}}}
 }
 
-func (p sarifPrinter) print(w io.Writer, results []fileResult, notes []string) error {
+func (p sarifPrinter) print(w io.Writer, results []fileResult, info runInfo) error {
 	// Files are sorted so that the log does not depend on the order of the arguments
 	results = slices.Clone(results)
 	slices.SortStableFunc(results, func(a, b fileResult) int { return strings.Compare(a.path, b.path) })
@@ -526,12 +534,15 @@ func (p sarifPrinter) print(w io.Writer, results []fileResult, notes []string) e
 	}
 
 	run := sarifRun{ColumnKind: "unicodeCodePoints", Results: []sarifResult{}}
-	if len(notes) > 0 {
+	if len(info.notes) > 0 {
 		inv := sarifInvocation{ExecutionSuccessful: true}
-		for _, n := range notes {
+		for _, n := range info.notes {
 			inv.ToolConfigurationNotifications = append(inv.ToolConfigurationNotifications, sarifNotification{"warning", sarifMessage{n}})
 		}
 		run.Invocations = []sarifInvocation{inv}
+	}
+	if info.online != nil {
+		run.Properties = map[string]any{"onlineCoverage": info.online}
 	}
 	d := &run.Tool.Driver
 	d.Name = "jactionlint"

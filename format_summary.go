@@ -16,7 +16,7 @@ type summaryCount struct{ fresh, baselined int }
 
 func (c summaryCount) total() int { return c.fresh + c.baselined }
 
-func (summaryPrinter) print(w io.Writer, results []fileResult, _ []string) error {
+func (summaryPrinter) print(w io.Writer, results []fileResult, _ runInfo) error {
 	byRule := map[string]*summaryCount{}
 	byFile := map[string]*summaryCount{}
 	var total summaryCount

@@ -560,7 +560,7 @@ func (l *Linter) LintFiles(filepaths []string, project *Project) ([]*Error, erro
 	for _, r := range results {
 		all = append(all, r.errs...)
 	}
-	if err := l.printer.print(l.out, results, l.notifications()); err != nil {
+	if err := l.printer.print(l.out, results, l.runInfo()); err != nil {
 		return nil, err
 	}
 	l.reportBaselineNote(results)
@@ -1129,6 +1129,12 @@ func (l *Linter) notifications() []string {
 	ret := slices.Clone(l.notes)
 	slices.Sort(ret)
 	return slices.Compact(ret)
+}
+
+// runInfo returns what the printers know about the run itself: the notifications and the coverage of the
+// online checks.
+func (l *Linter) runInfo() runInfo {
+	return runInfo{notes: l.notifications(), online: l.OnlineCoverage()}
 }
 
 // annotateErrors fills the fields of the errors which are derived from the diagnostic ID: the
