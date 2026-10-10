@@ -35,6 +35,9 @@ type shPlace struct {
 // splitReason explains why an unquoted placeholder is not quoted by a fix.
 const splitReason = "the expression is an unquoted argument of the script, so quoting it would change word splitting and globbing when the value is meant to expand to several words. quote it by hand, or pass it through an environment variable and expand it the way the script needs"
 
+// nulAssignment stands in the words of a command for an assignment whose value holds a placeholder or a quoted part.
+const nulAssignment = "\x00="
+
 // assignmentWordRe matches a word which starts an assignment, NAME=.
 var assignmentWordRe = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*=`)
 
@@ -46,7 +49,7 @@ func assignmentValue(cmd []string, word []byte) bool {
 		return false
 	}
 	for _, w := range cmd {
-		if !assignmentWordRe.MatchString(w) {
+		if w != nulAssignment && !assignmentWordRe.MatchString(w) {
 			return false
 		}
 	}
@@ -70,7 +73,7 @@ func analyzeShellPlaceholders(script string, spans []shSpan) []shPlace {
 		word      []byte
 		wordPlain = true // the current word has no quote or placeholder
 		globalBad bool
-		// cmd are the words of the current simple command, a placeholder or a quoted part makes the word "\x00"
+		// cmd are the words of the current simple command, a placeholder or a quoted part makes the word "\x00" ("\x00=" for an assignment)
 		cmd []string
 		// arrays is the depth of the array assignments, name=( ... ), the scanner is in
 		arrays int
@@ -79,6 +82,9 @@ func analyzeShellPlaceholders(script string, spans []shSpan) []shPlace {
 		if len(word) > 0 || !wordPlain {
 			if wordPlain {
 				cmd = append(cmd, string(word))
+			} else if assignmentWordRe.Match(word) {
+				// an assignment with a placeholder or a quoted part in its value
+				cmd = append(cmd, nulAssignment)
 			} else {
 				cmd = append(cmd, "\x00")
 			}
