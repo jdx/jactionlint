@@ -2,6 +2,7 @@ package jactionlint
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"strings"
 	"unicode/utf8"
@@ -20,6 +21,7 @@ import (
 // gets no fix, and neither does a line this cannot edit without guessing (a comment which does
 // not mention the ref, or other content after the value).
 func (l *Linter) attachPinFixes(sess *onlineSession, src []byte, errs []*Error) {
+	// With sess == nil (the online checks are off) the errors only get the reason why they have no fix.
 	var starts []int // Byte offset of each line
 	for _, e := range errs {
 		if e.ID != "unpinned-uses" || e.Fix != nil || e.Line <= 0 || e.Column <= 0 {
@@ -34,10 +36,39 @@ func (l *Linter) attachPinFixes(sess *onlineSession, src []byte, errs []*Error) 
 		fix, err := pinFix(sess, src, starts[e.Line-1], e.Column)
 		if err != nil {
 			l.debug("No fix for the error at line %d: %v", e.Line, err)
+			e.NoFix = noFixOf(err)
 			continue
 		}
 		e.Fix = fix
 	}
+}
+
+// pinFixError is why a pin fix cannot be built. It carries the reason shown with the finding.
+type pinFixError struct {
+	code NoFixCode
+	msg  string
+	err  error
+}
+
+func (e *pinFixError) Error() string { return e.msg }
+func (e *pinFixError) Unwrap() error { return e.err }
+
+func shapeErr(format string, args ...any) error {
+	return &pinFixError{code: NoFixUnsupportedShape, msg: fmt.Sprintf(format, args...)}
+}
+
+func judgmentErr(format string, args ...any) error {
+	return &pinFixError{code: NoFixNeedsJudgment, msg: fmt.Sprintf(format, args...)}
+}
+
+// noFixOf turns the error of pinFix into the reason shown with the finding.
+func noFixOf(err error) *NoFix {
+	var pe *pinFixError
+	if errors.As(err, &pe) {
+		return &NoFix{Code: pe.code, Reason: pe.msg}
+	}
+	// What is left are the failed lookups
+	return &NoFix{Code: NoFixLookupFailed, Reason: "pinning needs GitHub to resolve the ref and the lookup failed: " + err.Error()}
 }
 
 // lineStarts returns the byte offset where each line of the source starts.
@@ -65,7 +96,7 @@ func pinFix(sess *onlineSession, src []byte, lineStart, col int) (*Fix, error) {
 	off := 0
 	for n := 1; n < col; n++ {
 		if off >= len(line) {
-			return nil, fmt.Errorf("the column is outside the line")
+			return nil, shapeErr("the position of the value is outside its line")
 		}
 		_, w := utf8.DecodeRune(line[off:])
 		off += w
@@ -80,7 +111,7 @@ func pinFix(sess *onlineSession, src []byte, lineStart, col int) (*Fix, error) {
 		valueStart = off + 1
 		i := bytes.IndexByte(line[valueStart:], quote)
 		if i < 0 {
-			return nil, fmt.Errorf("the quoted value is not closed on its line")
+			return nil, shapeErr("the quoted value is not closed on its line")
 		}
 		valueEnd = valueStart + i
 		tokenEnd = valueEnd + 1
@@ -93,31 +124,34 @@ func pinFix(sess *onlineSession, src []byte, lineStart, col int) (*Fix, error) {
 	}
 	spec = string(line[valueStart:valueEnd])
 	if strings.ContainsAny(spec, "\\{}[],") {
-		return nil, fmt.Errorf("the value %q is not a plain action reference", spec)
+		return nil, shapeErr("the value %q is not a plain action reference", spec)
 	}
 
 	ref := ParseUses(spec)
 	if ref.Dynamic || (ref.Kind != UsesAction && ref.Kind != UsesReusableWorkflow) || (ref.RefKind != RefSemverTag && ref.RefKind != RefOther) {
-		return nil, fmt.Errorf("%q is not an action or workflow referenced by a symbolic ref", spec)
+		return nil, shapeErr("%q is not an action or workflow referenced by a symbolic ref, so there is no tag to resolve", spec)
 	}
 	if !validGitHubOwner(ref.Owner) || !validGitHubRepo(ref.Repo) || !validGitRefName(ref.Ref) {
-		return nil, fmt.Errorf("%q is not a GitHub repository", spec)
+		return nil, shapeErr("%q is not a GitHub repository", spec)
 	}
 
+	if sess == nil {
+		return nil, &pinFixError{code: NoFixOnlineRequired, msg: "pinning needs GitHub to resolve the tag, run with --online to enable the fix"}
+	}
 	sha, isTag, err := sess.TagCommit(ref.Owner, ref.Repo, ref.Ref)
 	if err != nil {
 		return nil, err
 	}
 	if !isTag {
-		return nil, fmt.Errorf("%q is not a tag of %s/%s, so what it points to can change", ref.Ref, ref.Owner, ref.Repo)
+		return nil, judgmentErr("%q is not a tag of %s/%s, so what it points to can change: choose the version to pin", ref.Ref, ref.Owner, ref.Repo)
 	}
 	if _, isBranch, err := sess.BranchCommit(ref.Owner, ref.Repo, ref.Ref); err != nil {
 		return nil, err
 	} else if isBranch {
-		return nil, fmt.Errorf("%q is both a branch and a tag of %s/%s", ref.Ref, ref.Owner, ref.Repo)
+		return nil, judgmentErr("%q is both a branch and a tag of %s/%s: choose which one to pin", ref.Ref, ref.Owner, ref.Repo)
 	}
 	if len(sha) != 40 || classifyRef(sha, true, false) != RefFullSHA {
-		return nil, fmt.Errorf("%q does not resolve to a commit SHA", ref.Ref)
+		return nil, judgmentErr("%q does not resolve to a commit SHA", ref.Ref)
 	}
 
 	// What follows the value on the line
@@ -137,7 +171,7 @@ func pinFix(sess *onlineSession, src []byte, lineStart, col int) (*Fix, error) {
 	case strings.HasPrefix(rest, "#") && commentNamesRef(rest[1:], ref.Ref):
 		// The comment already names the version
 	default:
-		return nil, fmt.Errorf("the line has other content after the value")
+		return nil, shapeErr("the line has other content after the value, or a comment which does not name the ref")
 	}
 	return &Fix{
 		Description: fmt.Sprintf("Pin %s/%s@%s to commit %s", ref.Owner, ref.Repo, ref.Ref, shortSHA(sha)),

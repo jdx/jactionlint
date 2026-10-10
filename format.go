@@ -599,6 +599,16 @@ func (p sarifPrinter) print(w io.Writer, results []fileResult, notes []string) e
 			if e.Kind != "" && e.Kind != e.ID {
 				res.Properties = map[string]string{"kind": e.Kind}
 			}
+			if e.NoFix != nil && e.Fix == nil {
+				if res.Properties == nil {
+					res.Properties = map[string]string{}
+				}
+				res.Properties["noFixCode"] = string(e.NoFix.Code)
+				res.Properties["noFixReason"] = e.NoFix.Reason
+				if e.NoFix.Option != "" {
+					res.Properties["noFixOption"] = e.NoFix.Option
+				}
+			}
 			if e.Baselined {
 				res.Suppressions = []sarifSuppression{{Kind: "external", Justification: "accepted by the jactionlint baseline"}}
 			}

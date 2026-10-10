@@ -55,6 +55,10 @@ type Error struct {
 	// Fix is an automatic correction for the error. It is nil when the error cannot be fixed
 	// mechanically.
 	Fix *Fix
+	// NoFix says why the error has no applicable Fix although the rule can fix such findings. It is nil
+	// when Fix is set and for the findings which are advice only (the rule never fixes them), so that an
+	// unavailable fix can be told from one that does not exist.
+	NoFix *NoFix
 	// Baselined is true when the baseline file accepts the finding (see Config.Baseline). The linter
 	// does not return such errors from its methods or print them, except in the SARIF log (as
 	// suppressed results) and the summary format; it is set only on the way there.
@@ -74,6 +78,37 @@ type Fix struct {
 	Unsafe bool `json:"unsafe,omitempty"`
 	// Edits are the replacements to apply.
 	Edits []TextEdit `json:"edits"`
+}
+
+// NoFixCode is the machine-readable reason why a finding which the rule could fix has no fix.
+type NoFixCode string
+
+const (
+	// NoFixOptionRequired means a rule option must be configured first. NoFix.Option names it. The fixers
+	// never invent a value such as a number of minutes or days.
+	NoFixOptionRequired NoFixCode = "option-required"
+	// NoFixOptionInvalid means the option is configured with a value the fix cannot use.
+	NoFixOptionInvalid NoFixCode = "option-invalid"
+	// NoFixOnlineRequired means the fix needs a lookup on GitHub and the online checks are off.
+	NoFixOnlineRequired NoFixCode = "online-required"
+	// NoFixLookupFailed means the online checks are on but the lookup failed, so what the fix needs is unknown.
+	NoFixLookupFailed NoFixCode = "lookup-failed"
+	// NoFixUnsupportedShape means the fix cannot edit the source the way it is written.
+	NoFixUnsupportedShape NoFixCode = "unsupported-shape"
+	// NoFixNeedsJudgment means the right change depends on a decision of a person, or an automatic change
+	// would not be safe.
+	NoFixNeedsJudgment NoFixCode = "needs-judgment"
+)
+
+// NoFix explains why a finding has no Fix. It is part of the JSON of the template fields and the SARIF log (the
+// text output stays one line per finding, as tools which parse it expect), and never changes what --fix does.
+type NoFix struct {
+	// Code is the machine-readable reason.
+	Code NoFixCode `json:"code"`
+	// Reason is the human-readable explanation, e.g. "set the missing-timeout option default-minutes to enable the fix".
+	Reason string `json:"reason"`
+	// Option is the rule option to configure as "rule-id.option" when Code is option-required or option-invalid.
+	Option string `json:"option,omitempty"`
 }
 
 // TextEdit replaces the bytes in [Start, End) of a file with NewText. Offsets are byte offsets
@@ -178,6 +213,7 @@ func (e *Error) templateFields(x *lineIndex) *ErrorTemplateFields {
 		DocURL:    e.DocURL,
 		EndLine:   endLine,
 		Fix:       e.Fix,
+		NoFix:     e.NoFix,
 	}
 }
 
@@ -456,6 +492,9 @@ type ErrorTemplateFields struct {
 	// Fix is the automatic fix for the error. When encoding into JSON, this field is omitted when the
 	// error cannot be fixed automatically.
 	Fix *Fix `json:"fix,omitempty"`
+	// NoFix says why a finding which the rule can fix has none. When encoding into JSON, this field is
+	// omitted when the error has a fix or is advice only.
+	NoFix *NoFix `json:"no_fix,omitempty"`
 }
 
 func unescapeBackslash(s string) string {

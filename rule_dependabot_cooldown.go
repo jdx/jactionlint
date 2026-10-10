@@ -21,6 +21,8 @@ const dependabotMaxCooldownDays = 90
 type RuleDependabotCooldown struct {
 	DependabotRuleBase
 	src *dependabotSource
+	// why is the reason the current update gets no fix from its options. It is nil when the options allow one.
+	why *NoFix
 }
 
 // NewRuleDependabotCooldown creates a new RuleDependabotCooldown instance. src is the content of the
@@ -62,9 +64,15 @@ func (r *RuleDependabotCooldown) VisitDependabotUpdate(u *DependabotUpdate) erro
 
 	// The fix needs a number of days chosen by the user. There is no default on purpose.
 	fixDays := -1
-	if v, ok := cfg.ruleOptionNumber("dependabot-cooldown", "default-days"); ok && int(v) >= minDays && int(v) <= dependabotMaxCooldownDays {
+	var why *NoFix
+	if v, ok := cfg.ruleOptionNumber("dependabot-cooldown", "default-days"); !ok {
+		why = &NoFix{Code: NoFixOptionRequired, Option: "dependabot-cooldown.default-days", Reason: "set the dependabot-cooldown option default-days to enable the fix, jactionlint does not choose a number of days"}
+	} else if int(v) < minDays || int(v) > dependabotMaxCooldownDays {
+		why = &NoFix{Code: NoFixOptionInvalid, Option: "dependabot-cooldown.default-days", Reason: fmt.Sprintf("the dependabot-cooldown option default-days must be between %d and %d for the fix to use it", minDays, dependabotMaxCooldownDays)}
+	} else {
 		fixDays = int(v)
 	}
+	r.why = why
 
 	switch {
 	case u.Cooldown == nil:
@@ -105,8 +113,14 @@ func dependabotUpdatesDisabled(u *DependabotUpdate) bool {
 
 func (r *RuleDependabotCooldown) report(pos *Pos, fix *Fix, format string, args ...any) {
 	r.ReportIDf("dependabot-cooldown", pos, format, args...)
-	if fix != nil {
-		r.errs[len(r.errs)-1].Fix = fix
+	e := r.errs[len(r.errs)-1]
+	switch {
+	case fix != nil:
+		e.Fix = fix
+	case r.why != nil:
+		e.NoFix = r.why
+	default:
+		e.NoFix = &NoFix{Code: NoFixUnsupportedShape, Reason: "the update is not written in a way the fix can edit"}
 	}
 }
 
