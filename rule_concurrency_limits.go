@@ -2,6 +2,7 @@ package jactionlint
 
 import (
 	"bytes"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
@@ -84,9 +85,9 @@ func (rule *RuleConcurrencyLimits) VisitWorkflowPre(n *Workflow) error {
 		// group is there to make a new run wait for the running one
 		msg = "workflow has no \"concurrency:\", so every run of it executes at the same time even when a newer run is started while one is running (" + why + "). add a top-level \"concurrency:\" with a \"group:\" and \"cancel-in-progress: false\", so that a new run waits for the running release or deployment to finish instead of cancelling it. a newer run that is waiting replaces an older one that is waiting, so add \"queue: max\" when no release may be skipped"
 	} else if startedByPullRequest(n) {
-		msg += ". use a group per pull request such as \"" + callerAwareGroup(n) + "\", so that a new push cancels only the older runs of the same pull request and not the runs of the others"
+		msg += ". use a group per pull request such as \"" + callerAwareGroup(n, rule.path) + "\", so that a new push cancels only the older runs of the same pull request and not the runs of the others"
 	} else if callsReusableWorkflow(n) {
-		msg += ". use a group such as \"" + callerAwareGroup(n) + "\""
+		msg += ". use a group such as \"" + callerAwareGroup(n, rule.path) + "\""
 	}
 	if callsReusableWorkflow(n) {
 		msg += ". the workflow has jobs that call reusable workflows, and inside a called workflow \"github.workflow\" is the name of the caller, so a group that the caller and the called workflow both build from \"${{ github.workflow }}\" is the same one and the called workflow is cancelled at once. give the group of the caller its own part, such as \"-caller\", so that it never equals the group of a called workflow"
@@ -149,11 +150,30 @@ func callsReusableWorkflow(w *Workflow) bool {
 
 // callerAwareGroup is the group that the advice and the fix write. A workflow that calls reusable workflows gets a
 // group that cannot equal the one of a callee.
-func callerAwareGroup(w *Workflow) string {
+//
+// A workflow that is itself called and calls others in turn sees the name of the outermost caller in
+// github.workflow, like its callees do, so the marker has the name of its own file to differ from both.
+func callerAwareGroup(w *Workflow, path string) string {
 	if callsReusableWorkflow(w) {
-		return "${{ github.workflow }}" + callerGroupMarker + "-${{ github.event.pull_request.number || github.ref }}"
+		marker := callerGroupMarker
+		if isReusableWorkflow(w) {
+			if stem := strings.TrimSuffix(filepath.Base(path), filepath.Ext(path)); path != "" && stem != "" {
+				marker = "-" + stem + callerGroupMarker
+			}
+		}
+		return "${{ github.workflow }}" + marker + "-${{ github.event.pull_request.number || github.ref }}"
 	}
 	return pullRequestGroup
+}
+
+// isReusableWorkflow reports whether the workflow can be called with workflow_call.
+func isReusableWorkflow(w *Workflow) bool {
+	for _, e := range w.On {
+		if _, ok := e.(*WorkflowCallEvent); ok {
+			return true
+		}
+	}
+	return false
 }
 
 // startedByPullRequest reports whether the workflow runs for an event of a pull request.
@@ -219,7 +239,7 @@ func fixConcurrencyLimits(w *Workflow) *Fix {
 		Description: "Add concurrency that cancels superseded runs of the same pull request",
 		Edits: []TextEdit{d.insertAfterLine(end, "", // a blank line separates the block from "on:"
 			pad+"concurrency:",
-			pad+unit+"group: "+callerAwareGroup(w),
+			pad+unit+"group: "+callerAwareGroup(w, ""),
 			pad+unit+"cancel-in-progress: true",
 		)},
 	}

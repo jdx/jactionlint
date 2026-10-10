@@ -1,6 +1,7 @@
 package jactionlint
 
 import (
+	"path"
 	"regexp"
 	"slices"
 	"strings"
@@ -42,14 +43,18 @@ func releaseCommand(c *runscript.Command) (string, bool) {
 	if i >= len(words) {
 		return "", false
 	}
-	tool := strings.SplitN(words[i], "@", 2)[0]
+	// ./gradlew and ./mvnw are run with their path, and on Windows with an extension
+	tool := strings.SplitN(path.Base(words[i]), "@", 2)[0]
+	tool = strings.TrimSuffix(strings.TrimSuffix(tool, ".cmd"), ".bat")
 	args := words[i+1:]
 	if slices.Contains(args, "--dry-run") || slices.Contains(args, "--noop") {
 		return "", false
 	}
 	if tool == "cargo" {
 		// cargo-release only simulates until it is given --execute
-		if len(args) > 0 && args[0] == "release" && (slices.Contains(args, "--execute") || slices.Contains(args, "-x")) {
+		// the subcommand follows the toolchain (+nightly) and the options of cargo (--locked)
+		sub := slices.IndexFunc(args, func(a string) bool { return !strings.HasPrefix(a, "+") && !strings.HasPrefix(a, "-") })
+		if sub >= 0 && args[sub] == "release" && (slices.Contains(args, "--execute") || slices.Contains(args, "-x")) {
 			return "cargo release", true
 		}
 		return "", false

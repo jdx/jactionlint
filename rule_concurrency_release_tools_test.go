@@ -26,6 +26,11 @@ func TestConcurrencyLimitsAdviceForReleaseToolsIsNotKeyedOnOneTool(t *testing.T)
 		{"cargo publish", "cargo publish", true},
 		{"cargo release executes", "cargo release patch --execute", true},
 		{"cargo release is a dry run without --execute", "cargo release patch", false},
+		{"cargo release with a toolchain", "cargo +nightly release patch --execute", true},
+		{"cargo release with an option of cargo", "cargo --locked release patch -x", true},
+		{"cargo release with a toolchain is a dry run without --execute", "cargo +nightly release patch", false},
+		{"gradle wrapper", "./gradlew publish", true},
+		{"maven wrapper", "./mvnw -B deploy", true},
 		{"lerna publish", "npx lerna publish from-package", true},
 		{"maven deploy", "mvn -B deploy", true},
 		{"nuget push", "dotnet nuget push pkg.nupkg", true},
@@ -110,5 +115,16 @@ func TestConcurrencyLimitsGroupOfACallerDiffersFromItsCallee(t *testing.T) {
 	errs = errsWithID(lintFileWithConfig(t, cfg, "ci.yaml", plain), "concurrency-limits")
 	if len(errs) != 1 || strings.Contains(errs[0].Message, "-caller") || strings.Contains(errs[0].Message, "called workflow") {
 		t.Errorf("a workflow without reusable calls: %v", errs)
+	}
+}
+
+func TestConcurrencyLimitsGroupOfANestedCaller(t *testing.T) {
+	// A reusable workflow which calls others in turn sees the name of the outermost caller in github.workflow, so the
+	// marker of its group differs from the one of the outermost caller
+	cfg := withoutMissingTimeout(mustParseConfig(t, "rules:\n  concurrency-limits: error\n"))
+	src := "on:\n  push:\n  workflow_call:\njobs:\n  ci:\n    uses: ./.github/workflows/ci-impl.yml\n"
+	errs := errsWithID(lintFileWithConfig(t, cfg, ".github/workflows/mid.yaml", src), "concurrency-limits")
+	if len(errs) != 1 || !strings.Contains(errs[0].Message, "${{ github.workflow }}-mid-caller-") {
+		t.Errorf("a nested caller should name its own file in the group: %v", errs)
 	}
 }
