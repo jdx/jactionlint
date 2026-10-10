@@ -40,7 +40,7 @@ type RuleExpression struct {
 	curStep   *Step
 	scriptRun *ExecRun // the step when the script being checked is its run: script
 	scriptStr *String  // the script being checked
-	fixPlan   map[int]*Fix
+	fixPlan   *tiFixPlan
 	planned   bool
 }
 
@@ -893,9 +893,7 @@ func (rule *RuleExpression) attachTemplateInjectionFix(nerrs, start int) {
 				run: rule.scriptRun,
 			})
 		}
-		if f := rule.fixPlan[start]; f != nil {
-			e.Fix = f
-		}
+		rule.fixPlan.apply(e, start)
 	}
 }
 

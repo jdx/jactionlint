@@ -202,10 +202,16 @@ func TestTemplateInjectionFixes(t *testing.T) {
 			safe: "      - run: echo 'title='\"${ISSUE_TITLE}\"'!'\n        env:\n          ISSUE_TITLE: ${{ github.event.issue.title }}\n",
 		},
 		{
-			name:   "unquoted needs the unsafe fix",
-			step:   "      - run: echo ${{ github.event.issue.title }}\n",
-			safe:   "      - run: echo ${{ github.event.issue.title }}\n",
-			unsafe: "      - run: echo \"${ISSUE_TITLE}\"\n        env:\n          ISSUE_TITLE: ${{ github.event.issue.title }}\n",
+			// An argument may be meant to expand to several words, so even the unsafe mode leaves it
+			name: "an unquoted argument is not quoted",
+			step: "      - run: echo ${{ github.event.issue.title }}\n",
+			safe: "      - run: echo ${{ github.event.issue.title }}\n",
+		},
+		{
+			name:   "an unquoted assignment value is a single word",
+			step:   "      - run: TITLE=${{ github.event.issue.title }}\n",
+			safe:   "      - run: TITLE=${{ github.event.issue.title }}\n",
+			unsafe: "      - run: TITLE=\"${ISSUE_TITLE}\"\n        env:\n          ISSUE_TITLE: ${{ github.event.issue.title }}\n",
 		},
 		{
 			name: "block scalar with several expressions and one variable",
@@ -310,15 +316,15 @@ func TestTemplateInjectionFixes(t *testing.T) {
 		{
 			// The quotes of the replacement are escaped for the double quoted YAML scalar
 			name:   "yaml quoted string with quotes in the replacement",
-			step:   "      - run: \"echo ${{ github.event.issue.title }}\"\n",
-			safe:   "      - run: \"echo ${{ github.event.issue.title }}\"\n",
-			unsafe: "      - run: \"echo \\\"${ISSUE_TITLE}\\\"\"\n        env:\n          ISSUE_TITLE: ${{ github.event.issue.title }}\n",
+			step:   "      - run: \"X=${{ github.event.issue.title }}\"\n",
+			safe:   "      - run: \"X=${{ github.event.issue.title }}\"\n",
+			unsafe: "      - run: \"X=\\\"${ISSUE_TITLE}\\\"\"\n        env:\n          ISSUE_TITLE: ${{ github.event.issue.title }}\n",
 		},
 		{
 			name:   "single quoted yaml string",
-			step:   "      - run: 'echo ${{ github.event.issue.title }}'\n",
-			safe:   "      - run: 'echo ${{ github.event.issue.title }}'\n",
-			unsafe: "      - run: 'echo \"${ISSUE_TITLE}\"'\n        env:\n          ISSUE_TITLE: ${{ github.event.issue.title }}\n",
+			step:   "      - run: 'X=${{ github.event.issue.title }}'\n",
+			safe:   "      - run: 'X=${{ github.event.issue.title }}'\n",
+			unsafe: "      - run: 'X=\"${ISSUE_TITLE}\"'\n        env:\n          ISSUE_TITLE: ${{ github.event.issue.title }}\n",
 		},
 		{
 			name: "yaml quoted string keeps working",
@@ -487,13 +493,13 @@ func TestPosixShellTemplate(t *testing.T) {
 
 // An expression the fix cannot replace must not get an environment variable that nothing reads.
 func TestTemplateInjectionFixAddsOnlyTheVariablesItUses(t *testing.T) {
-	src := tiWorkflow("      - run: ${{ github.event.issue.title }} x ${{ github.event.pull_request.title }}\n")
+	src := tiWorkflow("      - run: A=${{ github.event.issue.title }}; B=\"${{ github.event.pull_request.title }}\"; echo ${{ github.event.issue.title }}\n")
 	out, _ := fixAll(t, tiConfig(t), src, FixModeUnsafe)
-	if strings.Contains(out, "ISSUE_TITLE:") {
-		t.Errorf("ISSUE_TITLE is not read by the script:\n%s", out)
+	if !strings.Contains(out, "A=\"${ISSUE_TITLE}\"") || !strings.Contains(out, "echo ${{ github.event.issue.title }}") {
+		t.Errorf("the assignment is fixed and the argument is not:\n%s", out)
 	}
-	if !strings.Contains(out, "\"${PULL_REQUEST_TITLE}\"") || !strings.Contains(out, "PULL_REQUEST_TITLE: ${{") {
-		t.Errorf("the expression that can be replaced is:\n%s", out)
+	if strings.Count(out, "ISSUE_TITLE:") != 1 || !strings.Contains(out, "PULL_REQUEST_TITLE: ${{") {
+		t.Errorf("each variable is defined once:\n%s", out)
 	}
 }
 
@@ -521,18 +527,72 @@ func TestTemplateInjectionInputsFollowTheProfile(t *testing.T) {
 // An expression twice on a line, once in single quotes (a safe fix) and once unquoted (an unsafe one), is
 // fixed completely in one run of the unsafe mode, and the safe mode leaves only the unsafe one.
 func TestTemplateInjectionFixTwiceOnOneLine(t *testing.T) {
-	src := tiWorkflow("      - run: unzip -n '${{ github.event.issue.title }}/x.zip' -d ${{ github.event.issue.title }}\n")
+	src := tiWorkflow("      - run: unzip -n '${{ github.event.issue.title }}/x.zip' -d ${{ github.event.issue.title }}; D=${{ github.event.issue.title }}\n")
 	safe, _ := fixAll(t, tiConfig(t), src, FixModeSafe)
-	if !strings.Contains(safe, `''"${ISSUE_TITLE}"'/x.zip' -d ${{ github.event.issue.title }}`) {
+	if !strings.Contains(safe, `''"${ISSUE_TITLE}"'/x.zip' -d ${{ github.event.issue.title }}; D=${{ github.event.issue.title }}`) {
 		t.Errorf("safe mode fixes the quoted one only:\n%s", safe)
 	}
 	out, left := fixAll(t, tiConfig(t), src, FixModeUnsafe)
-	if !strings.Contains(out, `''"${ISSUE_TITLE}"'/x.zip' -d "${ISSUE_TITLE}"`) {
+	if !strings.Contains(out, `''"${ISSUE_TITLE}"'/x.zip' -d ${{ github.event.issue.title }}; D="${ISSUE_TITLE}"`) {
 		t.Errorf("both are replaced:\n%s", out)
 	}
+	// Only the argument is left, and it says why
+	n := 0
 	for _, e := range left {
-		if e.ID == "template-injection" {
-			t.Errorf("a finding is left: %v", e)
+		if e.ID == "template-injection" || e.ID == "expression" {
+			n++
+			if e.Fix != nil || e.NoFix == nil || e.NoFix.Code != NoFixNeedsJudgment {
+				t.Errorf("the argument has no fix and a reason: %+v", e)
+			}
+		}
+	}
+	if n != 1 {
+		t.Errorf("want one finding left but got %d", n)
+	}
+}
+
+// An unquoted expression in a position that is not provably a single word is reported with the reason why it is
+// not quoted, in every mode, and a quoted one or an assignment value is still fixed.
+func TestTemplateInjectionUnquotedArgumentsHaveNoFix(t *testing.T) {
+	for _, script := range []string{
+		"echo ${{ github.event.issue.title }}",
+		"rm -rf ${{ github.event.issue.title }}",
+		"git checkout ${{ github.head_ref }}",
+		"echo hi > ${{ github.event.issue.title }}",
+		"X=1 echo ${{ github.event.issue.title }}",
+		"export T=${{ github.event.issue.title }}",
+		"for f in ${{ github.event.issue.title }}; do echo \"$f\"; done",
+		"files=(${{ github.event.issue.title }})",
+	} {
+		src := tiWorkflow("      - run: " + script + "\n")
+		for _, mode := range []FixMode{FixModeSafe, FixModeUnsafe} {
+			out, _ := fixAll(t, tiConfig(t), src, mode)
+			if out != src {
+				t.Errorf("%q must not be fixed:\n%s", script, out)
+			}
+		}
+		found := false
+		for _, e := range lintWithConfig(t, tiConfig(t), src) {
+			if e.ID != "template-injection" && e.ID != "expression" || e.Kind == "syntax-check" {
+				continue
+			}
+			found = true
+			if e.Fix != nil {
+				t.Errorf("%q has a fix: %+v", script, e.Fix)
+			}
+			if e.NoFix == nil || e.NoFix.Code != NoFixNeedsJudgment || !strings.Contains(e.NoFix.Reason, "word splitting") {
+				t.Errorf("%q has no reason: %+v", script, e.NoFix)
+			}
+		}
+		if !found {
+			t.Errorf("%q is not reported", script)
+		}
+	}
+	// A quoted expression is fixed
+	src := tiWorkflow("      - run: echo \"${{ github.event.issue.title }}\"\n")
+	for _, e := range lintWithConfig(t, tiConfig(t), src) {
+		if (e.ID == "template-injection" || e.ID == "expression") && (e.Fix == nil || e.NoFix != nil) {
+			t.Errorf("a quoted expression has a fix: %+v", e)
 		}
 	}
 }

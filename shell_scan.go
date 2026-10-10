@@ -1,6 +1,10 @@
 package jactionlint
 
-import "github.com/jdx/jactionlint/v2/internal/runscript"
+import (
+	"regexp"
+
+	"github.com/jdx/jactionlint/v2/internal/runscript"
+)
 
 // shQuote is how a position of a POSIX shell script is quoted.
 type shQuote int8
@@ -22,6 +26,31 @@ type shPlace struct {
 	// the script does for benign values, e.g. the value is not quoted so quoting it changes word
 	// splitting. It is empty when the replacement is equivalent.
 	Unsafe string
+	// Split is the reason why no replacement is made for an unquoted placeholder: it is in a position of the
+	// script which is not provably a single word, so quoting it would change word splitting and globbing.
+	// Cannot is true then. It is empty for the placeholders which are quoted or are the value of an assignment.
+	Split string
+}
+
+// splitReason explains why an unquoted placeholder is not quoted by a fix.
+const splitReason = "the expression is an unquoted argument of the script, so quoting it would change word splitting and globbing when the value is meant to expand to several words. quote it by hand, or pass it through an environment variable and expand it the way the script needs"
+
+// assignmentWordRe matches a word which starts an assignment, NAME=.
+var assignmentWordRe = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*=`)
+
+// assignmentValue reports whether the placeholder after the word is in the value of an assignment (`NAME=${{ x }}`,
+// also after other assignments of the same command), where the shell does not split the value, so the position is a
+// single word.
+func assignmentValue(cmd []string, word []byte) bool {
+	if !assignmentWordRe.Match(word) {
+		return false
+	}
+	for _, w := range cmd {
+		if !assignmentWordRe.MatchString(w) {
+			return false
+		}
+	}
+	return true
 }
 
 // shSpan is the byte range [Start, End) of a placeholder in a script.
@@ -82,8 +111,12 @@ func analyzeShellPlaceholders(script string, spans []shSpan) []shPlace {
 				// one item of them, which is another program, and leaving it be is what the script
 				// asked for, so there is nothing to change but the script
 				p.Cannot = true
+				p.Split = splitReason
+			case quote == shUnquoted && wordPlain && assignmentValue(cmd, word):
+				p.Unsafe = "the value is not quoted so quoting it changes the text of the script"
 			case quote == shUnquoted:
-				p.Unsafe = "the value is not quoted so quoting it changes word splitting and globbing"
+				p.Cannot = true
+				p.Split = splitReason
 			}
 			if inDBrack && quote != shSingle {
 				if p.Unsafe == "" {
@@ -193,6 +226,7 @@ func analyzeShellPlaceholders(script string, spans []shSpan) []shPlace {
 	if globalBad {
 		for i := range places {
 			places[i].Cannot = true
+			places[i].Split = "" // the script is not understood, so the position is not known either
 		}
 		return places
 	}
@@ -206,6 +240,9 @@ func analyzeShellPlaceholders(script string, spans []shSpan) []shPlace {
 		}
 		if err != nil || parsed.InSplitList(spans[i].Start) {
 			places[i].Cannot = true
+			if places[i].Unsafe == "" {
+				places[i].Split = splitReason
+			}
 		}
 	}
 	return places

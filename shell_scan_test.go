@@ -12,17 +12,17 @@ func TestAnalyzeShellPlaceholders(t *testing.T) {
 		script string
 		want   []shPlace
 	}{
-		{"unquoted", "echo @", []shPlace{{Quote: shUnquoted, Unsafe: "x"}}},
+		{"unquoted", "echo @", []shPlace{{Cannot: true, Split: "x"}}},
 		{"double quoted", `echo "@"`, []shPlace{{Quote: shDouble}}},
 		{"double quoted in text", `echo "a @ b"`, []shPlace{{Quote: shDouble}}},
 		{"single quoted", `echo '@'`, []shPlace{{Quote: shSingle}}},
-		{"single quote closed", `echo 'a' @`, []shPlace{{Quote: shUnquoted, Unsafe: "x"}}},
+		{"single quote closed", `echo 'a' @`, []shPlace{{Cannot: true, Split: "x"}}},
 		{"single quote inside double quotes", `echo "it's @"`, []shPlace{{Quote: shDouble}}},
 		{"double quote inside single quotes", `echo 'say "@"'`, []shPlace{{Quote: shSingle}}},
 		{"escaped quote in double quotes", `echo "a\" @"`, []shPlace{{Quote: shDouble}}},
 		{"backslash before placeholder", `echo \@`, []shPlace{{Cannot: true}}},
 		{"comment", "echo hi # @", []shPlace{{Cannot: true}}},
-		{"hash inside a word is not a comment", "echo a#b @", []shPlace{{Quote: shUnquoted, Unsafe: "x"}}},
+		{"hash inside a word is not a comment", "echo a#b @", []shPlace{{Cannot: true, Split: "x"}}},
 		{"comment ends at newline", "# c\necho \"@\"", []shPlace{{Quote: shDouble}}},
 		{"command substitution", `echo "$(echo @)"`, []shPlace{{Cannot: true}}},
 		{"backticks", "echo `echo @`", []shPlace{{Cannot: true}}},
@@ -34,30 +34,37 @@ func TestAnalyzeShellPlaceholders(t *testing.T) {
 		{"unterminated quote", `echo "@`, []shPlace{{Cannot: true}}},
 		{"double brackets", `[[ "@" == a ]]`, []shPlace{{Quote: shDouble, Unsafe: "x"}}},
 		{"double brackets closed", `[[ a == b ]]; echo "@"`, []shPlace{{Quote: shDouble}}},
-		{"two placeholders", `echo "@" '@' @`, []shPlace{{Quote: shDouble}, {Quote: shSingle}, {Quote: shUnquoted, Unsafe: "x"}}},
+		{"two placeholders", `echo "@" '@' @`, []shPlace{{Quote: shDouble}, {Quote: shSingle}, {Cannot: true, Split: "x"}}},
 		{"parameter expansion is fine", `echo "${A:-@}"`, []shPlace{{Quote: shDouble}}},
-		{"for list", "for f in @; do echo \"$f\"; done", []shPlace{{Cannot: true}}},
-		{"for list after other words", "for f in a @ b; do :; done", []shPlace{{Cannot: true}}},
-		{"for list in a block", "if x; then\n  for f in @\n  do :; done\nfi", []shPlace{{Cannot: true}}},
+		{"for list", "for f in @; do echo \"$f\"; done", []shPlace{{Cannot: true, Split: "x"}}},
+		{"for list after other words", "for f in a @ b; do :; done", []shPlace{{Cannot: true, Split: "x"}}},
+		{"for list in a block", "if x; then\n  for f in @\n  do :; done\nfi", []shPlace{{Cannot: true, Split: "x"}}},
 		{"for list quoted is fine", "for f in \"@\"; do :; done", []shPlace{{Quote: shDouble}}},
-		{"for body is not the list", "for f in a b; do echo @; done", []shPlace{{Quote: shUnquoted, Unsafe: "x"}}},
+		{"for body is not the list", "for f in a b; do echo @; done", []shPlace{{Cannot: true, Split: "x"}}},
 		{"select list", "select f in @; do break; done", []shPlace{{Cannot: true}}},
-		{"array assignment", "files=(a @)", []shPlace{{Cannot: true}}},
-		{"after an array assignment", "files=(a b); echo @", []shPlace{{Quote: shUnquoted, Unsafe: "x"}}},
-		{"for list after a braced variable", "for f in ${A} @; do :; done", []shPlace{{Cannot: true}}},
-		{"for list in a brace group", "{ for f in @; do :; done; }", []shPlace{{Cannot: true}}},
-		{"for list after a braced variable in a group", "{ for f in ${A}; do :; done; for g in ${B} @; do :; done; }", []shPlace{{Cannot: true}}},
-		{"for list with a prefix assignment", "IFS=, for f in @; do :; done", []shPlace{{Cannot: true}}},
-		{"for list with a parameter expansion before", "for f in ${A:-x} @; do :; done", []shPlace{{Cannot: true}}},
-		{"for list word glued to a variable", "for f in ${A}@; do :; done", []shPlace{{Cannot: true}}},
-		{"for list over lines", "for f in a \\\n  @; do :; done", []shPlace{{Cannot: true}}},
-		{"for list on a pipeline line", "echo x | while read -r l; do for f in ${l} @; do :; done; done", []shPlace{{Cannot: true}}},
+		{"array assignment", "files=(a @)", []shPlace{{Cannot: true, Split: "x"}}},
+		{"after an array assignment", "files=(a b); echo @", []shPlace{{Cannot: true, Split: "x"}}},
+		{"for list after a braced variable", "for f in ${A} @; do :; done", []shPlace{{Cannot: true, Split: "x"}}},
+		{"for list in a brace group", "{ for f in @; do :; done; }", []shPlace{{Cannot: true, Split: "x"}}},
+		{"for list after a braced variable in a group", "{ for f in ${A}; do :; done; for g in ${B} @; do :; done; }", []shPlace{{Cannot: true, Split: "x"}}},
+		{"for list with a prefix assignment", "IFS=, for f in @; do :; done", []shPlace{{Cannot: true, Split: "x"}}},
+		{"for list with a parameter expansion before", "for f in ${A:-x} @; do :; done", []shPlace{{Cannot: true, Split: "x"}}},
+		{"for list word glued to a variable", "for f in ${A}@; do :; done", []shPlace{{Cannot: true, Split: "x"}}},
+		{"for list over lines", "for f in a \\\n  @; do :; done", []shPlace{{Cannot: true, Split: "x"}}},
+		{"for list on a pipeline line", "echo x | while read -r l; do for f in ${l} @; do :; done; done", []shPlace{{Cannot: true, Split: "x"}}},
 		{"select list after a braced variable", "select f in ${A} @; do break; done", []shPlace{{Cannot: true}}},
-		{"array assignment after braced variable", "files=(${A} @)", []shPlace{{Cannot: true}}},
-		{"array assignment with declare", "declare -a files=(a @)", []shPlace{{Cannot: true}}},
-		{"array append", "files+=(@)", []shPlace{{Cannot: true}}},
-		{"array assignment over lines", "files=(\n  a\n  @\n)", []shPlace{{Cannot: true}}},
-		{"for body after braced list is fine", "for f in ${A}; do echo @; done", []shPlace{{Quote: shUnquoted, Unsafe: "x"}}},
+		{"array assignment after braced variable", "files=(${A} @)", []shPlace{{Cannot: true, Split: "x"}}},
+		{"array assignment with declare", "declare -a files=(a @)", []shPlace{{Cannot: true, Split: "x"}}},
+		{"array append", "files+=(@)", []shPlace{{Cannot: true, Split: "x"}}},
+		{"array assignment over lines", "files=(\n  a\n  @\n)", []shPlace{{Cannot: true, Split: "x"}}},
+		{"for body after braced list is fine", "for f in ${A}; do echo @; done", []shPlace{{Cannot: true, Split: "x"}}},
+		{"assignment value", "A=@", []shPlace{{Quote: shUnquoted, Unsafe: "x"}}},
+		{"assignment value after text", "A=pre@", []shPlace{{Quote: shUnquoted, Unsafe: "x"}}},
+		{"assignment value after another assignment", "A=1 B=@ cmd", []shPlace{{Quote: shUnquoted, Unsafe: "x"}}},
+		{"assignment prefix of a command is not a single word argument", "A=1 echo @", []shPlace{{Cannot: true, Split: "x"}}},
+		{"argument that looks like an assignment", "echo A=@", []shPlace{{Cannot: true, Split: "x"}}},
+		{"export is not a plain assignment", "export A=@", []shPlace{{Cannot: true, Split: "x"}}},
+		{"redirection target", "echo hi > @", []shPlace{{Cannot: true, Split: "x"}}},
 		{"line continuation", "echo \\\n  \"@\"", []shPlace{{Quote: shDouble}}},
 	}
 	for _, tc := range tests {
@@ -81,6 +88,9 @@ func TestAnalyzeShellPlaceholders(t *testing.T) {
 				g := got[i]
 				if g.Cannot != w.Cannot {
 					t.Errorf("place %d: Cannot want %v got %v", i, w.Cannot, g.Cannot)
+				}
+				if (g.Split != "") != (w.Split != "") {
+					t.Errorf("place %d: Split want %q got %q", i, w.Split, g.Split)
 				}
 				if w.Cannot {
 					continue

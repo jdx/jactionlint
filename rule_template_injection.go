@@ -83,7 +83,7 @@ func (rule *RuleTemplateInjection) VisitStep(n *Step) error {
 	rule.reportSinks(ctx, stepSinks(n))
 	for _, code := range codeStringsOf(n) {
 		spans := rule.src.scanExprs(code.Str)
-		var plan map[int]*Fix
+		var plan *tiFixPlan
 		planned := false
 		for i := range spans {
 			sp := &spans[i]
@@ -98,7 +98,6 @@ func (rule *RuleTemplateInjection) VisitStep(n *Step) error {
 				planned = true
 			}
 			pos := sp.TokPos(cl.Ref.Node.Token())
-			fix := plan[sp.Start]
 			before := len(rule.errs)
 			switch cl.Tier {
 			case tiDirect:
@@ -115,9 +114,7 @@ func (rule *RuleTemplateInjection) VisitStep(n *Step) error {
 				rule.ReportIDf("template-injection", pos, "%q is expanded with ${{ }} into an inline script, so a value with shell syntax changes what the script does. instead, pass it through an environment variable and read it as a variable of the shell", cl.Ref.Display(sp.Src))
 			}
 			rule.errs[len(rule.errs)-1].RetiredID = cl.Tier.retiredID()
-			if fix != nil {
-				rule.errs[len(rule.errs)-1].Fix = fix
-			}
+			plan.apply(rule.errs[len(rule.errs)-1], sp.Start)
 			if note := rule.wf.callerWarning(); note != "" {
 				for _, e := range rule.errs[before:] {
 					e.Message += ". " + note
