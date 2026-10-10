@@ -1315,21 +1315,22 @@ func (p *parser) parseStepExecWait(entries []workflowMappingEntry) *ExecWait {
 		case "wait-all":
 			// 'wait-all' waits for all background steps and takes no arguments. The official schema
 			// types the value as null or boolean, so both `wait-all:` and `wait-all: true` are valid.
+			// GitHub refuses the workflow on `wait-all: false`, though.
 			if e.val.Kind != yaml.ScalarNode || (e.val.Tag != "!!null" && e.val.Tag != "!!bool") {
 				p.errorf(e.val, "\"wait-all\" takes no arguments. it must be empty or a boolean value (e.g. \"wait-all:\" or \"wait-all: true\") but found %s node with %q tag", nodeKindName(e.val.Kind), e.val.Tag)
+			} else if e.val.Tag == "!!bool" && !strings.EqualFold(e.val.Value, "true") {
+				p.errorf(e.val, "\"wait-all: %s\" is rejected by GitHub. write \"wait-all:\" or \"wait-all: true\", or remove the step", e.val.Value)
 			}
 			ret.All = true
 			ret.AllPos = e.key.Pos
-		case "id", "if", "name", "env", "continue-on-error", "timeout-minutes":
-			// do nothing
+		case "id", "name":
+			// do nothing. GitHub refuses the workflow when 'if', 'env', 'continue-on-error' or
+			// 'timeout-minutes' is set on a 'wait', 'wait-all' or 'cancel' step, although its schema
+			// lists 'continue-on-error' for them.
 		default:
 			p.unexpectedKey(e.key, "step to wait for background steps", []string{
 				"id",
-				"if",
 				"name",
-				"env",
-				"continue-on-error",
-				"timeout-minutes",
 				"wait",
 				"wait-all",
 			})
@@ -1355,16 +1356,12 @@ func (p *parser) parseStepExecCancel(entries []workflowMappingEntry) *ExecCancel
 		case "cancel":
 			// The 'cancel' step targets a single background step by its ID (not a list).
 			ret.Name = p.parseString(e.val, false)
-		case "id", "if", "name", "env", "continue-on-error", "timeout-minutes":
-			// do nothing
+		case "id", "name":
+			// do nothing. See parseStepExecWait for the keys GitHub refuses here.
 		default:
 			p.unexpectedKey(e.key, "step to cancel background steps", []string{
 				"id",
-				"if",
 				"name",
-				"env",
-				"continue-on-error",
-				"timeout-minutes",
 				"cancel",
 			})
 		}
@@ -1382,16 +1379,10 @@ func (p *parser) parseStepExecParallel(entries []workflowMappingEntry) *ExecPara
 		switch e.id {
 		case "parallel":
 			ret.Steps = p.parseSteps("parallel", e.val)
-		case "id", "if", "name", "env", "continue-on-error", "timeout-minutes":
-			// do nothing
 		default:
+			// GitHub refuses the workflow when any other key ('id', 'if', 'name', 'env',
+			// 'continue-on-error', 'timeout-minutes') is set on a 'parallel' step.
 			p.unexpectedKey(e.key, "step to run steps in parallel", []string{
-				"id",
-				"if",
-				"name",
-				"env",
-				"continue-on-error",
-				"timeout-minutes",
 				"parallel",
 			})
 		}
