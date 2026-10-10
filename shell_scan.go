@@ -75,6 +75,9 @@ func analyzeShellPlaceholders(script string, spans []shSpan) []shPlace {
 		globalBad bool
 		// cmd are the words of the current simple command, a placeholder or a quoted part makes the word "\x00" ("\x00=" for an assignment)
 		cmd []string
+		// expanded is true after a ${var} in the current command, expDepth is the depth of the ${ } the scanner is in
+		expanded bool
+		expDepth int
 		// redirNext is true after a redirection operator until the word of its target is complete
 		redirNext bool
 		// arrays is the depth of the array assignments, name=( ... ), the scanner is in
@@ -125,7 +128,7 @@ func analyzeShellPlaceholders(script string, spans []shSpan) []shPlace {
 				// asked for, so there is nothing to change but the script
 				p.Cannot = true
 				p.Split = splitReason
-			case quote == shUnquoted && wordPlain && !redirNext && assignmentValue(cmd, word):
+			case quote == shUnquoted && wordPlain && !redirNext && !expanded && assignmentValue(cmd, word):
 				p.Unsafe = "the value is not quoted so quoting it changes the text of the script"
 			case quote == shUnquoted:
 				p.Cannot = true
@@ -185,6 +188,17 @@ func analyzeShellPlaceholders(script string, spans []shSpan) []shPlace {
 			endWord()
 			cmd = cmd[:0]
 			redirNext = false
+			switch {
+			case c == '{' && i > 0 && script[i-1] == '$':
+				// ${var}: a parameter expansion, not a group. It clears the words of the command above, so
+				// the scanner no longer knows which word the command is and assignmentValue stays false
+				expDepth++
+				expanded = true
+			case c == '}' && expDepth > 0:
+				expDepth--
+			case c == '\n' || c == ';' || c == '&' || c == '|' || c == '(' || c == ')' || c == '{' || c == '}':
+				expanded = false
+			}
 			switch {
 			case c == '(' && i > 0 && script[i-1] == '=':
 				arrays++

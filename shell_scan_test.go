@@ -67,6 +67,8 @@ func TestAnalyzeShellPlaceholders(t *testing.T) {
 		{"redirection target that looks like an assignment", "A=1 > FILE=@", []shPlace{{Cannot: true, Split: "x"}}},
 		{"input redirection target that looks like an assignment", "cat < FILE=@", []shPlace{{Cannot: true, Split: "x"}}},
 		{"assignment after a redirection target", "echo > out B=@", []shPlace{{Cannot: true, Split: "x"}}},
+		{"assignment-looking argument after a braced variable", "echo ${A} B=@", []shPlace{{Cannot: true, Split: "x"}}},
+		{"assignment after a brace group", "{ echo a; }; B=@", []shPlace{{Quote: shUnquoted, Unsafe: "x"}}},
 		{"assignment prefix of a command is not a single word argument", "A=1 echo @", []shPlace{{Cannot: true, Split: "x"}}},
 		{"argument that looks like an assignment", "echo A=@", []shPlace{{Cannot: true, Split: "x"}}},
 		{"export is not a plain assignment", "export A=@", []shPlace{{Cannot: true, Split: "x"}}},

@@ -221,6 +221,13 @@ func TestTemplateInjectionFixes(t *testing.T) {
 			unsafe: "      - run: A=1 > FILE=${{ github.event.issue.title }}\n",
 		},
 		{
+			// ${A} hides the command word from the scanner, so B=... is an argument, not a prefix assignment
+			name:   "an assignment-looking argument after a braced variable is not fixed",
+			step:   "      - run: echo ${A} B=${{ github.event.issue.title }}\n",
+			safe:   "      - run: echo ${A} B=${{ github.event.issue.title }}\n",
+			unsafe: "      - run: echo ${A} B=${{ github.event.issue.title }}\n",
+		},
+		{
 			name: "block scalar with several expressions and one variable",
 			step: "      - name: x\n        run: |\n          echo \"${{ github.event.issue.title }}\"\n          echo \"title is ${{ github.event.issue.title }}\" \"${{ github.event.issue.body }}\"\n",
 			safe: "      - name: x\n        run: |\n          echo \"${ISSUE_TITLE}\"\n          echo \"title is ${ISSUE_TITLE}\" \"${ISSUE_BODY}\"\n        env:\n          ISSUE_TITLE: ${{ github.event.issue.title }}\n          ISSUE_BODY: ${{ github.event.issue.body }}\n",
