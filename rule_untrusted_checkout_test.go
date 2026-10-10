@@ -346,6 +346,26 @@ jobs:
       - run: python3 base/scripts/check.py --root pr-head
       - run: sudo apt-get install -y valgrind
 `},
+		{"fetch, then a script of the repository that checks out FETCH_HEAD", map[string]string{"../../scripts/co.sh": "#!/bin/bash\ngit checkout FETCH_HEAD\n"}, prt + `    steps:
+      - uses: actions/checkout@v4
+      - run: git fetch origin ${{ github.event.pull_request.head.sha }} # want
+      - run: ./scripts/co.sh
+`},
+		{"fetch, then bash on a script that checks out the destination", map[string]string{"../../scripts/co.sh": "git checkout pr\n"}, prt + `    steps:
+      - uses: actions/checkout@v4
+      - run: git fetch origin refs/pull/${{ github.event.number }}/head:pr # want
+      - run: bash scripts/co.sh
+`},
+		{"fetch, then a script that does not use the fetch", map[string]string{"../../scripts/co.sh": "git checkout main\n"}, prt + `    steps:
+      - uses: actions/checkout@v4
+      - run: git fetch origin ${{ github.event.pull_request.head.sha }}
+      - run: ./scripts/co.sh
+`},
+		{"fetch, then a script that is not in the project", nil, prt + `    steps:
+      - uses: actions/checkout@v4
+      - run: git fetch origin ${{ github.event.pull_request.head.sha }}
+      - run: ./scripts/missing.sh
+`},
 	}
 	for _, tc := range tests {
 		t.Run(tc.what, func(t *testing.T) {

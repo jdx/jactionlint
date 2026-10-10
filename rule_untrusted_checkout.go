@@ -1,6 +1,8 @@
 package jactionlint
 
 import (
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 
@@ -181,6 +183,13 @@ func (rule *RuleUntrustedCheckout) checkoutsOf(j *Job, s *Step) []*untrustedChec
 					}
 				}
 			}
+			if !ok {
+				// a script of the repository that puts the fetched revision in the working tree
+				if f := rule.scriptUsingFetch(c, s, earlier); f != nil {
+					// the offset starts one before the command so that the script itself counts as running the code
+					ret = append(ret, &untrustedCheckout{pos: f.pos, what: f.what, offset: c.Offset - 1, step: s})
+				}
+			}
 			if !ok && c.Name == "git" && c.Verb() == "fetch" {
 				// A fetch only downloads the objects: it checks out the code when a later command in
 				// the script puts what it fetched in the working tree.
@@ -201,6 +210,71 @@ func (rule *RuleUntrustedCheckout) checkoutsOf(j *Job, s *Step) []*untrustedChec
 			}
 		}
 		return ret
+	}
+	return nil
+}
+
+// maxScriptSize is the size of the largest script file that is read to look for a checkout.
+const maxScriptSize = 256 * 1024
+
+// scriptPath returns the file a command runs as a script of the repository: `./scripts/x.sh`, `bash scripts/x.sh`,
+// `sh ./x.sh`. It returns "" for everything else, including a path that is computed or absolute.
+func scriptPath(c *runscript.Command) string {
+	switch c.Name {
+	case "bash", "sh":
+		if len(c.Positional) == 0 {
+			return ""
+		}
+		w := c.Positional[0]
+		if w.Dynamic() || strings.HasPrefix(w.Value, "-") || strings.HasPrefix(w.Value, "/") {
+			return ""
+		}
+		return w.Value
+	}
+	if c.NameWord != nil && !c.NameWord.Dynamic() && strings.HasPrefix(c.NameWord.Value, "./") {
+		return c.NameWord.Value
+	}
+	return ""
+}
+
+// scriptUsingFetch returns the earlier fetch whose revision the script file that the command runs puts in the working
+// tree, and forgets it. The script is read from the project, and only when it names FETCH_HEAD or a destination of
+// the fetch literally in a command that changes the working tree, so a script that merely exists is not reported.
+func (rule *RuleUntrustedCheckout) scriptUsingFetch(c *runscript.Command, s *Step, earlier []*pendingFetch) *pendingFetch {
+	if rule.project == nil || rule.project.root == "" || !slices.ContainsFunc(earlier, func(f *pendingFetch) bool { return f != nil }) {
+		return nil
+	}
+	rel := scriptPath(c)
+	if rel == "" {
+		return nil
+	}
+	path := filepath.Join(rule.project.root, filepath.FromSlash(stepWorkdir(s)), filepath.FromSlash(rel))
+	real, err := filepath.EvalSymlinks(path)
+	root, rerr := filepath.EvalSymlinks(rule.project.root)
+	if err != nil || rerr != nil || !isPathInDir(root, real) {
+		return nil
+	}
+	if fi, err := os.Stat(real); err != nil || !fi.Mode().IsRegular() || fi.Size() > maxScriptSize {
+		return nil
+	}
+	b, err := os.ReadFile(real)
+	if err != nil {
+		return nil
+	}
+	script, err := runscript.Analyze(string(b), "")
+	if err != nil || script == nil {
+		return nil
+	}
+	for k, f := range earlier {
+		if f == nil {
+			continue
+		}
+		for _, sc := range script.Commands {
+			if sc.Name == "git" && workTreeVerbs[sc.Verb()] && wordsName(sc, f.names) {
+				earlier[k] = nil
+				return f
+			}
+		}
 	}
 	return nil
 }

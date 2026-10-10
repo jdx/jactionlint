@@ -7214,6 +7214,12 @@ A step is reported at its checkout when it puts untrusted code in the workspace 
 - `gh pr checkout`, and `git checkout`, `switch`, `merge`, `pull`, `clone` ... with such a reference in the arguments or
   in an environment variable they use. A `git fetch` of the head only downloads the objects: it counts when a later command
   of the same script (`git checkout FETCH_HEAD`, `git merge`, `git reset --hard`, ...) puts them in the working tree.
+- A `git fetch` of the head in an earlier step also counts when a later `run:` step starts a script file of the project
+  (`./scripts/x.sh`, `bash scripts/x.sh`, `sh ./x.sh`) and that file, read from the repository being linted, has a command that
+  changes the working tree and names `FETCH_HEAD` or a destination of the refspec literally (`git checkout FETCH_HEAD`). The rule
+  does not guess: a script that is missing, too large, outside the repository, whose path is computed, or that takes the
+  revision from a variable (`git checkout "$1"`, `git checkout "$PR_REF"`) is not followed, and neither are scripts that the
+  script starts in turn. The same holds for a revision that a step passes through a variable to a command other than `git`.
 - "Runs it" is a later step with a `run:` command that can execute workspace code (a script, `npm`, `cargo`, `make`, an
   interpreter, ...), a local action (`uses: ./...`), or one of a few actions that build the workspace. Commands that only read or
   move files (`cat`, `git diff`, `grep`, `jq`, `tar`, `gh`, ...) do not count, and neither do shell keywords and builtins

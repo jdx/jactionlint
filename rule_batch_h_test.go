@@ -86,6 +86,9 @@ func lintInProject(t *testing.T, others map[string]string, src, cfg string) []*E
 		t.Fatal(err)
 	}
 	for n, c := range others {
+		if err := os.MkdirAll(filepath.Dir(filepath.Join(dir, n)), 0o755); err != nil {
+			t.Fatal(err)
+		}
 		if err := os.WriteFile(filepath.Join(dir, n), []byte(c), 0o644); err != nil {
 			t.Fatal(err)
 		}
