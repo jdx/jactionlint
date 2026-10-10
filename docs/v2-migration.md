@@ -281,7 +281,7 @@ With `--format sarif` stdout holds only the log and stderr is empty unless `--ve
   actionlint, up to and including 1.7.12, rejects the `$/` syntax (`specifying action "$/..." in invalid format`), so a repository that
   also runs actionlint starts to fail there. That is why the fix is unsafe and never applied by `--fix` alone.
 - Some fixes are not offered where they would be wrong: `missing-permissions` writes nothing into a reusable workflow
-  (`workflow_call`), because the callers decide what the token can do and a callee asking for more than a caller grants is rejected
+  (`workflow_call`; a workflow that runs only on `workflow_call` is not reported at all), because the callers decide what the token can do and a callee asking for more than a caller grants is rejected
   at startup; and `template-injection` leaves the expression in a word list (`for f in ${{ ... }}`, `files=(...)`) alone, because quoting
   it would make one item of the list.
 

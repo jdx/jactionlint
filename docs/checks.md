@@ -3206,10 +3206,15 @@ the text of the workflow does not mention `GITHUB_TOKEN`, `github.token`, `GH_TO
 workflow runs and that pushes with the credentials left by `actions/checkout` is not visible, so check such a workflow before
 accepting the safe fix.
 
-A reusable workflow (one with `workflow_call:` in `on:`) gets no fix. The workflow that calls it decides what the token can do,
-and a callee that asks for more than its caller grants makes GitHub reject the run, so a `contents: read` written into the callee
-breaks every caller with `permissions: {}` or fewer permissions. The finding stays and the permissions have to be chosen by hand,
-after looking at the callers.
+A reusable workflow gets different treatment, because the workflow that calls it decides what the token can do, and a callee that
+asks for more than its caller grants makes GitHub reject the run:
+
+- A workflow whose only event is `workflow_call:` is **not checked**. The callers set `permissions:` (and `missing-permissions`
+  checks them when they are in the repository), and a value in the callee cannot suit callers that grant different permissions.
+- A workflow with `workflow_call:` and another event (such as `push:`) is also run directly, so it is still checked. Its finding
+  has **no fix**: a `contents: read` written into the callee breaks every caller with `permissions: {}` or fewer permissions. The
+  message says so, and the permissions have to be chosen by hand, after looking at the callers. Set them at job level, or
+  use `permissions: {}` if the jobs need nothing, and make sure no caller grants less than the jobs request.
 
 <a id="check-excessive-permissions"></a>
 ## Excessive permissions

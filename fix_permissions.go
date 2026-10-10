@@ -47,7 +47,8 @@ var tokenUseRe = regexp.MustCompile(`(?i)github_token|github\.token|\bgh_token\b
 // commenting on a pull request, publishing a package and so on.
 func fixMissingPermissions(w *Workflow) *Fix {
 	if _, ok := w.FindWorkflowCallEvent(); ok {
-		// A reusable workflow gets at most the permissions its caller grants. Setting "contents: read"
+		// A reusable workflow (also one with another event, which the rule still reports, with a message
+		// saying that there is no fix) gets at most the permissions its caller grants. Setting "contents: read"
 		// in the callee makes GitHub reject every caller which grants less, and the callers are in
 		// other files, so there is no value that is right to write. The finding stays without a fix.
 		return nil
