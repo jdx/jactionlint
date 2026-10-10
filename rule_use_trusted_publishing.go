@@ -1,7 +1,10 @@
 package jactionlint
 
 import (
+	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
@@ -20,6 +23,7 @@ import (
 type RuleUseTrustedPublishing struct {
 	RuleBase
 	runContext
+	root string // the root of the repository, "" when unknown
 }
 
 // NewRuleUseTrustedPublishing creates a new RuleUseTrustedPublishing instance.
@@ -174,6 +178,7 @@ func (rule *RuleUseTrustedPublishing) npmRegistryIsPrivate(step *Step, s *runscr
 		return false
 	}
 	private := false
+	scoped := map[string]bool{} // scope -> its registry is private; set by `@scope:registry`
 	if rule.job != nil {
 		for _, st := range rule.job.Steps {
 			if st == step {
@@ -208,19 +213,142 @@ func (rule *RuleUseTrustedPublishing) npmRegistryIsPrivate(step *Step, s *runscr
 			continue
 		}
 		k := strings.ToLower(key.Value)
+		scope := ""
 		if i := strings.LastIndex(k, ":"); i >= 0 {
-			k = k[i+1:] // @scope:registry
+			if strings.HasPrefix(k, "@") {
+				scope = k[:i] // @scope:registry
+			}
+			k = k[i+1:]
 		}
 		if key.Dynamic() || !slices.Contains(npmRegistrySettings, k) {
 			continue
 		}
-		if now := !registryValueIsPublic(val[0].Value); c.Cond {
+		now := !registryValueIsPublic(val[0].Value)
+		switch {
+		case scope != "":
+			// the registry of one scope: it decides only for the packages of the scope
+			scoped[scope] = (c.Cond && scoped[scope]) || now
+		case c.Cond:
 			private = private || now
-		} else {
+		default:
 			private = now
 		}
 	}
-	return private
+	if private {
+		return true
+	}
+	hasScoped := false
+	for _, p := range scoped {
+		hasScoped = hasScoped || p
+	}
+	if !hasScoped {
+		return false
+	}
+	// A private registry for a scope hides the publish only when the package is of that scope. The name is read
+	// from package.json: when it cannot be read with confidence the publish stays unreported.
+	name, ok := rule.publishedPackageName(step, s, publish)
+	if !ok {
+		return true
+	}
+	for scope, p := range scoped {
+		if p && strings.HasPrefix(name, scope+"/") {
+			return true
+		}
+	}
+	return false
+}
+
+// manifestTouched reports whether the script text may rewrite package.json.
+func manifestTouched(t string) bool {
+	if strings.Contains(t, "pkg set") || strings.Contains(t, "pkg delete") || strings.Contains(t, "pkg fix") {
+		return true
+	}
+	if !strings.Contains(t, "package.json") {
+		return false
+	}
+	for _, w := range []string{">", "sed ", "jq ", "tee ", "mv ", "cp ", "node ", "python"} {
+		if strings.Contains(t, w) {
+			return true
+		}
+	}
+	return false
+}
+
+// publishedPackageName returns the lower case name of the package that the npm, pnpm or yarn publish uploads, read
+// from the package.json of the directory it runs in (the working-directory of the step, the job or the workflow, or
+// the folder given to the command). It reports false when that cannot be known: the repository root is unknown, the
+// directory is an expression or changed by `cd`, the command selects workspaces or a tarball, or a script of the
+// job up to the publish may have rewritten the manifest.
+func (rule *RuleUseTrustedPublishing) publishedPackageName(step *Step, s *runscript.Script, publish *runscript.Command) (string, bool) {
+	if rule.root == "" || rule.job == nil {
+		return "", false
+	}
+	for _, f := range publish.Flags {
+		switch f.Name {
+		case "-w", "--workspace", "--workspaces", "--prefix", "-C", "--cwd", "--dir", "--filter", "-F", "-r", "--recursive":
+			return "", false
+		}
+	}
+	for _, c := range s.Commands {
+		if c.Offset < publish.Offset && (c.Name == "cd" || c.Name == "pushd") {
+			return "", false
+		}
+	}
+	for _, st := range rule.job.Steps {
+		if r, ok := st.Exec.(*ExecRun); ok && r.Run != nil && manifestTouched(r.Run.Value) {
+			return "", false
+		}
+		if st == step {
+			break
+		}
+	}
+	var wd *String
+	if rule.wf != nil && rule.wf.Defaults != nil && rule.wf.Defaults.Run != nil {
+		wd = rule.wf.Defaults.Run.WorkingDirectory
+	}
+	if rule.job.Defaults != nil && rule.job.Defaults.Run != nil && rule.job.Defaults.Run.WorkingDirectory != nil {
+		wd = rule.job.Defaults.Run.WorkingDirectory
+	}
+	if run, ok := step.Exec.(*ExecRun); ok && run.WorkingDirectory != nil {
+		wd = run.WorkingDirectory
+	}
+	dir := rule.root
+	if wd != nil {
+		if wd.ContainsExpression() {
+			return "", false
+		}
+		d := filepath.FromSlash(strings.TrimSpace(wd.Value))
+		if d != "" && d != "." {
+			if !filepath.IsLocal(d) {
+				return "", false
+			}
+			dir = filepath.Join(dir, d)
+		}
+	}
+	// `npm publish DIR`; `yarn npm publish` takes no folder
+	first := 1
+	if publish.Tool == "yarn" && publish.Sub(0) == "npm" {
+		first = 2
+	}
+	if len(publish.Positional) > first {
+		arg := publish.Positional[first]
+		d := filepath.FromSlash(arg.Value)
+		if arg.Dynamic() || strings.ContainsAny(arg.Value, ":@") || strings.HasSuffix(arg.Value, ".tgz") || strings.HasSuffix(arg.Value, ".tar.gz") || !filepath.IsLocal(d) {
+			return "", false
+		}
+		dir = filepath.Join(dir, d)
+	}
+	b, err := os.ReadFile(filepath.Join(dir, "package.json"))
+	if err != nil {
+		return "", false
+	}
+	var pkg struct {
+		Name string `json:"name"`
+	}
+	if json.Unmarshal(b, &pkg) != nil || strings.TrimSpace(pkg.Name) == "" {
+		return "", false
+	}
+	return strings.ToLower(strings.TrimSpace(pkg.Name)), true
 }
 
 // registryEnvAppliesTo reports whether the environment variable chooses the registry of the tool: `npm_config_*` is
@@ -562,6 +690,10 @@ func init() {
 		if !env.config.RuleEnabled("use-trusted-publishing") {
 			return nil
 		}
-		return []Rule{NewRuleUseTrustedPublishing()}
+		r := NewRuleUseTrustedPublishing()
+		if env.project != nil {
+			r.root = env.project.RootDir()
+		}
+		return []Rule{r}
 	})
 }

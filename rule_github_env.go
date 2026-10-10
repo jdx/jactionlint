@@ -45,7 +45,8 @@ import (
 //     `[[ v =~ ^re$ ]] || exit`, `[[ ! v =~ ^re$ ]] && exit`, `if [[ ! ... ]]; then exit; fi`, a bare `[[ ]]` under
 //     the default -e, or a `case` whose last branch is `*) exit`. The polarity must be right (a negated test
 //     whose failure is the way on proves nothing), the exit must be the exit of the script (not of a subshell),
-//     the test must be at the top level of the script, and no assignment may follow it. The regular expression
+//     the test must be at the top level of the script or in the same `if`/`else` branch as the write (before it, and
+//     then only for the rest of that branch; not in loops or functions), and no assignment may follow it. The regular expression
 //     must be anchored and hold no character the destination cannot have.
 //
 // Every case of the table in rule_github_env_flow_test.go names the clause it checks.

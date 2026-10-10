@@ -2741,7 +2741,9 @@ The rule `github-env` (in the `default` profile) reports two kinds of writes:
 A value that cannot carry what makes the write dangerous is accepted: for `$GITHUB_ENV` a value without newlines
 (`tr -d '\n'`, `tr '\n' ' '`, `head -n 1`, `sed ':a;N;$!ba;s/\n/ /g'`, `${v//$'\n'/}`), and for both files a value cut down to
 letters, digits and a few harmless characters (`sed 's/[^a-zA-Z0-9-]/-/g'`, `tr -cd 'a-z0-9'`, `${v//[^a-zA-Z0-9]/}`) or checked
-before the write with an anchored pattern such as `[[ "$v" =~ ^[a-z0-9.-]+$ ]] || exit 1`. A directory for `$GITHUB_PATH` also has
+before the write with an anchored pattern such as `[[ "$v" =~ ^[a-z0-9.-]+$ ]] || exit 1`. The check may sit at the top
+level of the script or inside the same `if` or `else` branch as the write, before it (it then holds for the rest of that
+branch only; a bare `[[ ]]` that relies on `set -e` is accepted at the top level only, and loops and functions are not followed). A directory for `$GITHUB_PATH` also has
 to hold no dot, slash or colon. A token minted by an earlier step of the job (the `token` output of
 `actions/create-github-app-token`), the timestamps of the event and the parts of `$GITHUB_REPOSITORY` split with `read` are trusted.
 
@@ -2940,7 +2942,14 @@ shell of the Windows runners) and `powershell` are searched for the publish comm
 An npm publish to another registry than the public one is not reported even when the command does not say so: the script set it
 before (`npm config set registry URL`, `yarn config set npmRegistryServer URL`), the environment sets `npm_config_registry` or
 `YARN_NPM_REGISTRY_SERVER`, or an earlier `actions/setup-node` step has a `registry-url` of another registry (GitHub Packages,
-`npm.pkg.github.com`, has no trusted publishing). A key that is the output of `NuGet/login` is trusted publishing in a PowerShell script as well.
+`npm.pkg.github.com`, has no trusted publishing).
+A registry that is set for one scope (`npm config set @acme:registry URL`) hides the publish only when the package is of that scope:
+the name is read from the `package.json` of the repository (in the `working-directory` of the step, or the folder that
+`npm publish` is given) and a package that is unscoped or of another scope is reported. When the name cannot be known with
+confidence the publish stays unreported, as before: no `package.json` is readable, the directory is an expression or changed
+with `cd`, the command publishes a tarball or selects workspaces (`-w`, `--workspaces`, `--filter`), an earlier script of the
+job may have rewritten the manifest (`npm pkg set`, `jq` or `sed` on `package.json`), or the scope comes from the `scope`
+input of `actions/setup-node`. A registry that is not scoped (`registry`) still counts as private for every package. A key that is the output of `NuGet/login` is trusted publishing in a PowerShell script as well.
 
 A credential variable that does not hold a long-lived credential is not one: `NODE_AUTH_TOKEN: ''` blanks the placeholder token
 that `actions/setup-node` writes, so that npm falls back to the OIDC token (the documented way to publish to npm with provenance),
