@@ -1,4 +1,16 @@
-./testdata/err/one_error.yaml:6:41: "github.event.head_commit.message" is potentially untrusted. avoid using it directly in inline scripts. instead, pass it through an environment variable. see https://docs.github.com/en/actions/reference/security/secure-use#good-practices-for-mitigating-script-injection-attacks for more details [expression]
+./testdata/err/one_error.yaml:1:1: workflow has no "concurrency:", so every run of it executes at the same time even when a newer run supersedes the older ones. add a top-level "concurrency:" with a "group:" and "cancel-in-progress: true" [concurrency-limits]
+  |
+1 | on: [push]
+  | ^~~
+./testdata/err/one_error.yaml:3:3: "timeout-minutes" is not set at this job. Set it to avoid wasting runner minutes when the job hangs [missing-timeout]
+  |
+3 |   test:
+  |   ^~~~~
+./testdata/err/one_error.yaml:3:3: neither the workflow nor this job sets "permissions:" so the GITHUB_TOKEN gets the default permissions of the repository. set "permissions:" at workflow-level or job-level (use "permissions: {}" for no permissions) because the "missing-permissions" rule is enabled [missing-permissions]
+  |
+3 |   test:
+  |   ^~~~~
+./testdata/err/one_error.yaml:6:41: "github.event.head_commit.message" is potentially untrusted. avoid using it directly in inline scripts. instead, pass it through an environment variable. see https://docs.github.com/en/actions/reference/security/secure-use#good-practices-for-mitigating-script-injection-attacks for more details [template-injection]
   |
 6 |       - run: echo "Checking commit '${{ github.event.head_commit.message }}'"
   |                                         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

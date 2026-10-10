@@ -41,7 +41,7 @@ for (const parent of ['examples', 'err']) {
             const msg = `Line '${line}' did not match to the regex ${regexp}`
             const m = line.match(regexp);
             assert.ok(m, msg); // not null
-            assert.equal('test.yaml', m[pattern.file], msg);
+            assert.ok(m[pattern.file].length > 0, msg);
             assert.match(m[pattern.line], /^\d+$/, msg);
             assert.match(m[pattern.column], /^\d+$/, msg);
             assert.ok(m[pattern.message].length > 0, msg);

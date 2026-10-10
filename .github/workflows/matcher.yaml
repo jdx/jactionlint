@@ -2,13 +2,20 @@ name: Problem Matchers
 on:
   push:
     paths:
-      - 'scripts/generate-jactionlint-matcher/*.js'
+      - '.github/workflows/matcher.yaml'
+      - 'scripts/generate-jactionlint-matcher/**'
       - 'testdata/examples/*.out'
       - 'testdata/err/*.out'
     branches:
       - main
     tags-ignore:
       - '*'
+  pull_request:
+    paths:
+      - '.github/workflows/matcher.yaml'
+      - 'scripts/generate-jactionlint-matcher/**'
+      - 'testdata/examples/*.out'
+      - 'testdata/err/*.out'
   workflow_dispatch:
 
 permissions:

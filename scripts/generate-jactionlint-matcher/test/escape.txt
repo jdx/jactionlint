@@ -1,4 +1,16 @@
-[33m./testdata/err/one_error.yaml[0m[90m:[0m6[90m:[0m41[90m: [0m[1m"github.event.head_commit.message" is potentially untrusted. avoid using it directly in inline scripts. instead, pass it through an environment variable. see https://docs.github.com/en/actions/reference/security/secure-use#good-practices-for-mitigating-script-injection-attacks for more details[0m[90m [expression]
+[33m./testdata/err/one_error.yaml[0m[90m:[0m1[90m:[0m1[90m: [0m[1mworkflow has no "concurrency:", so every run of it executes at the same time even when a newer run supersedes the older ones. add a top-level "concurrency:" with a "group:" and "cancel-in-progress: true"[0m[90m [concurrency-limits]
+[0m[90m  |
+[0m[90m1 | [0mon: [push]
+[90m  | [0m[32m^~~[0m
+[33m./testdata/err/one_error.yaml[0m[90m:[0m3[90m:[0m3[90m: [0m[1m"timeout-minutes" is not set at this job. Set it to avoid wasting runner minutes when the job hangs[0m[90m [missing-timeout]
+[0m[90m  |
+[0m[90m3 | [0m  test:
+[90m  | [0m[32m  ^~~~~[0m
+[33m./testdata/err/one_error.yaml[0m[90m:[0m3[90m:[0m3[90m: [0m[1mneither the workflow nor this job sets "permissions:" so the GITHUB_TOKEN gets the default permissions of the repository. set "permissions:" at workflow-level or job-level (use "permissions: {}" for no permissions) because the "missing-permissions" rule is enabled[0m[90m [missing-permissions]
+[0m[90m  |
+[0m[90m3 | [0m  test:
+[90m  | [0m[32m  ^~~~~[0m
+[33m./testdata/err/one_error.yaml[0m[90m:[0m6[90m:[0m41[90m: [0m[1m"github.event.head_commit.message" is potentially untrusted. avoid using it directly in inline scripts. instead, pass it through an environment variable. see https://docs.github.com/en/actions/reference/security/secure-use#good-practices-for-mitigating-script-injection-attacks for more details[0m[90m [template-injection]
 [0m[90m  |
 [0m[90m6 | [0m      - run: echo "Checking commit '${{ github.event.head_commit.message }}'"
 [90m  | [0m[32m                                        ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
