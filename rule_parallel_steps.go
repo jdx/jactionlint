@@ -4,7 +4,8 @@ import "strings"
 
 // RuleParallelSteps is a rule to check parallel steps: a 'wait' or 'cancel' step must refer to the ID
 // of a preceding background step, and a 'parallel' group may only contain 'run' and 'uses' steps
-// ('background', 'wait', 'wait-all', 'cancel', and nested 'parallel' steps are not allowed in it).
+// ('wait', 'wait-all', 'cancel', and nested 'parallel' steps are not allowed in it; 'background: true'
+// is redundant there but accepted by GitHub, so it is not reported).
 // https://github.blog/changelog/2026-06-25-actions-steps-can-now-be-run-in-parallel/
 type RuleParallelSteps struct {
 	RuleBase
