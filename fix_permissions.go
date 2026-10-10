@@ -77,7 +77,7 @@ func fixMissingPermissions(w *Workflow) *Fix {
 	return &Fix{
 		Description: "Add permissions: contents: read",
 		Unsafe:      !onlyReadsRepository(w),
-		Edits:       []TextEdit{d.insertAfterLine(line, pad+"permissions:", pad+unit+"contents: read")},
+		Edits:       []TextEdit{d.insertAfterLine(line, "", pad+"permissions:", pad+unit+"contents: read")},
 	}
 }
 

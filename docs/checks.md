@@ -5278,7 +5278,8 @@ pull request and nothing else. A group that is the same for every pull request w
 [`concurrency-cancels-prs`](#check-concurrency-cancels-prs) reports.
 
 A workflow that releases or deploys is told the opposite: when it runs on the `release` event or on pushed tags, or a job has an
-`environment:`, publishes a package or deploys, cancelling a run that is half done leaves a half done release
+`environment:`, publishes a package, pushes tags or deploys (whatever the tool: `release-plz`, `semantic-release`, `changesets`,
+`cargo publish`, `git push --tags`, see [the list](#check-concurrency-cancels-release)), cancelling a run that is half done leaves a half done release
 ([`concurrency-cancels-release`](#check-concurrency-cancels-release) reports exactly that). The advice is then `cancel-in-progress: false`,
 so that a new run waits for the running one, there is no fix for it, and the plain group name (`concurrency: release`), which
 queues runs and cancels none, is accepted. The two rules never contradict each other: the block that one recommends is not reported
@@ -5293,6 +5294,14 @@ events of a pull request (`pull_request`, `pull_request_target`, `pull_request_r
 no job has an `environment:` or publishes or deploys anything, no job has a `concurrency:` of its own, and the file has no
 anchors or aliases. It never adds the block to a workflow that a push, a tag, a release or a manual run starts, because cancelling
 those runs is a decision about the workflow: use the group of your choice there.
+
+Inside a called (reusable) workflow `github.workflow` is the name of the *caller*. If the caller and the workflow it calls both
+use `${{ github.workflow }}-${{ github.ref }}`, they share one group and the called workflow is cancelled at once. So for a
+workflow that has a job with `uses:` the advice and the fix write a group with a part of its own,
+`${{ github.workflow }}-caller-${{ github.event.pull_request.number || github.ref }}`, which never equals the group of a callee
+that follows the plain advice above, and the message says so. Do not give a called workflow the same group as its caller.
+
+`jactionlint --fix` puts a blank line between `on:` and the inserted block (as it does for the `permissions:` it adds).
 
 The workflow `.github/workflows/copilot-setup-steps.yml` is not reported: GitHub runs it when the Copilot coding agent starts, from a
 job with a fixed ID, and a concurrency group has no use there. A caller workflow whose jobs all call reusable workflows is reported
@@ -6956,6 +6965,13 @@ request and one of these is true:
   `twine upload`, `gh release create`, `docker push`, `wrangler deploy` or `kubectl apply`. A job or step whose `if:` is false
   for the trigger is ignored (`if: startsWith(github.ref, 'refs/tags/')` does not count for a push to a branch). `--dry-run`
   commands do not count.
+- A job pushes tags or runs a release tool. This does not depend on the name of one tool: `release-plz release`,
+  `semantic-release`, `release-it`, `changeset publish`, `lerna publish`, `mvn deploy`, `gradle publish`, `dotnet nuget push`
+  and `cargo release --execute` count, and so do actions such as `release-plz/action`, `changesets/action` and
+  `semantic-release/semantic-release`. `git push --tags`, `git push --follow-tags`, a push of a ref that is named like a tag or
+  a version (`git push origin v1.2.3`, `git push origin "$TAG"`, `refs/tags/...`), and a job that runs both `git tag <name>`
+  and `git push` count as pushing tags. Commands that only open a pull request or edit files (`release-plz release-pr`,
+  `changeset version`) and `cargo release` without `--execute` do not.
 
 What is **not** reported: the mixed idiom `cancel-in-progress: ${{ github.event_name == 'pull_request' }}` (false for pushes
 and tags) and other expressions that are false for the trigger; an expression that depends on something the rule cannot see

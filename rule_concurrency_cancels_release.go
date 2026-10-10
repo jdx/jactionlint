@@ -140,6 +140,12 @@ var releaseActions = map[string]bool{
 	"changesets/action":                             true,
 	"semantic-release/semantic-release":             true,
 	"cycjimmy/semantic-release-action":              true,
+	"release-plz/action":                            true,
+	"rymndhng/release-on-push-action":               true,
+	"mathieudutour/github-tag-action":               true,
+	"anothrnick/github-tag-action":                  true,
+	"actions/publish-immutable-action":              true,
+	"taiki-e/create-gh-release-action":              true,
 }
 
 // inputTruth evaluates the value of an input that is true or false in the scenario.
@@ -189,6 +195,7 @@ func releaseSignal(j *Job, sc scenario) string {
 			}
 		}
 	}
+	var tags tagState
 	for _, s := range flattenSteps(j.Steps) {
 		if sc.conditionIn(s.If) == condFalse {
 			continue
@@ -227,6 +234,15 @@ func releaseSignal(j *Job, sc scenario) string {
 				}
 				if what, ok := deployCommand(c); ok {
 					return fmt.Sprintf("job %q runs \"%s\"", j.ID.Value, what)
+				}
+				if what, ok := releaseCommand(c); ok {
+					return fmt.Sprintf("job %q runs \"%s\"", j.ID.Value, what)
+				}
+				if what, ok := tags.observe(c); ok {
+					return fmt.Sprintf("job %q runs a %s", j.ID.Value, what)
+				}
+				if tags.pushesCreatedTag() {
+					return fmt.Sprintf("job %q creates and pushes a tag", j.ID.Value)
 				}
 			}
 		}
