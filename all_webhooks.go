@@ -21,7 +21,7 @@ var AllWebhookTypes = map[string][]string{
 	"gollum":                      {},
 	"image_version":               {},
 	"issue_comment":               {"created", "edited", "deleted"},
-	"issues":                      {"opened", "edited", "deleted", "transferred", "pinned", "unpinned", "closed", "reopened", "assigned", "unassigned", "labeled", "unlabeled", "locked", "unlocked", "milestoned", "demilestoned", "typed", "untyped"},
+	"issues":                      {"opened", "edited", "deleted", "transferred", "pinned", "unpinned", "closed", "reopened", "assigned", "unassigned", "labeled", "unlabeled", "locked", "unlocked", "milestoned", "demilestoned", "typed", "untyped", "field_added", "field_removed"},
 	"label":                       {"created", "edited", "deleted"},
 	"merge_group":                 {"checks_requested", "destroyed"},
 	"milestone":                   {"created", "closed", "opened", "edited", "deleted"},

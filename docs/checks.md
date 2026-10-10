@@ -1682,7 +1682,7 @@ test.yaml:7:5: both "paths" and "paths-ignore" filters cannot be used for the sa
   |
 7 |     paths-ignore: path/to/foo
   |     ^~~~~~~~~~~~~
-test.yaml:10:12: invalid activity type "created" for "issues" Webhook event. available types are "assigned", "closed", "deleted", "demilestoned", "edited", "labeled", "locked", "milestoned", "opened", "pinned", "reopened", "transferred", "typed", "unassigned", "unlabeled", "unlocked", "unpinned", "untyped" [invalid-activity-type]
+test.yaml:10:12: invalid activity type "created" for "issues" Webhook event. available types are "assigned", "closed", "deleted", "demilestoned", "edited", "field_added", "field_removed", "labeled", "locked", "milestoned", "opened", "pinned", "reopened", "transferred", "typed", "unassigned", "unlabeled", "unlocked", "unpinned", "untyped" [invalid-activity-type]
    |
 10 |     types: created
    |            ^~~~~~~
