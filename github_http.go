@@ -1345,6 +1345,9 @@ func (c *httpGitHubClient) CommitOnAnyBranch(ctx context.Context, owner, repo, s
 		}
 		vars := map[string]any{"owner": owner, "name": repo, "sha": sha, "after": after}
 		if err := c.postGraphQL(ctx, token, branchScanQuery, vars, &res); err != nil {
+			if stale != nil && errors.Is(err, ErrGitHubRateLimited) {
+				return *stale, nil // like the REST requests: stale data is better than none
+			}
 			return GitHubBranchScan{}, err
 		}
 		if len(res.Errors) > 0 || res.Data.Repository == nil {
