@@ -4,7 +4,8 @@ import "strings"
 
 // RuleParallelSteps is a rule to check parallel steps: a 'wait' or 'cancel' step must refer to the ID
 // of a preceding background step, and a 'parallel' group may only contain 'run' and 'uses' steps
-// ('background', 'wait', 'wait-all', 'cancel', and nested 'parallel' steps are not allowed in it).
+// ('wait', 'wait-all', 'cancel', and nested 'parallel' steps are not allowed in it; 'background: true'
+// is redundant there but accepted by GitHub, so it is not reported).
 // https://github.blog/changelog/2026-06-25-actions-steps-can-now-be-run-in-parallel/
 type RuleParallelSteps struct {
 	RuleBase
@@ -72,14 +73,12 @@ func (rule *RuleParallelSteps) VisitStep(n *Step) error {
 }
 
 // checkParallelChildren checks the steps inside a 'parallel' group. Only 'run' and 'uses' steps are
-// allowed there: 'background', 'wait', 'wait-all', 'cancel', and nested 'parallel' steps are not,
-// because steps in a 'parallel' group already run in the background with an implicit wait at the end.
+// allowed there: 'wait', 'wait-all', 'cancel', and nested 'parallel' steps are not, because steps in a
+// 'parallel' group already run in the background with an implicit wait at the end. 'background: true'
+// is redundant there but accepted by GitHub, so it is not reported.
 func (rule *RuleParallelSteps) checkParallelChildren(steps []*Step) {
 	for _, s := range steps {
 		rule.inParallel[s] = struct{}{}
-		if s.Background != nil {
-			rule.ReportIDf("invalid-parallel-step", s.Background.Pos, "\"background\" is not allowed for a step inside a \"parallel\" group because the group's steps already run in the background")
-		}
 		switch e := s.Exec.(type) {
 		case *ExecWait:
 			kind := "wait"
