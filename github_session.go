@@ -185,7 +185,7 @@ func (s *onlineSession) allows(owner, repo string) bool {
 	if s.excluded == nil {
 		s.excluded = map[string]bool{}
 	}
-	s.excluded[slug] = true
+	s.excluded[strings.ToLower(slug)] = true
 	s.mu.Unlock()
 	return false
 }

@@ -866,3 +866,13 @@ func TestSARIFOnlineCoverage(t *testing.T) {
 		t.Error("no coverage expected when the online checks are off")
 	}
 }
+
+func TestExcludedRepositoriesIgnoreCase(t *testing.T) {
+	s := newOnlineSession(nil, nil, nil)
+	s.deny = []string{"Foo/*"}
+	s.allows("Foo", "Bar")
+	s.allows("foo", "bar")
+	if n := s.excludedRepos(); n != 1 {
+		t.Errorf("excludedRepos = %d, want 1", n)
+	}
+}
