@@ -13,6 +13,7 @@ type RuleUnsoundPrefixMatch struct {
 	RuleBase
 	refs           bool // also check the names of branches and tags
 	botConditionOn bool // bot-conditions reports the comparisons with bot names in conditions
+	botReports     bool // bot-conditions reports them in the workflow being visited
 }
 
 // NewRuleUnsoundPrefixMatch creates a new RuleUnsoundPrefixMatch instance. refs makes the rule check
@@ -71,6 +72,8 @@ var identityContexts = map[string]nameKind{
 
 // VisitWorkflowPre is callback when visiting Workflow node before visiting its children.
 func (rule *RuleUnsoundPrefixMatch) VisitWorkflowPre(n *Workflow) error {
+	// bot-conditions is silent on workflows only started by push-like events, so the prefix test stays here
+	rule.botReports = rule.botConditionOn && !n.botConditionsSilent()
 	sensitive := sensitiveContexts(n)
 	workflowExprSites(n, func(site exprSite) {
 		scanExpressions(site.Str, site.Cond, func(o *exprOccurrence) {
@@ -256,7 +259,7 @@ func (rule *RuleUnsoundPrefixMatch) checkExpr(o *exprOccurrence, cond bool) {
 		if kind == nameRef && !rule.refs {
 			return
 		}
-		if cond && rule.botConditionOn && kind == nameOwner && botLiteral(lit) != "" {
+		if cond && rule.botReports && kind == nameOwner && botLiteral(lit) != "" {
 			if _, spoofable := spoofableActors[name]; spoofable {
 				return // bot-conditions reports the comparison with a bot
 			}
