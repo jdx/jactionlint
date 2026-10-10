@@ -148,7 +148,7 @@ func (rule *RulePipelineWithoutPipefail) VisitStep(n *Step) error {
 			continue
 		}
 		c := hiddenFailure(p)
-		if c == nil || readsPipestatus(script, p, stageOf(p, c)) {
+		if c == nil || statusHandled(script, p, stageOf(p, c)) {
 			continue
 		}
 		pos := script.Position(origin, p.Offset)

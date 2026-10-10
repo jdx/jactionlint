@@ -11,8 +11,8 @@ package jactionlint
 // A workflow which runs only on workflow_call (a reusable workflow that nothing else triggers) is not
 // checked: the caller decides what the token can do, and a callee that asks for more than its caller
 // grants is rejected, so no value written in the callee is right for every caller. A workflow which
-// has workflow_call and another event is also run directly, so it is still checked, but its finding has
-// no fix (see fixMissingPermissions) and the message says so.
+// has workflow_call and another event is also run directly, so it is still checked, and its finding has
+// a fix which is always unsafe (see fixMissingPermissions) because the callers are not known; the message says so.
 type RuleRequirePermissions struct {
 	RuleBase
 	workflowHasPermissions bool
@@ -60,7 +60,7 @@ func (rule *RuleRequirePermissions) VisitJobPre(n *Job) error {
 	}
 	msg := "neither the workflow nor this job sets \"permissions:\" so the GITHUB_TOKEN gets the default permissions of the repository. set \"permissions:\" at workflow-level or job-level (use \"permissions: {}\" for no permissions) because the \"missing-permissions\" rule is enabled"
 	if rule.alsoReusable {
-		msg += ". this workflow is also called as a reusable workflow (workflow_call), so the permissions you set must not be more than its callers grant, and there is no automatic fix because the callers are not known here"
+		msg += ". this workflow is also called as a reusable workflow (workflow_call), so the permissions you set must not be more than its callers grant. the fix is unsafe because the callers are not known here"
 	}
 	rule.ReportIDf("missing-permissions", n.Pos, "%s", msg)
 	// Every job reports the same fix: it is applied once and the findings stay fixable together

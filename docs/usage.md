@@ -167,11 +167,12 @@ The old names `strict` and `all` are read as `pedantic` in the config file with 
 #### The first run
 
 The default profile is strict on purpose, so most repositories fail it the first time (the median repository of the bug bash had
-about 60 findings, all of them errors). When a text run finds 20 or more findings, jactionlint prints one line to stderr that says
-what to do next, for example:
+about 60 findings, all of them errors). When a text run finds 20 or more findings (the default profile reports a median of 37 per
+repository on the corpus, so most first runs reach it and a repository which follows the checks does not), jactionlint prints one
+line to stderr that says what to do next and leads with `--baseline-write`, for example:
 
 ```
-note: 132 findings in 14 files. see --format summary for the counts per rule; the name at the end of a finding is its rule ID, which --ignore, the config and ignore comments accept; adopt the checks gradually with --baseline-write; for the checks of actionlint only use --profile correctness. silence this note with --no-hints or JACTIONLINT_NO_HINTS=1
+note: 132 findings in 14 files, which is a lot for a first run of the default profile. to adopt the checks without fixing everything first, record the findings with --baseline-write: later runs then fail only on new findings. see --format summary for the counts per rule; the name at the end of a finding is its rule ID, which --ignore, the config and ignore comments accept; for the checks of actionlint only use --profile correctness. silence this note with --no-hints or JACTIONLINT_NO_HINTS=1
 ```
 
 It is shown only when stderr is a terminal or the process runs in CI (`CI` or `GITHUB_ACTIONS` is set), never with `--format json`,
@@ -675,6 +676,18 @@ used with stdin. These rules have a fix:
 | `unlocked-install`                    | Adds `--locked` to `cargo install`.                                                                                               | No                                                                |
 | `unpinned-uses`                       | With `--online`, replaces a tag with its commit and names the tag in a comment (see below).                                        | Yes                                                               |
 | `unused-ignore`                       | Removes the ignore comment, or only its patterns which did nothing when the comment has others.                                   | Yes                                                               |
+
+Two of these fixes write a number which jactionlint does not choose, so they are off until you set it in `.github/jactionlint.yaml`:
+
+```yaml
+rules:
+  missing-timeout:
+    default-minutes: 15   # --fix adds timeout-minutes: 15 to jobs without one
+  dependabot-cooldown:
+    default-days: 7       # --fix adds cooldown.default-days: 7 to Dependabot updates
+```
+
+The findings of `missing-timeout` and `dependabot-cooldown` say so while the option is not set.
 
 A finding in a shape the fix does not understand (a job written as `job: {runs-on: ...}`, a job with a YAML anchor, a file with
 a bare carriage return) is reported without a fix. The section of each rule in [the checks document](checks.md) says when its fix applies

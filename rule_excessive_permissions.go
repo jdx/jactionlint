@@ -141,9 +141,9 @@ func (rule *RuleExcessivePermissions) check(p *Permissions, job bool) {
 			continue
 		}
 		if rule.singleJob {
-			// There is no other job to keep it from: moving the scope to the job would change nothing, so the advice
-			// would be a no-op (zizmor does not report this either). It stays a finding only where people without write
-			// access can start the workflow, with a message that does not ask for the move.
+			// There is only one job, so granting the scope to the job instead changes nothing today. It is still
+			// reported, with a message that says why: the scope is set where a job added later inherits it silently.
+			// On a privileged trigger the message also says who can start the workflow and does not ask for the move.
 			if rule.trigger != "" {
 				rule.ReportIDf(
 					"excessive-permissions",
@@ -151,7 +151,14 @@ func (rule *RuleExcessivePermissions) check(p *Permissions, job bool) {
 					"%q lets the job %s, and the workflow runs on %q which people without write access can trigger. check that the job needs it and cannot run untrusted code",
 					name+": write", impact, rule.trigger,
 				)
+				continue
 			}
+			rule.ReportIDf(
+				"excessive-permissions",
+				s.Name.Pos,
+				"%q is set at the workflow level: it lets the job %s, and a job added later inherits it silently. set \"permissions: {}\" at the workflow level and grant %q on the job",
+				name+": write", impact, name+": write",
+			)
 			continue
 		}
 		note := ""

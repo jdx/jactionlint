@@ -1543,7 +1543,7 @@ jobs:
 Output:
 <!-- Skip update output -->
 ```
-test.yaml:3:3: "timeout-minutes" is not set at this job. Set it to avoid wasting runner minutes when the job hangs [timeout-check]
+test.yaml:3:3: "timeout-minutes" is not set at this job. Set it to avoid wasting runner minutes when the job hangs. Set "default-minutes" in the "missing-timeout" rule options of the configuration to turn on the --fix fix [timeout-check]
   |
 3 |   no-timeout:
   |   ^~~~~~~~~~~
@@ -2744,7 +2744,9 @@ The rule `github-env` (in the `default` profile) reports two kinds of writes:
 A value that cannot carry what makes the write dangerous is accepted: for `$GITHUB_ENV` a value without newlines
 (`tr -d '\n'`, `tr '\n' ' '`, `head -n 1`, `sed ':a;N;$!ba;s/\n/ /g'`, `${v//$'\n'/}`), and for both files a value cut down to
 letters, digits and a few harmless characters (`sed 's/[^a-zA-Z0-9-]/-/g'`, `tr -cd 'a-z0-9'`, `${v//[^a-zA-Z0-9]/}`) or checked
-before the write with an anchored pattern such as `[[ "$v" =~ ^[a-z0-9.-]+$ ]] || exit 1`. A directory for `$GITHUB_PATH` also has
+before the write with an anchored pattern such as `[[ "$v" =~ ^[a-z0-9.-]+$ ]] || exit 1`. The check may sit at the top
+level of the script or inside the same `if` or `else` branch as the write, before it (it then holds for the rest of that
+branch only; a bare `[[ ]]` that relies on `set -e` is accepted at the top level only, and loops and functions are not followed). A directory for `$GITHUB_PATH` also has
 to hold no dot, slash or colon. A token minted by an earlier step of the job (the `token` output of
 `actions/create-github-app-token`), the timestamps of the event and the parts of `$GITHUB_REPOSITORY` split with `read` are trusted.
 
@@ -2943,7 +2945,14 @@ shell of the Windows runners) and `powershell` are searched for the publish comm
 An npm publish to another registry than the public one is not reported even when the command does not say so: the script set it
 before (`npm config set registry URL`, `yarn config set npmRegistryServer URL`), the environment sets `npm_config_registry` or
 `YARN_NPM_REGISTRY_SERVER`, or an earlier `actions/setup-node` step has a `registry-url` of another registry (GitHub Packages,
-`npm.pkg.github.com`, has no trusted publishing). A key that is the output of `NuGet/login` is trusted publishing in a PowerShell script as well.
+`npm.pkg.github.com`, has no trusted publishing).
+A registry that is set for one scope (`npm config set @acme:registry URL`) hides the publish only when the package is of that scope:
+the name is read from the `package.json` of the repository (in the `working-directory` of the step, or the folder that
+`npm publish` is given) and a package that is unscoped or of another scope is reported. When the name cannot be known with
+confidence the publish stays unreported, as before: no `package.json` is readable, the directory is an expression or changed
+with `cd`, the command publishes a tarball or selects workspaces (`-w`, `--workspaces`, `--filter`), an earlier script of the
+job may have rewritten the manifest (`npm pkg set`, `jq` or `sed` on `package.json`), or the scope comes from the `scope`
+input of `actions/setup-node`. A registry that is not scoped (`registry`) still counts as private for every package. A key that is the output of `NuGet/login` is trusted publishing in a PowerShell script as well.
 
 A credential variable that does not hold a long-lived credential is not one: `NODE_AUTH_TOKEN: ''` blanks the placeholder token
 that `actions/setup-node` writes, so that npm falls back to the OIDC token (the documented way to publish to npm with provenance),
@@ -3249,9 +3258,10 @@ asks for more than its caller grants makes GitHub reject the run:
 - A workflow whose only event is `workflow_call:` is **not checked**. The callers set `permissions:` (and `missing-permissions`
   checks them when they are in the repository), and a value in the callee cannot suit callers that grant different permissions.
 - A workflow with `workflow_call:` and another event (such as `push:`) is also run directly, so it is still checked. Its finding
-  has **no fix**: a `contents: read` written into the callee breaks every caller with `permissions: {}` or fewer permissions. The
-  message says so, and the permissions have to be chosen by hand, after looking at the callers. Set them at job level, or
-  use `permissions: {}` if the jobs need nothing, and make sure no caller grants less than the jobs request.
+  has a fix, but it is always **unsafe** (applied with `--fix=unsafe` only): a `contents: read` written into the callee breaks
+  every caller with `permissions: {}` or fewer permissions, and the callers are in other files. The message says so. Look at the
+  callers before applying it, or set the permissions by hand at job level (or `permissions: {}` if the jobs need nothing), and
+  make sure no caller grants less than the jobs request.
 
 <a id="check-excessive-permissions"></a>
 ## Excessive permissions
@@ -3326,9 +3336,10 @@ It reports:
 - `write-all` and `read-all`, at the workflow level or on a job. They grant a level to every scope, including scopes which the
   job never uses.
 
-In a workflow with exactly one job the scope is not reported: the job gets it either way, so "grant it only to the job" would change
-nothing (zizmor does not report it either). On `pull_request_target`, `workflow_run` or `issue_comment` it still is, with a message
-that asks whether the job needs the scope instead of asking to move it.
+In a workflow with exactly one job the scope is reported too, although the job gets it either way today: a job added later
+inherits a workflow-level scope silently, so the message says that and asks to grant the scope on the job. On
+`pull_request_target`, `workflow_run` or `issue_comment` the message asks whether the job needs the scope instead of asking to
+move it.
 
 Write scopes on a job are not reported: that is where the access should be granted. The best practice is `permissions: {}` at
 the workflow level and the scopes a job needs on that job. Read scopes and `none` are not reported either.
@@ -4943,7 +4954,7 @@ Output:
    |
 12 |     label: [dependencies]
    |     ^~~~~~
-.github/dependabot.yml:13:5: "cooldown" is not set in this update, so Dependabot applies its implicit cooldown of 3 days. set "cooldown.default-days" to at least 7 to avoid updating to a version right after its release [dependabot-cooldown]
+.github/dependabot.yml:13:5: "cooldown" is not set in this update, so Dependabot applies its implicit cooldown of 3 days. set "cooldown.default-days" to at least 7 to avoid updating to a version right after its release. set "default-days" in the "dependabot-cooldown" rule options of the configuration to turn on the --fix fix [dependabot-cooldown]
    |
 13 |   - package-ecosystem: npm
    |     ^~~~~~~~~~~~~~~~~~
@@ -4951,7 +4962,7 @@ Output:
    |
 17 |       interval: hourly
    |                 ^~~~~~
-.github/dependabot.yml:19:5: "cooldown" is not set in this update, so Dependabot applies its implicit cooldown of 3 days. set "cooldown.default-days" to at least 7 to avoid updating to a version right after its release [dependabot-cooldown]
+.github/dependabot.yml:19:5: "cooldown" is not set in this update, so Dependabot applies its implicit cooldown of 3 days. set "cooldown.default-days" to at least 7 to avoid updating to a version right after its release. set "default-days" in the "dependabot-cooldown" rule options of the configuration to turn on the --fix fix [dependabot-cooldown]
    |
 19 |   - package-ecosystem: cargo
    |     ^~~~~~~~~~~~~~~~~~
@@ -5006,11 +5017,11 @@ updates:
 Output:
 
 ```
-.github/dependabot.yml:4:5: "cooldown" is not set in this update, so Dependabot applies its implicit cooldown of 3 days. set "cooldown.default-days" to at least 7 to avoid updating to a version right after its release [dependabot-cooldown]
+.github/dependabot.yml:4:5: "cooldown" is not set in this update, so Dependabot applies its implicit cooldown of 3 days. set "cooldown.default-days" to at least 7 to avoid updating to a version right after its release. set "default-days" in the "dependabot-cooldown" rule options of the configuration to turn on the --fix fix [dependabot-cooldown]
   |
 4 |   - package-ecosystem: github-actions
   |     ^~~~~~~~~~~~~~~~~~
-.github/dependabot.yml:14:21: "cooldown.default-days" is 2, which is less than the minimum 7 days. set it to at least 7 [dependabot-cooldown]
+.github/dependabot.yml:14:21: "cooldown.default-days" is 2, which is less than the minimum 7 days. set it to at least 7. set "default-days" in the "dependabot-cooldown" rule options of the configuration to turn on the --fix fix [dependabot-cooldown]
    |
 14 |       default-days: 2
    |                     ^
@@ -5189,6 +5200,9 @@ jactionlint reports a pipeline when all of the following hold:
 - The script reads `PIPESTATUS` in the command right after the pipeline, for the stage that hides the failure
   (`make | tee log; rc=${PIPESTATUS[0]}`) or for all of them (`${PIPESTATUS[@]}`): it looks at the status itself. The word
   without a `$`, the count `${#PIPESTATUS[@]}` and the status of another stage do not count.
+  When the status is copied into a plain scalar variable (`rc=${PIPESTATUS[0]}`), the variable has to be checked later in
+  the same script: in a test (`[ "$rc" -ne 0 ]`, `[[ ]]`, `test`), an arithmetic condition (`if (( rc ))`), `exit $rc`
+  or `return $rc`. A copy that is never checked, is only printed, or is assigned again before the check is still reported.
 - The pipeline is not inside a command substitution in the argument of a command (`echo "hash=$(sha256sum f | cut -d' ' -f1)"`):
   the status of the substitution is not the status of anything, so `pipefail` would change nothing. The value of an assignment
   (`hash=$(sha256sum f | cut -d' ' -f1)`) is the status of the assignment, and that pipeline is reported.
@@ -7219,6 +7233,12 @@ A step is reported at its checkout when it puts untrusted code in the workspace 
 - `gh pr checkout`, and `git checkout`, `switch`, `merge`, `pull`, `clone` ... with such a reference in the arguments or
   in an environment variable they use. A `git fetch` of the head only downloads the objects: it counts when a later command
   of the same script (`git checkout FETCH_HEAD`, `git merge`, `git reset --hard`, ...) puts them in the working tree.
+- A `git fetch` of the head in an earlier step also counts when a later `run:` step starts a script file of the project
+  (`./scripts/x.sh`, `bash scripts/x.sh`, `sh ./x.sh`) and that file, read from the repository being linted, has a command that
+  changes the working tree and names `FETCH_HEAD` or a destination of the refspec literally (`git checkout FETCH_HEAD`). The rule
+  does not guess: a script that is missing, too large, outside the repository, whose path is computed, or that takes the
+  revision from a variable (`git checkout "$1"`, `git checkout "$PR_REF"`) is not followed, and neither are scripts that the
+  script starts in turn. The same holds for a revision that a step passes through a variable to a command other than `git`.
 - "Runs it" is a later step with a `run:` command that can execute workspace code (a script, `npm`, `cargo`, `make`, an
   interpreter, ...), a local action (`uses: ./...`), or one of a few actions that build the workspace. Commands that only read or
   move files (`cat`, `git diff`, `grep`, `jq`, `tar`, `gh`, ...) do not count, and neither do shell keywords and builtins

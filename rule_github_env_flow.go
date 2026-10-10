@@ -151,7 +151,7 @@ func (rule *RuleGitHubEnv) judgeVar(s *runscript.Script, name string, depth int)
 		e := evs[i]
 		switch e.kind {
 		case flowGuard:
-			if !e.maybe && rule.guardHolds(s, e.guard, rule.dest) {
+			if !e.maybe && (e.guard.ScopeEnd == 0 || at < e.guard.ScopeEnd) && rule.guardHolds(s, e.guard, rule.dest) {
 				decided = true
 			}
 		case flowAssign:

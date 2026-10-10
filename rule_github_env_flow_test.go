@@ -135,7 +135,56 @@ done`, 1, "the items come from the outsider"},
 printf -v V '%s' "$TITLE"
 ` + env, 1, "printf -v assigns"},
 
+		{"guard in a branch, write after the branch", `V=$TITLE
+if [ -n "$CI" ]; then
+  [[ "$V" =~ ^[a-z]+$ ]] || exit 1
+fi
+` + env, 1, "the guard only holds inside its branch"},
+		{"guard in one branch, write in the other", `V=$TITLE
+if [ -n "$CI" ]; then
+  [[ "$V" =~ ^[a-z]+$ ]] || exit 1
+else
+  ` + env + `
+fi`, 1, "the else branch was not checked"},
+		{"guard in a branch, value replaced before the write", `V=$TITLE
+if [ -n "$CI" ]; then
+  [[ "$V" =~ ^[a-z]+$ ]] || exit 1
+  V=$TITLE
+  ` + env + `
+fi`, 1, "the value is assigned again after the check"},
+		{"guard in a branch that does not leave", `V=$TITLE
+if [ -n "$CI" ]; then
+  [[ "$V" =~ ^[a-z]+$ ]] || echo bad
+  ` + env + `
+fi`, 1, "the failing test does not stop the script"},
+		{"guard in a branch, the write comes first", `V=$TITLE
+if [ -n "$CI" ]; then
+  ` + env + `
+  [[ "$V" =~ ^[a-z]+$ ]] || exit 1
+fi`, 1, "the check comes too late"},
+		{"guard in a loop body", `V=$TITLE
+for i in 1; do
+  [[ "$V" =~ ^[a-z]+$ ]] || exit 1
+  ` + env + `
+done`, 1, "loops are not followed"},
 		// --- trusted ---
+		{"guard in the same branch as the write", `V=$TITLE
+if [ -n "$CI" ]; then
+  [[ "$V" =~ ^[a-z]+$ ]] || exit 1
+  ` + env + `
+fi`, 0, "the write is after the check in its own branch"},
+		{"guard in the else branch of the write", `V=$TITLE
+if [ -z "$CI" ]; then :; else
+  [[ "$V" =~ ^[a-z]+$ ]] || exit 1
+  ` + env + `
+fi`, 0, "the write is after the check in its own branch"},
+		{"guard in a nested branch", `V=$TITLE
+if [ -n "$CI" ]; then
+  if [ -n "$X" ]; then
+    [[ "$V" =~ ^[a-z]+$ ]] || exit 1
+    ` + env + `
+  fi
+fi`, 0, "the write is after the check in the nested branch"},
 		{"newline deleted", `V=$(echo "$TITLE" | tr -d "\n\r")
 ` + env, 0, "no newline left"},
 		{"newlines turned into spaces", `V=$(printf %s "$TITLE" | tr '\n' ' ')

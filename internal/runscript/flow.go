@@ -32,6 +32,9 @@ type Guard struct {
 	// Bare is whether the guard is a test on its own, which stops the script only when errexit is on (the shell
 	// of the step runs with -e, or the script ran `set -e` before it).
 	Bare bool
+	// ScopeEnd is the offset where the proof ends, 0 for the end of the script. A guard inside a branch of an `if`
+	// holds for the rest of that branch only.
+	ScopeEnd int
 }
 
 // Total is an `if` (with an `else`) or a `case` (with a `*` branch) at the top level of the script that, on every
@@ -318,58 +321,80 @@ func (b *builder) literalWord(w *syntax.Word) (string, bool) {
 // guards records the guards of the statements at the top level of the script.
 func (b *builder) guards(f *syntax.File) {
 	errexit := !strings.Contains(b.s.Source, "set +e") && !strings.Contains(b.s.Source, "set +o errexit")
+	curScope := 0
 	emit := func(st *syntax.Stmt, sh testShape) {
 		_, bare := st.Cmd.(*syntax.TestClause)
-		b.s.Guards = append(b.s.Guards, &Guard{Loc: b.s.loc(b.off(st.Pos()), b.offEnd(st.End())), Var: sh.name, Regex: sh.regex, Literals: sh.literals, Bare: bare})
+		b.s.Guards = append(b.s.Guards, &Guard{Loc: b.s.loc(b.off(st.Pos()), b.offEnd(st.End())), Var: sh.name, Regex: sh.regex, Literals: sh.literals, Bare: bare, ScopeEnd: curScope})
 	}
-	for _, st := range f.Stmts {
-		if st.Background {
-			continue
-		}
-		switch c := st.Cmd.(type) {
-		case *syntax.TestClause:
-			// a bare test fails the script under -e: going on means the test held
-			if sh, ok := b.testOf(st); ok && errexit && sh.holds {
-				emit(st, sh)
-			}
-		case *syntax.BinaryCmd:
-			if st.Negated || (c.Op != syntax.OrStmt && c.Op != syntax.AndStmt) {
-				continue
-			}
-			sh, ok := b.testOf(c.X)
-			if !ok || !b.leaves([]*syntax.Stmt{c.Y}) {
-				continue
-			}
-			// `T || exit` goes on when T held, `T && exit` when it did not
-			if (c.Op == syntax.OrStmt) == sh.holds {
-				emit(st, sh)
-			}
-		case *syntax.IfClause:
-			if st.Negated || len(c.Cond) != 1 {
-				continue
-			}
-			sh, ok := b.testOf(c.Cond[0])
-			if !ok {
-				continue
-			}
-			thenLeaves := b.leaves(c.Then)
-			switch {
-			case c.Else == nil && thenLeaves:
-				// the body runs when the test held, going on means it did not
-				if !sh.holds {
-					emit(st, sh)
-				}
-			case c.Else != nil && len(c.Else.Cond) == 0 && !c.Else.ThenPos.IsValid() && !thenLeaves && b.leaves(c.Else.Then):
-				if sh.holds {
-					emit(st, sh)
-				}
-			}
-		case *syntax.CaseClause:
-			if g := b.caseGuard(st, c); g != nil {
-				b.s.Guards = append(b.s.Guards, g)
+	var list func(stmts []*syntax.Stmt, scopeEnd int)
+	// branches records the guards inside the bodies of an if: a guard there holds up to the end of its body.
+	branches := func(c *syntax.IfClause) {
+		for e := c; e != nil; e = e.Else {
+			if end, ok := stmtsSpan(b, e.Then); ok {
+				list(e.Then, end.to)
 			}
 		}
 	}
+	list = func(stmts []*syntax.Stmt, scopeEnd int) {
+		prev := curScope
+		curScope = scopeEnd
+		defer func() { curScope = prev }()
+		for _, st := range stmts {
+			if st.Background {
+				continue
+			}
+			switch c := st.Cmd.(type) {
+			case *syntax.TestClause:
+				// a bare test fails the script under -e: going on means the test held. Inside a branch the errexit
+				// of the `if` may be suspended by its context, so only the top level counts
+				if sh, ok := b.testOf(st); ok && errexit && sh.holds && scopeEnd == 0 {
+					emit(st, sh)
+				}
+			case *syntax.BinaryCmd:
+				if st.Negated || (c.Op != syntax.OrStmt && c.Op != syntax.AndStmt) {
+					continue
+				}
+				sh, ok := b.testOf(c.X)
+				if !ok || !b.leaves([]*syntax.Stmt{c.Y}) {
+					continue
+				}
+				// `T || exit` goes on when T held, `T && exit` when it did not
+				if (c.Op == syntax.OrStmt) == sh.holds {
+					emit(st, sh)
+				}
+			case *syntax.IfClause:
+				if st.Negated {
+					continue
+				}
+				branches(c)
+				if len(c.Cond) != 1 {
+					continue
+				}
+				sh, ok := b.testOf(c.Cond[0])
+				if !ok {
+					continue
+				}
+				thenLeaves := b.leaves(c.Then)
+				switch {
+				case c.Else == nil && thenLeaves:
+					// the body runs when the test held, going on means it did not
+					if !sh.holds {
+						emit(st, sh)
+					}
+				case c.Else != nil && len(c.Else.Cond) == 0 && !c.Else.ThenPos.IsValid() && !thenLeaves && b.leaves(c.Else.Then):
+					if sh.holds {
+						emit(st, sh)
+					}
+				}
+			case *syntax.CaseClause:
+				if g := b.caseGuard(st, c); g != nil {
+					g.ScopeEnd = scopeEnd
+					b.s.Guards = append(b.s.Guards, g)
+				}
+			}
+		}
+	}
+	list(f.Stmts, 0)
 }
 
 // caseGuard reads `case "$v" in a|b) ;; *) exit 1 ;; esac`: the last branch is `*` and leaves, and every other

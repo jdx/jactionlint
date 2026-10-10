@@ -418,7 +418,7 @@ func TestRunHintAfterManyFindings(t *testing.T) {
 
 	t.Setenv("CI", "true")
 	_, errOut := run("--profile", "default")
-	for _, want := range []string{"note: ", " findings in 1 file.", "--format summary", "rule ID", "--baseline-write", "--profile correctness", "--no-hints"} {
+	for _, want := range []string{"note: ", " findings in 1 file", "--format summary", "rule ID", "--baseline-write", "--profile correctness", "--no-hints"} {
 		if !strings.Contains(errOut, want) {
 			t.Errorf("the hint must contain %q: %q", want, errOut)
 		}
@@ -452,6 +452,31 @@ func TestRunHintAfterManyFindings(t *testing.T) {
 	_, errOut = run("--profile", "default", "--baseline")
 	if strings.Contains(errOut, "silence this note") {
 		t.Errorf("everything is accepted by the baseline, so there is no hint: %q", errOut)
+	}
+}
+
+func TestRunHintThresholdAndBaselineAdvice(t *testing.T) {
+	t.Setenv("CI", "true")
+	t.Setenv("JACTIONLINT_NO_HINTS", "")
+	run := func(root string, args ...string) string {
+		t.Helper()
+		t.Chdir(root)
+		var out, errOut strings.Builder
+		cmd := &Command{Stdin: strings.NewReader(""), Stdout: &out, Stderr: &errOut}
+		cmd.Main(append([]string{"jactionlint", "--no-color", "--shellcheck=", "--pyflakes=", "--profile", "default"}, args...))
+		return errOut.String()
+	}
+	// Few findings: something to fix, not to adopt
+	few := makeWorkflowRepo(t, map[string]string{"ci.yaml": "on: push\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n"})
+	if errOut := run(few); strings.Contains(errOut, "note:") {
+		t.Errorf("no hint below %d findings: %q", runHintMinFindings, errOut)
+	}
+	// Many findings: the baseline is the first thing the note says
+	many := manyFindingsRepo(t)
+	errOut := run(many)
+	i, j := strings.Index(errOut, "--baseline-write"), strings.Index(errOut, "--format summary")
+	if i < 0 || j < 0 || i > j || !strings.Contains(errOut, "first run") || !strings.Contains(errOut, "only on new findings") {
+		t.Errorf("the note must lead with --baseline-write: %q", errOut)
 	}
 }
 
