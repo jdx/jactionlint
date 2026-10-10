@@ -5184,6 +5184,9 @@ jactionlint reports a pipeline when all of the following hold:
 - The script reads `PIPESTATUS` in the command right after the pipeline, for the stage that hides the failure
   (`make | tee log; rc=${PIPESTATUS[0]}`) or for all of them (`${PIPESTATUS[@]}`): it looks at the status itself. The word
   without a `$`, the count `${#PIPESTATUS[@]}` and the status of another stage do not count.
+  When the status is copied into a plain scalar variable (`rc=${PIPESTATUS[0]}`), the variable has to be checked later in
+  the same script: in a test (`[ "$rc" -ne 0 ]`, `[[ ]]`, `test`), an arithmetic condition (`if (( rc ))`), `exit $rc`
+  or `return $rc`. A copy that is never checked, is only printed, or is assigned again before the check is still reported.
 - The pipeline is not inside a command substitution in the argument of a command (`echo "hash=$(sha256sum f | cut -d' ' -f1)"`):
   the status of the substitution is not the status of anything, so `pipefail` would change nothing. The value of an assignment
   (`hash=$(sha256sum f | cut -d' ' -f1)`) is the status of the assignment, and that pipeline is reported.
