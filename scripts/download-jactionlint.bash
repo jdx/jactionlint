@@ -54,7 +54,7 @@ repo="${JACTIONLINT_REPO:-jdx/jactionlint}"
 name="${JACTIONLINT_NAME:-jactionlint}"
 
 # Default value is updated manually on release
-version="2.0.2"
+version="2.1.0"
 if [ -n "$1" ]; then
     if [[ "$1" != 'latest' && "$1" != 'LATEST' ]]; then
         if [[ "$1" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
