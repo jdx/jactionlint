@@ -105,6 +105,7 @@ var actionRuleScope = map[string]struct {
 	"unsound-contains":            {scope: actionApplies},
 	"workflow-call":               {scope: actionNotApplicable},
 	"workflow-run":                {scope: actionNotApplicable},
+	"workflow-secret-scope":       {scope: actionNotApplicable},
 }
 
 // runsOnActions reports whether the rule implementation is run for the metadata of an action.

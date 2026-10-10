@@ -163,6 +163,7 @@ rules:
 | [workflow-call-permissions](#workflow-call-permissions) | correctness | error | correctness |
 | [workflow-input-type](#workflow-input-type) | correctness | error | correctness |
 | [workflow-run-names](#workflow-run-names) | correctness | error | correctness |
+| [workflow-secret-scope](#workflow-secret-scope) | security | warn | pedantic |
 | [workflow-syntax](#workflow-syntax) | correctness | error | correctness |
 | [yaml-syntax](#yaml-syntax) | correctness | error | correctness |
 
@@ -1386,6 +1387,15 @@ A workflow_run event refers to a workflow which does not exist in the repository
 - Default level: error
 - Profile: correctness
 - Details and examples: [checks](./checks.md#check-workflow-run-names)
+
+## workflow-secret-scope
+
+A secret is assigned to the workflow-level env and reaches multiple jobs.
+
+- Group: security
+- Default level: warn
+- Profile: pedantic
+- Details and examples: [checks](./checks.md#check-workflow-secret-scope)
 
 ## workflow-syntax
 
