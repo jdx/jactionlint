@@ -643,14 +643,31 @@ func (rule *RuleCachePoisoning) callersTurnCacheOff(a *ExecAction, name string) 
 }
 
 // everyReleaseCallerSets reports whether every release workflow that runs the action passes the input with a
-// literal value that switches the cache off (false, or true for an input that switches it off when true), or leaves
-// the input out and the default of the action switches it off.
+// value that switches the cache off (the literal false, or true for an input that switches it off when true, or
+// an expression that evaluates to it in every scenario in which the caller publishes), or leaves the input out and
+// the default of the action switches it off. An expression which cannot be evaluated keeps the finding.
 func (rule *RuleCachePoisoning) everyReleaseCallerSets(input string, offWhenTrue bool) bool {
-	off := func(v string) bool {
-		if offWhenTrue {
-			return isTrueLiteral(v)
+	// off reports whether the value passed by a caller switches the cache off in every run of the caller that
+	// publishes. A literal is decided as is; an expression is evaluated for each scenario with the evaluator
+	// of the conditions (cache_gate.go), and what it cannot decide counts as not off.
+	off := func(v string, scenarios []triggerScenario) bool {
+		v = strings.TrimSpace(v)
+		if offWhenTrue && isTrueLiteral(v) || !offWhenTrue && isFalseLiteral(v) {
+			return true
 		}
-		return isFalseLiteral(v)
+		if !strings.Contains(v, "${{") || len(scenarios) == 0 {
+			return false
+		}
+		e := parseGateExpression(v)
+		if e == nil {
+			return false
+		}
+		for _, sc := range scenarios {
+			if !valueSwitchesOff(evalGate(e, sc), offWhenTrue) {
+				return false
+			}
+		}
+		return true
 	}
 	def, hasDefault := "", false
 	for _, in := range rule.wf.Action.Inputs {
@@ -660,7 +677,8 @@ func (rule *RuleCachePoisoning) everyReleaseCallerSets(input string, offWhenTrue
 	}
 	releasing := 0
 	for _, cl := range rule.wf.Action.Callers.Callers {
-		if why, _ := releaseTrigger(cl.Events); why == "" {
+		why, scenarios := releaseTrigger(cl.Events)
+		if why == "" {
 			continue
 		}
 		releasing++
@@ -670,14 +688,30 @@ func (rule *RuleCachePoisoning) everyReleaseCallerSets(input string, offWhenTrue
 		for _, call := range cl.calls {
 			v, ok := call.input(input)
 			switch {
-			case ok && off(v):
-			case !ok && hasDefault && off(def):
+			case ok && off(v, scenarios):
+			case !ok && hasDefault && off(def, nil):
 			default:
 				return false
 			}
 		}
 	}
 	return releasing > 0
+}
+
+// valueSwitchesOff reports whether the evaluated value of an input switches the cache off: a boolean, or the
+// string a boolean becomes ("false", or "true" for an input that switches it off when true). An empty string
+// switches off the inputs that are on when set. A value that is not known never does.
+func valueSwitchesOff(v gateValue, offWhenTrue bool) bool {
+	switch v.kind {
+	case 1:
+		return v.b == offWhenTrue
+	case 2:
+		if offWhenTrue {
+			return isTrueLiteral(v.s)
+		}
+		return v.s == "" || isFalseLiteral(v.s)
+	}
+	return false
 }
 
 // cacheGate is an input which decides whether an action uses the cache. offWhenTrue is set for the inputs that
