@@ -3740,8 +3740,11 @@ The list is not exhaustive: it has the actions whose caching behavior is known. 
 non-release runs (`enable-cache: ${{ !startsWith(github.ref, 'refs/tags/') }}`).
 
 In a composite action, a step that is given `enable-cache: ${{ inputs.enable-cache }}` (or another switch of the table) is not reported
-when every release workflow of the repository that calls the action passes the input as a literal that switches the cache off, or leaves
-it out and the default of the action does.
+when every release workflow of the repository that calls the action passes the input as a value that switches the cache off, or leaves
+it out and the default of the action does. The value is a literal (`false`) or an expression such as
+`cache: ${{ !startsWith(github.ref, 'refs/tags/') }}`, which is evaluated for each run of the caller that publishes (the release
+event, a push of a tag) with the same evaluator as the `if:` conditions. An expression that cannot be evaluated there (it reads
+an input, the matrix or a variable) is unknown, and the finding stays.
 
 `cache-mode: none` on the workflow or on the job switches the cache off for the runner and suppresses these findings.
 

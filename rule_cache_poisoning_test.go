@@ -243,3 +243,85 @@ func TestCachePoisoningPushWithoutRefFilterAlsoGetsTags(t *testing.T) {
 		})
 	}
 }
+
+// TestCachePoisoningCallerInputExpressions checks the analysis of a composite action which passes an input of its
+// caller down to the step that restores the cache: the expression the caller passes is evaluated for each run of
+// the caller that publishes.
+func TestCachePoisoningCallerInputExpressions(t *testing.T) {
+	// setup-uv restores its cache unless "enable-cache" is false; rust-cache is off when "lookup-only" is true
+	const action = "name: x\ndescription: d\ninputs:\n  cache:\n    description: c\n    default: 'true'\nruns:\n  using: composite\n  steps:\n    - uses: astral-sh/setup-uv@v6\n      with:\n        enable-cache: ${{ inputs.cache }}\n"
+	caller := func(on, with string) string {
+		return on + "jobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: ./.github/actions/x\n" + with
+	}
+	const release = "on:\n  release:\n    types: [published]\n"
+	const tags = "on:\n  push:\n    tags: ['v*']\n"
+	const both = "on:\n  release:\n    types: [published]\n  push:\n    branches: [main]\n    tags: ['v*']\n"
+	with := func(v string) string { return "        with:\n          cache: " + v + "\n" }
+	tests := []struct {
+		name   string
+		caller string
+		want   int
+	}{
+		{"literal false", caller(release, with("false")), 0},
+		{"not a tag ref", caller(tags, with("${{ !startsWith(github.ref, 'refs/tags/') }}")), 0},
+		{"not a tag ref on release and tag push", caller(both, with("${{ !startsWith(github.ref, 'refs/tags/') }}")), 0},
+		{"event is not release", caller(release, with("${{ github.event_name != 'release' }}")), 0},
+		{"ref_type is not tag", caller(both, with("${{ github.ref_type != 'tag' }}")), 0},
+		{"false on one scenario only", caller(both, with("${{ github.event_name != 'release' }}")), 1},
+		{"expression true on the release", caller(release, with("${{ startsWith(github.ref, 'refs/tags/') }}")), 1},
+		{"expression true", caller(tags, with("${{ true }}")), 1},
+		{"unknown expression", caller(release, with("${{ vars.CACHE }}")), 1},
+		{"unknown input of the caller", caller(release, with("${{ inputs.cache }}")), 1},
+		{"unknown operand next to a known one", caller(release, with("${{ vars.CACHE == 'true' }}")), 1},
+		{"string that is not false", caller(release, with("${{ github.ref }}")), 1},
+		{"text around an expression", caller(release, with("x${{ false }}")), 1},
+		{"default of the action", caller(release, ""), 1},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			root := writeProject(t, map[string]string{
+				".github/workflows/ci.yml":     tc.caller,
+				".github/actions/x/action.yml": action,
+			})
+			l := newActionLinter(t, root, io.Discard, LinterOptions{}, "rules:\n  cache-poisoning: warn\n")
+			errs, err := l.LintFiles([]string{filepath.Join(root, ".github", "actions", "x", "action.yml")}, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := policyErrorsOf(errs, "cache-poisoning"); len(got) != tc.want {
+				t.Errorf("want %d findings but got %v", tc.want, got)
+			}
+		})
+	}
+}
+
+// TestCachePoisoningCallerInputExpressionsOffWhenTrue covers an input that switches the cache off when it is true.
+func TestCachePoisoningCallerInputExpressionsOffWhenTrue(t *testing.T) {
+	const action = "name: x\ndescription: d\ninputs:\n  lookup:\n    description: c\n    default: 'false'\nruns:\n  using: composite\n  steps:\n    - uses: Swatinem/rust-cache@v2\n      with:\n        lookup-only: ${{ inputs.lookup }}\n"
+	const on = "on:\n  push:\n    tags: ['v*']\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: ./.github/actions/x\n        with:\n          lookup: "
+	tests := []struct {
+		name  string
+		value string
+		want  int
+	}{
+		{"true on tags", "${{ startsWith(github.ref, 'refs/tags/') }}", 0},
+		{"false on tags", "${{ !startsWith(github.ref, 'refs/tags/') }}", 1},
+		{"unknown", "${{ vars.LOOKUP }}", 1},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			root := writeProject(t, map[string]string{
+				".github/workflows/ci.yml":     on + tc.value + "\n",
+				".github/actions/x/action.yml": action,
+			})
+			l := newActionLinter(t, root, io.Discard, LinterOptions{}, "rules:\n  cache-poisoning: warn\n")
+			errs, err := l.LintFiles([]string{filepath.Join(root, ".github", "actions", "x", "action.yml")}, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := policyErrorsOf(errs, "cache-poisoning"); len(got) != tc.want {
+				t.Errorf("want %d findings but got %v", tc.want, got)
+			}
+		})
+	}
+}
