@@ -1,0 +1,1 @@
+test.yaml:7:3: "contents: write" is set at the workflow level: it lets the job push commits and tags and create or delete releases, and a job added later inherits it silently. set "permissions: {}" at the workflow level and grant "contents: write" on the job [excessive-permissions]

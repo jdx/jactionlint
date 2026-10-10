@@ -8,7 +8,9 @@ import (
 )
 
 // runHintMinFindings is the number of findings from which a run prints the hint about adopting the checks
-// gradually. A handful of findings is something to fix, not to adopt.
+// gradually with --baseline-write. A handful of findings is something to fix, not to adopt; the default profile
+// reports a median of 37 findings per repository on the corpus, so 20 is below what most repositories see on the
+// first run and above what a repository that already follows the checks sees. docs/usage.md names the number.
 const runHintMinFindings = 20
 
 // noteRunProfile remembers whether a file was linted with more than the checks of actionlint, which the
@@ -54,13 +56,17 @@ func (l *Linter) reportRunHint(results []fileResult) {
 	if findings < runHintMinFindings {
 		return
 	}
-	tips := []string{"see --format summary for the counts per rule", "the name at the end of a finding is its rule ID, which --ignore, the config and ignore comments accept"}
+	head := fmt.Sprintf("note: %s in %s", countNoun(findings, "finding"), countNoun(files, "file"))
+	var lead string
 	if hidden == 0 && !l.hintBaseline.Load() {
-		tips = append(tips, "adopt the checks gradually with --baseline-write")
+		// No baseline yet: this is most likely the first run of the default profile, so say the way in first
+		lead = head + ", which is a lot for a first run of the default profile. to adopt the checks without fixing everything first, " +
+			"record the findings with --baseline-write: later runs then fail only on new findings"
+	} else {
+		lead = head
 	}
-	tips = append(tips, "for the checks of actionlint only use --profile correctness")
-	fmt.Fprintf(l.logOut, "note: %s in %s. %s. silence this note with --no-hints or JACTIONLINT_NO_HINTS=1\n",
-		countNoun(findings, "finding"), countNoun(files, "file"), strings.Join(tips, "; "))
+	tips := []string{"see --format summary for the counts per rule", "the name at the end of a finding is its rule ID, which --ignore, the config and ignore comments accept", "for the checks of actionlint only use --profile correctness"}
+	fmt.Fprintf(l.logOut, "%s. %s. silence this note with --no-hints or JACTIONLINT_NO_HINTS=1\n", lead, strings.Join(tips, "; "))
 }
 
 // isTerminalWriter reports whether w is a terminal.
