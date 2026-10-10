@@ -101,16 +101,27 @@ func (rule *RuleParallelSteps) checkPendingReads(n *Step) {
 				if entering {
 					return
 				}
-				d, ok := node.(*ObjectDerefNode)
-				if !ok {
+				var recv ExprNode
+				var id string
+				switch d := node.(type) {
+				case *ObjectDerefNode:
+					recv, id = d.Receiver, d.Property
+				case *IndexAccessNode:
+					// steps['my-step'] is the only way to read a step ID with a hyphen
+					lit, ok := d.Index.(*StringNode)
+					if !ok {
+						return
+					}
+					recv, id = d.Operand, strings.ToLower(lit.Value)
+				default:
 					return
 				}
-				v, ok := d.Receiver.(*VariableNode)
+				v, ok := recv.(*VariableNode)
 				if !ok || v.Name != "steps" {
 					return
 				}
-				if _, ok := rule.pending[d.Property]; ok {
-					rule.ReportIDf("background-step-not-waited", o.PosOf(node), "outputs and results of the background step %q are not available until a \"wait\" or \"wait-all\" step covers it, so this evaluates to an empty string", d.Property)
+				if _, ok := rule.pending[id]; ok {
+					rule.ReportIDf("background-step-not-waited", o.PosOf(node), "outputs and results of the background step %q are not available until a \"wait\" or \"wait-all\" step covers it, so this evaluates to an empty string", id)
 				}
 			})
 		})
@@ -199,7 +210,7 @@ func isBackgroundStep(s *Step) bool {
 func init() {
 	registerRules(
 		RuleInfo{ID: "invalid-parallel-step", Group: RuleGroupCorrectness, Summary: "A step is not allowed inside a parallel group or refers to a wrong step.", DefaultLevel: SeverityError, Profile: ProfileCorrectness, DocsAnchor: "check-parallel-step-refs"},
-		RuleInfo{ID: "background-step-not-waited", Group: RuleGroupCorrectness, Summary: "Outputs or results of a background step are read before a wait step covers it.", DefaultLevel: SeverityError, Profile: ProfileCorrectness, DocsAnchor: "check-parallel-step-refs"},
+		RuleInfo{ID: "background-step-not-waited", Group: RuleGroupCorrectness, Summary: "Outputs or results of a background step are read before a wait step covers it.", DefaultLevel: SeverityError, Profile: ProfileCorrectness, DocsAnchor: "check-background-step-not-waited"},
 	)
 	registerRuleFactory("parallel-steps", func(env *RuleEnv) []Rule {
 		return []Rule{NewRuleParallelSteps()}

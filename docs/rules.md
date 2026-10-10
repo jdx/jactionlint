@@ -231,7 +231,7 @@ Outputs or results of a background step are read before a wait step covers it.
 - Group: correctness
 - Default level: error
 - Profile: correctness
-- Details and examples: [checks](./checks.md#check-parallel-step-refs)
+- Details and examples: [checks](./checks.md#check-background-step-not-waited)
 
 ## bot-conditions
 

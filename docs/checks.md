@@ -21,6 +21,7 @@ List of checks:
 - [Script injection by potentially untrusted inputs](#untrusted-inputs)
 - [Job dependencies validation](#check-job-deps)
 - [Parallel steps](#check-parallel-step-refs)
+- [Background step results read before a wait](#check-background-step-not-waited)
 - [Timeout minutes of jobs](#check-timeout-minutes)
 - [Workflow names of `workflow_run` event](#check-workflow-run-names)
 - [Matrix values](#check-matrix-values)
@@ -1484,7 +1485,12 @@ test.yaml:11:17: "serverr" is not the ID of a preceding background step. "wait" 
 
 [Playground](https://jactionlint.jdx.dev/#eNpczssNAjEMBND7VjG3nNKA26CCJGuxwOKs/KF+FD4R4mTJz6NxF8IRti3XXo0WwNl8TEBDLA+PGuKR9zLsReZ82PsKyJByZ8LJizqM9cH6IeCy0v9KQwjcto5kI5Km1NJuZ+0hK8E1eBb8RMYPlqa0Io33b4c+BwCanjvx)
 
-Reading `steps.<id>.outputs.*`, `steps.<id>.outcome` or `steps.<id>.conclusion` of a background step before a `wait` or `wait-all` step that covers it evaluates to an empty string, so it is reported too:
+<a id="check-background-step-not-waited"></a>
+## Background step results read before a wait
+
+Reading `steps.<id>.outputs.*`, `steps.<id>.outcome` or `steps.<id>.conclusion` of a background step before a `wait` or `wait-all` step that covers it evaluates to an empty string.
+
+Example input:
 
 ```yaml
 on: push
@@ -1508,6 +1514,8 @@ test.yaml:9:26: outputs and results of the background step "server" are not avai
 9 |       - run: echo "${{ steps.server.outputs.x }}"
   |                        ^~~~~~~~~~~~~~
 ```
+
+<!-- Skip playground link -->
 
 <a id="check-timeout-minutes"></a>
 ## Timeout minutes of jobs

@@ -20,3 +20,7 @@ jobs:
       - run: echo "still=[${{ steps.other.outputs.x }}]"
       - wait-all:
       - run: echo "done=[${{ steps.other.outputs.x }}]"
+      - id: my-bg
+        run: echo
+        background: true
+      - run: echo "${{ steps['my-bg'].outputs.x }}"
