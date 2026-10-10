@@ -126,25 +126,16 @@ func parseTemplateExprs(value string) (nodes []ExprNode, ok bool) {
 	}
 }
 
-// parseConditionExpr parses an `if:` condition that is not wrapped in `${{ }}`.
-func parseConditionExpr(value string) (ExprNode, bool) {
-	e, err := NewExprParser().Parse(NewExprLexer(value + "}}"))
-	if err != nil {
-		return nil, false
-	}
-	return e, true
-}
-
 // conditionExprs returns the expressions of an `if:` condition, wrapped in `${{ }}` or not.
 func conditionExprs(s *String) ([]ExprNode, bool) {
 	if s == nil {
 		return nil, true
 	}
 	if s.ContainsExpression() {
-		return parseTemplateExprs(s.Value)
+		return s.templateExprs()
 	}
-	e, ok := parseConditionExpr(s.Value)
-	if !ok {
+	e, err := s.condExpr()
+	if err != nil {
 		return nil, false
 	}
 	return []ExprNode{e}, true
@@ -201,8 +192,8 @@ func (rs *refSet) addCondition(s *String) {
 	if s == nil || s.ContainsExpression() {
 		return // already added with the other strings
 	}
-	e, ok := parseConditionExpr(s.Value)
-	if !ok {
+	e, err := s.condExpr()
+	if err != nil {
 		rs.unknown = true
 		return
 	}
@@ -557,7 +548,7 @@ func (sc scenario) isTrue(b *Bool) bool {
 	if b.Expression == nil {
 		return b.Value
 	}
-	exprs, ok := parseTemplateExprs(b.Expression.Value)
+	exprs, ok := b.Expression.templateExprs()
 	if !ok || len(exprs) != 1 || !b.Expression.IsExpressionAssigned() {
 		return false
 	}

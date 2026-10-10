@@ -147,7 +147,7 @@ func matrixLabels(label *String, m *Matrix) []*String {
 	if m == nil || !label.IsExpressionAssigned() {
 		return nil
 	}
-	exprs, ok := parseTemplateExprs(label.Value)
+	exprs, ok := label.templateExprs()
 	if !ok || len(exprs) != 1 {
 		return nil
 	}

@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 	"text/scanner"
+	"unicode/utf8"
 )
 
 // TokenKind is kind of token.
@@ -153,11 +154,144 @@ const expectedDigitChars = "'0'..'9'"
 const expectedAlphaChars = "'a'..'z', 'A'..'Z', '_'"
 const expectedAllChars = expectedAlphaChars + ", " + expectedDigitChars + ", " + expectedPunctChars
 
+// charScanner is the part of text/scanner.Scanner which the expression lexer needs: Peek, Next and Pos
+// with the same results, including the position at the end of the input. text/scanner allocates a
+// reader and a buffer of more than a kilobyte for each scanner, which was the biggest allocation of
+// the lexer, and the lexer is created for every expression of every rule. For valid UTF-8 input
+// charScanner works on the string without allocating. It falls back to a real scanner.Scanner at the
+// first character it cannot handle the same way (invalid UTF-8, NUL, a byte order mark) so that the
+// errors of the scanner stay the same.
+type charScanner struct {
+	src     string
+	onError func(msg string)
+
+	// ch is the lookahead character, -2 when nothing was read yet.
+	ch rune
+	// pulled is the offset after the lookahead character; lastCharLen is its width, 0 at the end.
+	pulled, lastCharLen int
+	// line is the line of the next character to pull; column is the number of characters pulled on it.
+	// After a line break column is 0 and lastLineLen is the length of the finished line.
+	line, column, lastLineLen int
+
+	fallback *scanner.Scanner
+}
+
+// canPull reports whether the character at offset i is one that the fast path handles.
+func (c *charScanner) canPull(i int) bool {
+	if i >= len(c.src) {
+		return true
+	}
+	b := c.src[i]
+	if b == 0 {
+		return false
+	}
+	if b < utf8.RuneSelf {
+		return true
+	}
+	r, w := utf8.DecodeRuneInString(c.src[i:])
+	return !(r == utf8.RuneError && w <= 1) && r != '\uFEFF'
+}
+
+// toFallback switches to text/scanner, in the state that has the same characters pulled.
+func (c *charScanner) toFallback() {
+	s := new(scanner.Scanner)
+	s.Init(strings.NewReader(c.src))
+	s.Error = func(_ *scanner.Scanner, m string) { c.onError(m) }
+	if c.ch != -2 {
+		s.Peek()
+		// c.pulled is the offset after the lookahead; everything before it is ASCII or valid UTF-8,
+		// consumed one character at a time like the lexer did.
+		for off := 0; off < c.pulled-c.lastCharLen; {
+			_, w := utf8.DecodeRuneInString(c.src[off:])
+			s.Next()
+			off += w
+		}
+	}
+	c.fallback = s
+}
+
+func (c *charScanner) pull() {
+	if c.pulled >= len(c.src) {
+		if c.lastCharLen > 0 {
+			// The scanner counts the end of the input as a character after a real one.
+			c.column++
+		}
+		c.ch, c.lastCharLen = scanner.EOF, 0
+		return
+	}
+	b := c.src[c.pulled]
+	r, w := rune(b), 1
+	if b >= utf8.RuneSelf {
+		r, w = utf8.DecodeRuneInString(c.src[c.pulled:])
+	}
+	c.pulled += w
+	c.lastCharLen = w
+	c.column++
+	if r == '\n' {
+		c.line++
+		c.lastLineLen = c.column
+		c.column = 0
+	}
+	c.ch = r
+}
+
+// Peek returns the next character without consuming it.
+func (c *charScanner) Peek() rune {
+	if c.fallback != nil {
+		return c.fallback.Peek()
+	}
+	if c.ch == -2 {
+		if !c.canPull(0) {
+			c.toFallback()
+			return c.fallback.Peek()
+		}
+		c.line = 1
+		c.pull()
+	}
+	return c.ch
+}
+
+// Next consumes and returns the next character.
+func (c *charScanner) Next() rune {
+	if c.fallback != nil {
+		return c.fallback.Next()
+	}
+	ch := c.Peek()
+	if c.fallback != nil {
+		return c.fallback.Next()
+	}
+	if ch != scanner.EOF {
+		if !c.canPull(c.pulled) {
+			c.toFallback()
+			return c.fallback.Next()
+		}
+		c.pull()
+	}
+	return ch
+}
+
+// Pos returns the position immediately after the last consumed character, as scanner.Scanner.Pos.
+func (c *charScanner) Pos() scanner.Position {
+	if c.fallback != nil {
+		return c.fallback.Pos()
+	}
+	pos := scanner.Position{Offset: c.pulled - c.lastCharLen}
+	switch {
+	case c.column > 0:
+		pos.Line, pos.Column = c.line, c.column
+	case c.lastLineLen > 0:
+		pos.Line, pos.Column = c.line-1, c.lastLineLen
+	default:
+		pos.Line, pos.Column = 1, 1
+	}
+	return pos
+}
+
 // ExprLexer is a struct to lex expression syntax. To know the syntax, see
 // https://docs.github.com/en/actions/learn-github-actions/expressions
 type ExprLexer struct {
 	src    string
-	scan   scanner.Scanner
+	scan   charScanner
 	lexErr *ExprError
 	start  scanner.Position
 }
@@ -172,8 +306,9 @@ func NewExprLexer(src string) *ExprLexer {
 			Column: 1,
 		},
 	}
-	l.scan.Init(strings.NewReader(src))
-	l.scan.Error = func(_ *scanner.Scanner, m string) {
+	l.scan.src = src
+	l.scan.ch = -2
+	l.scan.onError = func(m string) {
 		l.error(fmt.Sprintf("scan error while lexing expression: %s", m))
 	}
 	return l
