@@ -50,6 +50,9 @@ type String struct {
 	// src is the text of the file the string was parsed from, which maps the offsets of Value to
 	// positions (see valueAt). It is nil for a string that was not parsed from a file.
 	src *scalarSource
+
+	// exprs caches the parsed expressions of Value (see exprCache). It is filled by the rules.
+	exprs *stringExprs
 }
 
 // ContainsExpression checks if the given string contains a ${{ }} placeholder or not. This function

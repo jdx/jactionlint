@@ -368,7 +368,7 @@ func groupUniquePerRun(g *String, sc scenario) bool {
 	if g == nil {
 		return false
 	}
-	exprs, ok := parseTemplateExprs(g.Value)
+	exprs, ok := g.templateExprs()
 	if !ok {
 		return false
 	}

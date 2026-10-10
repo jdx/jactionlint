@@ -1,6 +1,7 @@
 package jactionlint
 
 import (
+	"archive/zip"
 	"fmt"
 	"io"
 	"os"
@@ -244,4 +245,56 @@ func BenchmarkLintCheckoutsPedantic(b *testing.B) {
 
 func BenchmarkLintJobsPedantic(b *testing.B) {
 	benchmarkLint(b, ProfilePedantic, perfWorkflowJobs, 1000, 4000)
+}
+
+// realWorldCorpus returns the workflows of testdata/realworld/dataset.zip (about 1500 files from public
+// repositories), the closest thing to a very large repository the tests have.
+func realWorldCorpus(tb testing.TB) (names []string, srcs [][]byte) {
+	tb.Helper()
+	zr, err := zip.OpenReader(filepath.Join("testdata", "realworld", "dataset.zip"))
+	if err != nil {
+		tb.Fatal(err)
+	}
+	defer zr.Close()
+	for _, f := range zr.File {
+		if f.FileInfo().IsDir() {
+			continue
+		}
+		rc, err := f.Open()
+		if err != nil {
+			tb.Fatal(err)
+		}
+		src, err := io.ReadAll(rc)
+		rc.Close()
+		if err != nil {
+			tb.Fatal(err)
+		}
+		names = append(names, f.Name)
+		srcs = append(srcs, src)
+	}
+	return names, srcs
+}
+
+// BenchmarkLintRealWorldCorpus lints every workflow of the corpus once per iteration. It is the
+// benchmark to compare allocation (B/op, allocs/op) of changes to the expression machinery.
+func BenchmarkLintRealWorldCorpus(b *testing.B) {
+	names, srcs := realWorldCorpus(b)
+	for _, profile := range []Profile{ProfileDefault, ProfilePedantic} {
+		b.Run(string(profile), func(b *testing.B) {
+			l, err := NewLinter(io.Discard, &LinterOptions{})
+			if err != nil {
+				b.Fatal(err)
+			}
+			l.defaultConfig = withoutMissingTimeout(&Config{Profile: profile})
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				for j, src := range srcs {
+					if _, err := l.Lint(names[j], src, nil); err != nil {
+						b.Fatal(err)
+					}
+				}
+			}
+		})
+	}
 }

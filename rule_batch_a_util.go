@@ -91,8 +91,7 @@ func scanExpressions(s *String, cond bool, f func(o *exprOccurrence)) {
 		return
 	}
 	if cond && !s.ContainsExpression() {
-		l := NewExprLexer(s.Value + "}}") // }} is necessary since lexer lexes it as end of tokens
-		expr, err := NewExprParser().Parse(l)
+		expr, err := s.condExpr()
 		if err != nil || expr == nil {
 			return
 		}
@@ -110,34 +109,15 @@ func scanExpressions(s *String, cond bool, f func(o *exprOccurrence)) {
 		col++
 	}
 	full := s.Value
-	rest := full
-	offset := 0
-	for {
-		idx := strings.Index(rest, "${{")
-		if idx < 0 {
-			return
-		}
-		start := idx + 3
-		rest = rest[start:]
-		offset += start
+	for _, p := range s.placeholders().list {
+		offset := p.after
 		l, c := line, col+offset
 		if s.Indent > 0 {
 			before := full[:offset]
 			l = s.Pos.Line + 1 + strings.Count(before, "\n")
 			c = s.Indent + 1 + offset - (strings.LastIndexByte(before, '\n') + 1)
 		}
-		lex := NewExprLexer(rest)
-		expr, err := NewExprParser().Parse(lex)
-		if err != nil || expr == nil {
-			return
-		}
-		f(&exprOccurrence{Root: expr, Str: s, Cond: cond, baseLine: l, baseCol: c, valueOff: offset, text: rest})
-		n := lex.Offset()
-		if n == 0 {
-			return
-		}
-		rest = rest[n:]
-		offset += n
+		f(&exprOccurrence{Root: p.node, Str: s, Cond: cond, baseLine: l, baseCol: c, valueOff: offset, text: full[offset:]})
 	}
 }
 

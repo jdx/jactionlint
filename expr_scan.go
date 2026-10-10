@@ -78,38 +78,25 @@ func (x *sourceIndex) scanExprs(s *String) []exprSpan {
 	}
 	var ret []exprSpan
 	value := s.Value
-	pos := 0
-	for {
-		i := strings.Index(value[pos:], "${{")
-		if i < 0 {
+	for _, p := range s.placeholders().list {
+		rest := value[p.after:]
+		if p.n < 2 || rest[p.n-2:p.n] != "}}" {
 			return ret
 		}
-		start := pos + i
-		after := start + len("${{")
-		rest := value[after:]
-		l := NewExprLexer(rest)
-		node, err := NewExprParser().Parse(l)
-		if err != nil {
-			return ret
-		}
-		n := l.Offset()
-		if n < 2 || rest[n-2:n] != "}}" {
-			return ret
-		}
-		line, col := valuePos(s, after)
+		line, col := valuePos(s, p.after)
 		ret = append(ret, exprSpan{
-			Start: start,
-			End:   after + n,
-			Src:   rest[:n-2],
-			Node:  node,
+			Start: p.after - len("${{"),
+			End:   p.after + p.n,
+			Src:   rest[:p.n-2],
+			Node:  p.node,
 			Line:  line,
 			Col:   col,
 			str:   s,
 			idx:   x,
-			base:  after,
+			base:  p.after,
 		})
-		pos = after + n
 	}
+	return ret
 }
 
 // parseExprString parses a condition or another value which is a whole expression, wrapped in ${{ }}

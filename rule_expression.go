@@ -714,8 +714,7 @@ func (rule *RuleExpression) checkIfCondition(str *String, workflowKey string) {
 		defer func() { rule.origin = nil }()
 		line, col := rule.originPos(0)
 
-		p := NewExprParser()
-		expr, err := p.Parse(NewExprLexer(src))
+		expr, err := str.condExpr()
 		if err != nil {
 			rule.exprError(err, line, col)
 			return
@@ -805,36 +804,37 @@ func (rule *RuleExpression) checkExprsIn(str *String, checkUntrusted bool, workf
 	// Positions inside the string are mapped back to the source through the position of the string and
 	// the way it is written (see exprOrigin).
 	full := str.Value
-	s := full
-	offset := 0
 	ts := []typedExpr{}
 	defer func() { rule.origin = nil }()
-	for {
-		idx := strings.Index(s, "${{")
-		if idx == -1 {
-			break
-		}
-
-		start := idx + 3 // 3 means removing "${{"
-		s = s[start:]
-		offset += start
-		rule.origin = &exprOrigin{str: str, base: offset, text: s}
+	// The expressions are parsed once for all the rules which look at the string.
+	parsed := str.placeholders()
+	for _, p := range parsed.list {
+		offset := p.after
+		rule.origin = &exprOrigin{str: str, base: offset, text: full[offset:]}
 		l, c := rule.originPos(0)
 
 		nerrs := len(rule.errs)
-		ty, offsetAfter, ok := rule.checkSemantics(s, l, c, checkUntrusted, workflowKey)
+		ty, ok := rule.checkSemanticsOfExprNode(p.node, l, c, checkUntrusted, workflowKey)
 		rule.attachTemplateInjectionFix(nerrs, offset-len("${{"))
 		if !ok {
 			return nil, false
 		}
-		if ty == nil || offsetAfter == 0 {
+		if ty == nil || p.n == 0 {
 			return nil, true
 		}
 		dl, dc := rule.originPos(-len("${{"))
 		ts = append(ts, typedExpr{ty, Pos{dl, dc}})
-
-		s = s[offsetAfter:]
-		offset += offsetAfter
+	}
+	if parsed.failed {
+		offset := parsed.errAfter
+		rule.origin = &exprOrigin{str: str, base: offset, text: full[offset:]}
+		l, c := rule.originPos(0)
+		nerrs := len(rule.errs)
+		if parsed.err != nil {
+			rule.exprError(parsed.err, l, c)
+		}
+		rule.attachTemplateInjectionFix(nerrs, offset-len("${{"))
+		return nil, false
 	}
 
 	return ts, true
@@ -1039,18 +1039,6 @@ func isFalsyLiteral(n ExprNode) bool {
 		return n.Value == ""
 	}
 	return false
-}
-
-func (rule *RuleExpression) checkSemantics(src string, line, col int, checkUntrusted bool, workflowKey string) (ExprType, int, bool) {
-	l := NewExprLexer(src)
-	p := NewExprParser()
-	expr, err := p.Parse(l)
-	if err != nil {
-		rule.exprError(err, line, col)
-		return nil, l.Offset(), false
-	}
-	t, ok := rule.checkSemanticsOfExprNode(expr, line, col, checkUntrusted, workflowKey)
-	return t, l.Offset(), ok
 }
 
 func (rule *RuleExpression) calcNeedsType(job *Job) *ObjectType {

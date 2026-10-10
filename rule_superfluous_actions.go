@@ -148,7 +148,7 @@ func mayBeSelfHosted(label *String, m *Matrix) bool {
 	if m == nil || m.Expression != nil || !label.IsExpressionAssigned() {
 		return true
 	}
-	exprs, ok := parseTemplateExprs(label.Value)
+	exprs, ok := label.templateExprs()
 	if !ok || len(exprs) != 1 {
 		return true
 	}
