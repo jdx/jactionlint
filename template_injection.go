@@ -1104,7 +1104,6 @@ func planTemplateInjectionFixesInto(in tiFixInput, plan *tiFixPlan) {
 			fixes[s] = f
 		}
 	}
-	return
 }
 
 // defaultEnvVars maps the properties of the github and runner contexts to the environment variables
