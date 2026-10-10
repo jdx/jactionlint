@@ -1,0 +1,58 @@
+on: push
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - id: server
+        run: echo 'start'
+        background: true
+      # 'id' and 'name' are the only keys GitHub accepts besides 'wait', 'wait-all' and 'cancel'
+      - id: w
+        name: Wait
+        wait: server
+      - id: wa
+        name: Wait for all
+        wait-all:
+      - id: c
+        name: Cancel
+        cancel: server
+      # GitHub refuses the workflow on each of the following keys
+      - if: always()
+        wait: server
+      - env:
+          A: b
+        wait: server
+      - timeout-minutes: 1
+        wait: server
+      - continue-on-error: true
+        wait: server
+      - if: always()
+        wait-all:
+      - continue-on-error: true
+        wait-all:
+      - if: always()
+        cancel: server
+      - continue-on-error: true
+        cancel: server
+      - wait-all: false
+      # A 'parallel' step takes no key but 'parallel'
+      - name: Build
+        parallel:
+          - run: echo 'a'
+      - id: group
+        parallel:
+          - run: echo 'a'
+      - if: success()
+        parallel:
+          - run: echo 'a'
+      - env:
+          A: b
+        parallel:
+          - run: echo 'a'
+      - continue-on-error: true
+        parallel:
+          - run: echo 'a'
+      - timeout-minutes: 1
+        parallel:
+          - run: echo 'a'

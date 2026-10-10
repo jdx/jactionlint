@@ -15,10 +15,9 @@ jobs:
         background: ${{ matrix.bg }}
       - run: echo c
         background: ${{ github.event_name == 'push' }}
-      # 'wait-all' takes no arguments: empty, or a boolean for compatibility with the official schema
+      # 'wait-all' takes no arguments: empty, or true for compatibility with the official schema
       - wait-all:
       - wait-all: true
-      - wait-all: false
       - wait: ${{ matrix.id }}
       - wait:
           - a

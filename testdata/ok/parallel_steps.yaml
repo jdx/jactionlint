@@ -28,11 +28,11 @@ jobs:
       # 'cancel' terminates a single background step that is no longer needed
       - cancel: server
       - cancel: checkout
-      # 'parallel' runs a group of steps in parallel
-      - name: Build things in parallel
-        if: success()
-        parallel:
+      # 'parallel' runs a group of steps in parallel. The group step takes no other key, but the steps
+      # in it are regular steps
+      - parallel:
           - run: echo 'a'
           - name: Task b
+            if: success()
             run: echo 'b'
           - uses: actions/setup-node@v4
