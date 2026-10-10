@@ -24,7 +24,6 @@ func TestBotConditionsFix(t *testing.T) {
 		{"id", "pull_request", "github.actor_id == 49699333", "github.event.pull_request.user.id == 49699333", true},
 		{"sender", "pull_request", "${{ 'dependabot[bot]' == github.event.sender.login }}", "${{ 'dependabot[bot]' == github.event.pull_request.user.login }}", true},
 		{"other events have no pull request", "[pull_request, push]", "github.actor == 'dependabot[bot]'", "github.actor == 'dependabot[bot]'", false},
-		{"push", "push", "github.actor == 'dependabot[bot]'", "github.actor == 'dependabot[bot]'", false},
 		{"no replacement for the node ID", "pull_request", "github.event.sender.node_id == 'dependabot[bot]'", "github.event.sender.node_id == 'dependabot[bot]'", false},
 	}
 	for _, tc := range tests {

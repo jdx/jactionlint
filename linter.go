@@ -827,6 +827,7 @@ func (l *Linter) check(
 		w, all = Parse(content)
 		if w != nil && project != nil {
 			w.inheritedSecrets = l.callersInheritSecrets(project, l.absFilePath(path))
+			w.callerEvents = l.workflowCallers(project, l.absFilePath(path))
 		}
 	}
 
@@ -1179,6 +1180,16 @@ func (l *Linter) callersInheritSecrets(p *Project, file string) bool {
 		return false
 	}
 	return l.callGraphOf(p).allCallersInheritSecrets(filepath.ToSlash(rel))
+}
+
+// workflowCallers returns the events of the local workflows which call the reusable workflow in the file, or nil
+// when the file is not in the project.
+func (l *Linter) workflowCallers(p *Project, file string) *WorkflowCallers {
+	rel, err := filepath.Rel(absPath(p.root), absPath(file))
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return nil
+	}
+	return l.callGraphOf(p).callerEventsOf(filepath.ToSlash(rel))
 }
 
 // actionCallers returns the local workflows which run the action defined in the file, or nil when the

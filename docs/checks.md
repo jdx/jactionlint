@@ -6316,6 +6316,19 @@ Use `github.event.pull_request.user.login` (or `.id`), the author of the pull re
 that somebody else pushed to, where it used to be false. The GitHub documentation also recommends not auto-merging from
 `pull_request_target`.
 
+The rule looks at the events that can start the run, and for a reusable workflow (and the metadata of a composite action) at the
+events of the local workflows that call it, directly or through other reusable workflows:
+
+- Only `pull_request` and `pull_request_target`: it suggests the author of the pull request, as above.
+- A pull request event next to others (for example `push` and `pull_request`): it reports and says that the author field exists only
+  on the pull request runs, so the condition needs another test on the other events.
+- Only `push`, `schedule`, `workflow_dispatch`, `repository_dispatch`, `release`, `create` or `delete`: it does not report. No pull
+  request can reach the job, so there is no author of a pull request to check, and people with write access start these runs. A
+  reusable workflow that is called only by a `push` workflow is therefore not reported for `github.event.sender.id`.
+- Other events without a pull request (`issue_comment`, `workflow_run`, ...): it reports without suggesting a pull request field.
+- Unknown events (a reusable workflow or an action that no workflow of the repository calls, or whose callers are themselves only
+  called): it behaves as before and suggests the author of the pull request. Another repository may call it on any event.
+
 A condition that also requires the author of the pull request to be the bot, such as
 `github.actor == 'dependabot[bot]' && github.event.pull_request.user.login == 'dependabot[bot]'`, is not reported: the author is
 what proves that the bot made the change, and the actor next to it only narrows the condition.

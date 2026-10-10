@@ -109,7 +109,7 @@ func TestUnsoundPrefixMatchPositionsAndMessages(t *testing.T) {
 
 func TestUnsoundPrefixMatchBotConditions(t *testing.T) {
 	// A comparison with a bot in a condition is reported by bot-conditions when it is enabled
-	src := prefixSrc("startsWith(github.actor, 'dependabot')")
+	src := strings.Replace(prefixSrc("startsWith(github.actor, 'dependabot')"), "on: push", "on: [push, pull_request]", 1)
 	both := ruleConfig("unsound-prefix-match", "bot-conditions")
 	if got := errsWithID(lintFileWithConfig(t, both, "ci.yaml", src), "unsound-prefix-match"); len(got) != 0 {
 		t.Errorf("bot-conditions is on but got %v", got)
