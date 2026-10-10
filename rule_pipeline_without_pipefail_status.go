@@ -16,6 +16,9 @@ var reStatusAssign = regexp.MustCompile(`^(?:(?:local|declare|export|readonly)\s
 // optionally behind `if`, `elif`, `while`, `until`, `!` or `then`.
 var reCheckLine = regexp.MustCompile(`^\s*(?:(?:if|elif|while|until|then|!)\s+)*(?:\[\[?\s|test\s|\(\(|exit\b|return\b)`)
 
+// reTrailingComment matches a comment that ends a statement (`rc=${PIPESTATUS[0]} # keep`).
+var reTrailingComment = regexp.MustCompile(`\s#.*$`)
+
 // followsPipestatus looks at the statement right after the pipeline. simple is whether it copies the status of the
 // stage that hides the failure into a plain variable (`rc=${PIPESTATUS[0]}`), and then checked is whether the script
 // checks the variable later: in a test, an arithmetic condition, `exit` or `return`. It is conservative: the
@@ -42,7 +45,11 @@ func followsPipestatus(s *runscript.Script, p *runscript.Pipeline, stage int) (s
 		break
 	}
 	end := pos + strings.IndexAny(src[pos:]+"\n", ";\n")
-	m := reStatusAssign.FindStringSubmatch(strings.TrimSpace(src[pos:end]))
+	stmt := src[pos:end]
+	if i := reTrailingComment.FindStringIndex(stmt); i != nil {
+		stmt = stmt[:i[0]]
+	}
+	m := reStatusAssign.FindStringSubmatch(strings.TrimSpace(stmt))
 	if m == nil {
 		return false, false
 	}
@@ -69,7 +76,15 @@ func followsPipestatus(s *runscript.Script, p *runscript.Pipeline, stage int) (s
 		}
 		ls := strings.LastIndexByte(src[:off], '\n') + 1
 		le := off + strings.IndexByte(src[off:]+"\n", '\n')
-		if reCheckLine.MatchString(src[ls:le]) {
+		// the check may follow the use on the same line (`rc=${PIPESTATUS[0]}; exit $rc`): only the statement that
+		// holds the use counts, so cut at the last separator before it
+		start := ls
+		for _, sep := range []string{";", "&&", "||"} {
+			if i := strings.LastIndex(src[ls:off], sep); i >= 0 && ls+i+len(sep) > start {
+				start = ls + i + len(sep)
+			}
+		}
+		if reCheckLine.MatchString(src[start:le]) {
 			return true, true
 		}
 	}
