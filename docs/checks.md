@@ -3721,7 +3721,9 @@ rules:
   cache-poisoning: error
 ```
 
-A job is a release job when the workflow runs on the `release` event or on pushed tags (`push` with `tags:`), or when the job
+A job is a release job when the workflow runs on the `release` event, on pushed tags (`push` with `tags:`) or on pushes to release
+branches (`push` with a `branches:` filter whose every positive pattern is `release`, `releases` or starts with `release/`, `release-`
+or `releases/`; `branches: [main, 'release/**']` is the filter of ordinary checks and does not count), or when the job
 uses a publishing action (such as `pypa/gh-action-pypi-publish`, `softprops/action-gh-release` or `goreleaser/goreleaser-action`)
 or runs a publishing command (`cargo publish`, `npm publish`, `twine upload`, `gh release create`, `docker push`, ...). In a
 release job the rule reports the steps which restore a cache:
@@ -3746,10 +3748,12 @@ release job the rule reports the steps which restore a cache:
 
 A `tags:` filter that lets no tag through is no tag trigger: `tags: ['!**']`, a list of negative patterns only (GitHub requires one
 positive pattern) and a list that ends with `!**`. A workflow that runs on pushed tags only to start checks is not a release
-either: when the workflow or the job sets `permissions:` and grants nothing but read access (`read-all`, `{}`, `contents: read`),
+either, and neither is a release branch: when the workflow or the job sets `permissions:` and grants nothing but read access (`read-all`, `{}`, `contents: read`),
 and the job has no `environment:`, reads no secret other than `GITHUB_TOKEN` and runs no publishing command or action, the tag does not make it a release job. This is a heuristic:
 without `permissions:` the token is whatever the repository sets, so the job may publish, and a job can still publish with a secret
 that it does not name (the secret of a reusable workflow, a credential stored on the runner). The `release` event always counts.
+The list of publishing actions grows with the well-known publishers (crates.io, container registries, Homebrew bumps, Azure, Google Cloud
+and AWS deploys, Vercel, Netlify, the app stores); one that is not in it is still found by its `run:` command or `cache-mode: none`.
 
 The list is not exhaustive: it has the actions whose caching behavior is known. A step is not reported when its `if:` looks at
 `github.event_name` or `github.ref`, or an input is an expression which does, since that is how caching is limited to
@@ -3768,10 +3772,17 @@ The rule also reports `cache-mode: write` and `cache-mode: write-only` in a work
 `workflow_run` or `issue_comment`: code of untrusted people writes the entries which privileged workflows restore later.
 
 Differences from [zizmor](https://docs.zizmor.sh/audits/#cache-poisoning): zizmor reports a release workflow once for the trigger and once
-for each step. jactionlint reports the steps (and the job-level publishing detection is jactionlint only). zizmor also treats a push to
-a `release/**` branch as a release, takes `actions/setup-node` v5 and later for a cache whether or not `package.json` names a package manager,
-and does not look at `permissions:` to tell a check from a release on a tag. jactionlint does not, because those workflows are mostly
-checks; use `cache-mode: none` where one of them does publish.
+for each step. jactionlint reports the steps (and the job-level publishing detection is jactionlint only). Deliberately different:
+
+- zizmor takes `actions/setup-node` v5 and later for a cache whether or not `package.json` names a package manager. jactionlint reads
+  `package.json` of the repository, because v5 and later cache only when it does; without a repository (a workflow linted on its
+  own, a composite action) it assumes the cache. That is the documented assumption, so a sparse clone without `package.json` reports
+  less than a full one.
+- zizmor does not look at `permissions:` to tell a check from a release on a tag, and reports a tag-only workflow with read-only
+  permissions that restores a cache. jactionlint does not, because those workflows are mostly checks (a tag only starts them) and nothing
+  is published without a write permission, a secret or an environment; use `cache-mode: none` where one of them does publish.
+  The same holds for a push to a release branch. Not decided by zizmor and different here: a `branches:` filter that also names
+  other branches is not a release trigger.
 
 `astral-sh/setup-uv` from v10 on, with `enable-cache` unset or `auto`, does not restore a cache on the events that are open to cache
 poisoning, so it is not reported. The version is the tag of the `uses:`, or the version in the comment after a pinned commit
