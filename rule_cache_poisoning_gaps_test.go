@@ -15,6 +15,8 @@ func TestCachePoisoningReleaseBranches(t *testing.T) {
 		{"a name that only starts like it", "on:\n  push:\n    branches: [releaser]\n" + tail, 0},
 		{"read-only token is a check", "on:\n  push:\n    branches: ['release/**']\npermissions: read-all\n" + tail, 0},
 		{"gated on the tag", "on:\n  push:\n    branches: ['release/**']\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: Swatinem/rust-cache@v2\n        if: startsWith(github.ref, 'refs/tags/')\n", 0},
+		{"gated on the ref type tag", "on:\n  push:\n    branches: ['release/**']\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: Swatinem/rust-cache@v2\n        if: github.ref_type == 'tag'\n", 0},
+		{"gated on the ref type branch", "on:\n  push:\n    branches: ['release/**']\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: Swatinem/rust-cache@v2\n        if: github.ref_type == 'branch'\n", 1},
 		{"no branch filter", "on: push\n" + tail, 0},
 	}
 	for _, tc := range tests {

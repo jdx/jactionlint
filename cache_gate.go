@@ -14,8 +14,9 @@ var (
 	scenarioTagPush = triggerScenario{"event_name": "push", "event.ref": "refs/tags/v1.0.0", "ref": "refs/tags/v1.0.0", "ref_type": "tag", "ref_name": "v1.0.0"}
 )
 
-// scenarioBranchPush is the push of a branch: the ref starts with refs/heads/ and the name is not known.
-var scenarioBranchPush = triggerScenario{"event_name": "push", refPrefixKey: "refs/heads/"}
+// scenarioBranchPush is the push of a branch: the ref starts with refs/heads/, its type is branch and the name is
+// not known.
+var scenarioBranchPush = triggerScenario{"event_name": "push", "ref_type": "branch", refPrefixKey: "refs/heads/"}
 
 // refPrefixKey names the scenario value which says what the ref of the run starts with when the ref itself is not
 // known: a pushed branch has a ref of "refs/heads/" and a name which is not known.
