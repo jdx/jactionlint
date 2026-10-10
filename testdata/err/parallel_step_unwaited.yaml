@@ -1,0 +1,22 @@
+on: push
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - id: bg
+        run: sleep 3; echo x=1 >> "$GITHUB_OUTPUT"
+        background: true
+      - id: other
+        run: echo other
+        background: true
+      - run: echo "before=[${{ steps.bg.outputs.x }}] outcome=[${{ steps.bg.outcome }}]"
+      - if: steps.other.conclusion == 'success'
+        run: echo hi
+        env:
+          X: ${{ steps.BG.outputs.x }}
+      - wait: bg
+      - run: echo "after=[${{ steps.bg.outputs.x }}] outcome=[${{ steps.bg.outcome }}]"
+      - run: echo "still=[${{ steps.other.outputs.x }}]"
+      - wait-all:
+      - run: echo "done=[${{ steps.other.outputs.x }}]"
