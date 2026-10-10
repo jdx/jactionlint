@@ -48,24 +48,27 @@ func (rule *RuleTimeoutCheck) fixMinutes() (int, bool) {
 	return minutes, true
 }
 
-// fixMissing makes the fix adding "timeout-minutes" to the job. It returns nil when the job is not
-// written in the block style.
-func (rule *RuleTimeoutCheck) fixMissing(n *Job) *Fix {
+// fixMissing makes the fix adding "timeout-minutes" to the job. It returns the reason instead when
+// "default-minutes" is not usable or the job is not written in the block style.
+func (rule *RuleTimeoutCheck) fixMissing(n *Job) (*Fix, *NoFix) {
+	minutes, ok := rule.fixMinutes()
+	if !ok {
+		if _, set := rule.Config().ruleOptionNumber("missing-timeout", "default-minutes"); set {
+			return nil, &NoFix{Code: NoFixOptionInvalid, Option: "missing-timeout.default-minutes", Reason: "the missing-timeout option default-minutes must be at least 1 for the fix to add timeout-minutes"}
+		}
+		return nil, &NoFix{Code: NoFixOptionRequired, Option: "missing-timeout.default-minutes", Reason: "set the missing-timeout option default-minutes to enable the fix, jactionlint does not choose a timeout"}
+	}
 	if rule.src == nil {
-		return nil
+		return nil, nil
 	}
 	site, ok := rule.src.locateJob(n)
 	if !ok {
-		return nil
-	}
-	minutes, ok := rule.fixMinutes()
-	if !ok {
-		return nil
+		return nil, &NoFix{Code: NoFixUnsupportedShape, Reason: "the job is not written in the block style, so timeout-minutes cannot be added to it"}
 	}
 	return &Fix{
 		Description: fmt.Sprintf("Add timeout-minutes: %d", minutes),
 		Edits:       []TextEdit{rule.src.insertAfterLine(site.after, fmt.Sprintf("%stimeout-minutes: %d", strings.Repeat(" ", site.bodyIndent), minutes))},
-	}
+	}, nil
 }
 
 // VisitJobPre is callback when visiting Job node before visiting its children.
@@ -88,7 +91,8 @@ func (rule *RuleTimeoutCheck) VisitJobPre(n *Job) error {
 	if n.TimeoutMinutes == nil {
 		if required {
 			rule.ReportID("missing-timeout", n.Pos, "\"timeout-minutes\" is not set at this job. Set it to avoid wasting runner minutes when the job hangs")
-			rule.Errs()[len(rule.Errs())-1].Fix = rule.fixMissing(n)
+			last := rule.Errs()[len(rule.Errs())-1]
+			last.Fix, last.NoFix = rule.fixMissing(n)
 		}
 		return nil
 	}

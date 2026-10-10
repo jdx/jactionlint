@@ -975,9 +975,8 @@ func (l *Linter) finishCheck(path string, content []byte, all []*Error, cfg *Con
 		all = dropForGeneratedFile(all, mode)
 	}
 	if isWorkflow {
-		if sess, _ := l.onlineSession(cfg); sess != nil {
-			l.attachPinFixes(sess, content, all)
-		}
+		sess, _ := l.onlineSession(cfg)
+		l.attachPinFixes(sess, content, all)
 	}
 
 	for _, err := range all {
