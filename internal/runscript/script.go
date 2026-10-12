@@ -160,7 +160,10 @@ func Analyze(script, shell string) (s *Script, err error) {
 	parsed, omap := stripCR(sub)
 	parser := parserPool.Get().(*syntax.Parser)
 	f, perr := parser.Parse(strings.NewReader(parsed), "")
-	parserPool.Put(parser) // not reached when Parse panics, so a parser in an unknown state is dropped
+	// The parser keeps the file and the reader of its last parse; parsing nothing drops them so that an idle parser
+	// does not keep the last script alive. Not reached when Parse panics, so a parser in an unknown state is dropped.
+	_, _ = parser.Parse(strings.NewReader(""), "")
+	parserPool.Put(parser)
 	if perr != nil {
 		return nil, &ParseError{perr}
 	}
