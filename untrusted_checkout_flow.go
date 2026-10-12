@@ -405,11 +405,11 @@ func envNameOf(entry string) string {
 // unconditional write replaces what an earlier step wrote, a conditional one can only add. `echo` writes one entry,
 // that of its first word, whose value is all of its words; `printf` writes the entries of its format with the
 // arguments filled in. Writes through a here document are not followed.
-func (rule *RuleUntrustedCheckout) carryEnv(sc *runscript.Script, t *revTaint) {
+func (rule *RuleUntrustedCheckout) carryEnv(sc *runscript.Script, t *revTaint, stepCond bool) {
 	// A value is untrusted, clean or unknown. Only a clean value replaces what an earlier step wrote: a value that
 	// cannot be resolved (a command substitution, a format that is not understood) keeps it.
 	set := func(name, d string, cond, unknown bool) {
-		if d == "" && (cond || unknown) {
+		if d == "" && (cond || unknown || stepCond) { // a step with an `if:` may not run
 			return
 		}
 		if rule.carried == nil {
@@ -469,7 +469,7 @@ func (rule *RuleUntrustedCheckout) carryEnv(sc *runscript.Script, t *revTaint) {
 						next += n
 						entry := seg
 						if (strings.HasPrefix(seg, "%s") || strings.HasPrefix(seg, "%b")) && len(used) > 0 {
-							entry = used[0].Value // the line starts with the first argument
+							entry = used[0].Value + seg[2:] // the line starts with the first argument
 						}
 						name := envNameOf(entry)
 						if name == "" {

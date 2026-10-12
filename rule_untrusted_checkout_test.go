@@ -833,6 +833,32 @@ jobs:
       - run: git checkout FETCH_HEAD
       - run: make
 `},
+		{"GITHUB_ENV: a clean write in a step with an if does not replace the value", nil, prt + `    steps:
+      - uses: actions/checkout@v4
+      - run: echo "REF=${{ github.event.pull_request.head.sha }}" >> "$GITHUB_ENV"
+      - run: echo "REF=main" >> "$GITHUB_ENV"
+        if: github.event_name == 'push'
+      - run: git fetch origin "$REF" # want
+      - run: git checkout FETCH_HEAD
+      - run: make
+`},
+		{"GITHUB_ENV: printf with %s=%s takes the name from the first argument", nil, prt + `    steps:
+      - uses: actions/checkout@v4
+      - run: printf '%s=%s\n' REF "$HEAD" >> "$GITHUB_ENV"
+        env:
+          HEAD: ${{ github.event.pull_request.head.sha }}
+      - run: git fetch origin "$REF" # want
+      - run: git checkout FETCH_HEAD
+      - run: make
+`},
+		{"fetch then a script of the repository after a cd", map[string]string{"../../scripts/co.sh": "git checkout FETCH_HEAD\n"}, prt + `    steps:
+      - uses: actions/checkout@v4
+      - run: git fetch origin ${{ github.event.pull_request.head.sha }} # want
+      - run: |
+          cd scripts
+          ./co.sh
+      - run: make
+`},
 	}
 	for _, tc := range tests {
 		t.Run(tc.what, func(t *testing.T) {

@@ -2,8 +2,6 @@ package jactionlint
 
 import (
 	"maps"
-	"os"
-	"path/filepath"
 	"slices"
 	"strings"
 
@@ -214,7 +212,7 @@ func (rule *RuleUntrustedCheckout) checkoutsOf(j *Job, s *Step) []*untrustedChec
 			}
 			if !ok {
 				// a script of the repository that puts the fetched revision in the working tree
-				if f := rule.scriptUsingFetch(c, s, earlier); f != nil {
+				if f := rule.scriptUsingFetch(c, s, earlier, taint); f != nil {
 					// the offset starts one before the command so that the script itself counts as running the code
 					ret = append(ret, &untrustedCheckout{pos: f.pos, what: f.what, offset: c.Offset - 1, step: s})
 				}
@@ -249,7 +247,7 @@ func (rule *RuleUntrustedCheckout) checkoutsOf(j *Job, s *Step) []*untrustedChec
 				ret = append(ret, &untrustedCheckout{pos: pos, what: what, dir: dir, offset: fetchAt, step: s})
 			}
 		}
-		rule.carryEnv(script, taint)
+		rule.carryEnv(script, taint, s.If != nil)
 		return ret
 	}
 	return nil
@@ -281,29 +279,20 @@ func scriptPath(c *runscript.Command) string {
 // scriptUsingFetch returns the earlier fetch whose revision the script file that the command runs puts in the working
 // tree, and forgets it. The script is read from the project, and only when it names FETCH_HEAD or a destination of
 // the fetch literally in a command that changes the working tree, so a script that merely exists is not reported.
-func (rule *RuleUntrustedCheckout) scriptUsingFetch(c *runscript.Command, s *Step, earlier []*pendingFetch) *pendingFetch {
-	if rule.project == nil || rule.project.root == "" || !slices.ContainsFunc(earlier, func(f *pendingFetch) bool { return f != nil }) {
+func (rule *RuleUntrustedCheckout) scriptUsingFetch(c *runscript.Command, s *Step, earlier []*pendingFetch, t *revTaint) *pendingFetch {
+	if !slices.ContainsFunc(earlier, func(f *pendingFetch) bool { return f != nil }) {
 		return nil
 	}
 	rel := scriptPath(c)
 	if rel == "" {
 		return nil
 	}
-	path := filepath.Join(rule.project.root, filepath.FromSlash(stepWorkdir(s)), filepath.FromSlash(rel))
-	real, err := filepath.EvalSymlinks(path)
-	root, rerr := filepath.EvalSymlinks(rule.project.root)
-	if err != nil || rerr != nil || !isPathInDir(root, real) {
+	cwd, known := t.cwdAt(stepWorkdir(s), c.Offset)
+	if !known {
 		return nil
 	}
-	if fi, err := os.Stat(real); err != nil || !fi.Mode().IsRegular() || fi.Size() > maxScriptSize {
-		return nil
-	}
-	b, err := os.ReadFile(real)
-	if err != nil {
-		return nil
-	}
-	script, err := runscript.Analyze(string(b), "")
-	if err != nil || script == nil {
+	script := rule.readScript(cwd, rel)
+	if script == nil {
 		return nil
 	}
 	for k, f := range earlier {
