@@ -248,10 +248,11 @@ var cacheEnvSwitch = map[string]string{
 	"mozilla-actions/sccache-action": "SCCACHE_GHA_ENABLED",
 }
 
-// envVarOn reports whether the variable is set in the environment to something other than a false value.
-func envVarOn(e *Env, name string) bool {
+// envVarState tells what the environment says about the variable: whether it sets it, and if so whether the value
+// is a false one.
+func envVarState(e *Env, name string) (set, on bool) {
 	if e == nil {
-		return false
+		return false, false
 	}
 	for _, v := range e.Vars {
 		if v == nil || v.Name == nil || !strings.EqualFold(v.Name.Value, name) {
@@ -261,25 +262,38 @@ func envVarOn(e *Env, name string) bool {
 		if v.Value != nil {
 			val = strings.TrimSpace(v.Value.Value)
 		}
-		if val != "" && !isFalseLiteral(val) && val != "0" {
-			return true
-		}
+		return true, val != "" && !isFalseLiteral(val) && val != "0"
 	}
-	return false
+	return false, false
 }
 
-// cacheEnvOn reports whether the variable that switches the cache of an action on is set for the step: in the env of
-// the step, the job or the workflow, or by a script of the job.
+// Invariants of the checks of this file that were added for the findings of zizmor. A new case is reported only when
+// it is certain (no finding when unsure): the environment of a step is resolved by precedence (step, job, workflow; see
+// cacheEnvOn), a condition is evaluated for the runs that publish with gateAllowsRun and the scenarios of the rule
+// (feedsPublishingJob uses it for the upload and for the jobs that need it), and the version of an action pinned to a
+// commit is the one of its comment (withCommentVersion) in every check.
+
+// cacheEnvOn reports whether the variable that switches the cache of an action on is set for the step. The most
+// specific value decides, as it does for the runner: the env of the step, then the env of the job, then the env of the
+// workflow. A script of the job that mentions the variable (it writes it to GITHUB_ENV) keeps the finding unless the
+// step sets it. In a composite action the variable may come from the workflow that calls it, which is not known
+// here, so the finding stays unless the step switches it off.
 func (rule *RuleCachePoisoning) cacheEnvOn(j *Job, s *Step, name string) bool {
-	if envVarOn(rule.wf.Env, name) || envVarOn(j.Env, name) || envVarOn(s.Env, name) {
-		return true
+	if set, on := envVarState(s.Env, name); set {
+		return on
 	}
 	for _, st := range flattenSteps(j.Steps) {
 		if r, ok := st.Exec.(*ExecRun); ok && r.Run != nil && strings.Contains(r.Run.Value, name) {
 			return true
 		}
 	}
-	return false
+	if set, on := envVarState(j.Env, name); set {
+		return on
+	}
+	if set, on := envVarState(rule.wf.Env, name); set {
+		return on
+	}
+	return rule.wf.Action != nil // the caller may set it, which is not known: the finding stays
 }
 
 // automaticCaches are the actions that restore a cache without an input asking for one, when the repository is set
@@ -688,11 +702,13 @@ func (rule *RuleCachePoisoning) canPublish(j *Job) bool {
 	return false
 }
 
-// uploadsArtifact reports whether the job uploads an artifact: it hands files to the jobs that need it.
-func uploadsArtifact(j *Job) bool {
+// uploadsArtifact reports whether the job uploads an artifact in the runs that publish: it hands files to the jobs
+// that need it. An upload with an `if:` that keeps those runs away does not.
+func uploadsArtifact(j *Job, scenarios []triggerScenario) bool {
 	return slices.ContainsFunc(flattenSteps(j.Steps), func(s *Step) bool {
 		a, ref := stepAction(s)
-		return a != nil && ref.Kind == UsesAction && strings.HasPrefix(ref.CanonicalName(), "actions/upload-artifact")
+		return a != nil && ref.Kind == UsesAction && strings.HasPrefix(ref.CanonicalName(), "actions/upload-artifact") &&
+			(s.If == nil || gateAllowsRun(s.If.Value, scenarios))
 	})
 }
 
@@ -701,8 +717,8 @@ func uploadsArtifact(j *Job) bool {
 // the permissions leave without a way to publish: the files that it builds are what the other job publishes, so a
 // poisoned cache in j ends up in the release. A job that only has to pass before the release (a test job) does not
 // hand over anything, and is not reported.
-func (rule *RuleCachePoisoning) feedsPublishingJob(j *Job) bool {
-	if j.ID == nil || rule.wf == nil || !uploadsArtifact(j) {
+func (rule *RuleCachePoisoning) feedsPublishingJob(j *Job, scenarios []triggerScenario) bool {
+	if j.ID == nil || rule.wf == nil || !uploadsArtifact(j, scenarios) {
 		return false
 	}
 	seen := map[string]bool{strings.ToLower(j.ID.Value): true}
@@ -711,6 +727,9 @@ func (rule *RuleCachePoisoning) feedsPublishingJob(j *Job) bool {
 		for id, dep := range rule.wf.Jobs {
 			if seen[strings.ToLower(id)] || dep == nil {
 				continue
+			}
+			if dep.If != nil && !gateAllowsRun(dep.If.Value, scenarios) {
+				continue // it does not run on the release, and the jobs that need it are skipped with it
 			}
 			for _, n := range dep.Needs {
 				if n != nil && seen[strings.ToLower(n.Value)] {
@@ -800,7 +819,7 @@ func (rule *RuleCachePoisoning) VisitJobPre(n *Job) error {
 
 	steps := flattenSteps(n.Steps)
 	why, scenarios := rule.releaseWhy, rule.scenarios
-	if why != "" && rule.tagOnly && !rule.loose && rule.cannotPublish(n) && !rule.feedsPublishingJob(n) {
+	if why != "" && rule.tagOnly && !rule.loose && rule.cannotPublish(n) && !rule.feedsPublishingJob(n, scenarios) {
 		why = "" // a tag only starts a check here, see cannotPublish
 	}
 	if why == "" {
@@ -830,7 +849,7 @@ func (rule *RuleCachePoisoning) VisitJobPre(n *Job) error {
 			reads, hint = auto(a, withCommentVersion(rule.wf, a, ref), root)
 		}
 		if !reads && rule.loose && name == "docker/setup-buildx-action" {
-			reads, hint = buildxMayDownload(a, ref)
+			reads, hint = buildxMayDownload(a, withCommentVersion(rule.wf, a, ref))
 		}
 		if !reads || !cacheCanRunOnReleaseTrigger(n, s, a, name, scenarios) || rule.callersTurnCacheOff(a, name) {
 			continue
@@ -860,7 +879,7 @@ func (rule *RuleCachePoisoning) callersTurnCacheOff(a *ExecAction, name string) 
 	}
 	for _, g := range cacheGateInputs[name] {
 		v, ok := a.input(g.input)
-		if !ok {
+		if !ok || gateInputIsRedundant(name, a, g.input) {
 			continue
 		}
 		m := inputRefRe.FindStringSubmatch(strings.TrimSpace(v))
@@ -1026,18 +1045,18 @@ func publishingReason(steps []*Step) string {
 	return ""
 }
 
-// buildPushPushes reports whether a use of docker/build-push-action may push the image: "push" is not a false value
-// (an expression such as "${{ github.event_name != 'pull_request' }}" or "${{ inputs.push }}" is not known to be one,
-// and the image is pushed on the runs where it is true), or "outputs" asks for the registry ("type=registry",
-// "push=true" as in "type=image,push-by-digest=true,push=true"). Without both the action does not push: the default
-// of "push" is false.
+// buildPushPushes reports whether a use of docker/build-push-action may push the image. A non-empty "outputs" is what
+// buildx receives, and the shorthand "push" is not applied to it, so "outputs" decides alone when it is set: it pushes
+// with "type=registry" or "push=true" (as in "type=image,push-by-digest=true,push=true"), and "push: false" does not
+// cancel that, nor does "push: true" make a local export push. Without "outputs", "push" decides: anything but a false
+// value pushes (an expression such as "${{ inputs.push }}" is not known to be false), and the default is false.
 func buildPushPushes(a *ExecAction) bool {
-	if v, ok := a.input("push"); ok {
-		v = strings.TrimSpace(v)
-		return v != "" && !isFalseLiteral(v)
+	if out, _ := a.input("outputs"); strings.TrimSpace(out) != "" {
+		return buildOutputPushRe.MatchString(out)
 	}
-	out, _ := a.input("outputs")
-	return buildOutputPushRe.MatchString(out)
+	v, _ := a.input("push")
+	v = strings.TrimSpace(v)
+	return v != "" && !isFalseLiteral(v)
 }
 
 // buildOutputPushRe finds the options of the "outputs" of docker/build-push-action which push the image.

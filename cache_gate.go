@@ -33,7 +33,7 @@ func tagPushScenarios(f *WebhookEventFilter) []triggerScenario {
 			if pat := strings.TrimSpace(v.Value); plainTagPatternRe.MatchString(pat) && strings.Trim(pat, "*") != "" {
 				name = strings.ReplaceAll(strings.ReplaceAll(pat, "**", "*"), "*", "1.0.0")
 			}
-			if !slices.Contains(names, name) && len(names) < 8 {
+			if !slices.Contains(names, name) {
 				names = append(names, name)
 			}
 		}
@@ -317,6 +317,18 @@ func gateAllows(cond string, scenarios []triggerScenario, offWhenTrue bool) bool
 	return len(scenarios) == 0
 }
 
+// gateInputIsRedundant reports whether the input is one of two switches of an action which the other one may keep
+// on: "cache" of maturin-action ("sccache", or an expression that is not known) keeps the cache on whatever "sccache"
+// says, so a condition in "sccache" alone does not keep it away.
+func gateInputIsRedundant(name string, a *ExecAction, input string) bool {
+	if name != "pyo3/maturin-action" || input != "sccache" {
+		return false
+	}
+	v, ok := a.input("cache")
+	v = strings.ToLower(strings.TrimSpace(v))
+	return ok && v != "" && v != "none" && !isFalseLiteral(v)
+}
+
 // cacheCanRunOnReleaseTrigger tells whether the cache of the step is used in a run that publishes. The run
 // is one of the scenarios (a release event, a push of a tag, or the events of a workflow that has
 // a publishing job). The cache is used when none of these keeps it away:
@@ -337,7 +349,7 @@ func cacheCanRunOnReleaseTrigger(job *Job, s *Step, a *ExecAction, name string, 
 		return false
 	}
 	for _, g := range cacheGateInputs[name] {
-		if v, ok := a.input(g.input); ok && strings.Contains(v, "${{") && !gateAllows(v, scenarios, g.offWhenTrue) {
+		if v, ok := a.input(g.input); ok && !gateInputIsRedundant(name, a, g.input) && strings.Contains(v, "${{") && !gateAllows(v, scenarios, g.offWhenTrue) {
 			return false
 		}
 	}

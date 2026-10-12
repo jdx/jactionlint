@@ -1,6 +1,8 @@
 package jactionlint
 
 import (
+	"io"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -84,7 +86,8 @@ func TestCachePoisoningImagePush(t *testing.T) {
 		{"push in an expression of the output", "        with:\n          outputs: type=image,name=x,push=${{ env.PUSH }}\n", 0},
 		{"an output to a directory", "        with:\n          outputs: type=local,dest=out\n", 0},
 		{"an output that only names the registry", "        with:\n          outputs: type=image,name=registry.example.com/x\n", 0},
-		{"push false wins over an output", "        with:\n          push: false\n          outputs: type=registry\n", 0},
+		{"outputs push next to push false", "        with:\n          push: false\n          outputs: type=registry\n", 1},
+		{"a local output next to push true", "        with:\n          push: true\n          outputs: type=local,dest=out\n", 0},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -130,6 +133,12 @@ func TestCachePoisoningSccache(t *testing.T) {
 		{"the variable on the step", job("", sccache+"        env:\n          SCCACHE_GHA_ENABLED: 'true'\n"), 1},
 		{"the variable switched off", job("env:\n  SCCACHE_GHA_ENABLED: 'false'\n", sccache), 0},
 		{"the variable is 0", job("env:\n  SCCACHE_GHA_ENABLED: '0'\n", sccache), 0},
+		{"the step switches off what the workflow switches on", job("env:\n  SCCACHE_GHA_ENABLED: 'true'\n", sccache+"        env:\n          SCCACHE_GHA_ENABLED: 'false'\n"), 0},
+		{"the job switches off what the workflow switches on", job("env:\n  SCCACHE_GHA_ENABLED: 'true'\n", "    env:\n      SCCACHE_GHA_ENABLED: '0'\n"+sccache), 0},
+		{"the step switches on what the job switches off", job("", "    env:\n      SCCACHE_GHA_ENABLED: 'false'\n"+sccache+"        env:\n          SCCACHE_GHA_ENABLED: 'true'\n"), 1},
+		{"maturin with an unknown cache and a condition on sccache", job("", "    steps:\n      - uses: PyO3/maturin-action@v1\n        with:\n          cache: ${{ vars.C }}\n          sccache: ${{ !startsWith(github.ref, 'refs/tags/') }}\n"), 1},
+		{"maturin with cache none and a condition on sccache", job("", "    steps:\n      - uses: PyO3/maturin-action@v1\n        with:\n          cache: none\n          sccache: ${{ !startsWith(github.ref, 'refs/tags/') }}\n"), 0},
+		{"maturin with cache sccache and a condition on sccache", job("", "    steps:\n      - uses: PyO3/maturin-action@v1\n        with:\n          cache: sccache\n          sccache: ${{ !startsWith(github.ref, 'refs/tags/') }}\n"), 1},
 		{"an expression is not known to be false", job("env:\n  SCCACHE_GHA_ENABLED: ${{ vars.SCCACHE }}\n", sccache), 1},
 		{"set by a script", job("", sccache+"      - run: echo \"SCCACHE_GHA_ENABLED=true\" >> \"$GITHUB_ENV\"\n"), 1},
 		{"maturin with sccache", job("", "    steps:\n      - uses: PyO3/maturin-action@v1\n        with:\n          sccache: 'true'\n"), 1},
@@ -167,6 +176,7 @@ func TestCachePoisoningBuildxNeedsAVersion(t *testing.T) {
 		{"version and no binary cache", job("        with:\n          version: latest\n          cache-binary: false\n"), false, 0},
 		{"pedantic and no binary cache", job("        with:\n          cache-binary: false\n"), true, 0},
 		{"pedantic and v2", strings.Replace(job(""), "@v3", "@v2", 1), true, 0},
+		{"pedantic and a commit with a v2 comment", strings.Replace(job(""), "@v3", "@8f4e6a1b2c3d4e5f60718293a4b5c6d7e8f90a1b # v2.10.0", 1), true, 0},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -272,5 +282,73 @@ func TestCachePoisoningEveryTagPatternIsARun(t *testing.T) {
 	src = strings.Replace(src, "'cli-v'", "'other-'", 1)
 	if got := cacheCount(t, false, src); got != 0 {
 		t.Errorf("a condition that none of the patterns satisfies: want 0 findings but got %d", got)
+	}
+}
+
+func TestCachePoisoningHandoffFollowsTheConditions(t *testing.T) {
+	const head = "on:\n  push:\n    tags: ['v*']\n  workflow_dispatch:\npermissions:\n  contents: read\n"
+	build := func(uploadIf string) string {
+		return "jobs:\n  build:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: Swatinem/rust-cache@v2\n      - uses: actions/upload-artifact@v4\n" + uploadIf + "        with:\n          name: d\n          path: d\n"
+	}
+	publish := func(cond string) string {
+		return "  publish:\n    needs: build\n" + cond + "    runs-on: ubuntu-latest\n    permissions:\n      contents: write\n    steps:\n      - run: echo\n"
+	}
+	tests := []struct {
+		name string
+		src  string
+		want int
+	}{
+		{"both run on tags", head + build("") + publish(""), 1},
+		{"the publisher only runs on a dispatch", head + build("") + publish("    if: github.event_name == 'workflow_dispatch'\n"), 0},
+		{"the publisher runs on tags", head + build("") + publish("    if: startsWith(github.ref, 'refs/tags/')\n"), 1},
+		{"the upload is skipped on tags", head + build("        if: github.event_name == 'workflow_dispatch'\n") + publish(""), 0},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := cacheCount(t, false, tc.src); got != tc.want {
+				t.Errorf("want %d findings but got %d", tc.want, got)
+			}
+		})
+	}
+}
+
+func TestCachePoisoningManyTagPatterns(t *testing.T) {
+	src := "on:\n  push:\n    tags: ['a-*', 'b-*', 'c-*', 'd-*', 'e-*', 'f-*', 'g-*', 'h-*', 'i-*', 'v*']\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: Swatinem/rust-cache@v2\n        if: startsWith(github.ref_name, 'v')\n"
+	if got := cacheCount(t, false, src); got != 1 {
+		t.Errorf("want 1 finding but got %d", got)
+	}
+}
+
+func TestCachePoisoningSccacheInACompositeAction(t *testing.T) {
+	// the variable may come from the workflow that calls the action, which is not known: the finding stays, unless the
+	// step of the action switches it off
+	const step = "    - uses: Mozilla-Actions/sccache-action@v0.0.9\n"
+	action := func(env string) string {
+		return "name: x\ndescription: d\nruns:\n  using: composite\n  steps:\n" + step + env
+	}
+	const caller = "on:\n  push:\n    tags: ['v*']\nenv:\n  SCCACHE_GHA_ENABLED: 'true'\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: ./.github/actions/x\n"
+	tests := []struct {
+		name string
+		env  string
+		want int
+	}{
+		{"the caller sets it", "", 1},
+		{"the step switches it off", "      env:\n        SCCACHE_GHA_ENABLED: 'false'\n", 0},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			root := writeProject(t, map[string]string{
+				".github/workflows/ci.yml":     caller,
+				".github/actions/x/action.yml": action(tc.env),
+			})
+			l := newActionLinter(t, root, io.Discard, LinterOptions{}, "rules:\n  cache-poisoning: warn\n")
+			errs, err := l.LintFiles([]string{filepath.Join(root, ".github", "actions", "x", "action.yml")}, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := policyErrorsOf(errs, "cache-poisoning"); len(got) != tc.want {
+				t.Errorf("want %d findings but got %v", tc.want, got)
+			}
+		})
 	}
 }

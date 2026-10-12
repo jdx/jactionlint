@@ -3731,10 +3731,11 @@ branches (`push` with a `branches:` filter whose every positive pattern is `rele
 or `releases/`; `branches: [main, 'release/**']` is the filter of ordinary checks and does not count), or when the job
 uses a publishing action (such as `pypa/gh-action-pypi-publish`, `softprops/action-gh-release` or `goreleaser/goreleaser-action`)
 or runs a publishing command (`cargo publish`, `npm publish`, `twine upload`, `gh release create`, `docker push`, ...).
-`docker/build-push-action` publishes when it may push: `push` is anything but a false value (an expression such as
-`push: ${{ github.event_name != 'pull_request' }}` is not known to be false, and the image is pushed on the runs where it is true) or
-`outputs` asks for the registry (`type=registry`, `push=true`, as in `type=image,push-by-digest=true,push=true`); without either
-the action does not push, because the default of `push` is false. In a release job the rule reports the steps which restore a cache:
+`docker/build-push-action` publishes when it may push. A non-empty `outputs` is what buildx receives and the `push` shorthand is not applied
+to it, so it decides alone: `type=registry` or `push=true` (as in `type=image,push-by-digest=true,push=true`) push, also next to
+`push: false`, and a local export does not, also next to `push: true`. Without `outputs`, `push` decides: anything but a false value pushes
+(an expression such as `push: ${{ github.event_name != 'pull_request' }}` is not known to be false, and the image is pushed on the runs where it
+is true), and the default is false. In a release job the rule reports the steps which restore a cache:
 
 | Action | Restores a cache unless |
 | --- | --- |
@@ -3753,7 +3754,7 @@ the action does not push, because the default of `push` is false. In a release j
 | `actions-rust-lang/setup-rust-toolchain` | `cache: false` |
 | `mlugg/setup-zig` | `use-cache: false` |
 | `PyO3/maturin-action` | `sccache` is missing or `false` and `cache` is not `sccache` (it sets `SCCACHE_GHA_ENABLED`) |
-| `Mozilla-Actions/sccache-action` | `SCCACHE_GHA_ENABLED` is not set to a value other than `false` or `0` in the `env` of the step, the job or the workflow, or by a script of the job: the action only installs sccache, which uses the cache of GitHub when that variable says so |
+| `Mozilla-Actions/sccache-action` | `SCCACHE_GHA_ENABLED` is not set to a value other than `false` or `0`: the action only installs sccache, which uses the cache of GitHub when that variable says so. The `env` of the step, then of the job, then of the workflow decides (the most specific one that sets it), and a script of the job that mentions the variable counts as setting it unless the step does. In a composite action the variable may come from the workflow that calls it, which is not known, so the finding stays unless the step switches it off |
 | `hendrikmuhs/ccache-action`, `DeterminateSystems/magic-nix-cache-action`, `awalsh128/cache-apt-pkgs-action`, `nix-community/cache-nix-action` | never: remove the step |
 
 A `tags:` filter that lets no tag through is no tag trigger: `tags: ['!**']`, a list of negative patterns only (GitHub requires one
@@ -3764,7 +3765,7 @@ hands no artifact to a job that can publish, the tag does not make it a release 
 (`actions/upload-artifact`) and a job which can publish needs it, directly or through other jobs: one with an `environment:`, a publishing
 command or action, or a write permission to `contents`, `packages`, `attestations`, `pages`, `deployments` or `id-token` (a job that
 only comments on pull requests or reads a secret to notify a chat is not a publisher). That job builds what the other publishes, so
-a poisoned cache in it ends up in the release; a test job that only has to pass before the release hands over nothing and is not reported. This is a heuristic:
+a poisoned cache in it ends up in the release. The upload step and the jobs that need it are judged by their `if:` for the runs that publish, so an upload or a publisher that only runs on a manual dispatch does not count; a test job that only has to pass before the release hands over nothing and is not reported. This is a heuristic:
 without `permissions:` the token is whatever the repository sets, so the job may publish, and a job can still publish with a secret
 that it does not name (the secret of a reusable workflow, a credential stored on the runner). The `release` event always counts.
 The list of publishing actions grows with the well-known publishers (crates.io, container registries, Homebrew bumps, Azure, Google Cloud
