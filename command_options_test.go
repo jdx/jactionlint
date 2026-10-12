@@ -2,6 +2,7 @@ package jactionlint
 
 import (
 	"bytes"
+	"errors"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -383,6 +384,11 @@ func TestNoStaleV1Options(t *testing.T) {
 	sort.Strings(files)
 	for _, file := range files {
 		b, err := os.ReadFile(filepath.FromSlash(file))
+		if errors.Is(err, fs.ErrNotExist) {
+			// The tests of other packages run in parallel and create and remove temporary files under scripts/*/testdata
+			// (generate-availability writes _test_output.go): a file that is gone since the walk is not stale
+			continue
+		}
 		if err != nil {
 			t.Fatal(err)
 		}
