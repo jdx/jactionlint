@@ -3,6 +3,7 @@ package jactionlint
 import (
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -48,7 +49,7 @@ func TestReportingNeverWritesSourcesForEveryFixture(t *testing.T) {
 		{"--format", "sarif"},
 		{"--format", "summary"},
 		{"--diff"},
-		{"--diff=unsafe"},
+		{"--fix=unsafe", "--diff"},
 		{"--diff", "--format", "sarif"},
 	}
 	for _, f := range fixtureWorkflows(t) {
@@ -64,7 +65,11 @@ func TestReportingNeverWritesSourcesForEveryFixture(t *testing.T) {
 				dir, path := writeWorkflow(t, content)
 				before := dirSnapshot(t, dir)
 				for _, args := range outputs {
-					runRegression(t, append(slices.Clone(args), path)...)
+					// 0 is a clean run and 1 a run with findings; 2 and up is a command that failed before it linted anything
+					code, stdout, stderr := runRegression(t, append(slices.Clone(args), path)...)
+					if code != ExitStatusSuccessNoProblem && code != ExitStatusSuccessProblemFound {
+						t.Fatalf("%v: exit status %d\nstdout: %s\nstderr: %s", args, code, stdout, stderr)
+					}
 					after := dirSnapshot(t, dir)
 					if len(after) != len(before) {
 						t.Fatalf("%v: files created or removed: %d -> %d", args, len(before), len(after))
@@ -83,6 +88,10 @@ func TestReportingNeverWritesSourcesForEveryFixture(t *testing.T) {
 	}
 }
 
+// ignoreDirectiveLine matches a comment-only line which is an ignore directive: `# jactionlint ignore=`, its older
+// spelling `# actionlint ignore=`, or `# zizmor: ignore[`.
+var ignoreDirectiveLine = regexp.MustCompile(`^#\s*(j?actionlint\s+ignore=|zizmor:\s*ignore\[)`)
+
 // keptLines are the lines of src that a fix must leave as they are: every uses: line (with its
 // version comment) and every comment-only line except the ignore comments. The BOM is not part of the first line.
 func keptLines(src string) []string {
@@ -90,8 +99,9 @@ func keptLines(src string) []string {
 	for _, line := range strings.Split(strings.ReplaceAll(src, "\r\n", "\n"), "\n") {
 		line = strings.TrimPrefix(line, "\ufeff")
 		trim := strings.TrimSpace(line)
-		// unused-ignore removes an ignore comment which suppresses nothing: that is its fix.
-		if strings.Contains(trim, "ignore") && strings.HasPrefix(trim, "#") {
+		// unused-ignore removes an ignore directive which suppresses nothing: that is its fix. Ordinary comments
+		// that merely contain the word, such as "the guard ignores the non-matching hour", stay checked.
+		if ignoreDirectiveLine.MatchString(trim) {
 			continue
 		}
 		if strings.Contains(trim, "uses:") || strings.HasPrefix(trim, "#") {

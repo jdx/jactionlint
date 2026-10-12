@@ -163,21 +163,21 @@ Audits with misses, at a tolerance of 3 lines:
 | `unpinned-uses` | 21,203 | 20,447 | 756 |
 | `artipacked` | 10,703 | 9,994 | 709 |
 | `cache-poisoning` | 1,038 | 419 | 619 |
+| `obfuscation` | 291 | 120 | 171 |
 | `unpinned-images` | 609 | 472 | 137 |
 | `archived-uses` | 109 | 0 | 109 |
 | `superfluous-actions` | 1,036 | 940 | 96 |
 | `dangerous-triggers` | 777 | 705 | 72 |
 | `dependabot-cooldown` | 892 | 848 | 44 |
-| `obfuscation` | 291 | 120 | 171 |
 | `adhoc-packages` | 1,071 | 1,032 | 39 |
 | `template-injection` | 24,181 | 24,142 | 39 |
 | `use-trusted-publishing` | 112 | 79 | 33 |
 | `github-env` | 63 | 31 | 32 |
 | `bot-conditions` | 38 | 34 | 4 |
+| `self-repository` | 10,729 | 10,728 | 1 |
 
-`secrets-inherit`, `self-repository` (1 missed), `github-app`, `misfeature`, `overprovisioned-secrets`, `unpinned-tools`,
-`unsound-condition`, `unsound-ternary` and `unsound-contains` (1 missed) have no or almost no misses, and every audit not listed has no
-finding on either side. `archived-uses` is 0 of 109 because it is an online audit here: the offline run of zizmor reports it and
+These audits have findings and no misses: `github-app`, `misfeature`, `overprovisioned-secrets`, `secrets-inherit`, `unpinned-tools`,
+`unsound-condition`, `unsound-contains` and `unsound-ternary`. Every audit not listed has no finding on either side. `archived-uses` is 0 of 109 because it is an online audit here: the offline run of zizmor reports it and
 jactionlint does not without `--online`.
 
 What this run does **not** say. The misses were not analyzed one by one, so none of them is claimed to be a known gap or a regression,
