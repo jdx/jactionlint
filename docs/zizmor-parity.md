@@ -118,7 +118,7 @@ report the same audit in the same file on the same line, or within a few lines w
 other at its `uses:`. The online audits (`--online`) are measured separately, see [online audits](#online-audits). Only workflow files
 are compared. Rules with no entry in the mapping of the harness are always "only jactionlint" in its report.
 
-The comparison below is over 1,109 local clones of public repositories, with `--line-tolerance 3`. zizmor reports 112,559 findings and
+The comparison below uses jactionlint from `main` at v2.1.0 over 1,109 local clones of public repositories, with `--line-tolerance 3`. zizmor reports 112,559 findings and
 jactionlint also reports 98,611 of them (87.6%); 13,948 are missed. Without the line tolerance 91,315 match (81.1%); the difference is
 mostly `artipacked`, `template-injection` and `dangerous-triggers`, where the tools point at different lines of the same finding. The
 numbers are measured again with the harness before each release. Audits with misses, at a tolerance of 3 lines:
