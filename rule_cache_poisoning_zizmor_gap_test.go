@@ -84,6 +84,11 @@ func TestCachePoisoningImagePush(t *testing.T) {
 		{"the registry as an output", "        with:\n          outputs: type=registry\n", 1},
 		{"push by digest", "        with:\n          outputs: type=image,\"name=ghcr.io/o/r\",push-by-digest=true,push=true\n", 1},
 		{"push in an expression of the output", "        with:\n          outputs: type=image,name=x,push=${{ env.PUSH }}\n", 1},
+		{"a path in a local output", "        with:\n          push: false\n          outputs: type=local,dest=${{ runner.temp }}/out\n", 0},
+		{"a name in an image output", "        with:\n          outputs: type=image,name=${{ env.IMAGE }}\n", 0},
+		{"the type from an input", "        with:\n          outputs: type=${{ inputs.type }},dest=out\n", 1},
+		{"push from an expression in a quoted field", "        with:\n          outputs: type=image,\"push=${{ !inputs.dry_run }}\"\n", 1},
+		{"the key from an expression", "        with:\n          outputs: type=image,${{ inputs.opt }}=true\n", 1},
 		{"outputs from an input, push true", "        with:\n          push: true\n          outputs: ${{ inputs.outputs }}\n", 1},
 		{"outputs from an input", "        with:\n          outputs: ${{ inputs.outputs }}\n", 1},
 		{"an output to a directory", "        with:\n          outputs: type=local,dest=out\n", 0},
@@ -297,6 +302,8 @@ func TestCachePoisoningHandoffFollowsTheConditions(t *testing.T) {
 	publish := func(cond string) string {
 		return "  publish:\n    needs: build\n" + cond + "    runs-on: ubuntu-latest\n    permissions:\n      contents: write\n    steps:\n      - run: echo\n"
 	}
+	const skippedTest = "  test:\n    needs: build\n    if: github.event_name == 'workflow_dispatch'\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo\n"
+	const pub = "    runs-on: ubuntu-latest\n    permissions:\n      contents: write\n    steps:\n      - run: echo\n"
 	tests := []struct {
 		name string
 		src  string
@@ -307,12 +314,24 @@ func TestCachePoisoningHandoffFollowsTheConditions(t *testing.T) {
 		{"the publisher runs on tags", head + build("") + publish("    if: startsWith(github.ref, 'refs/tags/')\n"), 1},
 		{"a skipped test, then a release that runs always", head + build("") + "  test:\n    needs: build\n    if: github.event_name == 'workflow_dispatch'\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo\n  publish:\n    needs: test\n    if: always()\n    runs-on: ubuntu-latest\n    permissions:\n      contents: write\n    steps:\n      - run: echo\n", 1},
 		{"a skipped test, then a release without a status function", head + build("") + "  test:\n    needs: build\n    if: github.event_name == 'workflow_dispatch'\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo\n  publish:\n    needs: test\n    runs-on: ubuntu-latest\n    permissions:\n      contents: write\n    steps:\n      - run: echo\n", 0},
+		{"after a skipped test: not cancelled and the test passed", head + build("") + skippedTest + "  publish:\n    needs: test\n    if: ${{ !cancelled() && needs.test.result == 'success' }}\n" + pub, 0},
+		{"after a skipped test: no status function, so success() is implied", head + build("") + skippedTest + "  publish:\n    needs: test\n    if: github.event_name == 'push'\n" + pub, 0},
+		{"after a skipped test: success() and a push", head + build("") + skippedTest + "  publish:\n    needs: test\n    if: success() && github.event_name == 'push'\n" + pub, 0},
+		{"after a skipped test: not cancelled", head + build("") + skippedTest + "  publish:\n    needs: test\n    if: ${{ !cancelled() }}\n" + pub, 1},
+		{"after a skipped test: failure()", head + build("") + skippedTest + "  publish:\n    needs: test\n    if: failure()\n" + pub, 0},
+		{"after a skipped test: success() or a push", head + build("") + skippedTest + "  publish:\n    needs: test\n    if: success() || github.event_name == 'push'\n" + pub, 1},
+		{"after a skipped test: always and an unknown variable", head + build("") + skippedTest + "  publish:\n    needs: test\n    if: always() && vars.GO == 'y'\n" + pub, 0},
+		{"after a skipped test: the result is not success", head + build("") + skippedTest + "  publish:\n    needs: test\n    if: ${{ always() && needs.test.result != 'success' }}\n" + pub, 1},
+		{"a job that needs the build and a skipped test", head + build("") + skippedTest + "  publish:\n    needs: [build, test]\n" + pub, 0},
 		{"the upload is skipped on tags", head + build("        if: github.event_name == 'workflow_dispatch'\n") + publish(""), 0},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := cacheCount(t, false, tc.src); got != tc.want {
-				t.Errorf("want %d findings but got %d", tc.want, got)
+			// the jobs are in a map: the answer must not depend on the order in which they are visited
+			for i := 0; i < 25; i++ {
+				if got := cacheCount(t, false, tc.src); got != tc.want {
+					t.Fatalf("run %d: want %d findings but got %d", i, tc.want, got)
+				}
 			}
 		})
 	}

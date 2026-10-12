@@ -721,37 +721,70 @@ func (rule *RuleCachePoisoning) feedsPublishingJob(j *Job, scenarios []triggerSc
 	if j.ID == nil || rule.wf == nil || !uploadsArtifact(j, scenarios) {
 		return false
 	}
-	// A job that the release runs do not reach is skipped, and so is a job that needs a skipped one, unless its own
-	// condition has a status function (always(), !cancelled(), ...), which makes it run after a skipped job. Dependencies
-	// are followed through the skipped jobs, because a job after them may still run.
-	seen := map[string]bool{strings.ToLower(j.ID.Value): true}
-	skipped := map[string]bool{}
+	// The jobs that depend on j, directly or not, in a fixed order: the result must not depend on the order of the map.
+	root := strings.ToLower(j.ID.Value)
+	ids := make([]string, 0, len(rule.wf.Jobs))
+	jobs := map[string]*Job{}
+	for id, dep := range rule.wf.Jobs {
+		if dep != nil && strings.ToLower(id) != root {
+			ids = append(ids, strings.ToLower(id))
+			jobs[strings.ToLower(id)] = dep
+		}
+	}
+	slices.Sort(ids)
+	needs := func(dep *Job) []string {
+		var ret []string
+		for _, n := range dep.Needs {
+			if n != nil {
+				ret = append(ret, strings.ToLower(n.Value))
+			}
+		}
+		return ret
+	}
+	reach := map[string]bool{root: true}
 	for grew := true; grew; {
 		grew = false
-		for id, dep := range rule.wf.Jobs {
-			lid := strings.ToLower(id)
-			if seen[lid] || dep == nil {
+		for _, id := range ids {
+			if !reach[id] && slices.ContainsFunc(needs(jobs[id]), func(n string) bool { return reach[n] }) {
+				reach[id], grew = true, true
+			}
+		}
+	}
+	// A job runs when its condition lets the release runs through, and after a job that was skipped only when its
+	// condition calls a status function and is true then (runsAfterSkipped). A job is decided when every job that it
+	// needs among the dependents is, so the answer does not depend on the order in which the jobs are looked at; a
+	// job that never gets decided (a cycle) is taken as skipped.
+	skipped := map[string]bool{}
+	decided := map[string]bool{root: true}
+	for grew := true; grew; {
+		grew = false
+		for _, id := range ids {
+			if decided[id] || !reach[id] {
 				continue
 			}
-			needsJob, needsSkipped := false, false
-			for _, n := range dep.Needs {
-				if n == nil {
-					continue
+			var skippedNeeds []string
+			ready := true
+			for _, n := range needs(jobs[id]) {
+				if reach[n] && !decided[n] {
+					ready = false
 				}
-				ln := strings.ToLower(n.Value)
-				needsJob = needsJob || seen[ln]
-				needsSkipped = needsSkipped || skipped[ln]
+				if skipped[n] {
+					skippedNeeds = append(skippedNeeds, n)
+				}
 			}
-			if !needsJob {
+			if !ready {
 				continue
 			}
-			seen[lid], grew = true, true
-			runs := dep.If == nil || gateAllowsRun(dep.If.Value, scenarios)
-			if runs && needsSkipped && (dep.If == nil || !hasStatusFunction(dep.If.Value)) {
-				runs = false
+			dep := jobs[id]
+			var runs bool
+			if len(skippedNeeds) == 0 {
+				runs = dep.If == nil || gateAllowsRun(dep.If.Value, scenarios)
+			} else {
+				runs = dep.If != nil && runsAfterSkipped(dep.If.Value, scenarios, skippedNeeds)
 			}
+			decided[id], grew = true, true
 			if !runs {
-				skipped[lid] = true
+				skipped[id] = true
 			} else if rule.canPublish(dep) {
 				return true
 			}
@@ -760,11 +793,44 @@ func (rule *RuleCachePoisoning) feedsPublishingJob(j *Job, scenarios []triggerSc
 	return false
 }
 
-// hasStatusFunction reports whether a condition calls a status function, which makes the job run when a job that it
-// needs was skipped or failed.
-func hasStatusFunction(cond string) bool {
-	c := strings.ToLower(cond)
-	return strings.Contains(c, "always()") || strings.Contains(c, "cancelled()") || strings.Contains(c, "failure()")
+// runsAfterSkipped reports whether a job with this condition runs although jobs that it needs were skipped. A job
+// without a status function in its condition gets success() added, which is false then; one with a status function
+// is evaluated with success(), failure() and cancelled() false (a skipped job did not fail, and nothing was
+// cancelled), always() true, and the result of each skipped job "skipped". It runs only when that is true: a condition
+// that is not known leaves the job out (no finding when unsure).
+func runsAfterSkipped(cond string, scenarios []triggerScenario, skippedNeeds []string) bool {
+	e := parseGateExpression(cond)
+	if e == nil || !exprCallsStatus(e) {
+		return false
+	}
+	for _, sc := range scenarios {
+		cp := triggerScenario{"status.success": "false", "status.failure": "false", "status.cancelled": "false"}
+		for k, v := range sc {
+			cp[k] = v
+		}
+		for _, n := range skippedNeeds {
+			cp["needs."+n+".result"] = "skipped"
+		}
+		if evalGate(e, cp).truth() == triTrue {
+			return true
+		}
+	}
+	return false
+}
+
+// exprCallsStatus reports whether the expression calls success(), failure(), cancelled() or always(), which
+// stops GitHub from adding success() to the condition of a job.
+func exprCallsStatus(e ExprNode) bool {
+	found := false
+	VisitExprNode(e, func(n, _ ExprNode, entering bool) {
+		if f, ok := n.(*FuncCallNode); ok && entering {
+			switch strings.ToLower(f.Callee) {
+			case "success", "failure", "cancelled", "always":
+				found = true
+			}
+		}
+	})
+	return found
 }
 
 // secretRefRe finds a read of a secret: secrets.NAME (group 1), secrets['NAME'] (group 2), or any other form
@@ -1073,12 +1139,37 @@ func publishingReason(steps []*Step) string {
 // value pushes (an expression such as "${{ inputs.push }}" is not known to be false), and the default is false.
 func buildPushPushes(a *ExecAction) bool {
 	if out, _ := a.input("outputs"); strings.TrimSpace(out) != "" {
-		// an expression in it may resolve to the registry, or to nothing, and then "push" applies: it may publish
-		return buildOutputPushRe.MatchString(out) || strings.Contains(out, "${{")
+		return buildOutputPushRe.MatchString(out) || buildOutputMayChange(out)
 	}
 	v, _ := a.input("push")
 	v = strings.TrimSpace(v)
 	return v != "" && !isFalseLiteral(v)
+}
+
+// outputExprRe finds an expression in the outputs of a build.
+var outputExprRe = regexp.MustCompile(`\$\{\{.*?\}\}`)
+
+// buildOutputMayChange reports whether an expression in "outputs" can change what the output does: it is the whole
+// field, or in a key, or in the value of "type" or "push" (it may resolve to the registry, or to nothing, and then
+// "push" applies). An expression in another value, as in "type=local,dest=${{ runner.temp }}", only supplies a path
+// or a name.
+func buildOutputMayChange(out string) bool {
+	if !strings.Contains(out, "${{") {
+		return false
+	}
+	out = outputExprRe.ReplaceAllString(out, "\x00")
+	for _, f := range strings.FieldsFunc(out, func(r rune) bool { return r == ',' || r == '\n' }) {
+		f = strings.Trim(strings.TrimSpace(f), `"'`)
+		if !strings.Contains(f, "\x00") {
+			continue
+		}
+		key, val, ok := strings.Cut(f, "=")
+		key = strings.ToLower(strings.TrimSpace(key))
+		if !ok || strings.Contains(key, "\x00") || (key == "type" || key == "push") && strings.Contains(val, "\x00") {
+			return true
+		}
+	}
+	return false
 }
 
 // buildOutputPushRe finds the options of the "outputs" of docker/build-push-action which push the image.

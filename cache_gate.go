@@ -153,6 +153,14 @@ func evalGate(n ExprNode, sc triggerScenario) gateValue {
 	case *StringNode:
 		return gateValue{kind: 2, s: n.Value}
 	case *ObjectDerefNode:
+		// needs.<job>.result of a job that is known to be skipped
+		if d, ok := n.Receiver.(*ObjectDerefNode); ok && n.Property == "result" {
+			if v, ok := d.Receiver.(*VariableNode); ok && v.Name == "needs" {
+				if s, ok := sc["needs."+strings.ToLower(d.Property)+".result"]; ok {
+					return gateValue{kind: 2, s: s}
+				}
+			}
+		}
 		if v, ok := n.Receiver.(*VariableNode); ok && v.Name == "github" {
 			if s, ok := sc[n.Property]; ok {
 				return gateValue{kind: 2, s: s}
@@ -221,8 +229,16 @@ func evalGate(n ExprNode, sc triggerScenario) gateValue {
 		}
 	case *FuncCallNode:
 		switch strings.ToLower(n.Callee) {
-		case "always", "success":
+		case "always":
 			return gateBool(true)
+		case "success", "failure", "cancelled":
+			// the status of the run: success() unless the scenario says what it is after a skipped job
+			if v, ok := sc["status."+strings.ToLower(n.Callee)]; ok {
+				return gateBool(v == "true")
+			}
+			if strings.EqualFold(n.Callee, "success") {
+				return gateBool(true)
+			}
 		case "startswith", "endswith", "contains":
 			if len(n.Args) != 2 {
 				break
