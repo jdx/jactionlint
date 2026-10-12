@@ -26,7 +26,7 @@ How to read the table:
 | `archived-uses` | `archived-uses` | online | partial: all archived repositories are found; see [online audits](#online-audits) |
 | `artipacked` | `artipacked` | default | full on the corpus, with a fix. A checkout that a later `git push` needs and `actions/checkout@v1` are not reported |
 | `bot-conditions` | `bot-conditions` | default | partial: `github.actor`, `github.triggering_actor`, `github.actor_id` and `github.event.sender.*` compared with a bot (`==`, `contains()`, `startsWith()`, `endsWith()`) in job and step `if:`. `!=` and negated tests are not reported, as in zizmor. `--fix=unsafe` only for workflows with `pull_request`/`pull_request_target` events. Bot names without `[bot]` are known by ID and prefix only. Judged by the events that reach the job, also through local reusable workflows: not reported when only `push`-like events (`push`, `schedule`, `workflow_dispatch`, ...) can run it, and the suggestion says that the author field is missing on the other events of a mixed workflow. Composite actions: the fix needs every local caller to run on a pull request event |
-| `cache-poisoning` | `cache-poisoning` | default | partial: a fixed table of cache actions, `tags-ignore` is not a release trigger, and neither is a `tags:` filter that lets no tag through or a tag-triggered workflow whose token is read-only and whose job publishes nothing (zizmor reports both). `setup-node` v5 and later and `docker/setup-buildx-action` are covered; the automatic cache of `setup-node` is judged by the `package.json` of the repository. A step guarded by `if: !startsWith(github.ref, 'refs/tags/')` is evaluated for the release scenarios, where zizmor reports it |
+| `cache-poisoning` | `cache-poisoning` | default, with the option `pedantic` | partial: a fixed table of cache actions and publishing actions. 43% of the findings of zizmor on the corpus are reported by default and 72% with the option `pedantic`, which adds zizmor's two heuristics (a tag with read-only permissions, a `branches:` filter that names a release branch among others) and has a measured false-positive rate of about 90%; most of the rest is zizmor reporting a cache that the action does not restore. See [cache-poisoning against zizmor](#cache-poisoning-against-zizmor). `tags-ignore` is not a release trigger, neither is a `tags:` filter that lets no tag through. `setup-node` v5 and later and `docker/setup-buildx-action` are covered, judged by the `package.json` of the repository and by `version`. A step guarded by `if: !startsWith(github.ref, 'refs/tags/')` is evaluated for the release scenarios, where zizmor reports it |
 | `concurrency-limits` | `concurrency-limits` | default | full: only a missing `concurrency:` and the bare group form are reported, not `cancel-in-progress: false` |
 | `dangerous-triggers` | `dangerous-triggers` | default | full; adds `issue_comment`, which zizmor flags from 1.31; reported at the trigger, zizmor reports at `on:`. `pull_request_target` with only `actions/labeler` is exempt in both |
 | `dependabot-cooldown` | `dependabot-cooldown` | default | full on the corpus, plus true positives that zizmor 1.30.1 misses (it stops at the first update which satisfies the minimum). `--fix` needs the `default-days` option; zizmor has a built-in 7. The `semver-*-days` keys are checked by neither |
@@ -230,12 +230,83 @@ actions.
 - `dangerous-triggers` also reports `issue_comment` (zizmor flags it from the version after 1.30.1) and reports at the trigger, where
   zizmor reports at `on:`.
 - `undocumented-permissions` accepts a comment above a scope as well as at its end of line (zizmor: end of line only).
-- `cache-poisoning` does not treat `push: {tags-ignore: ["*"]}` as a release workflow.
+- `cache-poisoning` does not treat `push: {tags-ignore: ["*"]}` as a release workflow, and does not take a tag with read-only permissions, or a
+  `branches:` filter with a release branch next to others, for a release unless the option `pedantic` is on (see
+  [cache-poisoning against zizmor](#cache-poisoning-against-zizmor)).
 - `ref-version-mismatch` does not report a missing or version-less comment (zizmor does, as a pedantic finding): a missing comment is
   not a mismatch. This is a gap, and a candidate for a separate offline rule.
 - `obfuscation` does not report `fromJSON(toJSON(context))`; constants in `if:` are `constant-condition` and `if-always-true`.
 - A rule has one level, where zizmor grades a finding by confidence and persona. Every rule of `correctness` and `default` is an
   `error`; the `pedantic` findings of an audit share the level of the rule.
+
+## Cache poisoning against zizmor
+
+The corpus has 1,109 repositories. zizmor 1.30.1 (`--persona auditor --offline`) reports 1,041 `cache-poisoning` findings on 237 of them.
+Both tools were run per repository, jactionlint with only this rule enabled, and a finding counts as shared when both report the same
+file and line (the `uses:` of the step). Before the work of this section jactionlint reported 411 of the 1,041 and 553 findings that zizmor
+does not have; the 288 that remain are all zizmor reporting something that jactionlint has a reason not to.
+
+| | findings of zizmor | share |
+| --- | --: | --: |
+| reported before | 411 | 39% |
+| new by default | 39 | 4% |
+| new with the option `pedantic` | 303 | 29% |
+| not reported | 288 | 28% |
+
+Every finding of zizmor that was not reported was classified by finding out where the rule stopped (a debug trace of the rule) and
+by reading the action. **(a)** real and cheap to cover; **(b)** real but needing more analysis; **(c)** a finding of zizmor that is not
+one.
+
+- **(a), reported by default now** (39 findings of zizmor and 34 more of jactionlint, 73 in all):
+  - a job that is a check by its permissions, in a workflow on pushed tags, but uploads an artifact for a job that can publish
+    (`needs`, directly or through another job; a job with an `environment`, a publishing command or action, or a write permission
+    for `contents`, `packages`, `attestations`, `pages`, `deployments` or `id-token`). The job builds what the other job publishes;
+  - `docker/build-push-action` with `push` set to an expression (`${{ inputs.push }}`, `${{ github.event_name != 'pull_request' }}`)
+    or with `outputs` that push (`type=registry`, `push=true`) is a publisher; before, only the literal `push: true` was;
+  - the publishers that zizmor knows and the table lacked (`jreleaser/release-action`, `release-drafter/release-drafter`,
+    `aws-actions/aws-cloudformation-github-deploy`, `azure/aci-deploy`, `azure/container-apps-deploy-action`, `azure/sql-action`,
+    `google-github-actions/deploy-cloud-functions`);
+  - `PyO3/maturin-action` with `sccache` (or `cache: sccache`) and `Mozilla-Actions/sccache-action` with `SCCACHE_GHA_ENABLED`;
+  - the conditions: a tag filter of `preview-*` now gives the run the tag `preview-1.0.0` (before, always `v1.0.0`), every positive pattern
+    is a run, and a condition that is open only in a part that says nothing about the trigger (`github.repository == 'o/r' &&
+    !startsWith(github.ref_name, 'go/')`, `github.event_name == 'push' && !contains(needs.release.outputs.version, '-')`) no longer
+    leaves the run out. That recovered release workflows of `apache/fory`, `getsentry/MobileBuildMCP` and others.
+- **(a) with the option `pedantic`**: 303 findings of zizmor, 114 of them a workflow on pushed tags with read-only permissions that
+  publishes nothing itself and 189 a `branches:` filter that names a release branch next to others (`[main, 'release/**']`).
+  They are the heuristics of zizmor, and they are not cheap in false positives (below), so they are the tier of the option.
+- **(b)** none that could be separated from (c): what is left is described by the next classes, and none could be decided without
+  running the workflow.
+- **(c), not reported on purpose** (288):
+  - 185 `actions/setup-node` v5 and later in a repository whose `package.json` names no package manager (or has none): the action
+    restores a cache only when it does. zizmor does not read the file. This is the documented difference;
+  - 64 `actions/setup-node` with a package manager that this version does not cache (v4, or pnpm, yarn or bun with v6 and later, which
+    cache npm only). The code of the action was read for v6.3.0, v7.0.0 and v7.1.0;
+  - 16 steps with a job or step condition that keeps the run of the release away (`if: github.ref == 'refs/heads/main'`, a manual
+    dispatch, a schedule). zizmor does not evaluate `if:`;
+  - 14 others: a step with a condition on the branch that cannot be decided (the release branch is not known), and
+    `docker/build-push-action` without `push` (zizmor counts the default as true; the default is false);
+  - 6 `actions/setup-go` before v4, which does not cache, and 3 `Mozilla-Actions/sccache-action` without `SCCACHE_GHA_ENABLED`, which
+    only installs the binary.
+
+### False-positive review
+
+All 73 new findings by default were read, one by one (34 repositories, with the workflow open): 71 are true positives (a release
+workflow, a job that pushes an image or publishes a release, a build job whose artifact a publishing job downloads) and 2 are
+doubtful, the build of `Cratis/Chronicle` (`hot-core-gate.yml`), where the manual dispatch pushes a test image tagged with the commit
+that the later jobs of the matrix use. Rate: 0 clear false positives, 2 of 73 doubtful.
+
+The option `pedantic` was sampled with 36 findings of 70 repositories (14 of a tag, 22 of a release branch, one per file, drawn
+with a fixed seed). 34 are jobs that publish nothing (a test, a lint, a smoke test, a documentation build in a CI workflow); the 2
+others are a wheel build and a smoke test of a release workflow. That is a false-positive rate of about 90%, which is why they are
+not the default.
+
+### Effect on the findings that were reported before
+
+`docker/setup-buildx-action` is reported only with `version` by default, as zizmor does: without it the action uses the buildx of the
+runner and does not download one, so nothing is restored from the cache (`src/main.ts` of the action: `download` runs when buildx is not
+available or `version` is set). That removes 242 findings from the 964 of the same run (174 on `ubuntu-*` or `windows-*`
+runners, 63 on a matrix runner, 1 self-hosted, 4 in composite actions); the option `pedantic` brings them back. A self-hosted runner
+without buildx is the one case that this does not cover.
 
 ## What is not done
 

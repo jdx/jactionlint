@@ -3730,15 +3730,18 @@ A job is a release job when the workflow runs on the `release` event, on pushed 
 branches (`push` with a `branches:` filter whose every positive pattern is `release`, `releases` or starts with `release/`, `release-`
 or `releases/`; `branches: [main, 'release/**']` is the filter of ordinary checks and does not count), or when the job
 uses a publishing action (such as `pypa/gh-action-pypi-publish`, `softprops/action-gh-release` or `goreleaser/goreleaser-action`)
-or runs a publishing command (`cargo publish`, `npm publish`, `twine upload`, `gh release create`, `docker push`, ...). In a
-release job the rule reports the steps which restore a cache:
+or runs a publishing command (`cargo publish`, `npm publish`, `twine upload`, `gh release create`, `docker push`, ...).
+`docker/build-push-action` publishes when it may push: `push` is anything but a false value (an expression such as
+`push: ${{ github.event_name != 'pull_request' }}` is not known to be false, and the image is pushed on the runs where it is true) or
+`outputs` asks for the registry (`type=registry`, `push=true`, as in `type=image,push-by-digest=true,push=true`); without either
+the action does not push, because the default of `push` is false. In a release job the rule reports the steps which restore a cache:
 
 | Action | Restores a cache unless |
 | --- | --- |
 | `actions/cache`, `actions/cache/restore` | `lookup-only: true` |
 | `actions/setup-node`, `setup-python`, `setup-java`, `setup-dotnet` | the `cache` input is missing or `false` (`package-manager-cache: false` only turns off the automatic cache of `setup-node`, not an explicit `cache`) |
 | `actions/setup-node` v5 and later | `package-manager-cache: false` (or an expression of it that is false on the release), or `package.json` of the repository does not name a package manager. v5 caches on its own when the top-level `packageManager` of `package.json` names npm, yarn or pnpm with a version (`pnpm@9`), and ignores `devEngines`; v6 and later cache only when `devEngines.packageManager` (any entry) or the top-level `packageManager` names `npm`. Without a repository to read (a workflow linted on its own, a composite action) the answer is "caches" |
-| `docker/setup-buildx-action` v3 and later | `cache-binary: false` (it caches the buildx binary) |
+| `docker/setup-buildx-action` v3 and later | `cache-binary: false` (it caches the buildx binary), or `version` is not set: the action downloads, and restores from the cache, a buildx only when `version` is set or the runner has none, and the images of the runners of GitHub have it. The option `pedantic` reports a use without `version` too, for a self-hosted runner without buildx |
 | `actions/setup-go` | `cache: false` (before `v4` the cache is opt-in) |
 | `ruby/setup-ruby` | `bundler-cache` is missing or `false` |
 | `astral-sh/setup-uv` | `enable-cache: false` |
@@ -3749,20 +3752,33 @@ release job the rule reports the steps which restore a cache:
 | `oven-sh/setup-bun` | `no-cache: true` (it caches the bun executable) |
 | `actions-rust-lang/setup-rust-toolchain` | `cache: false` |
 | `mlugg/setup-zig` | `use-cache: false` |
+| `PyO3/maturin-action` | `sccache` is missing or `false` and `cache` is not `sccache` (it sets `SCCACHE_GHA_ENABLED`) |
+| `Mozilla-Actions/sccache-action` | `SCCACHE_GHA_ENABLED` is not set to a value other than `false` or `0` in the `env` of the step, the job or the workflow, or by a script of the job: the action only installs sccache, which uses the cache of GitHub when that variable says so |
 | `hendrikmuhs/ccache-action`, `DeterminateSystems/magic-nix-cache-action`, `awalsh128/cache-apt-pkgs-action`, `nix-community/cache-nix-action` | never: remove the step |
 
 A `tags:` filter that lets no tag through is no tag trigger: `tags: ['!**']`, a list of negative patterns only (GitHub requires one
 positive pattern) and a list that ends with `!**`. A workflow that runs on pushed tags only to start checks is not a release
 either, and neither is a release branch: when the workflow or the job sets `permissions:` and grants nothing but read access (`read-all`, `{}`, `contents: read`),
-and the job has no `environment:`, reads no secret other than `GITHUB_TOKEN` and runs no publishing command or action, the tag does not make it a release job. This is a heuristic:
+and the job has no `environment:`, reads no secret other than `GITHUB_TOKEN`, runs no publishing command or action and
+hands no artifact to a job that can publish, the tag does not make it a release job. A job *hands over* when it uploads an artifact
+(`actions/upload-artifact`) and a job which can publish needs it, directly or through other jobs: one with an `environment:`, a publishing
+command or action, or a write permission to `contents`, `packages`, `attestations`, `pages`, `deployments` or `id-token` (a job that
+only comments on pull requests or reads a secret to notify a chat is not a publisher). That job builds what the other publishes, so
+a poisoned cache in it ends up in the release; a test job that only has to pass before the release hands over nothing and is not reported. This is a heuristic:
 without `permissions:` the token is whatever the repository sets, so the job may publish, and a job can still publish with a secret
 that it does not name (the secret of a reusable workflow, a credential stored on the runner). The `release` event always counts.
 The list of publishing actions grows with the well-known publishers (crates.io, container registries, Homebrew bumps, Azure, Google Cloud
-and AWS deploys, Vercel, Netlify, the app stores); one that is not in it is still found by its `run:` command or `cache-mode: none`.
+and AWS deploys, JReleaser, Release Drafter, Vercel, Netlify, the app stores); one that is not in it is still found by its `run:` command or `cache-mode: none`.
 
 The list is not exhaustive: it has the actions whose caching behavior is known. A step is not reported when its `if:` looks at
 `github.event_name` or `github.ref`, or an input is an expression which does, since that is how caching is limited to
-non-release runs (`enable-cache: ${{ !startsWith(github.ref, 'refs/tags/') }}`).
+non-release runs (`enable-cache: ${{ !startsWith(github.ref, 'refs/tags/') }}`). The conditions are evaluated for the runs that publish:
+the release event and a push of a tag, with the tag named after each pattern of `tags:` (`preview-*` gives `preview-1.0.0`, so
+`if: startsWith(github.ref, 'refs/tags/preview-')` lets the run through; a pattern with other wildcards gives `v1.0.0`). A condition
+that stays open is judged by the part that is not known: `github.repository == 'o/r' && !startsWith(github.ref_name, 'go/')` or
+`github.event_name == 'push' && !contains(needs.release.outputs.version, '-')` keep the finding, because what is not known (the
+repository, the output of another job) says nothing about the trigger, while `github.ref == format('refs/tags/{0}', inputs.tag)`
+does and leaves the run out.
 
 In a composite action, a step that is given `enable-cache: ${{ inputs.enable-cache }}` (or another switch of the table) is not reported
 when every release workflow of the repository that calls the action passes the input as a value that switches the cache off, or leaves
@@ -3776,6 +3792,12 @@ an input, the matrix or a variable) is unknown, and the finding stays.
 The rule also reports `cache-mode: write` and `cache-mode: write-only` in a workflow which runs on `pull_request_target`,
 `workflow_run` or `issue_comment`: code of untrusted people writes the entries which privileged workflows restore later.
 
+The option `pedantic` (on under the `pedantic` profile, `rules: {cache-poisoning: {pedantic: true}}` for one rule) takes the
+heuristics of zizmor for what a release is, which report mostly checks (34 of 36 sampled findings on the corpus of
+[the parity page](zizmor-parity.md#cache-poisoning-against-zizmor) were jobs that publish nothing): a workflow that runs on pushed tags is a release whatever its permissions, and so is one whose
+`branches:` filter names a release branch next to others (`branches: [main, 'release/**']`, any pattern with `release` in it). It also reports
+`docker/setup-buildx-action` without `version`.
+
 Differences from [zizmor](https://docs.zizmor.sh/audits/#cache-poisoning): zizmor reports a release workflow once for the trigger and once
 for each step. jactionlint reports the steps (and the job-level publishing detection is jactionlint only). Deliberately different:
 
@@ -3785,9 +3807,14 @@ for each step. jactionlint reports the steps (and the job-level publishing detec
   less than a full one.
 - zizmor does not look at `permissions:` to tell a check from a release on a tag, and reports a tag-only workflow with read-only
   permissions that restores a cache. jactionlint does not, because those workflows are mostly checks (a tag only starts them) and nothing
-  is published without a write permission, a secret or an environment; use `cache-mode: none` where one of them does publish.
-  The same holds for a push to a release branch. Not decided by zizmor and different here: a `branches:` filter that also names
-  other branches is not a release trigger.
+  is published without a write permission, a secret or an environment; use `cache-mode: none` where one of them does publish. A job
+  that uploads an artifact for a job which publishes is reported, as are the jobs of the `pedantic` option. The same holds for a push to
+  a release branch. zizmor takes a `branches:` filter that also names other branches (`[main, 'release/**']`) for a release trigger;
+  jactionlint does not, except with the option `pedantic`.
+- zizmor does not evaluate `if:`, so it reports a job that only runs on `main`, on a schedule or on a manual dispatch in a workflow that
+  also runs on tags. It takes every use of `docker/build-push-action` for a publisher whatever `push` says (the action does not push by
+  default), asks for a `version` before it takes `docker/setup-buildx-action` for a cache and reports `Mozilla-Actions/sccache-action` whether or not
+  `SCCACHE_GHA_ENABLED` is set. jactionlint does not report these.
 
 `astral-sh/setup-uv` from v10 on, with `enable-cache` unset or `auto`, does not restore a cache on the events that are open to cache
 poisoning, so it is not reported. The version is the tag of the `uses:`, or the version in the comment after a pinned commit

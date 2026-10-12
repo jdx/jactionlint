@@ -115,7 +115,8 @@ func TestCachePoisoningAutomaticCaches(t *testing.T) {
 		{"no package manager in package.json", `{"name": "x"}`, "      - uses: actions/setup-node@v5\n", 0},
 		{"no package.json", "-", "      - uses: actions/setup-node@v5\n", 0},
 		{"a commit with the version in its comment", `{"packageManager": "npm@10.0.0"}`, "      - uses: actions/setup-node@" + sha + " # v4.4.0\n", 0},
-		{"buildx", "", "      - uses: docker/setup-buildx-action@v3\n", 1},
+		{"buildx with a version", "", "      - uses: docker/setup-buildx-action@v3\n        with:\n          version: v0.19.0\n", 1},
+		{"buildx without a version: the runner has it", "", "      - uses: docker/setup-buildx-action@v3\n", 0},
 		{"buildx without the binary cache", "", "      - uses: docker/setup-buildx-action@v3\n        with:\n          cache-binary: false\n", 0},
 		{"buildx v2", "", "      - uses: docker/setup-buildx-action@v2\n", 0},
 	}
@@ -145,9 +146,9 @@ func TestCachePoisoningGatesOfRestoreSwitches(t *testing.T) {
 		step string
 		want int
 	}{
-		{"buildx binary cached", "      - uses: docker/setup-buildx-action@v3\n", 1},
+		{"buildx binary cached", "      - uses: docker/setup-buildx-action@v3\n        with:\n          version: latest\n", 1},
 		{"buildx binary cache off on tags", "      - uses: docker/setup-buildx-action@v3\n        with:\n          cache-binary: " + off + "\n", 0},
-		{"buildx binary cache on", "      - uses: docker/setup-buildx-action@v3\n        with:\n          cache-binary: ${{ startsWith(github.ref, 'refs/tags/') }}\n", 1},
+		{"buildx binary cache on", "      - uses: docker/setup-buildx-action@v3\n        with:\n          version: latest\n          cache-binary: ${{ startsWith(github.ref, 'refs/tags/') }}\n", 1},
 		{"node automatic cache off on tags", "      - uses: actions/setup-node@v5\n        with:\n          package-manager-cache: " + off + "\n", 0},
 		{"node automatic cache on", "      - uses: actions/setup-node@v5\n        with:\n          package-manager-cache: ${{ startsWith(github.ref, 'refs/tags/') }}\n", 1},
 		{"node automatic cache off next to cache: false", "      - uses: actions/setup-node@v5\n        with:\n          cache: false\n          package-manager-cache: " + off + "\n", 0},

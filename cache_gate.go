@@ -1,18 +1,53 @@
 package jactionlint
 
-import "strings"
+import (
+	"regexp"
+	"slices"
+	"strings"
+)
 
 // A triggerScenario describes a run of the workflow which publishes: the values of the github context that
 // are known for it. A key which is missing is unknown (for example the ref of a run that is not
 // a release).
 type triggerScenario map[string]string
 
-// releaseScenarios lists the runs on which a release workflow publishes: the release event and a push of a tag.
-// Both have a tag as the ref.
-var (
-	scenarioRelease = triggerScenario{"event_name": "release", "ref": "refs/tags/v1.0.0", "ref_type": "tag", "ref_name": "v1.0.0"}
-	scenarioTagPush = triggerScenario{"event_name": "push", "event.ref": "refs/tags/v1.0.0", "ref": "refs/tags/v1.0.0", "ref_type": "tag", "ref_name": "v1.0.0"}
-)
+// scenarioRelease is the run of the release event. The runs of a push of a tag are tagPushScenarios. Both have a tag as the ref.
+var scenarioRelease = triggerScenario{"event_name": "release", "ref": "refs/tags/v1.0.0", "ref_type": "tag", "ref_name": "v1.0.0"}
+
+// plainTagPatternRe is a tag pattern with "*" as its only wildcard.
+var plainTagPatternRe = regexp.MustCompile(`^[A-Za-z0-9._/*-]+$`)
+
+// tagPushScenarios are the runs of a push of a tag that the `tags` filter lets through, one for each positive
+// pattern. The name of the tag is not known, and a condition on it ("startsWith(github.ref, 'refs/tags/preview-')")
+// has to be judged for tags that the filter accepts: a pattern with "*" as its only wildcard gives a name ("v*" gives
+// v1.0.0, "preview-*" gives preview-1.0.0). Any other pattern, and one that lets every tag through, gives v1.0.0.
+// The condition lets the run through when it does for one of them.
+func tagPushScenarios(f *WebhookEventFilter) []triggerScenario {
+	names := []string{}
+	if !f.IsEmpty() {
+		for _, v := range f.Values {
+			if v == nil || strings.HasPrefix(strings.TrimSpace(v.Value), "!") {
+				continue
+			}
+			name := "v1.0.0"
+			if pat := strings.TrimSpace(v.Value); plainTagPatternRe.MatchString(pat) && strings.Trim(pat, "*") != "" {
+				name = strings.ReplaceAll(strings.ReplaceAll(pat, "**", "*"), "*", "1.0.0")
+			}
+			if !slices.Contains(names, name) && len(names) < 8 {
+				names = append(names, name)
+			}
+		}
+	}
+	if len(names) == 0 {
+		names = append(names, "v1.0.0")
+	}
+	ret := make([]triggerScenario, 0, len(names))
+	for _, name := range names {
+		ref := "refs/tags/" + name
+		ret = append(ret, triggerScenario{"event_name": "push", "event.ref": ref, "ref": ref, "ref_type": "tag", "ref_name": name})
+	}
+	return ret
+}
 
 // scenarioBranchPush is the push of a branch: the ref starts with refs/heads/, its type is branch and the name is
 // not known.
@@ -214,6 +249,39 @@ func evalGate(n ExprNode, sc triggerScenario) gateValue {
 	return gateValue{}
 }
 
+// mentionsTrigger reports whether the expression reads the event or the ref which started the run
+// (github.event_name, github.ref, github.ref_name, github.ref_type).
+func mentionsTrigger(n ExprNode) bool {
+	found := false
+	VisitExprNode(n, func(node, _ ExprNode, entering bool) {
+		if d, ok := node.(*ObjectDerefNode); ok && entering {
+			if v, ok := d.Receiver.(*VariableNode); ok && v.Name == "github" && (d.Property == "event_name" || strings.HasPrefix(d.Property, "ref")) {
+				found = true
+			}
+		}
+	})
+	return found
+}
+
+// unknownMentionsTrigger reports whether a part of the condition which is not known in the scenario reads the
+// trigger. A condition that is not known as a whole is taken for one written to keep some triggers away, and the run
+// is left out then (see gateAllowsRun). That is right when the part that is not known is about the trigger, and not
+// when the trigger part is known and what is not known is something else: in
+// "github.event_name == 'push' && !contains(needs.release.outputs.version, '-')" the trigger decides for the run
+// that is being checked, and the output of another job is what stays open, which says nothing about the trigger.
+func unknownMentionsTrigger(n ExprNode, sc triggerScenario) bool {
+	if evalGate(n, sc).truth() != triUnknown {
+		return false
+	}
+	switch n := n.(type) {
+	case *LogicalOpNode:
+		return unknownMentionsTrigger(n.Left, sc) || unknownMentionsTrigger(n.Right, sc)
+	case *NotOpNode:
+		return unknownMentionsTrigger(n.Operand, sc)
+	}
+	return mentionsTrigger(n)
+}
+
 // gateAllowsRun reports whether a condition (an if:, or the value of an input that switches a feature on)
 // lets the run through in at least one of the scenarios. A condition which cannot be evaluated lets it through,
 // unless it mentions the trigger: someone wrote it to keep the run away from some triggers, and
@@ -241,7 +309,7 @@ func gateAllows(cond string, scenarios []triggerScenario, offWhenTrue bool) bool
 			return true
 		case off:
 		default:
-			if !looksAtTrigger(cond) {
+			if !looksAtTrigger(cond) || !unknownMentionsTrigger(e, sc) {
 				return true
 			}
 		}
