@@ -780,7 +780,7 @@ func (rule *RuleCachePoisoning) feedsPublishingJob(j *Job, scenarios []triggerSc
 			if len(skippedNeeds) == 0 {
 				runs = dep.If == nil || gateAllowsRun(dep.If.Value, scenarios)
 			} else {
-				runs = dep.If != nil && runsAfterSkipped(dep.If.Value, scenarios, skippedNeeds)
+				runs = dep.If != nil && runsAfterSkipped(dep.If.Value, scenarios, skippedNeeds, len(skippedNeeds) < len(needs(dep)))
 			}
 			decided[id], grew = true, true
 			if !runs {
@@ -795,24 +795,31 @@ func (rule *RuleCachePoisoning) feedsPublishingJob(j *Job, scenarios []triggerSc
 
 // runsAfterSkipped reports whether a job with this condition runs although jobs that it needs were skipped. A job
 // without a status function in its condition gets success() added, which is false then; one with a status function
-// is evaluated with success(), failure() and cancelled() false (a skipped job did not fail, and nothing was
-// cancelled), always() true, and the result of each skipped job "skipped". It runs only when that is true: a condition
-// that is not known leaves the job out (no finding when unsure).
-func runsAfterSkipped(cond string, scenarios []triggerScenario, skippedNeeds []string) bool {
+// is evaluated with success() and cancelled() false (nothing was cancelled), always() true, and the result of each
+// skipped job "skipped". failure() is false when every job that it needs was skipped (a skipped job did not fail);
+// when it also needs other jobs, one of them may have failed, and the condition is evaluated both ways. It runs
+// when that is true; a condition that is not known leaves the job out.
+func runsAfterSkipped(cond string, scenarios []triggerScenario, skippedNeeds []string, otherNeeds bool) bool {
 	e := parseGateExpression(cond)
 	if e == nil || !exprCallsStatus(e) {
 		return false
 	}
+	failures := []string{"false"}
+	if otherNeeds {
+		failures = append(failures, "true")
+	}
 	for _, sc := range scenarios {
-		cp := triggerScenario{"status.success": "false", "status.failure": "false", "status.cancelled": "false"}
-		for k, v := range sc {
-			cp[k] = v
-		}
-		for _, n := range skippedNeeds {
-			cp["needs."+n+".result"] = "skipped"
-		}
-		if evalGate(e, cp).truth() == triTrue {
-			return true
+		for _, failure := range failures {
+			cp := triggerScenario{"status.success": "false", "status.failure": failure, "status.cancelled": "false"}
+			for k, v := range sc {
+				cp[k] = v
+			}
+			for _, n := range skippedNeeds {
+				cp["needs."+n+".result"] = "skipped"
+			}
+			if evalGate(e, cp).truth() == triTrue {
+				return true
+			}
 		}
 	}
 	return false
@@ -1147,7 +1154,8 @@ func buildPushPushes(a *ExecAction) bool {
 }
 
 // outputExprRe finds an expression in the outputs of a build.
-var outputExprRe = regexp.MustCompile(`\$\{\{.*?\}\}`)
+// It spans lines, as an expression in a block scalar may.
+var outputExprRe = regexp.MustCompile(`(?s)\$\{\{.*?\}\}`)
 
 // buildOutputMayChange reports whether an expression in "outputs" can change what the output does: it is the whole
 // field, or in a key, or in the value of "type" or "push" (it may resolve to the registry, or to nothing, and then
