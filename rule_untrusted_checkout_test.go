@@ -366,6 +366,139 @@ jobs:
       - run: git fetch origin ${{ github.event.pull_request.head.sha }}
       - run: ./scripts/missing.sh
 `},
+		// the revision reaches the working tree through a shell variable
+		{"variable from the step env, fetched then checked out", nil, prt + `    steps:
+      - uses: actions/checkout@v4
+      - run: | # want
+          REF=$PR_REF
+          git fetch origin "$REF"
+          git checkout FETCH_HEAD
+        env:
+          PR_REF: ${{ github.event.pull_request.head.sha }}
+      - run: make
+`},
+		{"variable set from an expression, fetched then checked out", nil, prt + `    steps:
+      - uses: actions/checkout@v4
+      - run: | # want
+          REF="${{ github.event.pull_request.head.sha }}"
+          git fetch origin "$REF"
+          git checkout FETCH_HEAD
+      - run: make
+`},
+		{"variable passed on twice and used in the next step", nil, prt + `    steps:
+      - uses: actions/checkout@v4
+      - run: | # want
+          A=$PR_REF
+          B="$A"
+          git fetch origin "$B"
+        env:
+          PR_REF: ${{ github.event.pull_request.head.sha }}
+      - run: git checkout FETCH_HEAD
+      - run: make
+`},
+		{"variable written to GITHUB_ENV and fetched in a later step", nil, prt + `    steps:
+      - uses: actions/checkout@v4
+      - run: echo "PR_REF=${{ github.event.pull_request.head.sha }}" >> "$GITHUB_ENV"
+      - run: git fetch origin "$PR_REF" # want
+      - run: git checkout FETCH_HEAD
+      - run: make
+`},
+		{"variable from a for loop", nil, prt + `    steps:
+      - uses: actions/checkout@v4
+      - run: | # want
+          for r in "$PR_REF"; do
+            git fetch origin "$r"
+          done
+          git checkout FETCH_HEAD
+          npm ci
+        env:
+          PR_REF: ${{ github.event.pull_request.head.sha }}
+`},
+		{"variable reset to a constant before the fetch", nil, prt + `    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          REF=$PR_REF
+          REF=main
+          git fetch origin "$REF"
+          git checkout FETCH_HEAD
+        env:
+          PR_REF: ${{ github.event.pull_request.head.sha }}
+      - run: make
+`},
+		{"variable of the base revision", nil, prt + `    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          REF=$BASE
+          git fetch origin "$REF"
+          git checkout FETCH_HEAD
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+      - run: make
+`},
+		{"variable that is only compared", nil, prt + `    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          REF=$PR_REF
+          git fetch origin main
+          git checkout FETCH_HEAD
+          test "$REF" = x
+        env:
+          PR_REF: ${{ github.event.pull_request.head.sha }}
+      - run: make
+`},
+		// a script file does the checkout itself
+		{"script that checks out its first argument, given the head", map[string]string{"../../scripts/co.sh": "#!/bin/bash\ngit checkout \"$1\"\n"}, prt + `    steps:
+      - uses: actions/checkout@v4
+      - run: ./scripts/co.sh "${{ github.event.pull_request.head.sha }}" # want
+      - run: make
+`},
+		{"script that checks out the variable of the step env", map[string]string{"../../scripts/co.sh": "git checkout \"$PR_REF\"\n"}, prt + `    steps:
+      - uses: actions/checkout@v4
+      - run: bash scripts/co.sh # want
+        env:
+          PR_REF: ${{ github.event.pull_request.head.sha }}
+      - run: make
+`},
+		{"script that fetches and checks out the argument", map[string]string{"../../scripts/co.sh": "REF=$1\ngit fetch origin \"$REF\"\ngit checkout FETCH_HEAD\n"}, prt + `    steps:
+      - uses: actions/checkout@v4
+      - run: ./scripts/co.sh "$PR_REF" # want
+        env:
+          PR_REF: ${{ github.event.pull_request.head.sha }}
+      - run: make
+`},
+		{"script that runs the code it checked out", map[string]string{"../../scripts/co.sh": "git checkout \"$1\"\nnpm ci\n"}, prt + `    steps:
+      - uses: actions/checkout@v4
+      - run: ./scripts/co.sh "${{ github.event.pull_request.head.sha }}" # want
+`},
+		{"script that uses gh pr checkout", map[string]string{"../../scripts/co.sh": "gh pr checkout \"$1\"\n"}, prt + `    steps:
+      - uses: actions/checkout@v4
+      - run: ./scripts/co.sh "${{ github.event.number }}" # want
+      - run: make
+`},
+		{"script that checks out its first argument, given a constant", map[string]string{"../../scripts/co.sh": "git checkout \"$1\"\n"}, prt + `    steps:
+      - uses: actions/checkout@v4
+      - run: ./scripts/co.sh main
+      - run: make
+`},
+		{"script that checks out its first argument, given the base", map[string]string{"../../scripts/co.sh": "git checkout \"$1\"\n"}, prt + `    steps:
+      - uses: actions/checkout@v4
+      - run: ./scripts/co.sh "${{ github.event.pull_request.base.sha }}"
+      - run: make
+`},
+		{"script that checks out its first argument, given nothing", map[string]string{"../../scripts/co.sh": "git checkout \"$1\"\n"}, prt + `    steps:
+      - uses: actions/checkout@v4
+      - run: ./scripts/co.sh
+      - run: make
+`},
+		{"script that checks out the head and nothing runs it afterwards", map[string]string{"../../scripts/co.sh": "git checkout \"$1\"\n"}, prt + `    steps:
+      - uses: actions/checkout@v4
+      - run: ./scripts/co.sh "${{ github.event.pull_request.head.sha }}"
+`},
+		{"script that starts a second script that checks out its argument", map[string]string{"../../scripts/co.sh": "./scripts/inner.sh \"$1\"\n", "../../scripts/inner.sh": "git checkout \"$1\"\n"}, prt + `    steps:
+      - uses: actions/checkout@v4
+      - run: ./scripts/co.sh "${{ github.event.pull_request.head.sha }}" # want
+      - run: make
+`},
 	}
 	for _, tc := range tests {
 		t.Run(tc.what, func(t *testing.T) {

@@ -2278,6 +2278,8 @@ Known limitations (use `ignore` in the configuration file when they matter):
   with an unrelated name and none of the inputs above is not taken for a checkout and the next local action is reported. A
   composite action of the repository itself (`uses: owner/repo/.github/actions/prep@main`, where `owner/repo` is the `origin` of
   the clone) counts as a wrapper that checks out, whatever its name.
+  `--online` does not change that: the online client has no lookup for the files of a repository, so the action is not fetched to look
+  inside it.
 - A local action outside of `.github/` (`./sources/repo/.github/actions/build`) after a step that downloads an artifact or unpacks an
   archive (`actions/download-artifact`, `tar`, `unzip`, ...) is not reported: the files may come from there.
 - `uses: $/path` (self-repository syntax) is never reported since it does not need a checkout. `uses:` of reusable workflows and
@@ -7244,12 +7246,23 @@ A step is reported at its checkout when it puts untrusted code in the workspace 
 - `gh pr checkout`, and `git checkout`, `switch`, `merge`, `pull`, `clone` ... with such a reference in the arguments or
   in an environment variable they use. A `git fetch` of the head only downloads the objects: it counts when a later command
   of the same script (`git checkout FETCH_HEAD`, `git merge`, `git reset --hard`, ...) puts them in the working tree.
+- The head can reach those commands through a shell variable: `REF=$PR_REF` (or `REF="${{ github.event.pull_request.head.sha }}"`,
+  a `for` loop over it, or a chain of assignments) and then `git fetch origin "$REF"`. A variable that an earlier step wrote to
+  `$GITHUB_ENV` with an untrusted value (`echo "REF=${{ github.event.pull_request.head.sha }}" >> "$GITHUB_ENV"`) is followed
+  into the later steps of the job. An unconditional assignment of another value ends it.
 - A `git fetch` of the head in an earlier step also counts when a later `run:` step starts a script file of the project
   (`./scripts/x.sh`, `bash scripts/x.sh`, `sh ./x.sh`) and that file, read from the repository being linted, has a command that
-  changes the working tree and names `FETCH_HEAD` or a destination of the refspec literally (`git checkout FETCH_HEAD`). The rule
-  does not guess: a script that is missing, too large, outside the repository, whose path is computed, or that takes the
-  revision from a variable (`git checkout "$1"`, `git checkout "$PR_REF"`) is not followed, and neither are scripts that the
-  script starts in turn. The same holds for a revision that a step passes through a variable to a command other than `git`.
+  changes the working tree and names `FETCH_HEAD` or a destination of the refspec literally (`git checkout FETCH_HEAD`).
+- A script file that does the checkout itself counts at the step that starts it: the file is read, and the revision that
+  reaches it is followed through the positional parameters (`./scripts/co.sh "${{ github.event.pull_request.head.sha }}"` with
+  `git checkout "$1"` inside), the environment of the step, the variables that the step exports or puts in front of the call,
+  and the script's own assignments. A script that uses `gh pr checkout` is one too, and so is a script that fetches the head
+  and checks it out. Scripts that the script starts are followed three levels deep. The step is reported at once when the script
+  runs code after the checkout (`npm ci`), otherwise when a later command or step does.
+  The rule does not guess: a script that is missing, too large, outside the repository or whose path is computed is not
+  followed, and neither is a revision that comes out of a command (`REF=$(cmd)`, except that the words of the substitution are
+  looked at), `read`, `eval`, an array, a step output or a revision that a script receives under a name other than a
+  positional parameter or an exported variable. The same holds for a revision that a step passes to a command other than `git`.
 - "Runs it" is a later step with a `run:` command that can execute workspace code (a script, `npm`, `cargo`, `make`, an
   interpreter, ...), a local action (`uses: ./...`), or one of a few actions that build the workspace. Commands that only read or
   move files (`cat`, `git diff`, `grep`, `jq`, `tar`, `gh`, ...) do not count, and neither do shell keywords and builtins

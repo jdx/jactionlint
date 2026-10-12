@@ -1,6 +1,7 @@
 package jactionlint
 
 import (
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -22,6 +23,11 @@ type RuleUntrustedCheckout struct {
 	// fetches are the fetches of an untrusted revision in the steps before the current one that no command has put
 	// in the working tree yet, see pendingFetch.
 	fetches []*pendingFetch
+	// carried are the variables that earlier steps of the job wrote to $GITHUB_ENV with an untrusted value, with where
+	// the value comes from.
+	carried map[string]string
+	// scripts are the script files that were read, by path, nil for one that cannot be followed.
+	scripts map[string]*runscript.Script
 }
 
 // pendingFetch is a `git fetch` of a revision of a pull request whose script does not put it in the working tree.
@@ -54,6 +60,8 @@ type untrustedCheckout struct {
 	// not see the code.
 	offset int
 	step   *Step
+	// how is what runs the code already, when the script file that does the checkout runs it itself.
+	how string
 }
 
 // VisitWorkflowPre is callback when visiting Workflow node before visiting its children.
@@ -75,7 +83,7 @@ func (rule *RuleUntrustedCheckout) VisitJobPre(n *Job) error {
 	// step runs code depends on the directory only, so it is asked once for each directory and not for
 	// each checkout: a job with thousands of checkouts is not quadratic.
 	rule.job = n
-	rule.fetches = nil
+	rule.fetches, rule.carried = nil, nil
 	pending := map[string][]*untrustedCheckout{}
 	var dirs []string // the keys of pending in the order they were added
 	for _, s := range flattenSteps(n.Steps) {
@@ -95,6 +103,10 @@ func (rule *RuleUntrustedCheckout) VisitJobPre(n *Job) error {
 			}
 		}
 		for _, c := range rule.checkoutsOf(n, s) {
+			if c.how != "" {
+				rule.report(c, c.how)
+				continue
+			}
 			if run, ok := s.Exec.(*ExecRun); ok && run.Run != nil {
 				// The same script can run the code it fetched
 				if how, ok := stepRunsCode(s, c.dir, c.offset+1); ok {
@@ -164,11 +176,23 @@ func (rule *RuleUntrustedCheckout) checkoutsOf(j *Job, s *Step) []*untrustedChec
 		if script == nil {
 			return nil
 		}
-		env := untrustedEnvNames(rule.wf, j, s)
+		process := map[string]string{} // the environment of the step, which a script file it starts inherits
+		for n := range untrustedEnvNames(rule.wf, j, s) {
+			process[n] = "$" + n
+		}
+		maps.Copy(process, rule.carried)
+		taint := newRevTaint(script, process)
 		var ret []*untrustedCheckout
 		earlier := rule.fetches
 		for i, c := range script.Commands {
+			var env map[string]bool
+			if c.Name == "git" || c.Name == "gh" {
+				env = taint.names(c.Offset)
+			}
 			what, ok := commandChecksOutUntrusted(c, env)
+			if ok {
+				what = taint.describe(what, c.Offset)
+			}
 			pos := s.Pos
 			if e.RunPos != nil {
 				pos = e.RunPos
@@ -190,10 +214,20 @@ func (rule *RuleUntrustedCheckout) checkoutsOf(j *Job, s *Step) []*untrustedChec
 					ret = append(ret, &untrustedCheckout{pos: f.pos, what: f.what, offset: c.Offset - 1, step: s})
 				}
 			}
+			if !ok {
+				// a script file of the project that checks out a revision it is given, or that it takes from the
+				// environment, see untrusted_checkout_flow.go
+				if w, how, found := rule.followScript(taint, c, process, s, maxScriptDepth); found {
+					off := c.Offset + 1 // the call itself is not the code that runs
+					ret = append(ret, &untrustedCheckout{pos: pos, what: w, offset: off, step: s, how: how})
+					continue
+				}
+			}
 			if !ok && c.Name == "git" && c.Verb() == "fetch" {
 				// A fetch only downloads the objects: it checks out the code when a later command in
 				// the script puts what it fetched in the working tree.
 				if w, bad := commandNamesUntrusted(c, env); bad {
+					w = taint.describe(w, c.Offset)
 					if fetchedThenUsed(script.Commands[i+1:]) {
 						what, ok = w, true
 					} else {
@@ -209,6 +243,7 @@ func (rule *RuleUntrustedCheckout) checkoutsOf(j *Job, s *Step) []*untrustedChec
 				ret = append(ret, &untrustedCheckout{pos: pos, what: what, dir: dir, offset: c.Offset, step: s})
 			}
 		}
+		rule.carryEnv(script, taint)
 		return ret
 	}
 	return nil
