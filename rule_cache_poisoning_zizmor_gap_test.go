@@ -83,7 +83,9 @@ func TestCachePoisoningImagePush(t *testing.T) {
 		{"no with at all", "", 0},
 		{"the registry as an output", "        with:\n          outputs: type=registry\n", 1},
 		{"push by digest", "        with:\n          outputs: type=image,\"name=ghcr.io/o/r\",push-by-digest=true,push=true\n", 1},
-		{"push in an expression of the output", "        with:\n          outputs: type=image,name=x,push=${{ env.PUSH }}\n", 0},
+		{"push in an expression of the output", "        with:\n          outputs: type=image,name=x,push=${{ env.PUSH }}\n", 1},
+		{"outputs from an input, push true", "        with:\n          push: true\n          outputs: ${{ inputs.outputs }}\n", 1},
+		{"outputs from an input", "        with:\n          outputs: ${{ inputs.outputs }}\n", 1},
 		{"an output to a directory", "        with:\n          outputs: type=local,dest=out\n", 0},
 		{"an output that only names the registry", "        with:\n          outputs: type=image,name=registry.example.com/x\n", 0},
 		{"outputs push next to push false", "        with:\n          push: false\n          outputs: type=registry\n", 1},
@@ -138,6 +140,8 @@ func TestCachePoisoningSccache(t *testing.T) {
 		{"the step switches on what the job switches off", job("", "    env:\n      SCCACHE_GHA_ENABLED: 'false'\n"+sccache+"        env:\n          SCCACHE_GHA_ENABLED: 'true'\n"), 1},
 		{"maturin with an unknown cache and a condition on sccache", job("", "    steps:\n      - uses: PyO3/maturin-action@v1\n        with:\n          cache: ${{ vars.C }}\n          sccache: ${{ !startsWith(github.ref, 'refs/tags/') }}\n"), 1},
 		{"maturin with cache none and a condition on sccache", job("", "    steps:\n      - uses: PyO3/maturin-action@v1\n        with:\n          cache: none\n          sccache: ${{ !startsWith(github.ref, 'refs/tags/') }}\n"), 0},
+		{"maturin with another cache and a condition on sccache", job("", "    steps:\n      - uses: PyO3/maturin-action@v1\n        with:\n          cache: kache\n          sccache: ${{ !startsWith(github.ref, 'refs/tags/') }}\n"), 0},
+		{"maturin with a cache that is false on tags", job("", "    steps:\n      - uses: PyO3/maturin-action@v1\n        with:\n          cache: ${{ startsWith(github.ref, 'refs/heads/') && 'sccache' }}\n          sccache: ${{ !startsWith(github.ref, 'refs/tags/') }}\n"), 0},
 		{"maturin with cache sccache and a condition on sccache", job("", "    steps:\n      - uses: PyO3/maturin-action@v1\n        with:\n          cache: sccache\n          sccache: ${{ !startsWith(github.ref, 'refs/tags/') }}\n"), 1},
 		{"an expression is not known to be false", job("env:\n  SCCACHE_GHA_ENABLED: ${{ vars.SCCACHE }}\n", sccache), 1},
 		{"set by a script", job("", sccache+"      - run: echo \"SCCACHE_GHA_ENABLED=true\" >> \"$GITHUB_ENV\"\n"), 1},
@@ -301,6 +305,8 @@ func TestCachePoisoningHandoffFollowsTheConditions(t *testing.T) {
 		{"both run on tags", head + build("") + publish(""), 1},
 		{"the publisher only runs on a dispatch", head + build("") + publish("    if: github.event_name == 'workflow_dispatch'\n"), 0},
 		{"the publisher runs on tags", head + build("") + publish("    if: startsWith(github.ref, 'refs/tags/')\n"), 1},
+		{"a skipped test, then a release that runs always", head + build("") + "  test:\n    needs: build\n    if: github.event_name == 'workflow_dispatch'\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo\n  publish:\n    needs: test\n    if: always()\n    runs-on: ubuntu-latest\n    permissions:\n      contents: write\n    steps:\n      - run: echo\n", 1},
+		{"a skipped test, then a release without a status function", head + build("") + "  test:\n    needs: build\n    if: github.event_name == 'workflow_dispatch'\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo\n  publish:\n    needs: test\n    runs-on: ubuntu-latest\n    permissions:\n      contents: write\n    steps:\n      - run: echo\n", 0},
 		{"the upload is skipped on tags", head + build("        if: github.event_name == 'workflow_dispatch'\n") + publish(""), 0},
 	}
 	for _, tc := range tests {

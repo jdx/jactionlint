@@ -721,29 +721,50 @@ func (rule *RuleCachePoisoning) feedsPublishingJob(j *Job, scenarios []triggerSc
 	if j.ID == nil || rule.wf == nil || !uploadsArtifact(j, scenarios) {
 		return false
 	}
+	// A job that the release runs do not reach is skipped, and so is a job that needs a skipped one, unless its own
+	// condition has a status function (always(), !cancelled(), ...), which makes it run after a skipped job. Dependencies
+	// are followed through the skipped jobs, because a job after them may still run.
 	seen := map[string]bool{strings.ToLower(j.ID.Value): true}
+	skipped := map[string]bool{}
 	for grew := true; grew; {
 		grew = false
 		for id, dep := range rule.wf.Jobs {
-			if seen[strings.ToLower(id)] || dep == nil {
+			lid := strings.ToLower(id)
+			if seen[lid] || dep == nil {
 				continue
 			}
-			if dep.If != nil && !gateAllowsRun(dep.If.Value, scenarios) {
-				continue // it does not run on the release, and the jobs that need it are skipped with it
-			}
+			needsJob, needsSkipped := false, false
 			for _, n := range dep.Needs {
-				if n != nil && seen[strings.ToLower(n.Value)] {
-					if rule.canPublish(dep) {
-						return true
-					}
-					seen[strings.ToLower(id)] = true
-					grew = true
-					break
+				if n == nil {
+					continue
 				}
+				ln := strings.ToLower(n.Value)
+				needsJob = needsJob || seen[ln]
+				needsSkipped = needsSkipped || skipped[ln]
+			}
+			if !needsJob {
+				continue
+			}
+			seen[lid], grew = true, true
+			runs := dep.If == nil || gateAllowsRun(dep.If.Value, scenarios)
+			if runs && needsSkipped && (dep.If == nil || !hasStatusFunction(dep.If.Value)) {
+				runs = false
+			}
+			if !runs {
+				skipped[lid] = true
+			} else if rule.canPublish(dep) {
+				return true
 			}
 		}
 	}
 	return false
+}
+
+// hasStatusFunction reports whether a condition calls a status function, which makes the job run when a job that it
+// needs was skipped or failed.
+func hasStatusFunction(cond string) bool {
+	c := strings.ToLower(cond)
+	return strings.Contains(c, "always()") || strings.Contains(c, "cancelled()") || strings.Contains(c, "failure()")
 }
 
 // secretRefRe finds a read of a secret: secrets.NAME (group 1), secrets['NAME'] (group 2), or any other form
@@ -879,7 +900,7 @@ func (rule *RuleCachePoisoning) callersTurnCacheOff(a *ExecAction, name string) 
 	}
 	for _, g := range cacheGateInputs[name] {
 		v, ok := a.input(g.input)
-		if !ok || gateInputIsRedundant(name, a, g.input) {
+		if !ok || gateInputIsRedundant(name, a, g.input, nil) {
 			continue
 		}
 		m := inputRefRe.FindStringSubmatch(strings.TrimSpace(v))
@@ -1052,7 +1073,8 @@ func publishingReason(steps []*Step) string {
 // value pushes (an expression such as "${{ inputs.push }}" is not known to be false), and the default is false.
 func buildPushPushes(a *ExecAction) bool {
 	if out, _ := a.input("outputs"); strings.TrimSpace(out) != "" {
-		return buildOutputPushRe.MatchString(out)
+		// an expression in it may resolve to the registry, or to nothing, and then "push" applies: it may publish
+		return buildOutputPushRe.MatchString(out) || strings.Contains(out, "${{")
 	}
 	v, _ := a.input("push")
 	v = strings.TrimSpace(v)

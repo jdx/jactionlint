@@ -317,16 +317,23 @@ func gateAllows(cond string, scenarios []triggerScenario, offWhenTrue bool) bool
 	return len(scenarios) == 0
 }
 
-// gateInputIsRedundant reports whether the input is one of two switches of an action which the other one may keep
-// on: "cache" of maturin-action ("sccache", or an expression that is not known) keeps the cache on whatever "sccache"
-// says, so a condition in "sccache" alone does not keep it away.
-func gateInputIsRedundant(name string, a *ExecAction, input string) bool {
+// gateInputIsRedundant reports whether the input is one of two switches of an action which the other one keeps on: the
+// action turns the cache of maturin-action on for "cache: sccache" whatever "sccache" says, so a condition in "sccache"
+// alone does not keep it away. Another literal does not turn it on. An expression in "cache" does when it is not known
+// to be false in the runs that publish (without scenarios it always does: the finding stays).
+func gateInputIsRedundant(name string, a *ExecAction, input string, scenarios []triggerScenario) bool {
 	if name != "pyo3/maturin-action" || input != "sccache" {
 		return false
 	}
 	v, ok := a.input("cache")
-	v = strings.ToLower(strings.TrimSpace(v))
-	return ok && v != "" && v != "none" && !isFalseLiteral(v)
+	v = strings.TrimSpace(v)
+	switch {
+	case !ok:
+		return false
+	case strings.Contains(v, "${{"):
+		return gateAllows(v, scenarios, false)
+	}
+	return strings.EqualFold(v, "sccache")
 }
 
 // cacheCanRunOnReleaseTrigger tells whether the cache of the step is used in a run that publishes. The run
@@ -349,7 +356,7 @@ func cacheCanRunOnReleaseTrigger(job *Job, s *Step, a *ExecAction, name string, 
 		return false
 	}
 	for _, g := range cacheGateInputs[name] {
-		if v, ok := a.input(g.input); ok && !gateInputIsRedundant(name, a, g.input) && strings.Contains(v, "${{") && !gateAllows(v, scenarios, g.offWhenTrue) {
+		if v, ok := a.input(g.input); ok && !gateInputIsRedundant(name, a, g.input, scenarios) && strings.Contains(v, "${{") && !gateAllows(v, scenarios, g.offWhenTrue) {
 			return false
 		}
 	}

@@ -257,7 +257,7 @@ Every finding of zizmor that was not reported was classified by finding out wher
 by reading the action. **(a)** real and cheap to cover; **(b)** real but needing more analysis; **(c)** a finding of zizmor that is not
 one.
 
-- **(a), reported by default now** (39 findings of zizmor and 34 more of jactionlint, 73 in all):
+- **(a), reported by default now** (39 findings of zizmor and 36 more of jactionlint, 75 in all):
   - a job that is a check by its permissions, in a workflow on pushed tags, but uploads an artifact for a job that can publish
     (`needs`, directly or through another job; a job with an `environment`, a publishing command or action, or a write permission
     for `contents`, `packages`, `attestations`, `pages`, `deployments` or `id-token`). The job builds what the other job publishes;
@@ -290,10 +290,10 @@ one.
 
 ### False-positive review
 
-All 73 new findings by default were read, one by one (34 repositories, with the workflow open): 71 are true positives (a release
+All 75 new findings by default were read, one by one (34 repositories, with the workflow open): 73 are true positives (a release
 workflow, a job that pushes an image or publishes a release, a build job whose artifact a publishing job downloads) and 2 are
 doubtful, the build of `Cratis/Chronicle` (`hot-core-gate.yml`), where the manual dispatch pushes a test image tagged with the commit
-that the later jobs of the matrix use. Rate: 0 clear false positives, 2 of 73 doubtful.
+that the later jobs of the matrix use. Rate: 0 clear false positives, 2 of 75 doubtful.
 
 The option `pedantic` was sampled with 36 findings of 70 repositories (14 of a tag, 22 of a release branch, one per file, drawn
 with a fixed seed). 34 are jobs that publish nothing (a test, a lint, a smoke test, a documentation build in a CI workflow); the 2

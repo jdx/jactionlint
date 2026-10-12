@@ -3732,7 +3732,7 @@ or `releases/`; `branches: [main, 'release/**']` is the filter of ordinary check
 uses a publishing action (such as `pypa/gh-action-pypi-publish`, `softprops/action-gh-release` or `goreleaser/goreleaser-action`)
 or runs a publishing command (`cargo publish`, `npm publish`, `twine upload`, `gh release create`, `docker push`, ...).
 `docker/build-push-action` publishes when it may push. A non-empty `outputs` is what buildx receives and the `push` shorthand is not applied
-to it, so it decides alone: `type=registry` or `push=true` (as in `type=image,push-by-digest=true,push=true`) push, also next to
+to it, so it decides alone: `type=registry` or `push=true` (as in `type=image,push-by-digest=true,push=true`) push, and so may an `outputs` with an expression in it (it may resolve to the registry), also next to
 `push: false`, and a local export does not, also next to `push: true`. Without `outputs`, `push` decides: anything but a false value pushes
 (an expression such as `push: ${{ github.event_name != 'pull_request' }}` is not known to be false, and the image is pushed on the runs where it
 is true), and the default is false. In a release job the rule reports the steps which restore a cache:
@@ -3765,7 +3765,7 @@ hands no artifact to a job that can publish, the tag does not make it a release 
 (`actions/upload-artifact`) and a job which can publish needs it, directly or through other jobs: one with an `environment:`, a publishing
 command or action, or a write permission to `contents`, `packages`, `attestations`, `pages`, `deployments` or `id-token` (a job that
 only comments on pull requests or reads a secret to notify a chat is not a publisher). That job builds what the other publishes, so
-a poisoned cache in it ends up in the release. The upload step and the jobs that need it are judged by their `if:` for the runs that publish, so an upload or a publisher that only runs on a manual dispatch does not count; a test job that only has to pass before the release hands over nothing and is not reported. This is a heuristic:
+a poisoned cache in it ends up in the release. The upload step and the jobs that need it are judged by their `if:` for the runs that publish, so an upload or a publisher that only runs on a manual dispatch does not count. The jobs between them are followed even when they are skipped, because a job after a skipped one still runs when its own `if:` calls `always()`, `cancelled()` or `failure()`; a test job that only has to pass before the release hands over nothing and is not reported. This is a heuristic:
 without `permissions:` the token is whatever the repository sets, so the job may publish, and a job can still publish with a secret
 that it does not name (the secret of a reusable workflow, a credential stored on the runner). The `release` event always counts.
 The list of publishing actions grows with the well-known publishers (crates.io, container registries, Homebrew bumps, Azure, Google Cloud
