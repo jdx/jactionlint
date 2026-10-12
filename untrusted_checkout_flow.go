@@ -568,12 +568,18 @@ func (t *revTaint) textValue(text string, quoted bool, off int) envValue {
 			v.unknown = true
 			continue
 		}
+		braced := strings.HasPrefix(rest, "{")
 		rest = strings.TrimPrefix(rest, "{")
 		n := 0
 		for n < len(rest) && (rest[n] == '_' || rest[n] >= 'a' && rest[n] <= 'z' || rest[n] >= 'A' && rest[n] <= 'Z' || n > 0 && rest[n] >= '0' && rest[n] <= '9') {
 			n++
 		}
-		if n == 0 {
+		if n == 0 || braced && (n >= len(rest) || rest[n] != '}') {
+			// a parameter that is not a plain name (`$1`, `${#X}`) or has an operator (`${X:+main}`, `${X:-y}`, `${X%%.*}`)
+			// does not give the value of the variable: unknown, which neither clears a saved taint nor invents one
+			if n > 0 || braced || strings.ContainsRune("0123456789@*#?!-$", rune(rest[0])) {
+				v.unknown = true
+			}
 			continue
 		}
 		if d := t.varAt(rest[:n], off); d != "" {

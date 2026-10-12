@@ -810,6 +810,29 @@ jobs:
       - run: git checkout FETCH_HEAD
       - run: make
 `},
+		{"GITHUB_ENV: here document with a parameter operator is not the variable", nil, prt + `    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          cat <<EOF >> "$GITHUB_ENV"
+          REF=${PR_REF:+main}
+          EOF
+        env:
+          PR_REF: ${{ github.event.pull_request.head.sha }}
+      - run: git fetch origin "$REF"
+      - run: git checkout FETCH_HEAD
+      - run: make
+`},
+		{"GITHUB_ENV: an unknown expansion keeps the saved value", nil, prt + `    steps:
+      - uses: actions/checkout@v4
+      - run: echo "REF=${{ github.event.pull_request.head.sha }}" >> "$GITHUB_ENV"
+      - run: |
+          cat <<EOF >> "$GITHUB_ENV"
+          REF=${OTHER:-main}
+          EOF
+      - run: git fetch origin "$REF" # want
+      - run: git checkout FETCH_HEAD
+      - run: make
+`},
 	}
 	for _, tc := range tests {
 		t.Run(tc.what, func(t *testing.T) {
