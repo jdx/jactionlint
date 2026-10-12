@@ -780,7 +780,13 @@ func (rule *RuleCachePoisoning) feedsPublishingJob(j *Job, scenarios []triggerSc
 			if len(skippedNeeds) == 0 {
 				runs = dep.If == nil || gateAllowsRun(dep.If.Value, scenarios)
 			} else {
-				runs = dep.If != nil && runsAfterSkipped(dep.If.Value, scenarios, skippedNeeds, len(skippedNeeds) < len(needs(dep)))
+				var otherNeeds []string
+				for _, n := range needs(dep) {
+					if !skipped[n] && !slices.Contains(otherNeeds, n) {
+						otherNeeds = append(otherNeeds, n)
+					}
+				}
+				runs = dep.If != nil && runsAfterSkipped(dep.If.Value, scenarios, skippedNeeds, otherNeeds)
 			}
 			decided[id], grew = true, true
 			if !runs {
@@ -793,31 +799,45 @@ func (rule *RuleCachePoisoning) feedsPublishingJob(j *Job, scenarios []triggerSc
 	return false
 }
 
-// runsAfterSkipped reports whether a job with this condition runs although jobs that it needs were skipped. A job
-// without a status function in its condition gets success() added, which is false then; one with a status function
-// is evaluated with success() and cancelled() false (nothing was cancelled), always() true, and the result of each
-// skipped job "skipped". failure() is false when every job that it needs was skipped (a skipped job did not fail);
-// when it also needs other jobs, one of them may have failed, and the condition is evaluated both ways. It runs
-// when that is true; a condition that is not known leaves the job out.
-func runsAfterSkipped(cond string, scenarios []triggerScenario, skippedNeeds []string, otherNeeds bool) bool {
+// runsAfterSkipped reports whether a job with this condition may run although jobs that it needs were skipped. A job
+// without a status function in its condition gets success() added, which is false then, so it does not run. One with
+// a status function is evaluated with success() false (a skipped job is not a success), always() true, and the result
+// of each skipped job "skipped". A needed job that was not skipped ended as success, failure or cancelled, and the
+// condition is evaluated for every combination of those (failure() is true when one failed, cancelled() when one was
+// cancelled; with more than four such jobs it is taken to run). The job may run when the condition is not false for
+// one of them: a condition that stays open for another reason counts as possibly running, as this is a security rule.
+func runsAfterSkipped(cond string, scenarios []triggerScenario, skippedNeeds, otherNeeds []string) bool {
 	e := parseGateExpression(cond)
 	if e == nil || !exprCallsStatus(e) {
 		return false
 	}
-	failures := []string{"false"}
-	if otherNeeds {
-		failures = append(failures, "true")
+	if len(otherNeeds) > 4 {
+		return true
+	}
+	results := []string{"success", "failure", "cancelled"}
+	combos := 1
+	for range otherNeeds {
+		combos *= len(results)
 	}
 	for _, sc := range scenarios {
-		for _, failure := range failures {
-			cp := triggerScenario{"status.success": "false", "status.failure": failure, "status.cancelled": "false"}
+		for c := 0; c < combos; c++ {
+			cp := triggerScenario{"status.success": "false", "status.failure": "false", "status.cancelled": "false"}
 			for k, v := range sc {
 				cp[k] = v
 			}
 			for _, n := range skippedNeeds {
 				cp["needs."+n+".result"] = "skipped"
 			}
-			if evalGate(e, cp).truth() == triTrue {
+			rest := c
+			for _, n := range otherNeeds {
+				res := results[rest%len(results)]
+				rest /= len(results)
+				cp["needs."+n+".result"] = res
+				if res != "success" {
+					cp["status."+res] = "true"
+				}
+			}
+			if evalGate(e, cp).truth() != triFalse {
 				return true
 			}
 		}
