@@ -7253,7 +7253,8 @@ A step is reported at its checkout when it puts untrusted code in the workspace 
   variable that an earlier step wrote to `$GITHUB_ENV` with an untrusted value is followed into the later steps of the job
   (`echo "REF=<head>" >> "$GITHUB_ENV"`, `printf 'REF=%s\n' ...`, a here document with `REF=<head>` or `REF<<EOF`); a later write
   of another value to the same variable, or an `env:` entry of a step that sets it, replaces it. `echo` writes one entry, the one
-  of its first word.
+  of its first word. A value that cannot be resolved (a command substitution, a `printf` format that is not understood) keeps the
+  earlier value instead of replacing it.
 - A `git fetch` of the head in an earlier step also counts when a later `run:` step starts a script file of the project
   (`./scripts/x.sh`, `bash scripts/x.sh`, `sh ./x.sh`) and that file, read from the repository being linted, has a command that
   changes the working tree and names `FETCH_HEAD` or a destination of the refspec literally (`git checkout FETCH_HEAD`).

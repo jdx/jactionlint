@@ -742,6 +742,74 @@ jobs:
       - run: git checkout FETCH_HEAD
       - run: make
 `},
+		{"GITHUB_ENV: here document with refs/pull and an expression", nil, prt + `    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          cat <<EOF >> "$GITHUB_ENV"
+          REF=refs/pull/${{ github.event.number }}/head
+          EOF
+      - run: git fetch origin "$REF" # want
+      - run: git checkout FETCH_HEAD
+      - run: make
+`},
+		{"GITHUB_ENV: here document with a literal refs/pull", nil, prt + `    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          cat <<EOF >> "$GITHUB_ENV"
+          REF=refs/pull/1/head
+          EOF
+      - run: git fetch origin "$REF" # want
+      - run: git checkout FETCH_HEAD
+      - run: make
+`},
+		{"GITHUB_ENV: printf with the head in the format", nil, prt + `    steps:
+      - uses: actions/checkout@v4
+      - run: printf 'REF=${{ github.event.pull_request.head.sha }}\n' >> "$GITHUB_ENV"
+      - run: git fetch origin "$REF" # want
+      - run: git checkout FETCH_HEAD
+      - run: make
+`},
+		{"GITHUB_ENV: here document that passes the variable on", nil, prt + `    steps:
+      - uses: actions/checkout@v4
+      - run: echo "REF=${{ github.event.pull_request.head.sha }}" >> "$GITHUB_ENV"
+      - run: |
+          cat <<EOF >> "$GITHUB_ENV"
+          REF=$REF
+          EOF
+      - run: git fetch origin "$REF" # want
+      - run: git checkout FETCH_HEAD
+      - run: make
+`},
+		{"GITHUB_ENV: here document with a command substitution keeps the value", nil, prt + `    steps:
+      - uses: actions/checkout@v4
+      - run: echo "REF=${{ github.event.pull_request.head.sha }}" >> "$GITHUB_ENV"
+      - run: |
+          cat <<EOF >> "$GITHUB_ENV"
+          REF=$(git rev-parse HEAD)
+          EOF
+      - run: git fetch origin "$REF" # want
+      - run: git checkout FETCH_HEAD
+      - run: make
+`},
+		{"GITHUB_ENV: echo with a command substitution keeps the value", nil, prt + `    steps:
+      - uses: actions/checkout@v4
+      - run: echo "REF=${{ github.event.pull_request.head.sha }}" >> "$GITHUB_ENV"
+      - run: echo "REF=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+      - run: git fetch origin "$REF" # want
+      - run: git checkout FETCH_HEAD
+      - run: make
+`},
+		{"GITHUB_ENV: quoted here document with a literal replaces the value", nil, prt + `    steps:
+      - uses: actions/checkout@v4
+      - run: echo "REF=${{ github.event.pull_request.head.sha }}" >> "$GITHUB_ENV"
+      - run: |
+          cat <<'EOF' >> "$GITHUB_ENV"
+          REF=main
+          EOF
+      - run: git fetch origin "$REF"
+      - run: git checkout FETCH_HEAD
+      - run: make
+`},
 	}
 	for _, tc := range tests {
 		t.Run(tc.what, func(t *testing.T) {

@@ -30,6 +30,10 @@ import (
 //     unexported variables never reach the child.
 //   - The working directory follows literal `cd` commands; a script file is looked up from it. A `cd` that is
 //     conditional, dynamic or absolute makes the directory unknown and the script is not followed.
+//   - A value written to $GITHUB_ENV (echo, printf, here document) is judged as a whole: untrusted when its text names the
+//     head, `refs/pull/` or an untrusted variable, clean when it is fully resolved and none of those, unknown otherwise
+//     (a command substitution, a format that is not understood). Only a clean unconditional value replaces what an
+//     earlier step wrote; unknown keeps it.
 //   - Attacker-controlled: the head of a pull request or of the triggering run (untrustedValue) and `refs/pull/...`.
 //   - Reaches the working tree: a command that puts a revision in it (gitCheckoutVerbs, `gh pr checkout`) and names
 //     an untrusted word, or a `git fetch` of an untrusted word followed by a command that changes the working tree.
@@ -402,8 +406,10 @@ func envNameOf(entry string) string {
 // that of its first word, whose value is all of its words; `printf` writes the entries of its format with the
 // arguments filled in. Writes through a here document are not followed.
 func (rule *RuleUntrustedCheckout) carryEnv(sc *runscript.Script, t *revTaint) {
-	set := func(name, d string, cond bool) {
-		if d == "" && cond {
+	// A value is untrusted, clean or unknown. Only a clean value replaces what an earlier step wrote: a value that
+	// cannot be resolved (a command substitution, a format that is not understood) keeps it.
+	set := func(name, d string, cond, unknown bool) {
+		if d == "" && (cond || unknown) {
 			return
 		}
 		if rule.carried == nil {
@@ -414,8 +420,8 @@ func (rule *RuleUntrustedCheckout) carryEnv(sc *runscript.Script, t *revTaint) {
 	for _, w := range sc.WritesTo("GITHUB_ENV") {
 		if w.Heredoc != nil {
 			cond := len(w.Producers) == 0 || w.Producers[0].Cond
-			for name, d := range heredocEntries(w.Heredoc.Body) {
-				set(name, d, cond)
+			for name, v := range heredocEntries(w.Heredoc, t) {
+				set(name, v.what, cond, v.unknown)
 			}
 		}
 		for _, p := range w.Producers {
@@ -429,17 +435,18 @@ func (rule *RuleUntrustedCheckout) carryEnv(sc *runscript.Script, t *revTaint) {
 				if name == "" || strings.Contains(words[0].Value[:len(name)], "$") {
 					continue
 				}
-				d := ""
+				d, unknown := "", false
 				for _, word := range words {
 					if d = t.wordAt(word, p.Offset); d != "" {
 						break
 					}
+					unknown = unknown || word.Subst
 				}
-				set(name, d, p.Cond)
+				set(name, d, p.Cond, unknown)
 			case "printf":
 				format := words[0]
-				if format.Dynamic() {
-					continue
+				if len(format.Vars) > 0 || format.Subst || strings.ContainsAny(format.Raw, "`") {
+					continue // unknown what it writes: the earlier value stays
 				}
 				if !simpleFormat(format.Value) {
 					continue // unknown what it writes: the earlier value stays
@@ -468,13 +475,15 @@ func (rule *RuleUntrustedCheckout) carryEnv(sc *runscript.Script, t *revTaint) {
 						if name == "" {
 							continue
 						}
-						d := ""
+						d, unknown := literalTaint(seg), false
 						for _, a := range used {
-							if d = t.wordAt(a, p.Offset); d != "" {
+							if d != "" {
 								break
 							}
+							d = t.wordAt(a, p.Offset)
+							unknown = unknown || a.Subst
 						}
-						set(name, d, p.Cond)
+						set(name, d, p.Cond, unknown)
 					}
 				}
 			}
@@ -514,23 +523,86 @@ func exprTaint(text string) string {
 	}
 }
 
-// heredocEntries returns the entries a here document writes to an environment file, with what makes each untrusted:
-// `NAME=value` lines and `NAME<<DELIM` blocks that end at a line that is DELIM.
-func heredocEntries(body string) map[string]string {
-	out := map[string]string{}
-	lines := strings.Split(body, "\n")
+// literalTaint returns what makes the text untrusted without looking at shell variables: an expression for the head of
+// a pull request, or `refs/pull/`.
+func literalTaint(text string) string {
+	if what := exprTaint(text); what != "" {
+		return what
+	}
+	if strings.Contains(text, "refs/pull/") {
+		return text
+	}
+	return ""
+}
+
+// envValue is the value of an entry written to an environment file: what makes it untrusted, or unknown when
+// it cannot be resolved.
+type envValue struct {
+	what    string
+	unknown bool
+}
+
+// textValue judges the text of a here document. In an unquoted one the shell expands `$NAME` and `${NAME}`, which are
+// resolved at the offset; a command substitution or arithmetic makes the value unknown.
+func (t *revTaint) textValue(text string, quoted bool, off int) envValue {
+	if what := literalTaint(text); what != "" {
+		return envValue{what: what}
+	}
+	if quoted {
+		return envValue{}
+	}
+	v := envValue{}
+	for i := 0; i < len(text); i++ {
+		if text[i] == '\\' {
+			i++
+			continue
+		}
+		if text[i] != '$' || i+1 >= len(text) {
+			continue
+		}
+		rest := text[i+1:]
+		if strings.HasPrefix(rest, "{{") {
+			continue // an expression, judged above
+		}
+		if rest[0] == '(' || rest[0] == '`' {
+			v.unknown = true
+			continue
+		}
+		rest = strings.TrimPrefix(rest, "{")
+		n := 0
+		for n < len(rest) && (rest[n] == '_' || rest[n] >= 'a' && rest[n] <= 'z' || rest[n] >= 'A' && rest[n] <= 'Z' || n > 0 && rest[n] >= '0' && rest[n] <= '9') {
+			n++
+		}
+		if n == 0 {
+			continue
+		}
+		if d := t.varAt(rest[:n], off); d != "" {
+			return envValue{what: d}
+		}
+	}
+	if strings.Contains(text, "`") {
+		v.unknown = true
+	}
+	return v
+}
+
+// heredocEntries returns the entries a here document writes to an environment file: `NAME=value` lines and
+// `NAME<<DELIM` blocks that end at a line that is DELIM.
+func heredocEntries(h *runscript.Heredoc, t *revTaint) map[string]envValue {
+	out := map[string]envValue{}
+	lines := strings.Split(h.Body, "\n")
 	for i := 0; i < len(lines); i++ {
 		line := lines[i]
-		if name, delim, ok := strings.Cut(line, "<<"); ok && envNameOf(name+"=") == name && name != "" {
+		if name, delim, ok := strings.Cut(line, "<<"); ok && name != "" && envNameOf(name+"=") == name {
 			text := ""
 			for i++; i < len(lines) && lines[i] != delim; i++ {
 				text += lines[i] + "\n"
 			}
-			out[name] = exprTaint(text)
+			out[name] = t.textValue(text, h.Quoted, h.Offset)
 			continue
 		}
 		if name := envNameOf(line); name != "" {
-			out[name] = exprTaint(line)
+			out[name] = t.textValue(line, h.Quoted, h.Offset)
 		}
 	}
 	return out
