@@ -66,8 +66,11 @@ func (t *revTaint) names(off int) map[string]bool {
 		}
 	}
 	for n := range cands {
+		// the value at this position replaces what the variable held when the script started
 		if t.varAt(n, off, 0) != "" {
 			out[n] = true
+		} else {
+			delete(out, n)
 		}
 	}
 	return out
@@ -196,16 +199,29 @@ func childBase(t *revTaint, c *runscript.Command, script *runscript.Word, proces
 	if base == nil {
 		base = map[string]string{}
 	}
-	for _, a := range c.Assigns {
-		if d := t.wordAt(a.Value, c.Offset, 0); d != "" {
-			base[a.Name] = d
-		}
+	// A variable the process inherited stays exported when the script assigns it, and `export` exports a new one, so
+	// the value at the call replaces the inherited one: a clean assignment ends the taint.
+	exported := map[string]bool{}
+	for n := range base {
+		exported[n] = true
 	}
 	for _, a := range t.s.Assignments {
 		if a.Cmd != nil && a.Cmd.Decl && a.Cmd.Name == "export" && a.Offset < c.Offset {
-			if d := t.varAt(a.Name, c.Offset, 0); d != "" {
-				base[a.Name] = d
-			}
+			exported[a.Name] = true
+		}
+	}
+	for n := range exported {
+		if d := t.varAt(n, c.Offset, 0); d != "" {
+			base[n] = d
+		} else {
+			delete(base, n)
+		}
+	}
+	for _, a := range c.Assigns { // NAME=value ./script.sh
+		if d := t.wordAt(a.Value, c.Offset, 0); d != "" {
+			base[a.Name] = d
+		} else {
+			delete(base, a.Name)
 		}
 	}
 	n := 0
@@ -317,6 +333,8 @@ func (rule *RuleUntrustedCheckout) carryEnv(sc *runscript.Script, t *revTaint) {
 						rule.carried = map[string]string{}
 					}
 					rule.carried[name] = d
+				} else if !p.Cond {
+					delete(rule.carried, name) // a later write replaces the value
 				}
 			}
 		}

@@ -499,6 +499,70 @@ jobs:
       - run: ./scripts/co.sh "${{ github.event.pull_request.head.sha }}" # want
       - run: make
 `},
+		// an inherited untrusted variable that the script overwrites is no longer untrusted
+		{"step env variable overwritten by a literal before the fetch", nil, prt + `    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          PR_REF=main
+          git fetch origin "$PR_REF"
+          git checkout FETCH_HEAD
+        env:
+          PR_REF: ${{ github.event.pull_request.head.sha }}
+      - run: make
+`},
+		{"step env variable overwritten conditionally before the fetch", nil, prt + `    steps:
+      - uses: actions/checkout@v4
+      - run: | # want
+          if [ -n "$X" ]; then PR_REF=main; fi
+          git fetch origin "$PR_REF"
+          git checkout FETCH_HEAD
+        env:
+          PR_REF: ${{ github.event.pull_request.head.sha }}
+      - run: make
+`},
+		{"GITHUB_ENV variable overwritten with a clean value in a later step", nil, prt + `    steps:
+      - uses: actions/checkout@v4
+      - run: echo "PR_REF=${{ github.event.pull_request.head.sha }}" >> "$GITHUB_ENV"
+      - run: echo "PR_REF=main" >> "$GITHUB_ENV"
+      - run: git fetch origin "$PR_REF"
+      - run: git checkout FETCH_HEAD
+      - run: make
+`},
+		{"GITHUB_ENV variable overwritten by the env of the step", nil, prt + `    steps:
+      - uses: actions/checkout@v4
+      - run: echo "PR_REF=${{ github.event.pull_request.head.sha }}" >> "$GITHUB_ENV"
+      - run: |
+          git fetch origin "$PR_REF"
+          git checkout FETCH_HEAD
+        env:
+          PR_REF: main
+      - run: make
+`},
+		{"script given a variable that the step exports as a literal", map[string]string{"../../scripts/co.sh": "git checkout \"$PR_REF\"\n"}, prt + `    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          export PR_REF=main
+          ./scripts/co.sh
+        env:
+          PR_REF: ${{ github.event.pull_request.head.sha }}
+      - run: make
+`},
+		{"script given a variable that a prefix assignment sets to a literal", map[string]string{"../../scripts/co.sh": "git checkout \"$PR_REF\"\n"}, prt + `    steps:
+      - uses: actions/checkout@v4
+      - run: PR_REF=main ./scripts/co.sh
+        env:
+          PR_REF: ${{ github.event.pull_request.head.sha }}
+      - run: make
+`},
+		{"script given a variable that the step reassigned to a literal", map[string]string{"../../scripts/co.sh": "git checkout \"$PR_REF\"\n"}, prt + `    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          PR_REF=main
+          ./scripts/co.sh
+        env:
+          PR_REF: ${{ github.event.pull_request.head.sha }}
+      - run: make
+`},
 	}
 	for _, tc := range tests {
 		t.Run(tc.what, func(t *testing.T) {

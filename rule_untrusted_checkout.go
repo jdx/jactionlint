@@ -176,11 +176,24 @@ func (rule *RuleUntrustedCheckout) checkoutsOf(j *Job, s *Step) []*untrustedChec
 		if script == nil {
 			return nil
 		}
-		process := map[string]string{} // the environment of the step, which a script file it starts inherits
-		for n := range untrustedEnvNames(rule.wf, j, s) {
+		// the environment of the step, which a script file it starts inherits: what earlier steps wrote to $GITHUB_ENV,
+		// then the env of the workflow, the job and the step. A step env entry with a value that is not untrusted
+		// replaces what an earlier step wrote.
+		process := maps.Clone(rule.carried)
+		if process == nil {
+			process = map[string]string{}
+		}
+		tainted := untrustedEnvNames(rule.wf, j, s)
+		if s.Env != nil {
+			for _, v := range s.Env.Vars {
+				if v.Name != nil && !tainted[v.Name.Value] {
+					delete(process, v.Name.Value)
+				}
+			}
+		}
+		for n := range tainted {
 			process[n] = "$" + n
 		}
-		maps.Copy(process, rule.carried)
 		taint := newRevTaint(script, process)
 		var ret []*untrustedCheckout
 		earlier := rule.fetches
