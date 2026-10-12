@@ -145,6 +145,46 @@ jactionlint reports findings that zizmor does not on this corpus: `require-shell
 (`undocumented-permissions`, `concurrency-limits`, `template-injection`, `cache-poisoning`, `artipacked`, `bot-conditions`,
 `unpinned-tools`). The surplus findings are not reviewed one by one.
 
+### Run over the 1,109-repository corpus (2026-10-12)
+
+The same harness (`pedantic` profile, zizmor 1.30.1 `--offline --persona pedantic`, jactionlint from `main` at v2.1.0, offline) over
+1,109 local clones of public repositories, with `--line-tolerance 3`: zizmor reports 112,559 findings and jactionlint also reports
+98,611 of them (87.6%). 13,948 are missed. zizmor 1.30.1 is still the latest release (`mise ls-remote zizmor`). Without the line
+tolerance the same run matches 91,315 (81.1%); the difference is mostly `artipacked` (4,692 against 9,994), `template-injection`
+(23,565 against 24,142) and `dangerous-triggers` (13 against 705), where the tools point at different lines of the same finding.
+Audits with misses, at a tolerance of 3 lines:
+
+| zizmor audit | zizmor | also reported by jactionlint | missed |
+| --- | --: | --: | --: |
+| `excessive-permissions` | 12,856 | 8,238 | 4,618 |
+| `undocumented-permissions` | 9,244 | 5,178 | 4,066 |
+| `concurrency-limits` | 5,693 | 4,253 | 1,440 |
+| `anonymous-definition` | 10,011 | 9,048 | 963 |
+| `unpinned-uses` | 21,203 | 20,447 | 756 |
+| `artipacked` | 10,703 | 9,994 | 709 |
+| `cache-poisoning` | 1,038 | 419 | 619 |
+| `unpinned-images` | 609 | 472 | 137 |
+| `archived-uses` | 109 | 0 | 109 |
+| `superfluous-actions` | 1,036 | 940 | 96 |
+| `dangerous-triggers` | 777 | 705 | 72 |
+| `dependabot-cooldown` | 892 | 848 | 44 |
+| `obfuscation` | 291 | 120 | 171 |
+| `adhoc-packages` | 1,071 | 1,032 | 39 |
+| `template-injection` | 24,181 | 24,142 | 39 |
+| `use-trusted-publishing` | 112 | 79 | 33 |
+| `github-env` | 63 | 31 | 32 |
+| `bot-conditions` | 38 | 34 | 4 |
+
+`secrets-inherit`, `self-repository` (1 missed), `github-app`, `misfeature`, `overprovisioned-secrets`, `unpinned-tools`,
+`unsound-condition`, `unsound-ternary` and `unsound-contains` (1 missed) have no or almost no misses, and every audit not listed has no
+finding on either side. `archived-uses` is 0 of 109 because it is an online audit here: the offline run of zizmor reports it and
+jactionlint does not without `--online`.
+
+What this run does **not** say. The misses were not analyzed one by one, so none of them is claimed to be a known gap or a regression,
+except what the table above already says is partial by design (`excessive-permissions`, `undocumented-permissions`, `cache-poisoning`). The online audits were not run. The jactionlint-only surplus was not reviewed. The
+largest groups of misses (`excessive-permissions`, `undocumented-permissions`, `concurrency-limits`, `anonymous-definition`) are
+candidates for a closer look in a later release.
+
 Known causes of differences between the tools:
 
 - `undocumented-permissions`: zizmor accepts only a comment at the end of the line, jactionlint accepts one above the scope too.
