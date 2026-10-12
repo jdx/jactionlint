@@ -7247,22 +7247,29 @@ A step is reported at its checkout when it puts untrusted code in the workspace 
   in an environment variable they use. A `git fetch` of the head only downloads the objects: it counts when a later command
   of the same script (`git checkout FETCH_HEAD`, `git merge`, `git reset --hard`, ...) puts them in the working tree.
 - The head can reach those commands through a shell variable: `REF=$PR_REF` (or `REF="${{ github.event.pull_request.head.sha }}"`,
-  a `for` loop over it, or a chain of assignments) and then `git fetch origin "$REF"`. A variable that an earlier step wrote to
-  `$GITHUB_ENV` with an untrusted value (`echo "REF=${{ github.event.pull_request.head.sha }}" >> "$GITHUB_ENV"`) is followed
-  into the later steps of the job. An unconditional assignment of another value ends it.
+  a `for` loop over it, or a chain of assignments) and then `git fetch origin "$REF"`. A variable is followed in execution order:
+  an unconditional assignment replaces what the variable held, also what it inherited from the `env:` of the workflow, the job or
+  the step, so assigning a clean value ends the taint; an assignment in a branch, loop, function or pipeline can only add. A
+  variable that an earlier step wrote to `$GITHUB_ENV` with an untrusted value is followed into the later steps of the job
+  (`echo "REF=<head>" >> "$GITHUB_ENV"`, `printf 'REF=%s\n' ...`, a here document with `REF=<head>` or `REF<<EOF`); a later write
+  of another value to the same variable, or an `env:` entry of a step that sets it, replaces it. `echo` writes one entry, the one
+  of its first word.
 - A `git fetch` of the head in an earlier step also counts when a later `run:` step starts a script file of the project
   (`./scripts/x.sh`, `bash scripts/x.sh`, `sh ./x.sh`) and that file, read from the repository being linted, has a command that
   changes the working tree and names `FETCH_HEAD` or a destination of the refspec literally (`git checkout FETCH_HEAD`).
 - A script file that does the checkout itself counts at the step that starts it: the file is read, and the revision that
-  reaches it is followed through the positional parameters (`./scripts/co.sh "${{ github.event.pull_request.head.sha }}"` with
-  `git checkout "$1"` inside), the environment of the step, the variables that the step exports or puts in front of the call,
-  and the script's own assignments. A script that uses `gh pr checkout` is one too, and so is a script that fetches the head
-  and checks it out. Scripts that the script starts are followed three levels deep. The step is reported at once when the script
-  runs code after the checkout (`npm ci`), otherwise when a later command or step does.
-  The rule does not guess: a script that is missing, too large, outside the repository or whose path is computed is not
-  followed, and neither is a revision that comes out of a command (`REF=$(cmd)`, except that the words of the substitution are
-  looked at), `read`, `eval`, an array, a step output or a revision that a script receives under a name other than a
-  positional parameter or an exported variable. The same holds for a revision that a step passes to a command other than `git`.
+  reaches it is followed through the positional parameters it is given (`./scripts/co.sh "${{ github.event.pull_request.head.sha }}"`
+  with `git checkout "$1"` inside), the variables it inherits (the `env:` of the step and the variables that the caller exported;
+  the assignments in front of the call apply last) and its own assignments. The caller's unexported variables and positional
+  parameters do not reach it. A script that uses `gh pr checkout` is one too, and so is a script that fetches the head and
+  checks it out. Scripts that the script starts are followed three levels deep. The file is looked up from the directory the
+  script is in, which follows `cd` with a literal relative directory. The step is reported at once when the script runs code
+  after the checkout (`npm ci`; what ran before it does not count), otherwise when a later command or step does.
+  The rule does not guess: a script that is missing, too large, outside the repository, whose path is computed, or that is
+  started after a `cd` that is conditional, dynamic or absolute (or `pushd`) is not followed. Neither is a revision that comes out
+  of a command (`REF=$(cmd)`, except that the words of the substitution are looked at), `read`, `eval`, an array, `declare -x`,
+  a step output or a here document written to `$GITHUB_ENV` with anything but `NAME=value` and `NAME<<DELIM` lines. The same
+  holds for a revision that a step passes to a command other than `git`.
 - "Runs it" is a later step with a `run:` command that can execute workspace code (a script, `npm`, `cargo`, `make`, an
   interpreter, ...), a local action (`uses: ./...`), or one of a few actions that build the workspace. Commands that only read or
   move files (`cat`, `git diff`, `grep`, `jq`, `tar`, `gh`, ...) do not count, and neither do shell keywords and builtins

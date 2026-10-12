@@ -376,29 +376,6 @@ func scriptValidates(s *Step) bool {
 	return ok && e.Run != nil && validationRegex.MatchString(e.Run.Value)
 }
 
-// untrustedEnvNames returns the names of the environment variables of the workflow, the job and the step whose
-// value refers to something untrusted. The variables of the workflow are inherited by every step.
-func untrustedEnvNames(wf *Workflow, j *Job, s *Step) map[string]bool {
-	names := map[string]bool{}
-	var wfEnv *Env
-	if wf != nil {
-		wfEnv = wf.Env
-	}
-	for _, env := range []*Env{wfEnv, j.Env, s.Env} {
-		if env == nil {
-			continue
-		}
-		for _, v := range env.Vars {
-			if v.Value != nil {
-				if _, bad := untrustedValue(v.Value.Value); bad {
-					names[v.Name.Value] = true
-				}
-			}
-		}
-	}
-	return names
-}
-
 // siblingWorkflows reads the workflows of a project for the rules that look at the workflows a
 // workflow_run event waits for. A project with hundreds of workflows would otherwise be read and parsed
 // again for each of them. One value serves the files linted in one run (LocalActionsCache.siblings), so

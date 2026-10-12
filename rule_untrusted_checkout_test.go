@@ -563,6 +563,185 @@ jobs:
           PR_REF: ${{ github.event.pull_request.head.sha }}
       - run: make
 `},
+		{"child env: step env REF clean, reassigned from the head, then the script", map[string]string{"../../scripts/co.sh": "git checkout \"$REF\"\n"}, prt + `    steps:
+      - uses: actions/checkout@v4
+      - run: | # want
+          REF=$PR_REF
+          ./scripts/co.sh
+        env:
+          REF: main
+          PR_REF: ${{ github.event.pull_request.head.sha }}
+      - run: make
+`},
+		{"child env: the prefix assignment wins over an earlier export", map[string]string{"../../scripts/co.sh": "git checkout \"$REF\"\n"}, prt + `    steps:
+      - uses: actions/checkout@v4
+      - run: | # want
+          export REF=main
+          REF=$PR_REF ./scripts/co.sh
+        env:
+          PR_REF: ${{ github.event.pull_request.head.sha }}
+      - run: make
+`},
+		{"child env: an unexported variable does not reach the script", map[string]string{"../../scripts/co.sh": "git checkout \"$REF\"\n"}, prt + `    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          REF=$PR_REF
+          ./scripts/co.sh
+      - run: make
+`},
+		{"nested script given a literal does not inherit the parent's argument", map[string]string{"../../scripts/co.sh": "./scripts/inner.sh main\n", "../../scripts/inner.sh": "git checkout \"$1\"\n"}, prt + `    steps:
+      - uses: actions/checkout@v4
+      - run: ./scripts/co.sh "${{ github.event.pull_request.head.sha }}"
+      - run: make
+`},
+		{"GITHUB_ENV: echo of several words writes one entry for the first", nil, prt + `    steps:
+      - uses: actions/checkout@v4
+      - run: echo "REF=main" >> "$GITHUB_ENV"
+        env:
+          PR_REF: ${{ github.event.pull_request.head.sha }}
+      - run: echo "REF=${{ github.event.pull_request.head.sha }}" >> "$GITHUB_ENV"
+      - run: echo "NOTE=building" "REF=main" >> "$GITHUB_ENV"
+      - run: git fetch origin "$REF" # want
+      - run: git checkout FETCH_HEAD
+      - run: make
+`},
+		{"GITHUB_ENV: echo with a flag then a clean write of the variable", nil, prt + `    steps:
+      - uses: actions/checkout@v4
+      - run: echo -n "REF=${{ github.event.pull_request.head.sha }}" >> "$GITHUB_ENV"
+      - run: echo -e "REF=main" >> "$GITHUB_ENV"
+      - run: git fetch origin "$REF"
+      - run: git checkout FETCH_HEAD
+      - run: make
+`},
+		{"GITHUB_ENV: printf with the entry in the format", nil, prt + `    steps:
+      - uses: actions/checkout@v4
+      - run: printf 'REF=%s\n' "$PR_REF" >> "$GITHUB_ENV"
+        env:
+          PR_REF: ${{ github.event.pull_request.head.sha }}
+      - run: git fetch origin "$REF" # want
+      - run: git checkout FETCH_HEAD
+      - run: make
+`},
+		{"GITHUB_ENV: printf %s with the entry in the argument", nil, prt + `    steps:
+      - uses: actions/checkout@v4
+      - run: printf '%s\n' "REF=${{ github.event.pull_request.head.sha }}" >> "$GITHUB_ENV"
+      - run: git fetch origin "$REF" # want
+      - run: git checkout FETCH_HEAD
+      - run: make
+`},
+		{"GITHUB_ENV: printf with a literal replaces the variable", nil, prt + `    steps:
+      - uses: actions/checkout@v4
+      - run: echo "REF=${{ github.event.pull_request.head.sha }}" >> "$GITHUB_ENV"
+      - run: printf 'REF=%s\n' main >> "$GITHUB_ENV"
+      - run: git fetch origin "$REF"
+      - run: git checkout FETCH_HEAD
+      - run: make
+`},
+		{"GITHUB_ENV: here document with the head", nil, prt + `    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          cat <<EOF >> "$GITHUB_ENV"
+          REF=${{ github.event.pull_request.head.sha }}
+          EOF
+      - run: git fetch origin "$REF" # want
+      - run: git checkout FETCH_HEAD
+      - run: make
+`},
+		{"GITHUB_ENV: here document with a delimiter entry, replaced by a literal", nil, prt + `    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          {
+            echo "REF<<EOF"
+            echo "${{ github.event.pull_request.head.sha }}"
+            echo "EOF"
+          } >> "$GITHUB_ENV"
+      - run: |
+          cat <<EOF >> "$GITHUB_ENV"
+          REF=main
+          EOF
+      - run: git fetch origin "$REF"
+      - run: git checkout FETCH_HEAD
+      - run: make
+`},
+		{"script: execution before the checkout is not the code of the pull request", map[string]string{"../../scripts/co.sh": "git fetch origin \"$1\"\nnpm ci\ngit checkout FETCH_HEAD\n"}, prt + `    steps:
+      - uses: actions/checkout@v4
+      - run: ./scripts/co.sh "${{ github.event.pull_request.head.sha }}"
+`},
+		{"script: execution after the checkout is reported", map[string]string{"../../scripts/co.sh": "git fetch origin \"$1\"\ngit checkout FETCH_HEAD\nnpm ci\n"}, prt + `    steps:
+      - uses: actions/checkout@v4
+      - run: ./scripts/co.sh "${{ github.event.pull_request.head.sha }}" # want
+`},
+		{"same script: npm before the checkout, nothing after", nil, prt + `    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          git fetch origin "$PR_REF"
+          npm ci
+          git checkout FETCH_HEAD
+        env:
+          PR_REF: ${{ github.event.pull_request.head.sha }}
+`},
+		{"same script: npm after the checkout", nil, prt + `    steps:
+      - uses: actions/checkout@v4
+      - run: | # want
+          git fetch origin "$PR_REF"
+          git checkout FETCH_HEAD
+          npm ci
+        env:
+          PR_REF: ${{ github.event.pull_request.head.sha }}
+`},
+		{"cd into the directory of the script", map[string]string{"../../scripts/co.sh": "git checkout \"$1\"\n"}, prt + `    steps:
+      - uses: actions/checkout@v4
+      - run: | # want
+          cd scripts
+          bash co.sh "$PR_REF"
+        env:
+          PR_REF: ${{ github.event.pull_request.head.sha }}
+      - run: make
+`},
+		{"cd into another directory than the one of the script", map[string]string{"../../co.sh": "git checkout \"$1\"\n"}, prt + `    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          cd scripts
+          bash co.sh "$PR_REF"
+        env:
+          PR_REF: ${{ github.event.pull_request.head.sha }}
+      - run: make
+`},
+		{"cd that is conditional makes the directory unknown", map[string]string{"../../scripts/co.sh": "git checkout \"$1\"\n"}, prt + `    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          if [ -n "$X" ]; then cd scripts; fi
+          bash co.sh "$PR_REF"
+        env:
+          PR_REF: ${{ github.event.pull_request.head.sha }}
+      - run: make
+`},
+		{"a long chain of assignments", nil, prt + `    steps:
+      - uses: actions/checkout@v4
+      - run: | # want
+          A=$PR_REF; B=$A; C=$B; D=$C; E=$D; F=$E
+          git fetch origin "$F"
+          git checkout FETCH_HEAD
+        env:
+          PR_REF: ${{ github.event.pull_request.head.sha }}
+      - run: make
+`},
+		{"a doubling chain of assignments ends", nil, prt + `    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          A=x; B=$A$A; C=$B$B; D=$C$C; E=$D$D; F=$E$E; G=$F$F; H=$G$G; I=$H$H; J=$I$I; K=$J$J; L=$K$K; M=$L$L
+          git fetch origin "$M"
+          git checkout FETCH_HEAD
+      - run: make
+`},
+		{"GITHUB_ENV: printf with a format that is not understood keeps the value", nil, prt + `    steps:
+      - uses: actions/checkout@v4
+      - run: echo "REF=${{ github.event.pull_request.head.sha }}" >> "$GITHUB_ENV"
+      - run: printf 'REF=%5.1f\n' 1 >> "$GITHUB_ENV"
+      - run: git fetch origin "$REF" # want
+      - run: git checkout FETCH_HEAD
+      - run: make
+`},
 	}
 	for _, tc := range tests {
 		t.Run(tc.what, func(t *testing.T) {

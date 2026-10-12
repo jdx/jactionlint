@@ -176,24 +176,15 @@ func (rule *RuleUntrustedCheckout) checkoutsOf(j *Job, s *Step) []*untrustedChec
 		if script == nil {
 			return nil
 		}
-		// the environment of the step, which a script file it starts inherits: what earlier steps wrote to $GITHUB_ENV,
-		// then the env of the workflow, the job and the step. A step env entry with a value that is not untrusted
-		// replaces what an earlier step wrote.
-		process := maps.Clone(rule.carried)
-		if process == nil {
-			process = map[string]string{}
+		// the environment of the step: the env of the workflow and the job, what earlier steps wrote to $GITHUB_ENV,
+		// then the env of the step
+		process := map[string]string{}
+		if rule.wf != nil {
+			envDescs(rule.wf.Env, process)
 		}
-		tainted := untrustedEnvNames(rule.wf, j, s)
-		if s.Env != nil {
-			for _, v := range s.Env.Vars {
-				if v.Name != nil && !tainted[v.Name.Value] {
-					delete(process, v.Name.Value)
-				}
-			}
-		}
-		for n := range tainted {
-			process[n] = "$" + n
-		}
+		envDescs(j.Env, process)
+		maps.Copy(process, rule.carried)
+		envDescs(s.Env, process)
 		taint := newRevTaint(script, process)
 		var ret []*untrustedCheckout
 		earlier := rule.fetches
@@ -202,6 +193,7 @@ func (rule *RuleUntrustedCheckout) checkoutsOf(j *Job, s *Step) []*untrustedChec
 			if c.Name == "git" || c.Name == "gh" {
 				env = taint.names(c.Offset)
 			}
+			fetchAt := c.Offset // where the revision reaches the working tree, for what runs after it
 			what, ok := commandChecksOutUntrusted(c, env)
 			if ok {
 				what = taint.describe(what, c.Offset)
@@ -230,7 +222,7 @@ func (rule *RuleUntrustedCheckout) checkoutsOf(j *Job, s *Step) []*untrustedChec
 			if !ok {
 				// a script file of the project that checks out a revision it is given, or that it takes from the
 				// environment, see untrusted_checkout_flow.go
-				if w, how, found := rule.followScript(taint, c, process, s, maxScriptDepth); found {
+				if w, how, found := rule.followScript(taint, c, process, stepWorkdir(s), maxScriptDepth); found {
 					off := c.Offset + 1 // the call itself is not the code that runs
 					ret = append(ret, &untrustedCheckout{pos: pos, what: w, offset: off, step: s, how: how})
 					continue
@@ -241,8 +233,9 @@ func (rule *RuleUntrustedCheckout) checkoutsOf(j *Job, s *Step) []*untrustedChec
 				// the script puts what it fetched in the working tree.
 				if w, bad := commandNamesUntrusted(c, env); bad {
 					w = taint.describe(w, c.Offset)
-					if fetchedThenUsed(script.Commands[i+1:]) {
+					if k := firstWorkTree(script.Commands[i+1:]); k >= 0 {
 						what, ok = w, true
+						fetchAt = script.Commands[i+1+k].Offset
 					} else {
 						rule.fetches = append(rule.fetches, &pendingFetch{pos: pos, what: w, names: fetchedNames(c)})
 					}
@@ -253,7 +246,7 @@ func (rule *RuleUntrustedCheckout) checkoutsOf(j *Job, s *Step) []*untrustedChec
 				if c.Name == "git" && c.Verb() == "clone" && len(c.Positional) > 2 {
 					dir = normalizeDir(c.Sub(2))
 				}
-				ret = append(ret, &untrustedCheckout{pos: pos, what: what, dir: dir, offset: c.Offset, step: s})
+				ret = append(ret, &untrustedCheckout{pos: pos, what: what, dir: dir, offset: fetchAt, step: s})
 			}
 		}
 		rule.carryEnv(script, taint)
@@ -328,7 +321,7 @@ func (rule *RuleUntrustedCheckout) scriptUsingFetch(c *runscript.Command, s *Ste
 }
 
 // gitCheckoutVerbs are the git commands that put a revision in the working tree. A "fetch" is not one:
-// it only downloads objects, see fetchedThenUsed.
+// it only downloads objects, see firstWorkTree.
 var gitCheckoutVerbs = map[string]bool{
 	"checkout": true, "switch": true, "pull": true, "merge": true, "cherry-pick": true,
 	"rebase": true, "clone": true, "reset": true, "restore": true,
@@ -394,16 +387,6 @@ func fetchedNames(c *runscript.Command) []string {
 func wordsName(c *runscript.Command, names []string) bool {
 	for _, w := range c.Words {
 		if !w.Dynamic() && slices.Contains(names, w.Value) {
-			return true
-		}
-	}
-	return false
-}
-
-// fetchedThenUsed reports whether one of the commands puts a fetched revision in the working tree.
-func fetchedThenUsed(rest []*runscript.Command) bool {
-	for _, c := range rest {
-		if c.Name == "git" && workTreeVerbs[c.Verb()] {
 			return true
 		}
 	}
