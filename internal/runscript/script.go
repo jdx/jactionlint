@@ -27,6 +27,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
 	"unicode/utf8"
 
 	"mvdan.cc/sh/v3/syntax"
@@ -157,7 +158,9 @@ func Analyze(script, shell string) (s *Script, err error) {
 	// The parser sees the script with the "\r" of each CRLF removed, so that a "\<newline>" continuation and a
 	// heredoc delimiter keep their meaning. omap turns its offsets back into offsets of the original script.
 	parsed, omap := stripCR(sub)
-	f, perr := syntax.NewParser(syntax.Variant(syntax.LangBash)).Parse(strings.NewReader(parsed), "")
+	parser := parserPool.Get().(*syntax.Parser)
+	f, perr := parser.Parse(strings.NewReader(parsed), "")
+	parserPool.Put(parser) // not reached when Parse panics, so a parser in an unknown state is dropped
 	if perr != nil {
 		return nil, &ParseError{perr}
 	}
@@ -165,6 +168,10 @@ func Analyze(script, shell string) (s *Script, err error) {
 	b.build(f)
 	return s, nil
 }
+
+// parserPool reuses the shell parsers: a parser is a few kilobytes of buffers, and a repository has thousands of
+// scripts. Parse resets all the state of a parser, so a parser can parse one script after another.
+var parserPool = sync.Pool{New: func() any { return syntax.NewParser(syntax.Variant(syntax.LangBash)) }}
 
 // stripCR removes the "\r" of every "\r\n". It returns the text and, when something was removed, a table which maps
 // each offset of the text (and its end) to the offset in src; the table is nil when src has no CRLF.

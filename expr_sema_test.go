@@ -1758,6 +1758,28 @@ func TestExprSematincsCheckerUpdateDispatchInputsVarType(t *testing.T) {
 	}
 }
 
+// The github context is copied once per checker, along the path to github.event.inputs, and not again by
+// the next update.
+func TestExprSemanticsCheckerUpdateDispatchInputsCopiesGithubOnce(t *testing.T) {
+	global := BuiltinGlobalVariableTypes["github"].(*ObjectType)
+	c := NewExprSemanticsChecker(false, nil, nil)
+	c.UpdateDispatchInputs(NewStrictObjectType(map[string]ExprType{"a": StringType{}}))
+	first := c.vars["github"].(*ObjectType)
+	if first == global || first.Props["event"] == global.Props["event"] {
+		t.Fatal("github context was not copied")
+	}
+	c.UpdateDispatchInputs(NewStrictObjectType(map[string]ExprType{"b": StringType{}}))
+	if c.vars["github"].(*ObjectType) != first {
+		t.Error("github context was copied again by the second update")
+	}
+	if _, ok := first.Props["event"].(*ObjectType).Props["inputs"].(*ObjectType).Props["b"]; !ok {
+		t.Error("second update was not applied")
+	}
+	if _, ok := global.Props["event"].(*ObjectType).Props["inputs"]; ok {
+		t.Error("global github.event.inputs was set")
+	}
+}
+
 func TestExprSemanticsCheckerUpdateInputsMultipleTimes(t *testing.T) {
 	tests := []struct {
 		first  *ObjectType

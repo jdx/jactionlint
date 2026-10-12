@@ -615,10 +615,14 @@ func (l *Linter) lintFilesQuietly(filepaths []string, project *Project) ([]fileR
 		rwc := rwcf.GetCache(proj)
 
 		eg.Go(func() error {
-			// Bound concurrency on reading files to avoid "too many files to open" error (issue #3)
+			// Bound concurrency on reading files to avoid "too many files to open" error (issue #3). The
+			// slot is held while the file is checked: a repository of hundreds of large workflows would
+			// otherwise keep every workflow's syntax trees alive at once (peak memory grew with the size
+			// of the repository, not with the number of CPUs), and the garbage collector has to scan
+			// all of them. The results do not depend on the order the files are checked in.
 			sema.Acquire(ctx, 1)
+			defer sema.Release(1)
 			src, err := os.ReadFile(w.path)
-			sema.Release(1)
 			if err != nil {
 				return fmt.Errorf("could not read %q: %w", w.path, err)
 			}

@@ -33,7 +33,7 @@ func (x *sourceIndex) sites() *yamlSiteIndex {
 
 // newSourceIndex indexes the lines of the source.
 func newSourceIndex(src []byte) *sourceIndex {
-	idx := &sourceIndex{src: src, lineStarts: []int{0}, valid: true}
+	idx := &sourceIndex{src: src, lineStarts: make([]int, 1, 1+bytes.Count(src, []byte{'\n'})), valid: true}
 	for i, b := range src {
 		switch {
 		case b == '\n':

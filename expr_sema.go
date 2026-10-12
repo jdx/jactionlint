@@ -3,6 +3,7 @@ package jactionlint
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"strconv"
 	"strings"
 )
@@ -443,7 +444,21 @@ func (sema *ExprSemanticsChecker) ensureGithubVarCopied() {
 	}
 	sema.ensureVarsCopied()
 
-	sema.vars["github"] = sema.vars["github"].DeepCopy()
+	// Only github.event.inputs is ever replaced, so copy the objects on the path to it and share
+	// everything else with the global type, which is never changed. A deep copy of the whole github
+	// context was made by every checker (one per expression site) of a workflow with dispatch inputs.
+	github, ok := sema.vars["github"].(*ObjectType)
+	if !ok {
+		sema.vars["github"] = sema.vars["github"].DeepCopy()
+		sema.githubVarCopied = true
+		return
+	}
+	github = &ObjectType{Props: maps.Clone(github.Props), Mapped: github.Mapped}
+	if event, ok := github.Props["event"].(*ObjectType); ok {
+		github.Props["event"] = &ObjectType{Props: maps.Clone(event.Props), Mapped: event.Mapped}
+	}
+	sema.vars["github"] = github
+	sema.githubVarCopied = true
 }
 
 // UpdateMatrix updates matrix object to given object type. Since matrix values change according to
