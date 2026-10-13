@@ -1,0 +1,7 @@
+name: composite
+description: Has no runtime of its own
+runs:
+  using: composite
+  steps:
+    - run: echo hi
+      shell: bash
