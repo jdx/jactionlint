@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/go-cmp/cmp"
 )
@@ -135,5 +136,23 @@ func TestOnlineCoverageGoldens(t *testing.T) {
 		if diff := cmp.Diff(string(want), have); diff != "" {
 			t.Errorf("%s (-want +got): %s", file, diff)
 		}
+	}
+}
+
+// The age bound that the report gives must never be tighter than the TTL the client enforces.
+func TestOnlineAnswerStatsRoundTheTTLUp(t *testing.T) {
+	for _, tc := range []struct {
+		ttl  time.Duration
+		want int
+	}{
+		{time.Hour, 3600}, {1500 * time.Millisecond, 2}, {500 * time.Millisecond, 1}, {time.Second, 1}, {0, 0},
+	} {
+		c := &httpGitHubClient{ttl: tc.ttl}
+		if got := c.answerStats().CacheTTLSeconds; got != tc.want {
+			t.Errorf("ttl %v: cacheTtlSeconds = %d, want %d", tc.ttl, got, tc.want)
+		}
+	}
+	if got := (&httpGitHubClient{ttl: time.Hour, offline: true}).answerStats().CacheTTLSeconds; got != 0 {
+		t.Errorf("the cache mode has no age limit: %d", got)
 	}
 }

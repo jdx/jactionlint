@@ -162,7 +162,7 @@ type OnlineAnswers struct {
 	// recently. RFC 3339, UTC. It is omitted when no cached answer was used.
 	OldestFetched string `json:"oldestFetched,omitempty"`
 	// CacheTTLSeconds is how long a cached answer is used without asking again, so a Cache answer is at most
-	// this old. It is omitted in the cache mode, which has no age limit, and with a TTL of zero.
+	// this old. It is the TTL rounded up to whole seconds, so it is never tighter than the TTL in force. It is omitted in the cache mode, which has no age limit, and with a TTL of zero.
 	CacheTTLSeconds int `json:"cacheTtlSeconds,omitempty"`
 }
 

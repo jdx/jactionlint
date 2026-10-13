@@ -1527,7 +1527,8 @@ func (c *httpGitHubClient) answerStats() OnlineAnswers {
 	defer c.mu.Unlock()
 	a := c.answers
 	if !c.offline && c.ttl > 0 {
-		a.CacheTTLSeconds = int(c.ttl / time.Second)
+		// Rounded up: the bound reported must never be tighter than the one enforced (1.5s is 2, 500ms is 1)
+		a.CacheTTLSeconds = int((c.ttl + time.Second - 1) / time.Second)
 	}
 	return a
 }
