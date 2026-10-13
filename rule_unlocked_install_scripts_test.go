@@ -1,6 +1,7 @@
 package jactionlint
 
 import (
+	"io"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -111,4 +112,28 @@ func TestUnlockedInstallLifecycleScripts(t *testing.T) {
 			t.Errorf("reported under the default profile:\n%s", out)
 		}
 	})
+}
+
+// A workflow that is linted on its own has no files to look at: the install is reported unless the command line says
+// otherwise.
+func TestUnlockedInstallLifecycleScriptsWithoutAProject(t *testing.T) {
+	src := "on: push\njobs:\n  build:\n    runs-on: ubuntu-latest\n    steps:\n      - run: npm ci\n      - run: npm ci --ignore-scripts\n      - run: cd web && npm ci\n"
+	l, err := NewLinter(io.Discard, &LinterOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	l.defaultConfig = &Config{Profile: ProfilePedantic}
+	errs, err := l.Lint("test.yaml", []byte(src), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var lines []int
+	for _, e := range errs {
+		if e.ID == "unlocked-install" && strings.Contains(e.Message, "lifecycle scripts") {
+			lines = append(lines, e.Line)
+		}
+	}
+	if len(lines) != 1 || lines[0] != 6 {
+		t.Errorf("want one finding at line 6, got %v: %v", lines, errs)
+	}
 }

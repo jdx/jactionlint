@@ -132,13 +132,14 @@ func atoiSafe(s string) int {
 // when the directory is not known: a working directory or prefix that is an expression, or a `cd` before the
 // command.
 func (c *runContext) commandDirs(root string, step *Step, s *runscript.Script, cmd *runscript.Command) ([]string, bool) {
-	if root == "" {
-		return nil, false
-	}
 	for _, o := range s.Commands {
 		if o.Offset < cmd.Offset && (o.Name == "cd" || o.Name == "pushd") {
 			return nil, false
 		}
+	}
+	if root == "" {
+		// a workflow linted on its own: there are no files to look at, and what they would say is not known
+		return nil, true
 	}
 	dirs := []string{root}
 	var wd *String
