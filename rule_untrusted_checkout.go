@@ -24,6 +24,8 @@ type RuleUntrustedCheckout struct {
 	// carried are the variables that earlier steps of the job wrote to $GITHUB_ENV with an untrusted value, with where
 	// the value comes from.
 	carried map[string]string
+	// carriedNum are the variables that earlier steps wrote to $GITHUB_ENV with the number of the pull request that a comment is on.
+	carriedNum map[string]string
 	// scripts are the script files that were read, by path, nil for one that cannot be followed.
 	scripts map[string]*runscript.Script
 	// gates tells with the online checks whether the environment of a job holds it back, see environmentGates.
@@ -170,7 +172,7 @@ func (rule *RuleUntrustedCheckout) VisitJobPre(n *Job) error {
 	// step runs code depends on the directory only, so it is asked once for each directory and not for
 	// each checkout: a job with thousands of checkouts is not quadratic.
 	rule.job = n
-	rule.fetches, rule.carried = nil, nil
+	rule.fetches, rule.carried, rule.carriedNum = nil, nil, nil
 	if neededJobGated(rule.wf, n, rule.privileged, rule.environmentHolds, map[*Job]bool{}) {
 		return nil // a job that this one needs is skipped or stops unless the user is trusted
 	}
@@ -181,6 +183,8 @@ func (rule *RuleUntrustedCheckout) VisitJobPre(n *Job) error {
 		}
 	}
 	gated := false
+	jobEvents := rule.privileged
+	defer rule.setEvents(jobEvents)
 	pending := map[string][]*untrustedCheckout{}
 	var dirs []string // the keys of pending in the order they were added
 	jobMerged := conditionRequiresMerged(n.If)
@@ -192,9 +196,11 @@ func (rule *RuleUntrustedCheckout) VisitJobPre(n *Job) error {
 			gated = true
 			continue
 		}
-		if len(eventsAfterCondition(rule.privileged, s.If)) == 0 {
+		stepEvents := eventsAfterCondition(jobEvents, s.If)
+		if len(stepEvents) == 0 {
 			continue // the step does not run for the events that this rule judges
 		}
+		rule.setEvents(stepEvents) // what ghAny, comment and the event of the message say is about this step
 		if conditionIsGuard(s.If) {
 			continue // a step a maintainer has to allow neither runs the code nor fetches it
 		}
@@ -471,8 +477,10 @@ func (rule *RuleUntrustedCheckout) checkoutsOf(j *Job, s *Step) []*untrustedChec
 				envDescs(rule.wf.Env, numEnv, issueNumberString)
 			}
 			envDescs(j.Env, numEnv, issueNumberString)
+			maps.Copy(numEnv, rule.carriedNum) // what earlier steps wrote to $GITHUB_ENV
 			envDescs(s.Env, numEnv, issueNumberString)
 			number = newNumberTaint(script, numEnv)
+			taint.num = number
 		}
 		var ret []*untrustedCheckout
 		earlier := rule.fetches
@@ -537,7 +545,13 @@ func (rule *RuleUntrustedCheckout) checkoutsOf(j *Job, s *Step) []*untrustedChec
 				ret = append(ret, &untrustedCheckout{pos: pos, what: what, dir: dir, offset: fetchAt, step: s})
 			}
 		}
-		rule.carryEnv(script, taint, s.If != nil)
+		rule.carryEnv(script, taint, s.If != nil, &rule.carried)
+		if rule.comment && !rule.ghAny {
+			// the number of the pull request that a comment is on can be carried the same way
+			numEnv := map[string]string{}
+			maps.Copy(numEnv, rule.carriedNum)
+			rule.carryEnv(script, newNumberTaint(script, numEnv), s.If != nil, &rule.carriedNum)
+		}
 		return ret
 	}
 	return nil

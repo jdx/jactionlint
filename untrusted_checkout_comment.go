@@ -186,8 +186,12 @@ func isPermissionGate(s *Step) bool {
 // collaborator, or the membership in an organization or a team.
 var reScriptChecksUser = regexp.MustCompile(`getCollaboratorPermissionLevel|getMembershipForUserInOrg|checkMembershipForUser|checkCollaborator|getMembershipForUser|getTeamMembershipForUserInOrg`)
 
-// jobHasGate reports whether a step of the job is a permission gate.
+// jobHasGate reports whether a step of the job is a permission gate that stops the jobs that need it: not when the job
+// goes on after a failure (`continue-on-error`).
 func jobHasGate(j *Job) bool {
+	if j.ContinueOnError != nil && (j.ContinueOnError.Expression != nil || j.ContinueOnError.Value) {
+		return false
+	}
 	for _, s := range flattenSteps(j.Steps) {
 		if isPermissionGate(s) {
 			return true
