@@ -121,14 +121,18 @@ type untrustedCheckout struct {
 // merged: the head the maintainer merged and the merge commit.
 var mergedCommits = []string{"github.event.pull_request.head.sha", "github.event.pull_request.merge_commit_sha"}
 
-// immutable reports whether the code is a commit of a pull request, which a branch name or `refs/pull/N/head` are not.
+// immutable reports whether the code is only commits of the pull request that was merged (every source is one of them), which
+// a branch name or `refs/pull/N/head` are not.
 func (c *untrustedCheckout) immutable() bool {
-	for _, m := range mergedCommits {
-		if strings.EqualFold(c.what, m) {
-			return true
+	if len(c.sources) == 0 {
+		return false
+	}
+	for _, s := range c.sources {
+		if s.kind != kindCommit || !slices.Contains(mergedCommits, s.text) {
+			return false
 		}
 	}
-	return false
+	return true
 }
 
 // conditionRequiresMerged reports whether the condition is only true for a pull request that was merged:
@@ -360,6 +364,9 @@ func (rule *RuleUntrustedCheckout) VisitJobPre(n *Job) error {
 			rule.reportOptOut(s)
 		}
 		for _, c := range rule.checkoutsOf(n, s) {
+			if c.sources == nil {
+				c.sources = rule.sourcesOfDescription(c.what) // a command: the ref it checks out is what describes it
+			}
 			if merged && c.immutable() {
 				continue // the code is only checked out, or only run, once it was merged
 			}
@@ -367,9 +374,6 @@ func (rule *RuleUntrustedCheckout) VisitJobPre(n *Job) error {
 				continue // actions/checkout refuses it for a fork
 			}
 			c.gates = c.gates.merge(here) // the gates of a step of a composite action are in c.gates already
-			if c.sources == nil {
-				c.sources = rule.sourcesOfDescription(c.what) // a command: the ref it checks out is what describes it
-			}
 			c.events = stepEvents
 			if c.how != "" {
 				rule.report(c, c.how, gateInfo{})
