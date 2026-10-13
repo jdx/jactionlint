@@ -145,7 +145,7 @@ func (rule *RuleUbuntuSlimLimits) VisitJobPre(n *Job) error {
 	if s := n.Services; s != nil && s.Expression == nil && len(s.Value) > 0 && s.Pos != nil {
 		rule.ReportIDf("ubuntu-slim-limits", s.Pos, "\"services\" cannot be used on ubuntu-slim: %s, so the service containers cannot start. use a runner with a VM such as ubuntu-latest", noDaemon)
 	}
-	for _, st := range n.Steps {
+	for _, st := range flattenSteps(n.Steps) {
 		a, ok := st.Exec.(*ExecAction)
 		if !ok || a.Uses == nil {
 			continue
@@ -189,8 +189,7 @@ func (rule *RuleUbuntuSlimLimits) dockerActionIn(spec string, visited map[string
 	if strings.EqualFold(md.Runs.Using, "docker") {
 		return "a Docker container action (runs.using: docker)"
 	}
-	for _, raw := range md.Runs.Steps {
-		uses := stepUses(raw)
+	for _, uses := range stepsUses(md.Runs.Steps) {
 		switch {
 		case strings.HasPrefix(uses, "docker://"):
 			return fmt.Sprintf("the Docker container action %q in a step of the composite action", uses)
@@ -203,17 +202,33 @@ func (rule *RuleUbuntuSlimLimits) dockerActionIn(spec string, visited map[string
 	return ""
 }
 
-// stepUses returns the "uses" of a step of a composite action as it was read from action.yml, or "".
-func stepUses(raw any) string {
-	switch m := raw.(type) {
-	case map[string]any:
-		s, _ := m["uses"].(string)
-		return s
-	case map[any]any:
-		s, _ := m["uses"].(string)
-		return s
+// stepsUses returns the "uses" of the steps of a composite action as they were read from action.yml, including the steps
+// of "parallel:" groups, in the order they appear.
+func stepsUses(steps []any) []string {
+	var ret []string
+	for _, raw := range steps {
+		var m map[string]any
+		switch v := raw.(type) {
+		case map[string]any:
+			m = v
+		case map[any]any:
+			m = make(map[string]any, len(v))
+			for k, x := range v {
+				if ks, ok := k.(string); ok {
+					m[ks] = x
+				}
+			}
+		default:
+			continue
+		}
+		if u, ok := m["uses"].(string); ok {
+			ret = append(ret, u)
+		}
+		if group, ok := m["parallel"].([]any); ok {
+			ret = append(ret, stepsUses(group)...)
+		}
 	}
-	return ""
+	return ret
 }
 
 func init() {

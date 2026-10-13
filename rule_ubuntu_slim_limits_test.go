@@ -43,6 +43,8 @@ func TestUbuntuSlimLimits(t *testing.T) {
 		{"container with image", slimJob("    container:\n      image: node:22\n"), []string{`"container" cannot be used on ubuntu-slim`}, ""},
 		{"services", slimJob("    services:\n      db:\n        image: postgres\n"), []string{`"services" cannot be used on ubuntu-slim`}, ""},
 		{"docker step", "on: push\njobs:\n  j:\n    runs-on: ubuntu-slim\n    steps:\n      - uses: docker://alpine:3.22\n", []string{`Docker container action "docker://alpine:3.22" cannot run on ubuntu-slim`}, ""},
+		{"docker step in a parallel group", "on: push\njobs:\n  j:\n    runs-on: ubuntu-slim\n    steps:\n      - parallel:\n          - run: echo\n          - uses: docker://alpine:3.22\n", []string{`"docker://alpine:3.22" cannot run on ubuntu-slim`}, ""},
+		{"docker step in a nested parallel group", "on: push\njobs:\n  j:\n    runs-on: ubuntu-slim\n    steps:\n      - parallel:\n          - parallel:\n              - uses: docker://alpine:3.22\n", []string{"docker://alpine:3.22"}, ""},
 		{"run docker commands is not reported", "on: push\njobs:\n  j:\n    runs-on: ubuntu-slim\n    steps:\n      - run: docker build .\n", nil, ""},
 		{"upper case label", "on: push\njobs:\n  j:\n    runs-on: Ubuntu-Slim\n    container: node:22\n    steps:\n      - run: echo\n", []string{"container"}, ""},
 		{"list of one label", "on: push\njobs:\n  j:\n    runs-on: [ubuntu-slim]\n    timeout-minutes: 20\n    steps:\n      - run: echo\n", []string{"20"}, pedanticSlim},
@@ -135,6 +137,7 @@ func TestUbuntuSlimLimitsLocalDockerAction(t *testing.T) {
 	write(".github/actions/cycle-b/action.yml", "name: c\ndescription: d\nruns:\n  using: composite\n  steps:\n    - uses: ./.github/actions/cycle-a\n    - uses: ./.github/actions/cycle-b\n")
 	write(".github/actions/cycle-docker-a/action.yml", "name: c\ndescription: d\nruns:\n  using: composite\n  steps:\n    - uses: ./.github/actions/cycle-docker-b\n")
 	write(".github/actions/cycle-docker-b/action.yml", "name: c\ndescription: d\nruns:\n  using: composite\n  steps:\n    - uses: ./.github/actions/cycle-docker-a\n    - uses: docker://busybox\n")
+	write(".github/actions/comp-parallel/action.yml", "name: c\ndescription: d\nruns:\n  using: composite\n  steps:\n    - run: echo\n      shell: bash\n    - parallel:\n        - run: echo\n          shell: bash\n        - parallel:\n            - uses: docker://alpine:3.22\n")
 	write(".github/actions/comp-node/action.yml", "name: c\ndescription: d\nruns:\n  using: composite\n  steps:\n    - uses: ./.github/actions/node\n    - uses: actions/checkout@v4\n")
 	write(".github/workflows/ci.yaml", `on: push
 jobs:
@@ -149,6 +152,7 @@ jobs:
       - uses: ./.github/actions/cycle-a
       - uses: ./.github/actions/cycle-docker-a
       - uses: ./.github/actions/comp-node
+      - uses: ./.github/actions/comp-parallel
   full:
     runs-on: ubuntu-latest
     steps:
@@ -171,6 +175,7 @@ jobs:
 		`the action "./.github/actions/comp-local-docker" runs "./.github/actions/comp-outer2", which runs "./.github/actions/dock", which runs a Docker container action (runs.using: docker)`,
 		// the cycle does not hide the Docker step of the action that is part of it
 		`the action "./.github/actions/cycle-docker-a" runs "./.github/actions/cycle-docker-b", which runs the Docker container action "docker://busybox"`,
+		`the action "./.github/actions/comp-parallel" runs the Docker container action "docker://alpine:3.22" in a step of the composite action`,
 	}
 	if len(got) != len(wants) {
 		t.Fatalf("want %d findings, all for the slim job, but got %q (all: %v)", len(wants), got, errs)
