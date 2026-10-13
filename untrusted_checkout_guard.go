@@ -2,6 +2,7 @@ package jactionlint
 
 import (
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -124,14 +125,20 @@ var (
 		{"github", "event", "pull_request", "head", "repo"},
 		{"github", "event", "workflow_run", "head_repository"},
 	}
-	// pullRequestNumberContexts are the contexts that hold the number of a pull request of the event that started the run, so a
-	// `refs/pull/<number>/merge` made from them is the pull request that the protection looks at.
-	pullRequestNumberContexts = [][]string{
-		{"github", "event", "number"},
-		{"github", "event", "pull_request"},
-		{"github", "event", "workflow_run", "pull_requests"},
-	}
 )
+
+// refIsPullNumber reports whether the chain is exactly a context that holds the number of a pull request of the event that
+// started the run, so a `refs/pull/<number>/merge` made from it is the pull request that the protection looks at. Not a
+// prefix: `github.event.pull_request.title` and `.head.ref` are other values.
+func refIsPullNumber(chain []string) bool {
+	switch {
+	case slices.Equal(chain, []string{"github", "event", "number"}), slices.Equal(chain, []string{"github", "event", "pull_request", "number"}):
+		return true
+	case len(chain) >= 6 && slices.Equal(chain[:4], []string{"github", "event", "workflow_run", "pull_requests"}) && chain[len(chain)-1] == "number":
+		return true // github.event.workflow_run.pull_requests[0].number
+	}
+	return false
+}
 
 var reRefsPull = regexp.MustCompile(`(?i)^refs/pull/((?:\$\{\{[^}]*\}\}|[^/])+)/(head|merge)$`)
 
@@ -162,7 +169,7 @@ func checkoutInputForksPR(name, value string) bool {
 			return true
 		}
 		for _, r := range nums {
-			if _, ok := refsMatchAny([]exprRef{r}, pullRequestNumberContexts); !ok {
+			if !refIsPullNumber(r.chain) {
 				return false
 			}
 		}

@@ -435,6 +435,29 @@ func (rule *RuleUntrustedCheckout) inputForksPR(name, value string) bool {
 // descAlternative joins the descriptions of the values that several callers pass for an input.
 const descAlternative = ", or "
 
+// uncoveredUntrusted reports whether the value reads something untrusted that the protection of actions/checkout does not look
+// at: a ref is only refused when every untrusted value in it is one that the protection knows (`github.head_ref` beside
+// `github.event.pull_request.head.sha` is a branch that it lets through). The inputs are judged through their callers.
+func (rule *RuleUntrustedCheckout) uncoveredUntrusted(name, value string) bool {
+	refs, _ := stringExprRefs(value)
+	covered := forkCommitContexts
+	if name == "repository" {
+		covered = forkRepoContexts
+	}
+	for _, r := range refs {
+		if len(r.chain) > 0 && r.chain[0] == "inputs" {
+			continue
+		}
+		if _, ok := refsMatchAny([]exprRef{r}, covered); ok || (name != "repository" && refIsPullNumber(r.chain)) {
+			continue
+		}
+		if _, ok := untrustedRefs([]exprRef{r}); ok {
+			return true
+		}
+	}
+	return false
+}
+
 // substituteInputs replaces the expressions that only read an input by the value of the input. An input that is not known stays.
 func substituteInputs(v string, value func(name string) (string, bool)) string {
 	return reInputExpr.ReplaceAllStringFunc(v, func(m string) string {
@@ -537,20 +560,17 @@ func (rule *RuleUntrustedCheckout) localActionCheckouts(s *Step, e *ExecAction) 
 
 	var ret []*untrustedCheckout
 	var gate permissionGateState
-	var groups []int // the group of each checkout in ret
 	for _, j := range action.Jobs {
 		steps, stepGroups := flattenStepsGroup(j.Steps)
 		for i, cs := range steps {
 			g := stepGroups[i]
 			if isPermissionGate(cs) {
 				// the action fails here for a user who may not write, and so does the step that calls it: what it checked
-				// out before is run by the steps of the caller that run after a failure only. A check in a parallel group
-				// does not hold back what runs beside it.
+				// out before or beside the check (a parallel group runs together, and the check does not hold back what runs
+				// beside it) is run by the steps of the caller that run after a failure only.
 				gate.see(g)
-				for k, c := range ret {
-					if gate.holds(groups[k]) {
-						c.afterFailure = true
-					}
+				for _, c := range ret {
+					c.afterFailure = true
 				}
 				continue
 			}
@@ -564,10 +584,9 @@ func (rule *RuleUntrustedCheckout) localActionCheckouts(s *Step, e *ExecAction) 
 			if _, cu := stepAction(cs); cu != nil && cu.isRepoAction("actions/checkout") {
 				if c := rule.actionCheckout(cs, ce, cu, action.Comments, subst, e.Uses.Pos); c != nil {
 					c.step = s
-					c.afterFailure = gate.holds(g) // only a step of the caller that also runs after a failure runs it
+					c.afterFailure = gate.set // after the check or beside it: only a step of the caller that also runs after a failure runs it
 					c.what += " in " + t.path
 					ret = append(ret, c)
-					groups = append(groups, g)
 				}
 			}
 		}
