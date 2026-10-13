@@ -95,6 +95,9 @@ func imageFix(sess *onlineSession, src []byte, lineStart, col int, uses bool) (*
 		if errors.Is(err, ErrImageNotFound) {
 			return nil, judgmentErr("the registry %s has no image %s:%s, or it is private: pin it by hand", reg.registry, ref.Image, tag)
 		}
+		if errors.Is(err, errImagesOffline) {
+			return nil, &pinFixError{code: NoFixOnlineRequired, err: err, msg: "pinning an image needs a lookup in its registry, which --online=cache does not make (a digest is not kept in the cache because a tag moves): run with --online to enable the fix"}
+		}
 		return nil, &pinFixError{code: NoFixLookupFailed, err: err,
 			msg: fmt.Sprintf("pinning the image needs %s to resolve the tag and the lookup failed: %v", reg.registry, err)}
 	}

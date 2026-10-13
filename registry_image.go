@@ -35,6 +35,10 @@ type ImageDigestClient interface {
 // visible without credentials.
 var ErrImageNotFound = errors.New("image not found in the registry")
 
+// errImagesOffline is why no digest is looked up in the cache mode (--online=cache): it never uses the network, and the digest
+// of a tag is not kept in the disk cache because a tag moves, so there is nothing to find. It is no failure and no skipped lookup.
+var errImagesOffline = errors.New("an image is not looked up in the cache mode, which never uses the network")
+
 // errImagesUnsupported is why no digest is known: the client cannot ask a registry.
 var errImagesUnsupported = errors.New("the online client cannot look up the digest of an image")
 
@@ -100,6 +104,9 @@ func (s *onlineSession) ImageDigest(img registryImage, tag string) (string, erro
 	if !s.allows(owner, repo) {
 		return "", errOnlineExcluded
 	}
+	if s.offline {
+		return "", errImagesOffline
+	}
 	var ic ImageDigestClient
 	switch {
 	case s.images != nil:
@@ -147,7 +154,7 @@ func (s *onlineSession) recordRegistry(registry, what string, err error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	switch {
-	case errors.Is(err, errOnlineExcluded), errors.Is(err, errImagesUnsupported):
+	case errors.Is(err, errOnlineExcluded), errors.Is(err, errImagesUnsupported), errors.Is(err, errImagesOffline):
 		return
 	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded) && s.ctx.Err() != nil:
 		s.stopLocked(err)

@@ -78,7 +78,7 @@ func newRegistryClient(ep registryEndpoints, githubToken func() string, offline 
 // ImageDigest implements ImageDigestClient.
 func (c *registryClient) ImageDigest(ctx context.Context, registry, repository, tag string) (string, error) {
 	if c.offline {
-		return "", fmt.Errorf("%s/%s:%s: %w", registry, repository, tag, ErrGitHubNotCached)
+		return "", errImagesOffline
 	}
 	if !imageRepoRe.MatchString(repository) || !imageTagRe.MatchString(tag) {
 		return "", fmt.Errorf("%q is not a name of an image", repository+":"+tag)

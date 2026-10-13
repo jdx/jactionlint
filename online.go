@@ -96,6 +96,7 @@ func (l *Linter) onlineSession(cfg *Config) (*onlineSession, error) {
 		}
 		o.sess = newOnlineSession(o.ctx, client, l.warnOnline)
 		o.sess.images = images
+		o.sess.offline = eff.Mode.Offline()
 		o.sess.allow, o.sess.deny = eff.Allow, eff.Deny
 		o.sess.detail = l.logf
 	})

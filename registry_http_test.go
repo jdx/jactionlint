@@ -304,7 +304,7 @@ func TestRegistryClientOfflineAndNames(t *testing.T) {
 	hub := newFakeRegistry(t)
 	c := testRegistryClient(hub, nil, "")
 	c.offline = true
-	if _, err := c.ImageDigest(context.Background(), registryDockerHub, "library/alpine", "1"); !errors.Is(err, ErrGitHubNotCached) {
+	if _, err := c.ImageDigest(context.Background(), registryDockerHub, "library/alpine", "1"); !errors.Is(err, errImagesOffline) {
 		t.Errorf("the mode which never uses the network: %v", err)
 	}
 	c.offline = false

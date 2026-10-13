@@ -152,6 +152,7 @@ type onlineSession struct {
 
 	// images answers the digest of container images. It is nil when the client itself can (ImageDigestClient).
 	images           ImageDigestClient
+	offline          bool // the cache mode: the registries are not asked
 	imageDigests     memo[imageKey, string]
 	registryDown     map[string]error // registries which are not asked again in this run
 	registryFailures map[string]int   // failures in a row, by registry
