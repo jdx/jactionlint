@@ -1436,7 +1436,7 @@ You can also see actionlint issues inline in VS Code via the [Trunk VS Code exte
 
 [reviewdog-actionlint]: https://github.com/reviewdog/action-actionlint
 [reviewdog]: https://github.com/reviewdog/reviewdog
-[cmd-manual]: https://github.com/jdx/jactionlint/blob/main/docs/usage.md
+[cmd-manual]: https://jactionlint.jdx.dev/usage
 [re2]: https://golang.org/s/re2syntax
 [go-template]: https://pkg.go.dev/text/template
 [jsonl]: https://jsonlines.org/

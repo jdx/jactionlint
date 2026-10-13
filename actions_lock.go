@@ -468,23 +468,19 @@ func firstLine(s string) string {
 	return s
 }
 
-// actionsLock returns the lock file of the project, read the first time it is asked for, or nil when the
-// repository has none.
-func (p *Project) actionsLock() *actionsLock {
+// actionsLockOf returns the lock file of the project, which the linter reads the first time a file needs it and keeps
+// for the rest of its run, or nil when the repository has none. It lives and dies with the Linter, like the call graph.
+func (l *Linter) actionsLockOf(p *Project) *actionsLock {
 	if p == nil {
 		return nil
 	}
-	v, _ := actionsLocks.LoadOrStore(p, &actionsLockSlot{})
+	v, _ := l.locks.LoadOrStore(p.root, &actionsLockSlot{})
 	slot := v.(*actionsLockSlot)
 	slot.once.Do(func() {
 		slot.lock = readActionsLock(filepath.Join(p.root, filepath.FromSlash(actionsLockPath)))
 	})
 	return slot.lock
 }
-
-// actionsLocks caches the lock file of each project: it is read when a rule first needs it, once for all the files
-// of the repository, so that a run sees one version of it, like the config of the project.
-var actionsLocks sync.Map // *Project -> *actionsLockSlot
 
 type actionsLockSlot struct {
 	once sync.Once
@@ -516,7 +512,7 @@ func (e *RuleEnv) lockScope() *lockScope {
 	if e == nil || e.project == nil {
 		return nil
 	}
-	lock := e.project.actionsLock()
+	lock := e.actionsLock
 	if !lock.usable() {
 		return nil
 	}
@@ -586,7 +582,7 @@ func (w *workflowLock) pins(u *UsesRef) bool {
 // lockWorkflowsOf returns the workflows (paths relative to the root of the repository) which run the local action
 // in the file, for an action file of a project whose lock file is usable.
 func (l *Linter) lockWorkflowsOf(p *Project, file string) []string {
-	if p == nil || !p.actionsLock().usable() {
+	if p == nil || !l.actionsLockOf(p).usable() {
 		return nil
 	}
 	rel := p.workflowKeyOf(l.absFilePath(file))
@@ -629,16 +625,16 @@ func (g *callGraph) workflowsRunning(dir string) []string {
 // lockListsWorkflow reports whether the Actions lock file of the project holds the file to itself: a workflow
 // which it lists, or an action which a workflow that it lists runs.
 func (l *Linter) lockListsWorkflow(project *Project, file string) bool {
-	if project == nil || !project.actionsLock().usable() {
+	if project == nil || !l.actionsLockOf(project).usable() {
 		return false
 	}
 	if l.isActionFile(file) {
 		for _, k := range l.lockWorkflowsOf(project, file) {
-			if project.actionsLock().listsWorkflow(k) {
+			if l.actionsLockOf(project).listsWorkflow(k) {
 				return true
 			}
 		}
 		return false
 	}
-	return project.actionsLock().listsWorkflow(project.workflowKeyOf(l.absFilePath(file)))
+	return l.actionsLockOf(project).listsWorkflow(project.workflowKeyOf(l.absFilePath(file)))
 }
