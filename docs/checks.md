@@ -2859,6 +2859,10 @@ A script can also read the text of an outsider itself, and the rule follows it f
   fetch of `refs/pull/N/head`, or the script did one of these before the command. Without that, the history is the one of the repository and
   the rule leaves it alone.
 
+The name of a branch or of an account that a command prints (`headRefName`, `author`, `git branch --show-current`, `%an`) is one line
+that git and GitHub restrict. It cannot add a variable to the environment, so `github-env` does not report it (CodeQL does the same), but
+`command-injection` does: `eval "git checkout $BR"` runs it.
+
 These are the models of [CodeQL](https://github.com/github/codeql/blob/main/actions/ql/lib/ext/config/untrusted_gh_command.yml)
 ([git](https://github.com/github/codeql/blob/main/actions/ql/lib/ext/config/untrusted_git_command.yml)). Only the output of a command
 substitution counts (`$(...)`), a value that was cut down or checked is accepted as for any other input, and a number or a state is not free

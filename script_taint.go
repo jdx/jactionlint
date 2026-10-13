@@ -25,36 +25,56 @@ import (
 type taintSource struct {
 	// desc names the command: `gh pr view --json title`.
 	desc string
-	// multiline is whether the text can hold a line break.
-	multiline bool
+	// kinds says what the text is, see kindText.
+	kinds int
 }
 
-// ghTaintedFields are the fields of `--json` of `gh pr view` and `gh issue view` that hold text of outsiders. The value
-// tells whether the field can hold several lines.
-var ghTaintedFields = map[string]map[string]bool{
+// What a source prints. A title or a subject is one line of free text, a body, comments, the files of a pull request or a
+// commit message can have many lines, and the name of a branch or of an account is one line that git and GitHub restrict
+// (it cannot hold a line break). CodeQL calls the last kind "branch" and "username" and does not count it as a source for
+// the injection into $GITHUB_ENV.
+const (
+	kindText  = 1
+	kindMulti = 2
+	kindName  = 4
+)
+
+// multiline is whether the text can hold a line break.
+func (t taintSource) multiline() bool { return t.kinds&kindMulti != 0 }
+
+// nameOnly is whether the text is only the name of a branch or of an account.
+func (t taintSource) nameOnly() bool { return t.kinds == kindName }
+
+// ghTaintedFields are the fields of `--json` of `gh pr view` and `gh issue view` that hold text of outsiders, and what
+// each is.
+var ghTaintedFields = map[string]map[string]int{
 	"pr": {
-		"headRefName": false, "title": false, "body": true, "comments": true, "files": true, "author": false,
-		"reviews": true, "latestReviews": true, "commits": true,
+		"headRefName": kindName, "title": kindText, "body": kindMulti, "comments": kindMulti, "files": kindMulti,
+		"author": kindName, "reviews": kindMulti, "latestReviews": kindMulti, "commits": kindMulti,
 	},
-	"issue": {"title": false, "body": true, "comments": true, "author": false},
+	"issue": {"title": kindText, "body": kindMulti, "comments": kindMulti, "author": kindName},
 }
 
 // ghJQTokens are the properties that a `--jq` filter of `gh api` or `gh pr view` selects when it reads text of an
-// outsider, and whether they can hold several lines.
+// outsider.
 var ghJQTokens = []struct {
-	re        *regexp.Regexp
-	multiline bool
+	re   *regexp.Regexp
+	kind int
 }{
-	{regexp.MustCompile(`\.body\b|\bbody\b|messageBody|\.message\b`), true},
-	{regexp.MustCompile(`\.title\b|\btitle\b|messageHeadline|headRefName|\.head\.ref\b|\.head\b|\.user\b|\.login\b|\bauthor\b|\.filename\b|\bpath\b|\.name\b`), false},
+	{regexp.MustCompile(`\.body\b|\bbody\b|messageBody|\.message\b|\.filename\b|\bpath\b`), kindMulti},
+	{regexp.MustCompile(`\.title\b|\btitle\b|messageHeadline`), kindText},
+	{regexp.MustCompile(`headRefName|\.head\.ref\b|\.head\b|\.user\b|\.login\b|\bauthor\b`), kindName},
 }
 
 var (
 	reGhAPIPath    = regexp.MustCompile(`(^|/)repos/[^\s]+/(pulls|issues)(/|$)`)
 	reGhTextPath   = regexp.MustCompile(`/(comments|reviews|files|commits)\b`)
-	reGitFormat    = regexp.MustCompile(`%(s|b|B|an|ae|aN|aE|cn|ce|cN|cE|N)\b|%[sbB]|oneline`)
 	rePullRefText  = regexp.MustCompile(`refs/pull/|\bpull/[^\s/]+/(head|merge)\b`)
 	gitSourceVerbs = map[string]bool{"log": true, "show": true, "diff": true, "diff-tree": true, "branch": true, "rev-parse": true, "symbolic-ref": true}
+	// the placeholders of a pretty format that print text of an outsider, by kind
+	reGitSubject = regexp.MustCompile(`%(s|ae|aE|ce|cE)\b|oneline`)
+	reGitBody    = regexp.MustCompile(`%(b|B|N)\b`)
+	reGitName    = regexp.MustCompile(`%(an|aN|cn|cN)\b`)
 )
 
 // scriptTaint returns the source of text that the command prints when it is one, see the top of the file.
@@ -89,20 +109,16 @@ func ghTaint(c *runscript.Command) (taintSource, bool) {
 			return taintSource{}, false
 		}
 		fields := ghTaintedFields[c.Verb()]
-		var listed []string
+		kinds := 0
 		for _, f := range c.FlagValues("--json") {
 			if f.Dynamic() {
-				return taintSource{desc: ghDesc(c), multiline: true}, true // the fields are not known
+				return taintSource{desc: ghDesc(c), kinds: kindMulti}, true // the fields are not known
 			}
-			listed = append(listed, strings.Split(f.Value, ",")...)
-		}
-		tainted, multiline := false, false
-		for _, name := range listed {
-			if ml, ok := fields[strings.TrimSpace(name)]; ok {
-				tainted, multiline = true, multiline || ml
+			for _, name := range strings.Split(f.Value, ",") {
+				kinds |= fields[strings.TrimSpace(name)]
 			}
 		}
-		if !tainted {
+		if kinds == 0 {
 			return taintSource{}, false
 		}
 		if jq, hasJQ := jqFilter(c); hasJQ {
@@ -112,10 +128,10 @@ func ghTaint(c *runscript.Command) (taintSource, bool) {
 				if sel == 0 {
 					return taintSource{}, false
 				}
-				multiline = sel&2 != 0
+				kinds = sel
 			}
 		}
-		return taintSource{desc: ghDesc(c), multiline: multiline}, true
+		return taintSource{desc: ghDesc(c), kinds: kinds}, true
 	case "api":
 		path := ""
 		if len(c.Positional) > 1 {
@@ -126,7 +142,7 @@ func ghTaint(c *runscript.Command) (taintSource, bool) {
 		}
 		jq, hasJQ := jqFilter(c)
 		if !hasJQ {
-			return taintSource{desc: ghDesc(c), multiline: false}, true // the JSON holds the title, the body ...
+			return taintSource{desc: ghDesc(c), kinds: kindText}, true // the JSON holds the title, the body ... on one line
 		}
 		sel, ok := jqSelects(jq)
 		if !ok {
@@ -135,28 +151,26 @@ func ghTaint(c *runscript.Command) (taintSource, bool) {
 		if sel == 0 && !reGhTextPath.MatchString(path) {
 			return taintSource{}, false
 		}
-		return taintSource{desc: ghDesc(c), multiline: sel&2 != 0}, true
+		if sel == 0 {
+			sel = kindMulti
+		}
+		return taintSource{desc: ghDesc(c), kinds: sel}, true
 	}
 	return taintSource{}, false
 }
 
-// jqSelects reports which kinds of free text a jq filter reads: 1 is a property that is one line, 2 one that can hold
-// several lines. ok is false when the filter is not a text the rule can read.
+// jqSelects reports which kinds of text a jq filter reads, 0 when it reads none. ok is false when the filter is empty.
 func jqSelects(filter string) (kinds int, ok bool) {
 	if strings.TrimSpace(filter) == "" {
 		return 0, false
 	}
 	for _, t := range ghJQTokens {
 		if t.re.MatchString(filter) {
-			if t.multiline {
-				kinds |= 2
-			} else {
-				kinds |= 1
-			}
+			kinds |= t.kind
 		}
 	}
 	if kinds != 0 && strings.Contains(filter, "[]") {
-		kinds |= 2 // a filter that iterates prints one line for each element
+		kinds |= kindMulti // a filter that iterates prints one line for each element
 	}
 	return kinds, true
 }
@@ -199,30 +213,39 @@ func gitSourceVerb(c *runscript.Command) (string, bool) {
 }
 
 func gitTaint(c *runscript.Command, verb string) (taintSource, bool) {
-	text := func(w *runscript.Word) string { return w.Value }
-	var all []string
-	for _, w := range c.Words {
-		all = append(all, text(w))
-	}
-	line := strings.Join(all, " ")
 	switch verb {
 	case "log", "show":
-		if reGitFormat.MatchString(line) {
-			return taintSource{desc: "git " + verb + " --format", multiline: strings.Contains(line, "%b") || strings.Contains(line, "%B") || strings.Contains(line, "%N")}, true
+		var all []string
+		for _, w := range c.Words {
+			all = append(all, w.Value)
+		}
+		line := strings.Join(all, " ")
+		kinds := 0
+		if reGitSubject.MatchString(line) {
+			kinds |= kindText
+		}
+		if reGitBody.MatchString(line) {
+			kinds |= kindMulti
+		}
+		if reGitName.MatchString(line) {
+			kinds |= kindName
+		}
+		if kinds != 0 {
+			return taintSource{desc: "git " + verb + " --format", kinds: kinds}, true
 		}
 	case "diff", "diff-tree":
-		return taintSource{desc: "git " + verb, multiline: true}, true
+		return taintSource{desc: "git " + verb, kinds: kindMulti}, true
 	case "branch":
 		if c.HasFlag("--show-current") {
-			return taintSource{desc: "git branch --show-current"}, true
+			return taintSource{desc: "git branch --show-current", kinds: kindName}, true
 		}
 	case "rev-parse":
 		if c.HasFlag("--abbrev-ref") {
-			return taintSource{desc: "git rev-parse --abbrev-ref"}, true
+			return taintSource{desc: "git rev-parse --abbrev-ref", kinds: kindName}, true
 		}
 	case "symbolic-ref":
 		if c.HasFlag("--short") {
-			return taintSource{desc: "git symbolic-ref --short"}, true
+			return taintSource{desc: "git symbolic-ref --short", kinds: kindName}, true
 		}
 	}
 	return taintSource{}, false

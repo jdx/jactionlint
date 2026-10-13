@@ -321,8 +321,9 @@ func (rule *RuleGitHubEnv) judgeWord(s *runscript.Script, w *runscript.Word, dep
 	}
 	// the output of `gh pr view --json title` and of `git log --format=%s` is text of outsiders
 	for _, c := range subs {
-		if src, ok := rule.scriptTaint(s, c); ok && (!rule.multilineOnly || src.multiline) {
-			return data{kind: dataUntrusted, input: src.desc, cmd: true, multiline: src.multiline}
+		if src, ok := rule.scriptTaint(s, c); ok && (!rule.multilineOnly || src.multiline()) && !(src.nameOnly() && rule.dest == "GITHUB_ENV") {
+			// the name of a branch or of an account is one line: it cannot add a variable to the environment
+			return data{kind: dataUntrusted, input: src.desc, cmd: true, multiline: src.multiline()}
 		}
 	}
 	if w.Subst && (len(w.Subs) == 0 || (len(subs) > 0 && !benignSubs(subs))) {
