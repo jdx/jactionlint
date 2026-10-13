@@ -175,9 +175,9 @@ jobs:
       - uses: actions/setup-go@v5 # zizmor: ignore[unpinned-uses]
 `
 	cfg := "ignores:\n  - rule: unpinned-uses\n    uses: actions/cache\n    reason: because\npaths:\n  .github/workflows/ci.yaml:\n    ignore: [excessive-permissions]\n"
-	root, wf := selectProject(t, workflow, map[string]string{".github/jactionlint.yaml": cfg})
+	root, _ := selectProject(t, workflow, map[string]string{".github/jactionlint.yaml": cfg})
 	t.Chdir(root) // the "paths" of the config are relative to the repository root, like the paths of the findings
-	wf = filepath.Join(".github", "workflows", "ci.yaml")
+	wf := filepath.Join(".github", "workflows", "ci.yaml")
 
 	count := func(args ...string) (n int, status int, stderr string) {
 		var out, errOut bytes.Buffer
@@ -202,9 +202,9 @@ jobs:
 func TestNoIgnoresKeepsTheCommandLineIgnoresAndDropsTheOthers(t *testing.T) {
 	workflow := "on: push\npermissions: {}\nconcurrency:\n  group: ci\n  cancel-in-progress: true\njobs:\n  build:\n    runs-on: ubuntu-latest\n    steps:\n      # jactionlint ignore=missing-timeout\n      - uses: actions/checkout@v4\n"
 	cfg := "paths:\n  .github/workflows/ci.yaml:\n    ignore: [unpinned-uses]\nignores:\n  - rule: missing-timeout\n    job: build\n"
-	root, wf := selectProject(t, workflow, map[string]string{".github/jactionlint.yaml": cfg})
+	root, _ := selectProject(t, workflow, map[string]string{".github/jactionlint.yaml": cfg})
 	t.Chdir(root)
-	wf = filepath.Join(".github", "workflows", "ci.yaml")
+	wf := filepath.Join(".github", "workflows", "ci.yaml")
 
 	ids, _, _ := findingIDs(t, wf)
 	if slices.Contains(ids, "unpinned-uses") || slices.Contains(ids, "missing-timeout") {
