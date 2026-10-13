@@ -406,18 +406,15 @@ func (rule *RuleUntrustedCheckout) inputForksPR(name, value string) bool {
 // `github.event.pull_request.head.sha` is a branch that it lets through). The inputs are judged through their callers.
 func (rule *RuleUntrustedCheckout) uncoveredUntrusted(name, value string) bool {
 	refs, _ := stringExprRefs(value)
-	var covered [][]string
-	switch name {
-	case "repository":
+	covered := forkCommitContexts
+	if name == "repository" {
 		covered = forkRepoContexts
-	default:
-		covered = append(slices.Clone(forkCommitContexts), pullRequestNumberContexts...)
 	}
 	for _, r := range refs {
 		if len(r.chain) > 0 && r.chain[0] == "inputs" {
 			continue
 		}
-		if _, ok := refsMatchAny([]exprRef{r}, covered); ok {
+		if _, ok := refsMatchAny([]exprRef{r}, covered); ok || (name != "repository" && refIsPullNumber(r.chain)) {
 			continue
 		}
 		if _, ok := untrustedRefs([]exprRef{r}); ok {
