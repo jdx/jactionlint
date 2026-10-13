@@ -43,6 +43,11 @@ var guardContexts = [][]string{
 	{"github", "event", "workflow_run", "actor"},
 	{"github", "actor"},
 	{"github", "triggering_actor"},
+	// who wrote the comment that started an issue_comment workflow
+	{"github", "event", "comment", "user"},
+	{"github", "event", "sender"},
+	{"github", "event", "comment", "author_association"},
+	{"github", "event", "issue", "author_association"},
 	// an earlier job or step decided whether the code is trusted
 	{"needs"},
 	{"steps"},
@@ -79,6 +84,9 @@ func conditionIsGuard(s *String) bool {
 				continue
 			}
 			if len(r.chain) == 4 && refCovers(r.chain, []string{"github", "event", "workflow_run", "event"}) && !workflowRunEventIsGuard(r) {
+				continue
+			}
+			if len(r.chain) == 4 && r.chain[3] == "author_association" && !associationIsGuard(exprs) {
 				continue
 			}
 			return true
@@ -129,7 +137,8 @@ func privilegedEvents(w *Workflow, project *Project, sib *siblingWorkflows) []st
 	var ret []string
 	for _, event := range privilegedTriggers {
 		switch event {
-		case "pull_request_target":
+		case "pull_request_target", "issue_comment":
+			// issue_comment carries no head to check out: a comment has to name the pull request, see untrusted_checkout_comment.go
 			if hasEvent(w, event) {
 				ret = append(ret, event)
 			}
@@ -141,7 +150,6 @@ func privilegedEvents(w *Workflow, project *Project, sib *siblingWorkflows) []st
 				}
 			}
 		}
-		// issue_comment is not handled: it carries no head to check out, a comment would have to name it
 	}
 	return ret
 }
