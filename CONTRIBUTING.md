@@ -219,7 +219,6 @@ around linking libc. `mise run build` does this by default.
 ## Testing
 
 [![CI](https://github.com/jdx/jactionlint/actions/workflows/ci.yaml/badge.svg)](https://github.com/jdx/jactionlint/actions/workflows/ci.yaml)
-[![Generate](https://github.com/jdx/jactionlint/actions/workflows/generate.yaml/badge.svg)](https://github.com/jdx/jactionlint/actions/workflows/generate.yaml)
 [![Problem Matchers](https://github.com/jdx/jactionlint/actions/workflows/matcher.yaml/badge.svg)](https://github.com/jdx/jactionlint/actions/workflows/matcher.yaml)
 [![Download script](https://github.com/jdx/jactionlint/actions/workflows/download.yaml/badge.svg)](https://github.com/jdx/jactionlint/actions/workflows/download.yaml)
 [![Release](https://github.com/jdx/jactionlint/actions/workflows/release.yaml/badge.svg)](https://github.com/jdx/jactionlint/actions/workflows/release.yaml)
@@ -415,8 +414,9 @@ automatically with `go generate`. The command runs [`generate-popular-actions`](
 
 The script also can detect new major releases of popular actions on GitHub by giving `-d` flag.
 
-The [`generate`](.github/workflows/generate.yaml) CI workflow weekly runs to detect new major releases and update
-`popular_actions.go`. Runs can be found [here](https://github.com/jdx/jactionlint/actions/workflows/generate.yaml).
+The `generate` job of the [release-please](.github/workflows/release-please.yaml) workflow runs weekly (and on every push to
+`main`) to detect new major releases and update `popular_actions.go` in the release pull request. Runs can be found
+[here](https://github.com/jdx/jactionlint/actions/workflows/release-please.yaml).
 
 ### Maintain `all_webhooks.go`
 
@@ -429,7 +429,7 @@ It fetches [`events-that-trigger-workflows.md`](https://raw.githubusercontent.co
 parses the markdown document, and extracts webhook names and their types. For more details, see
 [README.md at the script directory](./scripts/generate-webhook-events/README.md).
 
-Updating `all_webhooks.go` is run weekly on CI by [`generate`](.github/workflows/generate.yaml) workflow.
+Updating `all_webhooks.go` is run weekly on CI by the `generate` job of the [release-please](.github/workflows/release-please.yaml) workflow.
 
 ### Maintain `jactionlint-matcher.json`
 
@@ -454,7 +454,7 @@ contexts and special functions. GitHub Actions limits contexts and functions in 
 using [generate-availability](./scripts/generate-availability) script. It is run through `go generate` in `rule_expression.go`.
 See [the readme of the script](./scripts/generate-availability/README.md) for the usage of the script.
 
-Update for `availability.go` is run weekly on CI by [`generate`](.github/workflows/generate.yaml) workflow.
+Update for `availability.go` is run weekly on CI by the `generate` job of the [release-please](.github/workflows/release-please.yaml) workflow.
 
 <a id="about-checks-doc"></a>
 ## How to write checks document
