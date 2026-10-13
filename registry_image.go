@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"regexp"
 	"strings"
 )
@@ -121,7 +122,7 @@ func (s *onlineSession) ImageDigest(img registryImage, tag string) (string, erro
 		if down != nil {
 			s.mu.Lock()
 			s.skipped++
-			s.countKindLocked(classifyFailure(down))
+			s.countKindLocked(classifyRegistryFailure(down))
 			s.mu.Unlock()
 			return "", down
 		}
@@ -157,8 +158,8 @@ func (s *onlineSession) recordRegistry(registry, what string, err error) {
 			fmt.Sprintf("online: the image %s was not found in its registry or is private, so it is not pinned. --verbose lists every skipped lookup.", what))
 		return
 	}
-	s.registryFailedLocked(classifyFailure(err), "registry:"+registry, what, err,
-		fmt.Sprintf("online: could not look up %s: %s. the images of %s are not pinned (the lookups of GitHub are not affected). --verbose lists every skipped lookup.", what, err, registry))
+	s.registryFailedLocked(classifyRegistryFailure(err), "registry:"+registry, what, err,
+		fmt.Sprintf("online: could not look up %s: %s. this image is not pinned; the other images are still tried. --verbose lists every skipped lookup.", what, err))
 	if s.registryFailures == nil {
 		s.registryFailures = map[string]int{}
 	}
@@ -168,6 +169,8 @@ func (s *onlineSession) recordRegistry(registry, what string, err error) {
 			s.registryDown = map[string]error{}
 		}
 		s.registryDown[registry] = fmt.Errorf("skipped after a failure of %s: %w", registry, err)
+		s.warnRegistryOnceLocked("registry-down:"+registry,
+			fmt.Sprintf("online: %s is not asked again in this run (%s), so its other images are not pinned; the lookups of GitHub are not affected.", registry, err))
 	}
 }
 
@@ -182,10 +185,52 @@ func (s *onlineSession) registryFailedLocked(kind failureKind, key, what string,
 	if s.detail != nil {
 		s.detail("online: skipped %s: %v", what, err)
 	}
+	s.warnRegistryOnceLocked(key, message)
+}
+
+// warnRegistryOnceLocked warns the first time of its key.
+func (s *onlineSession) warnRegistryOnceLocked(key, message string) {
 	if k := failureKind(key); !s.seen[k] {
 		s.seen[k] = true
 		if s.warn != nil {
 			s.warn(message)
 		}
 	}
+}
+
+// registryStatusError is a registry answering with a status that is not a success.
+type registryStatusError struct {
+	registry string
+	status   int
+	message  string
+}
+
+func (e *registryStatusError) Error() string {
+	if e.message == "" {
+		return fmt.Sprintf("the registry %s answered with status %d", e.registry, e.status)
+	}
+	return fmt.Sprintf("the registry %s answered with status %d: %s", e.registry, e.status, e.message)
+}
+
+// classifyRegistryFailure tells the kind of a failure of a registry: classifyFailure knows the errors of GitHub, and not
+// the status of a registry.
+func classifyRegistryFailure(err error) failureKind {
+	var se *registryStatusError
+	switch {
+	case errors.Is(err, errRegistryRateLimited):
+		return failRateLimit
+	case errors.As(err, &se):
+		switch {
+		case se.status == http.StatusUnauthorized:
+			return failUnauthorized
+		case se.status == http.StatusForbidden:
+			return failForbidden
+		case se.status == http.StatusNotFound:
+			return failNotFound
+		case se.status >= 500:
+			return failServer
+		}
+		return failOther
+	}
+	return classifyFailure(err)
 }

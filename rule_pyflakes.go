@@ -2,6 +2,7 @@ package jactionlint
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"sync"
@@ -33,6 +34,8 @@ type RulePyflakes struct {
 	workflowShellIsPython shellIsPythonKind
 	jobShellIsPython      shellIsPythonKind
 	mu                    sync.Mutex
+	// ruff is true when the command is ruff instead of pyflakes (the option --ruff)
+	ruff bool
 	// tool counts the scripts which were checked, or which were not because the command is unavailable.
 	tool *externalTool
 }
@@ -47,6 +50,34 @@ func newRulePyflakes(cmd *externalCommand) *RulePyflakes {
 		workflowShellIsPython: shellIsPythonKindUnspecified,
 		jobShellIsPython:      shellIsPythonKindUnspecified,
 	}
+}
+
+// NewRuleRuff creates the rule for the Python scripts of "run:" which runs ruff (the pyflakes rules F of ruff)
+// instead of pyflakes. It reports the same rule ID "pyflakes". The executable is the command name or the path
+// of ruff.
+func NewRuleRuff(executable string, proc *concurrentProcess) (*RulePyflakes, error) {
+	cmd, err := proc.newCommandRunner(executable, false)
+	if err != nil {
+		return nil, err
+	}
+	r := newRulePyflakes(cmd)
+	r.ruff = true
+	r.desc = "Checks for Python script when \"shell: python\" is configured using ruff"
+	return r, nil
+}
+
+// ruffArgs is how ruff checks the script on stdin: only the rules F of pyflakes, whatever the configuration of the
+// directory ruff runs in says, and JSON.
+var ruffArgs = []string{"check", "--isolated", "--no-cache", "--select", "F", "--output-format", "json", "-"}
+
+// ruffDiagnostic is one element of the JSON array of ruff.
+type ruffDiagnostic struct {
+	Code     string `json:"code"`
+	Message  string `json:"message"`
+	Location struct {
+		Row    int `json:"row"`
+		Column int `json:"column"`
+	} `json:"location"`
 }
 
 // newRulePyflakesUnavailable creates the rule for a run where pyflakes cannot be used (it is disabled or was not
@@ -136,6 +167,10 @@ func (rule *RulePyflakes) runPyflakes(src string, pos *Pos) {
 	src = sanitizeExpressionsInScript(src) // Defined at rule_shellcheck.go
 	rule.Debug("%s: Running %s for Python script:\n%s", pos, rule.cmd.exe, src)
 
+	if rule.ruff {
+		rule.runRuff(src, pos)
+		return
+	}
 	rule.cmd.run([]string{}, src, func(stdout []byte, err error) error {
 		if err != nil {
 			rule.Debug("Command %s failed: %v", rule.cmd.exe, err)
@@ -149,6 +184,29 @@ func (rule *RulePyflakes) runPyflakes(src string, pos *Pos) {
 			if stdout, err = rule.parseNextError(stdout, pos); err != nil {
 				return err
 			}
+		}
+		return nil
+	})
+}
+
+func (rule *RulePyflakes) runRuff(src string, pos *Pos) {
+	rule.cmd.run(ruffArgs, src, func(stdout []byte, err error) error {
+		if err != nil {
+			rule.Debug("Command %s failed: %v", rule.cmd.exe, err)
+			return fmt.Errorf("`%s` did not run successfully while checking script at %s: %w", rule.cmd.exe, pos, err)
+		}
+		var ds []ruffDiagnostic
+		if err := json.Unmarshal(stdout, &ds); err != nil {
+			return fmt.Errorf("could not parse JSON output from ruff while checking script at %s: %w: stdout=%q", pos, err, stdout)
+		}
+		rule.mu.Lock()
+		defer rule.mu.Unlock()
+		for _, d := range ds {
+			msg := d.Message
+			if strings.HasPrefix(d.Code, "F") { // not "invalid-syntax", which has no number
+				msg = d.Code + " " + msg
+			}
+			rule.ReportIDf("pyflakes", pos, "ruff reported issue in this script: %d:%d: %s", d.Location.Row, d.Location.Column, msg)
 		}
 		return nil
 	})
@@ -195,6 +253,18 @@ func init() {
 	)
 	registerRuleFactory("pyflakes", func(env *RuleEnv) []Rule {
 		t := env.tools.tool("pyflakes")
+		if env.ruff != "" {
+			r, err := NewRuleRuff(env.ruff, env.proc)
+			if err != nil {
+				env.Skip(err.Error())
+				t.missing()
+				env.observe(newRulePyflakesUnavailable(t))
+				return nil
+			}
+			t.found()
+			r.tool = t
+			return []Rule{r}
+		}
 		if env.pyflakes == "" {
 			env.Skip("pyflakes command name was empty")
 			t.disabled()

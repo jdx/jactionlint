@@ -31,6 +31,11 @@ func (l *Linter) attachImageFixes(sess *onlineSession, src []byte, errs []*Error
 		if e.Line > len(starts) {
 			continue
 		}
+		if strings.Contains(e.Message, " in this script") {
+			// The image of a command in a script: the quoting of the shell and of YAML around it is not edited
+			e.NoFix = &NoFix{Code: NoFixNeedsJudgment, Reason: "the image is in a script: write the digest after its tag by hand, like \"image:tag@sha256:{digest}\""}
+			continue
+		}
 		fix, err := imageFix(sess, src, starts[e.Line-1], e.Column, e.ID == "unpinned-uses")
 		if err != nil {
 			if e.ID == "unpinned-uses" && errors.Is(err, errNotAnImage) {

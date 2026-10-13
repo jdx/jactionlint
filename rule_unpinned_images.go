@@ -17,6 +17,12 @@ import (
 // Docker images in `uses: docker://...` are checked by the unpinned-uses rule.
 type RuleUnpinnedImages struct {
 	RuleBase
+	runContext
+	// local are the images that the scripts of the workflow build or tag, and localUnknown is true when they also load
+	// images some other way (see localImagesOf). It is worked out when the first image of a script is found.
+	local        []string
+	localDone    bool
+	localUnknown bool
 }
 
 // NewRuleUnpinnedImages creates a new RuleUnpinnedImages instance.
@@ -39,6 +45,8 @@ var imageExprRegex = regexp.MustCompile(`\$\{\{(.*?)\}\}`)
 // "image" of a Docker action (action.yml), which is a registry image when it starts with "docker://"
 // and a Dockerfile otherwise.
 func (rule *RuleUnpinnedImages) VisitWorkflowPre(n *Workflow) error {
+	rule.enterWorkflow(n)
+	rule.local, rule.localDone, rule.localUnknown = nil, false, false
 	if n.Action == nil || n.Action.Runs == nil || n.Action.Runs.Image == nil || !rule.Config().RuleEnabled("unpinned-images") {
 		return nil
 	}
@@ -51,6 +59,7 @@ func (rule *RuleUnpinnedImages) VisitWorkflowPre(n *Workflow) error {
 
 // VisitJobPre is callback when visiting Job node before visiting its children.
 func (rule *RuleUnpinnedImages) VisitJobPre(n *Job) error {
+	rule.enterJob(n)
 	if !rule.Config().RuleEnabled("unpinned-images") {
 		return nil
 	}
@@ -215,6 +224,16 @@ func (rule *RuleUnpinnedImages) checkImage(img string, pos *Pos, subject func(im
 	if !ok {
 		requireDigest = true
 	}
+	// The policy of the first pattern of "policies" which matches the image wins over require-digest
+	fallback := imagePolicyHashPin
+	if !requireDigest {
+		fallback = imagePolicyTagPin
+	}
+	policies, _ := rule.Config().ruleOptionStringMap("unpinned-images", "policies")
+	policy := imagePolicyFor(policies, img, fallback)
+	if policy == imagePolicyAny {
+		return
+	}
 
 	what := subject(img)
 	ref := ParseUses("docker://" + img)
@@ -232,7 +251,7 @@ func (rule *RuleUnpinnedImages) checkImage(img string, pos *Pos, subject func(im
 		rule.ReportIDf("unpinned-images", pos, "%s has no tag, so the registry decides which image is pulled (\"latest\"). pin it to a digest like \"%s@sha256:{digest}\"", what, ref.Image)
 	case ref.Tag == "latest":
 		rule.ReportIDf("unpinned-images", pos, "%s uses the tag \"latest\", which changes whenever the registry is updated. pin it to a digest like \"%s@sha256:{digest}\"", what, ref.Image)
-	case requireDigest:
+	case policy == imagePolicyHashPin:
 		rule.ReportIDf("unpinned-images", pos, "%s is pinned by a tag, which can be moved to another image. pin it to a digest like \"%s:%s@sha256:{digest}\"", what, ref.Image, ref.Tag)
 	}
 }
@@ -257,7 +276,11 @@ func init() {
 		RuleInfo{
 			ID: "unpinned-images", Group: RuleGroupSecurity, Summary: "A container or service image is not pinned by a digest.",
 			DefaultLevel: SeverityError, Profile: ProfileDefault, Fixable: true, DocsAnchor: "check-unpinned-images",
-			Options: []RuleOption{{Name: "require-digest", Kind: RuleOptionBool, Default: true, Summary: "Report images pinned by a tag other than latest too. Turn it off to report only images without a tag or with the latest tag."}, pedanticOption},
+			Options: []RuleOption{
+				{Name: "require-digest", Kind: RuleOptionBool, Default: true, Summary: "Report images pinned by a tag other than latest too. Turn it off to report only images without a tag or with the latest tag."},
+				unpinnedImagesPolicies,
+				pedanticOption,
+			},
 		},
 	)
 	registerRuleFactory("unpinned-images", func(env *RuleEnv) []Rule {

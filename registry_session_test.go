@@ -98,8 +98,8 @@ func TestSessionRegistryFailuresStayInTheRegistry(t *testing.T) {
 	if s.skippedLookups() != 6 {
 		t.Errorf("%d skipped lookups", s.skippedLookups())
 	}
-	if len(*warnings) != 1 {
-		t.Errorf("one warning for the kind of failure: %v", *warnings)
+	if len(*warnings) != 2 {
+		t.Errorf("one warning for the failure and one for the registry which is not asked again: %v", *warnings)
 	}
 	// The other registry and GitHub itself are not affected
 	if _, err := s.ImageDigest(imageOf(t, "ghcr.io/acme/tool"), "1"); err != nil {

@@ -75,20 +75,6 @@ func newRegistryClient(ep registryEndpoints, githubToken func() string, offline 
 	return &registryClient{hc: hc, ep: ep, githubToken: githubToken, offline: offline, tokens: map[string]cachedRegistryToken{}, now: time.Now}
 }
 
-// registryStatusError is a registry answering with a status that is not a success.
-type registryStatusError struct {
-	registry string
-	status   int
-	message  string
-}
-
-func (e *registryStatusError) Error() string {
-	if e.message == "" {
-		return fmt.Sprintf("the registry %s answered with status %d", e.registry, e.status)
-	}
-	return fmt.Sprintf("the registry %s answered with status %d: %s", e.registry, e.status, e.message)
-}
-
 // ImageDigest implements ImageDigestClient.
 func (c *registryClient) ImageDigest(ctx context.Context, registry, repository, tag string) (string, error) {
 	if c.offline {

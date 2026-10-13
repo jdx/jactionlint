@@ -156,6 +156,7 @@ type onlineSession struct {
 	registryDown     map[string]error // registries which are not asked again in this run
 	registryFailures map[string]int   // failures in a row, by registry
 	owners           memo[string, *GitHubOwner]
+	releases         memo[releaseKey, *GitHubRelease]
 
 	environments memo[environmentKey, environmentResult]
 }
