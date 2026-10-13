@@ -1,2 +1,2 @@
-/test\.yaml:5:14: label "macos-10\.15" is unknown\. available labels are .+ \[runner-label\]/
+/test\.yaml:5:14: label "macos-10\.15" is unknown\. GitHub retired it on 2022-12-01, so a job on it never gets a runner\. use "macos-15" or "macos-26" instead .+ \[runner-label\]/
 /test\.yaml:9:14: label "macos-10" is unknown\. available labels are .+ \[runner-label\]/
