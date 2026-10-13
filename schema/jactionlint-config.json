@@ -229,6 +229,7 @@
               "unknown-workflow-input",
               "unknown-workflow-secret",
               "unlocked-install",
+              "unmatched-paths-filter",
               "unpinnable-action",
               "unpinned-images",
               "unpinned-tools",
@@ -456,6 +457,7 @@
                   "unknown-workflow-input",
                   "unknown-workflow-secret",
                   "unlocked-install",
+                  "unmatched-paths-filter",
                   "unpinnable-action",
                   "unpinned-images",
                   "unpinned-tools",
@@ -614,6 +616,7 @@
                     "unknown-workflow-input",
                     "unknown-workflow-secret",
                     "unlocked-install",
+                    "unmatched-paths-filter",
                     "unpinnable-action",
                     "unpinned-images",
                     "unpinned-tools",
@@ -3833,6 +3836,28 @@
                 "pedantic": {
                   "description": "Also report the pedantic checks, which are noisier. Unset, they run under the pedantic profile.",
                   "type": "boolean"
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "unmatched-paths-filter": {
+          "description": "An entry of paths or paths-ignore matches no file of the repository. Group: correctness. Profile: pedantic. Default level: warn. https://jactionlint.jdx.dev/rules#unmatched-paths-filter",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
                 }
               },
               "type": "object"
