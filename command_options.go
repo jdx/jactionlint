@@ -42,6 +42,7 @@ var cliOptions = []cliOption{
 	{"General", "version", "V", "", false, "-version", "Show the version and how this binary was installed, then exit"},
 	{"General", "verbose", "v", "", false, "-verbose", "Print verbose logs to stderr"},
 	{"General", "debug", "", "", false, "-debug", "Print debug logs to stderr (for development)"},
+	{"General", "completion", "", "SHELL", false, "", "Print the completion script of a shell (bash, zsh, fish or powershell) and exit. It completes the options, their values and the rule IDs"},
 	{"General", "stdin-filename", "", "NAME", false, "-stdin-filename", "File name used in the output when reading stdin (default <stdin>)"},
 
 	{"Output", "format", "f", "FORMAT", false, "-format", "Output format: text (default), oneline, json, jsonl, sarif, gcc, github, summary, or a Go template containing {{ }}"},
@@ -59,6 +60,7 @@ var cliOptions = []cliOption{
 	{"Rules and configuration", "init-config", "", "", false, "-init-config", "Write a default config file .github/jactionlint.yaml and exit"},
 	{"Rules and configuration", "migrate-config", "", "", false, "-migrate-config", "Rewrite the deprecated keys of the config file and exit"},
 	{"Rules and configuration", "migrate-ignores", "", "", false, "-migrate-ignores", "Rewrite \"# zizmor: ignore[...]\" comments into \"# jactionlint ignore=...\" comments and exit"},
+	{"Rules and configuration", "explain", "", "RULE", false, "", "Print the documentation of a rule ID (summary, group, profile, level, options, fixes and its section of the checks document) and exit"},
 
 	{"Fixing", "fix", "", "unsafe", true, "-fix", "Apply the safe automatic fixes in place. --fix=unsafe also applies the fixes that may change behavior"},
 	{"Fixing", "diff", "", "", false, "-diff", "Print what --fix would change as a unified diff and write nothing (implies --fix)"},
@@ -261,6 +263,8 @@ type commandFlags struct {
 	opts                     LinterOptions
 	ignorePats               []string
 	initConfig               bool
+	completion               string
+	explain                  string
 	fix                      fixFlag
 	diff                     bool
 	fixRules                 string
@@ -323,6 +327,8 @@ func newCommandFlags() *commandFlags {
 	fs.BoolVar(&f.initConfig, "init-config", false, "")
 	fs.BoolVar(&f.migrateConfig, "migrate-config", false, "")
 	fs.BoolVar(&f.migrateIgnores, "migrate-ignores", false, "")
+	fs.StringVar(&f.completion, "completion", "", "")
+	fs.StringVar(&f.explain, "explain", "", "")
 
 	fs.Var(&f.fix, "fix", "")
 	opt("fix", "safe")
