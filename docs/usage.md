@@ -141,6 +141,7 @@ cat action.yml | jactionlint --stdin-filename action.yml -
 | --- | --- | --- |
 | `--shellcheck=CMD` |  | Command or path of shellcheck (default shellcheck). Empty disables the integration |
 | `--pyflakes=CMD` |  | Command or path of pyflakes (default pyflakes). Empty disables the integration |
+| `--shellcheck-rcfile=FILE` |  | Let shellcheck read this shellcheckrc instead of passing --norc. Overrides "shellcheck.rcfile" of the config file |
 
 Exit status: 0 no problem, 1 problems found, 2 invalid command line, 3 failure.
 
@@ -305,6 +306,18 @@ processes.
 ```sh
 jactionlint --shellcheck= --pyflakes=
 ```
+
+jactionlint runs shellcheck with `--norc`, so the results do not depend on a `.shellcheckrc` in the directory you run it from.
+To use a shellcheckrc, to pass arguments or to turn on optional checks of shellcheck, set the
+[`shellcheck` section](config.md#shellcheck) of the config file, or give a file with `--shellcheck-rcfile`:
+
+```sh
+jactionlint --shellcheck-rcfile=.shellcheckrc
+```
+
+The file must exist (exit status 3 otherwise), and a relative path is resolved from the working directory. This is the way to keep
+the settings with the repository where `SHELLCHECK_OPTS` cannot be set, for example in a [pre-commit](#pre-commit) hook on
+pre-commit.ci: put `shellcheck: {rcfile: .shellcheckrc}` in `.github/jactionlint.yaml`. `SHELLCHECK_OPTS` still works as before.
 
 <a id="format"></a>
 ### Format error messages
