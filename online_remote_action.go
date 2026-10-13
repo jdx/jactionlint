@@ -24,7 +24,7 @@ type fileKey struct {
 	ref, path string
 }
 
-type repoFile struct {
+type remoteFile struct {
 	content []byte
 	// found is false when GitHub has no such file at the ref (the repository, the ref or the file is missing, or
 	// not visible to the token).
@@ -46,17 +46,17 @@ func normalizeFileRef(ref string) string {
 
 // file returns the file of the repository at the ref. A file which does not exist is not an error: found
 // is false.
-func (s *onlineSession) file(owner, repo, ref, path string) (repoFile, error) {
+func (s *onlineSession) file(owner, repo, ref, path string) (remoteFile, error) {
 	if !s.allows(owner, repo) {
-		return repoFile{}, errOnlineExcluded
+		return remoteFile{}, errOnlineExcluded
 	}
 	cc, ok := s.client.(GitHubContentClient)
 	if !ok {
-		return repoFile{}, errOnlineNoFiles
+		return remoteFile{}, errOnlineNoFiles
 	}
 	ref = normalizeFileRef(ref)
 	rk := newRepoKey(owner, repo)
-	return s.files.get(fileKey{rk, ref, path}, func() (repoFile, error) {
+	return s.files.get(fileKey{rk, ref, path}, func() (remoteFile, error) {
 		// The files of one repository are read one after the other, so that a failure is known to the lookups
 		// which follow it (see below)
 		lock := s.fileLock(rk)
@@ -78,14 +78,14 @@ func (s *onlineSession) file(owner, repo, ref, path string) (repoFile, error) {
 		}
 		s.mu.Unlock()
 		if prev != nil {
-			return repoFile{}, prev
+			return remoteFile{}, prev
 		}
-		f, err := callFor(s, owner+"/"+repo, func(ctx context.Context) (repoFile, error) {
+		f, err := callFor(s, owner+"/"+repo, func(ctx context.Context) (remoteFile, error) {
 			b, err := cc.FileContent(ctx, owner, repo, ref, path)
 			if errors.Is(err, ErrGitHubNotFound) {
-				return repoFile{}, nil
+				return remoteFile{}, nil
 			}
-			return repoFile{content: b, found: err == nil}, err
+			return remoteFile{content: b, found: err == nil}, err
 		})
 		if err != nil {
 			switch classifyFailure(err) {

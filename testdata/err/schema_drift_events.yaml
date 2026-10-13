@@ -1,0 +1,19 @@
+on:
+  merge_group:
+    types: [checks_requested, destroyed]
+  schedule:
+    - cron: '0 0 * * *'
+    - timezone: Europe/London
+    - cron: '30 5 * * *'
+      timezone: Europe/London
+  project:
+  project_card:
+    types: [created]
+  project_column:
+  pull_request_comment:
+    types: [created]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo ok

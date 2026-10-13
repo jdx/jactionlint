@@ -125,7 +125,7 @@ func (rule *RuleInsecureURLScheme) VisitStep(n *Step) error {
 // fetchesFromURL reports whether the command takes locations to download from or to install from.
 func fetchesFromURL(c *runscript.Command) bool {
 	switch c.Tool {
-	case "curl", "wget", "pip", "pipx", "uv", "uvx", "npm", "pnpm", "yarn", "bun", "cargo", "gem", "go", "poetry":
+	case "curl", "wget", "pip", "pipx", "uv", "uvx", "npm", "pnpm", "yarn", "bun", "aube", "aubx", "cargo", "gem", "go", "poetry":
 		return true
 	}
 	switch c.Name {

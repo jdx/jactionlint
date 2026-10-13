@@ -14,7 +14,7 @@ import (
 // metadata lookups of the action rule and nothing else.
 func remoteMetadataConfig() *Config {
 	c := &Config{Rules: map[string]RuleConfig{}}
-	for _, id := range []string{"archived-uses", "known-vulnerable-actions", "ref-confusion", "stale-action-refs", "impostor-commit", "ref-version-mismatch"} {
+	for _, id := range []string{"archived-uses", "known-vulnerable-actions", "ref-confusion", "stale-action-refs", "impostor-commit", "ref-version-mismatch", "repojacking"} {
 		c.Rules[id] = RuleConfig{Level: SeverityOff}
 	}
 	return c

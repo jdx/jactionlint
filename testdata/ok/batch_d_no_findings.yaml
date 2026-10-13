@@ -4,6 +4,11 @@ on:
     types: [opened]
 env:
   CHANNEL: stable
+  UV_EXCLUDE_NEWER: 7 days
+  PIP_UPLOADED_PRIOR_TO: P7D
+  npm_config_min_release_age: 7
+  pnpm_config_minimum_release_age: 1440
+  YARN_NPM_MINIMAL_AGE_GATE: 3d
 jobs:
   literals:
     runs-on: ubuntu-latest
@@ -23,10 +28,10 @@ jobs:
           cat <<'EOF2' >> "$GITHUB_ENV"
           A=$NOT_EXPANDED
           EOF2
-      - run: npm ci
+      - run: npm ci --ignore-scripts
       - run: npm install --package-lock-only
-      - run: yarn install --immutable
-      - run: bun ci
+      - run: yarn install --immutable --ignore-scripts
+      - run: bun ci --ignore-scripts
       - run: pnpm install
       - run: pnpm install --frozen-lockfile
       - run: bundle install
