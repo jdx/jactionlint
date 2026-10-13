@@ -61,6 +61,7 @@ List of checks:
 - [Deprecated workflow commands](#check-deprecated-workflow-commands)
 - [The gh command without a token](#check-gh-without-token)
 - [Constant conditions at `if:`](#if-cond-constant)
+- [Events that the workflow never receives (pedantic)](#check-event-name-never-received)
 - [Action metadata syntax validation](#action-metadata-syntax)
 - [Deprecated inputs usage](#deprecated-inputs-usage)
 - [YAML anchors](#yaml-anchors)
@@ -5542,6 +5543,69 @@ if: |
 
 jactionlint also checks extra characters around `${{ }}` in `if:` which unexpectedly make the conditions true.
 
+<a id="check-event-name-never-received"></a>
+## Events that the workflow never receives (pedantic)
+
+Example input:
+
+```yaml
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      # ERROR: the workflow is not run by pull_request
+      - run: echo "review"
+        if: github.event_name == 'pull_request'
+      # ERROR: a run has one event
+      - run: echo "both"
+        if: ${{ github.event_name == 'push' && github.event_name == 'workflow_dispatch' }}
+      # OK: push is one of the events
+      - run: echo "deploy"
+        if: github.event_name == 'push'
+```
+
+Output:
+<!-- Skip update output -->
+
+```
+test.yaml:11:13: warning: "github.event_name == 'pull_request'" is always false: this workflow is never run by the event "pull_request", it runs on push, workflow_dispatch [event-name-never-received]
+   |
+11 |         if: github.event_name == 'pull_request'
+   |             ^~~~~~~~~~~~~~~~~
+test.yaml:14:48: warning: "github.event_name == 'workflow_dispatch'" is always false here: the same condition needs the event to be "push" as well, and a run has one event [event-name-never-received]
+   |
+14 |         if: ${{ github.event_name == 'push' && github.event_name == 'workflow_dispatch' }}
+   |                                                ^~~~~~~~~~~~~~~~~
+```
+
+<!-- Skip playground link -->
+
+The rule is in the `pedantic` profile. The configuration of the example is:
+
+```yaml
+rules:
+  event-name-never-received: warn
+```
+
+A run of a workflow has one event, and `github.event_name` is its name. When the workflow lists the events it runs on and never lists
+`pull_request`, the comparison `github.event_name == 'pull_request'` is always false: the step or the job never runs, or the comparison
+is a dead branch of a larger condition. It is a typo in the name, a trigger that was removed, or a condition copied from another workflow
+([actionlint#68](https://github.com/rhysd/actionlint/issues/68), [actionlint#69](https://github.com/rhysd/actionlint/issues/69)). Two comparisons
+with different events in one `&&` chain cannot both be true either. The rule `event-name-never-received` reports them in
+every expression of the workflow, in `if:` conditions with or without `${{ }}` too.
+
+The names are compared without regard to case, as GitHub compares strings. The rule does not look at a workflow with `workflow_call`
+(the event of its run is the one of the caller), at a composite action, or at `!=`, `contains()` and other ways to test the event.
+
+It is a pedantic check because what it finds is dead code, and many workflows have it on purpose: a template shared by several workflows
+(`github.event_name == 'pull_request'` in a file that is only a template for a generated workflow, the same `concurrency:` or
+`if:` in every generated file), the code that gh-aw writes with the conditions for all the events, and conditions that were
+left after a trigger was removed. On popular repositories most findings come from the first two, and the rest is dead code that can be deleted.
+
 <a id="action-metadata-syntax"></a>
 ## Action metadata syntax validation
 
@@ -8970,7 +9034,7 @@ How the rules treat actions:
 
 - **Applies** to the steps (and the metadata) of an action: `action-syntax`, `adhoc-packages`, `archived-uses`, `artipacked`, `background-step-not-waited`, `checkout-static-credentials`, `command-injection`, `constant-condition`, `context-availability`, `continue-on-error`, `deprecated-action-input`, `deprecated-commands`, `duplicate-key`, `duplicate-step-id`, `environment-file-redirect`, `expired-ignore`, `expression-syntax`, `expression-type`, `fail-fast-action-inputs`, `forbidden-uses`, `github-app`, `if-always-true`, `impostor-commit`, `insecure-commands`, `insecure-ssh-keyscan`, `insecure-url-scheme`, `invalid-env-var-name`, `invalid-function-call`, `invalid-id`, `invalid-ignore-comment`, `invalid-local-action`, `invalid-parallel-step`, `invalid-shell-name`, `invalid-uses`, `invisible-characters`, `known-vulnerable-actions`, `malformed-expression-delimiters`, `max-run-lines`, `merge-key`, `misfeature`, `missing-action-input`, `multiline-plain-run`, `obfuscation`, `outdated-action-runner`, `output-clobbering`, `pipeline-without-pipefail`, `pyflakes`, `recursive-alias`, `ref-confusion`, `ref-version-mismatch`, `repojacking`, `require-expression-wrapping`, `self-repository`, `shellcheck`, `stale-action-refs`, `superfluous-actions`, `template-injection`, `typosquat-uses`, `undefined-function`, `undefined-property`, `unknown-action-input`, `unlocked-install`, `unpinned-images`, `unpinned-tools`, `unpinned-uses`, `unsound-contains`, `unsound-prefix-match`, `unsound-ternary`, `unused-anchor`, `unused-ignore`, `unverified-download`, `use-trusted-publishing`, `yaml-syntax`.
 - **Caller-dependent**: `agentic-actions`, `bot-conditions`, `cache-poisoning`, `github-env` (its findings about untrusted input do not depend on the caller), `untrusted-artifact` and `untrusted-checkout`.
-- **Not applicable** because an action does not have what the rule checks, or because only the calling job can decide (`unused-baseline-entry` is about the baseline file, not about a workflow or an action): `anonymous-definition`, `concurrency-cancels-prs`, `concurrency-cancels-release`, `concurrency-limits`, `conflicting-runner-labels`, `cron-too-frequent`, `cyclic-job-needs`, `dangerous-triggers`, `dependabot-cooldown`, `dependabot-execution`, `dependabot-missing-actions-update`, `dependabot-syntax`, `deprecated-runner-label`, `duplicate-job-id`, `duplicate-job-needs`, `duplicate-triggers`, `excessive-permissions`, `gate-job-skipped-on-failure`, `gh-without-token`, `hardcoded-container-credentials`, `insufficient-permissions`, `invalid-activity-type`, `invalid-cron`, `invalid-event-config`, `invalid-event-filter`, `invalid-glob`, `invalid-label-pattern`, `invalid-local-workflow`, `invalid-permissions`, `invalid-timezone`, `invalid-workflow-call`, `invalid-workflow-call-input`, `invalid-workflow-dispatch-input`, `local-action-checkout`, `matrix-duplicate-value`, `matrix-invalid-exclude`, `missing-permissions`, `missing-timeout`, `missing-workflow-input`, `missing-workflow-secret`, `mutable-runner-label`, `overprovisioned-secrets`, `require-shell`, `required-actions`, `secrets-inherit`, `secrets-outside-env`, `self-hosted-runner`, `timeout-too-long`, `ubuntu-slim-limits`, `undefined-job-needs`, `undocumented-permissions`, `unknown-event`, `unknown-runner-label`, `unknown-workflow-input`, `unknown-workflow-secret`, `unredacted-secrets`, `unused-baseline-entry`, `unused-job-output`, `unused-needs`, `unused-workflow-input`, `workflow-call-permissions`, `workflow-input-type`, `workflow-run-names`, `workflow-secret-scope`, `workflow-syntax`.
+- **Not applicable** because an action does not have what the rule checks, or because only the calling job can decide (`unused-baseline-entry` is about the baseline file, not about a workflow or an action): `anonymous-definition`, `concurrency-cancels-prs`, `concurrency-cancels-release`, `concurrency-limits`, `conflicting-runner-labels`, `cron-too-frequent`, `cyclic-job-needs`, `dangerous-triggers`, `dependabot-cooldown`, `dependabot-execution`, `dependabot-missing-actions-update`, `dependabot-syntax`, `deprecated-runner-label`, `duplicate-job-id`, `duplicate-job-needs`, `duplicate-triggers`, `event-name-never-received`, `excessive-permissions`, `gate-job-skipped-on-failure`, `gh-without-token`, `hardcoded-container-credentials`, `insufficient-permissions`, `invalid-activity-type`, `invalid-cron`, `invalid-event-config`, `invalid-event-filter`, `invalid-glob`, `invalid-label-pattern`, `invalid-local-workflow`, `invalid-permissions`, `invalid-timezone`, `invalid-workflow-call`, `invalid-workflow-call-input`, `invalid-workflow-dispatch-input`, `local-action-checkout`, `matrix-duplicate-value`, `matrix-invalid-exclude`, `missing-permissions`, `missing-timeout`, `missing-workflow-input`, `missing-workflow-secret`, `mutable-runner-label`, `overprovisioned-secrets`, `require-shell`, `required-actions`, `secrets-inherit`, `secrets-outside-env`, `self-hosted-runner`, `timeout-too-long`, `ubuntu-slim-limits`, `undefined-job-needs`, `undocumented-permissions`, `unknown-event`, `unknown-runner-label`, `unknown-workflow-input`, `unknown-workflow-secret`, `unredacted-secrets`, `unused-baseline-entry`, `unused-job-output`, `unused-needs`, `unused-workflow-input`, `workflow-call-permissions`, `workflow-input-type`, `workflow-run-names`, `workflow-secret-scope`, `workflow-syntax`.
 
 Example input:
 
