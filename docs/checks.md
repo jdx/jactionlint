@@ -2128,6 +2128,12 @@ test.yaml:4:30: label "windows-latest" conflicts with label "ubuntu-latest" defi
 In most cases, this is a misunderstanding that a matrix combination can be specified at `runs-on:` directly. It should use
 `matrix:` and expand it with `${{ }}` at `runs-on:` to run the workflow on multiple runners.
 
+The `-latest` labels follow the image GitHub points them to, so `windows-latest` agrees with `windows-2025` and
+`windows-2025-vs2026` (the same image since 2026-06-15) and conflicts with `windows-2022`, and `macos-latest` agrees with `macos-26`
+and conflicts with `macos-15`. GitHub moves `ubuntu-latest` from Ubuntu 24.04 to 26.04 in a rollout from 2026-10-19 to
+2026-11-19, so while it runs `ubuntu-latest` agrees with both `ubuntu-24.04` and `ubuntu-26.04`. The table is in one place in
+`rule_runner_label.go`, with the date it was last checked.
+
 <a id="check-action-format"></a>
 ## Action format in `uses:`
 
@@ -2427,8 +2433,24 @@ jactionlint checks inputs of many popular actions such as `actions/checkout@v4`.
 this is done by checking `with:` section items with a small database collected at building `jactionlint` binary. jactionlint
 can check popular actions without fetching any `action.yml` of the actions from the remote so that it can run efficiently.
 
-Note that it only supports the case of specifying major versions like `actions/checkout@v4`. Fixing version of action like
-`actions/checkout@v4.0.1` and using the HEAD of action like `actions/checkout@main` are not supported for now.
+The data set has one entry per major version of an action. jactionlint looks it up with the major version of
+
+- a version tag, however precise: `actions/cache@v4.2.4`, `actions/cache@v4.2` and `actions/cache@4.2.4` are checked as
+  `actions/cache@v4`
+- a commit SHA with a version comment after it, the form `pinact`, Dependabot and Renovate keep up to date and the `default`
+  profile asks for: `actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4` is checked as `actions/cache@v4`. The
+  comment must start with the version (`# v4`, `# v4.2.4`, `# 4.2.4`, `# tag=v4.2.4`, `# v4.2.4 (some note)`).
+
+When the version comes from a comment the finding says so, because nothing verifies the comment offline: a comment that
+went stale (the commit is another major version than the comment says) makes jactionlint check the inputs against the wrong
+version. [Version comments of pinned actions](#check-ref-version-mismatch) finds those with `--online`.
+
+jactionlint does not guess. A commit without a version comment, a comment that names several versions (`# v4 -> v5`) or none
+(`# keep in sync with v4`), a bare number (`# 4`), a pre-release (`v4.2.4-beta.1`), a branch (`actions/checkout@main`) and a
+major version which is not in the data set are not checked. The data set holds the inputs of the latest release of each major
+version, so an input which a later release of the major version added or removed is judged by that release even when you pin
+an older one. The outputs of `steps.<id>.outputs` are looked up the same way for a version tag, but not for a commit with a
+comment.
 
 So far, jactionlint supports more than 100 popular actions The data set is embedded at [`popular_actions.go`](https://github.com/jdx/jactionlint/blob/main/popular_actions.go)
 and were automatically collected by [a script][generate-popular-actions]. If you want more checks for other actions, please
@@ -2464,6 +2486,10 @@ test.yaml:8:15: the runner of "actions/checkout@v3" action is too old to run on 
 In addition to the checks for inputs of actions described in [the previous section](#check-popular-action-inputs), jactionlint
 reports an error when a popular action is 'outdated'. An action is outdated when the runner used by the action is no longer
 supported by GitHub Actions runtime. For example, `node12` is no longer available so any actions can not use `node12` runner.
+
+The version is found as described in [the previous section](#check-popular-action-inputs): `actions/checkout@v3.6.0` and
+`actions/checkout@<sha> # v3.6.0` are reported like `actions/checkout@v3`. For a commit the finding says that it rests on the
+version comment, which may be out of date.
 
 Note that this check doesn't report that the action version is up-to-date. For example, even if you use `actions/checkout@v4` and
 newer version `actions/checkout@v5` is available, jactionlint reports no error as long as `actions/checkout@v4` is not outdated.
@@ -6868,6 +6894,10 @@ jobs:
 Output:
 
 ```
+test.yaml:10:15: the runner of "actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683" action is too old to run on GitHub Actions (checked as "actions/checkout@v3": the version comment "# v3.0.0" says so, and nothing verifies the comment). update the action's version to fix this issue, or the version comment if it is out of date [outdated-action-runner]
+   |
+10 |       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v3.0.0
+   |               ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 test.yaml:10:15: warning: the version comment "# v3.0.0" does not match the commit pinned in action "actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683": tag "v3.0.0" points to commit a12a3943b4bd, but the pinned commit is tagged "v4.2.2". update the comment, or pin the commit of the version you mean [ref-version-mismatch]
    |
 10 |       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v3.0.0
@@ -7298,7 +7328,9 @@ A step is reported at its checkout when it puts untrusted code in the workspace 
 
 - `actions/checkout` with a `ref` or `repository` that names the head of a pull request or of the triggering run
   (`github.event.pull_request.head.*`, `github.head_ref`, `github.event.pull_request.merge_commit_sha`,
-  `github.event.workflow_run.head_sha`, `head_branch`, `head_repository`, ...) or `refs/pull/...`.
+  `github.event.workflow_run.head_sha`, `head_branch`, `head_repository`, ...) or `refs/pull/...`. In a `git` command the short
+  form `pull/<number>/head` (or `merge`) counts as well, because git looks a name up below `refs/` too: `git fetch origin
+  pull/${{ github.event.number }}/head:pr` then `git checkout pr`. A name below a remote (`origin/pull/1/head`) is not it.
 - `gh pr checkout`, and `git checkout`, `switch`, `merge`, `pull`, `clone` ... with such a reference in the arguments or
   in an environment variable they use. A `git fetch` of the head only downloads the objects: it counts when a later command
   of the same script (`git checkout FETCH_HEAD`, `git merge`, `git reset --hard`, ...) puts them in the working tree.
@@ -7329,9 +7361,12 @@ A step is reported at its checkout when it puts untrusted code in the workspace 
   holds for a revision that a step passes to a command other than `git`.
 - "Runs it" is a later step with a `run:` command that can execute workspace code (a script, `npm`, `cargo`, `make`, an
   interpreter, ...), a local action (`uses: ./...`), or one of a few actions that build the workspace. Commands that only read or
-  move files (`cat`, `git diff`, `grep`, `jq`, `tar`, `gh`, ...) do not count, and neither do shell keywords and builtins
-  (`break`, `continue`, `compgen`, ...), programs that only print or convert data (`xxd`, `base64`, `seq`, ...) and the system package managers
-  (`apt-get install -y valgrind`) unless they are given a path or a package file. A checkout with `path:` only counts when a later
+  move files (`cat`, `git diff`, `grep`, `jq`, `tar`, `gh`, ...) do not count, except when an option makes them run a file of
+  the workspace (a relative path or one below `$GITHUB_WORKSPACE`, not `/tmp/x` or `$RUNNER_TEMP/x`): `sed -f script.sed`,
+  `awk -f prog.awk`, `tar -xPf a.tar` (absolute names) and `unzip -: a.zip` (`../` in names), which poutine and CodeQL list as
+  well. Shell keywords and builtins (`break`, `continue`, `compgen`, ...), programs that only print or convert data (`xxd`,
+  `base64`, `seq`, ...) and the system package managers (`apt-get install -y valgrind`) do not count either, unless they are given
+  a path or a package file. A checkout with `path:` only counts when a later
   step works in that directory (`working-directory`, `cd`, or an argument below it); `python3 base/check.py --root pr-head` runs a
   script from the base checkout and only reads `pr-head`, so it does not count either.
 
@@ -7340,7 +7375,10 @@ In a job that sets `permissions: {}` the message does not claim a token, because
 What is **not** reported: a checkout of the base (no `ref`, or `github.event.pull_request.base.*`), a checkout that nothing runs,
 a job with an `environment:` (its reviewers decide), and a job or step whose `if:` reads who or what started the workflow:
 `github.actor`, the author or labels of the pull request, `github.event.pull_request.head.repo`, `github.event.workflow_run.event`,
-`needs` or `steps`. A `workflow_run` workflow is not reported when every workflow in `workflows:` is in the repository and only
+`needs` or `steps`. A job or step that only runs for a pull request that was merged (`if: github.event.pull_request.merged == true`,
+alone or in a conjunction) is not reported for a checkout of `github.event.pull_request.merge_commit_sha` or `head.sha`: that is
+code that a maintainer merged, as trusted as a `push` workflow. A branch name (`head.ref`, `github.head_ref`) or `refs/pull/N/head`
+stays reported, because the author can still push to it. A `workflow_run` workflow is not reported when every workflow in `workflows:` is in the repository and only
 runs for `push`, `schedule`, `workflow_dispatch`, `release`, `merge_group` or `repository_dispatch`. The rule cannot tell that
 a `labeled` pull request was reviewed or that an earlier step vouched for the code in a way other than a condition on `needs` or
 `steps`. Code that other steps fetch from an output (`ref: ${{ steps.x.outputs.sha }}`) is not followed.
@@ -7694,7 +7732,7 @@ jobs:
 Output:
 <!-- Skip update output -->
 ```
-test.yaml:4:14: warning: runner label "ubuntu-latest" is an alias that GitHub moves to newer images, so the job can break without a change in this repository. use a fixed label such as "ubuntu-24.04", which is the same image today [mutable-runner-label]
+test.yaml:4:14: warning: runner label "ubuntu-latest" is an alias that GitHub moves to newer images, so the job can break without a change in this repository. use a fixed label such as "ubuntu-24.04", the image it points to until GitHub moves it to "ubuntu-26.04" in a rollout from 2026-10-19 to 2026-11-19 [mutable-runner-label]
   |
 4 |     runs-on: ubuntu-latest
   |              ^~~~~~~~~~~~~
@@ -7712,7 +7750,9 @@ rules:
 The rule `mutable-runner-label` (in the `pedantic` profile, as a warning) reports the labels of GitHub-hosted runners that GitHub
 moves to a newer image over time: `ubuntu-latest`, `windows-latest`, `macos-latest` and their sized variants. A job on
 such a label can start to fail on the day GitHub switches the image, without any change in the repository. The message names the fixed label that the
-alias is today, according to the label table of jactionlint.
+alias is today, according to the label table of jactionlint (`windows-latest` is `windows-2025` and `macos-latest` is
+`macos-26`). `ubuntu-latest` is `ubuntu-24.04` until GitHub moves it to `ubuntu-26.04` in a rollout that runs from 2026-10-19 to
+2026-11-19; the message says so, and the [conflicting labels](#check-runner-labels) check accepts both images next to it while the move is announced.
 
 The rule reads `runs-on` and the values of `matrix.<key>` that `runs-on: ${{ matrix.<key> }}` selects. Jobs with `self-hosted` among
 the labels and labels given by other expressions are not reported.
@@ -7725,7 +7765,7 @@ rules:
   mutable-runner-label:
     pin:
       ubuntu-latest: ubuntu-24.04
-      macos-latest: macos-15
+      macos-latest: macos-26
 ```
 
 A label in a matrix is reported but never fixed, because the same value may be compared in an expression of the job.

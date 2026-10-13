@@ -80,6 +80,7 @@ type httpGitHubClient struct {
 	jitter func(d time.Duration) time.Duration
 
 	mu          sync.Mutex
+	answers     OnlineAnswers
 	token       string
 	limit       *GitHubRateLimitError // set once the limit is reached
 	noticedAnon bool
@@ -417,6 +418,7 @@ func (c *httpGitHubClient) getOpt(ctx context.Context, target string, revalidate
 	entry, key := c.lookup(u, token)
 	if entry != nil && !revalidate && (c.offline || (c.ttl > 0 && c.now().Sub(entry.Fetched) < c.ttl)) {
 		c.logf("GET %s: from the cache", target)
+		c.noteAnswer(answerCached, entry.Fetched)
 		return answerFromEntry(entry), nil
 	}
 	if c.offline {
@@ -426,6 +428,7 @@ func (c *httpGitHubClient) getOpt(ctx context.Context, target string, revalidate
 		return nil, err
 	} else if rl != nil {
 		if entry != nil {
+			c.noteAnswer(answerStale, entry.Fetched)
 			return answerFromEntry(entry), nil // Stale data is better than none
 		}
 		return nil, rl
@@ -433,7 +436,11 @@ func (c *httpGitHubClient) getOpt(ctx context.Context, target string, revalidate
 
 	ans, err := c.doLimited(ctx, u, token, entry, key)
 	if err != nil && entry != nil && errors.Is(err, ErrGitHubRateLimited) {
+		c.noteAnswer(answerStale, entry.Fetched)
 		return answerFromEntry(entry), nil
+	}
+	if err == nil {
+		c.noteAnswer(answerNetwork, time.Time{})
 	}
 	if token != "" && !revalidate {
 		c.afterTokenRequest(ctx, u, token, key, ans, err)
@@ -1286,6 +1293,7 @@ func (c *httpGitHubClient) CommitOnAnyBranch(ctx context.Context, owner, repo, s
 		if json.Unmarshal(e.Body, &scan) == nil {
 			if c.offline || (c.ttl > 0 && c.now().Sub(e.Fetched) < c.ttl) {
 				c.logf("GraphQL %s: from the cache", name)
+				c.noteAnswer(answerCached, e.Fetched)
 				return scan, nil
 			}
 			stale = &scan
@@ -1307,6 +1315,7 @@ func (c *httpGitHubClient) CommitOnAnyBranch(ctx context.Context, owner, repo, s
 		return GitHubBranchScan{}, err
 	} else if rl != nil {
 		if stale != nil {
+			c.noteAnswer(answerStale, e.Fetched)
 			return *stale, nil
 		}
 		return GitHubBranchScan{}, rl
@@ -1346,6 +1355,7 @@ func (c *httpGitHubClient) CommitOnAnyBranch(ctx context.Context, owner, repo, s
 		vars := map[string]any{"owner": owner, "name": repo, "sha": sha, "after": after}
 		if err := c.postGraphQL(ctx, token, branchScanQuery, vars, &res); err != nil {
 			if stale != nil && errors.Is(err, ErrGitHubRateLimited) {
+				c.noteAnswer(answerStale, e.Fetched)
 				return *stale, nil // like the REST requests: stale data is better than none
 			}
 			return GitHubBranchScan{}, err
@@ -1380,6 +1390,7 @@ func (c *httpGitHubClient) CommitOnAnyBranch(ctx context.Context, owner, repo, s
 		cursor := refs.PageInfo.EndCursor
 		after = &cursor
 	}
+	c.noteAnswer(answerNetwork, time.Time{})
 	if b, err := json.Marshal(scan); err == nil {
 		c.cache.put(key, &cacheEntry{URL: name, Fetched: c.now(), Status: http.StatusOK, Body: b})
 		shared = true
@@ -1481,4 +1492,43 @@ func ghHostname(apiHost string) string {
 		return h
 	}
 	return apiHost
+}
+
+type answerSource int
+
+const (
+	answerNetwork answerSource = iota // GitHub answered (a 304 revalidation counts)
+	answerCached                      // a cached answer used without asking: younger than the TTL, or any age offline
+	answerStale                       // an expired cached answer used because the rate limit left no choice
+)
+
+// noteAnswer counts an answer that a lookup used, and the age of the oldest cached one, for the coverage of the
+// run (see OnlineAnswers). fetched is when this client last received the answer from GitHub.
+func (c *httpGitHubClient) noteAnswer(src answerSource, fetched time.Time) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	switch src {
+	case answerNetwork:
+		c.answers.Network++
+		return
+	case answerCached:
+		c.answers.Cache++
+	case answerStale:
+		c.answers.Stale++
+	}
+	if !fetched.IsZero() && (c.answers.OldestFetched == "" || fetched.UTC().Format(time.RFC3339) < c.answers.OldestFetched) {
+		c.answers.OldestFetched = fetched.UTC().Format(time.RFC3339)
+	}
+}
+
+// answerStats implements answerStatsSource.
+func (c *httpGitHubClient) answerStats() OnlineAnswers {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	a := c.answers
+	if !c.offline && c.ttl > 0 {
+		// Rounded up: the bound reported must never be tighter than the one enforced (1.5s is 2, 500ms is 1)
+		a.CacheTTLSeconds = int((c.ttl + time.Second - 1) / time.Second)
+	}
+	return a
 }

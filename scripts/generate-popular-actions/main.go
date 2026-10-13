@@ -12,6 +12,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -363,7 +364,9 @@ func (g *gen) readJSONL(file string) (map[string]*jactionlint.ActionMetadata, er
 	}
 }
 
-func (g *gen) detectNewReleaseURLs() ([]string, error) {
+// detectNewReleases returns the registry entries whose next release tag exists on GitHub, sorted by
+// the URL of the new release.
+func (g *gen) detectNewReleases() ([]*registry, error) {
 	all, err := g.registry()
 	if err != nil {
 		return nil, err
@@ -379,13 +382,13 @@ func (g *gen) detectNewReleaseURLs() ([]string, error) {
 
 	g.log.Println("Start detecting new versions in", len(actions), "repositories")
 
-	urls := make(chan string)
+	urls := make(chan *registry)
 	done := make(chan struct{})
 	errs := make(chan error)
 	reqs := make(chan *registry)
 
 	for i := 0; i < 4; i++ {
-		go func(ret chan<- string, errs chan<- error, reqs <-chan *registry, done <-chan struct{}) {
+		go func(ret chan<- *registry, errs chan<- error, reqs <-chan *registry, done <-chan struct{}) {
 			c := http.Client{Transport: g.transport}
 			for {
 				select {
@@ -399,7 +402,7 @@ func (g *gen) detectNewReleaseURLs() ([]string, error) {
 					}
 					if res.StatusCode == 404 {
 						g.log.Println("Not found:", url)
-						ret <- ""
+						ret <- nil
 						break
 					}
 					if res.StatusCode < 200 || 300 <= res.StatusCode {
@@ -407,7 +410,7 @@ func (g *gen) detectNewReleaseURLs() ([]string, error) {
 						break
 					}
 					g.log.Println("Found:", url)
-					ret <- r.githubURL(r.Next)
+					ret <- r
 				case <-done:
 					return
 				}
@@ -425,12 +428,12 @@ func (g *gen) detectNewReleaseURLs() ([]string, error) {
 		}
 	}(done)
 
-	us := []string{}
+	us := []*registry{}
 	for i := 0; i < len(actions); i++ {
 		select {
-		case u := <-urls:
-			if u != "" {
-				us = append(us, u)
+		case r := <-urls:
+			if r != nil {
+				us = append(us, r)
 			}
 		case err := <-errs:
 			close(done)
@@ -439,10 +442,84 @@ func (g *gen) detectNewReleaseURLs() ([]string, error) {
 	}
 	close(done)
 
-	sort.Strings(us)
+	sort.Slice(us, func(i, j int) bool {
+		return us[i].githubURL(us[i].Next) < us[j].githubURL(us[j].Next)
+	})
 
 	g.log.Println("Done detecting new versions in", len(actions), "repositories")
 	return us, nil
+}
+
+var (
+	numericTagRe    = regexp.MustCompile(`^v(\d+)$`)
+	registryBlockRe = regexp.MustCompile(`\{[^{}]*\}`)
+	registryTagsRe  = regexp.MustCompile(`("tags":\s*\[)([^\]]*)(\])`)
+	registryNextRe  = regexp.MustCompile(`("next":\s*)"[^"]*"`)
+)
+
+// registerNewReleases edits the text of a registry JSON file so that the detected releases become
+// known releases. The tag of each release is appended to "tags" and "next" is advanced to the following
+// major version. The rest of the text, including its formatting, is kept as is. Releases whose tag is
+// not a plain major version such as "v7" cannot be advanced automatically and are returned in manual.
+func registerNewReleases(raw []byte, found []*registry) (updated []byte, added, manual []string, err error) {
+	want := map[string]*registry{}
+	for _, r := range found {
+		want[r.Slug+r.Path] = r
+	}
+	done := map[string]bool{}
+	updated = registryBlockRe.ReplaceAllFunc(raw, func(block []byte) []byte {
+		var cur registry
+		if err != nil || json.Unmarshal(block, &cur) != nil {
+			return block
+		}
+		key := cur.Slug + cur.Path
+		r, ok := want[key]
+		if !ok || cur.Next != r.Next || done[key] {
+			return block
+		}
+		done[key] = true
+		m := numericTagRe.FindStringSubmatch(r.Next)
+		if m == nil {
+			manual = append(manual, r.spec(r.Next))
+			return block
+		}
+		n, convErr := strconv.Atoi(m[1])
+		if convErr != nil {
+			err = fmt.Errorf("could not parse the version %q of %s: %w", r.Next, key, convErr)
+			return block
+		}
+		if !registryTagsRe.Match(block) || !registryNextRe.Match(block) {
+			err = fmt.Errorf("could not find \"tags\" and \"next\" in the registry entry of %s", key)
+			return block
+		}
+		block = registryTagsRe.ReplaceAllFunc(block, func(tags []byte) []byte {
+			m := registryTagsRe.FindSubmatch(tags)
+			sep := ", "
+			if len(bytes.TrimSpace(m[2])) == 0 {
+				sep = "" // empty array: no tag to separate from
+			}
+			return []byte(fmt.Sprintf(`%s%s%s%q%s`, m[1], bytes.TrimRight(m[2], " \t\r\n"), sep, r.Next, m[3]))
+		})
+		block = registryNextRe.ReplaceAll(block, []byte(fmt.Sprintf(`${1}"v%d"`, n+1)))
+		added = append(added, r.spec(r.Next))
+		return block
+	})
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	for k := range want {
+		if !done[k] {
+			return nil, nil, nil, fmt.Errorf("could not find the registry entry of %s in the registry file", k)
+		}
+	}
+	// Never hand back a registry which cannot be read again
+	var check []*registry
+	if err := json.Unmarshal(updated, &check); err != nil {
+		return nil, nil, nil, fmt.Errorf("the updated registry is not valid JSON, the registry file was not modified: %w", err)
+	}
+	sort.Strings(added)
+	sort.Strings(manual)
+	return updated, added, manual, nil
 }
 
 func (g *gen) run(args []string) int {
@@ -450,6 +527,7 @@ func (g *gen) run(args []string) int {
 	var format string
 	var quiet bool
 	var detect bool
+	var write bool
 	var registry string
 
 	flags := flag.NewFlagSet(args[0], flag.ContinueOnError)
@@ -457,6 +535,7 @@ func (g *gen) run(args []string) int {
 	flags.StringVar(&format, "f", "go", `format of generated code output to stdout. "go" or "jsonl"`)
 	flags.StringVar(&registry, "r", "", "registry of actions as local JSON file path. when this flag is not given, the default popular actions registry will be used")
 	flags.BoolVar(&detect, "d", false, "detect new version of actions are released")
+	flags.BoolVar(&write, "w", false, "with -d, add the detected releases to the registry file given by -r instead of exiting with status 2")
 	flags.BoolVar(&quiet, "q", false, "disable log output to stderr")
 	flags.SetOutput(g.stderr)
 	flags.Usage = func() {
@@ -474,7 +553,9 @@ func (g *gen) run(args []string) int {
 
   When -d flag is given, it tries to detect new release for popular actions.
   When detecting some new releases, it shows their URLs to stdout and returns
-  non-zero exit status.
+  non-zero exit status (2). When -w flag is also given, the detected releases
+  are added to the registry file given by -r (as known tags, and the next tag is
+  advanced), and the exit status is zero.
 
 Flags:`)
 		flags.PrintDefaults()
@@ -495,6 +576,10 @@ Flags:`)
 		defer func() { g.log.SetOutput(w) }()
 		g.log.SetOutput(io.Discard)
 	}
+	if write && (!detect || registry == "") {
+		fmt.Fprintln(g.stderr, "-w flag requires both -d and -r flags")
+		return 1
+	}
 	if registry != "" {
 		b, err := os.ReadFile(registry)
 		if err != nil {
@@ -507,20 +592,38 @@ Flags:`)
 	g.log.Println("Start generate-popular-actions script")
 
 	if detect {
-		urls, err := g.detectNewReleaseURLs()
+		found, err := g.detectNewReleases()
 		if err != nil {
 			fmt.Fprintln(g.stderr, err)
 			return 1
 		}
-		if len(urls) == 0 {
+		if len(found) == 0 {
 			fmt.Fprintln(g.stdout, "No new release was found")
 			return 0
 		}
 		fmt.Fprintln(g.stdout, "Detected some new releases")
-		for _, u := range urls {
-			fmt.Fprintln(g.stdout, u)
+		for _, r := range found {
+			fmt.Fprintln(g.stdout, r.githubURL(r.Next))
 		}
-		return 2
+		if !write {
+			return 2
+		}
+		updated, added, manual, err := registerNewReleases(g.rawRegistry, found)
+		if err != nil {
+			fmt.Fprintln(g.stderr, err)
+			return 1
+		}
+		if err := os.WriteFile(registry, updated, 0o644); err != nil {
+			fmt.Fprintf(g.stderr, "could not write the file for actions registry: %s\n", err)
+			return 1
+		}
+		for _, s := range added {
+			fmt.Fprintln(g.stdout, "Added to", registry+":", s)
+		}
+		for _, s := range manual {
+			fmt.Fprintln(g.stdout, "Not added automatically, update", registry, "by hand:", s)
+		}
+		return 0
 	}
 
 	if format != "go" && format != "jsonl" {

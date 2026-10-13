@@ -141,6 +141,16 @@ func conditionExprs(s *String) ([]ExprNode, bool) {
 	return []ExprNode{e}, true
 }
 
+// exprRefs returns the references of the `${{ }}` expressions of the string, from the expressions the
+// string has already parsed. ok is false when an expression cannot be parsed.
+func (s *String) exprRefs() (refs []exprRef, ok bool) {
+	nodes, ok := s.templateExprs()
+	for _, n := range nodes {
+		collectExprRefs(n, nil, &refs)
+	}
+	return refs, ok
+}
+
 // stringExprRefs returns the references of the `${{ }}` expressions of a string. ok is false when an
 // expression cannot be parsed.
 func stringExprRefs(value string) (refs []exprRef, ok bool) {
@@ -176,11 +186,11 @@ type refSet struct {
 	unknown bool
 }
 
-func (rs *refSet) addString(value string) {
-	if !strings.Contains(value, "${{") {
+func (rs *refSet) addString(s *String) {
+	if !strings.Contains(s.Value, "${{") {
 		return
 	}
-	refs, ok := stringExprRefs(value)
+	refs, ok := s.exprRefs()
 	rs.refs = append(rs.refs, refs...)
 	if !ok {
 		rs.unknown = true
@@ -269,7 +279,7 @@ func walkValue(v reflect.Value, f func(*String)) {
 // `if:` conditions that are not wrapped in `${{ }}`.
 func workflowRefs(w *Workflow) *refSet {
 	rs := &refSet{}
-	walkStrings(w, func(s *String) { rs.addString(s.Value) })
+	walkStrings(w, func(s *String) { rs.addString(s) })
 	for _, j := range w.Jobs {
 		rs.addCondition(j.If)
 		if j.Snapshot != nil {
@@ -285,7 +295,7 @@ func workflowRefs(w *Workflow) *refSet {
 // jobRefs is like workflowRefs for one job.
 func jobRefs(j *Job) *refSet {
 	rs := &refSet{}
-	walkStrings(j, func(s *String) { rs.addString(s.Value) })
+	walkStrings(j, func(s *String) { rs.addString(s) })
 	rs.addCondition(j.If)
 	for _, s := range flattenSteps(j.Steps) {
 		rs.addCondition(s.If)

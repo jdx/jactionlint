@@ -2,7 +2,9 @@ package jactionlint
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"os"
 	"sync"
 	"time"
 )
@@ -133,6 +135,40 @@ type OnlineCoverage struct {
 	// Evidence says where the answers came from. "cache" means that they may be older than the cache
 	// TTL of the run allows to tell: the cache has no freshness guarantee in this mode.
 	Evidence string `json:"evidence,omitempty"`
+	// SkippedBy counts the skipped lookups by the kind of failure ("rate limit", "unauthorized", "forbidden", "not found",
+	// "server error", "timeout", "network", "not cached" or "other"). It is omitted when nothing was skipped.
+	SkippedBy map[string]int `json:"skippedBy,omitempty"`
+	// Answers says where the answers which the checks used came from. It is omitted when the client does not
+	// track them (a custom GitHubClient), which means unknown, not "all fresh".
+	Answers *OnlineAnswers `json:"answers,omitempty"`
+}
+
+// OnlineAnswers counts the answers the online checks used, by where they came from, and bounds how old the
+// cached ones are. It is evidence about the run, not a guarantee about GitHub: an answer says what GitHub said
+// when it was asked, and a ref that resolved to a commit may be moved later.
+type OnlineAnswers struct {
+	// Network is the number of answers GitHub gave in this run, including a conditional request (304) that
+	// confirmed a cached answer.
+	Network int `json:"network"`
+	// Cache is the number of answers read from the disk cache without asking GitHub: younger than
+	// CacheTTLSeconds, or of any age in the cache mode.
+	Cache int `json:"cache"`
+	// Stale is the number of expired cached answers used because the rate limit left no other.
+	Stale int `json:"stale"`
+	// OldestFetched is the oldest time at which a cached answer that was used (Cache and Stale) was received.
+	// The timestamp source is the clock of the machine running jactionlint at the moment it last received the
+	// answer from GitHub, or confirmed it with a 304. It is not a date from GitHub and says nothing about when
+	// the repository, tag or branch last changed: an old commit does not prove that a tag was not repointed
+	// recently. RFC 3339, UTC. It is omitted when no cached answer was used.
+	OldestFetched string `json:"oldestFetched,omitempty"`
+	// CacheTTLSeconds is how long a cached answer is used without asking again, so a Cache answer is at most
+	// this old. It is the TTL rounded up to whole seconds, so it is never tighter than the TTL in force. It is omitted in the cache mode, which has no age limit, and with a TTL of zero.
+	CacheTTLSeconds int `json:"cacheTtlSeconds,omitempty"`
+}
+
+// answerStatsSource is implemented by the GitHub client of jactionlint, which knows where its answers came from.
+type answerStatsSource interface {
+	answerStats() OnlineAnswers
 }
 
 // OnlineCoverage returns the coverage of the online checks, or nil when they were not turned on.
@@ -158,8 +194,36 @@ func (l *Linter) OnlineCoverage() *OnlineCoverage {
 	}
 	if c.SkippedLookups > 0 {
 		c.Status = "incomplete"
+		c.SkippedBy = l.online.sess.skippedByKind()
+	}
+	if src, ok := l.online.sess.client.(answerStatsSource); ok {
+		a := src.answerStats()
+		c.Answers = &a
 	}
 	return c
+}
+
+// OnlineReport is the document of --online-report: the coverage of the online checks of the run, in a file
+// so that --format json (a bare array) and jsonl (one finding a line) keep their shape. Status is "disabled"
+// when the online checks were off, which is told apart from "complete" (checked, nothing missing).
+type OnlineReport struct {
+	// Version is the version of this document. It changes only when a field changes meaning.
+	Version int `json:"version"`
+	OnlineCoverage
+}
+
+// writeOnlineReport writes the OnlineReport of the run to the file. It never changes the findings or the
+// exit status.
+func (l *Linter) writeOnlineReport(path string) error {
+	rep := OnlineReport{Version: 1, OnlineCoverage: OnlineCoverage{Status: "disabled"}}
+	if c := l.OnlineCoverage(); c != nil {
+		rep.OnlineCoverage = *c
+	}
+	b, err := json.MarshalIndent(rep, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, append(b, '\n'), 0o644)
 }
 
 // OnlineFailed reports whether the run was asked to fail (the "strict" online mode) and a lookup was

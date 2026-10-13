@@ -183,7 +183,7 @@ func (rule *RuleBotConditions) checkCond(s *String) {
 	if s == nil {
 		return
 	}
-	node, text, base, ok := parseWholeExpr(s.Value)
+	node, text, base, ok := parseWholeExpr(s)
 	if !ok {
 		return
 	}
