@@ -355,6 +355,21 @@
               "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
             },
             {
+              "id": "macos-gnu-flags",
+              "name": "MacosGnuFlags",
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "description": "Checks for GNU-only options of commands at \"run:\" in jobs that run on macOS",
+                "queryURI": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+              },
+              "fullDescription": {
+                "text": "Checks for GNU-only options of commands at \"run:\" in jobs that run on macOS"
+              },
+              "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+            },
+            {
               "id": "matrix",
               "name": "Matrix",
               "defaultConfiguration": {

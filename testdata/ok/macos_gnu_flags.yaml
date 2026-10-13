@@ -1,0 +1,90 @@
+on:
+  workflow_dispatch:
+    inputs:
+      runner:
+        type: string
+
+jobs:
+  linux:
+    # Not a macOS job
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo hi | tee --append out.txt
+      - run: sed -i 's/a/b/' file.txt
+      - run: date -d yesterday
+  windows:
+    runs-on: windows-latest
+    steps:
+      - run: grep -P x file
+        shell: bash
+  self-hosted:
+    # The owner of the machine can have the GNU tools
+    runs-on: [self-hosted, macOS]
+    steps:
+      - run: sed -i 's/a/b/' file.txt
+  container:
+    runs-on: ubuntu-latest
+    container: alpine
+    steps:
+      - run: date -d yesterday
+  mac:
+    runs-on: macos-latest
+    steps:
+      # What both seds understand, and what macOS has
+      - run: sed -i.bak 's/a/b/' file.txt && rm file.txt.bak
+      - run: sed -i '' 's/a/b/' file.txt
+      - run: sed -i"" 's/a/b/' file.txt
+      - run: sed -i "$SUFFIX" 's/a/b/' file.txt
+      - run: sed -i -e 's/a/b/' file.txt
+      - run: sed -n 's/a/b/p' file.txt
+      - run: echo hi | tee -a out.txt
+      - run: date -j -f '%Y-%m-%d' 2024-01-01 +%s
+      - run: date -u +%FT%TZ
+      - run: grep -E 'a+' file
+      - run: grep -e -P file
+      - run: grep -A3 -n 'P' file
+      - run: stat -f %z file.txt
+      - run: find . -name '*.go' -print
+      - run: cp -R src dist
+      # Not GNU-only on macOS
+      - run: git ls-files | xargs -r wc -l
+      - run: sort -V versions.txt
+      - run: readlink -f ./link
+      # The commands are the GNU ones, or the script chooses by the system
+      - run: |
+          brew install gnu-sed
+          gsed -i 's/a/b/' file.txt
+      - run: |
+          if [ "$RUNNER_OS" = "macOS" ]; then sed -i '' 's/a/b/' f; else sed -i 's/a/b/' f; fi
+      - run: |
+          case "$(uname -s)" in
+            Darwin) sed -i '' 's/a/b/' f ;;
+            *) sed -i 's/a/b/' f ;;
+          esac
+      - run: sed -i 's/a/b/' file.txt
+        if: runner.os == 'Linux'
+      - run: date -d yesterday
+        if: ${{ runner.os != 'macOS' }}
+      # The script handles the failure of the command
+      - run: |
+          PAST=$(date -d '1 hour ago' '+%Y%m%d%H%M.%S' 2>/dev/null || date -v-1H '+%Y%m%d%H%M.%S')
+          echo "$PAST"
+          if grep -qP 'x' file; then echo found; fi
+      # A tool that is not the BSD one
+      - run: gdate -d yesterday
+      - run: echo 'tee --append and sed -i x y are text'
+      - run: echo "date -d is text"
+      # Not bash or sh
+      - run: print('sed -i x y')
+        shell: python
+  matrix-without-mac:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, ubuntu-24.04]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - run: sed -i 's/a/b/' file.txt
+  runner-unknown:
+    runs-on: ${{ inputs.runner }}
+    steps:
+      - run: sed -i 's/a/b/' file.txt

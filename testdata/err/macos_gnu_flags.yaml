@@ -1,0 +1,27 @@
+on: push
+
+jobs:
+  mac:
+    runs-on: macos-latest
+    steps:
+      - run: echo hi | tee --append out.txt
+      - run: sed -i 's/a/b/' file.txt
+      - run: sed -Ei 's/a+/b/' file.txt
+      - run: sed --in-place 's/a/b/' file.txt
+      - run: date -d '2 days ago' +%F
+      - run: grep -oP 'v\K[0-9.]+' version.txt
+      - run: git ls-files | grep --perl-regexp '^src/'
+      - run: stat -c %s file.txt
+      - run: find . -name '*.go' -printf '%p\n'
+      - run: cp --parents src/a.go dist/
+      - run: |
+          set -eu
+          sed -i "s/$OLD/$NEW/" config.yml
+          cat config.yml | tee --append log.txt
+  matrix:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-15]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - run: date -d yesterday

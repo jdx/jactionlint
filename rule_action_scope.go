@@ -42,6 +42,7 @@ var actionRuleScope = map[string]struct {
 	"github-env":                  {scope: actionCallerDependent}, // privileged only for the events of the callers; its findings about untrusted input do not depend on them
 	"insecure-ssh-keyscan":        {scope: actionApplies},         // the scripts of the steps
 	"insecure-url-scheme":         {scope: actionApplies},         // the scripts and inputs of the steps
+	"macos-gnu-flags":             {scope: actionNotApplicable},   // the runner is the one of the calling job
 	"mutable-runner-label":        {scope: actionNotApplicable},   // runs-on: belongs to the calling job
 	"pipeline-without-pipefail":   {scope: actionApplies},         // the scripts of the steps, with the shell of each step
 	"superfluous-actions":         {scope: actionApplies},         // the actions the steps use
