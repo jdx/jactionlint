@@ -997,7 +997,7 @@ three levels of objects, which is as far as the payloads are known for certain.
 The payloads come from the JSON schemas of the webhooks of [octokit/webhooks][octokit-webhooks] and the webhooks of
 [the OpenAPI description of the REST API of GitHub][rest-api-description], both under the MIT licence: a property is known
 when either of them has it, in the payload of any activity type of any event. They are in `event_payloads.go`, which
-`go generate` (`mise run generate`) refreshes with [`scripts/generate-event-payloads`](../scripts/generate-event-payloads/README.md).
+`go generate` (`mise run generate`) refreshes with [`scripts/generate-event-payloads`](https://github.com/jdx/jactionlint/tree/main/scripts/generate-event-payloads).
 To keep a false report out of the default profile, these are not checked:
 
 - the contents of an account, an app, an installation or a licence (`sender`, `pull_request.user`, `organization`, ...): GitHub adds
