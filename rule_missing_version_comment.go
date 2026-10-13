@@ -123,7 +123,7 @@ func (r *RuleMissingVersionComment) fixFor(s usesSite, starts []int) (*Fix, erro
 var trackedBranches = []string{"main", "master", "trunk", "develop", "development", "dev", "next", "latest", "stable", "nightly", "head"}
 
 // versionWordRe finds a version in the text of a comment: "1.2", "v1.2.3" or "v4", not as a part of a word ("v4abc", "pinv4").
-var versionWordRe = regexp.MustCompile(`(?:^|[^0-9A-Za-z.])(?:[vV]?[0-9]+(?:\.[0-9]+)+|[vV][0-9]+)(?:$|[^0-9A-Za-z])`)
+var versionWordRe = regexp.MustCompile(`(?:^|[^0-9A-Za-z.])(?:[vV]?[0-9]+(?:\.[0-9]+)+|[vV][0-9]+)(?:$|[^0-9A-Za-z.]|\.(?:$|[^0-9]))`)
 
 // mentionsVersion reports whether the comment has a version anywhere, such as "pin@v7.0.1" or "Release v4.4.1". Such a
 // comment says which version the pin is even when it is not written the way the bots write it. Whether the
