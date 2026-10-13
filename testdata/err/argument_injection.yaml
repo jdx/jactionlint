@@ -35,3 +35,16 @@ jobs:
       - run: |
           SAFE=$(echo "$BODY" | tr -cd 'a-z0-9-')
           sed "s/PLACEHOLDER/$SAFE/g" template.txt
+  after-checkout:
+    runs-on: ubuntu-latest
+    steps:
+      - run: gh pr checkout "$NUM"
+        env:
+          NUM: ${{ github.event.issue.number }}
+          GH_TOKEN: ${{ github.token }}
+      - run: |
+          AUTHOR=$(git log -1 --format=%an)
+          sed "s/PLACEHOLDER/$AUTHOR/g" template.txt
+          # Not reported: the name of the branch and the login of an account
+          BRANCH=$(git branch --show-current)
+          sed "s/PLACEHOLDER/$BRANCH/g" template.txt

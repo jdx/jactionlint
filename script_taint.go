@@ -38,22 +38,30 @@ const (
 	kindText  = 1
 	kindMulti = 2
 	kindName  = 4
+	// kindPerson is the display name of an author or a committer: one line like a name, which cannot add a variable to the
+	// environment, but free text for a program (it can start with a dash), unlike a branch, a label or a login.
+	kindPerson = 8
 )
 
 // multiline is whether the text can hold a line break.
 func (t taintSource) multiline() bool { return t.kinds&kindMulti != 0 }
 
-// nameOnly is whether the text is only the name of a branch or of an account.
-func (t taintSource) nameOnly() bool { return t.kinds == kindName }
+// nameOnly is whether the text is only one line that git and GitHub restrict: the name of a branch or of an account, or
+// the display name of a person.
+func (t taintSource) nameOnly() bool { return t.kinds&^kindPerson == kindName }
+
+// refOrLoginOnly is whether the text is only the name of a branch or the login of an account, which is no free text for a
+// program either: the display name of a person is.
+func (t taintSource) refOrLoginOnly() bool { return t.kinds == kindName }
 
 // ghTaintedFields are the fields of `--json` of `gh pr view` and `gh issue view` that hold text of outsiders, and what
 // each is.
 var ghTaintedFields = map[string]map[string]int{
 	"pr": {
 		"headRefName": kindName, "title": kindText, "body": kindMulti, "comments": kindMulti, "files": kindMulti,
-		"author": kindName, "reviews": kindMulti, "latestReviews": kindMulti, "commits": kindMulti,
+		"author": kindName | kindPerson, "reviews": kindMulti, "latestReviews": kindMulti, "commits": kindMulti,
 	},
-	"issue": {"title": kindText, "body": kindMulti, "comments": kindMulti, "author": kindName},
+	"issue": {"title": kindText, "body": kindMulti, "comments": kindMulti, "author": kindName | kindPerson},
 }
 
 // ghJQTokens are the properties that a `--jq` filter of `gh api` or `gh pr view` selects when it reads text of an
@@ -68,6 +76,8 @@ var ghJQTokens = []struct {
 }
 
 var (
+	reJQAuthorLogin  = regexp.MustCompile(`\bauthor\.login\b`)
+	reJQAuthorObject = regexp.MustCompile(`\bauthor\b|\bcommitter\b`)
 	// the path of the API that lists or reads pull requests and issues, also with a query (`pulls?state=open`)
 	reGhAPIPath = regexp.MustCompile(`(^|/)repos/(?:\$\{\{.*?\}\}|\S)+/(pulls|issues)(?:[/?#]|$)`)
 	// the part of that path that holds text of many people: `pulls/7/comments`, `issues/comments`, `pulls/7/files`
@@ -131,7 +141,7 @@ func ghTaint(c *runscript.Command) (taintSource, bool) {
 		jq, hasJQ := jqFilter(c)
 		if !hasJQ {
 			// without a filter gh prints compact JSON, where a line break of a text is written \n: one line
-			if kinds&^kindName != 0 || unknown {
+			if kinds&^(kindName|kindPerson) != 0 || unknown {
 				kinds = kindText
 			}
 			return taintSource{desc: ghDesc(c), kinds: kinds}, true
@@ -187,6 +197,10 @@ func jqKinds(filter string) (kinds int) {
 		if t.re.MatchString(filter) {
 			kinds |= t.kind
 		}
+	}
+	// `.author` is the object (the login and the display name); only `.author.login` is the login alone
+	if reJQAuthorObject.MatchString(reJQAuthorLogin.ReplaceAllString(filter, "")) {
+		kinds |= kindPerson
 	}
 	if kinds != 0 && strings.Contains(filter, "[]") {
 		kinds |= kindMulti // a filter that iterates prints one line for each element
@@ -268,7 +282,7 @@ func gitTaint(c *runscript.Command, verb string) (taintSource, bool) {
 			kinds |= kindMulti
 		}
 		if reGitName.MatchString(line) {
-			kinds |= kindName
+			kinds |= kindName | kindPerson
 		}
 		if kinds != 0 {
 			return taintSource{desc: "git " + verb + " --format", kinds: kinds}, true
