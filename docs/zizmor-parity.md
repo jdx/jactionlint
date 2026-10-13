@@ -28,7 +28,7 @@ How to read the table:
 | `bot-conditions` | `bot-conditions` | default | partial: `github.actor`, `github.triggering_actor`, `github.actor_id` and `github.event.sender.*` compared with a bot (`==`, `contains()`, `startsWith()`, `endsWith()`) in job and step `if:`. `!=` and negated tests are not reported, as in zizmor. `--fix=unsafe` only for workflows with `pull_request`/`pull_request_target` events. Bot names without `[bot]` are known by ID and prefix only. Judged by the events that reach the job, also through local reusable workflows: not reported when only `push`-like events (`push`, `schedule`, `workflow_dispatch`, ...) can run it, and the suggestion says that the author field is missing on the other events of a mixed workflow. Composite actions: the fix needs every local caller to run on a pull request event. A conjunction with a check of the author of the pull request is not reported (zizmor#1914), and neither is a negated test; those are the 4 misses |
 | `cache-poisoning` | `cache-poisoning` | default, with the option `pedantic` | partial: a fixed table of cache actions and publishing actions. 43% of the findings of zizmor on the corpus are reported by default and 72% with the option `pedantic`, which adds zizmor's two heuristics (a tag with read-only permissions, a `branches:` filter that names a release branch among others) and has a measured false-positive rate of about 90%; most of the rest is zizmor reporting a cache that the action does not restore. See [cache-poisoning against zizmor](#cache-poisoning-against-zizmor). `tags-ignore` is not a release trigger, neither is a `tags:` filter that lets no tag through. `setup-node` v5 and later and `docker/setup-buildx-action` are covered, judged by the `package.json` of the repository and by `version`. A step guarded by `if: !startsWith(github.ref, 'refs/tags/')` is evaluated for the release scenarios, where zizmor reports it |
 | `concurrency-limits` | `concurrency-limits` | default | partial: only a missing `concurrency:` and the bare group form are reported, not `cancel-in-progress: false`. A workflow that only a schedule or a manual run starts is not reported (nothing supersedes such a run), nor is the job of `copilot-setup-steps.yml` or a generated file. See [where a rule differs on purpose](#where-a-rule-differs-on-purpose) |
-| `dangerous-triggers` | `dangerous-triggers` | default | full; adds `issue_comment`, which zizmor flags from 1.31; reported at the trigger, zizmor reports at `on:`, which is more than 3 lines away in a long `on:` block (all 72 misses of the harness are that). `pull_request_target` with only `actions/labeler` is exempt in both |
+| `dangerous-triggers` | `dangerous-triggers` | default, with the option `pedantic` | full, except that a workflow which cannot write (`permissions: {}`, read-only everywhere) and reads no secret is reported only with the option `pedantic`, as [zizmor#398](https://github.com/zizmorcore/zizmor/issues/398) proposes (zizmor reports it always; the effect on the comparison below was not measured). The message names the scopes the token can write and the secrets. Adds `issue_comment`, which zizmor flags from 1.31; reported at the trigger, zizmor reports at `on:`, which is more than 3 lines away in a long `on:` block (all 72 misses of the harness are that). `pull_request_target` with only `actions/labeler` is exempt in both |
 | `dependabot-cooldown` | `dependabot-cooldown` | default | full on the corpus, plus true positives that zizmor 1.30.1 misses (it stops at the first update which satisfies the minimum). `--fix` needs the `default-days` option; zizmor has a built-in 7. The `semver-*-days` keys are checked by neither. An update with `open-pull-requests-limit: 0` or an `ignore` of every dependency is not reported (nothing is proposed that a cooldown could delay), where zizmor reports it |
 | `dependabot-execution` | `dependabot-execution` | default | not measured: no `allow` on the corpus, so both tools report nothing. Covered by unit tests only. The fix is unsafe (zizmor offers it too) |
 | `excessive-permissions` | `excessive-permissions` | default | partial: workflow-level write scopes, `write-all`, `read-all`, a workflow without a top-level `permissions:` (option `require-workflow-permissions`, on under the `pedantic` profile; reported at the first key of the file, as zizmor does) and, with `missing-permissions`, jobs without any permissions. 95.6% of the findings of zizmor on the corpus are reported; the rest are generated files and reusable-only workflows, see [permissions against zizmor](#permissions-against-zizmor). zizmor grades findings by persona and confidence, jactionlint has one level per rule |
@@ -47,7 +47,7 @@ How to read the table:
 | `ref-version-mismatch` | `ref-version-mismatch` | online | partial: every mismatch of a tag comment is found; a missing or version-less comment and a branch comment are not reported; see [online audits](#online-audits) |
 | `secrets-inherit` | `secrets-inherit` | default | full, reported at the `uses:` of the job like zizmor |
 | `secrets-outside-env` | `secrets-outside-env` | pedantic | full; zizmor reports it only for the auditor persona. `workflow_call` workflows are skipped like zizmor does. Inside a folded `>-` scalar jactionlint reports the line of the scalar start |
-| `self-hosted-runner` | `self-hosted-runner` | pedantic (info) | partial: literal `self-hosted` labels and matrix values; labels from other expressions are not resolved. Labels of hosted-runner providers such as namespace or blacksmith are not reported |
+| `self-hosted-runner` | `self-hosted-runner` | pedantic (info) | partial: literal `self-hosted` labels and matrix values, the labels of `self-hosted-runner.labels` of the configuration (ARC runner sets), and `runs-on: {group: ...}`; labels from other expressions are not resolved, and zizmor's list of GitHub-hosted labels is not used. Labels of hosted-runner providers such as namespace or blacksmith are not reported (and are not unknown labels for `unknown-runner-label`, see `self-hosted-runner.providers`). Options `allow` and `pull-request-only` (zizmor has none). Not compared with zizmor on a corpus |
 | `self-repository` | `self-repository` | pedantic (info) | full on the corpus, with an unsafe fix (the one miss is a step with `if: false`, whose findings are dropped) |
 | `stale-action-refs` | `stale-action-refs` | online | partial: same findings except repositories with more than 1000 tags; see [online audits](#online-audits) |
 | `superfluous-actions` | `superfluous-actions` | default | partial: the same findings as zizmor, split like its personas (regular, and the pedantic ones with the option `pedantic`, which the `pedantic` profile turns on). jactionlint adds the archived `actions/create-release` and `actions/upload-release-asset`. A job whose runner may be self-hosted is not reported: a `runs-on:` that is an expression other than matrix values (`${{ inputs.runner }}`, a runner group, the labels of a provider such as `runs-on=...`) counts as one, which is 72 of the 74 misses (the other 2 have a literal `self-hosted` label). See [the check](checks.md#check-superfluous-actions) |
@@ -176,7 +176,7 @@ Known causes of differences between the tools:
   jactionlint does not. jactionlint also reports a job that runs `gh release upload` or pushes an image and restores a cache
   (`jdx/mise-action` with `cache_save: false`, which only stops saving, and `docker/build-push-action` with `cache-from: type=gha`),
   where zizmor looks at triggers and not at jobs.
-- `dangerous-triggers`: jactionlint also reports `issue_comment`, and reports at the trigger where zizmor reports at `on:`.
+- `dangerous-triggers`: jactionlint also reports `issue_comment`, and reports at the trigger where zizmor reports at `on:`. A workflow that cannot write and uses no secret is not reported by default (the counts above were measured before that).
 
 ## Intentional differences: where jactionlint goes beyond zizmor
 
@@ -194,7 +194,7 @@ jactionlint" in the harness report. The idea behind some of them is an open issu
 | Rule | Profile | What it reports | Notes |
 | --- | --- | --- | --- |
 | `missing-timeout`, `timeout-too-long` | default, configured | a job without `timeout-minutes`; a value above `max`. zizmor [#2166](https://github.com/zizmorcore/zizmor/pull/2166) is open | `missing-timeout` is noisy for a repository that never set the key; `--fix` with `default-minutes` clears it |
-| `unlocked-install` | default | `cargo install` without `--locked` (fixable, unsafe), and `npm install`, `yarn` and `pnpm install --no-frozen-lockfile` when the repository has the lock file the install ignores. With the option `pedantic`: the same without a lock file, `bun install` without `--frozen-lockfile` and `pip install -r` without hashes or constraints. See [the check](checks.md#check-unlocked-install) | unit tests and fixtures |
+| `unlocked-install` | default | `cargo install` without `--locked` (fixable, unsafe), and `npm install`, `yarn` and `pnpm install --no-frozen-lockfile` when the repository has the lock file the install ignores. With the option `pedantic`: the same without a lock file, `bun install` without `--frozen-lockfile`, `pip install -r` without hashes or constraints, npm, Yarn and bun installs without `--ignore-scripts` ([zizmor#1405](https://github.com/zizmorcore/zizmor/issues/1405)), and installs without a release-age cooldown ([zizmor#2044](https://github.com/zizmorcore/zizmor/issues/2044)), unless the repository's config files settle it (neither is implemented in zizmor). See [the check](checks.md#check-unlocked-install) | unit tests and fixtures |
 | `dependabot-missing-actions-update` | pedantic | `dependabot.yml` has no `github-actions` update although `.github/workflows` uses actions; skipped when the repository has a Renovate configuration. Also reports the local composite actions that use actions and that no `github-actions` update names (zizmor [#1806](https://github.com/zizmorcore/zizmor/issues/1806) is open), with an unsafe fix. [The check](checks.md#check-dependabot-missing-actions-update) | |
 | `pipeline-without-pipefail` | default | a failure in a pipeline of a `run:` script is hidden because the default shell (`bash -e {0}`) and `shell: sh` do not enable pipefail. zizmor [#288](https://github.com/zizmorcore/zizmor/issues/288) is the open idea | unit tests and fixtures |
 | `agentic-actions` | default | AI agent actions ([zizmor#1605](https://github.com/zizmorcore/zizmor/issues/1605) is a proposal): an agent outsiders can steer without a check of the user, an open gate (`allowed_non_write_users: '*'`), settings that turn safeguards off, an agent on the code of a pull request. [The check](checks.md#check-agentic-actions) | [see below](#agentic-actions) |
@@ -250,7 +250,7 @@ actions.
 ### Where a rule differs on purpose
 
 - `dangerous-triggers` also reports `issue_comment` (zizmor flags it from the version after 1.30.1) and reports at the trigger, where
-  zizmor reports at `on:`.
+  zizmor reports at `on:`. It reports a workflow that cannot write and reads no secret only with the option `pedantic`.
 - `undocumented-permissions` accepts a comment above a scope as well as at its end of line (zizmor: end of line only), does not report
   a scope granted with `none`, and reports each scope without a comment where zizmor reports one finding for the whole block (see
   [permissions against zizmor](#permissions-against-zizmor)).
@@ -364,14 +364,12 @@ without buildx is the one case that this does not cover.
 
 ## What is not done
 
-These ideas from the zizmor tracker are **not built**: a check of `allow-unsafe-pr-checkout` of `actions/checkout` and of code that a
-pull request controls (zizmor [#2134](https://github.com/zizmorcore/zizmor/issues/2134)), TOCTOU refs
+These ideas from the zizmor tracker are **not built**: TOCTOU refs
 ([#935](https://github.com/zizmorcore/zizmor/issues/935)), shell syntax errors without shellcheck
 ([#2322](https://github.com/zizmorcore/zizmor/issues/2322)), a rule for a SHA without a version comment
 ([#2316](https://github.com/zizmorcore/zizmor/issues/2316)), immutable releases under `--online`
 ([#766](https://github.com/zizmorcore/zizmor/issues/766)), credentials in the `registries` of `dependabot.yml`
-([#1222](https://github.com/zizmorcore/zizmor/issues/1222)), a repojacking check by owner lookup
-([#479](https://github.com/zizmorcore/zizmor/issues/479)), and zizmor's precomputed snapshot of tags and advisories, which would cut the
+([#1222](https://github.com/zizmorcore/zizmor/issues/1222)), and zizmor's precomputed snapshot of tags and advisories, which would cut the
 first-run cost of `--online`. The registry of rules, [rules.md](rules.md), is the list of what exists.
 
 ## Permissions against zizmor
@@ -494,7 +492,10 @@ Not reported: archives that are downloaded, extracted and run, `go install` or `
 - `untrusted-checkout` follows `actions/checkout`, `gh pr checkout` and `git` commands with a literal reference. A ref that comes from
   an output of an earlier step is not followed. "Runs it" is a list of commands: an unusual build tool that is not in the list of
   commands that only read files counts as running code, while an action that builds the workspace and is not in the short list does
-  not. Conditions on `needs` and `steps` are guards, and so is `github.event.pull_request.merged == true` for a checkout of the merged commit.
+  not. `untrusted-checkout` knows the protection of `actions/checkout` against the code of fork pull requests (zizmor
+  [#2134](https://github.com/zizmorcore/zizmor/issues/2134), poutine#450): `allow-unsafe-pr-checkout: true` or an expression is a finding of
+  its own, and a checkout that a guarded version refuses is reported only with the option `pedantic`. Which versions are guarded is a
+  list of floors and the version comment of a commit, which is not verified (see the checks document). Conditions on `needs` and `steps` are guards, and so is `github.event.pull_request.merged == true` for a checkout of the merged commit.
 - `untrusted-artifact` links the use to the download by the `path` of the artifact, or its `name` (a file in the root of the workspace
   that has another name is not linked), and takes any `=~`, numeric test or checksum as validation.
 - `concurrency-cancels-release` knows a fixed list of publish and deploy actions and commands. A release done by a script of the

@@ -355,7 +355,7 @@ var (
 		"timeout-minutes", "require-commit-hash", "require-permissions", "require-checkout-before-local-action",
 		"require-expression-wrapping", "check-falsy-ternary", "check-workflow-run-names", "require-shell", "max-run-lines",
 	}
-	selfHostedRunnerKeys   = []string{"labels", "strict-labels"}
+	selfHostedRunnerKeys   = []string{"labels", "strict-labels", "providers"}
 	fixConfigKeys          = []string{"rules"}
 	onlineOptionsKeys      = []string{"mode", "api-url", "token-env", "token-file", "allow", "deny", "cache-ttl", "max-rate-limit-wait", "retries", "concurrency", "gh-cli"}
 	pathConfigKeys         = []string{"ignore"}

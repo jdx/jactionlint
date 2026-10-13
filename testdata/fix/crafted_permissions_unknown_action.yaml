@@ -3,4 +3,4 @@ jobs:
   release:
     runs-on: ubuntu-latest
     steps:
-      - uses: softprops/action-gh-release@v2
+      - uses: someone/unknown-action@v1
