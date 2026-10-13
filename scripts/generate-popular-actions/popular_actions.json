@@ -149,8 +149,8 @@
     },
     {
         "slug": "actions/setup-java",
-        "tags": ["v1", "v2", "v3", "v4", "v5"],
-        "next": "v6"
+        "tags": ["v1", "v2", "v3", "v4", "v5", "v6"],
+        "next": "v7"
     },
     {
         "slug": "actions/setup-node",
@@ -209,13 +209,13 @@
     },
     {
         "slug": "dawidd6/action-download-artifact",
-        "tags": ["v2", "v3", "v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15", "v16", "v17", "v18", "v19", "v20", "v21"],
-        "next": "v22"
+        "tags": ["v2", "v3", "v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15", "v16", "v17", "v18", "v19", "v20", "v21", "v22"],
+        "next": "v23"
     },
     {
         "slug": "dawidd6/action-send-mail",
-        "tags": ["v1", "v2", "v3", "v4", "v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15", "v16", "v17", "v18"],
-        "next": "v19"
+        "tags": ["v1", "v2", "v3", "v4", "v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15", "v16", "v17", "v18", "v19"],
+        "next": "v20"
     },
     {
         "slug": "dessant/lock-threads",
@@ -265,8 +265,8 @@
     },
     {
         "slug": "game-ci/unity-builder",
-        "tags": ["v2", "v3", "v4", "v5"],
-        "next": "v6"
+        "tags": ["v2", "v3", "v4", "v5", "v6"],
+        "next": "v7"
     },
     {
         "slug": "github/codeql-action",

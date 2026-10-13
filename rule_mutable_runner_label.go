@@ -29,32 +29,28 @@ func NewRuleMutableRunnerLabel(src []byte) *RuleMutableRunnerLabel {
 }
 
 var mutableRunnerLabelRegex = regexp.MustCompile(`(?i)^(ubuntu|windows|macos)-latest(-.+)?$`)
-var fixedRunnerLabelRegex = regexp.MustCompile(`^(ubuntu|windows|macos)-[0-9]+(\.[0-9]+)?$`)
 
-// currentRunnerLabel returns the fixed label that a "-latest" label is the same image as at the
-// moment, according to the table of runner labels, or "".
-func currentRunnerLabel(label string) string {
+// currentRunnerLabel returns the fixed label that a "-latest" label is the same image as, according to
+// latestRunnerImages, or "". The second result describes a move of the label that is in progress or
+// announced, or is "".
+func currentRunnerLabel(label string) (string, string) {
 	l := strings.ToLower(label)
 	m := mutableRunnerLabelRegex.FindStringSubmatch(l)
 	if m == nil {
-		return ""
+		return "", ""
 	}
-	os := m[1]
-	compat, ok := defaultRunnerOSCompats[os+"-latest"]
+	img, ok := latestRunnerImages[m[1]]
 	if !ok {
-		return ""
+		return "", ""
 	}
-	for _, c := range allGitHubHostedRunnerLabels {
-		if fixedRunnerLabelRegex.MatchString(c) && strings.HasPrefix(c, os+"-") && defaultRunnerOSCompats[c] == compat {
-			cand := c + strings.TrimPrefix(l, os+"-latest")
-			for _, known := range allGitHubHostedRunnerLabels {
-				if known == cand {
-					return cand
-				}
-			}
+	// The suffix of a larger runner ("-large") is kept when the fixed label with it is a known label
+	cand := img.pin + strings.TrimPrefix(l, m[1]+"-latest")
+	for _, known := range allGitHubHostedRunnerLabels {
+		if known == cand {
+			return cand, img.rollout
 		}
 	}
-	return ""
+	return "", ""
 }
 
 // VisitJobPre is callback when visiting Job node before visiting its children.
@@ -94,7 +90,9 @@ func (rule *RuleMutableRunnerLabel) check(l *String, direct bool) {
 		return
 	}
 	msg := fmt.Sprintf("runner label %q is an alias that GitHub moves to newer images, so the job can break without a change in this repository.", l.Value)
-	if cur := currentRunnerLabel(l.Value); cur != "" {
+	if cur, rollout := currentRunnerLabel(l.Value); cur != "" && rollout != "" {
+		msg += fmt.Sprintf(" use a fixed label such as %q, %s", cur, rollout)
+	} else if cur != "" {
 		msg += fmt.Sprintf(" use a fixed label such as %q, which is the same image today", cur)
 	} else {
 		msg += " use a label with a version"

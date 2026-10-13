@@ -134,6 +134,9 @@ func (rule *RuleParallelSteps) checkPendingReads(n *Step) {
 		for _, v := range n.Env.Vars {
 			check(v.Value, false)
 		}
+		for _, v := range n.Env.Inserts {
+			check(v, false)
+		}
 	}
 	if n.ContinueOnError != nil {
 		check(n.ContinueOnError.Expression, false)
@@ -153,6 +156,10 @@ func (rule *RuleParallelSteps) checkPendingReads(n *Step) {
 		check(e.Uses, false)
 		check(e.Entrypoint, false)
 		check(e.Args, false)
+		check(e.InputsExpression, false)
+		for _, v := range e.InputInserts {
+			check(v, false)
+		}
 		for _, in := range e.Inputs {
 			if in != nil {
 				check(in.Value, false)

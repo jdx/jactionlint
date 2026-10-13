@@ -115,7 +115,7 @@ func (rule *RuleUntrustedArtifact) downloadOf(s *Step) *artifactDownload {
 			if in == nil || in.Value == nil {
 				return nil // the artifacts of the current run
 			}
-			refs, _ := stringExprRefs(in.Value.Value)
+			refs, _ := in.Value.exprRefs()
 			if !refsRead(refs, []string{"github", "event", "workflow_run"}) {
 				return nil
 			}
