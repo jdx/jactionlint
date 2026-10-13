@@ -98,7 +98,7 @@ func (rule *RuleMultilinePlainRun) VisitStep(n *Step) error {
 		r := []rune(joined)
 		joined = string(r[:77]) + "..."
 	}
-	e := rule.errorIDAt("multiline-plain-run", &Pos{Line: line, Col: col}, "this \"run:\" is not a block scalar, so YAML folds its "+strconv.Itoa(len(shown))+" lines into one line and the shell runs the single command "+quote(joined)+". write `run: |` to keep the lines")
+	e := rule.errorIDAt("multiline-plain-run", &Pos{Line: line, Col: col}, "this \"run:\" is not a block scalar, so YAML folds its "+strconv.Itoa(len(shown))+" lines into one line and the shell runs the single command `"+joined+"`. write `run: |` to keep the lines").endAt(&Pos{Line: line, Col: col + utf8.RuneCountInString(f.lines[idx])})
 	rule.fix(e, run.Run, f)
 	return nil
 }

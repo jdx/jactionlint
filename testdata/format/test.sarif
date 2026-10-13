@@ -355,6 +355,21 @@
               "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
             },
             {
+              "id": "multiline-plain-run",
+              "name": "MultilinePlainRun",
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "description": "Checks for \"run:\" written over several lines without \"|\", which YAML folds into one line",
+                "queryURI": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+              },
+              "fullDescription": {
+                "text": "Checks for \"run:\" written over several lines without \"|\", which YAML folds into one line"
+              },
+              "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+            },
+            {
               "id": "mutable-runner-label",
               "name": "MutableRunnerLabel",
               "defaultConfiguration": {

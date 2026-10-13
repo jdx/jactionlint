@@ -111,6 +111,7 @@ rules:
 | [missing-timeout](#missing-timeout) | policy | error | default |
 | [missing-workflow-input](#missing-workflow-input) | correctness | error | correctness |
 | [missing-workflow-secret](#missing-workflow-secret) | correctness | error | correctness |
+| [multiline-plain-run](#multiline-plain-run) | correctness | error | correctness |
 | [mutable-runner-label](#mutable-runner-label) | policy | warn | pedantic |
 | [obfuscation](#obfuscation) | security | error | default |
 | [outdated-action-runner](#outdated-action-runner) | correctness | error | correctness |
@@ -897,6 +898,16 @@ A required secret of a reusable workflow is not passed.
 - Default level: error
 - Profile: correctness
 - Details and examples: [checks](./checks.md#check-reusable-workflows)
+
+## multiline-plain-run
+
+A run: is written over several lines without |, so YAML folds the lines into one command.
+
+- Group: correctness
+- Default level: error
+- Profile: correctness
+- Fixable: yes
+- Details and examples: [checks](./checks.md#check-multiline-plain-run)
 
 ## mutable-runner-label
 
