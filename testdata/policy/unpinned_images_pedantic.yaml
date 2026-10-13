@@ -1,0 +1,27 @@
+on: push
+
+jobs:
+  expressions:
+    runs-on: ubuntu-latest
+    container: ${{ vars.IMAGE }}
+    services:
+      pinned:
+        image: ${{ vars.REGISTRY }}/tool@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+      tail:
+        image: ${{ vars.REGISTRY }}/tool:1.2
+      digest-from-expression:
+        image: tool@sha256:${{ vars.DIGEST }}
+      tag-from-expression:
+        image: tool:${{ vars.TAG }}
+    steps:
+      - run: echo hello
+  matrix-with-an-unknown-value:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - image: debian:12
+          - image: debian:${{ vars.TAG }}
+    container: ${{ matrix.image }}
+    steps:
+      - run: echo hello

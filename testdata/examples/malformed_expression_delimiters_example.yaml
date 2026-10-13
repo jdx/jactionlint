@@ -1,0 +1,17 @@
+on: push
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      # ERROR: one brace, GitHub does not expand it
+      REF: ${ github.ref }
+      # ERROR: a space after the dollar
+      SHA: $ {{ github.sha }}
+      # ERROR: no dollar
+      TAG: v-{{ github.run_number }}
+      # OK: these are not expressions
+      TEMPLATE: "{{ .Values.image }}"
+      HOME_BIN: ${HOME}/bin
+    steps:
+      - run: echo "${GITHUB_REF} {{ github.sha }}"
