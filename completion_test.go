@@ -293,6 +293,10 @@ func TestPowerShellCompletion(t *testing.T) {
 		{"jactionlint --color ", nil, []string{"always", "never", "auto"}},
 		{"jactionlint --fix ", nil, []string{"unsafe"}},
 		{"jactionlint --fix=un", []string{"--fix=unsafe"}, nil},
+		// A finished list is a complete word: the file names follow, not the values of the option
+		{"jactionlint --fix-rules=missing-timeout,unpinned-uses ", []string{"./docs"}, []string{"missing-timeout", "unpinned-uses"}},
+		{"jactionlint --online=cache,strict ", []string{"./docs"}, []string{"cache", "strict", "cache,strict"}},
+		{"jactionlint --fix-rules missing-timeout,unpinned-uses ", []string{"./docs"}, []string{"missing-timeout"}},
 		{"jactionlint --config-file=docs/us", []string{"--config-file=./docs/usage.md"}, nil},
 		{"jactionlint --config-file docs/us", []string{"./docs/usage.md"}, nil},
 		{"jactionlint docs/us", []string{"./docs/usage.md"}, nil},

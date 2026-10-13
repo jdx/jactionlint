@@ -210,7 +210,7 @@ jactionlint --completion=powershell | Out-String | Invoke-Expression
 
 `jactionlint --explain RULE` prints what the installed version knows about a rule: its summary, group, profile, default level, whether it has a fix, its
 options, the configuration and the ignore comment to use, and the section about it of [the checks document](checks.md) (with the examples). It
-needs no network. An unknown ID is an error with the closest ID. Use `--list-rules`, or the completion, to find an ID.
+needs no network. An unknown ID is an error with the closest ID. The IDs are in [the list of rules](rules.md), and the [completion](#shell-completion) offers them.
 
 ```sh
 jactionlint --explain missing-timeout

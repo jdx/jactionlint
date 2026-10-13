@@ -308,7 +308,7 @@ func writePowerShellCompletion(w io.Writer, opts []compOption, ids []string) err
     if ($word -match '^(--[^=]+)=(.*)$') {
         $o = $options | Where-Object { $_.Name -eq $Matches[1] -and $_.Arg -ne '' } | Select-Object -First 1
         if ($o) { $prefix = $Matches[1] + '='; $word = $Matches[2] }
-    } elseif ($words.Count -ge 2 -and $words[-1] -match '^(--[^=]+)=.*,') {
+    } elseif ($words.Count -ge 2 -and $commandAst.CommandElements[-1].Extent.EndOffset -eq $cursorPosition -and $words[-1] -match '^(--[^=]+)=.*,') {
         # --option=a,b,c: PowerShell reads a list and completes its last element only, which replaces just that element
         $o = $options | Where-Object { $_.Name -eq $Matches[1] -and $_.Arg -ne '' } | Select-Object -First 1
     } elseif ($prev -like '-*') {
