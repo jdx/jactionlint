@@ -402,6 +402,7 @@ note: shellcheck was not found, so it did not check 12 shell scripts. install it
   number of scripts the tool checked and `skippedScripts` the number that it would have checked. A tool which no script needed (pyflakes in a
   repository without `shell: python`) and a tool turned off with an empty command are not listed, so a `ran` has `scripts` of at least 1 and a
   `not found` has `skippedScripts` of at least 1, and the log says the same as the note.
+  `node` is a third tool, for the rule `github-script-syntax`; it has no option, so the note says to turn the rule off.
 
   ```json
   "properties": {
