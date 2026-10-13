@@ -264,8 +264,10 @@ func githubScriptRegion(str *String, src string, e nodeSyntaxError) (start, end 
 	}
 	start = &Pos{Line: l, Col: c}
 	eo := so
-	for k := 0; k < max(e.n, 1) && eo < len(src) && src[eo] != '\n'; k++ {
-		_, w := utf8.DecodeRuneInString(src[eo:])
+	// The carets of node are UTF-16 units too: a character outside the BMP is two of them
+	for units := 0; units < max(e.n, 1) && eo < len(src) && src[eo] != '\n'; {
+		r, w := utf8.DecodeRuneInString(src[eo:])
+		units += len(utf16.Encode([]rune{r}))
 		eo += w
 	}
 	if l, c, ok := str.valueAt(eo); ok {

@@ -122,3 +122,21 @@ func TestGithubScriptSyntaxWithNode(t *testing.T) {
 		}
 	})
 }
+
+func TestGithubScriptRegionEndCountsUTF16Units(t *testing.T) {
+	skipWithoutNode(t)
+	// The error is at the string "😀": node marks 4 carets (UTF-16 units), the region is its 3 characters
+	src := "on: push\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/github-script@v7\n        with:\n          script: |\n            let x = 1 \"😀\" + 2\n"
+	var got []*Error
+	for _, e := range lintWithConfig(t, &Config{}, src) {
+		if e.ID == "github-script-syntax" {
+			got = append(got, e)
+		}
+	}
+	if len(got) != 1 {
+		t.Fatalf("want one finding, have %v", got)
+	}
+	if got[0].EndLine != got[0].Line || got[0].EndColumn-got[0].Column != 3 {
+		t.Errorf("the region is %d:%d-%d:%d, want 3 characters", got[0].Line, got[0].Column, got[0].EndLine, got[0].EndColumn)
+	}
+}
