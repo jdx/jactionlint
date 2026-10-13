@@ -1,0 +1,4 @@
+rules:
+  missing-timeout:
+    level: error
+    accept-step-timeouts: true

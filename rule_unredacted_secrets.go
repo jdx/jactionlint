@@ -8,6 +8,7 @@ import "strings"
 // https://docs.github.com/en/actions/security-for-github-actions/security-guides/using-secrets-in-github-actions#redacting-secrets
 type RuleUnredactedSecrets struct {
 	RuleBase
+	runContext
 }
 
 // NewRuleUnredactedSecrets creates a new RuleUnredactedSecrets instance.
@@ -22,6 +23,7 @@ func NewRuleUnredactedSecrets() *RuleUnredactedSecrets {
 
 // VisitWorkflowPre is callback when visiting Workflow node before visiting its children.
 func (rule *RuleUnredactedSecrets) VisitWorkflowPre(n *Workflow) error {
+	rule.enterWorkflow(n)
 	workflowExprs(n, func(_ exprSite, o *exprOccurrence) {
 		VisitExprNode(o.Root, func(node, _ ExprNode, entering bool) {
 			if !entering {
@@ -72,7 +74,7 @@ func firstSecretIn(root ExprNode) (string, bool) {
 
 func init() {
 	registerRules(
-		RuleInfo{ID: "unredacted-secrets", Group: RuleGroupSecurity, Summary: "A secret is parsed with fromJSON(), so the fields of it are not redacted in logs.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-unredacted-secrets"},
+		RuleInfo{ID: "unredacted-secrets", Group: RuleGroupSecurity, Summary: "A secret is parsed with fromJSON(), so the fields of it are not redacted in logs. With the option pedantic, also a value that a script cuts from a secret and prints without masking it.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-unredacted-secrets", Options: []RuleOption{pedanticOption}},
 	)
 	registerRuleFactory("unredacted-secrets", func(env *RuleEnv) []Rule {
 		if !env.config.RuleEnabled("unredacted-secrets") {

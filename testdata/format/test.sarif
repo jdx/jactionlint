@@ -175,6 +175,21 @@
               "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
             },
             {
+              "id": "deprecated-node-runtime",
+              "name": "DeprecatedNodeRuntime",
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "description": "Checks for Node.js runtimes which GitHub Actions removed: runs.using of an action and the popular actions at majors that declare one",
+                "queryURI": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+              },
+              "fullDescription": {
+                "text": "Checks for Node.js runtimes which GitHub Actions removed: runs.using of an action and the popular actions at majors that declare one"
+              },
+              "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+            },
+            {
               "id": "duplicate-triggers",
               "name": "DuplicateTriggers",
               "defaultConfiguration": {
@@ -786,6 +801,21 @@
               },
               "fullDescription": {
                 "text": "Checks that every input of workflow_dispatch and workflow_call is used"
+              },
+              "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+            },
+            {
+              "id": "unused-workflow-secret",
+              "name": "UnusedWorkflowSecret",
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "description": "Checks that every secret of workflow_call is used",
+                "queryURI": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+              },
+              "fullDescription": {
+                "text": "Checks that every secret of workflow_call is used"
               },
               "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
             },

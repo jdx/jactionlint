@@ -2,6 +2,7 @@
 /scripts/generate-popular-actions/testdata/** -text
 /scripts/generate-webhook-events/testdata/** -text
 /scripts/generate-availability/testdata/** -text
+/scripts/generate-event-payloads/testdata/** -text
 /scripts/generate-jactionlint-matcher/test/** -text
 /internal/runscript/testdata/** -text
 /schema/*.json -text

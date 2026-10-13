@@ -155,6 +155,10 @@ type OnlineAnswers struct {
 	Cache int `json:"cache"`
 	// Stale is the number of expired cached answers used because the rate limit left no other.
 	Stale int `json:"stale"`
+	// Immutable is the number of cached answers older than the TTL which were used without asking because they are
+	// about a file at a full commit SHA, which cannot change. They are not in Cache and do not set
+	// OldestFetched: the age limit of Cache does not apply to them. It is omitted when there were none.
+	Immutable int `json:"immutable,omitempty"`
 	// OldestFetched is the oldest time at which a cached answer that was used (Cache and Stale) was received.
 	// The timestamp source is the clock of the machine running jactionlint at the moment it last received the
 	// answer from GitHub, or confirmed it with a 304. It is not a date from GitHub and says nothing about when

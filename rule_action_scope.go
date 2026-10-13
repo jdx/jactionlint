@@ -62,6 +62,7 @@ var actionRuleScope = map[string]struct {
 	"unused-job-output":               {scope: actionNotApplicable},   // outputs between the jobs of a workflow
 	"unused-needs":                    {scope: actionNotApplicable},   // needs: between the jobs of a workflow
 	"unused-workflow-input":           {scope: actionNotApplicable},   // inputs of workflow_dispatch and workflow_call
+	"unused-workflow-secret":          {scope: actionNotApplicable},   // secrets of workflow_call
 	"unverified-download":             {scope: actionApplies},         // the scripts of the steps
 	"use-trusted-publishing":          {scope: actionApplies},         // the publishing steps; the id-token permission is the caller's
 	"anonymous-definition":            {scope: actionNotApplicable},
@@ -74,6 +75,7 @@ var actionRuleScope = map[string]struct {
 	"credentials":                     {scope: actionNotApplicable},
 	"dangerous-triggers":              {scope: actionNotApplicable},
 	"deprecated-commands":             {scope: actionApplies},
+	"deprecated-node-runtime":         {scope: actionApplies},
 	"env-var":                         {scope: actionApplies},
 	"events":                          {scope: actionNotApplicable},
 	"event-name-never-received":       {scope: actionNotApplicable}, // the events are the ones of the workflow, and an action has the events of its callers
