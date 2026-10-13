@@ -110,6 +110,13 @@ func TestOutputClobbering(t *testing.T) {
 		{"a script variable copied from a secret in two steps", "a=$SECRETDELIM\nd=\"x-$a\"\n{ echo \"body<<$d\"; echo \"$BODY\"; echo \"$d\"; } " + out, 0},
 		{"a script variable copied from the run id", "d=$RUNID\n{ echo \"body<<$d\"; echo \"$BODY\"; echo \"$d\"; } " + out, 1},
 		{"a script variable copied from a literal", "d=$LIT\n{ echo \"body<<$d\"; echo \"$BODY\"; echo \"$d\"; } " + out, 1},
+		// --- the record is closed by a printf too ---
+		{"a printf closer of a printf opener, random delimiter", "d=$(uuidgen)\n{ printf 'body<<%s\\n' \"$d\"; printf '%s\\n' \"$d\"; echo \"x=$BODY\"; } " + out, 1},
+		{"an echo closer of a printf opener, random delimiter", "d=$(uuidgen)\n{ printf 'body<<%s\\n' \"$d\"; echo \"$d\"; echo \"x=$BODY\"; } " + out, 1},
+		{"a printf closer of an echo opener, random delimiter", "d=$(uuidgen)\n{ echo \"body<<$d\"; printf '%s\\n' \"$d\"; echo \"x=$BODY\"; } " + out, 1},
+		{"a printf closer that does not match stays open", "d=$(uuidgen)\n{ printf 'body<<%s\\n' \"$d\"; printf '%s\\n' \"$LIT\"; echo \"x=$BODY\"; } " + out, 0},
+		{"a printf closer that does not match, constant delimiter", "{ printf 'body<<%s\\n' \"$LIT\"; printf '%s\\n' \"$TITLE\"; echo \"$BODY\"; } " + out, 1},
+		{"a printf closer with a literal", "{ printf 'body<<%s\\n' EOF; printf 'EOF\\n'; echo \"x=$BODY\"; } " + out, 1},
 		{"a trusted conversion before the value", `printf 'approved=%s\nbody=%s\n' "$LIT" "$BODY" ` + out, 1},
 		{"a trusted variable before the value", `echo -e "approved=$LIT\nbody=$BODY" ` + out, 1},
 		{"a trusted variable after the value", `echo -e "body=$BODY\napproved=$LIT" ` + out, 1},

@@ -2,6 +2,7 @@ package jactionlint
 
 import (
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/jdx/jactionlint/v2/internal/runscript"
@@ -220,12 +221,33 @@ func ghDesc(c *runscript.Command) string {
 	return strings.Join(parts, " ")
 }
 
+// gitGlobalOptionValues are the options of git before the subcommand that take the next word as their value (the form
+// with an equal sign or attached to the option has no next word).
+var gitGlobalOptionValues = map[string]bool{"-C": true, "-c": true, "--git-dir": true, "--work-tree": true, "--namespace": true, "--super-prefix": true, "--config-env": true, "--exec-path": false}
+
+// gitSubcommand returns the subcommand of git: the first word that is not a global option or the value of one. It is ""
+// when there is none or it is not static.
+func gitSubcommand(c *runscript.Command) string {
+	for i := 0; i < len(c.Args); i++ {
+		w := c.Args[i]
+		if !w.Dynamic() && strings.HasPrefix(w.Value, "-") && w.Value != "-" {
+			if gitGlobalOptionValues[w.Value] {
+				i++ // its value
+			}
+			continue
+		}
+		if w.Dynamic() {
+			return ""
+		}
+		return w.Value
+	}
+	return ""
+}
+
 // gitSourceVerb returns the subcommand of git that the command runs when it is one of the sources.
 func gitSourceVerb(c *runscript.Command) (string, bool) {
-	for _, w := range c.Positional {
-		if !w.Dynamic() && gitSourceVerbs[w.Value] {
-			return w.Value, true
-		}
+	if v := gitSubcommand(c); gitSourceVerbs[v] {
+		return v, true
 	}
 	return "", false
 }
@@ -279,42 +301,54 @@ func (rule *RuleGitHubEnv) prHeadCheckedOut(s *runscript.Script, c *runscript.Co
 	if rule.job == nil {
 		return false
 	}
-	for _, st := range rule.job.Steps {
-		if st == rule.step {
+	// the steps of a group of steps run together: those of the group of the current step are not before it, and the steps
+	// of the groups before it are
+	for _, top := range rule.job.Steps {
+		group := flattenSteps([]*Step{top})
+		if slices.Contains(group, rule.step) {
 			break
 		}
-		switch e := st.Exec.(type) {
-		case *ExecAction:
-			_, u := usesOfStep(st)
-			if u == nil || !u.isRepoAction("actions/checkout") {
-				continue
-			}
-			// the ref and the repository of the checkout, like untrusted-checkout reads them
-			for _, name := range []string{"ref", "repository"} {
-				if in, ok := e.Inputs[name]; ok && in != nil && in.Value != nil {
-					if _, bad := untrustedString(in.Value); bad {
-						return true
-					}
-				}
-			}
-		case *ExecRun:
-			if e.Run == nil {
-				continue
-			}
-			if rule.checkouts == nil {
-				rule.checkouts = map[*Step]bool{}
-			}
-			done, ok := rule.checkouts[st]
-			if !ok {
-				if es, err := runscript.Analyze(e.Run.Value, "bash"); err == nil {
-					done = scriptChecksOutPR(es, len(e.Run.Value)+1)
-				}
-				rule.checkouts[st] = done
-			}
-			if done {
+		for _, st := range group {
+			if rule.stepChecksOutPR(st) {
 				return true
 			}
 		}
+	}
+	return false
+}
+
+// stepChecksOutPR reports whether the step puts the code of a pull request in the workspace: a checkout of a head that
+// outsiders control, or a script that does it.
+func (rule *RuleGitHubEnv) stepChecksOutPR(st *Step) bool {
+	switch e := st.Exec.(type) {
+	case *ExecAction:
+		_, u := usesOfStep(st)
+		if u == nil || !u.isRepoAction("actions/checkout") {
+			return false
+		}
+		// the ref and the repository of the checkout, like untrusted-checkout reads them
+		for _, name := range []string{"ref", "repository"} {
+			if in, ok := e.Inputs[name]; ok && in != nil && in.Value != nil {
+				if _, bad := untrustedString(in.Value); bad {
+					return true
+				}
+			}
+		}
+	case *ExecRun:
+		if e.Run == nil {
+			return false
+		}
+		if rule.checkouts == nil {
+			rule.checkouts = map[*Step]bool{}
+		}
+		done, ok := rule.checkouts[st]
+		if !ok {
+			if es, err := runscript.Analyze(e.Run.Value, "bash"); err == nil {
+				done = scriptChecksOutPR(es, len(e.Run.Value)+1)
+			}
+			rule.checkouts[st] = done
+		}
+		return done
 	}
 	return false
 }
