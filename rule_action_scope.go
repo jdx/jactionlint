@@ -38,6 +38,7 @@ var actionRuleScope = map[string]struct {
 	"output-clobbering":               {scope: actionApplies},         // the scripts of the steps
 	"argument-injection":              {scope: actionApplies},         // the scripts of the steps
 	"checkout-static-credentials":     {scope: actionApplies},         // the inputs of actions/checkout steps
+	"comment-trigger-authorization":   {scope: actionNotApplicable},   // on: belongs to the workflow
 	"concurrency-cancels-prs":         {scope: actionNotApplicable},   // concurrency: belongs to the workflow
 	"concurrency-cancels-release":     {scope: actionNotApplicable},   // concurrency: belongs to the workflow
 	"concurrency-deadlock":            {scope: actionNotApplicable},   // concurrency: belongs to the workflow
