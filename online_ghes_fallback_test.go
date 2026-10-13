@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -604,5 +605,59 @@ func TestFallbackClientReleaseWithoutLookup(t *testing.T) {
 	c.primary = &stubClient{repo: &GitHubRepo{}}
 	if _, err := c.Release(context.Background(), "o", "r", "v1"); !errors.Is(err, errNoReleaseLookup) {
 		t.Errorf("%v", err)
+	}
+}
+
+// fakeGH puts a gh on the PATH which behaves like the real one for "auth token": it prints $GH_TOKEN or $GITHUB_TOKEN when one is
+// set (gh takes them as the token of github.com), and else what "gh auth login" stored.
+func fakeGH(t *testing.T) {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("the fake gh is a shell script")
+	}
+	dir := t.TempDir()
+	script := "#!/bin/sh\nif [ -n \"$GH_TOKEN\" ]; then echo \"$GH_TOKEN\"; elif [ -n \"$GITHUB_TOKEN\" ]; then echo \"$GITHUB_TOKEN\"; else echo keyring-token; fi\n"
+	if err := os.WriteFile(filepath.Join(dir, "gh"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir)
+}
+
+// gh must not be able to print the token of the Server for github.com: the process which asks it has neither variable.
+func TestGitHubComFallbackGHDoesNotSeeTheTokenOfTheServer(t *testing.T) {
+	fakeGH(t)
+	t.Setenv("GH_TOKEN", "server-gh-token")
+	t.Setenv("GITHUB_TOKEN", "server-github-token")
+	out, err := runGHAuthTokenOfTheKeyring(context.Background(), "github.com")
+	if err != nil || strings.TrimSpace(out) != "keyring-token" {
+		t.Errorf("%q, %v", out, err)
+	}
+	// What the probe shows for the other function: this is what the sanitizing is for
+	out, err = runGHAuthToken(context.Background(), "github.com")
+	if err != nil || strings.TrimSpace(out) != "server-gh-token" {
+		t.Errorf("the fake gh does not print the variable: %q, %v", out, err)
+	}
+}
+
+// End to end: with no GITHUB_COM_TOKEN, the token of github.com is the one of the keyring of gh, never the ones of the Server.
+func TestGitHubComFallbackTokenFromGHIsNotTheTokenOfTheServer(t *testing.T) {
+	h := newTwoHosts(t, false)
+	fakeGH(t)
+	t.Setenv("GITHUB_COM_TOKEN", "")
+	t.Setenv("GH_TOKEN", "server-gh-token")
+	t.Setenv("GITHUB_TOKEN", ghesToken)
+	fallbackRun(t, "--online-github-com-fallback")
+	if len(h.dotcom.auth) == 0 {
+		t.Fatal("github.com was not asked")
+	}
+	for _, a := range h.dotcom.auth {
+		if a != "Bearer keyring-token" {
+			t.Errorf("github.com got %q", a)
+		}
+	}
+	for _, a := range h.ghes.auth {
+		if a != "Bearer "+ghesToken {
+			t.Errorf("the Server got %q", a)
+		}
 	}
 }
