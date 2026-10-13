@@ -859,6 +859,196 @@ jobs:
           ./co.sh
       - run: make
 `},
+		{"fetch of pull/N/head without refs/ then checkout of the branch", nil, prt + `    steps:
+      - uses: actions/checkout@v4
+      - run: | # want
+          git fetch origin pull/${{ github.event.pull_request.number }}/head:pr
+          git checkout pr
+          make
+`},
+		{"fetch of pull/N/head without refs/ then checkout of FETCH_HEAD", nil, prt + `    steps:
+      - uses: actions/checkout@v4
+      - run: | # want
+          git fetch origin pull/${{ github.event.pull_request.number }}/head:pr
+          git checkout FETCH_HEAD
+          make
+`},
+		{"fetch of pull/N/merge with a forced refspec in one step, checkout in the next", nil, prt + `    steps:
+      - uses: actions/checkout@v4
+      - run: git fetch origin +pull/${{ github.event.number }}/merge:pr # want
+      - run: git switch pr
+      - run: make
+`},
+		{"fetch of pull/N/head with a number in a shell variable", nil, prt + `    steps:
+      - uses: actions/checkout@v4
+      - run: | # want
+          git fetch origin "pull/$PR/head:pr"
+          git checkout pr
+          make
+        env:
+          PR: ${{ github.event.number }}
+`},
+		{"a branch below a remote is not the short ref of a pull request", nil, prt + `    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          git fetch origin
+          git checkout origin/pull/1/head
+          make
+`},
+		{"fetch of pull/N/head that is only diffed", nil, prt + `    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          git fetch origin pull/${{ github.event.number }}/head:pr
+          git diff --stat main...pr
+      - run: npm ci
+`},
+		{"merged pull request: the merge commit is code a maintainer merged", nil, "on:\n  pull_request_target:\n    types: [closed]\njobs:\n  j:\n    runs-on: ubuntu-latest\n    if: github.event.pull_request.merged == true\n" + `    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.merge_commit_sha }}
+      - run: make
+`},
+		{"merged pull request: the context alone, in an expression, in a conjunction", nil, "on:\n  pull_request_target:\n    types: [closed]\njobs:\n  j:\n    runs-on: ubuntu-latest\n    if: ${{ success() && github.event.pull_request.merged }}\n" + `    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - run: make
+`},
+		{"merged pull request: on the step that runs the code", nil, "on:\n  pull_request_target:\n    types: [closed]\njobs:\n  j:\n    runs-on: ubuntu-latest\n" + `    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.merge_commit_sha }}
+      - run: make
+        if: github.event.pull_request.merged == true
+`},
+		{"merged pull request: a later step without the condition runs the code", nil, "on:\n  pull_request_target:\n    types: [closed]\njobs:\n  j:\n    runs-on: ubuntu-latest\n" + `    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.merge_commit_sha }} # want
+      - run: make
+        if: github.event.pull_request.merged == true
+      - run: make test
+`},
+		{"merged pull request: the head branch can be pushed to after the merge", nil, "on:\n  pull_request_target:\n    types: [closed]\njobs:\n  j:\n    runs-on: ubuntu-latest\n    if: github.event.pull_request.merged == true\n" + `    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }} # want
+      - run: make
+`},
+		{"merged is not required: an or, a comparison with false, a string", nil, "on:\n  pull_request_target:\n    types: [closed]\njobs:\n  a:\n    runs-on: ubuntu-latest\n    if: github.event.pull_request.merged == true || github.event.action == 'closed'\n" + `    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }} # want
+      - run: make
+  b:
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.merged == false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }} # want
+      - run: make
+  c:
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.merged == 'true'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }} # want
+      - run: make
+`},
+		{"tar with absolute names extracts an archive of the checkout", nil, prt + `    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }} # want
+      - run: tar -xPf release.tar
+`},
+		{"tar with absolute names, long options", nil, prt + `    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }} # want
+      - run: tar --absolute-names --extract --file=release.tar
+`},
+		{"tar with absolute names, old style options", nil, prt + `    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }} # want
+      - run: tar xPf release.tar
+`},
+		{"tar without absolute names only extracts", nil, prt + `    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - run: tar -xzf release.tar.gz && tar -tPf release.tar
+`},
+		{"tar with absolute names of an archive outside the workspace", nil, prt + `    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - run: tar -xPf "$RUNNER_TEMP/tool.tar" && tar -xPf /opt/tool.tar
+`},
+		{"unzip that keeps the parent directory in names", nil, prt + `    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }} # want
+      - run: |
+          unzip -d out -: build.zip
+`},
+		{"unzip without the option", nil, prt + `    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - run: unzip -o -d out build.zip
+`},
+		{"sed with a script file of the checkout", nil, prt + `    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }} # want
+      - run: sed -n -f scripts/fix.sed input.txt
+`},
+		{"sed with a script file in a cluster of options", nil, prt + `    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }} # want
+      - run: sed -nf ./fix.sed input.txt
+`},
+		{"sed with an inline script, an in-place suffix that holds an f and a file outside the workspace", nil, prt + `    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - run: |
+          sed -i.conf -e 's/a/b/' version.txt
+          sed -n 's/a/-f/p' version.txt
+          sed -f /tmp/fix.sed version.txt
+          sed -f "$RUNNER_TEMP/fix.sed" version.txt
+`},
+		{"awk with a program file of the checkout", nil, prt + `    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }} # want
+      - run: |
+          awk -F: -v x=1 -f tools/sum.awk data.txt
+`},
+		{"awk with an inline program", nil, prt + `    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - run: awk -F: '{ print $1 }' data.txt
+`},
+		{"sed with a script file below the directory of a checkout in a subdirectory", nil, prt + `    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }} # want
+          path: pr
+      - run: sed -f pr/fix.sed input.txt
+`},
+		{"sed with a script file of the base next to a checkout in a subdirectory", nil, prt + `    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          path: pr
+      - run: sed -f tools/fix.sed pr/input.txt
+`},
 	}
 	for _, tc := range tests {
 		t.Run(tc.what, func(t *testing.T) {

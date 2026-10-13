@@ -115,6 +115,8 @@ func (rule *RuleUnpinnedTools) checkAction(e *ExecAction) {
 		}
 		in := e.Inputs[t.input]
 		switch {
+		case (in == nil || in.Value == nil) && e.InputsUnknown():
+			// the input may be in a "with:" which is an expression
 		case in == nil || in.Value == nil:
 			report(e.Uses.Pos, fmt.Sprintf("action %q installs the newest version of its tool because the input %q is not set. set %q to an exact version", e.Uses.Value, t.input, t.input))
 		case in.Value.ContainsExpression():

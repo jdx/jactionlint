@@ -73,7 +73,7 @@ type fixRequest struct {
 	result *FixResult
 }
 
-func (cmd *Command) runLinter(args []string, opts *LinterOptions, initConfig, migrateConfig, migrateIgnores bool, fix *fixRequest, baselineWrite *optionalValueFlag, onlineFailed *int) ([]*Error, error) {
+func (cmd *Command) runLinter(args []string, opts *LinterOptions, initConfig, migrateConfig, migrateIgnores bool, fix *fixRequest, baselineWrite *optionalValueFlag, onlineFailed *int, onlineReport string) ([]*Error, error) {
 	l, err := NewLinter(cmd.Stdout, opts)
 	if err != nil {
 		return nil, err
@@ -81,6 +81,11 @@ func (cmd *Command) runLinter(args []string, opts *LinterOptions, initConfig, mi
 	defer func() {
 		if l.OnlineFailed() {
 			*onlineFailed = l.OnlineSkipped()
+		}
+		if onlineReport != "" {
+			if err := l.writeOnlineReport(onlineReport); err != nil {
+				fmt.Fprintf(cmd.Stderr, "could not write --online-report: %v\n", err)
+			}
 		}
 	}()
 
@@ -296,7 +301,7 @@ func (cmd *Command) Main(args []string) int {
 		}
 	}
 	var onlineFailed int
-	errs, err := cmd.runLinter(flags.Args(), &opts, f.initConfig, f.migrateConfig, f.migrateIgnores, req, &baselineWrite, &onlineFailed)
+	errs, err := cmd.runLinter(flags.Args(), &opts, f.initConfig, f.migrateConfig, f.migrateIgnores, req, &baselineWrite, &onlineFailed, f.onlineReport)
 	if err != nil {
 		fmt.Fprintln(cmd.Stderr, err.Error())
 		var ue *usageError

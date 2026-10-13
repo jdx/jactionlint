@@ -99,7 +99,7 @@ func (rule *RuleDuplicateTriggers) deduplicated(n *Workflow) bool {
 		return false
 	}
 	if c := n.Concurrency; c != nil && c.Group != nil && c.CancelInProgress != nil {
-		refs, _ := stringExprRefs(c.Group.Value)
+		refs, _ := c.Group.exprRefs()
 		if refsRead(refs, []string{"github", "head_ref"}) && refsRead(refs, []string{"github", "ref_name"}) && (scenario{}).isTrue(c.CancelInProgress) {
 			return true
 		}

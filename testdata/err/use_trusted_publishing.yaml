@@ -49,6 +49,8 @@ jobs:
       - run: npm publish --dry-run
       - run: npm pack
       - run: gh release create v1 dist/*
+        env:
+          GH_TOKEN: ${{ github.token }}
       - run: echo "twine upload dist/*"
       # Trusted publishing
       - uses: pypa/gh-action-pypi-publish@76f52bc884231f62b9a034ebfe128415bbaabdfc # v1.12.4
