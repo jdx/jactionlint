@@ -1,0 +1,33 @@
+on: push
+env:
+  ${{ insert }}: ${{ fromJSON(vars.WORKFLOW_ENV) }}
+jobs:
+  generated:
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy: ${{ fromJSON(vars.STRATEGY) }}
+    defaults:
+      run: ${{ fromJSON(vars.RUN_DEFAULTS) }}
+    container: ${{ fromJSON(vars.CONTAINER) }}
+    services: ${{ fromJSON(vars.SERVICES) }}
+    concurrency: ${{ fromJSON(vars.CONCURRENCY) }}
+    env:
+      ${{ insert }}: ${{ fromJSON(vars.JOB_ENV) }}
+    steps:
+      - uses: actions/checkout@v4
+        with: ${{ fromJSON(vars.CHECKOUT) }}
+      - uses: actions/cache@v4
+        with:
+          ${{ insert }}: ${{ fromJSON(vars.CACHE) }}
+      - run: echo ${{ matrix.os }}
+        env:
+          ${{ insert }}: ${{ fromJSON(vars.STEP_ENV) }}
+  second:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    container:
+      image: node:20
+      ports: ${{ fromJSON(vars.PORTS) }}
+      volumes: ${{ fromJSON(vars.VOLUMES) }}
+    steps:
+      - run: echo hi

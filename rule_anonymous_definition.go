@@ -146,6 +146,9 @@ func firstKeyLine(src []byte) (int, bool) {
 	}
 	lines := bytes.Split(src, []byte("\n"))
 	for i, l := range lines {
+		if i == 0 {
+			l = bytes.TrimPrefix(l, []byte("\xef\xbb\xbf")) // a UTF-8 byte order mark is not part of the first line
+		}
 		t := bytes.TrimRight(l, "\r \t")
 		switch {
 		case len(t) == 0, t[0] == '#', bytes.Equal(t, []byte("---")), t[0] == '%':
