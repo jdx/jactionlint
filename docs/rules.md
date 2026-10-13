@@ -160,6 +160,7 @@ rules:
 | [unused-job-output](#unused-job-output) | policy | error | default |
 | [unused-needs](#unused-needs) | style | info | pedantic |
 | [unused-workflow-input](#unused-workflow-input) | policy | warn | pedantic |
+| [unused-workflow-secret](#unused-workflow-secret) | policy | warn | pedantic |
 | [unverified-download](#unverified-download) | security | error | default |
 | [use-trusted-publishing](#use-trusted-publishing) | security | error | default |
 | [workflow-call-permissions](#workflow-call-permissions) | correctness | error | correctness |
@@ -1043,7 +1044,7 @@ A reusable workflow is called with secrets: inherit.
 
 ## secrets-outside-env
 
-A job uses a secret but has no environment.
+A job uses a secret but has no environment, or passes one to a reusable workflow.
 
 - Group: security
 - Default level: warn
@@ -1365,6 +1366,15 @@ An input of workflow_dispatch or workflow_call is never used.
 - Profile: pedantic
 - Details and examples: [checks](./checks.md#check-unused-workflow-input)
 
+## unused-workflow-secret
+
+A secret of workflow_call is never used.
+
+- Group: policy
+- Default level: warn
+- Profile: pedantic
+- Details and examples: [checks](./checks.md#check-unused-workflow-secret)
+
 ## unverified-download
 
 A script runs what it downloads without verifying it.
@@ -1413,11 +1423,12 @@ A workflow_run event refers to a workflow which does not exist in the repository
 
 ## workflow-secret-scope
 
-A secret is assigned to the workflow-level env and reaches multiple jobs.
+A secret is assigned to the workflow-level env and reaches multiple jobs. With the option job-level, also one of the env of a job that reaches its steps.
 
 - Group: security
 - Default level: warn
 - Profile: pedantic
+- Option `job-level` (bool, default false): Also report a secret assigned to the env of a job with two or more steps, which reaches all of them.
 - Details and examples: [checks](./checks.md#check-workflow-secret-scope)
 
 ## workflow-syntax

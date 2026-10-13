@@ -43,7 +43,21 @@ func (rule *RuleSecretsOutsideEnv) VisitWorkflowPre(n *Workflow) error {
 
 	workflowExprs(n, func(site exprSite, o *exprOccurrence) {
 		j := site.Job
-		if j == nil || j.Environment != nil || j.WorkflowCall != nil {
+		if j == nil || j.Environment != nil {
+			return
+		}
+		if j.WorkflowCall != nil {
+			// A job which calls a reusable workflow cannot set "environment:", and the environment of a job of the called
+			// workflow does not give its secrets to the workflow (zizmor#1792). A secret passed there is a repository or
+			// organization secret, whatever the callee does.
+			VisitExprNode(o.Root, func(node, _ ExprNode, entering bool) {
+				if !entering {
+					return
+				}
+				if name, ok := secretNameOf(node); ok && !isAllowed(name) {
+					rule.ReportIDf("secrets-outside-env", o.PosOf(node), "secret %q is passed to a reusable workflow by a job which cannot have an \"environment:\", so it is a repository or organization secret exposed to every job that asks for it. pass a token that the called workflow mints, or inline the workflow in a job with an environment", strings.ToUpper(name))
+				}
+			})
 			return
 		}
 		VisitExprNode(o.Root, func(node, _ ExprNode, entering bool) {
@@ -63,7 +77,7 @@ func (rule *RuleSecretsOutsideEnv) VisitWorkflowPre(n *Workflow) error {
 func init() {
 	registerRules(
 		RuleInfo{
-			ID: "secrets-outside-env", Group: RuleGroupSecurity, Summary: "A job uses a secret but has no environment.", DefaultLevel: SeverityWarning, Profile: ProfilePedantic,
+			ID: "secrets-outside-env", Group: RuleGroupSecurity, Summary: "A job uses a secret but has no environment, or passes one to a reusable workflow.", DefaultLevel: SeverityWarning, Profile: ProfilePedantic,
 			DocsAnchor: "check-secrets-outside-env",
 			Options:    []RuleOption{{Name: "allow", Kind: RuleOptionStrings, Summary: "Names of secrets which may be used outside of an environment. GITHUB_TOKEN is always allowed."}},
 		},

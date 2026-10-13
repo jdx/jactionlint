@@ -100,6 +100,7 @@ List of checks:
 - [Untrusted artifacts in workflow_run workflows](#check-untrusted-artifact)
 - [Unused job outputs](#check-unused-job-output)
 - [Unused workflow inputs (pedantic)](#check-unused-workflow-input)
+- [Unused workflow secrets (pedantic)](#check-unused-workflow-secret)
 - [Needs entries that do nothing (pedantic)](#check-unused-needs)
 - [Duplicate triggers](#check-duplicate-triggers)
 - [Failures hidden by continue-on-error (pedantic)](#check-continue-on-error)
@@ -6215,6 +6216,20 @@ a compromised workflow.
 Move the secret to an environment, remove it from the repository secrets, and set `environment:` at the job. jactionlint
 cannot see where a secret is stored, so it assumes that the secrets of a job with an `environment:` are environment secrets.
 
+A job that calls a reusable workflow cannot have an `environment:`, and the environment of a job of the called workflow does not
+give its secrets to the workflow either, so a secret that the caller passes with `secrets:` is always a repository or organization
+secret. It is reported too (a message of its own, at the secret in the `secrets:` of the call; zizmor reports it as an auditor
+finding, [#1792](https://github.com/zizmorcore/zizmor/pull/1792)). `secrets: inherit` names no secret and is not reported here (see
+[`secrets-inherit`](#check-secrets-inherit)):
+
+```yaml
+jobs:
+  deploy:
+    uses: ./.github/workflows/deploy.yaml
+    secrets:
+      token: ${{ secrets.DEPLOY_TOKEN }}
+```
+
 `GITHUB_TOKEN` is never reported because its permissions are set by the workflow. Workflows that run through `workflow_call`
 are skipped: environment secrets do not reach a reusable workflow unless the caller inherits all secrets. Secrets that are fine
 outside of an environment can be listed in the `allow` option (names are case-insensitive):
@@ -6273,6 +6288,28 @@ Set the value at the job or the step that needs it. A workflow with a single job
 variable itself does not receive the workflow-level value, and a job that calls a reusable workflow does not pass `env:` on, so
 neither counts. `GITHUB_TOKEN` is never reported. There is no automatic fix because moving the value changes where it is visible
 to expressions.
+
+The option `job-level` (off unless set) does the same for the `env:` of a job: a secret there reaches every step of the job,
+third-party actions included, so it is reported when the job has two or more steps that do not set the variable themselves
+(ghalint `job_secrets`, zizmor [#1816](https://github.com/zizmorcore/zizmor/issues/1816)):
+
+```yaml
+rules:
+  workflow-secret-scope:
+    level: warn
+    job-level: true
+```
+
+```yaml
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}   # reaches both steps
+    steps:
+      - uses: actions/checkout@v4
+      - run: ./deploy.sh                      # the only step that needs it
+```
 
 <a id="check-typosquat-uses"></a>
 ## Typosquatting of actions
@@ -7767,6 +7804,57 @@ The rule is not in the `default` profile because an input can exist for someone 
 workflow never reads it. Silence such an input with `# jactionlint ignore=unused-workflow-input` on its line. There is no
 automatic fix because removing an input of `workflow_call` breaks the callers that still pass it.
 
+<a id="check-unused-workflow-secret"></a>
+## Unused workflow secrets (pedantic)
+
+Example input:
+
+```yaml
+on:
+  workflow_call:
+    secrets:
+      token:
+        required: true
+      npm-token:
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - run: ./release.sh
+        env:
+          TOKEN: ${{ secrets.token }}
+```
+
+Output:
+<!-- Skip update output -->
+```
+test.yaml:6:7: warning: secret "npm-token" of "workflow_call" is never used: no expression reads "secrets.npm-token". remove it from the workflow and from the callers, so that nothing passes a credential which is not needed, or use it [unused-workflow-secret]
+  |
+6 |       npm-token:
+  |       ^~~~~~~~~
+```
+
+<!-- Skip playground link -->
+
+The output above is from the following `rules` section of the [configuration file](config.md):
+
+```yaml
+rules:
+  unused-workflow-secret: warn
+```
+
+The rule `unused-workflow-secret` (in the `pedantic` profile, as a warning) is the sibling of
+[`unused-workflow-input`](#check-unused-workflow-input) for `on.workflow_call.secrets`: a secret that the workflow declares and
+no expression reads. A caller has to pass a required one and passes an optional one for nothing, so every unused secret hands a
+credential to a workflow that does not need it (zizmor [#1044](https://github.com/zizmorcore/zizmor/issues/1044) asks for it).
+
+A secret is read as `secrets.<name>` (names are case-insensitive) or `secrets['<name>']`. A read of the whole context
+(`toJSON(secrets)`, `secrets[matrix.name]`) counts as a read of every secret, and so does a job that calls another workflow with
+`secrets: inherit`, which passes every secret on. A workflow where an expression does not parse is skipped. It is not in the
+`default` profile for the same reason as the inputs: the secret may be passed for a reason that the file does not show. Silence one
+with `# jactionlint ignore=unused-workflow-secret` on its line. There is no automatic fix because removing a secret of `workflow_call`
+breaks the callers that still pass it.
+
 <a id="check-unused-needs"></a>
 ## Needs entries that do nothing (pedantic)
 
@@ -8051,7 +8139,7 @@ How the rules treat actions:
 
 - **Applies** to the steps (and the metadata) of an action: `action-syntax`, `adhoc-packages`, `archived-uses`, `artipacked`, `background-step-not-waited`, `checkout-static-credentials`, `constant-condition`, `context-availability`, `continue-on-error`, `deprecated-action-input`, `deprecated-commands`, `duplicate-key`, `duplicate-step-id`, `environment-file-redirect`, `expired-ignore`, `expression-syntax`, `expression-type`, `forbidden-uses`, `github-app`, `if-always-true`, `impostor-commit`, `insecure-commands`, `insecure-ssh-keyscan`, `insecure-url-scheme`, `invalid-env-var-name`, `invalid-function-call`, `invalid-id`, `invalid-ignore-comment`, `invalid-local-action`, `invalid-parallel-step`, `invalid-shell-name`, `invalid-uses`, `invisible-characters`, `known-vulnerable-actions`, `max-run-lines`, `merge-key`, `misfeature`, `missing-action-input`, `obfuscation`, `outdated-action-runner`, `pipeline-without-pipefail`, `pyflakes`, `recursive-alias`, `ref-confusion`, `ref-version-mismatch`, `require-expression-wrapping`, `self-repository`, `shellcheck`, `stale-action-refs`, `superfluous-actions`, `template-injection`, `typosquat-uses`, `undefined-function`, `undefined-property`, `unknown-action-input`, `unlocked-install`, `unpinned-images`, `unpinned-tools`, `unpinned-uses`, `unsound-contains`, `unsound-prefix-match`, `unsound-ternary`, `unused-anchor`, `unused-ignore`, `unverified-download`, `use-trusted-publishing`, `yaml-syntax`.
 - **Caller-dependent**: `agentic-actions`, `bot-conditions`, `cache-poisoning`, `github-env` (its findings about untrusted input do not depend on the caller), `untrusted-artifact` and `untrusted-checkout`.
-- **Not applicable** because an action does not have what the rule checks, or because only the calling job can decide (`unused-baseline-entry` is about the baseline file, not about a workflow or an action): `anonymous-definition`, `concurrency-cancels-prs`, `concurrency-cancels-release`, `concurrency-limits`, `conflicting-runner-labels`, `cron-too-frequent`, `cyclic-job-needs`, `dangerous-triggers`, `dependabot-cooldown`, `dependabot-execution`, `dependabot-missing-actions-update`, `dependabot-syntax`, `duplicate-job-id`, `duplicate-job-needs`, `duplicate-triggers`, `excessive-permissions`, `gate-job-skipped-on-failure`, `gh-without-token`, `hardcoded-container-credentials`, `invalid-activity-type`, `invalid-cron`, `invalid-event-config`, `invalid-event-filter`, `invalid-glob`, `invalid-label-pattern`, `invalid-local-workflow`, `invalid-permissions`, `invalid-timezone`, `invalid-workflow-call`, `invalid-workflow-call-input`, `invalid-workflow-dispatch-input`, `local-action-checkout`, `matrix-duplicate-value`, `matrix-invalid-exclude`, `missing-permissions`, `missing-timeout`, `missing-workflow-input`, `missing-workflow-secret`, `mutable-runner-label`, `overprovisioned-secrets`, `require-shell`, `required-actions`, `secrets-inherit`, `secrets-outside-env`, `self-hosted-runner`, `timeout-too-long`, `undefined-job-needs`, `undocumented-permissions`, `unknown-event`, `unknown-runner-label`, `unknown-workflow-input`, `unknown-workflow-secret`, `unredacted-secrets`, `unused-baseline-entry`, `unused-job-output`, `unused-needs`, `unused-workflow-input`, `workflow-call-permissions`, `workflow-input-type`, `workflow-run-names`, `workflow-secret-scope`, `workflow-syntax`.
+- **Not applicable** because an action does not have what the rule checks, or because only the calling job can decide (`unused-baseline-entry` is about the baseline file, not about a workflow or an action): `anonymous-definition`, `concurrency-cancels-prs`, `concurrency-cancels-release`, `concurrency-limits`, `conflicting-runner-labels`, `cron-too-frequent`, `cyclic-job-needs`, `dangerous-triggers`, `dependabot-cooldown`, `dependabot-execution`, `dependabot-missing-actions-update`, `dependabot-syntax`, `duplicate-job-id`, `duplicate-job-needs`, `duplicate-triggers`, `excessive-permissions`, `gate-job-skipped-on-failure`, `gh-without-token`, `hardcoded-container-credentials`, `invalid-activity-type`, `invalid-cron`, `invalid-event-config`, `invalid-event-filter`, `invalid-glob`, `invalid-label-pattern`, `invalid-local-workflow`, `invalid-permissions`, `invalid-timezone`, `invalid-workflow-call`, `invalid-workflow-call-input`, `invalid-workflow-dispatch-input`, `local-action-checkout`, `matrix-duplicate-value`, `matrix-invalid-exclude`, `missing-permissions`, `missing-timeout`, `missing-workflow-input`, `missing-workflow-secret`, `mutable-runner-label`, `overprovisioned-secrets`, `require-shell`, `required-actions`, `secrets-inherit`, `secrets-outside-env`, `self-hosted-runner`, `timeout-too-long`, `undefined-job-needs`, `undocumented-permissions`, `unknown-event`, `unknown-runner-label`, `unknown-workflow-input`, `unknown-workflow-secret`, `unredacted-secrets`, `unused-baseline-entry`, `unused-job-output`, `unused-needs`, `unused-workflow-input`, `unused-workflow-secret`, `workflow-call-permissions`, `workflow-input-type`, `workflow-run-names`, `workflow-secret-scope`, `workflow-syntax`.
 
 Example input:
 
