@@ -273,10 +273,8 @@ func isBuildCommand(c *runscript.Command) bool {
 	for _, suffix := range []string{".exe", ".cmd", ".bat"} {
 		name = strings.TrimSuffix(name, suffix)
 	}
-	tool := c.Tool
-	if tool == "" {
-		tool = name // `npm.cmd` is not a tool of the analyzer, but it is npm
-	}
+	// the tools that the analyzer knows (`npm.cmd`, `NPM`, `Pip.exe`) are normalized by it, so they take the same path
+	// as the plain spelling
 	sub := strings.ToLower(c.Sub(0))
 	switch {
 	case name == "make" || name == "gmake" || name == "cmake" || name == "ninja" || name == "rake" || name == "tox" || name == "nox" ||
@@ -290,24 +288,21 @@ func isBuildCommand(c *runscript.Command) bool {
 				return true
 			}
 		}
-	case tool == "uv":
+	case c.Tool == "uv":
 		return sub == "build" || sub == "sync"
 	case name == "poetry" || name == "hatch" || name == "flit" || name == "pdm":
 		return sub == "build" || sub == "install"
-	case tool == "cargo":
+	case c.Tool == "cargo":
 		return sub == "build" || sub == "test" || sub == "check" || sub == "package"
-	case tool == "go":
+	case c.Tool == "go":
 		return sub == "build" || sub == "test" || sub == "generate"
 	case name == "nuget" || name == "nuget.exe":
 		return sub == "restore"
 	case name == "dotnet":
 		return sub == "build" || sub == "pack" || sub == "restore" || sub == "test"
-	case tool == "npm" || tool == "pnpm" || tool == "yarn" || tool == "bun":
-		if c.Tool == "" && slices.Contains([]string{"ci", "install", "i", "add"}, sub) {
-			return true // `npm.cmd ci`: the analyzer does not know it as an install
-		}
+	case c.Tool == "npm" || c.Tool == "pnpm" || c.Tool == "yarn" || c.Tool == "bun":
 		return slices.Contains([]string{"run", "run-script", "test", "build", "pack", "rebuild", "prepare", "compile"}, sub)
-	case tool == "gem":
+	case c.Tool == "gem":
 		return sub == "build"
 	case name == "bundle":
 		return sub == "install" || sub == "exec"
