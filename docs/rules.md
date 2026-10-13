@@ -139,6 +139,7 @@ rules:
 | [template-injection](#template-injection) | security | error | correctness |
 | [timeout-too-long](#timeout-too-long) | policy | error | only when configured |
 | [typosquat-uses](#typosquat-uses) | security | error | default |
+| [ubuntu-slim-limits](#ubuntu-slim-limits) | correctness | error | default |
 | [undefined-function](#undefined-function) | correctness | error | correctness |
 | [undefined-job-needs](#undefined-job-needs) | correctness | error | correctness |
 | [undefined-property](#undefined-property) | correctness | error | correctness |
@@ -932,7 +933,7 @@ A job does not set timeout-minutes.
 - Default level: error
 - Profile: default
 - Fixable: yes
-- Option `default-minutes` (int, no default): The timeout-minutes which --fix adds to a job. There is no default: the rule has no fix unless this is set. It is lowered to the max of timeout-too-long when that is smaller.
+- Option `default-minutes` (int, no default): The timeout-minutes which --fix adds to a job. There is no default: the rule has no fix unless this is set. It is lowered to the max of timeout-too-long when that is smaller, and to 15 on a job that runs only on ubuntu-slim.
 - Details and examples: [checks](./checks.md#check-timeout-minutes)
 
 ## missing-workflow-input
@@ -1176,6 +1177,16 @@ An action is one typo away from a popular action of another owner.
 - Option `allow` (strings, empty by default): Slugs (owner/repo) of actions which are never reported, e.g. a legitimate fork.
 - Details and examples: [checks](./checks.md#check-typosquat-uses)
 
+## ubuntu-slim-limits
+
+A job on ubuntu-slim has a container, services or a Docker container action, which the single-CPU runner cannot run. With the option pedantic, a timeout-minutes above its limit of 15 minutes counts too.
+
+- Group: correctness
+- Default level: error
+- Profile: default
+- Option `pedantic` (bool, no default): Also report the pedantic checks, which are noisier. Unset, they run under the pedantic profile.
+- Details and examples: [checks](./checks.md#check-ubuntu-slim-limits)
+
 ## undefined-function
 
 An undefined function is called in an expression.
@@ -1349,11 +1360,12 @@ A workflow_run workflow uses an artifact of the triggering run without validatin
 
 ## untrusted-checkout
 
-A pull_request_target or workflow_run workflow checks out the code of a pull request and runs it.
+A pull_request_target or workflow_run workflow checks out the code of a pull request and runs it, or turns off the protection of actions/checkout against the code of fork pull requests. With the option pedantic, a checkout that actions/checkout refuses for a fork is reported too.
 
 - Group: security
 - Default level: error
 - Profile: default
+- Option `pedantic` (bool, no default): Also report the pedantic checks, which are noisier. Unset, they run under the pedantic profile.
 - Details and examples: [checks](./checks.md#check-untrusted-checkout)
 
 ## unused-anchor

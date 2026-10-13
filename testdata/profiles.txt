@@ -104,6 +104,7 @@ superfluous-actions default security error
 template-injection correctness security error
 timeout-too-long configured policy error
 typosquat-uses default security error
+ubuntu-slim-limits default correctness error
 undefined-function correctness correctness error
 undefined-job-needs correctness correctness error
 undefined-property correctness correctness error
