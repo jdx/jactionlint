@@ -21,20 +21,20 @@ How to read the table:
 
 | zizmor audit | jactionlint rule | Profile | Status |
 | --- | --- | --- | --- |
-| `adhoc-packages` | `adhoc-packages` | default | partial: installs of local tarballs (`npm install ../pkg/*.tgz`) are not called ad hoc, and positions in a folded block can differ. jactionlint also reports installs behind `sudo`. No `pwsh` scripts. See [the check](checks.md#check-adhoc-packages) |
-| `anonymous-definition` | `anonymous-definition` | pedantic | full for workflows and jobs; not applicable to `action.yml` (GitHub requires its `name`); fixable |
-| `archived-uses` | `archived-uses` | online | partial: all archived repositories are found; see [online audits](#online-audits) |
-| `artipacked` | `artipacked` | default | full on the corpus, with a fix. A checkout that a later `git push` needs and `actions/checkout@v1` are not reported |
-| `bot-conditions` | `bot-conditions` | default | partial: `github.actor`, `github.triggering_actor`, `github.actor_id` and `github.event.sender.*` compared with a bot (`==`, `contains()`, `startsWith()`, `endsWith()`) in job and step `if:`. `!=` and negated tests are not reported, as in zizmor. `--fix=unsafe` only for workflows with `pull_request`/`pull_request_target` events. Bot names without `[bot]` are known by ID and prefix only. Judged by the events that reach the job, also through local reusable workflows: not reported when only `push`-like events (`push`, `schedule`, `workflow_dispatch`, ...) can run it, and the suggestion says that the author field is missing on the other events of a mixed workflow. Composite actions: the fix needs every local caller to run on a pull request event |
+| `adhoc-packages` | `adhoc-packages` | default | partial: installs of local tarballs (`npm install ../pkg/*.tgz`) and the value of `--prefix` (`npm install --prefix ./assets`) are not called ad hoc, and positions in a folded block can differ. jactionlint also reports installs behind `sudo`. A `pwsh`, `powershell` or `cmd` script is read line by line, and only a line that is a plain command (`npm install typescript`). See [the check](checks.md#check-adhoc-packages) and [where a rule differs on purpose](#where-a-rule-differs-on-purpose) |
+| `anonymous-definition` | `anonymous-definition` | pedantic | full for workflows and jobs, except in a generated file (by default the rules of the `policy` and `style` groups are not reported there) and for the job of `copilot-setup-steps.yml`; not applicable to `action.yml` (GitHub requires its `name`); fixable |
+| `archived-uses` | `archived-uses` | online | full with `--online`: the 109 findings that zizmor reports on the corpus are all reported, on the same lines. The rule needs the network, so it does nothing without `--online` (by design: it asks GitHub whether the repository is archived); see [online audits](#online-audits) |
+| `artipacked` | `artipacked` | default | partial, with a fix. A checkout that a later `git push` (or an action that pushes) needs, `actions/checkout@v1` and a `persist-credentials` given by an expression are not reported. A `git push` counts as a command only: in a comment, in the text of `echo` or in a heredoc it does not. See [where a rule differs on purpose](#where-a-rule-differs-on-purpose) |
+| `bot-conditions` | `bot-conditions` | default | partial: `github.actor`, `github.triggering_actor`, `github.actor_id` and `github.event.sender.*` compared with a bot (`==`, `contains()`, `startsWith()`, `endsWith()`) in job and step `if:`. `!=` and negated tests are not reported, as in zizmor. `--fix=unsafe` only for workflows with `pull_request`/`pull_request_target` events. Bot names without `[bot]` are known by ID and prefix only. Judged by the events that reach the job, also through local reusable workflows: not reported when only `push`-like events (`push`, `schedule`, `workflow_dispatch`, ...) can run it, and the suggestion says that the author field is missing on the other events of a mixed workflow. Composite actions: the fix needs every local caller to run on a pull request event. A conjunction with a check of the author of the pull request is not reported (zizmor#1914), and neither is a negated test; those are the 4 misses |
 | `cache-poisoning` | `cache-poisoning` | default, with the option `pedantic` | partial: a fixed table of cache actions and publishing actions. 43% of the findings of zizmor on the corpus are reported by default and 72% with the option `pedantic`, which adds zizmor's two heuristics (a tag with read-only permissions, a `branches:` filter that names a release branch among others) and has a measured false-positive rate of about 90%; most of the rest is zizmor reporting a cache that the action does not restore. See [cache-poisoning against zizmor](#cache-poisoning-against-zizmor). `tags-ignore` is not a release trigger, neither is a `tags:` filter that lets no tag through. `setup-node` v5 and later and `docker/setup-buildx-action` are covered, judged by the `package.json` of the repository and by `version`. A step guarded by `if: !startsWith(github.ref, 'refs/tags/')` is evaluated for the release scenarios, where zizmor reports it |
-| `concurrency-limits` | `concurrency-limits` | default | full: only a missing `concurrency:` and the bare group form are reported, not `cancel-in-progress: false` |
-| `dangerous-triggers` | `dangerous-triggers` | default | full; adds `issue_comment`, which zizmor flags from 1.31; reported at the trigger, zizmor reports at `on:`. `pull_request_target` with only `actions/labeler` is exempt in both |
-| `dependabot-cooldown` | `dependabot-cooldown` | default | full on the corpus, plus true positives that zizmor 1.30.1 misses (it stops at the first update which satisfies the minimum). `--fix` needs the `default-days` option; zizmor has a built-in 7. The `semver-*-days` keys are checked by neither |
+| `concurrency-limits` | `concurrency-limits` | default | partial: only a missing `concurrency:` and the bare group form are reported, not `cancel-in-progress: false`. A workflow that only a schedule or a manual run starts is not reported (nothing supersedes such a run), nor is the job of `copilot-setup-steps.yml` or a generated file. See [where a rule differs on purpose](#where-a-rule-differs-on-purpose) |
+| `dangerous-triggers` | `dangerous-triggers` | default | full; adds `issue_comment`, which zizmor flags from 1.31; reported at the trigger, zizmor reports at `on:`, which is more than 3 lines away in a long `on:` block (all 72 misses of the harness are that). `pull_request_target` with only `actions/labeler` is exempt in both |
+| `dependabot-cooldown` | `dependabot-cooldown` | default | full on the corpus, plus true positives that zizmor 1.30.1 misses (it stops at the first update which satisfies the minimum). `--fix` needs the `default-days` option; zizmor has a built-in 7. The `semver-*-days` keys are checked by neither. An update with `open-pull-requests-limit: 0` or an `ignore` of every dependency is not reported (nothing is proposed that a cooldown could delay), where zizmor reports it |
 | `dependabot-execution` | `dependabot-execution` | default | not measured: no `allow` on the corpus, so both tools report nothing. Covered by unit tests only. The fix is unsafe (zizmor offers it too) |
 | `excessive-permissions` | `excessive-permissions` | default | partial: workflow-level write scopes, `write-all`, `read-all`, a workflow without a top-level `permissions:` (option `require-workflow-permissions`, on under the `pedantic` profile; reported at the first key of the file, as zizmor does) and, with `missing-permissions`, jobs without any permissions. 95.6% of the findings of zizmor on the corpus are reported; the rest are generated files and reusable-only workflows, see [permissions against zizmor](#permissions-against-zizmor). zizmor grades findings by persona and confidence, jactionlint has one level per rule |
 | `forbidden-uses` | `forbidden-uses` | configured | partial: patterns follow zizmor documentation but were not measured against zizmor |
 | `github-app` | `github-app` | default | partial: `actions/create-github-app-token` only, no dependabot side yet |
-| `github-env` | `github-env` | default | partial: no finding on the corpus in either tool. jactionlint accepts values of trusted contexts (`github.sha`, `runner.*`) and `mktemp`/`date` substitutions that zizmor reports in `pull_request_target` and `workflow_run` workflows, and reports untrusted input under every trigger. Writes of values from step outputs or computed in the script are reported only for `pull_request_target` and `workflow_run`. `pwsh` and `cmd` are matched line by line. `inputs.*` of a composite action counts as an outsider's input. See [the check](checks.md#check-github-env) |
+| `github-env` | `github-env` | default | partial: zizmor reports 63 findings on the corpus and jactionlint 31 of them; the 32 misses are 17 positions (zizmor reports at the `run:` line, jactionlint at the write) and 15 writes that jactionlint accepts on purpose, see [where a rule differs on purpose](#where-a-rule-differs-on-purpose). jactionlint accepts values of trusted contexts (`github.sha`, `runner.*`) and `mktemp`/`date` substitutions that zizmor reports in `pull_request_target` and `workflow_run` workflows, and reports untrusted input under every trigger. Writes of values from step outputs or computed in the script are reported only for `pull_request_target` and `workflow_run`. `pwsh` and `cmd` are matched line by line. `inputs.*` of a composite action counts as an outsider's input. See [the check](checks.md#check-github-env) |
 | `hardcoded-container-credentials` | `hardcoded-container-credentials`, the check of actionlint ([Hardcoded credentials](checks.md#check-hardcoded-credentials)) | correctness | not measured against zizmor |
 | `impostor-commit` | `impostor-commit` | online | partial: same findings on the corpus; a repository with more than 1000 branches gives no verdict (100 without a token); see [online audits](#online-audits) |
 | `insecure-commands` | `insecure-commands` | default | partial: workflow, job and step `env` (step `env` in `action.yml` too); fixable (unsafe). A job-level `"1"` is flagged by neither tool, the runner parses the variable as a boolean |
@@ -48,20 +48,20 @@ How to read the table:
 | `secrets-inherit` | `secrets-inherit` | default | full, reported at the `uses:` of the job like zizmor |
 | `secrets-outside-env` | `secrets-outside-env` | pedantic | full; zizmor reports it only for the auditor persona. `workflow_call` workflows are skipped like zizmor does. Inside a folded `>-` scalar jactionlint reports the line of the scalar start |
 | `self-hosted-runner` | `self-hosted-runner` | pedantic (info) | partial: literal `self-hosted` labels and matrix values; labels from other expressions are not resolved. Labels of hosted-runner providers such as namespace or blacksmith are not reported |
-| `self-repository` | `self-repository` | pedantic (info) | full on the corpus, with an unsafe fix |
+| `self-repository` | `self-repository` | pedantic (info) | full on the corpus, with an unsafe fix (the one miss is a step with `if: false`, whose findings are dropped) |
 | `stale-action-refs` | `stale-action-refs` | online | partial: same findings except repositories with more than 1000 tags; see [online audits](#online-audits) |
-| `superfluous-actions` | `superfluous-actions` | default | full: the same findings as zizmor, split like its personas (regular, and the pedantic ones with the option `pedantic`, which the `pedantic` profile turns on). jactionlint adds the archived `actions/create-release` and `actions/upload-release-asset`. See [the check](checks.md#check-superfluous-actions) |
+| `superfluous-actions` | `superfluous-actions` | default | partial: the same findings as zizmor, split like its personas (regular, and the pedantic ones with the option `pedantic`, which the `pedantic` profile turns on). jactionlint adds the archived `actions/create-release` and `actions/upload-release-asset`. A job whose runner may be self-hosted is not reported: a `runs-on:` that is an expression other than matrix values (`${{ inputs.runner }}`, a runner group, the labels of a provider such as `runs-on=...`) counts as one, which is 72 of the 74 misses (the other 2 have a literal `self-hosted` label). See [the check](checks.md#check-superfluous-actions) |
 | `template-injection` | `template-injection` | correctness | partial: see [template injection](#template-injection) |
 | `typosquat-uses` | `typosquat-uses` | default | partial: one typo of the slug, not all of the transformations of zizmor |
 | `undocumented-permissions` | `undocumented-permissions` | pedantic | partial: scopes granted with `write` and, with `include-read` (on under the `pedantic` profile), `read` other than `contents: read`. A comment above a scope counts, where zizmor accepts only a comment at the end of the line; a `none` scope is not reported; one finding per scope, where zizmor reports one per `permissions:` block. 68.7% of the findings of zizmor on the corpus are reported; most of the rest are generated files, see [permissions against zizmor](#permissions-against-zizmor) |
-| `unpinned-images` | `unpinned-images` | default | partial: no per-persona split (an image without a tag against a tag without a digest; the `require-digest` option switches between them), images in `docker://` are `unpinned-uses`. For `container: ${{ matrix.image }}` zizmor points at the container and jactionlint at the matrix value that is not pinned |
+| `unpinned-images` | `unpinned-images` | default | partial: no per-persona split (an image without a tag against a tag without a digest; the `require-digest` option switches between them), images in `docker://` are `unpinned-uses`. For `container: ${{ matrix.image }}` zizmor points at the container and jactionlint at the matrix value that is not pinned (all of the misses but two, which are in generated files, are that). An image that is written with an expression is judged as far as it can be known: a matrix object or text with matrix values is resolved, an image that ends in text after the expression is reported, and any other (`${{ vars.IMAGE }}`) only with the option `pedantic`, which zizmor reports as its low confidence finding. See [the check](checks.md#check-unpinned-images) |
 | `unpinned-tools` | `unpinned-tools` | default | full for the 4 actions zizmor knows. The option `pedantic` (on under the `pedantic` profile) adds `run:` installs without an exact version and three more actions. An input that is an expression is not reported, zizmor reports it with low confidence. See [the check](checks.md#check-unpinned-tools) |
-| `unpinned-uses` | `unpinned-uses` | default | partial: `hash-pin`, `ref-pin`, `any` policies with the patterns `*`, `owner/*`, `owner/repo` and `owner/repo/path`; other pattern forms are rejected when the configuration is read. Docker images follow the `*` pattern only |
+| `unpinned-uses` | `unpinned-uses` | default | partial: `hash-pin`, `ref-pin`, `any` policies with the patterns `*`, `owner/*`, `owner/repo` and `owner/repo/path`; other pattern forms are rejected when the configuration is read. Docker images follow the `*` pattern only. A generated file is not checked by default (755 of the 756 misses, see [where a rule differs on purpose](#where-a-rule-differs-on-purpose)) |
 | `unredacted-secrets` | `unredacted-secrets` | default | full on the synthetic cases (any `fromJSON(secrets.X)` is reported, also without a field access); no finding on the corpus |
 | `unsound-condition` | `if-always-true` (existing) | correctness | full for workflows: `if-always-true` reports every `if:` with characters around `${{ }}`, a block scalar's trailing newline included. No new rule. Composite action steps are checked too (not measured) |
 | `unsound-contains` | `unsound-contains` | default | full on the synthetic cases; no finding on the corpus |
 | `unsound-ternary` | `unsound-ternary` | correctness | not measured: no corpus run against zizmor, covered by fixtures only |
-| `use-trusted-publishing` | `use-trusted-publishing` | default | partial: reusable workflows without `permissions:` are skipped because the caller may grant `id-token: write`. No `pwsh` npm publish and no `npm run publish`. A blank `NODE_AUTH_TOKEN` and a token from `rust-lang/crates-io-auth-action` or `NuGet/login` are trusted publishing and are not reported; `cargo publish -p` is understood. A long-lived credential next to `id-token: write` is reported. See [the check](checks.md#check-use-trusted-publishing) |
+| `use-trusted-publishing` | `use-trusted-publishing` | default | partial: reusable workflows without `permissions:` are skipped because the caller may grant `id-token: write`. No `pwsh` npm publish and no `npm run publish`. A blank `NODE_AUTH_TOKEN` and a token from `rust-lang/crates-io-auth-action` or `NuGet/login` are trusted publishing and are not reported; `cargo publish -p` is understood. A long-lived credential next to `id-token: write` is reported. A publish to a registry without trusted publishing (GitHub Packages, MyGet, a local registry), `pkg-pr-new` and `electron-builder --publish never` are not reported, where zizmor reports them. See [the check](checks.md#check-use-trusted-publishing) and [where a rule differs on purpose](#where-a-rule-differs-on-purpose) |
 
 `unused-ignore` does not report `# zizmor: ignore[...]` comments unless its `zizmor` option is on; see [ignore comments](#ignore-comments).
 
@@ -118,8 +118,8 @@ report the same audit in the same file on the same line, or within a few lines w
 other at its `uses:`. The online audits (`--online`) are measured separately, see [online audits](#online-audits). Only workflow files
 are compared. Rules with no entry in the mapping of the harness are always "only jactionlint" in its report.
 
-The comparison below uses jactionlint from `main` at v2.1.0 over 1,109 local clones of public repositories, with `--line-tolerance 3`. zizmor reports 112,559 findings and
-jactionlint also reports 98,611 of them (87.6%); 13,948 are missed. Without the line tolerance 91,315 match (81.1%); the difference is
+The comparison below uses jactionlint from `main` over 1,109 local clones of public repositories, with `--line-tolerance 3`. zizmor reports 112,559 findings and
+jactionlint also reports 104,421 of them (92.8%); 8,138 are missed. Without the line tolerance 97,717 match (86.8%); the difference is
 mostly `artipacked`, `template-injection` and `dangerous-triggers`, where the tools point at different lines of the same finding. The
 numbers are measured again with the harness before each release. Audits with misses, at a tolerance of 3 lines:
 
@@ -130,33 +130,36 @@ numbers are measured again with the harness before each release. Audits with mis
 | `concurrency-limits` | 5,693 | 4,253 | 1,440 |
 | `anonymous-definition` | 10,011 | 9,048 | 963 |
 | `unpinned-uses` | 21,203 | 20,447 | 756 |
-| `artipacked` | 10,703 | 9,994 | 709 |
-| `cache-poisoning` | 1,038 | 419 | 619 |
-| `obfuscation` | 291 | 120 | 171 |
-| `unpinned-images` | 609 | 472 | 137 |
+| `artipacked` | 10,703 | 10,004 | 699 |
+| `cache-poisoning` | 1,038 | 760 | 278 |
+| `obfuscation` | 291 | 223 | 68 |
+| `unpinned-images` | 609 | 576 | 33 |
 | `archived-uses` | 109 | 0 | 109 |
-| `superfluous-actions` | 1,036 | 940 | 96 |
+| `superfluous-actions` | 1,036 | 962 | 74 |
 | `dangerous-triggers` | 777 | 705 | 72 |
 | `dependabot-cooldown` | 892 | 848 | 44 |
-| `adhoc-packages` | 1,071 | 1,032 | 39 |
+| `adhoc-packages` | 1,071 | 1,041 | 30 |
 | `template-injection` | 24,181 | 24,142 | 39 |
-| `use-trusted-publishing` | 112 | 79 | 33 |
+| `use-trusted-publishing` | 112 | 82 | 30 |
 | `github-env` | 63 | 31 | 32 |
 | `bot-conditions` | 38 | 34 | 4 |
 | `self-repository` | 10,729 | 10,728 | 1 |
-
-The rows of `excessive-permissions` and `undocumented-permissions` were measured again with jactionlint from `main` after the
-changes described in [permissions against zizmor](#permissions-against-zizmor); the other rows are those of v2.1.0.
 
 These audits have findings and no misses: `github-app`, `misfeature`, `overprovisioned-secrets`, `secrets-inherit`, `unpinned-tools`,
 `unsound-condition`, `unsound-contains` and `unsound-ternary`. Every audit not listed has no finding on either side. `archived-uses` is
 0 of 109 because it is an online audit here: the offline run of zizmor reports it and jactionlint does not without `--online`.
 
-What the comparison does **not** say. The misses were not analyzed one by one, so none of them is claimed to be a known gap or a
-regression, except what is partial by design (`cache-poisoning`) and the two audits that
-[permissions against zizmor](#permissions-against-zizmor) accounts for. The online audits
-are not part of it, and the jactionlint-only surplus is not reviewed. The largest groups of misses (`concurrency-limits`,
-`anonymous-definition`) are the candidates for a closer look.
+What the comparison does **not** say. The misses of `concurrency-limits`, `anonymous-definition`, `unpinned-uses`, `artipacked`,
+`obfuscation`, `unpinned-images`, `archived-uses`, `superfluous-actions`, `dangerous-triggers`, `dependabot-cooldown`, `adhoc-packages`,
+`template-injection`, `use-trusted-publishing`, `github-env`, `bot-conditions` and `self-repository` were grouped by cause, at least 15
+of each cause read (a smaller group in full). Each cause is a position, a difference on purpose ([where a rule differs on
+purpose](#where-a-rule-differs-on-purpose)) or a finding of zizmor that is not one ([where zizmor is wrong](#where-zizmor-is-wrong)); the
+counts are there. The misses of `excessive-permissions` and `undocumented-permissions` are accounted for in [permissions against
+zizmor](#permissions-against-zizmor), and those of `cache-poisoning` are partial by design.
+The online audits are not part of it. The jactionlint-only surplus is not reviewed as a whole; the findings of `artipacked` and
+`unpinned-images` that zizmor does not report at the same place were: 2 of `artipacked` (checkouts that zizmor reports at the first line of
+the step) and 14 of `unpinned-images` (10 that zizmor reports at the `container:` line of the same job, and 4 of the option `pedantic` for
+an image from a matrix that is computed, which zizmor does not report).
 
 jactionlint also reports findings that zizmor does not: `require-shell`, `require-expression-wrapping`, `mutable-runner-label`,
 `secrets-outside-env`, `missing-timeout`, `pipeline-without-pipefail`, `unknown-runner-label`, `checkout-static-credentials`,
@@ -259,7 +262,34 @@ actions.
   [cache-poisoning against zizmor](#cache-poisoning-against-zizmor)).
 - `ref-version-mismatch` does not report a missing or version-less comment (zizmor does, as a pedantic finding): a missing comment is
   not a mismatch. This is a gap, and a candidate for a separate offline rule.
-- `obfuscation` does not report `fromJSON(toJSON(context))`; constants in `if:` are `constant-condition` and `if-always-true`.
+- `obfuscation` does not report `fromJSON(toJSON(context))`; a constant `if:` is `constant-condition` and `if-always-true` (14 of the misses, all `if: ${{ false }}`); an index that is a value of the matrix (`secrets[matrix.provider.env_key]`, `fromJSON(...)[matrix.tool]`) is not reported, because the matrix is how a workflow selects a value by name (53 of the misses); a trailing slash in the path of a remote action (`owner/repo/@sha`) is not reported (1).
+- **Generated files.** A file whose header says that a tool wrote it (`# This file was automatically generated by gh-aw`, `# generated by praktika`, `# Generated by projen`) is not checked by the rules of the `policy` and `style` groups by default (`generated-files: skip-policy`), because its author fixes the generator. On the corpus that is 200 files in 42 repositories (96 by gh-aw, 28 by praktika, 25 "automatically generated", 10 by dist, 5 by modulesync and a few others). They hold 941 of the 963 misses of `anonymous-definition`, 755 of the 756 of `unpinned-uses`, 37 of the 1,440 of `concurrency-limits` and 2 of the 33 of `unpinned-images`. With `generated-files: report` the same run misses 22, 1, 1,403 and 31.
+- `concurrency-limits` does not report a workflow that only a `schedule` or a `workflow_dispatch` starts, because nothing supersedes such a run (1,363 of the 1,440 misses). It reports a missing `concurrency:` and the bare group form, not a `concurrency:` without `cancel-in-progress: true` (15), and not a workflow in which every job has a `concurrency:` of its own (4). The job of `copilot-setup-steps.yml` is not reported by it or by `anonymous-definition` (20 and 22 misses, see zizmor#1481 above). One more miss is a position: the `on:` of a workflow that is indented as a whole is not found, so jactionlint reports at line 1.
+- `artipacked` does not report a checkout that a later step pushes with: a `git push` command, or an action that pushes (678 of the 699 misses, zizmor#1043), `actions/checkout@v1`, which has no such input (8, zizmor#1098), or a `persist-credentials` that is an expression (2). The other 11 are positions: zizmor reports at the first line of the step and jactionlint at its `uses:`, more than 3 lines further down when the step has a long `if:` or comments, or at the alias of a step written as a YAML anchor.
+- `dependabot-cooldown` does not report an update that cannot propose anything: `open-pull-requests-limit: 0` or an `ignore` of every dependency (40 of the 44 misses). The other 4 are positions: zizmor reports at the `package-ecosystem` key and jactionlint at the first key of the update.
+- `dangerous-triggers`: 72 misses, all of them the position of the `on:` block.
+- `superfluous-actions` does not report a job whose runner may be self-hosted, and a `runs-on:` that is an expression the rule cannot resolve counts as one (72 of the 74 misses; the other 2 have a literal `self-hosted` label).
+- `unpinned-images` reports an image from the matrix at the value in the matrix, zizmor at the `container:` (31 of the 33 misses).
+- `adhoc-packages` does not call an install from a local path or tarball ad hoc (12 of the 30 misses), and does not take the value of `--prefix` for a package (18).
+- `use-trusted-publishing` does not report publishes to a registry that has no trusted publishing: GitHub Packages and MyGet (10 of the 30 misses), a local registry (1) and the Visual Studio marketplace (`vsce publish`, 2). It does not report a reusable workflow without `permissions:` (3, the caller may grant `id-token: write`), nor a script that is not a publish command (`pnpm run publish`, `bun upload-npm -- publish`, 2). `pkg-pr-new publish` (8) and `electron-builder --publish never` (2) are not publishes either, see below. The other 2 are positions.
+- `github-env` does not report a write of a value it can see is not attacker controlled: a runner path (`${{ runner.temp }}`, `$RUNNER_TEMP`), `date`, `$PWD`, `realpath`, a number that the script checked against `^[0-9]+$`, a variable that is already in the environment from a secret (15 of the 32 misses). The other 17 are positions: zizmor reports at the `run:` of the script and jactionlint at the line that writes.
+- `template-injection` does not report an expansion in a step or a job with `if: false` (10 of the 39 misses, zizmor#2059), nor in the input of an action that is not code: the payload of a Slack action, the body of an issue (15, `8398a7/action-slack`, `slackapi/slack-github-action`, `imjohnbo/issue-bot`: the table of code inputs lists an action only after its source was read). 11 are positions (zizmor reports at the `run:` line, jactionlint at the expansion) and 3 are expansions that jactionlint judges to be safe (`toJson(github.event.pull_request.requested_reviewers[*].login)`, which holds account names; a constant string in `run:`).
+- `bot-conditions` does not report a conjunction with a check of the author of the pull request (3 of the 4 misses, zizmor#1914) or a negated test (1).
+- `self-repository`: the one miss is a step with `if: false`, whose findings are dropped for every rule outside the correctness group (zizmor#2059).
+- `archived-uses` is an online rule. It reports nothing without `--online`, as designed: whether a repository is archived is not in the workflow. With `--online` it reports all 109 findings of zizmor on the corpus, on the same lines.
+
+### Where zizmor is wrong
+
+Findings of zizmor 1.30.1 that jactionlint does not report because they are not findings:
+
+- `adhoc-packages` on `npm install --prefix ./assets` (18): the value of `--prefix` is a directory, not a package. The command installs the dependencies of the `package.json` of that directory (`plausible/analytics`, `elastic/kibana`, `storybookjs/storybook`).
+- `use-trusted-publishing` on `pnpm dlx pkg-pr-new publish './packages/*'` (8) and `bun x electron-builder ... --publish never` (2). `pkg-pr-new` uploads a preview of the package to pkg.pr.new and does not publish to a registry, and `--publish never` says that nothing is published.
+- `concurrency-limits` and `anonymous-definition` on `copilot-setup-steps.yml` (20 and 22): GitHub runs the file to prepare the environment of the Copilot agent, as zizmor#1481 says.
+- `artipacked` on `actions/checkout@v1` (8): the version has no `persist-credentials` input and always leaves the credential, so a finding cannot be acted on (zizmor#1098).
+- `dependabot-cooldown` on an update with `open-pull-requests-limit: 0` or an `ignore` of every dependency (40): the update proposes nothing, so there is nothing for a cooldown to delay (`ClickHouse/ClickHouse` switches Dependabot off this way, in a file that explains it).
+- `github-env` on `PR_NUMBER=$(cat pr_number)` followed by `echo "PR_NUMBER=$PR_NUMBER" >> $GITHUB_ENV` in a workflow that checked the value against `^[0-9]+$` first (`microsoft/semantic-kernel`).
+- `bot-conditions` on `github.actor == 'dependabot[bot]' && github.event.pull_request.user.login == 'dependabot[bot]'` (3, zizmor#1914): the author of the pull request is checked as well.
+- Any audit on a step or a job with `if: false` (12 of the misses of this list: 10 `template-injection`, `unpinned-uses`, `self-repository`): the code does not run (zizmor#2059).
 - A rule has one level, where zizmor grades a finding by confidence and persona. Every rule of `correctness` and `default` is an
   `error`; the `pedantic` findings of an audit share the level of the rule.
 
@@ -495,7 +525,7 @@ tools report the same audit in the same file within two lines. The numbers are f
 | `known-vulnerable-actions` | 0 | 0 | 0 | 0 |
 | `ref-confusion` | 0 | 0 | 0 | 0 |
 | `stale-action-refs` | 7 | 6 | 1 | 0 |
-| `archived-uses` | 0 | 0 | 0 | 0 |
+| `archived-uses` (zizmor with `--offline`, see below) | 109 | 109 | 0 | 0 |
 | `ref-version-mismatch`, tag comment does not match | 182 | 182 | 0 | 0 |
 | `ref-version-mismatch`, comment names a branch | 2 | 1 | 1 | 0 |
 | `ref-version-mismatch`, missing or version-less comment | 42 | 0 | 42 | 0 |
@@ -514,7 +544,8 @@ What the differences are:
   rule.
 - **`ref-version-mismatch`, comment names a branch.** zizmor also compares a comment such as `# stable` with the branch of that name.
   jactionlint only reads comments that start with a version.
-- **No finding for either tool** for `ref-confusion` and `archived-uses`, and for `known-vulnerable-actions` on current workflows:
+- **`archived-uses`.** zizmor reports 109 findings on the corpus in 42 repositories with `--offline` (`actions-rs/toolchain` 22, `actions/upload-release-asset` 18, `8398a7/action-slack` 17, `actions/create-release` 10, `contributor-assistant/github-action` 9, `actions-rs/cargo` 8, `marvinpinto/action-automatic-releases` 7 and a few others). jactionlint with `--online` (and a token) reports all 109, on the same lines within 3. Without `--online` it reports none: whether a repository is archived is not in the workflow, so the rule is online by design.
+- **No finding for either tool** for `ref-confusion`, and for `known-vulnerable-actions` on current workflows:
   those rules are exercised by fixtures, not by a measurement against zizmor.
 
 Gaps of the online rules that the corpus does not show, so they are not measured:
