@@ -5,6 +5,8 @@ import (
 	"strings"
 
 	"go.yaml.in/yaml/v4"
+
+	"github.com/jdx/jactionlint/v2/internal/runscript"
 )
 
 // gitCredentialUseRegex matches a command of a `run:` script that talks to a git remote or creates
@@ -155,7 +157,7 @@ func pushesWithCredentials(steps []*Step) bool {
 		}
 		switch e := s.Exec.(type) {
 		case *ExecRun:
-			if e.Run != nil && gitPushRe.MatchString(e.Run.Value) {
+			if scriptRuns(e, gitPushRe) {
 				return true
 			}
 		case *ExecAction:
@@ -171,6 +173,43 @@ func pushesWithCredentials(steps []*Step) bool {
 		}
 	}
 	return false
+}
+
+// printingCommands only show their arguments: `echo "run git push by hand"` pushes nothing.
+var printingCommands = map[string]bool{"echo": true, "printf": true}
+
+// scriptRuns reports whether the script of a step runs a command that matches re (a `git push`, or another
+// operation on a git remote). A bash or sh script is split into commands first, so that a comment, a message printed
+// with echo and the text of a heredoc do not count as the command: a checkout that only a message mentions `git push`
+// for still leaves its credential in the workspace. A command which only runs others (`bash -c "git push"`,
+// `xargs git push`, `retry git push`) is matched on its words, as is a script that is not bash or sh or does not parse.
+// Whatever cannot be told counts as running the command, which is the exemption.
+func scriptRuns(e *ExecRun, re *regexp.Regexp) bool {
+	if e.Run == nil {
+		return false
+	}
+	shell := ""
+	if e.Shell != nil {
+		shell = e.Shell.Value
+	}
+	if shell == "" || shell == "bash" || shell == "sh" {
+		if s, err := runscript.Analyze(e.Run.Value, shell); err == nil {
+			for _, c := range s.Commands {
+				if printingCommands[c.Name] {
+					continue
+				}
+				raw := make([]string, len(c.Words))
+				for i, w := range c.Words {
+					raw[i] = w.Raw
+				}
+				if re.MatchString(strings.Join(raw, " ")) {
+					return true
+				}
+			}
+			return false
+		}
+	}
+	return re.MatchString(e.Run.Value)
 }
 
 // uploadsWorkspace reports whether a step uploads an artifact of the whole workspace (or its parent), which
@@ -313,7 +352,7 @@ func needsPersistedCredentials(steps []*Step) bool {
 		}
 		switch e := s.Exec.(type) {
 		case *ExecRun:
-			if e.Run != nil && gitCredentialUseRegex.MatchString(e.Run.Value) {
+			if scriptRuns(e, gitCredentialUseRegex) {
 				return true
 			}
 		case *ExecAction:
