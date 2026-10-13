@@ -317,11 +317,32 @@ func (c *LocalActionsCache) FindMetadata(spec string) (*ActionMetadata, bool, er
 		return nil, false, nil
 	}
 
+	meta, err := decodeActionMetadata(b, false)
+	if err != nil {
+		err = fmt.Errorf("could not parse action metadata in %q: %s", strings.TrimSuffix(key, "/"), err)
+		c.writeInvalid(key, err) // Remember action was invalid
+		return nil, false, err
+	}
+	meta.file = f
+	meta.dir = dir
+
+	c.debug("New metadata parsed from action %s: %v", dir, meta)
+	c.writeCache(key, meta)
+	return meta, false, nil
+}
+
+// decodeActionMetadata parses the content of an action.yml. The error says what is wrong with the file in
+// one line, without the name of the file. With lenient the metadata of a file whose only problem is a key of an
+// input which GitHub does not document (many actions write `type: string` there) is returned: the file is not
+// the one of the repository being linted, so it is not for jactionlint to reject it, and what it declares is read all
+// the same.
+func decodeActionMetadata(b []byte, lenient bool) (*ActionMetadata, error) {
 	var meta ActionMetadata
 	if err := yaml.Unmarshal(b, &meta); err != nil {
-
+		if lenient && onlyUnexpectedInputKeys(err) {
+			return &meta, nil
+		}
 		// Unwrap type error when a single type error occurs to simplify the error message
-		var m string
 		var les *yaml.LoadErrors
 		if errors.As(err, &les) {
 			if len(les.Errors) == 1 {
@@ -329,24 +350,28 @@ func (c *LocalActionsCache) FindMetadata(spec string) (*ActionMetadata, bool, er
 				// at L4.C9: ..." form. Build the message from Mark and Message instead to keep
 				// the "line 4: ..." shape jactionlint has always reported.
 				e := les.Errors[0]
-				m = fmt.Sprintf("line %d: %s", e.Mark.Line, e.Message)
-			} else {
-				m = strings.ReplaceAll(les.Error(), "\n", "")
+				return nil, fmt.Errorf("line %d: %s", e.Mark.Line, e.Message)
 			}
-		} else {
-			m = err.Error()
+			return nil, errors.New(strings.ReplaceAll(les.Error(), "\n", ""))
 		}
-
-		err = fmt.Errorf("could not parse action metadata in %q: %s", strings.TrimSuffix(key, "/"), m)
-		c.writeInvalid(key, err) // Remember action was invalid
-		return nil, false, err
+		return nil, err
 	}
-	meta.file = f
-	meta.dir = dir
+	return &meta, nil
+}
 
-	c.debug("New metadata parsed from action %s: %v", dir, &meta)
-	c.writeCache(key, &meta)
-	return &meta, false, nil
+// onlyUnexpectedInputKeys reports whether every error of parsing action metadata is the non-fatal one of
+// ActionMetadataInputs.UnmarshalYAML.
+func onlyUnexpectedInputKeys(err error) bool {
+	var les *yaml.LoadErrors
+	if !errors.As(err, &les) || len(les.Errors) == 0 {
+		return false
+	}
+	for _, e := range les.Errors {
+		if !strings.HasPrefix(e.Message, "unexpected key ") {
+			return false
+		}
+	}
+	return true
 }
 
 func (c *LocalActionsCache) readLocalActionMetadataFile(dir string) ([]byte, string, bool) {

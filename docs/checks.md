@@ -17,6 +17,7 @@ List of checks:
 - [Contextual typing for `steps.<step_id>` objects](#check-contextual-step-object)
 - [Contextual typing for `matrix` object](#check-contextual-matrix-object)
 - [Contextual typing for `needs` object](#check-contextual-needs-object)
+- [Contextual typing for `github.event` object](#check-contextual-github-event)
 - [Strict type checks for comparison operators](#check-comparison-types)
 - [shellcheck integration for `run:`](#check-shellcheck-integ)
 - [pyflakes integration for `run:`](#check-pyflakes-integ)
@@ -37,6 +38,7 @@ List of checks:
 - [Local action inputs validation at `with:`](#check-local-action-inputs)
 - [Local action used before checkout](#check-local-action-checkout)
 - [Popular action inputs validation at `with:`](#check-popular-action-inputs)
+- [Inputs and outputs of any action (online)](#check-remote-action-metadata)
 - [Outdated popular actions detection at `uses:`](#detect-outdated-popular-actions)
 - [Shell name validation at `shell:`](#check-shell-names)
 - [Scripts folded into one line](#check-multiline-plain-run)
@@ -606,7 +608,7 @@ jobs:
       - run: echo "${{ startsWith('hello, world', github.event) }}"
       # Function overloads can be handled properly. contains() has string version and array version
       - run: echo "${{ contains('hello, world', 'lo,') }}"
-      - run: echo "${{ contains(github.event.labels.*.name, 'enhancement') }}"
+      - run: echo "${{ contains(github.event.issue.labels.*.name, 'enhancement') }}"
 ```
 
 Output:
@@ -634,7 +636,7 @@ test.yaml:15:51: 2nd argument of function call is not assignable. "object" canno
    |                                                   ^~~~~~~~~~~~~
 ```
 
-[Playground](https://jactionlint.jdx.dev/#eNqckEFKxjAQhfc9xVCEqKQ5QC/iUpI6mGo6UzoTK5TcXWJB/OFvF11l8b7v5TFMPcxZYvPBQfoGQFG0vgBLJulqnkMmzV3yNfuNRHGWnQLoKtkDDpHBPGwbZPokXul1YFL8VijFHKHvo8YcHH4hqRyAbQVF/aIvo8ZHEzEltrDykt6MBZPYmicopT115Y58zbI3q0876gX8SHJh9J/6/zOXfMAk7tmRn9CCQYqeBpyQdK/7GQBh6o/Y)
+[Playground](https://jactionlint.jdx.dev/#eNqckMFKxDAQhu/7FMMiRCXNA/RFPEpSBxPNziydGVcoeXeJBVGwPfSUw/99f36GaYSrST69cZLxBKAo2l+A2UiGnlsyUhtq7Nl3JIpXWSmAoZMj4JQZ3N2ygNE78Y2eJybFT4XW3Bb6WjRbCviBpLIBnjsoGmd9KprvXcZa2cON5/riPLjK3j1Aa+ddV/6Rj1n+z+rdjn6BWEgOjP5Rf38WiohhqDFhlfAYKF7Qg0PKkSa8IOla+jUA1HySLw==)
 
 [Contexts][contexts-doc] and [built-in functions][funcs-doc] are strongly typed. Typos in property access of contexts and
 function names can be checked. And invalid function calls like wrong number of arguments or type mismatch at parameter also
@@ -1017,6 +1019,87 @@ Outputs from the jobs can be accessed only from jobs following them via [`needs`
 
 jactionlint defines a type of `needs` variable contextually by looking at each job's `outputs:` section and `needs:` section.
 
+<a id="check-contextual-github-event"></a>
+## Contextual typing for `github.event` object
+
+Example input:
+
+```yaml
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    steps:
+      # ERROR: Typo of workflow_run
+      - run: echo "${{ github.event.worflow_run.conclusion }}"
+      # ERROR: Typo of a property of the workflow run
+      - run: echo "${{ github.event.workflow_run.head_brach }}"
+      # ERROR: Typo of a property of the elements of an array
+      - run: echo "${{ join(github.event.workflow_run.pull_requests.*.nubmer, ', ') }}"
+      # OK: These are in the payload
+      - run: echo "${{ github.event.workflow_run.conclusion }} ${{ github.event.workflow_run.pull_requests[0].number }}"
+```
+
+Output:
+
+```
+test.yaml:10:24: property "worflow_run" is not defined in github.event: no webhook event has it in its payload. did you mean "workflow_run"? [undefined-property]
+   |
+10 |       - run: echo "${{ github.event.worflow_run.conclusion }}"
+   |                        ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+test.yaml:12:24: property "head_brach" is not defined in github.event.workflow_run: no webhook event has it in its payload. did you mean "head_branch"? [undefined-property]
+   |
+12 |       - run: echo "${{ github.event.workflow_run.head_brach }}"
+   |                        ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+test.yaml:14:29: property "nubmer" is not defined in github.event.workflow_run.pull_requests.*: no webhook event has it in its payload. did you mean "number"? [undefined-property]
+   |
+14 |       - run: echo "${{ join(github.event.workflow_run.pull_requests.*.nubmer, ', ') }}"
+   |                             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+```
+
+[Playground](https://jactionlint.jdx.dev/#eNqcj09Lw0AQxe/9FEMRqtIsnnP15GcoIWS3o0ndzKzzxyCl312SotKDRTzO2/fb9x5TvQKYWF6fM0+t+HL/KFrD7vGpWTT7KDjficeS0XDfrA4cdQYEC4udUXHSiqkGj07mVe4M1ZYnNSx6dgFUs7MGTD3D+uZ4hJfBeo8B35EsTCxfjUJiStl1YILTaf1X/HtR6LHbt1G61F/jDzzQ7e+fFM+5FXxzVNNwH8jjiLKFzRY2d//rdbELrnsv4ncPTSAfI8oc/DkANsuZCg==)
+
+`github.event` is the payload of the webhook event which started the run. The type of `github.event` stays an untyped
+object, but the names of the properties which a workflow reads from it are checked: a property which no webhook event has at that
+place is an `undefined-property` error. The names are checked on the top level and in the objects below it
+(`github.event.pull_request`, `github.event.workflow_run.head_commit`, the elements of `github.event.commits` and so on), down to
+three levels of objects, which is as far as the payloads are known for certain.
+
+The payloads come from the JSON schemas of the webhooks of [octokit/webhooks][octokit-webhooks] and the webhooks of
+[the OpenAPI description of the REST API of GitHub][rest-api-description], both under the MIT licence: a property is known
+when either of them has it, in the payload of any activity type of any event. They are in `event_payloads.go`, which
+`go generate` (`mise run generate`) refreshes with [`scripts/generate-event-payloads`](https://github.com/jdx/jactionlint/tree/main/scripts/generate-event-payloads).
+To keep a false report out of the default profile, these are not checked:
+
+- the contents of an account, an app, an installation or a licence (`sender`, `pull_request.user`, `organization`, ...): GitHub adds
+  properties to them from time to time. The property itself (`github.event.sender`) is checked
+- objects which are arbitrary or hold the old values of an edit: `changes`, `inputs`, `client_payload` and `payload` (of a deployment),
+  and everything deeper than three levels of objects
+- the whole payload of a workflow which has `workflow_dispatch`, `repository_dispatch`, `schedule`, `workflow_call` or
+  `image_version` in `on:`, or an event which has no schema, and of composite actions and reusable workflows, whose payload
+  is the one of their callers
+
+By default a property is reported when no webhook event has it. A read of the property of another event, such as
+`github.event.pull_request.number` in a workflow which runs on `push`, is not reported: it evaluates to null, which
+workflows often rely on (`${{ github.event.pull_request.number || github.ref }}`). The option `strict-event-payloads` of
+`undefined-property` makes it report such a read too, with the properties of the events of the workflow (the union of
+their payloads, so a property which one of several events has is fine). The `pedantic` profile turns it on:
+
+```yaml
+rules:
+  undefined-property:
+    strict-event-payloads: true
+```
+
+With that option, the step `echo "${{ github.event.pull_request.number || github.ref }}"` of a workflow with `on: push` is reported:
+
+```
+test.yaml:6:24: property "pull_request" is not defined in github.event, the payload of the event "push". available properties are "after", "base_ref", "before", "commits", "compare", "created", "deleted", "enterprise", "forced", "head_commit", "installation", "organization", "pusher", "ref", "repository", "sender" [undefined-property]
+```
+
 <a id="check-comparison-types"></a>
 ## Strict type checks for comparison operators
 
@@ -1285,7 +1368,7 @@ jobs:
         run: echo '${{ toJSON(github.event.*.body) }}'
       - name: Do something with checking skip
         # OK: This placeholder uses an untrusted input, but the input cannot be injected to the script
-        run: if [ "${{ contains(github.event.pull_request.author.title, '[SKIP]') }}" = "true" ]; then echo "skip"; fi
+        run: if [ "${{ contains(github.event.pull_request.title, '[SKIP]') }}" = "true" ]; then echo "skip"; fi
 ```
 
 Output:
@@ -1305,7 +1388,7 @@ test.yaml:22:31: object filter extracts potentially untrusted properties "github
    |                               ^~~~~~~~~~~~~~~~~~~~
 ```
 
-[Playground](https://jactionlint.jdx.dev/#eNqMkUFrGzEQhe/+FY+lYKd0t8dShUIOLaUNJIHkFkKQ5YmlWqvZakYOJfi/F+0aE7cYclpm5+l7T0/J9mRwR6IzTgZDifEx0+9Sf8x+8VLMDFASrV8glyRtFZZlSVraaOtuXInSIJMKaDGBb3JIOlKxp0KDRtrLRqABOc+Yv3t5wTqoL8uOtpS0ex2mG49ht5sfHIqQGFingZN8FLWRLrafD+TnoN4cJiDTwK3yhpJBtRJymVS6u+vLb1fY7V5JR1Y75LYnEbsmg7dlw7MVuMhCqxMpJ0YrLodBL7afTqadFAaOk3CkLvJ68X9Dnuzq0XHfB+1sUc+5q73Xms7+eYnvpKhKSiqn2lf+eXt9tTiyeN8tefXn7Kj5ifiVIdyT+pDWY344T25TJ9mE4dgkPOEeTTVxnNSGJIvTfe6vMtb6AfP728sfNw/zmqHBFzSaCzV4OId6SlP8pjo253gKfwcAqP/kRg==)
+[Playground](https://jactionlint.jdx.dev/#eNqMkUFrGzEQhe/+FY+lYKd0t8dShUIOLaUNJIHkFkKQ5YmlWqvZakYOJfi/F+0GY7eY9iRG8/S9x1OyPRnckeiMk8FQYnzM9LPUi9kPXoqZAUqi9QRySdJWYVmWpKWNtu7GlSgNMqmAFhP4JoekIxWvVGjQSK+yEWhAzjPmb15esA7qy7KjLSXtDsN04zPsdvO9QxESA+s0cJL3ojbSxfbjnvwc1Jv9BGQauFXeUDKoVkIuk0p3d3355Qq73YF0ZLVDbnsSsWsy+L9seLYCF1lodSLlxGjF5TDoxfbDybSTwsBxEo7URV4v/m7Ik109Ou77oJ0t6jl3tfda09kfP/GVFFVJSeVU+8rfb6+vFkcWb7slr36dHTU/ET8zhHtSH9J6zA/nyW3qJJswHJuEJ9yjqSaOk9qQZPGPPt9hfn97+e3mYV7NG3xCo7lQg4dzqKc05W6qVXOOp/B7AFEp4YU=)
 
 Since `${{ }}` placeholders are evaluated and replaced directly by GitHub Actions runtime, you need to use them carefully in
 inline scripts at `run:`. For example, if we have step as follows,
@@ -2731,7 +2814,8 @@ jactionlint checks inputs of many popular actions such as `actions/checkout@v4`.
 - input set at `with:` is not defined in the action (this commonly occurs by a typo)
 
 this is done by checking `with:` section items with a small database collected at building `jactionlint` binary. jactionlint
-can check popular actions without fetching any `action.yml` of the actions from the remote so that it can run efficiently.
+can check popular actions without fetching any `action.yml` of the actions from the remote so that it can run efficiently. With
+`--online` the other actions are read from GitHub, see [inputs and outputs of any action](#check-remote-action-metadata).
 
 The data set has one entry per major version of an action. jactionlint looks it up with the major version of
 
@@ -2825,6 +2909,85 @@ The version is the major version of the tag, or of the version comment after a c
 not judged. A step whose `with:` is an expression, or has an `${{ insert }}` key, is not judged either. A conflict is reported when both
 inputs are written out: two expressions may be empty at run time, which is how a workflow chooses between them. A `run-id` or
 `repository` that is the default expression (`${{ github.run_id }}`) needs no token.
+
+<a id="check-remote-action-metadata"></a>
+## Inputs and outputs of any action (online)
+
+The data set behind [the popular action inputs check](#check-popular-action-inputs) covers a little over a hundred actions. With
+`--online` jactionlint reads the `action.yml` (or `action.yaml`) of every other action at the ref the workflow pins, from GitHub, and
+checks it the way it checks [a local action](#check-local-action-inputs):
+
+- `missing-action-input`: an input the action requires (`required: true` and no `default`) is not set at `with:`
+- `unknown-action-input`: an input is set which the action does not declare (often a typo)
+- `deprecated-action-input`: an input is set which the action marks with `deprecationMessage`
+- `undefined-property`: `steps.<id>.outputs.<name>` names an output which a *composite* action does not declare
+
+Example input:
+
+```yaml
+# requires --online
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      # ERROR: "tool" is required, and "tools" is a typo
+      - uses: taiki-e/install-action@v2
+        with:
+          tools: just
+      - id: greet
+        uses: example/composite-tool@v1
+        with:
+          name: me
+          # ERROR: deprecated, the action's own message says what to use instead
+          old: x
+      # ERROR: the composite action declares only "result"
+      - run: echo ${{ steps.greet.outputs.reslt }}
+```
+
+Output:
+
+```
+test.yaml:8:15: missing input "tool" which is required by action "taiki-e/install-action@v2" (action.yml read from GitHub with --online). all required inputs are "tool" [missing-action-input]
+  |
+8 |       - uses: taiki-e/install-action@v2
+  |               ^~~~~~~~~~~~~~~~~~~~~~~~~
+test.yaml:10:11: input "tools" is not defined in action "taiki-e/install-action@v2" (action.yml read from GitHub with --online). available inputs are "checksum", "fallback", "tool" [unknown-action-input]
+   |
+10 |           tools: just
+   |           ^~~~~~
+test.yaml:16:11: avoid using deprecated input "old" in action "example/composite-tool@v1" (action.yml read from GitHub with --online): Use level instead [deprecated-action-input]
+   |
+16 |           old: x
+   |           ^~~~
+test.yaml:18:23: property "reslt" is not defined in object type {result: string} [undefined-property]
+   |
+18 |       - run: echo ${{ steps.greet.outputs.reslt }}
+   |                       ^~~~~~~~~~~~~~~~~~~~~~~~~
+```
+
+<!-- Skip playground link -->
+
+What is read, and what is not:
+
+- **Only actions which are not in the data set.** `actions/checkout@v4` and the other popular actions are checked with the
+  built-in data, which costs no request. A commit pinned with a version comment is checked as the popular action it names, see
+  [the popular action inputs check](#check-popular-action-inputs).
+- **The metadata at the pinned ref.** `owner/repo@ref` reads `action.yml` of the root of the repository, `owner/repo/path@ref` reads
+  `path/action.yml`, and each tries `action.yaml` when there is no `action.yml`. The ref is a tag, a branch or a commit. It costs one request
+  for each action and ref (two when the file is `action.yaml`), made once for the whole run however many steps use the
+  action. A `@main` or `@v1` is read as it is now, not as it was when the workflow was written.
+- **Nothing is reported when the metadata is not known.** A private action, a repository on the deny list or outside the allow list
+  of `--online-allow`, a rate limit, a timeout, a repository without `action.yml` (an action which is only a `Dockerfile`) or a file which
+  is not valid metadata gives no finding, exactly as without `--online`. The lookup is counted as skipped (`--online=strict` fails on it,
+  and the coverage of the run says so, see [the online checks](usage.md#online-checks)), except for the repositories which are left out on purpose.
+- **Outputs only for composite actions.** A composite action has the outputs it declares and no others. A JavaScript or Docker action may set an
+  output with `core.setOutput` or `$GITHUB_OUTPUT` which its `action.yml` does not declare (`tj-actions/changed-files` sets one for each key of
+  `files_yaml`, `dorny/paths-filter` one for each filter), so its outputs are not checked.
+- **Required inputs are the ones the action declares.** An action may default a required input in its code, which jactionlint cannot
+  see. It is the same limit as for local and popular actions.
+- **The file of another repository is read leniently.** `type: string` in an input is not documented by GitHub but many actions write
+  it; it is read and not reported. A file which does not parse at all is skipped.
 
 <a id="detect-outdated-popular-actions"></a>
 ## Outdated popular actions detection at `uses:`
@@ -9617,6 +9780,8 @@ anymore.
 [contexts-doc]: https://docs.github.com/en/actions/learn-github-actions/contexts
 [funcs-doc]: https://docs.github.com/en/actions/learn-github-actions/expressions#functions
 [needs-doc]: https://docs.github.com/en/actions/learn-github-actions/workflow-syntax-for-github-actions#jobsjob_idneeds
+[octokit-webhooks]: https://github.com/octokit/webhooks/tree/main/payload-schemas
+[rest-api-description]: https://github.com/github/rest-api-description
 [needs-context-doc]: https://docs.github.com/en/actions/learn-github-actions/contexts#needs-context
 [shell-doc]: https://docs.github.com/en/actions/learn-github-actions/workflow-syntax-for-github-actions#using-a-specific-shell
 [matrix-doc]: https://docs.github.com/en/actions/learn-github-actions/workflow-syntax-for-github-actions#jobsjob_idstrategymatrix

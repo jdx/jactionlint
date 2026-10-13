@@ -114,6 +114,10 @@ func TestRepojackingRequests(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			f := newFakeGitHub(t)
+			// The action.yml of the action is readable, so that the test counts only what it is about
+			if ref := ParseUses(strings.TrimPrefix(tc.uses, "uses: ")); ref.Kind == UsesAction {
+				f.json("/repos/"+ref.Owner+"/"+ref.Repo+"/contents/action.yml", contentsJSON("name: x\ndescription: d\nruns:\n  using: node20\n  main: i.js\n"))
+			}
 			tc.answer(f)
 			setOnlineEnv(t, f, "tok")
 			ownerLookupHost(t, f)

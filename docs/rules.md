@@ -1308,6 +1308,7 @@ An undefined variable or property is accessed in an expression.
 - Group: correctness
 - Default level: error
 - Profile: correctness
+- Option `strict-event-payloads` (bool, no default): Report a property of github.event which the events of the workflow do not have, also when another event has it. Unset, a property is reported only when no webhook event has it, and the pedantic profile turns the option on.
 - Details and examples: [checks](./checks.md#check-contexts-and-builtin-func)
 
 ## undocumented-permissions

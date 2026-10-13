@@ -18,7 +18,7 @@ func githubFailingFor(f *fakeGitHub, repo string, status int) {
 		w.WriteHeader(status)
 		fmt.Fprint(w, `{"message":"nope"}`)
 	}
-	for _, p := range []string{"/repos/" + repo, "/repos/" + repo + "/tags"} {
+	for _, p := range []string{"/repos/" + repo, "/repos/" + repo + "/tags", "/repos/" + repo + "/contents/action.yml", "/repos/" + repo + "/contents/action.yaml"} {
 		f.handle(p, h)
 	}
 }
