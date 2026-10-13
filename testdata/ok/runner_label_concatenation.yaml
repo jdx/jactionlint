@@ -7,6 +7,8 @@ on:
         type: string
       suffix:
         type: string
+      node:
+        type: string
 
 jobs:
   # Every label that the values make is a label
@@ -34,6 +36,44 @@ jobs:
         os: [ubuntu, linux]
         exclude:
           - os: ${{ inputs.os }}
+    runs-on: ${{ matrix.os }}-latest
+    steps:
+      - run: echo ...
+  # An expression on another key of an entry may remove any combination: it is not known that linux has a job
+  excluded-by-expression-on-another-key:
+    strategy:
+      matrix:
+        os: [ubuntu, linux]
+        node: [18, 20]
+        exclude:
+          - os: linux
+            node: ${{ inputs.node }}
+    runs-on: ${{ matrix.os }}-latest
+    steps:
+      - run: echo ...
+  # The entries together remove every combination of linux (a number is the same as its text)
+  excluded-by-pairs:
+    strategy:
+      matrix:
+        os: [ubuntu, linux]
+        node: [18, 20]
+        exclude:
+          - os: linux
+            node: 18
+          - os: linux
+            node: '20'
+    runs-on: ${{ matrix.os }}-latest
+    steps:
+      - run: echo ...
+  # A row that is an expression stands for any value, so an entry on it may remove linux
+  excluded-with-a-dynamic-row:
+    strategy:
+      matrix:
+        os: [ubuntu, linux]
+        node: ${{ fromJSON(inputs.node) }}
+        exclude:
+          - os: linux
+            node: 18
     runs-on: ${{ matrix.os }}-latest
     steps:
       - run: echo ...

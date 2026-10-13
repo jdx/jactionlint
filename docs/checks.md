@@ -2314,8 +2314,11 @@ A label that is a matrix value written together with text (`runs-on: ${{ matrix.
 is resolved the same way: with `os: [macos, linux]` the labels are `macos-latest` and `linux-latest`, and the second one is
 reported at `linux` in the matrix. It is resolved only when the label has one matrix name (`${{ matrix.os }}-${{ matrix.arch }}` is
 not, because `exclude` and `include` decide which pairs run), when the values are strings (a number such as `20.10`, which GitHub
-prints as `20.1`, is skipped), and a value of the matrix removed by an `exclude` entry which has only that name is skipped (one that `include` adds again stays; when an
-`exclude` has an expression, only the values that `include` adds are checked).
+prints as `20.1`, is skipped), and a value of the row is used only when a job certainly has it. The matrix is modelled as GitHub
+documents it: the base is the cross product of the rows, an `exclude` entry removes the combinations that have all of its
+pairs (so `{os: linux, node: 18}` leaves `linux` with `node: 20`), and `include` adds jobs afterwards, so a value that `include` names
+always has one. Wherever an expression makes the effect unknown (a value in an `exclude` entry, an entry or the whole `exclude`,
+a row of another key) the value is not reported.
 
 When you define some custom labels for your self-hosted runner, jactionlint does not know the labels. Please set the label
 names in [`jactionlint.yaml` configuration file](config.md) to let jactionlint know them. A job that has the label `self-hosted`

@@ -3,6 +3,8 @@ on:
     inputs:
       os:
         type: string
+      node:
+        type: string
 
 jobs:
   # The label is made of the value of the matrix and text
@@ -77,6 +79,19 @@ jobs:
         os: ${{ fromJSON(inputs.os) }}
         include:
           - os: plan9
+    runs-on: ${{ matrix.os }}-latest
+    steps:
+      - run: echo ...
+  # An exclude entry with several keys removes only the combinations that have all of them: linux still has a job
+  # with node 20
+  partial-exclude:
+    strategy:
+      matrix:
+        os: [ubuntu, linux]
+        node: [18, 20]
+        exclude:
+          - os: linux
+            node: 18
     runs-on: ${{ matrix.os }}-latest
     steps:
       - run: echo ...

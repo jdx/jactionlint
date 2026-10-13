@@ -12,10 +12,9 @@ import (
 // It is conservative: it returns nothing unless every `${{ }}` of the label is the same plain `matrix.<name>`. A label
 // made of several matrix values (`${{ matrix.os }}-${{ matrix.arch }}`) is not resolved because `exclude` and `include`
 // decide which pairs run and the product of the values has pairs that do not. A value that is not a string without an
-// expression, or a number that GitHub prints differently from the text of the file (`20.10` is `20.1`), is skipped, and
-// so is a value of the matrix that an `exclude` entry which has only that name removes (a value that `include` adds
-// is a new job and stays). When an `exclude` has an expression the values of the row are not known, so only the ones that `include`
-// adds are checked.
+// expression, or a number that GitHub prints differently from the text of the file (`20.10` is `20.1`), is skipped. A
+// value of the row is used only when some job certainly has it, after `exclude` (survivingRowValues); a value that
+// `include` adds always has a job. Wherever an expression makes the effect unknown nothing is reported.
 func concatenatedRunnerLabels(label *String, m *Matrix) []*String {
 	if m == nil || m.Expression != nil || !strings.Contains(label.Value, "${{") {
 		return nil
@@ -55,17 +54,14 @@ func concatenatedRunnerLabels(label *String, m *Matrix) []*String {
 		return nil
 	}
 
-	// A value of the row can be removed by `exclude`, which is applied before `include`: a value which `include` adds
-	// is a new job, so it stays.
-	type candidate struct {
-		v       *RawYAMLString
-		fromRow bool
-	}
-	var values []candidate
-	if row, ok := m.Rows[name]; ok && row.Expression == nil { // the values of a row that is an expression are not known
+	// The values of the row that certainly have a job (see matrix_survival.go), and the ones that `include` adds, which
+	// are a job whatever `exclude` removed.
+	survive := survivingRowValues(m, name)
+	var values []*RawYAMLString
+	if row, ok := m.Rows[name]; ok && row.Expression == nil {
 		for _, v := range row.Values {
-			if s, ok := v.(*RawYAMLString); ok {
-				values = append(values, candidate{s, true})
+			if s, ok := v.(*RawYAMLString); ok && survive[s] {
+				values = append(values, s)
 			}
 		}
 	}
@@ -73,44 +69,16 @@ func concatenatedRunnerLabels(label *String, m *Matrix) []*String {
 		for _, c := range m.Include.Combinations {
 			if a, ok := c.Assigns[name]; ok {
 				if s, ok := a.Value.(*RawYAMLString); ok {
-					values = append(values, candidate{s, false})
+					values = append(values, s)
 				}
-			}
-		}
-	}
-
-	removed := map[string]bool{}
-	rowsUnknown := false // an expression in exclude can remove any value of the row
-	if m.Exclude != nil {
-		if m.Exclude.Expression != nil {
-			rowsUnknown = true
-		}
-		for _, c := range m.Exclude.Combinations {
-			if c.Expression != nil {
-				rowsUnknown = true
-				continue
-			}
-			a, ok := c.Assigns[name]
-			if !ok {
-				continue
-			}
-			s, ok := a.Value.(*RawYAMLString)
-			if !ok {
-				continue // an object or an array never equals a string of the row
-			}
-			if ContainsExpression(s.Value) {
-				rowsUnknown = true
-			} else if len(c.Assigns) == 1 {
-				removed[s.Value] = true
 			}
 		}
 	}
 
 	var labels []*String
 	seen := map[string]bool{}
-	for _, cand := range values {
-		v := cand.v
-		if !isStableMatrixString(v) || (cand.fromRow && (rowsUnknown || removed[v.Value])) {
+	for _, v := range values {
+		if !isStableMatrixString(v) {
 			continue
 		}
 		var b strings.Builder
