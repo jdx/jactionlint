@@ -9,6 +9,36 @@
     "new-owner": true
   },
   "repos": {
+    "example/environments": {
+      "repo": {
+        "archived": false,
+        "default_branch": "main"
+      },
+      "environments": {
+        "release": {
+          "found": true,
+          "required_reviewers": true
+        },
+        "staging": {
+          "found": true
+        },
+        "prodution": {
+          "found": false
+        }
+      }
+    },
+    "example/private-environments": {
+      "repo": {
+        "archived": false,
+        "default_branch": "main",
+        "private": true
+      },
+      "environments": {
+        "production": {
+          "found": false
+        }
+      }
+    },
     "ghost-owner/deploy": {
       "missing": true
     },

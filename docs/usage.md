@@ -884,6 +884,10 @@ jactionlint --online
 - **Offline.** `--online=cache` never uses the network: it answers from the cache whatever the age of the answers, and a lookup with
   nothing cached is skipped with one warning (run once with `--online` to fill the cache). `--online=cache,strict` fails on such a
   lookup. Good for a laptop on a plane or a sandboxed CI job that restores the cache directory.
+- **Environments.** Three other rules use the online checks without being online rules: `untrusted-checkout`, `untrusted-artifact`
+  and `agentic-actions` trust the `environment:` of a job ("its reviewers decide"), and with `--online` they look at the environment
+  (`GET /repos/{owner}/{repo}/environments/{name}`, the repository from `GITHUB_REPOSITORY` or the `origin` remote) and report the job
+  when it has no required reviewers. See [environments without reviewers](checks.md#check-untrusted-checkout-environment).
 - **Few requests.** Every repository, tag and commit is asked for once per run however often it is used, and the checks share what
   they learn. At most six requests are in flight (`concurrency`). The number of requests grows with the number of different
   actions, not steps. Interrupting with Ctrl-C stops the lookups.
