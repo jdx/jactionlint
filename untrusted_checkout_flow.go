@@ -83,9 +83,9 @@ func (rule *RuleUntrustedCheckout) newTaint(s *runscript.Script, base map[string
 
 // newNumberTaint follows the number of the pull request that a comment is on, which `gh pr checkout` takes as a
 // revision.
-func newNumberTaint(s *runscript.Script, base map[string]string) *revTaint {
+func newNumberTaint(s *runscript.Script, base map[string]string, pred func(string) (string, bool)) *revTaint {
 	t := newRevTaint(s, base)
-	t.pred, t.refs = issueNumberValue, false
+	t.pred, t.refs = pred, false
 	return t
 }
 

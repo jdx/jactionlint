@@ -334,8 +334,7 @@ without buildx is the one case that this does not cover.
 
 ## What is not done
 
-These ideas from the zizmor tracker are **not built**: TOCTOU refs
-([#935](https://github.com/zizmorcore/zizmor/issues/935)), shell syntax errors without shellcheck
+These ideas from the zizmor tracker are **not built**: shell syntax errors without shellcheck
 ([#2322](https://github.com/zizmorcore/zizmor/issues/2322)), a rule for a SHA without a version comment
 ([#2316](https://github.com/zizmorcore/zizmor/issues/2316)), immutable releases under `--online`
 ([#766](https://github.com/zizmorcore/zizmor/issues/766)), credentials in the `registries` of `dependabot.yml`
@@ -467,7 +466,9 @@ Not reported: archives that are downloaded, extracted and run, `go install` or `
   commands that only read files counts as running code, while an action that builds the workspace and is not in the short list does
   not. `untrusted-checkout` knows the protection of `actions/checkout` against the code of fork pull requests (zizmor
   [#2134](https://github.com/zizmorcore/zizmor/issues/2134), poutine#450): `allow-unsafe-pr-checkout: true` or an expression is a finding of
-  its own, and a checkout that a guarded version refuses is reported only with the option `pedantic`. Which versions are guarded is a
+  its own, and a checkout that a guarded version refuses is reported only with the option `pedantic`. TOCTOU refs (zizmor
+  [#935](https://github.com/zizmorcore/zizmor/issues/935)) are a message of the same rule: a gate that holds at one moment (an environment, a
+  label, the comment of a maintainer) and a branch as the ref, or a label that survives a push. Which versions are guarded is a
   list of floors and the version comment of a commit, which is not verified (see the checks document). Conditions on `needs` and `steps` are guards, and so is `github.event.pull_request.merged == true` for a checkout of the merged commit.
 - `untrusted-artifact` links the use to the download by the `path` of the artifact, or its `name` (a file in the root of the workspace
   that has another name is not linked), and takes any `=~`, numeric test or checksum as validation.

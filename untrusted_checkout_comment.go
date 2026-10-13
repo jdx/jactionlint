@@ -221,3 +221,26 @@ func neededJobGated(w *Workflow, j *Job, seen map[*Job]bool) bool {
 	}
 	return false
 }
+
+// numberValue reports whether the string reads the number of the pull request that a comment is on, or an input of a
+// dispatch that holds one.
+func (rule *RuleUntrustedCheckout) numberValue(value string) (string, bool) {
+	refs, _ := stringExprRefs(value)
+	return rule.numberRefs(refs)
+}
+
+// numberStr is numberValue for a string of the workflow, which shares its parsed expressions.
+func (rule *RuleUntrustedCheckout) numberStr(s *String) (string, bool) {
+	refs, _ := s.exprRefs()
+	return rule.numberRefs(refs)
+}
+
+func (rule *RuleUntrustedCheckout) numberRefs(refs []exprRef) (string, bool) {
+	if what, ok := issueNumberRefs(refs); ok {
+		return what, true
+	}
+	if len(rule.dispatch) > 0 {
+		return dispatchInputRefs(refs, rule.dispatch)
+	}
+	return "", false
+}

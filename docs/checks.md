@@ -7556,9 +7556,7 @@ A comment run is safe when the person who commented, or the pull request author,
   `environment:` or has a gate step: when it is skipped or fails, so does this job, unless its own `if:` calls `always()`,
   `cancelled()` or `failure()`.
 
-These gates do not protect against a pull request that changes after the person has looked at it: a maintainer comments
-`/test`, the author pushes, and the job checks out the new head, which the author controls (a time-of-check to time-of-use
-race). The rule does not report that yet.
+Some gates hold at one moment only, and are judged for the code that follows them (see "Time of check to time of use" below).
 
 A job or step whose `if:` is false for the privileged events of the workflow, as far as it reads `github.event_name`
 (`if: github.event_name == 'workflow_dispatch'`), is not judged for them, and a job that needs a skipped job is skipped too.
@@ -7585,6 +7583,40 @@ and the callee has `actions/checkout` with `ref: ${{ inputs.ref }}` and then `ma
 What is not known stays out: a reusable workflow or action that no workflow of the project calls (it is published for other
 repositories), a call through a composite action that calls another one, a value from a step output, a matrix or an
 `needs` output, a `uses:` with an expression, and a call made by a composite action.
+
+**Time of check to time of use.** A gate that lets a job start is only as good as the code that runs after it. An `environment:`
+whose reviewers approve, a label that a maintainer adds and a comment of a maintainer hold at one moment. If the job then checks
+out a branch (`github.event.pull_request.head.ref`, `github.head_ref`, `workflow_run.head_branch`, `head_ref` of the actions that
+look up a pull request, `refs/pull/N/head` or `refs/pull/N/merge`, `gh pr checkout`), the author of the pull request pushes after
+the review and the job runs what is there then, not what was reviewed (CodeQL `UntrustedCheckoutTOCTOU`, gato-x `approval_gate`,
+[ActionsTOCTOU](https://github.com/AdnaneKhan/ActionsTOCTOU)). The rule reports it as another message of the same rule:
+
+- **A gate that holds at one moment, and a ref that can change.** The gates that count are an `environment:`, a label condition
+  (`github.event.label.name`, or `github.event.pull_request.labels`), and, in a workflow that only a comment starts, a check of the
+  commenter (`author_association`, `github.actor`, `github.event.comment.user`, a permission check). The author of the pull request
+  is not the commenter. A commit (`head.sha`, `merge_commit_sha`, `head_sha` of a step) is never reported for these gates: the
+  reviewer saw that commit. A gate that checks the author, such as `author_association` of the pull request, the repository of the
+  head, `github.actor` or a permission check in a `pull_request_target` workflow, still holds after a push, and so do conditions on
+  `needs` and `steps`, which are not judged. A step that reads the commit after the checkout (`git rev-parse HEAD`, `git log -1`),
+  compares it with something named sha, revision, commit, expected or verified and stops the job is taken for a check that it is the
+  commit that was reviewed.
+- **A label that lasts.** `if: contains(github.event.pull_request.labels.*.name, 'safe to test')` in a `pull_request_target` workflow
+  that also runs for `opened`, `synchronize` or `reopened` (the default types): the label stays after the review, so each later
+  push runs with it although nobody has looked at it, whatever the ref is, also a commit. It is not reported when the job takes
+  the label away (`gh pr edit --remove-label`, `removeLabel`), or when the condition is tied to the event
+  (`github.event.action == 'labeled'`, `github.event.label.name`).
+- **A dispatch with the number of a pull request** (with the option `pedantic`): `workflow_dispatch` with an input that holds the
+  number of a pull request (`pr`, `pr_number`, `pull`, ...) and no required input for a commit (`sha`, `commit`, `rev` in its name),
+  that checks out `refs/pull/<input>/head` or runs `gh pr checkout <input>`. A maintainer dispatches it after reading the pull request,
+  and a push in between runs unreviewed code (gato-x `dispatch_toctou`). Add a required `sha` input and check it out.
+
+Check out the commit that was reviewed (`github.event.pull_request.head.sha`) instead of the branch.
+
+**A checkout that nothing runs.** The rule needs a later step that runs the code, which keeps it quiet for the workflows that only
+read the pull request (`git diff`). Scorecard (Dangerous-Workflow) and Semgrep report the checkout alone, and it also catches what
+the rule does not recognize as running code. With the option `any-checkout` (on under `profile: pedantic`; `rules:
+{untrusted-checkout: {level: error, any-checkout: true}}` otherwise) the checkout of the code of a pull request in a
+`pull_request_target` or `workflow_run` workflow is reported when no later step visibly runs it and no gate is in front of it.
 
 A step is reported at its checkout when it puts untrusted code in the workspace and a later step in the same job runs it:
 
@@ -7636,7 +7668,7 @@ In a job that sets `permissions: {}` the message does not claim a token, because
 permissions are all `read` it says that the token can only read.
 
 What is **not** reported: a checkout of the base (no `ref`, or `github.event.pull_request.base.*`), a checkout that nothing runs,
-a job with an `environment:` (its reviewers decide), and a job or step whose `if:` reads who or what started the workflow:
+a job with an `environment:` (its reviewers decide) when it checks out a commit, and a job or step whose `if:` reads who or what started the workflow:
 `github.actor`, the author or labels of the pull request, `github.event.pull_request.head.repo`, `github.event.workflow_run.event`,
 `needs` or `steps`. A job or step that only runs for a pull request that was merged (`if: github.event.pull_request.merged == true`,
 alone or in a conjunction) is not reported for a checkout of `github.event.pull_request.merge_commit_sha` or `head.sha`: that is

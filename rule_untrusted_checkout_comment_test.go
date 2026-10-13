@@ -16,9 +16,12 @@ func TestRuleUntrustedCheckoutComment(t *testing.T) {
           ref: refs/pull/${{ github.event.issue.number }}/head # want
       - run: make
 `
-	const checkoutHeadNoWant = `      - uses: actions/checkout@v4
+	// the commit of the pull request: a gate is enough for it (a branch is the subject of TestRuleUntrustedCheckoutToctou)
+	const checkoutHeadNoWant = `      - id: pr
+        uses: xt0rted/pull-request-comment-branch@v3
+      - uses: actions/checkout@v4
         with:
-          ref: refs/pull/${{ github.event.issue.number }}/head
+          ref: ${{ steps.pr.outputs.head_sha }}
       - run: make
 `
 	const maintainers = `contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)`
@@ -60,7 +63,7 @@ func TestRuleUntrustedCheckoutComment(t *testing.T) {
 		{"the command alone is not a gate", nil, icIf("github.event.issue.pull_request && contains(github.event.comment.body, '/test')") + checkoutHead},
 		{"the author of the comment by name", nil, icIf("github.event.comment.user.login == 'maintainer'") + checkoutHeadNoWant},
 		{"the actor", nil, icIf("github.actor == 'maintainer'") + checkoutHeadNoWant},
-		{"an association condition on the step that runs the code", nil, ic + "      - uses: actions/checkout@v4\n        with:\n          ref: refs/pull/${{ github.event.issue.number }}/head\n      - run: make\n        if: " + maintainers + "\n"},
+		{"an association condition on the step that runs the code", nil, ic + "      - id: pr\n        uses: xt0rted/pull-request-comment-branch@v3\n      - uses: actions/checkout@v4\n        with:\n          ref: ${{ steps.pr.outputs.head_sha }}\n      - run: make\n        if: " + maintainers + "\n"},
 		{"an environment", nil, "on: issue_comment\njobs:\n  j:\n    runs-on: ubuntu-latest\n    environment: ci\n    steps:\n" + checkoutHeadNoWant},
 		{"gate: sushichop/action-repository-permission with write", nil, ic + "      - uses: sushichop/action-repository-permission@v3\n        with:\n          required-permission: write\n" + checkoutHeadNoWant},
 		{"gate: sushichop/action-repository-permission with its default (admin)", nil, ic + "      - uses: sushichop/action-repository-permission@v3\n" + checkoutHeadNoWant},
@@ -78,7 +81,7 @@ func TestRuleUntrustedCheckoutComment(t *testing.T) {
 		{"gate: actions-cool/check-user-permission with error-if-missing", nil, ic + "      - uses: actions-cool/check-user-permission@v2\n        with:\n          require: write\n          error-if-missing: true\n" + checkoutHeadNoWant},
 		{"gate: github-script that asks for the permission and throws", nil, ic + "      - uses: actions/github-script@v7\n        with:\n          script: |\n            const { data } = await github.rest.repos.getCollaboratorPermissionLevel({ owner: context.repo.owner, repo: context.repo.repo, username: context.actor });\n            if (!['admin', 'write'].includes(data.permission)) throw new Error('not allowed');\n" + checkoutHeadNoWant},
 		{"gate: github-script that asks for the permission and only reports it", nil, ic + "      - uses: actions/github-script@v7\n        with:\n          script: |\n            const { data } = await github.rest.repos.getCollaboratorPermissionLevel({ owner: context.repo.owner, repo: context.repo.repo, username: context.actor });\n            core.setOutput('permission', data.permission);\n" + checkoutHead},
-		{"gate: after the checkout, before the build", nil, ic + "      - uses: actions/checkout@v4\n        with:\n          ref: refs/pull/${{ github.event.issue.number }}/head\n      - uses: sushichop/action-repository-permission@v3\n        with:\n          required-permission: write\n      - run: make\n"},
+		{"gate: after the checkout, before the build", nil, ic + "      - id: pr\n        uses: xt0rted/pull-request-comment-branch@v3\n      - uses: actions/checkout@v4\n        with:\n          ref: ${{ steps.pr.outputs.head_sha }}\n      - uses: sushichop/action-repository-permission@v3\n        with:\n          required-permission: write\n      - run: make\n"},
 		{"gate: after the build", nil, ic + "      - uses: actions/checkout@v4\n        with:\n          ref: refs/pull/${{ github.event.issue.number }}/head # want\n      - run: make\n      - uses: sushichop/action-repository-permission@v3\n        with:\n          required-permission: write\n"},
 		{"gate: in a job that this one needs", nil, "on: issue_comment\njobs:\n  permission:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: sushichop/action-repository-permission@v3\n        with:\n          required-permission: write\n  j:\n    runs-on: ubuntu-latest\n    needs: permission\n    steps:\n" + checkoutHeadNoWant},
 		{"gate: in a job that this one does not need", nil, "on: issue_comment\njobs:\n  permission:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: sushichop/action-repository-permission@v3\n        with:\n          required-permission: write\n  j:\n    runs-on: ubuntu-latest\n    steps:\n" + checkoutHead},
