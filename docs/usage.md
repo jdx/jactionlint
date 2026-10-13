@@ -973,7 +973,7 @@ it points to and naming the tag in a comment, the format Dependabot and Renovate
 The comment names the most specific version tag that points to the commit (`# v4.2.2`, not `# v4`), as zizmor, pinact and Renovate
 do, because the moving tag `v4` will point somewhere else after the next release. A tag which is not a version (`release`), and
 a commit with two different versions of the same specificity (`v2.0.1` and `v2.0.2`), are named as written. The tag chosen is always
-a refinement of the one written (`v4` can become `v4.2.2`, never `v5.0.0`). A comment that is already there is not rewritten. To keep the
+a refinement of the one written (`v4` can become `v4.2.2`, never `v5.0.0`). A comment that is already there is not rewritten, and neither is the tag refined when the repository has more tags than were read. To keep the
 tag as written (`# v4`), set `short-pin-comment` of the rule:
 
 ```yaml
