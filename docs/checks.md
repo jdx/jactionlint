@@ -1430,6 +1430,7 @@ jobs:
       - uses: nick-fields/retry@v3
         with:
           command: echo ${{ github.head_ref }}
+          timeout_minutes: 5
       # OK: The shell expands the variable
       - run: echo "$TITLE"
 ```
@@ -1459,7 +1460,7 @@ test.yaml:21:29: "github.head_ref" is potentially untrusted. avoid using it dire
    |                             ^~~~~~~~~~~~~~~
 ```
 
-[Playground](https://jactionlint.jdx.dev/#eNpskL1OAzEQhHs/xSiKFCjOFHSuaChACArSR/ez4QyXNbpdH4rCvTvyxcqPODfWar/xzDiwgxeJtKnDbkesxhAPzgDrp/XLo8PycMCH1zZWlgZitRNt1WtHGEdjPkMliVcSTTfQR5YiPRyryBqLrky7aSVK33KkgCKRDlS3AavkQzzYyRbjuLqGfvOYzlmQg7VUNpuetheyWe5YIBe1VWj2/43OIg3P72+vN5fa2ys+CokD+/qr2HrqGrnrSfv9w3B/CvHjtXWnCUjeJTfZZr7CTJ7FcvqWxd8A3hV//w==)
+[Playground](https://jactionlint.jdx.dev/#eNpskL9Ow0AMh/c8hVVVKgw5BsRyEwsDCMFA9yh/XHKQ+FBsB1Ul746cRm2q5paT5e93n32RPARmxayMbYskSYLU+wRg+7x9ffKwPhzgM0ithcMeSdxIOwnSIAxDknzFgo0XZLEboFPi1B7WQkk0bXLrjS0W/OEjBZAa6QHLOsLGPEi9G7UwDJtL6G8q7ZwD02A15lXW4W4WW+SOC0yLuiJW+2vROSTx5eP97Waevb3glZE9UCi/013ApuK7DqXbP/b3pyF+g9T+VAGYO6dq0iyvMMMltBhVsjaQiskeFoZdrcc/W/0PAOmOiEM=)
 
 `--fix` fixes the findings in `run:` scripts of bash and sh when it can show that the fix does the same: the `${{ }}` is in double
 quotes or single quotes, and the script has no here-document, command substitution or comment around it. The expression is replaced
@@ -2695,6 +2696,76 @@ comment.
 So far, jactionlint supports more than 100 popular actions The data set is embedded at [`popular_actions.go`](https://github.com/jdx/jactionlint/blob/main/popular_actions.go)
 and were automatically collected by [a script][generate-popular-actions]. If you want more checks for other actions, please
 make a request [as an issue][issue-form].
+
+<a id="check-action-input-dependencies"></a>
+## Inputs which only work together
+
+Example input:
+
+```yaml
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      # ERROR: run-id and repository are ignored without github-token
+      - uses: actions/download-artifact@v4
+        with:
+          name: build
+          run-id: ${{ github.event.workflow_run.id }}
+          repository: octo/other
+      # ERROR: one of the timeouts is required
+      - uses: nick-fields/retry@v3
+        with:
+          max_attempts: 3
+          command: make
+      # ERROR: only one of the two identities may be given
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/1/locations/global/workloadIdentityPools/p/providers/g
+          credentials_json: '{"type": "service_account"}'
+```
+
+Output:
+
+```
+test.yaml:10:11: input "run-id" of action "actions/download-artifact@v4" needs "github-token", without it the action ignores it and downloads from the current run. add "github-token" [missing-action-input]
+   |
+10 |           run-id: ${{ github.event.workflow_run.id }}
+   |           ^~~~~~~
+test.yaml:11:11: input "repository" of action "actions/download-artifact@v4" needs "github-token", without it the action ignores it and downloads from the current repository. add "github-token" [missing-action-input]
+   |
+11 |           repository: octo/other
+   |           ^~~~~~~~~~~
+test.yaml:13:15: missing input: action "nick-fields/retry@v3" needs "timeout_minutes" or "timeout_seconds", the action fails with "Must specify either timeout_minutes or timeout_seconds inputs". give one of them [missing-action-input]
+   |
+13 |       - uses: nick-fields/retry@v3
+   |               ^~~~~~~~~~~~~~~~~~~~
+test.yaml:21:11: inputs "workload_identity_provider" and "credentials_json" of action "google-github-actions/auth@v2" exclude each other, the action fails with "must specify exactly one of". give only one of "workload_identity_provider" and "credentials_json" [conflicting-action-inputs]
+   |
+21 |           credentials_json: '{"type": "service_account"}'
+   |           ^~~~~~~~~~~~~~~~~
+```
+
+[Playground](https://jactionlint.jdx.dev/#eNp0kc/O2yAQxO/fU6ysSjkR1KYnTrn21jewMGxsEswidrFrRXn3yvnzyYqUE4KZYX8MlAzkysPXmTo2XwCCLOsKUGpiteq1q0mqinbV7hILZn64ABRURjZgnQRKrD3NKZL1yhYJJ+vkOP1+WgHmIIP53gEkO6KBroboN6elJhW8gR/XK/RBhtrtccIk+5nK5RRpbktN++DhdtumMBMHobIYICekSQYsb5QpuIs6BYyedUEpy3E6fKQb7b/WiuCYhQ0cNoqjcbTJGxjtBd9G9ER9RPUAV69abJXhOP36OGt92lpbGzwmCbK0udAUPBYDudAZnbD+qSM5+7iwj9TZqF+5P8/YX6LIOutXmnW/5S5499nI7ZnX391dG1kyNgYaxjIFh611jmqS5rb7PwDl26jL)
+
+The data set of popular actions knows which inputs exist and which are required, but not that some inputs only work together. A few
+well-known actions have inputs like that, and the mistake is quiet or late: `actions/download-artifact` downloads from the current run
+when `run-id` or `repository` is given without `github-token`, and `nick-fields/retry` fails only when it runs. jactionlint has a table
+for them (`action_input_dependencies.go`, with the source of each entry in a comment), checked for the versions the sources describe:
+
+| Action | Rule | Reported as |
+| --- | --- | --- |
+| `actions/download-artifact` (v4+) | `run-id` and `repository` need `github-token` | `missing-action-input` |
+| `actions/download-artifact` (v4+) | `name` and `artifact-ids` exclude each other | `conflicting-action-inputs` |
+| `nick-fields/retry` | exactly one of `timeout_minutes` and `timeout_seconds` | `missing-action-input`, `conflicting-action-inputs` |
+| `google-github-actions/auth` | exactly one of `workload_identity_provider` and `credentials_json` | `missing-action-input`, `conflicting-action-inputs` |
+| `actions/dependency-review-action` (v4+) | `allow-licenses` and `deny-licenses` exclude each other | `conflicting-action-inputs` |
+
+The version is the major version of the tag, or of the version comment after a commit SHA; a branch and a commit without a comment are
+not judged. A step whose `with:` is an expression, or has an `${{ insert }}` key, is not judged either. A conflict is reported when both
+inputs are written out: two expressions may be empty at run time, which is how a workflow chooses between them. A `run-id` or
+`repository` that is the default expression (`${{ github.run_id }}`) needs no token.
 
 <a id="detect-outdated-popular-actions"></a>
 ## Outdated popular actions detection at `uses:`
@@ -9057,7 +9128,7 @@ way because any caller can pass attacker-controlled text. jactionlint does not l
 
 How the rules treat actions:
 
-- **Applies** to the steps (and the metadata) of an action: `action-syntax`, `adhoc-packages`, `archived-uses`, `artipacked`, `background-step-not-waited`, `checkout-static-credentials`, `command-injection`, `constant-condition`, `context-availability`, `continue-on-error`, `deprecated-action-input`, `deprecated-commands`, `duplicate-key`, `duplicate-step-id`, `environment-file-redirect`, `expired-ignore`, `expression-syntax`, `expression-type`, `fail-fast-action-inputs`, `forbidden-uses`, `github-app`, `if-always-true`, `impostor-commit`, `insecure-commands`, `insecure-ssh-keyscan`, `insecure-url-scheme`, `invalid-env-var-name`, `invalid-function-call`, `invalid-id`, `invalid-ignore-comment`, `invalid-local-action`, `invalid-parallel-step`, `invalid-shell-name`, `invalid-uses`, `invisible-characters`, `known-vulnerable-actions`, `malformed-expression-delimiters`, `max-run-lines`, `merge-key`, `misfeature`, `missing-action-input`, `multiline-plain-run`, `obfuscation`, `outdated-action-runner`, `output-clobbering`, `pipeline-without-pipefail`, `pyflakes`, `recursive-alias`, `ref-confusion`, `ref-version-mismatch`, `repojacking`, `require-expression-wrapping`, `self-repository`, `shellcheck`, `stale-action-refs`, `superfluous-actions`, `template-injection`, `typosquat-uses`, `undefined-function`, `undefined-property`, `unknown-action-input`, `unlocked-install`, `unpinned-images`, `unpinned-tools`, `unpinned-uses`, `unsound-contains`, `unsound-prefix-match`, `unsound-ternary`, `unused-anchor`, `unused-ignore`, `unverified-download`, `use-trusted-publishing`, `yaml-syntax`.
+- **Applies** to the steps (and the metadata) of an action: `action-syntax`, `adhoc-packages`, `archived-uses`, `artipacked`, `background-step-not-waited`, `checkout-static-credentials`, `command-injection`, `conflicting-action-inputs`, `constant-condition`, `context-availability`, `continue-on-error`, `deprecated-action-input`, `deprecated-commands`, `duplicate-key`, `duplicate-step-id`, `environment-file-redirect`, `expired-ignore`, `expression-syntax`, `expression-type`, `fail-fast-action-inputs`, `forbidden-uses`, `github-app`, `if-always-true`, `impostor-commit`, `insecure-commands`, `insecure-ssh-keyscan`, `insecure-url-scheme`, `invalid-env-var-name`, `invalid-function-call`, `invalid-id`, `invalid-ignore-comment`, `invalid-local-action`, `invalid-parallel-step`, `invalid-shell-name`, `invalid-uses`, `invisible-characters`, `known-vulnerable-actions`, `malformed-expression-delimiters`, `max-run-lines`, `merge-key`, `misfeature`, `missing-action-input`, `multiline-plain-run`, `obfuscation`, `outdated-action-runner`, `output-clobbering`, `pipeline-without-pipefail`, `pyflakes`, `recursive-alias`, `ref-confusion`, `ref-version-mismatch`, `repojacking`, `require-expression-wrapping`, `self-repository`, `shellcheck`, `stale-action-refs`, `superfluous-actions`, `template-injection`, `typosquat-uses`, `undefined-function`, `undefined-property`, `unknown-action-input`, `unlocked-install`, `unpinned-images`, `unpinned-tools`, `unpinned-uses`, `unsound-contains`, `unsound-prefix-match`, `unsound-ternary`, `unused-anchor`, `unused-ignore`, `unverified-download`, `use-trusted-publishing`, `yaml-syntax`.
 - **Caller-dependent**: `agentic-actions`, `bot-conditions`, `cache-poisoning`, `github-env` (its findings about untrusted input do not depend on the caller), `untrusted-artifact` and `untrusted-checkout`.
 - **Not applicable** because an action does not have what the rule checks, or because only the calling job can decide (`unused-baseline-entry` is about the baseline file, not about a workflow or an action): `anonymous-definition`, `concurrency-cancels-prs`, `concurrency-cancels-release`, `concurrency-limits`, `conflicting-runner-labels`, `cron-too-frequent`, `cyclic-job-needs`, `dangerous-triggers`, `dependabot-cooldown`, `dependabot-execution`, `dependabot-missing-actions-update`, `dependabot-syntax`, `deprecated-runner-label`, `duplicate-job-id`, `duplicate-job-needs`, `duplicate-triggers`, `event-name-never-received`, `excessive-permissions`, `gate-job-skipped-on-failure`, `gh-without-token`, `hardcoded-container-credentials`, `insufficient-permissions`, `invalid-activity-type`, `invalid-cron`, `invalid-event-config`, `invalid-event-filter`, `invalid-glob`, `invalid-label-pattern`, `invalid-local-workflow`, `invalid-permissions`, `invalid-timezone`, `invalid-workflow-call`, `invalid-workflow-call-input`, `invalid-workflow-dispatch-input`, `local-action-checkout`, `matrix-duplicate-value`, `matrix-invalid-exclude`, `missing-permissions`, `missing-timeout`, `missing-workflow-input`, `missing-workflow-secret`, `mutable-runner-label`, `overprovisioned-secrets`, `require-shell`, `required-actions`, `secrets-inherit`, `secrets-outside-env`, `self-hosted-runner`, `timeout-too-long`, `ubuntu-slim-limits`, `undefined-job-needs`, `undocumented-permissions`, `unknown-event`, `unknown-runner-label`, `unknown-workflow-input`, `unknown-workflow-secret`, `unredacted-secrets`, `unused-baseline-entry`, `unused-job-output`, `unused-needs`, `unused-workflow-input`, `workflow-call-permissions`, `workflow-input-type`, `workflow-run-names`, `workflow-secret-scope`, `workflow-syntax`.
 
