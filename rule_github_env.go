@@ -368,16 +368,19 @@ func (rule *RuleGitHubEnv) judgeExprList(exprs []string, depth int) data {
 // judgeExpr judges one expression. In the metadata of an action, `inputs.*` is whatever the caller passes, and a
 // workflow can pass the title of an issue: it is an outsider's input, whichever event runs the action.
 func (rule *RuleGitHubEnv) judgeExpr(e string) data {
-	if rule.multilineOnly && !exprMayHaveNewline(e) {
+	var d data
+	switch {
+	case rule.wf != nil && rule.wf.Action != nil && !rule.skipInputs && exprReadsContext(e, "inputs"):
+		d = data{kind: dataUntrusted, input: e}
+	case rule.mintedByJob(e):
+	default:
+		d = judgeExprs([]string{e})
+	}
+	// only an untrusted value is asked whether it can hold a line break
+	if rule.multilineOnly && d.kind == dataUntrusted && !exprMayHaveNewline(e) {
 		return data{}
 	}
-	if rule.wf != nil && rule.wf.Action != nil && !rule.skipInputs && exprReadsContext(e, "inputs") {
-		return data{kind: dataUntrusted, input: e}
-	}
-	if rule.mintedByJob(e) {
-		return data{}
-	}
-	return judgeExprs([]string{e})
+	return d
 }
 
 // mintedTokenActions are actions that create a token of a GitHub App; the token is not data of the event.
