@@ -190,3 +190,38 @@ func TestNoFixSites(t *testing.T) {
 		})
 	}
 }
+
+// The reason of a script that no fix is written for names what stands in the way, not only that it is not bash or sh.
+func TestNoFixShellReasons(t *testing.T) {
+	const tail = "      - run: echo \"${{ github.event.issue.title }}\"\n"
+	tests := []struct {
+		name, job, want, notWant string
+	}{
+		{"pwsh", "    runs-on: ubuntu-latest\n    defaults:\n      run:\n        shell: pwsh\n    steps:\n", `with the shell "pwsh"`, ""},
+		{"windows runner", "    runs-on: windows-latest\n    steps:\n", "runs on Windows", "another shell"},
+		{"self-hosted runner", "    runs-on: [self-hosted, gpu]\n    steps:\n", "self-hosted or custom runner", "Windows"},
+		{"runs-on expression", "    runs-on: ${{ matrix.os }}\n    strategy:\n      matrix:\n        os: [ubuntu-latest]\n    steps:\n", "chosen by an expression", "Windows"},
+		{"shell expression", "    runs-on: ubuntu-latest\n    defaults:\n      run:\n        shell: ${{ vars.SHELL }}\n    steps:\n", "set by an expression", ""},
+		{"bash template", "    runs-on: ubuntu-latest\n    defaults:\n      run:\n        shell: bash -c \"{0}\"\n    steps:\n", "options or a template that the fix does not understand", "bash and sh only"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			src := "on: issues\npermissions: {}\njobs:\n  a:\n" + tc.job + tail
+			l, err := NewLinter(&bytes.Buffer{}, &LinterOptions{Config: mustParseConfig(t, "profile: pedantic\n")})
+			if err != nil {
+				t.Fatal(err)
+			}
+			errs, err := l.Lint("w.yaml", []byte(src), nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			e := findNoFix(errs, "template-injection")
+			if e == nil || e.NoFix == nil {
+				t.Fatalf("no reason: %+v", errs)
+			}
+			if e.NoFix.Code != NoFixUnsupportedShape || !strings.Contains(e.NoFix.Reason, tc.want) || (tc.notWant != "" && strings.Contains(e.NoFix.Reason, tc.notWant)) {
+				t.Errorf("reason %q: want %q, not %q", e.NoFix.Reason, tc.want, tc.notWant)
+			}
+		})
+	}
+}

@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -958,7 +959,10 @@ func envNameFor(path []string) string {
 // posixShell reports whether the run: script of the step is run by bash or sh, which is what the
 // fixes know how to write. It uses the shell of the step, then the defaults of the job and the
 // workflow, then the shell of the runner, which it knows for the usual runner labels only.
-func posixShell(wf *Workflow, job *Job, run *ExecRun) bool {
+//
+// When it is not, the second result says what stands in the way, so that a finding says why the script is not fixed
+// and not only that it is not bash or sh.
+func posixShell(wf *Workflow, job *Job, run *ExecRun) (bool, string) {
 	var shell *String
 	switch {
 	case run.Shell != nil:
@@ -969,25 +973,49 @@ func posixShell(wf *Workflow, job *Job, run *ExecRun) bool {
 		shell = wf.Defaults.Run.Shell
 	}
 	if shell != nil {
-		return posixShellTemplate(shell.Value)
+		if posixShellTemplate(shell.Value) {
+			return true, ""
+		}
+		words := strings.Fields(shell.Value)
+		switch {
+		case shell.ContainsExpression():
+			return false, "the shell is set by an expression, so it is not known which shell runs the script"
+		case len(words) > 0 && posixShellName(words[0]):
+			return false, "the shell " + strconv.Quote(shell.Value) + " is bash or sh with options or a template that the fix does not understand"
+		}
+		return false, "the script runs with the shell " + strconv.Quote(shell.Value) + ", and the fix handles bash and sh only"
 	}
-	if job == nil || job.RunsOn == nil || job.RunsOn.LabelsExpr != nil || len(job.RunsOn.Labels) == 0 {
-		return false
+	if job != nil && job.RunsOn != nil && job.RunsOn.LabelsExpr != nil {
+		return false, "the shell of the script is not known: the runner is chosen by an expression, so the default shell is not known"
+	}
+	if job == nil || job.RunsOn == nil || len(job.RunsOn.Labels) == 0 {
+		return false, "the shell of the script is not known: the runner is not written as a list of labels, so the default shell is not known"
 	}
 	unix := false
 	for _, l := range job.RunsOn.Labels {
 		if l.ContainsExpression() {
-			return false
+			return false, "the shell of the script is not known: the runner is chosen by an expression, so the default shell is not known"
 		}
 		v := strings.ToLower(l.Value)
 		if strings.Contains(v, "windows") {
-			return false
+			return false, "the script runs on Windows, whose default shell is PowerShell, and the fix handles bash and sh only"
 		}
 		if strings.Contains(v, "ubuntu") || strings.Contains(v, "linux") || strings.Contains(v, "macos") {
 			unix = true
 		}
 	}
-	return unix
+	if !unix {
+		return false, "the shell of the script is not known: the runner label (a self-hosted or custom runner) does not say which operating system it is, so the default shell is not known"
+	}
+	return true, ""
+}
+
+func posixShellName(word string) bool {
+	switch strings.ToLower(path.Base(word)) {
+	case "bash", "sh", "dash", "zsh":
+		return true
+	}
+	return false
 }
 
 // posixShellTemplate reports whether the value of "shell:" runs the script with a POSIX shell the fixes
@@ -1075,9 +1103,9 @@ func planTemplateInjectionFixesInto(in tiFixInput, plan *tiFixPlan) {
 			plan.NoFix[start] = &NoFix{Code: code, Reason: reason}
 		}
 	}
-	if !posixShell(in.ctx.wf, in.ctx.job, in.run) {
+	if ok, reason := posixShell(in.ctx.wf, in.ctx.job, in.run); !ok {
 		for _, sp := range in.idx.scanExprs(in.str) {
-			why(sp.Start, NoFixUnsupportedShape, "the fix handles scripts of bash and sh only, and this one runs with another shell. read the value from an environment variable by hand")
+			why(sp.Start, NoFixUnsupportedShape, reason+". read the value from an environment variable by hand")
 		}
 		return
 	}
