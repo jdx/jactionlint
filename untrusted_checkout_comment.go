@@ -26,18 +26,7 @@ var issueNumberContexts = [][]string{
 	{"github", "event", "issue", "pull_request", "url"},
 }
 
-// issueNumberValue reports whether the string reads one of the contexts that name the pull request that was commented on.
-func issueNumberValue(value string) (string, bool) {
-	refs, _ := stringExprRefs(value)
-	return issueNumberRefs(refs)
-}
-
-// issueNumberString is issueNumberValue for a string of the workflow, which shares its parsed expressions.
-func issueNumberString(s *String) (string, bool) {
-	refs, _ := s.exprRefs()
-	return issueNumberRefs(refs)
-}
-
+// issueNumberRefs reports whether the references read one of the contexts that name the pull request that was commented on.
 func issueNumberRefs(refs []exprRef) (string, bool) {
 	if r, ok := refsMatchAny(refs, issueNumberContexts); ok {
 		return r.String(), true
