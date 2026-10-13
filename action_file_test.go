@@ -462,7 +462,8 @@ func TestActionInputDefaultCannotReadInputs(t *testing.T) {
 	src := "name: x\ndescription: x\ninputs:\n  a:\n    description: a\n    default: ${{ inputs.b }}\n  b:\n    description: b\nruns:\n  using: node20\n  main: index.js\n"
 	var found bool
 	for _, e := range lintActionSource(t, src) {
-		if strings.Contains(e.Message, `"b" is not defined`) {
+		// The runner evaluates a default with the contexts github, strategy, matrix, job and runner only
+		if strings.Contains(e.Message, `context "inputs" is not allowed here`) {
 			found = true
 		}
 	}
