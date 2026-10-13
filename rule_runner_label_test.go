@@ -149,14 +149,16 @@ func TestRuleRunnerLabelCheckLabels(t *testing.T) {
 			known:  []string{"foo", "bar"},
 		},
 		{
-			what:   "cannot check label: prefix",
+			what:   "check label made of a prefix and a matrix value",
 			labels: []string{"foo-${{matrix.os}}"},
 			matrix: []string{"ubuntu-latest"},
+			errs:   []string{`label "foo-ubuntu-latest" is unknown`},
 		},
 		{
-			what:   "cannot check label: siffux",
+			what:   "check label made of a matrix value and a suffix",
 			labels: []string{"${{matrix.os}}-bar"},
 			matrix: []string{"ubuntu-latest"},
+			errs:   []string{`label "ubuntu-latest-bar" is unknown`},
 		},
 		{
 			what:   "cannot check label: not a matrix",

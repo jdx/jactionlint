@@ -2168,6 +2168,11 @@ to run the job. So specifying proper labels at `runs-on:` is important.
 
 jactionlint checks proper label is used at `runs-on:` configuration. Even if an expression is used in the section like
 `runs-on: ${{ matrix.foo }}`, jactionlint parses the expression and resolves the possible values, then validates the values.
+A label that is a matrix value written together with text (`runs-on: ${{ matrix.os }}-latest`, `ubuntu-${{ matrix.version }}`)
+is resolved the same way: with `os: [macos, linux]` the labels are `macos-latest` and `linux-latest`, and the second one is
+reported at `linux` in the matrix. It is resolved only when the label has one matrix name (`${{ matrix.os }}-${{ matrix.arch }}` is
+not, because `exclude` and `include` decide which pairs run), when the values are strings (a number such as `20.10`, which GitHub
+prints as `20.1`, is skipped), and a value removed by an `exclude` entry which has only that name is skipped.
 
 When you define some custom labels for your self-hosted runner, jactionlint does not know the labels. Please set the label
 names in [`jactionlint.yaml` configuration file](config.md) to let jactionlint know them. A job that has the label `self-hosted`

@@ -1,0 +1,43 @@
+on: push
+
+jobs:
+  # The label is made of the value of the matrix and text
+  suffix:
+    strategy:
+      matrix:
+        os: [macos, linux, windows]
+    runs-on: ${{ matrix.os }}-latest
+    steps:
+      - run: echo ...
+  prefix:
+    strategy:
+      matrix:
+        version: ['24.04', '18.04']
+    runs-on: ubuntu-${{ matrix.version }}
+    steps:
+      - run: echo ...
+  both-sides:
+    strategy:
+      matrix:
+        os: [ubuntu]
+        include:
+          - os: freebsd
+    runs-on: ${{ matrix.os }}-latest
+    steps:
+      - run: echo ...
+  # A number is a part of the label when GitHub prints it as it is written
+  number:
+    strategy:
+      matrix:
+        version: [22.04, 21.10]
+    runs-on: ubuntu-${{ matrix.version }}
+    steps:
+      - run: echo ...
+  # A label next to others is checked too
+  with-other-labels:
+    strategy:
+      matrix:
+        os: [macos, linux]
+    runs-on: ['${{ matrix.os }}-latest', arm64]
+    steps:
+      - run: echo ...

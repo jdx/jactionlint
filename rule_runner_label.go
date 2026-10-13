@@ -361,7 +361,7 @@ func (rule *RuleRunnerLabel) tryToGetLabelsInMatrix(label *String, m *Matrix) []
 
 	// Only when the form of "${{...}}", evaluate the expression
 	if !label.IsExpressionAssigned() {
-		return nil
+		return concatenatedRunnerLabels(label, m)
 	}
 
 	l := strings.TrimSpace(label.Value)
