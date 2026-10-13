@@ -2128,6 +2128,12 @@ test.yaml:4:30: label "windows-latest" conflicts with label "ubuntu-latest" defi
 In most cases, this is a misunderstanding that a matrix combination can be specified at `runs-on:` directly. It should use
 `matrix:` and expand it with `${{ }}` at `runs-on:` to run the workflow on multiple runners.
 
+The `-latest` labels follow the image GitHub points them to, so `windows-latest` agrees with `windows-2025` and
+`windows-2025-vs2026` (the same image since 2026-06-15) and conflicts with `windows-2022`, and `macos-latest` agrees with `macos-26`
+and conflicts with `macos-15`. GitHub moves `ubuntu-latest` from Ubuntu 24.04 to 26.04 in a rollout from 2026-10-19 to
+2026-11-19, so while it runs `ubuntu-latest` agrees with both `ubuntu-24.04` and `ubuntu-26.04`. The table is in one place in
+`rule_runner_label.go`, with the date it was last checked.
+
 <a id="check-action-format"></a>
 ## Action format in `uses:`
 
@@ -7666,7 +7672,7 @@ jobs:
 Output:
 <!-- Skip update output -->
 ```
-test.yaml:4:14: warning: runner label "ubuntu-latest" is an alias that GitHub moves to newer images, so the job can break without a change in this repository. use a fixed label such as "ubuntu-24.04", which is the same image today [mutable-runner-label]
+test.yaml:4:14: warning: runner label "ubuntu-latest" is an alias that GitHub moves to newer images, so the job can break without a change in this repository. use a fixed label such as "ubuntu-24.04", the image it points to until GitHub moves it to "ubuntu-26.04" in a rollout from 2026-10-19 to 2026-11-19 [mutable-runner-label]
   |
 4 |     runs-on: ubuntu-latest
   |              ^~~~~~~~~~~~~
@@ -7684,7 +7690,9 @@ rules:
 The rule `mutable-runner-label` (in the `pedantic` profile, as a warning) reports the labels of GitHub-hosted runners that GitHub
 moves to a newer image over time: `ubuntu-latest`, `windows-latest`, `macos-latest` and their sized variants. A job on
 such a label can start to fail on the day GitHub switches the image, without any change in the repository. The message names the fixed label that the
-alias is today, according to the label table of jactionlint.
+alias is today, according to the label table of jactionlint (`windows-latest` is `windows-2025` and `macos-latest` is
+`macos-26`). `ubuntu-latest` is `ubuntu-24.04` until GitHub moves it to `ubuntu-26.04` in a rollout that runs from 2026-10-19 to
+2026-11-19; the message says so, and the [conflicting labels](#check-runner-labels) check accepts both images next to it while the move is announced.
 
 The rule reads `runs-on` and the values of `matrix.<key>` that `runs-on: ${{ matrix.<key> }}` selects. Jobs with `self-hosted` among
 the labels and labels given by other expressions are not reported.
@@ -7697,7 +7705,7 @@ rules:
   mutable-runner-label:
     pin:
       ubuntu-latest: ubuntu-24.04
-      macos-latest: macos-15
+      macos-latest: macos-26
 ```
 
 A label in a matrix is reported but never fixed, because the same value may be compared in an expression of the job.

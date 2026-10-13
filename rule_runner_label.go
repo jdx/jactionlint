@@ -28,10 +28,47 @@ const (
 	compatXcode27XL
 	compatWindows2022
 	compatWindows2025
-	compatWindows2025VS2026
 	compatWindows11Arm
 	compatWindows11VS2026Arm
 )
+
+// Where the moving "-latest" labels point. THIS IS THE ONE PLACE TO UPDATE when GitHub moves a label: change the images
+// here and the pins in latestRunnerImages below, then update TestLatestRunnerLabelsArePinned (it records the date the
+// mapping was last checked against the sources). Nothing else in the code names the image behind a "-latest" label.
+//
+// Sources, last verified 2026-10-13:
+//   - windows-latest: Windows Server 2025, since 2025-09-30
+//     https://github.blog/changelog/2025-07-31-github-actions-new-apis-and-windows-latest-migration-notice
+//     windows-2025 and windows-2025-vs2026 are the same image since 2026-06-15 (Visual Studio 2026):
+//     https://github.com/actions/runner-images/issues/14017 and the label table of
+//     https://github.com/actions/runner-images#available-images
+//   - macos-latest (and -large, -xlarge): macOS 26, since 2026-07-15: https://github.com/actions/runner-images/issues/14167
+//   - ubuntu-latest: Ubuntu 24.04 today. GitHub moves it to Ubuntu 26.04 in a rollout from 2026-10-19 to 2026-11-19
+//     (https://github.com/actions/runner-images/issues/14748). While the rollout runs a job on ubuntu-latest can be on
+//     either image, so both are accepted next to ubuntu-latest. When the rollout is done (on or after 2026-11-19) set
+//     compatUbuntuLatest to compatUbuntu2604, set the pin of "ubuntu" to "ubuntu-26.04" and clear its rollout.
+const (
+	compatUbuntuLatest      = compatUbuntu2404 | compatUbuntu2604
+	compatWindowsLatest     = compatWindows2025
+	compatMacOSLatest       = compatMacOS260
+	compatMacOSLatestLarge  = compatMacOS260L
+	compatMacOSLatestXLarge = compatMacOS260XL
+)
+
+// latestRunnerImage is what the "-latest" labels of one operating system mean for suggestions.
+type latestRunnerImage struct {
+	// pin is the fixed label that is the image behind the "-latest" label of the operating system, without a size suffix.
+	pin string
+	// rollout describes a move of the label that is in progress or announced. It is "" when the label is stable.
+	rollout string
+}
+
+// latestRunnerImages is keyed by the operating system prefix of the label ("ubuntu" for "ubuntu-latest").
+var latestRunnerImages = map[string]latestRunnerImage{
+	"ubuntu":  {pin: "ubuntu-24.04", rollout: "the image it points to until GitHub moves it to \"ubuntu-26.04\" in a rollout from 2026-10-19 to 2026-11-19"},
+	"windows": {pin: "windows-2025"},
+	"macos":   {pin: "macos-26"},
+}
 
 // https://docs.github.com/en/actions/using-github-hosted-runners/about-github-hosted-runners
 var allGitHubHostedRunnerLabels = []string{
@@ -88,19 +125,19 @@ var selfHostedRunnerPresetOtherLabels = []string{
 
 var defaultRunnerOSCompats = map[string]runnerOSCompat{
 	"ubuntu-slim":            compatUbuntu2404,
-	"ubuntu-latest":          compatUbuntu2404,
-	"ubuntu-latest-4-cores":  compatUbuntu2404,
-	"ubuntu-latest-8-cores":  compatUbuntu2404,
-	"ubuntu-latest-16-cores": compatUbuntu2404,
+	"ubuntu-latest":          compatUbuntuLatest,
+	"ubuntu-latest-4-cores":  compatUbuntuLatest,
+	"ubuntu-latest-8-cores":  compatUbuntuLatest,
+	"ubuntu-latest-16-cores": compatUbuntuLatest,
 	"ubuntu-26.04":           compatUbuntu2604,
 	"ubuntu-26.04-arm":       compatUbuntu2604,
 	"ubuntu-24.04":           compatUbuntu2404,
 	"ubuntu-24.04-arm":       compatUbuntu2404,
 	"ubuntu-22.04":           compatUbuntu2204,
 	"ubuntu-22.04-arm":       compatUbuntu2204,
-	"macos-latest-xlarge":    compatMacOS150XL,
-	"macos-latest-large":     compatMacOS150L,
-	"macos-latest":           compatMacOS150,
+	"macos-latest-xlarge":    compatMacOSLatestXLarge,
+	"macos-latest-large":     compatMacOSLatestLarge,
+	"macos-latest":           compatMacOSLatest,
 	"macos-26-intel":         compatMacOS260Intel,
 	"macos-26-xlarge":        compatMacOS260XL,
 	"macos-26-large":         compatMacOS260L,
@@ -114,16 +151,16 @@ var defaultRunnerOSCompats = map[string]runnerOSCompat{
 	"macos-14":               compatMacOS140,
 	"xcode-27":               compatXcode27,
 	"xcode-27-xlarge":        compatXcode27XL,
-	"windows-latest":         compatWindows2022,
-	"windows-latest-8-cores": compatWindows2022,
+	"windows-latest":         compatWindowsLatest,
+	"windows-latest-8-cores": compatWindowsLatest,
 	"windows-2025":           compatWindows2025,
-	"windows-2025-vs2026":    compatWindows2025VS2026,
+	"windows-2025-vs2026":    compatWindows2025, // the same image as windows-2025 since 2026-06-15
 	"windows-2022":           compatWindows2022,
 	"windows-11-arm":         compatWindows11Arm,
 	"windows-11-vs2026-arm":  compatWindows11VS2026Arm,
 	"linux":                  compatUbuntu2604 | compatUbuntu2404 | compatUbuntu2204, // Note: "linux" does not always indicate Ubuntu. It might be Fedora or Arch or ...
 	"macos":                  compatMacOS260 | compatMacOS260Intel | compatMacOS260L | compatMacOS260XL | compatXcode27 | compatXcode27XL | compatMacOS150 | compatMacOS150Intel | compatMacOS150L | compatMacOS150XL | compatMacOS140 | compatMacOS140L | compatMacOS140XL,
-	"windows":                compatWindows2025VS2026 | compatWindows2025 | compatWindows2022 | compatWindows11Arm | compatWindows11VS2026Arm,
+	"windows":                compatWindows2025 | compatWindows2022 | compatWindows11Arm | compatWindows11VS2026Arm,
 }
 
 // RuleRunnerLabel is a rule to check runner label like "ubuntu-latest". There are two types of

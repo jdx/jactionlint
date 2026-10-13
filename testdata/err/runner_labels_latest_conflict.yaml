@@ -1,0 +1,14 @@
+on: push
+jobs:
+  windows:
+    runs-on: [windows-latest, windows-2022]
+    steps:
+      - run: echo ...
+  macos:
+    runs-on: [macos-latest, macos-15]
+    steps:
+      - run: echo ...
+  ubuntu:
+    runs-on: [ubuntu-latest, ubuntu-22.04]
+    steps:
+      - run: echo ...

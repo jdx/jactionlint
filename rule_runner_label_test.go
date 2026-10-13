@@ -44,11 +44,11 @@ func TestRuleRunnerLabelCheckLabels(t *testing.T) {
 		},
 		{
 			what:   "self-hosted all macOS runner labels",
-			labels: []string{"self-hosted", "macOS", "macOS-latest", "macOS-15"},
+			labels: []string{"self-hosted", "macOS", "macOS-latest", "macOS-26"},
 		},
 		{
 			what:   "self-hosted all Windows runner labels",
-			labels: []string{"self-hosted", "windows", "windows-latest", "windows-2022"},
+			labels: []string{"self-hosted", "windows", "windows-latest", "windows-2025"},
 		},
 		{
 			what:   "self-hosted Linux runner in upper case",
@@ -80,11 +80,31 @@ func TestRuleRunnerLabelCheckLabels(t *testing.T) {
 		},
 		{
 			what:   "multiple labels for GH-hosted Windows runner",
-			labels: []string{"windows-latest", "windows-2022"},
+			labels: []string{"windows-latest", "windows-2025"},
+		},
+		{
+			what:   "windows-latest and windows-2025-vs2026 are the same image",
+			labels: []string{"windows-latest", "windows-2025-vs2026"},
+		},
+		{
+			what:   "windows-2025 and windows-2025-vs2026 are the same image",
+			labels: []string{"windows-2025", "windows-2025-vs2026"},
 		},
 		{
 			what:   "multiple labels for GH-hosted macOS runner",
-			labels: []string{"macos-latest", "macos-15"},
+			labels: []string{"macos-latest", "macos-26"},
+		},
+		{
+			what:   "macos-latest-large is the Intel image of macos-26",
+			labels: []string{"macos-latest-large", "macos-26-large"},
+		},
+		{
+			what:   "macos-latest-xlarge is the xlarge image of macos-26",
+			labels: []string{"macos-latest-xlarge", "macos-26-xlarge"},
+		},
+		{
+			what:   "ubuntu-latest moves to 26.04 in a rollout, so both images are accepted next to it",
+			labels: []string{"ubuntu-latest", "ubuntu-26.04"},
 		},
 		{
 			what:   "user-defined labels",
@@ -267,6 +287,31 @@ func TestRuleRunnerLabelCheckLabels(t *testing.T) {
 				`label "windows-latest" conflicts with label "macos-latest"`,
 				`label "macos-latest" conflicts with label "windows-latest"`,
 			},
+		},
+		{
+			what:   "windows-latest is not Windows Server 2022 any more",
+			labels: []string{"windows-latest", "windows-2022"},
+			errs:   []string{`label "windows-2022" conflicts with label "windows-latest"`},
+		},
+		{
+			what:   "windows-latest-8-cores is not Windows Server 2022 any more",
+			labels: []string{"windows-latest-8-cores", "windows-2022"},
+			errs:   []string{`label "windows-2022" conflicts with label "windows-latest-8-cores"`},
+		},
+		{
+			what:   "macos-latest is not macOS 15 any more",
+			labels: []string{"macos-latest", "macos-15"},
+			errs:   []string{`label "macos-15" conflicts with label "macos-latest"`},
+		},
+		{
+			what:   "macos-latest-large is not macOS 15 any more",
+			labels: []string{"macos-latest-large", "macos-15-large"},
+			errs:   []string{`label "macos-15-large" conflicts with label "macos-latest-large"`},
+		},
+		{
+			what:   "macos-latest is the arm64 image, macos-latest-large is Intel",
+			labels: []string{"macos-latest", "macos-latest-large"},
+			errs:   []string{`label "macos-latest-large" conflicts with label "macos-latest"`},
 		},
 		{
 			what:   "Linux labels version conflict",
