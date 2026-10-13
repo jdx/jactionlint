@@ -116,11 +116,8 @@ func (rule *RuleUseTrustedPublishing) checkRun(step *Step, run *ExecRun) {
 		}
 		info := trustedPublishing[eco]
 		cred := rule.credentialVar(step, eco)
-		for _, f := range c.Flags {
-			// -p is the password of twine, and the package of cargo (`cargo publish -p crate`)
-			if cred == "" && f.Value != nil && slices.Contains([]string{"--token", "--password", "--api-key", "-p"}, f.Name) && c.Tool != "gh" && (f.Name != "-p" || eco == "pypi") && !rule.exchangedToken(f.Value.Exprs) {
-				cred = f.Name
-			}
+		if cred == "" {
+			cred = rule.credentialFlag(c, eco)
 		}
 		if granted && cred == "" {
 			continue
@@ -128,6 +125,18 @@ func (rule *RuleUseTrustedPublishing) checkRun(step *Step, run *ExecRun) {
 		start, end := commandRange(s, origin, c)
 		rule.errorIDAt("use-trusted-publishing", start, trustedPublishingMessage(cmd, info.registry, info.instead, cred, granted)).endAt(end)
 	}
+}
+
+// credentialFlag returns the name of the option of the publish command that carries a long-lived credential, or "".
+// `-p` is the password of twine, and the package of cargo (`cargo publish -p crate`), so it counts for PyPI only. An
+// option whose value is the token of an exchange of the OIDC token is not one.
+func (rule *RuleUseTrustedPublishing) credentialFlag(c *runscript.Command, eco string) string {
+	for _, f := range c.Flags {
+		if f.Value != nil && slices.Contains([]string{"--token", "--password", "--api-key", "-p"}, f.Name) && c.Tool != "gh" && (f.Name != "-p" || eco == "pypi") && !rule.exchangedToken(f.Value.Exprs) {
+			return f.Name
+		}
+	}
+	return ""
 }
 
 // npmRegistrySettings are the keys of the configuration of npm, pnpm, aube and yarn that choose the registry.

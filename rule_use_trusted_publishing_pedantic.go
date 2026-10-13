@@ -1,8 +1,10 @@
 package jactionlint
 
 import (
+	"regexp"
 	"slices"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/jdx/jactionlint/v2/internal/runscript"
 )
@@ -58,6 +60,9 @@ var oidcBuildActions = map[string]string{
 // publisherTools are the packages that a publishing job installs to publish, which is not a build.
 var publisherTools = []string{"twine", "npm", "pnpm", "yarn", "bun", "corepack", "uv", "pip", "pipx", "poetry", "hatch", "flit", "pdm", "pkginfo", "packaging", "keyring", "id"}
 
+// psBuildRe finds the build and install commands of a PowerShell script (the analyzer reads bash and sh only).
+var psBuildRe = regexp.MustCompile(`(?i)\b(?:(?:npm|pnpm|yarn|bun)\s+(?:ci|install|i|add|run|run-script|test|build|pack|rebuild)|yarn\s*$|pip3?\s+install|python3?\s+-m\s+build|python3?\s+setup\.py|uv\s+(?:build|sync)|poetry\s+(?:build|install)|cargo\s+(?:build|test|check|package)|dotnet\s+(?:build|pack|restore|test)|msbuild|nuget\s+restore|gem\s+build|bundle\s+install)\b`)
+
 func (rule *RuleUseTrustedPublishing) checkJobPedantic(job *Job) {
 	if !rule.pedantic("use-trusted-publishing") || job == nil || !rule.grantsIDToken() || rule.permissionsComeFromCaller() {
 		return
@@ -65,7 +70,11 @@ func (rule *RuleUseTrustedPublishing) checkJobPedantic(job *Job) {
 	checkedOut := false
 	build := "" // the first build step before the publish
 	reportedBuild, reportedEnv := false, false
-	for _, step := range job.Steps {
+	publish := func(what string, pos *Pos, eco string, buildsItself bool) {
+		rule.reportOIDCPublish(what, pos, eco, buildsItself, job, checkedOut, build, &reportedBuild, &reportedEnv)
+	}
+	// a `parallel:` group is flattened: its steps run in the same job
+	for _, step := range flattenSteps(job.Steps) {
 		switch e := step.Exec.(type) {
 		case *ExecAction:
 			if e.Uses == nil || e.Uses.ContainsExpression() {
@@ -84,7 +93,7 @@ func (rule *RuleUseTrustedPublishing) checkJobPedantic(job *Job) {
 					continue
 				}
 				rule.attestations(name, e)
-				rule.reportOIDCPublish(e.Uses.Value, e.Uses.Pos, a.eco, a.buildsItself, job, checkedOut, build, &reportedBuild, &reportedEnv)
+				publish(e.Uses.Value, e.Uses.Pos, a.eco, a.buildsItself)
 				continue
 			}
 			if input, ok := oidcBuildActions[name]; ok && build == "" && checkedOut {
@@ -95,8 +104,15 @@ func (rule *RuleUseTrustedPublishing) checkJobPedantic(job *Job) {
 				}
 			}
 		case *ExecRun:
+			if e.Run == nil {
+				continue
+			}
 			s, origin := rule.script(e)
 			if s == nil {
+				// the default shell of the Windows runners is pwsh: its scripts are read line by line, like the default check does
+				if shell := rule.shellName(e); shell == "pwsh" || shell == "powershell" {
+					rule.pedanticPowerShell(step, e, publish, func() bool { return checkedOut && build == "" }, func(label string) { build = label })
+				}
 				continue
 			}
 			for _, c := range s.Commands {
@@ -104,16 +120,54 @@ func (rule *RuleUseTrustedPublishing) checkJobPedantic(job *Job) {
 					if eco == "npm" && rule.npmRegistryIsPrivate(step, s, c) {
 						continue
 					}
-					if rule.credentialVar(step, eco) != "" || c.HasFlag("--token", "--password", "--api-key") {
-						continue // a long-lived credential: the default finding is about that
+					// a long-lived credential: the default finding is about that
+					if rule.credentialVar(step, eco) != "" || rule.credentialFlag(c, eco) != "" {
+						continue
 					}
 					start, _ := commandRange(s, origin, c)
-					rule.reportOIDCPublish(cmd, start, eco, eco == "crates", job, checkedOut, build, &reportedBuild, &reportedEnv)
+					publish(cmd, start, eco, eco == "crates")
 					continue
 				}
 				if build == "" && checkedOut && isBuildCommand(c) {
 					build = commandLabel(c)
 				}
+			}
+		}
+	}
+}
+
+// pedanticPowerShell reads the lines of a PowerShell script: a publish command is reported like the default check
+// finds it, and a line with a build or install command sets the build. wantBuild says whether a build is still
+// being looked for.
+func (rule *RuleUseTrustedPublishing) pedanticPowerShell(step *Step, run *ExecRun, publish func(what string, pos *Pos, eco string, buildsItself bool), wantBuild func() bool, setBuild func(label string)) {
+	origin := run.Run.scriptOrigin()
+	for i, line := range strings.Split(strings.ReplaceAll(run.Run.Value, "\r\n", "\n"), "\n") {
+		code := line
+		if j := strings.Index(code, "#"); j >= 0 {
+			code = code[:j]
+		}
+		if strings.TrimSpace(code) == "" {
+			continue
+		}
+		published := false
+		if !powerShellNoPublishRe.MatchString(code) {
+			for _, p := range powerShellPublishes {
+				loc := p.re.FindStringIndex(code)
+				if loc == nil {
+					continue
+				}
+				if rule.credentialVar(step, p.eco) != "" || powerShellTokenRe.MatchString(code) && !rule.exchangedToken(expressionsOf(code)) {
+					break // a long-lived credential: the default finding is about that
+				}
+				pos := origin.Map(i+1, utf8.RuneCountInString(code[:loc[0]])+1)
+				publish(p.cmd, &Pos{Line: pos.Line, Col: pos.Col}, p.eco, p.eco == "crates")
+				published = true
+				break
+			}
+		}
+		if !published && wantBuild() {
+			if m := psBuildRe.FindString(code); m != "" {
+				setBuild(strings.Join(strings.Fields(m), " "))
 			}
 		}
 	}

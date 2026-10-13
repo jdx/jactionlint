@@ -12,6 +12,9 @@ func TestUseTrustedPublishingPedantic(t *testing.T) {
 	job := func(head, steps string) string {
 		return "on: release\npermissions: {}\njobs:\n  publish:\n    runs-on: ubuntu-latest\n" + head + "    steps:\n" + steps
 	}
+	jobOn := func(runner, head, steps string) string {
+		return strings.Replace(job(head, steps), "runs-on: ubuntu-latest", "runs-on: "+runner, 1)
+	}
 	const oidc = "    permissions:\n      id-token: write\n"
 	const env = "    environment: pypi\n" + oidc
 	run := func(c string) string { return "      - run: " + c + "\n" }
@@ -47,6 +50,26 @@ func TestUseTrustedPublishingPedantic(t *testing.T) {
 		{"a token", job(env, checkout+run("npm ci")+run("npm publish")+"        env:\n          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}\n"), 0, 0, 0},
 		{"a private registry", job(env, checkout+run("npm ci")+run("npm publish --registry https://npm.pkg.github.com")), 0, 0, 0},
 		{"a dry run", job(env, checkout+run("npm ci")+run("npm publish --dry-run")), 0, 0, 0},
+
+		// a parallel group is part of the job
+		{"checkout, build and publish in a parallel group", job(env, "      - parallel:\n          - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2\n          - run: python -m build\n"+publish), 1, 0, 0},
+		{"publish in a parallel group", job(oidc, "      - parallel:\n          - uses: pypa/gh-action-pypi-publish@76f52bc884231f62b9a034ebfe128415bbaabdfc # v1.12.4\n"), 0, 1, 0},
+		{"attestations off in a parallel group", job(env, "      - parallel:\n          - uses: pypa/gh-action-pypi-publish@76f52bc884231f62b9a034ebfe128415bbaabdfc # v1.12.4\n            with:\n              attestations: false\n"), 0, 0, 1},
+
+		// -p is the password of twine: that is the default finding, not trusted publishing
+		{"twine -p", job(env, checkout+run("python -m build")+run("twine upload -p ${{ secrets.PYPI_TOKEN }} dist/*")), 0, 0, 0},
+		{"twine --password", job(env, checkout+run("python -m build")+run("twine upload --password ${{ secrets.PYPI_TOKEN }} dist/*")), 0, 0, 0},
+		{"cargo publish -p is a package", job(oidc, checkout+run("cargo publish -p mycrate")), 0, 1, 0},
+
+		// PowerShell: the default shell of the Windows runners
+		{"pwsh npm publish after a build", jobOn("windows-latest", env, checkout+run("npm ci")+run("npm publish")), 1, 0, 0},
+		{"pwsh dotnet nuget push without environment", jobOn("windows-latest", oidc, run("dotnet nuget push pkg.nupkg")), 0, 1, 0},
+		{"pwsh build and publish in one script", jobOn("windows-latest", env, checkout+"      - run: |\n          dotnet build -c Release\n          dotnet nuget push pkg.nupkg\n"), 1, 0, 0},
+		{"pwsh a token", jobOn("windows-latest", env, checkout+run("npm ci")+run("npm publish --token $env:T")), 0, 0, 0},
+		{"pwsh a dry run", jobOn("windows-latest", env, checkout+run("npm ci")+run("npm publish --dry-run")), 0, 0, 0},
+		{"pwsh no checkout", jobOn("windows-latest", env, run("npm ci")+run("npm publish")), 0, 0, 0},
+		{"pwsh publish after the publish only", jobOn("windows-latest", env, checkout+run("npm publish")+run("npm ci")), 0, 0, 0},
+		{"shell pwsh on linux", job(env, checkout+"      - run: npm ci\n        shell: pwsh\n      - run: npm publish\n        shell: pwsh\n"), 1, 0, 0},
 
 		// the environment
 		{"no environment", job(oidc, publish), 0, 1, 0},
