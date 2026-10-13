@@ -136,6 +136,9 @@ type callContext struct {
 	// numbers are the inputs that the call fills with the number of the pull request that a comment is on, with where it
 	// comes from: the callee can give them to `gh pr checkout`.
 	numbers map[string]string
+	// values are the values of the inputs that the call gives, as they are written (or the defaults of the callee), by lower case
+	// name: the protection of actions/checkout is decided for the value that the step gets.
+	values map[string]string
 }
 
 // calleeKey returns the key of the file in the call index, "" when it is neither a workflow nor an action of the project.
@@ -261,7 +264,7 @@ func (rule *RuleUntrustedCheckout) callContexts(key string, depth int, seen map[
 				call[name] = dv // an input that the call leaves out has its default
 			}
 		}
-		ctx := callContext{from: ref.file, events: events, inputs: map[string]callInput{}, numbers: map[string]string{}}
+		ctx := callContext{from: ref.file, events: events, inputs: map[string]callInput{}, numbers: map[string]string{}, values: call}
 		for name, v := range call {
 			if what, ok := valueUntrustedFor(events, v); ok {
 				mergeInputs(ctx.inputs, map[string]callInput{name: {desc: what + " by " + ref.file, sources: []string{v}}})
@@ -398,6 +401,36 @@ func (rule *RuleUntrustedCheckout) inputForksPR(name, value string) bool {
 	return found
 }
 
+// substituteInputs replaces the expressions that only read an input by the value of the input. An input that is not known stays.
+func substituteInputs(v string, value func(name string) (string, bool)) string {
+	return reInputExpr.ReplaceAllStringFunc(v, func(m string) string {
+		sm := reInputExpr.FindStringSubmatch(m)
+		name := sm[1]
+		if name == "" {
+			name = sm[2]
+		}
+		if v, ok := value(strings.ToLower(name)); ok {
+			return v
+		}
+		return m
+	})
+}
+
+// callsForkPR reports whether every call of the file gives the inputs that the value reads values that make the protection of
+// actions/checkout refuse the checkout: `refs/pull/${{ inputs.n }}/head` with the number of the pull request of the event.
+func (rule *RuleUntrustedCheckout) callsForkPR(name, value string) bool {
+	if len(rule.calls) == 0 || len(inputsRead(value)) == 0 {
+		return false
+	}
+	for _, c := range rule.calls {
+		sub := substituteInputs(value, func(n string) (string, bool) { v, ok := c.values[n]; return v, ok })
+		if sub == value || !checkoutInputForksPR(name, sub) {
+			return false
+		}
+	}
+	return true
+}
+
 // mergeInputs adds the untrusted inputs of a call to the ones of the file.
 func mergeInputs(into map[string]callInput, from map[string]callInput) {
 	for n, in := range from {
@@ -410,7 +443,8 @@ func mergeInputs(into map[string]callInput, from map[string]callInput) {
 	}
 }
 
-var reInputExpr = regexp.MustCompile(`\$\{\{\s*inputs\.([A-Za-z_][A-Za-z0-9_-]*)\s*\}\}`)
+// reInputExpr matches an expression that only reads an input: inputs.name, INPUTS.Name and inputs['name'].
+var reInputExpr = regexp.MustCompile(`(?i)\$\{\{\s*inputs(?:\.([a-z_][a-z0-9_-]*)|\[\s*'([^']*)'\s*\])\s*\}\}`)
 
 // localActionCheckouts returns the code of a pull request that a local composite action checks out when the step calls
 // it. The inputs of the action that the call fills with the head of a pull request (or that it leaves out, with a default that
@@ -438,12 +472,7 @@ func (rule *RuleUntrustedCheckout) localActionCheckouts(s *Step, e *ExecAction) 
 		v, ok := defaults[name]
 		return v, ok
 	}
-	subst := func(v string) string {
-		return reInputExpr.ReplaceAllStringFunc(v, func(m string) string {
-			v, _ := value(strings.ToLower(reInputExpr.FindStringSubmatch(m)[1]))
-			return v
-		})
-	}
+	subst := func(v string) string { return substituteInputs(v, value) }
 	// the inputs of the action are the taint of its steps, from the values of the call
 	local := map[string]callInput{}
 	localNumber := map[string]string{}
@@ -465,9 +494,9 @@ func (rule *RuleUntrustedCheckout) localActionCheckouts(s *Step, e *ExecAction) 
 			localNumber[name] = what
 		}
 	}
-	savedTaint, savedNumber := rule.inputTaint, rule.inputNumber
-	rule.inputTaint, rule.inputNumber = local, localNumber
-	defer func() { rule.inputTaint, rule.inputNumber = savedTaint, savedNumber }()
+	savedTaint, savedNumber, savedCalls := rule.inputTaint, rule.inputNumber, rule.calls
+	rule.inputTaint, rule.inputNumber, rule.calls = local, localNumber, nil // the inputs are the ones of the action
+	defer func() { rule.inputTaint, rule.inputNumber, rule.calls = savedTaint, savedNumber, savedCalls }()
 
 	var ret []*untrustedCheckout
 	var gate permissionGateState

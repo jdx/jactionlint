@@ -458,8 +458,10 @@ func (rule *RuleUntrustedCheckout) actionCheckout(s *Step, e *ExecAction, u *Use
 		if in == nil || in.Value == nil {
 			continue
 		}
+		// the protection is decided for the value that the step gets: with the values of the call in place of the inputs of the
+		// action (subst is the identity for the steps of the workflow)
 		v := in.Value.Value
-		if checkoutInputForksPR(name, v) || rule.inputForksPR(name, v) {
+		if checkoutInputForksPR(name, v) || checkoutInputForksPR(name, subst(v)) || rule.inputForksPR(name, v) || rule.callsForkPR(name, v) {
 			forks = true
 		}
 		if found != nil {
