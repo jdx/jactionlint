@@ -1136,6 +1136,7 @@ The version comment of a hash-pinned action does not match the pinned commit.
 - Default level: warn
 - Profile: only with `--online`
 - Needs network access: yes (only with `--online`)
+- Fixable: yes
 - Details and examples: [checks](./checks.md#check-ref-version-mismatch)
 
 ## repojacking

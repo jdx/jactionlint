@@ -32,6 +32,8 @@ func TestPinFixes(t *testing.T) {
 		{"trailing white space", "uses: actions/checkout@v4   ", "uses: actions/checkout@" + pinCheckoutV4 + " # v4"},
 		{"comment naming the ref", "uses: actions/checkout@v4 # v4", "uses: actions/checkout@" + pinCheckoutV4 + " # v4"},
 		{"comment naming the ref among words", "uses: actions/checkout@v4 # tag=v4 (see docs)", "uses: actions/checkout@" + pinCheckoutV4 + " # tag=v4 (see docs)"},
+		{"comment of ratchet naming the ref", "uses: actions/checkout@v4 # ratchet:actions/checkout@v4", "uses: actions/checkout@" + pinCheckoutV4 + " # ratchet:actions/checkout@v4"},
+		{"comment of ratchet naming another action", "uses: actions/checkout@v4 # ratchet:actions/cache@v4", ""},
 		{"another action", "uses: actions/setup-node@v4", "uses: actions/setup-node@" + pinSetupNodeV4 + " # v4"},
 		{"a tag that is also a version of other tags", "uses: tj-actions/changed-files@v45", "uses: tj-actions/changed-files@" + pinChangedV45 + " # v45.0.2"},
 		{"with other keys after", "uses: actions/checkout@v4\n        with:\n          fetch-depth: 0", "uses: actions/checkout@" + pinCheckoutV4 + " # v4\n        with:\n          fetch-depth: 0"},

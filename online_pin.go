@@ -174,7 +174,7 @@ func pinFix(sess *onlineSession, src []byte, lineStart, col int, short bool) (*F
 			newText += string(quote)
 		}
 		newText += " # " + pinCommentVersion(sess, ref, sha, short)
-	case strings.HasPrefix(rest, "#") && commentNamesRef(rest[1:], ref.Ref):
+	case strings.HasPrefix(rest, "#") && commentNamesRef(rest[1:], ref):
 		// The comment already names the version
 	default:
 		return nil, shapeErr("the line has other content after the value, or a comment which does not name the ref")
@@ -185,10 +185,11 @@ func pinFix(sess *onlineSession, src []byte, lineStart, col int, short bool) (*F
 	}, nil
 }
 
-// commentNamesRef reports whether the comment names the ref as its version.
-func commentNamesRef(comment, ref string) bool {
-	v, ok := commentVersion(comment)
-	return ok && v == ref
+// commentNamesRef reports whether the comment names the ref as its version, in the form of the bots
+// ("# v4", "# tag=v4") or of ratchet ("# ratchet:actions/checkout@v4").
+func commentNamesRef(comment string, ref *UsesRef) bool {
+	v, _, _, ok := commentVersionAt(comment, ref)
+	return ok && v == ref.Ref
 }
 
 // pinCommentVersion is the version to name in the comment of the pin of the tag: the most specific

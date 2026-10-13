@@ -1021,6 +1021,9 @@ The fix is applied by plain `--fix` because it keeps the code the same: it is of
 (annotated tags are followed to the commit) and no branch has the same name. A branch, an unknown tag, an abbreviated SHA, a Docker
 image or a line with a comment that does not name the ref is left to you.
 
+`ref-version-mismatch` has an unsafe fix (`--fix=unsafe`) that rewrites the version of the comment to the tag of the pinned commit.
+It is unsafe because a mismatch can also mean that the SHA is the wrong part, see [the check](checks.md#check-ref-version-mismatch).
+
 ```sh
 jactionlint --online --fix
 ```
