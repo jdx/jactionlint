@@ -1,0 +1,16 @@
+on: push
+jobs:
+  short:
+    runs-on: ubuntu-slim
+    timeout-minutes: 10
+    steps:
+      - run: echo ...
+  ubuntu-latest-can-do-anything:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    container: node:22
+    services:
+      redis:
+        image: redis
+    steps:
+      - uses: docker://alpine:3.22

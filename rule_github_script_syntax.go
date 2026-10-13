@@ -31,8 +31,9 @@ import (
 //     the rule does nothing.
 type RuleGithubScriptSyntax struct {
 	RuleBase
-	cmd *externalCommand
-	mu  sync.Mutex
+	cmd  *externalCommand
+	mu   sync.Mutex
+	tool *externalTool // counts the scripts which were checked
 }
 
 // NewRuleGithubScriptSyntax creates a new RuleGithubScriptSyntax instance. The executable is node. When it is not found,
@@ -59,20 +60,60 @@ func (rule *RuleGithubScriptSyntax) VisitWorkflowPost(n *Workflow) error {
 
 // VisitStep is callback when visiting Step node.
 func (rule *RuleGithubScriptSyntax) VisitStep(n *Step) error {
+	script, args := githubScriptOf(n)
+	if script == nil {
+		return nil
+	}
+	rule.check(script, args)
+	return nil
+}
+
+// githubScriptOf returns the script of a step of actions/github-script and the names that the action passes to it,
+// or nil when the step is not one or has no script.
+func githubScriptOf(n *Step) (*String, []string) {
 	e, ok := n.Exec.(*ExecAction)
 	if !ok || e.Uses == nil || e.Uses.ContainsExpression() {
-		return nil
+		return nil, nil
 	}
 	u := ParseUses(e.Uses.Value)
 	if u.Kind != UsesAction || !strings.EqualFold(u.CanonicalName(), "actions/github-script") {
-		return nil
+		return nil, nil
 	}
 	in := e.Inputs["script"]
 	if in == nil || in.Value == nil || strings.TrimSpace(in.Value.Value) == "" {
-		return nil
+		return nil, nil
 	}
-	rule.check(in.Value, githubScriptArguments(u.Ref))
+	return in.Value, githubScriptArguments(u.Ref)
+}
+
+// githubScriptObserver counts the scripts that would have been checked when node is not available, for the note
+// that says so (see externalTool). It reports nothing.
+type githubScriptObserver struct {
+	RuleBase
+	tool *externalTool
+}
+
+// VisitStep is callback when visiting Step node.
+func (o *githubScriptObserver) VisitStep(n *Step) error {
+	if script, _ := githubScriptOf(n); script != nil && githubScriptSource(script.Value) != "" {
+		o.tool.skip()
+	}
 	return nil
+}
+
+// githubScriptSource returns the script as node gets it, with the expressions replaced, or "" when it is not
+// checked: it has an expression over several lines, directly after a number, or not closed.
+func githubScriptSource(src string) string {
+	if strings.Contains(src, "${{") {
+		if hasMultilineExpression(src) || expressionAfterNumber.MatchString(src) {
+			return ""
+		}
+		src = sanitizeExpressionsInScript(src)
+		if strings.Contains(src, "${{") {
+			return ""
+		}
+	}
+	return src
 }
 
 // githubScriptArguments returns the names that the action passes to the script, which the script cannot declare
@@ -110,16 +151,11 @@ var githubScriptMajorRe = regexp.MustCompile(`^v?(\d{1,3})(?:\.\d+){0,2}$`)
 var expressionAfterNumber = regexp.MustCompile(`[0-9]\$\{\{`)
 
 func (rule *RuleGithubScriptSyntax) check(script *String, args []string) {
-	src := script.Value
-	if strings.Contains(src, "${{") {
-		if hasMultilineExpression(src) || expressionAfterNumber.MatchString(src) {
-			return
-		}
-		src = sanitizeExpressionsInScript(src)
-		if strings.Contains(src, "${{") {
-			return // an expression that is not closed
-		}
+	src := githubScriptSource(script.Value)
+	if src == "" {
+		return
 	}
+	rule.tool.checked()
 	// The wrapper is one line, so the line of node is the line of the script plus one
 	wrapped := "(async function(" + strings.Join(args, ", ") + ") {\n" + src + "\n})\n"
 	pos := script.Pos
@@ -262,15 +298,22 @@ func init() {
 		RuleInfo{ID: "github-script-syntax", Group: RuleGroupCorrectness, Summary: "The script of actions/github-script has a JavaScript syntax error.", DefaultLevel: SeverityError, Profile: ProfileCorrectness, DocsAnchor: "check-github-script-syntax"},
 	)
 	registerRuleFactory("github-script-syntax", func(env *RuleEnv) []Rule {
+		t := env.tools.tool("node")
 		r, err := NewRuleGithubScriptSyntax("node", env.proc)
 		if err != nil {
 			env.Skip("node was not found, so the scripts of actions/github-script are not checked")
+			t.missing()
+			env.observe(&githubScriptObserver{RuleBase: RuleBase{name: "github-script-syntax"}, tool: t})
 			return nil
 		}
 		if !nodeIsRecent(r.cmd.exe) {
 			env.Skip("node is older than version 20, so it may not know the syntax that the scripts use")
+			t.missing()
+			env.observe(&githubScriptObserver{RuleBase: RuleBase{name: "github-script-syntax"}, tool: t})
 			return nil
 		}
+		t.found()
+		r.tool = t
 		return []Rule{r}
 	})
 }

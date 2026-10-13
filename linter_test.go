@@ -14,6 +14,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/go-cmp/cmp"
 	"golang.org/x/sys/execabs"
@@ -217,6 +218,15 @@ func TestLinterLintError(t *testing.T) {
 				}
 
 				o := LinterOptions{}
+				// A fixture named ..._asof_YYYY_MM_DD is linted on that day, so that it does not change when a date
+				// that a check depends on (the retirement of a runner label) passes
+				if i := strings.LastIndex(testName, "_asof_"); i >= 0 {
+					day, err := time.Parse("2006_01_02", testName[i+len("_asof_"):])
+					if err != nil {
+						t.Fatalf("invalid date in the name of %s: %v", testName, err)
+					}
+					o.Now = func() time.Time { return day }
+				}
 
 				if strings.Contains(testName, "shellcheck") {
 					if shellcheck == "" {
@@ -244,6 +254,8 @@ func TestLinterLintError(t *testing.T) {
 				l.defaultConfig = fixtureConfig()
 				if strings.HasSuffix(testName, "_online") {
 					l.online = onlineSettings{enabled: true, client: onlineFixtureClient(t)}
+					// The repository whose environments the rules look at, see environmentGates
+					t.Setenv("GITHUB_REPOSITORY", "example/environments")
 				}
 				if strings.HasSuffix(testName, "_security") {
 					l.defaultConfig = fixtureConfig("unpinned-uses")
