@@ -11,6 +11,6 @@ runs:
   using: node24
   main: dist/index.js
   pre: dist/setup.js
-  pre-if: runner.os == 'Linux' && inputs.sha != '' && env.CI == 'true' && always()
+  pre-if: runner.os == 'Linux' && inputs.sha != '' && env.CI == 'true' && needs.foo.result == 'success' && always()
   post: dist/cleanup.js
   post-if: ${{ success() || failure() && steps.main.outcome == 'failure' }}

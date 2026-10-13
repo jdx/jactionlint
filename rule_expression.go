@@ -1445,14 +1445,16 @@ func (rule *RuleExpression) visitActionPre(a *ActionFile) {
 
 	// The conditions of "pre" and "post" are expressions without "${{ }}", like the one of a step
 	if a.Runs != nil {
-		// The steps of the job which uses the action are not known either
+		// The steps and the needs of the job which uses the action are not known either
 		if !a.Runs.IsComposite() {
 			rule.stepsTy = NewEmptyObjectType()
+			rule.needsTy = NewEmptyObjectType()
 		}
 		rule.checkIfCondition(a.Runs.PreIf, actionRunsIfKey)
 		rule.checkIfCondition(a.Runs.PostIf, actionRunsIfKey)
 		if !a.Runs.IsComposite() {
 			rule.stepsTy = nil
+			rule.needsTy = nil
 		}
 	}
 	rule.matrixTy = nil
