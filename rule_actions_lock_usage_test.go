@@ -41,6 +41,39 @@ func TestActionsLockStaleOnlyFromCompleteUsage(t *testing.T) {
 		})
 	}
 
+	testLocalActionWithAnError(t, lock, head)
+}
+
+// A version comment names the locked version or its series, by whole numbers: "v1" does not cover "v10.2.0".
+func TestVersionCovers(t *testing.T) {
+	tests := []struct {
+		comment, locked string
+		want            bool
+	}{
+		{"v1", "v10.2.0", false},
+		{"v2", "v20.1.0", false},
+		{"v1", "v1.2.3", true},
+		{"v1.2", "v1.20.0", false},
+		{"v1.2", "v1.2.9", true},
+		{"v1", "v1", true},
+		{"1", "v1.2.3", true},
+		{"v4.2", "v4.2.0", true},
+		{"v1.2.3", "v1.2.3", true},
+		{"v1.2.3", "v1.2", false},
+		{"v1", "v1.2.3-rc.1", true},
+		{"V1", "v1.0.0", true},
+		{"v1", "v2.0.0", false},
+		{"v1", "main", false},
+	}
+	for _, tc := range tests {
+		if got := versionCovers(tc.comment, tc.locked); got != tc.want {
+			t.Errorf("versionCovers(%q, %q) = %v, want %v", tc.comment, tc.locked, got, tc.want)
+		}
+	}
+}
+
+func testLocalActionWithAnError(t *testing.T, lock, head string) {
+	t.Helper()
 	// The same for a local action: its metadata has an error, so what it uses is not known
 	root := t.TempDir()
 	writeFile(t, filepath.Join(root, ".github", "workflows", "ci.yml"), head+"      - uses: $/.github/actions/setup\n")
