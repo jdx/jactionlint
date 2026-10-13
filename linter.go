@@ -742,6 +742,9 @@ func (l *Linter) lintFilesQuietly(filepaths []string, project *Project) ([]fileR
 	if err := eg.Wait(); err != nil {
 		return nil, err
 	}
+	// --changed-since first: of the copies of a shared finding the one that is shown is the first of those that are
+	// left, not the first of all (which may be in a file that did not change)
+	ws = l.filterChanged(ws)
 	l.shared.dropRepeatedInFiles(ws)
 
 	// Ensure that all processes finish. `proc.wait()` must be called after `eg.Wait()`.

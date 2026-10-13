@@ -129,12 +129,12 @@ func (l *Linter) changedError() error {
 // file of a repository (stdin) and the results of the baseline files keep everything.
 func (l *Linter) filterChanged(results []fileResult) []fileResult {
 	c := l.changed
-	if c == nil {
-		return results
+	if c == nil || l.baseline.writing {
+		return results // WriteBaseline records every finding
 	}
 	for i := range results {
 		r := &results[i]
-		if r.baselineFile || r.file == "" || r.file == l.stdin || len(r.errs) == 0 {
+		if r.baselineFile || r.file == "" || r.file == l.stdin {
 			continue
 		}
 		abs := l.absFilePath(r.file)
@@ -256,48 +256,72 @@ func readChangedFiles(root, rev string) (map[string]*changedLines, error) {
 	return files, nil
 }
 
-var reHunk = regexp.MustCompile(`^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@`)
+var reHunk = regexp.MustCompile(`^@@ -\d+(?:,(\d+))? \+(\d+)(?:,(\d+))? @@`)
 
 // parseChangedDiff reads the output of git diff -U0: the new side of each hunk. A file that is new has one hunk of
 // all of its lines; a deleted file is not there. A hunk that only deletes marks the lines on both sides of the place.
+//
+// The lines of a hunk are counted, so that a line of the file that starts with "++ " or "diff --git" (it is "+++ ..."
+// in the diff, with the "+" in front) is a line of the hunk and not the header of another file: a header is read only
+// where no hunk is open.
 func parseChangedDiff(diff string) map[string]*changedLines {
 	files := map[string]*changedLines{}
 	var cur *changedLines
+	oldLeft, newLeft := 0, 0 // lines of the open hunk that are still to come
 	for _, line := range strings.Split(diff, "\n") {
+		if oldLeft > 0 || newLeft > 0 {
+			switch {
+			case strings.HasPrefix(line, "+"):
+				newLeft--
+			case strings.HasPrefix(line, "-"):
+				oldLeft--
+			case strings.HasPrefix(line, " "):
+				oldLeft--
+				newLeft--
+			}
+			oldLeft, newLeft = max(oldLeft, 0), max(newLeft, 0)
+			continue // "\ No newline at end of file" is not counted either
+		}
 		switch {
 		case strings.HasPrefix(line, "diff --git "):
 			cur = nil
 		case strings.HasPrefix(line, "+++ "):
-			name := strings.TrimSuffix(strings.TrimPrefix(line, "+++ "), "\t") // git ends a name with spaces by a tab
+			name := strings.TrimSuffix(strings.TrimPrefix(line, "+++ "), "\t") // the name of a file with spaces ends with a tab
 			if name == "/dev/null" {
 				cur = nil
 				continue
 			}
-			name = strings.TrimPrefix(name, "b/")
 			if unq, err := strconv.Unquote(name); err == nil && strings.HasPrefix(name, `"`) {
-				name = strings.TrimPrefix(unq, "b/")
+				name = unq
 			}
+			name = strings.TrimPrefix(name, "b/")
 			cur = files[name]
 			if cur == nil {
 				cur = &changedLines{}
 				files[name] = cur
 			}
-		case cur != nil && strings.HasPrefix(line, "@@"):
+		case strings.HasPrefix(line, "@@"):
 			m := reHunk.FindStringSubmatch(line)
 			if m == nil {
 				continue
 			}
-			start, _ := strconv.Atoi(m[1])
-			count := 1
-			if m[2] != "" {
-				count, _ = strconv.Atoi(m[2])
+			oldLeft, newLeft = 1, 1
+			if m[1] != "" {
+				oldLeft, _ = strconv.Atoi(m[1])
 			}
-			if count == 0 {
-				// Only a deletion: the new side is empty and start is the line before the place
-				cur.ranges = append(cur.ranges, [2]int{max(start, 1), start + 1})
+			start, _ := strconv.Atoi(m[2])
+			if m[3] != "" {
+				newLeft, _ = strconv.Atoi(m[3])
+			}
+			if cur == nil {
 				continue
 			}
-			cur.ranges = append(cur.ranges, [2]int{start, start + count - 1})
+			if newLeft == 0 {
+				// Only a deletion: the new side is empty and start is the line before the place
+				cur.ranges = append(cur.ranges, [2]int{max(start, 1), start + 1})
+			} else {
+				cur.ranges = append(cur.ranges, [2]int{start, start + newLeft - 1})
+			}
 		}
 	}
 	for _, c := range files {

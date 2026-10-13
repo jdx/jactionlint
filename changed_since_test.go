@@ -196,6 +196,27 @@ func TestChangedSinceShowsTheChangedLinesOnly(t *testing.T) {
 	}
 }
 
+// The comparison is checked for every run, also when the files have no finding to filter: an unknown revision is an
+// error and not a clean report.
+func TestChangedSinceFailsWithoutFindings(t *testing.T) {
+	r := newChangedRepo(t)
+	run := func(since string, args ...string) (int, string) {
+		t.Chdir(r.dir)
+		var out, errOut bytes.Buffer
+		cmd := Command{Stdin: strings.NewReader(""), Stdout: &out, Stderr: &errOut}
+		status := cmd.Main(append([]string{"jactionlint", "--no-color", "--profile", "correctness", "--shellcheck=", "--pyflakes=", "--changed-since", since}, args...))
+		return status, out.String() + errOut.String()
+	}
+	if status, out := run("main"); status != ExitStatusSuccessNoProblem || out != "" {
+		t.Fatalf("a clean repository: status %d\n%s", status, out)
+	}
+	for _, args := range [][]string{nil, {".github/workflows/a.yaml"}} {
+		if status, out := run("no-such-branch", args...); status != ExitStatusFailure || !strings.Contains(out, "does not know the revision") {
+			t.Errorf("%v: an unknown revision with nothing to report: status %d\n%s", args, status, out)
+		}
+	}
+}
+
 func TestChangedSinceCountsTheWorkingTree(t *testing.T) {
 	r := newChangedRepo(t)
 	// Not committed: a change of the first job, a new file, and a file that is staged only
@@ -363,5 +384,88 @@ func TestChangedSinceKeepsTheCallerEffects(t *testing.T) {
 	}
 	if errs := lint(r, "full"); len(errs) != 1 || !strings.Contains(errs[0].Message, "github.event.pull_request.user.id") {
 		t.Errorf("a full run reports the guard, which the pull request caller now makes a finding: %v", errs)
+	}
+}
+
+// A finding that every use of a broken local action reports is kept once in a full run, at the first file. Under
+// --changed-since the copy on a changed line is the one that is shown, not the one of a file that did not change.
+func TestChangedSinceKeepsTheSharedFindingOfTheChangedLine(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git is not installed")
+	}
+	r := gitRepoForChanged{t: t, dir: t.TempDir()}
+	r.git("init", "-q")
+	r.git("checkout", "-q", "-b", "main")
+	wf := func(name string) string {
+		return "name: " + name + "\non: push\npermissions: {}\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: ./.github/actions/x\n"
+	}
+	r.write(".github/actions/x/action.yml", "name: x\ndescription: x\noutputs: nope\nruns:\n  using: composite\n  steps: []\n")
+	r.write(".github/workflows/a.yaml", wf("a"))
+	r.write(".github/workflows/b.yaml", wf("b"))
+	r.git("add", ".")
+	r.git("commit", "-q", "-m", "base")
+	r.git("checkout", "-q", "-b", "feature")
+	r.write(".github/workflows/b.yaml", strings.Replace(wf("b"), "- uses: ./.github/actions/x", "- uses: ./.github/actions/x # changed", 1))
+
+	run := func(since string) []*Error {
+		l, err := NewLinter(&bytes.Buffer{}, &LinterOptions{WorkingDir: r.dir, ChangedSince: since, Config: mustParseConfig(t, "profile: correctness\n")})
+		if err != nil {
+			t.Fatal(err)
+		}
+		errs, err := l.LintRepository(r.dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var out []*Error
+		for _, e := range errs {
+			if strings.Contains(e.Message, "could not parse action metadata") {
+				out = append(out, e)
+			}
+		}
+		return out
+	}
+	full := run("")
+	if len(full) != 1 || !strings.HasSuffix(filepath.ToSlash(full[0].Filepath), "a.yaml") {
+		t.Fatalf("a full run keeps the first copy: %v", full)
+	}
+	changed := run("main")
+	if len(changed) != 1 || !strings.HasSuffix(filepath.ToSlash(changed[0].Filepath), "b.yaml") {
+		t.Errorf("the copy on the changed file is shown: %v", changed)
+	}
+}
+
+// A line of a file that starts with "++ " is "+++ " in the diff, and "-- " is "--- ": they are lines of the hunk, not the
+// headers of another file, and the hunks after them belong to the file they are in.
+func TestParseChangedDiffLinesThatLookLikeHeaders(t *testing.T) {
+	const diff = `diff --git a/a.yaml b/a.yaml
+--- a/a.yaml
++++ b/a.yaml
+@@ -2,2 +2,3 @@
+-- old
+--- old header-like
++++ b/evil.yaml
+++ new
++diff --git a/x b/x
+@@ -9 +10 @@
+-x
++y
+diff --git a/b.yaml b/b.yaml
+--- a/b.yaml
++++ b/b.yaml
+@@ -1 +1 @@
+-a
+\ No newline at end of file
++b
+\ No newline at end of file
+`
+	got := parseChangedDiff(diff)
+	if len(got) != 2 || got["a.yaml"] == nil || got["b.yaml"] == nil {
+		t.Fatalf("only the files of the headers are there: %v", got)
+	}
+	if d := cmp.Diff([][2]int{{2, 4}, {10, 10}}, got["a.yaml"].ranges); d != "" {
+		t.Errorf("a.yaml (-want +got): %s", d)
+	}
+	if d := cmp.Diff([][2]int{{1, 1}}, got["b.yaml"].ranges); d != "" {
+		t.Errorf("b.yaml (-want +got): %s", d)
 	}
 }
