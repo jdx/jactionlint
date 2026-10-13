@@ -1,0 +1,72 @@
+name: Schema pin
+# Bumps the commit of actions/runner whose workflow schemas TestSchemaConformance compares the parser with
+# (testdata/schema/runner). When GitHub changes its syntax the test of the pull request fails with the difference,
+# which is how new syntax is noticed. See scripts/update-schema-pin.bash.
+on:
+  schedule:
+    # Every Sunday 10:21 in JST
+    - cron: '21 1 * * 0'
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  bump:
+    if: ${{ github.repository == 'jdx/jactionlint' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version: '1.27'
+          check-latest: true
+      - name: Pin the head of actions/runner
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: scripts/update-schema-pin.bash
+      - name: Check changes
+        id: diff
+        run: |
+          if [ -z "$(git status --porcelain)" ]; then
+            echo "pr=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git diff --stat
+          # The test is allowed to fail: its output is what the pull request is about
+          go test -run TestSchemaConformance -count=1 . 2>&1 | head -n 200 | cut -c1-400 > "$RUNNER_TEMP/test.txt" || true
+          {
+            echo 'This PR moves the pinned commit of actions/runner (testdata/schema/runner) to the latest.'
+            echo
+            echo 'TestSchemaConformance compares the parser with the workflow schemas of that commit. If its check fails, GitHub changed its syntax: make the parser follow, or explain the difference in schemaConformanceAllowed with the reason. Output of the test on this commit:'
+            echo
+            echo '```'
+            cat "$RUNNER_TEMP/test.txt"
+            echo '```'
+            echo
+            echo "This PR was created by [this workflow run]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID) automatically."
+            echo "List of workflow runs is [here]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/workflows/schema-pin.yaml)."
+          } > "$RUNNER_TEMP/pr-body.md"
+          echo "pr=true" >> "$GITHUB_OUTPUT"
+      # A PAT is required: pull requests opened with GITHUB_TOKEN do not trigger the CI workflows, so their
+      # required checks would never run. The same token is used by generate.yaml and release-please.yaml.
+      - uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
+        with:
+          token: ${{ secrets.RELEASE_PLZ_TOKEN }}
+          branch: ci/schema-pin
+          delete-branch: true
+          commit-message: 'test(schema): pin the latest actions/runner schemas'
+          committer: 'github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>'
+          author: 'github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>'
+          title: 'test(schema): pin the latest actions/runner schemas'
+          body-path: ${{ runner.temp }}/pr-body.md
+          assignees: jdx
+        if: ${{ steps.diff.outputs.pr == 'true' }}
