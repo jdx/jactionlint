@@ -69,6 +69,9 @@ func (rule *RuleUntrustedArtifact) VisitJobPre(n *Job) error {
 		if dl == nil {
 			continue
 		}
+		if rule.pedantic("untrusted-artifact") && isBlanketDownload(s) {
+			rule.ReportID("untrusted-artifact", dl.pos, "this step downloads every artifact of the run that triggered the workflow, which ran the code of a pull request, not only the one it expects. name it with \"name:\" (or select a few with \"pattern:\") so that nothing else of what the pull request uploaded reaches the workspace")
+		}
 		if scriptValidates(s) {
 			continue
 		}
@@ -119,7 +122,18 @@ func (rule *RuleUntrustedArtifact) downloadOf(s *Step) *artifactDownload {
 			if !refsRead(refs, []string{"github", "event", "workflow_run"}) {
 				return nil
 			}
-		case "dawidd6/action-download-artifact":
+		case "dawidd6/action-download-artifact", "aochmann/actions-download-artifact", "blablacar/action-download-last-artifact":
+			// the same "name" and "path" inputs (blablacar's takes the last artifact of that name of any run, branch or workflow,
+			// so the one of a pull request too)
+		case "bettermarks/action-artifact-download":
+			// no "path": the artifact is put in the workspace under "rename" or, without it, "artifact_name"
+			for _, name := range []string{"rename", "artifact_name"} {
+				if v, ok := e.input(name); ok && v != "" && !ContainsExpression(v) && normalizeDir(v) != "" {
+					dl.prefixes = append(dl.prefixes, normalizeDir(v))
+					break
+				}
+			}
+			return dl
 		case "actions/github-script":
 			script, ok := e.input("script")
 			if !ok || !strings.Contains(script, "listWorkflowRunArtifacts") || !strings.Contains(script, "downloadArtifact") {
@@ -171,6 +185,42 @@ func (rule *RuleUntrustedArtifact) downloadOf(s *Step) *artifactDownload {
 		}
 	}
 	return nil
+}
+
+// isBlanketDownload reports whether the step downloads artifacts of another run without saying which: no name and no
+// pattern, so it fetches all of them.
+func isBlanketDownload(s *Step) bool {
+	switch e := s.Exec.(type) {
+	case *ExecAction:
+		if e.Uses == nil || e.InputsUnknown() {
+			return false
+		}
+		has := func(names ...string) bool {
+			for _, n := range names {
+				if v, ok := e.input(n); ok && strings.TrimSpace(v) != "" {
+					return true
+				}
+			}
+			return false
+		}
+		switch strings.ToLower(ParseUses(e.Uses.Value).CanonicalName()) {
+		case "actions/download-artifact":
+			return !has("name", "pattern", "artifact-ids")
+		case "dawidd6/action-download-artifact", "aochmann/actions-download-artifact":
+			return !has("name")
+		}
+	case *ExecRun:
+		script, _ := analyzeRun(e)
+		if script == nil {
+			return false
+		}
+		for _, c := range script.Commands {
+			if c.Name == "gh" && c.Verb() == "run" && c.Sub(1) == "download" && downloadsOtherRun(c) {
+				return !c.HasFlag("-n", "--name", "-p", "--pattern")
+			}
+		}
+	}
+	return false
 }
 
 // downloadsOtherRun reports whether `gh run download` names a run other than the current one: its run ID is
@@ -312,7 +362,7 @@ func isExtraction(c *runscript.Command) bool {
 
 func init() {
 	registerRules(
-		RuleInfo{ID: "untrusted-artifact", Group: RuleGroupSecurity, Summary: "A workflow_run workflow uses an artifact of the triggering run without validating it.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-untrusted-artifact"},
+		RuleInfo{ID: "untrusted-artifact", Group: RuleGroupSecurity, Summary: "A workflow_run workflow uses an artifact of the triggering run without validating it. With the option pedantic, also one that downloads every artifact of the run.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-untrusted-artifact", Options: []RuleOption{pedanticOption}},
 	)
 	registerRuleFactory("untrusted-artifact", func(env *RuleEnv) []Rule {
 		r := NewRuleUntrustedArtifact(env.project)

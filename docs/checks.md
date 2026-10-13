@@ -7622,7 +7622,10 @@ Check the content before you use it, for example match a pull request number aga
 ```
 
 The download is `actions/download-artifact` with a `run-id` that reads `github.event.workflow_run`, any use of
-`dawidd6/action-download-artifact`, `gh run download`, or an `actions/github-script` that calls `listWorkflowRunArtifacts` and
+`dawidd6/action-download-artifact` or of its forks and look-alikes that octoscan knows (`aochmann/actions-download-artifact`,
+`blablacar/action-download-last-artifact`, which takes the last artifact of that name of any run, branch or workflow, and
+`bettermarks/action-artifact-download`, which has no `path` and puts the artifact under `rename` or `artifact_name`),
+`gh run download`, or an `actions/github-script` that calls `listWorkflowRunArtifacts` and
 `downloadArtifact`. The use is a later step of the same job with a `run:` that
 
 - runs something below the artifact directory (`path:`, or the artifact `name` when there is no `path`), including `cd` into it
@@ -7638,6 +7641,13 @@ What is **not** reported: artifacts of the current run, a download whose files c
 without `path` and `name` lands in the root of the workspace under names the rule does not know), jobs with an `environment:`,
 jobs and steps with the same guards as `untrusted-checkout`, and workflows that wait only for workflows that run for `push`,
 `schedule` and other events that only people with write access cause.
+
+The option `pedantic` (on under the `pedantic` profile, `rules: {untrusted-artifact: {pedantic: true}}` for the rule alone) also
+reports a download that does not say which artifact it wants: `actions/download-artifact` with a `run-id` of the triggering run and no
+`name`, `pattern` or `artifact-ids`, `dawidd6/action-download-artifact` or `aochmann/actions-download-artifact` without `name`, and
+`gh run download <id>` without `-n` or `--pattern`. It fetches every artifact that the run uploaded, which includes the ones that the
+workflow does not expect and the pull request chose to add. This is reported whether or not a later step uses the files
+([ghlint#239](https://github.com/TWiStErRob/net.twisterrob.ghlint/issues/239)); the same guards as above apply.
 
 There is no automatic fix.
 
