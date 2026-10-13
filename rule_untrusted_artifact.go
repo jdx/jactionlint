@@ -78,7 +78,18 @@ func (rule *RuleUntrustedArtifact) VisitJobPre(n *Job) error {
 			continue
 		}
 		if rule.pedantic("untrusted-artifact") && isBlanketDownload(s) {
-			rule.ReportID("untrusted-artifact", dl.pos, "this step downloads every artifact of the run that triggered the workflow, which ran the code of a pull request, not only the one it expects. name it with \"name:\" (or select a few with \"pattern:\") so that nothing else of what the pull request uploaded reaches the workspace")
+			// The reviewers of the environment decide here too, unless the online checks find that there are none
+			note, held := "", false
+			if envJob {
+				n, ok := rule.gates.noGate(n)
+				if ok {
+					note = ". " + n
+				}
+				held = !ok
+			}
+			if !held {
+				rule.ReportIDf("untrusted-artifact", dl.pos, "this step downloads every artifact of the run that triggered the workflow, which ran the code of a pull request, not only the one it expects%s. name it with \"name:\" (or select a few with \"pattern:\") so that nothing else of what the pull request uploaded reaches the workspace", note)
+			}
 		}
 		if scriptValidates(s) {
 			continue
