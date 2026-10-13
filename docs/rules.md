@@ -46,6 +46,7 @@ rules:
 | [concurrency-cancels-prs](#concurrency-cancels-prs) | correctness | error | default |
 | [concurrency-cancels-release](#concurrency-cancels-release) | correctness | error | default |
 | [concurrency-limits](#concurrency-limits) | policy | error | default |
+| [conflicting-action-inputs](#conflicting-action-inputs) | correctness | error | correctness |
 | [conflicting-runner-labels](#conflicting-runner-labels) | correctness | error | correctness |
 | [constant-condition](#constant-condition) | correctness | error | correctness |
 | [context-availability](#context-availability) | correctness | error | correctness |
@@ -295,6 +296,15 @@ A workflow does not cancel superseded runs with concurrency:.
 - Profile: default
 - Fixable: yes
 - Details and examples: [checks](./checks.md#check-concurrency-limits)
+
+## conflicting-action-inputs
+
+Two inputs of a well-known action exclude each other.
+
+- Group: correctness
+- Default level: error
+- Profile: correctness
+- Details and examples: [checks](./checks.md#check-action-input-dependencies)
 
 ## conflicting-runner-labels
 

@@ -25,6 +25,21 @@
               "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
             },
             {
+              "id": "action-input-dependencies",
+              "name": "ActionInputDependencies",
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "description": "Checks inputs of well-known actions which only work together",
+                "queryURI": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+              },
+              "fullDescription": {
+                "text": "Checks inputs of well-known actions which only work together"
+              },
+              "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+            },
+            {
               "id": "artipacked",
               "name": "Artipacked",
               "defaultConfiguration": {

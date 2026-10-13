@@ -67,6 +67,7 @@ var actionRuleScope = map[string]struct {
 	"env-var":                     {scope: actionApplies},
 	"events":                      {scope: actionNotApplicable},
 	"environment-file-redirect":   {scope: actionApplies},
+	"action-input-dependencies":   {scope: actionApplies},
 	"excessive-permissions":       {scope: actionNotApplicable},
 	"expression":                  {scope: actionApplies},
 	"forbidden-uses":              {scope: actionApplies},
