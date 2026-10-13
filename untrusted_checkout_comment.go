@@ -98,66 +98,93 @@ func (rule *RuleUntrustedCheckout) untrustedIn(value string, refs []exprRef) (st
 	return rule.inputUntrusted(refs)
 }
 
-// associationIsGuard reports whether the conditions that read `author_association` restrict it to people who can write:
-// they name no association of someone who has no access (`NONE`, `CONTRIBUTOR`, `FIRST_TIMER`, `FIRST_TIME_CONTRIBUTOR`,
-// `MANNEQUIN`). `!= 'NONE'` lets every contributor through, who may be anyone with a merged change. Conditions with no
-// literal are given the benefit of the doubt, like the other guards.
-func associationIsGuard(exprs []ExprNode) bool {
-	guard := true
+// trustedAssociations are the associations of someone who can write; the others (`NONE`, `CONTRIBUTOR`, `FIRST_TIMER`,
+// `FIRST_TIME_CONTRIBUTOR`, `MANNEQUIN`) can be anyone with a merged change or no access at all.
+var trustedAssociations = map[string]bool{"OWNER": true, "MEMBER": true, "COLLABORATOR": true}
+
+// associationRestricts reports whether a condition that reads `author_association` is true only for people who can write. It
+// follows the polarity of the expression: `contains(['OWNER', 'MEMBER'], association)` and `association == 'OWNER'` restrict,
+// their negations (`!contains(...)`, `association != 'OWNER'`, `... == false`) let everyone else through, a double negation
+// restricts again, `a && b` restricts when one side does, and `a || b` only when both do (`association == 'MEMBER' ||
+// startsWith(body, '/test')` lets everyone who writes the command through). A list or a value that is not a literal is given
+// the benefit of the doubt, like the other guards.
+func associationRestricts(exprs []ExprNode) bool {
 	for _, e := range exprs {
-		VisitExprNode(e, func(n, _ ExprNode, entering bool) {
-			s, ok := n.(*StringNode)
-			if !ok || entering {
-				return
-			}
-			for _, a := range reAssociation.FindAllString(strings.ToUpper(s.Value), -1) {
-				switch a {
-				case "NONE", "CONTRIBUTOR", "FIRST_TIMER", "FIRST_TIME_CONTRIBUTOR", "MANNEQUIN":
-					guard = false
-				}
-			}
-		})
+		if associationHolds(e, true) {
+			return true
+		}
 	}
-	return guard
+	return false
 }
 
-// associationIsNegated reports whether the condition turns the check of the association around: `!contains(..., association)`,
-// `!(association == 'OWNER')` or `association != 'OWNER'` let everyone but the named associations through.
-func associationIsNegated(r exprRef) bool {
-	if r.negated {
+// isAssociation reports whether the expression reads the association of the author of a comment, an issue or a pull request.
+func isAssociation(n ExprNode) bool {
+	chain, _, ok := chainOf(n)
+	return ok && len(chain) == 4 && chain[3] == "author_association"
+}
+
+// associationHolds reports whether the expression, when its value is `value`, is only possible for a trusted association.
+func associationHolds(n ExprNode, value bool) bool {
+	switch n := n.(type) {
+	case *NotOpNode:
+		return associationHolds(n.Operand, !value)
+	case *LogicalOpNode:
+		l, r := associationHolds(n.Left, value), associationHolds(n.Right, value)
+		if (n.Kind == LogicalOpNodeKindAnd) == value {
+			return l || r // both sides hold (a && b true, a || b false): one of them is enough
+		}
+		return l && r // one of the sides holds (a || b true, a && b false): each of them must
+	case *CompareOpNode:
+		if !n.Kind.IsEqualityOp() {
+			return false
+		}
+		equal := n.Kind == CompareOpNodeKindEq
+		for _, side := range [][2]ExprNode{{n.Left, n.Right}, {n.Right, n.Left}} {
+			if b, ok := side[1].(*BoolNode); ok {
+				return associationHolds(side[0], value == (equal == b.Value)) // `x == false` is `!x`
+			}
+			if isAssociation(side[0]) {
+				if lit, ok := side[1].(*StringNode); ok {
+					// association == 'LIT' restricts when it is true, and `!=` when it is false
+					return value == equal && trustedAssociations[strings.ToUpper(strings.TrimSpace(lit.Value))]
+				}
+				return value == equal // not a literal: the benefit of the doubt for `==`, none for `!=`
+			}
+		}
+	case *FuncCallNode:
+		if !strings.EqualFold(n.Callee, "contains") || len(n.Args) != 2 || !isAssociation(n.Args[1]) {
+			return false
+		}
+		return value && associationListTrusted(n.Args[0])
+	}
+	return false
+}
+
+// associationListTrusted reports whether the list that is searched for the association only has trusted ones: a literal
+// (`fromJSON('["OWNER","MEMBER"]')`, `'OWNER MEMBER'`) with none of the others in it. What is not a literal is given the benefit
+// of the doubt.
+func associationListTrusted(n ExprNode) bool {
+	var lits []*StringNode
+	VisitExprNode(n, func(c, _ ExprNode, entering bool) {
+		if l, ok := c.(*StringNode); ok && !entering {
+			lits = append(lits, l)
+		}
+	})
+	if len(lits) == 0 {
 		return true
 	}
-	c, ok := r.parent.(*CompareOpNode)
-	return ok && c.Kind == CompareOpNodeKindNotEq
-}
-
-// associationIsCompared reports whether the condition compares an expression that reads an association with false (`... ==
-// false`, `... != true`), which turns the check around the same way.
-func associationIsCompared(exprs []ExprNode) bool {
 	found := false
-	for _, e := range exprs {
-		VisitExprNode(e, func(n, _ ExprNode, entering bool) {
-			c, ok := n.(*CompareOpNode)
-			if !ok || !entering || !c.Kind.IsEqualityOp() {
-				return
-			}
-			other := c.Left
-			b, isBool := c.Right.(*BoolNode)
-			if !isBool {
-				b, isBool = c.Left.(*BoolNode)
-				other = c.Right
-			}
-			if !isBool || (c.Kind == CompareOpNodeKindEq) == b.Value {
-				return // `== true` and `!= false` keep the check
-			}
-			var refs []exprRef
-			collectExprRefs(other, nil, &refs)
-			for _, r := range refs {
-				if len(r.chain) == 4 && r.chain[3] == "author_association" {
-					found = true
+	for _, l := range lits {
+		for _, a := range reAssociation.FindAllString(strings.ToUpper(l.Value), -1) {
+			if !trustedAssociations[a] {
+				switch a {
+				case "NONE", "CONTRIBUTOR", "FIRST_TIMER", "FIRST_TIME_CONTRIBUTOR", "MANNEQUIN":
+					return false
 				}
+				continue // another word of the text
 			}
-		})
+			found = true
+		}
 	}
 	return found
 }
