@@ -1,0 +1,26 @@
+on:
+  pull_request:
+    types: [opened, stacked, destroyed]
+  image_version:
+    types: [created, finished]
+    names: [my-image]
+  workflow_dispatch:
+    inputs:
+      flavor:
+        type: choice
+        options: ["", staging, ""]
+        default: other
+permissions:
+  drives: owner
+  models: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    cancel-timeout-minutes: ${{ secrets.TOKEN }}
+    snapshot:
+      image-name: my-image
+      if: steps.nope.outcome == 'success' && foo.bar
+    steps:
+      - id: build
+        run: echo ${{ github.artifacts }}

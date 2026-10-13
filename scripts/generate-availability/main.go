@@ -218,7 +218,9 @@ func WorkflowKeyAvailability(key string) ([]string, []string) {
 	// https://github.com/github/docs/issues/41255
 	snapshotIf := "jobs.<job_id>.snapshot.if"
 	if !cases.Contains(snapshotIf) {
-		// https://github.com/actions/runner/blob/c96dcd472907e514274cdb4af281116adf7aad18/src/Sdk/WorkflowParser/Conversion/WorkflowTemplateConverter.cs#L2216
+		// The runner accepts the contexts, the status functions and hashFiles of a step condition since v2.335.0.
+		// https://github.com/actions/runner/pull/4443
+		// https://github.com/actions/runner/blob/main/src/Sdk/WorkflowParser/workflow-v1.0.json (snapshot-if)
 		ctx := []string{
 			"github",
 			"vars",
@@ -226,12 +228,18 @@ func WorkflowKeyAvailability(key string) ([]string, []string) {
 			"needs",
 			"strategy",
 			"matrix",
+			"steps",
+			"job",
+			"runner",
+			"env",
 		}
-		// https://github.com/actions/runner/blob/c96dcd472907e514274cdb4af281116adf7aad18/src/Sdk/WorkflowParser/Conversion/WorkflowTemplateConverter.cs#L2240
-		sp := []string{}
+		sp := []string{"always", "cancelled", "failure", "hashfiles", "success"}
 		cases.Add(snapshotIf, ctx, sp)
 		for _, c := range ctx {
 			ctxs[c] = append(ctxs[c], snapshotIf)
+		}
+		for _, f := range sp {
+			funcs[f] = append(funcs[f], snapshotIf)
 		}
 	}
 
