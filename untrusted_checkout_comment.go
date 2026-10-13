@@ -202,6 +202,29 @@ func jobHasGate(j *Job) bool {
 	return false
 }
 
+// neededEvents narrows the events by the conditions of the jobs that the job needs, at any depth: the job runs for the events
+// for which all of them run, and is skipped for the others (unless its own condition lets it run after a skipped job).
+func neededEvents(w *Workflow, j *Job, events []string, seen map[*Job]bool) []string {
+	if w == nil || j == nil || seen[j] || runsAfterSkippedNeeds(j.If) {
+		return events
+	}
+	seen[j] = true
+	for _, n := range j.Needs {
+		if n == nil {
+			continue
+		}
+		need := w.Jobs[strings.ToLower(n.Value)]
+		if need == nil {
+			continue
+		}
+		if events = eventsAfterCondition(events, need.If); len(events) == 0 {
+			return nil
+		}
+		events = neededEvents(w, need, events, seen)
+	}
+	return events
+}
+
 // neededJobGated reports whether a job that the job needs, at any depth, is skipped or fails unless the user is trusted:
 // its condition is a guard or is false for the events (it is skipped), it has an environment that holds it back (envHolds,
 // see environmentHolds) or a permission gate. The job is skipped with it, unless its own condition lets it run after a
