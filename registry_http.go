@@ -205,6 +205,9 @@ func (c *registryClient) token(ctx context.Context, registry, repository string,
 	if t == "" {
 		t = tok.AccessToken
 	}
+	if t == "" {
+		return "", fmt.Errorf("the token service of %s answered without a token", registry)
+	}
 	// The tokens are short-lived (about 5 minutes on Docker Hub): keep one for the time it says, less a margin, and 60 seconds
 	// (what the specification says) when it says nothing. A token about to expire is not kept.
 	life := time.Duration(tok.ExpiresIn) * time.Second
