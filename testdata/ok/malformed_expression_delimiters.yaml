@@ -1,0 +1,27 @@
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      EXPRESSION: ${{ github.sha }}
+      QUOTED_BRACES: "{${{ github.sha }}}"
+      SHELL_VARIABLES: ${HOME}/bin:$PATH
+      GO_TEMPLATE: "{{ .Id }} {{ .Values.image }} {{ range .Items }}"
+      UNKNOWN_NAME: ${ foo.bar } ${ github }
+      THREE_BRACES: "{{{ github.sha }}}"
+      UNTERMINATED: "{{ github.sha"
+      LITERAL_IN_EXPRESSION: ${{ format('{0} {{ github.sha }}', 1) }}
+    steps:
+      - run: echo "${GITHUB_SHA}" "{{ github.sha }}" # ${ github.sha } $ {{ github.sha }}
+      - run: |
+          # ${ github.sha } {{ github.sha }}
+          echo "{{ github.sha }}"
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const sha = `${ github.sha } {{ github.sha }}`
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: https://registry.npmjs.org
+          cache-dependency-path: $HOME/x
