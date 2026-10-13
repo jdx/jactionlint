@@ -1359,11 +1359,12 @@ A workflow_run workflow uses an artifact of the triggering run without validatin
 
 ## untrusted-checkout
 
-A pull_request_target or workflow_run workflow checks out the code of a pull request and runs it.
+A pull_request_target or workflow_run workflow checks out the code of a pull request and runs it, or turns off the protection of actions/checkout against the code of fork pull requests. With the option pedantic, a checkout that actions/checkout refuses for a fork is reported too.
 
 - Group: security
 - Default level: error
 - Profile: default
+- Option `pedantic` (bool, no default): Also report the pedantic checks, which are noisier. Unset, they run under the pedantic profile.
 - Details and examples: [checks](./checks.md#check-untrusted-checkout)
 
 ## unused-anchor
