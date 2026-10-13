@@ -225,6 +225,14 @@ single-dash long options of v1 are removed; the error names the replacement.
   * `-v`, `--verbose`:
     Enable verbose output
 
+  * `--completion` <SHELL>:
+    Print the completion script of a shell (`bash`, `zsh`, `fish` or `powershell`) and exit. It
+    completes the options, their values and the rule IDs of this version
+
+  * `--explain` <RULE>:
+    Print the documentation of a rule ID and exit: summary, group, profile, default level, options,
+    fixes, and its section of the checks document
+
   * `--stdin-filename` <NAME>:
     File name when reading input from stdin (default "&lt;stdin&gt;")
 
