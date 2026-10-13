@@ -268,8 +268,14 @@ func (rule *RuleCommandInjection) stdinInput(s *runscript.Script, c *runscript.C
 				}
 			}
 			for _, r := range sc.Redirects {
-				if r.Op == "<<<" && r.Target != nil {
+				switch {
+				case r.Op == "<<<" && r.Target != nil:
 					if d := rule.judge(s, sc, r.Target); d.kind == dataUntrusted {
+						return d
+					}
+				case r.Heredoc != nil && !r.Heredoc.Quoted:
+					// `cat <<EOF | bash`: the text of the here document is what the shell runs
+					if d := f.judgeHeredoc(s, r.Heredoc); d.kind == dataUntrusted {
 						return d
 					}
 				}
