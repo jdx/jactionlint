@@ -10,6 +10,7 @@ bot-conditions default security error
 cache-poisoning default security error
 checkout-static-credentials default security error
 command-injection pedantic security warn
+comment-trigger-authorization pedantic security warn
 concurrency-cancels-prs default correctness error
 concurrency-cancels-release default correctness error
 concurrency-deadlock correctness correctness error

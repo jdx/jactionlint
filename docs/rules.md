@@ -45,6 +45,7 @@ rules:
 | [cache-poisoning](#cache-poisoning) | security | error | default |
 | [checkout-static-credentials](#checkout-static-credentials) | security | error | default |
 | [command-injection](#command-injection) | security | warn | pedantic |
+| [comment-trigger-authorization](#comment-trigger-authorization) | security | warn | pedantic |
 | [concurrency-cancels-prs](#concurrency-cancels-prs) | correctness | error | default |
 | [concurrency-cancels-release](#concurrency-cancels-release) | correctness | error | default |
 | [concurrency-deadlock](#concurrency-deadlock) | correctness | error | correctness |
@@ -302,6 +303,15 @@ Input that an outsider controls is run as code by a script after it was moved to
 - Default level: warn
 - Profile: pedantic
 - Details and examples: [checks](./checks.md#check-command-injection)
+
+## comment-trigger-authorization
+
+A job of a comment-triggered workflow is started by the text of the comment and nothing checks who wrote it.
+
+- Group: security
+- Default level: warn
+- Profile: pedantic
+- Details and examples: [checks](./checks.md#check-comment-trigger-authorization)
 
 ## concurrency-cancels-prs
 
