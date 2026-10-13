@@ -63,6 +63,14 @@ type Error struct {
 	// does not return such errors from its methods or print them, except in the SARIF log (as
 	// suppressed results) and the summary format; it is set only on the way there.
 	Baselined bool
+	// Events are the names of the events which trigger the workflow the finding is in, sorted. It is set only
+	// with LinterOptions.FindingContext, and for a workflow.
+	Events []string
+	// Permissions are the permissions of the token of the job the finding is in (the permissions of the job, or
+	// else the ones of the workflow): scope to read, write or none, "*" for read-all and write-all, and "*" at
+	// none for an empty mapping. It is empty when the file does not configure them (the default token of the
+	// repository applies) and unless LinterOptions.FindingContext is set.
+	Permissions map[string]string
 	// RetiredID is the rule ID that the finding had before its audit was merged into ID, when it was one of
 	// the findings which the pedantic option adds (see RenamedRule). Ignores written with the old ID match it.
 	RetiredID string
@@ -222,6 +230,9 @@ func (e *Error) templateFields(x *lineIndex) *ErrorTemplateFields {
 		EndLine:   endLine,
 		Fix:       e.Fix,
 		NoFix:     e.NoFix,
+
+		Events:      e.Events,
+		Permissions: e.Permissions,
 	}
 }
 
@@ -503,6 +514,11 @@ type ErrorTemplateFields struct {
 	// NoFix says why a finding which the rule can fix has none. When encoding into JSON, this field is
 	// omitted when the error has a fix or is advice only.
 	NoFix *NoFix `json:"no_fix,omitempty"`
+	// Events are the events which trigger the workflow. They are in the output only with --finding-context.
+	Events []string `json:"events,omitempty"`
+	// Permissions are the permissions of the token of the job, scope to level. They are in the output only
+	// with --finding-context, and when the file configures them.
+	Permissions map[string]string `json:"permissions,omitempty"`
 }
 
 func unescapeBackslash(s string) string {
