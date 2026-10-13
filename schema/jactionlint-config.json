@@ -107,13 +107,16 @@
               "agentic-actions",
               "anonymous-definition",
               "archived-uses",
+              "argument-injection",
               "artipacked",
               "background-step-not-waited",
               "bot-conditions",
               "cache-poisoning",
               "checkout-static-credentials",
+              "command-injection",
               "concurrency-cancels-prs",
               "concurrency-cancels-release",
+              "concurrency-deadlock",
               "concurrency-limits",
               "conflicting-action-inputs",
               "conflicting-runner-labels",
@@ -192,6 +195,7 @@
               "mutable-runner-label",
               "obfuscation",
               "outdated-action-runner",
+              "output-clobbering",
               "overprovisioned-secrets",
               "pipeline-without-pipefail",
               "pyflakes",
@@ -326,13 +330,16 @@
                   "agentic-actions",
                   "anonymous-definition",
                   "archived-uses",
+                  "argument-injection",
                   "artipacked",
                   "background-step-not-waited",
                   "bot-conditions",
                   "cache-poisoning",
                   "checkout-static-credentials",
+                  "command-injection",
                   "concurrency-cancels-prs",
                   "concurrency-cancels-release",
+                  "concurrency-deadlock",
                   "concurrency-limits",
                   "conflicting-action-inputs",
                   "conflicting-runner-labels",
@@ -411,6 +418,7 @@
                   "mutable-runner-label",
                   "obfuscation",
                   "outdated-action-runner",
+                  "output-clobbering",
                   "overprovisioned-secrets",
                   "pipeline-without-pipefail",
                   "pyflakes",
@@ -476,13 +484,16 @@
                     "agentic-actions",
                     "anonymous-definition",
                     "archived-uses",
+                    "argument-injection",
                     "artipacked",
                     "background-step-not-waited",
                     "bot-conditions",
                     "cache-poisoning",
                     "checkout-static-credentials",
+                    "command-injection",
                     "concurrency-cancels-prs",
                     "concurrency-cancels-release",
+                    "concurrency-deadlock",
                     "concurrency-limits",
                     "conflicting-action-inputs",
                     "conflicting-runner-labels",
@@ -561,6 +572,7 @@
                     "mutable-runner-label",
                     "obfuscation",
                     "outdated-action-runner",
+                    "output-clobbering",
                     "overprovisioned-secrets",
                     "pipeline-without-pipefail",
                     "pyflakes",
@@ -961,6 +973,28 @@
             }
           ]
         },
+        "argument-injection": {
+          "description": "Free text that an outsider writes is expanded into the program text or the options of sed, awk, find, curl, wget and git clone. Group: security. Profile: pedantic. Default level: warn. https://jactionlint.jdx.dev/rules#argument-injection",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
         "artipacked": {
           "description": "actions/checkout persists the GITHUB_TOKEN credential in the git config. Group: security. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#artipacked",
           "oneOf": [
@@ -1028,7 +1062,7 @@
           ]
         },
         "cache-poisoning": {
-          "description": "A cache is restored in a release job or written by a privileged trigger. With the option pedantic, a tag that only starts checks and a branch filter that names a release branch among others count as releases too. Group: security. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#cache-poisoning",
+          "description": "A cache is restored in a release job or written by a privileged trigger. With the option pedantic, a tag that only starts checks and a branch filter that names a release branch among others count as releases too, and a cache that saves a file with credentials is reported. Group: security. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#cache-poisoning",
           "oneOf": [
             {
               "$ref": "#/definitions/level"
@@ -1086,6 +1120,28 @@
             }
           ]
         },
+        "command-injection": {
+          "description": "Input that an outsider controls is run as code by a script after it was moved to an environment variable: eval, sh -c, a variable as a command, a pipe into a shell, an inline program, child_process in github-script. Group: security. Profile: pedantic. Default level: warn. https://jactionlint.jdx.dev/rules#command-injection",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
         "concurrency-cancels-prs": {
           "description": "A concurrency group that cancels runs is shared by all pull requests, so unrelated pull requests cancel each other. Group: correctness. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#concurrency-cancels-prs",
           "oneOf": [
@@ -1110,6 +1166,28 @@
         },
         "concurrency-cancels-release": {
           "description": "cancel-in-progress can cancel a release or a deployment which is still running. Group: correctness. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#concurrency-cancels-release",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "concurrency-deadlock": {
+          "description": "The concurrency group of a workflow is the same as the group of a local reusable workflow it calls, so GitHub detects a deadlock and cancels the run. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#concurrency-deadlock",
           "oneOf": [
             {
               "$ref": "#/definitions/level"
@@ -1393,7 +1471,7 @@
           ]
         },
         "dependabot-missing-actions-update": {
-          "description": "dependabot.yml has no github-actions update although the repository has workflows using actions. Group: policy. Profile: pedantic. Default level: warn. https://jactionlint.jdx.dev/rules#dependabot-missing-actions-update",
+          "description": "dependabot.yml has no github-actions update although the repository has workflows using actions, or its github-actions updates do not cover the local composite actions that use actions. Group: policy. Profile: pedantic. Default level: warn. https://jactionlint.jdx.dev/rules#dependabot-missing-actions-update",
           "oneOf": [
             {
               "$ref": "#/definitions/level"
@@ -1793,6 +1871,20 @@
                   },
                   "type": "array"
                 },
+                "images-allow": {
+                  "description": "Glob patterns of the only container images which may be used (container:, services:, docker:// and docker run in a script), e.g. \"ghcr.io/my-org/*\" or \"node:20\". Docker Hub names can leave out the registry (\"node\" is \"docker.io/library/node\").",
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                "images-deny": {
+                  "description": "Glob patterns of container images which must not be used.",
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
                 "level": {
                   "allOf": [
                     {
@@ -1851,7 +1943,7 @@
           ]
         },
         "github-app": {
-          "description": "A GitHub App token is issued with more access or a longer life than needed. Group: security. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#github-app",
+          "description": "A GitHub App token (actions/create-github-app-token, tibdex/github-app-token, peter-murray/workflow-application-token-action) is issued with more access or a longer life than needed. Group: security. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#github-app",
           "oneOf": [
             {
               "$ref": "#/definitions/level"
@@ -2927,6 +3019,28 @@
             }
           ]
         },
+        "output-clobbering": {
+          "description": "Input that an outsider controls is written to GITHUB_OUTPUT as a record, so a line break in it sets the other outputs of the step. Group: security. Profile: pedantic. Default level: warn. https://jactionlint.jdx.dev/rules#output-clobbering",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
         "overprovisioned-secrets": {
           "description": "An expression uses the whole secrets context. Group: security. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#overprovisioned-secrets",
           "oneOf": [
@@ -3681,6 +3795,14 @@
                   "description": "Also report the pedantic checks, which are noisier. Unset, they run under the pedantic profile.",
                   "type": "boolean"
                 },
+                "policies": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "default": {},
+                  "description": "How strongly to pin the images matching a pattern: hash-pin (a digest, the default of require-digest), tag-pin (a tag other than latest, or a digest) or any. The most specific pattern that matches wins over require-digest: more literal characters before the first *, in the pattern with the registry written out, then fewer *, then a tag, then the longer pattern. Patterns are globs of the image name, where * matches any characters: \"*\", \"ghcr.io/my-org/*\", \"registry.example.com/team/tool\" or \"node:20\". The registry of Docker Hub can be left out (\"node\" is \"docker.io/library/node\").",
+                  "type": "object"
+                },
                 "require-digest": {
                   "default": true,
                   "description": "Report images pinned by a tag other than latest too. Turn it off to report only images without a tag or with the latest tag.",
@@ -3739,7 +3861,7 @@
                     "type": "string"
                   },
                   "default": {},
-                  "description": "How strongly to pin the actions matching a pattern: hash-pin (full commit SHA, the default for everything), ref-pin (any tag, branch or SHA) or any. The most specific pattern wins. Patterns are \"*\", \"owner/*\", \"owner/repo\" and \"owner/repo/path\". Docker images follow the \"*\" policy.",
+                  "description": "How strongly to pin the actions matching a pattern: hash-pin (full commit SHA, the default for everything), ref-pin (any tag, branch or SHA), immutable-release (a full commit SHA, or with --online the tag of an immutable GitHub release) or any. The most specific pattern wins. Patterns are \"*\", \"owner/*\", \"owner/repo\" and \"owner/repo/path\". Docker images follow the \"*\" policy.",
                   "type": "object"
                 }
               },
@@ -3841,7 +3963,7 @@
           ]
         },
         "untrusted-artifact": {
-          "description": "A workflow_run workflow uses an artifact of the triggering run without validating it. Group: security. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#untrusted-artifact",
+          "description": "A workflow_run workflow uses an artifact of the triggering run without validating it. With the option pedantic, also one that downloads every artifact of the run. Group: security. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#untrusted-artifact",
           "oneOf": [
             {
               "$ref": "#/definitions/level"
@@ -3856,6 +3978,10 @@
                     }
                   ],
                   "description": "The level of the rule: error, warn, info or off."
+                },
+                "pedantic": {
+                  "description": "Also report the pedantic checks, which are noisier. Unset, they run under the pedantic profile.",
+                  "type": "boolean"
                 }
               },
               "type": "object"
@@ -3863,7 +3989,7 @@
           ]
         },
         "untrusted-checkout": {
-          "description": "A pull_request_target or workflow_run workflow checks out the code of a pull request and runs it, or turns off the protection of actions/checkout against the code of fork pull requests. With the option pedantic, a checkout that actions/checkout refuses for a fork is reported too. Group: security. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#untrusted-checkout",
+          "description": "A pull_request_target, workflow_run or issue_comment workflow checks out the code of a pull request and runs it, or turns off the protection of actions/checkout against the code of fork pull requests. With the option pedantic, a checkout that actions/checkout refuses for a fork is reported too. Group: security. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#untrusted-checkout",
           "oneOf": [
             {
               "$ref": "#/definitions/level"
@@ -4055,7 +4181,7 @@
           ]
         },
         "use-trusted-publishing": {
-          "description": "A package is published with a long-lived credential although the registry supports trusted publishing. Group: security. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#use-trusted-publishing",
+          "description": "A package is published with a long-lived credential although the registry supports trusted publishing. With the option pedantic, also trusted publishing in a job that builds the package or has no environment, and attestations that are switched off. Group: security. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#use-trusted-publishing",
           "oneOf": [
             {
               "$ref": "#/definitions/level"
@@ -4070,6 +4196,10 @@
                     }
                   ],
                   "description": "The level of the rule: error, warn, info or off."
+                },
+                "pedantic": {
+                  "description": "Also report the pedantic checks, which are noisier. Unset, they run under the pedantic profile.",
+                  "type": "boolean"
                 }
               },
               "type": "object"
