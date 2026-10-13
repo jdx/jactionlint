@@ -1,0 +1,18 @@
+on: push
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      # ERROR: without a $ this writes a file named GITHUB_OUTPUT in the working directory
+      - id: version
+        run: echo "version=1.2.3" >> GITHUB_OUTPUT
+      # ERROR: the second > empties the file, so "a" is lost
+      - id: pair
+        run: |
+          echo "a=1" >> "$GITHUB_OUTPUT"
+          echo "b=2" > "$GITHUB_OUTPUT"
+      # OK: the variable, appended
+      - run: echo "c=3" >> "$GITHUB_OUTPUT"
+      # OK: each step has its own file, so a lone > is harmless
+      - run: echo "d=4" > "$GITHUB_OUTPUT"

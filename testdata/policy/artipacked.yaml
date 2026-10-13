@@ -59,3 +59,27 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           path: .
+  mentions-push-only:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          # Commits go through GraphQL rather than `git push`
+          echo "to publish by hand run: git push origin main"
+          printf '%s\n' "git push --force is not used here"
+  pushes-through-a-wrapper:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: retry 3 git push origin HEAD
+  pushes-in-bash-c:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash -c "git push origin HEAD"
+  pushes-with-pwsh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - shell: pwsh
+        run: git push origin HEAD
