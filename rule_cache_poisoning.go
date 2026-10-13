@@ -843,8 +843,15 @@ func runsWithNeeds(cond string, scenarios []triggerScenario, sets map[string][]s
 	// the choices for the jobs that are not named: success() (all succeeded, or not), failure() and cancelled()
 	type flags struct{ success, failure, cancelled bool }
 	var restChoices []flags
-	for _, f := range []flags{{true, false, false}, {false, false, false}, {false, true, false}, {false, false, true}} {
-		if f.success && !allSucceed || f.failure && !canFail || f.cancelled && !canCancel || !f.success && !f.failure && !f.cancelled && !anyOther {
+	// one needed job can fail while another is cancelled, so both can be true when two different jobs can do each
+	both := false
+	for _, a := range rest {
+		for _, b := range rest {
+			both = both || a != b && has(a, "failure") && has(b, "cancelled")
+		}
+	}
+	for _, f := range []flags{{true, false, false}, {false, false, false}, {false, true, false}, {false, false, true}, {false, true, true}} {
+		if f.success && !allSucceed || f.failure && !canFail || f.cancelled && !canCancel || f.failure && f.cancelled && !both || !f.success && !f.failure && !f.cancelled && !anyOther {
 			continue
 		}
 		restChoices = append(restChoices, f)

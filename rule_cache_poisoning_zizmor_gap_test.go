@@ -424,6 +424,8 @@ func TestCachePoisoningDependencyJudgedByItsOwnNeeds(t *testing.T) {
 		{"cleanup runs when the check does not succeed", head + build + check("") + cleanup("!success()") + publish, 1},
 		{"cleanup after a check that is skipped on tags", head + build + check("github.event_name == 'workflow_dispatch'") + cleanup("failure()") + publish, 0},
 		{"a job that is not named: !success() is true when one of them may fail", head + build + check("") + "  publish:\n    needs: [build, check]\n    if: ${{ !success() }}\n" + pub, 1},
+		{"one unnamed job cannot fail and be cancelled at once", head + build + "  publish:\n    needs: [build]\n    if: ${{ always() && failure() && cancelled() }}\n" + pub, 0},
+		{"two unnamed jobs: one fails and the other is cancelled", head + build + check("") + "  publish:\n    needs: [build, check]\n    if: ${{ always() && failure() && cancelled() }}\n" + pub, 1},
 		{"a job that is not named: success() is true when all succeed", head + build + check("") + "  publish:\n    needs: [build, check]\n    if: ${{ success() && github.event_name == 'workflow_dispatch' }}\n" + pub, 0},
 		{"a needed job with an open condition on the trigger may have succeeded", head + build + check("github.ref == format('refs/tags/{0}', inputs.t)") + "  publish:\n    needs: [build, check]\n    if: ${{ always() && needs.check.result == 'success' }}\n" + pub, 1},
 		{"a needed job whose condition is true on tags is not skipped", head + build + check("github.event_name == 'push'") + "  publish:\n    needs: [build, check]\n    if: ${{ always() && needs.check.result == 'skipped' }}\n" + pub, 0},
