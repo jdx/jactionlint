@@ -1072,9 +1072,12 @@ func (c *httpGitHubClient) Repository(ctx context.Context, owner, repo string) (
 	if err != nil {
 		return nil, err
 	}
-	if _, err := c.getJSON(ctx, path, &r); err != nil {
+	ans, err := c.getJSON(ctx, path, &r)
+	if err != nil {
 		return nil, err
 	}
+	// Not known to be public is private: an answer which does not say "private": false, or which says internal, is
+	r.Private = !repoBodyPublic(ans.body)
 	return &r, nil
 }
 

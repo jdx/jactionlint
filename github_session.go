@@ -152,10 +152,13 @@ type onlineSession struct {
 	compares   memo[compareKey, GitHubCompareStatus]
 	advisories memo[string, []GitHubAdvisory]
 	origins    memo[originKey, originResult]
-	files      memo[fileKey, repoFile]
+	files      memo[fileKey, remoteFile]
 	actions    memo[remoteActionKey, *ActionMetadata]
 	workflows  memo[remoteWorkflowKey, *ReusableWorkflowMetadata]
 	pins       memo[pinProblemsKey, []pinProblem]
+	owners     memo[string, *GitHubOwner]
+
+	environments memo[environmentKey, environmentResult]
 }
 
 type originKey struct {
@@ -406,7 +409,7 @@ func (s *onlineSession) record(err error, what string) {
 	case err == nil, errors.Is(err, ErrGitHubNotFound):
 		s.transient = 0
 		return
-	case errors.Is(err, ErrGitHubBranchScanUnavailable), errors.Is(err, errOnlineExcluded), errors.Is(err, errOnlineNoFiles):
+	case errors.Is(err, ErrGitHubBranchScanUnavailable), errors.Is(err, errOnlineExcluded), errors.Is(err, errNoOwnerLookup), errors.Is(err, errOnlineNoFiles):
 		return // Not a failure: the caller does it another way, or was asked not to
 	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded) && s.ctx.Err() != nil:
 		s.stopLocked(err)

@@ -9,7 +9,7 @@ import (
 )
 
 // onlyMetadataConfig keeps the other online rules from asking about the repositories of the test.
-const onlyMetadataConfig = "rules:\n  archived-uses: off\n  known-vulnerable-actions: off\n  ref-confusion: off\n  stale-action-refs: off\n  impostor-commit: off\n  ref-version-mismatch: off\n"
+const onlyMetadataConfig = "rules:\n  archived-uses: off\n  known-vulnerable-actions: off\n  ref-confusion: off\n  stale-action-refs: off\n  impostor-commit: off\n  ref-version-mismatch: off\n  repojacking: off\n"
 
 const remoteTestSHA = "0123456789abcdef0123456789abcdef01234567"
 

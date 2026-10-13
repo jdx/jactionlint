@@ -1,0 +1,5 @@
+test.yaml:7:14: "aube install" is told not to freeze the lock file (--no-frozen-lockfile), so it may update the lock file instead of failing when it is out of date. pass --frozen-lockfile or use `aube ci` [unlocked-install]
+test.yaml:8:14: "aube install" is told not to freeze the lock file (--prefer-frozen-lockfile), so it may update the lock file instead of failing when it is out of date. pass --frozen-lockfile or use `aube ci` [unlocked-install]
+test.yaml:9:14: "aube install" is told not to freeze the lock file (--fix-lockfile), so it may update the lock file instead of failing when it is out of date. pass --frozen-lockfile or use `aube ci` [unlocked-install]
+test.yaml:10:14: "aube install" is told not to freeze the lock file (--no-frozen-lockfile), so it may update the lock file instead of failing when it is out of date. pass --frozen-lockfile or use `aube ci` [unlocked-install]
+test.yaml:11:14: "aube install" is told not to freeze the lock file (--no-frozen-lockfile), so it may update the lock file instead of failing when it is out of date. pass --frozen-lockfile or use `aube ci` [unlocked-install]

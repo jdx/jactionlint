@@ -1,6 +1,174 @@
 {
   "_note": "Trimmed answers of the GitHub API recorded in 2026-10 (see github_fixture.go). Tag and branch lists keep only the entries the tests use, and the action.yml files of taiki-e/install-action, jdx/mise-action and gradle/actions are shortened (inputs and outputs as recorded, steps cut), and so is the workflow of google/osv-scanner-action (the declaration of the call as recorded, the jobs replaced by one). pre-commit/action, actions/jekyll-build-pages, aquasecurity/trivy-action, aquasecurity/setup-trivy, actions/cache and reviewdog/action-actionlint have only the recorded files. example/* repositories are made up. A file which is not listed under files does not exist.",
+  "owners": {
+    "actions": true,
+    "example": true,
+    "ghost-owner": false,
+    "former-owner": false,
+    "moved-org": true,
+    "new-owner": true
+  },
   "repos": {
+    "example/environments": {
+      "repo": {
+        "archived": false,
+        "default_branch": "main"
+      },
+      "environments": {
+        "release": {
+          "found": true,
+          "required_reviewers": true
+        },
+        "staging": {
+          "found": true
+        },
+        "prodution": {
+          "found": false
+        }
+      }
+    },
+    "example/private-environments": {
+      "repo": {
+        "archived": false,
+        "default_branch": "main",
+        "private": true
+      },
+      "environments": {
+        "production": {
+          "found": false
+        }
+      }
+    },
+    "ghost-owner/deploy": {
+      "missing": true
+    },
+    "former-owner/deploy": {
+      "repo": {
+        "archived": false,
+        "default_branch": "main",
+        "full_name": "new-owner/deploy"
+      },
+      "tags": {
+        "tags": [
+          {
+            "name": "v1",
+            "sha": "6666666666666666666666666666666666666666"
+          }
+        ]
+      },
+      "branches": {
+        "branches": [
+          {
+            "name": "main",
+            "sha": "7777777777777777777777777777777777777777"
+          }
+        ]
+      },
+      "refs": {
+        "heads/v1": {
+          "found": false
+        }
+      },
+      "advisories": {
+        "list": []
+      }
+    },
+    "moved-org/deploy": {
+      "repo": {
+        "archived": false,
+        "default_branch": "main",
+        "full_name": "new-owner/deploy"
+      },
+      "tags": {
+        "tags": [
+          {
+            "name": "v1",
+            "sha": "6666666666666666666666666666666666666666"
+          }
+        ]
+      },
+      "branches": {
+        "branches": [
+          {
+            "name": "main",
+            "sha": "7777777777777777777777777777777777777777"
+          }
+        ]
+      },
+      "refs": {
+        "heads/v1": {
+          "found": false
+        }
+      },
+      "advisories": {
+        "list": []
+      }
+    },
+    "new-owner/old-name": {
+      "repo": {
+        "archived": false,
+        "default_branch": "main",
+        "full_name": "new-owner/deploy"
+      },
+      "tags": {
+        "tags": [
+          {
+            "name": "v1",
+            "sha": "6666666666666666666666666666666666666666"
+          }
+        ]
+      },
+      "branches": {
+        "branches": [
+          {
+            "name": "main",
+            "sha": "7777777777777777777777777777777777777777"
+          }
+        ]
+      },
+      "refs": {
+        "heads/v1": {
+          "found": false
+        }
+      },
+      "advisories": {
+        "list": []
+      }
+    },
+    "new-owner/private": {
+      "missing": true
+    },
+    "new-owner/deploy": {
+      "repo": {
+        "archived": false,
+        "default_branch": "main",
+        "full_name": "new-owner/deploy"
+      },
+      "tags": {
+        "tags": [
+          {
+            "name": "v1",
+            "sha": "6666666666666666666666666666666666666666"
+          }
+        ]
+      },
+      "branches": {
+        "branches": [
+          {
+            "name": "main",
+            "sha": "7777777777777777777777777777777777777777"
+          }
+        ]
+      },
+      "refs": {
+        "heads/v1": {
+          "found": false
+        }
+      },
+      "advisories": {
+        "list": []
+      }
+    },
     "actions/checkout": {
       "repo": {
         "archived": false,

@@ -21,6 +21,8 @@ import (
 type gitHubFixtures struct {
 	// Repos maps "owner/repo" in lower case to the recorded data.
 	Repos map[string]*fixtureRepo `json:"repos"`
+	// Owners maps the login of a user or organization in lower case to whether it exists, see GitHubOwnerClient.
+	Owners map[string]bool `json:"owners,omitempty"`
 }
 
 type fixtureRepo struct {
@@ -36,6 +38,8 @@ type fixtureRepo struct {
 	// listed does not exist: the lookup is optional for the checks which use it, and answering "not found" keeps
 	// the other recorded lookups of a test from failing because of one nobody recorded.
 	Files map[string]*fixtureFile `json:"files,omitempty"`
+	// Environments are the answers about the environments by their lower case name, see GitHubEnvironmentClient.
+	Environments map[string]*fixtureEnvironment `json:"environments,omitempty"`
 }
 
 type fixtureFile struct {
