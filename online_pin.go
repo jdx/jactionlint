@@ -29,7 +29,7 @@ func (l *Linter) attachPinFixes(sess *onlineSession, cfg *Config, src []byte, er
 	short, _ := cfg.ruleOptionBool("unpinned-uses", "short-pin-comment")
 	var starts []int // Byte offset of each line
 	for _, e := range errs {
-		if e.ID != "unpinned-uses" || e.Fix != nil || e.Line <= 0 || e.Column <= 0 {
+		if e.ID != "unpinned-uses" || e.Fix != nil || e.NoFix != nil || e.Line <= 0 || e.Column <= 0 {
 			continue
 		}
 		if starts == nil {
