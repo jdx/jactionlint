@@ -37,7 +37,7 @@ func TestMacosGnuFlagsIsPedantic(t *testing.T) {
 
 func TestIsMacOSRunnerLabel(t *testing.T) {
 	for l, want := range map[string]bool{
-		"macos-latest": true, "macos-15": true, "macOS-14": true, "macos-15-intel": true, "macos-26-xlarge": true,
+		"macos-latest": true, "xcode-27": true, "xcode-27-xlarge": true, "macos-15": true, "macOS-14": true, "macos-15-intel": true, "macos-26-xlarge": true,
 		// Labels of runners of the owner, and other systems
 		"macOS-ARM64": false, "macos": false, "macos-custom": false, "ubuntu-latest": false, "windows-latest": false, "self-hosted": false,
 	} {

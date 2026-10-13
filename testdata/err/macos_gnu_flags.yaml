@@ -18,6 +18,14 @@ jobs:
           set -eu
           sed -i "s/$OLD/$NEW/" config.yml
           cat config.yml | tee --append log.txt
+      # The value of the option is glued to it, and other options come before
+      - run: date -d@1700000000 +%F
+      - run: stat -c%s file.txt
+      - run: cp -f --parents src/a.go dist/
+  xcode:
+    runs-on: xcode-27
+    steps:
+      - run: date -d yesterday
   matrix:
     strategy:
       matrix:

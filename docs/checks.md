@@ -5563,7 +5563,7 @@ rules:
 
 The rule `macos-gnu-flags` (in the `pedantic` profile, as a warning) reports an option of a command in a `run:` script that the GNU
 version of the command has and the BSD version on macOS does not, in a job that runs on macOS: a `runs-on` label of a GitHub-hosted
-macOS runner (`macos-latest`, `macos-15`, `macos-14-large`, ...) or a value of `runs-on: ${{ matrix.os }}` that is one. A workflow
+macOS runner (`macos-latest`, `macos-15`, `macos-14-large`, `xcode-27`, ...) or a value of `runs-on: ${{ matrix.os }}` that is one. A workflow
 that was written and tried on Linux fails with `tee: illegal option -- -` on the first macOS job.
 
 It reports only what the sources that Apple publishes for the commands of macOS (`shell_cmds`, `file_cmds` and `text_cmds` of

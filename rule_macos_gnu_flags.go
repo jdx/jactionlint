@@ -153,10 +153,10 @@ func macosLabelOf(j *Job) string {
 }
 
 // isMacOSRunnerLabel reports whether the label is a GitHub-hosted macOS runner: macos-latest, macos-14, macos-15-intel,
-// macos-26-xlarge, ... A label such as macOS-ARM64 is the label of a self-hosted runner.
+// macos-26-xlarge, xcode-27, ... A label such as macOS-ARM64 is the label of a self-hosted runner.
 func isMacOSRunnerLabel(l string) bool {
 	l = strings.ToLower(l)
-	return strings.HasPrefix(l, "macos-") && isGitHubHostedLabel(l)
+	return (strings.HasPrefix(l, "macos-") || strings.HasPrefix(l, "xcode-")) && isGitHubHostedLabel(l)
 }
 
 // portableTools returns the names of the commands which the script also calls in a form that is the one of macOS, as in
@@ -208,6 +208,10 @@ type macosGnuForm struct {
 var (
 	// sedInPlaceRe is a word that is the in-place option of sed, alone or last of a cluster (-i, -Ei, -ni).
 	sedInPlaceRe = regexp.MustCompile(`^-[A-Za-z]*i$`)
+	// dateOptionRe is the -d option of GNU date, alone or with its value attached (-d@1700000000, -ud).
+	dateOptionRe = regexp.MustCompile(`^-u?d`)
+	// statFormatRe is the -c option of GNU stat, alone or with its value attached (-c%s, -Lc).
+	statFormatRe = regexp.MustCompile(`^-[LFlnqrsx]*c`)
 	// sedSuffixRe is a word that BSD sed takes as the suffix of the backup: ".bak", ".orig", "~", "bak".
 	sedSuffixRe = regexp.MustCompile(`^(?:\.[A-Za-z0-9_~.-]*|~|[A-Za-z]{3,})$`)
 )
@@ -219,11 +223,11 @@ func macosGnuForms(c *runscript.Command) []macosGnuForm {
 		out = append(out, macosGnuForm{word: w, message: msg, hint: hint})
 	}
 	for i, w := range c.Args {
-		if w == nil || w.Dynamic() {
+		if w == nil {
 			continue
 		}
 		v := w.Raw
-		if i > 0 && c.Args[i-1] != nil && grepValueFlags[c.Args[i-1].Raw] {
+		if c.Name == "grep" && i > 0 && c.Args[i-1] != nil && grepValueFlags[c.Args[i-1].Raw] {
 			continue // the value of an option: grep -e -P
 		}
 		switch c.Name {
@@ -243,7 +247,7 @@ func macosGnuForms(c *runscript.Command) []macosGnuForm {
 				add(w, `"sed -i" without a suffix takes the script as the suffix of the backup on macOS, so the file is read as the script ("invalid command code").`, `Use "sed -i.bak" (and remove the backup), which both seds understand, or "sed -i ''" on macOS only.`)
 			}
 		case "date":
-			if v == "-d" || v == "--date" || strings.HasPrefix(v, "--date=") {
+			if dateOptionRe.MatchString(v) || v == "--date" || strings.HasPrefix(v, "--date=") {
 				add(w, `"date -d" does not exist in the date of macOS ("illegal option -- d").`, `Use "date -j -f FORMAT ..." or "date -v", or install coreutils and call "gdate".`)
 			}
 		case "grep":
@@ -251,7 +255,7 @@ func macosGnuForms(c *runscript.Command) []macosGnuForm {
 				add(w, `"grep -P" is rejected by the grep of macOS ("invalid option -- P"): it has no Perl regular expressions.`, `Use "grep -E" if the pattern allows it, or "perl -ne", which macOS has too.`)
 			}
 		case "stat":
-			if v == "-c" || v == "--format" || strings.HasPrefix(v, "--format=") || v == "--printf" || strings.HasPrefix(v, "--printf=") {
+			if statFormatRe.MatchString(v) || v == "--format" || strings.HasPrefix(v, "--format=") || v == "--printf" || strings.HasPrefix(v, "--printf=") {
 				add(w, `"stat -c" does not exist in the stat of macOS: its format option is -f.`, `Use "stat -f FORMAT" on macOS, or read the value in another way (wc -c < file for the size).`)
 			}
 		case "find":
