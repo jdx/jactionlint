@@ -1,0 +1,15 @@
+on:
+  issue_comment:
+    types: [created]
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    outputs:
+      approved: ${{ steps.gate.outputs.approved }}
+    steps:
+      - id: gate
+        run: |
+          echo "approved=false" >> "$GITHUB_OUTPUT"
+          echo "body=$BODY" >> "$GITHUB_OUTPUT"
+        env:
+          BODY: ${{ github.event.comment.body }}

@@ -34,6 +34,11 @@ func TestRuleUntrustedCheckoutGuard(t *testing.T) {
 		{"release above the floor", nil, prt + head("actions/checkout@v5.2.1", ""), true, ""},
 		{"commit with the version of the floor in its comment", nil, prt + head("actions/checkout@"+sha+" # v4.4.0", ""), true, ""},
 		{"commit with a later major version in its comment", nil, prt + head("actions/checkout@"+sha+" # tag=v7.0.1", ""), true, ""},
+		{"the head commit beside a branch name that the protection does not look at", nil, prt + "      - uses: actions/checkout@v4\n        with:\n          ref: ${{ github.event.pull_request.head.sha || github.head_ref }} # want\n      - run: make\n", false, ""},
+		{"the head commit beside the branch of the head", nil, prt + "      - uses: actions/checkout@v4\n        with:\n          ref: ${{ github.event.pull_request.head.sha || github.event.pull_request.head.ref }} # want\n      - run: make\n", false, ""},
+		{"the number of the pull request in refs/pull", nil, prt + "      - uses: actions/checkout@v4\n        with:\n          ref: refs/pull/${{ github.event.pull_request.number }}/head\n      - run: make\n", true, ""},
+		{"another property of the pull request in refs/pull", nil, prt + "      - uses: actions/checkout@v4\n        with:\n          ref: refs/pull/${{ github.event.pull_request.title }}/head # want\n      - run: make\n", false, ""},
+		{"the head commit twice", nil, prt + "      - uses: actions/checkout@v4\n        with:\n          ref: ${{ github.event.pull_request.head.sha || github.event.pull_request.merge_commit_sha }}\n      - run: make\n", true, ""},
 		{"release below the floor", nil, prt + wantRef("actions/checkout@v4.3.0", ""), false, "upgrade to v4.4.0"},
 		{"commit with a version below the floor in its comment", nil, prt + wantRef("actions/checkout@"+sha+" # v4.2.2", ""), false, "(v4.2.2) predates"},
 		{"commit with a comment that is only a major version", nil, prt + wantRef("actions/checkout@"+sha+" # v4", ""), false, ""},
@@ -83,5 +88,35 @@ func TestRuleUntrustedCheckoutGuard(t *testing.T) {
 			}
 			checkLines(t, ped, markedWantLines(tc.src)...)
 		})
+	}
+}
+
+// Only the contexts that hold the number of a pull request are numbers that the protection knows, not what is below them.
+func TestRefIsPullNumber(t *testing.T) {
+	tests := []struct {
+		expr string
+		want bool
+	}{
+		{"github.event.number", true},
+		{"github.event.pull_request.number", true},
+		{"github.event.workflow_run.pull_requests[0].number", true},
+		{"github.event.workflow_run.pull_requests.*.number", true},
+		{"github.event.workflow_run.pull_requests[0].milestone.number", false},
+		{"github.event.workflow_run.pull_requests[0].base.repo.id", false},
+		{"github.event.workflow_run.pull_requests[0].head.repo.number", false},
+		{"github.event.workflow_run.pull_requests[0].number.x", false},
+		{"github.event.workflow_run.pull_requests.number", false},
+		{"github.event.pull_request.title", false},
+		{"github.event.pull_request.milestone.number", false},
+		{"github.event.number.x", false},
+	}
+	for _, tc := range tests {
+		refs, ok := stringExprRefs("${{ " + tc.expr + " }}")
+		if !ok || len(refs) != 1 {
+			t.Fatalf("%s: no single reference: %v", tc.expr, refs)
+		}
+		if got := refIsPullNumber(refs[0].chain); got != tc.want {
+			t.Errorf("refIsPullNumber(%s) = %v, want %v", tc.expr, got, tc.want)
+		}
 	}
 }

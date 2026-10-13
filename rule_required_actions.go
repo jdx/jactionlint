@@ -24,6 +24,8 @@ type RequiredActionRule struct {
 type RuleRequiredActions struct {
 	RuleBase
 	required []RequiredActionRule
+	// urlUses reads `uses: https://host/owner/repo@ref` as owner/repo@ref (the platform is Forgejo or Gitea)
+	urlUses bool
 }
 
 // NewRuleRequiredActions creates a new instance of RuleRequiredActions with the specified
@@ -60,10 +62,14 @@ func (rule *RuleRequiredActions) VisitWorkflowPre(workflow *Workflow) error {
 		if uses == nil {
 			return
 		}
-		if ContainsExpression(uses.Value) {
+		value := uses.Value
+		if rule.urlUses {
+			value = repoOfURLUses(value)
+		}
+		if ContainsExpression(value) {
 			// The ref is only known at runtime, so the action counts as used with an unknown version. When the
 			// action name itself is dynamic nothing can be said about it.
-			name, _, _ := strings.Cut(uses.Value, "@")
+			name, _, _ := strings.Cut(value, "@")
 			if ContainsExpression(name) {
 				return
 			}
@@ -73,7 +79,7 @@ func (rule *RuleRequiredActions) VisitWorkflowPre(workflow *Workflow) error {
 			}
 			return
 		}
-		if name, ver := parseActionRef(uses.Value); name != "" {
+		if name, ver := parseActionRef(value); name != "" {
 			k := strings.ToLower(name)
 			found[k] = append(found[k], ver)
 		}
@@ -173,6 +179,8 @@ func init() {
 		if env.config == nil || len(env.config.RequiredActions) == 0 {
 			return nil
 		}
-		return []Rule{NewRuleRequiredActions(env.config.RequiredActions)}
+		r := NewRuleRequiredActions(env.config.RequiredActions)
+		r.urlUses = env.config.allowsURLUses()
+		return []Rule{r}
 	})
 }
