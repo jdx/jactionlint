@@ -271,6 +271,8 @@ var BuiltinGlobalVariableTypes = map[string]ExprType{
 		"actor_id":                  StringType{},
 		"api_url":                   StringType{},
 		"artifact_cache_size_limit": NumberType{}, // Note: Undocumented
+		"artifacts":                 StringType{}, // Note: Path of the file of workflow artifact declarations, documented behind a feature flag
+		"artifacts_list":            StringType{}, // Note: Path of the file of aggregated workflow artifacts, documented behind a feature flag
 		"base_ref":                  StringType{},
 		"env":                       StringType{},
 		"event":                     NewEmptyObjectType(), // Note: Stricter type check for this payload would be possible

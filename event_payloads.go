@@ -4,7 +4,7 @@ package jactionlint
 
 // The shapes of the payloads of the webhook events, which are the shapes of github.event. They are derived from
 // the JSON schemas of the webhooks of octokit/webhooks (MIT licence) at the commit aa80c24a3f55354465b8b1438d33dd5602956d0d and of
-// the OpenAPI description of github/rest-api-description (MIT licence), version 1.1.4 (SHA-256 27b25eb98783),
+// the OpenAPI description of github/rest-api-description (MIT licence), version 1.1.4 (SHA-256 3362dfd39209),
 // reduced to the first 3 levels of objects: an object of a deeper level is not written, and nothing is known of it.
 // A property of an object is known when the payload of any action of the event has it, in any of the sources.
 //

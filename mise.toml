@@ -22,6 +22,10 @@ run = "go build ./cmd/jactionlint"
 description = "Regenerate popular_actions.go, all_webhooks.go, availability.go and event_payloads.go (fetches data from GitHub) and docs/rules.md"
 run = ["go generate", "go run ./scripts/generate-rules-doc"]
 
+[tasks."schema-pin"]
+description = "Pin the latest actions/runner schemas that TestSchemaConformance compares the parser with. Usage: mise run schema-pin [commit]"
+run = "scripts/update-schema-pin.bash {{arg(name=\"commit\", default=\"\")}}"
+
 [tasks.rules-doc]
 description = "Regenerate docs/rules.md from the rule registry (run after adding or changing a rule)"
 run = "go run ./scripts/generate-rules-doc"

@@ -263,7 +263,7 @@ func splitToolList(s string) []string {
 var anyCodeCommands = map[string]bool{
 	"bash": true, "sh": true, "zsh": true, "dash": true, "ksh": true, "fish": true, "eval": true, "exec": true,
 	"env": true, "xargs": true, "sudo": true, "python": true, "python3": true, "node": true, "nodejs": true,
-	"deno": true, "bun": true, "perl": true, "ruby": true, "php": true, "npx": true, "bunx": true, "pnpx": true,
+	"deno": true, "bun": true, "perl": true, "ruby": true, "php": true, "npx": true, "bunx": true, "pnpx": true, "aubx": true,
 	"uvx": true, "pipx": true, "docker": true, "pwsh": true, "powershell": true,
 }
 
