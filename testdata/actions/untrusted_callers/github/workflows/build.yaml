@@ -1,0 +1,17 @@
+name: build
+on:
+  workflow_call:
+    inputs:
+      ref:
+        type: string
+        required: true
+permissions: {}
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ inputs.ref }}
+      - run: make test

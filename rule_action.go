@@ -339,6 +339,10 @@ func (rule *RuleAction) VisitStep(n *Step) error {
 	}
 
 	spec := e.Uses.Value
+	if rule.config.allowsURLUses() && isURLUses(spec) {
+		rule.checkURLAction(spec, e)
+		return nil
+	}
 	ref := ParseUses(spec)
 
 	switch {
@@ -396,6 +400,54 @@ func (rule *RuleAction) checkRepoAction(ref *UsesRef, exec *ExecAction) {
 	rule.checkAction(meta, exec, func(m *ActionMetadata) string {
 		return ps.describe(spec)
 	})
+}
+
+// isURLUses reports whether the value of `uses:` starts like the URL of a repository.
+func isURLUses(spec string) bool {
+	return strings.HasPrefix(spec, "https://") || strings.HasPrefix(spec, "http://")
+}
+
+// repoOfURLUses returns the {owner}/{repo}[/{path}]@{ref} of a `uses:` written as the URL of a repository, which
+// the rules that look at the repository of an action read instead (forbidden-uses, required-actions). A value which
+// is not a URL is returned as it is.
+func repoOfURLUses(spec string) string {
+	if !isURLUses(spec) {
+		return spec
+	}
+	rest := spec[strings.Index(spec, "://")+3:]
+	if _, repo, ok := strings.Cut(rest, "/"); ok {
+		return repo
+	}
+	return spec
+}
+
+// checkURLAction checks `uses: https://{host}/{owner}/{repo}[/{path}]@{ref}`, which Forgejo and Gitea accept. The
+// value is valid when it has a host, an owner, a repository and a ref. It follows the pinning policy of
+// "unpinned-uses" for {owner}/{repo}. It is not looked up in the data of the actions of GitHub, since the
+// action at another host is another action.
+func (rule *RuleAction) checkURLAction(spec string, exec *ExecAction) {
+	rest := spec[strings.Index(spec, "://")+3:]
+	host, repoPath, hasPath := strings.Cut(rest, "/")
+	problem := ""
+	var ref *UsesRef
+	switch {
+	case host == "" || strings.ContainsAny(host, "@ "):
+		problem = "host is missing"
+	case !hasPath:
+		problem = usesProblemOwnerMissing
+	default:
+		if ref = ParseUses(repoPath); ref.Kind == UsesInvalid {
+			problem = ref.Problem
+		}
+	}
+	if problem != "" {
+		rule.ReportIDf("invalid-uses", exec.Uses.Pos, "specifying action %q in invalid format because %s. available formats are \"{owner}/{repo}@{ref}\", \"{owner}/{repo}/{path}@{ref}\" or, with the platform %q, \"https://{host}/{owner}/{repo}[/{path}]@{ref}\"", spec, problem, rule.config.platformName())
+		return
+	}
+	ref.Raw = spec // the message names the whole value
+	if msg := unpinnedUsesMessage(rule.config, ref, false); msg != "" {
+		rule.ReportID("unpinned-uses", exec.Uses.Pos, msg)
+	}
 }
 
 func (rule *RuleAction) invalidActionFormat(pos *Pos, spec string, why string) {

@@ -98,6 +98,18 @@ type LinterOptions struct {
 	// --shellcheck-rcfile). A relative path is resolved from the working directory. It wins over the
 	// "shellcheck.rcfile" key of the configuration. The file must exist: the run fails when it does not.
 	ShellcheckRCFile string
+	// ShowDocURLs prints the URL of the documentation of the rule under each finding of the text format (not
+	// with Oneline) and in the message of the github format (the option --show-doc-urls). The json and sarif
+	// formats have it anyway.
+	ShowDocURLs bool
+	// Ruff is the command or the path of ruff (the option --ruff). When it is not empty ruff checks the Python
+	// scripts of "run:" instead of Pyflakes, with the rules of pyflakes (F) and without the configuration of
+	// the working directory. NewLinter fails when the command cannot be found.
+	Ruff string
+	// FindingContext adds the events of the workflow and the permissions of the token of the job to each finding
+	// (Error.Events and Error.Permissions), which the json, jsonl and sarif formats print (the option
+	// --finding-context).
+	FindingContext bool
 	// IgnorePatterns is list of regular expression to filter errors. The pattern is applied to error
 	// messages. When an error is matched, the error is ignored.
 	IgnorePatterns []string
@@ -198,6 +210,8 @@ type Linter struct {
 	printer    printer
 	shellcheck string
 	pyflakes   string
+	findingCtx bool
+	ruff       string
 	// tools tracks whether shellcheck and pyflakes ran in this run.
 	tools     *externalTools
 	toolNoted atomic.Bool
@@ -317,6 +331,7 @@ func NewLinter(out io.Writer, opts *LinterOptions) (*Linter, error) {
 	if err != nil {
 		return nil, &usageError{err}
 	}
+	prn = withDocURLs(prn, opts.ShowDocURLs)
 
 	cwd := "."
 	if opts.WorkingDir != "" {
@@ -338,6 +353,8 @@ func NewLinter(out io.Writer, opts *LinterOptions) (*Linter, error) {
 		printer:        prn,
 		shellcheck:     opts.Shellcheck,
 		pyflakes:       opts.Pyflakes,
+		findingCtx:     opts.FindingContext,
+		ruff:           opts.Ruff,
 		tools:          newExternalTools(opts),
 		shellcheckRC:   opts.ShellcheckRCFile,
 		ignorePats:     ignore,
@@ -366,6 +383,7 @@ func NewLinter(out io.Writer, opts *LinterOptions) (*Linter, error) {
 		}
 		if !sel["pyflakes"] {
 			l.pyflakes = ""
+			l.ruff = "" // ruff checks the same scripts, in the rule of pyflakes
 		}
 	}
 	l.noIgnores = opts.NoIgnores
@@ -374,6 +392,11 @@ func NewLinter(out io.Writer, opts *LinterOptions) (*Linter, error) {
 	}
 	if _, err := shellcheckRCFile(opts.ShellcheckRCFile, cwd, nil, ""); err != nil {
 		return nil, err
+	}
+	if opts.Ruff != "" {
+		if _, _, err := resolveExternalCommand(opts.Ruff); err != nil {
+			return nil, fmt.Errorf("--ruff=%s: the command was not found or is not executable (%w)", opts.Ruff, err)
+		}
 	}
 	l.warnRetiredIgnores(ignore...)
 	if opts.Profile != "" {
@@ -888,6 +911,7 @@ func (l *Linter) check(
 		if w != nil && project != nil {
 			w.inheritedSecrets = l.callersInheritSecrets(project, l.absFilePath(path))
 			w.callerEvents = l.workflowCallers(project, l.absFilePath(path))
+			w.calleeGroups = l.calleeGroups(project, l.absFilePath(path))
 		}
 	}
 
@@ -920,6 +944,7 @@ func (l *Linter) check(
 			config:                 cfg,
 			shellcheck:             l.shellcheck,
 			pyflakes:               l.pyflakes,
+			ruff:                   l.ruff,
 			tools:                  l.tools.forCheck(),
 			shellcheckRCFile:       l.shellcheckRC,
 			cwd:                    l.cwd,
@@ -983,7 +1008,7 @@ func (l *Linter) check(
 		}
 	}
 
-	return l.finishCheck(path, content, all, cfg, bl, start, w != nil, &ignoreContext{project: project, scopes: newScopeIndex(w, content), skipped: skippedRules}), nil
+	return l.finishCheck(path, content, all, cfg, bl, start, w != nil, &ignoreContext{project: project, scopes: newScopeIndex(w, content), skipped: skippedRules, finding: l.findingContextFor(w, content)}), nil
 }
 
 // isActionFile reports whether the path is the metadata file of an action (see IsActionPath). The path
@@ -1005,6 +1030,7 @@ func (l *Linter) finishCheck(path string, content []byte, all []*Error, cfg *Con
 	if ic != nil {
 		all = dropUnreachable(all, ic.scopes)
 	}
+	all = l.acceptImmutableReleases(cfg, content, all)
 	all = l.annotateErrors(all, content, cfg)
 
 	// The ignores of the config file are matched first, without removing anything, so that the inline
@@ -1072,6 +1098,9 @@ func (l *Linter) finishCheck(path string, content []byte, all []*Error, cfg *Con
 
 	for _, err := range all {
 		err.Filepath = path // Populate filename in the error
+		if ic != nil {
+			ic.finding.apply(err)
+		}
 	}
 
 	slices.SortFunc(all, compareErrors)
@@ -1311,6 +1340,16 @@ func (l *Linter) workflowCallers(p *Project, file string) *WorkflowCallers {
 	return l.callGraphOf(p).callerEventsOf(filepath.ToSlash(rel))
 }
 
+// calleeGroups returns the concurrency groups of the local reusable workflows which the workflow in the file calls, or nil
+// when the file is not in the project.
+func (l *Linter) calleeGroups(p *Project, file string) map[string]*workflowGroups {
+	rel, err := filepath.Rel(absPath(p.root), absPath(file))
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return nil
+	}
+	return l.callGraphOf(p).calleeGroupsOf(filepath.ToSlash(rel))
+}
+
 // actionCallers returns the local workflows which run the action defined in the file, or nil when the
 // file is not in the project.
 func (l *Linter) actionCallers(p *Project, file string) *ActionCallers {
@@ -1319,4 +1358,12 @@ func (l *Linter) actionCallers(p *Project, file string) *ActionCallers {
 		return nil
 	}
 	return l.callGraphOf(p).callersOf(filepath.ToSlash(filepath.Dir(rel)))
+}
+
+// findingContextFor returns the context for the findings of the workflow, or nil when --finding-context is off.
+func (l *Linter) findingContextFor(w *Workflow, src []byte) *findingContext {
+	if !l.findingCtx {
+		return nil
+	}
+	return newFindingContext(w, newScopeIndex(w, src))
 }

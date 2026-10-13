@@ -1,0 +1,175 @@
+{
+  "$id": "https://raw.githubusercontent.com/jdx/jactionlint/main/schema/jactionlint-output.json",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "finding": {
+      "description": "One finding.",
+      "properties": {
+        "column": {
+          "description": "The column where the finding starts (1-based, counted in Unicode code points).",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "doc_url": {
+          "description": "The documentation of the rule. It is omitted for custom rules.",
+          "format": "uri",
+          "type": "string"
+        },
+        "end_column": {
+          "description": "The column of the last character of the indicator in snippet, counted in display width. It equals column when no indicator can be shown. It is not the exclusive end of the region.",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "end_line": {
+          "description": "The line where the region of the finding ends. It is equal to line unless the region spans several lines.",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "events": {
+          "description": "The sorted names of the events which trigger the workflow. Only with --finding-context, and for a workflow.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "filepath": {
+          "description": "The path of the file, relative to the working directory when possible. It is omitted for the input of stdin without a name.",
+          "type": "string"
+        },
+        "fix": {
+          "description": "The automatic fix. It is omitted when the finding has none.",
+          "properties": {
+            "description": {
+              "description": "What applying the fix does.",
+              "type": "string"
+            },
+            "edits": {
+              "description": "The replacements, which do not overlap.",
+              "items": {
+                "properties": {
+                  "end": {
+                    "description": "The byte offset just after the replaced range.",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "new_text": {
+                    "description": "The text put in place of the range.",
+                    "type": "string"
+                  },
+                  "start": {
+                    "description": "The byte offset where the replaced range starts.",
+                    "minimum": 0,
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "start",
+                  "end",
+                  "new_text"
+                ],
+                "type": "object"
+              },
+              "type": "array"
+            },
+            "unsafe": {
+              "description": "The fix may change the behavior of the workflow, so --fix applies it only with --fix=unsafe. It is omitted when false.",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "description",
+            "edits"
+          ],
+          "type": "object"
+        },
+        "id": {
+          "description": "The stable ID of the rule, like unpinned-uses. See https://jactionlint.jdx.dev/rules. A custom rule has its name as ID.",
+          "type": "string"
+        },
+        "kind": {
+          "description": "The group of the rule which reported the finding. Legacy: use id.",
+          "type": "string"
+        },
+        "line": {
+          "description": "The line where the finding starts (1-based).",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "message": {
+          "description": "The message of the finding.",
+          "type": "string"
+        },
+        "no_fix": {
+          "description": "Why a finding which the rule can fix has no fix. It is omitted when the finding has a fix or is advice only.",
+          "properties": {
+            "code": {
+              "description": "The machine-readable reason.",
+              "enum": [
+                "option-required",
+                "option-invalid",
+                "online-required",
+                "lookup-failed",
+                "unsupported-shape",
+                "needs-judgment",
+                "unsafe-edit",
+                "edit-conflict",
+                "invalid-edit"
+              ],
+              "type": "string"
+            },
+            "option": {
+              "description": "The rule option to configure, as rule-id.option, for option-required and option-invalid.",
+              "type": "string"
+            },
+            "reason": {
+              "description": "The explanation for a person.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "code",
+            "reason"
+          ],
+          "type": "object"
+        },
+        "permissions": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "The permissions of the token of the job the finding is in, scope to read, write, none or unknown (an expression decides it); the scope * is read-all, write-all, an empty mapping (none) or an expression (unknown). Only with --finding-context, and when the file configures them.",
+          "type": "object"
+        },
+        "severity": {
+          "description": "The level of the finding.",
+          "enum": [
+            "error",
+            "warn",
+            "info"
+          ],
+          "type": "string"
+        },
+        "snippet": {
+          "description": "The lines of the source with the indicator (^~~~) under the region. It is omitted when empty.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "message",
+        "line",
+        "column",
+        "end_line",
+        "end_column",
+        "kind",
+        "id",
+        "severity"
+      ],
+      "type": "object"
+    }
+  },
+  "description": "The output of `jactionlint --format json`: an array of findings. `--format jsonl` prints one finding per line, each valid against #/definitions/finding. Fields are never removed or renamed within a major version; new fields can appear, so readers must ignore the fields they do not know. Generated by `jactionlint --print-output-schema`.",
+  "items": {
+    "$ref": "#/definitions/finding"
+  },
+  "title": "jactionlint findings",
+  "type": "array"
+}

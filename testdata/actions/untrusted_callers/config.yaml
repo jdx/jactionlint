@@ -1,0 +1,3 @@
+rules:
+  untrusted-checkout: error
+  unpinned-uses: off
