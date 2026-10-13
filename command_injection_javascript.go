@@ -401,17 +401,7 @@ func (sc *jsScan) collectAliases() {
 				if !reJSIdent.MatchString(local) || prop == "" {
 					continue
 				}
-				var src *jsSource
-				switch {
-				case rhs == "process.env":
-					src = sc.envSource(prop)
-				case strings.HasPrefix(rhs, "context.payload") || strings.HasPrefix(rhs, "github.context.payload"):
-					path := strings.TrimPrefix(strings.TrimPrefix(strings.TrimPrefix(rhs, "github."), "context.payload"), ".")
-					if path != "" {
-						path += "."
-					}
-					src = sc.payloadSource(path + prop)
-				}
+				src := sc.destructuredSource(rhs, prop)
 				if src != nil {
 					sc.aliases[local] = src
 				}
@@ -421,6 +411,44 @@ func (sc *jsScan) collectAliases() {
 			break
 		}
 	}
+}
+
+var reJSAlternative = regexp.MustCompile(`\|\||\?\?`)
+
+// destructuredSource returns the source that the property `prop` of the right side of a destructuring comes from. The right
+// side can be a fallback (`process.env || {}`, `(await context.payload.comment) ?? {}`): each alternative is read, and the
+// first one that is a source decides.
+func (sc *jsScan) destructuredSource(rhs, prop string) *jsSource {
+	for _, alt := range reJSAlternative.Split(rhs, -1) {
+		alt = strings.TrimSpace(alt)
+		for {
+			trimmed := strings.TrimSpace(strings.TrimSuffix(alt, ";"))
+			trimmed = strings.TrimSpace(strings.TrimPrefix(trimmed, "await "))
+			if strings.HasPrefix(trimmed, "(") && strings.HasSuffix(trimmed, ")") {
+				trimmed = trimmed[1 : len(trimmed)-1]
+			}
+			if trimmed == alt {
+				break
+			}
+			alt = trimmed
+		}
+		switch {
+		case alt == "process.env":
+			if src := sc.envSource(prop); src != nil {
+				return src
+			}
+		case strings.HasPrefix(alt, "context.payload") || strings.HasPrefix(alt, "github.context.payload"):
+			path := strings.TrimPrefix(strings.TrimPrefix(strings.TrimPrefix(alt, "github."), "context.payload"), ".")
+			path = strings.NewReplacer("?.", ".", " ", "", "\t", "", "\n", "").Replace(path)
+			if path != "" {
+				path += "."
+			}
+			if src := sc.payloadSource(path + prop); src != nil {
+				return src
+			}
+		}
+	}
+	return nil
 }
 
 // statementEnd returns the end of the statement that starts at i: the first `;` outside of brackets, or the
