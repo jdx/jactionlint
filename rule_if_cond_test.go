@@ -19,7 +19,15 @@ func TestRuleIfCond(t *testing.T) {
 		{"${{ contains('foo', 'f') }}", false},
 		{"${{ github.ref_name == 'foo' }}", true},
 		{"${{ foo }}", true},
-		{"${{ foo }}\n", false},
+		// The newlines at the end of a block scalar are trimmed by GitHub, so they are not extra characters
+		{"${{ foo }}\n", true},
+		{"${{ foo }}\r\n", true},
+		{"${{ foo }}\n\n", true},
+		{"${{ true }}\n", false}, // a constant, which is another rule
+		{"${{ foo }}\n ", false},
+		{"${{ foo }} \n", false},
+		{"${{ foo }}\nbar", false},
+		{"\n${{ foo }}\n", false},
 		{"${{ foo }} ", false},
 		{" ${{ foo }}", false},
 		{"${{ true }} && ${{ true }}", false},

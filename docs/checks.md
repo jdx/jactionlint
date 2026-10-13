@@ -4792,7 +4792,7 @@ jobs:
         if: |
           github.event_name == 'push'
       - run: echo 'Commit is pushed'
-        # ERROR: It is always evaluated to true
+        # OK: GitHub trims the newline at the end of the block scalar
         if: |
           ${{ github.event_name == 'push' }}
       - run: echo 'Commit is pushed'
@@ -4813,10 +4813,6 @@ test.yaml:9:13: constant expression "false" in condition. remove the if: section
   |
 9 |         if: false
   |             ^~~~~
-test.yaml:19:13: if: condition "${{ github.event_name == 'push' }}\n" is always evaluated to true because extra characters are around ${{ }} [if-always-true]
-   |
-19 |         if: |
-   |             ^
 test.yaml:23:13: if: condition "${{ github.event_name == 'push' }} " is always evaluated to true because extra characters are around ${{ }} [if-always-true]
    |
 23 |         if: "${{ github.event_name == 'push' }} "
@@ -4829,8 +4825,9 @@ test.yaml:29:13: if: condition "${{ github.event_name == 'push' }} && ${{ github
 
 [Playground](https://jactionlint.jdx.dev/#eNq0zz1OxDAQBeA+p3hYyK7CASxtw484ATVyYEKM1vZqZ0yz+O7Iy18iohBAVFH03nwzTtFil3lomsfUsW0AIZb6BfY5clsLuctRcrt1NTtGLLTj1xbQ1qYF3Q0J6vLq/Ob6BKeHAx68DLk7oyeKchtdIJSi3mYA31v0bss0o5iLFIIXeD4eR/dmMjaPbzYwtW1Qys/N548/LNl/g//jcPU9CrWGhSQE5+OUX5K1fo/31H+GY+QXG1e8R+tx6+tylPIyANrl1qA=)
 
-The conditions with characters around `${{ }}` (a trailing newline of a block scalar included) are reported by the rule
-`if-always-true`. It is the audit `unsound-condition` of zizmor.
+The conditions with characters around `${{ }}` are reported by the rule `if-always-true`. The newlines at the end of the
+condition are not reported: a block scalar (`if: |`) ends with one, and GitHub trims it (see below). It is the audit
+`unsound-condition` of zizmor.
 
 jactionlint reports constant conditions at `if:` like `if: true` as error because they are usually leftover debug code like
 `#if 0` in C. `if: true` should be removed because it doesn't affect the workflow behavior. `if: false` should be replaced with
@@ -4840,19 +4837,24 @@ In addition, evaluation of `${{ }}` at `if:` condition is tricky. When the expre
 and there is no extra characters around the `${{ }}`, the condition is evaluated to the boolean value. Otherwise the condition is
 treated as string hence it is **always** evaluated to `true`.
 
-It means that multi-line string must not be used at `if:` condition (`if: |`) because the condition is always evaluated to true.
-Multi-line string inserts newline character at end of each line.
+Characters other than the newlines at the end are such extra characters. A multi-line string inserts a newline character at
+the end of each line, so
 
 ```yaml
 if: |
   ${{ false }}
+  && ${{ true }}
 ```
 
-is equivalent to
+is equivalent to `if: "${{ false }}\n&& ${{ true }}\n"`, which is always true.
 
-```yaml
-if: "${{ false }}\n"
-```
+Without the trimming `if: "${{ false }}\n"`, which is what a block scalar `if: |` with one line is, would be a string and so
+always true, and actionlint still reports it. GitHub announced in the
+[changelog of 2026-01-29](https://github.blog/changelog/2026-01-29-github-actions-smarter-editing-clearer-debugging-and-a-new-case-function/)
+that "Trailing newlines will automatically be trimmed". A job with
+`if: |` and a `${{ }}` expression which is false is skipped by GitHub now, so jactionlint does not report it any more. Other
+white space, such as a space at the end or a newline at the start, is still reported because GitHub does not say that it
+trims it.
 
 Unlike using `${{ }}`, putting an expression directly ignores white spaces around it. It's the reason why the following `if:`
 condition works as intended.
