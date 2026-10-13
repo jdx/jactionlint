@@ -10,9 +10,9 @@ import (
 // RuleMultilinePlainRun detects a `run:` which is written as a plain or quoted scalar over several lines of the file
 // without a block indicator, and whose lines look like separate commands:
 //
-//	- run: echo "start"
-//	    npm ci
-//	    npm test
+//   - run: echo "start"
+//     npm ci
+//     npm test
 //
 // YAML folds the line breaks of such a scalar into spaces, so the shell runs one command, `echo "start" npm ci npm
 // test`, and the steps after the first never happen. The block indicator `|` keeps the lines.
