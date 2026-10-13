@@ -101,19 +101,57 @@ func (o *githubScriptObserver) VisitStep(n *Step) error {
 	return nil
 }
 
-// githubScriptSource returns the script as node gets it, with the expressions replaced, or "" when it is not
-// checked: it has an expression over several lines, directly after a number, or not closed.
+// githubScriptSource returns the script as node gets it, with each expression replaced by underscores of the same
+// length (a name, which stands where a value or a name can), or "" when the script is not checked. The replacement is
+// sound only where any value could stand, so the script is not checked when an expression
+//
+//   - is not closed, or spans several lines (the lines of node would not be the lines of the file);
+//   - contains `}}` inside a string of the expression (`format('{{}}', 1)`), which the end of the expression depends on;
+//   - touches a letter, a digit, `_` or `$` on either side (`1${{ x }}`, `${{ x }}2`, `0x${{ x }}`, `a${{ x }}b`): the
+//     value can continue a number or a name, or be something that is not one.
 func githubScriptSource(src string) string {
-	if strings.Contains(src, "${{") {
-		if hasMultilineExpression(src) || expressionAfterNumber.MatchString(src) {
-			return ""
-		}
-		src = sanitizeExpressionsInScript(src)
-		if strings.Contains(src, "${{") {
-			return ""
-		}
+	if !strings.Contains(src, "${{") {
+		return src
 	}
-	return src
+	var b strings.Builder
+	for {
+		start := strings.Index(src, "${{")
+		if start < 0 {
+			b.WriteString(src)
+			return b.String()
+		}
+		// The end of the expression: the first "}}" outside a string with single quotes, as GitHub finds it
+		end, inString := -1, false
+		for i := start + len("${{"); i < len(src); i++ {
+			switch {
+			case src[i] == '\'':
+				inString = !inString
+			case !inString && src[i] == '}' && src[i-1] == '}' && i-1 >= start+len("${{"):
+				end = i + 1
+			}
+			if end >= 0 {
+				break
+			}
+		}
+		if end < 0 {
+			return ""
+		}
+		expr := src[start:end]
+		if strings.Contains(expr, "\n") || strings.Contains(expr[len("${{"):len(expr)-len("}}")], "}}") {
+			return ""
+		}
+		if start > 0 && isScriptNameChar(src[start-1]) || end < len(src) && isScriptNameChar(src[end]) {
+			return ""
+		}
+		b.WriteString(src[:start])
+		b.WriteString(strings.Repeat("_", len(expr)))
+		src = src[end:]
+	}
+}
+
+// isScriptNameChar reports whether the byte can be part of a name or of a number in JavaScript.
+func isScriptNameChar(c byte) bool {
+	return c == '_' || c == '$' || c >= '0' && c <= '9' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= 0x80
 }
 
 // githubScriptArguments returns the names that the action passes to the script, which the script cannot declare
@@ -145,10 +183,6 @@ func githubScriptArguments(ref string) []string {
 }
 
 var githubScriptMajorRe = regexp.MustCompile(`^v?(\d{1,3})(?:\.\d+){0,2}$`)
-
-// expressionAfterNumber matches a `${{` directly after a digit: `1${{ x }}` is not an identifier when the
-// expression is replaced by one.
-var expressionAfterNumber = regexp.MustCompile(`[0-9]\$\{\{`)
 
 func (rule *RuleGithubScriptSyntax) check(script *String, args []string) {
 	src := githubScriptSource(script.Value)

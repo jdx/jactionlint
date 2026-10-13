@@ -46,6 +46,19 @@ jobs:
       - uses: actions/github-script@v7
         with:
           script: ${{ inputs.script }}
+      # An expression that touches a number or a name could continue it, whatever the value is: not looked at
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const n = 1${{ inputs.script }};
+            const m = ${{ inputs.script }}x;
+            const k = ;
+      # The end of an expression with }} in a string depends on it: not looked at
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const n = ${{ format('{0}{{}}', 1) }};
+            const k = ;
       # An expression on several lines is not looked at
       - uses: actions/github-script@v7
         with:
