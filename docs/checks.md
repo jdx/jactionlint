@@ -3385,7 +3385,9 @@ rules:
 Passing the input through `env:` makes `"$BODY"` safe as an argument, but not as part of the program that a command reads. In
 `sed "s/PLACEHOLDER/$BODY/g"` a slash in the value ends the `s` command and the rest is a program of its own: GNU sed runs a
 command with the `e` command and the `e` flag (`a/g;1e id;#`) and writes files with `w`. The program of `awk` can call `system()`.
-`find -exec $BODY` runs the value, and an unquoted value in `find` is split into words that can add `-exec`. For `wget`, `curl` and
+`find -exec $BODY` runs the value, an unquoted value in `find` is split into words that can add `-exec`, and a quoted value in the place of a
+predicate (`find . "$BODY"`, after the first path or after a predicate) is read as a predicate when it starts with a dash (`-delete`, `-exec`).
+The first path, the operands of the predicates (`-name "$TITLE"`) and the arguments of the command of `-exec` are not such places. For `wget`, `curl` and
 `git clone` a value that starts a word and starts with a dash is an option: `-o`, `--output`, `--upload-pack`. See CodeQL's [argument injection query](https://github.com/github/codeql/blob/main/actions/ql/src/experimental/Security/CWE-088/ArgumentInjectionCritical.ql)
 and [its commands](https://github.com/github/codeql/blob/main/actions/ql/lib/ext/config/argument_injection_sinks.yml).
 

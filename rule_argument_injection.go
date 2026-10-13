@@ -95,6 +95,84 @@ func (rule *RuleArgumentInjection) judge(s *runscript.Script, c *runscript.Comma
 	return d
 }
 
+// findArgPredicates are the predicates of find that take one word as their operand.
+var findArgPredicates = map[string]bool{
+	"-name": true, "-iname": true, "-path": true, "-ipath": true, "-wholename": true, "-iwholename": true, "-regex": true, "-iregex": true,
+	"-lname": true, "-ilname": true, "-type": true, "-xtype": true, "-perm": true, "-user": true, "-group": true, "-uid": true, "-gid": true,
+	"-newer": true, "-anewer": true, "-cnewer": true, "-size": true, "-mtime": true, "-atime": true, "-ctime": true, "-mmin": true,
+	"-amin": true, "-cmin": true, "-maxdepth": true, "-mindepth": true, "-samefile": true, "-fstype": true, "-links": true, "-inum": true,
+	"-used": true, "-printf": true, "-fprint": true, "-fprint0": true, "-context": true, "-D": true, "-O": true,
+}
+
+// findSink looks at the words of find that can run code or add a predicate: the command of -exec, a value that the shell
+// splits (outside double quotes), and a quoted value in the place of a predicate (after the first path), where a value that
+// starts with a dash such as -delete or -exec is read as one. The first path, the operands of the predicates and the words
+// of the command of -exec are left alone.
+func (rule *RuleArgumentInjection) findSink(s *runscript.Script, c *runscript.Command) (*runscript.Word, data, string) {
+	args := c.Args
+	seenPredicate := false
+	paths := 0
+	for i := 0; i < len(args); i++ {
+		w := args[i]
+		v := w.Value
+		static := !w.Dynamic()
+		switch {
+		case static && (v == "-exec" || v == "-execdir" || v == "-ok" || v == "-okdir"):
+			seenPredicate = true
+			if i+1 < len(args) {
+				if d := rule.judge(s, c, args[i+1]); d.kind == dataUntrusted {
+					return args[i+1], d, "find-exec"
+				}
+			}
+			for i++; i < len(args) && !(args[i].Value == ";" || args[i].Value == `\;` || args[i].Value == "+"); i++ {
+				if isUnquotedExpansion(args[i]) {
+					if d := rule.judge(s, c, args[i]); d.kind == dataUntrusted {
+						return args[i], d, "find-split"
+					}
+				}
+			}
+			continue
+		case static && (v == "-H" || v == "-L" || v == "-P"):
+			continue
+		case static && (strings.HasPrefix(v, "-") && len(v) > 1 || v == "(" || v == `\(` || v == "!" || v == `\!`):
+			seenPredicate = true
+			operands := 0
+			if findArgPredicates[v] || strings.HasPrefix(v, "-newer") {
+				operands = 1
+			} else if v == "-fprintf" {
+				operands = 2
+			}
+			// the operand is a value, not a predicate; only the shell can make it more by splitting it
+			for ; operands > 0 && i+1 < len(args); operands-- {
+				i++
+				if isUnquotedExpansion(args[i]) {
+					if d := rule.judge(s, c, args[i]); d.kind == dataUntrusted {
+						return args[i], d, "find-split"
+					}
+				}
+			}
+			continue
+		}
+		if !seenPredicate {
+			paths++
+		}
+		// an expansion that the shell splits is dangerous wherever it is
+		if isUnquotedExpansion(w) {
+			if d := rule.judge(s, c, w); d.kind == dataUntrusted {
+				return w, d, "find-split"
+			}
+			continue
+		}
+		// a quoted value where a predicate can stand: after the first path
+		if (seenPredicate || paths > 1) && startsWithVar(w) {
+			if d := rule.judge(s, c, w); d.kind == dataUntrusted {
+				return w, d, "find-predicate"
+			}
+		}
+	}
+	return nil, data{}, ""
+}
+
 // gitGlobalValueFlags are the options of git before the subcommand that take the next word as their value.
 var gitGlobalValueFlags = map[string]bool{"-C": true, "-c": true, "--git-dir": true, "--work-tree": true, "--namespace": true, "--super-prefix": true, "--config-env": true, "--exec-path": false}
 
@@ -192,20 +270,8 @@ func (rule *RuleArgumentInjection) sinkOf(s *runscript.Script, c *runscript.Comm
 			}
 		}
 	case "find":
-		for i, w := range c.Args {
-			switch w.Value {
-			case "-exec", "-execdir", "-ok", "-okdir":
-				if i+1 < len(c.Args) {
-					if d := rule.judge(s, c, c.Args[i+1]); d.kind == dataUntrusted {
-						return c.Args[i+1], d, "find-exec"
-					}
-				}
-			}
-			if isUnquotedExpansion(w) {
-				if d := rule.judge(s, c, w); d.kind == dataUntrusted {
-					return w, d, "find-split"
-				}
-			}
+		if w, d, kind := rule.findSink(s, c); w != nil {
+			return w, d, kind
 		}
 	}
 	for _, w := range optionOperands(c) {
@@ -398,6 +464,8 @@ func argumentMessage(c *runscript.Command, d data, kind string) string {
 		return src + " is expanded into the program of " + name + ", where it can close a string and call system(). pass the value with -v name=\"$VALUE\" and read it in the program as name, or cut it down to letters and digits first"
 	case "find-exec":
 		return src + " is the command that find runs with -exec: an attacker who controls the value chooses what runs. use a fixed command"
+	case "find-predicate":
+		return src + " is a word of find where a predicate can stand: a value that starts with a dash, such as -delete or -exec, is read as one. give the value as the operand of a predicate (-name \"$VALUE\") or put it before the paths"
 	case "find-split":
 		return src + " is expanded without quotes in find: the shell splits it into words, so it can add an option such as -exec. quote it, and give it as the argument of an option such as -name"
 	}
