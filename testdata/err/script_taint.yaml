@@ -38,6 +38,25 @@ jobs:
           echo "MSG=$MSG" >> "$GITHUB_ENV"
           FILES=$(git diff --name-only HEAD~1)
           bash -c "echo $FILES"
-          # Not reported: a hash and a date are not free text
+          SUBJECT=$(git -C . --no-pager log -1 --format=%s)
+          echo "SUBJECT=$SUBJECT" >> "$GITHUB_ENV"
+          # Not reported: a hash and a date are not free text, and a path named diff is not the git subcommand
           SHA=$(git rev-parse HEAD)
           echo "SHA=$SHA" >> "$GITHUB_ENV"
+          ADDED=$(git add diff)
+          echo "ADDED=$ADDED" >> "$GITHUB_ENV"
+  grouped:
+    runs-on: ubuntu-latest
+    steps:
+      - parallel:
+          - run: gh pr checkout "$NUM"
+            env:
+              NUM: ${{ github.event.issue.number }}
+              GH_TOKEN: ${{ github.token }}
+          - run: |
+              # Not reported: the checkout of the group runs together with this step
+              MSG=$(git log -1 --format=%B)
+              echo "MSG=$MSG" >> "$GITHUB_ENV"
+      - run: |
+          MSG=$(git log -1 --format=%B)
+          echo "MSG=$MSG" >> "$GITHUB_ENV"

@@ -97,6 +97,20 @@ func TestScriptTaintSources(t *testing.T) {
 		{"an earlier step that fetches a branch", "      - run: git fetch origin pull-${{ github.event.number }}\n", "V=$(git log -1 --format=%s)\n" + env, "github-env", 0},
 		{"an earlier step that fetches the ref of the pull request", "      - run: git fetch origin +refs/pull/$N/merge\n", "V=$(git log -1 --format=%s)\n" + env, "github-env", 1},
 		{"a url in the script before the git command", "", "echo https://github.com/o/r/pull/1/head\nV=$(git log -1 --format=%s)\n" + env, "github-env", 0},
+		{"a checkout in a group of steps that ran before", "      - parallel:\n          - uses: actions/checkout@v4\n            with:\n              ref: ${{ github.event.pull_request.head.sha || github.head_ref }}\n          - run: echo hi\n", "V=$(git log -1 --format=%s)\n" + env, "github-env", 1},
+		{"gh pr checkout in a group of steps that ran before", "      - parallel:\n          - run: gh pr checkout \"$N\"\n", "V=$(git log -1 --format=%s)\n" + env, "github-env", 1},
+		{"a group of steps that checks out nothing", "      - parallel:\n          - run: echo hi\n", "V=$(git log -1 --format=%s)\n" + env, "github-env", 0},
+		{"a path named diff is not git diff", checkout, "V=$(git add diff)\n" + env, "github-env", 0},
+		{"a path named log is not git log", checkout, "V=$(git restore log --source=HEAD)\n" + env, "github-env", 0},
+		{"a branch named show is not git show", checkout, "V=$(git checkout show)\n" + env, "github-env", 0},
+		{"the directory option before the subcommand", checkout, "V=$(git -C sub diff --name-only)\n" + env, "github-env", 1},
+		{"a directory named like a subcommand", checkout, "V=$(git -C diff add x)\n" + env, "github-env", 0},
+		{"a config option before the subcommand", checkout, "V=$(git -c core.pager=cat log -1 --format=%s)\n" + env, "github-env", 1},
+		{"no pager before the subcommand", checkout, "V=$(git --no-pager diff --name-only)\n" + env, "github-env", 1},
+		{"git-dir with an equal sign", checkout, "V=$(git --git-dir=.git log -1 --format=%s)\n" + env, "github-env", 1},
+		{"git-dir with its own word", checkout, "V=$(git --git-dir .git show -s --format=%B)\n" + env, "github-env", 1},
+		{"work-tree before the subcommand", checkout, "V=$(git --work-tree=. --no-pager diff)\n" + env, "github-env", 1},
+		{"a subcommand that is not known after global options", checkout, "V=$(git -C diff status)\n" + env, "github-env", 0},
 		{"without a checkout of the pull request", "", "V=$(git log -1 --format=%s)\n" + env, "github-env", 0},
 		{"a checkout of the repository", "      - uses: actions/checkout@v4\n", "V=$(git log -1 --format=%s)\n" + env, "github-env", 0},
 		{"the sha is not free text", checkout, "V=$(git rev-parse HEAD)\n" + env, "github-env", 0},
@@ -121,6 +135,32 @@ func TestScriptTaintSources(t *testing.T) {
 			}
 			if got := countScriptTaint(t, tc.rule, src); got != tc.want {
 				t.Errorf("%d findings of %s, want %d\n%s", got, tc.rule, tc.want, src)
+			}
+		})
+	}
+}
+
+// TestScriptTaintParallelCheckout: the steps of a group run together, so a checkout of the group does not come before the
+// other steps of the same group, but it does come before the steps after the group.
+func TestScriptTaintParallelCheckout(t *testing.T) {
+	const head = "on: issue_comment\npermissions: {}\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n"
+	const use = "          - run: |\n              V=$(git log -1 --format=%s)\n              echo \"V=$V\" >> \"$GITHUB_ENV\"\n"
+	const checkout = "          - uses: actions/checkout@v4\n            with:\n              ref: ${{ github.event.pull_request.head.sha || github.head_ref }}\n"
+	tests := []struct {
+		what, src string
+		want      int
+	}{
+		{"the checkout and the use in one group", "      - parallel:\n" + checkout + use, 0},
+		{"the use and the checkout in one group", "      - parallel:\n" + use + checkout, 0},
+		{"the checkout in a group before the use in another", "      - parallel:\n" + checkout + "      - parallel:\n" + use, 1},
+		{"the checkout in a step before the group of the use", "      - uses: actions/checkout@v4\n        with:\n          ref: ${{ github.event.pull_request.head.sha || github.head_ref }}\n      - parallel:\n" + use, 1},
+		{"the checkout in a group after the use", "      - parallel:\n" + use + "      - parallel:\n" + checkout, 0},
+	}
+	for _, tc := range tests {
+		t.Run(tc.what, func(t *testing.T) {
+			src := head + tc.src
+			if got := countScriptTaint(t, "github-env", src); got != tc.want {
+				t.Errorf("%d findings of github-env, want %d\n%s", got, tc.want, src)
 			}
 		})
 	}
