@@ -151,6 +151,7 @@
               "gh-without-token",
               "github-app",
               "github-env",
+              "github-script-syntax",
               "hardcoded-container-credentials",
               "if-always-true",
               "impostor-commit",
@@ -376,6 +377,7 @@
                   "gh-without-token",
                   "github-app",
                   "github-env",
+                  "github-script-syntax",
                   "hardcoded-container-credentials",
                   "if-always-true",
                   "impostor-commit",
@@ -532,6 +534,7 @@
                     "gh-without-token",
                     "github-app",
                     "github-env",
+                    "github-script-syntax",
                     "hardcoded-container-credentials",
                     "if-always-true",
                     "impostor-commit",
@@ -1565,7 +1568,7 @@
           ]
         },
         "deprecated-node-runtime": {
-          "description": "A Node.js runtime that GitHub Actions removed is declared by an action or by an action that is used. Group: policy. Profile: pedantic. Default level: warn. https://jactionlint.jdx.dev/rules#deprecated-node-runtime",
+          "description": "A Node.js runtime that GitHub Actions removed is declared, used or selected by an environment variable. Group: policy. Profile: pedantic. Default level: warn. https://jactionlint.jdx.dev/rules#deprecated-node-runtime",
           "oneOf": [
             {
               "$ref": "#/definitions/level"
@@ -1994,6 +1997,28 @@
         },
         "github-env": {
           "description": "Input that an outsider controls, or a value that is not a literal in a workflow triggered by pull_request_target or workflow_run, is written to GITHUB_ENV or GITHUB_PATH. Group: security. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#github-env",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "github-script-syntax": {
+          "description": "The script of actions/github-script has a JavaScript syntax error. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#github-script-syntax",
           "oneOf": [
             {
               "$ref": "#/definitions/level"
@@ -3900,6 +3925,11 @@
                   "default": {},
                   "description": "How strongly to pin the actions matching a pattern: hash-pin (full commit SHA, the default for everything), ref-pin (any tag, branch or SHA), immutable-release (a full commit SHA, or with --online the tag of an immutable GitHub release) or any. The most specific pattern wins. Patterns are \"*\", \"owner/*\", \"owner/repo\" and \"owner/repo/path\". Docker images follow the \"*\" policy.",
                   "type": "object"
+                },
+                "short-pin-comment": {
+                  "default": false,
+                  "description": "Make `--online --fix` name the tag as written in the comment of a pin (`# v4`), not the most specific version tag of the commit (`# v4.2.4`).",
+                  "type": "boolean"
                 }
               },
               "type": "object"

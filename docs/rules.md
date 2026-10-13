@@ -82,6 +82,7 @@ rules:
 | [gh-without-token](#gh-without-token) | correctness | error | correctness |
 | [github-app](#github-app) | security | error | default |
 | [github-env](#github-env) | security | error | default |
+| [github-script-syntax](#github-script-syntax) | correctness | error | correctness |
 | [hardcoded-container-credentials](#hardcoded-container-credentials) | security | error | correctness |
 | [if-always-true](#if-always-true) | correctness | error | correctness |
 | [impostor-commit](#impostor-commit) | security | error | only with `--online` |
@@ -472,7 +473,7 @@ A deprecated workflow command such as ::set-output is used.
 
 ## deprecated-node-runtime
 
-A Node.js runtime that GitHub Actions removed is declared by an action or by an action that is used.
+A Node.js runtime that GitHub Actions removed is declared, used or selected by an environment variable.
 
 - Group: policy
 - Default level: warn
@@ -647,6 +648,15 @@ Input that an outsider controls, or a value that is not a literal in a workflow 
 - Default level: error
 - Profile: default
 - Details and examples: [checks](./checks.md#check-github-env)
+
+## github-script-syntax
+
+The script of actions/github-script has a JavaScript syntax error.
+
+- Group: correctness
+- Default level: error
+- Profile: correctness
+- Details and examples: [checks](./checks.md#check-github-script-syntax)
 
 ## hardcoded-container-credentials
 
@@ -1385,6 +1395,7 @@ A container or service image is not pinned by a digest.
 - Group: security
 - Default level: error
 - Profile: default
+- Fixable: yes
 - Option `require-digest` (bool, default true): Report images pinned by a tag other than latest too. Turn it off to report only images without a tag or with the latest tag.
 - Option `policies` (string-map, default empty): How strongly to pin the images matching a pattern: hash-pin (a digest, the default of require-digest), tag-pin (a tag other than latest, or a digest) or any. The most specific pattern that matches wins over require-digest: more literal characters before the first *, in the pattern with the registry written out, then fewer *, then a tag, then the longer pattern. Patterns are globs of the image name, where * matches any characters: "*", "ghcr.io/my-org/*", "registry.example.com/team/tool" or "node:20". The registry of Docker Hub can be left out ("node" is "docker.io/library/node").
 - Option `pedantic` (bool, no default): Also report the pedantic checks, which are noisier. Unset, they run under the pedantic profile.
@@ -1409,6 +1420,7 @@ An action, reusable workflow or Docker image is not pinned to a commit SHA or di
 - Profile: default
 - Fixable: yes
 - Option `policies` (string-map, default empty): How strongly to pin the actions matching a pattern: hash-pin (full commit SHA, the default for everything), ref-pin (any tag, branch or SHA), immutable-release (a full commit SHA, or with --online the tag of an immutable GitHub release) or any. The most specific pattern wins. Patterns are "*", "owner/*", "owner/repo" and "owner/repo/path". Docker images follow the "*" policy.
+- Option `short-pin-comment` (bool, default false): Make `--online --fix` name the tag as written in the comment of a pin (`# v4`), not the most specific version tag of the commit (`# v4.2.4`).
 - Details and examples: [checks](./checks.md#check-action-format)
 
 ## unredacted-secrets

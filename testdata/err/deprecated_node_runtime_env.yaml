@@ -1,0 +1,31 @@
+on: push
+permissions: {}
+env:
+  # the opt-out of Node.js 24 as the default
+  ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
+  OTHER: value
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      # the opt-in to Node.js 24
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+    steps:
+      - run: echo hello
+        env:
+          ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: "true"
+      - run: echo not reported, the name is not the variable
+        env:
+          NOT_ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
+          FORCE_JAVASCRIPT_ACTIONS_TO_NODE20: true
+  container:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    container:
+      image: alpine:3
+      # not reported: the env of a container is not the env of the steps
+      env:
+        FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+    steps:
+      - run: echo hello
