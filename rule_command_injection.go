@@ -257,7 +257,9 @@ func (rule *RuleCommandInjection) stdinInput(s *runscript.Script, c *runscript.C
 	}
 	for i := c.Stage - 1; i >= 0; i-- {
 		for _, sc := range p.Stages[i].Commands {
-			if commandSanitizes(sc, destShell).satisfies(destShell) {
+			// a stage that cuts the text down to a set makes it safe only if no later stage up to the shell can bring
+			// other characters back (a decoder, an interpreter)
+			if commandSanitizes(sc, destShell).satisfies(destShell) && !rewritesAfter(p, i, c.Stage) {
 				return data{}
 			}
 		}
@@ -283,6 +285,23 @@ func (rule *RuleCommandInjection) stdinInput(s *runscript.Script, c *runscript.C
 		}
 	}
 	return data{}
+}
+
+// rewriters are the commands that can turn the text they read into other characters: decoders, interpreters, a command that
+// runs another with the text as its arguments. A pipeline that was cut down to a safe set is not safe after one of them.
+var rewriters = set("base64 basenc xxd uudecode openssl gunzip gzip zcat bzcat bunzip2 xzcat unxz xz zstd unzstd python python3 node perl ruby php awk gawk mawk nawk lua xargs printf echo eval")
+
+// rewritesAfter reports whether a stage after the stage i, before the stage end, rewrites what it reads.
+func rewritesAfter(p *runscript.Pipeline, i, end int) bool {
+	for _, st := range p.Stages[i+1 : end] {
+		for _, sc := range st.Commands {
+			name := strings.TrimSuffix(sc.Name, ".exe")
+			if rewriters[name] || strings.HasPrefix(name, "python") {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // commandPositionSink: `$CMD` or `"$CMD" args` where the name of the program is a variable (or the output of a
