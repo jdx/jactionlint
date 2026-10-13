@@ -202,8 +202,8 @@ type jsRef struct {
 }
 
 var (
-	reJSEnvDot     = regexp.MustCompile(`\bprocess\s*\.\s*env\s*\.\s*([A-Za-z_][A-Za-z0-9_]*)`)
-	reJSEnvBracket = regexp.MustCompile(`\bprocess\s*\.\s*env\s*\[\s*['"]([A-Za-z_][A-Za-z0-9_]*)['"]\s*\]`)
+	reJSEnvDot     = regexp.MustCompile(`\bprocess\s*(?:\?\.|\.)\s*env\s*(?:\?\.|\.)\s*([A-Za-z_][A-Za-z0-9_]*)`)
+	reJSEnvBracket = regexp.MustCompile(`\bprocess\s*(?:\?\.|\.)\s*env\s*(?:\?\.\s*)?\[\s*['"]([A-Za-z_][A-Za-z0-9_]*)['"]\s*\]`)
 	reJSPayload    = regexp.MustCompile(`\b(?:github\.)?context\.payload((?:\s*\??\.\s*[A-Za-z_$][A-Za-z0-9_$]*)+)`)
 	reJSIdent      = regexp.MustCompile(`[A-Za-z_$][A-Za-z0-9_$]*`)
 	reJSDeclSimple = regexp.MustCompile(`\b(?:const|let|var)\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*=`)
