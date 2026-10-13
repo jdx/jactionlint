@@ -240,22 +240,41 @@ func (c *fallbackGitHubClient) CommitOnAnyBranch(ctx context.Context, owner, rep
 	return GitHubBranchScan{}, ErrGitHubBranchScanUnavailable
 }
 
+// registryTokenSource is implemented by the GitHub clients which know the token for ghcr.io, the registry of github.com: it is
+// the token for the API of github.com, and nil when there is none or the client is one of an Enterprise Server.
+type registryTokenSource interface {
+	registryToken() func() string
+}
+
+// registryToken implements registryTokenSource with the token of the client for github.com. The one of the Server is never the token
+// for ghcr.io, which is the registry of github.com: the token which the fallback has for api.github.com is the one that goes there.
+func (c *fallbackGitHubClient) registryToken() func() string {
+	if s, ok := c.secondary.(registryTokenSource); ok {
+		return s.registryToken()
+	}
+	return nil
+}
+
+// add counts the answers of another host in: every count is summed, the oldest time is the oldest of both, and the age limit is
+// the longer one. A field which is added to OnlineAnswers must be handled here (a test goes through all of them).
+func (a *OnlineAnswers) add(b OnlineAnswers) {
+	a.Network += b.Network
+	a.Cache += b.Cache
+	a.Stale += b.Stale
+	a.Immutable += b.Immutable
+	if b.OldestFetched != "" && (a.OldestFetched == "" || b.OldestFetched < a.OldestFetched) {
+		a.OldestFetched = b.OldestFetched
+	}
+	a.CacheTTLSeconds = max(a.CacheTTLSeconds, b.CacheTTLSeconds)
+}
+
 // answerStats implements answerStatsSource: the answers of both hosts.
 func (c *fallbackGitHubClient) answerStats() OnlineAnswers {
 	var total OnlineAnswers
 	for _, cl := range []GitHubClient{c.primary, c.secondary} {
-		src, ok := cl.(answerStatsSource)
-		if !ok {
-			continue
+		if src, ok := cl.(answerStatsSource); ok {
+			total.add(src.answerStats())
 		}
-		a := src.answerStats()
-		total.Network += a.Network
-		total.Cache += a.Cache
-		total.Stale += a.Stale
-		if a.OldestFetched != "" && (total.OldestFetched == "" || a.OldestFetched < total.OldestFetched) {
-			total.OldestFetched = a.OldestFetched
-		}
-		total.CacheTTLSeconds = max(total.CacheTTLSeconds, a.CacheTTLSeconds)
 	}
 	return total
 }
