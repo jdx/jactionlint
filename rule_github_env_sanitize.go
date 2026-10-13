@@ -32,10 +32,18 @@ const (
 // characters of a path do not matter (`.`, `/` and `:` are harmless in a command).
 const destShell = "SHELL"
 
+// destOutputLine is the destination of a line of $GITHUB_OUTPUT that an outsider writes as a whole: there is no constant
+// `name=` in front of the text, so one line is already a record (`approved=true`), and only a text cut down to letters,
+// digits, `_` and `-` is safe.
+const destOutputLine = "OUTPUT_LINE"
+
+// strictDest reports whether only a value cut down to a strict set of characters is safe for the destination.
+func strictDest(dest string) bool { return dest == "GITHUB_PATH" || dest == destOutputLine }
+
 // satisfies reports whether the guarantee is enough for a write to the destination ("GITHUB_ENV" or "GITHUB_PATH")
 // or for the code of a shell (destShell).
 func (k sanitizeKind) satisfies(dest string) bool {
-	if dest == "GITHUB_PATH" || dest == destShell {
+	if strictDest(dest) || dest == destShell {
 		return k == sanitizeCharset
 	}
 	return k != sanitizeNone
@@ -72,6 +80,9 @@ func commandSanitizes(c *runscript.Command, dest string) sanitizeKind {
 	if dest == destOutput && cannotAddRecords(c) {
 		return sanitizeNewline
 	}
+	if dest == destOutputLine && cannotAddRecords(c) {
+		return sanitizeCharset
+	}
 	switch c.Name {
 	case "tr":
 		del, comp := c.HasFlag("-d"), c.HasFlag("-c", "-C")
@@ -81,7 +92,7 @@ func commandSanitizes(c *runscript.Command, dest string) sanitizeKind {
 		set1 := c.Positional[0].Value
 		switch {
 		case del && comp:
-			if !setHasNewline(set1) && charsetSafe(set1, dest == "GITHUB_PATH") {
+			if !setHasNewline(set1) && charsetSafe(set1, strictDest(dest)) {
 				return sanitizeCharset
 			}
 		case del:
@@ -90,7 +101,7 @@ func commandSanitizes(c *runscript.Command, dest string) sanitizeKind {
 			}
 		case len(c.Positional) == 2 && !c.Positional[1].Dynamic():
 			set2 := c.Positional[1].Value
-			if comp && !setHasNewline(set1) && charsetSafe(set1, dest == "GITHUB_PATH") && !setHasNewline(set2) {
+			if comp && !setHasNewline(set1) && charsetSafe(set1, strictDest(dest)) && !setHasNewline(set2) {
 				return sanitizeCharset
 			}
 			if !comp && setHasNewline(set1) && !setHasNewline(set2) {
@@ -165,7 +176,7 @@ var (
 // of a line but never its newline (unless -z puts the whole input in one line): a set that holds `=` still lets a
 // value carry a second line `NAME=value`.
 func sedSanitizes(script string, nulSeparated bool, dest string) sanitizeKind {
-	if m := reSedWhitelist.FindStringSubmatch(script); m != nil && charsetSafe(m[1], dest == "GITHUB_PATH") && !setHasNewline(m[2]) && !strings.Contains(m[2], "&") && (nulSeparated || !strings.Contains(m[1], "=")) {
+	if m := reSedWhitelist.FindStringSubmatch(script); m != nil && charsetSafe(m[1], strictDest(dest)) && !setHasNewline(m[2]) && !strings.Contains(m[2], "&") && (nulSeparated || !strings.Contains(m[1], "=")) {
 		return sanitizeCharset
 	}
 	if reSedNewline.MatchString(script) && (nulSeparated || strings.Contains(script, "N")) {
@@ -188,7 +199,7 @@ func keepsSanitized(c *runscript.Command, dest string) bool {
 	case "tr":
 		return trKeeps(c, dest)
 	case "sed":
-		return dest != "GITHUB_PATH" && sedKeeps(c)
+		return !strictDest(dest) && sedKeeps(c)
 	}
 	return false
 }
@@ -211,8 +222,8 @@ func trKeeps(c *runscript.Command, dest string) bool {
 			return false
 		}
 	}
-	if len(c.Positional) == 2 && (dest == "GITHUB_PATH" || c.HasFlag("-d")) {
-		return dest != "GITHUB_PATH" && !c.HasFlag("-d")
+	if len(c.Positional) == 2 && (strictDest(dest) || c.HasFlag("-d")) {
+		return !strictDest(dest) && !c.HasFlag("-d")
 	}
 	return true
 }
@@ -353,7 +364,7 @@ func sanitizedExpansions(raw, dest string) []string {
 		}
 		kind := sanitizeNone
 		switch {
-		case strings.HasPrefix(pat, "[^") && strings.HasSuffix(pat, "]") && charsetSafe(pat[2:len(pat)-1], dest == "GITHUB_PATH") && !setHasNewline(pat):
+		case strings.HasPrefix(pat, "[^") && strings.HasSuffix(pat, "]") && charsetSafe(pat[2:len(pat)-1], strictDest(dest)) && !setHasNewline(pat):
 			kind = sanitizeCharset
 		case strings.Contains(pat, `$'\n'`) || strings.Contains(pat, `$'\r'`) || strings.Contains(pat, `$'\r\n'`) || strings.Contains(pat, "[[:space:]]") || strings.Contains(pat, "[[:cntrl:]]"):
 			if !strings.HasPrefix(pat, "[^") {
@@ -410,11 +421,11 @@ func validatingRegex(re, dest string) bool {
 		return false
 	}
 	for _, br := range regexp.MustCompile(`\[[^\]]*\]`).FindAllString(inner, -1) {
-		if setHasNewline(br) || !charsetSafe(br[1:len(br)-1], dest == "GITHUB_PATH") {
+		if setHasNewline(br) || !charsetSafe(br[1:len(br)-1], strictDest(dest)) {
 			return false
 		}
 	}
-	if dest == "GITHUB_PATH" && (strings.ContainsAny(inner, "./") || strings.Contains(inner, `\w`)) {
+	if strictDest(dest) && (strings.ContainsAny(inner, "./") || strings.Contains(inner, `\w`)) {
 		return false
 	}
 	if dest == destShell && reShellSyntaxEscape.MatchString(inner) {
