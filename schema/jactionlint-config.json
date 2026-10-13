@@ -203,6 +203,7 @@
               "template-injection",
               "timeout-too-long",
               "typosquat-uses",
+              "ubuntu-slim-limits",
               "undefined-function",
               "undefined-job-needs",
               "undefined-property",
@@ -394,6 +395,7 @@
                   "template-injection",
                   "timeout-too-long",
                   "typosquat-uses",
+                  "ubuntu-slim-limits",
                   "undefined-function",
                   "undefined-job-needs",
                   "undefined-property",
@@ -538,6 +540,7 @@
                     "template-injection",
                     "timeout-too-long",
                     "typosquat-uses",
+                    "ubuntu-slim-limits",
                     "undefined-function",
                     "undefined-job-needs",
                     "undefined-property",
@@ -1380,7 +1383,7 @@
               "additionalProperties": false,
               "properties": {
                 "default-minutes": {
-                  "description": "The timeout-minutes which --fix adds to a job. There is no default: the rule has no fix unless this is set. It is lowered to the max of timeout-too-long when that is smaller.",
+                  "description": "The timeout-minutes which --fix adds to a job. There is no default: the rule has no fix unless this is set. It is lowered to the max of timeout-too-long when that is smaller, and to 15 on a job that runs only on ubuntu-slim.",
                   "minimum": 0,
                   "type": "integer"
                 },
@@ -1631,6 +1634,28 @@
                 "level": {
                   "$ref": "#/definitions/level",
                   "description": "The level of the rule."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "ubuntu-slim-limits": {
+          "description": "A job on ubuntu-slim has a container, services or a Docker container action, which the single-CPU runner cannot run. With the option pedantic, a timeout-minutes above its limit of 15 minutes counts too. Group: correctness. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#ubuntu-slim-limits",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "$ref": "#/definitions/level",
+                  "description": "The level of the rule."
+                },
+                "pedantic": {
+                  "description": "Also report the pedantic checks, which are noisier. Unset, they run under the pedantic profile.",
+                  "type": "boolean"
                 }
               },
               "type": "object"
