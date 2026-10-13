@@ -8,6 +8,7 @@ import (
 
 func TestRequireCommitHashOptIn(t *testing.T) {
 	const sha = "db41740e12847bb616a339b75eb9414e711417df"
+	const hash64 = sha + "0123456789abcdef01234567" // a commit hash of a SHA-256 repository
 	const digest = "sha256:3235326357dfb65f1781dbc4df3b834546d8bf914e82cce58e6e6b676e23ce8f"
 
 	tests := []struct {
@@ -22,6 +23,11 @@ func TestRequireCommitHashOptIn(t *testing.T) {
 		{"actions/checkout@main", false, true},
 		{"actions/checkout@" + sha[:7], false, true},
 		{"actions/checkout@" + sha + "0", false, true},
+		// 64 hex digits is a commit of a repository with the SHA-256 object format
+		{"actions/checkout@" + hash64, false, false},
+		{"actions/checkout@" + strings.ToUpper(hash64), false, false},
+		{"actions/checkout@" + hash64[:63], false, true},
+		{"actions/checkout@" + hash64 + "0", false, true},
 		{"./local", false, false},
 		{"$/local", false, false},
 		{"docker://image@" + digest, false, false},
