@@ -114,7 +114,7 @@ func TestHTTPClientReleaseDate(t *testing.T) {
 
 func TestRecordedReleaseDatesAreServed(t *testing.T) {
 	published := time.Date(2026, 10, 11, 9, 0, 0, 0, time.UTC)
-	fx := `{"repos":{"o/r":{"releases":{"tags/v1":{"published_at":"2026-10-11T09:00:00Z"},"commits/` + strings.Repeat("a", 40) + `":{"committed_at":"2026-10-01T08:30:00Z"}}}}}`
+	fx := `{"repos":{"o/r":{"release_dates":{"tags/v1":{"published_at":"2026-10-11T09:00:00Z"},"commits/` + strings.Repeat("a", 40) + `":{"committed_at":"2026-10-01T08:30:00Z"}}}}}`
 	c, err := NewFixtureGitHubClient([]byte(fx))
 	if err != nil {
 		t.Fatal(err)

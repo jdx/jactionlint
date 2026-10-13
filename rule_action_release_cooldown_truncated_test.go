@@ -9,7 +9,7 @@ func TestActionReleaseCooldownWithTruncatedTags(t *testing.T) {
 	sha := strings.Repeat("9", 40)
 	fx := `{"repos":{"example/trunc":{"tags":{"tags":[{"name":"v9","sha":"` + sha + `"}],"truncated":true},` +
 		`"refs":{"tags/v9.1.0":{"sha":"` + sha + `","found":true}},` +
-		`"releases":{"tags/v9.1.0":{"published_at":"2026-10-12T09:00:00Z"},"tags/v9":{"committed_at":"2026-10-12T09:00:00Z"},"commits/` + sha + `":{"committed_at":"2026-10-12T09:00:00Z"}}}}}`
+		`"release_dates":{"tags/v9.1.0":{"published_at":"2026-10-12T09:00:00Z"},"tags/v9":{"committed_at":"2026-10-12T09:00:00Z"},"commits/` + sha + `":{"committed_at":"2026-10-12T09:00:00Z"}}}}}`
 	client := func() GitHubClient {
 		c, err := NewFixtureGitHubClient([]byte(fx))
 		if err != nil {

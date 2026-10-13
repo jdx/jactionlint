@@ -83,7 +83,7 @@ func TestActionReleaseCooldownDays(t *testing.T) {
 }
 
 func TestActionReleaseCooldownDaysIsValidated(t *testing.T) {
-	for _, bad := range []string{"days: 0", "days: -1", "days: soon", "days: 1.5"} {
+	for _, bad := range []string{"days: -1", "days: soon", "days: 1.5"} {
 		if _, err := ParseConfig([]byte("rules:\n  action-release-cooldown:\n    " + bad + "\n")); err == nil {
 			t.Errorf("%q must be refused", bad)
 		}

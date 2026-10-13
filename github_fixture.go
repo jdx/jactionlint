@@ -34,8 +34,10 @@ type fixtureRepo struct {
 	Refs       map[string]*fixtureRef         `json:"refs,omitempty"`    // "heads/main", "tags/v1"
 	Compare    map[string]GitHubCompareStatus `json:"compare,omitempty"` // "base...head"; "not-found" for unknown commits
 	Advisories *fixtureAdvisories             `json:"advisories,omitempty"`
-	// Releases are the dates of a release, by "tags/<tag>" or, for a commit without a tag, "commits/<sha>".
-	Releases map[string]*GitHubReleaseDate `json:"releases,omitempty"`
+	// Releases are the answers about the release of a tag by the name of the tag, see GitHubReleaseClient.
+	Releases map[string]*fixtureRelease `json:"releases,omitempty"`
+	// ReleaseDates are the dates of a release, by "tags/<tag>" or, for a commit without a tag, "commits/<sha>".
+	ReleaseDates map[string]*GitHubReleaseDate `json:"release_dates,omitempty"`
 	// Environments are the answers about the environments by their lower case name, see GitHubEnvironmentClient.
 	Environments map[string]*fixtureEnvironment `json:"environments,omitempty"`
 }

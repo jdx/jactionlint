@@ -164,7 +164,9 @@ func pinCommentVersion(sess *onlineSession, ref *UsesRef, sha string, short bool
 		return ref.Ref
 	}
 	idx, err := sess.Tags(ref.Owner, ref.Repo)
-	if err != nil {
+	if err != nil || idx.truncated {
+		// With more tags than were read the most specific one may be missing, and a less specific one from the partial list
+		// would be a comment that still moves: the tag is named as it was written
 		return ref.Ref
 	}
 	if name, ok := specificVersionTag(idx.bySHA[sha], ref.Ref); ok {

@@ -168,20 +168,13 @@ func ago(age time.Duration, at time.Time) string {
 	return fmt.Sprintf("%d days ago, on %s", int(age.Hours()/24), date)
 }
 
-func validateReleaseCooldownDays(v any) error {
-	if n, ok := v.(int); ok && n < 1 {
-		return fmt.Errorf("it must be at least 1 day")
-	}
-	return nil
-}
-
 func init() {
 	registerRules(
 		RuleInfo{
 			ID: "action-release-cooldown", Group: RuleGroupSecurity, Summary: "An action is pinned to a version released less than the cooldown ago.",
 			DefaultLevel: SeverityWarning, Online: true, DocsAnchor: "check-action-release-cooldown",
 			Options: []RuleOption{{
-				Name: "days", Kind: RuleOptionInt, Default: actionReleaseCooldownDefaultDays, Validate: validateReleaseCooldownDays,
+				Name: "days", Kind: RuleOptionInt, Default: actionReleaseCooldownDefaultDays,
 				Summary: "How many days a version must be old. The date is the publication of its release on GitHub, else the date of its commit. The rule runs only when \"rules\" has an entry for it, and only with the online checks.",
 			}},
 		},

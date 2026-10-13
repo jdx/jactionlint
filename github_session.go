@@ -142,15 +142,16 @@ type onlineSession struct {
 	excluded   map[string]bool     // repositories left out by the allow and deny lists
 	seen       map[failureKind]bool
 
-	repos      memo[repoKey, *GitHubRepo]
-	tags       memo[repoKey, *tagIndex]
-	refs       memo[refKey, refResult]
-	branches   memo[repoKey, *GitHubBranchList]
-	compares   memo[compareKey, GitHubCompareStatus]
-	advisories memo[string, []GitHubAdvisory]
-	origins    memo[originKey, originResult]
-	releases   memo[releaseKey, *GitHubReleaseDate]
-	owners     memo[string, *GitHubOwner]
+	repos        memo[repoKey, *GitHubRepo]
+	tags         memo[repoKey, *tagIndex]
+	refs         memo[refKey, refResult]
+	branches     memo[repoKey, *GitHubBranchList]
+	compares     memo[compareKey, GitHubCompareStatus]
+	advisories   memo[string, []GitHubAdvisory]
+	origins      memo[originKey, originResult]
+	releaseDates memo[releaseDateKey, *GitHubReleaseDate]
+	owners       memo[string, *GitHubOwner]
+	releases     memo[releaseKey, *GitHubRelease]
 
 	environments memo[environmentKey, environmentResult]
 }

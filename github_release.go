@@ -5,105 +5,101 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"time"
 )
 
-// GitHubReleaseDate says when a version of an action was released. The data is what the check of
-// the release cooldown (the rule action-release-cooldown) needs.
-type GitHubReleaseDate struct {
-	// PublishedAt is when the release of GitHub named by the tag was published. It is the zero time
-	// when the tag has no release.
-	PublishedAt time.Time `json:"published_at,omitzero"`
-	// CommittedAt is the committer date of the commit. A client sets it when the tag has no release (the
-	// date is then the best that is known). A tag which was moved to an older commit carries
-	// the date of that commit, so the date can be older than the release it stands for.
-	CommittedAt time.Time `json:"committed_at,omitzero"`
+// This file has the lookup of the release of a tag, which tells whether the release is immutable. GitHub locks
+// the tag of an immutable release (it cannot be moved or deleted) and its assets, so
+// that `uses: owner/repo@v1.2.3` runs the same code for as long as the release exists. The release object of the
+// REST API says so with "immutable": true (the endpoint "Get a release by tag name").
+
+// GitHubRelease is the release of a tag.
+type GitHubRelease struct {
+	// Tag is the name of the tag of the release.
+	Tag string `json:"tag"`
+	// Immutable is true when the release is immutable: its tag and its assets cannot be changed any more.
+	Immutable bool `json:"immutable"`
 }
 
-// Time returns when the version was released: the publication of the release, else the date of the commit.
-// The boolean is false when neither is known.
-func (d GitHubReleaseDate) Time() (t time.Time, release, ok bool) {
-	switch {
-	case !d.PublishedAt.IsZero():
-		return d.PublishedAt, true, true
-	case !d.CommittedAt.IsZero():
-		return d.CommittedAt, false, true
-	}
-	return time.Time{}, false, false
+// GitHubReleaseClient is an optional interface of a GitHubClient. A client which implements it can tell whether
+// the release of a tag is immutable, which the "immutable-release" policy of the unpinned-uses rule needs.
+type GitHubReleaseClient interface {
+	// Release returns the published release of the tag. It returns ErrGitHubNotFound when the tag has no release (the
+	// tags which are not releases, such as the v4 which moves with every v4.x.y, have none).
+	Release(ctx context.Context, owner, repo, tag string) (*GitHubRelease, error)
 }
 
-// GitHubReleaseDateClient is an optional interface of a GitHubClient. A client which implements it answers
-// the rule action-release-cooldown. Without it the rule has nothing to check and says nothing.
-type GitHubReleaseDateClient interface {
-	// ReleaseDate returns when the tag was released. tag can be empty when the commit is not tagged. sha is the
-	// commit the tag points to, or the commit itself. When the tag has no release, or tag is empty,
-	// the answer has the date of the commit. A tag or a commit which does not exist gives an answer
-	// without dates, not an error.
-	ReleaseDate(ctx context.Context, owner, repo, tag, sha string) (*GitHubReleaseDate, error)
-}
-
-// errReleaseDatesUnsupported is why the date of a release is not known: the client cannot tell.
-var errReleaseDatesUnsupported = errors.New("the GitHub client cannot look up the date of a release")
+var (
+	errNoReleaseLookup    = errors.New("the GitHub client cannot look up releases")
+	errInvalidReleaseName = errors.New("not a tag name that can be looked up")
+)
 
 type releaseKey struct {
 	repoKey
-	tag, sha string
+	tag string
 }
 
-// ReleaseDate returns when the tag (which can be empty) and the commit were released.
-func (s *onlineSession) ReleaseDate(owner, repo, tag, sha string) (*GitHubReleaseDate, error) {
+// Release returns the published release of the tag, or ErrGitHubNotFound (wrapped) when the tag has none. The error
+// is errNoReleaseLookup when the client cannot look releases up, which is no failure.
+func (s *onlineSession) Release(owner, repo, tag string) (*GitHubRelease, error) {
 	if !s.allows(owner, repo) {
 		return nil, errOnlineExcluded
 	}
-	rc, ok := s.client.(GitHubReleaseDateClient)
+	rc, ok := s.client.(GitHubReleaseClient)
 	if !ok {
-		return nil, errReleaseDatesUnsupported
+		return nil, errNoReleaseLookup
 	}
-	what := owner + "/" + repo
-	return s.releases.get(releaseKey{newRepoKey(owner, repo), tag, strings.ToLower(sha)}, func() (*GitHubReleaseDate, error) {
-		return callFor(s, what, func(ctx context.Context) (*GitHubReleaseDate, error) {
-			return rc.ReleaseDate(ctx, owner, repo, tag, sha)
-		})
+	// A tag with a slash is more than one segment of the path, which this does not guess
+	if !validGitRefName(tag) || strings.Contains(tag, "/") {
+		return nil, fmt.Errorf("%q: %w", tag, errInvalidReleaseName)
+	}
+	return s.releases.get(releaseKey{newRepoKey(owner, repo), tag}, func() (*GitHubRelease, error) {
+		return callFor(s, owner+"/"+repo, func(ctx context.Context) (*GitHubRelease, error) { return rc.Release(ctx, owner, repo, tag) })
 	})
 }
 
-// fixtureReleaseKey is the key of the dates in the fixtures: the tag, or the commit when there is none.
-func fixtureReleaseKey(tag, sha string) string {
-	if tag != "" {
-		return "tags/" + tag
-	}
-	return "commits/" + strings.ToLower(sha)
+// fixtureRelease is the recorded answer about the release of one tag.
+type fixtureRelease struct {
+	// Found is false when GitHub answered "not found": the tag has no release.
+	Found     bool `json:"found"`
+	Immutable bool `json:"immutable,omitempty"`
 }
 
-// ReleaseDate implements GitHubReleaseDateClient.
-func (c *FixtureGitHubClient) ReleaseDate(_ context.Context, owner, repo, tag, sha string) (*GitHubReleaseDate, error) {
-	r, err := c.repo(owner, repo, "release date")
+// Release implements GitHubReleaseClient.
+func (c *FixtureGitHubClient) Release(_ context.Context, owner, repo, tag string) (*GitHubRelease, error) {
+	r, err := c.repo(owner, repo, "release")
 	if err != nil {
 		return nil, err
 	}
-	d, ok := r.Releases[fixtureReleaseKey(tag, sha)]
+	e, ok := r.Releases[tag]
 	if !ok {
-		return nil, fmt.Errorf("the GitHub fixtures have no release date for %s/%s %s", owner, repo, fixtureReleaseKey(tag, sha))
+		return nil, fmt.Errorf("the GitHub fixtures have no release of the tag %q for %s/%s", tag, owner, repo)
 	}
-	cp := *d
-	return &cp, nil
+	if !e.Found {
+		return nil, fmt.Errorf("release of %q of %s/%s: %w", tag, owner, repo, ErrGitHubNotFound)
+	}
+	return &GitHubRelease{Tag: tag, Immutable: e.Immutable}, nil
 }
 
-// ReleaseDate implements GitHubReleaseDateClient.
-func (c *RecordingGitHubClient) ReleaseDate(ctx context.Context, owner, repo, tag, sha string) (*GitHubReleaseDate, error) {
-	rc, ok := c.inner.(GitHubReleaseDateClient)
+// Release implements GitHubReleaseClient when the wrapped client does.
+func (c *RecordingGitHubClient) Release(ctx context.Context, owner, repo, tag string) (*GitHubRelease, error) {
+	rc, ok := c.inner.(GitHubReleaseClient)
 	if !ok {
-		return nil, errReleaseDatesUnsupported
+		return nil, errNoReleaseLookup
 	}
-	v, err := rc.ReleaseDate(ctx, owner, repo, tag, sha)
-	if err == nil {
+	rel, err := rc.Release(ctx, owner, repo, tag)
+	record := func(e *fixtureRelease) {
 		c.rec(owner, repo, func(r *fixtureRepo) {
 			if r.Releases == nil {
-				r.Releases = map[string]*GitHubReleaseDate{}
+				r.Releases = map[string]*fixtureRelease{}
 			}
-			cp := *v
-			r.Releases[fixtureReleaseKey(tag, sha)] = &cp
+			r.Releases[tag] = e
 		})
 	}
-	return v, err
+	switch {
+	case err == nil:
+		record(&fixtureRelease{Found: true, Immutable: rel.Immutable})
+	case isNotFound(err):
+		record(&fixtureRelease{})
+	}
+	return rel, err
 }

@@ -29,13 +29,18 @@ var actionRuleScope = map[string]struct {
 	scope  actionScope
 	except []string
 }{
+	"action-input-dependencies":       {scope: actionApplies},
 	"action":                          {scope: actionApplies},
 	"action-release-cooldown":         {scope: actionApplies},
 	"adhoc-packages":                  {scope: actionApplies},         // package installs in the scripts of the steps
 	"agentic-actions":                 {scope: actionCallerDependent}, // an agent is steerable depending on the events of the callers
+	"command-injection":               {scope: actionApplies},         // the scripts of the steps
+	"output-clobbering":               {scope: actionApplies},         // the scripts of the steps
+	"argument-injection":              {scope: actionApplies},         // the scripts of the steps
 	"checkout-static-credentials":     {scope: actionApplies},         // the inputs of actions/checkout steps
 	"concurrency-cancels-prs":         {scope: actionNotApplicable},   // concurrency: belongs to the workflow
 	"concurrency-cancels-release":     {scope: actionNotApplicable},   // concurrency: belongs to the workflow
+	"concurrency-deadlock":            {scope: actionNotApplicable},   // concurrency: belongs to the workflow
 	"continue-on-error":               {scope: actionApplies},         // the steps option; an action has no jobs
 	"deprecated-runner-label":         {scope: actionNotApplicable},   // runs-on: belongs to the calling job
 	"duplicate-triggers":              {scope: actionNotApplicable},   // on: belongs to the workflow
@@ -72,6 +77,7 @@ var actionRuleScope = map[string]struct {
 	"deprecated-commands":             {scope: actionApplies},
 	"env-var":                         {scope: actionApplies},
 	"events":                          {scope: actionNotApplicable},
+	"event-name-never-received":       {scope: actionNotApplicable}, // the events are the ones of the workflow, and an action has the events of its callers
 	"environment-file-redirect":       {scope: actionApplies},
 	"excessive-permissions":           {scope: actionNotApplicable},
 	"fail-fast-action-inputs":         {scope: actionApplies},

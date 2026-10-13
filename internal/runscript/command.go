@@ -500,7 +500,11 @@ var shells = set("sh bash zsh dash ash ksh fish busybox toybox")
 // canonicalTool maps the command name (and for python -m the module) to a tool name and returns the arguments
 // after the tool.
 func canonicalTool(name string, args []*Word) (string, []*Word) {
-	name = strings.TrimSuffix(name, ".exe")
+	// the spelling on Windows: `NPM.CMD`, `Pip.exe`, `python.EXE`; the name of a tool is compared in lower case without the suffix
+	name = strings.ToLower(name)
+	for _, suffix := range []string{".exe", ".cmd", ".bat"} {
+		name = strings.TrimSuffix(name, suffix)
+	}
 	switch {
 	case name == "":
 		return "", args
