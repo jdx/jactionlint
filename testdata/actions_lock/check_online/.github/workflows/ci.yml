@@ -9,3 +9,4 @@ jobs:
       - uses: actions/setup-node@v4
       - uses: example/forgotten@v1
       - uses: example/renamed-action@v1
+      - uses: example/transferred-action@v1

@@ -525,6 +525,17 @@
         }
       }
     },
+    "example/transferred-action": {
+      "repo": {
+        "archived": false,
+        "default_branch": "main",
+        "id": 7001,
+        "full_name": "newowner/transferred-action",
+        "owner": {
+          "id": 7002
+        }
+      }
+    },
     "example/archived-action": {
       "repo": {
         "archived": true,

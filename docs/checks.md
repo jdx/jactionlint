@@ -2672,7 +2672,7 @@ What it reports:
   runs cannot be read (an expression in `uses:`, a local action that does not exist), its pins are not reported as stale.
 
 The option `pedantic` (true under the `pedantic` profile) adds two checks which are a matter of taste: a workflow which the lock file
-does not list (workflows are onboarded one by one, so this can be on purpose), and a commit SHA whose version comment
+does not list although it uses actions (workflows are onboarded one by one, so this can be on purpose; a workflow without actions has nothing to lock), and a commit SHA whose version comment
 (`# v4.0.0`) names another version than the one the lock file resolved the commit from (`# v4` is accepted for `v4.3.1`).
 
 ```yaml
@@ -2687,8 +2687,9 @@ rules:
 With `--online` the rule `actions-lock-drift` compares each pin of the lock file with GitHub, with the answers the other online
 checks use. It reports a pin whose:
 
-- repository is not the one which was locked: GitHub has other IDs for the name than `repo_id` and `owner_id` (the repository was deleted
-  and created again, or the name was taken over), or the repository was renamed or transferred, which the runner refuses;
+- repository is not the one which was locked: GitHub has another `repo_id` for the name (the repository was deleted and created again, or
+  the name was taken over); or it is the same repository (the `repo_id` stays) under another name or owner, which is a rename or a
+  transfer that the runner refuses;
 - full version tag (`v4.2.1`) points to another commit than `commit` now, which is a moved tag;
 - commit is on no branch or tag of the repository (an impostor commit, as the rule `impostor-commit` finds for a commit in `uses:`).
 

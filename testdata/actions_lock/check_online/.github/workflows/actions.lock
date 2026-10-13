@@ -7,6 +7,7 @@ workflows:
         - 'actions/setup-node@v4'
         - 'example/forgotten@v1'
         - 'example/renamed-action@v1'
+        - 'example/transferred-action@v1'
 dependencies:
     'actions/checkout@2f547d07f23dec7f4a96fc091165260dcbe59529':
         ref: 'v4.9.9'
@@ -38,3 +39,8 @@ dependencies:
         commit: 'sha1-6666666666666666666666666666666666666666'
         owner_id: 9002
         repo_id: 9001
+    'example/transferred-action@v1':
+        ref: 'v1'
+        commit: 'sha1-7777777777777777777777777777777777777777'
+        owner_id: 7000
+        repo_id: 7001

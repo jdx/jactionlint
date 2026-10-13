@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -452,12 +453,17 @@ func (c *lockFileChecks) checkOnline(sess *onlineSession) {
 			continue // Not found can be a private repository: no verdict
 		}
 		switch {
-		case info.ID != 0 && d.RepoID > 0 && info.ID != d.RepoID,
-			info.Owner != nil && info.Owner.ID != 0 && d.OwnerID > 0 && info.Owner.ID != d.OwnerID:
-			c.reportDrift(d, "%s is not the repository which was locked any more: the lock file has repo_id %d and owner_id %d, GitHub has repo_id %d and owner_id %d for the name. it was deleted and created again, or the name was taken over. do not run `gh actions-lock --relock` before you know why", slug, d.RepoID, d.OwnerID, info.ID, ownerIDOf(info))
+		case info.ID != 0 && d.RepoID > 0 && info.ID != d.RepoID:
+			// The ID stays when a repository is renamed or transferred, so another one means another repository
+			c.reportDrift(d, "%s is not the repository which was locked any more: the lock file has repo_id %d, GitHub has repo_id %d for the name. it was deleted and created again, or the name was taken over. do not run `gh actions-lock --relock` before you know why", slug, d.RepoID, info.ID)
 			continue
-		case info.FullName != "" && !strings.EqualFold(info.FullName, slug):
-			c.reportDrift(d, "%s was renamed or transferred to %s. the lock file still has the old name, which the runner refuses. update `uses:` and run `gh actions-lock`", slug, info.FullName)
+		case info.Owner != nil && info.Owner.ID != 0 && d.OwnerID > 0 && info.Owner.ID != d.OwnerID,
+			info.FullName != "" && !strings.EqualFold(info.FullName, slug):
+			now := info.FullName
+			if now == "" {
+				now = slug + " (owner_id " + strconv.FormatInt(ownerIDOf(info), 10) + " now, the lock file has " + strconv.FormatInt(d.OwnerID, 10) + ")"
+			}
+			c.reportDrift(d, "%s was renamed or transferred to %s. the lock file still has the old name, which the runner refuses. update `uses:` and run `gh actions-lock`", slug, now)
 			continue
 		}
 
