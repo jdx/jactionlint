@@ -94,7 +94,8 @@ func (r *RuleMissingVersionComment) fixFor(s usesSite, starts []int) (*Fix, erro
 
 	idx, err := r.sess.Tags(s.ref.Owner, s.ref.Repo)
 	if err != nil {
-		return nil, err
+		return nil, &pinFixError{code: NoFixLookupFailed, err: err,
+			msg: fmt.Sprintf("adding the version needs the tags of %s and the lookup failed: %v", s.repoSlug(), err)}
 	}
 	tagged := idx.bySHA[strings.ToLower(s.ref.Ref)]
 	switch {
