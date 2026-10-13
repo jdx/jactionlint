@@ -78,6 +78,16 @@ type LinterOptions struct {
 	// or file path like "/path/to/pyflakes", "path/to/pyflakes". When this value is empty, pyflakes
 	// won't run to check scripts in workflow file.
 	Pyflakes string
+	// Select makes the run report only the findings of these rule IDs (the option --select). A selected rule which
+	// the profile or the configuration turns off is turned on at its default level; the other rules report
+	// nothing. An unknown ID is an error from NewLinter. The empty list selects nothing: every rule follows the
+	// configuration.
+	Select []string
+	// NoIgnores makes the run apply none of the ways to accept a finding which the repository carries: the inline
+	// ignore comments (also those of zizmor), the "ignores" and "paths" ignores of the config file and the
+	// baseline (the option --no-ignores). The IgnorePatterns of the command line still apply. It is for audits and
+	// for finding what the ignores hide.
+	NoIgnores bool
 	// ShellcheckRequired and PyflakesRequired say that the command was asked for explicitly (the command line
 	// option --shellcheck or --pyflakes was given). NewLinter then fails when the command cannot be found or is
 	// not executable, instead of running without it. A command which is not required and is missing is only
@@ -209,9 +219,12 @@ type Linter struct {
 	minSeverity    Severity
 	online         onlineSettings
 	baseline       linterBaseline
-	warnedOnce     sync.Map    // string -> struct{}: the messages warnOnce printed
-	profile        Profile     // the --profile override, empty when the configuration decides
-	profiled       sync.Map    // *Config -> *Config: the configs with the profile override applied
+	warnedOnce     sync.Map // string -> struct{}: the messages warnOnce printed
+	profile        Profile  // the --profile override, empty when the configuration decides
+	profiled       sync.Map // *Config -> *Config: the configs with the profile override applied
+	selected       sync.Map // *Config -> *Config: the configs with --select applied
+	selectIDs      map[string]bool
+	noIgnores      bool
 	warned         sync.Map    // *Config -> struct{}: configs whose deprecations were already reported
 	graphs         sync.Map    // root directory -> *sync.Once-guarded *callGraph, see callGraphOf
 	runHints       bool        // LinterOptions.RunHints
@@ -341,6 +354,21 @@ func NewLinter(out io.Writer, opts *LinterOptions) (*Linter, error) {
 		minSeverity:    opts.MinSeverity,
 		online:         onlineSettings{off: opts.OnlineOff, enabled: !opts.OnlineOff && (opts.Online || opts.OnlineOptions.Mode != OnlineModeDefault), client: opts.GitHubClient, ttl: opts.OnlineCacheTTL, ctx: opts.Context, opts: opts.OnlineOptions},
 	}
+	if len(opts.Select) > 0 {
+		sel, err := parseSelect(opts.Select)
+		if err != nil {
+			return nil, &usageError{err}
+		}
+		l.selectIDs = sel
+		// A tool which no selected rule needs is not run at all
+		if !sel["shellcheck"] {
+			l.shellcheck = ""
+		}
+		if !sel["pyflakes"] {
+			l.pyflakes = ""
+		}
+	}
+	l.noIgnores = opts.NoIgnores
 	if err := l.tools.checkRequired(); err != nil {
 		return nil, err
 	}
@@ -356,7 +384,7 @@ func NewLinter(out io.Writer, opts *LinterOptions) (*Linter, error) {
 		l.profile = p
 	}
 	l.baseline.on = opts.Baseline
-	l.baseline.off = opts.NoBaseline
+	l.baseline.off = opts.NoBaseline || opts.NoIgnores
 	l.baseline.check = opts.BaselineCheck
 	l.baseline.hideInSARIF = opts.SARIFHideBaselined
 	if opts.BaselineFile != "" {
@@ -977,13 +1005,19 @@ func (l *Linter) finishCheck(path string, content []byte, all []*Error, cfg *Con
 	var skipped map[string]bool
 	if ic != nil {
 		skipped = ic.skipped
-		l.trackIgnoreConfig(cfg, ic.project, path, ic.skipped)
-		cfgHit = l.matchConfigIgnores(all, cfg, ic.project, path, ic.scopes)
+		if !l.noIgnores {
+			l.trackIgnoreConfig(cfg, ic.project, path, ic.skipped)
+			cfgHit = l.matchConfigIgnores(all, cfg, ic.project, path, ic.scopes)
+		}
 	}
 
 	// Inline ignores are applied first so that every pattern sees all errors, which tells whether it
 	// is used. The order of the filters does not change which errors remain.
 	inlineIgnores, orphans, ignoreErrs := parseInlineIgnoresWithOrphans(content)
+	if l.noIgnores {
+		// Nothing is accepted by a comment, so there are no unused comments and no broken ones to report either
+		inlineIgnores, orphans, ignoreErrs = nil, nil, nil
+	}
 	for _, ig := range inlineIgnores {
 		for _, e := range ig.entries {
 			l.warnRetiredIgnores(e.pat)
@@ -999,14 +1033,20 @@ func (l *Linter) finishCheck(path string, content []byte, all []*Error, cfg *Con
 		}
 	}
 	l.warnKindPatterns(all, inlinePats)
-	inlineIgnores = append(inlineIgnores, parseZizmorIgnores(content)...)
+	if !l.noIgnores {
+		inlineIgnores = append(inlineIgnores, parseZizmorIgnores(content)...)
+	}
 	all = l.filterInlineIgnores(all, inlineIgnores)
 	all = dropIgnored(all, cfgHit)
 	unused := unusedInlineIgnores(inlineIgnores, orphans, cfg, l.onlineOn(cfg), skipped)
 	dropFixesChangingYAML(content, unused)
 	all = append(all, l.annotateErrors(unused, content, cfg)...)
 
-	all = l.filterErrors(all, cfg.PathConfigs(path))
+	pathConfigs := cfg.PathConfigs(path)
+	if l.noIgnores {
+		pathConfigs = nil
+	}
+	all = l.filterErrors(all, pathConfigs)
 	all = append(all, l.annotateErrors(ignoreErrs, content, cfg)...)
 	// The findings which nobody can act on in a generated file are dropped last: an ignore comment for a dropped
 	// rule is not unused, and "skip" reports nothing, also nothing about the ignore comments.
