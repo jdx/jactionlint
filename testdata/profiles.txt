@@ -12,6 +12,7 @@ concurrency-cancels-prs default correctness error
 concurrency-cancels-release default correctness error
 concurrency-deadlock correctness correctness error
 concurrency-limits default policy error
+conflicting-action-inputs correctness correctness error
 conflicting-runner-labels correctness correctness error
 constant-condition correctness correctness error
 context-availability correctness correctness error
@@ -32,10 +33,12 @@ duplicate-key correctness correctness error
 duplicate-step-id correctness correctness error
 duplicate-triggers default policy error
 environment-file-redirect correctness correctness error
+event-name-never-received pedantic correctness warn
 excessive-permissions default security error
 expired-ignore correctness policy error
 expression-syntax correctness correctness error
 expression-type correctness correctness error
+fail-fast-action-inputs pedantic correctness warn
 forbidden-uses configured policy error
 gate-job-skipped-on-failure default correctness error
 gh-without-token correctness correctness error

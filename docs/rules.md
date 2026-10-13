@@ -47,6 +47,7 @@ rules:
 | [concurrency-cancels-release](#concurrency-cancels-release) | correctness | error | default |
 | [concurrency-deadlock](#concurrency-deadlock) | correctness | error | correctness |
 | [concurrency-limits](#concurrency-limits) | policy | error | default |
+| [conflicting-action-inputs](#conflicting-action-inputs) | correctness | error | correctness |
 | [conflicting-runner-labels](#conflicting-runner-labels) | correctness | error | correctness |
 | [constant-condition](#constant-condition) | correctness | error | correctness |
 | [context-availability](#context-availability) | correctness | error | correctness |
@@ -67,10 +68,12 @@ rules:
 | [duplicate-step-id](#duplicate-step-id) | correctness | error | correctness |
 | [duplicate-triggers](#duplicate-triggers) | policy | error | default |
 | [environment-file-redirect](#environment-file-redirect) | correctness | error | correctness |
+| [event-name-never-received](#event-name-never-received) | correctness | warn | pedantic |
 | [excessive-permissions](#excessive-permissions) | security | error | default |
 | [expired-ignore](#expired-ignore) | policy | error | correctness |
 | [expression-syntax](#expression-syntax) | correctness | error | correctness |
 | [expression-type](#expression-type) | correctness | error | correctness |
+| [fail-fast-action-inputs](#fail-fast-action-inputs) | correctness | warn | pedantic |
 | [forbidden-uses](#forbidden-uses) | policy | error | only when configured |
 | [gate-job-skipped-on-failure](#gate-job-skipped-on-failure) | correctness | error | default |
 | [gh-without-token](#gh-without-token) | correctness | error | correctness |
@@ -312,6 +315,15 @@ A workflow does not cancel superseded runs with concurrency:.
 - Fixable: yes
 - Details and examples: [checks](./checks.md#check-concurrency-limits)
 
+## conflicting-action-inputs
+
+Two inputs of a well-known action exclude each other.
+
+- Group: correctness
+- Default level: error
+- Profile: correctness
+- Details and examples: [checks](./checks.md#check-action-input-dependencies)
+
 ## conflicting-runner-labels
 
 The runner labels of a job conflict with each other.
@@ -499,6 +511,15 @@ A script writes to GITHUB_OUTPUT or another environment file of the runner witho
 - Fixable: yes
 - Details and examples: [checks](./checks.md#check-environment-file-redirect)
 
+## event-name-never-received
+
+github.event_name is compared with an event that the workflow never receives, so the comparison is always false.
+
+- Group: correctness
+- Default level: warn
+- Profile: pedantic
+- Details and examples: [checks](./checks.md#check-event-name-never-received)
+
 ## excessive-permissions
 
 The GITHUB_TOKEN gets write access that is broader than needed.
@@ -535,6 +556,16 @@ A ${{ }} expression has a type error.
 - Default level: error
 - Profile: correctness
 - Details and examples: [checks](./checks.md#check-type-check-expression)
+
+## fail-fast-action-inputs
+
+An action which passes by default when nothing was produced or found is not told to fail.
+
+- Group: correctness
+- Default level: warn
+- Profile: pedantic
+- Fixable: yes
+- Details and examples: [checks](./checks.md#check-fail-fast-action-inputs)
 
 ## forbidden-uses
 

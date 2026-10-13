@@ -25,6 +25,21 @@
               "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
             },
             {
+              "id": "action-input-dependencies",
+              "name": "ActionInputDependencies",
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "description": "Checks inputs of well-known actions which only work together",
+                "queryURI": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+              },
+              "fullDescription": {
+                "text": "Checks inputs of well-known actions which only work together"
+              },
+              "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+            },
+            {
               "id": "artipacked",
               "name": "Artipacked",
               "defaultConfiguration": {
@@ -205,6 +220,21 @@
               "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
             },
             {
+              "id": "event-name-never-received",
+              "name": "EventNameNeverReceived",
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "description": "Checks for \"github.event_name\" compared with an event that the workflow never receives",
+                "queryURI": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+              },
+              "fullDescription": {
+                "text": "Checks for \"github.event_name\" compared with an event that the workflow never receives"
+              },
+              "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+            },
+            {
               "id": "events",
               "name": "Events",
               "defaultConfiguration": {
@@ -246,6 +276,21 @@
               },
               "fullDescription": {
                 "text": "Syntax and semantics checks for expressions embedded with ${{ }} syntax"
+              },
+              "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+            },
+            {
+              "id": "fail-fast-action-inputs",
+              "name": "FailFastActionInputs",
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "description": "Checks that actions which pass by default when nothing was produced or found are told to fail",
+                "queryURI": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+              },
+              "fullDescription": {
+                "text": "Checks that actions which pass by default when nothing was produced or found are told to fail"
               },
               "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
             },
