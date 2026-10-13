@@ -7475,7 +7475,7 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           ref: ${{ github.event.pull_request.head.sha }}
       - run: npm ci && npm test
@@ -7484,13 +7484,13 @@ jobs:
 Output:
 
 ```
-test.yaml:8:16: this step checks out code from a pull request (github.event.pull_request.head.sha) in a "pull_request_target" workflow and "npm" runs it afterwards. the workflow has a write token and secrets, so whoever controls that code can use them. run untrusted code in a "pull_request" workflow without secrets, or check out the base branch and only read the pull request as data [untrusted-checkout]
+test.yaml:8:16: this step checks out code from a pull request (github.event.pull_request.head.sha) in a "pull_request_target" workflow and "npm" runs it afterwards. the workflow has a write token and secrets, so whoever controls that code can use them. run untrusted code in a "pull_request" workflow without secrets, or check out the base branch and only read the pull request as data. the pinned actions/checkout (v4.2.2) predates the protection that refuses the code of a fork pull request here, upgrade to v4.4.0 or later [untrusted-checkout]
   |
 8 |           ref: ${{ github.event.pull_request.head.sha }}
   |                ^~~
 ```
 
-[Playground](https://jactionlint.jdx.dev/#eNpMjjHOwjAMRvee4ht+dWv+hSkTN6nSYJpASUpsl6Hq3VEKqphs6z3JLyeLWaepL/RUYunFlZGkueWBbQMIsdQJFE3cVV0HTaLd5CrbEQvN/LGADsrEFs5LzIn/fSB/zyrn5fQ1gFeUYI8LKHS1+FtXjFGCDoYWSmJ+u0wgdzEcHLbteFQ0WaT5AR/RtvtWm94DACIeQkk=)
+[Playground](https://jactionlint.jdx.dev/#eNpMj8FOwzAMhu97il8C7dawtFtLc+JNpiT1lkJJS2yPw7R3Rx1o4mRb/yfr/+bssOg0HQt9KbEcxZczyeZ9Duw2gBDLOoGimasV16BZtJr8mt0jFlr4lwIqKBM7+CjjnPklJoofs8qbtWHobL+zIdAh2LbZRSLfNUPdHfquafex96f2tcETLntTm/rvIfA9SnKPCyh0cni+XnEeJWkwdKEs5r+GSeQHw8njdnv0Kpod8vKJOGK7vW+rws8AsOBOKw==)
 
 The rule `untrusted-checkout` (in the `default` profile, as an error) reports a `pull_request_target` or `workflow_run`
 workflow that checks out the code of a pull request and then runs it. These events run in the context of the base repository,
@@ -7499,6 +7499,30 @@ a test, a `package.json` hook or a local action is enough to take over the token
 
 Run untrusted code in a `pull_request` workflow, which has no secrets for pull requests from forks. If a privileged workflow
 has to look at the pull request, check out the base branch and read the pull request as data.
+
+The protection of `actions/checkout`: since v7, and since 2026-07-20 in the floating tags of every older major version but v1,
+`actions/checkout` refuses to check out the code of a pull request from a fork in a `pull_request_target` workflow (and in a
+`workflow_run` workflow that a pull request event started). See
+[the announcement](https://github.blog/changelog/2026-06-18-safer-pull_request_target-defaults-for-github-actions-checkout/).
+It refuses a `repository` that is the fork, a `ref` of `refs/pull/N/head` or `refs/pull/N/merge`, and a `ref` that is the head
+or merge commit of the pull request. The input `allow-unsafe-pr-checkout: true` turns it off. The rule takes that into account:
+
+- A checkout that the protection refuses is **not reported**: the step fails for a fork, and a pull request from a branch of the
+  repository is written by someone with write access. The protection is in the floating tags (`@v4`, `@v6`, `@v7`), in a release
+  at or above the first one of its line (`v2.8.0`, `v3.7.0`, `v4.4.0`, `v5.1.0`, `v6.1.0`) and in a commit pinned with a version
+  comment that names such a release (`# v4.4.0`, not `# v4`). The comment is not verified (`ref-version-mismatch` does that
+  online), so a commit is only as guarded as its comment is true. With the option `pedantic` these checkouts are reported too,
+  and the message says that it is only a pull request from a branch of the repository that gets through.
+- A release below the first one of its line, a commit whose comment names such a release, `v1`, and a commit without a version
+  comment are **reported as before**, and the message says to upgrade when the version is known.
+- `allow-unsafe-pr-checkout: true`, or an expression, is a finding of its own on that line, when the workflow has an event that
+  the protection covers and the step has a `ref` or `repository` that is an expression or names `refs/pull/`: nothing stops the
+  step from checking out the code of the fork then. It is reported whether or not a later step runs the code.
+- `git` and `gh pr checkout` in a `run:` step, a branch name (`github.event.pull_request.head.ref`, `github.head_ref`) as the
+  only input, a `refs/pull/N/head` whose number does not come from the pull request of the event (`inputs.number`), and a workflow
+  that also has the event `issue_comment`, `issues` or `workflow_call` are **not covered by the protection**, so they are
+  reported as before. So is a `workflow_run` workflow unless every workflow in `workflows:` is in the repository and only runs
+  for `pull_request*` events.
 
 A step is reported at its checkout when it puts untrusted code in the workspace and a later step in the same job runs it:
 
