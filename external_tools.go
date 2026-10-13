@@ -104,6 +104,48 @@ func (t *externalTool) note() string {
 type externalTools struct {
 	shellcheck *externalTool
 	pyflakes   *externalTool
+
+	// seen are the files which the totals already have. --fix and --diff lint a file again for each pass, and the
+	// scripts of a file count once per run, as the first check of it saw them.
+	mu   sync.Mutex
+	seen map[string]bool
+}
+
+// forCheck returns the tracking for the check of one file: the same tools with counters of their own, which record
+// puts into the totals when the check is over.
+func (ts *externalTools) forCheck() *externalTools {
+	if ts == nil {
+		return nil
+	}
+	cp := func(t *externalTool) *externalTool {
+		return &externalTool{name: t.name, command: t.command, required: t.required, kind: t.kind}
+	}
+	return &externalTools{shellcheck: cp(ts.shellcheck), pyflakes: cp(ts.pyflakes)}
+}
+
+// record adds what the check of the file saw to the totals, unless an earlier check of the same file did.
+func (ts *externalTools) record(path string, check *externalTools) {
+	if ts == nil || check == nil {
+		return
+	}
+	ts.mu.Lock()
+	if ts.seen[path] {
+		ts.mu.Unlock()
+		return
+	}
+	if ts.seen == nil {
+		ts.seen = map[string]bool{}
+	}
+	ts.seen[path] = true
+	ts.mu.Unlock()
+	for _, p := range [][2]*externalTool{{ts.shellcheck, check.shellcheck}, {ts.pyflakes, check.pyflakes}} {
+		total, one := p[0], p[1]
+		if s, ok := one.snapshot(); ok {
+			total.setStatus(s.Status)
+			total.scripts.Add(int64(s.Scripts))
+			total.skipped.Add(int64(s.SkippedScripts))
+		}
+	}
 }
 
 func newExternalTools(opts *LinterOptions) *externalTools {

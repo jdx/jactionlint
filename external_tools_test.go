@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"strings"
 	"testing"
@@ -349,5 +350,69 @@ func TestToolsNobodyNeededAreNotListed(t *testing.T) {
 		if wantProp && strings.Contains(out.String(), `"shellcheck": {`) {
 			t.Errorf("%s: shellcheck was not needed: %s", file, out.String())
 		}
+	}
+}
+
+// TestToolScriptsAreCountedOncePerFile: --fix lints a file again for each pass, and --diff does too, but the scripts
+// of a file count once per run, like in a plain run.
+func TestToolScriptsAreCountedOncePerFile(t *testing.T) {
+	emptyPath(t)
+	root := t.TempDir()
+	for _, d := range []string{filepath.Join(root, ".git"), filepath.Join(root, ".github", "workflows")} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// artipacked has a safe fix, so the file is linted again after the pass. Three scripts: two bash and one python
+	src := "on: push\npermissions: {}\nconcurrency:\n  group: ci\n  cancel-in-progress: true\njobs:\n  j:\n    runs-on: ubuntu-latest\n    timeout-minutes: 5\n    steps:\n" +
+		"      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8\n" +
+		"      - run: echo one\n      - run: echo two\n        shell: bash\n      - run: print(1)\n        shell: python\n"
+	f := filepath.Join(root, ".github", "workflows", "ci.yaml")
+	write := func() {
+		if err := os.WriteFile(f, []byte(src), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	newLinter := func() *Linter {
+		l, err := NewLinter(&bytes.Buffer{}, &LinterOptions{Shellcheck: "shellcheck", Pyflakes: "pyflakes", Profile: ProfileDefault})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return l
+	}
+
+	write()
+	plain := newLinter()
+	if _, err := plain.LintFile(f, nil); err != nil {
+		t.Fatal(err)
+	}
+	want := plain.ExternalTools()
+	if want["shellcheck"].SkippedScripts != 2 || want["pyflakes"].SkippedScripts != 1 {
+		t.Fatalf("the plain run: %+v", want)
+	}
+
+	write()
+	fixer := newLinter()
+	res, err := fixer.FixFilesWithOptions([]string{f}, nil, FixOptions{Mode: FixModeSafe})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Applied == 0 {
+		t.Fatalf("the file must have been fixed, so that it was linted again: %+v", res)
+	}
+	if got := fixer.ExternalTools(); !reflect.DeepEqual(got, want) {
+		t.Errorf("--fix counted %+v, a plain run %+v", got, want)
+	}
+
+	write()
+	diff := newLinter()
+	if _, err := diff.FixFilesWithOptions([]string{f}, nil, FixOptions{Mode: FixModeSafe, DryRun: true}); err != nil {
+		t.Fatal(err)
+	}
+	if got := diff.ExternalTools(); !reflect.DeepEqual(got, want) {
+		t.Errorf("--diff counted %+v, a plain run %+v", got, want)
+	}
+	if n := fixer.tools.notes(); len(n) != 2 || !strings.Contains(n[0], "did not check 2 shell scripts") || !strings.Contains(n[1], "did not check 1 Python script.") {
+		t.Errorf("the notes: %q", n)
 	}
 }

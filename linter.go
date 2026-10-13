@@ -883,7 +883,7 @@ func (l *Linter) check(
 			config:                 cfg,
 			shellcheck:             l.shellcheck,
 			pyflakes:               l.pyflakes,
-			tools:                  l.tools,
+			tools:                  l.tools.forCheck(),
 			shellcheckRCFile:       l.shellcheckRC,
 			cwd:                    l.cwd,
 			proc:                   proc,
@@ -921,6 +921,7 @@ func (l *Linter) check(
 			l.debug("Error occurred while visiting workflow syntax tree: %v", err)
 			return nil, err
 		}
+		l.tools.record(path, env.tools)
 
 		for _, rule := range rules {
 			if sr, ok := rule.(interface{ sharedErrs() []*Error }); ok {
