@@ -45,7 +45,7 @@ func options(names ...string) map[string]bool {
 var wrapperCommands = map[string]wrapperSpec{
 	"sudo":    {withValue: options("-u", "-g", "-h", "-p", "-C", "-D", "-r", "-t", "-U", "-T", "--user", "--group", "--host", "--prompt", "--chdir")},
 	"doas":    {withValue: options("-u", "-C")},
-	"env":     {withValue: options("-u", "-C", "-S", "--unset", "--chdir", "--split-string")},
+	"env":     {withValue: options("-u", "-C", "--unset", "--chdir")},
 	"command": {},
 	"exec":    {withValue: options("-a")},
 	"time":    {withValue: options("-f", "-o", "--format", "--output")},
@@ -73,39 +73,50 @@ func isAssignmentWord(w string) bool {
 	return true
 }
 
-// commandWordOf returns the index of the real command in the words of a simple command, after the wrappers, their
-// options with the values of these, and the assignments; and -1 when it is not a literal word.
-func commandWordOf(words []string) int {
+// commandWordOf returns the words of a simple command and the index of the real command in them, after the wrappers,
+// their options with the values of these, and the assignments; -1 when it is not a literal word. The words are the ones
+// given, except that the value of `env -S` (which is a command line) is split into words and put in place of the option.
+func commandWordOf(words []string) ([]string, int) {
 	i := 0
 	for i < len(words) {
 		w := words[i]
 		if w == "" {
-			return -1
+			return words, -1
 		}
 		if isAssignmentWord(w) {
 			i++
 			continue
 		}
-		spec, ok := wrapperCommands[path.Base(w)]
+		base := path.Base(w)
+		spec, ok := wrapperCommands[base]
 		if !ok {
-			return i
+			return words, i
 		}
 		i++
 		for i < len(words) {
 			o := words[i]
 			if o == "" {
-				return -1
+				return words, -1
 			}
 			if o == "--" {
 				i++
 				break
 			}
 			if len(o) > 1 && strings.HasPrefix(o, "-") {
-				if spec.withValue[o] {
-					i += 2
-				} else {
-					i++
+				if base == "env" {
+					// env -S and --split-string: the value is a command line, which runs
+					if value, used, isSplit := envSplitString(words, i); isSplit {
+						if value == "" && used > 1 {
+							return words, -1 // the value is not a literal word
+						}
+						expanded := append([]string{}, words[:i]...)
+						expanded = append(expanded, strings.Fields(value)...)
+						expanded = append(expanded, words[i+used:]...)
+						words = expanded
+						continue
+					}
 				}
+				i += 1 + optionValueWords(spec, o)
 				continue
 			}
 			if isAssignmentWord(o) {
@@ -116,7 +127,45 @@ func commandWordOf(words []string) int {
 		}
 		i += spec.positional
 	}
-	return -1
+	return words, -1
+}
+
+// optionValueWords returns how many of the words after the option the option takes as its value: 1 for an option that
+// takes a value, or a cluster of short options whose last letter takes one (`-Eu user`), and 0 when the value is in the
+// word (`-uuser`, `--user=x`) or the option has none.
+func optionValueWords(spec wrapperSpec, o string) int {
+	if spec.withValue[o] {
+		return 1
+	}
+	if len(o) > 2 && o[1] != '-' {
+		for k, c := range o[1:] {
+			if spec.withValue["-"+string(c)] {
+				if k == len(o)-2 {
+					return 1 // the last letter takes the next word
+				}
+				return 0 // the rest of the word is its value
+			}
+		}
+	}
+	return 0
+}
+
+// envSplitString reads `-S value`, `-Svalue`, `--split-string value` and `--split-string=value` of env at words[i]. It
+// returns the value, the number of words that the option and its value take, and whether it is such an option.
+func envSplitString(words []string, i int) (value string, used int, ok bool) {
+	o := words[i]
+	switch {
+	case o == "-S" || o == "--split-string":
+		if i+1 >= len(words) {
+			return "", 1, true
+		}
+		return words[i+1], 2, true
+	case strings.HasPrefix(o, "--split-string="):
+		return strings.TrimPrefix(o, "--split-string="), 1, true
+	case strings.HasPrefix(o, "-S") && len(o) > 2 && o[1] != '-':
+		return o[2:], 1, true
+	}
+	return "", 0, false
 }
 
 // stepConditionReadsTheSystem reports whether the `if:` of a step reads the context runner or matrix, which can keep the
@@ -185,7 +234,7 @@ func callIsForMoreSystems(c *syntax.CallExpr) bool {
 	for _, a := range c.Args {
 		words = append(words, literalWord(a))
 	}
-	i := commandWordOf(words)
+	words, i := commandWordOf(words)
 	if i < 0 || i >= len(words) {
 		return false
 	}

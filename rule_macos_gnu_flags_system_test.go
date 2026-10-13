@@ -37,6 +37,23 @@ func TestScriptIsForMoreSystems(t *testing.T) {
 		`env -u uname sed -i x f`:             false,
 		`sudo -u deploy sed -i x f`:           false,
 		`timeout 5 sed -i x f`:                false,
+		// A cluster whose last letter takes a value: the next word is the value
+		`sudo -Eu user gsed -i x f`: true,
+		`sudo -En gsed -i x f`:      true,
+		`sudo -Eu gsed sed -i x f`:  false,
+		`sudo -Eu user sed -i x f`:  false,
+		`sudo -uuser gsed -i x f`:   true,
+		`sudo -Euuser gsed -i x f`:  true,
+		// env -S is a command line
+		`env -S 'gsed -i x f'`:              true,
+		`env -S gsed -i x f`:                true,
+		`env --split-string 'gsed -i x f'`:  true,
+		`env --split-string=gsed`:           true,
+		`env -S'gsed -i x f'`:               true,
+		`env -S 'FOO=1 gsed -i x'`:          true,
+		`env -S 'sudo -u deploy gsed -i x'`: true,
+		`env -S 'sed -i x f'`:               false,
+		`env -S "sed -i $X"`:                false,
 		// A script that cannot be read is not known
 		`if [ -z "$X" ]; then`: true,
 		// Words that only look like them
