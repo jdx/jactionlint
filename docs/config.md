@@ -123,7 +123,7 @@ extends:
 
 - `self-hosted-runner`: Configuration for your self-hosted runner environment.
   - `labels`: Label names added to your self-hosted runners as list of pattern. Glob syntax supported by [`path.Match`][pat]
-    is available.
+    is available. The [`self-hosted-runner` rule](checks.md#check-self-hosted-runner) takes them for self-hosted runners too.
   - `strict-labels`: When `true`, the [runner label check](checks.md#check-runner-labels) accepts only the labels listed in
     `labels` (glob patterns supported). The built-in labels (GitHub-hosted runner labels such as `ubuntu-latest` and the preset
     self-hosted labels such as `self-hosted`, `linux`, and `x64`) are reported as errors unless they are listed in `labels`.
