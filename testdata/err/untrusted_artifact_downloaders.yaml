@@ -1,0 +1,41 @@
+on:
+  workflow_run:
+    workflows: [Build]
+    types: [completed]
+
+jobs:
+  forks:
+    runs-on: ubuntu-latest
+    steps:
+      # ERROR: a fork of dawidd6/action-download-artifact, and the script comes from the pull request
+      - uses: aochmann/actions-download-artifact@v1
+        with:
+          name: pr
+          path: pr
+      - run: bash pr/run.sh
+  last:
+    runs-on: ubuntu-latest
+    steps:
+      # ERROR: the last artifact of that name, of any run
+      - uses: blablacar/action-download-last-artifact@v1
+        with:
+          name: build
+          path: build
+      - run: ./build/tool
+  bettermarks:
+    runs-on: ubuntu-latest
+    steps:
+      # ERROR
+      - uses: bettermarks/action-artifact-download@v1
+        with:
+          artifact_name: build
+      - run: ./build/tool
+  unrelated:
+    runs-on: ubuntu-latest
+    steps:
+      # OK: nothing of the artifact is used
+      - uses: aochmann/actions-download-artifact@v1
+        with:
+          name: pr
+          path: pr
+      - run: echo done
