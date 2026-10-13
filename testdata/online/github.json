@@ -1,5 +1,13 @@
 {
-  "_note": "Trimmed answers of the GitHub API recorded in 2026-10 (see github_fixture.go). Tag and branch lists keep only the entries the tests use. example/* repositories are made up.",
+  "_note": "Trimmed answers of the GitHub API and of the registries (images) recorded in 2026-10 (see github_fixture.go). Tag and branch lists keep only the entries the tests use. example/* repositories are made up.",
+  "images": {
+    "docker.io/example/gone:1": "not-found",
+    "docker.io/library/alpine:3.19": "sha256:6baf43584bcb78f2e5847d1de515f23499913ac9f12bdf834811a3145eb11ca1",
+    "docker.io/library/node:latest": "sha256:32fa97f3363975684b08bf4e8a68a47c7905175cc20275b50b974bbd02aba731",
+    "docker.io/library/postgres:16": "sha256:ca0bd484cb98bf4b24eb1010e73fb3fcbd6714d240fbc1a10eea5b7dbecb641d",
+    "docker.io/library/ubuntu:22.04": "sha256:5ec03bb3441e8b0bf3b4f9cd4629a1ae763010dc3035bb8da3ae6cf026486401",
+    "ghcr.io/astral-sh/uv:0.5.0": "sha256:0e0fb77970aceaa106c1fee7103ec3e4885f6c4289e32a596123af06d2e9db9d"
+  },
   "repos": {
     "actions/checkout": {
       "repo": {

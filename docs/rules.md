@@ -1230,6 +1230,7 @@ A container or service image is not pinned by a digest.
 - Group: security
 - Default level: error
 - Profile: default
+- Fixable: yes
 - Option `require-digest` (bool, default true): Report images pinned by a tag other than latest too. Turn it off to report only images without a tag or with the latest tag.
 - Option `pedantic` (bool, no default): Also report the pedantic checks, which are noisier. Unset, they run under the pedantic profile.
 - Details and examples: [checks](./checks.md#check-unpinned-images)

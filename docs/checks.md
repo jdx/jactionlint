@@ -3673,6 +3673,17 @@ An image written with an expression is checked as far as it can be known:
 
 Docker images used as actions (`uses: docker://alpine:3.20`) are checked by the [`unpinned-uses`](#check-action-format) rule.
 
+With `--online --fix` the digest is written for you: `postgres:16` becomes `postgres:16@sha256:...` (the format Renovate keeps up to date), and an
+image without a tag becomes `image:latest@sha256:...`, because that is what Docker pulls. It works for `container:`, `services:`, the values a
+matrix writes, `uses: docker://` and the `runs.image: docker://` of an action. The digest is asked of the registry (the v2 API, a HEAD request of the
+manifest) and is the one `docker pull image:tag` resolves today: for a multi-platform image the digest of its index. Only
+Docker Hub (`docker.io`, `ubuntu`, `owner/image`) and ghcr.io are asked, and an image of another registry gets the reason in the finding instead of a
+request. Both give an anonymous token for a public image; for a private image on ghcr.io the token of GitHub (`GITHUB_TOKEN`) is sent to ghcr.io as
+its password when the anonymous request is refused, and to no other host. The fix is **unsafe** (`--fix=unsafe`): the image behind a tag moves,
+and the digest is the image of this moment, so look at what you are pinning. It never updates a pin to a newer image. `--online-allow` and `--online-deny`
+apply to images as `owner/image` (`library/ubuntu` for an official image of Docker Hub), whichever registry it is on, and `--online=cache` does not ask
+the registry. A tag that does not exist, a private image and a registry which fails leave the finding without a fix, with the reason.
+
 <a id="check-self-repository"></a>
 ## Self-repository syntax (pedantic)
 

@@ -149,6 +149,12 @@ type onlineSession struct {
 	compares   memo[compareKey, GitHubCompareStatus]
 	advisories memo[string, []GitHubAdvisory]
 	origins    memo[originKey, originResult]
+
+	// images answers the digest of container images. It is nil when the client itself can (ImageDigestClient).
+	images           ImageDigestClient
+	imageDigests     memo[imageKey, string]
+	registryDown     map[string]error // registries which are not asked again in this run
+	registryFailures map[string]int   // failures in a row, by registry
 }
 
 type originKey struct {

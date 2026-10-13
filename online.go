@@ -63,6 +63,7 @@ func (l *Linter) onlineSession(cfg *Config) (*onlineSession, error) {
 		eff := cfgOpts.overlay(o.opts)
 		o.mode = eff.Mode
 		client := o.client
+		var images ImageDigestClient
 		if client == nil {
 			if !onlineSupported {
 				o.err = fmt.Errorf("\"online: true\" in the configuration cannot be used: %w", errOnlineUnsupported)
@@ -91,8 +92,10 @@ func (l *Linter) onlineSession(cfg *Config) (*onlineSession, error) {
 				return
 			}
 			client = c
+			images = defaultImageClient(c, eff.Mode.Offline())
 		}
 		o.sess = newOnlineSession(o.ctx, client, l.warnOnline)
+		o.sess.images = images
 		o.sess.allow, o.sess.deny = eff.Allow, eff.Deny
 		o.sess.detail = l.logf
 	})
