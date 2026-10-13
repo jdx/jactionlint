@@ -120,7 +120,7 @@ func (rule *RuleGitHubEnv) guardHolds(s *runscript.Script, g *runscript.Guard, d
 		return false
 	}
 	for _, l := range g.Literals {
-		if !charsetSafe(l, dest == "GITHUB_PATH") {
+		if !charsetSafe(l, strictDest(dest)) {
 			return false
 		}
 	}

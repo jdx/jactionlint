@@ -53,6 +53,14 @@ const maxScriptDepth = 3
 // revTaint tells which shell variables of a script hold a revision of a pull request.
 type revTaint struct {
 	s *runscript.Script
+	// pred says whether an expression names a revision that someone else controls; refs whether a `refs/pull/` word
+	// does. The head of a pull request is the default (untrustedValue); a taint of the number of the pull request that a
+	// comment is on only has the contexts of that number and no refs.
+	pred func(string) (string, bool)
+	refs bool
+	// num follows the number of the pull request that a comment is on (or that a caller passes), for gh pr checkout; nil when
+	// there is none.
+	num *revTaint
 	// base is the environment the script starts with: for each name where an untrusted value comes from, "" for a
 	// variable that is exported but clean.
 	base map[string]string
@@ -65,7 +73,23 @@ type varKey struct {
 }
 
 func newRevTaint(s *runscript.Script, base map[string]string) *revTaint {
-	return &revTaint{s: s, base: base, memo: map[varKey]string{}}
+	return &revTaint{s: s, base: base, memo: map[varKey]string{}, pred: untrustedValue, refs: true}
+}
+
+// newTaint is newRevTaint with what the rule knows about the head of a pull request: the outputs of the actions that
+// look it up.
+func (rule *RuleUntrustedCheckout) newTaint(s *runscript.Script, base map[string]string) *revTaint {
+	t := newRevTaint(s, base)
+	t.pred = rule.untrusted
+	return t
+}
+
+// newNumberTaint follows the number of the pull request that a comment is on, which `gh pr checkout` takes as a
+// revision.
+func newNumberTaint(s *runscript.Script, base map[string]string, pred func(string) (string, bool)) *revTaint {
+	t := newRevTaint(s, base)
+	t.pred, t.refs = pred, false
+	return t
 }
 
 // names returns the variables that hold a revision of a pull request at the offset.
@@ -156,11 +180,11 @@ func (t *revTaint) wordAt(w *runscript.Word, off int) string {
 		return ""
 	}
 	for _, e := range w.Exprs {
-		if what, bad := untrustedValue("${{ " + e + " }}"); bad {
+		if what, bad := t.pred("${{ " + e + " }}"); bad {
 			return what
 		}
 	}
-	if namesPullRef(w.Value) {
+	if t.refs && namesPullRef(w.Value) {
 		return w.Value
 	}
 	for _, v := range w.Vars {
@@ -314,18 +338,21 @@ func firstWorkTree(cmds []*runscript.Command) int {
 // scriptChecksOut reports whether running the script puts untrusted code in the working tree: it describes the
 // revision, and says what the script runs after that ("" when it runs nothing, so a later step has to). dir is the
 // directory the script runs in.
-func (rule *RuleUntrustedCheckout) scriptChecksOut(sc *runscript.Script, base map[string]string, dir string, depth int) (what, how string, ok bool) {
-	t := newRevTaint(sc, base)
+func (rule *RuleUntrustedCheckout) scriptChecksOut(sc *runscript.Script, base, numBase map[string]string, dir string, depth int) (what, how string, ok bool) {
+	t := rule.newTaint(sc, base)
+	if numBase != nil {
+		t.num = newNumberTaint(sc, numBase, rule.numberValue)
+	}
 	for i, c := range sc.Commands {
 		var env map[string]bool
 		if c.Name == "git" || c.Name == "gh" {
 			env = t.names(c.Offset)
 		}
 		at := i // the command after which the code is in the working tree
-		what, ok = commandChecksOutUntrusted(c, env)
+		what, ok = rule.commandChecksOutUntrusted(c, env, t.num)
 		if !ok && c.Name == "git" && c.Verb() == "fetch" {
 			if k := firstWorkTree(sc.Commands[i+1:]); k >= 0 {
-				if what, ok = commandNamesUntrusted(c, env); ok {
+				if what, ok = rule.commandNamesUntrusted(c, env); ok {
 					at = i + 1 + k
 				}
 			}
@@ -385,7 +412,11 @@ func (rule *RuleUntrustedCheckout) followScript(t *revTaint, c *runscript.Comman
 	if child == nil {
 		return "", "", false
 	}
-	return rule.scriptChecksOut(child, childBase(t, c, sw, inherited), cwd, depth)
+	var numBase map[string]string
+	if t.num != nil {
+		numBase = childBase(t.num, c, sw, t.num.base)
+	}
+	return rule.scriptChecksOut(child, childBase(t, c, sw, inherited), numBase, cwd, depth)
 }
 
 // envNameOf returns the variable that an entry of an environment file ("NAME=value") sets, "" if it is not one.
@@ -406,17 +437,17 @@ func envNameOf(entry string) string {
 // unconditional write replaces what an earlier step wrote, a conditional one can only add. `echo` writes one entry,
 // that of its first word, whose value is all of its words; `printf` writes the entries of its format with the
 // arguments filled in. Writes through a here document are not followed.
-func (rule *RuleUntrustedCheckout) carryEnv(sc *runscript.Script, t *revTaint, stepCond bool) {
+func (rule *RuleUntrustedCheckout) carryEnv(sc *runscript.Script, t *revTaint, stepCond bool, into *map[string]string) {
 	// A value is untrusted, clean or unknown. Only a clean value replaces what an earlier step wrote: a value that
 	// cannot be resolved (a command substitution, a format that is not understood) keeps it.
 	set := func(name, d string, cond, unknown bool) {
 		if d == "" && (cond || unknown || stepCond) { // a step with an `if:` may not run
 			return
 		}
-		if rule.carried == nil {
-			rule.carried = map[string]string{}
+		if *into == nil {
+			*into = map[string]string{}
 		}
-		rule.carried[name] = d
+		(*into)[name] = d
 	}
 	for _, w := range sc.WritesTo("GITHUB_ENV") {
 		if w.Heredoc != nil {
@@ -476,7 +507,7 @@ func (rule *RuleUntrustedCheckout) carryEnv(sc *runscript.Script, t *revTaint, s
 						if name == "" {
 							continue
 						}
-						d, unknown := literalTaint(seg), false
+						d, unknown := literalTaint(seg, t.pred), false
 						for _, a := range used {
 							if d != "" {
 								break
@@ -507,7 +538,7 @@ func simpleFormat(f string) bool {
 }
 
 // exprTaint returns what makes a text with `${{ }}` expressions untrusted, "" if nothing does.
-func exprTaint(text string) string {
+func exprTaint(text string, pred func(string) (string, bool)) string {
 	for {
 		i := strings.Index(text, "${{")
 		if i < 0 {
@@ -517,7 +548,7 @@ func exprTaint(text string) string {
 		if j < 0 {
 			return ""
 		}
-		if what, bad := untrustedValue(text[i : i+j+2]); bad {
+		if what, bad := pred(text[i : i+j+2]); bad {
 			return what
 		}
 		text = text[i+j+2:]
@@ -526,8 +557,8 @@ func exprTaint(text string) string {
 
 // literalTaint returns what makes the text untrusted without looking at shell variables: an expression for the head of
 // a pull request, or `refs/pull/`.
-func literalTaint(text string) string {
-	if what := exprTaint(text); what != "" {
+func literalTaint(text string, pred func(string) (string, bool)) string {
+	if what := exprTaint(text, pred); what != "" {
 		return what
 	}
 	if namesPullRef(text) {
@@ -557,7 +588,7 @@ type envValue struct {
 // textValue judges the text of a here document. In an unquoted one the shell expands `$NAME` and `${NAME}`, which are
 // resolved at the offset; a command substitution or arithmetic makes the value unknown.
 func (t *revTaint) textValue(text string, quoted bool, off int) envValue {
-	if what := literalTaint(text); what != "" {
+	if what := literalTaint(text, t.pred); what != "" {
 		return envValue{what: what}
 	}
 	if quoted {
@@ -627,7 +658,7 @@ func heredocEntries(h *runscript.Heredoc, t *revTaint) map[string]envValue {
 }
 
 // envDescs describes the variables of an env block: where an untrusted value comes from, "" for a clean one.
-func envDescs(env *Env, into map[string]string) {
+func envDescs(env *Env, into map[string]string, pred func(*String) (string, bool)) {
 	if env == nil {
 		return
 	}
@@ -637,7 +668,7 @@ func envDescs(env *Env, into map[string]string) {
 		}
 		into[v.Name.Value] = ""
 		if v.Value != nil {
-			if _, bad := untrustedString(v.Value); bad {
+			if _, bad := pred(v.Value); bad {
 				into[v.Name.Value] = "$" + v.Name.Value
 			}
 		}
