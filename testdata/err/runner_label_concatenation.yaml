@@ -1,4 +1,8 @@
-on: push
+on:
+  workflow_dispatch:
+    inputs:
+      os:
+        type: string
 
 jobs:
   # The label is made of the value of the matrix and text
@@ -63,6 +67,16 @@ jobs:
           - os: ${{ github.event_name }}
         include:
           - os: haiku
+    runs-on: ${{ matrix.os }}-latest
+    steps:
+      - run: echo ...
+  # The values of the row are not known, but the one that include adds is
+  expression-row-and-included:
+    strategy:
+      matrix:
+        os: ${{ fromJSON(inputs.os) }}
+        include:
+          - os: plan9
     runs-on: ${{ matrix.os }}-latest
     steps:
       - run: echo ...

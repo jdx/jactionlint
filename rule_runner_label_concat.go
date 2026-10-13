@@ -62,10 +62,7 @@ func concatenatedRunnerLabels(label *String, m *Matrix) []*String {
 		fromRow bool
 	}
 	var values []candidate
-	if row, ok := m.Rows[name]; ok {
-		if row.Expression != nil {
-			return nil
-		}
+	if row, ok := m.Rows[name]; ok && row.Expression == nil { // the values of a row that is an expression are not known
 		for _, v := range row.Values {
 			if s, ok := v.(*RawYAMLString); ok {
 				values = append(values, candidate{s, true})
