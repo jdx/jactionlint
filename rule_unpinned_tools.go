@@ -3,6 +3,7 @@ package jactionlint
 import (
 	"fmt"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 
@@ -46,7 +47,7 @@ var floatingToolActions = []floatingToolAction{
 // of their tool because no version is set or the version is "latest". "unpinned-tools-pedantic" reports the
 // further actions of that table that zizmor does not report, and `run:` steps that install or run a tool without
 // an exact version: `pip install`, `pipx`, `uv tool`, `uvx`, `cargo install` and `cargo binstall`, `go install`,
-// global `npm install -g` and `npx --yes`, `pnpm dlx` and the like.
+// global `npm install -g` and `npx --yes`, `pnpm dlx`, `aube dlx` and the like.
 type RuleUnpinnedTools struct {
 	RuleBase
 	runContext
@@ -211,6 +212,14 @@ func unpinnedToolInstall(c *runscript.Command, in *runscript.Install) bool {
 			// `npm exec`, `npm x` and `bun x` are the same as npx and bunx.
 			localFirst := c.Tool == "npx" || c.Tool == "bunx" ||
 				(c.Tool == "npm" && (in.Verb == "exec" || in.Verb == "x")) || (c.Tool == "bun" && in.Verb == "x")
+			if c.Tool == "aubx" || c.Tool == "aube" {
+				// `aube dlx` and `aubx` use the binary of the project when the argument is a bare name and install the
+				// package when it has a version or a tag (`aubx tsc@latest`) or `-p` names it (aube: dlx.rs can_use_local_bin).
+				// A `jsr:` or `npm:` spec is not a bare name either: no binary of the project is called `npm:cowsay`
+				localFirst = !slices.ContainsFunc(in.Packages, func(p *runscript.Package) bool {
+					return p.Version != "" || p.Kind != runscript.KindRegistry || hasRegistryPrefix(p.Spec)
+				})
+			}
 			return !localFirst || c.HasFlag("-y", "--yes", "-p", "--package")
 		}
 		return in.Global
@@ -244,4 +253,10 @@ func pinnedByVersion(c *runscript.Command, p *runscript.Package) bool {
 		return reVersionLike.MatchString(p.Version)
 	}
 	return false
+}
+
+// hasRegistryPrefix reports whether the spec of a package starts with `jsr:` or `npm:`, which the analyzer strips to read
+// the name but which `aube dlx` does not take for the name of a binary of the project.
+func hasRegistryPrefix(spec string) bool {
+	return strings.HasPrefix(spec, "jsr:") || strings.HasPrefix(spec, "npm:")
 }

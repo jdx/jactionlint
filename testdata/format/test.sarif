@@ -340,6 +340,21 @@
               "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
             },
             {
+              "id": "insufficient-permissions",
+              "name": "InsufficientPermissions",
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "description": "Checks that the explicit permissions of a job grant what its actions and commands need from the GITHUB_TOKEN",
+                "queryURI": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+              },
+              "fullDescription": {
+                "text": "Checks that the explicit permissions of a job grant what its actions and commands need from the GITHUB_TOKEN"
+              },
+              "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+            },
+            {
               "id": "job-needs",
               "name": "JobNeeds",
               "defaultConfiguration": {
@@ -411,6 +426,21 @@
               },
               "fullDescription": {
                 "text": "Checks for usages of GitHub Actions features which are considered misfeatures"
+              },
+              "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+            },
+            {
+              "id": "multiline-plain-run",
+              "name": "MultilinePlainRun",
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "description": "Checks for \"run:\" written over several lines without \"|\", which YAML folds into one line",
+                "queryURI": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+              },
+              "fullDescription": {
+                "text": "Checks for \"run:\" written over several lines without \"|\", which YAML folds into one line"
               },
               "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
             },
@@ -591,6 +621,21 @@
               },
               "fullDescription": {
                 "text": "Checks that timeout-minutes is set at jobs and does not exceed the configured maximum (opt-in by config)"
+              },
+              "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+            },
+            {
+              "id": "ubuntu-slim-limits",
+              "name": "UbuntuSlimLimits",
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "description": "Checks for jobs on ubuntu-slim runners that use what the single-CPU runner does not support",
+                "queryURI": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+              },
+              "fullDescription": {
+                "text": "Checks for jobs on ubuntu-slim runners that use what the single-CPU runner does not support"
               },
               "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
             },

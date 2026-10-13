@@ -1,0 +1,30 @@
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+
+jobs:
+  # ERROR: the environment has no required reviewers, so nobody approves the run
+  staging:
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: site
+          path: site
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+      - run: unzip site/site.zip -d out
+  # OK: the reviewers of the environment decide
+  release:
+    runs-on: ubuntu-latest
+    environment: release
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: site
+          path: site
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+      - run: unzip site/site.zip -d out

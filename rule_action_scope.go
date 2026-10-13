@@ -44,9 +44,11 @@ var actionRuleScope = map[string]struct {
 	"insecure-ssh-keyscan":            {scope: actionApplies},         // the scripts of the steps
 	"insecure-url-scheme":             {scope: actionApplies},         // the scripts and inputs of the steps
 	"malformed-expression-delimiters": {scope: actionApplies},         // the strings of the steps
+	"multiline-plain-run":             {scope: actionApplies},         // the scripts of the steps
 	"mutable-runner-label":            {scope: actionNotApplicable},   // runs-on: belongs to the calling job
 	"pipeline-without-pipefail":       {scope: actionApplies},         // the scripts of the steps, with the shell of each step
 	"superfluous-actions":             {scope: actionApplies},         // the actions the steps use
+	"ubuntu-slim-limits":              {scope: actionNotApplicable},   // runs-on: belongs to the calling job
 	"unlocked-install":                {scope: actionApplies},         // the scripts of the steps
 	"unpinned-tools":                  {scope: actionApplies},         // the inputs of the actions the steps use
 	"unsound-prefix-match":            {scope: actionApplies},         // the if: conditions and expressions of the steps
@@ -72,6 +74,7 @@ var actionRuleScope = map[string]struct {
 	"event-name-never-received":       {scope: actionNotApplicable}, // the events are the ones of the workflow, and an action has the events of its callers
 	"environment-file-redirect":       {scope: actionApplies},
 	"excessive-permissions":           {scope: actionNotApplicable},
+	"insufficient-permissions":        {scope: actionNotApplicable},
 	"expression":                      {scope: actionApplies},
 	"forbidden-uses":                  {scope: actionApplies},
 	"github-app":                      {scope: actionApplies},

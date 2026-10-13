@@ -146,6 +146,11 @@ var cacheActions = []cacheAction{
 		}
 		return true, "set \"cache: false\""
 	}},
+	{"jdx/aube-action", func(a *ExecAction, u *UsesRef) (bool, string) {
+		// "cache: true" restores node_modules with actions/cache (it also needs "run-install: true"; the action fails without)
+		_, ok := inputEnabled(a, "cache")
+		return ok, "remove the \"cache\" input"
+	}},
 	{"gradle/actions/setup-gradle", func(a *ExecAction, u *UsesRef) (bool, string) {
 		if v, _ := a.input("cache-disabled"); isTrueLiteral(v) {
 			return false, ""
@@ -437,7 +442,7 @@ var publishingActions = []string{
 }
 
 // publishCommandRegex matches a command of a `run:` script that publishes a release or a package.
-var publishCommandRegex = regexp.MustCompile(`(?m)\b(cargo\s+publish|npm\s+publish|pnpm\s+publish|yarn\s+(npm\s+)?publish|cargo\s+(mono|workspaces)\s+publish|(?:pnpm|npx)\s+(?:-r\s+)?changeset\s+publish|lerna\s+publish|semantic-release|ovsx\s+publish|dotnet\s+nuget\s+push|(?:dart|flutter)\s+pub\s+publish|helm\s+push|oras\s+push|twine\s+upload|gem\s+push|poetry\s+publish|uv\s+publish|docker\s+push|gh\s+release\s+(create|upload)|goreleaser\s+(release|publish)|vsce\s+publish|mvn\b[^\n]*\bdeploy|gradle\w*\s+[^\n]*\bpublish)\b`)
+var publishCommandRegex = regexp.MustCompile(`(?m)\b(cargo\s+publish|npm\s+publish|pnpm\s+publish|aube\s+publish|yarn\s+(npm\s+)?publish|cargo\s+(mono|workspaces)\s+publish|(?:pnpm|npx)\s+(?:-r\s+)?changeset\s+publish|lerna\s+publish|semantic-release|ovsx\s+publish|dotnet\s+nuget\s+push|(?:dart|flutter)\s+pub\s+publish|helm\s+push|oras\s+push|twine\s+upload|gem\s+push|poetry\s+publish|uv\s+publish|docker\s+push|gh\s+release\s+(create|upload)|goreleaser\s+(release|publish)|vsce\s+publish|mvn\b[^\n]*\bdeploy|gradle\w*\s+[^\n]*\bpublish)\b`)
 
 // RuleCachePoisoning is a rule checker for two ways the GitHub Actions cache turns into an attack path:
 //
@@ -1200,6 +1205,8 @@ var cacheGateInputs = map[string][]cacheGate{
 	"swatinem/rust-cache": {{input: "lookup-only", offWhenTrue: true}},
 	// "cache: false" turns off the cache of mise-action
 	"jdx/mise-action": {{input: "cache"}},
+	// "cache: true" restores node_modules, and is off by default
+	"jdx/aube-action": {{input: "cache"}},
 	// "cache-disabled: true" turns off all caching of the action
 	"gradle/actions/setup-gradle": {{input: "cache-disabled", offWhenTrue: true}},
 	"gradle/gradle-build-action":  {{input: "cache-disabled", offWhenTrue: true}},

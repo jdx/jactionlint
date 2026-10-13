@@ -1,0 +1,19 @@
+on: push
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      # ERROR: without | YAML folds the lines into one, so this is one echo command
+      - run: echo "building"
+          npm ci
+          npm test
+      # OK: a block scalar keeps the lines
+      - run: |
+          echo "building"
+          npm ci
+          npm test
+      # OK: one command wrapped over several lines
+      - run: docker build
+          --tag app
+          .
