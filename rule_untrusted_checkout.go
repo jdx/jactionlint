@@ -160,7 +160,7 @@ func (rule *RuleUntrustedCheckout) VisitWorkflowPre(n *Workflow) error {
 	if _, reusable := n.FindWorkflowCallEvent(); reusable || n.Action != nil {
 		// a reusable workflow and a composite action run for the events of the workflows that call them
 		if key := calleeKey(rule.project, rule.path); key != "" {
-			rule.calls = rule.callContexts(key, 0, map[string]bool{})
+			rule.calls = rule.callContexts(key, 0, map[string]bool{}, inputDefaults(n))
 			rule.inputTaint, rule.inputNumber = map[string]callInput{}, map[string]string{}
 			events := slices.Clone(rule.privileged)
 			for _, c := range rule.calls {
@@ -215,18 +215,19 @@ func (rule *RuleUntrustedCheckout) VisitJobPre(n *Job) error {
 			rule.stepActions[strings.ToLower(s.ID.Value)] = strings.ToLower(u.CanonicalName())
 		}
 	}
-	gated := false
+	var gate permissionGateState
 	jobEvents := rule.privileged
 	defer rule.setEvents(jobEvents)
 	pending := map[string][]*untrustedCheckout{}
 	var dirs []string // the keys of pending in the order they were added
 	jobMerged := conditionRequiresMerged(n.If)
-	for _, s := range flattenSteps(n.Steps) {
+	steps, groups := flattenStepsGroup(n.Steps)
+	for i, s := range steps {
 		if isPermissionGate(s) {
-			gated = true
+			gate.see(groups[i])
 			continue
 		}
-		if gated && !stepRunsAfterFailure(s) {
+		if gate.holds(groups[i]) && !stepRunsAfterFailure(s) {
 			continue // the steps after a permission check only run for a user who may write
 		}
 		stepEvents := eventsAfterCondition(jobEvents, s.If)
@@ -443,8 +444,7 @@ func tokenIsReadOnly(w *Workflow, j *Job) bool {
 // subst turns a value of the step into what it is in the run (nil for itself): the values that a call passes replace the
 // inputs of a composite action. pos is where to report, nil for the value of the input.
 func (rule *RuleUntrustedCheckout) actionCheckout(s *Step, e *ExecAction, u *UsesRef, comments *CommentIndex, subst func(string) string, pos *Pos) *untrustedCheckout {
-	plain := subst == nil // the values are the ones of the step: its strings share their parsed expressions
-	if plain {
+	if subst == nil {
 		subst = func(v string) string { return v }
 	}
 	dir := ""
@@ -458,21 +458,14 @@ func (rule *RuleUntrustedCheckout) actionCheckout(s *Step, e *ExecAction, u *Use
 		if in == nil || in.Value == nil {
 			continue
 		}
-		v := subst(in.Value.Value)
+		v := in.Value.Value
 		if checkoutInputForksPR(name, v) || rule.inputForksPR(name, v) {
 			forks = true
 		}
 		if found != nil {
 			continue
 		}
-		var what string
-		var bad bool
-		if plain {
-			what, bad = rule.untrustedStr(in.Value)
-		} else {
-			what, bad = rule.untrusted(v)
-		}
-		if bad {
+		if what, bad := rule.untrustedStr(in.Value); bad {
 			at := pos
 			if at == nil {
 				at = in.Value.Pos

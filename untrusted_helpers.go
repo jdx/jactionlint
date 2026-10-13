@@ -86,7 +86,7 @@ func conditionIsGuard(s *String) bool {
 			if len(r.chain) == 4 && refCovers(r.chain, []string{"github", "event", "workflow_run", "event"}) && !workflowRunEventIsGuard(r) {
 				continue
 			}
-			if len(r.chain) == 4 && r.chain[3] == "author_association" && (!associationIsGuard(exprs) || associationIsNegated(r)) {
+			if len(r.chain) == 4 && r.chain[3] == "author_association" && (!associationIsGuard(exprs) || associationIsNegated(r) || associationIsCompared(exprs)) {
 				continue
 			}
 			return true

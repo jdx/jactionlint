@@ -131,6 +131,37 @@ func associationIsNegated(r exprRef) bool {
 	return ok && c.Kind == CompareOpNodeKindNotEq
 }
 
+// associationIsCompared reports whether the condition compares an expression that reads an association with false (`... ==
+// false`, `... != true`), which turns the check around the same way.
+func associationIsCompared(exprs []ExprNode) bool {
+	found := false
+	for _, e := range exprs {
+		VisitExprNode(e, func(n, _ ExprNode, entering bool) {
+			c, ok := n.(*CompareOpNode)
+			if !ok || !entering || !c.Kind.IsEqualityOp() {
+				return
+			}
+			other := c.Left
+			b, isBool := c.Right.(*BoolNode)
+			if !isBool {
+				b, isBool = c.Left.(*BoolNode)
+				other = c.Right
+			}
+			if !isBool || (c.Kind == CompareOpNodeKindEq) == b.Value {
+				return // `== true` and `!= false` keep the check
+			}
+			var refs []exprRef
+			collectExprRefs(other, nil, &refs)
+			for _, r := range refs {
+				if len(r.chain) == 4 && r.chain[3] == "author_association" {
+					found = true
+				}
+			}
+		})
+	}
+	return found
+}
+
 var reAssociation = regexp.MustCompile(`[A-Z_]+`)
 
 // isPermissionGate reports whether the step stops the job unless the user who started it, the author of the comment, has

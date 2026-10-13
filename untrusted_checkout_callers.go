@@ -182,7 +182,7 @@ func valueUntrustedFor(events []string, value string) (string, bool) {
 
 // callContexts returns the calls that reach the callee with a privileged event. depth counts the reusable workflows
 // between the callee and the workflow that makes the call.
-func (rule *RuleUntrustedCheckout) callContexts(key string, depth int, seen map[string]bool) []callContext {
+func (rule *RuleUntrustedCheckout) callContexts(key string, depth int, seen map[string]bool, defaults map[string]string) []callContext {
 	if rule.project == nil || depth >= maxCallDepth || seen[key] {
 		return nil
 	}
@@ -236,17 +236,30 @@ func (rule *RuleUntrustedCheckout) callContexts(key string, depth int, seen map[
 		events := privilegedEvents(cw, rule.project, rule.siblings)
 		var outer []callContext
 		if _, ok := cw.FindWorkflowCallEvent(); ok {
-			outer = rule.callContexts("w:"+ref.file, depth+1, seen)
+			outer = rule.callContexts("w:"+ref.file, depth+1, seen, inputDefaults(cw))
 			for _, c := range outer {
 				events = append(events, c.events...)
 			}
 		}
-		events = eventsAfterCondition(sortedEvents(events), job.If)
+		events = neededEvents(cw, job, eventsAfterCondition(sortedEvents(events), job.If), map[*Job]bool{})
 		if step != nil {
 			events = eventsAfterCondition(events, step.If) // a step that is not for these events is not a call for them
 		}
 		if len(events) == 0 || rule.callIsGuarded(cw, job, step, events) {
 			continue
+		}
+		// only the callers that run for the events that reach this call pass something down
+		var live []callContext
+		for _, o := range outer {
+			if slices.ContainsFunc(o.events, func(e string) bool { return slices.Contains(events, e) }) {
+				live = append(live, o)
+			}
+		}
+		outer = live
+		for name, dv := range defaults {
+			if _, ok := call[name]; !ok {
+				call[name] = dv // an input that the call leaves out has its default
+			}
 		}
 		ctx := callContext{from: ref.file, events: events, inputs: map[string]callInput{}, numbers: map[string]string{}}
 		for name, v := range call {
@@ -300,17 +313,41 @@ func (rule *RuleUntrustedCheckout) callIsGuarded(w *Workflow, job *Job, step *St
 	if step == nil {
 		return false
 	}
-	gated := false
-	for _, s := range flattenSteps(job.Steps) {
+	var gate permissionGateState
+	steps, groups := flattenStepsGroup(job.Steps)
+	for i, s := range steps {
 		if s == step {
 			// a step that runs after a failure (always(), failure()) still runs when the permission check failed
-			return conditionIsGuard(s.If) || (gated && !stepRunsAfterFailure(s))
+			return conditionIsGuard(s.If) || (gate.holds(groups[i]) && !stepRunsAfterFailure(s))
 		}
 		if isPermissionGate(s) {
-			gated = true
+			gate.see(groups[i])
 		}
 	}
 	return false
+}
+
+// inputDefaults are the defaults of the inputs of a reusable workflow, by lower case name.
+func inputDefaults(w *Workflow) map[string]string {
+	ret := map[string]string{}
+	if w == nil {
+		return ret
+	}
+	if e, ok := w.FindWorkflowCallEvent(); ok {
+		for _, in := range e.Inputs {
+			if in != nil && in.Default != nil && in.Name != nil {
+				ret[strings.ToLower(in.Name.Value)] = in.Default.Value
+			}
+		}
+	}
+	if w.Action != nil {
+		for _, in := range w.Action.Inputs {
+			if in != nil && in.ID != nil && in.Default != nil {
+				ret[strings.ToLower(in.ID.Value)] = in.Default.Value
+			}
+		}
+	}
+	return ret
 }
 
 // inputsRead returns the names of the inputs that the expressions of the string read (`${{ inputs.ref }}`).
@@ -376,9 +413,10 @@ func mergeInputs(into map[string]callInput, from map[string]callInput) {
 var reInputExpr = regexp.MustCompile(`\$\{\{\s*inputs\.([A-Za-z_][A-Za-z0-9_-]*)\s*\}\}`)
 
 // localActionCheckouts returns the code of a pull request that a local composite action checks out when the step calls
-// it, with the values of the call in place of its inputs. The checkout is reported at the step that calls the action, and
-// the steps of the caller that run the code are found like for any other checkout. A step of the action that is guarded, or
-// an action that calls another one, is not followed.
+// it. The inputs of the action that the call fills with the head of a pull request (or that it leaves out, with a default that
+// names it) are untrusted in the steps of the action, in whatever expression they are read. The checkout is reported at the
+// step that calls the action, and the steps of the caller that run the code are found like for any other checkout. A step of
+// the action that is guarded, or an action that calls another one, is not followed.
 func (rule *RuleUntrustedCheckout) localActionCheckouts(s *Step, e *ExecAction) []*untrustedCheckout {
 	if rule.project == nil || e.Uses == nil {
 		return nil
@@ -391,36 +429,66 @@ func (rule *RuleUntrustedCheckout) localActionCheckouts(s *Step, e *ExecAction) 
 	if action == nil || action.Action == nil || !action.Action.Runs.IsComposite() {
 		return nil
 	}
-	defaults := map[string]string{}
-	for _, in := range action.Action.Inputs {
-		if in != nil && in.ID != nil && in.Default != nil {
-			defaults[strings.ToLower(in.ID.Value)] = in.Default.Value
-		}
-	}
+	defaults := inputDefaults(action)
 	// the value of an input of the action in this call: what the step passes, or the default of the action
+	value := func(name string) (string, bool) {
+		if in := e.Inputs[name]; in != nil && in.Value != nil {
+			return in.Value.Value, true
+		}
+		v, ok := defaults[name]
+		return v, ok
+	}
 	subst := func(v string) string {
 		return reInputExpr.ReplaceAllStringFunc(v, func(m string) string {
-			name := strings.ToLower(reInputExpr.FindStringSubmatch(m)[1])
-			if in := e.Inputs[name]; in != nil && in.Value != nil {
-				return in.Value.Value
-			}
-			return defaults[name]
+			v, _ := value(strings.ToLower(reInputExpr.FindStringSubmatch(m)[1]))
+			return v
 		})
 	}
+	// the inputs of the action are the taint of its steps, from the values of the call
+	local := map[string]callInput{}
+	localNumber := map[string]string{}
+	names := map[string]bool{}
+	for name := range e.Inputs {
+		names[name] = true
+	}
+	for name := range defaults {
+		names[name] = true
+	}
+	for name := range names {
+		v, ok := value(name)
+		if !ok {
+			continue
+		}
+		if what, bad := rule.untrusted(v); bad {
+			local[name] = callInput{desc: what, sources: []string{v}}
+		} else if what, ok := rule.numberValue(v); ok {
+			localNumber[name] = what
+		}
+	}
+	savedTaint, savedNumber := rule.inputTaint, rule.inputNumber
+	rule.inputTaint, rule.inputNumber = local, localNumber
+	defer func() { rule.inputTaint, rule.inputNumber = savedTaint, savedNumber }()
+
 	var ret []*untrustedCheckout
-	gated := false
+	var gate permissionGateState
+	var groups []int // the group of each checkout in ret
 	for _, j := range action.Jobs {
-		for _, cs := range flattenSteps(j.Steps) {
+		steps, stepGroups := flattenStepsGroup(j.Steps)
+		for i, cs := range steps {
+			g := stepGroups[i]
 			if isPermissionGate(cs) {
 				// the action fails here for a user who may not write, and so does the step that calls it: what it checked
-				// out before is run by the steps of the caller that run after a failure only
-				gated = true
-				for _, c := range ret {
-					c.afterFailure = true
+				// out before is run by the steps of the caller that run after a failure only. A check in a parallel group
+				// does not hold back what runs beside it.
+				gate.see(g)
+				for k, c := range ret {
+					if gate.holds(groups[k]) {
+						c.afterFailure = true
+					}
 				}
 				continue
 			}
-			if gated && !stepRunsAfterFailure(cs) {
+			if gate.holds(g) && !stepRunsAfterFailure(cs) {
 				continue // the steps after a permission check only run for a user who may write
 			}
 			ce, ok := cs.Exec.(*ExecAction)
@@ -430,9 +498,10 @@ func (rule *RuleUntrustedCheckout) localActionCheckouts(s *Step, e *ExecAction) 
 			if _, cu := stepAction(cs); cu != nil && cu.isRepoAction("actions/checkout") {
 				if c := rule.actionCheckout(cs, ce, cu, action.Comments, subst, e.Uses.Pos); c != nil {
 					c.step = s
-					c.afterFailure = gated // only a step of the caller that also runs after a failure runs it
+					c.afterFailure = gate.holds(g) // only a step of the caller that also runs after a failure runs it
 					c.what += " in " + t.path
 					ret = append(ret, c)
+					groups = append(groups, g)
 				}
 			}
 		}
