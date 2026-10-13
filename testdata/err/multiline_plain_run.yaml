@@ -1,0 +1,54 @@
+on: push
+jobs:
+  folded:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "start é"
+          npm ci
+          npm test
+      - run: echo a
+          x=1
+          echo $x
+      - run: "cd app
+          npm ci"
+      - run: 'git commit -m ''x''
+          git push'
+      - name: the value is on the next line
+        run:
+          echo a
+          echo b
+      - run: cd x &&
+          npm ci
+          npm test
+  not-reported:
+    runs-on: ubuntu-latest
+    steps:
+      - run: docker build
+          --tag app
+          .
+      - run: echo x |
+          sort
+      - run: echo x
+          && echo y
+      - run: echo x
+          >> "$GITHUB_OUTPUT"
+      - run: make test
+          CC=gcc exec=no
+      - run: docker run --rm image
+          git status
+      - run: ssh host
+          git status
+      - run: echo "one
+          echo two"
+      - run: echo a
+
+          echo b
+      - run: |
+          echo a
+          echo b
+      - run: >
+          echo a
+          echo b
+      - run: echo a
+          echo b
+        shell: python

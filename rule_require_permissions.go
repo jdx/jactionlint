@@ -22,6 +22,9 @@ type RuleRequirePermissions struct {
 	alsoReusable bool
 	// fix is the fix adding "permissions:" to the workflow. It is nil when it cannot be made.
 	fix *Fix
+	// why is the reason there is no fix, when the file is in a shape the fix understands but the jobs need what it
+	// cannot write.
+	why *NoFix
 }
 
 // NewRuleRequirePermissions creates new RuleRequirePermissions instance.
@@ -41,14 +44,14 @@ func (rule *RuleRequirePermissions) enabled() bool {
 // VisitWorkflowPre is callback when visiting Workflow node before visiting its children.
 func (rule *RuleRequirePermissions) VisitWorkflowPre(n *Workflow) error {
 	rule.workflowHasPermissions = n.Permissions != nil
-	rule.fix = nil
+	rule.fix, rule.why = nil, nil
 	rule.reusableOnly, rule.alsoReusable = false, false
 	if _, ok := n.FindWorkflowCallEvent(); ok {
 		rule.reusableOnly = len(n.On) == 1
 		rule.alsoReusable = !rule.reusableOnly
 	}
 	if rule.enabled() && !rule.workflowHasPermissions {
-		rule.fix = fixMissingPermissions(n)
+		rule.fix, rule.why = fixMissingPermissionsWhy(n)
 	}
 	return nil
 }
@@ -65,6 +68,9 @@ func (rule *RuleRequirePermissions) VisitJobPre(n *Job) error {
 	rule.ReportIDf("missing-permissions", n.Pos, "%s", msg)
 	// Every job reports the same fix: it is applied once and the findings stay fixable together
 	rule.Errs()[len(rule.Errs())-1].Fix = rule.fix
+	if rule.fix == nil {
+		rule.Errs()[len(rule.Errs())-1].NoFix = rule.why
+	}
 	return nil
 }
 
