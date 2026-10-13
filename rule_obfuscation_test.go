@@ -118,6 +118,19 @@ func TestObfuscationOfExpressions(t *testing.T) {
 		{"github.event.commits[0]", 0},
 		{"format('{0}', github.sha)", 0},
 		{"github.sha", 0},
+		// a constant part of an expression that is not constant as a whole
+		{"fromJSON(format('{{\"group\":{0},\"labels\":{1}}}', toJSON(vars.GROUP), toJSON('ubuntu-24.04')))", 1},
+		{"github.x || 'true' && 'false'", 1},
+		{"github.ref == 'refs/heads/main' && startsWith('release/1', 'release/')", 1},
+		{"vars.A || !true", 1},
+		{"toJSON('a') == toJSON('b') && github.x", 1},
+		{"fromJSON(toJSON('[1]')) && github.x", 1},
+		{"github.ref == 'refs/heads/main' && 'a' || 'b'", 0},
+		{"github.x || 'fallback'", 0},
+		{"fromJSON('[\"a\",\"b\"]')", 0},
+		{"fromJSON(vars.MATRIX || '[\"a\"]')", 0},
+		{"toJSON(github.event)", 0},
+		{"contains(github.ref, 'x') || contains(fromJSON('[\"a\"]'), 'a')", 0},
 	}
 	for _, tc := range tests {
 		t.Run(tc.expr, func(t *testing.T) {
@@ -142,6 +155,19 @@ func TestObfuscationLeavesConstantIfToConstantCondition(t *testing.T) {
 		src := "on: push\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo\n        if: " + cond + "\n"
 		if got := errsWithID(lintWithConfig(t, cfg, src), "obfuscation"); len(got) != 0 {
 			t.Errorf("%s: want no obfuscation finding but got %v", cond, got)
+		}
+	}
+	// a constant part of a condition that is not constant as a whole is not reported by constant-condition
+	for cond, want := range map[string]int{
+		"'shadow' == 'execute' && github.event_name == 'push'":     1,
+		"${{ 'shadow' == 'execute' && github.event_name != 'x' }}": 1,
+		"github.event_name == 'push' || 'a' == 'b'":                1,
+		"github.event_name == 'push' && !cancelled()":              0,
+		"github.ref_name == 'main'":                                0,
+	} {
+		src := "on: push\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo\n        if: \"" + cond + "\"\n"
+		if got := errsWithID(lintWithConfig(t, cfg, src), "obfuscation"); len(got) != want {
+			t.Errorf("%s: want %d obfuscation findings but got %v", cond, want, got)
 		}
 	}
 }

@@ -26,6 +26,10 @@ type RuleUntrustedCheckout struct {
 	carried map[string]string
 	// scripts are the script files that were read, by path, nil for one that cannot be followed.
 	scripts map[string]*runscript.Script
+	// gates tells with the online checks whether the environment of a job holds it back, see environmentGates.
+	gates *environmentGates
+	// envJob is whether the job being checked has an environment, which is trusted unless the gates say it is no gate.
+	envJob bool
 	// guard is which events of the workflow the protection of actions/checkout covers, see untrusted_checkout_guard.go.
 	guard checkoutEvents
 	// allPrivileged are the privileged events of the workflow, privileged those that the job being judged runs for.
@@ -154,7 +158,12 @@ func (rule *RuleUntrustedCheckout) setEvents(events []string) {
 // VisitJobPre is callback when visiting Job node before visiting its children.
 func (rule *RuleUntrustedCheckout) VisitJobPre(n *Job) error {
 	rule.setEvents(eventsAfterCondition(rule.allPrivileged, n.If))
-	if len(rule.privileged) == 0 || (n.Environment != nil && n.Environment.Name != nil) || conditionIsGuard(n.If) {
+	if len(rule.privileged) == 0 || conditionIsGuard(n.If) {
+		return nil
+	}
+	// The reviewers of an environment decide, unless the online checks find that there are none
+	rule.envJob = n.Environment != nil && n.Environment.Name != nil
+	if rule.envJob && rule.gates == nil {
 		return nil
 	}
 	// The checkouts which no step has run the code of yet, by the directory they put it in. Whether a
@@ -239,8 +248,22 @@ func (rule *RuleUntrustedCheckout) VisitJobPre(n *Job) error {
 	return nil
 }
 
+// environmentNote tells whether a finding of the job is reported. A job with an environment is trusted, as it always was,
+// unless the online checks prove that the environment is no gate (see environmentGates): then it is reported and the
+// text says why. It is the one decision for every finding of the job, and it asks GitHub only when a finding is about to be made.
+func (rule *RuleUntrustedCheckout) environmentNote() (note string, report bool) {
+	if !rule.envJob {
+		return "", true
+	}
+	return rule.gates.noGate(rule.job)
+}
+
 func (rule *RuleUntrustedCheckout) report(c *untrustedCheckout, how string) {
 	event := rule.privileged[0]
+	gate, ok := rule.environmentNote()
+	if !ok {
+		return // the reviewers of the environment decide
+	}
 	source := "a pull request"
 	switch event {
 	case "workflow_run":
@@ -254,6 +277,13 @@ func (rule *RuleUntrustedCheckout) report(c *untrustedCheckout, how string) {
 	} else if rule.job != nil && rule.wf != nil && tokenIsReadOnly(rule.wf, rule.job) {
 		privileges = "the job's GITHUB_TOKEN can only read, but the code still runs on the runner with everything else the job gives it, such as secrets passed to a step and the cache, and whoever controls it can use them"
 	}
+	suffix := ""
+	if c.note != "" {
+		suffix = ". " + c.note
+	}
+	if gate != "" {
+		privileges += ". " + gate
+	}
 	if c.guarded {
 		rule.ReportIDf(
 			"untrusted-checkout",
@@ -262,10 +292,6 @@ func (rule *RuleUntrustedCheckout) report(c *untrustedCheckout, how string) {
 			source, c.what, event, how, privileges,
 		)
 		return
-	}
-	suffix := ""
-	if c.note != "" {
-		suffix = ". " + c.note
 	}
 	rule.ReportIDf(
 		"untrusted-checkout",
@@ -302,11 +328,18 @@ func (rule *RuleUntrustedCheckout) reportOptOut(s *Step) {
 	if !named {
 		return
 	}
+	gate, ok := rule.environmentNote()
+	if !ok {
+		return // the reviewers of the environment decide
+	}
+	if gate != "" {
+		gate = ". " + gate
+	}
 	rule.ReportIDf(
 		"untrusted-checkout",
 		opt.Value.Pos,
-		"this step sets \"allow-unsafe-pr-checkout\", which turns off the protection of actions/checkout that refuses to check out the code of a pull request from a fork in a %q workflow. the step then checks out whatever \"ref\" and \"repository\" name, so nothing stops the code of the pull request from reaching a privileged workflow, which has secrets and may have a write token. remove the input and check out the base branch, or document why the code is safe to run",
-		rule.privileged[0],
+		"this step sets \"allow-unsafe-pr-checkout\", which turns off the protection of actions/checkout that refuses to check out the code of a pull request from a fork in a %q workflow. the step then checks out whatever \"ref\" and \"repository\" name, so nothing stops the code of the pull request from reaching a privileged workflow, which has secrets and may have a write token%s. remove the input and check out the base branch, or document why the code is safe to run",
+		rule.privileged[0], gate,
 	)
 }
 
@@ -643,6 +676,7 @@ func init() {
 	registerRuleFactory("untrusted-checkout", func(env *RuleEnv) []Rule {
 		r := NewRuleUntrustedCheckout(env.project)
 		r.siblings = env.localActions.siblings()
+		r.gates = newEnvironmentGates(env, r.Debug)
 		return []Rule{r}
 	})
 }

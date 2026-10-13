@@ -28,6 +28,12 @@ type RuleShellcheck struct {
 	jobShell      string
 	runnerShell   string
 	mu            sync.Mutex
+	// tool counts the scripts which were checked, or which were not because the command is unavailable.
+	tool *externalTool
+	// rcfile is the shellcheckrc to read instead of --norc, and extraArgs are the arguments added by the
+	// configuration (see ShellcheckConfig).
+	rcfile    string
+	extraArgs []string
 }
 
 func newRuleShellcheck(cmd *externalCommand) *RuleShellcheck {
@@ -41,6 +47,15 @@ func newRuleShellcheck(cmd *externalCommand) *RuleShellcheck {
 		jobShell:      "",
 		runnerShell:   "",
 	}
+}
+
+// newRuleShellcheckUnavailable creates the rule for a run where shellcheck cannot be used (it is disabled or was not
+// found). It reports nothing. It counts the scripts that shellcheck would have checked, with the same rules for the
+// shell, so that the run can say how much was not checked.
+func newRuleShellcheckUnavailable(tool *externalTool) *RuleShellcheck {
+	r := newRuleShellcheck(nil)
+	r.tool = tool
+	return r
 }
 
 // NewRuleShellcheck creates new RuleShellcheck instance. The executable argument can be command
@@ -104,6 +119,9 @@ func (rule *RuleShellcheck) VisitWorkflowPre(n *Workflow) error {
 // VisitWorkflowPost is callback when visiting Workflow node after visiting its children.
 func (rule *RuleShellcheck) VisitWorkflowPost(n *Workflow) error {
 	rule.workflowShell = ""
+	if rule.cmd == nil {
+		return nil // shellcheck is unavailable, see newRuleShellcheckUnavailable
+	}
 	return rule.cmd.wait() // Wait until all processes running for this rule
 }
 
@@ -193,6 +211,11 @@ func (rule *RuleShellcheck) runShellcheck(srcAst *String, shell string, pos *Pos
 	} else {
 		return // Skip checking this shell script since shellcheck doesn't support it
 	}
+	if rule.cmd == nil {
+		rule.tool.skip()
+		return
+	}
+	rule.tool.checked()
 
 	src := srcAst.Value
 	src = sanitizeExpressionsInScript(src)
@@ -213,7 +236,7 @@ func (rule *RuleShellcheck) runShellcheck(srcAst *String, shell string, pos *Pos
 	//           this can happen. For example, `if [ -z ${{ env.FOO }} ]` -> `if [ -z ______________ ]` (#113).
 	// - SC2043: Loop can be detected as only running once when the target of iteration is a placeholder. (#355)
 	//           e.g. `for foo in ${{ inputs.foo }}; do`
-	args := []string{"--norc", "-f", "json", "-x", "--shell", sh, "-e", "SC1091,SC2194,SC2050,SC2153,SC2154,SC2157,SC2043", "-"}
+	args := rule.shellcheckArgs(sh)
 	rule.Debug("%s: Running %s command with %s", pos, rule.cmd.exe, args)
 
 	// Use same options to run shell process described at document
@@ -274,6 +297,17 @@ func (rule *RuleShellcheck) runShellcheck(srcAst *String, shell string, pos *Pos
 
 		return nil
 	})
+}
+
+// shellcheckArgs returns the arguments of one call of shellcheck for a script of the shell.
+func (rule *RuleShellcheck) shellcheckArgs(sh string) []string {
+	rc := "--norc"
+	if rule.rcfile != "" {
+		rc = "--rcfile=" + rule.rcfile
+	}
+	args := []string{rc, "-f", "json", "-x", "--shell", sh, "-e", "SC1091,SC2194,SC2050,SC2153,SC2154,SC2157,SC2043"}
+	args = append(args, rule.extraArgs...)
+	return append(args, "-")
 }
 
 // shellcheckRegion maps the region which shellcheck reports to the file. The line and the column of
@@ -342,14 +376,34 @@ func init() {
 		RuleInfo{ID: "shellcheck", Group: RuleGroupCorrectness, Summary: "shellcheck reported an issue in a shell script.", DefaultLevel: SeverityError, Profile: ProfileCorrectness, DocsAnchor: "check-shellcheck-integ"},
 	)
 	registerRuleFactory("shellcheck", func(env *RuleEnv) []Rule {
+		t := env.tools.tool("shellcheck")
 		if env.shellcheck == "" {
 			env.Skip("shellcheck command name was empty")
+			t.disabled()
+			env.observe(newRuleShellcheckUnavailable(t))
 			return nil
 		}
 		r, err := NewRuleShellcheck(env.shellcheck, env.proc)
 		if err != nil {
 			env.Skip(err.Error())
+			t.missing()
+			env.observe(newRuleShellcheckUnavailable(t))
 			return nil
+		}
+		t.found()
+		r.tool = t
+		root := ""
+		if env.project != nil {
+			root = env.project.root
+		}
+		rc, err := shellcheckRCFile(env.shellcheckRCFile, env.cwd, env.config, root)
+		if err != nil {
+			env.err = err
+			return nil
+		}
+		r.rcfile = rc
+		if env.config != nil {
+			r.extraArgs = env.config.Shellcheck.extraArgs()
 		}
 		return []Rule{r}
 	})

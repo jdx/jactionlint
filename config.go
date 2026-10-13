@@ -210,6 +210,11 @@ type Config struct {
 		// built-in labels (GitHub-hosted runner labels and the preset self-hosted labels such as "self-hosted"
 		// and "linux") are reported as unknown unless they are explicitly listed in Labels.
 		StrictLabels bool `yaml:"strict-labels"`
+		// Providers names the hosted-runner providers whose labels the runner-label rule accepts (blacksmith,
+		// depot, namespace, runson, ubicloud and warpbuild). Nil, which is the default, accepts all of them; an
+		// empty list accepts none. Labels of other providers belong in Labels. It has no effect when StrictLabels is
+		// true.
+		Providers []string `yaml:"providers"`
 	} `yaml:"self-hosted-runner"`
 	// ConfigVariables is names of configuration variables used in the checked workflows. When this value is nil,
 	// property names of `vars` context will not be checked. Otherwise jactionlint will report a name which is not
@@ -253,6 +258,9 @@ type Config struct {
 
 	// Fix configures "jactionlint --fix".
 	Fix FixConfig `yaml:"fix"`
+
+	// Shellcheck tunes the shellcheck integration: a shellcheckrc, more arguments and optional checks.
+	Shellcheck ShellcheckConfig `yaml:"shellcheck"`
 
 	// Path is the path of the file which the config was read from. It is empty when the config was
 	// parsed from bytes.
@@ -376,6 +384,9 @@ func parseConfig(b []byte) (*Config, error) {
 			return nil, fmt.Errorf("invalid action %q in \"required-actions\": it must be like \"owner/repo\" without \"@version\"; put the version in \"version\"", r.Action)
 		}
 	}
+	if err := validateRunnerProviders(c.SelfHostedRunner.Providers); err != nil {
+		return nil, err
+	}
 	if c.GeneratedFiles != nil {
 		switch *c.GeneratedFiles {
 		case GeneratedFilesReport, GeneratedFilesSkipPolicy, GeneratedFilesSkip:
@@ -392,6 +403,9 @@ func parseConfig(b []byte) (*Config, error) {
 	}
 	if err := c.OnlineOptions.validate(); err != nil {
 		return nil, fmt.Errorf("%w in \"online-options\"", err)
+	}
+	if err := c.Shellcheck.validate(); err != nil {
+		return nil, err
 	}
 	if err := c.normalizeRules(); err != nil {
 		return nil, err
@@ -489,6 +503,9 @@ func (c *Config) merge(over *Config) {
 	if over.present["self-hosted-runner.strict-labels"] {
 		c.SelfHostedRunner.StrictLabels = over.SelfHostedRunner.StrictLabels
 	}
+	if over.present["self-hosted-runner.providers"] {
+		c.SelfHostedRunner.Providers = over.SelfHostedRunner.Providers
+	}
 	if over.present["config-variables"] {
 		c.ConfigVariables = over.ConfigVariables
 	}
@@ -513,6 +530,15 @@ func (c *Config) merge(over *Config) {
 	}
 	if over.present["fix.rules"] {
 		c.Fix.Rules = over.Fix.Rules
+	}
+	if over.present["shellcheck.rcfile"] {
+		c.Shellcheck.RCFile = over.Shellcheck.RCFile
+	}
+	if over.present["shellcheck.args"] {
+		c.Shellcheck.Args = over.Shellcheck.Args
+	}
+	if over.present["shellcheck.enable"] {
+		c.Shellcheck.Enable = over.Shellcheck.Enable
 	}
 	c.Deprecations = append(c.Deprecations, over.Deprecations...)
 	c.Notices = append(c.Notices, over.Notices...)

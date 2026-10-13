@@ -37,3 +37,23 @@ jobs:
       - run: gem build pkg.gemspec
       - run: echo "npm install lodash"
       - run: npx tsc
+  windows:
+    runs-on: windows-2025
+    steps:
+      # The default shell of a Windows runner is pwsh. A line that is a plain command is read, one with the syntax of
+      # the shell is not
+      - run: npm install conventional-changelog-conventionalcommits
+      - run: |
+          npm install --no-save electron@22.3.27
+          if ($lastExitCode -ne 0) { exit $lastExitCode }
+          npm install -g typescript
+      - shell: cmd
+        run: npm i -D left-pad
+      - shell: pwsh
+        run: |
+          npm install --prefix ./assets
+          npm install ./pkg.tgz
+          npm install $env:PACKAGE
+          npm install lodash | Out-Null
+          npm ci
+          Write-Host "npm install lodash"
