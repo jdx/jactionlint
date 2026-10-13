@@ -7538,7 +7538,7 @@ A step is reported at its checkout when it puts untrusted code in the workspace 
   a step output or a here document written to `$GITHUB_ENV` with anything but `NAME=value` and `NAME<<DELIM` lines. The same
   holds for a revision that a step passes to a command other than `git`.
 - "Runs it" is a later step with a `run:` command that can execute workspace code (a script, `npm`, `cargo`, `make`, an
-  interpreter, ...), a local action (`uses: ./...`), or one of a few actions that build the workspace. Commands that only read or
+  interpreter, ...), a local action (`uses: ./...`), or an action that runs the workspace (below). Commands that only read or
   move files (`cat`, `git diff`, `grep`, `jq`, `tar`, `gh`, ...) do not count, except when an option makes them run a file of
   the workspace (a relative path or one below `$GITHUB_WORKSPACE`, not `/tmp/x` or `$RUNNER_TEMP/x`): `sed -f script.sed`,
   `awk -f prog.awk`, `tar -xPf a.tar` (absolute names) and `unzip -: a.zip` (`../` in names), which poutine and CodeQL list as
@@ -7547,6 +7547,25 @@ A step is reported at its checkout when it puts untrusted code in the workspace 
   a path or a package file. A checkout with `path:` only counts when a later
   step works in that directory (`working-directory`, `cd`, or an argument below it); `python3 base/check.py --root pr-head` runs a
   script from the base checkout and only reads `pr-head`, so it does not count either.
+
+The actions that run the workspace are the ones that poutine and CodeQL list (their source is the
+[LOTP catalog](https://boostsecurityio.github.io/lotp/), whose entries for actions are `actions/setup-node`,
+`oxsecurity/megalinter` and local actions), where the action runs a tool on the files of the repository: a linter with the
+configuration and the plugins of the repository (`oxsecurity/megalinter`, `super-linter/super-linter`, `trunk-io/trunk-action`,
+`bridgecrewio/checkov-action`, `sonarsource/sonarcloud-github-action`, `sonarsource/sonarqube-scan-action`, `errata-ai/vale-action`,
+`reviewdog/action-eslint`, `-rubocop`, `-tflint`, `-flake8`, `-stylelint`, `-golangci-lint`, `-mypy`, `golangci/golangci-lint-action`,
+`pre-commit/action` and the other eslint, rubocop, mypy, stylelint, phpstan and pre-commit actions of poutine), a build or an
+installer (`dflook/terraform-plan`, `-apply`, `dflook/tofu-plan`, `-apply`, `JS-DevTools/npm-publish`, `pypa/cibuildwheel`,
+`PyO3/maturin-action`, `hynek/build-and-inspect-python-package`, `cypress-io/github-action`, `actions-rs/cargo`,
+`github/codeql-action/autobuild` and `analyze`, the Maven, mkdocs and pip actions of poutine). Some actions run it only for an
+input, which is checked: `ruby/setup-ruby` with `bundler-cache: true`, `actions/setup-node` with `cache`, `docker/build-push-action`
+with a `context` that is a path (the default is the git context of the repository, not the workspace),
+`goreleaser/goreleaser-action` with `args` that has `release` or `build` and no `install-only`, `magefile/mage-action` with
+`args`, `gradle/gradle-build-action` with `arguments`, `azure/powershell` with an `inlineScript` that calls a script of the
+workspace, and `cypress-io/github-action` unless both `install` and `runTests` are false. Not listed although poutine or CodeQL
+has them: `docker/setup-buildx-action`, `pre-commit-ci/lite-action` and `browniebroke/pre-commit-autoupdate-action` (they
+run nothing of the workspace) and `actions/jekyll-build-pages` (not verified). `gradle/actions/setup-gradle` only prepares a later
+step.
 
 In a job that sets `permissions: {}` the message does not claim a token, because the job has none.
 
