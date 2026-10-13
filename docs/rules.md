@@ -65,6 +65,7 @@ rules:
 | [duplicate-step-id](#duplicate-step-id) | correctness | error | correctness |
 | [duplicate-triggers](#duplicate-triggers) | policy | error | default |
 | [environment-file-redirect](#environment-file-redirect) | correctness | error | correctness |
+| [event-name-never-received](#event-name-never-received) | correctness | warn | pedantic |
 | [excessive-permissions](#excessive-permissions) | security | error | default |
 | [expired-ignore](#expired-ignore) | policy | error | correctness |
 | [expression-syntax](#expression-syntax) | correctness | error | correctness |
@@ -472,6 +473,15 @@ A script writes to GITHUB_OUTPUT or another environment file of the runner witho
 - Profile: correctness
 - Fixable: yes
 - Details and examples: [checks](./checks.md#check-environment-file-redirect)
+
+## event-name-never-received
+
+github.event_name is compared with an event that the workflow never receives, so the comparison is always false.
+
+- Group: correctness
+- Default level: warn
+- Profile: pedantic
+- Details and examples: [checks](./checks.md#check-event-name-never-received)
 
 ## excessive-permissions
 

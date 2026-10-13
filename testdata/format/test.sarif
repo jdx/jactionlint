@@ -190,6 +190,21 @@
               "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
             },
             {
+              "id": "event-name-never-received",
+              "name": "EventNameNeverReceived",
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "description": "Checks for \"github.event_name\" compared with an event that the workflow never receives",
+                "queryURI": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+              },
+              "fullDescription": {
+                "text": "Checks for \"github.event_name\" compared with an event that the workflow never receives"
+              },
+              "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+            },
+            {
               "id": "events",
               "name": "Events",
               "defaultConfiguration": {
