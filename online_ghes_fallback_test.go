@@ -55,7 +55,7 @@ func newTwoHosts(t *testing.T, both bool) *twoHosts {
 	return h
 }
 
-const fallbackConfig = "rules:\n  impostor-commit: off\n  ref-confusion: off\n  ref-version-mismatch: off\n  stale-action-refs: off\n  unpinned-uses: off\n"
+const fallbackConfig = "rules:\n  impostor-commit: off\n  ref-confusion: off\n  ref-version-mismatch: off\n  stale-action-refs: off\n  unpinned-uses: off\n  repojacking: off\n"
 
 func fallbackRun(t *testing.T, args ...string) (stdout, stderr string, report map[string]any) {
 	t.Helper()
@@ -102,9 +102,11 @@ func TestGitHubComFallbackRoutesByRepository(t *testing.T) {
 			t.Errorf("github.com: %d requests for %s, want %d", got, path, want)
 		}
 	}
-	// The repository which neither has is skipped and counted
-	if report["skippedLookups"] != float64(1) {
-		t.Errorf("skipped lookups: %v", report["skippedLookups"])
+	// The repository which neither has is skipped and counted, and so is the action.yml which the two actions that are not known to
+	// jactionlint do not have in the fake (corp/internal on the Server, example/archived on github.com): the files are asked for on
+	// the host which has the repository
+	if report["skippedLookups"] != float64(4) {
+		t.Errorf("skipped lookups: %v %v (ghes %v, dotcom %v)", report["skippedLookups"], report["skippedBy"], h.ghes.hits, h.dotcom.hits)
 	}
 	// Both hosts' answers are in the report
 	ans, _ := report["answers"].(map[string]any)
@@ -193,7 +195,8 @@ func TestGitHubComFallbackIsOptIn(t *testing.T) {
 	if h.dotcom.total() != 0 {
 		t.Errorf("github.com was asked %d times without the option: %v", h.dotcom.total(), h.dotcom.hits)
 	}
-	if strings.Count(stdout, "[archived-uses]") != 1 || report["skippedLookups"] != float64(3) {
+	// Every repository which the Server does not have is skipped (its metadata is looked for too, which counts as well)
+	if skipped, _ := report["skippedLookups"].(float64); strings.Count(stdout, "[archived-uses]") != 1 || skipped < 3 {
 		t.Errorf("skipped %v:\n%s", report["skippedLookups"], stdout)
 	}
 }
@@ -659,5 +662,57 @@ func TestGitHubComFallbackTokenFromGHIsNotTheTokenOfTheServer(t *testing.T) {
 		if a != "Bearer "+ghesToken {
 			t.Errorf("the Server got %q", a)
 		}
+	}
+}
+
+// The files of a repository (the action.yml of a remote action) are read on the host which has the repository.
+func TestFallbackClientFilesAreOfTheHostWhichHasTheRepository(t *testing.T) {
+	mk := func(data string) *FixtureGitHubClient {
+		c, err := NewFixtureGitHubClient([]byte(data))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return c
+	}
+	primary := mk(`{"repos":{"corp/a":{"repo":{},"files":{"v1:action.yml":{"found":true,"content":"server"}}},"actions/checkout":{"missing":true},"both/x":{"repo":{},"files":{"v1:action.yml":{"found":true,"content":"server"}}}}}`)
+	secondary := mk(`{"repos":{"actions/checkout":{"repo":{},"files":{"v4:action.yml":{"found":true,"content":"github.com"}}},"both/x":{"repo":{},"files":{"v1:action.yml":{"found":true,"content":"github.com"}}}}}`)
+	c := newFallbackGitHubClient(primary, secondary)
+	ctx := context.Background()
+	for _, tc := range []struct{ owner, repo, ref, want string }{
+		{"corp", "a", "v1", "server"},
+		{"actions", "checkout", "v4", "github.com"},
+		{"both", "x", "v1", "server"},
+	} {
+		b, err := c.FileContent(ctx, tc.owner, tc.repo, tc.ref, "action.yml")
+		if err != nil || string(b) != tc.want {
+			t.Errorf("%s/%s: %q, %v, want %q", tc.owner, tc.repo, b, err, tc.want)
+		}
+	}
+	// A file which the host which has the repository does not have is not looked for on the other one
+	before := primary.Calls()
+	if _, err := c.FileContent(ctx, "actions", "checkout", "v4", "other.yml"); !errors.Is(err, ErrGitHubNotFound) {
+		t.Errorf("%v", err)
+	}
+	if primary.Calls() != before {
+		t.Error("the Server was asked for a file of a repository of github.com")
+	}
+}
+
+// With github.com down the files of its repositories are a failure of the host, and the Server goes on.
+func TestFallbackClientFileWithGitHubComDown(t *testing.T) {
+	primary, err := NewFixtureGitHubClient([]byte(`{"repos":{"corp/a":{"repo":{},"files":{"v1:action.yml":{"found":true,"content":"server"}}},"actions/checkout":{"missing":true}}}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	secondary := &stubClient{err: &GitHubRateLimitError{Reset: time.Now().Add(time.Hour)}}
+	c := newFallbackGitHubClient(primary, secondary)
+	ctx := context.Background()
+	_, err = c.FileContent(ctx, "actions", "checkout", "v4", "action.yml")
+	var scoped *hostScopedError
+	if !errors.As(err, &scoped) || !errors.Is(err, ErrGitHubRateLimited) {
+		t.Errorf("want the rate limit of the host: %v", err)
+	}
+	if b, err := c.FileContent(ctx, "corp", "a", "v1", "action.yml"); err != nil || string(b) != "server" {
+		t.Errorf("the Server must go on: %q, %v", b, err)
 	}
 }

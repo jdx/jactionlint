@@ -29,9 +29,12 @@ type RuleExpression struct {
 	inputsTy         *ObjectType
 	dispatchInputsTy *ObjectType
 	jobsTy           *ObjectType
+	payload          *eventPayload // what is known of github.event, or nil
 	workflow         *Workflow
 	localActions     *LocalActionsCache
 	localWorkflows   *LocalReusableWorkflowCache
+	// online reads the outputs of actions which are not in the data set; nil when the online checks are off.
+	online *onlineSession
 
 	// The following fields let a template-injection finding carry a fix (see template_injection.go).
 	src       *sourceIndex
@@ -66,6 +69,7 @@ func NewRuleExpression(actionsCache *LocalActionsCache, workflowCache *LocalReus
 
 // VisitWorkflowPre is callback when visiting Workflow node before visiting its children.
 func (rule *RuleExpression) VisitWorkflowPre(n *Workflow) error {
+	rule.payload = payloadOfWorkflow(n, rule.config.strictEventPayloads())
 	if n.Action != nil {
 		rule.workflow = n
 		rule.visitActionPre(n.Action)
@@ -438,6 +442,10 @@ func (rule *RuleExpression) getActionOutputsType(spec *String) *ObjectType {
 	known := func(s string) bool { _, ok := PopularActions[s]; return ok }
 	if ps, ok := resolvePopularSpec(ParseUses(spec.Value), spec, nil, known); ok {
 		return typeOfActionOutputs(PopularActions[ps.Key])
+	}
+
+	if t := rule.remoteActionOutputsType(spec); t != nil {
+		return t
 	}
 
 	return NewMapObjectType(StringType{})
@@ -1031,6 +1039,7 @@ func (rule *RuleExpression) checkSemanticsOfExprNode(expr ExprNode, line, col in
 	if rule.jobsTy != nil {
 		c.UpdateJobs(rule.jobsTy)
 	}
+	c.setEventPayload(rule.payload)
 	if workflowKey != "" {
 		ctx, sp := WorkflowKeyAvailability(workflowKey)
 		if a, ok := actionKeyAvailability[workflowKey]; ok {
@@ -1389,6 +1398,41 @@ func convertExprLineColToPos(line, col, lineBase, colBase int) *Pos {
 	}
 }
 
+// remoteActionOutputsType is the type of `steps.<id>.outputs` of an action which is not in the data set, from its
+// action.yml read from GitHub with --online. It is nil when the outputs cannot be told: the checks are off, the
+// metadata cannot be read, or the action may set outputs which it does not declare. Only a composite action
+// has no other outputs than the ones it declares. A JavaScript or Docker action can set any output with
+// `core.setOutput` or `$GITHUB_OUTPUT`, declared or not (tj-actions/changed-files sets one per key of its
+// `files_yaml`, dorny/paths-filter one per filter), so nothing is known about its outputs.
+func (rule *RuleExpression) remoteActionOutputsType(spec *String) *ObjectType {
+	if rule.online == nil || spec == nil {
+		return nil
+	}
+	ref := ParseUses(spec.Value)
+	if !remoteActionLookup(ref) {
+		return nil
+	}
+	// An action of the data set is not read from GitHub: the data set has what there is to know about it, and the
+	// action rule checks its inputs with it. The outputs of a commit are not typed from its version comment (see
+	// getActionOutputsType), but the comment still tells that the action is in the data set.
+	var comments *CommentIndex
+	if rule.workflow != nil {
+		comments = rule.workflow.Comments
+	}
+	if _, ok := resolvePopularSpec(ref, spec, comments, knownPopularAction); ok {
+		return nil
+	}
+	meta, err := rule.online.RemoteAction(ref.Owner, ref.Repo, ref.Subpath, ref.Ref)
+	if err != nil || meta == nil {
+		rule.Debug("%s: no action metadata to type the outputs with: %v", ref.Raw, err)
+		return nil
+	}
+	if meta.Runs.Using != "composite" {
+		return nil
+	}
+	return typeOfActionOutputs(meta)
+}
+
 func typeOfActionOutputs(meta *ActionMetadata) *ObjectType {
 	// Some action sets outputs dynamically. Such outputs are not defined in action.yml. jactionlint
 	// cannot check such outputs statically so it allows any props (#18)
@@ -1410,6 +1454,7 @@ func init() {
 	)
 	registerRuleFactory("expression", func(env *RuleEnv) []Rule {
 		r := NewRuleExpression(env.localActions, env.localReusableWorkflows)
+		r.online = env.online
 		if env.src != nil {
 			r.src = newSourceIndex(env.src)
 		}

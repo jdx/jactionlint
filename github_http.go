@@ -5,6 +5,7 @@ package jactionlint
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -463,6 +464,13 @@ func (c *httpGitHubClient) get(ctx context.Context, target string) (*httpAnswer,
 // getOpt is get; with revalidate a cached answer is never served without asking the server (a conditional
 // request, so that an unchanged answer costs no quota), whatever its age.
 func (c *httpGitHubClient) getOpt(ctx context.Context, target string, revalidate bool) (*httpAnswer, error) {
+	return c.fetch(ctx, target, revalidate, false)
+}
+
+// fetch is getOpt; with immutable the answer is about something which can never change (a file at a full
+// commit SHA), so a cached 200 answer is used whatever its age, unless the TTL is zero, which asks for
+// every answer to be checked.
+func (c *httpGitHubClient) fetch(ctx context.Context, target string, revalidate, immutable bool) (*httpAnswer, error) {
 	u := target
 	if !strings.HasPrefix(target, "http://") && !strings.HasPrefix(target, "https://") {
 		u = c.base.String() + target
@@ -477,10 +485,18 @@ func (c *httpGitHubClient) getOpt(ctx context.Context, target string, revalidate
 
 	token := c.currentToken()
 	entry, key := c.lookup(u, token)
-	if entry != nil && !revalidate && (c.offline || (c.ttl > 0 && c.now().Sub(entry.Fetched) < c.ttl)) {
-		c.logf("GET %s: from the cache", target)
-		c.noteAnswer(answerCached, entry.Fetched)
-		return answerFromEntry(entry), nil
+	if entry != nil && !revalidate {
+		age := c.now().Sub(entry.Fetched)
+		switch {
+		case c.offline || (c.ttl > 0 && age < c.ttl):
+			c.logf("GET %s: from the cache", target)
+			c.noteAnswer(answerCached, entry.Fetched)
+			return answerFromEntry(entry), nil
+		case immutable && c.ttl > 0 && entry.Status == http.StatusOK:
+			c.logf("GET %s: from the cache (it cannot change)", target)
+			c.noteAnswer(answerImmutable, entry.Fetched)
+			return answerFromEntry(entry), nil
+		}
 	}
 	if c.offline {
 		return nil, fmt.Errorf("%s: %w", strings.SplitN(target, "?", 2)[0], ErrGitHubNotCached)
@@ -1261,6 +1277,58 @@ func (c *httpGitHubClient) Compare(ctx context.Context, owner, repo, base, head 
 	return "", fmt.Errorf("unexpected comparison status %q", r.Status)
 }
 
+// maxFileContentBytes bounds the size of a file which FileContent returns: the contents API sends the
+// content of a file up to 1 MB inline, and a file of metadata is far smaller.
+const maxFileContentBytes = 1 << 20
+
+// FileContent implements GitHubContentClient with the contents API (one request). The answer for a ref
+// which is a full commit SHA is kept for ever: neither the commit nor the file in it can change.
+func (c *httpGitHubClient) FileContent(ctx context.Context, owner, repo, ref, path string) ([]byte, error) {
+	if !validRepoFilePath(path) {
+		return nil, fmt.Errorf("%w: file path %q", errInvalidGitHubName, path)
+	}
+	if !validGitRefName(ref) {
+		return nil, fmt.Errorf("%w: ref %q", errInvalidGitHubName, ref)
+	}
+	target, err := repoURL(owner, repo, append([]string{"contents"}, strings.Split(path, "/")...)...)
+	if err != nil {
+		return nil, err
+	}
+	target += "?ref=" + url.QueryEscape(ref)
+	ans, err := c.fetch(ctx, target, false, validGitSHA(ref))
+	if err != nil {
+		return nil, err
+	}
+	notFound := fmt.Errorf("%s/%s: %s at %s: %w", owner, repo, path, ref, ErrGitHubNotFound)
+	if ans.status != http.StatusOK {
+		return nil, notFound
+	}
+	var f struct {
+		Type     string `json:"type"`
+		Encoding string `json:"encoding"`
+		Size     int    `json:"size"`
+		Content  string `json:"content"`
+	}
+	if err := json.Unmarshal(ans.body, &f); err != nil {
+		// A directory is answered with a list
+		if bytes.HasPrefix(bytes.TrimSpace(ans.body), []byte("[")) {
+			return nil, notFound
+		}
+		return nil, fmt.Errorf("could not decode the answer of the GitHub API for %s: %w", path, err)
+	}
+	if f.Type != "file" {
+		return nil, notFound // A directory, a symbolic link or a submodule
+	}
+	if f.Encoding != "base64" || f.Size > maxFileContentBytes {
+		return nil, fmt.Errorf("%s/%s: %s at %s is too large to read through the contents API", owner, repo, path, ref)
+	}
+	b, err := base64.StdEncoding.DecodeString(strings.NewReplacer("\n", "", "\r", "").Replace(f.Content))
+	if err != nil {
+		return nil, fmt.Errorf("could not decode the content of %s: %w", path, err)
+	}
+	return b, nil
+}
+
 // Advisories implements GitHubClient.
 func (c *httpGitHubClient) Advisories(ctx context.Context, owner, repo string) ([]GitHubAdvisory, error) {
 	return c.AdvisoriesForPackages(ctx, []string{owner + "/" + repo})
@@ -1565,9 +1633,10 @@ func ghHostname(apiHost string) string {
 type answerSource int
 
 const (
-	answerNetwork answerSource = iota // GitHub answered (a 304 revalidation counts)
-	answerCached                      // a cached answer used without asking: younger than the TTL, or any age offline
-	answerStale                       // an expired cached answer used because the rate limit left no choice
+	answerNetwork   answerSource = iota // GitHub answered (a 304 revalidation counts)
+	answerCached                        // a cached answer used without asking: younger than the TTL, or any age offline
+	answerStale                         // an expired cached answer used because the rate limit left no choice
+	answerImmutable                     // a cached answer about something that cannot change (a file at a full commit SHA), of any age
 )
 
 // noteAnswer counts an answer that a lookup used, and the age of the oldest cached one, for the coverage of the
@@ -1578,6 +1647,9 @@ func (c *httpGitHubClient) noteAnswer(src answerSource, fetched time.Time) {
 	switch src {
 	case answerNetwork:
 		c.answers.Network++
+		return
+	case answerImmutable:
+		c.answers.Immutable++
 		return
 	case answerCached:
 		c.answers.Cache++
