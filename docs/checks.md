@@ -2416,6 +2416,15 @@ to run the job. So specifying proper labels at `runs-on:` is important.
 
 jactionlint checks proper label is used at `runs-on:` configuration. Even if an expression is used in the section like
 `runs-on: ${{ matrix.foo }}`, jactionlint parses the expression and resolves the possible values, then validates the values.
+A label that is a matrix value written together with text (`runs-on: ${{ matrix.os }}-latest`, `ubuntu-${{ matrix.version }}`)
+is resolved the same way: with `os: [macos, linux]` the labels are `macos-latest` and `linux-latest`, and the second one is
+reported at `linux` in the matrix. It is resolved only when the label has one matrix name (`${{ matrix.os }}-${{ matrix.arch }}` is
+not, because `exclude` and `include` decide which pairs run), when the values are strings (a number such as `20.10`, which GitHub
+prints as `20.1`, is skipped), and a value of the row is used only when a job certainly has it. The matrix is modelled as GitHub
+documents it: the base is the cross product of the rows, an `exclude` entry removes the combinations that have all of its
+pairs (so `{os: linux, node: 18}` leaves `linux` with `node: 20`), and `include` adds jobs afterwards, so a value that `include` names
+always has one. Wherever an expression makes the effect unknown (a value in an `exclude` entry, an entry or the whole `exclude`,
+a row of another key) the value is not reported.
 
 When you define some custom labels for your self-hosted runner, jactionlint does not know the labels. Please set the label
 names in [`jactionlint.yaml` configuration file](config.md) to let jactionlint know them. A job that has the label `self-hosted`
@@ -2592,6 +2601,9 @@ Owners and repositories are compared case-insensitively. When several patterns m
 they are written in: in the example, `actions/checkout` needs a commit SHA while the other `actions/*` actions only need a ref.
 Reusable workflow calls follow the same patterns. Patterns describe repositories, so a Docker image follows the `*` pattern.
 Invalid patterns and unknown policies are errors when the configuration is read.
+
+With `--online --fix` a tag is pinned to its commit and the tag is named in a comment: the most specific version tag of the commit
+(`# v4.2.2` for `@v4`), or as written with the option `short-pin-comment: true`. See [the usage document](usage.md#online-checks).
 
 <a id="check-immutable-release"></a>
 #### Tags of immutable releases (online)
@@ -4845,6 +4857,24 @@ fewer `*`, (3) a pattern with a tag beats the same name without one, (4) the lon
 these, the first one in lexical order. So `node` beats `docker.io/library/*`, `docker.io/library/*` beats `docker.io/*`, `node:20`
 beats `node`, and `ghcr.io/org/app` beats `ghcr.io/org/*`, which beats `ghcr.io/*` and `*`. A policy wins over `require-digest`. `node` and `docker.io/library/node` are the same image.
 To forbid or allow images by name, see the options `images-allow` and `images-deny` of [`forbidden-uses`](#check-forbidden-uses).
+
+With `--online --fix=unsafe` the digest is written for you: `postgres:16` becomes `postgres:16@sha256:...` (the format Renovate keeps up to date), and an
+image without a tag becomes `image:latest@sha256:...`, because that is what Docker pulls. It works for `container:`, `services:`, the values a
+matrix writes, `uses: docker://` and the `runs.image: docker://` of an action. The digest is asked of the registry (the v2 API, a HEAD request of the
+manifest) and is the one `docker pull image:tag` resolves today: for a multi-platform image the digest of its index. Only
+Docker Hub (`docker.io`, `ubuntu`, `owner/image`) and ghcr.io are asked, and an image of another registry gets the reason in the finding instead of a
+request. Both give an anonymous token for a public image; for a private image on ghcr.io the token of GitHub (`GITHUB_TOKEN`) is sent to ghcr.io as
+its password when the anonymous request is refused, and to no other host. The fix is **unsafe** (`--fix=unsafe`): the image behind a tag moves,
+and the digest is the image of this moment, so look at what you are pinning. It never updates a pin to a newer image. `--online-allow` and `--online-deny`
+apply to images as `owner/image` (`library/ubuntu` for an official image of Docker Hub), whichever registry it is on, and `--online=cache` does not look images up at all (a digest is not kept in the cache, because a tag moves; the finding says that the fix needs `--online`, and it is no skipped lookup for `strict`). It does not ask
+the registry. A tag that does not exist, a private image and a registry which fails leave the finding without a fix, with the reason.
+What the answers of the registries mean (the same for Docker Hub and ghcr.io):
+
+| Request | Answer | Meaning |
+| --- | --- | --- |
+| token service | 401, 403, 404, 429, 5xx, no answer | the registry fails: the finding says so, and after three failures in a row (at once for a rate limit) the registry is not asked again in this run |
+| manifest | 401, 403, 404 | the registry answered: the image is private or does not exist for this token. No failure, no backoff. ghcr.io is asked once more with the GitHub token first |
+| manifest | 429, 5xx, no answer | the registry fails, as above |
 
 <a id="check-self-repository"></a>
 ## Self-repository syntax (pedantic)
@@ -9950,7 +9980,7 @@ has. GitHub removed Node.js 20 on 2026-09-23 ([changelog][node20-removed]; the p
 
 That is why the rule is not part of the `default` or `correctness` profile: the action does not fail, and jactionlint cannot tell
 a runner on github.com from GitHub Enterprise Server or an old self-hosted runner, where `node20` can still be the runtime that runs.
-The finding says what holds everywhere: the action declares a runtime that the runner on github.com does not provide. It checks two things.
+The finding says what holds everywhere: the action declares a runtime that the runner on github.com does not provide. It checks three things.
 
 **The actions that a workflow uses.** The generated data of the popular actions (`PopularActionRuntimes`) records the `runs.using` of every
 major version they know, taken from the `action.yml` of that major when the data was generated. A `uses:` of a major that declares
@@ -9973,6 +10003,21 @@ runs:
 A workflow that calls a local action is not reported a second time: the metadata file of the action is. `node12` and `node16` in a local
 action are also reported by [`invalid-local-action`](#action-metadata-syntax) where a workflow calls it, because the runner does not document them
 anymore.
+
+**The variables that chose the runtime.** `ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION` kept JavaScript actions on Node.js 20 after Node.js 24
+became the default on 2026-06-16, and `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24` ran them on Node.js 24 before that. The runner reads both in
+`NodeUtil.DetermineActionsNodeVersion` and ignores both once its server side flag `requirenode24` is on, which is the case since Node.js 20 was
+removed. The [changelog][node20-removed] says that the opt-out "is no longer available"; it does not mention the other variable, which the
+runner source shows to be redundant by the same flag. A key of that name in `env:` of the workflow, of a job or of a step (also of the steps
+of a composite action) is reported at the name, whatever its value is:
+
+```yaml
+env:
+  ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true # warning: no longer does anything
+```
+
+The `env:` of a `container:` or of a service is not looked at, and neither is a variable written to `$GITHUB_ENV` by a script or
+set in the environment of a self-hosted runner.
 
 [yamllint]: https://github.com/adrienverge/yamllint
 [node20-removed]: https://github.blog/changelog/2026-09-23-node-20-is-no-longer-available-in-github-actions

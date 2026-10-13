@@ -3,6 +3,7 @@ package jactionlint
 import (
 	"io"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -162,6 +163,49 @@ func TestPopularActionRuntimesData(t *testing.T) {
 		if got := PopularActionRuntimes[spec]; got != want {
 			t.Errorf("%s: want %s, got %q", spec, want, got)
 		}
+	}
+}
+
+func TestDeprecatedNodeRuntimeEnvironmentVariables(t *testing.T) {
+	tests := []struct {
+		name string
+		src  string
+		want []int // lines of the findings
+	}{
+		{"workflow env", "on: push\nenv:\n  ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo\n", []int{3}},
+		{"job env", "on: push\njobs:\n  a:\n    runs-on: ubuntu-latest\n    env:\n      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true\n    steps:\n      - run: echo\n", []int{6}},
+		{"step env", "on: push\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo\n        env:\n          FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'\n", []int{8}},
+		{"both at once", "on: push\nenv:\n  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true\n  ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo\n", []int{3, 4}},
+		{"the value does not matter", "on: push\nenv:\n  ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: false\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo\n", []int{3}},
+		{"another variable", "on: push\nenv:\n  FORCE_COLOR: 1\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo\n", nil},
+		{"a name that only contains it", "on: push\nenv:\n  MY_FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 1\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo\n", nil},
+		{"an env made of an expression", "on: push\nenv: ${{ fromJSON(vars.ENV) }}\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo\n", nil},
+		{"the env of a container", "on: push\njobs:\n  a:\n    runs-on: ubuntu-latest\n    container:\n      image: alpine:3\n      env:\n        FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true\n    steps:\n      - run: echo\n", nil},
+		{"the name in a script is not an env", "on: push\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true\n", nil},
+	}
+	cfg := &Config{Rules: map[string]RuleConfig{"deprecated-node-runtime": {Level: SeverityWarning}}}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			found := deprecatedNodeRuntimeFindings(lintWithConfig(t, cfg, tc.src))
+			var lines []int
+			for _, e := range found {
+				lines = append(lines, e.Line)
+			}
+			slices.Sort(lines)
+			if !slices.Equal(lines, tc.want) {
+				t.Fatalf("want findings at lines %v, got %v", tc.want, found)
+			}
+		})
+	}
+}
+
+// The env of a step of a composite action is the env of a step.
+func TestDeprecatedNodeRuntimeEnvironmentVariablesInCompositeSteps(t *testing.T) {
+	src := "name: x\ndescription: x\nruns:\n  using: composite\n  steps:\n    - run: echo\n      shell: bash\n      env:\n        FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true\n"
+	cfg := &Config{Rules: map[string]RuleConfig{"deprecated-node-runtime": {Level: SeverityWarning}}}
+	found := deprecatedNodeRuntimeFindings(lintActionWithConfig(t, cfg, src))
+	if len(found) != 1 || found[0].Line != 9 {
+		t.Fatalf("want one finding at line 9, got %v", found)
 	}
 }
 
