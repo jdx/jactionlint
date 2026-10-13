@@ -1,0 +1,40 @@
+# Actions that do not run the workspace for these inputs, after a checkout of the code of a pull request
+on:
+  pull_request_target:
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.3"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: docker/setup-buildx-action@v3
+      - uses: goreleaser/goreleaser-action@v6
+        with:
+          install-only: true
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      # the default context is the git context of the repository, not the workspace
+      - uses: docker/build-push-action@v6
+        with:
+          push: false
+  mage-install:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - uses: magefile/mage-action@v3
+        with:
+          install-only: true

@@ -200,4 +200,4 @@ var unpinnedUsesOptions = []RuleOption{{
 	Name: "policies", Kind: RuleOptionStringMap, Default: map[string]string{},
 	Summary:  "How strongly to pin the actions matching a pattern: hash-pin (full commit SHA, the default for everything), ref-pin (any tag, branch or SHA), immutable-release (a full commit SHA, or with --online the tag of an immutable GitHub release) or any. The most specific pattern wins. Patterns are \"*\", \"owner/*\", \"owner/repo\" and \"owner/repo/path\". Docker images follow the \"*\" policy.",
 	Validate: validateUsesPolicies,
-}}
+}, shortPinCommentOption}
