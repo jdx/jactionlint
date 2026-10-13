@@ -2226,6 +2226,9 @@ test.yaml:23:14: label "macos-10.13" is unknown. available labels are "windows-l
 
 [Playground](https://jactionlint.jdx.dev/#eNqEj8GqwyAQRfd+xV28ZZSXNmThr5QubGqTlESDo5AS8u9FNBSh0JVcZ+ZyjjUSS6CBPe2NJAO8Jh9fgLxTXvevlIBZeTeuRwJcMEa7TwY4ZtVZ4pOKLcVgGk1Yvw0upKcHHyx5fa/SWoW1ba7FlnJz2xQ//RJYpiAeLf62LSOKRIZ9zx56oQOTxwMJ3Q0WQgiWjU+yLEse9b+ozz873gMASPlVEA==)
 
+The lists of the available labels in the output above are as of 2026-10-13: a label that GitHub has retired is dropped from the list on its day (`macos-14` on 2026-11-02),
+and the examples of this document are made as of that day so that they do not change.
+
 GitHub Actions provides two kinds of job runners, [GitHub-hosted runner][gh-hosted-runner] and [self-hosted runner][self-hosted-runner].
 Each runner has one or more labels. GitHub Actions runtime finds a proper runner based on label(s) specified at `runs-on:`
 to run the job. So specifying proper labels at `runs-on:` is important.
@@ -8083,7 +8086,7 @@ retire but that still works: `macos-14`, `macos-14-large`, `macos-14-xlarge` (re
 `ubuntu-22.04-arm` (deprecated since 2026-09-17, retired on 2027-04-17). The message has the date, the labels to move to and the announcement. The
 rule reads `runs-on` and the values of `matrix.<key>` that `runs-on: ${{ matrix.<key> }}` selects. Jobs with `self-hosted` among the labels are not reported.
 
-It is not in the `default` profile, and it does not fail a build, because the label works until its day. From the day of the retirement the label is
+It is not in the `default` profile, and it does not fail a build (unless `--strict-exit` makes warnings fail it), because the label works until its day. From the day of the retirement the label is
 unknown, and [`unknown-runner-label`](#check-runner-labels) reports it as an error in every profile. The rule has no automatic fix:
 jactionlint does not know which image your jobs can move to. Every date is in one table, `runnerLabelRetirements` in `runner_label_retirement.go`, which
 is checked against the announcements: a deprecation that GitHub announces later is one more row.

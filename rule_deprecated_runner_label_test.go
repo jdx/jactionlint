@@ -83,6 +83,8 @@ func TestDeprecatedRunnerLabel(t *testing.T) {
 		{"after the retirement", "2027-01-01", runsOn("macos-14"), nil},
 		{"ubuntu-22.04 on its day", "2027-04-17", runsOn("ubuntu-22.04"), nil},
 		{"the pool of self-hosted runners", "2026-10-13", runsOn("[self-hosted, macos-14]"), nil},
+		{"self-hosted selected by the matrix next to the label", "2026-10-13", "on: push\njobs:\n  j:\n    runs-on: ['${{ matrix.pool }}', macos-14]\n    strategy:\n      matrix:\n        pool: [self-hosted]\n    steps:\n      - run: echo\n", nil},
+		{"self-hosted is the whole runs-on of its own job", "2026-10-13", "on: push\njobs:\n  j:\n    runs-on: ${{ matrix.pool }}\n    strategy:\n      matrix:\n        pool: [self-hosted, macos-14]\n    steps:\n      - run: echo\n", []string{"macos-14"}},
 		{"a label of today", "2026-10-13", runsOn("macos-15"), nil},
 		{"a moving label", "2026-10-13", runsOn("macos-latest"), nil},
 		{"an already retired label", "2026-10-13", runsOn("macos-13"), nil},

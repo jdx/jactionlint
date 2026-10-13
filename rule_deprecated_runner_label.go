@@ -34,14 +34,12 @@ func (rule *RuleDeprecatedRunnerLabel) VisitJobPre(n *Job) error {
 	if n.RunsOn == nil {
 		return nil
 	}
-	for _, l := range n.RunsOn.Labels {
-		if strings.EqualFold(l.Value, "self-hosted") {
-			return nil // the other labels are labels of the runner pool
-		}
-	}
 	var m *Matrix
 	if n.Strategy != nil {
 		m = n.Strategy.Matrix
+	}
+	if runsOnSelfHosted(n.RunsOn, m) {
+		return nil // the other labels are labels of the runner pool
 	}
 	if n.RunsOn.LabelsExpr != nil {
 		for _, l := range matrixLabels(n.RunsOn.LabelsExpr, m) {
@@ -59,6 +57,28 @@ func (rule *RuleDeprecatedRunnerLabel) VisitJobPre(n *Job) error {
 		rule.check(l)
 	}
 	return nil
+}
+
+// runsOnSelfHosted reports whether the labels of runs-on have "self-hosted", also as a value of the matrix that one
+// of several labels selects (`[${{ matrix.pool }}, macos-14]`). When the matrix value is all of runs-on, each value makes a
+// job of its own, so "self-hosted" in it does not make the others self-hosted.
+func runsOnSelfHosted(r *Runner, m *Matrix) bool {
+	for _, l := range r.Labels {
+		if strings.EqualFold(l.Value, "self-hosted") {
+			return true
+		}
+	}
+	if r.LabelsExpr != nil || len(r.Labels) < 2 {
+		return false
+	}
+	for _, l := range r.Labels {
+		for _, v := range matrixLabels(l, m) {
+			if strings.EqualFold(v.Value, "self-hosted") {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func (rule *RuleDeprecatedRunnerLabel) check(l *String) {
