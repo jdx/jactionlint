@@ -1,5 +1,7 @@
 action-release-cooldown online security warn
 action-syntax correctness correctness error
+actions-lock default security error
+actions-lock-drift online security error
 adhoc-packages default security error
 agentic-actions default security error
 anonymous-definition pedantic policy warn

@@ -10,6 +10,9 @@ on:
   push:
     branches:
       - main
+  schedule:
+    # Every Saturday 10:21 in JST. Refreshes the generated files (see the generate job) even without a push.
+    - cron: '21 1 * * 6'
   workflow_dispatch:
 
 jobs:
@@ -34,3 +37,116 @@ jobs:
           token: ${{ secrets.RELEASE_PLZ_TOKEN }}
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+
+  # Updates the generated files (go generate, and the detection of new releases of popular actions) in the release
+  # PR, so that they ship with each release instead of in a pull request of their own.
+  #
+  # release-please rewrites its branch from main whenever it updates the release PR, which drops the commit of
+  # this job. So the job runs after release-please on every run (needs:) and adds the commit again; when the
+  # branch was not rewritten the generated files are already up to date and there is nothing to commit. The push
+  # is never forced.
+  #
+  # A chore commit alone does not create a release PR (release-please ignores it), so the generated files are
+  # updated only while a release PR is open.
+  generate:
+    name: Generate
+    needs: release-please
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    if: ${{ github.repository == 'jdx/jactionlint' }}
+    permissions:
+      contents: read
+      pull-requests: write
+    env:
+      RELEASE_BRANCH: release-please--branches--main--components--jactionlint
+    steps:
+      # The outputs of release-please-action (prs_created, pr, prs) are not used on purpose: they list only the
+      # pull requests that release-please created or updated in this run, so they are not a reliable way to find
+      # an existing release PR. Look for the open PR of the branch instead.
+      - name: Find the release PR
+        id: find
+        run: |
+          set -euo pipefail
+          number=$(gh pr list -R "$GITHUB_REPOSITORY" --base main --head "$RELEASE_BRANCH" --state open --limit 100 --json number,headRefName,headRepositoryOwner \
+            --jq "[.[] | select(.headRefName == \"$RELEASE_BRANCH\") | select(.headRepositoryOwner.login == \"jdx\")][0].number // empty")
+          if [ -z "$number" ]; then
+            echo "No open release PR; nothing to generate"
+            echo "found=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "Release PR: #$number"
+          echo "found=true" >> "$GITHUB_OUTPUT"
+          echo "number=$number" >> "$GITHUB_OUTPUT"
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: ${{ env.RELEASE_BRANCH }}
+          persist-credentials: false
+        if: ${{ steps.find.outputs.found == 'true' }}
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version: '1.27'
+          check-latest: true
+        if: ${{ steps.find.outputs.found == 'true' }}
+      # Detecting new major versions of popular actions must never stop the data refresh: they are added to
+      # the registry (known tags, and "next" is advanced) and listed in the commit and the comment for review.
+      - name: Check new releases on GitHub
+        run: |
+          set -o pipefail
+          go run ./scripts/generate-popular-actions -d -w -r scripts/generate-popular-actions/popular_actions.json | tee "$RUNNER_TEMP/detect.txt"
+        if: ${{ steps.find.outputs.found == 'true' }}
+      - run: go generate
+        if: ${{ steps.find.outputs.found == 'true' }}
+      - name: Check changes
+        id: diff
+        run: |
+          if [ -z "$(git status --porcelain)" ]; then
+            echo "Generated files are up to date"
+            echo "commit=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git status --short
+          git diff
+          echo "commit=true" >> "$GITHUB_OUTPUT"
+        if: ${{ steps.find.outputs.found == 'true' }}
+      # A PAT is required: pushes with GITHUB_TOKEN do not trigger the CI workflows, so the required checks would
+      # never run on the release PR. The same token is used by release-please above. The token is passed through
+      # the environment to an explicit remote URL because checkout does not persist credentials.
+      - name: Commit and push to the release PR
+        run: |
+          set -euo pipefail
+          {
+            echo 'chore(generate): update generated files by go generate'
+            echo
+            echo 'Output of the detection of new releases of popular actions (generate-popular-actions -d -w):'
+            echo
+            cat "$RUNNER_TEMP/detect.txt"
+            echo
+            echo "Created by $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          } > "$RUNNER_TEMP/commit-message.txt"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add --all
+          git commit --quiet -F "$RUNNER_TEMP/commit-message.txt"
+          git push "https://x-access-token:${PUSH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "HEAD:refs/heads/${RELEASE_BRANCH}"
+        env:
+          PUSH_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN }}
+          GIT_TERMINAL_PROMPT: '0'
+        if: ${{ steps.find.outputs.found == 'true' && steps.diff.outputs.commit == 'true' }}
+      - name: Comment the detection on the release PR
+        run: |
+          {
+            echo "The generated files of this release PR were updated by [this workflow run]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID)."
+            echo
+            echo 'Output of the detection of new releases of popular actions (generate-popular-actions -d -w):'
+            echo
+            echo '```'
+            cat "$RUNNER_TEMP/detect.txt"
+            echo '```'
+          } > "$RUNNER_TEMP/comment.md"
+          gh pr comment "$PR_NUMBER" -R "$GITHUB_REPOSITORY" --body-file "$RUNNER_TEMP/comment.md" --edit-last --create-if-none
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ steps.find.outputs.number }}
+        if: ${{ steps.find.outputs.found == 'true' && steps.diff.outputs.commit == 'true' }}

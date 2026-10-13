@@ -1,0 +1,2 @@
+.github/workflows/actions.lock:6:5: the workflow ".github/workflows/gone.yml" does not exist, so its entry is stale. run `gh actions-lock` to prune it [actions-lock]
+.github/workflows/actions.lock:8:5: the path of the workflow "../outside.yml" must not go up to a parent directory [actions-lock]

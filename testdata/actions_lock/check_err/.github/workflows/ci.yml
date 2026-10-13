@@ -1,0 +1,18 @@
+on: push
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      # The lock file has actions/checkout at v4
+      - uses: actions/checkout@v6.0.2
+      # Not in the lock file at all
+      - uses: actions/upload-artifact@v4
+        with: {name: x, path: y}
+      - uses: Actions/Upload-Artifact@v4
+        with: {name: x, path: y}
+      # Pinned by hand to the commit of the lock file, with another version in the comment
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.0.0
+      # A commit which the lock file does not know
+      - uses: actions/setup-go@0aaccfd150d50ccaeb58ebd88d36e91967a5f35b # v5.4.0
+      # Not part of the lock file
+      - uses: docker://alpine:3.20

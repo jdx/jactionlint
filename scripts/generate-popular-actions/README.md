@@ -27,8 +27,8 @@ go run ./scripts/generate-popular-actions -d
 ```
 
 Detect new releases and register them in the data source file (adds the new tag to `tags` and advances `next`).
-This is what the [Generate workflow](../../.github/workflows/generate.yaml) runs, so that detecting a new major version
-does not fail the workflow. Without `-w` the exit status is 2 when a new release is detected:
+This is what the `generate` job of the [release-please workflow](../../.github/workflows/release-please.yaml) runs, so that detecting a new major
+version does not fail the workflow. Without `-w` the exit status is 2 when a new release is detected:
 
 ```sh
 go run ./scripts/generate-popular-actions -d -w -r scripts/generate-popular-actions/popular_actions.json
