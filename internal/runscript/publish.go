@@ -34,8 +34,12 @@ func publishOf(c *Command) *Publish {
 		}
 		p.Verb = "publish"
 		p.setRegistry("--registry", "--index")
-	case "npm", "pnpm", "bun":
-		if c.Verb() != "publish" {
+	case "npm", "pnpm", "bun", "aube":
+		verb := c.Verb()
+		if c.Tool == "aube" {
+			verb = aubeVerb(c) // `aube recursive publish`
+		}
+		if verb != "publish" {
 			return nil
 		}
 		p.Verb = "publish"

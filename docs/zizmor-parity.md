@@ -47,7 +47,7 @@ How to read the table:
 | `ref-version-mismatch` | `ref-version-mismatch` | online | partial: every mismatch of a tag comment is found; a missing or version-less comment and a branch comment are not reported; see [online audits](#online-audits) |
 | `secrets-inherit` | `secrets-inherit` | default | full, reported at the `uses:` of the job like zizmor |
 | `secrets-outside-env` | `secrets-outside-env` | pedantic | full; zizmor reports it only for the auditor persona. `workflow_call` workflows are skipped like zizmor does. Inside a folded `>-` scalar jactionlint reports the line of the scalar start |
-| `self-hosted-runner` | `self-hosted-runner` | pedantic (info) | partial: literal `self-hosted` labels and matrix values; labels from other expressions are not resolved. Labels of hosted-runner providers such as namespace or blacksmith are not reported |
+| `self-hosted-runner` | `self-hosted-runner` | pedantic (info) | partial: literal `self-hosted` labels and matrix values, the labels of `self-hosted-runner.labels` of the configuration (ARC runner sets), and `runs-on: {group: ...}`; labels from other expressions are not resolved, and zizmor's list of GitHub-hosted labels is not used. Labels of hosted-runner providers such as namespace or blacksmith are not reported (and are not unknown labels for `unknown-runner-label`, see `self-hosted-runner.providers`). Options `allow` and `pull-request-only` (zizmor has none). Not compared with zizmor on a corpus |
 | `self-repository` | `self-repository` | pedantic (info) | full on the corpus, with an unsafe fix (the one miss is a step with `if: false`, whose findings are dropped) |
 | `stale-action-refs` | `stale-action-refs` | online | partial: same findings except repositories with more than 1000 tags; see [online audits](#online-audits) |
 | `superfluous-actions` | `superfluous-actions` | default | partial: the same findings as zizmor, split like its personas (regular, and the pedantic ones with the option `pedantic`, which the `pedantic` profile turns on). jactionlint adds the archived `actions/create-release` and `actions/upload-release-asset`. A job whose runner may be self-hosted is not reported: a `runs-on:` that is an expression other than matrix values (`${{ inputs.runner }}`, a runner group, the labels of a provider such as `runs-on=...`) counts as one, which is 72 of the 74 misses (the other 2 have a literal `self-hosted` label). See [the check](checks.md#check-superfluous-actions) |
@@ -194,7 +194,7 @@ jactionlint" in the harness report. The idea behind some of them is an open issu
 | Rule | Profile | What it reports | Notes |
 | --- | --- | --- | --- |
 | `missing-timeout`, `timeout-too-long` | default, configured | a job without `timeout-minutes`; a value above `max`. zizmor [#2166](https://github.com/zizmorcore/zizmor/pull/2166) is open | `missing-timeout` is noisy for a repository that never set the key; `--fix` with `default-minutes` clears it |
-| `unlocked-install` | default | `cargo install` without `--locked` (fixable, unsafe), and `npm install`, `yarn` and `pnpm install --no-frozen-lockfile` when the repository has the lock file the install ignores. With the option `pedantic`: the same without a lock file, `bun install` without `--frozen-lockfile` and `pip install -r` without hashes or constraints. See [the check](checks.md#check-unlocked-install) | unit tests and fixtures |
+| `unlocked-install` | default | `cargo install` without `--locked` (fixable, unsafe), and `npm install`, `yarn` and `pnpm install --no-frozen-lockfile` when the repository has the lock file the install ignores. With the option `pedantic`: the same without a lock file, `bun install` without `--frozen-lockfile`, `pip install -r` without hashes or constraints, npm, Yarn and bun installs without `--ignore-scripts` ([zizmor#1405](https://github.com/zizmorcore/zizmor/issues/1405)), and installs without a release-age cooldown ([zizmor#2044](https://github.com/zizmorcore/zizmor/issues/2044)), unless the repository's config files settle it (neither is implemented in zizmor). See [the check](checks.md#check-unlocked-install) | unit tests and fixtures |
 | `dependabot-missing-actions-update` | pedantic | `dependabot.yml` has no `github-actions` update although `.github/workflows` uses actions; skipped when the repository has a Renovate configuration. [The check](checks.md#check-dependabot-missing-actions-update) | |
 | `pipeline-without-pipefail` | default | a failure in a pipeline of a `run:` script is hidden because the default shell (`bash -e {0}`) and `shell: sh` do not enable pipefail. zizmor [#288](https://github.com/zizmorcore/zizmor/issues/288) is the open idea | unit tests and fixtures |
 | `agentic-actions` | default | AI agent actions ([zizmor#1605](https://github.com/zizmorcore/zizmor/issues/1605) is a proposal): an agent outsiders can steer without a check of the user, an open gate (`allowed_non_write_users: '*'`), settings that turn safeguards off, an agent on the code of a pull request. [The check](checks.md#check-agentic-actions) | [see below](#agentic-actions) |
@@ -364,14 +364,12 @@ without buildx is the one case that this does not cover.
 
 ## What is not done
 
-These ideas from the zizmor tracker are **not built**: a check of `allow-unsafe-pr-checkout` of `actions/checkout` and of code that a
-pull request controls (zizmor [#2134](https://github.com/zizmorcore/zizmor/issues/2134)), TOCTOU refs
+These ideas from the zizmor tracker are **not built**: TOCTOU refs
 ([#935](https://github.com/zizmorcore/zizmor/issues/935)), shell syntax errors without shellcheck
 ([#2322](https://github.com/zizmorcore/zizmor/issues/2322)), a rule for a SHA without a version comment
 ([#2316](https://github.com/zizmorcore/zizmor/issues/2316)), immutable releases under `--online`
 ([#766](https://github.com/zizmorcore/zizmor/issues/766)), credentials in the `registries` of `dependabot.yml`
-([#1222](https://github.com/zizmorcore/zizmor/issues/1222)), a repojacking check by owner lookup
-([#479](https://github.com/zizmorcore/zizmor/issues/479)), and zizmor's precomputed snapshot of tags and advisories, which would cut the
+([#1222](https://github.com/zizmorcore/zizmor/issues/1222)), and zizmor's precomputed snapshot of tags and advisories, which would cut the
 first-run cost of `--online`. The registry of rules, [rules.md](rules.md), is the list of what exists.
 
 ## Permissions against zizmor
@@ -494,7 +492,10 @@ Not reported: archives that are downloaded, extracted and run, `go install` or `
 - `untrusted-checkout` follows `actions/checkout`, `gh pr checkout` and `git` commands with a literal reference. A ref that comes from
   an output of an earlier step is not followed. "Runs it" is a list of commands: an unusual build tool that is not in the list of
   commands that only read files counts as running code, while an action that builds the workspace and is not in the short list does
-  not. Conditions on `needs` and `steps` are guards, and so is `github.event.pull_request.merged == true` for a checkout of the merged commit.
+  not. `untrusted-checkout` knows the protection of `actions/checkout` against the code of fork pull requests (zizmor
+  [#2134](https://github.com/zizmorcore/zizmor/issues/2134), poutine#450): `allow-unsafe-pr-checkout: true` or an expression is a finding of
+  its own, and a checkout that a guarded version refuses is reported only with the option `pedantic`. Which versions are guarded is a
+  list of floors and the version comment of a commit, which is not verified (see the checks document). Conditions on `needs` and `steps` are guards, and so is `github.event.pull_request.merged == true` for a checkout of the merged commit.
 - `untrusted-artifact` links the use to the download by the `path` of the artifact, or its `name` (a file in the root of the workspace
   that has another name is not linked), and takes any `=~`, numeric test or checksum as validation.
 - `concurrency-cancels-release` knows a fixed list of publish and deploy actions and commands. A release done by a script of the

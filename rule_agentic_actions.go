@@ -45,6 +45,8 @@ type RuleAgenticActions struct {
 	// checkoutTrigger is the first event of the workflow that runs with a fork's pull request at hand.
 	checkoutTrigger string
 	anyTrigger      bool
+	// gates tells with the online checks whether the environment of a job holds it back, see environmentGates.
+	gates *environmentGates
 }
 
 // NewRuleAgenticActions creates a new RuleAgenticActions instance. With anyTrigger the unsafe settings of
@@ -122,12 +124,14 @@ func (rule *RuleAgenticActions) checkAgent(job *Job, prev []*Step, step *Step, a
 			}
 		}
 	}
-	if !agent.Gated && rule.trigger != "" && !rule.agentGuarded(job, prev, step) {
-		exposed = true
-		if !limited {
-			rule.ReportIDf("agentic-actions", a.Uses.Pos,
-				"%s does not check who started it, and this workflow runs on %q, which anyone can cause on a public repository. the text they write steers the agent, which has the secrets of the job%s. restrict the job with an if: on github.event.comment.author_association (OWNER, MEMBER or COLLABORATOR) or on a label that only maintainers add, run it in an environment with required reviewers, or limit the agent to the few tools it needs",
-				agent.Title, rule.trigger, token)
+	if !agent.Gated && rule.trigger != "" {
+		if guarded, gate := rule.agentGuarded(job, prev, step); !guarded {
+			exposed = true
+			if !limited {
+				rule.ReportIDf("agentic-actions", a.Uses.Pos,
+					"%s does not check who started it, and this workflow runs on %q, which anyone can cause on a public repository. the text they write steers the agent, which has the secrets of the job%s%s. restrict the job with an if: on github.event.comment.author_association (OWNER, MEMBER or COLLABORATOR) or on a label that only maintainers add, run it in an environment with required reviewers, or limit the agent to the few tools it needs",
+					agent.Title, rule.trigger, token, gate)
+			}
 		}
 	}
 
@@ -295,27 +299,43 @@ func checksOutPullRequest(s *Step) bool {
 // agent: a condition on the actor, the association with the repository or a label, an environment, or a
 // step that checks the permission of the actor. It is a heuristic: it cannot tell a condition that is
 // correct from one that merely mentions the actor.
-func (rule *RuleAgenticActions) agentGuarded(job *Job, prev []*Step, step *Step) bool {
-	if job.Environment != nil {
-		return true
+//
+// An environment counts as a guard because its reviewers decide, unless the online checks find that it has no required
+// reviewers (or does not exist). Then it guards nothing, and the second result says so for the message, as ". text"
+// (empty when an environment was not the reason).
+func (rule *RuleAgenticActions) agentGuarded(job *Job, prev []*Step, step *Step) (bool, string) {
+	// What needs no lookup comes first: a condition or a step that guards the job decides without asking GitHub
+	if guardInCond(job.If) || guardInCond(step.If) || stepsGuard(prev) {
+		return true, ""
 	}
-	if guardInCond(job.If) || guardInCond(step.If) {
-		return true
-	}
-	if stepsGuard(prev) {
-		return true
-	}
+	var needed []*Job
 	for _, id := range job.Needs {
 		if id == nil {
 			continue
 		}
 		if j := rule.wf.Jobs[strings.ToLower(id.Value)]; j != nil {
-			if j.Environment != nil || guardInCond(j.If) || stepsGuard(flattenSteps(j.Steps)) {
-				return true
+			if guardInCond(j.If) || stepsGuard(flattenSteps(j.Steps)) {
+				return true, ""
 			}
+			needed = append(needed, j)
 		}
 	}
-	return false
+	// The reviewers of an environment guard the job, unless the online checks find that it has none. The first
+	// environment which is no gate is told in the message.
+	gate := ""
+	for _, j := range append([]*Job{job}, needed...) {
+		if j.Environment == nil {
+			continue
+		}
+		note, noGate := rule.gates.noGate(j)
+		if !noGate {
+			return true, ""
+		}
+		if gate == "" {
+			gate = ". " + note
+		}
+	}
+	return false, gate
 }
 
 func guardInCond(c *String) bool {
@@ -435,6 +455,8 @@ func init() {
 		}
 		v, _ := env.config.RuleOption("agentic-actions", "any-trigger")
 		b, _ := v.(bool)
-		return []Rule{NewRuleAgenticActions(b)}
+		r := NewRuleAgenticActions(b)
+		r.gates = newEnvironmentGates(env, r.Debug)
+		return []Rule{r}
 	})
 }

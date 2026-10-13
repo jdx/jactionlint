@@ -1,0 +1,10 @@
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-slim
+    container: node:22
+    services:
+      redis:
+        image: redis
+    steps:
+      - uses: docker://alpine:3.22

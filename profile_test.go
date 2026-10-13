@@ -372,6 +372,15 @@ func TestUnlockedInstallNeedsALockFileInTheRepository(t *testing.T) {
 		{"pnpm not frozen", "pnpm install --no-frozen-lockfile", "", []string{"pnpm-lock.yaml"}, 1},
 		{"pnpm not frozen without a lock file", "pnpm install --no-frozen-lockfile", "", nil, 0},
 		{"pnpm install", "pnpm install", "", []string{"pnpm-lock.yaml"}, 0},
+		{"aube not frozen", "aube install --no-frozen-lockfile", "", []string{"aube-lock.yaml"}, 1},
+		{"aube not frozen with the lock file of pnpm", "aube install --no-frozen-lockfile", "", []string{"pnpm-lock.yaml"}, 1},
+		{"aube not frozen with a bun.lock", "aube i --prefer-frozen-lockfile", "", []string{"bun.lock"}, 1},
+		{"aube fixing the lock file", "aube install --fix-lockfile", "", []string{"aube-lock.yaml"}, 1},
+		{"aube not frozen without a lock file", "aube install --no-frozen-lockfile", "", nil, 0},
+		{"aube install is frozen by CI", "aube install", "", []string{"aube-lock.yaml"}, 0},
+		{"aube ci", "aube ci", "", []string{"aube-lock.yaml"}, 0},
+		{"aube frozen", "aube install --frozen-lockfile", "", []string{"aube-lock.yaml"}, 0},
+		{"aube working directory with the lock file", "aube install --no-frozen-lockfile", "        working-directory: web\n", []string{"web/aube-lock.yaml"}, 1},
 		{"working directory with the lock file", "npm install", "        working-directory: web\n", []string{"web/package-lock.json"}, 1},
 		{"working directory without it", "npm install", "        working-directory: web\n", []string{"other/package-lock.json"}, 0},
 		{"working directory outside the repository", "npm install", "        working-directory: ../web\n", []string{"package-lock.json"}, 1}, // the root one counts
@@ -392,8 +401,9 @@ func TestUnlockedInstallNeedsALockFileInTheRepository(t *testing.T) {
 	}
 
 	// The pedantic option reports them without a lock file too
-	for _, run := range []string{"npm install", "yarn install", "bun install", "pip install -r requirements.txt"} {
-		baselineProject(t, wf(run, ""), "profile: default\nrules:\n  unlocked-install:\n    pedantic: true\n")
+	for _, run := range []string{"npm install --ignore-scripts", "yarn install --ignore-scripts", "bun install --ignore-scripts", "pip install -r requirements.txt"} {
+		root := baselineProject(t, wf(run, "        env:\n          npm_config_min_release_age: 7\n          YARN_NPM_MINIMAL_AGE_GATE: 3d\n          PIP_UPLOADED_PRIOR_TO: P7D\n"), "profile: default\nrules:\n  unlocked-install:\n    pedantic: true\n")
+		writeTestFile(t, filepath.Join(root, "bunfig.toml"), "[install]\nminimumReleaseAge = 259200\n")
 		if _, ids, _ := profileCmd(t); countID(ids, "unlocked-install") != 1 {
 			t.Errorf("%s with pedantic: %v", run, ids)
 		}
