@@ -571,9 +571,16 @@ var (
 	reJSRequire   = regexp.MustCompile(`(?:(?:const|let|var)\s+(\{[^}]*\}|[A-Za-z_$][A-Za-z0-9_$]*)\s*=\s*(?:await\s+)?require\(\s*['"](?:node:)?child_process['"]\s*\)|import\s+(?:\*\s+as\s+([A-Za-z_$][A-Za-z0-9_$]*)|([A-Za-z_$][A-Za-z0-9_$]*)|(\{[^}]*\}))\s+from\s+['"](?:node:)?child_process['"])`)
 	reJSPromisfy  = regexp.MustCompile(`(?:const|let|var)\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*=\s*(?:util\.)?promisify\(\s*(?:[A-Za-z_$][A-Za-z0-9_$]*\.)?(exec|execFile)\s*\)`)
 	reJSShellOpt  = regexp.MustCompile(`\bshell\s*:\s*(?:true|['"` + "`" + `])`)
-	reJSShellArg  = regexp.MustCompile(`^['"](?:ba|z|da|k|a)?sh['"]$`)
-	reJSDashC     = regexp.MustCompile(`^['"]-[a-zA-Z]*c['"]$`)
+	// a shell as a string of any quote ("sh", '/bin/bash', `zsh`): the name or a path that ends with it
+	reJSShellArg = regexp.MustCompile(quotedJS(`(?:[^'"` + "`" + `\s]*/)?(?:ba|z|da|k|a)?sh`))
+	// the option of a shell that takes the script, in any quote: -c, -lc, -ec
+	reJSDashC = regexp.MustCompile(quotedJS(`-[a-zA-Z]*c`))
 )
+
+// quotedJS returns the expression for a string literal of any quote that holds exactly what the expression says.
+func quotedJS(inner string) string {
+	return "^(?:'" + inner + "'|\"" + inner + "\"|`" + inner + "`)$"
+}
 
 // cpImports returns what the script imported from child_process: the names of the namespace objects and the local
 // names of the functions.
