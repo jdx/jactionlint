@@ -316,7 +316,7 @@ func (rule *RuleInsufficientPermissions) checkScript(step *Step, run *ExecRun, t
 		start, end := commandRange(sc, origin, c)
 		if c.Tool == "gh" && gh {
 			if needs, ok := ghCommandNeeds(c); ok {
-				rule.emit(start, "gh "+strings.Join(commandWords(c, 2), " "), needs, end)
+				rule.emit(start, "gh "+strings.Join(positionalWords(c, 2), " "), needs, end)
 			}
 			continue
 		}
@@ -367,8 +367,8 @@ func ghCommandNeeds(c *runscript.Command) (permNeeds, bool) {
 	return n, ok
 }
 
-// commandWords returns the first n positional words of a command.
-func commandWords(c *runscript.Command, n int) []string {
+// positionalWords returns the first n positional words of a command.
+func positionalWords(c *runscript.Command, n int) []string {
 	var out []string
 	for i, w := range c.Positional {
 		if i >= n {
