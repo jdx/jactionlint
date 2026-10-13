@@ -3824,7 +3824,7 @@ a value that is an expression is not judged. The table lists only what the docum
 | `actions/labeler`, `marocchino/sticky-pull-request-comment` | `pull-requests: write` or `issues: write` |
 | `actions/dependency-review-action` | `pull-requests: write` with `comment-summary-in-pr: always` or `on-failure` |
 | `peter-evans/create-pull-request`, `googleapis/release-please-action` | `contents: write`, `pull-requests: write` |
-| `softprops/action-gh-release`, `ncipollo/release-action`, `JamesIves/github-pages-deploy-action`, `peaceiris/actions-gh-pages` (with `github_token`), `release-drafter/release-drafter` | `contents: write` (`softprops/action-gh-release` also `discussions: write` with `discussion_category_name`) |
+| `softprops/action-gh-release`, `ncipollo/release-action`, `JamesIves/github-pages-deploy-action`, `peaceiris/actions-gh-pages` (with `github_token`) | `contents: write` (`softprops/action-gh-release` also `discussions: write` with `discussion_category_name`) |
 | `release-drafter/release-drafter/autolabeler` | `pull-requests: write` |
 | `dorny/test-reporter`, `EnricoMi/publish-unit-test-result-action` | `checks: write` |
 | `aws-actions/configure-aws-credentials` with `role-to-assume` and no access key, `google-github-actions/auth` with `workload_identity_provider`, `azure/login` with a `client-id` and no `creds`, `pypa/gh-action-pypi-publish` without `password`, `rubygems/configure-rubygems-credentials` with `role-to-assume`, `NuGet/login` | `id-token: write` |

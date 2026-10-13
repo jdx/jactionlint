@@ -338,21 +338,10 @@ var actionPermissionTable = map[string]actionPermission{
 		},
 	},
 
-	// release-drafter/release-drafter: "permissions: contents: write # write permission is required to create a
-	// github release". With `disable-releaser` it only labels.
+	// release-drafter/release-drafter has no entry on purpose: the README asks for "contents: write # write permission is
+	// required to create a github release", but whether a run writes depends on its dry-run mode (an explicit `dry-run`,
+	// and a pull request merge ref which forces it), which the file does not settle. The table holds needs that are certain.
 	// https://github.com/release-drafter/release-drafter#usage
-	"release-drafter/release-drafter": {
-		Source: "https://github.com/release-drafter/release-drafter#usage",
-		Needs: func(s actionStep) permNeeds {
-			// "A pull request merge ref forces dry-run mode because its merge commit is temporary", and the default
-			// target is the ref of the workflow, so a run for a pull request writes nothing unless `commitish` says so
-			if !s.tokenIsGitHubToken("token") || s.anyFlagMayBeOn("disable-releaser", "dry-run") || s.set("commitish") ||
-				s.ctx.hasTrigger("pull_request", "pull_request_target") {
-				return permNeeds{}
-			}
-			return permNeeds{All: writes("contents")}
-		},
-	},
 
 	// release-drafter/release-drafter/autolabeler: "permissions: pull-requests: write".
 	// https://github.com/release-drafter/release-drafter#autolabeler
