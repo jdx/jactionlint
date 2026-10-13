@@ -57,7 +57,7 @@ How to read the table:
 | `unpinned-images` | `unpinned-images` | default | partial: no per-persona split (an image without a tag against a tag without a digest; the `require-digest` option switches between them), images in `docker://` are `unpinned-uses`. Beyond zizmor: the image of `docker run`/`create`/`pull` (and podman, nerdctl) in a script (zizmor#738 is open), and per-image `policies` (zizmor#737 is open); not compared with zizmor on a corpus. For `container: ${{ matrix.image }}` zizmor points at the container and jactionlint at the matrix value that is not pinned (all of the misses but two, which are in generated files, are that). An image that is written with an expression is judged as far as it can be known: a matrix object or text with matrix values is resolved, an image that ends in text after the expression is reported, and any other (`${{ vars.IMAGE }}`) only with the option `pedantic`, which zizmor reports as its low confidence finding. See [the check](checks.md#check-unpinned-images) |
 | `unpinned-tools` | `unpinned-tools` | default | full for the 4 actions zizmor knows. The option `pedantic` (on under the `pedantic` profile) adds `run:` installs without an exact version and three more actions. An input that is an expression is not reported, zizmor reports it with low confidence. See [the check](checks.md#check-unpinned-tools) |
 | `unpinned-uses` | `unpinned-uses` | default | partial: `hash-pin`, `ref-pin`, `any` policies with the patterns `*`, `owner/*`, `owner/repo` and `owner/repo/path`; other pattern forms are rejected when the configuration is read. Docker images follow the `*` pattern only. A generated file is not checked by default (755 of the 756 misses, see [where a rule differs on purpose](#where-a-rule-differs-on-purpose)) |
-| `unredacted-secrets` | `unredacted-secrets` | default | full on the synthetic cases (any `fromJSON(secrets.X)` is reported, also without a field access); no finding on the corpus |
+| `unredacted-secrets` | `unredacted-secrets` | default | full on the synthetic cases (any `fromJSON(secrets.X)` is reported, also without a field access); no finding on the corpus. With the option `pedantic`: a value cut from a secret in a script and printed or traced, not implemented in zizmor (the idea is sisakulint's `secret-in-log`) |
 | `unsound-condition` | `if-always-true` (existing) | correctness | full for workflows: `if-always-true` reports every `if:` with characters around `${{ }}`, a block scalar's trailing newline included. No new rule. Composite action steps are checked too (not measured) |
 | `unsound-contains` | `unsound-contains` | default | full on the synthetic cases; no finding on the corpus |
 | `unsound-ternary` | `unsound-ternary` | correctness | not measured: no corpus run against zizmor, covered by fixtures only |
@@ -368,8 +368,7 @@ without buildx is the one case that this does not cover.
 
 ## What is not done
 
-These ideas from the zizmor tracker are **not built**: TOCTOU refs
-([#935](https://github.com/zizmorcore/zizmor/issues/935)), shell syntax errors without shellcheck
+These ideas from the zizmor tracker are **not built**: shell syntax errors without shellcheck
 ([#2322](https://github.com/zizmorcore/zizmor/issues/2322)), a rule for a SHA without a version comment
 ([#2316](https://github.com/zizmorcore/zizmor/issues/2316)), credentials in the `registries` of `dependabot.yml`
 ([#1222](https://github.com/zizmorcore/zizmor/issues/1222)), and zizmor's precomputed snapshot of tags and advisories, which would cut the
@@ -496,10 +495,12 @@ Not reported: archives that are downloaded, extracted and run, `go install` or `
   an output of an earlier step is not followed (except the outputs of the actions that look up the pull request of a comment), and the head
   that a workflow passes to a local reusable workflow or composite action is followed one call at a time, not through a composite action
   that calls another one. "Runs it" is a list of commands: an unusual build tool that is not in the list of
-  commands that only read files counts as running code, while an action that builds the workspace and is not in the short list does
-  not. `untrusted-checkout` knows the protection of `actions/checkout` against the code of fork pull requests (zizmor
+  commands that only read files counts as running code, while an action that runs the workspace and is not in the list (a few dozen actions of poutine and CodeQL, some with an input
+  that must be set) does not. `untrusted-checkout` knows the protection of `actions/checkout` against the code of fork pull requests (zizmor
   [#2134](https://github.com/zizmorcore/zizmor/issues/2134), poutine#450): `allow-unsafe-pr-checkout: true` or an expression is a finding of
-  its own, and a checkout that a guarded version refuses is reported only with the option `pedantic`. Which versions are guarded is a
+  its own, and a checkout that a guarded version refuses is reported only with the option `pedantic`. TOCTOU refs (zizmor
+  [#935](https://github.com/zizmorcore/zizmor/issues/935)) are a message of the same rule: a gate that holds at one moment (an environment, a
+  label, the comment of a maintainer) and a branch as the ref, or a label that survives a push. Which versions are guarded is a
   list of floors and the version comment of a commit, which is not verified (see the checks document). Conditions on `needs` and `steps` are guards, and so is `github.event.pull_request.merged == true` for a checkout of the merged commit.
 - `untrusted-artifact` links the use to the download by the `path` of the artifact, or its `name` (a file in the root of the workspace
   that has another name is not linked), and takes any `=~`, numeric test or checksum as validation.

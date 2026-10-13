@@ -132,6 +132,7 @@
               "dependabot-syntax",
               "deprecated-action-input",
               "deprecated-commands",
+              "deprecated-node-runtime",
               "deprecated-runner-label",
               "duplicate-job-id",
               "duplicate-job-needs",
@@ -356,6 +357,7 @@
                   "dependabot-syntax",
                   "deprecated-action-input",
                   "deprecated-commands",
+                  "deprecated-node-runtime",
                   "deprecated-runner-label",
                   "duplicate-job-id",
                   "duplicate-job-needs",
@@ -511,6 +513,7 @@
                     "dependabot-syntax",
                     "deprecated-action-input",
                     "deprecated-commands",
+                    "deprecated-node-runtime",
                     "deprecated-runner-label",
                     "duplicate-job-id",
                     "duplicate-job-needs",
@@ -1541,6 +1544,28 @@
         },
         "deprecated-commands": {
           "description": "A deprecated workflow command such as ::set-output is used. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#deprecated-commands",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "deprecated-node-runtime": {
+          "description": "A Node.js runtime that GitHub Actions removed is declared by an action or by an action that is used. Group: policy. Profile: pedantic. Default level: warn. https://jactionlint.jdx.dev/rules#deprecated-node-runtime",
           "oneOf": [
             {
               "$ref": "#/definitions/level"
@@ -2865,6 +2890,11 @@
             {
               "additionalProperties": false,
               "properties": {
+                "accept-step-timeouts": {
+                  "default": false,
+                  "description": "Do not report a job without timeout-minutes when every one of its steps sets timeout-minutes (ghalint's exception). Off by default: the timeout of a step does not cover setting up the job, the post steps of actions or completing the job.",
+                  "type": "boolean"
+                },
                 "default-minutes": {
                   "description": "The timeout-minutes which --fix adds to a job. There is no default: the rule has no fix unless this is set. It is lowered to the max of timeout-too-long when that is smaller, and to 15 on a job that runs only on ubuntu-slim.",
                   "minimum": 0,
@@ -3609,6 +3639,10 @@
                     }
                   ],
                   "description": "The level of the rule: error, warn, info or off."
+                },
+                "strict-event-payloads": {
+                  "description": "Report a property of github.event which the events of the workflow do not have, also when another event has it. Unset, a property is reported only when no webhook event has it, and the pedantic profile turns the option on.",
+                  "type": "boolean"
                 }
               },
               "type": "object"
@@ -3866,6 +3900,11 @@
                   "default": {},
                   "description": "How strongly to pin the actions matching a pattern: hash-pin (full commit SHA, the default for everything), ref-pin (any tag, branch or SHA), immutable-release (a full commit SHA, or with --online the tag of an immutable GitHub release) or any. The most specific pattern wins. Patterns are \"*\", \"owner/*\", \"owner/repo\" and \"owner/repo/path\". Docker images follow the \"*\" policy.",
                   "type": "object"
+                },
+                "short-pin-comment": {
+                  "default": false,
+                  "description": "Make `--online --fix` name the tag as written in the comment of a pin (`# v4`), not the most specific version tag of the commit (`# v4.2.4`).",
+                  "type": "boolean"
                 }
               },
               "type": "object"
@@ -3873,7 +3912,7 @@
           ]
         },
         "unredacted-secrets": {
-          "description": "A secret is parsed with fromJSON(), so the fields of it are not redacted in logs. Group: security. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#unredacted-secrets",
+          "description": "A secret is parsed with fromJSON(), so the fields of it are not redacted in logs. With the option pedantic, also a value that a script cuts from a secret and prints without masking it. Group: security. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#unredacted-secrets",
           "oneOf": [
             {
               "$ref": "#/definitions/level"
@@ -3888,6 +3927,10 @@
                     }
                   ],
                   "description": "The level of the rule: error, warn, info or off."
+                },
+                "pedantic": {
+                  "description": "Also report the pedantic checks, which are noisier. Unset, they run under the pedantic profile.",
+                  "type": "boolean"
                 }
               },
               "type": "object"
@@ -3992,7 +4035,7 @@
           ]
         },
         "untrusted-checkout": {
-          "description": "A pull_request_target, workflow_run or issue_comment workflow checks out the code of a pull request and runs it, or turns off the protection of actions/checkout against the code of fork pull requests. With the option pedantic, a checkout that actions/checkout refuses for a fork is reported too. Group: security. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#untrusted-checkout",
+          "description": "A pull_request_target, workflow_run or issue_comment workflow checks out the code of a pull request and runs it, or turns off the protection of actions/checkout against the code of fork pull requests. It also reports a gate that holds at one moment (an environment, a label, the comment of a maintainer) in front of a branch that the author can still push to, and a label that survives a push. With the option pedantic, a checkout that actions/checkout refuses for a fork and a dispatch with the number of a pull request and no commit are reported too, and with the option any-checkout a checkout that nothing visibly runs. Group: security. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#untrusted-checkout",
           "oneOf": [
             {
               "$ref": "#/definitions/level"
@@ -4000,6 +4043,10 @@
             {
               "additionalProperties": false,
               "properties": {
+                "any-checkout": {
+                  "description": "Also report a checkout of the code of a pull request in a privileged workflow when no later step visibly runs it, like Scorecard and Semgrep do. Unset, it is true under the pedantic profile.",
+                  "type": "boolean"
+                },
                 "level": {
                   "allOf": [
                     {

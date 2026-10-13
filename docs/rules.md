@@ -63,6 +63,7 @@ rules:
 | [dependabot-syntax](#dependabot-syntax) | correctness | error | correctness |
 | [deprecated-action-input](#deprecated-action-input) | correctness | error | correctness |
 | [deprecated-commands](#deprecated-commands) | correctness | error | correctness |
+| [deprecated-node-runtime](#deprecated-node-runtime) | policy | warn | pedantic |
 | [deprecated-runner-label](#deprecated-runner-label) | policy | warn | pedantic |
 | [duplicate-job-id](#duplicate-job-id) | correctness | error | correctness |
 | [duplicate-job-needs](#duplicate-job-needs) | correctness | error | correctness |
@@ -468,6 +469,15 @@ A deprecated workflow command such as ::set-output is used.
 - Default level: error
 - Profile: correctness
 - Details and examples: [checks](./checks.md#check-deprecated-workflow-commands)
+
+## deprecated-node-runtime
+
+A Node.js runtime that GitHub Actions removed is declared by an action or by an action that is used.
+
+- Group: policy
+- Default level: warn
+- Profile: pedantic
+- Details and examples: [checks](./checks.md#check-deprecated-node-runtime)
 
 ## deprecated-runner-label
 
@@ -1001,6 +1011,7 @@ A job does not set timeout-minutes.
 - Profile: default
 - Fixable: yes
 - Option `default-minutes` (int, no default): The timeout-minutes which --fix adds to a job. There is no default: the rule has no fix unless this is set. It is lowered to the max of timeout-too-long when that is smaller, and to 15 on a job that runs only on ubuntu-slim.
+- Option `accept-step-timeouts` (bool, default false): Do not report a job without timeout-minutes when every one of its steps sets timeout-minutes (ghalint's exception). Off by default: the timeout of a step does not cover setting up the job, the post steps of actions or completing the job.
 - Details and examples: [checks](./checks.md#check-timeout-minutes)
 
 ## missing-workflow-input
@@ -1298,6 +1309,7 @@ An undefined variable or property is accessed in an expression.
 - Group: correctness
 - Default level: error
 - Profile: correctness
+- Option `strict-event-payloads` (bool, no default): Report a property of github.event which the events of the workflow do not have, also when another event has it. Unset, a property is reported only when no webhook event has it, and the pedantic profile turns the option on.
 - Details and examples: [checks](./checks.md#check-contexts-and-builtin-func)
 
 ## undocumented-permissions
@@ -1397,15 +1409,17 @@ An action, reusable workflow or Docker image is not pinned to a commit SHA or di
 - Profile: default
 - Fixable: yes
 - Option `policies` (string-map, default empty): How strongly to pin the actions matching a pattern: hash-pin (full commit SHA, the default for everything), ref-pin (any tag, branch or SHA), immutable-release (a full commit SHA, or with --online the tag of an immutable GitHub release) or any. The most specific pattern wins. Patterns are "*", "owner/*", "owner/repo" and "owner/repo/path". Docker images follow the "*" policy.
+- Option `short-pin-comment` (bool, default false): Make `--online --fix` name the tag as written in the comment of a pin (`# v4`), not the most specific version tag of the commit (`# v4.2.4`).
 - Details and examples: [checks](./checks.md#check-action-format)
 
 ## unredacted-secrets
 
-A secret is parsed with fromJSON(), so the fields of it are not redacted in logs.
+A secret is parsed with fromJSON(), so the fields of it are not redacted in logs. With the option pedantic, also a value that a script cuts from a secret and prints without masking it.
 
 - Group: security
 - Default level: error
 - Profile: default
+- Option `pedantic` (bool, no default): Also report the pedantic checks, which are noisier. Unset, they run under the pedantic profile.
 - Details and examples: [checks](./checks.md#check-unredacted-secrets)
 
 ## unsound-contains
@@ -1448,12 +1462,13 @@ A workflow_run workflow uses an artifact of the triggering run without validatin
 
 ## untrusted-checkout
 
-A pull_request_target, workflow_run or issue_comment workflow checks out the code of a pull request and runs it, or turns off the protection of actions/checkout against the code of fork pull requests. With the option pedantic, a checkout that actions/checkout refuses for a fork is reported too.
+A pull_request_target, workflow_run or issue_comment workflow checks out the code of a pull request and runs it, or turns off the protection of actions/checkout against the code of fork pull requests. It also reports a gate that holds at one moment (an environment, a label, the comment of a maintainer) in front of a branch that the author can still push to, and a label that survives a push. With the option pedantic, a checkout that actions/checkout refuses for a fork and a dispatch with the number of a pull request and no commit are reported too, and with the option any-checkout a checkout that nothing visibly runs.
 
 - Group: security
 - Default level: error
 - Profile: default
 - Option `pedantic` (bool, no default): Also report the pedantic checks, which are noisier. Unset, they run under the pedantic profile.
+- Option `any-checkout` (bool, no default): Also report a checkout of the code of a pull request in a privileged workflow when no later step visibly runs it, like Scorecard and Semgrep do. Unset, it is true under the pedantic profile.
 - Details and examples: [checks](./checks.md#check-untrusted-checkout)
 
 ## unused-anchor
