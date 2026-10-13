@@ -458,14 +458,6 @@ func isWorkspaceFile(w *runscript.Word) bool {
 	return true
 }
 
-// buildActions are actions that run what is in the workspace.
-var buildActions = map[string]bool{
-	"github/codeql-action/autobuild": true,
-	"github/codeql-action/analyze":   true,
-	"pre-commit/action":              true,
-	"golangci/golangci-lint-action":  true,
-}
-
 // normalizeDir turns the path of a checkout or a download into a relative directory, "" for the
 // workspace root.
 func normalizeDir(p string) string {
@@ -527,7 +519,7 @@ func stepRunsCode(s *Step, dir string, after int) (string, bool) {
 				return "", false
 			}
 			return "the local action " + e.Uses.Value, true
-		case u.Kind == UsesAction && buildActions[strings.ToLower(u.CanonicalName())]:
+		case u.Kind == UsesAction && workspaceActionRuns(e, u):
 			if dir != "" {
 				return "", false
 			}

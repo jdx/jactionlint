@@ -48,6 +48,7 @@ gate-job-skipped-on-failure default correctness error
 gh-without-token correctness correctness error
 github-app default security error
 github-env default security error
+github-script-syntax correctness correctness error
 hardcoded-container-credentials correctness security error
 if-always-true correctness correctness error
 impostor-commit online security error
@@ -141,6 +142,7 @@ unused-ignore pedantic policy error
 unused-job-output default policy error
 unused-needs pedantic style info
 unused-workflow-input pedantic policy warn
+unused-workflow-secret pedantic policy warn
 unverified-download default security error
 use-trusted-publishing default security error
 workflow-call-permissions correctness correctness error

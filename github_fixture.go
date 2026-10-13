@@ -21,6 +21,9 @@ import (
 type gitHubFixtures struct {
 	// Repos maps "owner/repo" in lower case to the recorded data.
 	Repos map[string]*fixtureRepo `json:"repos"`
+	// Images maps "registry/repository:tag" ("docker.io/library/ubuntu:22.04") to the digest of the image, or to
+	// "not-found" for an image which the registry does not have.
+	Images map[string]string `json:"images,omitempty"`
 	// Owners maps the login of a user or organization in lower case to whether it exists, see GitHubOwnerClient.
 	Owners map[string]bool `json:"owners,omitempty"`
 }

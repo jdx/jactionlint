@@ -57,12 +57,14 @@ var actionRuleScope = map[string]struct {
 	"ubuntu-slim-limits":              {scope: actionNotApplicable},   // runs-on: belongs to the calling job
 	"unlocked-install":                {scope: actionApplies},         // the scripts of the steps
 	"unpinned-tools":                  {scope: actionApplies},         // the inputs of the actions the steps use
+	"github-script-syntax":            {scope: actionApplies},         // the script input of the github-script steps
 	"unsound-prefix-match":            {scope: actionApplies},         // the if: conditions and expressions of the steps
 	"untrusted-artifact":              {scope: actionCallerDependent}, // privileged only when a caller runs on workflow_run
 	"untrusted-checkout":              {scope: actionCallerDependent}, // privileged only when a caller runs on pull_request_target or workflow_run
 	"unused-job-output":               {scope: actionNotApplicable},   // outputs between the jobs of a workflow
 	"unused-needs":                    {scope: actionNotApplicable},   // needs: between the jobs of a workflow
 	"unused-workflow-input":           {scope: actionNotApplicable},   // inputs of workflow_dispatch and workflow_call
+	"unused-workflow-secret":          {scope: actionNotApplicable},   // secrets of workflow_call
 	"unverified-download":             {scope: actionApplies},         // the scripts of the steps
 	"use-trusted-publishing":          {scope: actionApplies},         // the publishing steps; the id-token permission is the caller's
 	"anonymous-definition":            {scope: actionNotApplicable},

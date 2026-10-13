@@ -8,9 +8,12 @@ jobs:
     if: contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association) && startsWith(github.event.comment.body, '/test')
     runs-on: ubuntu-latest
     steps:
+      # the commit that was commented on, not the branch of the pull request, which its author can still push to
+      - id: pr
+        uses: xt0rted/pull-request-comment-branch@v3
       - uses: actions/checkout@v4
         with:
-          ref: refs/pull/${{ github.event.issue.number }}/head
+          ref: ${{ steps.pr.outputs.head_sha }}
       - run: make test
   permission-check:
     runs-on: ubuntu-latest
@@ -18,9 +21,11 @@ jobs:
       - uses: sushichop/action-repository-permission@v3
         with:
           required-permission: write
-      - run: gh pr checkout ${{ github.event.issue.number }}
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - id: pr
+        uses: xt0rted/pull-request-comment-branch@v3
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.pr.outputs.head_sha }}
       - run: make test
   branch-for-the-fix:
     runs-on: ubuntu-latest

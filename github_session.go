@@ -145,18 +145,25 @@ type onlineSession struct {
 	fileFailures map[repoKey]error
 	fileLocks    map[repoKey]*sync.Mutex
 
-	repos        memo[repoKey, *GitHubRepo]
-	tags         memo[repoKey, *tagIndex]
-	refs         memo[refKey, refResult]
-	branches     memo[repoKey, *GitHubBranchList]
-	compares     memo[compareKey, GitHubCompareStatus]
-	advisories   memo[string, []GitHubAdvisory]
-	origins      memo[originKey, originResult]
-	files        memo[fileKey, remoteFile]
-	actions      memo[remoteActionKey, *ActionMetadata]
-	owners       memo[string, *GitHubOwner]
-	releases     memo[releaseKey, *GitHubRelease]
-	releaseDates memo[releaseDateKey, *GitHubReleaseDate]
+	repos      memo[repoKey, *GitHubRepo]
+	tags       memo[repoKey, *tagIndex]
+	refs       memo[refKey, refResult]
+	branches   memo[repoKey, *GitHubBranchList]
+	compares   memo[compareKey, GitHubCompareStatus]
+	advisories memo[string, []GitHubAdvisory]
+	origins    memo[originKey, originResult]
+
+	// images answers the digest of container images. It is nil when the client itself can (ImageDigestClient).
+	images           ImageDigestClient
+	offline          bool // the cache mode: the registries are not asked
+	imageDigests     memo[imageKey, string]
+	registryDown     map[string]error // registries which are not asked again in this run
+	registryFailures map[string]int   // failures in a row, by registry
+	files            memo[fileKey, remoteFile]
+	actions          memo[remoteActionKey, *ActionMetadata]
+	owners           memo[string, *GitHubOwner]
+	releases         memo[releaseKey, *GitHubRelease]
+	releaseDates     memo[releaseDateKey, *GitHubReleaseDate]
 
 	environments memo[environmentKey, environmentResult]
 }

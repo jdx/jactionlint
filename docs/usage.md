@@ -402,6 +402,7 @@ note: shellcheck was not found, so it did not check 12 shell scripts. install it
   number of scripts the tool checked and `skippedScripts` the number that it would have checked. A tool which no script needed (pyflakes in a
   repository without `shell: python`) and a tool turned off with an empty command are not listed, so a `ran` has `scripts` of at least 1 and a
   `not found` has `skippedScripts` of at least 1, and the log says the same as the note.
+  `node` is a third tool, for the rule `github-script-syntax`; it has no option, so the note says to turn the rule off.
 
   ```json
   "properties": {
@@ -1030,6 +1031,26 @@ It is unsafe because a mismatch can also mean that the SHA is the wrong part, se
 
 ```sh
 jactionlint --online --fix
+```
+
+#### Pin container images to digests with `--online --fix=unsafe`
+
+The images of `container:`, `services:`, `uses: docker://` and `runs.image: docker://` (the findings of `unpinned-images` and of `unpinned-uses`) get the
+digest which their tag has in the registry, in the format of Renovate:
+
+```yaml
+container: postgres:16
+# becomes
+container: postgres:16@sha256:ca0bd484cb98bf4b24eb1010e73fb3fcbd6714d240fbc1a10eea5b7dbecb641d
+```
+
+The fix is unsafe, so it needs `--fix=unsafe`: a tag moves, and the digest pins the image of today. Docker Hub and ghcr.io are asked
+(anonymously, and with the GitHub token for a private image of ghcr.io); another registry is not, and the finding says so. The registries
+are asked once for each image and tag, with a timeout, and `--online-allow` and `--online-deny` apply (an image is matched as `owner/image`). See
+[the check](checks.md#check-unpinned-images).
+
+```sh
+jactionlint --online --fix=unsafe
 ```
 
 <a id="hk"></a>
