@@ -428,11 +428,17 @@ func (rule *RuleUntrustedCheckout) inputForksPR(name, value string) bool {
 	return found
 }
 
+// descAlternative joins the descriptions of the values that several callers pass for an input.
+const descAlternative = ", or "
+
 // mergeInputs adds the untrusted inputs of a call to the ones of the file.
 func mergeInputs(into map[string]callInput, from map[string]callInput) {
 	for n, in := range from {
 		if cur, ok := into[n]; ok {
 			cur.sources = append(cur.sources, in.sources...)
+			if !refIsMutable(cur.desc) && refIsMutable(in.desc) {
+				cur.desc += descAlternative + in.desc // a branch from one caller is judged as a branch, whatever the others pass
+			}
 			into[n] = cur
 			continue
 		}

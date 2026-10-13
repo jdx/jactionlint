@@ -85,6 +85,8 @@ func NewRuleUntrustedCheckout(project *Project) *RuleUntrustedCheckout {
 // untrustedCheckout is a step that puts code which someone else controls in the workspace.
 type untrustedCheckout struct {
 	pos *Pos
+	// events are the privileged events that the step of the checkout runs for.
+	events []string
 	// what is the reference that makes the code untrusted.
 	what string
 	// dir is where the code is, "" for the root of the workspace.
@@ -234,12 +236,15 @@ func (rule *RuleUntrustedCheckout) VisitJobPre(n *Job) error {
 	}
 	// A gate that holds after the code changes stops the job. One that holds at one moment (an environment, a label, a
 	// comment of a maintainer) leaves the job to the check for a ref that can change.
-	commentOnly := rule.commentOnly()
+	// The gates are judged for the events of the step (see below): a comment is judged differently from a pull request
+	runningFor := func(comment bool) gateInfo {
+		return rule.ownGates(n, comment, false).merge(rule.neededGates(rule.wf, n, rule.privileged, comment, map[*Job]bool{})).merge(rule.calleeGates)
+	}
 	// The reviewers of an environment decide, unless the online checks find that there are none (environmentGate)
 	rule.envJob = n.Environment != nil && n.Environment.Name != nil
 	// the steps of the job itself are counted as the loop reaches them
-	running := rule.ownGates(n, commentOnly, false).merge(rule.neededGates(rule.wf, n, rule.privileged, commentOnly, map[*Job]bool{})).merge(rule.calleeGates)
-	if running.safe {
+	jobRunning := map[bool]gateInfo{rule.commentOnly(): runningFor(rule.commentOnly())}
+	if running := jobRunning[rule.commentOnly()]; running.safe && (rule.commentOnly() || !slices.Contains(rule.privileged, "issue_comment") || runningFor(true).safe) {
 		return nil
 	}
 	// The checkouts which no step has run the code of yet, by the directory they put it in. Whether a
@@ -254,8 +259,7 @@ func (rule *RuleUntrustedCheckout) VisitJobPre(n *Job) error {
 		}
 	}
 	removesLabel := jobRemovesLabel(n)
-	var gate, staleGate permissionGateState // the permission checks that hold, and the ones that hold at one moment
-	var stale gateInfo
+	var gate permissionGateState // the permission checks
 	jobEvents := rule.privileged
 	defer rule.setEvents(jobEvents)
 	pending := map[string][]*untrustedCheckout{}
@@ -264,22 +268,35 @@ func (rule *RuleUntrustedCheckout) VisitJobPre(n *Job) error {
 	steps, groups := flattenStepsGroup(n.Steps)
 	for i, s := range steps {
 		if isPermissionGate(s) {
-			if g := permissionGate(commentOnly); g.safe {
-				gate.see(groups[i])
-			} else {
-				staleGate.see(groups[i]) // the steps of a parallel group beside the check are not behind it
-				stale = stale.merge(g)
-			}
+			gate.see(groups[i]) // the steps of a parallel group beside the check are not behind it
 			continue
-		}
-		if gate.holds(groups[i]) && !stepRunsAfterFailure(s) {
-			continue // the steps after a permission check only run for a user who may write
 		}
 		stepEvents := eventsAfterCondition(jobEvents, s.If)
 		if len(stepEvents) == 0 {
 			continue // the step does not run for the events that this rule judges
 		}
 		rule.setEvents(stepEvents) // what ghAny, comment and the event of the message say is about this step
+		commentOnly := rule.commentOnly()
+		running, ok := jobRunning[commentOnly]
+		if !ok {
+			running = runningFor(commentOnly)
+			jobRunning[commentOnly] = running
+		}
+		if running.safe {
+			continue
+		}
+		here := running
+		if gate.holds(groups[i]) {
+			// the steps after a permission check only run for a user who may write. For a comment, the check is about the one
+			// who commented, who is not the author of the code.
+			if g := permissionGate(commentOnly); g.safe {
+				if !stepRunsAfterFailure(s) {
+					continue
+				}
+			} else {
+				here = here.merge(g)
+			}
+		}
 		var stepGate gateInfo
 		if conditionIsGuard(s.If) {
 			stepGate = classifyCondition(s.If, commentOnly)
@@ -287,10 +304,7 @@ func (rule *RuleUntrustedCheckout) VisitJobPre(n *Job) error {
 				continue // a step a maintainer has to allow neither runs the code nor fetches it
 			}
 		}
-		here := running.merge(stepGate)
-		if staleGate.holds(groups[i]) {
-			here = here.merge(stale)
-		}
+		here = here.merge(stepGate)
 		if removesLabel {
 			here.label = false
 		}
@@ -338,6 +352,7 @@ func (rule *RuleUntrustedCheckout) VisitJobPre(n *Job) error {
 				continue // actions/checkout refuses it for a fork
 			}
 			c.gates = here
+			c.events = stepEvents
 			if c.how != "" {
 				rule.report(c, c.how, gateInfo{})
 				continue
@@ -355,10 +370,14 @@ func (rule *RuleUntrustedCheckout) VisitJobPre(n *Job) error {
 			pending[c.dir] = append(pending[c.dir], c)
 		}
 	}
-	if rule.anyCheckout && rule.ghAny {
+	if rule.anyCheckout {
 		// the checkout that nothing visibly runs (Scorecard and Semgrep report it, and it catches what the heuristics miss)
 		for _, dir := range dirs {
 			for _, c := range pending[dir] {
+				rule.setEvents(c.events) // the events of the step of the checkout, not of the last step of the job
+				if !rule.ghAny {
+					continue
+				}
 				if holds, _ := rule.environmentGate(); !c.gates.gated() && !holds && !c.ran && !(jobMerged && c.immutable()) {
 					rule.reportUnused(c)
 				}

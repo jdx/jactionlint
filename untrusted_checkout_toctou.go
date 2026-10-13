@@ -162,8 +162,12 @@ func permissionGate(commentOnly bool) gateInfo {
 
 // refIsMutable reports whether the ref that a checkout names can change after the gate: a branch (`head.ref`,
 // `github.head_ref`, `workflow_run.head_branch`, `head_ref` of the actions that look it up), `refs/pull/N/head` and
-// `gh pr checkout`. A commit, and what cannot be told, is not.
+// `gh pr checkout`. A commit, and what cannot be told, is not. An input that several callers fill is described by all of them
+// (mergeInputs, joined by ", or "): it is mutable when any of them is.
 func refIsMutable(what string) bool {
+	if parts := strings.Split(what, descAlternative); len(parts) > 1 {
+		return slices.ContainsFunc(parts, refIsMutable)
+	}
 	l := strings.ToLower(what)
 	switch {
 	case strings.Contains(l, ".sha") || strings.Contains(l, "_sha") || strings.Contains(l, "head_commit.id"):

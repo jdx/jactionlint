@@ -329,6 +329,18 @@ func TestUntrustedCheckoutCallersToctou(t *testing.T) {
 			"a.yml": ucActionCaller("pull_request_target", "    environment: ci\n", head),
 			"b.yml": ucActionCaller("pull_request_target", "", headSHA),
 		}, 1, ".github/workflows/b.yml"},
+		{"two gated calls, one with a commit and one with a branch", map[string]string{
+			"a.yml": ucActionCaller("pull_request_target", "    environment: ci\n", headSHA),
+			"b.yml": ucActionCaller("pull_request_target", "    environment: ci\n", head),
+		}, 1, "an environment lets the job start"},
+		{"two gated calls, one with a branch and one with a commit", map[string]string{
+			"a.yml": ucActionCaller("pull_request_target", "    environment: ci\n", head),
+			"b.yml": ucActionCaller("pull_request_target", "    environment: ci\n", headSHA),
+		}, 1, "an environment lets the job start"},
+		{"two gated calls with a commit each", map[string]string{
+			"a.yml": ucActionCaller("pull_request_target", "    environment: ci\n", headSHA),
+			"b.yml": ucActionCaller("pull_request_target", "    environment: ci\n", "${{ github.event.pull_request.merge_commit_sha }}"),
+		}, 0, ""},
 		{"a gated call and a call with a branch that nothing holds back", map[string]string{
 			"a.yml": ucActionCaller("pull_request_target", "    environment: ci\n", headSHA),
 			"b.yml": ucActionCaller("pull_request_target", "", head),
