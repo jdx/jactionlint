@@ -7605,9 +7605,15 @@ for the words of a command, the value of an assignment (`A=`, `A+=`, `export A=`
 `${{ secrets.X }}` in it). A command substitution holds what its last command prints, followed back along its pipe through `echo`,
 `printf`, `cat` and the tools above, also when substitutions are nested. A print is `echo`, `printf` or `cat` whose stdout is not
 redirected and not piped on (`echo "$KEY" | cat` prints, `echo "$KEY" | wc -c` does not); the input of `cat` is its here-string, its heredoc or
-the pipe. A `::add-mask::` masks only when it is printed that way. `printf -v NAME ...` assigns and prints nothing. Assignments
+the pipe. An expansion in a heredoc is valued as the same word on a command line (`${KEY:0:8}` is a cut, a masked variable is exact).
+A `::add-mask::` masks only when it is the whole line and printed that way: `echo "::add-mask::$KEY"` with that one argument, or
+`printf '::add-mask::%s\n' "$KEY"`, of exactly one variable or one `$(...)`. A mask of a cut (`${KEY:0:4}`), with more text or
+more arguments masks another string, and is an ordinary print. `printf -v NAME ...` (with `-v` as the first argument) assigns and
+prints nothing; `-v` after the format is data. Assignments
 inside a substitution stay in its subshell. Under `set -x` every command that expands a cut value is reported, an assignment included.
 Only `bash` and `sh` scripts are read, in the order of the source.
+The supported subset is pinned by a table of snippets, each reported or not (`TestUnredactedSecretsShellTable`), next to the golden
+`testdata/err/unredacted_secrets_shell.yaml`.
 
 **What is not understood, and so reported as nothing:** functions, loops and branches (the order of the source decides, so a mask in
 one `if` branch counts for the next), `eval`, `source`, `read`, `mapfile`, arrays, indirect expansion, a process substitution (`<(cmd)`

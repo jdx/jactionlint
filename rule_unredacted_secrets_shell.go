@@ -276,24 +276,34 @@ func (f *shellSecretFlow) commandInput(c *runscript.Command, args bool) wval {
 			v = better(v, f.wordValue(r.Target))
 		}
 		if r.Heredoc != nil && !r.Heredoc.Quoted {
-			for _, name := range varsIn(r.Heredoc.Body) {
-				if s, ok := f.secrets[name]; ok {
-					v = better(v, wval{true, s, "", name})
-				}
-				if d, ok := f.derived[name]; ok && !d.masked {
-					v = better(v, wval{true, d.secret, d.how, name})
-				}
-			}
-			for _, e := range r.Heredoc.Exprs {
-				if m := secretExprRe.FindStringSubmatch(e); m != nil {
-					v = better(v, wval{true, strings.ToUpper(m[1] + m[2]), "", ""})
-				}
-			}
+			v = better(v, f.heredocValue(r.Heredoc))
 		}
 	}
 	if args {
 		for _, w := range c.Words {
 			v = better(v, f.wordValue(w))
+		}
+	}
+	return v
+}
+
+// heredocTokenRe is a parameter expansion in the body of a heredoc: `$NAME` or `${NAME...}`.
+var heredocTokenRe = regexp.MustCompile(`\$\{[A-Za-z_][A-Za-z0-9_]*[^}]*\}|\$[A-Za-z_][A-Za-z0-9_]*`)
+
+// heredocValue is the best value that the body of a heredoc that expands holds. Each expansion in it is valued as the word
+// it would be on a command line: a masked variable is exact, and `${KEY:0:8}` is a cut.
+func (f *shellSecretFlow) heredocValue(h *runscript.Heredoc) wval {
+	var v wval
+	for _, tok := range heredocTokenRe.FindAllString(h.Body, -1) {
+		names := varsIn(tok)
+		if len(names) == 0 {
+			continue
+		}
+		v = better(v, f.wordValue(&runscript.Word{Raw: tok, Value: tok, Vars: names[:1]}))
+	}
+	for _, e := range h.Exprs {
+		if m := secretExprRe.FindStringSubmatch(e); m != nil {
+			v = better(v, wval{true, strings.ToUpper(m[1] + m[2]), "", ""})
 		}
 	}
 	return v
@@ -478,24 +488,16 @@ func (f *shellSecretFlow) command(c *runscript.Command) {
 		return
 	}
 	// `printf -v NAME FORMAT ARGS` assigns the text to NAME and prints nothing
-	if c.Name == "printf" {
-		for i, a := range c.Args {
-			if a.Value == "-v" && i+2 <= len(c.Args)-1 && !c.Args[i+1].Dynamic() {
-				var v wval
-				for _, w := range c.Args[i+2:] {
-					v = better(v, f.wordValue(w))
-				}
-				f.set(c.Loc, c.Args[i+1].Value, v, false)
-				return
-			}
+	// (only as the first argument: after the format, `-v` is data)
+	if c.Name == "printf" && len(c.Args) >= 3 && c.Args[0].Value == "-v" && !c.Args[1].Dynamic() {
+		var v wval
+		for _, w := range c.Args[2:] {
+			v = better(v, f.wordValue(w))
 		}
+		f.set(c.Loc, c.Args[1].Value, v, false)
+		return
 	}
-	isMask := false
-	for _, w := range c.Args {
-		if strings.HasPrefix(w.Value, "::add-mask::") && (c.Name == "echo" || c.Name == "printf") {
-			isMask = true
-		}
-	}
+	maskedName, isMask := maskTarget(c)
 	switch {
 	case f.xtrace:
 		// the trace shows every command with its expansions: a variable that is cut from a secret, also inside a
@@ -525,15 +527,68 @@ func (f *shellSecretFlow) command(c *runscript.Command) {
 		}
 	}
 	// the runner only reads the mask from the output of the step: a mask that is redirected to a file or piped on is none
-	if isMask && f.prints(c) {
-		for _, w := range c.Args {
-			for _, name := range w.Vars {
-				if d := f.derived[name]; d != nil {
-					d.masked = true
-				}
+	if isMask && maskedName != "" && f.prints(c) {
+		if d := f.derived[maskedName]; d != nil {
+			d.masked = true
+		}
+	}
+}
+
+var (
+	maskWholeVarRe = regexp.MustCompile(`^\$(?:([A-Za-z_][A-Za-z0-9_]*)|\{([A-Za-z_][A-Za-z0-9_]*)\})$`)
+	maskPrefix     = "::add-mask::"
+)
+
+// maskTarget reports whether the command is a mask that the runner takes whole: `echo "::add-mask::$VALUE"` with exactly
+// one argument, or `printf '::add-mask::%s\n' "$VALUE"`, where VALUE is exactly one variable (returned by name) or exactly
+// one command substitution (name empty). A mask of a cut, or with more text or arguments, masks another string than the
+// value, so it is an ordinary print.
+func maskTarget(c *runscript.Command) (name string, ok bool) {
+	var text string
+	switch c.Name {
+	case "echo":
+		if len(c.Args) != 1 || !strings.HasPrefix(c.Args[0].Value, maskPrefix) {
+			return "", false
+		}
+		text = strings.TrimPrefix(c.Args[0].Value, maskPrefix)
+	case "printf":
+		if len(c.Args) != 2 {
+			return "", false
+		}
+		if format := c.Args[0].Value; format != maskPrefix+"%s" && format != maskPrefix+`%s\n` {
+			return "", false
+		}
+		text = c.Args[1].Value
+	default:
+		return "", false
+	}
+	if m := maskWholeVarRe.FindStringSubmatch(text); m != nil {
+		return m[1] + m[2], true
+	}
+	if wholeSubstitution(text) {
+		return "", true
+	}
+	return "", false
+}
+
+// wholeSubstitution reports whether the text is exactly one `$(...)`.
+func wholeSubstitution(text string) bool {
+	if !strings.HasPrefix(text, "$(") || !strings.HasSuffix(text, ")") {
+		return false
+	}
+	depth := 0
+	for i := 1; i < len(text); i++ {
+		switch text[i] {
+		case '(':
+			depth++
+		case ')':
+			depth--
+			if depth == 0 && i != len(text)-1 {
+				return false
 			}
 		}
 	}
+	return depth == 0
 }
 
 // traceNested is the part of command() that a command inside a substitution takes: `set -x` shows it (with a `++`) and
