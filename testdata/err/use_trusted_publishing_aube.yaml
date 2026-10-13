@@ -11,6 +11,8 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
       - run: aube -r publish
+      - run: aube recursive publish --access public
+      - run: aube m publish
       - run: aube --filter '@acme/*' publish --tag next
       # A registry of your own, a dry run, or not a publish
       - run: aube publish --registry https://npm.example.com

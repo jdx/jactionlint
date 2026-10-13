@@ -475,6 +475,15 @@ func (in *Install) node(c *Command) bool {
 	return false
 }
 
+// aubeVerb returns the command of an aube command line: the first positional word, or the one after `recursive` (`multi`, `m`),
+// which runs another command in every package of the workspace like `-r` does. "" if there is none or it is dynamic.
+func aubeVerb(c *Command) string {
+	if v := c.Verb(); aubeRecursiveVerbs[v] && c.Sub(1) != "" {
+		return c.Sub(1)
+	}
+	return c.Verb()
+}
+
 // aube handles `aube`, whose positional words start with the command (and `aube recursive` with another command).
 // pos is not empty and its first word is not dynamic.
 func (in *Install) aube(c *Command, pos []*Word) bool {
