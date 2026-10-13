@@ -7107,7 +7107,7 @@ test.yaml:10:15: the runner of "actions/checkout@11bd71901bbe5b1630ceea73d275973
    |
 10 |       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v3.0.0
    |               ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-test.yaml:10:15: warning: the version comment "# v3.0.0" does not match the commit pinned in action "actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683": tag "v3.0.0" points to commit a12a3943b4bd, but the pinned commit is tagged "v4.2.2". update the comment, or pin the commit of the version you mean [ref-version-mismatch]
+test.yaml:10:15: warning: the version comment "# v3.0.0" does not match the commit pinned in action "actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683": tag "v3.0.0" points to commit a12a3943b4bd, but the pinned commit is tagged "v4.2.2". either the comment is stale or the SHA is wrong, so check which one is meant: update the comment, or pin the commit of the version you mean [ref-version-mismatch]
    |
 10 |       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v3.0.0
    |               ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -7116,6 +7116,15 @@ test.yaml:10:15: warning: the version comment "# v3.0.0" does not match the comm
 <!-- Skip playground link -->
 
 The `--online --fix` option can pin tags to commits and add this comment for you, see [the usage document](usage.md#online-checks).
+
+The version can also be written the way [ratchet](https://github.com/sethvargo/ratchet) does it, `# ratchet:actions/checkout@v4.2.2`.
+The comment is read only when it names the action it follows (`ratchet:exclude` and a comment about another action are left alone).
+
+A mismatch has two possible causes: the comment is stale, or the SHA is not the commit that was meant (it was replaced by hand,
+or by someone else). The commit is what runs, so the fix of this rule, which needs `--fix=unsafe`, rewrites the version in the comment
+(and only that, words around it stay) to the tag of the pinned commit, `# v3.0.0` to `# v4.2.2`. Review the change like any other: it
+is wrong when the SHA is the part that has to change. There is no fix when the commit has no tag, or has several versions of the
+same specificity (`v2.0.1` and `v2.0.2`), or the repository has more tags than were read, because the version to write is then a choice.
 
 <a id="check-invisible-characters"></a>
 ## Invisible characters
