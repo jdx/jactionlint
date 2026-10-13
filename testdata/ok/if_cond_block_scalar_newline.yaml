@@ -1,0 +1,25 @@
+on: push
+
+jobs:
+  test:
+    # GitHub trims the newlines at the end of the condition, so a block scalar with only ${{ }} is the expression itself
+    # (the job of a repository which runs `if: |` + a false expression is skipped).
+    if: |
+      ${{ github.event_name == 'push' }}
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo literal block
+        if: |
+          ${{ github.event_name == 'push' }}
+      - run: echo folded block
+        if: >
+          ${{ github.event_name == 'push' && github.ref_name == 'main' }}
+      - run: echo keep
+        if: |+
+          ${{ github.event_name == 'push' }}
+
+      - run: echo strip
+        if: |-
+          ${{ github.event_name == 'push' }}
+      - run: echo double quoted
+        if: "${{ github.event_name == 'push' }}\n"

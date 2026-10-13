@@ -1,0 +1,22 @@
+on: push
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      # Newlines at the end are trimmed by GitHub, but other characters are still part of the string
+      - run: echo text after
+        if: |
+          ${{ github.event_name == 'push' }} && true
+      - run: echo two expressions
+        if: |
+          ${{ github.event_name == 'push' }}
+          && ${{ github.ref_name == 'main' }}
+      - run: echo space after the newline
+        if: "${{ github.event_name == 'push' }}\n "
+      - run: echo newline before
+        if: "\n${{ github.event_name == 'push' }}"
+      # The trimmed newline does not hide a constant
+      - run: echo constant
+        if: |
+          ${{ true }}

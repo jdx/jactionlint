@@ -86,6 +86,7 @@ List of checks:
 - [Static credentials for actions/checkout](#check-checkout-static-credentials)
 - [Insecure URL schemes](#check-insecure-url-scheme)
 - [Dangerous triggers](#check-dangerous-triggers)
+- [Comment triggers without a check of the user (pedantic)](#check-comment-trigger-authorization)
 - [Self-hosted runners (pedantic)](#check-self-hosted-runner)
 - [Unsound `contains()` on a string](#check-unsound-contains)
 - [Overprovisioned secrets](#check-overprovisioned-secrets)
@@ -6302,7 +6303,7 @@ jobs:
         if: |
           github.event_name == 'push'
       - run: echo 'Commit is pushed'
-        # ERROR: It is always evaluated to true
+        # OK: GitHub trims the newline at the end of the block scalar
         if: |
           ${{ github.event_name == 'push' }}
       - run: echo 'Commit is pushed'
@@ -6323,10 +6324,6 @@ test.yaml:9:13: constant expression "false" in condition. remove the if: section
   |
 9 |         if: false
   |             ^~~~~
-test.yaml:19:13: if: condition "${{ github.event_name == 'push' }}\n" is always evaluated to true because extra characters are around ${{ }} [if-always-true]
-   |
-19 |         if: |
-   |             ^
 test.yaml:23:13: if: condition "${{ github.event_name == 'push' }} " is always evaluated to true because extra characters are around ${{ }} [if-always-true]
    |
 23 |         if: "${{ github.event_name == 'push' }} "
@@ -6339,8 +6336,9 @@ test.yaml:29:13: if: condition "${{ github.event_name == 'push' }} && ${{ github
 
 [Playground](https://jactionlint.jdx.dev/#eNq0zz1OxDAQBeA+p3hYyK7CASxtw484ATVyYEKM1vZqZ0yz+O7Iy18iohBAVFH03nwzTtFil3lomsfUsW0AIZb6BfY5clsLuctRcrt1NTtGLLTj1xbQ1qYF3Q0J6vLq/Ob6BKeHAx68DLk7oyeKchtdIJSi3mYA31v0bss0o5iLFIIXeD4eR/dmMjaPbzYwtW1Qys/N548/LNl/g//jcPU9CrWGhSQE5+OUX5K1fo/31H+GY+QXG1e8R+tx6+tylPIyANrl1qA=)
 
-The conditions with characters around `${{ }}` (a trailing newline of a block scalar included) are reported by the rule
-`if-always-true`. It is the audit `unsound-condition` of zizmor.
+The conditions with characters around `${{ }}` are reported by the rule `if-always-true`. The newlines at the end of the
+condition are not reported: a block scalar (`if: |`) ends with one, and GitHub trims it (see below). It is the audit
+`unsound-condition` of zizmor.
 
 jactionlint reports constant conditions at `if:` like `if: true` as error because they are usually leftover debug code like
 `#if 0` in C. `if: true` should be removed because it doesn't affect the workflow behavior. `if: false` should be replaced with
@@ -6350,19 +6348,24 @@ In addition, evaluation of `${{ }}` at `if:` condition is tricky. When the expre
 and there is no extra characters around the `${{ }}`, the condition is evaluated to the boolean value. Otherwise the condition is
 treated as string hence it is **always** evaluated to `true`.
 
-It means that multi-line string must not be used at `if:` condition (`if: |`) because the condition is always evaluated to true.
-Multi-line string inserts newline character at end of each line.
+Characters other than the newlines at the end are such extra characters. A multi-line string inserts a newline character at
+the end of each line, so
 
 ```yaml
 if: |
   ${{ false }}
+  && ${{ true }}
 ```
 
-is equivalent to
+is equivalent to `if: "${{ false }}\n&& ${{ true }}\n"`, which is always true.
 
-```yaml
-if: "${{ false }}\n"
-```
+Without the trimming `if: "${{ false }}\n"`, which is what a block scalar `if: |` with one line is, would be a string and so
+always true, and actionlint still reports it. GitHub announced in the
+[changelog of 2026-01-29](https://github.blog/changelog/2026-01-29-github-actions-smarter-editing-clearer-debugging-and-a-new-case-function/)
+that "Trailing newlines will automatically be trimmed". A job with
+`if: |` and a `${{ }}` expression which is false is skipped by GitHub now, so jactionlint does not report it any more. Other
+white space, such as a space at the end or a newline at the start, is still reported because GitHub does not say that it
+trims it.
 
 Unlike using `${{ }}`, putting an expression directly ignores white spaces around it. It's the reason why the following `if:`
 condition works as intended.
@@ -7684,6 +7687,73 @@ Actions event policy can allow the trigger. So a `pull_request_target` workflow 
 event policy allows it, and one that is allowed is exactly as dangerous as described above. The rule does not know the event policies of your
 repository, so it reports the trigger either way. Another platform default reduces the risk without removing it: a run of an untrusted trigger (`pull_request_target`, `issue_comment`)
 gets a [read-only Actions cache](https://github.blog/changelog/2026-06-26-read-only-actions-cache-for-untrusted-triggers), which blocks writing to the cache.
+
+<a id="check-comment-trigger-authorization"></a>
+## Comment triggers without a check of the user (pedantic)
+
+Example input:
+
+```yaml
+on:
+  issue_comment:
+    types: [created]
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    if: github.event.issue.pull_request && contains(github.event.comment.body, '/deploy')
+    steps:
+      - run: ./deploy.sh
+        env:
+          TOKEN: ${{ secrets.DEPLOY_TOKEN }}
+```
+
+Output:
+<!-- Skip update output -->
+```
+test.yaml:7:9: warning: this condition starts the job from the text of a comment (the event is "issue_comment"), and nothing checks who wrote it, so anyone who can comment can run the job with the token and the secrets of the repository. check github.event.comment.author_association (OWNER, MEMBER or COLLABORATOR), ask for the permission of github.actor in an earlier step or job, or run the job in an environment with required reviewers [comment-trigger-authorization]
+  |
+7 |     if: github.event.issue.pull_request && contains(github.event.comment.body, '/deploy')
+  |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+```
+
+<!-- Skip playground link -->
+
+The output above is from this `rules` section of the [configuration file](config.md):
+
+```yaml
+rules:
+  comment-trigger-authorization: warn
+```
+
+A command bot starts a job from a comment (`/deploy`, `/test`, `@bot run`). The condition looks like a restriction, but it only reads
+what the commenter chose to write: on a public repository everybody on GitHub can comment, and the job runs in the base repository with
+the default token and the secrets ([zizmor#459](https://github.com/zizmorcore/zizmor/issues/459)). The rule `comment-trigger-authorization`
+(in the `pedantic` profile, at the `warn` level) reports a job of a workflow with the trigger `issue_comment`,
+`pull_request_review_comment` or `discussion_comment` whose `if:` (or the `if:` of one of its steps) reads
+`github.event.comment.body`, when nothing checks who the commenter is. It is [`dangerous-triggers`](#check-dangerous-triggers) with a
+finer eye: that rule reports the trigger of every workflow, this one the jobs that anybody can start. It is the same check of the user as
+that of [`agentic-actions`](#check-agentic-actions). It looks for:
+
+- a condition on the association or the user (`github.event.comment.author_association`, `github.actor`, `github.event.comment.user.login`, ...);
+- an `environment:` (which can require reviewers), or a condition on the labels of the issue or the pull request, which only people with triage access set;
+- a step of the job that asks for the permission of the commenter: an action whose name has `permission` or `membership`, a `run:` that looks
+  at `collaborators/` or `/permission`, an `actions/github-script` with a script that does, and the command actions
+  `peter-evans/slash-command-dispatch`, `xt0rted/slash-command-action`, `github/command` and `github/branch-deploy` (they check the permission
+  `write` by default). Each has its own input for the level: `permission` (dispatch), `permission-level` (slash-command-action) and the list
+  `permissions` (command and branch-deploy). A level that every commenter has (`none` or `read`, also inside the list) is no check;
+- a job that the job `needs` and that has one of these, or a condition that reads `needs` or `steps` (an earlier job or step decided);
+- an AI agent action that checks the write access of the user itself (`anthropics/claude-code-action` unless `allowed_non_write_users` is `*`).
+
+A step that checks, or an agent that does, protects the steps after it and itself, not the steps before it: a check after the work does not
+stop the work from running with the token and the secrets (a checkout before the check does not count as work). An agent that another comment
+starts (`@claude` in a `/deploy` job) does not run for this comment, so it protects nothing.
+
+A job that calls a reusable workflow is not looked into, because the callee may check the user.
+
+It is a heuristic and the tier is pedantic for that reason: it cannot tell a check that is correct from a mention of the actor, and an action or
+script of the repository that checks the commenter in a way that is not recognized (a custom action, a script file) is reported. Whether the job
+is harmful depends on what it does with the token and secrets; the rule does not judge that, so a job that only adds a reaction is reported
+as well.
 
 <a id="check-self-hosted-runner"></a>
 ## Self-hosted runners (pedantic)
@@ -10441,7 +10511,7 @@ How the rules treat actions:
 
 - **Applies** to the steps (and the metadata) of an action: `action-syntax`, `adhoc-packages`, `archived-uses`, `argument-injection`, `artipacked`, `background-step-not-waited`, `checkout-static-credentials`, `command-injection`, `conflicting-action-inputs`, `constant-condition`, `context-availability`, `continue-on-error`, `deprecated-action-input`, `deprecated-commands`, `deprecated-node-runtime`, `duplicate-key`, `duplicate-step-id`, `environment-file-redirect`, `expired-ignore`, `expression-syntax`, `expression-type`, `fail-fast-action-inputs`, `forbidden-uses`, `github-app`, `github-script-syntax`, `if-always-true`, `impostor-commit`, `insecure-commands`, `insecure-ssh-keyscan`, `insecure-url-scheme`, `invalid-env-var-name`, `invalid-function-call`, `invalid-id`, `invalid-ignore-comment`, `invalid-local-action`, `invalid-parallel-step`, `invalid-shell-name`, `invalid-uses`, `invisible-characters`, `known-vulnerable-actions`, `malformed-expression-delimiters`, `max-run-lines`, `merge-key`, `misfeature`, `missing-action-input`, `multiline-plain-run`, `obfuscation`, `outdated-action-runner`, `output-clobbering`, `pipeline-without-pipefail`, `pyflakes`, `recursive-alias`, `ref-confusion`, `ref-version-mismatch`, `repojacking`, `require-expression-wrapping`, `self-repository`, `shellcheck`, `stale-action-refs`, `superfluous-actions`, `template-injection`, `typosquat-uses`, `undefined-function`, `undefined-property`, `unknown-action-input`, `unlocked-install`, `unpinnable-action`, `unpinned-images`, `unpinned-tools`, `unpinned-uses`, `unsound-contains`, `unsound-prefix-match`, `unsound-ternary`, `unused-anchor`, `unused-ignore`, `unverified-download`, `use-trusted-publishing`, `yaml-syntax`.
 - **Caller-dependent**: `agentic-actions`, `bot-conditions`, `cache-poisoning`, `github-env` (its findings about untrusted input do not depend on the caller), `untrusted-artifact` and `untrusted-checkout`.
-- **Not applicable** because an action does not have what the rule checks, or because only the calling job can decide (`unused-baseline-entry` is about the baseline file, not about a workflow or an action): `anonymous-definition`, `concurrency-cancels-prs`, `concurrency-cancels-release`, `concurrency-deadlock`, `concurrency-limits`, `conflicting-runner-labels`, `cron-too-frequent`, `cyclic-job-needs`, `dangerous-triggers`, `dependabot-cooldown`, `dependabot-execution`, `dependabot-missing-actions-update`, `dependabot-syntax`, `deprecated-runner-label`, `duplicate-job-id`, `duplicate-job-needs`, `duplicate-triggers`, `event-name-never-received`, `excessive-permissions`, `gate-job-skipped-on-failure`, `gh-without-token`, `hardcoded-container-credentials`, `insufficient-permissions`, `invalid-activity-type`, `invalid-cron`, `invalid-event-config`, `invalid-event-filter`, `invalid-glob`, `invalid-label-pattern`, `invalid-local-workflow`, `invalid-permissions`, `invalid-timezone`, `invalid-workflow-call`, `invalid-workflow-call-input`, `invalid-workflow-dispatch-input`, `local-action-checkout`, `macos-gnu-flags`, `matrix-duplicate-value`, `matrix-invalid-exclude`, `missing-permissions`, `missing-timeout`, `missing-workflow-input`, `missing-workflow-secret`, `mutable-runner-label`, `overprovisioned-secrets`, `require-shell`, `required-actions`, `secrets-inherit`, `secrets-outside-env`, `self-hosted-runner`, `timeout-too-long`, `ubuntu-slim-limits`, `undefined-job-needs`, `undocumented-permissions`, `unknown-event`, `unknown-runner-label`, `unknown-workflow-input`, `unknown-workflow-secret`, `unredacted-secrets`, `unused-baseline-entry`, `unused-job-output`, `unused-needs`, `unused-workflow-input`, `unused-workflow-secret`, `workflow-call-permissions`, `workflow-input-type`, `workflow-run-names`, `workflow-secret-scope`, `workflow-syntax`.
+- **Not applicable** because an action does not have what the rule checks, or because only the calling job can decide (`unused-baseline-entry` is about the baseline file, not about a workflow or an action): `anonymous-definition`, `comment-trigger-authorization`, `concurrency-cancels-prs`, `concurrency-cancels-release`, `concurrency-deadlock`, `concurrency-limits`, `conflicting-runner-labels`, `cron-too-frequent`, `cyclic-job-needs`, `dangerous-triggers`, `dependabot-cooldown`, `dependabot-execution`, `dependabot-missing-actions-update`, `dependabot-syntax`, `deprecated-runner-label`, `duplicate-job-id`, `duplicate-job-needs`, `duplicate-triggers`, `event-name-never-received`, `excessive-permissions`, `gate-job-skipped-on-failure`, `gh-without-token`, `hardcoded-container-credentials`, `insufficient-permissions`, `invalid-activity-type`, `invalid-cron`, `invalid-event-config`, `invalid-event-filter`, `invalid-glob`, `invalid-label-pattern`, `invalid-local-workflow`, `invalid-permissions`, `invalid-timezone`, `invalid-workflow-call`, `invalid-workflow-call-input`, `invalid-workflow-dispatch-input`, `local-action-checkout`, `macos-gnu-flags`, `matrix-duplicate-value`, `matrix-invalid-exclude`, `missing-permissions`, `missing-timeout`, `missing-workflow-input`, `missing-workflow-secret`, `mutable-runner-label`, `overprovisioned-secrets`, `require-shell`, `required-actions`, `secrets-inherit`, `secrets-outside-env`, `self-hosted-runner`, `timeout-too-long`, `ubuntu-slim-limits`, `undefined-job-needs`, `undocumented-permissions`, `unknown-event`, `unknown-runner-label`, `unknown-workflow-input`, `unknown-workflow-secret`, `unredacted-secrets`, `unused-baseline-entry`, `unused-job-output`, `unused-needs`, `unused-workflow-input`, `unused-workflow-secret`, `workflow-call-permissions`, `workflow-input-type`, `workflow-run-names`, `workflow-secret-scope`, `workflow-syntax`.
 
 Example input:
 

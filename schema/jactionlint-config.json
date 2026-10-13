@@ -114,6 +114,7 @@
               "cache-poisoning",
               "checkout-static-credentials",
               "command-injection",
+              "comment-trigger-authorization",
               "concurrency-cancels-prs",
               "concurrency-cancels-release",
               "concurrency-deadlock",
@@ -342,6 +343,7 @@
                   "cache-poisoning",
                   "checkout-static-credentials",
                   "command-injection",
+                  "comment-trigger-authorization",
                   "concurrency-cancels-prs",
                   "concurrency-cancels-release",
                   "concurrency-deadlock",
@@ -501,6 +503,7 @@
                     "cache-poisoning",
                     "checkout-static-credentials",
                     "command-injection",
+                    "comment-trigger-authorization",
                     "concurrency-cancels-prs",
                     "concurrency-cancels-release",
                     "concurrency-deadlock",
@@ -1149,6 +1152,28 @@
         },
         "command-injection": {
           "description": "Input that an outsider controls is run as code by a script after it was moved to an environment variable: eval, sh -c, a variable as a command, a pipe into a shell, an inline program, child_process in github-script. Group: security. Profile: pedantic. Default level: warn. https://jactionlint.jdx.dev/rules#command-injection",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "comment-trigger-authorization": {
+          "description": "A job of a comment-triggered workflow is started by the text of the comment and nothing checks who wrote it. Group: security. Profile: pedantic. Default level: warn. https://jactionlint.jdx.dev/rules#comment-trigger-authorization",
           "oneOf": [
             {
               "$ref": "#/definitions/level"
