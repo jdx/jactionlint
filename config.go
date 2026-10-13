@@ -259,6 +259,9 @@ type Config struct {
 	// Fix configures "jactionlint --fix".
 	Fix FixConfig `yaml:"fix"`
 
+	// Shellcheck tunes the shellcheck integration: a shellcheckrc, more arguments and optional checks.
+	Shellcheck ShellcheckConfig `yaml:"shellcheck"`
+
 	// Path is the path of the file which the config was read from. It is empty when the config was
 	// parsed from bytes.
 	Path string `yaml:"-"`
@@ -401,6 +404,9 @@ func parseConfig(b []byte) (*Config, error) {
 	if err := c.OnlineOptions.validate(); err != nil {
 		return nil, fmt.Errorf("%w in \"online-options\"", err)
 	}
+	if err := c.Shellcheck.validate(); err != nil {
+		return nil, err
+	}
 	if err := c.normalizeRules(); err != nil {
 		return nil, err
 	}
@@ -524,6 +530,15 @@ func (c *Config) merge(over *Config) {
 	}
 	if over.present["fix.rules"] {
 		c.Fix.Rules = over.Fix.Rules
+	}
+	if over.present["shellcheck.rcfile"] {
+		c.Shellcheck.RCFile = over.Shellcheck.RCFile
+	}
+	if over.present["shellcheck.args"] {
+		c.Shellcheck.Args = over.Shellcheck.Args
+	}
+	if over.present["shellcheck.enable"] {
+		c.Shellcheck.Enable = over.Shellcheck.Enable
 	}
 	c.Deprecations = append(c.Deprecations, over.Deprecations...)
 	c.Notices = append(c.Notices, over.Notices...)
