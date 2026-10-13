@@ -97,6 +97,11 @@ func (rule *RuleOutputClobbering) VisitStep(n *Step) error {
 				// the closer is compared as the shell expands it: printf '%s\n' "$d" prints the delimiter held by $d
 				if printfDelimiter(c.cmd, t, t) == open.text {
 					open = nil
+					// the same command can go on with records after the closer: judge the ones it names
+					// (`printf '%s\nbody=%s\n' "$d" "$BODY"`), but never open another record from it
+					if c.d.kind == dataUntrusted && exprMayHaveNewline(c.d.input) && len(c.names) > 0 && recordsAfterCloser(c.cmd) {
+						rule.report(s, origin, n, w, c, c.names[0], "", "record")
+					}
 					continue
 				}
 				if c.d.kind == dataUntrusted && exprMayHaveNewline(c.d.input) && !open.random {
@@ -225,6 +230,24 @@ func (rule *RuleOutputClobbering) chunksOf(s *runscript.Script, w *runscript.Wri
 		}
 	}
 	return out
+}
+
+// recordsAfterCloser reports whether the command goes on with plain records after the first line, which closed a record
+// (`printf '%s\nbody=%s\n' "$d" "$BODY"`): it prints more lines and none of them starts a record with a delimiter.
+func recordsAfterCloser(c *runscript.Command) bool {
+	if c == nil {
+		return false
+	}
+	lines := printedLines(c)
+	if len(lines) < 2 {
+		return false
+	}
+	for _, l := range lines[1:] {
+		if reRecordStart.MatchString(strings.TrimSpace(l)) {
+			return false
+		}
+	}
+	return true
 }
 
 // isWholeLine reports whether the first line of a text has no constant record name in front of it (`name=` or `name<<`): an
