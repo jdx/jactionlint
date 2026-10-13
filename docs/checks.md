@@ -2746,7 +2746,8 @@ check anything else about it: the commit is not looked up on GitHub, and the act
 The rule is unchanged when:
 
 - the repository has no lock file, it is not valid YAML, it has not the shape of the format, it has no `version` or the version is not
-  `v0.0.2` or `v0.0.3` (`v0.0.1` is not read);
+  `v0.0.2` or `v0.0.3` (`v0.0.1` is not read), or a key is repeated (a workflow, a dependency, or a key of one): the official parser
+  rejects such a file, so neither the first nor the last entry is trusted;
 - the workflow is not listed in the file: workflows are onboarded to the lock file one by one, and only a listed workflow is held
   to it (`gh actions-lock --verify` reports the others);
 - the entry of the action is missing or malformed (a ref which differs from the one of the pin, a `commit` which is not a digest);
