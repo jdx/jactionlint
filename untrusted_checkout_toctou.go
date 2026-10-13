@@ -92,7 +92,7 @@ func classifyCondition(cond *String, commentOnly bool) gateInfo {
 	}
 	tiedToEvent := false
 	for _, r := range refs {
-		if refCovers(r.chain, actionEventContext) || refCovers(r.chain, eventLabelContext) {
+		if refCovers(r.chain, eventLabelContext) || (refCovers(r.chain, actionEventContext) && requiresLabeledAction(r)) {
 			tiedToEvent = true
 		}
 	}
@@ -113,6 +113,22 @@ func classifyCondition(cond *String, commentOnly bool) gateInfo {
 		g.safe = true // a guard that is not one of the above: not judged
 	}
 	return g
+}
+
+// requiresLabeledAction reports whether the reference to the action of the event is compared for equality with `labeled`: only
+// then does the condition belong to the one event of the label. `== 'synchronize'`, `!= 'labeled'` and the other actions keep a
+// label that is on the pull request true for every later push.
+func requiresLabeledAction(r exprRef) bool {
+	c, ok := r.parent.(*CompareOpNode)
+	if !ok || c.Kind != CompareOpNodeKindEq {
+		return false
+	}
+	other := c.Right
+	if c.Right == r.node {
+		other = c.Left
+	}
+	lit, ok := other.(*StringNode)
+	return ok && strings.EqualFold(lit.Value, "labeled")
 }
 
 // neededGates are the gates of the jobs that the job needs, at any depth: the job runs after them.
