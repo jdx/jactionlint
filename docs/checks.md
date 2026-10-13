@@ -3308,22 +3308,22 @@ compromised releases are found and pulled within days. A cooldown keeps only ver
 | uv (`uv pip install`, `uv add`, `uv tool install`, `uvx`) | `--exclude-newer` (a date or a duration), `UV_EXCLUDE_NEWER`, `exclude-newer` in `uv.toml` or `[tool.uv]` of `pyproject.toml` | all |
 | pip, pipx | `--uploaded-prior-to` (a date, or a duration in days such as `P7D`), `PIP_UPLOADED_PRIOR_TO`; only for indexes that tell the upload time | pip 26.0 |
 | npm | `--min-release-age=DAYS` or `min-release-age` in `.npmrc`; `--before=DATE` | npm 11.10 |
-| pnpm | `minimumReleaseAge` (minutes) in `pnpm-workspace.yaml`; pnpm 11 waits one day by default | pnpm 10.16 |
+| pnpm | `minimumReleaseAge` (minutes) in `pnpm-workspace.yaml` (up to pnpm 10 also `minimum-release-age` in `.npmrc`; the `min-release-age` and `before` of npm are not read); pnpm 11 waits one day by default | pnpm 10.16 |
 | Yarn | `npmMinimalAgeGate` in `.yarnrc.yml`; Yarn 4.15 waits one day by default; Yarn 1 has none | Yarn 4.10 |
-| bun | `minimumReleaseAge` (seconds) under `[install]` in `bunfig.toml` | bun 1.3 |
+| bun | `--minimum-release-age` (seconds) or `minimumReleaseAge` under `[install]` in `bunfig.toml`; bun reads nothing of the kind from `.npmrc` | bun 1.3 |
 
 Check the version of the tool on the runner before you add the setting: an option that the installed pip or npm does not know fails the
 install. The check reads the same places as the lifecycle scripts do (the repository's files, the environment of the step, an earlier
 script of the job), and so reads `uv.toml`, `pyproject.toml`, `.npmrc`, `pnpm-workspace.yaml`, `.yarnrc.yml` and `bunfig.toml`. It reports
 installs that resolve something. The environment variable and the option are those of the tool that installs (`UV_EXCLUDE_NEWER` does
-nothing for npm), a value that switches the age off (`0`, `0m`, `false`, empty) is no cooldown, and a script of the job counts only when it
+nothing for npm), a value that switches the age off (`0`, `0m`, `false`, empty) is no cooldown (in an option and in a script as well as in the environment), `minimumReleaseAgeExclude` and `minimumReleaseAgeStrict` are not the age, and a script of the job counts only when it
 sets the option before the install. It is silent about these:
 
 - installs that are bound to a lock file or to hashes (`npm ci`, `uv sync`, `--frozen-lockfile`, `--immutable`, `--require-hashes`,
   a constraints file `-c`), and `npm install`, `pnpm install` and `yarn` without a package in a repository that has the lock file;
 - `npx`, `bunx` and `pnpm dlx`, which usually run a binary of the project, and ecosystems whose tool has no such setting (cargo, go, gem,
   apt, Homebrew);
-- a command that follows a `cd`, or has `--project`, `--directory` or `--config-file` for uv: the configuration in force is not known;
+- a command that follows a `cd`, or has `--project`, `--directory` or `--config-file` for uv: the configuration in force is not known (`--no-config` is the opposite: uv reads no file, so only an option or `UV_EXCLUDE_NEWER` counts);
 - Yarn 2+ of an unknown version, because the default depends on it.
 
 An install of an exact version (`pip install requests==2.32.3`) is reported too: the dependencies of the package are still resolved anew.

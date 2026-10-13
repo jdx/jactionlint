@@ -25,7 +25,7 @@ var toolValueFlags = map[string]map[string]bool{
 	"pnpm":     set(`--filter -F -C --dir --reporter --registry --store-dir --virtual-store-dir --lockfile-dir --modules-dir --tag --workspace-concurrency --network-concurrency --loglevel --config --otp --access --publish-branch --package -p --cpu --os --libc --pnpmfile --global-dir --global-bin-dir --prefix --fetch-timeout --fetch-retries`),
 	"pnpm-dlx": set(`--package -p --registry`),
 	"yarn":     set(`--cwd --mode --registry --tag --otp --access --mutex --network-timeout --network-concurrency --modules-folder --cache-folder --link-folder --global-folder --prefix --proxy --https-proxy --cpu --os -p --package`),
-	"bun":      set(`--cwd --registry --cache-dir --backend --concurrent-scripts --network-concurrency --tag --access --otp --config -c --filter -F --omit --os --cpu --package -p --revision`),
+	"bun":      set(`--cwd --registry --cache-dir --backend --concurrent-scripts --network-concurrency --tag --access --otp --config -c --filter -F --omit --os --cpu --package -p --revision --minimum-release-age`),
 	"bunx":     set(`--package -p --registry --cwd --config -c`),
 	"aube":     set(`--filter -F -C --dir --registry --store-dir --tag --reporter --loglevel --config --prefix --cpu --os --lockfile-dir --modules-dir`),
 	"cargo": set(`--version --vers --git --branch --tag --rev --path --root --registry --index --features -F --target --bin

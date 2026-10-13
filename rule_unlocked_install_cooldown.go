@@ -44,22 +44,48 @@ var (
 type cooldownSetting struct {
 	// flag matches the name of an option of the command.
 	flag *regexp.Regexp
-	// text finds the setting by name in a script that writes the configuration, or in the value of an option
-	// (`pipx install --pip-args="--uploaded-prior-to P7D"`).
-	text *regexp.Regexp
+	// texts find the setting and its value in a script that writes the configuration, or in the value of an option
+	// (`pipx install --pip-args="--uploaded-prior-to P7D"`), see settingValue.
+	texts []*regexp.Regexp
 	// env matches the lower case name of an environment variable.
 	env *regexp.Regexp
 }
 
 var noMatch = regexp.MustCompile(`a^`)
 
+// settingValue builds the pattern of a setting written in a script or an option: the name, a separator (`=`, `:` or
+// white space) and the value, which is the one capture group. The name must end there, so that
+// `minimumReleaseAgeExclude` is not `minimumReleaseAge`.
+func settingValue(name string) *regexp.Regexp {
+	return regexp.MustCompile(`(?i)(?:` + name + `)\s*(?:=|:|\s)\s*["']?([^\s"']*)`)
+}
+
 var cooldownSettings = map[string]cooldownSetting{
-	"uv":   {regexp.MustCompile(`^--exclude-newer(-package)?$`), regexp.MustCompile(`(?i)exclude[-_]newer`), regexp.MustCompile(`^uv_exclude_newer(_package)?$`)},
-	"pip":  {regexp.MustCompile(`^--uploaded-prior-to$`), regexp.MustCompile(`(?i)uploaded[-_]prior[-_]to`), regexp.MustCompile(`^pip_uploaded_prior_to$`)},
-	"npm":  {regexp.MustCompile(`^--(min-release-age|before)$`), regexp.MustCompile(`(?i)(min[-_]release[-_]age|npm_config_before|config\s+set\s+before\b)`), regexp.MustCompile(`^npm_config_(min_release_age|before)$`)},
-	"pnpm": {regexp.MustCompile(`(?i)^--config\.minimum.*$`), regexp.MustCompile(`(?i)minimum[-_]?release[-_]?age`), regexp.MustCompile(`^(npm|pnpm)_config_minimum_release_age$`)},
-	"yarn": {noMatch, regexp.MustCompile(`(?i)(npmMinimalAgeGate|minimal[-_]age[-_]gate)`), regexp.MustCompile(`^yarn_npm_minimal_age_gate$`)},
-	"bun":  {noMatch, regexp.MustCompile(`(?i)minimumReleaseAge`), noMatch},
+	"uv":  {regexp.MustCompile(`^--exclude-newer$`), []*regexp.Regexp{settingValue(`exclude[-_]newer`)}, regexp.MustCompile(`^uv_exclude_newer$`)},
+	"pip": {regexp.MustCompile(`^--uploaded-prior-to$`), []*regexp.Regexp{settingValue(`uploaded[-_]prior[-_]to`)}, regexp.MustCompile(`^pip_uploaded_prior_to$`)},
+	"npm": {regexp.MustCompile(`^--(min-release-age|before)$`),
+		[]*regexp.Regexp{settingValue(`(?:npm_config_)?min[-_]release[-_]age`), settingValue(`npm_config_before`), settingValue(`config\s+set\s+before`)},
+		regexp.MustCompile(`^npm_config_(min_release_age|before)$`)},
+	// pnpm reads minimum-release-age (not min-release-age or before) from the environment, pnpm-workspace.yaml and, up to
+	// pnpm 10, .npmrc; minimumReleaseAgeExclude and minimumReleaseAgeStrict are other settings
+	"pnpm": {regexp.MustCompile(`(?i)^--config\.(minimumReleaseAge|minimum-release-age)$`),
+		[]*regexp.Regexp{settingValue(`minimum(?:-release-age|ReleaseAge|_release_age)`)},
+		regexp.MustCompile(`^(npm|pnpm)_config_minimum_release_age$`)},
+	"yarn": {noMatch, []*regexp.Regexp{settingValue(`npmMinimalAgeGate|npm_minimal_age_gate`)}, regexp.MustCompile(`^yarn_npm_minimal_age_gate$`)},
+	// bun: --minimum-release-age (seconds) and [install] minimumReleaseAge of bunfig.toml, nothing in .npmrc
+	"bun": {regexp.MustCompile(`^--minimum-release-age$`), []*regexp.Regexp{settingValue(`minimumReleaseAge|minimum-release-age`)}, noMatch},
+}
+
+// anySetting reports whether the text sets the tool's release age to a value that is not off.
+func (s cooldownSetting) anySetting(text string) bool {
+	for _, re := range s.texts {
+		for _, m := range re.FindAllStringSubmatch(text, -1) {
+			if !cooldownValueOff(m[1]) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // cooldownKey maps the tool of a command to the key of cooldownSettings.
@@ -120,11 +146,18 @@ func (rule *RuleUnlockedInstall) checkReleaseAge(step *Step, s *runscript.Script
 	}
 	set := cooldownSettings[cooldownKey(c.Tool)]
 	for _, f := range c.Flags {
-		if set.flag.MatchString(f.Name) || f.Value != nil && set.text.MatchString(f.Value.Value) {
+		// the value counts: `--min-release-age=0` and `--exclude-newer false` switch the age off. An option whose
+		// value is not known (an expression, a variable) is taken as set.
+		if set.flag.MatchString(f.Name) && (f.Value == nil || f.Value.Dynamic() || !cooldownValueOff(f.Value.Value)) {
+			return
+		}
+		if f.Value != nil && set.anySetting(f.Value.Value) {
 			return
 		}
 	}
-	if c.HasFlag("--project", "--directory", "--config-file", "--no-config") && c.Tool == "uv" {
+	// these point uv at another configuration, which is not known; `--no-config` is the opposite and is handled where
+	// the files are read
+	if c.HasFlag("--project", "--directory", "--config-file") && c.Tool == "uv" {
 		return
 	}
 	dirs, ok := rule.commandDirs(rule.root, step, s, c)
@@ -139,7 +172,7 @@ func (rule *RuleUnlockedInstall) checkReleaseAge(step *Step, s *runscript.Script
 		// whether there is one
 		return
 	}
-	if rule.cooldownSetByRepository(dirs, step, c) {
+	if rule.cooldownSetByRepository(dirs, step, c, s.Source[:c.Offset]) {
 		return
 	}
 	name := c.Name
@@ -234,36 +267,42 @@ func (rule *RuleUnlockedInstall) cooldownSetByWorkflow(step *Step, set cooldownS
 			return on
 		}
 	}
-	return rule.jobScriptMatches(step, before, set.text.MatchString)
+	return rule.jobScriptMatches(step, before, set.anySetting)
 }
 
 // cooldownSetByRepository reports whether the files of the repository, or the version of the tool, give a cooldown
 // to the command.
-func (rule *RuleUnlockedInstall) cooldownSetByRepository(dirs []string, step *Step, c *runscript.Command) bool {
+func (rule *RuleUnlockedInstall) cooldownSetByRepository(dirs []string, step *Step, c *runscript.Command, before string) bool {
 	for _, d := range dirs {
 		pkg, _ := rule.files.packageJSON(d)
 		switch c.Tool {
 		case "uv", "uvx":
-			if rule.uvExcludesNewer(d) {
+			// --no-config: uv reads no uv.toml and no pyproject.toml
+			if !c.HasFlag("--no-config") && rule.uvExcludesNewer(d) {
 				return true
 			}
 		case "npm":
-			if npmrcHasAge(rule.files.npmrc(d)) {
+			rc := rule.files.npmrc(d)
+			if v, ok := rc["min-release-age"]; ok && !cooldownValueOff(v) {
+				return true
+			}
+			if v, ok := rc["before"]; ok && !cooldownValueOff(v) {
 				return true
 			}
 		case "pnpm":
 			if text, ok := rule.files.read(filepath.Join(d, "pnpm-workspace.yaml")); ok {
-				if m := pnpmWorkspaceAgeRe.FindStringSubmatch(text); m != nil && m[1] != "0" {
+				if m := pnpmWorkspaceAgeRe.FindStringSubmatch(text); m != nil && !cooldownValueOff(m[1]) {
 					return true
 				}
 			}
-			if npmrcHasAge(rule.files.npmrc(d)) {
+			// up to pnpm 10 the setting is read from .npmrc in this spelling; the keys of npm are not pnpm's
+			if v, ok := rule.files.npmrc(d)["minimum-release-age"]; ok && !cooldownValueOff(v) {
 				return true
 			}
 			if major, _, ok := pkg.managerVersion("pnpm"); ok && major >= 11 {
 				return true // pnpm 11 waits one day by default
 			}
-			if rule.pnpmVersionInJob(step) >= 11 {
+			if rule.pnpmVersionInJob(step, before) >= 11 {
 				return true
 			}
 		case "yarn":
@@ -271,12 +310,8 @@ func (rule *RuleUnlockedInstall) cooldownSetByRepository(dirs []string, step *St
 				return true
 			}
 		case "bun":
-			if text, ok := rule.files.read(filepath.Join(d, "bunfig.toml")); ok {
-				if m := bunfigAgeRe.FindStringSubmatch(text); m != nil && strings.Trim(m[1], "0_") != "" {
-					return true
-				}
-			}
-			if npmrcHasAge(rule.files.npmrc(d)) {
+			// bunfig.toml only, and only its [install] table; bun reads no release age from .npmrc
+			if text, ok := rule.files.read(filepath.Join(d, "bunfig.toml")); ok && bunfigHasAge(text) {
 				return true
 			}
 		}
@@ -284,17 +319,23 @@ func (rule *RuleUnlockedInstall) cooldownSetByRepository(dirs []string, step *St
 	return false
 }
 
-// npmrcHasAge reports whether the .npmrc asks for a number of days, or a date.
-func npmrcHasAge(rc map[string]string) bool {
-	if v, ok := rc["min-release-age"]; ok {
-		if n, err := strconv.ParseFloat(v, 64); err != nil || n > 0 {
+// bunfigHasAge reports whether the [install] table of a bunfig.toml sets minimumReleaseAge to something but zero.
+// The key means nothing in another table.
+func bunfigHasAge(text string) bool {
+	table := ""
+	for _, line := range strings.Split(text, "\n") {
+		if m := tomlHeaderRe.FindStringSubmatch(line); m != nil {
+			table = m[1]
+			continue
+		}
+		if table != "install" {
+			continue
+		}
+		if m := bunfigAgeRe.FindStringSubmatch(line); m != nil && !cooldownValueOff(strings.ReplaceAll(m[1], "_", "")) {
 			return true
 		}
 	}
-	if v, ok := rc["minimum-release-age"]; ok && v != "" && v != "0" {
-		return true
-	}
-	return rc["before"] != ""
+	return false
 }
 
 // uvExcludesNewer reports whether uv.toml or the [tool.uv] table of pyproject.toml sets exclude-newer.
@@ -341,12 +382,24 @@ func (rule *RuleUnlockedInstall) yarnHasAgeGate(dir string, pkg packageJSON) boo
 
 // pnpmVersionInJob returns the major version of pnpm that the job names: `pnpm/action-setup` with a version, or a
 // script that installs `pnpm@11`. It is 0 when none does.
-func (rule *RuleUnlockedInstall) pnpmVersionInJob(step *Step) int {
+func (rule *RuleUnlockedInstall) pnpmVersionInJob(step *Step, before string) int {
 	if rule.job == nil {
 		return 0
 	}
 	best := 0
+	versionsIn := func(text string) {
+		for _, m := range pnpmVersionTextRe.FindAllStringSubmatch(text, -1) {
+			if n, err := strconv.Atoi(m[1]); err == nil && n > best {
+				best = n
+			}
+		}
+	}
 	for _, st := range rule.job.Steps {
+		if st == step {
+			// in the script of the step itself, only what comes before the install
+			versionsIn(before)
+			break
+		}
 		switch e := st.Exec.(type) {
 		case *ExecAction:
 			if e.Uses != nil && ParseUses(e.Uses.Value).CanonicalName() == "pnpm/action-setup" {
@@ -358,15 +411,8 @@ func (rule *RuleUnlockedInstall) pnpmVersionInJob(step *Step) int {
 			}
 		case *ExecRun:
 			if e.Run != nil {
-				for _, m := range pnpmVersionTextRe.FindAllStringSubmatch(e.Run.Value, -1) {
-					if n, err := strconv.Atoi(m[1]); err == nil && n > best {
-						best = n
-					}
-				}
+				versionsIn(e.Run.Value)
 			}
-		}
-		if st == step {
-			break
 		}
 	}
 	return best
