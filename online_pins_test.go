@@ -211,3 +211,25 @@ func TestUnpinnableActionListsAFewProblems(t *testing.T) {
 		t.Errorf("%v", errs)
 	}
 }
+
+// An action which two steps pin to the same commit is read once and its problems are listed once, so that they do not
+// use up the places of the other dependencies.
+func TestPinProblemsOfSiblingActionsAreNotRepeated(t *testing.T) {
+	c := newFilesClient(t, map[string]string{
+		"o/a@" + pinSHA1 + ":action.yml": compositeOf(
+			stepUses("o/dep@"+pinSHA2),
+			stepUses("o/dep@"+pinSHA2),
+			stepUses("o/dep@"+strings.ToUpper(pinSHA2)),
+			stepUses("o/other@v1"),
+		),
+		"o/dep@" + pinSHA2 + ":action.yml": compositeOf(stepUses("actions/setup-node@v4")),
+	})
+	s := newOnlineSession(context.Background(), c, nil)
+	ps, err := s.PinProblems("o", "a", "", pinSHA1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ps) != 2 {
+		t.Errorf("want the problem of dep once and the one of o/other, got %d: %v", len(ps), ps)
+	}
+}

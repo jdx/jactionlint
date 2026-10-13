@@ -70,8 +70,25 @@ func (s *onlineSession) PinProblems(owner, repo, subpath, sha string) ([]pinProb
 	sha = normalizeFileRef(sha)
 	return s.pins.get(pinProblemsKey{newRepoKey(owner, repo), subpath, sha}, func() ([]pinProblem, error) {
 		w := pinWalk{s: s, max: maxTransitivePinDepth, seen: map[string]bool{}}
-		return w.walk(owner, repo, subpath, sha, 1, "")
+		ps, err := w.walk(owner, repo, subpath, sha, 1, "")
+		return uniquePinProblems(ps), err
 	})
+}
+
+// uniquePinProblems drops the repeated problems: an action which several steps pin to the same commit is walked for
+// each of them, and a repeat must not use up the places of the dependencies a finding lists.
+func uniquePinProblems(ps []pinProblem) []pinProblem {
+	seen := map[pinProblem]bool{}
+	var out []pinProblem
+	for _, p := range ps {
+		k := pinProblem{kind: p.kind, target: p.target, holder: strings.ToLower(p.holder)}
+		if seen[k] {
+			continue
+		}
+		seen[k] = true
+		out = append(out, p)
+	}
+	return out
 }
 
 type pinWalk struct {
