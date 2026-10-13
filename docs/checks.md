@@ -4097,7 +4097,7 @@ An image written with an expression is checked as far as it can be known:
 
 Docker images used as actions (`uses: docker://alpine:3.20`) are checked by the [`unpinned-uses`](#check-action-format) rule.
 
-With `--online --fix` the digest is written for you: `postgres:16` becomes `postgres:16@sha256:...` (the format Renovate keeps up to date), and an
+With `--online --fix=unsafe` the digest is written for you: `postgres:16` becomes `postgres:16@sha256:...` (the format Renovate keeps up to date), and an
 image without a tag becomes `image:latest@sha256:...`, because that is what Docker pulls. It works for `container:`, `services:`, the values a
 matrix writes, `uses: docker://` and the `runs.image: docker://` of an action. The digest is asked of the registry (the v2 API, a HEAD request of the
 manifest) and is the one `docker pull image:tag` resolves today: for a multi-platform image the digest of its index. Only

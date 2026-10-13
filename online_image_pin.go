@@ -90,7 +90,8 @@ func imageFix(sess *onlineSession, src []byte, lineStart, col int, uses bool) (*
 		if errors.Is(err, ErrImageNotFound) {
 			return nil, judgmentErr("the registry %s has no image %s:%s, or it is private: pin it by hand", reg.registry, ref.Image, tag)
 		}
-		return nil, err
+		return nil, &pinFixError{code: NoFixLookupFailed, err: err,
+			msg: fmt.Sprintf("pinning the image needs %s to resolve the tag and the lookup failed: %v", reg.registry, err)}
 	}
 	add := "@" + digest
 	if !ref.HasTag {

@@ -29,6 +29,14 @@ const (
 const manifestAccept = "application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, " +
 	"application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json"
 
+// registryTokenMargin is how long before its end a token is not used any more.
+const registryTokenMargin = 10 * time.Second
+
+type cachedRegistryToken struct {
+	value   string
+	expires time.Time
+}
+
 // registryEndpoints are the URLs of the two registries. Tests replace them.
 type registryEndpoints struct {
 	hubAuth, hubRegistry string
@@ -56,14 +64,15 @@ type registryClient struct {
 	offline bool
 
 	mu     sync.Mutex
-	tokens map[string]string // by registry, repository and whether credentials were sent
+	tokens map[string]cachedRegistryToken // by registry, repository and whether credentials were sent
+	now    func() time.Time
 }
 
 func newRegistryClient(ep registryEndpoints, githubToken func() string, offline bool) *registryClient {
 	hc := &http.Client{Timeout: registryRequestTimeout}
 	// A request with credentials is never redirected to another host
 	hc.CheckRedirect = authRedirectPolicy(nil)
-	return &registryClient{hc: hc, ep: ep, githubToken: githubToken, offline: offline, tokens: map[string]string{}}
+	return &registryClient{hc: hc, ep: ep, githubToken: githubToken, offline: offline, tokens: map[string]cachedRegistryToken{}, now: time.Now}
 }
 
 // registryStatusError is a registry answering with a status that is not a success.
@@ -162,10 +171,10 @@ func (c *registryClient) manifestDigest(ctx context.Context, registry, base, rep
 func (c *registryClient) token(ctx context.Context, registry, repository string, withCreds bool) (string, error) {
 	key := fmt.Sprintf("%s|%s|%t", registry, repository, withCreds)
 	c.mu.Lock()
-	t, ok := c.tokens[key]
+	ct, ok := c.tokens[key]
 	c.mu.Unlock()
-	if ok {
-		return t, nil
+	if ok && c.now().Before(ct.expires) {
+		return ct.value, nil
 	}
 	var endpoint, service string
 	switch registry {
@@ -201,17 +210,26 @@ func (c *registryClient) token(ctx context.Context, registry, repository string,
 	var tok struct {
 		Token       string `json:"token"`
 		AccessToken string `json:"access_token"`
+		ExpiresIn   int    `json:"expires_in"`
 	}
 	if err := json.Unmarshal(body, &tok); err != nil {
 		return "", fmt.Errorf("the token service of %s answered with something else than a token", registry)
 	}
-	t = tok.Token
+	t := tok.Token
 	if t == "" {
 		t = tok.AccessToken
 	}
-	c.mu.Lock()
-	c.tokens[key] = t
-	c.mu.Unlock()
+	// The tokens are short-lived (about 5 minutes on Docker Hub): keep one for the time it says, less a margin, and 60 seconds
+	// (what the specification says) when it says nothing. A token about to expire is not kept.
+	life := time.Duration(tok.ExpiresIn) * time.Second
+	if tok.ExpiresIn <= 0 {
+		life = time.Minute
+	}
+	if life -= registryTokenMargin; life > 0 {
+		c.mu.Lock()
+		c.tokens[key] = cachedRegistryToken{value: t, expires: c.now().Add(life)}
+		c.mu.Unlock()
+	}
 	return t, nil
 }
 
