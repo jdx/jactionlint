@@ -1,0 +1,36 @@
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - id: tool
+        uses: example/composite-tool@v1
+        with:
+          name: me
+          level: debug
+      - run: echo ${{ steps.tool.outputs.result }}
+      # The inputs of an action in a subdirectory, with an action.yaml
+      - uses: example/sub-tools/tools/lint@v1
+        with:
+          config: lint.toml
+      # A JavaScript action which declares no output may set any
+      - id: filter
+        uses: example/node-dynamic@v1
+        with:
+          filters: |
+            src: src/**
+      - run: echo ${{ steps.filter.outputs.src }}
+      # A real action which is not in the data set of the popular actions
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: just
+      # Metadata which cannot be read or does not exist: nothing is reported
+      - uses: example/private-action@v1
+        with:
+          anything: goes
+      - uses: example/broken-metadata@v1
+        with:
+          anything: goes
+      - id: mise
+        uses: jdx/mise-action@v2
+      - run: echo ${{ steps.mise.outputs.cache-hit }}

@@ -1,0 +1,69 @@
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      # ERROR: the required input "name" is missing
+      - uses: example/composite-tool@v1
+      # ERROR: the input "levl" is a typo, and "old" is deprecated
+      - uses: example/composite-tool@v1
+        with:
+          name: me
+          levl: debug
+          old: x
+      # OK
+      - uses: example/composite-tool@v1
+        with:
+          name: me
+          level: debug
+      # ERROR: the action is in a subdirectory, its action.yaml is read
+      - uses: example/sub-tools/tools/lint@v1
+      - uses: example/node-tool@v1
+        with:
+          token: x
+          unknown: y
+      # OK: "with" can be an expression, so the required input may be in it
+      - uses: example/node-tool@v1
+        with: ${{ fromJSON(vars.TOOL_INPUTS) }}
+      # ERROR: a real action, which is not in the data set of the popular actions
+      - uses: taiki-e/install-action@v2
+        with:
+          tools: just
+      # OK: the inputs of the commit are the ones of the file at that commit
+      - uses: taiki-e/install-action@1168f6810a3cb30a3514bf5756a3b7f0422c6df8 # v2
+        with:
+          tool: just
+          fallback: none
+      # OK: nothing is reported for an action whose metadata cannot be read, or which is not visible
+      - uses: example/private-action@v1
+      - uses: example/unknown-action@v1
+        with:
+          anything: goes
+      - uses: example/broken-metadata@v1
+        with:
+          anything: goes
+  outputs:
+    runs-on: ubuntu-latest
+    steps:
+      - id: composite
+        uses: example/composite-tool@v1
+        with:
+          name: me
+      - id: node
+        uses: example/node-tool@v1
+        with:
+          token: x
+      - id: dynamic
+        uses: example/node-dynamic@v1
+        with:
+          filters: x
+      - id: mise
+        uses: jdx/mise-action@v2
+      # OK: a composite action sets the outputs which it declares
+      - run: echo ${{ steps.composite.outputs.result }}
+      # ERROR: a composite action has no other output
+      - run: echo ${{ steps.composite.outputs.reslt }}
+      # OK: a JavaScript action may set outputs which it does not declare
+      - run: echo ${{ steps.node.outputs.cache-miss }}
+      - run: echo ${{ steps.dynamic.outputs.anything }}
+      - run: echo ${{ steps.mise.outputs.cache-miss }}
