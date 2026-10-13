@@ -5,6 +5,8 @@ import (
 	"strings"
 
 	"mvdan.cc/sh/v3/syntax"
+
+	"github.com/jdx/jactionlint/v2/internal/runscript"
 )
 
 // This file decides from the PARSED script (and the parsed expressions of the step) whether a step is written for more
@@ -18,12 +20,6 @@ var gnuPrefixedCommands = map[string]bool{
 	"gls": true, "greadlink": true, "gxargs": true, "gfind": true, "gtee": true, "gsort": true, "ghead": true,
 	"gtail": true, "gwc": true, "gcut": true, "gtr": true, "gmktemp": true, "gbase64": true, "gtimeout": true,
 	"gdu": true, "ginstall": true,
-}
-
-// gnuBrewPackages are the formulas of Homebrew that install GNU tools in place of, or next to, the BSD ones.
-// Every formula whose name starts with gnu- is one as well.
-var gnuBrewPackages = map[string]bool{
-	"coreutils": true, "findutils": true, "diffutils": true, "grep": true, "gawk": true, "gsed": true,
 }
 
 // wrapperSpec describes a command that runs the command after it: the options of the wrapper which take a value (the
@@ -73,13 +69,21 @@ func isAssignmentWord(w string) bool {
 	return true
 }
 
+// cmdWord is a word of a simple command: its literal text ("" for a word that is not literal) and, when it comes from a
+// script that runscript read, that word.
+type cmdWord struct {
+	text string
+	src  *runscript.Word
+}
+
 // commandWordOf returns the words of a simple command and the index of the real command in them, after the wrappers,
 // their options with the values of these, and the assignments; -1 when it is not a literal word. The words are the ones
 // given, except that the value of `env -S` (which is a command line) is split into words and put in place of the option.
-func commandWordOf(words []string) ([]string, int) {
+// It is the one place that knows the wrappers, for the check of what a script is written for and for the reporting.
+func commandWordOf(words []cmdWord) ([]cmdWord, int) {
 	i := 0
 	for i < len(words) {
-		w := words[i]
+		w := words[i].text
 		if w == "" {
 			return words, -1
 		}
@@ -94,7 +98,7 @@ func commandWordOf(words []string) ([]string, int) {
 		}
 		i++
 		for i < len(words) {
-			o := words[i]
+			o := words[i].text
 			if o == "" {
 				return words, -1
 			}
@@ -109,8 +113,18 @@ func commandWordOf(words []string) ([]string, int) {
 						if value == "" && used > 1 {
 							return words, -1 // the value is not a literal word
 						}
-						expanded := append([]string{}, words[:i]...)
-						expanded = append(expanded, strings.Fields(value)...)
+						from := words[i].src
+						if used > 1 {
+							from = words[i+1].src
+						}
+						expanded := append([]cmdWord{}, words[:i]...)
+						for _, f := range strings.Fields(value) {
+							var w *runscript.Word
+							if from != nil {
+								w = &runscript.Word{Loc: from.Loc, Raw: f, Value: f}
+							}
+							expanded = append(expanded, cmdWord{f, w})
+						}
 						expanded = append(expanded, words[i+used:]...)
 						words = expanded
 						continue
@@ -128,6 +142,47 @@ func commandWordOf(words []string) ([]string, int) {
 		i += spec.positional
 	}
 	return words, -1
+}
+
+// realCommand returns the command that a simple command of a script really runs, when runscript names another one: the
+// command behind `xargs`, `ionice`, `setsid`, `chronic`, `env -S '...'`, ... as the wrappers of commandWordOf. It is the
+// command itself when runscript has already found the real command (sudo, env, nice, timeout, ...).
+func realCommand(c *runscript.Command) *runscript.Command {
+	words := make([]cmdWord, 0, len(c.Words))
+	for _, w := range c.Words {
+		t := w.Value
+		if w.Dynamic() {
+			t = ""
+		}
+		words = append(words, cmdWord{t, w})
+	}
+	words, i := commandWordOf(words)
+	if i < 0 || i >= len(words) {
+		return c
+	}
+	name := path.Base(words[i].text)
+	if name == c.Name {
+		return c
+	}
+	nc := *c
+	nc.Name = name
+	nc.Args = nil
+	for _, w := range words[i+1:] {
+		if w.src == nil {
+			return c
+		}
+		nc.Args = append(nc.Args, w.src)
+	}
+	return &nc
+}
+
+// realCommands returns the commands of the script as they are really run (see realCommand).
+func realCommands(s *runscript.Script) []*runscript.Command {
+	out := make([]*runscript.Command, len(s.Commands))
+	for i, c := range s.Commands {
+		out[i] = realCommand(c)
+	}
+	return out
 }
 
 // optionValueWords returns how many of the words after the option the option takes as its value: 1 for an option that
@@ -152,14 +207,14 @@ func optionValueWords(spec wrapperSpec, o string) int {
 
 // envSplitString reads `-S value`, `-Svalue`, `--split-string value` and `--split-string=value` of env at words[i]. It
 // returns the value, the number of words that the option and its value take, and whether it is such an option.
-func envSplitString(words []string, i int) (value string, used int, ok bool) {
-	o := words[i]
+func envSplitString(words []cmdWord, i int) (value string, used int, ok bool) {
+	o := words[i].text
 	switch {
 	case o == "-S" || o == "--split-string":
 		if i+1 >= len(words) {
 			return "", 1, true
 		}
-		return words[i+1], 2, true
+		return words[i+1].text, 2, true
 	case strings.HasPrefix(o, "--split-string="):
 		return strings.TrimPrefix(o, "--split-string="), 1, true
 	case strings.HasPrefix(o, "-S") && len(o) > 2 && o[1] != '-':
@@ -187,8 +242,9 @@ func stepConditionReadsTheSystem(cond *String) bool {
 //
 //   - it reads `runner.os` or `matrix.os` in an expression, or expands `$OSTYPE` or `$RUNNER_OS`;
 //   - it calls `uname` or `sw_vers` (the words of a test or a case are compared with what they print);
-//   - one of its command words is a GNU tool by its Homebrew name (`gsed`, `gdate`, ...), or it calls `brew install` (or
-//     reinstall, upgrade) with one of the formulas of the GNU tools as an argument, or it names a `gnubin` directory;
+//   - one of its command words is a GNU tool by its Homebrew name (`gsed`, `gdate`, ...), or it names a `gnubin` directory
+//     (which Homebrew puts the GNU tools under with their plain names). `brew install coreutils` alone is not enough: the
+//     formula is keg-only, so the BSD tool stays first on the PATH;
 //   - it compares or prints the word GNU (`sed --version | grep GNU`).
 //
 // A script that cannot be parsed counts as written for more systems: nothing is known about it.
@@ -228,32 +284,18 @@ func literalNamesTheSystem(v string) bool {
 	return v == "GNU" || strings.Contains(v, "gnubin")
 }
 
-// callIsForMoreSystems looks at the command word and, for brew, the arguments of a simple command.
+// callIsForMoreSystems looks at the command word of a simple command, after the wrappers.
 func callIsForMoreSystems(c *syntax.CallExpr) bool {
-	var words []string // the literal words, "" for a word that is not
+	var words []cmdWord // the literal words, "" for a word that is not
 	for _, a := range c.Args {
-		words = append(words, literalWord(a))
+		words = append(words, cmdWord{text: literalWord(a)})
 	}
 	words, i := commandWordOf(words)
 	if i < 0 || i >= len(words) {
 		return false
 	}
-	name := path.Base(words[i])
-	switch {
-	case name == "uname" || name == "sw_vers" || gnuPrefixedCommands[name]:
-		return true
-	case name == "brew":
-		installing := false
-		for _, a := range words[i+1:] {
-			switch {
-			case a == "install" || a == "reinstall" || a == "upgrade":
-				installing = true
-			case installing && !strings.HasPrefix(a, "-") && (gnuBrewPackages[a] || strings.HasPrefix(a, "gnu-")):
-				return true
-			}
-		}
-	}
-	return false
+	name := path.Base(words[i].text)
+	return name == "uname" || name == "sw_vers" || gnuPrefixedCommands[name]
 }
 
 // literalWord returns the text of a word that has no expansion, with the quotes removed, and "" for any other word.

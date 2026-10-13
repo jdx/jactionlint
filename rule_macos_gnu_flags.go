@@ -76,8 +76,9 @@ func (rule *RuleMacosGnuFlags) VisitStep(n *Step) error {
 	if s == nil {
 		return nil
 	}
-	portable := portableTools(s)
-	for _, c := range s.Commands {
+	cmds := realCommands(s)
+	portable := portableTools(cmds)
+	for _, c := range cmds {
 		if (c.Tested && !c.AndOnly) || portable[c.Name] {
 			// the script handles the failure (`if grep -P ...`, `date -d ... || date -v ...`: not the left side of &&,
 			// whose failure is the status of the list) or has the form of macOS too
@@ -219,9 +220,9 @@ func isMacOSRunnerLabel(l string) bool {
 // portableTools returns the names of the commands which the script also calls in a form that is the one of macOS, as in
 // `date -j -f ... "$x" || date -d "$x"` or when a script prints `stat -c` and `stat -f` to see which one works: the author
 // handles both systems, so the GNU form is not a mistake.
-func portableTools(s *runscript.Script) map[string]bool {
+func portableTools(cmds []*runscript.Command) map[string]bool {
 	out := map[string]bool{}
-	for _, c := range s.Commands {
+	for _, c := range cmds {
 		for i, w := range c.Args {
 			if w == nil {
 				continue

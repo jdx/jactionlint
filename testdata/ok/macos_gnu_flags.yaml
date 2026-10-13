@@ -100,9 +100,11 @@ jobs:
       # Clustered options of stat of macOS: the script handles both systems
       - run: |
           stat -Lf %m file.txt || stat -c %Y file.txt
-      # The GNU grep is installed, which is what the script uses
+      # The GNU grep is on the PATH under its plain name
       - run: |
           brew install grep
+          gnubin="$(brew --prefix grep)/libexec/gnubin"
+          PATH="$gnubin:$PATH"
           grep -P x file.txt
       # The value of an option that ends a cluster is the next word: -P is the pattern here
       - run: |

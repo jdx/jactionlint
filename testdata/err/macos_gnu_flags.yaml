@@ -132,3 +132,25 @@ jobs:
     steps:
       # gsed is the value of the user here, not the command
       - run: sudo -u gsed sed -i 's/a/b/' file.txt
+  keg-only-formulas:
+    runs-on: macos-latest
+    steps:
+      # The formulas are keg-only: the BSD tools stay first on the PATH, and the GNU ones have a g in front
+      - run: |
+          brew install grep coreutils
+          grep -P x file.txt
+          date -d yesterday
+  behind-wrappers:
+    runs-on: macos-latest
+    steps:
+      - run: echo a b | xargs -n 1 sed -i 's/a/b/'
+      - run: ionice -c 2 -n 7 grep -P x file.txt
+      - run: setsid date -d yesterday
+      - run: chronic stat -c %s file.txt
+      - run: env -S 'sed -i s/a/b/ file.txt'
+      - run: sudo -Eu root cp --parents a b
+  wrappers-of-gnu-tools:
+    runs-on: macos-latest
+    steps:
+      - run: xargs -n 1 gsed -i 's/a/b/'
+      - run: env -S 'gsed -i s/a/b/ file.txt'

@@ -7341,9 +7341,11 @@ tools), a job that runs in a `container:`, a command whose failure the script ha
 command in the form of macOS (`date -j -f ... || date -d ...`, `stat -f` next to `stat -c`, `sed -i bak` next to `sed -i`, `tee -a`), and a step
 whose `if:` reads the `runner` or `matrix` context, or whose script is written for more than one system. That is decided
 from the parsed script, not from its text: it expands `$OSTYPE` or `$RUNNER_OS`, reads `runner.os` or `matrix.os` in an
-expression, calls `uname` or `sw_vers`, has a GNU tool by its Homebrew name as a command word (`gsed`, `gdate`, ...), calls
-`brew install` with `coreutils`, `findutils`, `grep`, `gawk` or a `gnu-*` formula as an argument, or names a `gnubin` directory. Scripts
-of other shells than bash and sh are not looked at.
+expression, calls `uname` or `sw_vers`, has a GNU tool by its Homebrew name as a command word (`gsed`, `gdate`, ...), or names a
+`gnubin` directory. `brew install coreutils` (or `grep`, `gnu-sed`, ...) alone is not enough: the formulas are keg-only, so the BSD
+tool stays first on the `PATH` until the `gnubin` directory is put on it. The real command is found behind `sudo`, `env` (also
+`env -S '...'`), `timeout`, `nice`, `xargs`, `ionice`, `setsid`, `chronic` and the like, with their options. Scripts of other shells than bash and
+sh are not looked at.
 
 There is no automatic fix: the portable form depends on the script.
 
