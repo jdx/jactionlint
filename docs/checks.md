@@ -5584,7 +5584,8 @@ Forms that look GNU-only and work on macOS are not reported: `xargs -r` (accepte
 (since macOS 12.3).
 
 The rule leaves out what may be meant for another system: a job on a self-hosted runner (its owner can have installed the GNU
-tools), a job that runs in a `container:`, a command whose failure the script handles (`date -d ... || date -v ...`), and a step
+tools), a job that runs in a `container:`, a command whose failure the script handles (`if grep -P ...`), a script that also calls the
+command in the form of macOS (`date -j -f ... || date -d ...`, `stat -f` next to `stat -c`, `sed -i bak` next to `sed -i`, `tee -a`), and a step
 whose `if:` reads `runner.` or `matrix.` or whose script mentions the system or the GNU tools (`RUNNER_OS`, `uname`, `Darwin`,
 `gsed`, `gnu-sed`, `coreutils`, `brew`, ...). Scripts of other shells than bash and sh are not looked at.
 

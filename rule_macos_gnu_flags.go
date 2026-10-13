@@ -76,9 +76,10 @@ func (rule *RuleMacosGnuFlags) VisitStep(n *Step) error {
 	if s == nil {
 		return nil
 	}
+	portable := portableTools(s)
 	for _, c := range s.Commands {
-		if c.Tested {
-			continue // the script handles the failure: `date -d ... || date -v ...`, `if grep -P ...`
+		if c.Tested || portable[c.Name] {
+			continue // the script handles the failure (`date -d ... || date -v ...`) or has the form of macOS too
 		}
 		for _, f := range macosGnuForms(c) {
 			start, end := scriptPos(s, origin, f.word.Offset), scriptPos(s, origin, f.word.End)
@@ -158,6 +159,45 @@ func isMacOSRunnerLabel(l string) bool {
 	return strings.HasPrefix(l, "macos-") && isGitHubHostedLabel(l)
 }
 
+// portableTools returns the names of the commands which the script also calls in a form that is the one of macOS, as in
+// `date -j -f ... "$x" || date -d "$x"` or when a script prints `stat -c` and `stat -f` to see which one works: the author
+// handles both systems, so the GNU form is not a mistake.
+func portableTools(s *runscript.Script) map[string]bool {
+	out := map[string]bool{}
+	for _, c := range s.Commands {
+		for i, w := range c.Args {
+			if w == nil {
+				continue
+			}
+			switch c.Name {
+			case "date":
+				if w.Raw == "-j" || w.Raw == "-v" || strings.HasPrefix(w.Raw, "-v") && len(w.Raw) > 2 && (w.Raw[2] == '+' || w.Raw[2] == '-') {
+					out["date"] = true
+				}
+			case "stat":
+				if w.Raw == "-f" || strings.HasPrefix(w.Raw, "-f") && len(w.Raw) > 2 && w.Raw[2] == '%' {
+					out["stat"] = true
+				}
+			case "sed":
+				if sedInPlaceRe.MatchString(w.Raw) && i+1 < len(c.Args) && c.Args[i+1] != nil && !c.Args[i+1].Dynamic() && isSedSuffix(c.Args[i+1].Value) {
+					out["sed"] = true
+				}
+			case "tee":
+				if w.Raw == "-a" {
+					out["tee"] = true
+				}
+			}
+		}
+	}
+	return out
+}
+
+// isSedSuffix reports whether the word is what BSD sed takes as the suffix of the backup of -i: the empty string,
+// `.bak`, `~` or a word of letters (`bak`, `orig`). A word like `1d` is a script.
+func isSedSuffix(v string) bool {
+	return v == "" || sedSuffixRe.MatchString(v)
+}
+
 // macosGnuForm is one GNU-only form in a command.
 type macosGnuForm struct {
 	word    *runscript.Word
@@ -168,8 +208,8 @@ type macosGnuForm struct {
 var (
 	// sedInPlaceRe is a word that is the in-place option of sed, alone or last of a cluster (-i, -Ei, -ni).
 	sedInPlaceRe = regexp.MustCompile(`^-[A-Za-z]*i$`)
-	// sedSuffixRe is a word that BSD sed takes as the suffix of the backup: ".bak", ".orig", "~".
-	sedSuffixRe = regexp.MustCompile(`^(?:\.[A-Za-z0-9_~.-]*|~)$`)
+	// sedSuffixRe is a word that BSD sed takes as the suffix of the backup: ".bak", ".orig", "~", "bak".
+	sedSuffixRe = regexp.MustCompile(`^(?:\.[A-Za-z0-9_~.-]*|~|[A-Za-z]{3,})$`)
 )
 
 // macosGnuForms returns the GNU-only forms of the command.

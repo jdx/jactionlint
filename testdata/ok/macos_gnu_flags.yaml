@@ -70,6 +70,17 @@ jobs:
           PAST=$(date -d '1 hour ago' '+%Y%m%d%H%M.%S' 2>/dev/null || date -v-1H '+%Y%m%d%H%M.%S')
           echo "$PAST"
           if grep -qP 'x' file; then echo found; fi
+      # The script has the form of macOS too, so it handles both systems
+      - run: |
+          end=$(date -j -f "%b %d %T %Y %Z" "$not_after" +%s 2>/dev/null)
+          [ -z "$end" ] && end=$(date -d "$not_after" +%s 2>/dev/null)
+          echo "$end"
+      - run: |
+          echo "stat -f %m : $(stat -f %m file.txt 2>&1 | head -1)"
+          echo "stat -c %Y : $(stat -c %Y file.txt 2>&1 | head -1)"
+      - run: |
+          sed -i bak 's/a/b/' file.txt
+          sed -i 's/c/d/' other.txt
       # A tool that is not the BSD one
       - run: gdate -d yesterday
       - run: echo 'tee --append and sed -i x y are text'
