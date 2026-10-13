@@ -1,0 +1,7 @@
+on: push
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: other-workflow/action@v1
+      - uses: actions/checkout@v6.0.2

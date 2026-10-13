@@ -357,7 +357,7 @@ var (
 	}
 	selfHostedRunnerKeys   = []string{"labels", "strict-labels", "providers"}
 	fixConfigKeys          = []string{"rules"}
-	onlineOptionsKeys      = []string{"mode", "api-url", "token-env", "token-file", "allow", "deny", "cache-ttl", "max-rate-limit-wait", "retries", "concurrency", "gh-cli"}
+	onlineOptionsKeys      = []string{"mode", "api-url", "token-env", "token-file", "allow", "deny", "cache-ttl", "max-rate-limit-wait", "retries", "concurrency", "gh-cli", "github-com-fallback", "github-com-token-env", "github-com-token-file"}
 	pathConfigKeys         = []string{"ignore"}
 	requiredActionKeys     = []string{"action", "version"}
 	legacyTimeoutMinutesKy = []string{"required", "max"}

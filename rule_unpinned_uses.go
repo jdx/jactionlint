@@ -200,4 +200,27 @@ var unpinnedUsesOptions = []RuleOption{{
 	Name: "policies", Kind: RuleOptionStringMap, Default: map[string]string{},
 	Summary:  "How strongly to pin the actions matching a pattern: hash-pin (full commit SHA, the default for everything), ref-pin (any tag, branch or SHA), immutable-release (a full commit SHA, or with --online the tag of an immutable GitHub release) or any. The most specific pattern wins. Patterns are \"*\", \"owner/*\", \"owner/repo\" and \"owner/repo/path\". Docker images follow the \"*\" policy.",
 	Validate: validateUsesPolicies,
+}, {
+	Name: "actions-lock", Kind: RuleOptionBool, Default: true,
+	Summary: "Accept an action which is not pinned to a commit in a workflow when the Actions lock file of the repository (.github/workflows/actions.lock) pins it to a full commit for that workflow. The lock file is a technical preview of GitHub whose format may change. Set it to false to ignore the lock file.",
 }, shortPinCommentOption}
+
+// lockPins reports whether the Actions lock file of the repository pins the action to a commit for the
+// workflow being checked, so that a tag or a branch in `uses:` is as good as a commit SHA. The option
+// "actions-lock" turns this off.
+func (rule *RuleAction) lockPins(ref *UsesRef) bool {
+	if rule.lock == nil {
+		return false
+	}
+	if !rule.config.readsActionsLock() {
+		return false
+	}
+	return rule.lock.pins(ref)
+}
+
+// readsActionsLock reports whether the Actions lock file is read for the rule unpinned-uses: the option "actions-lock"
+// is not false. It decides the findings and the pin fix alike.
+func (c *Config) readsActionsLock() bool {
+	v, set := c.ruleOptionBool("unpinned-uses", "actions-lock")
+	return !set || v
+}

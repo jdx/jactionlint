@@ -160,6 +160,7 @@ rules:
 | [unknown-workflow-input](#unknown-workflow-input) | correctness | error | correctness |
 | [unknown-workflow-secret](#unknown-workflow-secret) | correctness | error | correctness |
 | [unlocked-install](#unlocked-install) | security | error | default |
+| [unpinnable-action](#unpinnable-action) | security | warn | only with `--online` |
 | [unpinned-images](#unpinned-images) | security | error | default |
 | [unpinned-tools](#unpinned-tools) | security | error | default |
 | [unpinned-uses](#unpinned-uses) | policy | error | default |
@@ -1146,6 +1147,7 @@ The version comment of a hash-pinned action does not match the pinned commit.
 - Default level: warn
 - Profile: only with `--online`
 - Needs network access: yes (only with `--online`)
+- Fixable: yes
 - Details and examples: [checks](./checks.md#check-ref-version-mismatch)
 
 ## repojacking
@@ -1388,6 +1390,17 @@ cargo install runs without --locked, or npm, yarn or pnpm install without freezi
 - Option `pedantic` (bool, no default): Also report the pedantic checks, which are noisier. Unset, they run under the pedantic profile.
 - Details and examples: [checks](./checks.md#check-unlocked-install)
 
+## unpinnable-action
+
+A hash-pinned action pulls in an action or a Docker image by a tag or a branch, so its pin does not freeze what runs. Only with the option pedantic.
+
+- Group: security
+- Default level: warn
+- Profile: only with `--online`
+- Needs network access: yes (only with `--online`)
+- Option `pedantic` (bool, no default): Also report the pedantic checks, which are noisier. Unset, they run under the pedantic profile.
+- Details and examples: [checks](./checks.md#check-unpinnable-action)
+
 ## unpinned-images
 
 A container or service image is not pinned by a digest.
@@ -1420,6 +1433,7 @@ An action, reusable workflow or Docker image is not pinned to a commit SHA or di
 - Profile: default
 - Fixable: yes
 - Option `policies` (string-map, default empty): How strongly to pin the actions matching a pattern: hash-pin (full commit SHA, the default for everything), ref-pin (any tag, branch or SHA), immutable-release (a full commit SHA, or with --online the tag of an immutable GitHub release) or any. The most specific pattern wins. Patterns are "*", "owner/*", "owner/repo" and "owner/repo/path". Docker images follow the "*" policy.
+- Option `actions-lock` (bool, default true): Accept an action which is not pinned to a commit in a workflow when the Actions lock file of the repository (.github/workflows/actions.lock) pins it to a full commit for that workflow. The lock file is a technical preview of GitHub whose format may change. Set it to false to ignore the lock file.
 - Option `short-pin-comment` (bool, default false): Make `--online --fix` name the tag as written in the comment of a pin (`# v4`), not the most specific version tag of the commit (`# v4.2.4`).
 - Details and examples: [checks](./checks.md#check-action-format)
 

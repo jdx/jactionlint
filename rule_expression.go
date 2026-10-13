@@ -462,6 +462,9 @@ func (rule *RuleExpression) getWorkflowCallOutputsType(call *WorkflowCall) *Obje
 		return NewMapObjectType(StringType{})
 	}
 	if m == nil {
+		m = rule.remoteWorkflowMetadata(call)
+	}
+	if m == nil {
 		return NewMapObjectType(StringType{})
 	}
 
@@ -470,6 +473,24 @@ func (rule *RuleExpression) getWorkflowCallOutputsType(call *WorkflowCall) *Obje
 		p[n] = StringType{}
 	}
 	return NewStrictObjectType(p)
+}
+
+// remoteWorkflowMetadata is what the reusable workflow of another repository declares, read from GitHub with
+// --online, or nil when the checks are off or it is not known.
+func (rule *RuleExpression) remoteWorkflowMetadata(call *WorkflowCall) *ReusableWorkflowMetadata {
+	if rule.online == nil || call == nil || call.Uses == nil {
+		return nil
+	}
+	ref := ParseUses(call.Uses.Value)
+	if !remoteWorkflowLookup(ref) {
+		return nil
+	}
+	m, err := rule.online.RemoteWorkflow(ref.Owner, ref.Repo, ref.Subpath, ref.Ref)
+	if err != nil {
+		rule.Debug("%s: no workflow metadata to type the call with: %v", ref.Raw, err)
+		return nil
+	}
+	return m
 }
 
 func (rule *RuleExpression) checkOneExpression(s *String, what, workflowKey string) ExprType {
@@ -660,6 +681,12 @@ func (rule *RuleExpression) checkWorkflowCall(c *WorkflowCall) {
 	if err != nil {
 		rule.ReportID("invalid-local-workflow", c.Uses.Pos, err.Error())
 	}
+	where := ""
+	if m == nil && err == nil {
+		if m = rule.remoteWorkflowMetadata(c); m != nil {
+			where = " (read from GitHub with --online)"
+		}
+	}
 
 	for n, i := range c.Inputs {
 		ts := rule.checkString(i.Value, "jobs.<job_id>.with.<with_id>")
@@ -704,10 +731,11 @@ func (rule *RuleExpression) checkWorkflowCall(c *WorkflowCall) {
 			rule.ReportIDf(
 				"workflow-input-type",
 				i.Value.Pos,
-				"input %q is typed as %s by reusable workflow %q. %s value cannot be assigned",
+				"input %q is typed as %s by reusable workflow %q%s. %s value cannot be assigned",
 				mi.Name,
 				mi.Type.String(),
 				c.Uses.Value,
+				where,
 				ty.String(),
 			)
 		}

@@ -306,6 +306,8 @@ type RuleAction struct {
 	shared []*Error
 	// wf is the file being checked, for the version comments of the steps.
 	wf *Workflow
+	// lock is the Actions lock file as it applies to the workflow, nil when it does not (see RuleEnv.workflowLock).
+	lock *workflowLock
 	// online reads the metadata of the actions which are not in the data set; nil when the online checks are off.
 	online *onlineSession
 }
@@ -370,7 +372,7 @@ func (rule *RuleAction) checkRepoAction(ref *UsesRef, exec *ExecAction) {
 		}
 	}
 
-	if msg := unpinnedUsesMessage(rule.config, ref, false); msg != "" {
+	if msg := unpinnedUsesMessage(rule.config, ref, false); msg != "" && !rule.lockPins(ref) {
 		rule.ReportID("unpinned-uses", exec.Uses.Pos, msg)
 	}
 
@@ -837,6 +839,7 @@ func init() {
 	)
 	registerRuleFactory("action", func(env *RuleEnv) []Rule {
 		r := NewRuleAction(env.localActions)
+		r.lock = env.workflowLock()
 		r.online = env.online
 		return []Rule{r}
 	})
