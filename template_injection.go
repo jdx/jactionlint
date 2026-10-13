@@ -355,10 +355,85 @@ func (c *tiContext) externalText(path []string) string {
 				if len(path) == 5 && path[3] == "base" && path[4] == "ref" {
 					return "a branch name"
 				}
+				return c.outsiderEventText(path)
+			default:
+				return c.outsiderEventText(path)
 			}
 		}
 	}
 	return ""
+}
+
+// outsiderEventText returns what kind of value the property of github.event is when it is free text which a
+// person outside of the workflow types, and "" when it is not. It covers the properties which the table of
+// attacker controlled properties lacks, so the correctness profile (what actionlint reports) does not know them.
+// The path is in lower case.
+//
+// The properties which CodeQL and gato-x list and this does not cover: github.event.changes.head.ref.from (no payload has
+// it, the field of a pull request which changed its base is changes.base.ref.from), github.event.merge_group.committer.*
+// (the payload has head_commit.committer, the commit of the merge queue which GitHub creates), the email of the author
+// of that commit (GitHub fills it from a verified address) and github.event.merge_group.head_ref (the name of the queue's branch).
+func (c *tiContext) outsiderEventText(path []string) string {
+	if len(path) < 4 || path[0] != "github" || path[1] != "event" {
+		return ""
+	}
+	isElem := func(s string) bool { return s == "*" || s == "[]" }
+	rest := strings.Join(path[3:], ".")
+	switch path[2] {
+	case "pull_request":
+		if rest == "head.repo.homepage" {
+			return "the website of the repository which the pull request comes from"
+		}
+	case "changes":
+		// The previous values of an edited issue or pull request: text which its author typed before.
+		switch rest {
+		case "title.from":
+			return "the previous title of an edited issue or pull request"
+		case "body.from":
+			return "the previous text of an edited issue or pull request"
+		case "base.ref.from":
+			return "a branch name"
+		}
+	case "pages":
+		// A gollum event: the pages of a wiki, which anyone who may edit the wiki names.
+		if len(path) == 5 && isElem(path[3]) && path[4] == "title" {
+			return "the title of a wiki page"
+		}
+	case "merge_group":
+		// The commit of a merge queue has the title and the text of the pull requests.
+		switch rest {
+		case "head_commit.message":
+			return "the message of a merge queue commit"
+		case "head_commit.author.name":
+			return "the name of the author of a merge queue commit"
+		}
+	case "workflow_run", "workflow":
+		// The path of the workflow file which started a workflow_run is a name which the author of a pull request
+		// from a fork chooses: the file may be new in the pull request. github.event.workflow is also the workflow of
+		// a workflow_dispatch event, which only someone with write access starts.
+		if !c.hasTrigger("workflow_run") {
+			return ""
+		}
+		if rest == "path" || (path[2] == "workflow_run" && len(path) == 6 && path[3] == "referenced_workflows" && isElem(path[4]) && path[5] == "path") {
+			return "the path of the workflow file that started this run"
+		}
+	}
+	return ""
+}
+
+// hasTrigger reports whether the workflow, or for a reusable workflow or an action one of the workflows which call it, is started by one of the events.
+func (c *tiContext) hasTrigger(events ...string) bool {
+	if c.wf == nil {
+		return false
+	}
+	// The events of the workflows which call a reusable workflow count (github.event is the one of the caller)
+	evs, _ := c.wf.actorEvents()
+	for _, e := range evs {
+		if w, ok := e.(*WebhookEvent); ok && w.Hook != nil && slices.Contains(events, w.Hook.Value) {
+			return true
+		}
+	}
+	return false
 }
 
 // matrixIsLiteral reports whether every value of the matrix variable is written in the workflow.
@@ -492,6 +567,9 @@ type tiContext struct {
 	wf   *Workflow
 	job  *Job
 	step *Step
+	// outsiderText is true when the free text of outsiders which the table of attacker controlled properties lacks counts
+	// in the sinks, which is when the configuration reports it in scripts (tiEnabled of tiInput).
+	outsiderText bool
 	// matrix remembers matrixIsLiteral for the job, which looks at every combination of the matrix. It can
 	// be nil, then the answer is worked out each time.
 	matrix map[string]bool
@@ -567,6 +645,32 @@ func (c *tiContext) envTaint(name string, depth int) string {
 			if r.Path[0] == "env" && len(r.Path) == 2 {
 				if t := c.envTaint(r.Path[1], depth+1); t != "" {
 					return t
+				}
+			}
+		}
+	}
+	return ""
+}
+
+// envOutsiderText returns what kind of text of an outsider (see outsiderEventText) the environment variable is set from, or
+// an empty string. Unlike envTaint it does not read the table of attacker controlled properties, so the correctness profile
+// does not change.
+func (c *tiContext) envOutsiderText(name string, depth int) string {
+	if depth > 4 {
+		return ""
+	}
+	v := c.lookupEnv(name)
+	if v == nil || v.Value == nil {
+		return ""
+	}
+	for _, sp := range scanExprs(v.Value) {
+		for _, r := range exprContextRefs(sp.Node) {
+			if k := c.outsiderEventText(r.Path); k != "" {
+				return r.String()
+			}
+			if r.Path[0] == "env" && len(r.Path) == 2 {
+				if k := c.envOutsiderText(r.Path[1], depth+1); k != "" {
+					return k
 				}
 			}
 		}
