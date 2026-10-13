@@ -24,6 +24,11 @@ jobs:
       - run: |
           docker build -t app:ci .
           docker run --rm app:ci
+      # OK: the options of buildx and of commit are not the subcommand or the image
+      - run: |
+          docker buildx --builder b build -t tool:ci2 .
+          docker commit -m msg c tool:ci3
+          docker run tool:ci2 && docker run tool:ci3
       # OK: the image is a value that is only known when the script runs
       - run: docker run --rm "$IMAGE" && docker run ${{ env.IMAGE }}
         env:

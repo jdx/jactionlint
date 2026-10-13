@@ -243,9 +243,13 @@ func localImagesOf(s *runscript.Script) (names []string, unknown bool) {
 		case "tag", "image tag", "commit", "container commit":
 			// docker tag SRC DST, docker commit CONTAINER IMAGE
 			var pos []string
-			for _, w := range rest {
-				if !strings.HasPrefix(w, "-") {
+			for k := 0; k < len(rest); k++ {
+				w := rest[k]
+				switch {
+				case !strings.HasPrefix(w, "-"):
 					pos = append(pos, w)
+				case !strings.Contains(w, "=") && dockerCommitValueFlags[w] && strings.HasSuffix(verb, "commit"):
+					k++ // the value of the option is not an argument
 				}
 			}
 			if len(pos) >= 2 {
@@ -267,29 +271,45 @@ func dockerSubcommand(c *runscript.Command) (string, []string) {
 	for _, a := range c.Args {
 		words = append(words, a.Value)
 	}
-	i := 0
-	for i < len(words) && strings.HasPrefix(words[i], "-") && words[i] != "--" {
-		name, _, hasValue := strings.Cut(words[i], "=")
-		switch {
-		case hasValue || dockerGlobalBoolFlags[name]:
-			i++
-		case dockerGlobalValueFlags[name]:
-			i += 2
-		default:
-			return "", nil
+	// skipFlags returns the index of the first word from i which is not an option or the value of one. An option which is not
+	// known ends the reading: the subcommand is not known then.
+	skipFlags := func(i int, value map[string]bool) (int, bool) {
+		for i < len(words) && strings.HasPrefix(words[i], "-") && words[i] != "--" {
+			name, _, hasValue := strings.Cut(words[i], "=")
+			switch {
+			case hasValue || dockerGlobalBoolFlags[name]:
+				i++
+			case value[name]:
+				i += 2
+			default:
+				return i, false
+			}
 		}
+		return i, true
 	}
-	if i >= len(words) {
+	i, ok := skipFlags(0, dockerGlobalValueFlags)
+	if !ok || i >= len(words) {
 		return "", nil
 	}
 	verb := words[i]
 	i++
-	switch verb {
-	case "container", "image", "builder", "buildx", "manifest":
-		if i < len(words) {
-			verb += " " + words[i]
-			i++
+	if dockerManagementCommands[verb] {
+		// docker buildx --builder name build: the options of the management command come before its subcommand
+		i, ok = skipFlags(i, dockerManagementValueFlags)
+		if !ok || i >= len(words) {
+			return "", nil
 		}
+		verb += " " + words[i]
+		i++
 	}
 	return verb, words[i:]
 }
+
+// dockerManagementCommands are the commands which have subcommands of their own (docker image tag, docker buildx build).
+var dockerManagementCommands = setOf("container image builder buildx manifest")
+
+// dockerManagementValueFlags are the options with a value that come between a management command and its subcommand.
+var dockerManagementValueFlags = setOf("--builder --context -c --config -H --host --log-level -l")
+
+// dockerCommitValueFlags are the options of `docker commit` which take a value.
+var dockerCommitValueFlags = setOf("-m --message -a --author -c --change")
