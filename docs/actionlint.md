@@ -74,7 +74,7 @@ a key it does not know, so a file shared by both tools can keep `profile: correc
 | `cron` and time zones | `invalid-cron`, `cron-too-frequent`, `invalid-timezone` |
 | Runner labels | `unknown-runner-label`, `conflicting-runner-labels`, `invalid-label-pattern` |
 | Format of `uses:` | `invalid-uses` |
-| Inputs of local and popular actions | `missing-action-input`, `unknown-action-input`, `invalid-local-action`, `deprecated-action-input` |
+| Inputs of local and popular actions (and of any action with `--online`) | `missing-action-input`, `unknown-action-input`, `invalid-local-action`, `deprecated-action-input` |
 | Outdated popular actions | `outdated-action-runner` |
 | Reusable workflows (`workflow_call`) | `invalid-workflow-call`, `invalid-workflow-call-input`, `missing-workflow-input`, `unknown-workflow-input`, `missing-workflow-secret`, `unknown-workflow-secret`, `workflow-input-type`, `workflow-call-permissions`, `invalid-local-workflow` |
 | Shell names | `invalid-shell-name` |
@@ -119,6 +119,10 @@ profile the free text that is chosen from outside the workflow (`inputs.*` of ty
 so it can be passed to an input of the type `string` (actionlint 1.7 reports it as a boolean or a number).
 A call of an overloaded function (`contains`) that fits no signature is one finding, about the signature that fits best, where actionlint reports one finding per signature.
 A context that is not available at a place (`runner` in a job-level `env` key, `inputs` in the `shell` of a composite step) is one finding; actionlint also reports the properties read from it.
+`undefined-property` also checks the names of the properties of `github.event` against the payloads of the webhook events (`github.event.worflow_run`
+is an error; actionlint does not type this object, see [rhysd/actionlint#39](https://github.com/rhysd/actionlint/issues/39)). It is
+careful: a property is reported only when no webhook event has it, and the whole payload is skipped for the triggers whose payload
+is not known (`workflow_dispatch`, `workflow_call`, `schedule`). See [the check](checks.md#check-contextual-github-event).
 `workflow-syntax` accepts `needs: []` and a filter without a value (`tags:`), which GitHub runs and actionlint 1.7 reports as an empty section.
 `if-always-true` does not report the newline at the end of a block scalar (`if: |` and `${{ }}` alone), which GitHub trims and actionlint 1.7 reports.
 The checks follow the workflow schema of GitHub where it is newer than actionlint 1.7, so these are not reported: a top-level `description:`,

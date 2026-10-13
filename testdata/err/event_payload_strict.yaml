@@ -1,0 +1,20 @@
+on:
+  push:
+  issues:
+
+concurrency:
+  # ERROR: Neither push nor issues has a pull request. The read is null, which this fallback relies on
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    steps:
+      # ERROR: The payloads of push and issues have no comment
+      - run: echo '${{ github.event.comment.id }}'
+      # ERROR: Typos are reported, too
+      - run: echo '${{ github.event.isue.number }}'
+      # OK: A property of any of the events is in the union
+      - run: echo '${{ github.event.issue.number }} ${{ github.event.head_commit.id }} ${{ github.event.action }}'
+      # ERROR: The inputs of a dispatch are in no payload of these events
+      - run: echo '${{ github.event.inputs.name }}'

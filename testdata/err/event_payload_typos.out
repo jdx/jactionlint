@@ -1,0 +1,8 @@
+test.yaml:8:15: property "pul_request" is not defined in github.event: no webhook event has it in its payload. did you mean "pull_request"? [expression]
+test.yaml:15:24: property "worflow_run" is not defined in github.event: no webhook event has it in its payload. did you mean "workflow_run"? [expression]
+test.yaml:17:24: property "head_brach" is not defined in github.event.workflow_run: no webhook event has it in its payload. did you mean "head_branch"? [expression]
+test.yaml:18:24: property "rfe" is not defined in github.event.pull_request.head: no webhook event has it in its payload. did you mean "ref"? [expression]
+test.yaml:19:24: property "numbr" is not defined in github.event.workflow_run.pull_requests[]: no webhook event has it in its payload. did you mean "number"? [expression]
+test.yaml:20:29: property "mesage" is not defined in github.event.commits.*: no webhook event has it in its payload. did you mean "message"? [expression]
+test.yaml:21:24: property "head_comit" is not defined in github.event: no webhook event has it in its payload. did you mean "head_commit"? [expression]
+test.yaml:23:24: property "push" is not defined in github.event: no webhook event has it in its payload. did you mean "pusher"? [expression]
