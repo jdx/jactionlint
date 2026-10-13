@@ -23,18 +23,20 @@ import (
 //   - `trustedDependencies` in the package.json of a bun project (an allow list replaces the default list of
 //     popular packages), `allowScripts` in the package.json of an npm project (the allow list of npm 12) or
 //     `allow-scripts` in its `.npmrc`;
-//   - a Yarn that does not run them by default: `packageManager: yarn@4.14.0` or later (and a `.yarnrc.yml` without
-//     the version known, because Yarn 4.14 changed the default of `enableScripts` to false);
+//   - a Yarn that does not run them by default: `packageManager: yarn@4.14.0` or later (Yarn 4.14 changed the default of
+//     `enableScripts` to false; an unknown version is not assumed to be one);
 //
 // pnpm is not reported: pnpm 10 and later run no lifecycle script of a dependency unless it is allowed (a project on
 // pnpm 9 or earlier does run them, which the check cannot tell without knowing the version of pnpm).
 
 var (
-	// ignoreScriptsInScriptRe finds the setting `ignore-scripts=true` or `config set ignore-scripts true` in the text
-	// of a script, as `npm config set` and an echo into .npmrc write it.
-	ignoreScriptsInScriptRe = regexp.MustCompile(`(?i)ignore[-_]scripts["']?\s*(=|\s)\s*["']?(true|1)\b`)
-	bunfigIgnoreScriptsRe   = regexp.MustCompile(`(?m)^\s*ignoreScripts\s*=\s*true\b`)
-	yarnrcEnableScriptsRe   = regexp.MustCompile(`(?m)^enableScripts:\s*["']?(\w+)`)
+	// the ways a script turns the option on, see scriptSetsIgnoreScripts
+	configSetIgnoreScriptsRe = regexp.MustCompile(`(?i)\bconfig\s+set\s+ignore[-_]scripts(?:\s+|\s*=\s*)["']?(?:true|1)\b`)
+	envIgnoreScriptsRe       = regexp.MustCompile(`(?i)\bnpm_config_ignore_scripts\s*=\s*["']?(?:true|1)\b`)
+	npmrcRedirectRe          = regexp.MustCompile(`(?:>>?|\btee\b(?:\s+-a)?)\s*["']?[^\s"'|;&]*\.npmrc\b`)
+	settingRe                = regexp.MustCompile(`(?i)ignore[-_]scripts\s*=\s*["']?(?:true|1)\b`)
+	bunfigIgnoreScriptsRe    = regexp.MustCompile(`(?m)^\s*ignoreScripts\s*=\s*true\b`)
+	yarnrcEnableScriptsRe    = regexp.MustCompile(`(?m)^enableScripts:\s*["']?(\w+)`)
 )
 
 func (rule *RuleUnlockedInstall) checkLifecycleScripts(step *Step, s *runscript.Script, origin runscript.Origin, c *runscript.Command, in *runscript.Install) {
@@ -49,8 +51,14 @@ func (rule *RuleUnlockedInstall) checkLifecycleScripts(step *Step, s *runscript.
 	if !lifecycleVerb(in) {
 		return
 	}
-	if rule.scriptsDisabledByWorkflow(step, c.Tool) {
+	if rule.scriptsDisabledByWorkflow(step, c.Tool, s.Source[:c.Offset]) {
 		return
+	}
+	for _, a := range c.Assigns {
+		// `npm_config_ignore_scripts=true npm ci`
+		if strings.EqualFold(a.Name, "npm_config_ignore_scripts") && a.Value != nil && (a.Value.Dynamic() || strings.EqualFold(a.Value.Value, "true") || a.Value.Value == "1") {
+			return
+		}
 	}
 	dirs, ok := rule.commandDirs(rule.root, step, s, c)
 	if !ok {
@@ -88,8 +96,9 @@ func lifecycleVerb(in *runscript.Install) bool {
 }
 
 // scriptsDisabledByWorkflow reports whether the workflow itself turns the scripts off for the step: an
-// environment variable, or a script of the job that sets the option.
-func (rule *RuleUnlockedInstall) scriptsDisabledByWorkflow(step *Step, tool string) bool {
+// environment variable, or a script of the job that sets the option. before is the part of the script of the step that
+// comes before the install.
+func (rule *RuleUnlockedInstall) scriptsDisabledByWorkflow(step *Step, tool, before string) bool {
 	names := []string{"npm_config_ignore_scripts", "NPM_CONFIG_IGNORE_SCRIPTS"}
 	if tool == "yarn" {
 		names = append(names, "YARN_ENABLE_SCRIPTS")
@@ -110,23 +119,52 @@ func (rule *RuleUnlockedInstall) scriptsDisabledByWorkflow(step *Step, tool stri
 			return true
 		}
 	}
-	return rule.jobScriptMentions(step, ignoreScriptsInScriptRe)
+	return rule.jobScriptMatches(step, before, scriptSetsIgnoreScripts)
 }
 
-// jobScriptMentions reports whether the script of a step of the job, up to the step itself, matches the pattern.
-func (rule *RuleUnlockedInstall) jobScriptMentions(step *Step, re *regexp.Regexp) bool {
+// jobScriptMatches reports whether the script of an earlier step of the job matches, or the part of the script of the
+// step itself that comes before the install (before): what a script does after the install does not change it.
+func (rule *RuleUnlockedInstall) jobScriptMatches(step *Step, before string, match func(string) bool) bool {
 	if rule.job == nil {
 		return false
 	}
 	for _, st := range rule.job.Steps {
-		if r, ok := st.Exec.(*ExecRun); ok && r.Run != nil && re.MatchString(r.Run.Value) {
-			return true
-		}
 		if st == step {
-			break
+			return match(before)
+		}
+		if r, ok := st.Exec.(*ExecRun); ok && r.Run != nil && match(r.Run.Value) {
+			return true
 		}
 	}
 	return false
+}
+
+// scriptSetsIgnoreScripts reports whether the script turns the option on in the configuration that a later install
+// reads: `npm config set ignore-scripts true` (or `ignore-scripts=true`), the environment variable
+// `npm_config_ignore_scripts=true`, or `ignore-scripts=true` written to a .npmrc (`>> ~/.npmrc`, `> .npmrc`,
+// `tee -a .npmrc`, also with the setting in the heredoc that follows). Text that only prints the setting
+// (`echo "ignore-scripts=true"`) does not.
+func scriptSetsIgnoreScripts(text string) bool {
+	if configSetIgnoreScriptsRe.MatchString(text) || envIgnoreScriptsRe.MatchString(text) {
+		return true
+	}
+	if !strings.Contains(strings.ToLower(text), "ignore") {
+		return false
+	}
+	for _, loc := range npmrcRedirectRe.FindAllStringIndex(text, -1) {
+		// the setting on the same line (`echo ignore-scripts=true >> .npmrc`) or in the heredoc after it
+		if settingRe.MatchString(text[lineStartOf(text, loc[0]):]) {
+			return true
+		}
+	}
+	return false
+}
+
+func lineStartOf(text string, i int) int {
+	if j := strings.LastIndexByte(text[:i], '\n'); j >= 0 {
+		return j + 1
+	}
+	return 0
 }
 
 // scriptsDisabledByRepository reports whether the files of the repository in the directories settle the scripts of
@@ -165,10 +203,10 @@ func (rule *RuleUnlockedInstall) yarnSkipsScripts(dir string, pkg packageJSON) b
 		if m := yarnrcEnableScriptsRe.FindStringSubmatch(text); m != nil {
 			return strings.EqualFold(m[1], "false")
 		}
-		// Yarn 2+ without the setting: 4.14 changed the default to false, and the version is not known unless
-		// package.json names it
+		// Yarn 2+ without the setting: the default is true up to Yarn 4.13 and false from 4.14 (Configuration.ts of
+		// the release tags), so only a version that package.json names can tell
 		major, minor, ok := pkg.managerVersion("yarn")
-		return !ok || major > 4 || major == 4 && minor >= 14
+		return ok && (major > 4 || major == 4 && minor >= 14)
 	}
 	if major, minor, ok := pkg.managerVersion("yarn"); ok {
 		return major > 4 || major == 4 && minor >= 14

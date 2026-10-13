@@ -31,13 +31,6 @@ import (
 // skipped as in the check of the lifecycle scripts, because the configuration in force is not known.
 
 var (
-	// cooldownFlagRe matches the options which set a release age or a date limit.
-	cooldownFlagRe = regexp.MustCompile(`(?i)^--(min(imum)?-release-age|exclude-newer(-package)?|uploaded-prior-to|before|npm-minimal-age-gate|config\.minimum.*)$`)
-	// cooldownTextRe finds the setting by name in the text of a script or the value of an option (`--pip-args`).
-	cooldownTextRe = regexp.MustCompile(`(?i)(min(imum)?[-_]release[-_]age|exclude[-_]newer|uploaded[-_]prior[-_]to|npmMinimalAgeGate|npm_config_before|config set before\b|--before\b)`)
-	// cooldownEnvRe matches the (lower case) name of an environment variable which sets one.
-	cooldownEnvRe = regexp.MustCompile(`(min(imum)?_release_age|exclude_newer|uploaded_prior_to|^npm_config_before$|minimal_age_gate)`)
-
 	pnpmWorkspaceAgeRe = regexp.MustCompile(`(?m)^minimumReleaseAge:\s*["']?(\d+)`)
 	bunfigAgeRe        = regexp.MustCompile(`(?m)^\s*minimumReleaseAge\s*=\s*(\d[\d_]*)`)
 	yarnrcGateRe       = regexp.MustCompile(`(?m)^npmMinimalAgeGate:\s*["']?([^"'\s#]+)`)
@@ -45,6 +38,51 @@ var (
 	tomlHeaderRe       = regexp.MustCompile(`^\s*\[+\s*([^\]]*?)\s*\]+`)
 	tomlExcludeNewerRe = regexp.MustCompile(`^\s*exclude-newer\s*=\s*(.+?)\s*(#.*)?$`)
 )
+
+// cooldownSetting is how a tool is given a release age by the command line, the text of a script and the environment.
+// Each tool reads its own: `UV_EXCLUDE_NEWER` does nothing for npm, and `git log --before` is not a setting at all.
+type cooldownSetting struct {
+	// flag matches the name of an option of the command.
+	flag *regexp.Regexp
+	// text finds the setting by name in a script that writes the configuration, or in the value of an option
+	// (`pipx install --pip-args="--uploaded-prior-to P7D"`).
+	text *regexp.Regexp
+	// env matches the lower case name of an environment variable.
+	env *regexp.Regexp
+}
+
+var noMatch = regexp.MustCompile(`a^`)
+
+var cooldownSettings = map[string]cooldownSetting{
+	"uv":   {regexp.MustCompile(`^--exclude-newer(-package)?$`), regexp.MustCompile(`(?i)exclude[-_]newer`), regexp.MustCompile(`^uv_exclude_newer(_package)?$`)},
+	"pip":  {regexp.MustCompile(`^--uploaded-prior-to$`), regexp.MustCompile(`(?i)uploaded[-_]prior[-_]to`), regexp.MustCompile(`^pip_uploaded_prior_to$`)},
+	"npm":  {regexp.MustCompile(`^--(min-release-age|before)$`), regexp.MustCompile(`(?i)(min[-_]release[-_]age|npm_config_before|config\s+set\s+before\b)`), regexp.MustCompile(`^npm_config_(min_release_age|before)$`)},
+	"pnpm": {regexp.MustCompile(`(?i)^--config\.minimum.*$`), regexp.MustCompile(`(?i)minimum[-_]?release[-_]?age`), regexp.MustCompile(`^(npm|pnpm)_config_minimum_release_age$`)},
+	"yarn": {noMatch, regexp.MustCompile(`(?i)(npmMinimalAgeGate|minimal[-_]age[-_]gate)`), regexp.MustCompile(`^yarn_npm_minimal_age_gate$`)},
+	"bun":  {noMatch, regexp.MustCompile(`(?i)minimumReleaseAge`), noMatch},
+}
+
+// cooldownKey maps the tool of a command to the key of cooldownSettings.
+func cooldownKey(tool string) string {
+	switch tool {
+	case "uvx":
+		return "uv"
+	case "pipx":
+		return "pip"
+	}
+	return tool
+}
+
+// cooldownValueOff reports whether the value of a setting means no cooldown: nothing, false, none, or a zero
+// with or without a unit (`0`, `0m`, `0d`).
+func cooldownValueOff(v string) bool {
+	v = strings.ToLower(strings.Trim(strings.TrimSpace(v), `"'`))
+	switch v {
+	case "", "false", "none", "off", "null":
+		return true
+	}
+	return strings.Trim(strings.TrimRight(v, "abcdefghijklmnopqrstuvwxyz"), "0._") == "" && strings.TrimRight(v, "abcdefghijklmnopqrstuvwxyz") != ""
+}
 
 // lockFilesOf are the lock files of the package managers of npm.
 var lockFilesOf = map[string][]string{
@@ -80,8 +118,9 @@ func (rule *RuleUnlockedInstall) checkReleaseAge(step *Step, s *runscript.Script
 	default:
 		return
 	}
+	set := cooldownSettings[cooldownKey(c.Tool)]
 	for _, f := range c.Flags {
-		if cooldownFlagRe.MatchString(f.Name) || f.Value != nil && cooldownTextRe.MatchString(f.Value.Value) {
+		if set.flag.MatchString(f.Name) || f.Value != nil && set.text.MatchString(f.Value.Value) {
 			return
 		}
 	}
@@ -92,10 +131,10 @@ func (rule *RuleUnlockedInstall) checkReleaseAge(step *Step, s *runscript.Script
 	if !ok {
 		return
 	}
-	if rule.cooldownSetByWorkflow(step) {
+	if rule.cooldownSetByWorkflow(step, set, s.Source[:c.Offset]) {
 		return
 	}
-	if in.Ecosystem == "npm" && in.FromManifest && (rule.root == "" || rule.hasAnyFile(dirs, lockFilesOf[c.Tool])) {
+	if in.Ecosystem == "npm" && in.FromManifest && !toldNotToFreeze(c) && (rule.root == "" || rule.hasAnyFile(dirs, lockFilesOf[c.Tool])) {
 		// nothing is resolved when the lock file decides the versions, and without the repository it is not known
 		// whether there is one
 		return
@@ -144,6 +183,23 @@ func (rule *RuleUnlockedInstall) checkReleaseAge(step *Step, s *runscript.Script
 	rule.errorIDAt("unlocked-install", start, msg).endAt(end)
 }
 
+// toldNotToFreeze reports whether the command switches the freeze of the lock file off (`--no-frozen-lockfile`,
+// `--frozen-lockfile=false`): it then resolves the versions again although the repository has the lock file.
+func toldNotToFreeze(c *runscript.Command) bool {
+	if c.HasFlag("--no-frozen-lockfile") {
+		return true
+	}
+	for _, f := range c.Flags {
+		switch f.Name {
+		case "--frozen-lockfile", "--immutable", "--ci":
+			if f.Value != nil && !f.Value.Dynamic() && cooldownValueOff(f.Value.Value) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func (rule *RuleUnlockedInstall) hasAnyFile(dirs, names []string) bool {
 	for _, d := range dirs {
 		for _, n := range names {
@@ -155,19 +211,30 @@ func (rule *RuleUnlockedInstall) hasAnyFile(dirs, names []string) bool {
 	return false
 }
 
-// cooldownSetByWorkflow reports whether the environment of the step or an earlier script of the job sets one.
-func (rule *RuleUnlockedInstall) cooldownSetByWorkflow(step *Step) bool {
+// cooldownSetByWorkflow reports whether the environment of the step, or a script of the job that runs before the
+// install, gives the tool a release age. before is the part of the script of the step that comes before the install.
+// The nearest scope of the environment that sets the variable decides, and a value that switches the gate off
+// (`0`, `0m`, `false`, empty) is no cooldown.
+func (rule *RuleUnlockedInstall) cooldownSetByWorkflow(step *Step, set cooldownSetting, before string) bool {
 	for _, env := range []*Env{step.Env, rule.jobEnv(), rule.workflowEnv()} {
 		if env == nil {
 			continue
 		}
-		for name := range env.Vars {
-			if cooldownEnvRe.MatchString(name) {
-				return true
+		found, on := false, false
+		for name, v := range env.Vars {
+			if !set.env.MatchString(name) {
+				continue
+			}
+			found = true
+			if v != nil && v.Value != nil && (v.Value.ContainsExpression() || !cooldownValueOff(v.Value.Value)) {
+				on = true
 			}
 		}
+		if found {
+			return on
+		}
 	}
-	return rule.jobScriptMentions(step, cooldownTextRe)
+	return rule.jobScriptMatches(step, before, set.text.MatchString)
 }
 
 // cooldownSetByRepository reports whether the files of the repository, or the version of the tool, give a cooldown

@@ -7,6 +7,8 @@ env:
   UV_EXCLUDE_NEWER: 7 days
   PIP_UPLOADED_PRIOR_TO: P7D
   npm_config_min_release_age: 7
+  pnpm_config_minimum_release_age: 1440
+  YARN_NPM_MINIMAL_AGE_GATE: 3d
 jobs:
   literals:
     runs-on: ubuntu-latest

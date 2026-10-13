@@ -14,6 +14,9 @@ func TestUnlockedInstallReleaseAge(t *testing.T) {
 			"jobs:\n  build:\n    runs-on: ubuntu-latest\n    timeout-minutes: 10\n    steps:\n" + step
 	}
 	run := func(c string) string { return "      - run: " + c + "\n" }
+	block := func(lines ...string) string {
+		return "      - run: |\n          " + strings.Join(lines, "\n          ") + "\n"
+	}
 	tests := []struct {
 		what  string
 		wf    string
@@ -71,6 +74,40 @@ func TestUnlockedInstallReleaseAge(t *testing.T) {
 		{"npm config set before", wf("", run("npm config set min-release-age 7")+run("npm install left-pad")), nil, 0},
 		{"a later npm config set", wf("", run("npm install left-pad")+run("npm config set min-release-age 7")), nil, 1},
 		{"yarn env", wf("env:\n  YARN_NPM_MINIMAL_AGE_GATE: 3d\n", run("yarn add left-pad")), nil, 0},
+		{"a later setting in the same script", wf("", block("npm install left-pad", "npm config set min-release-age 7")), nil, 1},
+		{"an earlier setting in the same script", wf("", block("npm config set min-release-age 7", "npm install left-pad")), nil, 0},
+
+		// the environment variable of another tool does nothing
+		{"UV_EXCLUDE_NEWER for npm", wf("env:\n  UV_EXCLUDE_NEWER: 7 days\n", run("npm install left-pad")), nil, 1},
+		{"PIP_UPLOADED_PRIOR_TO for yarn", wf("env:\n  PIP_UPLOADED_PRIOR_TO: P7D\n", run("yarn add left-pad")), nil, 1},
+		{"npm_config_min_release_age for uv", wf("env:\n  npm_config_min_release_age: 7\n", run("uv pip install ruff")), nil, 1},
+		{"YARN_NPM_MINIMAL_AGE_GATE for pip", wf("env:\n  YARN_NPM_MINIMAL_AGE_GATE: 3d\n", run("pip install requests")), nil, 1},
+		{"UV_EXCLUDE_NEWER for uvx", wf("env:\n  UV_EXCLUDE_NEWER: 7 days\n", run("uvx ruff check")), nil, 0},
+		{"PIP_UPLOADED_PRIOR_TO for pipx", wf("env:\n  PIP_UPLOADED_PRIOR_TO: P7D\n", run("pipx install black")), nil, 0},
+		{"npm_config_before for pnpm", wf("env:\n  npm_config_before: 2026-01-01\n", run("pnpm add left-pad")), nil, 1},
+		{"pnpm env", wf("env:\n  pnpm_config_minimum_release_age: 1440\n", run("pnpm add left-pad")), nil, 0},
+
+		// a script that mentions an option of another tool or a command that is not an install
+		{"git log --before", wf("", run("git log --before=2.weeks.ago")+run("pip install requests")), nil, 1},
+		{"git log --before in the same script", wf("", block("git log --before=1.week.ago", "npm install left-pad")), nil, 1},
+		{"a script of another tool", wf("", run("echo uv pip install --exclude-newer 7d")+run("npm install left-pad")), nil, 1},
+
+		// a value that switches it off is no cooldown
+		{"min age 0", wf("env:\n  npm_config_min_release_age: 0\n", run("npm install left-pad")), nil, 1},
+		{"yarn gate 0", wf("env:\n  YARN_NPM_MINIMAL_AGE_GATE: 0\n", run("yarn add left-pad")), nil, 1},
+		{"yarn gate 0m", wf("env:\n  YARN_NPM_MINIMAL_AGE_GATE: 0m\n", run("yarn add left-pad")), nil, 1},
+		{"uv false", wf("env:\n  UV_EXCLUDE_NEWER: 'false'\n", run("uv pip install ruff")), nil, 1},
+		{"empty", wf("env:\n  PIP_UPLOADED_PRIOR_TO: ''\n", run("pip install requests")), nil, 1},
+		{"an expression", wf("env:\n  npm_config_min_release_age: ${{ vars.AGE }}\n", run("npm install left-pad")), nil, 0},
+		{"the nearest scope decides: off", wf("env:\n  npm_config_min_release_age: 7\n", "      - run: npm install left-pad\n        env:\n          npm_config_min_release_age: 0\n"), nil, 1},
+		{"the nearest scope decides: on", wf("env:\n  npm_config_min_release_age: 0\n", "      - run: npm install left-pad\n        env:\n          npm_config_min_release_age: 7\n"), nil, 0},
+
+		// an install that is told not to freeze the lock file resolves
+		{"pnpm --frozen-lockfile=false", wf("", run("pnpm install --frozen-lockfile=false")), map[string]string{"pnpm-lock.yaml": ""}, 1},
+		{"pnpm --no-frozen-lockfile", wf("", run("pnpm install --no-frozen-lockfile")), map[string]string{"pnpm-lock.yaml": ""}, 1},
+		{"pnpm --frozen-lockfile=true", wf("", run("pnpm install --frozen-lockfile=true")), map[string]string{"pnpm-lock.yaml": ""}, 0},
+		{"yarn add --frozen-lockfile=false", wf("", run("yarn add left-pad --frozen-lockfile=false")), nil, 1},
+		{"yarn --immutable=false", wf("", run("yarn install --immutable=false")), map[string]string{"yarn.lock": ""}, 1},
 
 		// the files of the repository
 		{"uv.toml", wf("", run("uv pip install ruff")), map[string]string{"uv.toml": "exclude-newer = \"7 days\"\n"}, 0},

@@ -3288,10 +3288,11 @@ need the scripts of all their dependencies, and the few that do (`esbuild`, `sha
 - the repository has `ignore-scripts=true` in its `.npmrc` (npm, Yarn 1 and bun read it), `ignoreScripts = true` in `bunfig.toml` or
   `enableScripts: false` in `.yarnrc.yml`. The files are looked up in the root of the repository and in the `working-directory` of the step;
 - the environment of the step sets `npm_config_ignore_scripts` (`YARN_ENABLE_SCRIPTS=false` for Yarn), or an earlier step of the job
-  runs `npm config set ignore-scripts true`;
+  runs `npm config set ignore-scripts true` or writes `ignore-scripts=true` to a `.npmrc` (`>> ~/.npmrc`, `tee -a .npmrc`) before the
+  install. Text that only prints the setting (`echo "ignore-scripts=true"`) does not count, and neither does a setting after the install;
 - the package.json has an allow list: `trustedDependencies` for bun (bun runs the scripts of a default list of popular packages, and
   an explicit list replaces it) and `allowScripts` for npm 12, which does not run the scripts of dependencies by default;
-- Yarn is 4.14 or later (`packageManager` in package.json), which does not run them by default either.
+- Yarn is 4.14 or later (`packageManager` in package.json), which does not run them by default either. Yarn 2 to 4.13 do, so a `.yarnrc.yml` of a Yarn whose version is not known is not assumed to be one that does not.
 
 pnpm is not reported: pnpm 10 and later run no script of a dependency unless the project allows it. Global installs (`npm install -g`)
 and `npx` are not reported, and neither is a command which follows a `cd`, because the configuration in force is not known.
@@ -3314,7 +3315,9 @@ compromised releases are found and pulled within days. A cooldown keeps only ver
 Check the version of the tool on the runner before you add the setting: an option that the installed pip or npm does not know fails the
 install. The check reads the same places as the lifecycle scripts do (the repository's files, the environment of the step, an earlier
 script of the job), and so reads `uv.toml`, `pyproject.toml`, `.npmrc`, `pnpm-workspace.yaml`, `.yarnrc.yml` and `bunfig.toml`. It reports
-installs that resolve something and is silent about these:
+installs that resolve something. The environment variable and the option are those of the tool that installs (`UV_EXCLUDE_NEWER` does
+nothing for npm), a value that switches the age off (`0`, `0m`, `false`, empty) is no cooldown, and a script of the job counts only when it
+sets the option before the install. It is silent about these:
 
 - installs that are bound to a lock file or to hashes (`npm ci`, `uv sync`, `--frozen-lockfile`, `--immutable`, `--require-hashes`,
   a constraints file `-c`), and `npm install`, `pnpm install` and `yarn` without a package in a repository that has the lock file;

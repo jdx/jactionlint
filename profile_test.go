@@ -393,7 +393,8 @@ func TestUnlockedInstallNeedsALockFileInTheRepository(t *testing.T) {
 
 	// The pedantic option reports them without a lock file too
 	for _, run := range []string{"npm install --ignore-scripts", "yarn install --ignore-scripts", "bun install --ignore-scripts", "pip install -r requirements.txt"} {
-		baselineProject(t, wf(run, "        env:\n          npm_config_min_release_age: 7\n          PIP_UPLOADED_PRIOR_TO: P7D\n"), "profile: default\nrules:\n  unlocked-install:\n    pedantic: true\n")
+		root := baselineProject(t, wf(run, "        env:\n          npm_config_min_release_age: 7\n          YARN_NPM_MINIMAL_AGE_GATE: 3d\n          PIP_UPLOADED_PRIOR_TO: P7D\n"), "profile: default\nrules:\n  unlocked-install:\n    pedantic: true\n")
+		writeTestFile(t, filepath.Join(root, "bunfig.toml"), "[install]\nminimumReleaseAge = 259200\n")
 		if _, ids, _ := profileCmd(t); countID(ids, "unlocked-install") != 1 {
 			t.Errorf("%s with pedantic: %v", run, ids)
 		}

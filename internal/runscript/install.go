@@ -427,7 +427,7 @@ func (in *Install) node(c *Command) bool {
 		global, pos = true, pos[1:]
 	}
 	in.Global = global
-	in.Locked = c.HasFlag("--frozen-lockfile", "--immutable", "--ci") && !c.HasFlag("--no-frozen-lockfile")
+	in.Locked = freezesLockfile(c)
 	in.NoScripts = skipsScripts(c)
 	if len(pos) == 0 {
 		switch c.Tool {
@@ -458,6 +458,24 @@ func (in *Install) node(c *Command) bool {
 			in.addAll(pos[1:], npmPackage)
 		}
 		return true
+	}
+	return false
+}
+
+// freezesLockfile reports whether an npm, pnpm, yarn or bun command is bound to the lock file: `--frozen-lockfile`,
+// `--immutable` or `--ci`, none of which counts when it is given the value false (`--frozen-lockfile=false` turns the
+// freeze off) or when `--no-frozen-lockfile` comes with it.
+func freezesLockfile(c *Command) bool {
+	if c.HasFlag("--no-frozen-lockfile") {
+		return false
+	}
+	for _, f := range c.Flags {
+		switch f.Name {
+		case "--frozen-lockfile", "--immutable", "--ci":
+			if f.Value == nil || f.Value.Dynamic() || !isFalseWord(f.Value.Value) {
+				return true
+			}
+		}
 	}
 	return false
 }
