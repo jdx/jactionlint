@@ -110,6 +110,7 @@ List of checks:
 - [Archived repositories (online)](#check-archived-uses)
 - [Repojacking (online)](#check-repojacking)
 - [Version comments of pinned actions (online)](#check-ref-version-mismatch)
+- [Pinned actions without a version comment (pedantic)](#check-missing-version-comment)
 - [Concurrency that cancels unrelated pull requests](#check-concurrency-cancels-prs)
 - [Concurrency that cancels a release](#check-concurrency-cancels-release)
 - [Gate jobs that are skipped when a job fails](#check-gate-job-skipped-on-failure)
@@ -4331,7 +4332,8 @@ nothing gained. The rule `superfluous-actions` (in the `default` profile) report
 actions (`softprops/action-gh-release`, `ncipollo/release-action`, `elgohr/Github-Release-Action`,
 `svenstaro/upload-release-action` and the archived `actions/create-release` and `actions/upload-release-asset`), which
 `gh release` replaces, `dacbd/create-issue-action`, `actions-ecosystem/action-add-labels` and `action-remove-labels` (`gh issue`,
-`gh pr`), `addnab/docker-run-action` (`docker run`) and `sergeysova/jq-action` (`jq`).
+`gh pr`), `addnab/docker-run-action` (`docker run`), `benc-uk/workflow-dispatch` (`gh workflow run`,
+[zizmor#2181](https://github.com/zizmorcore/zizmor/issues/2181)) and `sergeysova/jq-action` (`jq`).
 
 With the option `pedantic` (on under the `pedantic` profile) the rule reports the ones whose replacement takes several commands or
 misses a feature: `peter-evans/create-pull-request`, `peter-evans/create-or-update-comment`, `dtolnay/rust-toolchain`,
@@ -5320,7 +5322,14 @@ It reports:
 - `owner:` without `repositories:`, which gives the token access to every repository of the owner where the app is installed
 - `skip-token-revoke: true`, which keeps the token valid after the job instead of revoking it in the post step
 
-Only `actions/create-github-app-token` is checked. Other actions which issue app tokens are not known to the rule.
+Two other actions which issue app tokens are checked with their own inputs:
+
+| Action | Reported |
+| --- | --- |
+| `tibdex/github-app-token` (archived) | no `permissions` (a JSON object like `'{"contents": "read"}'`): every permission of the app; no `repositories` (a JSON array of the repository names without the owner, like `'["repo"]'`, since version 2: the version 1 has `repository`, the current repository by default): every repository of the installation; `revoke: false` (the version 1 has neither `repositories` nor `revoke`, and a commit whose version is not in a `# v2.1.0` comment is not checked for them) |
+| `peter-murray/workflow-application-token-action` | no `permissions` (`contents:read,issues:write`): every permission of the app; `revoke_token` missing or false, since the token is revoked only when it is `true`; the input and the post step that revokes the token are in version 3 and later, so for version 1 and 2 the advice is to upgrade. The action has no list of repositories, `organization` only picks the installation |
+
+Other actions which issue app tokens are not known to the rule.
 
 [create-github-app-token]: https://github.com/actions/create-github-app-token
 
@@ -7128,8 +7137,8 @@ local path or a `docker://` image). It is a policy of jactionlint; zizmor has no
 
 The check does nothing when the repository has a Renovate configuration (`renovate.json`, `.github/renovate.json`,
 `.renovaterc` and so on), since another tool may update the actions. A repository which does not have `dependabot.yml` at all
-is not reported: there is no file to report. There is no automatic fix because the update needs a schedule that only you can
-choose.
+is not reported: there is no file to report. A missing update has no automatic fix because the update needs a schedule that only
+you can choose (the local composite actions that an update does not cover have an unsafe fix, see below).
 
 Example input:
 
@@ -7158,6 +7167,39 @@ Output:
 
 The rule is `dependabot-missing-actions-update`. It is in the `pedantic` profile as a warning, or enabled explicitly with
 `rules: {dependabot-missing-actions-update: warn}`.
+
+A `github-actions` update reads the workflows of `.github/workflows` and the `action.yml` of the directory it is given. With
+`directory: /` the local composite actions (`.github/actions/*/action.yml`, or any other action of the repository that a workflow
+calls with `./path`) are never updated, which is the same mistake one level down (zizmor
+[#1806](https://github.com/zizmorcore/zizmor/issues/1806), dependabot-core
+[#6345](https://github.com/dependabot/dependabot-core/issues/6345)). When the file has a `github-actions` update, the check also reports the
+local composite actions that use an action or a reusable workflow and that no `github-actions` update names, either as `directory`
+or as an entry of `directories`. Only `directories` takes globs (Dependabot documents globbing and the wildcard for `directories`, not
+for `directory`): `*` is one name and `**` any number of directories, so `/.github/actions/**/*` covers every directory below
+`.github/actions` (`/**/*` alone is Dependabot's "current directory and the recursive subdirectories" and covers the root as well), and
+`directory: /.github/actions/*` covers nothing:
+
+```yaml
+updates:
+  - package-ecosystem: github-actions
+    directories:
+      - /
+      - /.github/actions/**/*
+    schedule:
+      interval: weekly
+```
+
+An update which is disabled, with `open-pull-requests-limit: 0` or an `ignore` of every dependency, opens no pull request and does not
+count for either check: with only disabled `github-actions` updates, the repository is reported as one whose actions are not updated. Whether the repository uses actions that Dependabot can update is asked of both the workflows and the local composite actions, for
+the missing update as well as for the disabled ones. The message says where the actions are: when only the workflows use them it asks for
+`directory: /` (as in the example), and when the local composite actions use them, alone or besides the workflows, it names those actions
+and asks for `directories` with `/` and those actions (the entries of the suggestion above), so the advice is the same whether the file has
+no `github-actions` update, only disabled ones or an active one that misses the local actions.
+
+The fix replaces `directory: /` of an update that is the only `github-actions` one by `directories: ["/", "/.github/actions/**/*"]` (the
+actions that are not below `.github/actions` are listed by their directory). It makes Dependabot propose pull requests it did not, so it is
+unsafe and only applied by `--fix=unsafe`. It is not offered when the file has several `github-actions` updates or writes the key in a way
+it cannot edit. The check is silent when the repository has a Renovate configuration.
 
 <a id="check-pipeline-without-pipefail"></a>
 ## Pipelines that hide failures
@@ -9195,7 +9237,14 @@ What is looked at:
 An archived repository is read-only: nobody fixes the vulnerabilities of the action, or of the dependencies bundled with it. The
 rule `archived-uses` reports actions and reusable workflows which live in an archived repository. It is the same as the
 [zizmor audit][zizmor-archived-uses]. Replace the action with a maintained one, or with the commands it wraps in a `run:` step (many
-actions are thin wrappers around the `gh` CLI, which is on the GitHub-hosted runners).
+actions are thin wrappers around the `gh` CLI, which is on the GitHub-hosted runners). For the well-known archived actions the
+message names the successor ([zizmor#2028](https://github.com/zizmorcore/zizmor/issues/2028)): `actions-rs/*` (`dtolnay/rust-toolchain`
+or `cargo ...` in a script step), `crazy-max/ghaction-docker-meta` (`docker/metadata-action`), `nick-invision/retry`
+(`nick-fields/retry`), `actions/setup-ruby` (`ruby/setup-ruby`), `actions/setup-elixir` (`erlef/setup-beam`),
+`actions/setup-haskell` (`haskell-actions/setup`), `8398a7/action-slack` (`slackapi/slack-github-action`),
+`marvinpinto/action-automatic-releases` (`gh release create`), and for `actions/create-release` and `actions/upload-release-asset` the `gh release`
+command that [`superfluous-actions`](#check-superfluous-actions) names. The table only matters for a repository that the check found
+archived, and any other gets the general advice.
 
 Example input:
 
@@ -9336,6 +9385,66 @@ or by someone else). The commit is what runs, so the fix of this rule, which nee
 (and only that, words around it stay) to the tag of the pinned commit, `# v3.0.0` to `# v4.2.2`. Review the change like any other: it
 is wrong when the SHA is the part that has to change. There is no fix when the commit has no tag, or has several versions of the
 same specificity (`v2.0.1` and `v2.0.2`), or the repository has more tags than were read, because the version to write is then a choice.
+
+<a id="check-missing-version-comment"></a>
+## Pinned actions without a version comment (pedantic)
+
+A bare commit SHA tells a reader nothing, and Dependabot and Renovate do not know which release it is: they read the comment after
+it (`uses: actions/checkout@<sha> # v4.2.2`) to find the newer ones. The rule `missing-version-comment` reports an action or reusable
+workflow pinned to a full commit SHA whose comment names no version. It is the part of the
+[zizmor audit][zizmor-ref-version-mismatch] that is about a missing comment; the comment that names another version than the commit is
+[`ref-version-mismatch`](#check-ref-version-mismatch). This rule needs no network.
+
+Example input:
+
+```yaml
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      # OK: the comment names the version
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      # ERROR: no comment
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+      # ERROR: the comment names no version
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # speeds up the build
+```
+
+Output:
+<!-- Skip update output -->
+```
+test.yaml:9:15: warning: action "actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020" is pinned to a commit but has no comment which names its version. add one like "# v1.2.3" after it: Dependabot and Renovate read it to update the pin, and it tells a reader what the commit is [missing-version-comment]
+  |
+9 |       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+  |               ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+test.yaml:11:15: warning: action "actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830" is pinned to a commit but its comment "# speeds up the build" names no version. write the version at its start like "# v1.2.3": Dependabot and Renovate read it to update the pin, and it tells a reader what the commit is [missing-version-comment]
+   |
+11 |       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # speeds up the build
+   |               ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+```
+
+<!-- Skip playground link -->
+
+The output above is from the following `rules` section of the [configuration file](config.md):
+
+```yaml
+rules:
+  missing-version-comment: warning
+```
+
+The rule is in the `pedantic` profile, as a warning. The same forms of a version comment as in `ref-version-mismatch` are read:
+`# v4.2.2`, `# 4.2.2`, `# v4`, `# tag=v4.2.2`, `# v4.2.2 (some note)` and the comment of [ratchet](https://github.com/sethvargo/ratchet),
+`# ratchet:actions/checkout@v4.2.2`. A comment which has a version somewhere (`# pin@v7.0.1`, `# Release v4.4.1`) is accepted too, because it says which version the pin is; only a
+comment that starts with the version is read by `ref-version-mismatch`. A comment that starts with the name of a branch which is usually followed (`# main`, `# master`, `# develop`, `# branch=main`) is
+not reported: the pin follows the branch on purpose, and its commit is not a release. A version on the line above the action is not read by any tool and is reported. An action which is
+not pinned to a commit is the business of `unpinned-uses`, and local actions and Docker images have no version comment.
+
+With `--online --fix` the finding is fixed by adding the comment: the most specific version tag which points to the commit
+(`# v4.2.2`, not `# v4`), the way [the pin fix](usage.md#online-checks) names it. The fix is safe, it only adds a comment. There is no fix when a
+comment is already there (it may say something else that matters), when no tag of the repository points to the commit (a commit between releases has
+no version to name), or when the commit has several versions of the same specificity (`v2.0.1` and `v2.0.2`). Without `--online` the finding says
+that the fix needs it.
 
 <a id="check-invisible-characters"></a>
 ## Invisible characters
@@ -10690,7 +10799,7 @@ way because any caller can pass attacker-controlled text. jactionlint does not l
 
 How the rules treat actions:
 
-- **Applies** to the steps (and the metadata) of an action: `action-syntax`, `actions-lock`, `actions-lock-drift`, `adhoc-packages`, `archived-uses`, `argument-injection`, `artipacked`, `background-step-not-waited`, `checkout-static-credentials`, `command-injection`, `conflicting-action-inputs`, `constant-condition`, `context-availability`, `continue-on-error`, `deprecated-action-input`, `deprecated-commands`, `deprecated-node-runtime`, `duplicate-key`, `duplicate-step-id`, `environment-file-redirect`, `expired-ignore`, `expression-syntax`, `expression-type`, `fail-fast-action-inputs`, `forbidden-uses`, `github-app`, `github-script-syntax`, `if-always-true`, `impostor-commit`, `insecure-commands`, `insecure-ssh-keyscan`, `insecure-url-scheme`, `invalid-env-var-name`, `invalid-function-call`, `invalid-id`, `invalid-ignore-comment`, `invalid-local-action`, `invalid-parallel-step`, `invalid-shell-name`, `invalid-uses`, `invisible-characters`, `known-vulnerable-actions`, `malformed-expression-delimiters`, `max-run-lines`, `merge-key`, `misfeature`, `missing-action-input`, `multiline-plain-run`, `obfuscation`, `outdated-action-runner`, `output-clobbering`, `pipeline-without-pipefail`, `pyflakes`, `recursive-alias`, `ref-confusion`, `ref-version-mismatch`, `repojacking`, `require-expression-wrapping`, `self-repository`, `shellcheck`, `stale-action-refs`, `superfluous-actions`, `template-injection`, `typosquat-uses`, `undefined-function`, `undefined-property`, `unknown-action-input`, `unlocked-install`, `unpinnable-action`, `unpinned-images`, `unpinned-tools`, `unpinned-uses`, `unsound-contains`, `unsound-prefix-match`, `unsound-ternary`, `unused-anchor`, `unused-ignore`, `unverified-download`, `use-trusted-publishing`, `yaml-syntax`.
+- **Applies** to the steps (and the metadata) of an action: `action-syntax`, `actions-lock`, `actions-lock-drift`, `adhoc-packages`, `archived-uses`, `argument-injection`, `artipacked`, `background-step-not-waited`, `checkout-static-credentials`, `command-injection`, `conflicting-action-inputs`, `constant-condition`, `context-availability`, `continue-on-error`, `deprecated-action-input`, `deprecated-commands`, `deprecated-node-runtime`, `duplicate-key`, `duplicate-step-id`, `environment-file-redirect`, `expired-ignore`, `expression-syntax`, `expression-type`, `fail-fast-action-inputs`, `forbidden-uses`, `github-app`, `github-script-syntax`, `if-always-true`, `impostor-commit`, `insecure-commands`, `insecure-ssh-keyscan`, `insecure-url-scheme`, `invalid-env-var-name`, `invalid-function-call`, `invalid-id`, `invalid-ignore-comment`, `invalid-local-action`, `invalid-parallel-step`, `invalid-shell-name`, `invalid-uses`, `invisible-characters`, `known-vulnerable-actions`, `malformed-expression-delimiters`, `max-run-lines`, `merge-key`, `misfeature`, `missing-action-input`, `missing-version-comment`, `multiline-plain-run`, `obfuscation`, `outdated-action-runner`, `output-clobbering`, `pipeline-without-pipefail`, `pyflakes`, `recursive-alias`, `ref-confusion`, `ref-version-mismatch`, `repojacking`, `require-expression-wrapping`, `self-repository`, `shellcheck`, `stale-action-refs`, `superfluous-actions`, `template-injection`, `typosquat-uses`, `undefined-function`, `undefined-property`, `unknown-action-input`, `unlocked-install`, `unpinnable-action`, `unpinned-images`, `unpinned-tools`, `unpinned-uses`, `unsound-contains`, `unsound-prefix-match`, `unsound-ternary`, `unused-anchor`, `unused-ignore`, `unverified-download`, `use-trusted-publishing`, `yaml-syntax`.
 - **Caller-dependent**: `agentic-actions`, `bot-conditions`, `cache-poisoning`, `github-env` (its findings about untrusted input do not depend on the caller), `untrusted-artifact` and `untrusted-checkout`.
 - **Not applicable** because an action does not have what the rule checks, or because only the calling job can decide (`unused-baseline-entry` is about the baseline file, not about a workflow or an action): `anonymous-definition`, `comment-trigger-authorization`, `concurrency-cancels-prs`, `concurrency-cancels-release`, `concurrency-deadlock`, `concurrency-limits`, `conflicting-runner-labels`, `cron-too-frequent`, `cyclic-job-needs`, `dangerous-triggers`, `dependabot-cooldown`, `dependabot-execution`, `dependabot-missing-actions-update`, `dependabot-syntax`, `deprecated-runner-label`, `duplicate-job-id`, `duplicate-job-needs`, `duplicate-triggers`, `event-name-never-received`, `excessive-permissions`, `gate-job-skipped-on-failure`, `gh-without-token`, `hardcoded-container-credentials`, `insufficient-permissions`, `invalid-activity-type`, `invalid-cron`, `invalid-event-config`, `invalid-event-filter`, `invalid-glob`, `invalid-label-pattern`, `invalid-local-workflow`, `invalid-permissions`, `invalid-timezone`, `invalid-workflow-call`, `invalid-workflow-call-input`, `invalid-workflow-dispatch-input`, `local-action-checkout`, `macos-gnu-flags`, `matrix-duplicate-value`, `matrix-invalid-exclude`, `missing-permissions`, `missing-timeout`, `missing-workflow-input`, `missing-workflow-secret`, `mutable-runner-label`, `overprovisioned-secrets`, `require-shell`, `required-actions`, `secrets-inherit`, `secrets-outside-env`, `self-hosted-runner`, `timeout-too-long`, `ubuntu-slim-limits`, `undefined-job-needs`, `undocumented-permissions`, `unknown-event`, `unknown-runner-label`, `unknown-workflow-input`, `unknown-workflow-secret`, `unmatched-paths-filter`, `unredacted-secrets`, `unused-baseline-entry`, `unused-job-output`, `unused-needs`, `unused-workflow-input`, `unused-workflow-secret`, `workflow-call-permissions`, `workflow-input-type`, `workflow-run-names`, `workflow-secret-scope`, `workflow-syntax`.
 

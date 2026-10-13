@@ -91,6 +91,7 @@ misfeature default security error
 missing-action-input correctness correctness error
 missing-permissions default policy error
 missing-timeout default policy error
+missing-version-comment pedantic policy warn
 missing-workflow-input correctness correctness error
 missing-workflow-secret correctness correctness error
 multiline-plain-run correctness correctness error

@@ -16,9 +16,13 @@ var renovateConfigFiles = []string{
 
 // RuleDependabotMissingActionsUpdate is a rule to check that a repository which has workflows and
 // uses Dependabot also keeps its actions up to date with Dependabot.
+//
+// It also reports the local composite actions with `uses:` which none of the github-actions updates covers.
 type RuleDependabotMissingActionsUpdate struct {
 	DependabotRuleBase
 	project *Project
+	// src is the content of the file for the fix of the second check. It can be nil.
+	src *dependabotSource
 }
 
 // NewRuleDependabotMissingActionsUpdate creates a new RuleDependabotMissingActionsUpdate instance.
@@ -36,15 +40,47 @@ func (r *RuleDependabotMissingActionsUpdate) VisitDependabotPost(d *Dependabot) 
 	if r.project == nil || d.Pos == nil {
 		return nil
 	}
+	var updates []*DependabotUpdate
 	for _, u := range d.Updates {
 		if u.PackageEcosystem != nil && u.PackageEcosystem.Value == "github-actions" {
-			return nil
+			updates = append(updates, u)
 		}
 	}
-	if usesRenovate(r.project.RootDir()) || !hasExternalActions(r.project.WorkflowsDir()) {
+	if len(updates) > 0 {
+		if usesRenovate(r.project.RootDir()) {
+			return nil
+		}
+		// An update which is disabled (open-pull-requests-limit: 0, or an ignore of every dependency) opens no pull request: it
+		// updates nothing, in its directory or anywhere
+		var active []*DependabotUpdate
+		for _, u := range updates {
+			if !dependabotUpdatesDisabled(u) {
+				active = append(active, u)
+			}
+		}
+		if len(active) > 0 {
+			r.checkLocalActions(active)
+			return nil
+		}
+		if where, advice, ok := r.whereActionsAreUsed(updates, false); ok {
+			pos := updates[0].Pos
+			if pos == nil {
+				pos = d.Pos
+			}
+			r.ReportIDf("dependabot-missing-actions-update", pos, "this repository uses actions %s but every update with the \"github-actions\" package ecosystem is disabled (\"open-pull-requests-limit: 0\", or an \"ignore\" of every dependency), so Dependabot never updates them. enable one of them%s", where, advice)
+		}
 		return nil
 	}
-	r.ReportID("dependabot-missing-actions-update", d.Pos, "this repository uses actions in its workflows but no update has the \"github-actions\" package ecosystem, so Dependabot never updates them. add an update with \"package-ecosystem: github-actions\" and \"directory: /\"")
+	if usesRenovate(r.project.RootDir()) {
+		return nil
+	}
+	if where, advice, ok := r.whereActionsAreUsed(nil, true); ok {
+		directories := `"directory: /"`
+		if advice != "" {
+			directories = `"directories: [` + advice + `]"`
+		}
+		r.ReportIDf("dependabot-missing-actions-update", d.Pos, "this repository uses actions %s but no update has the \"github-actions\" package ecosystem, so Dependabot never updates them. add an update with \"package-ecosystem: github-actions\" and %s", where, directories)
+	}
 	return nil
 }
 
@@ -75,13 +111,6 @@ func hasExternalActions(dir string) bool {
 	if err != nil {
 		return false
 	}
-	external := func(uses *String) bool {
-		if uses == nil {
-			return false
-		}
-		u := ParseUses(uses.Value)
-		return !u.Dynamic && (u.Kind == UsesAction || u.Kind == UsesReusableWorkflow)
-	}
 	for _, e := range entries {
 		n := e.Name()
 		if e.IsDir() || !(strings.HasSuffix(n, ".yml") || strings.HasSuffix(n, ".yaml")) {
@@ -95,18 +124,8 @@ func hasExternalActions(dir string) bool {
 		if w == nil {
 			continue
 		}
-		for _, j := range w.Jobs {
-			if j == nil {
-				continue
-			}
-			if j.WorkflowCall != nil && external(j.WorkflowCall.Uses) {
-				return true
-			}
-			for _, s := range flattenSteps(j.Steps) {
-				if a, ok := s.Exec.(*ExecAction); ok && external(a.Uses) {
-					return true
-				}
-			}
+		if workflowHasExternalActions(w) {
+			return true
 		}
 	}
 	return false
@@ -115,8 +134,8 @@ func hasExternalActions(dir string) bool {
 func init() {
 	registerRules(RuleInfo{
 		ID: "dependabot-missing-actions-update", Group: RuleGroupPolicy,
-		Summary:      "dependabot.yml has no github-actions update although the repository has workflows using actions.",
-		DefaultLevel: SeverityWarning, Profile: ProfilePedantic, DocsAnchor: "check-dependabot-missing-actions-update",
+		Summary:      "dependabot.yml has no github-actions update although the repository has workflows using actions, or its github-actions updates do not cover the local composite actions that use actions.",
+		DefaultLevel: SeverityWarning, Profile: ProfilePedantic, Fixable: true, DocsAnchor: "check-dependabot-missing-actions-update",
 	})
 	dependabotRuleFactories = append(dependabotRuleFactories, dependabotRuleFactory{
 		kind: "dependabot-missing-actions-update",
@@ -124,7 +143,37 @@ func init() {
 			if !ctx.config.RuleEnabled("dependabot-missing-actions-update") || ctx.project == nil {
 				return nil, nil
 			}
-			return NewRuleDependabotMissingActionsUpdate(ctx.project), nil
+			r := NewRuleDependabotMissingActionsUpdate(ctx.project)
+			if ctx.src != nil {
+				r.src = newDependabotSource(ctx.src)
+			}
+			return r, nil
 		},
 	})
+}
+
+// whereActionsAreUsed says where the repository uses actions that Dependabot can update, for the message ("in its workflows",
+// or with the local composite actions), and, when local actions use them, the entries of "directories" that cover the root and those
+// actions (the suggestion of the other finding of the rule, see suggestDirectories); ok is false when none does. For the message of
+// a disabled update the advice is the suffix ' with "directories: [...]"', for a missing update (entriesOnly) the entries alone.
+func (r *RuleDependabotMissingActionsUpdate) whereActionsAreUsed(updates []*DependabotUpdate, entriesOnly bool) (where, advice string, ok bool) {
+	inWorkflows := hasExternalActions(r.project.WorkflowsDir())
+	locals := localActionsWithExternalUses(r.project)
+	switch {
+	case inWorkflows && len(locals) == 0:
+		where = "in its workflows"
+	case inWorkflows:
+		where = "in its workflows and in the local composite actions in " + showDirectories(locals)
+	case len(locals) > 0:
+		where = "in the local composite actions in " + showDirectories(locals)
+	default:
+		return "", "", false
+	}
+	if len(locals) > 0 {
+		advice = strings.Join(suggestDirectories(updates, locals, true), ", ")
+		if !entriesOnly {
+			advice = " with \"directories: [" + advice + "]\""
+		}
+	}
+	return where, advice, true
 }

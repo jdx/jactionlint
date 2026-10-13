@@ -1,0 +1,35 @@
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      # OK: the comment names the version
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      # OK: the other forms of a version comment
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # 4.2.2
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # tag=v4.2.2 (updated by a bot)
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+      - uses: "actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683" # v4.2.2
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # ratchet:actions/checkout@v4.2.2
+      # OK: not pinned to a commit, which is the business of unpinned-uses
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd719
+      # OK: a local action and an image are not pinned by a SHA
+      - uses: ./.github/actions/local
+      - uses: docker://alpine@sha256:c5b1261d6d3e43071626931fc004f70149baeba2c8ec672bd4f27761f8e1ad6b
+      # ERROR: no comment
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      # ERROR: no comment, quoted
+      - uses: "actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020"
+      # ERROR: the comment does not start with a version
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # needed for the cache
+      # ERROR: a directive of another tool is not a version
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # zizmor: ignore[artipacked]
+      # ERROR: the version is above the line, where no tool reads it
+      # v4.2.2
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+  call:
+    # ERROR: a reusable workflow is pinned the same way
+    uses: octo-org/octo-repo/.github/workflows/ci.yml@11bd71901bbe5b1630ceea73d27597364c9af683
+  call-ok:
+    uses: octo-org/octo-repo/.github/workflows/ci.yml@11bd71901bbe5b1630ceea73d27597364c9af683 # v1.0.0

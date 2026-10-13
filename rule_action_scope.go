@@ -101,6 +101,7 @@ var actionRuleScope = map[string]struct {
 	"local-action-checkout":           {scope: actionNotApplicable},
 	"matrix":                          {scope: actionNotApplicable},
 	"misfeature":                      {scope: actionApplies},
+	"missing-version-comment":         {scope: actionApplies},
 	"obfuscation":                     {scope: actionApplies},
 	"overprovisioned-secrets":         {scope: actionNotApplicable},
 	"parallel-steps":                  {scope: actionApplies},

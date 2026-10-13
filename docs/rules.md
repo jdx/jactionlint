@@ -126,6 +126,7 @@ rules:
 | [missing-action-input](#missing-action-input) | correctness | error | correctness |
 | [missing-permissions](#missing-permissions) | policy | error | default |
 | [missing-timeout](#missing-timeout) | policy | error | default |
+| [missing-version-comment](#missing-version-comment) | policy | warn | pedantic |
 | [missing-workflow-input](#missing-workflow-input) | correctness | error | correctness |
 | [missing-workflow-secret](#missing-workflow-secret) | correctness | error | correctness |
 | [multiline-plain-run](#multiline-plain-run) | correctness | error | correctness |
@@ -472,11 +473,12 @@ An update in dependabot.yml allows insecure external code execution.
 
 ## dependabot-missing-actions-update
 
-dependabot.yml has no github-actions update although the repository has workflows using actions.
+dependabot.yml has no github-actions update although the repository has workflows using actions, or its github-actions updates do not cover the local composite actions that use actions.
 
 - Group: policy
 - Default level: warn
 - Profile: pedantic
+- Fixable: yes
 - Details and examples: [checks](./checks.md#check-dependabot-missing-actions-update)
 
 ## dependabot-syntax
@@ -668,7 +670,7 @@ A script runs the gh command although no GH_TOKEN or GITHUB_TOKEN reaches the st
 
 ## github-app
 
-A GitHub App token is issued with more access or a longer life than needed.
+A GitHub App token (actions/create-github-app-token, tibdex/github-app-token, peter-murray/workflow-application-token-action) is issued with more access or a longer life than needed.
 
 - Group: security
 - Default level: error
@@ -1067,6 +1069,16 @@ A job does not set timeout-minutes.
 - Option `default-minutes` (int, no default): The timeout-minutes which --fix adds to a job. There is no default: the rule has no fix unless this is set. It is lowered to the max of timeout-too-long when that is smaller, and to 15 on a job that runs only on ubuntu-slim.
 - Option `accept-step-timeouts` (bool, default false): Do not report a job without timeout-minutes when every one of its steps sets timeout-minutes (ghalint's exception). Off by default: the timeout of a step does not cover setting up the job, the post steps of actions or completing the job.
 - Details and examples: [checks](./checks.md#check-timeout-minutes)
+
+## missing-version-comment
+
+A hash-pinned action has no comment which names its version.
+
+- Group: policy
+- Default level: warn
+- Profile: pedantic
+- Fixable: yes
+- Details and examples: [checks](./checks.md#check-missing-version-comment)
 
 ## missing-workflow-input
 

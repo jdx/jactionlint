@@ -39,6 +39,7 @@ var superfluousActions = []superfluousAction{
 	{action: "actions-ecosystem/action-add-labels", instead: "use `gh issue edit --add-label` or `gh pr edit --add-label` in a script step", source: sourceZizmor},
 	{action: "actions-ecosystem/action-remove-labels", instead: "use `gh issue edit --remove-label` or `gh pr edit --remove-label` in a script step", source: sourceZizmor},
 	{action: "addnab/docker-run-action", instead: "use `docker run` in a script step", source: sourceZizmor},
+	{action: "benc-uk/workflow-dispatch", instead: "use `gh workflow run` (with `--ref` and `-f name=value` for the inputs) in a script step", source: "zizmor#2181"},
 	{action: "sergeysova/jq-action", instead: "use `jq`, which the runner images include, in a script step", source: sourceZizmor},
 	// The following replacements take more than one command or miss a feature of the action. zizmor puts them in
 	// its pedantic persona as well.
