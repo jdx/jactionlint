@@ -9950,7 +9950,7 @@ has. GitHub removed Node.js 20 on 2026-09-23 ([changelog][node20-removed]; the p
 
 That is why the rule is not part of the `default` or `correctness` profile: the action does not fail, and jactionlint cannot tell
 a runner on github.com from GitHub Enterprise Server or an old self-hosted runner, where `node20` can still be the runtime that runs.
-The finding says what holds everywhere: the action declares a runtime that the runner on github.com does not provide. It checks two things.
+The finding says what holds everywhere: the action declares a runtime that the runner on github.com does not provide. It checks three things.
 
 **The actions that a workflow uses.** The generated data of the popular actions (`PopularActionRuntimes`) records the `runs.using` of every
 major version they know, taken from the `action.yml` of that major when the data was generated. A `uses:` of a major that declares
@@ -9973,6 +9973,21 @@ runs:
 A workflow that calls a local action is not reported a second time: the metadata file of the action is. `node12` and `node16` in a local
 action are also reported by [`invalid-local-action`](#action-metadata-syntax) where a workflow calls it, because the runner does not document them
 anymore.
+
+**The variables that chose the runtime.** `ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION` kept JavaScript actions on Node.js 20 after Node.js 24
+became the default on 2026-06-16, and `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24` ran them on Node.js 24 before that. The runner reads both in
+`NodeUtil.DetermineActionsNodeVersion` and ignores both once its server side flag `requirenode24` is on, which is the case since Node.js 20 was
+removed. The [changelog][node20-removed] says that the opt-out "is no longer available"; it does not mention the other variable, which the
+runner source shows to be redundant by the same flag. A key of that name in `env:` of the workflow, of a job or of a step (also of the steps
+of a composite action) is reported at the name, whatever its value is:
+
+```yaml
+env:
+  ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true # warning: no longer does anything
+```
+
+The `env:` of a `container:` or of a service is not looked at, and neither is a variable written to `$GITHUB_ENV` by a script or
+set in the environment of a self-hosted runner.
 
 [yamllint]: https://github.com/adrienverge/yamllint
 [node20-removed]: https://github.blog/changelog/2026-09-23-node-20-is-no-longer-available-in-github-actions
