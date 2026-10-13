@@ -46,6 +46,7 @@ impostor-commit online security error
 insecure-commands default security error
 insecure-ssh-keyscan default security error
 insecure-url-scheme default security error
+insufficient-permissions default correctness error
 invalid-activity-type correctness correctness error
 invalid-cron correctness correctness error
 invalid-env-var-name correctness correctness error

@@ -32,6 +32,9 @@ self-hosted-runner:
   # When true, only the labels listed above are accepted at 'runs-on:'. Built-in labels such as 'ubuntu-latest' and
   # 'self-hosted' are reported unless listed. (default: false)
   strict-labels: false
+  # Hosted-runner providers whose labels are accepted: blacksmith, depot, namespace, runson, ubicloud and warpbuild.
+  # (default: all of them. [] accepts none)
+  providers: [blacksmith, depot]
 
 # Configuration variables in array of strings defined in your repository or organization.
 config-variables:
@@ -130,6 +133,12 @@ extends:
     This is useful when all jobs must run on your own runners, or when your runners (e.g. Actions Runner Controller runner
     sets) do not have the default `self-hosted` label. Label conflict checks still apply to listed built-in labels. The default
     is `false`.
+  - `providers`: The hosted-runner providers whose labels the runner label check accepts without them being listed in `labels`:
+    `blacksmith` (`blacksmith-*`), `depot` (`depot-ubuntu-*`, `depot-windows-*`, `depot-macos-*`), `namespace` (`namespace-profile-*`,
+    `nscloud-*`, `namespace-features:*`), `runson` (`runs-on=...`, `runner=...`, `family=...`, `image=...` and the other keys of the
+    labels of RunsOn), `ubicloud` (`ubicloud`, `ubicloud-arm`, `ubicloud-standard-*`, `ubicloud-premium-*`) and `warpbuild` (`warp-*`). The default, when the key is
+    not set, is all of them. A list accepts only the providers in it, and an empty list none of them. Another service goes in `labels`. It is not
+    used when `strict-labels` is `true`.
 - `config-variables`: [Configuration variables][vars]. When an array is set, jactionlint will check `vars` properties strictly.
   An empty array means no variable is allowed. The default value `null` disables the check.
 - `required-actions`: List of actions which must be used in each checked workflow. This check is disabled unless the list

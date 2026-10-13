@@ -46,42 +46,64 @@ var tokenUseRe = regexp.MustCompile(`(?i)github_token|github\.token|\bgh_token\b
 // "contents: read" removes every other permission from the GITHUB_TOKEN, which breaks a job
 // commenting on a pull request, publishing a package and so on.
 func fixMissingPermissions(w *Workflow) *Fix {
+	f, _ := fixMissingPermissionsWhy(w)
+	return f
+}
+
+// fixMissingPermissionsWhy is fixMissingPermissions with the reason for the lack of a fix, when there is one that
+// the person should know: the file is in a shape the fix understands, but the jobs need what it cannot write.
+func fixMissingPermissionsWhy(w *Workflow) (*Fix, *NoFix) {
 	_, callable := w.FindWorkflowCallEvent()
 	if callable && len(w.On) == 1 {
 		// A reusable-only workflow gets at most the permissions its caller grants. Setting "contents: read"
 		// in the callee makes GitHub reject every caller which grants less, and the callers are in other
 		// files, so there is no value that is right to write. The rule does not report it, and no fix exists.
-		return nil
+		return nil, nil
 	}
 	d := newSrcDoc(w.Source)
 	if d == nil {
-		return nil
+		return nil, nil
 	}
 	if _, _, _, ok := d.topLevelKey("permissions"); ok {
-		return nil // the parser did not see it, so the shape is not understood
+		return nil, nil // the parser did not see it, so the shape is not understood
 	}
 	line, indent, inline, ok := d.topLevelKey("on")
 	if !ok {
 		line, indent, inline, ok = d.topLevelKey(`"on"`)
 	}
 	if !ok {
-		return nil
+		return nil, nil
 	}
 	end, ok := d.entryEnd(line, indent, inline)
 	if !ok {
-		return nil
+		return nil, nil
 	}
 	line = end
 	// The new key goes at the indentation of the other keys of the root mapping
 	pad := strings.Repeat(" ", indent)
 	unit := strings.Repeat(" ", d.indentUnit())
+	edits := []TextEdit{d.insertAfterLine(line, "", pad+"permissions:", pad+unit+"contents: read")}
+	desc := "Add permissions: contents: read"
+	unsafe := callable || !onlyReadsRepository(w)
+	// A job whose actions need more than reading the repository gets a block of its own with the scopes which the
+	// documentation of the action lists (the table of action_permissions.go). "contents: read" at the workflow level
+	// would break it, so the block comes with the same fix. It widens the token of the job, so the fix is unsafe.
+	jobEdits, why := jobPermissionEdits(w, d, unit)
+	if why != nil {
+		return nil, why
+	}
+	if len(jobEdits) > 0 {
+		edits = append(edits, jobEdits...)
+		desc += ", and the permissions which the actions of some jobs need"
+		unsafe = true
+	}
 	return &Fix{
-		Description: "Add permissions: contents: read",
+		Description: desc,
 		// A workflow which is also called (workflow_call) gets the permissions its callers grant when they call
 		// it, which the callee cannot know, so the fix is never safe there.
-		Unsafe: callable || !onlyReadsRepository(w),
-		Edits:  []TextEdit{d.insertAfterLine(line, "", pad+"permissions:", pad+unit+"contents: read")},
-	}
+		Unsafe: unsafe,
+		Edits:  edits,
+	}, nil
 }
 
 // onlyReadsRepository reports whether the jobs which have no "permissions:" look like they work with

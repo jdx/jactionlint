@@ -72,6 +72,7 @@ var actionRuleScope = map[string]struct {
 	"events":                          {scope: actionNotApplicable},
 	"environment-file-redirect":       {scope: actionApplies},
 	"excessive-permissions":           {scope: actionNotApplicable},
+	"insufficient-permissions":        {scope: actionNotApplicable},
 	"expression":                      {scope: actionApplies},
 	"forbidden-uses":                  {scope: actionApplies},
 	"github-app":                      {scope: actionApplies},

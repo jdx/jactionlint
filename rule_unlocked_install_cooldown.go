@@ -25,6 +25,10 @@ import (
 //   - pnpm 10.16: `minimumReleaseAge` (minutes) in pnpm-workspace.yaml. pnpm 11 has a default of one day.
 //   - Yarn 4.10: `npmMinimalAgeGate` in .yarnrc.yml. Yarn 4.15 has a default of one day. Yarn 1 has none.
 //   - bun 1.3: `--minimum-release-age` or `minimumReleaseAge` (seconds) under `[install]` of bunfig.toml.
+//   - aube: `minimumReleaseAge` (minutes) in aube-workspace.yaml (or pnpm-workspace.yaml, which aube ignores when it has
+//     an aube-workspace.yaml next to it) and `minimumReleaseAge` or `minimum-release-age` in .npmrc, or
+//     `AUBE_MINIMUM_RELEASE_AGE`; aube has a default of one day (1440) since its first release, so only a value that
+//     turns it off is reported (https://aube.sh/settings/#setting-minimumreleaseage).
 //
 // An install that does not resolve is not reported: `npm ci`, `uv sync`, `--frozen-lockfile`, `--require-hashes`, a
 // constraints file `-c`, and a manifest install in a repository with the lock file. `npx` and the other runners of
@@ -167,6 +171,13 @@ var ageTools = map[string]ageTool{
 		texts:   []keyedText{{"minimumReleaseAge", settingValue(`minimumReleaseAge|minimum-release-age`)}},
 		envKey:  func(string) (string, bool) { return "", false },
 	},
+	// aube has no option for it. `aube config set minimumReleaseAge 0` and `AUBE_MINIMUM_RELEASE_AGE=0` in a script are
+	// read by the text patterns, the environment of the workflow by envKey
+	"aube": {
+		flagKey: func(string) (string, bool) { return "", false },
+		texts:   []keyedText{{"minimum-release-age", settingValue(`minimum(?:-release-age|ReleaseAge|_release_age)`)}},
+		envKey:  exactly(map[string]string{"npm_config_minimum_release_age": "minimum-release-age", "aube_minimum_release_age": "minimum-release-age"}),
+	},
 }
 
 // ageToolOf maps the tool of a command to its entry of ageTools.
@@ -245,6 +256,8 @@ var lockFilesOf = map[string][]string{
 	"yarn": {"yarn.lock"},
 	"pnpm": {"pnpm-lock.yaml"},
 	"bun":  {"bun.lock", "bun.lockb"},
+	// aube reads and writes the lock file the project has, see https://aube.sh/package-manager/lockfiles
+	"aube": {"aube-lock.yaml", "pnpm-lock.yaml", "bun.lock", "yarn.lock", "npm-shrinkwrap.json", "package-lock.json"},
 }
 
 func (rule *RuleUnlockedInstall) checkReleaseAge(step *Step, s *runscript.Script, origin runscript.Origin, c *runscript.Command, in *runscript.Install) {
@@ -264,6 +277,11 @@ func (rule *RuleUnlockedInstall) checkReleaseAge(step *Step, s *runscript.Script
 	case "npm":
 		switch c.Tool {
 		case "npm", "pnpm", "yarn", "bun":
+		case "aube":
+			// `aube ci` is a frozen install (in.Locked), and `aube install` takes no package
+			if !aubeResolves(in) {
+				return
+			}
 		default:
 			return
 		}
@@ -320,6 +338,8 @@ func (rule *RuleUnlockedInstall) checkReleaseAge(step *Step, s *runscript.Script
 		msg = quote(name) + " " + why + "pass `--uploaded-prior-to` (pip 26.0 and later; a date, or a duration such as `P7D`), or install with uv and `--exclude-newer`"
 	case "npm":
 		msg = quote(name) + " " + why + "pass `--min-release-age=7` or set `min-release-age=7` in .npmrc (npm 11.10 and later)"
+	case "aube":
+		msg = quote(name) + " " + why + "aube waits one day for a release by default (`minimumReleaseAge` of 1440 minutes), but the settings of this install turn that off. set `minimumReleaseAge` (in minutes) to more than 0 in aube-workspace.yaml, or remove the setting that makes it 0"
 	case "pnpm":
 		msg = quote(name) + " " + why + "set `minimumReleaseAge` (in minutes, pnpm 10.16 and later) in pnpm-workspace.yaml"
 	case "yarn":
@@ -372,11 +392,13 @@ func (rule *RuleUnlockedInstall) releaseAgeAt(dirs []string, step *Step, c *runs
 	return st.after(tool.flagAssignments(c))
 }
 
-// ageDefaultOn reports whether the version of the tool waits for a release by default: pnpm 11 (one day) and Yarn
-// 4.15 (one day). A Yarn 2+ project of a version that is not known is taken as such too, which keeps the install
+// ageDefaultOn reports whether the version of the tool waits for a release by default: pnpm 11 (one day), Yarn
+// 4.15 (one day) and aube (one day, in every version). A Yarn 2+ project of a version that is not known is taken as such too, which keeps the install
 // unreported: the default depends on the version.
 func (rule *RuleUnlockedInstall) ageDefaultOn(dirs []string, step *Step, c *runscript.Command, before string) bool {
 	switch c.Tool {
+	case "aube":
+		return true
 	case "pnpm":
 		if rule.pnpmVersionInJob(step, before) >= 11 {
 			return true
@@ -479,6 +501,28 @@ func (rule *RuleUnlockedInstall) ageFiles(dir string, c *runscript.Command, npmr
 			}
 			out = append(out, as)
 		}
+	case "aube":
+		// .npmrc (both spellings of the key), then the workspace file, which wins: aube-workspace.yaml, and the
+		// pnpm-workspace.yaml only when there is none
+		rc := rule.files.npmrc(dir)
+		var as []ageAssignment
+		for _, k := range []string{"minimum-release-age", "minimumReleaseAge"} {
+			if v, ok := rc[k]; ok {
+				as = append(as, ageAssignment{"minimum-release-age", v})
+			}
+		}
+		out = append(out, as)
+		text, ok := read("aube-workspace.yaml")
+		if !ok {
+			text, ok = read("pnpm-workspace.yaml")
+		}
+		if ok {
+			var ws []ageAssignment
+			for _, m := range pnpmWorkspaceAgeRe.FindAllStringSubmatch(text, -1) {
+				ws = append(ws, ageAssignment{"minimum-release-age", m[1]})
+			}
+			out = append(out, ws)
+		}
 	case "yarn":
 		if text, ok := read(".yarnrc.yml"); ok {
 			var as []ageAssignment
@@ -527,6 +571,10 @@ func uvAssignments(text string, tables ...string) []ageAssignment {
 // `--frozen-lockfile=false`): it then resolves the versions again although the repository has the lock file.
 func toldNotToFreeze(c *runscript.Command) bool {
 	if c.HasFlag("--no-frozen-lockfile") {
+		return true
+	}
+	// aube freezes by default in CI. These two resolve again, the whole lock file or the entries that drifted
+	if c.Tool == "aube" && c.HasFlag("--prefer-frozen-lockfile", "--fix-lockfile") {
 		return true
 	}
 	for _, f := range c.Flags {
@@ -587,4 +635,14 @@ func (rule *RuleUnlockedInstall) pnpmVersionInJob(step *Step, before string) int
 		}
 	}
 	return best
+}
+
+// aubeResolves reports whether the aube command is one that resolves versions: `aube install` and `aube add`
+// (`aube ci` and `aube dlx` are not installs of the project, and the first is frozen).
+func aubeResolves(in *runscript.Install) bool {
+	switch in.Verb {
+	case "install", "i", "add", "a":
+		return true
+	}
+	return false
 }

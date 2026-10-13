@@ -24,7 +24,7 @@ type Command struct {
 	// NameWord is the word of the command name, nil if the command has no name (only `export`-like forms).
 	NameWord *Word
 	// Tool is the canonical name of the tool, if it is one of the tools the analyzer knows: pip (also pip3,
-	// pip3.11, python -m pip), npm, pnpm, yarn, bun, aube, npx, cargo, go, gem, apt (also apt-get), brew, uv, pipx,
+	// pip3.11, python -m pip), npm, pnpm, yarn, bun, aube, aubx, npx, cargo, go, gem, apt (also apt-get), brew, uv, pipx,
 	// twine, gh, curl, wget, tee, and the shells (sh, bash, zsh, ...). Otherwise "".
 	Tool string
 	// Args are the words after the tool. For `python -m pip install x` they start after `pip`, so
@@ -523,7 +523,7 @@ func canonicalTool(name string, args []*Word) (string, []*Word) {
 		return "pnpm-dlx", args
 	}
 	switch name {
-	case "pip", "npm", "pnpm", "yarn", "bun", "aube", "npx", "bunx", "cargo", "go", "gem", "apt", "brew", "uv", "uvx", "pipx", "twine",
+	case "pip", "npm", "pnpm", "yarn", "bun", "aube", "aubx", "npx", "bunx", "cargo", "go", "gem", "apt", "brew", "uv", "uvx", "pipx", "twine",
 		"gh", "curl", "wget", "tee", "poetry", "flit", "hatch", "eval", "source", ".":
 		return name, args
 	}
