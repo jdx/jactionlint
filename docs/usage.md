@@ -109,6 +109,8 @@ cat action.yml | jactionlint --stdin-filename action.yml -
 | `--list-rules` |  | List every rule ID with its group, profile, level and summary, and exit. --format json prints it as JSON |
 | `--print-config-schema` |  | Print the JSON Schema of the config file (rule IDs and options included) and exit |
 | `--print-output-schema` |  | Print the JSON Schema of --format json and jsonl and exit |
+| `--export-facts` |  | Print the facts of the workflows and actions (events, permissions, concurrency, calls and who calls them, inputs; with positions and explicit unknowns) as versioned JSON and exit. Nothing is checked |
+| `--print-facts-schema` |  | Print the JSON Schema of --export-facts and exit |
 | `--explain=RULE` |  | Print the documentation of a rule ID (summary, group, profile, level, options, fixes and its section of the checks document) and exit |
 
 **Fixing**
@@ -654,6 +656,50 @@ In `{{ }}` placeholder, input can be piped and action can be used to transform t
 `|` and transformed with `printf "%q"`.
 
 Note that special characters escaped with backslash like `\n` in the format string are automatically unescaped.
+
+### Export the facts of the repository
+
+`jactionlint --export-facts` prints what the workflows and actions of the repository declare, and what the call graph of the
+repository knows, as one JSON document, instead of checking them. It is for tools that apply a policy of their own to the same
+model as jactionlint, such as [Conftest](https://www.conftest.dev/), [Lintnet](https://github.com/lintnet-modules/ghalint) or a
+script, without parsing the YAML and the rules of GitHub Actions again. [`schema/jactionlint-facts.json`](https://github.com/jdx/jactionlint/blob/main/schema/jactionlint-facts.json)
+(`--print-facts-schema`) describes it. Like `--format json` it is versioned: `version` is 1, a field is not removed and does not change its
+meaning within a version, and a reader ignores the fields it does not know. Without files it exports the workflows and the actions of the
+repository; with files it exports those, and the callers are still those of the whole repository. It reads and writes nothing, and the
+configuration, the profile and the ignores do not change it (they decide the findings, not the facts).
+
+| Document | Facts |
+| --- | --- |
+| `workflows[]` | `path` (relative to the root of the repository), `name`, `events[]` (name, `types`, branch, tag and path `filters`, `schedules`, `inputs`), `callable`, `called_by`, `permissions`, `concurrency`, `cache_mode`, `jobs[]` |
+| `jobs[]` | `needs`, `runs_on`, `permissions` (declared) and `effective_permissions`, `concurrency`, `environment`, `timeout_minutes`, `cache_mode`, `if` (as written, not evaluated), `uses` (a call of a reusable workflow: `secrets_inherit`, `secrets`, `inputs`), `steps[]` (`uses` with `ref_kind` such as `full-sha`, the `inputs` of `with:`, `shell`) |
+| `actions[]` | `path`, `using`, `inputs`, `steps[]` of a composite action, and `called_by`: the workflows that run it, the actions between them (`via`), their `events` and the `inputs` they pass |
+| `calls[]` | Each local call: a job that calls a reusable workflow, or a step that runs a local action (`from`, `job`, `step`, `to`), with the `permissions` of the calling job (what the callee gets at most) and the `events` of the calling workflow |
+
+Every position is a `location` with a 1-based `line` and `column`, the column counted in Unicode code points like the findings. **What is
+not known is said, not left out or guessed:**
+
+- A value with a `${{ }}` expression has `dynamic: true` and the text as written (`concurrency.group`, `environment`, a `with:` input, a name).
+  `concurrency.cancel_in_progress` is `true`, `false`, `unset` (not written, so nothing is cancelled) or `unknown` (an expression), and a
+  `concurrency` written as one expression has `form: expression`. `timeout_minutes` and `runs_on` have a `dynamic` flag.
+- `effective_permissions` has a `source`: `job`, `workflow` or `repository-setting`. The last one means neither the job nor the workflow
+  declares the permissions, so the default token of the repository applies, which the file does not say: `scopes` is absent and that is
+  unknown, not `none`. A scope that an expression decides is `"unknown"`.
+- `called_by.known` is `false` when nothing in the repository calls a reusable workflow (or a caller is itself only called): another
+  repository may call it on any event, so `events` is not all of them. For an action it is `false` when no workflow of the repository runs
+  it, and its events are unknown.
+- A file that is not valid YAML has `parsed: false` and no other fact. `syntax_errors` counts the errors of a file that was read in part.
+
+```sh
+# the jobs whose token is the default of the repository
+jactionlint --export-facts | jq -r '.workflows[].jobs[] | select(.effective_permissions.source == "repository-setting") | .id'
+# the reusable workflows that a job with write access calls, and on which events
+jactionlint --export-facts | jq -c '.calls[] | select(.permissions.scopes.contents == "write") | {from, job, to, events}'
+```
+
+The facts are not findings: jactionlint does not judge them here, and the model is the one the rules use (the events and permissions of
+`--finding-context`, the call graph of the repository), so a policy written on the facts sees the same workflow as the rules do. The
+document is not a promise that every fact the rules compute is in it: the facts that depend on a run (the result of an expression) are not
+evaluated, and the variables of a matrix are not expanded.
 
 ### Exit status
 

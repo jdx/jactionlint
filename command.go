@@ -73,7 +73,7 @@ type fixRequest struct {
 	result *FixResult
 }
 
-func (cmd *Command) runLinter(args []string, opts *LinterOptions, initConfig, migrateConfig, migrateIgnores bool, fix *fixRequest, baselineWrite *optionalValueFlag, onlineFailed *int, onlineReport string) ([]*Error, error) {
+func (cmd *Command) runLinter(args []string, opts *LinterOptions, initConfig, migrateConfig, migrateIgnores, exportFacts bool, fix *fixRequest, baselineWrite *optionalValueFlag, onlineFailed *int, onlineReport string) ([]*Error, error) {
 	l, err := NewLinter(cmd.Stdout, opts)
 	if err != nil {
 		return nil, err
@@ -94,6 +94,25 @@ func (cmd *Command) runLinter(args []string, opts *LinterOptions, initConfig, mi
 	}
 	if migrateConfig {
 		return nil, l.MigrateConfig("")
+	}
+
+	if exportFacts {
+		if len(args) == 1 && args[0] == "-" {
+			return nil, &usageError{errors.New("--export-facts cannot be used with stdin because the facts are about the files of a repository")}
+		}
+		if fix.mode != 0 || baselineWrite.set || migrateIgnores {
+			return nil, &usageError{errors.New("--export-facts cannot be combined with --fix, --diff, --baseline-write or --migrate-ignores: it only reads")}
+		}
+		facts, err := l.ExportFacts(args, nil)
+		if err != nil {
+			return nil, err
+		}
+		b, err := facts.Marshal()
+		if err != nil {
+			return nil, err
+		}
+		_, err = cmd.Stdout.Write(b)
+		return nil, err
 	}
 
 	if baselineWrite.set {
@@ -196,14 +215,17 @@ func (cmd *Command) Main(args []string) int {
 		}
 		return ExitStatusSuccessNoProblem
 	}
-	if f.printConfigSchema || f.printOutputSchema {
-		if f.printConfigSchema && f.printOutputSchema {
-			fmt.Fprintln(cmd.Stderr, "--print-config-schema and --print-output-schema cannot be combined")
+	if f.printConfigSchema || f.printOutputSchema || f.printFactsSchema {
+		if n := countTrue(f.printConfigSchema, f.printOutputSchema, f.printFactsSchema); n > 1 {
+			fmt.Fprintln(cmd.Stderr, "--print-config-schema, --print-output-schema and --print-facts-schema cannot be combined")
 			return ExitStatusInvalidCommandOption
 		}
 		schema := OutputSchema()
-		if f.printConfigSchema {
+		switch {
+		case f.printConfigSchema:
 			schema = ConfigSchema()
+		case f.printFactsSchema:
+			schema = FactsSchema()
 		}
 		if _, err := cmd.Stdout.Write(schema); err != nil {
 			fmt.Fprintf(cmd.Stderr, "could not write the schema: %v\n", err)
@@ -359,7 +381,7 @@ func (cmd *Command) Main(args []string) int {
 		}
 	}
 	var onlineFailed int
-	errs, err := cmd.runLinter(flags.Args(), &opts, f.initConfig, f.migrateConfig, f.migrateIgnores, req, &baselineWrite, &onlineFailed, f.onlineReport)
+	errs, err := cmd.runLinter(flags.Args(), &opts, f.initConfig, f.migrateConfig, f.migrateIgnores, f.exportFacts, req, &baselineWrite, &onlineFailed, f.onlineReport)
 	if err != nil {
 		fmt.Fprintln(cmd.Stderr, err.Error())
 		var ue *usageError
@@ -404,4 +426,14 @@ func displayPath(wd, p string) string {
 		return r
 	}
 	return p
+}
+
+func countTrue(bs ...bool) int {
+	n := 0
+	for _, b := range bs {
+		if b {
+			n++
+		}
+	}
+	return n
 }

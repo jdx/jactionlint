@@ -67,6 +67,8 @@ var cliOptions = []cliOption{
 	{"Rules and configuration", "list-rules", "", "", false, "", "List every rule ID with its group, profile, level and summary, and exit. --format json prints it as JSON"},
 	{"Rules and configuration", "print-config-schema", "", "", false, "", "Print the JSON Schema of the config file (rule IDs and options included) and exit"},
 	{"Rules and configuration", "print-output-schema", "", "", false, "", "Print the JSON Schema of --format json and jsonl and exit"},
+	{"Rules and configuration", "export-facts", "", "", false, "", "Print the facts of the workflows and actions (events, permissions, concurrency, calls and who calls them, inputs; with positions and explicit unknowns) as versioned JSON and exit. Nothing is checked"},
+	{"Rules and configuration", "print-facts-schema", "", "", false, "", "Print the JSON Schema of --export-facts and exit"},
 	{"Rules and configuration", "explain", "", "RULE", false, "", "Print the documentation of a rule ID (summary, group, profile, level, options, fixes and its section of the checks document) and exit"},
 
 	{"Fixing", "fix", "", "unsafe", true, "-fix", "Apply the safe automatic fixes in place. --fix=unsafe also applies the fixes that may change behavior"},
@@ -276,6 +278,8 @@ type commandFlags struct {
 	listRules                bool
 	printConfigSchema        bool
 	printOutputSchema        bool
+	printFactsSchema         bool
+	exportFacts              bool
 	completion               string
 	explain                  string
 	fix                      fixFlag
@@ -347,6 +351,8 @@ func newCommandFlags() *commandFlags {
 	fs.BoolVar(&f.listRules, "list-rules", false, "")
 	fs.BoolVar(&f.printConfigSchema, "print-config-schema", false, "")
 	fs.BoolVar(&f.printOutputSchema, "print-output-schema", false, "")
+	fs.BoolVar(&f.printFactsSchema, "print-facts-schema", false, "")
+	fs.BoolVar(&f.exportFacts, "export-facts", false, "")
 	fs.StringVar(&f.completion, "completion", "", "")
 	fs.StringVar(&f.explain, "explain", "", "")
 

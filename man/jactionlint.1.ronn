@@ -153,6 +153,14 @@ single-dash long options of v1 are removed; the error names the replacement.
   * `--print-output-schema`:
     Print the JSON Schema of the output of `--format json` and `jsonl`, and exit
 
+  * `--export-facts`:
+    Print the facts of the workflows and actions of the repository as versioned JSON and exit: the events,
+    permissions, concurrency, the local calls and who calls them, and the inputs, with positions and an explicit
+    `dynamic`, `unknown` or `repository-setting` wherever a value is not known. Nothing is checked or written
+
+  * `--print-facts-schema`:
+    Print the JSON Schema of the output of `--export-facts`, and exit
+
   * `--min-severity` <LEVEL>:
     Hide the errors less severe than this level: `info` (default), `warn` or `error`
 
