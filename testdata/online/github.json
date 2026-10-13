@@ -1,5 +1,5 @@
 {
-  "_note": "Trimmed answers of the GitHub API and of the registries (images) recorded in 2026-10 (see github_fixture.go). Tag and branch lists keep only the entries the tests use. example/* repositories are made up.",
+  "_note": "Trimmed answers of the GitHub API and of the registries (images) recorded in 2026-10 (see github_fixture.go). Tag and branch lists keep only the entries the tests use, and the action.yml files of taiki-e/install-action, jdx/mise-action and gradle/actions are shortened (inputs and outputs as recorded, steps cut). example/* repositories are made up. A file which is not listed under files does not exist.",
   "images": {
     "docker.io/example/gone:1": "not-found",
     "docker.io/library/alpine:3.19": "sha256:6baf43584bcb78f2e5847d1de515f23499913ac9f12bdf834811a3145eb11ca1",
@@ -524,6 +524,295 @@
             "sha": "5555555555555555555555555555555555555555"
           }
         ]
+      },
+      "advisories": {
+        "list": []
+      }
+    },
+    "taiki-e/install-action": {
+      "repo": {
+        "archived": false,
+        "default_branch": "main"
+      },
+      "tags": {
+        "tags": [
+          {
+            "name": "v2",
+            "sha": "1168f6810a3cb30a3514bf5756a3b7f0422c6df8"
+          }
+        ]
+      },
+      "refs": {
+        "heads/v2": {
+          "found": false
+        }
+      },
+      "files": {
+        "v2:action.yml": {
+          "found": true,
+          "content": "name: Install development tools\ndescription: GitHub Action for installing development tools\n\ninputs:\n  tool:\n    description: Tools to install (whitespace or comma separated list)\n    required: true\n    # default: #publish:tool\n  checksum:\n    description: Whether to enable checksums (strongly discouraged to disable)\n    required: false\n    default: 'true'\n  fallback:\n    description: Whether to use fallback (none, cargo-binstall, or cargo-install)\n    required: false\n    default: 'cargo-binstall'\n\n# Note:\n# - inputs.* should be manually mapped to INPUT_* due to https://github.com/actions/runner/issues/665\n# - For context containing path, use GITHUB_*/RUNNER_* instead of github.*/runner.* due to https://github.com/actions/runner/issues/2185\nruns:\n  using: composite\n  steps:\n    - run: bash \"${GITHUB_ACTION_PATH:?}/main.sh\"\n      shell: bash\n"
+        },
+        "v2:action.yaml": {
+          "found": false
+        },
+        "1168f6810a3cb30a3514bf5756a3b7f0422c6df8:action.yml": {
+          "found": true,
+          "content": "name: Install development tools\ndescription: GitHub Action for installing development tools\n\ninputs:\n  tool:\n    description: Tools to install (whitespace or comma separated list)\n    required: true\n    # default: #publish:tool\n  checksum:\n    description: Whether to enable checksums (strongly discouraged to disable)\n    required: false\n    default: 'true'\n  fallback:\n    description: Whether to use fallback (none, cargo-binstall, or cargo-install)\n    required: false\n    default: 'cargo-binstall'\n\n# Note:\n# - inputs.* should be manually mapped to INPUT_* due to https://github.com/actions/runner/issues/665\n# - For context containing path, use GITHUB_*/RUNNER_* instead of github.*/runner.* due to https://github.com/actions/runner/issues/2185\nruns:\n  using: composite\n  steps:\n    - run: bash \"${GITHUB_ACTION_PATH:?}/main.sh\"\n      shell: bash\n"
+        }
+      },
+      "advisories": {
+        "list": []
+      }
+    },
+    "jdx/mise-action": {
+      "repo": {
+        "archived": false,
+        "default_branch": "main"
+      },
+      "tags": {
+        "tags": [
+          {
+            "name": "v2",
+            "sha": "8888888888888888888888888888888888888888"
+          }
+        ]
+      },
+      "refs": {
+        "heads/v2": {
+          "found": false
+        }
+      },
+      "files": {
+        "v2:action.yml": {
+          "found": true,
+          "content": "name: mise action\ndescription: Actions for working with mise runtime manager\nauthor: Jeff Dickey <@jdx>\nbranding:\n  icon: arrow-down-circle\n  color: purple\ninputs:\n  version:\n    required: false\n    description: The version of mise to use. If not specified, will use the latest release.\n  sha256:\n    required: false\n    description: The SHA256 checksum of the mise binary to verify the download.\n  mise_dir:\n    required: false\n    description: |\n      The directory that mise will be installed to, defaults to $HOME/.local/share/mise\n      Or $XDG_DATA_HOME/mise if $XDG_DATA_HOME is set.\n      Or $MISE_DATA_DIR if $MISE_DATA_DIR is set.\n  tool_versions:\n    required: false\n    description: If present, this value will be written to the .tool-versions file\n  mise_toml:\n    required: false\n    description: If present, this value will be written to the .mise.toml file\n  install:\n    required: false\n    default: \"true\"\n    description: if false, will not run `mise install`\n  install_args:\n    required: false\n    description: Arguments to pass to `mise install` such as \"bun\" to only install bun\n  install_dir:\n    required: false\n    description: deprecated\n  cache:\n    required: false\n    default: \"true\"\n    description: if false, action will not read or write to cache\n  cache_save:\n    required: false\n    default: \"true\"\n    description: if false, action will not write to cache\n  cache_key_prefix:\n    required: false\n    default: \"mise-v0\"\n    description: The prefix key to use for the cache, change this to invalidate the cache\n  experimental:\n    required: false\n    default: \"false\"\n    description: if true, will use experimental features\n  log_level:\n    required: false\n    default: \"info\"\n    description: The log level to use for the action\n  working_directory:\n    required: false\n    description: The directory that mise runs in\n  reshim:\n    required: false\n    default: \"false\"\n    description: if true, will run `mise reshim --all` after setting up mise\n  github_token:\n    required: false\n    description: |\n      GitHub token for API authentication to avoid rate limits when installing GitHub-hosted tools.\n      Defaults to the automatic GitHub token.\n    default: ${{ github.token }}\n  fetch_from_github:\n    required: false\n    default: \"true\"\n    description: If true (default), fetch the mise binary from GitHub. If false and using the latest version, fetch from mise.jdx.dev instead.\noutputs:\n  cache-hit:\n    description: A boolean value to indicate if a cache was hit.\nruns:\n  using: node20\n  main: dist/index.js\n"
+        }
+      },
+      "advisories": {
+        "list": []
+      }
+    },
+    "gradle/actions": {
+      "repo": {
+        "archived": false,
+        "default_branch": "main"
+      },
+      "tags": {
+        "tags": [
+          {
+            "name": "v4",
+            "sha": "9999999999999999999999999999999999999999"
+          }
+        ]
+      },
+      "refs": {
+        "heads/v4": {
+          "found": false
+        }
+      },
+      "files": {
+        "v4:setup-gradle/action.yml": {
+          "found": true,
+          "content": "name: 'Setup Gradle'\ndescription: 'Configures Gradle for GitHub actions, caching state and generating a dependency graph via Dependency Submission.'\n\ninputs:\n  gradle-version:\n    description: |\n      Gradle version to use. If specified, this Gradle version will be downloaded, added to the PATH and used for invoking Gradle.\n      If not provided, it is assumed that the project uses the Gradle Wrapper.\n    required: false\n\n  # Cache configuration\n  cache-disabled:\n    description: When 'true', all caching is disabled. No entries will be written to or read from the cache.\n    required: false\n    default: false\n\n  cache-read-only:\n    description: |\n      When 'true', existing entries will be read from the cache but no entries will be written.\n      By default this value is 'false' for workflows on the GitHub default branch and 'true' for workflows on other branches.\n    required: false\n    default: ${{ github.event.repository != null && github.ref_name != github.event.repository.default_branch }}\n\n  cache-write-only:\n    description: |\n      When 'true', entries will not be restored from the cache but will be saved at the end of the Job.\n      Setting this to 'true' implies cache-read-only will be 'false'.\n    required: false\n    default: false\n\n  cache-overwrite-existing:\n    description: When 'true', a pre-existing Gradle User Home will not prevent the cache from being restored.\n    required: false\n    default: false\n\n  cache-encryption-key:\n    description: |\n      A base64 encoded AES key used to encrypt the configuration-cache data. The key is exported as 'GRADLE_ENCRYPTION_KEY' for later steps.\n      A suitable key can be generated with `openssl rand -base64 16`.\n      Configuration-cache data will not be saved/restored without an encryption key being provided.\n    required: false\n\n  cache-cleanup:\n    description: |\n      Specifies if the action should attempt to remove any stale/unused entries from the Gradle User Home prior to saving to the GitHub Actions cache.\n      By default ('on-success'), cleanup is performed when all Gradle builds succeed for the Job. \n      This behaviour can be disabled ('never'), or configured to always run irrespective of the build outcome ('always').\n      Valid values are 'never', 'on-success' and 'always'.\n    required: false\n    default: 'on-success'\n\n  gradle-home-cache-cleanup:\n    description: When 'true', the action will attempt to remove any stale/unused entries from the Gradle User Home prior to saving to the GitHub Actions cache.\n    required: false\n    deprecation-message: This input has been superceded by the 'cache-cleanup' input parameter.\n\n  gradle-home-cache-includes:\n    description: Paths within Gradle User Home to cache.\n    required: false\n    default: |\n        caches\n        notifications\n\n  gradle-home-cache-excludes:\n    description: Paths within Gradle User Home to exclude from cache.\n    required: false\n\n  # Job summary configuration\n  add-job-summary:\n    description: Specifies when a Job Summary should be inluded in the action results. Valid values are 'never', 'always' (default), and 'on-failure'.\n    required: false\n    default: 'always'\n\n  add-job-summary-as-pr-comment:\n    description: Specifies when each Job Summary should be added as a PR comment. Valid values are 'never' (default), 'always', and 'on-failure'. No action will be taken if the workflow was not triggered from a pull request.\n    required: false\n    default: 'never'\n\n  # Dependency Graph configuration\n  dependency-graph:\n    description: |\n      Specifies if a GitHub dependency snapshot should be generated for each Gradle build, and if so, how.\n      Valid values are 'disabled' (default), 'generate', 'generate-and-submit', 'generate-submit-and-upload', 'generate-and-upload', and 'download-and-submit'.\n    required: false\n    default: 'disabled'\n\n  dependency-graph-report-dir:\n    description: |\n      Specifies where the dependency graph report will be generated. \n      Paths can relative or absolute. Relative paths are resolved relative to the workspace directory.\n    required: false\n    default: 'dependency-graph-reports'\n\n  dependency-graph-continue-on-failure:\n    description: When 'false' a failure to generate or submit a dependency graph will fail the Step or Job. When 'true' a warning will be emitted but no failure will result.\n    required: false\n    default: true\n\n  dependency-graph-exclude-projects:\n    description: |\n      Gradle projects that should be excluded from dependency graph (regular expression).\n      When set, any matching project will be excluded.\n    required: false\n\n  dependency-graph-include-projects:\n    description: |\n      Gradle projects that should be included in dependency graph (regular expression). \n      When set, only matching projects will be included.\n    required: false\n\n  dependency-graph-exclude-configurations:\n    description: |\n      Gradle configurations that should be included in dependency graph (regular expression). \n      When set, anymatching configurations will be excluded.\n    required: false\n\n  dependency-graph-include-configurations:\n    description: |\n      Gradle configurations that should be included in dependency graph (regular expression). \n      When set, only matching configurations will be included.\n    required: false\n\n  artifact-retention-days:\n    description: Specifies the number of days to retain any artifacts generated by the action. If not set, the default retention settings for the repository will apply.\n    required: false\n\n  # Build Scan configuration\n  build-scan-publish:\n    description: |\n      Set to 'true' to automatically publish build results as a Build Scan on scans.gradle.com.\n      For publication to succeed without user input, you must also provide values for `build-scan-terms-of-use-url` and 'build-scan-terms-of-use-agree'.\n    required: false\n    default: false\n\n  build-scan-terms-of-use-url:\n    description: The URL to the Build Scan® terms of use. This input must be set to 'https://gradle.com/terms-of-service' or 'https://gradle.com/help/legal-terms-of-use'.\n    required: false\n\n  build-scan-terms-of-use-agree:\n    description: Indicate that you agree to the Build Scan® terms of use. This input value must be \"yes\".\n    required: false\n\n  develocity-access-key:\n    description: Develocity access key. Should be set to a secret containing the Develocity Access key.\n    required: false\n\n  develocity-token-expiry:\n    description: The Develocity short-lived access tokens expiry in hours. Default is 2 hours.\n    required: false\n\n  develocity-injection-enabled:\n    description: Enables Develocity injection.\n    required: false\n\n  develocity-url:\n    description: The URL for the Develocity server.\n    required: false\n\n  develocity-allow-untrusted-server:\n    description: Allow communication with an untrusted server; set to _true_ if your Develocity instance is using a self-signed.\n    required: false\n\n  develocity-capture-file-fingerprints:\n    description: Enables capturing the paths and content hashes of each individual input file.\n    required: false\n\n  develocity-enforce-url:\n    description: Enforce the configured Develocity URL over a URL configured in the project's build; set to _true_ to enforce publication of build scans to the configured Develocity URL.\n    required: false\n\n  develocity-plugin-version:\n    description: The version of the Develocity Gradle plugin to apply.\n    required: false\n\n  develocity-ccud-plugin-version:\n    description: The version of the Common Custom User Data Gradle plugin to apply, if any.\n    required: false\n\n  gradle-plugin-repository-url:\n    description: The URL of the repository to use when resolving the Develocity and CCUD plugins; the Gradle Plugin Portal is used by default.\n    required: false\n\n  gradle-plugin-repository-username:\n    description: The username for the repository URL to use when resolving the Develocity and CCUD.\n    required: false\n\n  gradle-plugin-repository-password:\n    description: The password for the repository URL to use when resolving the Develocity and CCUD plugins; Consider using secrets to pass the value to this variable.\n    required: false\n\n  # Wrapper validation configuration\n  validate-wrappers:\n    description: |\n      When 'true' (the default) the action will automatically validate all wrapper jars found in the repository.\n      If the wrapper checksums are not valid, the action will fail.\n    required: false\n    default: true\n\n  allow-snapshot-wrappers:\n    description: |\n      When 'true', wrapper validation will include the checksums of snapshot wrapper jars. \n      Use this if you are running with nightly or snapshot versions of the Gradle wrapper.\n    required: false\n    default: false\n\n  # DEPRECATED ACTION INPUTS\n  arguments:\n    description: Gradle command line arguments (supports multi-line input)\n    required: false\n    deprecation-message: This parameter has been deprecated and removed. It is only left here to allow for better reporting to assist users to migrate.\n\n  # EXPERIMENTAL ACTION INPUTS\n  # The following action properties allow fine-grained tweaking of the action caching behaviour.\n  # These properties are experimental and not (yet) designed for production use, and may change without notice in a subsequent release of `setup-gradle`.\n  # Use at your own risk!\n  gradle-home-cache-strict-match:\n    description: When 'true', the action will not attempt to restore the Gradle User Home entries from other Jobs.\n    required: false\n    default: false\n\n  # INTERNAL ACTION INPUTS\n  # These inputs should not be configured directly, and are only used to pass environmental information to the action\n  workflow-job-context:\n    description: Used to uniquely identify the current job invocation. Defaults to the matrix values for this job; this should not be overridden by users (INTERNAL).\n    required: false\n    default: ${{ toJSON(matrix) }}\n\n  github-token:\n    description: The GitHub token used to authenticate when submitting via the Dependency Submission API.\n    default: ${{ github.token }}\n    required: false\n\noutputs:\n  build-scan-url:\n    description: Link to the Build Scan® generated by a Gradle build. Note that this output applies to a Step executing Gradle, not to the `setup-gradle` Step itself.\n  dependency-graph-file:\n    description: Path to the GitHub Dependency Graph snapshot file generated by a Gradle build. Note that this output applies to a Step executing Gradle, not to the `setup-gradle` Step itself.\n  gradle-version:\n    description: Version of Gradle that was setup by the action\n\nruns:\n  using: node24\n  main: dist/main/index.js\n  post: dist/post/index.js\n"
+        },
+        "v4:setup-gradle/action.yaml": {
+          "found": false
+        }
+      },
+      "advisories": {
+        "list": []
+      }
+    },
+    "example/composite-tool": {
+      "repo": {
+        "archived": false,
+        "default_branch": "main"
+      },
+      "tags": {
+        "tags": [
+          {
+            "name": "v1",
+            "sha": "7777777777777777777777777777777777777777"
+          }
+        ]
+      },
+      "refs": {
+        "heads/v1": {
+          "found": false
+        },
+        "heads/v2": {
+          "found": false
+        },
+        "heads/v4": {
+          "found": false
+        }
+      },
+      "files": {
+        "v1:action.yml": {
+          "found": true,
+          "content": "name: Composite tool\ndescription: A composite action\ninputs:\n  name:\n    description: Who to greet\n    required: true\n  level:\n    description: How loud\n    default: info\n  old:\n    description: The old way\n    required: false\n    deprecationMessage: Use level instead.\noutputs:\n  result:\n    description: The result\n    value: ${{ steps.run.outputs.result }}\nruns:\n  using: composite\n  steps:\n    - id: run\n      run: echo \"result=ok\" >> \"$GITHUB_OUTPUT\"\n      shell: bash\n"
+        }
+      },
+      "advisories": {
+        "list": []
+      }
+    },
+    "example/node-tool": {
+      "repo": {
+        "archived": false,
+        "default_branch": "main"
+      },
+      "tags": {
+        "tags": [
+          {
+            "name": "v1",
+            "sha": "7777777777777777777777777777777777777777"
+          }
+        ]
+      },
+      "refs": {
+        "heads/v1": {
+          "found": false
+        },
+        "heads/v2": {
+          "found": false
+        },
+        "heads/v4": {
+          "found": false
+        }
+      },
+      "files": {
+        "v1:action.yml": {
+          "found": true,
+          "content": "name: Node tool\ndescription: A JavaScript action which declares an output\ninputs:\n  token:\n    description: A token\n    required: true\n  mode:\n    description: The mode\n    type: string\n    default: fast\noutputs:\n  cache-hit:\n    description: Whether the cache was hit\nruns:\n  using: node20\n  main: dist/index.js\n"
+        }
+      },
+      "advisories": {
+        "list": []
+      }
+    },
+    "example/node-dynamic": {
+      "repo": {
+        "archived": false,
+        "default_branch": "main"
+      },
+      "tags": {
+        "tags": [
+          {
+            "name": "v1",
+            "sha": "7777777777777777777777777777777777777777"
+          }
+        ]
+      },
+      "refs": {
+        "heads/v1": {
+          "found": false
+        },
+        "heads/v2": {
+          "found": false
+        },
+        "heads/v4": {
+          "found": false
+        }
+      },
+      "files": {
+        "v1:action.yml": {
+          "found": true,
+          "content": "name: Node dynamic\ndescription: A JavaScript action which sets its outputs with core.setOutput and declares none\ninputs:\n  filters:\n    description: The filters\n    required: true\nruns:\n  using: node20\n  main: dist/index.js\n"
+        }
+      },
+      "advisories": {
+        "list": []
+      }
+    },
+    "example/sub-tools": {
+      "repo": {
+        "archived": false,
+        "default_branch": "main"
+      },
+      "tags": {
+        "tags": [
+          {
+            "name": "v1",
+            "sha": "7777777777777777777777777777777777777777"
+          }
+        ]
+      },
+      "refs": {
+        "heads/v1": {
+          "found": false
+        },
+        "heads/v2": {
+          "found": false
+        },
+        "heads/v4": {
+          "found": false
+        }
+      },
+      "files": {
+        "v1:tools/lint/action.yml": {
+          "found": false
+        },
+        "v1:tools/lint/action.yaml": {
+          "found": true,
+          "content": "name: Lint\ndescription: An action in a subdirectory with an action.yaml\ninputs:\n  config:\n    description: The configuration file\n    required: true\nruns:\n  using: composite\n  steps:\n    - run: echo lint\n      shell: bash\n"
+        }
+      },
+      "advisories": {
+        "list": []
+      }
+    },
+    "example/broken-metadata": {
+      "repo": {
+        "archived": false,
+        "default_branch": "main"
+      },
+      "tags": {
+        "tags": [
+          {
+            "name": "v1",
+            "sha": "7777777777777777777777777777777777777777"
+          }
+        ]
+      },
+      "refs": {
+        "heads/v1": {
+          "found": false
+        },
+        "heads/v2": {
+          "found": false
+        },
+        "heads/v4": {
+          "found": false
+        }
+      },
+      "files": {
+        "v1:action.yml": {
+          "found": true,
+          "content": "name: Broken\ndescription: The inputs are not a mapping\ninputs:\n  - name\nruns:\n  using: node20\n  main: index.js\n"
+        }
+      },
+      "advisories": {
+        "list": []
+      }
+    },
+    "example/private-action": {
+      "repo": {
+        "archived": false,
+        "default_branch": "main"
+      },
+      "tags": {
+        "tags": [
+          {
+            "name": "v1",
+            "sha": "7777777777777777777777777777777777777777"
+          }
+        ]
+      },
+      "refs": {
+        "heads/v1": {
+          "found": false
+        }
       },
       "advisories": {
         "list": []

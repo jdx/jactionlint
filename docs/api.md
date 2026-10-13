@@ -60,6 +60,9 @@ Followings are unexhaustive list of interesting APIs.
   `ExcludedRepositories`, and `Answers` with the number of answers from the network, from the cache and stale, and the time of
   the oldest cached one; `nil` when the online checks were off), which `--online-report` writes as JSON. The time is the local
   clock when the answer was last received from GitHub, not a date from GitHub. A failed lookup never makes a `Lint` call fail.
+  A `GitHubClient` which also implements `GitHubContentClient` (`FileContent`, a file of a repository at a ref) lets the online
+  checks read the `action.yml` of actions which are not in `PopularActions`; without it they report nothing for those actions.
+  The fixtures of `NewFixtureGitHubClient()` hold files under `files`, and a file which they do not list does not exist.
 - `Pass` is a visitor to traverse a workflow syntax tree. Multiple passes can be applied at single pass using `Visitor`.
 - `Rule` is an interface for rule checkers and `RuleBase` is a base struct to implement a rule checker. `RuleBase.ReportID()`
   reports an error with the stable ID of the diagnostic. `RuleBase.Error()` reports it with the name of the rule as the ID.
