@@ -7407,7 +7407,8 @@ A job that calls a reusable workflow cannot have an `environment:`, so a secret 
 organization secret, which no environment protects. (A job of the called workflow can have an environment of its own and use the
 secrets of that environment, which is a different secret: that design is not reported.) It is reported too (a message of its own, at the secret in the `secrets:` of the call; zizmor reports it as an auditor
 finding, [#1792](https://github.com/zizmorcore/zizmor/pull/1792)). `secrets: inherit` names no secret and is not reported here (see
-[`secrets-inherit`](#check-secrets-inherit)):
+[`secrets-inherit`](#check-secrets-inherit)). Only the values under `secrets:` are read: a secret in another field of the job (`with:`, `if:`,
+`name:`, where the `secrets` context is not available and the expression check reports it) is not a secret that is passed on:
 
 ```yaml
 jobs:

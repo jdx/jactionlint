@@ -50,6 +50,17 @@ func (rule *RuleSecretsOutsideEnv) VisitWorkflowPre(n *Workflow) error {
 			// A job which calls a reusable workflow cannot set "environment:", so a secret that it passes with "secrets:" is
 			// a repository or organization secret (zizmor#1792). A job of the called workflow can have an environment of its
 			// own and use the secrets of it, which is a different secret: the one passed here is not behind an environment.
+			// Only the values under "secrets:" are passed on: another field of the job (if:, with:, name:, strategy:) that
+			// reads a secret is not described as passed, and "secrets: inherit" has no value to read.
+			passed := false
+			for _, sec := range j.WorkflowCall.Secrets {
+				if sec != nil && sec.Value == site.Str {
+					passed = true
+				}
+			}
+			if !passed {
+				return
+			}
 			VisitExprNode(o.Root, func(node, _ ExprNode, entering bool) {
 				if !entering {
 					return
