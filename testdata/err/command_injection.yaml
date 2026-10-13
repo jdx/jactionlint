@@ -1,0 +1,49 @@
+# The advice for template injection (pass the input through env:) is followed, but the script runs the variable
+on:
+  issue_comment:
+    types: [created]
+permissions: {}
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      BODY: ${{ github.event.comment.body }}
+    steps:
+      - run: eval "$BODY"
+      - run: bash -c "echo $BODY"
+      - run: sh -c "echo $BODY" _
+      - run: sudo docker run --rm alpine sh -c "echo $BODY"
+      - run: |
+          CMD=$(echo "$BODY" | sed -n 's#^/run ##p')
+          $CMD --verbose
+      - run: source <(echo "$BODY")
+      - run: echo "$BODY" | bash
+      - run: bash <<< "$BODY"
+      - run: echo "$BODY" | xargs -I{} sh -c 'echo {}'
+      - run: python3 -c "print('$BODY')"
+      - run: node -e "console.log('$BODY')"
+      - env:
+          REF: ${{ github.head_ref }}
+        run: |
+          V=$REF
+          eval "git checkout $V"
+      # Not reported: the value is data, or it was made safe
+      - run: echo "$BODY"
+      - run: bash -c 'echo "$1"' _ "$BODY"
+      - run: bash -c 'echo "$BODY"'
+      - run: eval 'echo "$BODY"'
+      - run: echo "$BODY" | xargs sh -c 'echo "$@"' _
+      - run: python3 -c 'import os; print(os.environ["BODY"])'
+      - run: $HOME/bin/tool "$BODY"
+      - run: eval "$(ssh-agent -s)"
+      - run: |
+          [[ "$BODY" =~ ^[a-z0-9-]+$ ]] || exit 1
+          eval "echo $BODY"
+      - run: |
+          NAME=$(echo "$BODY" | tr -cd 'a-z0-9')
+          bash -c "echo $NAME"
+      - run: eval "echo $(printf '%q' "$BODY")"
+      - run: eval "echo ${BODY@Q}"
+      - env:
+          NAME: fixed
+        run: eval "echo $NAME"
