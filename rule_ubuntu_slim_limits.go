@@ -2,6 +2,7 @@ package jactionlint
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 )
 
@@ -55,19 +56,11 @@ func ubuntuSlimMatrixValues(label *String, m *Matrix) ([]string, bool) {
 		ret = append(ret, s.Value)
 		return true
 	}
-	for name, row := range m.Rows {
-		if !strings.EqualFold(name, prop) {
-			continue
-		}
-		if row.Expression != nil {
-			return nil, false
-		}
-		for _, v := range row.Values {
-			if !add(v) {
-				return nil, false
-			}
-		}
+	rowValues, ok := ubuntuSlimRowValues(m, prop)
+	if !ok {
+		return nil, false
 	}
+	ret = append(ret, rowValues...)
 	if m.Include != nil {
 		if m.Include.Expression != nil {
 			return nil, false
@@ -84,6 +77,128 @@ func ubuntuSlimMatrixValues(label *String, m *Matrix) ([]string, bool) {
 		}
 	}
 	return ret, len(ret) > 0
+}
+
+// maxMatrixCombinations bounds the product of the rows that is built to apply "exclude".
+const maxMatrixCombinations = 4096
+
+// ubuntuSlimRowValues returns the values of the row `prop` that some combination of the rows still runs. GitHub removes the
+// combinations that "exclude" lists before it adds the "include" ones. An exclusion is applied only when it is fully
+// known: every row has plain strings, and the entry of "exclude" has plain strings too. Anything else removes nothing, so the
+// result then has more values, never fewer (which keeps a job from being taken for a slim-only one). It returns false when
+// a value of the row cannot be read.
+func ubuntuSlimRowValues(m *Matrix, prop string) ([]string, bool) {
+	var target *MatrixRow
+	for name, row := range m.Rows {
+		if strings.EqualFold(name, prop) {
+			target = row
+		}
+	}
+	if target == nil {
+		return nil, true
+	}
+	plain := func(v RawYAMLValue) (string, bool) {
+		s, ok := v.(*RawYAMLString)
+		if !ok || ContainsExpression(s.Value) {
+			return "", false
+		}
+		return s.Value, true
+	}
+	all := func() ([]string, bool) {
+		if target.Expression != nil {
+			return nil, false
+		}
+		var ret []string
+		for _, v := range target.Values {
+			s, ok := plain(v)
+			if !ok {
+				return nil, false
+			}
+			ret = append(ret, s)
+		}
+		return ret, true
+	}
+
+	// The exclusions which are known
+	var excludes []map[string]string
+	if m.Exclude != nil && m.Exclude.Expression == nil {
+		for _, c := range m.Exclude.Combinations {
+			if c.Expression != nil {
+				continue
+			}
+			e := map[string]string{}
+			known := len(c.Assigns) > 0
+			for key, a := range c.Assigns {
+				v, ok := plain(a.Value)
+				if !ok {
+					known = false
+					break
+				}
+				e[strings.ToLower(key)] = v
+			}
+			if known {
+				excludes = append(excludes, e)
+			}
+		}
+	}
+	if len(excludes) == 0 {
+		return all()
+	}
+
+	// The product of the rows, which must be all known to tell which combinations are left
+	names := make([]string, 0, len(m.Rows))
+	values := map[string][]string{}
+	size := 1
+	for name, row := range m.Rows {
+		if row.Expression != nil {
+			return all()
+		}
+		var vs []string
+		for _, v := range row.Values {
+			s, ok := plain(v)
+			if !ok {
+				return all()
+			}
+			vs = append(vs, s)
+		}
+		key := strings.ToLower(name)
+		names = append(names, key)
+		values[key] = vs
+		if size *= max(len(vs), 1); size > maxMatrixCombinations {
+			return all()
+		}
+	}
+	slices.Sort(names)
+	var ret []string
+	var walk func(i int, combo map[string]string)
+	walk = func(i int, combo map[string]string) {
+		if i == len(names) {
+			for _, e := range excludes {
+				match := true
+				for k, v := range e {
+					if cv, ok := combo[k]; !ok || cv != v {
+						match = false
+						break
+					}
+				}
+				if match {
+					return
+				}
+			}
+			ret = append(ret, combo[strings.ToLower(prop)])
+			return
+		}
+		for _, v := range values[names[i]] {
+			combo[names[i]] = v
+			walk(i+1, combo)
+		}
+		delete(combo, names[i])
+	}
+	if _, ok := all(); !ok {
+		return nil, false
+	}
+	walk(0, map[string]string{})
+	return ret, true
 }
 
 // runsOnlyOnUbuntuSlim reports whether every runner that the job can get is ubuntu-slim: its labels, and the values of the

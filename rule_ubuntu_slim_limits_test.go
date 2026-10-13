@@ -57,6 +57,14 @@ func TestUbuntuSlimLimits(t *testing.T) {
 		{"self-hosted with the label", "on: push\njobs:\n  j:\n    runs-on: [self-hosted, ubuntu-slim]\n    container: node:22\n    steps:\n      - run: echo\n", nil, ""},
 		{"runner group", "on: push\njobs:\n  j:\n    runs-on:\n      group: slim\n    container: node:22\n    steps:\n      - run: echo\n", nil, ""},
 		{"matrix with another runner", "on: push\njobs:\n  j:\n    runs-on: ${{ matrix.os }}\n    container: node:22\n    strategy:\n      matrix:\n        os: [ubuntu-slim, ubuntu-latest]\n    steps:\n      - run: echo\n", nil, ""},
+		{"exclude removes the other runner", "on: push\njobs:\n  j:\n    runs-on: ${{ matrix.os }}\n    container: node:22\n    strategy:\n      matrix:\n        os: [ubuntu-slim, ubuntu-latest]\n        exclude:\n          - os: ubuntu-latest\n    steps:\n      - run: echo\n", []string{"container"}, ""},
+		{"exclude of a combination of two rows removes the other runner", "on: push\njobs:\n  j:\n    runs-on: ${{ matrix.os }}\n    container: node:22\n    strategy:\n      matrix:\n        os: [ubuntu-slim, windows-latest]\n        v: [1, 2]\n        exclude:\n          - os: windows-latest\n            v: 1\n          - os: windows-latest\n            v: 2\n    steps:\n      - run: echo\n", []string{"container"}, ""},
+		{"exclude of a part of the combinations leaves the other runner", "on: push\njobs:\n  j:\n    runs-on: ${{ matrix.os }}\n    container: node:22\n    strategy:\n      matrix:\n        os: [ubuntu-slim, windows-latest]\n        v: [1, 2]\n        exclude:\n          - os: windows-latest\n            v: 1\n    steps:\n      - run: echo\n", nil, ""},
+		{"exclude which is an expression removes nothing", "on: push\njobs:\n  j:\n    runs-on: ${{ matrix.os }}\n    container: node:22\n    strategy:\n      matrix:\n        os: [ubuntu-slim, ubuntu-latest]\n        exclude:\n          - os: ${{ vars.X }}\n    steps:\n      - run: echo\n", nil, ""},
+		{"exclude list which is an expression removes nothing", "on: push\njobs:\n  j:\n    runs-on: ${{ matrix.os }}\n    container: node:22\n    strategy:\n      matrix:\n        os: [ubuntu-slim, ubuntu-latest]\n        exclude: ${{ fromJSON(vars.X) }}\n    steps:\n      - run: echo\n", nil, ""},
+		{"exclude of another key removes nothing", "on: push\njobs:\n  j:\n    runs-on: ${{ matrix.os }}\n    container: node:22\n    strategy:\n      matrix:\n        os: [ubuntu-slim, ubuntu-latest]\n        exclude:\n          - os: ubuntu-latest\n            node: 20\n    steps:\n      - run: echo\n", nil, ""},
+		{"include after the exclude adds a runner back", "on: push\njobs:\n  j:\n    runs-on: ${{ matrix.os }}\n    container: node:22\n    strategy:\n      matrix:\n        os: [ubuntu-slim, ubuntu-latest]\n        exclude:\n          - os: ubuntu-latest\n        include:\n          - os: ubuntu-latest\n    steps:\n      - run: echo\n", nil, ""},
+		{"exclude removes every combination", "on: push\njobs:\n  j:\n    runs-on: ${{ matrix.os }}\n    container: node:22\n    strategy:\n      matrix:\n        os: [ubuntu-slim]\n        exclude:\n          - os: ubuntu-slim\n    steps:\n      - run: echo\n", nil, ""},
 		{"matrix include with another runner", "on: push\njobs:\n  j:\n    runs-on: ${{ matrix.os }}\n    container: node:22\n    strategy:\n      matrix:\n        os: [ubuntu-slim]\n        include:\n          - os: macos-latest\n    steps:\n      - run: echo\n", nil, ""},
 		{"matrix value which is an expression", "on: push\njobs:\n  j:\n    runs-on: ${{ matrix.os }}\n    container: node:22\n    strategy:\n      matrix:\n        os: [ubuntu-slim, '${{ vars.OS }}']\n    steps:\n      - run: echo\n", nil, ""},
 		{"matrix from JSON", "on: push\njobs:\n  j:\n    runs-on: ${{ matrix.os }}\n    container: node:22\n    strategy:\n      matrix: ${{ fromJSON(vars.M) }}\n    steps:\n      - run: echo\n", nil, ""},
@@ -224,6 +232,22 @@ func TestMissingTimeoutFixOnUbuntuSlim(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("a long default is capped when exclude removes the other runners", func(t *testing.T) {
+		src := "on: push\njobs:\n  j:\n    runs-on: ${{ matrix.os }}\n    strategy:\n      matrix:\n        os: [ubuntu-slim, ubuntu-latest]\n        exclude:\n          - os: ubuntu-latest\n    steps:\n      - run: echo\n"
+		cfg := "profile: default\nrules:\n  missing-timeout:\n    default-minutes: 60\n"
+		for _, e := range lintSlimRaw(t, cfg, src) {
+			if e.ID != "missing-timeout" || e.Fix == nil {
+				continue
+			}
+			out, n := applyFixes([]byte(src), []*Error{e}, FixModeSafe)
+			if n != 1 || !strings.Contains(string(out), "timeout-minutes: 15\n") {
+				t.Errorf("want 15 but got %d fixes: %q", n, out)
+			}
+			return
+		}
+		t.Error("no fix")
+	})
 
 	t.Run("no value is invented without the option", func(t *testing.T) {
 		if out, ok := fixed("profile: default\n", "ubuntu-slim"); ok {
