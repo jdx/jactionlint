@@ -1,0 +1,22 @@
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      # ERROR: the owner does not exist, so anyone can register it
+      - uses: ghost-owner/deploy@v1
+      # ERROR: the owner of the old name is gone, GitHub only redirects
+      - uses: former-owner/deploy@v1
+      # OK: the repository was transferred, and the old owner is still there
+      - uses: moved-org/deploy@v1
+      # OK: renamed in the same account
+      - uses: new-owner/old-name@v1
+      # OK: not visible, and the owner exists
+      - uses: new-owner/private@v1
+      # OK: the case of the name does not matter
+      - uses: New-Owner/Deploy@v1
+      # OK: the owner exists
+      - uses: actions/checkout@v4
+  call:
+    # ERROR: reusable workflows count too
+    uses: ghost-owner/deploy/.github/workflows/ci.yml@v1
