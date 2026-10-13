@@ -310,10 +310,15 @@ func (c *lockFileChecks) workflowUsage(key string) *lockUsage {
 		return nil
 	}
 	u := &lockUsage{keys: map[string]bool{}, complete: true}
-	w, _ := Parse(src)
+	w, errs := Parse(src)
 	if w == nil {
 		u.complete = false
 		return u
+	}
+	if len(errs) > 0 {
+		// A step which did not parse (a syntax error, an unknown key, a value of the wrong type) may be the one that
+		// uses the action, so the pins are not judged
+		u.complete = false
 	}
 	g := c.linter.callGraphOf(c.project)
 	seen := map[string]bool{}
@@ -331,6 +336,9 @@ func (c *lockFileChecks) workflowUsage(key string) *lockUsage {
 				continue
 			}
 			if j.WorkflowCall != nil && j.WorkflowCall.Uses != nil {
+				if j.WorkflowCall.Uses.ContainsExpression() {
+					u.complete = false
+				}
 				// The current gh actions-lock does not record reusable workflows, but lock files of other versions
 				// list them: what is listed is used, so that it is not reported as stale.
 				if ref := ParseUses(j.WorkflowCall.Uses.Value); ref.Kind == UsesReusableWorkflow && !ref.Dynamic {
@@ -352,6 +360,9 @@ func (c *lockFileChecks) workflowUsage(key string) *lockUsage {
 					}
 					seen[t.path] = true
 					if act := g.actions[t.path]; act != nil {
+						if !c.actionReadsClean(g, t.path) {
+							u.complete = false
+						}
 						scan(act)
 					} else {
 						u.complete = false
@@ -368,6 +379,21 @@ func (c *lockFileChecks) workflowUsage(key string) *lockUsage {
 	}
 	scan(w)
 	return u
+}
+
+// actionReadsClean reports whether the metadata of the local action in the directory parses without an error. The call
+// graph keeps the tree and drops the errors, so the file is read once more.
+func (c *lockFileChecks) actionReadsClean(g *callGraph, dir string) bool {
+	rel := g.actionFiles[dir]
+	if rel == "" {
+		return false
+	}
+	src, err := os.ReadFile(filepath.Join(g.root, filepath.FromSlash(rel)))
+	if err != nil {
+		return false
+	}
+	_, errs := ParseAction(src)
+	return len(errs) == 0
 }
 
 // checkUsage reports the entries of the lock file which nothing uses: the workflows which do not exist, the
