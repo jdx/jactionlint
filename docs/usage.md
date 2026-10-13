@@ -75,6 +75,7 @@ cat action.yml | jactionlint --stdin-filename action.yml -
 | `--verbose` | `-v` | Print verbose logs to stderr |
 | `--debug` |  | Print debug logs to stderr (for development) |
 | `--stdin-filename=NAME` |  | File name used in the output when reading stdin (default `<stdin>`) |
+| `--completion=SHELL` |  | Print the completion script of a shell (bash, zsh, fish or powershell) and exit. It completes the options, their values and the rule IDs |
 
 **Output**
 
@@ -99,6 +100,7 @@ cat action.yml | jactionlint --stdin-filename action.yml -
 | `--init-config` |  | Write a default config file .github/jactionlint.yaml and exit |
 | `--migrate-config` |  | Rewrite the deprecated keys of the config file and exit |
 | `--migrate-ignores` |  | Rewrite "# zizmor: ignore[...]" comments into "# jactionlint ignore=..." comments and exit |
+| `--explain=RULE` |  | Print the documentation of a rule ID (summary, group, profile, level, options, fixes and its section of the checks document) and exit |
 
 **Fixing**
 
@@ -181,6 +183,37 @@ It is shown only when stderr is a terminal or the process runs in CI (`CI` or `G
 adopt), and not at all with `--no-hints` or `JACTIONLINT_NO_HINTS=1`. The advice to write a baseline is left out once a baseline is
 applied. After `--baseline-write` the command prints the line that makes plain runs use the baseline (`baseline: auto` in the config
 file); without it only `jactionlint --baseline` reads the file.
+
+### Shell completion
+
+`jactionlint --completion=SHELL` prints a completion script for `bash`, `zsh`, `fish` or `powershell`. It completes the options, the values of
+`--format`, `--profile`, `--min-severity`, `--color`, `--fix`, `--online` and `--completion`, and the [rule IDs](rules.md) for `--ignore`,
+`--fix-rules` and `--explain` (a comma separated list for `--fix-rules`). The script is generated from the options and the rules of the binary, so
+generate it again after an upgrade.
+
+```sh
+# bash: in ~/.bashrc
+source <(jactionlint --completion=bash)
+
+# zsh: in ~/.zshrc (after compinit), or save the output as _jactionlint in a directory of $fpath
+source <(jactionlint --completion=zsh)
+
+# fish
+jactionlint --completion=fish > ~/.config/fish/completions/jactionlint.fish
+
+# PowerShell: in $PROFILE
+jactionlint --completion=powershell | Out-String | Invoke-Expression
+```
+
+### Explain a rule
+
+`jactionlint --explain RULE` prints what the installed version knows about a rule: its summary, group, profile, default level, whether it has a fix, its
+options, the configuration and the ignore comment to use, and the section about it of [the checks document](checks.md) (with the examples). It
+needs no network. An unknown ID is an error with the closest ID. Use `--list-rules`, or the completion, to find an ID.
+
+```sh
+jactionlint --explain missing-timeout
+```
 
 ### Ignore some errors
 
