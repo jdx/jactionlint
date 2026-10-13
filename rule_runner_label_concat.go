@@ -1,6 +1,7 @@
 package jactionlint
 
 import (
+	"regexp"
 	"strconv"
 	"strings"
 )
@@ -117,6 +118,13 @@ func matrixPropertyOfExpression(text string) (string, bool) {
 	return strings.ToLower(deref.Property), true
 }
 
+// yamlCoreNumberRe matches the scalars that the YAML 1.2 core schema reads as numbers (GitHub does: YamlObjectReader of
+// the runner): decimal integers and floats, 0o octal and 0x hexadecimal. yamlCoreSpecialNumberRe is infinity and NaN.
+var (
+	yamlCoreNumberRe        = regexp.MustCompile(`^(?:[-+]?(?:\.[0-9]+|[0-9]+(?:\.[0-9]*)?)(?:[eE][-+]?[0-9]+)?|0o[0-7]+|0x[0-9a-fA-F]+)$`)
+	yamlCoreSpecialNumberRe = regexp.MustCompile(`^(?:[-+]?\.(?:inf|Inf|INF)|\.(?:nan|NaN|NAN))$`)
+)
+
 // isStableMatrixString reports whether the text of a matrix value is the string that GitHub makes of it when it is put
 // into another string: a scalar without an expression which is a string, or a number that is printed the same way.
 func isStableMatrixString(v *RawYAMLString) bool {
@@ -134,12 +142,12 @@ func isStableMatrixString(v *RawYAMLString) bool {
 		// for GitHub, which does not read YAML 1.1.
 		return v.Value == strings.ToLower(v.Value)
 	}
-	if f, err := strconv.ParseFloat(v.Value, 64); err == nil {
-		return strconv.FormatFloat(f, 'g', -1, 64) == v.Value
+	if yamlCoreNumberRe.MatchString(v.Value) || yamlCoreSpecialNumberRe.MatchString(v.Value) {
+		// A number (YAML 1.2 core, what GitHub reads) is printed again from its value: 22.04 stays, 1.10 is 1.1, 1e3 is
+		// 1000, 0x10 is 16, .5 is 0.5, 010 is 10. Only a text that is that printed form is the label.
+		f, err := strconv.ParseFloat(v.Value, 64)
+		return err == nil && len(v.Value) <= 15 && strconv.FormatFloat(f, 'f', -1, 64) == v.Value
 	}
-	// A number in another form (0x1F, 1_000, 010, .5, .inf) is not looked at; a text such as 22.04-arm is a string
-	if c := v.Value[0]; c >= '0' && c <= '9' || c == '-' || c == '+' || c == '.' {
-		return strings.Trim(strings.ToLower(v.Value), "0123456789+-._abcdefxoin") != ""
-	}
+	// Anything else is a string, however much it looks like a version: 1.2.3, 22.04-arm, 1_000
 	return true
 }

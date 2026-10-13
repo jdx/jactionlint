@@ -95,3 +95,11 @@ jobs:
     runs-on: ${{ matrix.os }}-latest
     steps:
       - run: echo ...
+  # 1.2.3 is a string in YAML 1.2, which GitHub reads, so it is the label as written
+  version-with-two-dots:
+    strategy:
+      matrix:
+        version: [1.2.3]
+    runs-on: macos-${{ matrix.version }}
+    steps:
+      - run: echo ...
