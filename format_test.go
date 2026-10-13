@@ -770,6 +770,9 @@ func TestSARIFOmitsFixesWhichCannotBeApplied(t *testing.T) {
 		if strings.Contains(out, `"fixes"`) {
 			t.Errorf("%s: an invalid fix must be left out: %s", name, out)
 		}
+		if !strings.Contains(out, `"noFixCode": "invalid-edit"`) {
+			t.Errorf("%s: an invalid fix must say why: %s", name, out)
+		}
 	}
 }
 

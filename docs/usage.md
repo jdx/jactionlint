@@ -311,7 +311,7 @@ An error object of `json` and `jsonl` has these fields.
 | `doc_url`      | The URL of the documentation of the rule. It is omitted for custom rules                                          |
 | `snippet`      | Code snippet to indicate the position of the error                                                                |
 | `fix`          | The automatic fix of the error: its `description` and the byte-range `edits`. It is omitted when there is no fix  |
-| `no_fix`       | Why a finding which the rule can fix has no fix (the SARIF log adds `unsafe-edit` and `edit-conflict`, see the SARIF section below): a `code` (`option-required`, `option-invalid`, `online-required`, `lookup-failed`, `unsupported-shape` or `needs-judgment`), a `reason` and, for the options, the `option` to configure such as `missing-timeout.default-minutes`. It is omitted when there is a fix and for findings which are advice only |
+| `no_fix`       | Why a finding which the rule can fix has no fix (the SARIF log adds `unsafe-edit`, `edit-conflict` and `invalid-edit`, see the SARIF section below): a `code` (`option-required`, `option-invalid`, `online-required`, `lookup-failed`, `unsupported-shape` or `needs-judgment`), a `reason` and, for the options, the `option` to configure such as `missing-timeout.default-minutes`. It is omitted when there is a fix and for findings which are advice only |
 
 #### Lines and columns
 
@@ -402,7 +402,7 @@ their summary, group and a link to the documentation. A result which the rule co
 `properties` (`noFixCode`, `noFixReason` and `noFixOption`), so that code scanning consumers can tell it from advice-only findings,
 which have no `noFixCode`. A result never has both `fixes` and `noFixCode`. A fix which may change behavior (an unsafe fix) is never in the
 log, so its result says `noFixCode: unsafe-edit` (the JSON has the fix itself, with `unsafe: true`), and a fix whose edit overlaps the fix
-of another result of the same log says `edit-conflict`. The reasons are in JSON and SARIF only; the text output is one line per finding.
+of another result of the same log says `edit-conflict`, and one whose edits do not fit the source (from a custom rule) says `invalid-edit`. The reasons are in JSON and SARIF only; the text output is one line per finding.
 
 A custom template still works. This is [the template file in test data](https://github.com/jdx/jactionlint/blob/main/testdata/format/sarif_template.txt)
 which was used before `--format sarif`. [The output example in test data](https://github.com/jdx/jactionlint/blob/main/testdata/format/test.sarif)

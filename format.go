@@ -486,8 +486,11 @@ func (s *editSet) add(e TextEdit) {
 // which needs the fixer.
 func sarifFixes(e *Error, x *lineIndex, accepted *editSet) ([]sarifFix, *NoFix) {
 	f := e.Fix
-	if f == nil || !f.validFor(x.src) {
+	if f == nil {
 		return nil, nil
+	}
+	if !f.validFor(x.src) {
+		return nil, &NoFix{Code: NoFixInvalidEdit, Reason: "a fix is attached but its edits do not fit the source (out of range, reversed, empty or overlapping), so it is not offered here"}
 	}
 	if f.Unsafe {
 		// The fix exists but code scanning must not offer it: say so instead of leaving the result looking like advice

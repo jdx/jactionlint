@@ -103,6 +103,9 @@ const (
 	NoFixUnsafeEdit NoFixCode = "unsafe-edit"
 	// NoFixEditConflict means a fix exists but its edit overlaps the fix of another finding of the same SARIF log.
 	NoFixEditConflict NoFixCode = "edit-conflict"
+	// NoFixInvalidEdit means a fix is attached (by a custom rule, say) but its edits do not fit the source, so no
+	// tool can apply it.
+	NoFixInvalidEdit NoFixCode = "invalid-edit"
 )
 
 // NoFix explains why a finding has no Fix. It is part of the JSON of the template fields and the SARIF log (the
