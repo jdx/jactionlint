@@ -16,6 +16,8 @@ type RuleUntrustedArtifact struct {
 	project  *Project
 	siblings *siblingWorkflows // nil reads the workflows of the project for each file
 	active   bool
+	// gates tells with the online checks whether the environment of a job holds it back, see environmentGates.
+	gates *environmentGates
 }
 
 // NewRuleUntrustedArtifact creates a new RuleUntrustedArtifact instance. The project can be nil.
@@ -57,7 +59,13 @@ func (rule *RuleUntrustedArtifact) VisitWorkflowPre(n *Workflow) error {
 
 // VisitJobPre is callback when visiting Job node before visiting its children.
 func (rule *RuleUntrustedArtifact) VisitJobPre(n *Job) error {
-	if !rule.active || (n.Environment != nil && n.Environment.Name != nil) || conditionIsGuard(n.If) {
+	if !rule.active || conditionIsGuard(n.If) {
+		return nil
+	}
+	// The reviewers of an environment decide, unless the online checks find that there are none
+	gate := ""
+	envJob := n.Environment != nil && n.Environment.Name != nil
+	if envJob && rule.gates == nil {
 		return nil
 	}
 	steps := flattenSteps(n.Steps)
@@ -87,11 +95,18 @@ func (rule *RuleUntrustedArtifact) VisitJobPre(n *Job) error {
 				if later.Pos != nil {
 					line = later.Pos.Line
 				}
+				if envJob {
+					note, ok := rule.gates.noGate(n)
+					if !ok {
+						return nil // the reviewers of the environment decide
+					}
+					gate = ". " + note
+				}
 				rule.ReportIDf(
 					"untrusted-artifact",
 					dl.pos,
-					"this step downloads an artifact of the run that triggered the workflow, which ran the code of a pull request, and the step at line %d %s without validating its content first. the artifact is whatever the pull request wanted, and this workflow has a write token and secrets. match the content against a strict pattern (for example digits only) before you use it, and never run or extract it",
-					line, how,
+					"this step downloads an artifact of the run that triggered the workflow, which ran the code of a pull request, and the step at line %d %s without validating its content first. the artifact is whatever the pull request wanted, and this workflow has a write token and secrets%s. match the content against a strict pattern (for example digits only) before you use it, and never run or extract it",
+					line, how, gate,
 				)
 				break
 			}
@@ -367,6 +382,7 @@ func init() {
 	registerRuleFactory("untrusted-artifact", func(env *RuleEnv) []Rule {
 		r := NewRuleUntrustedArtifact(env.project)
 		r.siblings = env.localActions.siblings()
+		r.gates = newEnvironmentGates(env, r.Debug)
 		return []Rule{r}
 	})
 }

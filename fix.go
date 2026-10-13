@@ -387,6 +387,7 @@ func (l *Linter) FixFilesWithOptions(filepaths []string, project *Project, opts 
 	}
 	l.printFixSummary(res, opts.DryRun)
 	l.reportBaselineNote(results)
+	l.reportToolNotes()
 	return res, nil
 }
 
@@ -564,6 +565,20 @@ func (l *Linter) lintSource(file string, src []byte, project *Project) (fileResu
 // configFor returns the configuration which applies to files of the project.
 // The --profile option, when given, replaces the profile of the configuration.
 func (l *Linter) configFor(project *Project) *Config {
+	cfg := l.profiledConfigFor(project)
+	if len(l.selectIDs) == 0 {
+		return cfg
+	}
+	key := cfg
+	if v, ok := l.selected.Load(key); ok {
+		return v.(*Config)
+	}
+	actual, _ := l.selected.LoadOrStore(key, selectRules(cfg, l.selectIDs))
+	return actual.(*Config)
+}
+
+// profiledConfigFor is the configuration of the project with the profile of --profile applied.
+func (l *Linter) profiledConfigFor(project *Project) *Config {
 	var cfg *Config
 	switch {
 	case l.defaultConfig != nil:
