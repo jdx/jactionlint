@@ -1,6 +1,7 @@
 package jactionlint
 
 import (
+	"regexp"
 	"slices"
 	"strings"
 	"unicode/utf8"
@@ -145,32 +146,55 @@ func (rule *RuleUseTrustedPublishing) pedanticPowerShell(step *Step, run *ExecRu
 		if strings.TrimSpace(code) == "" {
 			continue
 		}
-		published := false
-		if !powerShellNoPublishRe.MatchString(code) {
-			for _, p := range powerShellPublishes {
-				loc := p.re.FindStringIndex(code)
-				if loc == nil {
-					continue
-				}
-				if rule.credentialVar(step, p.eco) != "" || powerShellTokenRe.MatchString(code) && !rule.exchangedToken(expressionsOf(code)) {
-					break // a long-lived credential: the default finding is about that
-				}
-				pos := origin.Map(i+1, utf8.RuneCountInString(code[:loc[0]])+1)
-				publish(p.cmd, &Pos{Line: pos.Line, Col: pos.Col}, p.eco, p.eco == "crates")
-				published = true
-				break
+		// The commands of the line are walked in order, like the commands of a bash script: `npm ci; npm publish` builds
+		// and then publishes. The line is split at `;`, `&&` and `||`.
+		start := 0
+		segments := psSeparatorRe.FindAllStringIndex(code, -1)
+		for k := 0; k <= len(segments); k++ {
+			end := len(code)
+			if k < len(segments) {
+				end = segments[k][0]
+			}
+			rule.pedanticPowerShellCommand(step, code, start, end, origin, i, publish, wantBuild, setBuild)
+			if k < len(segments) {
+				start = segments[k][1]
 			}
 		}
-		if !published && wantBuild() {
-			// A simple command reads the same in PowerShell and in bash, so the line goes through the analyzer of
-			// bash and the decision of the bash path (isBuildCommand: the same exemptions for global installs and
-			// the tools of publishing). A line that does not parse as a command (`$env:X = 1`) is no build.
-			if s, err := runscript.Analyze(code, "bash"); err == nil {
-				for _, c := range s.Commands {
-					if isBuildCommand(c) {
-						setBuild(commandLabel(c))
-						break
-					}
+	}
+}
+
+// psSeparatorRe separates the commands of a line of PowerShell.
+var psSeparatorRe = regexp.MustCompile(`;|&&|\|\|`)
+
+// pedanticPowerShellCommand reads code[start:end], one command of line i: it is a publish, or it is a build.
+func (rule *RuleUseTrustedPublishing) pedanticPowerShellCommand(step *Step, code string, start, end int, origin runscript.Origin, i int, publish func(what string, pos *Pos, eco string, buildsItself bool), wantBuild func() bool, setBuild func(label string)) {
+	text := code[start:end]
+	if strings.TrimSpace(text) == "" {
+		return
+	}
+	if !powerShellNoPublishRe.MatchString(text) {
+		for _, p := range powerShellPublishes {
+			loc := p.re.FindStringIndex(text)
+			if loc == nil {
+				continue
+			}
+			if rule.credentialVar(step, p.eco) != "" || powerShellTokenRe.MatchString(text) && !rule.exchangedToken(expressionsOf(text)) {
+				return // a long-lived credential: the default finding is about that
+			}
+			pos := origin.Map(i+1, utf8.RuneCountInString(code[:start+loc[0]])+1)
+			publish(p.cmd, &Pos{Line: pos.Line, Col: pos.Col}, p.eco, p.eco == "crates")
+			return
+		}
+	}
+	if wantBuild() {
+		// A simple command reads the same in PowerShell and in bash, so the command goes through the analyzer of
+		// bash and the decision of the bash path (isBuildCommand: the same exemptions for global installs and the
+		// tools of publishing). Text that does not parse as a command (`$env:X = 1`) is no build.
+		if s, err := runscript.Analyze(text, "bash"); err == nil {
+			for _, c := range s.Commands {
+				if isBuildCommand(c) {
+					setBuild(commandLabel(c))
+					return
 				}
 			}
 		}
