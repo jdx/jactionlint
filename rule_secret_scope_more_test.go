@@ -23,6 +23,9 @@ func TestWorkflowSecretScopeJobLevel(t *testing.T) {
 		{"one step", "on: push\njobs:\n  a:\n    runs-on: ubuntu-latest\n    env:\n      T: ${{ secrets.T }}\n    steps:\n      - run: echo a\n", nil},
 		{"one step of two overrides it", "on: push\njobs:\n  a:\n    runs-on: ubuntu-latest\n    env:\n      T: ${{ secrets.T }}\n    steps:\n      - run: echo a\n        env:\n          T: x\n      - run: echo b\n", nil},
 		{"the secret is in the step", "on: push\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo a\n        env:\n          T: ${{ secrets.T }}\n      - run: echo b\n", nil},
+		{"steps of a parallel group", "on: push\njobs:\n  a:\n    runs-on: ubuntu-latest\n    env:\n      T: ${{ secrets.T }}\n    steps:\n      - parallel:\n          - run: echo a\n          - run: echo b\n", []int{6}},
+		{"one step of a parallel group", "on: push\njobs:\n  a:\n    runs-on: ubuntu-latest\n    env:\n      T: ${{ secrets.T }}\n    steps:\n      - parallel:\n          - run: echo a\n", nil},
+		{"parallel steps which override it", "on: push\njobs:\n  a:\n    runs-on: ubuntu-latest\n    env:\n      T: ${{ secrets.T }}\n    steps:\n      - parallel:\n          - run: echo a\n            env:\n              T: x\n          - run: echo b\n            env:\n              T: y\n", nil},
 		{"an env which is an expression", "on: push\njobs:\n  a:\n    runs-on: ubuntu-latest\n    env: ${{ fromJSON(vars.E) }}\n" + steps, nil},
 		{"a job which calls a workflow has no env", "on: push\njobs:\n  a:\n    uses: octo/repo/.github/workflows/w.yaml@v1\n", nil},
 	}

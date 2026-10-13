@@ -101,7 +101,11 @@ func (rule *RuleWorkflowSecretScope) VisitJobPre(n *Job) error {
 	if on, _ := rule.Config().ruleOptionBool("workflow-secret-scope", "job-level"); !on {
 		return nil
 	}
-	if n == nil || n.Composite || n.Env == nil || n.Env.Dynamic() || len(n.Steps) < 2 {
+	if n == nil || n.Composite || n.Env == nil || n.Env.Dynamic() {
+		return nil
+	}
+	steps := flattenSteps(n.Steps) // the steps of a parallel group get the env of the job too
+	if len(steps) < 2 {
 		return nil
 	}
 	names := make([]string, 0, len(n.Env.Vars))
@@ -115,7 +119,7 @@ func (rule *RuleWorkflowSecretScope) VisitJobPre(n *Job) error {
 			continue
 		}
 		reach := 0
-		for _, st := range n.Steps {
+		for _, st := range steps {
 			if st != nil && !envOverrides(st.Env, v.Name.Value) {
 				reach++
 			}
