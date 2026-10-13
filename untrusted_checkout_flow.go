@@ -4,6 +4,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -159,7 +160,7 @@ func (t *revTaint) wordAt(w *runscript.Word, off int) string {
 			return what
 		}
 	}
-	if strings.Contains(w.Value, "refs/pull/") {
+	if namesPullRef(w.Value) {
 		return w.Value
 	}
 	for _, v := range w.Vars {
@@ -529,10 +530,21 @@ func literalTaint(text string) string {
 	if what := exprTaint(text); what != "" {
 		return what
 	}
-	if strings.Contains(text, "refs/pull/") {
+	if namesPullRef(text) {
 		return text
 	}
 	return ""
+}
+
+// pullRefRe matches the short form of the ref of a pull request, `pull/<number>/head` and `pull/<number>/merge`, that
+// git accepts for `refs/pull/...` (it looks a name up in refs/ too). The number can be a literal, a shell variable or
+// an expression. The ref must start the word or follow `:`, `+` or `=`, so `origin/pull/1/head` (a name below a
+// remote) and a URL are not matched.
+var pullRefRe = regexp.MustCompile(`(?:^|[^A-Za-z0-9_./-])pull/(?:\$\{\{[^}]*\}\}|[^/\s])+/(?:head|merge)\b`)
+
+// namesPullRef reports whether the text names a ref of a pull request: `refs/pull/...` or `pull/<number>/head`.
+func namesPullRef(text string) bool {
+	return strings.Contains(text, "refs/pull/") || pullRefRe.MatchString(text)
 }
 
 // envValue is the value of an entry written to an environment file: what makes it untrusted, or unknown when

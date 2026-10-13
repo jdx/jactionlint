@@ -28,6 +28,10 @@ type RuleShellcheck struct {
 	jobShell      string
 	runnerShell   string
 	mu            sync.Mutex
+	// rcfile is the shellcheckrc to read instead of --norc, and extraArgs are the arguments added by the
+	// configuration (see ShellcheckConfig).
+	rcfile    string
+	extraArgs []string
 }
 
 func newRuleShellcheck(cmd *externalCommand) *RuleShellcheck {
@@ -213,7 +217,7 @@ func (rule *RuleShellcheck) runShellcheck(srcAst *String, shell string, pos *Pos
 	//           this can happen. For example, `if [ -z ${{ env.FOO }} ]` -> `if [ -z ______________ ]` (#113).
 	// - SC2043: Loop can be detected as only running once when the target of iteration is a placeholder. (#355)
 	//           e.g. `for foo in ${{ inputs.foo }}; do`
-	args := []string{"--norc", "-f", "json", "-x", "--shell", sh, "-e", "SC1091,SC2194,SC2050,SC2153,SC2154,SC2157,SC2043", "-"}
+	args := rule.shellcheckArgs(sh)
 	rule.Debug("%s: Running %s command with %s", pos, rule.cmd.exe, args)
 
 	// Use same options to run shell process described at document
@@ -274,6 +278,17 @@ func (rule *RuleShellcheck) runShellcheck(srcAst *String, shell string, pos *Pos
 
 		return nil
 	})
+}
+
+// shellcheckArgs returns the arguments of one call of shellcheck for a script of the shell.
+func (rule *RuleShellcheck) shellcheckArgs(sh string) []string {
+	rc := "--norc"
+	if rule.rcfile != "" {
+		rc = "--rcfile=" + rule.rcfile
+	}
+	args := []string{rc, "-f", "json", "-x", "--shell", sh, "-e", "SC1091,SC2194,SC2050,SC2153,SC2154,SC2157,SC2043"}
+	args = append(args, rule.extraArgs...)
+	return append(args, "-")
 }
 
 // shellcheckRegion maps the region which shellcheck reports to the file. The line and the column of
@@ -350,6 +365,19 @@ func init() {
 		if err != nil {
 			env.Skip(err.Error())
 			return nil
+		}
+		root := ""
+		if env.project != nil {
+			root = env.project.root
+		}
+		rc, err := shellcheckRCFile(env.shellcheckRCFile, env.cwd, env.config, root)
+		if err != nil {
+			env.err = err
+			return nil
+		}
+		r.rcfile = rc
+		if env.config != nil {
+			r.extraArgs = env.config.Shellcheck.extraArgs()
 		}
 		return []Rule{r}
 	})

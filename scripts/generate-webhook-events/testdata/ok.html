@@ -68,6 +68,110 @@
         </table>
         <p>Runs your workflow when someone forks a repository.</p>
 
+        <h2 id="image_version" tabindex="-1">
+          <a class="heading-link" href="#image_version">
+            <code>image_version</code>
+            <span class="heading-link-symbol" aria-hidden="true"></span>
+          </a>
+        </h2>
+        <table aria-labelledby="image_version">
+          <thead>
+            <tr>
+              <th scope="col">Webhook event payload</th>
+              <th scope="col">Activity types</th>
+              <th scope="col"><code>GITHUB_SHA</code></th>
+              <th scope="col"><code>GITHUB_REF</code></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><a href="/en/webhooks-and-events/webhooks/webhook-events-and-payloads#image_version"><code>image_version</code></a></td>
+              <td>Not applicable</td>
+              <td>Last commit on default branch</td>
+              <td>Default branch</td>
+            </tr>
+          </tbody>
+        </table>
+        <p>Runs your workflow.</p>
+
+        <h2 id="pull_request" tabindex="-1">
+          <a class="heading-link" href="#pull_request">
+            <code>pull_request</code>
+            <span class="heading-link-symbol" aria-hidden="true"></span>
+          </a>
+        </h2>
+        <table aria-labelledby="pull_request">
+          <thead>
+            <tr>
+              <th scope="col">Webhook event payload</th>
+              <th scope="col">Activity types</th>
+              <th scope="col"><code>GITHUB_SHA</code></th>
+              <th scope="col"><code>GITHUB_REF</code></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><a href="/en/webhooks-and-events/webhooks/webhook-events-and-payloads#pull_request"><code>pull_request</code></a></td>
+              <td>- <code>opened</code><br>- <code>closed</code></td>
+              <td>Last commit on default branch</td>
+              <td>Default branch</td>
+            </tr>
+          </tbody>
+        </table>
+        <p>Runs your workflow.</p>
+
+        <h2 id="pull_request_target" tabindex="-1">
+          <a class="heading-link" href="#pull_request_target">
+            <code>pull_request_target</code>
+            <span class="heading-link-symbol" aria-hidden="true"></span>
+          </a>
+        </h2>
+        <table aria-labelledby="pull_request_target">
+          <thead>
+            <tr>
+              <th scope="col">Webhook event payload</th>
+              <th scope="col">Activity types</th>
+              <th scope="col"><code>GITHUB_SHA</code></th>
+              <th scope="col"><code>GITHUB_REF</code></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><a href="/en/webhooks-and-events/webhooks/webhook-events-and-payloads#pull_request_target"><code>pull_request_target</code></a></td>
+              <td>- <code>opened</code><br>- <code>closed</code></td>
+              <td>Last commit on default branch</td>
+              <td>Default branch</td>
+            </tr>
+          </tbody>
+        </table>
+        <p>Runs your workflow.</p>
+
+        <h2 id="merge_group" tabindex="-1">
+          <a class="heading-link" href="#merge_group">
+            <code>merge_group</code>
+            <span class="heading-link-symbol" aria-hidden="true"></span>
+          </a>
+        </h2>
+        <table aria-labelledby="merge_group">
+          <thead>
+            <tr>
+              <th scope="col">Webhook event payload</th>
+              <th scope="col">Activity types</th>
+              <th scope="col"><code>GITHUB_SHA</code></th>
+              <th scope="col"><code>GITHUB_REF</code></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><a href="/en/webhooks-and-events/webhooks/webhook-events-and-payloads#merge_group"><code>merge_group</code></a></td>
+              <td>- <code>checks_requested</code></td>
+              <td>SHA of the merge group</td>
+              <td>Ref of the merge group</td>
+            </tr>
+          </tbody>
+        </table>
+        <p>Runs your workflow when a pull request is added to a merge queue.</p>
+
         <h2 id="repository_dispatch" tabindex="-1">
           <a class="heading-link" href="#repository_dispatch">
             <code>repository_dispatch</code>

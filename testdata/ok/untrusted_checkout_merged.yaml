@@ -1,0 +1,26 @@
+# A pull request that was merged is code a maintainer accepted
+on:
+  pull_request_target:
+    types: [closed]
+
+permissions: {}
+
+jobs:
+  after-merge:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.merge_commit_sha }}
+          persist-credentials: false
+      - run: make
+  one-step:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - run: make
+        if: ${{ success() && github.event.pull_request.merged }}
