@@ -141,6 +141,16 @@ func (rule *RulePipelineWithoutPipefail) VisitStep(n *Step) error {
 	fixable := (kind == pipefailShellDefault || (kind == pipefailShellTemplate && tmplBash)) && !hasExprInShell(shell) && !anyPipelineQuitsEarly(script)
 	var fix *Fix
 	fixBuilt := false
+	var why *NoFix // set when the script is not fixable
+	switch {
+	case fixable:
+	case kind == pipefailShellSh || kind == pipefailShellShTemplate || !tmplBash && kind == pipefailShellTemplate:
+		why = &NoFix{Code: NoFixNeedsJudgment, Reason: "the shell of the step has no pipefail, so the step has to run with another shell (\"shell: bash\"), which is a change of the step that the fix does not make"}
+	case hasExprInShell(shell):
+		why = &NoFix{Code: NoFixUnsupportedShape, Reason: "the shell is an expression, so jactionlint cannot tell what turns pipefail on. add it by hand"}
+	default:
+		why = &NoFix{Code: NoFixNeedsJudgment, Reason: "a pipeline of the script ends in a consumer that quits early (head, grep -q), which pipefail would make die with SIGPIPE. decide where to turn pipefail on by hand"}
+	}
 
 	discarded := discardedSubstitutions(script)
 	for _, p := range script.Pipelines {
@@ -162,10 +172,15 @@ func (rule *RulePipelineWithoutPipefail) VisitStep(n *Step) error {
 			pipefailAdvice(kind),
 		)
 		if !fixable {
+			rule.errs[len(rule.errs)-1].NoFix = why
 			continue
 		}
 		if !fixBuilt {
 			fix, fixBuilt = rule.buildFix(run.Run), true
+		}
+		if fix == nil {
+			rule.errs[len(rule.errs)-1].NoFix = &NoFix{Code: NoFixUnsupportedShape, Reason: "the script is not a literal block (|) whose lines the fix can find in the file, add \"set -o pipefail\" by hand"}
+			continue
 		}
 		rule.errs[len(rule.errs)-1].Fix = fix
 	}

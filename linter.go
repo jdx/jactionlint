@@ -102,6 +102,11 @@ type LinterOptions struct {
 	// with Oneline) and in the message of the github format (the option --show-doc-urls). The json and sarif
 	// formats have it anyway.
 	ShowDocURLs bool
+	// ShowFixStatus prints what the fix of each finding is under it in the text format (not with Oneline) and in the
+	// message of the github format (the option --show-fix-status): the fix that --fix or --fix=unsafe applies, or the
+	// reason why a finding which the rule can fix has none (Error.NoFix). A finding that is advice only has no line. The
+	// json and sarif formats have the same data as fix, no_fix and noFixCode anyway.
+	ShowFixStatus bool
 	// Ruff is the command or the path of ruff (the option --ruff). When it is not empty ruff checks the Python
 	// scripts of "run:" instead of Pyflakes, with the rules of pyflakes (F) and without the configuration of
 	// the working directory. NewLinter fails when the command cannot be found.
@@ -333,6 +338,7 @@ func NewLinter(out io.Writer, opts *LinterOptions) (*Linter, error) {
 		return nil, &usageError{err}
 	}
 	prn = withDocURLs(prn, opts.ShowDocURLs)
+	prn = withFixStatus(prn, opts.ShowFixStatus)
 
 	cwd := "."
 	if opts.WorkingDir != "" {

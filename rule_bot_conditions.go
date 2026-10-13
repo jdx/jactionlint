@@ -335,23 +335,34 @@ func (rule *RuleBotConditions) checkBot(s *String, text string, base int, ref, o
 	}
 	// The author of the pull request is a different account from the actor when somebody else pushed
 	// to the branch. The condition then holds where it did not, so the fix is unsafe.
+	errs := rule.errs
+	last := errs[len(errs)-1]
 	repl := spoofableActors[name]
-	if repl == "" || !rule.prOnly || rule.src == nil {
+	if !rule.prOnly || repl == "" {
+		last.NoFix = &NoFix{Code: NoFixNeedsJudgment, Reason: "who authored the change is read from another field on other events, or this field has no counterpart on a pull request, so the replacement is a decision. rewrite the condition by hand"}
+		return true
+	}
+	shape := &NoFix{Code: NoFixUnsupportedShape, Reason: "the access is not written in a way the fix can edit exactly, replace it by hand"}
+	if rule.src == nil {
+		last.NoFix = shape
 		return true
 	}
 	off, ok := rule.src.valueOffset(s, base+tok.Offset)
 	if !ok {
+		last.NoFix = shape
 		return true
 	}
 	// Only a plain access written as it is in the table
 	end := tok.Offset + len(name)
 	if end > len(text) || !strings.EqualFold(text[tok.Offset:end], name) || !rule.src.matches(off, text[tok.Offset:end]) {
+		last.NoFix = shape
 		return true
 	}
 	if end < len(text) && isExprIdentChar(text[end]) {
+		last.NoFix = shape
 		return true
 	}
-	rule.errs[len(rule.errs)-1].Fix = &Fix{
+	last.Fix = &Fix{
 		Description: fmt.Sprintf("Check %s instead of %s", repl, name),
 		Unsafe:      true,
 		Edits:       []TextEdit{{off, off + len(name), repl}},

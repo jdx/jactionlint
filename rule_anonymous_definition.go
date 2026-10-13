@@ -41,6 +41,8 @@ func isCopilotSetupSteps(path string) bool {
 	return false
 }
 
+var anonymousNoFixShape = &NoFix{Code: NoFixUnsupportedShape, Reason: "the workflow is not written as a block mapping at the first column, add the top-level \"name:\" by hand"}
+
 // VisitWorkflowPre is callback when visiting Workflow node before visiting its children.
 func (rule *RuleAnonymousDefinition) VisitWorkflowPre(n *Workflow) error {
 	if n.Name != nil || isCopilotSetupSteps(rule.path) {
@@ -51,6 +53,7 @@ func (rule *RuleAnonymousDefinition) VisitWorkflowPre(n *Workflow) error {
 	line, ok := rule.firstKeyLine()
 	if !ok {
 		rule.ReportID("anonymous-definition", &Pos{Line: 1, Col: 1}, msg)
+		rule.noFixLast(anonymousNoFixShape)
 		return nil
 	}
 	pos := &Pos{Line: line, Col: 1}
@@ -58,6 +61,7 @@ func (rule *RuleAnonymousDefinition) VisitWorkflowPre(n *Workflow) error {
 	name := rule.deriveName(n)
 	if name == "" {
 		rule.ReportID("anonymous-definition", pos, msg)
+		rule.noFixLast(&NoFix{Code: NoFixNeedsJudgment, Reason: "the file name is not known and the workflow has no single job to name it after, choose a name by hand"})
 		return nil
 	}
 	at := rule.lineIndex().startOf(line)
@@ -85,6 +89,7 @@ func (rule *RuleAnonymousDefinition) VisitJobPre(n *Job) error {
 		return nil
 	}
 	rule.ReportID("anonymous-definition", pos, msg)
+	rule.noFixLast(&NoFix{Code: NoFixUnsupportedShape, Reason: "the job is not written as a block mapping that starts on the next line, add the \"name:\" by hand"})
 	return nil
 }
 

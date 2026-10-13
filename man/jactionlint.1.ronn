@@ -167,6 +167,12 @@ single-dash long options of v1 are removed; the error names the replacement.
     Print the URL of the documentation of the rule of each finding: under the finding in the text
     format (not with `oneline`) and in the message of the annotation in the `github` format
 
+  * `--show-fix-status`:
+    Print what the fix of each finding is, or why it has none: under the finding in the text format
+    (not with `oneline`) and in the message of the annotation in the `github` format. A finding that
+    the rule never fixes has no line. The `json` and `sarif` formats always have it (`fix`, `no_fix`,
+    `noFixCode`)
+
   * `--finding-context`:
     Add `events` (the events of `on:` of the workflow) and `permissions` (the permissions of the token
     of the job the finding is in, scope to `read`, `write` or `none`) to each finding of the `json`,

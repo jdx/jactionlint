@@ -93,9 +93,9 @@ func (rule *RuleConcurrencyLimits) VisitWorkflowPre(n *Workflow) error {
 		msg += ". the workflow has jobs that call reusable workflows, and inside a called workflow \"github.workflow\" is the name of the caller, so a group that the caller and the called workflow both build from \"${{ github.workflow }}\" is the same one and the called workflow is cancelled at once. give the group of the caller its own part, such as \"-caller\", so that it never equals the group of a called workflow"
 	}
 	rule.ReportID("concurrency-limits", pos, msg)
-	if fix := fixConcurrencyLimits(n); fix != nil {
-		rule.errs[len(rule.errs)-1].Fix = fix
-	}
+	fix, why := fixConcurrencyLimits(n)
+	rule.errs[len(rule.errs)-1].Fix = fix
+	rule.errs[len(rule.errs)-1].NoFix = why
 	return nil
 }
 
@@ -197,41 +197,50 @@ var anchorRe = regexp.MustCompile(`(?m)^[^#\n]*(?:[:-][ \t]+[&*][A-Za-z0-9_-]+|<
 //   - no job has a "concurrency:" of its own;
 //   - the file is written in a shape the edit understands: no anchors or aliases, and the "on:" entry is a block
 //     the parser and the helpers agree on.
-func fixConcurrencyLimits(w *Workflow) *Fix {
+//
+// When there is no fix for a workflow of pull requests the second result says why. A workflow with another trigger is
+// advice only: both results are nil.
+func fixConcurrencyLimits(w *Workflow) (*Fix, *NoFix) {
+	shape := &NoFix{Code: NoFixUnsupportedShape, Reason: "the workflow is not written in a way the fix can edit exactly (anchors, aliases or an \"on:\" it does not understand), add the top-level \"concurrency:\" by hand"}
 	if len(w.On) == 0 {
-		return nil
+		return nil, shape
 	}
 	for _, e := range w.On {
 		if !slices.Contains(pullRequestEvents, e.EventName()) {
-			return nil
+			// Advice only: the fix is made for pull requests, and whether a push, a tag or a manual run may cancel the older
+			// ones is a decision the rule leaves to the person
+			return nil, nil
 		}
 	}
 	sc := releaseScenario{scenario: scenario{event: "pull_request"}}
 	for _, j := range w.Jobs {
-		if j == nil || j.Concurrency != nil || releaseSignal(j, sc.scenario) != "" {
-			return nil
+		if j == nil {
+			return nil, shape
+		}
+		if j.Concurrency != nil || releaseSignal(j, sc.scenario) != "" {
+			return nil, &NoFix{Code: NoFixNeedsJudgment, Reason: "a job has a \"concurrency:\" of its own or releases or deploys something, so cancelling superseded runs is a decision. choose the group and cancel-in-progress by hand"}
 		}
 	}
 	d := newSrcDoc(w.Source)
 	if d == nil || anchorRe.Match(w.Source) {
-		return nil
+		return nil, shape
 	}
 	if _, _, _, ok := d.topLevelKey("concurrency"); ok {
-		return nil // the parser did not see it, so the shape is not understood
+		return nil, shape // the parser did not see it, so the shape is not understood
 	}
 	line, indent, inline, ok := d.topLevelKey("on")
 	if !ok {
 		line, indent, inline, ok = d.topLevelKey(`"on"`)
 	}
 	if !ok || strings.HasPrefix(inline, "&") || strings.HasPrefix(inline, "*") {
-		return nil
+		return nil, shape
 	}
 	end, ok := d.entryEnd(line, indent, inline)
 	if !ok {
-		return nil
+		return nil, shape
 	}
 	if (strings.HasPrefix(inline, "{") || strings.HasPrefix(inline, "[")) && end != line {
-		return nil // a flow collection over several lines
+		return nil, shape // a flow collection over several lines
 	}
 	pad := strings.Repeat(" ", indent)
 	unit := strings.Repeat(" ", d.indentUnit())
@@ -242,7 +251,7 @@ func fixConcurrencyLimits(w *Workflow) *Fix {
 			pad+unit+"group: "+callerAwareGroup(w, ""),
 			pad+unit+"cancel-in-progress: true",
 		)},
-	}
+	}, nil
 }
 
 var onKeyRegexp = regexp.MustCompile(`^(?:on|"on"|'on')[ \t]*:`)

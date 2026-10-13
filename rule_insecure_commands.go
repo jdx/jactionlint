@@ -63,6 +63,7 @@ func (rule *RuleInsecureCommands) checkEnv(env *Env, where string) {
 		return
 	}
 	rule.ReportID("insecure-commands", pos, msg)
+	rule.noFixLast(&NoFix{Code: NoFixUnsupportedShape, Reason: "the variable is not a single-line entry of a block mapping that the fix can remove exactly, remove it by hand"})
 }
 
 // isTruthyEnvValue reports whether the runner reads the value as true. It parses the variable as a
