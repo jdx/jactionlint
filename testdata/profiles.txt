@@ -69,6 +69,7 @@ invisible-characters default security error
 known-vulnerable-actions online security error
 local-action-checkout correctness correctness error
 macos-gnu-flags pedantic correctness warn
+malformed-expression-delimiters correctness correctness error
 matrix-duplicate-value correctness correctness error
 matrix-invalid-exclude correctness correctness error
 max-run-lines pedantic style error

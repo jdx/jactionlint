@@ -104,6 +104,7 @@ rules:
 | [known-vulnerable-actions](#known-vulnerable-actions) | security | error | only with `--online` |
 | [local-action-checkout](#local-action-checkout) | correctness | error | correctness |
 | [macos-gnu-flags](#macos-gnu-flags) | correctness | warn | pedantic |
+| [malformed-expression-delimiters](#malformed-expression-delimiters) | correctness | error | correctness |
 | [matrix-duplicate-value](#matrix-duplicate-value) | correctness | error | correctness |
 | [matrix-invalid-exclude](#matrix-invalid-exclude) | correctness | error | correctness |
 | [max-run-lines](#max-run-lines) | style | error | pedantic |
@@ -833,6 +834,17 @@ A command at run: has a GNU-only option and the job runs on macOS, which has the
 - Default level: warn
 - Profile: pedantic
 - Details and examples: [checks](./checks.md#check-macos-gnu-flags)
+
+## malformed-expression-delimiters
+
+Text such as ${ github.ref }, $ {{ x }} or {{ github.sha }} is meant to be an expression but is not one. With the option pedantic, so is a shell variable in the input of an action.
+
+- Group: correctness
+- Default level: error
+- Profile: correctness
+- Fixable: yes
+- Option `pedantic` (bool, no default): Also report the pedantic checks, which are noisier. Unset, they run under the pedantic profile.
+- Details and examples: [checks](./checks.md#check-malformed-expression-delimiters)
 
 ## matrix-duplicate-value
 
