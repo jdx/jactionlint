@@ -254,6 +254,7 @@ type RuleEnv struct {
 	config                 *Config
 	shellcheck             string
 	pyflakes               string
+	ruff                   string         // runs instead of pyflakes when it is set
 	tools                  *externalTools // nil when the run does not track the external linters
 	shellcheckRCFile       string         // --shellcheck-rcfile, relative to cwd
 	cwd                    string

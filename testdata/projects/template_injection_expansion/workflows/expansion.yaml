@@ -55,7 +55,7 @@ jobs:
       # Contexts of GitHub and the runner
       - run: echo '${{ github.repository }} ${{ github.sha }} ${{ runner.os }} ${{ secrets.TOKEN }}'
       # Only tested: the result is a boolean or a literal
-      - run: echo '${{ github.event_name == 'push' && 'a' || 'b' }}'
+      - run: echo '${{ github.event_name == 'workflow_dispatch' && 'a' || 'b' }}'
       # The shell reads the variable
       - run: echo "$TEXT"
         env:
