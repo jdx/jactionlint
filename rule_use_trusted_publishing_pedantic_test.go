@@ -77,6 +77,22 @@ func TestUseTrustedPublishingPedantic(t *testing.T) {
 		{"pwsh publish then build on one line", jobOn("windows-latest", env, checkout+run("npm publish; npm ci")), 0, 0, 0},
 		{"pwsh install of the tools and publish on one line", jobOn("windows-latest", env, checkout+run("npm install -g npm@latest; npm publish")), 0, 0, 0},
 		{"pwsh a token on a one-liner", jobOn("windows-latest", env, checkout+run("npm ci; npm publish --token $env:T")), 0, 0, 0},
+		// a requirements file or the project itself is a build, even next to the tools of publishing
+		{"pip install twine -r requirements.txt", job(env, checkout+run("pip install twine -r requirements.txt")+run("twine upload dist/*")), 1, 0, 0},
+		{"pip install -r requirements.txt twine", job(env, checkout+run("pip install --requirement requirements.txt twine")+run("twine upload dist/*")), 1, 0, 0},
+		{"pip install twine -e .", job(env, checkout+run("pip install twine -e .")+run("twine upload dist/*")), 1, 0, 0},
+		{"pip install twine .", job(env, checkout+run("pip install twine .")+run("twine upload dist/*")), 1, 0, 0},
+		{"pip install twine -c constraints.txt", job(env, checkout+run("pip install twine -c constraints.txt")+run("twine upload dist/*")), 0, 0, 0},
+		{"pip install twine build", job(env, checkout+run("pip install twine build")+run("twine upload dist/*")), 1, 0, 0},
+		{"pwsh pip install -r requirements.txt", jobOn("windows-latest", env, checkout+run("pip install twine -r requirements.txt")+run("twine upload dist/*")), 1, 0, 0},
+
+		// Windows spellings: the case and the suffix of the command do not matter
+		{"pwsh NuGet.exe restore then push", jobOn("windows-latest", env, checkout+run("NuGet.exe restore")+run("NuGet.exe push pkg.nupkg")), 1, 0, 0},
+		{"pwsh MSBuild.exe then push", jobOn("windows-latest", env, checkout+run("MSBuild.exe app.sln /t:Build")+run("dotnet nuget push pkg.nupkg")), 1, 0, 0},
+		{"pwsh Dotnet.exe build", jobOn("windows-latest", env, checkout+run("Dotnet.exe build")+run("dotnet nuget push pkg.nupkg")), 1, 0, 0},
+		{"pwsh msbuild.cmd", jobOn("windows-latest", env, checkout+run("msbuild.cmd app.sln")+run("dotnet nuget push pkg.nupkg")), 1, 0, 0},
+		{"pwsh npm.cmd ci", jobOn("windows-latest", env, checkout+run("npm.cmd ci")+run("npm publish")), 1, 0, 0},
+		{"pwsh NuGet.exe push alone", jobOn("windows-latest", env, checkout+run("NuGet.exe push pkg.nupkg")), 0, 0, 0},
 		{"pwsh nuget restore then push", jobOn("windows-latest", env, checkout+run("nuget restore")+run("nuget push pkg.nupkg")), 1, 0, 0},
 		{"bash nuget restore then push", job(env, checkout+run("nuget restore")+run("nuget push pkg.nupkg")), 1, 0, 0},
 		{"dotnet restore then nuget push", job(env, checkout+run("dotnet restore")+run("dotnet nuget push pkg.nupkg")), 1, 0, 0},

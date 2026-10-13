@@ -255,7 +255,7 @@ func isBuildCommand(c *runscript.Command) bool {
 		default:
 			return false
 		}
-		if len(in.Packages) > 0 {
+		if len(in.Packages) > 0 && len(in.Requirements) == 0 {
 			onlyTools := true
 			for _, p := range in.Packages {
 				if p.Dynamic || !slices.Contains(publisherTools, strings.ToLower(p.Name)) {
@@ -268,8 +268,16 @@ func isBuildCommand(c *runscript.Command) bool {
 		}
 		return true
 	}
-	sub := c.Sub(0)
-	name := strings.TrimSuffix(strings.TrimPrefix(c.Name, "./"), ".exe")
+	// the spelling on Windows: `MSBuild.exe`, `NuGet.exe`, `npm.cmd`; the case does not matter there
+	name := strings.ToLower(strings.TrimPrefix(c.Name, "./"))
+	for _, suffix := range []string{".exe", ".cmd", ".bat"} {
+		name = strings.TrimSuffix(name, suffix)
+	}
+	tool := c.Tool
+	if tool == "" {
+		tool = name // `npm.cmd` is not a tool of the analyzer, but it is npm
+	}
+	sub := strings.ToLower(c.Sub(0))
 	switch {
 	case name == "make" || name == "gmake" || name == "cmake" || name == "ninja" || name == "rake" || name == "tox" || name == "nox" ||
 		name == "gradle" || name == "gradlew" || name == "mvn" || name == "mvnw" || name == "msbuild" || name == "pyproject-build":
@@ -282,21 +290,24 @@ func isBuildCommand(c *runscript.Command) bool {
 				return true
 			}
 		}
-	case c.Tool == "uv":
+	case tool == "uv":
 		return sub == "build" || sub == "sync"
 	case name == "poetry" || name == "hatch" || name == "flit" || name == "pdm":
 		return sub == "build" || sub == "install"
-	case c.Tool == "cargo":
+	case tool == "cargo":
 		return sub == "build" || sub == "test" || sub == "check" || sub == "package"
-	case c.Tool == "go":
+	case tool == "go":
 		return sub == "build" || sub == "test" || sub == "generate"
 	case name == "nuget" || name == "nuget.exe":
 		return sub == "restore"
 	case name == "dotnet":
 		return sub == "build" || sub == "pack" || sub == "restore" || sub == "test"
-	case c.Tool == "npm" || c.Tool == "pnpm" || c.Tool == "yarn" || c.Tool == "bun":
+	case tool == "npm" || tool == "pnpm" || tool == "yarn" || tool == "bun":
+		if c.Tool == "" && slices.Contains([]string{"ci", "install", "i", "add"}, sub) {
+			return true // `npm.cmd ci`: the analyzer does not know it as an install
+		}
 		return slices.Contains([]string{"run", "run-script", "test", "build", "pack", "rebuild", "prepare", "compile"}, sub)
-	case c.Tool == "gem":
+	case tool == "gem":
 		return sub == "build"
 	case name == "bundle":
 		return sub == "install" || sub == "exec"

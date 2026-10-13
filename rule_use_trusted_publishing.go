@@ -576,11 +576,11 @@ func publishCommand(c *runscript.Command, resolve func(string) string) (eco, cmd
 	switch {
 	case c.Name == "pdm" && pos(0) == "publish":
 		return "pypi", "pdm publish", true
-	case c.Name == "nuget" || c.Name == "nuget.exe":
+	case strings.EqualFold(c.Name, "nuget") || strings.EqualFold(c.Name, "nuget.exe"):
 		if pos(0) == "push" {
 			return "nuget", "nuget push", true
 		}
-	case c.Name == "dotnet" && pos(0) == "nuget" && pos(1) == "push":
+	case (strings.EqualFold(c.Name, "dotnet") || strings.EqualFold(c.Name, "dotnet.exe")) && pos(0) == "nuget" && pos(1) == "push":
 		return "nuget", "dotnet nuget push", true
 	case c.Name == "bundle" && pos(0) == "exec" && pos(1) == "gem" && pos(2) == "push":
 		return "rubygems", "bundle exec gem push", true
