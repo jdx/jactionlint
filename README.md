@@ -208,7 +208,8 @@ See the [contribution guide](./CONTRIBUTING.md) for more details.
 
 ## License
 
-jactionlint is distributed under [the MIT license](./LICENSE.txt).
+jactionlint is distributed under [the MIT license](./LICENSE.txt). See [NOTICE.md](./NOTICE.md) for the projects it is built on,
+including actionlint, zizmor and ghlint.
 
 [ci-badge]: https://github.com/jdx/jactionlint/actions/workflows/ci.yaml/badge.svg
 [ci]: https://github.com/jdx/jactionlint/actions/workflows/ci.yaml
