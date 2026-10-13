@@ -307,12 +307,32 @@ func (rule *RuleOutputClobbering) randomDelimiter(s *runscript.Script, step *Ste
 		if v, ok := rule.flow.envValue(step, name); ok {
 			// what the workflow set is a constant, an expression that has a value somebody can read or choose (the id of the
 			// run, text of the event), or a random source (`secrets.X`)
-			if reRandomSource.MatchString(v.Value) {
+			if exprsUnguessable(v.Value) {
 				return true
 			}
 			continue
 		}
 		return true // not known: do not report
+	}
+	return false
+}
+
+// exprsUnguessable reports whether a value of the workflow holds an expression that nobody can guess: a secret or the token.
+// The expressions are read as expressions, with or without spaces inside `${{ }}`; the text around them is a literal. What
+// reRandomSource matches is shell text, not YAML.
+func exprsUnguessable(value string) bool {
+	for _, e := range exprsIn(value) {
+		n := parseExprText(e)
+		if n == nil {
+			continue
+		}
+		var refs []exprRef
+		collectExprRefs(n, nil, &refs)
+		for _, r := range refs {
+			if r.chain[0] == "secrets" || (len(r.chain) == 2 && r.chain[0] == "github" && r.chain[1] == "token") {
+				return true
+			}
+		}
 	}
 	return false
 }

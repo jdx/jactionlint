@@ -68,13 +68,13 @@ var ghJQTokens = []struct {
 
 var (
 	// the path of the API that lists or reads pull requests and issues, also with a query (`pulls?state=open`)
-	reGhAPIPath = regexp.MustCompile(`(^|/)repos/[^\s]+/(pulls|issues)(?:[/?#]|$)`)
+	reGhAPIPath = regexp.MustCompile(`(^|/)repos/(?:\$\{\{.*?\}\}|\S)+/(pulls|issues)(?:[/?#]|$)`)
 	// the part of that path that holds text of many people: `pulls/7/comments`, `issues/comments`, `pulls/7/files`
-	reGhTextPath = regexp.MustCompile(`/(?:pulls|issues)/(?:[^/\s]+/)?(?:comments|reviews|files|commits)(?:[/?#]|$)`)
+	reGhTextPath = regexp.MustCompile(`/(?:pulls|issues)/(?:(?:\$\{\{.*?\}\}|[^/\s])+/)?(?:comments|reviews|files|commits)(?:[/?#]|$)`)
 	// a filter that provably prints a number, a state, a date or a count and no text
 	reJQHarmless = regexp.MustCompile(`^\s*\.(?:number|state|id|url|mergeable|isDraft|draft|merged|mergedAt|createdAt|updatedAt|closedAt|additions|deletions|changedFiles|changed_files|headRefOid|locked|stateReason)(?:\s*\|\s*(?:tostring|not))?\s*$|^\s*\.(?:comments|files|reviews|commits|labels)\s*\|\s*length\s*$`)
 	// the ref of a pull request as an argument of git: `pull/7/head`, `+refs/pull/7/merge:pr`; a url of GitHub is not one
-	rePullRefText  = regexp.MustCompile(`^\+?(?:refs/)?pull/[^\s/]+/(?:head|merge)\b`)
+	rePullRefText  = regexp.MustCompile(`^\+?(?:refs/)?pull/(?:\$\{\{.*?\}\}|[^\s/])+/(?:head|merge)\b`)
 	gitSourceVerbs = map[string]bool{"log": true, "show": true, "diff": true, "diff-tree": true, "branch": true, "rev-parse": true, "symbolic-ref": true}
 	// the placeholders of a pretty format that print text of an outsider, by kind
 	reGitSubject = regexp.MustCompile(`%(s|ae|aE|ce|cE)\b|oneline`)

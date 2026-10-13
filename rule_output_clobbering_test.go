@@ -19,7 +19,7 @@ func countOutputClobbering(t *testing.T, name, src string) int {
 
 // TestOutputClobbering is the table of the rule. want is the number of findings.
 func TestOutputClobbering(t *testing.T) {
-	const head = "on: issue_comment\npermissions: {}\njobs:\n  j:\n    runs-on: ubuntu-latest\n    outputs:\n      approved: ${{ steps.check.outputs.approved }}\n    steps:\n      - id: check\n        env:\n          BODY: ${{ github.event.comment.body }}\n          TITLE: ${{ github.event.issue.title }}\n          REF: ${{ github.head_ref }}\n          LIT: fixed\n          RUNID: ${{ github.run_id }}\n          SECRETDELIM: ${{ secrets.DELIM }}\n        run: |\n"
+	const head = "on: issue_comment\npermissions: {}\njobs:\n  j:\n    runs-on: ubuntu-latest\n    outputs:\n      approved: ${{ steps.check.outputs.approved }}\n    steps:\n      - id: check\n        env:\n          BODY: ${{ github.event.comment.body }}\n          TITLE: ${{ github.event.issue.title }}\n          REF: ${{ github.head_ref }}\n          LIT: fixed\n          RUNID: ${{ github.run_id }}\n          SECRETDELIM: ${{ secrets.DELIM }}\n          COMPACTDELIM: ${{secrets.DELIM}}\n          TOKENDELIM: ${{github.token}}\n          MIXEDDELIM: ${{ github.run_id }}-${{ secrets.DELIM }}\n          LITDELIM: uuid-secrets\n        run: |\n"
 	const tail = "      - if: steps.check.outputs.approved == 'true'\n        run: echo approved\n"
 	const out = `>> "$GITHUB_OUTPUT"`
 	tests := []struct {
@@ -80,6 +80,10 @@ func TestOutputClobbering(t *testing.T) {
 		{"the delimiter is a script variable that holds the comment", "d=$BODY\n{ echo \"body<<$d\"; echo \"$BODY\"; echo \"$d\"; } " + out, 1},
 		{"the delimiter is the id of the run", "{ echo \"body<<$RUNID\"; echo \"$BODY\"; echo \"$RUNID\"; } " + out, 1},
 		{"the delimiter is a secret", "{ echo \"body<<$SECRETDELIM\"; echo \"$BODY\"; echo \"$SECRETDELIM\"; } " + out, 0},
+		{"the delimiter is a secret written without spaces", "{ echo \"body<<$COMPACTDELIM\"; echo \"$BODY\"; echo \"$COMPACTDELIM\"; } " + out, 0},
+		{"the delimiter is the token", "{ echo \"body<<$TOKENDELIM\"; echo \"$BODY\"; echo \"$TOKENDELIM\"; } " + out, 0},
+		{"the delimiter is made of the run id and a secret", "{ echo \"body<<$MIXEDDELIM\"; echo \"$BODY\"; echo \"$MIXEDDELIM\"; } " + out, 0},
+		{"the delimiter is a literal that names a random source", "{ echo \"body<<$LITDELIM\"; echo \"$BODY\"; echo \"$LITDELIM\"; } " + out, 1},
 		{"tee with a here string", `tee -a "$GITHUB_OUTPUT" <<< "body=$BODY"`, 1},
 		{"tee with a here string of a literal", `tee -a "$GITHUB_OUTPUT" <<< "x=1"`, 0},
 		{"tee with a here string of the title", `tee -a "$GITHUB_OUTPUT" <<< "t=$TITLE"`, 0},
