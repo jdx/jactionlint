@@ -88,6 +88,7 @@ cat action.yml | jactionlint --stdin-filename action.yml -
 | `--color[=WHEN]` |  | Colorize the output: always, never or auto (default). Bare --color means always |
 | `--no-color` |  | Same as --color=never |
 | `--show-doc-urls` |  | Print the documentation URL of the rule of each finding: under the finding (text) or in the message (github) |
+| `--finding-context` |  | Add the events of the workflow and the permissions of the token of the job to each finding of json, jsonl and sarif |
 | `--no-hints` |  | Do not print the hint line after a text run with many findings |
 | `--min-severity=LEVEL` |  | Hide findings less severe than LEVEL: info (default), warn or error |
 | `--strict-exit` |  | Exit with status 1 also for findings of level warn and info |
@@ -340,6 +341,22 @@ An error object of `json` and `jsonl` has these fields.
 | `snippet`      | Code snippet to indicate the position of the error                                                                |
 | `fix`          | The automatic fix of the error: its `description` and the byte-range `edits`. It is omitted when there is no fix  |
 | `no_fix`       | Why a finding which the rule can fix has no fix (the SARIF log adds `unsafe-edit`, `edit-conflict` and `invalid-edit`, see the SARIF section below): a `code` (`option-required`, `option-invalid`, `online-required`, `lookup-failed`, `unsupported-shape` or `needs-judgment`), a `reason` and, for the options, the `option` to configure such as `missing-timeout.default-minutes`. It is omitted when there is a fix and for findings which are advice only |
+
+#### Events and token permissions of a finding
+
+`--finding-context` adds two fields to each finding of `json`, `jsonl` and `sarif` (to `properties` of the result), so that the findings of many
+repositories can be filtered by what can trigger the workflow and what its token can do (for instance with `jq`):
+
+| Field | Description |
+|-|-|
+| `events` | The sorted names of the events of `on:`, such as `["pull_request_target", "push"]`. Omitted for a file which is not a workflow (an action, `dependabot.yml`) |
+| `permissions` | The permissions of the token of the job that the finding is in: its `permissions:`, or else the ones of the workflow. A mapping from the scope to `read`, `write` or `none`. `read-all` and `write-all` are `{"*": "read"}` and `{"*": "write"}`, and an empty `permissions: {}` is `{"*": "none"}`. Omitted when neither the job nor the workflow sets it: the default token then depends on a setting of the repository, which jactionlint does not know. A finding outside of the jobs has the permissions of the workflow |
+
+```sh
+jactionlint --format json --finding-context | jq '.[] | select(.events | index("pull_request_target")) | select(.permissions["contents"] == "write")'
+```
+
+The fields are not in the output without the option, so existing consumers see no change.
 
 #### Lines and columns
 

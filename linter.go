@@ -90,6 +90,10 @@ type LinterOptions struct {
 	// scripts of "run:" instead of Pyflakes, with the rules of pyflakes (F) and without the configuration of
 	// the working directory. NewLinter fails when the command cannot be found.
 	Ruff string
+	// FindingContext adds the events of the workflow and the permissions of the token of the job to each finding
+	// (Error.Events and Error.Permissions), which the json, jsonl and sarif formats print (the option
+	// --finding-context).
+	FindingContext bool
 	// IgnorePatterns is list of regular expression to filter errors. The pattern is applied to error
 	// messages. When an error is matched, the error is ignored.
 	IgnorePatterns []string
@@ -190,6 +194,7 @@ type Linter struct {
 	printer    printer
 	shellcheck string
 	pyflakes   string
+	findingCtx bool
 	ruff       string
 	// shellcheckRC is LinterOptions.ShellcheckRCFile
 	shellcheckRC string
@@ -326,6 +331,7 @@ func NewLinter(out io.Writer, opts *LinterOptions) (*Linter, error) {
 		printer:        prn,
 		shellcheck:     opts.Shellcheck,
 		pyflakes:       opts.Pyflakes,
+		findingCtx:     opts.FindingContext,
 		ruff:           opts.Ruff,
 		shellcheckRC:   opts.ShellcheckRCFile,
 		ignorePats:     ignore,
@@ -941,7 +947,7 @@ func (l *Linter) check(
 		}
 	}
 
-	return l.finishCheck(path, content, all, cfg, bl, start, w != nil, &ignoreContext{project: project, scopes: newScopeIndex(w, content), skipped: skippedRules}), nil
+	return l.finishCheck(path, content, all, cfg, bl, start, w != nil, &ignoreContext{project: project, scopes: newScopeIndex(w, content), skipped: skippedRules, finding: l.findingContextFor(w, content)}), nil
 }
 
 // isActionFile reports whether the path is the metadata file of an action (see IsActionPath). The path
@@ -1018,6 +1024,9 @@ func (l *Linter) finishCheck(path string, content []byte, all []*Error, cfg *Con
 
 	for _, err := range all {
 		err.Filepath = path // Populate filename in the error
+		if ic != nil {
+			ic.finding.apply(err)
+		}
 	}
 
 	slices.SortFunc(all, compareErrors)
@@ -1241,4 +1250,12 @@ func (l *Linter) actionCallers(p *Project, file string) *ActionCallers {
 		return nil
 	}
 	return l.callGraphOf(p).callersOf(filepath.ToSlash(filepath.Dir(rel)))
+}
+
+// findingContextFor returns the context for the findings of the workflow, or nil when --finding-context is off.
+func (l *Linter) findingContextFor(w *Workflow, src []byte) *findingContext {
+	if !l.findingCtx {
+		return nil
+	}
+	return newFindingContext(w, newScopeIndex(w, src))
 }

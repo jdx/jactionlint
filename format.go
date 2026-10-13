@@ -334,13 +334,13 @@ type sarifSuppression struct {
 }
 
 type sarifResult struct {
-	RuleID     string            `json:"ruleId"`
-	RuleIndex  *int              `json:"ruleIndex,omitempty"`
-	Level      string            `json:"level"`
-	Message    sarifMessage      `json:"message"`
-	Locations  []sarifLocation   `json:"locations"`
-	Fixes      []sarifFix        `json:"fixes,omitempty"`
-	Properties map[string]string `json:"properties,omitempty"`
+	RuleID     string          `json:"ruleId"`
+	RuleIndex  *int            `json:"ruleIndex,omitempty"`
+	Level      string          `json:"level"`
+	Message    sarifMessage    `json:"message"`
+	Locations  []sarifLocation `json:"locations"`
+	Fixes      []sarifFix      `json:"fixes,omitempty"`
+	Properties map[string]any  `json:"properties,omitempty"`
 	// PartialFingerprints identify the finding by what it says and where it is relative to its own
 	// line, so that code scanning keeps tracking it when lines are added above it.
 	PartialFingerprints map[string]string `json:"partialFingerprints,omitempty"`
@@ -644,7 +644,19 @@ func (p sarifPrinter) print(w io.Writer, results []fileResult, info runInfo) err
 				res.RuleIndex = &i
 			}
 			if e.Kind != "" && e.Kind != e.ID {
-				res.Properties = map[string]string{"kind": e.Kind}
+				res.Properties = map[string]any{"kind": e.Kind}
+			}
+			if len(e.Events) > 0 || len(e.Permissions) > 0 {
+				// --finding-context: so that results can be filtered by what triggers the workflow and by its token
+				if res.Properties == nil {
+					res.Properties = map[string]any{}
+				}
+				if len(e.Events) > 0 {
+					res.Properties["events"] = e.Events
+				}
+				if len(e.Permissions) > 0 {
+					res.Properties["permissions"] = e.Permissions
+				}
 			}
 			if e.Baselined {
 				res.Suppressions = []sarifSuppression{{Kind: "external", Justification: "accepted by the jactionlint baseline"}}
@@ -667,7 +679,7 @@ func (p sarifPrinter) print(w io.Writer, results []fileResult, info runInfo) err
 			if why != nil {
 				// A result without fixes stays without them (hk's sarif-diff relies on it): the reason is a property
 				if res.Properties == nil {
-					res.Properties = map[string]string{}
+					res.Properties = map[string]any{}
 				}
 				res.Properties["noFixCode"] = string(why.Code)
 				res.Properties["noFixReason"] = why.Reason

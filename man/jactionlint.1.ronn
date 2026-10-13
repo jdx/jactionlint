@@ -146,6 +146,11 @@ single-dash long options of v1 are removed; the error names the replacement.
     Print the URL of the documentation of the rule of each finding: under the finding in the text
     format (not with `oneline`) and in the message of the annotation in the `github` format
 
+  * `--finding-context`:
+    Add `events` (the events of `on:` of the workflow) and `permissions` (the permissions of the token
+    of the job the finding is in, scope to `read`, `write` or `none`) to each finding of the `json`,
+    `jsonl` and `sarif` formats. Without it they are not in the output
+
   * `--no-hints`:
     Do not print the line at the end of a text run with many findings (20 or more) that says how to
     count them (`--format summary`), adopt them gradually (`--baseline-write`) and get the checks of
