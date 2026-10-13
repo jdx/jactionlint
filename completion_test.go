@@ -320,7 +320,8 @@ func TestPowerShellCompletion(t *testing.T) {
 			continue
 		}
 		if l != "" {
-			results[cur] = append(results[cur], l)
+			// PowerShell on Windows completes ".\docs\usage.md": compare the paths with forward slashes
+			results[cur] = append(results[cur], strings.ReplaceAll(l, `\`, "/"))
 		}
 	}
 	for _, c := range cases {
