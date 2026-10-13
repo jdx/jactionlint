@@ -314,7 +314,7 @@ func (rule *RuleEvents) checkWorkflowDispatchEvent(event *WorkflowDispatchEvent)
 
 // https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#image_version_ready
 func (rule *RuleEvents) checkImageVersionEvent(event *ImageVersionEvent) {
-	// Do nothing
+	rule.checkTypes(&String{Value: "image_version", Pos: event.Pos}, event.Types, AllWebhookTypes["image_version"])
 }
 
 func init() {

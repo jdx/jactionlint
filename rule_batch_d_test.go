@@ -304,8 +304,8 @@ func TestBatchDLabelIsID(t *testing.T) {
 	}
 }
 
-// The default shell of a Windows runner is not bash, so its scripts are not read as bash. An explicit shell, or a
-// default shell of the job or the workflow, decides.
+// The default shell of a Windows runner is not bash, so its scripts are not read as bash: a line that is a plain command is
+// read, a line with the syntax of pwsh is not. An explicit shell, or a default shell of the job or the workflow, decides.
 func TestBatchDShells(t *testing.T) {
 	cfg := allBatchDRules()
 	count := func(src string) int {
@@ -322,10 +322,11 @@ func TestBatchDShells(t *testing.T) {
 		want int
 	}{
 		"linux default":                {"on: push\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - run: npm install foo\n", 1},
-		"windows default is pwsh":      {"on: push\njobs:\n  j:\n    runs-on: windows-latest\n    steps:\n      - run: npm install foo\n", 0},
+		"windows default is pwsh":      {"on: push\njobs:\n  j:\n    runs-on: windows-latest\n    steps:\n      - run: npm install foo\n", 1},
+		"windows pwsh syntax":          {"on: push\njobs:\n  j:\n    runs-on: windows-latest\n    steps:\n      - run: npm install $env:FOO\n      - run: npm install foo; echo done\n      - run: if ($true) { npm install foo }\n", 0},
 		"windows with bash":            {"on: push\njobs:\n  j:\n    runs-on: windows-latest\n    steps:\n      - run: npm install foo\n        shell: bash\n", 1},
 		"windows job default":          {"on: push\njobs:\n  j:\n    runs-on: windows-latest\n    defaults:\n      run:\n        shell: bash\n    steps:\n      - run: npm install foo\n", 1},
-		"workflow default pwsh":        {"on: push\ndefaults:\n  run:\n    shell: pwsh\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - run: npm install foo\n", 0},
+		"workflow default pwsh":        {"on: push\ndefaults:\n  run:\n    shell: pwsh\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - run: npm install foo\n", 1},
 		"custom shell":                 {"on: push\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - run: npm install foo\n        shell: bash -e {0}\n", 1},
 		"python":                       {"on: push\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - run: npm install foo\n        shell: python\n", 0},
 		"shell is an expression":       {"on: push\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - run: npm install foo\n        shell: ${{ github.sha }}\n", 0},

@@ -83,6 +83,16 @@ func (rule *RuleSuperfluousActions) VisitJobPre(n *Job) error {
 			}
 			return
 		}
+		// A label written as text and matrix values (`${{ matrix.os }}-latest`, `${{ matrix.target.os }}`) is
+		// resolved for every value of the matrix, when all of them are known
+		if labels, ok := matrixImages(n, l.Value); ok {
+			for _, v := range labels {
+				if strings.EqualFold(strings.TrimSpace(v), "self-hosted") {
+					rule.selfHosted = true
+				}
+			}
+			return
+		}
 		if mayBeSelfHosted(l, m) {
 			rule.selfHosted = true
 		}
