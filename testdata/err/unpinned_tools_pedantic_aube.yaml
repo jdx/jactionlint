@@ -1,0 +1,24 @@
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      # Tools downloaded without an exact version
+      - run: aube dlx -p typescript tsc
+      - run: aubx cowsay@latest hi
+      - run: aubx --package create-vite create-vite app
+      - run: aube dlx @tanstack/cli@next create
+      - run: aubx jsr:@std/cli
+      - run: aubx npm:cowsay hi
+      - run: aube add -g cowsay
+      # Exact versions
+      - run: aube dlx cowsay@1.6.0 hi
+      - run: aubx -p typescript@5.4.2 tsc
+      - run: aube add -g cowsay@1.6.0
+      - run: aubx npm:cowsay@1.6.0 hi
+      # A bare name runs the binary of the project when it has one, and aube exec never downloads
+      - run: aubx cowsay hi
+      - run: aube dlx vitest run
+      - run: aube exec vitest
+      - run: aube x vitest
+      - run: aube run build

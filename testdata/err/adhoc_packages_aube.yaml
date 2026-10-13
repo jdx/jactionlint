@@ -1,0 +1,23 @@
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      # Packages installed by name outside of the lock file
+      - run: aube add lodash
+      - run: aube add -D vitest@1.0.0
+      - run: aube a zod
+      - run: aube add -g cowsay
+      - run: aube --filter app add react@18.3.1 react-dom
+      - run: aube add jsr:@std/path@1.0.0
+      - run: aube add alias@npm:left-pad@1.3.0
+      # The packages of the project, installed from its lock file
+      - run: aube install
+      - run: aube ci
+      - run: aube install --frozen-lockfile
+      - run: aube add ./local-pkg
+      - run: aube add file:../pkg link:../other
+      - run: aube remove lodash
+      - run: aube exec vitest
+      - run: aube run build
+      - run: echo "aube add lodash"

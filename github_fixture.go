@@ -21,6 +21,8 @@ import (
 type gitHubFixtures struct {
 	// Repos maps "owner/repo" in lower case to the recorded data.
 	Repos map[string]*fixtureRepo `json:"repos"`
+	// Owners maps the login of a user or organization in lower case to whether it exists, see GitHubOwnerClient.
+	Owners map[string]bool `json:"owners,omitempty"`
 }
 
 type fixtureRepo struct {
@@ -34,6 +36,8 @@ type fixtureRepo struct {
 	Advisories *fixtureAdvisories             `json:"advisories,omitempty"`
 	// Releases are the dates of a release, by "tags/<tag>" or, for a commit without a tag, "commits/<sha>".
 	Releases map[string]*GitHubReleaseDate `json:"releases,omitempty"`
+	// Environments are the answers about the environments by their lower case name, see GitHubEnvironmentClient.
+	Environments map[string]*fixtureEnvironment `json:"environments,omitempty"`
 }
 
 type fixtureRef struct {
