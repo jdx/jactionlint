@@ -1253,6 +1253,7 @@ An action, reusable workflow or Docker image is not pinned to a commit SHA or di
 - Profile: default
 - Fixable: yes
 - Option `policies` (string-map, default empty): How strongly to pin the actions matching a pattern: hash-pin (full commit SHA, the default for everything), ref-pin (any tag, branch or SHA) or any. The most specific pattern wins. Patterns are "*", "owner/*", "owner/repo" and "owner/repo/path". Docker images follow the "*" policy.
+- Option `short-pin-comment` (bool, default false): Make `--online --fix` name the tag as written in the comment of a pin (`# v4`), not the most specific version tag of the commit (`# v4.2.4`).
 - Details and examples: [checks](./checks.md#check-action-format)
 
 ## unredacted-secrets

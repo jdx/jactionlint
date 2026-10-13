@@ -2318,6 +2318,9 @@ they are written in: in the example, `actions/checkout` needs a commit SHA while
 Reusable workflow calls follow the same patterns. Patterns describe repositories, so a Docker image follows the `*` pattern.
 Invalid patterns and unknown policies are errors when the configuration is read.
 
+With `--online --fix` a tag is pinned to its commit and the tag is named in a comment: the most specific version tag of the commit
+(`# v4.2.2` for `@v4`), or as written with the option `short-pin-comment: true`. See [the usage document](usage.md#online-checks).
+
 <a id="check-local-action-checkout"></a>
 ### Local action used before checkout
 
