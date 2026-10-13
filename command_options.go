@@ -62,6 +62,9 @@ var cliOptions = []cliOption{
 	{"Rules and configuration", "init-config", "", "", false, "-init-config", "Write a default config file .github/jactionlint.yaml and exit"},
 	{"Rules and configuration", "migrate-config", "", "", false, "-migrate-config", "Rewrite the deprecated keys of the config file and exit"},
 	{"Rules and configuration", "migrate-ignores", "", "", false, "-migrate-ignores", "Rewrite \"# zizmor: ignore[...]\" comments into \"# jactionlint ignore=...\" comments and exit"},
+	{"Rules and configuration", "select", "", "RULES", false, "", "Report only these comma separated rule IDs, also those the profile does not enable. Repeatable"},
+	{"Rules and configuration", "no-ignores", "", "", false, "", "Apply no ignore comment, no \"ignores\" or \"paths\" ignore of the config file and no baseline (--ignore still applies)"},
+	{"Rules and configuration", "list-rules", "", "", false, "", "List every rule ID with its group, profile, level and summary, and exit. --format json prints it as JSON"},
 	{"Rules and configuration", "explain", "", "RULE", false, "", "Print the documentation of a rule ID (summary, group, profile, level, options, fixes and its section of the checks document) and exit"},
 
 	{"Fixing", "fix", "", "unsafe", true, "-fix", "Apply the safe automatic fixes in place. --fix=unsafe also applies the fixes that may change behavior"},
@@ -263,6 +266,9 @@ type commandFlags struct {
 	opts                     LinterOptions
 	ignorePats               []string
 	initConfig               bool
+	selectRules              []string
+	noIgnores                bool
+	listRules                bool
 	completion               string
 	explain                  string
 	fix                      fixFlag
@@ -328,6 +334,9 @@ func newCommandFlags() *commandFlags {
 	fs.BoolVar(&f.initConfig, "init-config", false, "")
 	fs.BoolVar(&f.migrateConfig, "migrate-config", false, "")
 	fs.BoolVar(&f.migrateIgnores, "migrate-ignores", false, "")
+	fs.StringArrayVar(&f.selectRules, "select", nil, "")
+	fs.BoolVar(&f.noIgnores, "no-ignores", false, "")
+	fs.BoolVar(&f.listRules, "list-rules", false, "")
 	fs.StringVar(&f.completion, "completion", "", "")
 	fs.StringVar(&f.explain, "explain", "", "")
 
