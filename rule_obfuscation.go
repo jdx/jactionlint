@@ -157,8 +157,26 @@ func (rule *RuleExpression) checkObfuscation(expr ExprNode, line, col int, workf
 		return
 	}
 	isIf := strings.HasSuffix(workflowKey, ".if")
+	sema := NewExprSemanticsChecker(false, nil, nil)
+	// inside is the part of the expression that was reported as a whole: what it holds is not reported again.
+	var inside ExprNode
 	VisitExprNode(expr, func(n, _ ExprNode, entering bool) {
+		if inside != nil {
+			if !entering && n == inside {
+				inside = nil
+			}
+			return
+		}
 		if !entering {
+			return
+		}
+		if !isIf && reducibleOperation(sema, n) {
+			// A part that has a constant result in the middle of an expression that does not, such as
+			// `toJSON('ubuntu-24.04')` or `'true' && 'false'`. A call of format() with literals has its own message below,
+			// and fromJSON() is not a constant function: it is how a workflow writes a list or an object in a matrix.
+			tok := n.Token()
+			rule.ReportIDf("obfuscation", rule.exprPos(tok.Line, tok.Column, line, col), "this part of the expression has a constant result, so it can be replaced by its value. write the value itself")
+			inside = n
 			return
 		}
 		if idx, ok := n.(*IndexAccessNode); ok {
@@ -185,6 +203,7 @@ func (rule *RuleExpression) checkObfuscation(expr ExprNode, line, col int, workf
 			}
 			if inner, ok := call.Args[0].(*FuncCallNode); ok && strings.EqualFold(inner.Callee, "toJSON") && len(inner.Args) == 1 && !isContextChain(inner.Args[0]) {
 				rule.ReportIDf("obfuscation", rule.exprPos(tok.Line, tok.Column, line, col), "fromJSON(toJSON(...)) returns its argument unchanged. remove both calls")
+				inside = n
 			}
 		case "format":
 			if isIf && ExprNode(call) == expr {
@@ -195,6 +214,20 @@ func (rule *RuleExpression) checkObfuscation(expr ExprNode, line, col int, workf
 			}
 		}
 	})
+}
+
+// reducibleOperation reports whether the node is an operation, not a plain literal, whose result is constant: a
+// comparison, a logical operator, a negation or a call of a constant function (`contains`, `startsWith`, `toJSON`, ...)
+// with constant arguments. Its operands are all constants, so the result can be written down. format() is left to its
+// own check.
+func reducibleOperation(sema *ExprSemanticsChecker, n ExprNode) bool {
+	switch e := n.(type) {
+	case *NotOpNode, *CompareOpNode, *LogicalOpNode:
+		return sema.IsConstant(n)
+	case *FuncCallNode:
+		return !strings.EqualFold(e.Callee, "format") && sema.IsConstant(n)
+	}
+	return false
 }
 
 // formatOfLiterals computes format() for arguments which are all literals.
