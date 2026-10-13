@@ -34,6 +34,8 @@ rules:
 | ID | Group | Default level | Profile |
 | --- | --- | --- | --- |
 | [action-syntax](#action-syntax) | correctness | error | correctness |
+| [actions-lock](#actions-lock) | security | error | default |
+| [actions-lock-drift](#actions-lock-drift) | security | error | only with `--online` |
 | [adhoc-packages](#adhoc-packages) | security | error | default |
 | [agentic-actions](#agentic-actions) | security | error | default |
 | [anonymous-definition](#anonymous-definition) | policy | warn | pedantic |
@@ -196,6 +198,26 @@ The action metadata does not follow the syntax of action.yml.
 - Default level: error
 - Profile: correctness
 - Details and examples: [checks](./checks.md#check-composite-action-syntax)
+
+## actions-lock
+
+The Actions lock file does not match the workflows: an action is missing from it, an entry is stale or malformed.
+
+- Group: security
+- Default level: error
+- Profile: default
+- Option `pedantic` (bool, no default): Also report the pedantic checks, which are noisier. Unset, they run under the pedantic profile.
+- Details and examples: [checks](./checks.md#check-actions-lock)
+
+## actions-lock-drift
+
+A pin of the Actions lock file no longer matches GitHub: the repository changed owner or was replaced, a version tag moved, or the commit is not in the history of the repository.
+
+- Group: security
+- Default level: error
+- Profile: only with `--online`
+- Needs network access: yes (only with `--online`)
+- Details and examples: [checks](./checks.md#check-actions-lock)
 
 ## adhoc-packages
 
