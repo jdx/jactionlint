@@ -356,7 +356,7 @@ See [zizmor ignore comments](usage.md#zizmor-ignore-comments).
 
 `--online` (or `online: true`) turns on six rules that ask GitHub about the actions a workflow uses: `impostor-commit`,
 `known-vulnerable-actions`, `ref-confusion`, `stale-action-refs`, `archived-uses` and `ref-version-mismatch`. With `--fix` it also pins
-a tag to the commit it points to and names the most specific version tag of the commit in a comment (`actions/checkout@<sha> # v4.2.2`). Without the flag jactionlint never
+a tag to the commit it points to and names the most specific version tag of the commit in a comment (`actions/checkout@<sha> # v4.2.2`). The rule `action-release-cooldown` (the version of an action is younger than N days) is online too, but runs only when `rules` has an entry for it. Without the flag jactionlint never
 uses the network, and the playground has no network at all.
 
 - A lookup that fails (404, 403, a server error, a timeout, DNS, a rate limit that resets too late) is skipped with one warning per
