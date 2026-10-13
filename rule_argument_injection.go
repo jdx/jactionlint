@@ -271,10 +271,32 @@ func startsWithVar(w *runscript.Word) bool {
 	return strings.HasPrefix(r, "$") && !strings.HasPrefix(r, "$(") && !strings.HasPrefix(r, "$((")
 }
 
-// isUnquotedExpansion reports whether the word expands a variable outside quotes, so that the shell splits the value
-// into several words.
+// isUnquotedExpansion reports whether some expansion of the word is outside of double quotes, so that the shell splits its
+// value into words. Quoting is judged for each fragment: `"$X"` and `"a$X"` are quoted, `$X""`, `"a"$X` and `${X}”` are not.
 func isUnquotedExpansion(w *runscript.Word) bool {
-	return len(w.Vars) > 0 && !w.Quoted
+	if len(w.Vars) == 0 && !w.Subst {
+		return false
+	}
+	raw := w.Raw
+	dq, sq := false, false
+	for i := 0; i < len(raw); i++ {
+		c := raw[i]
+		switch {
+		case sq:
+			sq = c != '\''
+		case c == '\\':
+			i++ // an escaped character is no expansion and no quote
+		case dq:
+			dq = c != '"'
+		case c == '\'':
+			sq = true
+		case c == '"':
+			dq = true
+		case c == '$' && i+1 < len(raw) && (raw[i+1] == '{' || raw[i+1] == '(' || raw[i+1] == '_' || (raw[i+1] >= 'a' && raw[i+1] <= 'z') || (raw[i+1] >= 'A' && raw[i+1] <= 'Z')):
+			return true
+		}
+	}
+	return false
 }
 
 // sedPrograms returns the words of the command that are a sed program: the values of -e and --expression, or the

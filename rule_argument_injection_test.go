@@ -36,6 +36,14 @@ func TestArgumentInjection(t *testing.T) {
 		{"gawk", `gawk "{ print \"$BODY\" }" file`, 1},
 		// --- find ---
 		{"find -exec with the value as the command", `find . -exec $BODY {} \;`, 1},
+		{"find with a word that ends with an empty string", "find . -name x $TITLE\"\"", 1},
+		{"find with a quoted fragment before the expansion", "find . \"a\"$TITLE", 1},
+		{"find with a braced expansion and empty quotes", "find . ${TITLE}''", 1},
+		{"find with the expansion inside the quotes", "find . \"x$TITLE\"", 0},
+		{"find with the whole word quoted", "find . \"$TITLE\"", 0},
+		{"find with the expansion in single quotes", "find . '$TITLE'", 0},
+		{"find with an escaped dollar sign", "find . \\$TITLE", 0},
+		{"find with an expansion after a quoted fragment that closes", "find . \"$TITLE\"$TITLE", 1},
 		{"find with an unquoted value", `find . -name $TITLE`, 1},
 		// --- options of curl, wget, git clone ---
 		{"git clone", `git clone "$BODY"`, 1},
