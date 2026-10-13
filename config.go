@@ -308,6 +308,14 @@ const (
 	PlatformGitea = "gitea"
 )
 
+// platformName is the configured platform: "github" unless the config says another one.
+func (c *Config) platformName() string {
+	if c == nil || c.Platform == nil {
+		return PlatformGitHub
+	}
+	return *c.Platform
+}
+
 // allowsURLUses reports whether a step can run an action by the URL of its repository: the platform is Forgejo or
 // Gitea. It can be called on a nil Config.
 func (c *Config) allowsURLUses() bool {

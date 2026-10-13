@@ -45,22 +45,31 @@ func newFindingContext(w *Workflow, scopes *scopeIndex) *findingContext {
 }
 
 // permissionMap turns the permissions of a workflow or a job into the map of scope to level. read-all and write-all
-// are the scope "*", and `permissions: {}` is "*" at none. It is nil for no permissions.
+// are the scope "*", and `permissions: {}` is "*" at none. What an expression decides (`permissions: ${{ ... }}`, or
+// the value of a scope) is "unknown", also for "*": it is not "none", which is what an empty mapping says. It is nil for
+// no permissions.
 func permissionMap(p *Permissions) map[string]string {
 	if p == nil {
 		return nil
 	}
 	m := map[string]string{}
 	if p.All != nil {
-		switch p.All.Value {
-		case "read-all":
+		switch {
+		case p.All.ContainsExpression():
+			m["*"] = "unknown"
+		case p.All.Value == "read-all":
 			m["*"] = "read"
-		case "write-all":
+		case p.All.Value == "write-all":
 			m["*"] = "write"
+		default:
+			m["*"] = "unknown" // a value which GitHub does not know
 		}
 	}
 	for name, s := range p.Scopes {
-		if s != nil && s.Value != nil && !s.Value.ContainsExpression() {
+		switch {
+		case s == nil || s.Value == nil || s.Value.ContainsExpression():
+			m[name] = "unknown"
+		default:
 			m[name] = s.Value.Value
 		}
 	}

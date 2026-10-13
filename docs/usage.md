@@ -416,7 +416,7 @@ repositories can be filtered by what can trigger the workflow and what its token
 | Field | Description |
 |-|-|
 | `events` | The sorted names of the events of `on:`, such as `["pull_request_target", "push"]`. Omitted for a file which is not a workflow (an action, `dependabot.yml`) |
-| `permissions` | The permissions of the token of the job that the finding is in: its `permissions:`, or else the ones of the workflow. A mapping from the scope to `read`, `write` or `none`. `read-all` and `write-all` are `{"*": "read"}` and `{"*": "write"}`, and an empty `permissions: {}` is `{"*": "none"}`. Omitted when neither the job nor the workflow sets it: the default token then depends on a setting of the repository, which jactionlint does not know. A finding outside of the jobs has the permissions of the workflow |
+| `permissions` | The permissions of the token of the job that the finding is in: its `permissions:`, or else the ones of the workflow. A mapping from the scope to `read`, `write` or `none`. `read-all` and `write-all` are `{"*": "read"}` and `{"*": "write"}`, and an empty `permissions: {}` is `{"*": "none"}`. What an expression decides (`permissions: ${{ ... }}`, or the value of a scope) is `"unknown"`, never `"none"`: `{"*": "unknown"}` or `{"contents": "unknown"}`. Omitted when neither the job nor the workflow sets it: the default token then depends on a setting of the repository, which jactionlint does not know. A finding outside of the jobs has the permissions of the workflow |
 
 ```sh
 jactionlint --format json --finding-context | jq '.[] | select(.events | index("pull_request_target")) | select(.permissions["contents"] == "write")'

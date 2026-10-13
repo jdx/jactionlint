@@ -148,3 +148,46 @@ func TestPlatformConfig(t *testing.T) {
 		t.Errorf("extends: %v", err)
 	}
 }
+
+func TestURLUsesInForbiddenAndRequiredActions(t *testing.T) {
+	url := "https://code.forgejo.org/actions/checkout@" + sha40
+	// forbidden-uses: the allow list and the deny list apply to owner/repo whatever the host is
+	allow := "platform: forgejo\nrules:\n  forbidden-uses:\n    allow: ['actions/*']\n"
+	if fs := platformFindings(t, allow, url); hasFinding(fs, "forbidden-uses") {
+		t.Errorf("an allowed action in the URL form is reported: %v", fs)
+	}
+	other := "https://code.forgejo.org/someone/tool@" + sha40
+	if fs := platformFindings(t, allow, other); !hasFinding(fs, `forbidden-uses: action "`+other+`" is not allowed`) {
+		t.Errorf("an action which is not allowed must be reported in the URL form: %v", fs)
+	}
+	deny := "platform: forgejo\nrules:\n  forbidden-uses:\n    deny: ['actions/checkout']\n"
+	if fs := platformFindings(t, deny, url); !hasFinding(fs, `forbidden-uses: action "`+url+`" is forbidden by pattern`) {
+		t.Errorf("a denied action in the URL form must be reported: %v", fs)
+	}
+	// on GitHub the value is invalid, and nothing else looks at it
+	if fs := platformFindings(t, "rules:\n  forbidden-uses:\n    deny: ['actions/checkout']\n", url); hasFinding(fs, "forbidden-uses") {
+		t.Errorf("the URL form is no action on GitHub: %v", fs)
+	}
+
+	// required-actions: a checkout in the URL form is a checkout
+	req := "platform: forgejo\nrequired-actions:\n  - action: actions/checkout\n"
+	if fs := platformFindings(t, req, url); hasFinding(fs, "required-actions") {
+		t.Errorf("the required action is used in the URL form: %v", fs)
+	}
+	if fs := platformFindings(t, req, other); !hasFinding(fs, `required action "actions/checkout" is not used`) {
+		t.Errorf("another action does not satisfy it: %v", fs)
+	}
+	versioned := "platform: gitea\nrequired-actions:\n  - action: actions/checkout\n    version: v4\n"
+	if fs := platformFindings(t, versioned, url); !hasFinding(fs, `action "actions/checkout" must use version "v4" but found`) {
+		t.Errorf("the version of the URL form is compared: %v", fs)
+	}
+}
+
+func TestURLUsesMessageNamesTheConfiguredPlatform(t *testing.T) {
+	for _, platform := range []string{"forgejo", "gitea"} {
+		fs := platformFindings(t, "platform: "+platform+"\n", "https://code.example.org/actions/checkout")
+		if !hasFinding(fs, `with the platform "`+platform+`"`) {
+			t.Errorf("platform %s: %v", platform, fs)
+		}
+	}
+}

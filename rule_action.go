@@ -405,6 +405,20 @@ func isURLUses(spec string) bool {
 	return strings.HasPrefix(spec, "https://") || strings.HasPrefix(spec, "http://")
 }
 
+// repoOfURLUses returns the {owner}/{repo}[/{path}]@{ref} of a `uses:` written as the URL of a repository, which
+// the rules that look at the repository of an action read instead (forbidden-uses, required-actions). A value which
+// is not a URL is returned as it is.
+func repoOfURLUses(spec string) string {
+	if !isURLUses(spec) {
+		return spec
+	}
+	rest := spec[strings.Index(spec, "://")+3:]
+	if _, repo, ok := strings.Cut(rest, "/"); ok {
+		return repo
+	}
+	return spec
+}
+
 // checkURLAction checks `uses: https://{host}/{owner}/{repo}[/{path}]@{ref}`, which Forgejo and Gitea accept. The
 // value is valid when it has a host, an owner, a repository and a ref. It follows the pinning policy of
 // "unpinned-uses" for {owner}/{repo}. It is not looked up in the data of the actions of GitHub, since the
@@ -425,7 +439,7 @@ func (rule *RuleAction) checkURLAction(spec string, exec *ExecAction) {
 		}
 	}
 	if problem != "" {
-		rule.ReportIDf("invalid-uses", exec.Uses.Pos, "specifying action %q in invalid format because %s. available formats are \"{owner}/{repo}@{ref}\", \"{owner}/{repo}/{path}@{ref}\" or, with the platform %q, \"https://{host}/{owner}/{repo}[/{path}]@{ref}\"", spec, problem, PlatformForgejo)
+		rule.ReportIDf("invalid-uses", exec.Uses.Pos, "specifying action %q in invalid format because %s. available formats are \"{owner}/{repo}@{ref}\", \"{owner}/{repo}/{path}@{ref}\" or, with the platform %q, \"https://{host}/{owner}/{repo}[/{path}]@{ref}\"", spec, problem, rule.config.platformName())
 		return
 	}
 	ref.Raw = spec // the message names the whole value

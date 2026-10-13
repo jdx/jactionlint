@@ -202,3 +202,32 @@ func TestFindingContextOfActionsAndDependabot(t *testing.T) {
 		t.Errorf("a Dependabot file and an action have no events and no token of their own:\n%s", out.String())
 	}
 }
+
+// TestFindingContextUnknownPermissions: what an expression decides is "unknown", not the "none" of an empty mapping.
+func TestFindingContextUnknownPermissions(t *testing.T) {
+	wf := func(perm string) string {
+		return "on: push\nconcurrency:\n  group: ci\n  cancel-in-progress: true\njobs:\n  a:\n    runs-on: ubuntu-latest\n" + perm + "    steps:\n      - run: echo hi\n"
+	}
+	for _, tc := range []struct {
+		name, perm string
+		want       map[string]any
+	}{
+		{"an empty mapping", "    permissions: {}\n", map[string]any{"*": "none"}},
+		{"an expression", "    permissions: ${{ fromJSON(vars.PERMS) }}\n", map[string]any{"*": "unknown"}},
+		{"expressions for the scopes", "    permissions:\n      contents: ${{ vars.C }}\n      issues: ${{ vars.I }}\n", map[string]any{"contents": "unknown", "issues": "unknown"}},
+		{"some scopes known", "    permissions:\n      contents: read\n      issues: ${{ vars.I }}\n", map[string]any{"contents": "read", "issues": "unknown"}},
+		{"known", "    permissions: read-all\n", map[string]any{"*": "read"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			byLine, _ := findingContextRun(t, wf(tc.perm), "--format", "json", "--finding-context")
+			if len(byLine) != 1 {
+				t.Fatalf("%d findings of missing-timeout", len(byLine))
+			}
+			for _, it := range byLine {
+				if !reflect.DeepEqual(it["permissions"], tc.want) {
+					t.Errorf("permissions = %v, want %v", it["permissions"], tc.want)
+				}
+			}
+		})
+	}
+}
