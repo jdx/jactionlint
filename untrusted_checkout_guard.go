@@ -134,8 +134,8 @@ func refIsPullNumber(chain []string) bool {
 	switch {
 	case slices.Equal(chain, []string{"github", "event", "number"}), slices.Equal(chain, []string{"github", "event", "pull_request", "number"}):
 		return true
-	case len(chain) >= 6 && slices.Equal(chain[:4], []string{"github", "event", "workflow_run", "pull_requests"}) && chain[len(chain)-1] == "number":
-		return true // github.event.workflow_run.pull_requests[0].number
+	case len(chain) == 6 && slices.Equal(chain[:4], []string{"github", "event", "workflow_run", "pull_requests"}) && chain[4] == "*" && chain[5] == "number":
+		return true // github.event.workflow_run.pull_requests[0].number, and nothing after it
 	}
 	return false
 }
