@@ -377,7 +377,7 @@ func (c *httpGitHubClient) rateLimited() *GitHubRateLimitError {
 func (c *httpGitHubClient) setRateLimited(reset time.Time, authenticated bool) *GitHubRateLimitError {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.limit = &GitHubRateLimitError{Reset: reset, Authenticated: authenticated, now: c.now}
+	c.limit = &GitHubRateLimitError{Reset: reset, Authenticated: authenticated, TokenHint: c.noTokenHint, now: c.now}
 	return c.limit
 }
 

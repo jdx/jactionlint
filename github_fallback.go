@@ -3,6 +3,7 @@ package jactionlint
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 )
@@ -20,22 +21,37 @@ type fallbackGitHubClient struct {
 	primary, secondary GitHubClient
 	routes             memo[repoKey, fallbackRoute]
 
-	mu   sync.Mutex
-	down error // why github.com cannot be asked any more in this run, see fromSecondary
+	mu        sync.Mutex
+	down      error // why github.com cannot be asked any more in this run, see fromSecondary
+	transient int   // failures in a row which suggest an outage (timeouts, server errors), see fromSecondary
 }
 
 // hostScopedError is the failure of one of the two hosts. The online session counts and warns about it like any
 // other, but does not stop the lookups because of it: the rate limit of github.com (60 an hour without a token) says
 // nothing about the Server, which can go on answering for the repositories it has.
-type hostScopedError struct{ err error }
+type hostScopedError struct {
+	err  error
+	host string // for messages
+}
+
+// gitHubComHost is the host of the secondary client.
+const gitHubComHost = "api.github.com"
 
 func (e *hostScopedError) Error() string { return e.err.Error() }
 func (e *hostScopedError) Unwrap() error { return e.err }
 
 // fromSecondary makes the error of a call to github.com one of the host. A failure which asking again cannot fix (the rate
-// limit, a rejected token, no network) is remembered, so that the next repositories do not ask in vain.
+// limit, a rejected token, no network) is remembered, so that the next repositories do not ask in vain, and so are
+// timeouts and server errors when there are several in a row, like the session does for a host: a github.com which a firewall
+// blackholes would otherwise make every action which the Server does not have wait for the whole timeout.
 func (c *fallbackGitHubClient) fromSecondary(err error) error {
-	if err == nil || errors.Is(err, ErrGitHubNotFound) || errors.Is(err, ErrGitHubBranchScanUnavailable) {
+	if err == nil || errors.Is(err, ErrGitHubNotFound) {
+		c.mu.Lock()
+		c.transient = 0
+		c.mu.Unlock()
+		return err
+	}
+	if errors.Is(err, ErrGitHubBranchScanUnavailable) {
 		return err
 	}
 	var scoped *hostScopedError
@@ -49,8 +65,15 @@ func (c *fallbackGitHubClient) fromSecondary(err error) error {
 			c.down = err
 		}
 		c.mu.Unlock()
+	case failTimeout, failServer, failOther:
+		c.mu.Lock()
+		c.transient++
+		if c.transient >= maxConsecutiveGitHubFailures && c.down == nil {
+			c.down = fmt.Errorf("skipped after %d failed lookups in a row: %w", c.transient, err)
+		}
+		c.mu.Unlock()
 	}
-	return &hostScopedError{err}
+	return &hostScopedError{err, gitHubComHost}
 }
 
 // secondaryDown returns the failure which stops the lookups on github.com, or nil.
@@ -60,7 +83,7 @@ func (c *fallbackGitHubClient) secondaryDown() error {
 	if c.down == nil {
 		return nil
 	}
-	return &hostScopedError{c.down}
+	return &hostScopedError{c.down, gitHubComHost}
 }
 
 // fallbackRoute is which host has a repository.

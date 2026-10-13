@@ -7,10 +7,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 )
 
@@ -364,5 +366,114 @@ func TestFallbackClientEnvironmentsAreTheServers(t *testing.T) {
 	}
 	if _, ok := any(c).(GitHubOwnerClient); ok {
 		t.Error("the owner lookup of github.com says nothing about the owners of a Server")
+	}
+}
+
+// stubClient answers every question of a repository with the error, and counts the questions.
+type stubClient struct {
+	GitHubClient
+	err error
+	n   atomic.Int32
+}
+
+func (c *stubClient) Repository(context.Context, string, string) (*GitHubRepo, error) {
+	c.n.Add(1)
+	return nil, c.err
+}
+
+// A github.com which does not answer (a firewall which drops the packets, a proxy which hangs) costs the whole timeout of each
+// request: after a few timeouts in a row it is not asked again, like the session does for the Server, instead of making every
+// action which the Server does not have wait.
+func TestFallbackClientStopsAskingAGitHubComWhichTimesOut(t *testing.T) {
+	notFound := fmt.Errorf("x: %w", ErrGitHubNotFound)
+	primary := &stubClient{err: notFound}
+	secondary := &stubClient{err: &net.OpError{Op: "dial", Err: timeoutErr{}}}
+	c := newFallbackGitHubClient(primary, secondary)
+	for i := 0; i < 10; i++ {
+		_, err := c.Repository(context.Background(), "o", fmt.Sprintf("r%d", i))
+		var scoped *hostScopedError
+		if !errors.As(err, &scoped) {
+			t.Fatalf("repository %d: the failure of github.com must be the one of a host: %v", i, err)
+		}
+	}
+	if n := secondary.n.Load(); n != maxConsecutiveGitHubFailures {
+		t.Errorf("github.com was asked %d times, want %d", n, maxConsecutiveGitHubFailures)
+	}
+	if n := primary.n.Load(); n != 10 {
+		t.Errorf("the Server was asked %d times, want 10", n)
+	}
+}
+
+// A failure in between which is not one of an outage starts the count again.
+func TestFallbackClientCountsFailuresInARow(t *testing.T) {
+	c := newFallbackGitHubClient(&stubClient{err: fmt.Errorf("x: %w", ErrGitHubNotFound)}, &stubClient{})
+	timeout := &net.OpError{Op: "dial", Err: timeoutErr{}}
+	for i := 0; i < maxConsecutiveGitHubFailures-1; i++ {
+		c.fromSecondary(timeout)
+	}
+	c.fromSecondary(nil)
+	for i := 0; i < maxConsecutiveGitHubFailures-1; i++ {
+		c.fromSecondary(timeout)
+	}
+	if c.secondaryDown() != nil {
+		t.Error("github.com was given up too early")
+	}
+	c.fromSecondary(timeout)
+	if c.secondaryDown() == nil {
+		t.Error("github.com was not given up")
+	}
+}
+
+// The advice of a rate limit of github.com names the token of github.com, not the one of the Server, and it says that only github.com is skipped.
+func TestGitHubComFallbackRateLimitAdviceIsForGitHubCom(t *testing.T) {
+	h := newTwoHosts(t, false)
+	t.Setenv("GITHUB_COM_TOKEN", "")
+	t.Setenv("GH_TOKEN", "")
+	limit := func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-RateLimit-Remaining", "0")
+		w.Header().Set("X-RateLimit-Reset", fmt.Sprint(4102444800)) // 2100
+		w.WriteHeader(http.StatusForbidden)
+		fmt.Fprint(w, `{"message":"API rate limit exceeded"}`)
+	}
+	for _, p := range []string{"/repos/actions/checkout", "/repos/example/archived", "/repos/nowhere/none", "/advisories"} {
+		h.dotcom.handle(p, limit)
+	}
+	_, stderr := func() (string, string) {
+		_, wf := onlineProject(t, workflowWith("uses: actions/checkout@v4", "uses: corp/internal@v1"), fallbackConfig)
+		_, o, e := runOnlineCommand(t, "--online", "--online-github-com-fallback", wf)
+		return o, e
+	}()
+	var warning string
+	for _, l := range strings.Split(stderr, "\n") {
+		if strings.Contains(l, "rate limit") {
+			warning = l
+		}
+	}
+	if warning == "" {
+		t.Fatalf("no warning about the rate limit:\n%s", stderr)
+	}
+	if strings.Contains(warning, "GITHUB_TOKEN") || strings.Contains(warning, "GH_TOKEN") {
+		t.Errorf("the advice names the token of the Server: %s", warning)
+	}
+	if !strings.Contains(warning, githubComTokenEnv) || !strings.Contains(warning, "api.github.com") {
+		t.Errorf("the advice does not name the token and the host of the fallback: %s", warning)
+	}
+	if strings.Contains(warning, "lookups which need GitHub are skipped") {
+		t.Errorf("the lookups on the Server are not skipped: %s", warning)
+	}
+}
+
+// Without a fallback the advice is the one it always was.
+func TestRateLimitAdviceWithoutAFallback(t *testing.T) {
+	e := &GitHubRateLimitError{}
+	if s := e.Error(); !strings.Contains(s, "GITHUB_TOKEN") {
+		t.Errorf("%s", s)
+	}
+	e = &GitHubRateLimitError{TokenHint: "X or Y"}
+	if s := e.Error(); strings.Contains(s, "GITHUB_TOKEN") || !strings.Contains(s, "X or Y") {
+		t.Errorf("%s", s)
+	}
+	if s := (&GitHubRateLimitError{Authenticated: true, TokenHint: "X"}).Error(); strings.Contains(s, "X") {
+		t.Errorf("a request with a token needs no advice: %s", s)
 	}
 }

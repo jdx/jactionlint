@@ -942,7 +942,7 @@ jactionlint --online
     `--online-github-com-token-file`, or `gh auth token --hostname github.com`, which is run without `GH_TOKEN` and
     `GITHUB_TOKEN` because gh would print them). **The token of the Server is never sent to github.com** (`GITHUB_TOKEN` and `GH_TOKEN` are
     not read for it) and the token for github.com is never sent to the Server. A rate limit or another failure of github.com is
-    counted and warned about like any other, but does not stop the lookups on the Server. Without a
+    counted and warned about like any other, but does not stop the lookups on the Server (after three timeouts or server errors in a row, or a rate limit or a rejected token, github.com is not asked again in the run). The advice of a rate limit of github.com names `GITHUB_COM_TOKEN`. Without a
     token the requests to github.com are unauthenticated (60 an hour; a notice says so). Advisories (`known-vulnerable-actions`)
     always come from github.com, which is where the database of advisories for actions is. One more request is needed for every
     repository which the Server does not have (a 404, cached like any answer, so the next runs do not repeat it); a
