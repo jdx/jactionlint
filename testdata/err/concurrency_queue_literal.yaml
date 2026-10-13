@@ -1,0 +1,41 @@
+on: push
+
+# A literal in an expression is as known as the literal itself
+concurrency:
+  group: test
+  queue: ${{ 'invalid' }}
+
+jobs:
+  conflict:
+    runs-on: ubuntu-latest
+    concurrency:
+      group: job-conflict
+      cancel-in-progress: ${{ true }}
+      queue: ${{ 'max' }}
+    steps:
+      - run: echo
+  conflict-plain:
+    runs-on: ubuntu-latest
+    concurrency:
+      group: job-conflict-plain
+      cancel-in-progress: true
+      queue: ${{ 'max' }}
+    steps:
+      - run: echo
+  # not known: an expression which is not a literal
+  unknown:
+    runs-on: ubuntu-latest
+    concurrency:
+      group: job-unknown
+      cancel-in-progress: ${{ github.event_name == 'push' }}
+      queue: ${{ vars.QUEUE }}
+    steps:
+      - run: echo
+  single:
+    runs-on: ubuntu-latest
+    concurrency:
+      group: job-single
+      cancel-in-progress: ${{ true }}
+      queue: ${{ 'single' }}
+    steps:
+      - run: echo

@@ -37,7 +37,7 @@ func (rule *RuleTemplateInjection) VisitWorkflowPre(n *Workflow) error {
 // VisitJobPre is callback when visiting Job node before visiting its children.
 func (rule *RuleTemplateInjection) VisitJobPre(n *Job) error {
 	rule.job, rule.matrix = n, nil
-	rule.reportSinks(tiContext{wf: rule.wf, job: n}, jobSinks(n))
+	rule.reportSinks(tiContext{wf: rule.wf, job: n, outsiderText: tiEnabled(rule.Config(), tiInput)}, jobSinks(n))
 	return nil
 }
 
@@ -79,7 +79,7 @@ func (rule *RuleTemplateInjection) VisitStep(n *Step) error {
 	if rule.matrix == nil {
 		rule.matrix = map[string]bool{} // for the matrix of this job
 	}
-	ctx := tiContext{wf: rule.wf, job: rule.job, step: n, matrix: rule.matrix}
+	ctx := tiContext{wf: rule.wf, job: rule.job, step: n, matrix: rule.matrix, outsiderText: tiEnabled(cfg, tiInput)}
 	rule.reportSinks(ctx, stepSinks(n))
 	for _, code := range codeStringsOf(n) {
 		spans := rule.src.scanExprs(code.Str)
