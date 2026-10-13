@@ -1,0 +1,21 @@
+on: push
+jobs:
+  all-steps:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        timeout-minutes: 5
+      - run: make test
+        timeout-minutes: 20
+  expression-timeout:
+    runs-on: ubuntu-latest
+    steps:
+      - run: make build
+        timeout-minutes: ${{ fromJSON('10') }}
+  job-timeout:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - run: make build
+  reusable:
+    uses: octo/repo/.github/workflows/w.yaml@v1
