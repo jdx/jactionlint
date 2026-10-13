@@ -1,0 +1,4438 @@
+{
+  "$id": "https://raw.githubusercontent.com/jdx/jactionlint/main/schema/jactionlint-config.json",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "definitions": {
+    "level": {
+      "description": "The value of a rule: a level (error, warn, info or off), true for the default level of the rule, or false for off.",
+      "oneOf": [
+        {
+          "$ref": "#/definitions/severity"
+        },
+        {
+          "type": "boolean"
+        }
+      ]
+    },
+    "severity": {
+      "description": "The level of a rule: error (fails the run), warn, info or off.",
+      "enum": [
+        "off",
+        "info",
+        "warn",
+        "warning",
+        "error"
+      ],
+      "type": "string"
+    }
+  },
+  "description": "The configuration file of jactionlint, .github/jactionlint.yaml. Generated from the rule registry by `jactionlint --print-config-schema`. See https://jactionlint.jdx.dev/config",
+  "properties": {
+    "assume-default-permissions": {
+      "description": "What to assume for a caller workflow which declares no permissions: restricted is GitHub's restricted default token, permissive is write on every scope except id-token. Unset assumes nothing.",
+      "enum": [
+        "restricted",
+        "permissive",
+        null
+      ],
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "baseline": {
+      "description": "The baseline of accepted findings. auto (or true) applies .github/jactionlint-baseline.json when the file exists, false or no value applies none, and any other value is the path of the baseline file relative to the repository root, which must exist. The --baseline flag overrides it.",
+      "type": [
+        "string",
+        "boolean",
+        "null"
+      ]
+    },
+    "check-falsy-ternary": {
+      "deprecated": true,
+      "description": "Deprecated: turn on the unsound-ternary rule.",
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "check-workflow-run-names": {
+      "deprecated": true,
+      "description": "Deprecated: turn on the workflow-run-names rule.",
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "config-secrets": {
+      "description": "Names of the secrets of your repository or organization. When it is a list, the secrets context is checked against it (an empty list allows none; GITHUB_TOKEN is always allowed). null disables the check.",
+      "items": {
+        "type": "string"
+      },
+      "type": [
+        "array",
+        "null"
+      ]
+    },
+    "config-variables": {
+      "description": "Names of the configuration variables of your repository or organization. When it is a list, the vars context is checked against it (an empty list allows none). null disables the check.",
+      "items": {
+        "type": "string"
+      },
+      "type": [
+        "array",
+        "null"
+      ]
+    },
+    "extends": {
+      "description": "Config files to inherit from. Relative paths are resolved from the directory of this file. Later files win over earlier ones and this file wins over all of them.",
+      "items": {
+        "type": "string"
+      },
+      "type": [
+        "array",
+        "null"
+      ]
+    },
+    "fix": {
+      "additionalProperties": false,
+      "description": "Configuration of --fix.",
+      "properties": {
+        "rules": {
+          "description": "Apply only the fixes of these rules, like --fix-rules (which overrides it). All fixes are applied when the list is empty.",
+          "items": {
+            "enum": [
+              "action-syntax",
+              "adhoc-packages",
+              "agentic-actions",
+              "anonymous-definition",
+              "archived-uses",
+              "argument-injection",
+              "artipacked",
+              "background-step-not-waited",
+              "bot-conditions",
+              "cache-poisoning",
+              "checkout-static-credentials",
+              "command-injection",
+              "concurrency-cancels-prs",
+              "concurrency-cancels-release",
+              "concurrency-deadlock",
+              "concurrency-limits",
+              "conflicting-action-inputs",
+              "conflicting-runner-labels",
+              "constant-condition",
+              "context-availability",
+              "continue-on-error",
+              "cron-too-frequent",
+              "cyclic-job-needs",
+              "dangerous-triggers",
+              "dependabot-cooldown",
+              "dependabot-execution",
+              "dependabot-missing-actions-update",
+              "dependabot-syntax",
+              "deprecated-action-input",
+              "deprecated-commands",
+              "deprecated-runner-label",
+              "duplicate-job-id",
+              "duplicate-job-needs",
+              "duplicate-key",
+              "duplicate-step-id",
+              "duplicate-triggers",
+              "environment-file-redirect",
+              "event-name-never-received",
+              "excessive-permissions",
+              "expired-ignore",
+              "expression-syntax",
+              "expression-type",
+              "fail-fast-action-inputs",
+              "forbidden-uses",
+              "gate-job-skipped-on-failure",
+              "gh-without-token",
+              "github-app",
+              "github-env",
+              "hardcoded-container-credentials",
+              "if-always-true",
+              "impostor-commit",
+              "insecure-commands",
+              "insecure-ssh-keyscan",
+              "insecure-url-scheme",
+              "insufficient-permissions",
+              "invalid-activity-type",
+              "invalid-cron",
+              "invalid-env-var-name",
+              "invalid-event-config",
+              "invalid-event-filter",
+              "invalid-function-call",
+              "invalid-glob",
+              "invalid-id",
+              "invalid-ignore-comment",
+              "invalid-label-pattern",
+              "invalid-local-action",
+              "invalid-local-workflow",
+              "invalid-parallel-step",
+              "invalid-permissions",
+              "invalid-shell-name",
+              "invalid-timezone",
+              "invalid-uses",
+              "invalid-workflow-call",
+              "invalid-workflow-call-input",
+              "invalid-workflow-dispatch-input",
+              "invisible-characters",
+              "known-vulnerable-actions",
+              "local-action-checkout",
+              "malformed-expression-delimiters",
+              "matrix-duplicate-value",
+              "matrix-invalid-exclude",
+              "max-run-lines",
+              "merge-key",
+              "misfeature",
+              "missing-action-input",
+              "missing-permissions",
+              "missing-timeout",
+              "missing-workflow-input",
+              "missing-workflow-secret",
+              "multiline-plain-run",
+              "mutable-runner-label",
+              "obfuscation",
+              "outdated-action-runner",
+              "output-clobbering",
+              "overprovisioned-secrets",
+              "pipeline-without-pipefail",
+              "pyflakes",
+              "recursive-alias",
+              "ref-confusion",
+              "ref-version-mismatch",
+              "repojacking",
+              "require-expression-wrapping",
+              "require-shell",
+              "required-actions",
+              "secrets-inherit",
+              "secrets-outside-env",
+              "self-hosted-runner",
+              "self-repository",
+              "shellcheck",
+              "stale-action-refs",
+              "superfluous-actions",
+              "template-injection",
+              "timeout-too-long",
+              "typosquat-uses",
+              "ubuntu-slim-limits",
+              "undefined-function",
+              "undefined-job-needs",
+              "undefined-property",
+              "undocumented-permissions",
+              "unknown-action-input",
+              "unknown-event",
+              "unknown-runner-label",
+              "unknown-workflow-input",
+              "unknown-workflow-secret",
+              "unlocked-install",
+              "unpinned-images",
+              "unpinned-tools",
+              "unpinned-uses",
+              "unredacted-secrets",
+              "unsound-contains",
+              "unsound-prefix-match",
+              "unsound-ternary",
+              "untrusted-artifact",
+              "untrusted-checkout",
+              "unused-anchor",
+              "unused-baseline-entry",
+              "unused-ignore",
+              "unused-job-output",
+              "unused-needs",
+              "unused-workflow-input",
+              "unverified-download",
+              "use-trusted-publishing",
+              "workflow-call-permissions",
+              "workflow-input-type",
+              "workflow-run-names",
+              "workflow-secret-scope",
+              "workflow-syntax",
+              "yaml-syntax"
+            ],
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "generated-files": {
+      "default": "skip-policy",
+      "description": "What to do with a file whose first comment says that a tool wrote it (DO NOT EDIT, automatically generated by ...): skip-policy (the default) does not report the rules of the policy and style groups there, report treats it like any other file, skip reports nothing.",
+      "enum": [
+        "report",
+        "skip-policy",
+        "skip",
+        null
+      ],
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "ignores": {
+      "description": "Findings to accept, matched by the rule and by where they are (file, job, step, uses) instead of by line, so they survive tools which rewrite the workflow. At least one of file, uses, job and step is required.",
+      "items": {
+        "additionalProperties": false,
+        "anyOf": [
+          {
+            "required": [
+              "file"
+            ]
+          },
+          {
+            "required": [
+              "uses"
+            ]
+          },
+          {
+            "required": [
+              "job"
+            ]
+          },
+          {
+            "required": [
+              "step"
+            ]
+          }
+        ],
+        "description": "One accepted finding.",
+        "properties": {
+          "expires": {
+            "description": "The last day (YYYY-MM-DD, UTC) the entry accepts findings. After it the findings come back and the expired-ignore rule reports the entry. Quote it (\"2027-06-30\") if your editor reads an unquoted date as a timestamp, which has no string type.",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+            "type": "string"
+          },
+          "file": {
+            "description": "A glob matched against the path of the file, relative to the repository root (** crosses directories).",
+            "type": "string"
+          },
+          "job": {
+            "description": "The ID of the job.",
+            "type": "string"
+          },
+          "reason": {
+            "description": "Why the finding is accepted. It is for the readers of the file.",
+            "type": "string"
+          },
+          "rule": {
+            "description": "The rule ID, or a list of rule IDs, whose findings are accepted.",
+            "oneOf": [
+              {
+                "enum": [
+                  "action-syntax",
+                  "adhoc-packages",
+                  "agentic-actions",
+                  "anonymous-definition",
+                  "archived-uses",
+                  "argument-injection",
+                  "artipacked",
+                  "background-step-not-waited",
+                  "bot-conditions",
+                  "cache-poisoning",
+                  "checkout-static-credentials",
+                  "command-injection",
+                  "concurrency-cancels-prs",
+                  "concurrency-cancels-release",
+                  "concurrency-deadlock",
+                  "concurrency-limits",
+                  "conflicting-action-inputs",
+                  "conflicting-runner-labels",
+                  "constant-condition",
+                  "context-availability",
+                  "continue-on-error",
+                  "cron-too-frequent",
+                  "cyclic-job-needs",
+                  "dangerous-triggers",
+                  "dependabot-cooldown",
+                  "dependabot-execution",
+                  "dependabot-missing-actions-update",
+                  "dependabot-syntax",
+                  "deprecated-action-input",
+                  "deprecated-commands",
+                  "deprecated-runner-label",
+                  "duplicate-job-id",
+                  "duplicate-job-needs",
+                  "duplicate-key",
+                  "duplicate-step-id",
+                  "duplicate-triggers",
+                  "environment-file-redirect",
+                  "event-name-never-received",
+                  "excessive-permissions",
+                  "expired-ignore",
+                  "expression-syntax",
+                  "expression-type",
+                  "fail-fast-action-inputs",
+                  "forbidden-uses",
+                  "gate-job-skipped-on-failure",
+                  "gh-without-token",
+                  "github-app",
+                  "github-env",
+                  "hardcoded-container-credentials",
+                  "if-always-true",
+                  "impostor-commit",
+                  "insecure-commands",
+                  "insecure-ssh-keyscan",
+                  "insecure-url-scheme",
+                  "insufficient-permissions",
+                  "invalid-activity-type",
+                  "invalid-cron",
+                  "invalid-env-var-name",
+                  "invalid-event-config",
+                  "invalid-event-filter",
+                  "invalid-function-call",
+                  "invalid-glob",
+                  "invalid-id",
+                  "invalid-ignore-comment",
+                  "invalid-label-pattern",
+                  "invalid-local-action",
+                  "invalid-local-workflow",
+                  "invalid-parallel-step",
+                  "invalid-permissions",
+                  "invalid-shell-name",
+                  "invalid-timezone",
+                  "invalid-uses",
+                  "invalid-workflow-call",
+                  "invalid-workflow-call-input",
+                  "invalid-workflow-dispatch-input",
+                  "invisible-characters",
+                  "known-vulnerable-actions",
+                  "local-action-checkout",
+                  "malformed-expression-delimiters",
+                  "matrix-duplicate-value",
+                  "matrix-invalid-exclude",
+                  "max-run-lines",
+                  "merge-key",
+                  "misfeature",
+                  "missing-action-input",
+                  "missing-permissions",
+                  "missing-timeout",
+                  "missing-workflow-input",
+                  "missing-workflow-secret",
+                  "multiline-plain-run",
+                  "mutable-runner-label",
+                  "obfuscation",
+                  "outdated-action-runner",
+                  "output-clobbering",
+                  "overprovisioned-secrets",
+                  "pipeline-without-pipefail",
+                  "pyflakes",
+                  "recursive-alias",
+                  "ref-confusion",
+                  "ref-version-mismatch",
+                  "repojacking",
+                  "require-expression-wrapping",
+                  "require-shell",
+                  "required-actions",
+                  "secrets-inherit",
+                  "secrets-outside-env",
+                  "self-hosted-runner",
+                  "self-repository",
+                  "shellcheck",
+                  "stale-action-refs",
+                  "superfluous-actions",
+                  "template-injection",
+                  "timeout-too-long",
+                  "typosquat-uses",
+                  "ubuntu-slim-limits",
+                  "undefined-function",
+                  "undefined-job-needs",
+                  "undefined-property",
+                  "undocumented-permissions",
+                  "unknown-action-input",
+                  "unknown-event",
+                  "unknown-runner-label",
+                  "unknown-workflow-input",
+                  "unknown-workflow-secret",
+                  "unlocked-install",
+                  "unpinned-images",
+                  "unpinned-tools",
+                  "unpinned-uses",
+                  "unredacted-secrets",
+                  "unsound-contains",
+                  "unsound-prefix-match",
+                  "unsound-ternary",
+                  "untrusted-artifact",
+                  "untrusted-checkout",
+                  "unused-anchor",
+                  "unused-baseline-entry",
+                  "unused-ignore",
+                  "unused-job-output",
+                  "unused-needs",
+                  "unused-workflow-input",
+                  "unverified-download",
+                  "use-trusted-publishing",
+                  "workflow-call-permissions",
+                  "workflow-input-type",
+                  "workflow-run-names",
+                  "workflow-secret-scope",
+                  "workflow-syntax",
+                  "yaml-syntax"
+                ],
+                "type": "string"
+              },
+              {
+                "items": {
+                  "enum": [
+                    "action-syntax",
+                    "adhoc-packages",
+                    "agentic-actions",
+                    "anonymous-definition",
+                    "archived-uses",
+                    "argument-injection",
+                    "artipacked",
+                    "background-step-not-waited",
+                    "bot-conditions",
+                    "cache-poisoning",
+                    "checkout-static-credentials",
+                    "command-injection",
+                    "concurrency-cancels-prs",
+                    "concurrency-cancels-release",
+                    "concurrency-deadlock",
+                    "concurrency-limits",
+                    "conflicting-action-inputs",
+                    "conflicting-runner-labels",
+                    "constant-condition",
+                    "context-availability",
+                    "continue-on-error",
+                    "cron-too-frequent",
+                    "cyclic-job-needs",
+                    "dangerous-triggers",
+                    "dependabot-cooldown",
+                    "dependabot-execution",
+                    "dependabot-missing-actions-update",
+                    "dependabot-syntax",
+                    "deprecated-action-input",
+                    "deprecated-commands",
+                    "deprecated-runner-label",
+                    "duplicate-job-id",
+                    "duplicate-job-needs",
+                    "duplicate-key",
+                    "duplicate-step-id",
+                    "duplicate-triggers",
+                    "environment-file-redirect",
+                    "event-name-never-received",
+                    "excessive-permissions",
+                    "expired-ignore",
+                    "expression-syntax",
+                    "expression-type",
+                    "fail-fast-action-inputs",
+                    "forbidden-uses",
+                    "gate-job-skipped-on-failure",
+                    "gh-without-token",
+                    "github-app",
+                    "github-env",
+                    "hardcoded-container-credentials",
+                    "if-always-true",
+                    "impostor-commit",
+                    "insecure-commands",
+                    "insecure-ssh-keyscan",
+                    "insecure-url-scheme",
+                    "insufficient-permissions",
+                    "invalid-activity-type",
+                    "invalid-cron",
+                    "invalid-env-var-name",
+                    "invalid-event-config",
+                    "invalid-event-filter",
+                    "invalid-function-call",
+                    "invalid-glob",
+                    "invalid-id",
+                    "invalid-ignore-comment",
+                    "invalid-label-pattern",
+                    "invalid-local-action",
+                    "invalid-local-workflow",
+                    "invalid-parallel-step",
+                    "invalid-permissions",
+                    "invalid-shell-name",
+                    "invalid-timezone",
+                    "invalid-uses",
+                    "invalid-workflow-call",
+                    "invalid-workflow-call-input",
+                    "invalid-workflow-dispatch-input",
+                    "invisible-characters",
+                    "known-vulnerable-actions",
+                    "local-action-checkout",
+                    "malformed-expression-delimiters",
+                    "matrix-duplicate-value",
+                    "matrix-invalid-exclude",
+                    "max-run-lines",
+                    "merge-key",
+                    "misfeature",
+                    "missing-action-input",
+                    "missing-permissions",
+                    "missing-timeout",
+                    "missing-workflow-input",
+                    "missing-workflow-secret",
+                    "multiline-plain-run",
+                    "mutable-runner-label",
+                    "obfuscation",
+                    "outdated-action-runner",
+                    "output-clobbering",
+                    "overprovisioned-secrets",
+                    "pipeline-without-pipefail",
+                    "pyflakes",
+                    "recursive-alias",
+                    "ref-confusion",
+                    "ref-version-mismatch",
+                    "repojacking",
+                    "require-expression-wrapping",
+                    "require-shell",
+                    "required-actions",
+                    "secrets-inherit",
+                    "secrets-outside-env",
+                    "self-hosted-runner",
+                    "self-repository",
+                    "shellcheck",
+                    "stale-action-refs",
+                    "superfluous-actions",
+                    "template-injection",
+                    "timeout-too-long",
+                    "typosquat-uses",
+                    "ubuntu-slim-limits",
+                    "undefined-function",
+                    "undefined-job-needs",
+                    "undefined-property",
+                    "undocumented-permissions",
+                    "unknown-action-input",
+                    "unknown-event",
+                    "unknown-runner-label",
+                    "unknown-workflow-input",
+                    "unknown-workflow-secret",
+                    "unlocked-install",
+                    "unpinned-images",
+                    "unpinned-tools",
+                    "unpinned-uses",
+                    "unredacted-secrets",
+                    "unsound-contains",
+                    "unsound-prefix-match",
+                    "unsound-ternary",
+                    "untrusted-artifact",
+                    "untrusted-checkout",
+                    "unused-anchor",
+                    "unused-baseline-entry",
+                    "unused-ignore",
+                    "unused-job-output",
+                    "unused-needs",
+                    "unused-workflow-input",
+                    "unverified-download",
+                    "use-trusted-publishing",
+                    "workflow-call-permissions",
+                    "workflow-input-type",
+                    "workflow-run-names",
+                    "workflow-secret-scope",
+                    "workflow-syntax",
+                    "yaml-syntax"
+                  ],
+                  "type": "string"
+                },
+                "minItems": 1,
+                "type": "array"
+              }
+            ]
+          },
+          "step": {
+            "description": "The id or the name of the step.",
+            "type": "string"
+          },
+          "uses": {
+            "description": "The uses value of the step or of the called workflow: a pattern like actions/checkout or actions/*, a glob for other values (docker://alpine*), or a regular expression between slashes (/^actions\\/(checkout|cache)@/).",
+            "type": "string"
+          }
+        },
+        "required": [
+          "rule"
+        ],
+        "type": "object"
+      },
+      "type": [
+        "array",
+        "null"
+      ]
+    },
+    "max-run-lines": {
+      "deprecated": true,
+      "description": "Deprecated: the max option of the max-run-lines rule.",
+      "minimum": 0,
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "online": {
+      "description": "Turns on the checks which query the GitHub API for the files this configuration applies to, like the --online flag. The default is false: nothing uses the network.",
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "online-options": {
+      "additionalProperties": false,
+      "description": "Tunes the online checks. Every key is optional. The command line flags win over them.",
+      "properties": {
+        "allow": {
+          "description": "Look up only the repositories matching one of these owner/repo patterns (* is a wildcard within a part). Empty allows all.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "api-url": {
+          "description": "The REST API URL of a GitHub Enterprise Server, like https://ghe.example.com/api/v3. A token is not sent to a host named here by the config file of a repository.",
+          "type": "string"
+        },
+        "cache-ttl": {
+          "description": "How long a cached answer is used without asking GitHub again, as a duration like 1h. 0s always revalidates. The default is 1h.",
+          "type": "string"
+        },
+        "concurrency": {
+          "description": "How many requests are in flight at most (at most 32; 0 is the default, 6).",
+          "maximum": 32,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "deny": {
+          "description": "Never look up the repositories matching one of these owner/repo patterns. It wins over allow.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "gh-cli": {
+          "description": "Whether gh auth token is asked for a token when no variable or file has one. The default is true.",
+          "type": "boolean"
+        },
+        "max-rate-limit-wait": {
+          "description": "The longest to wait for a rate limit to reset, as a duration like 30s. 0s never waits. The default is 30s.",
+          "type": "string"
+        },
+        "mode": {
+          "description": "cache never uses the network and answers from the disk cache, strict makes the exit status 3 when a lookup is skipped, cache,strict is both. A mode other than the default also turns the online checks on, unless online is false.",
+          "enum": [
+            "cache",
+            "strict",
+            "cache,strict"
+          ],
+          "type": "string"
+        },
+        "retries": {
+          "description": "How often a request is repeated after a server error or a secondary rate limit (at most 10). The default is 2.",
+          "maximum": 10,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "token-env": {
+          "description": "The name of the environment variable which holds the token. It is read before GITHUB_TOKEN and GH_TOKEN.",
+          "type": "string"
+        },
+        "token-file": {
+          "description": "A file which holds the token.",
+          "type": "string"
+        }
+      },
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "paths": {
+      "additionalProperties": {
+        "additionalProperties": false,
+        "description": "The configuration of the files matching the pattern.",
+        "properties": {
+          "ignore": {
+            "description": "Rule IDs and regular expressions. A rule ID ignores all the findings of the rule, and a regular expression ignores the findings whose message matches it.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "description": "Configuration for the files matching a glob pattern, relative to the repository root. The path separator is always /.",
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "platform": {
+      "description": "The system which runs the workflows: github (the default), or forgejo or gitea, which also accept `uses: https://host/owner/repo@ref` for an action. That form stays an error on github.",
+      "enum": [
+        "github",
+        "forgejo",
+        "gitea",
+        null
+      ],
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "profile": {
+      "default": "default",
+      "description": "The set of rules which run: correctness (what actionlint checks and the bug detectors of jactionlint), default (adds the security posture and policy rules worth failing a build on) or pedantic (adds the noisy and opinionated rules). Each profile includes the one before it. The --profile flag overrides it. The retired names strict and all mean pedantic.",
+      "enum": [
+        "correctness",
+        "default",
+        "pedantic",
+        "strict",
+        "all",
+        null
+      ],
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "require-checkout-before-local-action": {
+      "deprecated": true,
+      "description": "Deprecated: turn on the local-action-checkout rule.",
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "require-commit-hash": {
+      "deprecated": true,
+      "description": "Deprecated: turn on the unpinned-uses rule.",
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "require-expression-wrapping": {
+      "deprecated": true,
+      "description": "Deprecated: turn on the require-expression-wrapping rule.",
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "require-permissions": {
+      "deprecated": true,
+      "description": "Deprecated: turn on the missing-permissions rule.",
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "require-shell": {
+      "deprecated": true,
+      "description": "Deprecated: turn on the require-shell rule.",
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "required-actions": {
+      "description": "Actions or reusable workflows which must be used at least once in every checked workflow. The check is off when the list is empty.",
+      "items": {
+        "additionalProperties": false,
+        "description": "A required action.",
+        "properties": {
+          "action": {
+            "description": "The name of the action, like actions/checkout, without @version. A sub-path is part of the name. It is case-insensitive.",
+            "type": "string"
+          },
+          "version": {
+            "description": "The exact ref (tag, branch or commit SHA) which one use of the action must have. Any version is accepted when it is omitted.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "type": "object"
+      },
+      "type": [
+        "array",
+        "null"
+      ]
+    },
+    "rules": {
+      "additionalProperties": false,
+      "description": "The level and the options of each rule by its rule ID. A rule which is not listed follows the profile. See https://jactionlint.jdx.dev/rules",
+      "properties": {
+        "action-syntax": {
+          "description": "The action metadata does not follow the syntax of action.yml. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#action-syntax",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "adhoc-packages": {
+          "description": "A package is installed by name with npm, yarn, pnpm, bun, aube, gem or bundle add outside of a lock file. Group: security. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#adhoc-packages",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "agentic-actions": {
+          "description": "An AI agent action can be steered by outsiders, runs on code of a pull request, or has its safeguards turned off. Group: security. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#agentic-actions",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "any-trigger": {
+                  "default": false,
+                  "description": "Also report the unsafe settings of an agent (tools that allow any command, permission checks switched off) in a workflow that no outsider can trigger.",
+                  "type": "boolean"
+                },
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "anonymous-definition": {
+          "description": "A workflow has no top-level name:. Group: policy. Profile: pedantic. Default level: warn. https://jactionlint.jdx.dev/rules#anonymous-definition",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "archived-uses": {
+          "description": "An action or reusable workflow is in an archived repository. Group: security. Runs only with --online. Default level: warn. https://jactionlint.jdx.dev/rules#archived-uses",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "argument-injection": {
+          "description": "Free text that an outsider writes is expanded into the program text or the options of sed, awk, find, curl, wget and git clone. Group: security. Profile: pedantic. Default level: warn. https://jactionlint.jdx.dev/rules#argument-injection",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "artipacked": {
+          "description": "actions/checkout persists the GITHUB_TOKEN credential in the git config. Group: security. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#artipacked",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "background-step-not-waited": {
+          "description": "Outputs or results of a background step are read before a wait step covers it. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#background-step-not-waited",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "bot-conditions": {
+          "description": "A condition trusts a bot by github.actor, which can be spoofed. Group: security. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#bot-conditions",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "cache-poisoning": {
+          "description": "A cache is restored in a release job or written by a privileged trigger. With the option pedantic, a tag that only starts checks and a branch filter that names a release branch among others count as releases too, and a cache that saves a file with credentials is reported. Group: security. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#cache-poisoning",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                },
+                "pedantic": {
+                  "description": "Also report the pedantic checks, which are noisier. Unset, they run under the pedantic profile.",
+                  "type": "boolean"
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "checkout-static-credentials": {
+          "description": "actions/checkout is given an SSH key or a token that does not expire. Group: security. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#checkout-static-credentials",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "allow": {
+                  "description": "Names of secrets which may be given to actions/checkout (for example a deploy key).",
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                },
+                "secret-tokens": {
+                  "description": "Also report a token input taken from a secret other than GITHUB_TOKEN (a personal access token). The ssh-key input is always reported. Unset, it is on under the pedantic profile and off otherwise.",
+                  "type": "boolean"
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "command-injection": {
+          "description": "Input that an outsider controls is run as code by a script after it was moved to an environment variable: eval, sh -c, a variable as a command, a pipe into a shell, an inline program, child_process in github-script. Group: security. Profile: pedantic. Default level: warn. https://jactionlint.jdx.dev/rules#command-injection",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "concurrency-cancels-prs": {
+          "description": "A concurrency group that cancels runs is shared by all pull requests, so unrelated pull requests cancel each other. Group: correctness. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#concurrency-cancels-prs",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "concurrency-cancels-release": {
+          "description": "cancel-in-progress can cancel a release or a deployment which is still running. Group: correctness. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#concurrency-cancels-release",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "concurrency-deadlock": {
+          "description": "The concurrency group of a workflow is the same as the group of a local reusable workflow it calls, so GitHub detects a deadlock and cancels the run. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#concurrency-deadlock",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "concurrency-limits": {
+          "description": "A workflow does not cancel superseded runs with concurrency:. Group: policy. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#concurrency-limits",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "conflicting-action-inputs": {
+          "description": "Two inputs of a well-known action exclude each other. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#conflicting-action-inputs",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "conflicting-runner-labels": {
+          "description": "The runner labels of a job conflict with each other. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#conflicting-runner-labels",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "constant-condition": {
+          "description": "An if: condition is a constant expression. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#constant-condition",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "context-availability": {
+          "description": "A context or special function is used where it is not available. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#context-availability",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "continue-on-error": {
+          "description": "A job has continue-on-error: true, so its failure does not fail the workflow. Group: policy. Profile: pedantic. Default level: info. https://jactionlint.jdx.dev/rules#continue-on-error",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                },
+                "steps": {
+                  "default": false,
+                  "description": "Also report steps with continue-on-error: true. By default only jobs are reported.",
+                  "type": "boolean"
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "cron-too-frequent": {
+          "description": "A scheduled job runs more often than once every 5 minutes. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#cron-too-frequent",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "cyclic-job-needs": {
+          "description": "Jobs depend on each other in a cycle. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#cyclic-job-needs",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "dangerous-triggers": {
+          "description": "A workflow uses pull_request_target, workflow_run or issue_comment. With the option pedantic, also one that cannot write and uses no secret. Group: security. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#dangerous-triggers",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                },
+                "pedantic": {
+                  "description": "Also report the pedantic checks, which are noisier. Unset, they run under the pedantic profile.",
+                  "type": "boolean"
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "dependabot-cooldown": {
+          "description": "An update in dependabot.yml has no cooldown or a cooldown shorter than the minimum. Group: security. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#dependabot-cooldown",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "days": {
+                  "default": 7,
+                  "description": "The minimum number of days \"cooldown.default-days\" must be. Defaults to 7.",
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "default-days": {
+                  "description": "The number of days --fix writes as \"cooldown.default-days\". It must be at least \"days\". There is no default: without it findings have no fix.",
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "dependabot-execution": {
+          "description": "An update in dependabot.yml allows insecure external code execution. Group: security. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#dependabot-execution",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "dependabot-missing-actions-update": {
+          "description": "dependabot.yml has no github-actions update although the repository has workflows using actions. Group: policy. Profile: pedantic. Default level: warn. https://jactionlint.jdx.dev/rules#dependabot-missing-actions-update",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "dependabot-syntax": {
+          "description": "The Dependabot configuration does not follow the syntax of dependabot.yml. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#dependabot-syntax",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "deprecated-action-input": {
+          "description": "A deprecated input of an action is used. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#deprecated-action-input",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "deprecated-commands": {
+          "description": "A deprecated workflow command such as ::set-output is used. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#deprecated-commands",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "deprecated-runner-label": {
+          "description": "A runner label is deprecated and GitHub is going to retire it on a known date, such as macos-14. Group: policy. Profile: pedantic. Default level: warn. https://jactionlint.jdx.dev/rules#deprecated-runner-label",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "duplicate-job-id": {
+          "description": "A job ID is defined more than once. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#duplicate-job-id",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "duplicate-job-needs": {
+          "description": "A job ID is listed more than once in needs. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#duplicate-job-needs",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "duplicate-key": {
+          "description": "A key is defined more than once in a mapping. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#duplicate-key",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "duplicate-step-id": {
+          "description": "A step ID is not unique within its job. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#duplicate-step-id",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "duplicate-triggers": {
+          "description": "push and pull_request both run the workflow for the same commit. Group: policy. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#duplicate-triggers",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "environment-file-redirect": {
+          "description": "A script writes to GITHUB_OUTPUT or another environment file of the runner without the $, or empties it with > after it wrote to it. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#environment-file-redirect",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "event-name-never-received": {
+          "description": "github.event_name is compared with an event that the workflow never receives, so the comparison is always false. Group: correctness. Profile: pedantic. Default level: warn. https://jactionlint.jdx.dev/rules#event-name-never-received",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "excessive-permissions": {
+          "description": "The GITHUB_TOKEN gets write access that is broader than needed. Group: security. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#excessive-permissions",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                },
+                "require-workflow-permissions": {
+                  "description": "Also report a workflow which has no top-level permissions, even when its jobs set their own. Unset, it runs under the pedantic profile.",
+                  "type": "boolean"
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "expired-ignore": {
+          "description": "An entry of \"ignores\" in the config file has expired or is about to. Group: policy. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#expired-ignore",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "expression-syntax": {
+          "description": "A ${{ }} expression has a syntax error. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#expression-syntax",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "expression-type": {
+          "description": "A ${{ }} expression has a type error. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#expression-type",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "fail-fast-action-inputs": {
+          "description": "An action which passes by default when nothing was produced or found is not told to fail. Group: correctness. Profile: pedantic. Default level: warn. https://jactionlint.jdx.dev/rules#fail-fast-action-inputs",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "forbidden-uses": {
+          "description": "An action or reusable workflow is not allowed or is denied by the configuration. Group: policy. Runs only when configured. Default level: error. https://jactionlint.jdx.dev/rules#forbidden-uses",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "allow": {
+                  "description": "Patterns of the only actions and reusable workflows which may be used, e.g. \"actions/*\". The rule does nothing without allow or deny.",
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                "deny": {
+                  "description": "Patterns of actions and reusable workflows which must not be used.",
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                "images-allow": {
+                  "description": "Glob patterns of the only container images which may be used (container:, services:, docker:// and docker run in a script), e.g. \"ghcr.io/my-org/*\" or \"node:20\". Docker Hub names can leave out the registry (\"node\" is \"docker.io/library/node\").",
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                "images-deny": {
+                  "description": "Glob patterns of container images which must not be used.",
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "gate-job-skipped-on-failure": {
+          "description": "A job that reads the results of the jobs it needs is skipped when one of them fails. Group: correctness. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#gate-job-skipped-on-failure",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "gh-without-token": {
+          "description": "A script runs the gh command although no GH_TOKEN or GITHUB_TOKEN reaches the step, so gh stops. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#gh-without-token",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "github-app": {
+          "description": "A GitHub App token is issued with more access or a longer life than needed. Group: security. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#github-app",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "github-env": {
+          "description": "Input that an outsider controls, or a value that is not a literal in a workflow triggered by pull_request_target or workflow_run, is written to GITHUB_ENV or GITHUB_PATH. Group: security. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#github-env",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "hardcoded-container-credentials": {
+          "description": "A password for a container registry is written directly in the workflow. Group: security. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#hardcoded-container-credentials",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "if-always-true": {
+          "description": "An if: condition is always true because of the characters around ${{ }}. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#if-always-true",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "impostor-commit": {
+          "description": "A hash-pinned action uses a commit which is not part of the repository's own history (it exists only in a fork). Group: security. Runs only with --online. Default level: error. https://jactionlint.jdx.dev/rules#impostor-commit",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                },
+                "max-branches": {
+                  "default": 1000,
+                  "description": "How many branches of the action repository a commit is compared with before giving up without a verdict. Without a token each branch costs a request, so at most 100 are compared.",
+                  "minimum": 0,
+                  "type": "integer"
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "insecure-commands": {
+          "description": "ACTIONS_ALLOW_UNSECURE_COMMANDS enables the deprecated set-env and add-path commands. Group: security. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#insecure-commands",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "insecure-ssh-keyscan": {
+          "description": "ssh-keyscan output is trusted as the host key without verification. Group: security. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#insecure-ssh-keyscan",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "insecure-url-scheme": {
+          "description": "A download uses http, ftp or git instead of https. Group: security. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#insecure-url-scheme",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "insufficient-permissions": {
+          "description": "The explicit permissions of a job do not grant what an action or command of the job needs from the GITHUB_TOKEN. Group: correctness. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#insufficient-permissions",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                },
+                "pedantic": {
+                  "description": "Also report actions/checkout without \"contents: read\", which only a private repository needs. Unset, it runs under the pedantic profile.",
+                  "type": "boolean"
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "invalid-activity-type": {
+          "description": "An activity type is not available for the Webhook event. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#invalid-activity-type",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "invalid-cron": {
+          "description": "A cron schedule has an invalid format. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#invalid-cron",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "invalid-env-var-name": {
+          "description": "An environment variable name contains characters which are not allowed. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#invalid-env-var-name",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "invalid-event-config": {
+          "description": "An event is configured with options it does not support. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#invalid-event-config",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "invalid-event-filter": {
+          "description": "An event filter is not available for the event or conflicts with another filter. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#invalid-event-filter",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "invalid-function-call": {
+          "description": "A built-in function is called with wrong arguments. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#invalid-function-call",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "invalid-glob": {
+          "description": "A glob filter pattern is invalid. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#invalid-glob",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "invalid-id": {
+          "description": "A job or step ID does not follow the naming convention. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#invalid-id",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "invalid-ignore-comment": {
+          "description": "An inline ignore comment is invalid. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#invalid-ignore-comment",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "invalid-label-pattern": {
+          "description": "A runner label pattern in the configuration is not a valid glob. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#invalid-label-pattern",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "invalid-local-action": {
+          "description": "A local action cannot be loaded or its metadata is invalid. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#invalid-local-action",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "invalid-local-workflow": {
+          "description": "A local reusable workflow cannot be loaded or is invalid. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#invalid-local-workflow",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "invalid-parallel-step": {
+          "description": "A step is not allowed inside a parallel group or refers to a wrong step. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#invalid-parallel-step",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "invalid-permissions": {
+          "description": "A permission scope or its value is invalid. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#invalid-permissions",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "invalid-shell-name": {
+          "description": "A shell name is not available on the runner. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#invalid-shell-name",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "invalid-timezone": {
+          "description": "A timezone of a schedule is not a valid IANA timezone name. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#invalid-timezone",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "invalid-uses": {
+          "description": "A uses: value does not follow the format of an action or a Docker image. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#invalid-uses",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "invalid-workflow-call": {
+          "description": "A reusable workflow call does not follow the format of a reusable workflow. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#invalid-workflow-call",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "invalid-workflow-call-input": {
+          "description": "An input of the workflow_call event is invalid. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#invalid-workflow-call-input",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "invalid-workflow-dispatch-input": {
+          "description": "An input of the workflow_dispatch event is invalid. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#invalid-workflow-dispatch-input",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "invisible-characters": {
+          "description": "A file contains an invisible or bidirectional control character which hides what the text says. Group: security. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#invisible-characters",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "known-vulnerable-actions": {
+          "description": "An action version is affected by a published GitHub security advisory. Group: security. Runs only with --online. Default level: error. https://jactionlint.jdx.dev/rules#known-vulnerable-actions",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "allow": {
+                  "description": "Advisory IDs (GHSA-...) which are not reported.",
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "local-action-checkout": {
+          "description": "A local action is used before any step checks out the repository. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#local-action-checkout",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "malformed-expression-delimiters": {
+          "description": "Text such as ${ github.ref }, $ {{ x }} or {{ github.sha }} is meant to be an expression but is not one. With the option pedantic, so is a shell variable in the input of an action. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#malformed-expression-delimiters",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                },
+                "pedantic": {
+                  "description": "Also report the pedantic checks, which are noisier. Unset, they run under the pedantic profile.",
+                  "type": "boolean"
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "matrix-duplicate-value": {
+          "description": "A matrix has a duplicate value. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#matrix-duplicate-value",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "matrix-invalid-exclude": {
+          "description": "An exclude entry of a matrix does not match the matrix. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#matrix-invalid-exclude",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "max-run-lines": {
+          "description": "A run: script has more lines than allowed. Group: style. Profile: pedantic. Default level: error. https://jactionlint.jdx.dev/rules#max-run-lines",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                },
+                "max": {
+                  "default": 100,
+                  "description": "The maximum number of non-blank lines of a run: script.",
+                  "minimum": 0,
+                  "type": "integer"
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "merge-key": {
+          "description": "The YAML merge key << is used, which GitHub Actions does not support. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#merge-key",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "misfeature": {
+          "description": "A misfeature of GitHub Actions is used: the pip-install input of setup-python or the cmd shell. With the option pedantic, a shell that GitHub does not document too. Group: security. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#misfeature",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                },
+                "pedantic": {
+                  "description": "Also report the pedantic checks, which are noisier. Unset, they run under the pedantic profile.",
+                  "type": "boolean"
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "missing-action-input": {
+          "description": "A required input of an action is not specified. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#missing-action-input",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "missing-permissions": {
+          "description": "Neither the workflow nor the job sets permissions:. Group: policy. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#missing-permissions",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "missing-timeout": {
+          "description": "A job does not set timeout-minutes. Group: policy. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#missing-timeout",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "default-minutes": {
+                  "description": "The timeout-minutes which --fix adds to a job. There is no default: the rule has no fix unless this is set. It is lowered to the max of timeout-too-long when that is smaller, and to 15 on a job that runs only on ubuntu-slim.",
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "missing-workflow-input": {
+          "description": "A required input of a reusable workflow is not specified. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#missing-workflow-input",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "missing-workflow-secret": {
+          "description": "A required secret of a reusable workflow is not passed. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#missing-workflow-secret",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "multiline-plain-run": {
+          "description": "A run: is written over several lines without |, so YAML folds the lines into one command. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#multiline-plain-run",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "mutable-runner-label": {
+          "description": "A runner label is an alias that GitHub moves to newer images, such as ubuntu-latest. Group: policy. Profile: pedantic. Default level: warn. https://jactionlint.jdx.dev/rules#mutable-runner-label",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                },
+                "pin": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "description": "Maps a moving label to the fixed label that --fix writes in its place, e.g. ubuntu-latest: ubuntu-24.04. There is no default: without an entry the finding has no fix.",
+                  "type": "object"
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "obfuscation": {
+          "description": "A path at uses: or an expression is written in an obfuscated way. Group: security. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#obfuscation",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "outdated-action-runner": {
+          "description": "An action runs on a runtime which GitHub Actions no longer supports. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#outdated-action-runner",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "output-clobbering": {
+          "description": "Input that an outsider controls is written to GITHUB_OUTPUT as a record, so a line break in it sets the other outputs of the step. Group: security. Profile: pedantic. Default level: warn. https://jactionlint.jdx.dev/rules#output-clobbering",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "overprovisioned-secrets": {
+          "description": "An expression uses the whole secrets context. Group: security. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#overprovisioned-secrets",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "pipeline-without-pipefail": {
+          "description": "A failing command in a pipeline of a run: script is hidden because the shell does not enable pipefail. Group: correctness. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#pipeline-without-pipefail",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "pyflakes": {
+          "description": "pyflakes reported an issue in a Python script. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#pyflakes",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "recursive-alias": {
+          "description": "A YAML alias refers to itself. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#recursive-alias",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "ref-confusion": {
+          "description": "The ref of an action is both a branch and a tag of its repository. Group: security. Runs only with --online. Default level: warn. https://jactionlint.jdx.dev/rules#ref-confusion",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "ref-version-mismatch": {
+          "description": "The version comment of a hash-pinned action does not match the pinned commit. Group: security. Runs only with --online. Default level: warn. https://jactionlint.jdx.dev/rules#ref-version-mismatch",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "repojacking": {
+          "description": "An action or reusable workflow has an owner whose name anyone can register. Group: security. Runs only with --online. Default level: warn. https://jactionlint.jdx.dev/rules#repojacking",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "require-expression-wrapping": {
+          "description": "An if: condition is not wrapped in ${{ }}. Group: style. Profile: pedantic. Default level: error. https://jactionlint.jdx.dev/rules#require-expression-wrapping",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "require-shell": {
+          "description": "A run: step does not set the shell explicitly. Group: style. Profile: pedantic. Default level: error. https://jactionlint.jdx.dev/rules#require-shell",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "required-actions": {
+          "description": "An action listed in required-actions is not used by a workflow. Group: policy. Runs only when configured. Default level: error. https://jactionlint.jdx.dev/rules#required-actions",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "secrets-inherit": {
+          "description": "A reusable workflow is called with secrets: inherit. Group: security. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#secrets-inherit",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "secrets-outside-env": {
+          "description": "A job uses a secret but has no environment. Group: security. Profile: pedantic. Default level: warn. https://jactionlint.jdx.dev/rules#secrets-outside-env",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "allow": {
+                  "description": "Names of secrets which may be used outside of an environment. GITHUB_TOKEN is always allowed.",
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "self-hosted-runner": {
+          "description": "A job runs on a self-hosted runner: the label self-hosted, a label of self-hosted-runner.labels or a runner group. Group: security. Profile: pedantic. Default level: info. https://jactionlint.jdx.dev/rules#self-hosted-runner",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "allow": {
+                  "description": "Glob patterns of the labels and the runner groups of runners which are ephemeral or trusted. A job with one of them is not reported.",
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                },
+                "pull-request-only": {
+                  "default": false,
+                  "description": "Report only the jobs of workflows that a pull request event can start, which is the case that poutine reports.",
+                  "type": "boolean"
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "self-repository": {
+          "description": "A local action or workflow is referenced as ./path instead of $/path. Group: security. Profile: pedantic. Default level: info. https://jactionlint.jdx.dev/rules#self-repository",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "shellcheck": {
+          "description": "shellcheck reported an issue in a shell script. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#shellcheck",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "stale-action-refs": {
+          "description": "A hash-pinned action uses a commit which no tag of the repository points to. Group: security. Runs only with --online. Default level: info. https://jactionlint.jdx.dev/rules#stale-action-refs",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "superfluous-actions": {
+          "description": "An action does what a tool of the runner image does as well, such as gh release create. Group: security. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#superfluous-actions",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                },
+                "pedantic": {
+                  "description": "Also report the pedantic checks, which are noisier. Unset, they run under the pedantic profile.",
+                  "type": "boolean"
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "template-injection": {
+          "description": "A potentially untrusted input is expanded in a script, a container option or the prompt of an AI agent. With the option pedantic, so is any other expression. Group: security. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#template-injection",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                },
+                "pedantic": {
+                  "description": "Also report the pedantic checks, which are noisier. Unset, they run under the pedantic profile.",
+                  "type": "boolean"
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "timeout-too-long": {
+          "description": "timeout-minutes of a job exceeds the configured maximum. Group: policy. Runs only when configured. Default level: error. https://jactionlint.jdx.dev/rules#timeout-too-long",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                },
+                "max": {
+                  "description": "The maximum allowed timeout-minutes. The rule does nothing without it.",
+                  "minimum": 0,
+                  "type": "number"
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "typosquat-uses": {
+          "description": "An action is one typo away from a popular action of another owner. Group: security. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#typosquat-uses",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "allow": {
+                  "description": "Slugs (owner/repo) of actions which are never reported, e.g. a legitimate fork.",
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "ubuntu-slim-limits": {
+          "description": "A job on ubuntu-slim has a container, services or a Docker container action, which the single-CPU runner cannot run. With the option pedantic, a timeout-minutes above its limit of 15 minutes counts too. Group: correctness. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#ubuntu-slim-limits",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                },
+                "pedantic": {
+                  "description": "Also report the pedantic checks, which are noisier. Unset, they run under the pedantic profile.",
+                  "type": "boolean"
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "undefined-function": {
+          "description": "An undefined function is called in an expression. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#undefined-function",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "undefined-job-needs": {
+          "description": "A job needs a job which does not exist. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#undefined-job-needs",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "undefined-property": {
+          "description": "An undefined variable or property is accessed in an expression. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#undefined-property",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "undocumented-permissions": {
+          "description": "A permission scope above read has no comment explaining it. Group: policy. Profile: pedantic. Default level: info. https://jactionlint.jdx.dev/rules#undocumented-permissions",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "include-read": {
+                  "description": "Also require a comment for scopes granted with read, except contents: read. Unset, it runs under the pedantic profile.",
+                  "type": "boolean"
+                },
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "unknown-action-input": {
+          "description": "An input which the action does not define is specified. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#unknown-action-input",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "unknown-event": {
+          "description": "An unknown Webhook event is used. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#unknown-event",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "unknown-runner-label": {
+          "description": "A runner label is unknown, or is one that GitHub has retired. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#unknown-runner-label",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "unknown-workflow-input": {
+          "description": "An input which the reusable workflow does not define is specified. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#unknown-workflow-input",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "unknown-workflow-secret": {
+          "description": "A secret which the reusable workflow does not define is passed. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#unknown-workflow-secret",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "unlocked-install": {
+          "description": "cargo install runs without --locked, or npm, yarn or pnpm install without freezing a lock file that the repository has. With the option pedantic, also installs without a lock file, npm, Yarn and bun installs that run the lifecycle scripts of the dependencies (and aube installs that allow every build), and installs without a release-age cooldown. Group: security. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#unlocked-install",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                },
+                "pedantic": {
+                  "description": "Also report the pedantic checks, which are noisier. Unset, they run under the pedantic profile.",
+                  "type": "boolean"
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "unpinned-images": {
+          "description": "A container or service image is not pinned by a digest. Group: security. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#unpinned-images",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                },
+                "pedantic": {
+                  "description": "Also report the pedantic checks, which are noisier. Unset, they run under the pedantic profile.",
+                  "type": "boolean"
+                },
+                "policies": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "default": {},
+                  "description": "How strongly to pin the images matching a pattern: hash-pin (a digest, the default of require-digest), tag-pin (a tag other than latest, or a digest) or any. The most specific pattern that matches wins over require-digest: more literal characters before the first *, in the pattern with the registry written out, then fewer *, then a tag, then the longer pattern. Patterns are globs of the image name, where * matches any characters: \"*\", \"ghcr.io/my-org/*\", \"registry.example.com/team/tool\" or \"node:20\". The registry of Docker Hub can be left out (\"node\" is \"docker.io/library/node\").",
+                  "type": "object"
+                },
+                "require-digest": {
+                  "default": true,
+                  "description": "Report images pinned by a tag other than latest too. Turn it off to report only images without a tag or with the latest tag.",
+                  "type": "boolean"
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "unpinned-tools": {
+          "description": "An action installs the newest version of its tool because no version is set or it is latest. Group: security. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#unpinned-tools",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                },
+                "pedantic": {
+                  "description": "Also report the pedantic checks, which are noisier. Unset, they run under the pedantic profile.",
+                  "type": "boolean"
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "unpinned-uses": {
+          "description": "An action, reusable workflow or Docker image is not pinned to a commit SHA or digest. Group: policy. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#unpinned-uses",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "actions-lock": {
+                  "default": true,
+                  "description": "Accept an action which is not pinned to a commit in a workflow when the Actions lock file of the repository (.github/workflows/actions.lock) pins it to a full commit for that workflow. The lock file is a technical preview of GitHub whose format may change. Set it to false to ignore the lock file.",
+                  "type": "boolean"
+                },
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                },
+                "policies": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "default": {},
+                  "description": "How strongly to pin the actions matching a pattern: hash-pin (full commit SHA, the default for everything), ref-pin (any tag, branch or SHA), immutable-release (a full commit SHA, or with --online the tag of an immutable GitHub release) or any. The most specific pattern wins. Patterns are \"*\", \"owner/*\", \"owner/repo\" and \"owner/repo/path\". Docker images follow the \"*\" policy.",
+                  "type": "object"
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "unredacted-secrets": {
+          "description": "A secret is parsed with fromJSON(), so the fields of it are not redacted in logs. Group: security. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#unredacted-secrets",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "unsound-contains": {
+          "description": "A condition uses contains() on a string literal, which also matches substrings. Group: security. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#unsound-contains",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "unsound-prefix-match": {
+          "description": "An account, an owner or a repository is identified by a prefix, a suffix or a part of its name. Group: security. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#unsound-prefix-match",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                },
+                "refs": {
+                  "default": false,
+                  "description": "Also check the names of branches and tags (github.ref, github.head_ref, ...). A prefix test of a ref is often meant, so this is noisy.",
+                  "type": "boolean"
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "unsound-ternary": {
+          "description": "The a && b || c idiom has a falsy b so it always evaluates to c. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#unsound-ternary",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "untrusted-artifact": {
+          "description": "A workflow_run workflow uses an artifact of the triggering run without validating it. With the option pedantic, also one that downloads every artifact of the run. Group: security. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#untrusted-artifact",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                },
+                "pedantic": {
+                  "description": "Also report the pedantic checks, which are noisier. Unset, they run under the pedantic profile.",
+                  "type": "boolean"
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "untrusted-checkout": {
+          "description": "A pull_request_target, workflow_run or issue_comment workflow checks out the code of a pull request and runs it, or turns off the protection of actions/checkout against the code of fork pull requests. With the option pedantic, a checkout that actions/checkout refuses for a fork is reported too. Group: security. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#untrusted-checkout",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                },
+                "pedantic": {
+                  "description": "Also report the pedantic checks, which are noisier. Unset, they run under the pedantic profile.",
+                  "type": "boolean"
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "unused-anchor": {
+          "description": "A YAML anchor is defined but never used. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#unused-anchor",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "unused-baseline-entry": {
+          "description": "A baseline entry matches no finding any more, so the baseline can shrink. Group: policy. Profile: correctness. Default level: info. https://jactionlint.jdx.dev/rules#unused-baseline-entry",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "unused-ignore": {
+          "description": "An ignore comment or an entry of \"ignores\" in the config file did not suppress anything. Group: policy. Profile: pedantic. Default level: error. https://jactionlint.jdx.dev/rules#unused-ignore",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                },
+                "zizmor": {
+                  "default": false,
+                  "description": "Also report \"# zizmor: ignore[...]\" comments which suppressed nothing. Turn it on after zizmor is gone.",
+                  "type": "boolean"
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "unused-job-output": {
+          "description": "An output of a job is never read by another job or by a workflow_call output. Group: policy. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#unused-job-output",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "unused-needs": {
+          "description": "A needs entry is neither read by the job nor needed for the order of jobs. Group: style. Profile: pedantic. Default level: info. https://jactionlint.jdx.dev/rules#unused-needs",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "unused-workflow-input": {
+          "description": "An input of workflow_dispatch or workflow_call is never used. Group: policy. Profile: pedantic. Default level: warn. https://jactionlint.jdx.dev/rules#unused-workflow-input",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "unverified-download": {
+          "description": "A script runs what it downloads without verifying it. Group: security. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#unverified-download",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "allow": {
+                  "description": "Hosts, or URL prefixes (entries with \"://\"), whose downloads are accepted without verification.",
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "use-trusted-publishing": {
+          "description": "A package is published with a long-lived credential although the registry supports trusted publishing. With the option pedantic, also trusted publishing in a job that builds the package or has no environment, and attestations that are switched off. Group: security. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#use-trusted-publishing",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                },
+                "pedantic": {
+                  "description": "Also report the pedantic checks, which are noisier. Unset, they run under the pedantic profile.",
+                  "type": "boolean"
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "workflow-call-permissions": {
+          "description": "A caller job grants fewer permissions than a reusable workflow requires. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#workflow-call-permissions",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "workflow-input-type": {
+          "description": "The type of a value passed to a reusable workflow does not match its input. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#workflow-input-type",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "workflow-run-names": {
+          "description": "A workflow_run event refers to a workflow which does not exist in the repository. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#workflow-run-names",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "workflow-secret-scope": {
+          "description": "A secret is assigned to the workflow-level env and reaches multiple jobs. Group: security. Profile: pedantic. Default level: warn. https://jactionlint.jdx.dev/rules#workflow-secret-scope",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "workflow-syntax": {
+          "description": "The workflow does not follow the syntax of GitHub Actions workflows. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#workflow-syntax",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "yaml-syntax": {
+          "description": "The file is not valid YAML. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#yaml-syntax",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        }
+      },
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "self-hosted-runner": {
+      "additionalProperties": false,
+      "description": "Configuration for your self-hosted runners.",
+      "properties": {
+        "labels": {
+          "description": "Label names of your self-hosted runners. Glob patterns are supported.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "providers": {
+          "description": "The hosted-runner providers whose labels runs-on accepts without them being listed in labels: blacksmith, depot, namespace, runson, ubicloud, warpbuild. Names are not case sensitive. Unset (or null) accepts all of them, an empty list none. It has no effect with strict-labels.",
+          "items": {
+            "pattern": "^([bB][lL][aA][cC][kK][sS][mM][iI][tT][hH]|[dD][eE][pP][oO][tT]|[nN][aA][mM][eE][sS][pP][aA][cC][eE]|[rR][uU][nN][sS][oO][nN]|[uU][bB][iI][cC][lL][oO][uU][dD]|[wW][aA][rR][pP][bB][uU][iI][lL][dD])$",
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "strict-labels": {
+          "description": "When true, runs-on accepts only the labels listed in labels. The built-in labels are reported unless they are listed too. The default is false.",
+          "type": "boolean"
+        }
+      },
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "shellcheck": {
+      "additionalProperties": false,
+      "description": "How shellcheck is run for the scripts of run steps. By default it runs with --norc.",
+      "properties": {
+        "args": {
+          "description": "More arguments for shellcheck, one option per item with its value attached, such as --exclude=SC2129. The options jactionlint sets itself (--format, --color, --shell, --norc, --rcfile, --version, --wiki-link-count) and file names are errors.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "enable": {
+          "description": "Optional checks of shellcheck to turn on (--enable=NAME,...), such as avoid-nullary-conditions, or all.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "rcfile": {
+          "description": "A shellcheckrc file to read instead of --norc. A relative path is resolved from the repository root. The file must exist. A config file of the repository can name only a file inside the repository.",
+          "type": "string"
+        }
+      },
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "timeout-minutes": {
+      "additionalProperties": false,
+      "deprecated": true,
+      "description": "Deprecated: use the missing-timeout and timeout-too-long rules.",
+      "properties": {
+        "max": {
+          "description": "Deprecated: the max option of timeout-too-long.",
+          "minimum": 0,
+          "type": "number"
+        },
+        "required": {
+          "description": "Deprecated: enables missing-timeout.",
+          "type": "boolean"
+        }
+      },
+      "type": [
+        "object",
+        "null"
+      ]
+    }
+  },
+  "title": "jactionlint configuration",
+  "type": [
+    "object",
+    "null"
+  ]
+}

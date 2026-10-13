@@ -64,6 +64,20 @@ type RuleGitHubEnv struct {
 	errexit bool
 	// loop is whether the write is in the body of a loop.
 	loop bool
+	// varsOnly makes the judgement ignore the `${{ }}` expressions written in the script and judge only what reaches
+	// it through variables. The command-injection rule uses it: an expression in the script is a finding of
+	// template-injection.
+	varsOnly bool
+	// skipInputs makes `inputs.*` of a composite action an ordinary value instead of an outsider's input.
+	skipInputs bool
+	// multilineOnly makes an input that is one line (a title, a branch name) an ordinary value: the output-clobbering
+	// rule is about a line break in the value.
+	multilineOnly bool
+	// freeTextOnly makes the name of a branch, of a label or of an account an ordinary value: the argument-injection rule
+	// is about text that a person types.
+	freeTextOnly bool
+	// checkouts caches, for the earlier steps of the job, whether the script checks out a pull request.
+	checkouts map[*Step]bool
 }
 
 // NewRuleGitHubEnv creates a new RuleGitHubEnv instance.
@@ -151,18 +165,15 @@ func (rule *RuleGitHubEnv) emit(d data, dest string, start, end *Pos) {
 	}
 	switch d.kind {
 	case dataUntrusted:
-		src := quote(d.input)
-		if d.via != "" {
-			src = "from the variable " + d.via + " (" + d.input + ")"
-		}
-		e := rule.errorIDAt("github-env", start, "untrusted input "+src+" is written to "+dest+". "+effect+". do not write input that an outsider controls to "+dest+"; validate it first or pass it to the next step with $GITHUB_OUTPUT").endAt(end)
+		src := describeUntrusted(d)
+		e := rule.errorIDAt("github-env", start, "untrusted input "+src+" is written to "+dest+". "+effect+". do not write input that an outsider controls to "+dest+"; validate it first, or pass it to the next step with $GITHUB_OUTPUT (only a value without line breaks, or one between a delimiter that nobody can guess, is safe there: see output-clobbering)").endAt(end)
 		e.RetiredID = "github-env-untrusted-input"
 	case dataUnknown:
 		trigger, ok := rule.privileged()
 		if !ok {
 			return
 		}
-		rule.errorIDAt("github-env", start, what+" that is not a literal is written to "+dest+" in a workflow triggered by "+quote(trigger)+", which runs with secrets and a write token for events that may come from a fork. "+effect+". write only literal values and values computed from trusted sources, or pass state with $GITHUB_OUTPUT").endAt(end)
+		rule.errorIDAt("github-env", start, what+" that is not a literal is written to "+dest+" in a workflow triggered by "+quote(trigger)+", which runs with secrets and a write token for events that may come from a fork. "+effect+". write only literal values and values computed from trusted sources, or pass state with $GITHUB_OUTPUT (only a value without line breaks, or one between a delimiter that nobody can guess, is safe there: see output-clobbering)").endAt(end)
 	}
 }
 
@@ -225,7 +236,10 @@ func (rule *RuleGitHubEnv) judgeCommand(s *runscript.Script, c *runscript.Comman
 var reExpressionSpan = regexp.MustCompile(`(?s)\$\{\{.*?\}\}`)
 
 func (rule *RuleGitHubEnv) judgeHeredoc(s *runscript.Script, h *runscript.Heredoc) data {
-	d := rule.judgeExprList(h.Exprs, 0)
+	d := data{}
+	if !rule.varsOnly {
+		d = rule.judgeExprList(h.Exprs, 0)
+	}
 	if h.Quoted || (!strings.Contains(h.Body, "$") && !strings.Contains(h.Body, "`")) {
 		return d
 	}
@@ -273,7 +287,10 @@ func benignSubs(subs []*runscript.Command) bool {
 // judgeWordArgs judges the expressions and variables of an argument of a command in a substitution; nested
 // substitutions are judged on their own, as the commands of Word.Subs are listed at any depth.
 func (rule *RuleGitHubEnv) judgeWordArgs(s *runscript.Script, w *runscript.Word, depth int) data {
-	d := rule.judgeExprList(w.Exprs, depth)
+	d := data{}
+	if !rule.varsOnly {
+		d = rule.judgeExprList(w.Exprs, depth)
+	}
 	for _, v := range w.Vars {
 		d = d.worse(rule.judgeVar(s, v, depth))
 	}
@@ -284,6 +301,9 @@ func (rule *RuleGitHubEnv) judgeWordArgs(s *runscript.Script, w *runscript.Word,
 // script it expands.
 func (rule *RuleGitHubEnv) judgeWord(s *runscript.Script, w *runscript.Word, depth int) data {
 	exprs, vars, subs := w.Exprs, w.Vars, w.Subs
+	if rule.varsOnly {
+		exprs = nil
+	}
 	if rule.dest != "" {
 		// What a pipeline of the substitution or an expansion has made safe does not count.
 		if cover := sanitizedCommands(w, rule.dest); len(cover) > 0 {
@@ -303,6 +323,13 @@ func (rule *RuleGitHubEnv) judgeWord(s *runscript.Script, w *runscript.Word, dep
 	d := rule.judgeExprList(exprs, depth)
 	if d.kind == dataUntrusted {
 		return d
+	}
+	// the output of `gh pr view --json title` and of `git log --format=%s` is text of outsiders
+	for _, c := range subs {
+		if src, ok := rule.scriptTaint(s, c); ok && (!rule.multilineOnly || src.multiline()) && !((src.nameOnly() && rule.dest == "GITHUB_ENV") || (src.refOrLoginOnly() && rule.freeTextOnly)) {
+			// the name of a branch or of an account is one line: it cannot add a variable to the environment
+			return data{kind: dataUntrusted, input: src.desc, cmd: true, multiline: src.multiline()}
+		}
 	}
 	if w.Subst && (len(w.Subs) == 0 || (len(subs) > 0 && !benignSubs(subs))) {
 		d = d.worse(data{kind: dataUnknown})
@@ -353,13 +380,22 @@ func (rule *RuleGitHubEnv) judgeExprList(exprs []string, depth int) data {
 // judgeExpr judges one expression. In the metadata of an action, `inputs.*` is whatever the caller passes, and a
 // workflow can pass the title of an issue: it is an outsider's input, whichever event runs the action.
 func (rule *RuleGitHubEnv) judgeExpr(e string) data {
-	if rule.wf != nil && rule.wf.Action != nil && exprReadsContext(e, "inputs") {
-		return data{kind: dataUntrusted, input: e}
+	var d data
+	switch {
+	case rule.wf != nil && rule.wf.Action != nil && !rule.skipInputs && exprReadsContext(e, "inputs"):
+		d = data{kind: dataUntrusted, input: e}
+	case rule.mintedByJob(e):
+	default:
+		d = judgeExprs([]string{e})
 	}
-	if rule.mintedByJob(e) {
+	// only an untrusted value is asked whether it can hold a line break
+	if rule.multilineOnly && d.kind == dataUntrusted && !exprMayHaveNewline(e) {
 		return data{}
 	}
-	return judgeExprs([]string{e})
+	if rule.freeTextOnly && d.kind == dataUntrusted && exprIsName(e) {
+		return data{}
+	}
+	return d
 }
 
 // mintedTokenActions are actions that create a token of a GitHub App; the token is not data of the event.
