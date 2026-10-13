@@ -78,6 +78,27 @@ type packageJSON struct {
 	PackageManager      string          `json:"packageManager"`
 	TrustedDependencies json.RawMessage `json:"trustedDependencies"`
 	AllowScripts        json.RawMessage `json:"allowScripts"`
+	// Aube and Pnpm are the namespaces of package.json that aube reads its settings from (`aube.allowBuilds`,
+	// `pnpm.allowBuilds`).
+	Aube json.RawMessage `json:"aube"`
+	Pnpm json.RawMessage `json:"pnpm"`
+}
+
+// allowsEveryBuild reports whether the `allowBuilds` of package.json, in the namespace of aube or of pnpm, has the
+// entry `"*": true`, which lets every dependency run its build scripts.
+func (p packageJSON) allowsEveryBuild() bool {
+	for _, ns := range []json.RawMessage{p.Aube, p.Pnpm} {
+		var cfg struct {
+			AllowBuilds map[string]any `json:"allowBuilds"`
+		}
+		if len(ns) == 0 || json.Unmarshal(ns, &cfg) != nil {
+			continue
+		}
+		if v, ok := cfg.AllowBuilds["*"].(bool); ok && v {
+			return true
+		}
+	}
+	return false
 }
 
 func (r *repoFiles) packageJSON(dir string) (packageJSON, bool) {
@@ -93,6 +114,7 @@ func (r *repoFiles) packageJSON(dir string) (packageJSON, bool) {
 			return packageJSON{}, false
 		}
 		p.TrustedDependencies, p.AllowScripts = raw["trustedDependencies"], raw["allowScripts"]
+		p.Aube, p.Pnpm = raw["aube"], raw["pnpm"]
 		_ = json.Unmarshal(raw["packageManager"], &p.PackageManager)
 	}
 	return p, true
