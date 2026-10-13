@@ -666,7 +666,8 @@
           "type": "string"
         },
         "concurrency": {
-          "description": "How many requests are in flight at most (at most 32). The default is 6.",
+          "description": "How many requests are in flight at most (at most 32; 0 is the default, 6).",
+          "maximum": 32,
           "minimum": 0,
           "type": "integer"
         },
@@ -696,6 +697,7 @@
         },
         "retries": {
           "description": "How often a request is repeated after a server error or a secondary rate limit (at most 10). The default is 2.",
+          "maximum": 10,
           "minimum": 0,
           "type": "integer"
         },
@@ -4166,6 +4168,7 @@
       "properties": {
         "max": {
           "description": "Deprecated: the max option of timeout-too-long.",
+          "minimum": 0,
           "type": "number"
         },
         "required": {

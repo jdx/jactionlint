@@ -39,6 +39,20 @@ func sInt(desc string) jsonObject {
 	return o
 }
 
+// sIntMax is a non-negative integer with an upper limit.
+func sIntMax(desc string, max int) jsonObject {
+	o := sInt(desc)
+	o["maximum"] = max
+	return o
+}
+
+// sNumber is a non-negative number.
+func sNumber(desc string) jsonObject {
+	o := sType(desc, "number")
+	o["minimum"] = 0
+	return o
+}
+
 func sEnum(desc string, vals ...string) jsonObject {
 	o := sType(desc, "string")
 	o["enum"] = vals
@@ -156,7 +170,7 @@ func ConfigSchema() []byte {
 		// Deprecated keys. They still work and are translated into rules: jactionlint --migrate-config rewrites them.
 		"timeout-minutes": sDeprecated(sObject("Deprecated: use the missing-timeout and timeout-too-long rules.", jsonObject{
 			"required": sBool("Deprecated: enables missing-timeout."),
-			"max":      sType("Deprecated: the max option of timeout-too-long.", "number"),
+			"max":      sNumber("Deprecated: the max option of timeout-too-long."),
 		})),
 		"require-commit-hash":                  sDeprecated(sBool("Deprecated: turn on the unpinned-uses rule.")),
 		"require-permissions":                  sDeprecated(sBool("Deprecated: turn on the missing-permissions rule.")),
@@ -290,8 +304,8 @@ func onlineOptionsSchema() jsonObject {
 		"deny":                sStrings("Never look up the repositories matching one of these owner/repo patterns. It wins over allow."),
 		"cache-ttl":           sStr("How long a cached answer is used without asking GitHub again, as a duration like 1h. 0s always revalidates. The default is 1h."),
 		"max-rate-limit-wait": sStr("The longest to wait for a rate limit to reset, as a duration like 30s. 0s never waits. The default is 30s."),
-		"retries":             sInt("How often a request is repeated after a server error or a secondary rate limit (at most 10). The default is 2."),
-		"concurrency":         sInt("How many requests are in flight at most (at most 32). The default is 6."),
+		"retries":             sIntMax(fmt.Sprintf("How often a request is repeated after a server error or a secondary rate limit (at most %d). The default is %d.", maxOnlineRetries, defaultOnlineRetries), maxOnlineRetries),
+		"concurrency":         sIntMax(fmt.Sprintf("How many requests are in flight at most (at most %d; 0 is the default, %d).", maxOnlineInFlight, defaultOnlineInFlight), maxOnlineInFlight),
 		"gh-cli":              sBool("Whether gh auth token is asked for a token when no variable or file has one. The default is true."),
 	})
 }

@@ -194,10 +194,13 @@ func (cmd *Command) Main(args []string) int {
 			fmt.Fprintln(cmd.Stderr, "--print-config-schema and --print-output-schema cannot be combined")
 			return ExitStatusInvalidCommandOption
 		}
+		schema := OutputSchema()
 		if f.printConfigSchema {
-			cmd.Stdout.Write(ConfigSchema())
-		} else {
-			cmd.Stdout.Write(OutputSchema())
+			schema = ConfigSchema()
+		}
+		if _, err := cmd.Stdout.Write(schema); err != nil {
+			fmt.Fprintf(cmd.Stderr, "could not write the schema: %v\n", err)
+			return ExitStatusFailure
 		}
 		return ExitStatusSuccessNoProblem
 	}

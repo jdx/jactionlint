@@ -30,7 +30,7 @@ type schemaValidator struct {
 var knownSchemaKeywords = map[string]bool{
 	"$schema": true, "$id": true, "$ref": true, "title": true, "description": true, "default": true, "deprecated": true, "format": true,
 	"type": true, "enum": true, "properties": true, "additionalProperties": true, "required": true, "items": true, "minItems": true,
-	"minimum": true, "pattern": true, "oneOf": true, "allOf": true, "anyOf": true, "definitions": true,
+	"minimum": true, "maximum": true, "pattern": true, "oneOf": true, "allOf": true, "anyOf": true, "definitions": true,
 }
 
 func (v schemaValidator) validate(schema map[string]any, doc any, path string) []string {
@@ -93,6 +93,11 @@ func (v schemaValidator) validate(schema map[string]any, doc any, path string) [
 		}
 		if !matched {
 			errs = append(errs, fmt.Sprintf("%s: %v matches none of the anyOf alternatives", path, doc))
+		}
+	}
+	if m, ok := schema["maximum"].(float64); ok {
+		if f, ok := toFloat(doc); ok && f > m {
+			errs = append(errs, fmt.Sprintf("%s: %v is greater than %v", path, doc, m))
 		}
 	}
 	if one, ok := schema["oneOf"].([]any); ok {
