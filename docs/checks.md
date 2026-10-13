@@ -8420,7 +8420,7 @@ installer (`dflook/terraform-plan`, `-apply`, `dflook/tofu-plan`, `-apply`, `JS-
 `PyO3/maturin-action`, `hynek/build-and-inspect-python-package`, `cypress-io/github-action`, `actions-rs/cargo`,
 `github/codeql-action/autobuild` and `analyze`, the Maven, mkdocs and pip actions of poutine). Some actions run it only for an
 input, which is checked: `ruby/setup-ruby` with `bundler-cache: true`, `actions/setup-node` with `cache` set to `npm`, `yarn` or `pnpm`, `golangci/golangci-lint-action` unless `install-only` is true, `docker/build-push-action`
-with a `context` that is a path (the default is the git context of the repository, not the workspace),
+with a `context` that is a path of the workspace (a relative path, `${{ github.workspace }}` or `cwd://`; the default, `{{defaultContext}}` and the URL and `github.com/` contexts are remote and do not read the workspace),
 `goreleaser/goreleaser-action` with `args` that has `release` or `build` and no `install-only` (it fails without `args`),
 `magefile/mage-action` unless `install-only` is true (it runs `mage` with the default target when `args` is empty),
 `gradle/gradle-build-action` and `gradle/actions/setup-gradle` with `arguments` (setup-gradle up to v3 runs Gradle with it; v4

@@ -1,6 +1,7 @@
 package jactionlint
 
 import (
+	"regexp"
 	"slices"
 	"strings"
 )
@@ -97,10 +98,7 @@ var workspaceActions = func() map[string]workspaceAction {
 	gated("docker/build-push-action", func(e *ExecAction) bool {
 		// the default context is the git context of the repository, not the workspace: only a path runs its Dockerfile
 		v, ok := e.input("context")
-		if !ok || v == "" || strings.Contains(v, "${{") || strings.Contains(v, "{{") {
-			return false
-		}
-		return !strings.Contains(v, "://") && !strings.HasPrefix(v, "git@")
+		return ok && contextIsWorkspace(v)
 	})
 	runsArgs := func(e *ExecAction) bool {
 		v, ok := e.input("args")
@@ -178,4 +176,26 @@ func workspaceActionRuns(e *ExecAction, u *UsesRef) bool {
 		}
 	}
 	return false
+}
+
+var reWorkspacePrefix = regexp.MustCompile(`(?i)^\$\{\{\s*github\.workspace\s*\}\}`)
+
+// contextIsWorkspace reports whether a build context of docker/build-push-action is a path of the workspace: a relative path,
+// the workspace itself (`${{ github.workspace }}`) or the local context of buildx (`cwd://`). The default (no context) is the
+// remote context of the triggering ref, and so are `{{defaultContext}}`, URLs, `github.com/...` and `ssh` contexts: they do not
+// read the workspace. An expression that is not known is not counted.
+func contextIsWorkspace(v string) bool {
+	v = strings.TrimSpace(v)
+	if loc := reWorkspacePrefix.FindStringIndex(v); loc != nil {
+		return !strings.Contains(v[loc[1]:], "${{") // the workspace and a path below it
+	}
+	switch {
+	case v == "", strings.Contains(v, "${{"), strings.Contains(v, "{{"):
+		return false
+	case strings.HasPrefix(strings.ToLower(v), "cwd://"):
+		return true
+	case strings.Contains(v, "://"), strings.HasPrefix(v, "git@"), strings.HasPrefix(strings.ToLower(v), "github.com/"):
+		return false
+	}
+	return true
 }
