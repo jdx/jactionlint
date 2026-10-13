@@ -142,6 +142,7 @@ cat action.yml | jactionlint --stdin-filename action.yml -
 | --- | --- | --- |
 | `--shellcheck=CMD` |  | Command or path of shellcheck (default shellcheck). Empty disables the integration |
 | `--pyflakes=CMD` |  | Command or path of pyflakes (default pyflakes). Empty disables the integration |
+| `--ruff=CMD` |  | Check the Python scripts with ruff (its pyflakes rules F) instead of pyflakes. The command must exist (exit status 3 otherwise) |
 | `--shellcheck-rcfile=FILE` |  | Let shellcheck read this shellcheckrc instead of passing --norc. Overrides "shellcheck.rcfile" of the config file |
 
 Exit status: 0 no problem, 1 problems found, 2 invalid command line, 3 failure.
@@ -276,6 +277,12 @@ processes.
 ```sh
 jactionlint --shellcheck= --pyflakes=
 ```
+
+<a id="external-tools-ruff"></a>`--ruff=ruff` checks the Python scripts (`shell: python`) with [ruff][ruff] instead of pyflakes (actionlint#439). jactionlint runs
+`ruff check --isolated --no-cache --select F --output-format json -`: only the rules `F` of ruff, which are the ones of pyflakes, and none of the
+configuration of the directory, so the result does not depend on a `pyproject.toml` in the working directory. The findings have the same rule ID
+`pyflakes`, with the message `ruff reported issue in this script: 2:7: F821 Undefined name ...`, and `--pyflakes` is not used then. The command
+must exist: the exit status is 3 when it does not.
 
 jactionlint runs shellcheck with `--norc`, so the results do not depend on a `.shellcheckrc` in the directory you run it from.
 To use a shellcheckrc, to pass arguments or to turn on optional checks of shellcheck, set the
@@ -1241,6 +1248,7 @@ You can also see actionlint issues inline in VS Code via the [Trunk VS Code exte
 [jactionlint-matcher]: https://raw.githubusercontent.com/jdx/jactionlint/main/.github/jactionlint-matcher.json
 [preinstall-ubuntu]: https://github.com/actions/runner-images/blob/main/images/ubuntu/Ubuntu2404-Readme.md
 [pre-commit]: https://pre-commit.com
+[ruff]: https://docs.astral.sh/ruff/
 [jujutsu]: https://jj-vcs.github.io/jj/
 [go-shellcheck]: https://github.com/wasilibs/go-shellcheck
 [go-install]: https://go.dev/doc/install

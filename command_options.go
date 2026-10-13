@@ -84,6 +84,7 @@ var cliOptions = []cliOption{
 
 	{"External tools", "shellcheck", "", "CMD", false, "-shellcheck", "Command or path of shellcheck (default shellcheck). Empty disables the integration"},
 	{"External tools", "pyflakes", "", "CMD", false, "-pyflakes", "Command or path of pyflakes (default pyflakes). Empty disables the integration"},
+	{"External tools", "ruff", "", "CMD", false, "", "Check the Python scripts with ruff (its pyflakes rules F) instead of pyflakes. The command must exist (exit status 3 otherwise)"},
 	{"External tools", "shellcheck-rcfile", "", "FILE", false, "", "Let shellcheck read this shellcheckrc instead of passing --norc. Overrides \"shellcheck.rcfile\" of the config file"},
 }
 
@@ -349,6 +350,7 @@ func newCommandFlags() *commandFlags {
 
 	fs.StringVar(&o.Shellcheck, "shellcheck", "shellcheck", "")
 	fs.StringVar(&o.Pyflakes, "pyflakes", "pyflakes", "")
+	fs.StringVar(&o.Ruff, "ruff", "", "")
 	fs.StringVar(&o.ShellcheckRCFile, "shellcheck-rcfile", "", "")
 	return f
 }

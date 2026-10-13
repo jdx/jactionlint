@@ -86,6 +86,10 @@ type LinterOptions struct {
 	// with Oneline) and in the message of the github format (the option --show-doc-urls). The json and sarif
 	// formats have it anyway.
 	ShowDocURLs bool
+	// Ruff is the command or the path of ruff (the option --ruff). When it is not empty ruff checks the Python
+	// scripts of "run:" instead of Pyflakes, with the rules of pyflakes (F) and without the configuration of
+	// the working directory. NewLinter fails when the command cannot be found.
+	Ruff string
 	// IgnorePatterns is list of regular expression to filter errors. The pattern is applied to error
 	// messages. When an error is matched, the error is ignored.
 	IgnorePatterns []string
@@ -186,6 +190,7 @@ type Linter struct {
 	printer    printer
 	shellcheck string
 	pyflakes   string
+	ruff       string
 	// shellcheckRC is LinterOptions.ShellcheckRCFile
 	shellcheckRC string
 	ignorePats   IgnorePatterns
@@ -321,6 +326,7 @@ func NewLinter(out io.Writer, opts *LinterOptions) (*Linter, error) {
 		printer:        prn,
 		shellcheck:     opts.Shellcheck,
 		pyflakes:       opts.Pyflakes,
+		ruff:           opts.Ruff,
 		shellcheckRC:   opts.ShellcheckRCFile,
 		ignorePats:     ignore,
 		now:            opts.Now,
@@ -338,6 +344,11 @@ func NewLinter(out io.Writer, opts *LinterOptions) (*Linter, error) {
 	}
 	if _, err := shellcheckRCFile(opts.ShellcheckRCFile, cwd, nil, ""); err != nil {
 		return nil, err
+	}
+	if opts.Ruff != "" {
+		if _, _, err := resolveExternalCommand(opts.Ruff); err != nil {
+			return nil, fmt.Errorf("--ruff=%s: the command was not found or is not executable (%w)", opts.Ruff, err)
+		}
 	}
 	l.warnRetiredIgnores(ignore...)
 	if opts.Profile != "" {
@@ -874,6 +885,7 @@ func (l *Linter) check(
 			config:                 cfg,
 			shellcheck:             l.shellcheck,
 			pyflakes:               l.pyflakes,
+			ruff:                   l.ruff,
 			shellcheckRCFile:       l.shellcheckRC,
 			cwd:                    l.cwd,
 			proc:                   proc,

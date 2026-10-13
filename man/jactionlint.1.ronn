@@ -213,6 +213,11 @@ single-dash long options of v1 are removed; the error names the replacement.
     Command name or file path of "pyflakes" external command. If empty, pyflakes integration will be
     disabled (default "pyflakes")
 
+  * `--ruff` <EXECUTABLE>:
+    Check the Python scripts of `shell: python` with this ruff (only its pyflakes rules `F`, without
+    the configuration of the working directory) instead of pyflakes. The command must exist: the
+    exit status is 3 when it is not found or not executable
+
   * `--shellcheck` <EXECUTABLE>:
     Command name or file path of "shellcheck" external command. If empty, shellcheck integration will
     be disabled (default "shellcheck")

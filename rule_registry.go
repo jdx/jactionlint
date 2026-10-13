@@ -253,6 +253,7 @@ type RuleEnv struct {
 	config                 *Config
 	shellcheck             string
 	pyflakes               string
+	ruff                   string // runs instead of pyflakes when it is set
 	shellcheckRCFile       string // --shellcheck-rcfile, relative to cwd
 	cwd                    string
 	// skipped holds the names of the rules whose factory could not create them (the external command is
