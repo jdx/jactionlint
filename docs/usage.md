@@ -802,6 +802,8 @@ jactionlint --online
 - **Offline.** `--online=cache` never uses the network: it answers from the cache whatever the age of the answers, and a lookup with
   nothing cached is skipped with one warning (run once with `--online` to fill the cache). `--online=cache,strict` fails on such a
   lookup. Good for a laptop on a plane or a sandboxed CI job that restores the cache directory.
+- **Immutable releases.** With the policy `immutable-release` of the `unpinned-uses` rule, `--online` accepts the tag of an immutable GitHub
+  release (`uses: astral-sh/setup-uv@v10.3.0`) like a commit SHA. See [tags of immutable releases](checks.md#check-immutable-release).
 - **Few requests.** Every repository, tag and commit is asked for once per run however often it is used, and the checks share what
   they learn. At most six requests are in flight (`concurrency`). The number of requests grows with the number of different
   actions, not steps. Interrupting with Ctrl-C stops the lookups.

@@ -1264,7 +1264,7 @@ An action, reusable workflow or Docker image is not pinned to a commit SHA or di
 - Default level: error
 - Profile: default
 - Fixable: yes
-- Option `policies` (string-map, default empty): How strongly to pin the actions matching a pattern: hash-pin (full commit SHA, the default for everything), ref-pin (any tag, branch or SHA) or any. The most specific pattern wins. Patterns are "*", "owner/*", "owner/repo" and "owner/repo/path". Docker images follow the "*" policy.
+- Option `policies` (string-map, default empty): How strongly to pin the actions matching a pattern: hash-pin (full commit SHA, the default for everything), ref-pin (any tag, branch or SHA), immutable-release (a full commit SHA, or with --online the tag of an immutable GitHub release) or any. The most specific pattern wins. Patterns are "*", "owner/*", "owner/repo" and "owner/repo/path". Docker images follow the "*" policy.
 - Details and examples: [checks](./checks.md#check-action-format)
 
 ## unredacted-secrets

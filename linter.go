@@ -946,6 +946,7 @@ func (l *Linter) finishCheck(path string, content []byte, all []*Error, cfg *Con
 	if ic != nil {
 		all = dropUnreachable(all, ic.scopes)
 	}
+	all = l.acceptImmutableReleases(cfg, content, all)
 	all = l.annotateErrors(all, content, cfg)
 
 	// The ignores of the config file are matched first, without removing anything, so that the inline

@@ -368,8 +368,7 @@ These ideas from the zizmor tracker are **not built**: a check of `allow-unsafe-
 pull request controls (zizmor [#2134](https://github.com/zizmorcore/zizmor/issues/2134)), TOCTOU refs
 ([#935](https://github.com/zizmorcore/zizmor/issues/935)), shell syntax errors without shellcheck
 ([#2322](https://github.com/zizmorcore/zizmor/issues/2322)), a rule for a SHA without a version comment
-([#2316](https://github.com/zizmorcore/zizmor/issues/2316)), immutable releases under `--online`
-([#766](https://github.com/zizmorcore/zizmor/issues/766)), credentials in the `registries` of `dependabot.yml`
+([#2316](https://github.com/zizmorcore/zizmor/issues/2316)), credentials in the `registries` of `dependabot.yml`
 ([#1222](https://github.com/zizmorcore/zizmor/issues/1222)), a repojacking check by owner lookup
 ([#479](https://github.com/zizmorcore/zizmor/issues/479)), and zizmor's precomputed snapshot of tags and advisories, which would cut the
 first-run cost of `--online`. The registry of rules, [rules.md](rules.md), is the list of what exists.

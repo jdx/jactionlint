@@ -2373,6 +2373,9 @@ Each key is a pattern for the repository of the `uses:` value, and the value is 
 - `hash-pin`: a full-length commit SHA is required (for Docker images, a digest). This is the policy of everything that no
   pattern matches.
 - `ref-pin`: any tag, branch or commit SHA is accepted. For Docker images, a tag other than `latest` or a digest is required.
+- `immutable-release`: like `hash-pin`, and with `--online` the tag of an [immutable release](https://docs.github.com/en/code-security/concepts/supply-chain-security/immutable-releases)
+  is accepted as well (`uses: astral-sh/setup-uv@v10.3.0`). Without `--online` it is `hash-pin`: the message says that an immutable release
+  would do. See [below](#check-immutable-release).
 - `any`: nothing is required.
 
 The patterns are `*` (everything), `owner/*`, `owner/repo` and `owner/repo/path` (the path and everything below it).
@@ -2380,6 +2383,38 @@ Owners and repositories are compared case-insensitively. When several patterns m
 they are written in: in the example, `actions/checkout` needs a commit SHA while the other `actions/*` actions only need a ref.
 Reusable workflow calls follow the same patterns. Patterns describe repositories, so a Docker image follows the `*` pattern.
 Invalid patterns and unknown policies are errors when the configuration is read.
+
+<a id="check-immutable-release"></a>
+#### Tags of immutable releases (online)
+
+When a repository publishes its releases as [immutable](https://docs.github.com/en/code-security/concepts/supply-chain-security/immutable-releases),
+GitHub locks the tag of each release (it cannot be moved or deleted) and its assets, so that
+`uses: owner/repo@v1.2.3` runs the same code for as long as the release exists, which is what pinning to a commit is for. The policy
+`immutable-release` of the `policies` option accepts such a tag instead of reporting it:
+
+```yaml
+rules:
+  unpinned-uses:
+    level: error
+    policies:
+      '*': immutable-release
+```
+
+With `--online` a ref is accepted when all of these hold, and is reported as with `hash-pin` otherwise:
+
+- `GET /repos/{owner}/{repo}/releases/tags/{ref}` answers a published release with `"immutable": true`. This is the field of the release
+  object of the REST API (the endpoint "Get a release by tag name"). A tag without a release (a moving tag such as `v4`), a release which
+  was published before the repository turned immutability on, and a draft are not immutable.
+- No branch has the name of the tag, because `uses: owner/repo@v1.2.3` would be ambiguous (see [`ref-confusion`](#check-ref-confusion)): a
+  branch can be pushed by whoever can write to the repository, whatever the release says.
+- The `uses:` is an action or a reusable workflow of a GitHub repository, and the ref is a plain tag name (a ref with a `/`, a branch and a
+  commit SHA are not looked up: a commit is accepted by every policy anyway).
+
+A lookup which fails (403, rate limit, no network, `--online=cache` without the answer) keeps the finding and counts as a skipped
+lookup. It costs one request for each tag of the run that the policy leaves open (also the answer "no release" is cached, like all
+answers), and one for the branch of the same name for each immutable one, which `ref-confusion` and `--fix` share. Nothing is asked for
+the repositories which another policy matches, or for a configuration without `immutable-release`. The setting protects the tag, not the
+author: an immutable release of a repository which was taken over later still runs what its author published.
 
 <a id="check-local-action-checkout"></a>
 ### Local action used before checkout
