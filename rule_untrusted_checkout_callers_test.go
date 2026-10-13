@@ -173,6 +173,24 @@ func TestUntrustedCheckoutCallers(t *testing.T) {
 			"a.yml":     "on: pull_request_target\njobs:\n  call:\n    uses: ./.github/workflows/mid.yml\n    with:\n      sha: ${{ github.event.pull_request.head.ref }}\n",
 			"z.yml":     "on: pull_request_target\njobs:\n  call:\n    uses: ./.github/workflows/mid.yml\n    with:\n      sha: " + headSHA + "\n",
 		}, "build.yml", 1, "head.ref by .github/workflows/a.yml"},
+		{"reusable workflow, a commit and a branch passed to a checkout that refuses commits", map[string]string{
+			"build.yml": strings.Replace(ucReusable, "actions/checkout@v1", "actions/checkout@v4", 1),
+			"pr.yml":    "on: pull_request_target\njobs:\n  call:\n    uses: ./.github/workflows/build.yml\n    with:\n      ref: ${{ github.event.pull_request.head.sha || github.head_ref }}\n",
+		}, "build.yml", 1, "inputs.ref, given"},
+		{"reusable workflow, two callers to a checkout that refuses commits, one with a branch", map[string]string{
+			"build.yml": strings.Replace(ucReusable, "actions/checkout@v1", "actions/checkout@v4", 1),
+			"a.yml":     "on: pull_request_target\njobs:\n  call:\n    uses: ./.github/workflows/build.yml\n    with:\n      ref: ${{ github.event.pull_request.head.sha }}\n",
+			"b.yml":     "on: pull_request_target\njobs:\n  call:\n    uses: ./.github/workflows/build.yml\n    with:\n      ref: ${{ github.event.pull_request.head.ref }}\n",
+		}, "build.yml", 1, "inputs.ref, given"},
+		{"reusable workflow, two callers to a checkout that refuses commits, both with a commit", map[string]string{
+			"build.yml": strings.Replace(ucReusable, "actions/checkout@v1", "actions/checkout@v4", 1),
+			"a.yml":     "on: pull_request_target\njobs:\n  call:\n    uses: ./.github/workflows/build.yml\n    with:\n      ref: ${{ github.event.pull_request.head.sha }}\n",
+			"b.yml":     "on: pull_request_target\njobs:\n  call:\n    uses: ./.github/workflows/build.yml\n    with:\n      ref: ${{ github.event.pull_request.merge_commit_sha }}\n",
+		}, "build.yml", 0, ""},
+		{"reusable workflow, a commit passed to a checkout that refuses commits", map[string]string{
+			"build.yml": strings.Replace(ucReusable, "actions/checkout@v1", "actions/checkout@v4", 1),
+			"pr.yml":    "on: pull_request_target\njobs:\n  call:\n    uses: ./.github/workflows/build.yml\n    with:\n      ref: ${{ github.event.pull_request.head.sha || github.event.pull_request.merge_commit_sha }}\n",
+		}, "build.yml", 0, ""},
 		{"reusable workflow, the number of the pull request in the ref of a checkout that refuses it", map[string]string{
 			"build.yml": "on:\n  workflow_call:\n    inputs:\n      n:\n        type: string\njobs:\n  b:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n        with:\n          ref: refs/pull/${{ inputs.n }}/head\n      - run: make\n",
 			"pr.yml":    "on: pull_request_target\njobs:\n  call:\n    uses: ./.github/workflows/build.yml\n    with:\n      n: ${{ github.event.number }}\n",
@@ -261,6 +279,7 @@ func TestUntrustedCheckoutLocalActionCheckout(t *testing.T) {
 		{"the number of the pull request in the ref, and a checkout that refuses it", numberAction("actions/checkout@v4"), prt + "      - uses: ./.github/actions/checkout-pr\n        with:\n          n: ${{ github.event.number }}\n      - run: make\n"},
 		{"the number of the pull request in the ref, and a checkout that does not refuse it", numberAction("actions/checkout@v1"), prt + "      - uses: ./.github/actions/checkout-pr # want\n        with:\n          n: ${{ github.event.number }}\n      - run: make\n"},
 		{"the number of the pull request in the ref, in another case and an index access", strings.Replace(numberAction("actions/checkout@v4"), "${{ inputs.n }}", "${{ INPUTS['N'] }}", 1), prt + "      - uses: ./.github/actions/checkout-pr\n        with:\n          n: ${{ github.event.number }}\n      - run: make\n"},
+		{"a commit and a branch passed to a checkout that refuses commits", action("actions/checkout@v4", "${{ inputs.ref }}"), prt + "      - uses: ./.github/actions/checkout-pr # want\n        with:\n          ref: ${{ github.event.pull_request.head.sha || github.head_ref }}\n      - run: make\n"},
 		{"free text in the ref, and a checkout that refuses a number", numberAction("actions/checkout@v4"), prt + "      - uses: ./.github/actions/checkout-pr # want\n        with:\n          n: ${{ github.head_ref }}\n      - run: make\n"},
 		{"a number in the ref that the call leaves out", numberAction("actions/checkout@v4"), prt + "      - uses: ./.github/actions/checkout-pr # want\n      - run: make\n"},
 		{"the step is for maintainers", action("actions/checkout@v1", "${{ inputs.ref }}"), prt + "      - uses: ./.github/actions/checkout-pr\n        if: github.event.pull_request.author_association == 'MEMBER'\n        with:\n          ref: " + headSHA + "\n      - run: make\n"},
