@@ -33,7 +33,7 @@ func TestPinFixes(t *testing.T) {
 		{"comment naming the ref", "uses: actions/checkout@v4 # v4", "uses: actions/checkout@" + pinCheckoutV4 + " # v4"},
 		{"comment naming the ref among words", "uses: actions/checkout@v4 # tag=v4 (see docs)", "uses: actions/checkout@" + pinCheckoutV4 + " # tag=v4 (see docs)"},
 		{"another action", "uses: actions/setup-node@v4", "uses: actions/setup-node@" + pinSetupNodeV4 + " # v4"},
-		{"a tag that is also a version of other tags", "uses: tj-actions/changed-files@v45", "uses: tj-actions/changed-files@" + pinChangedV45 + " # v45"},
+		{"a tag that is also a version of other tags", "uses: tj-actions/changed-files@v45", "uses: tj-actions/changed-files@" + pinChangedV45 + " # v45.0.2"},
 		{"with other keys after", "uses: actions/checkout@v4\n        with:\n          fetch-depth: 0", "uses: actions/checkout@" + pinCheckoutV4 + " # v4\n        with:\n          fetch-depth: 0"},
 
 		{"a branch", "uses: actions/upload-artifact@main", ""},
@@ -41,7 +41,7 @@ func TestPinFixes(t *testing.T) {
 		{"an unknown tag", "uses: actions/checkout@v99", ""},
 		{"a comment about something else", "uses: actions/checkout@v4 # needed for the cache", ""},
 		{"an unknown repository", "uses: example/forgotten@v1", ""},
-		{"a docker image", "uses: docker://alpine:3.19", ""},
+		{"a docker image of a registry which is not asked", "uses: docker://quay.io/example/tool:1", ""},
 		{"an abbreviated sha", "uses: actions/checkout@abc1234", ""},
 		{"a dynamic ref", "uses: actions/checkout@${{ matrix.ref }}", ""},
 		{"a flow mapping", "{uses: actions/checkout@v4, name: x}", ""},
@@ -170,7 +170,7 @@ func FuzzPinFix(f *testing.F) {
 			return
 		}
 		sess := newOnlineSession(context.Background(), client(), nil)
-		fix, err := pinFix(sess, src, starts[line-1], col)
+		fix, err := pinFix(sess, src, starts[line-1], col, false)
 		if err != nil {
 			return
 		}

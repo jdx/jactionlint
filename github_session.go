@@ -152,11 +152,18 @@ type onlineSession struct {
 	compares   memo[compareKey, GitHubCompareStatus]
 	advisories memo[string, []GitHubAdvisory]
 	origins    memo[originKey, originResult]
-	files      memo[fileKey, remoteFile]
-	actions    memo[remoteActionKey, *ActionMetadata]
-	workflows  memo[remoteWorkflowKey, *ReusableWorkflowMetadata]
-	owners     memo[string, *GitHubOwner]
-	releases   memo[releaseKey, *GitHubRelease]
+
+	// images answers the digest of container images. It is nil when the client itself can (ImageDigestClient).
+	images           ImageDigestClient
+	offline          bool // the cache mode: the registries are not asked
+	imageDigests     memo[imageKey, string]
+	registryDown     map[string]error // registries which are not asked again in this run
+	registryFailures map[string]int   // failures in a row, by registry
+	files            memo[fileKey, remoteFile]
+	actions          memo[remoteActionKey, *ActionMetadata]
+	workflows        memo[remoteWorkflowKey, *ReusableWorkflowMetadata]
+	owners           memo[string, *GitHubOwner]
+	releases         memo[releaseKey, *GitHubRelease]
 
 	environments memo[environmentKey, environmentResult]
 }

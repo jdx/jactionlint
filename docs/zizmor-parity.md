@@ -46,7 +46,7 @@ How to read the table:
 | `ref-confusion` | `ref-confusion` | online | partial: no finding on the corpus by either tool; see [online audits](#online-audits) |
 | `ref-version-mismatch` | `ref-version-mismatch` | online | partial: every mismatch of a tag comment is found; a missing or version-less comment and a branch comment are not reported; see [online audits](#online-audits) |
 | `secrets-inherit` | `secrets-inherit` | default | full, reported at the `uses:` of the job like zizmor |
-| `secrets-outside-env` | `secrets-outside-env` | pedantic | full; zizmor reports it only for the auditor persona. `workflow_call` workflows are skipped like zizmor does. Inside a folded `>-` scalar jactionlint reports the line of the scalar start |
+| `secrets-outside-env` | `secrets-outside-env` | pedantic | full; zizmor reports it only for the auditor persona. `workflow_call` workflows are skipped like zizmor does. Inside a folded `>-` scalar jactionlint reports the line of the scalar start. A secret that a job passes to a reusable workflow with `secrets:` is reported too (the open zizmor PR [#1792](https://github.com/zizmorcore/zizmor/pull/1792) adds that as an auditor finding) |
 | `self-hosted-runner` | `self-hosted-runner` | pedantic (info) | partial: literal `self-hosted` labels and matrix values, the labels of `self-hosted-runner.labels` of the configuration (ARC runner sets), and `runs-on: {group: ...}`; labels from other expressions are not resolved, and zizmor's list of GitHub-hosted labels is not used. Labels of hosted-runner providers such as namespace or blacksmith are not reported (and are not unknown labels for `unknown-runner-label`, see `self-hosted-runner.providers`). Options `allow` and `pull-request-only` (zizmor has none). Not compared with zizmor on a corpus |
 | `self-repository` | `self-repository` | pedantic (info) | full on the corpus, with an unsafe fix (the one miss is a step with `if: false`, whose findings are dropped) |
 | `stale-action-refs` | `stale-action-refs` | online | partial: same findings except repositories with more than 1000 tags; see [online audits](#online-audits) |
@@ -57,7 +57,7 @@ How to read the table:
 | `unpinned-images` | `unpinned-images` | default | partial: no per-persona split (an image without a tag against a tag without a digest; the `require-digest` option switches between them), images in `docker://` are `unpinned-uses`. Beyond zizmor: the image of `docker run`/`create`/`pull` (and podman, nerdctl) in a script (zizmor#738 is open), and per-image `policies` (zizmor#737 is open); not compared with zizmor on a corpus. For `container: ${{ matrix.image }}` zizmor points at the container and jactionlint at the matrix value that is not pinned (all of the misses but two, which are in generated files, are that). An image that is written with an expression is judged as far as it can be known: a matrix object or text with matrix values is resolved, an image that ends in text after the expression is reported, and any other (`${{ vars.IMAGE }}`) only with the option `pedantic`, which zizmor reports as its low confidence finding. See [the check](checks.md#check-unpinned-images) |
 | `unpinned-tools` | `unpinned-tools` | default | full for the 4 actions zizmor knows. The option `pedantic` (on under the `pedantic` profile) adds `run:` installs without an exact version and three more actions. An input that is an expression is not reported, zizmor reports it with low confidence. See [the check](checks.md#check-unpinned-tools) |
 | `unpinned-uses` | `unpinned-uses` | default | partial: `hash-pin`, `ref-pin`, `any` policies with the patterns `*`, `owner/*`, `owner/repo` and `owner/repo/path`; other pattern forms are rejected when the configuration is read. Docker images follow the `*` pattern only. A generated file is not checked by default (755 of the 756 misses, see [where a rule differs on purpose](#where-a-rule-differs-on-purpose)) |
-| `unredacted-secrets` | `unredacted-secrets` | default | full on the synthetic cases (any `fromJSON(secrets.X)` is reported, also without a field access); no finding on the corpus |
+| `unredacted-secrets` | `unredacted-secrets` | default | full on the synthetic cases (any `fromJSON(secrets.X)` is reported, also without a field access); no finding on the corpus. With the option `pedantic`: a value cut from a secret in a script and printed or traced, not implemented in zizmor (the idea is sisakulint's `secret-in-log`) |
 | `unsound-condition` | `if-always-true` (existing) | correctness | full for workflows: `if-always-true` reports every `if:` with characters around `${{ }}`, a block scalar's trailing newline included. No new rule. Composite action steps are checked too (not measured) |
 | `unsound-contains` | `unsound-contains` | default | full on the synthetic cases; no finding on the corpus |
 | `unsound-ternary` | `unsound-ternary` | correctness | not measured: no corpus run against zizmor, covered by fixtures only |
@@ -201,7 +201,8 @@ jactionlint" in the harness report. The idea behind some of them is an open issu
 | `unverified-download` | default | a download piped into a shell or an interpreter, a downloaded file made executable and run without a checksum or signature check, TLS verification turned off. The idea is zizmor [#711](https://github.com/zizmorcore/zizmor/issues/711) | [see below](#downloads-and-credentials) |
 | `insecure-ssh-keyscan` | default | `ssh-keyscan` output written to a `known_hosts` file. The idea is zizmor [#2012](https://github.com/zizmorcore/zizmor/issues/2012) | [see below](#downloads-and-credentials) |
 | `checkout-static-credentials` | default | `actions/checkout` given an `ssh-key` or a literal `token`; with the option `secret-tokens` (on under the `pedantic` profile) also a token from a secret other than `GITHUB_TOKEN`. The idea is zizmor [#1118](https://github.com/zizmorcore/zizmor/issues/1118) | [see below](#downloads-and-credentials) |
-| `workflow-secret-scope` | pedantic | a secret assigned to the workflow-level `env` that reaches several jobs | [the check](checks.md#check-workflow-secret-scope) |
+| `workflow-secret-scope` | pedantic | a secret assigned to the workflow-level `env` that reaches several jobs; with the option `job-level`, one in the `env` of a job with several steps (zizmor [#1816](https://github.com/zizmorcore/zizmor/issues/1816) is open) | [the check](checks.md#check-workflow-secret-scope) |
+| `unused-workflow-secret` | pedantic | a secret of `on.workflow_call.secrets` that no expression reads (zizmor [#1044](https://github.com/zizmorcore/zizmor/issues/1044) is open) | [the check](checks.md#check-unused-workflow-secret) |
 | `insecure-url-scheme` | default | `http://`, `ftp://` and `git://` locations in `run:` downloads and `with:` inputs. zizmor's audit of this name looks at `.pre-commit-config.yaml` only | |
 | `invisible-characters` | default | invisible and bidirectional control characters ([zizmor#914](https://github.com/zizmorcore/zizmor/issues/914)), in workflows and `dependabot.yml`, also in a file that does not parse. Safe fix | no true positive on the corpus: unit tests and fixtures. Emoji variation selectors (`U+FE0F` after `ℹ`, `✏`, `⚠`) are not reported |
 | `unsound-prefix-match` | default | `startsWith()`, `endsWith()` and `contains()` on the name of an account or repository ([zizmor#1533](https://github.com/zizmorcore/zizmor/issues/1533)); `unsound-contains` is the sibling for a literal haystack | an expression outside `if:` is reported only in a runner, environment, container, service or workflow-call-secret context, or when it reads a secret or `github.token`; `endsWith(.., '[bot]')` and `!contains(github.actor, '[bot]')` are not reported on purpose. The option `refs` is opt-in |
@@ -367,8 +368,7 @@ without buildx is the one case that this does not cover.
 
 ## What is not done
 
-These ideas from the zizmor tracker are **not built**: TOCTOU refs
-([#935](https://github.com/zizmorcore/zizmor/issues/935)), shell syntax errors without shellcheck
+These ideas from the zizmor tracker are **not built**: shell syntax errors without shellcheck
 ([#2322](https://github.com/zizmorcore/zizmor/issues/2322)), a rule for a SHA without a version comment
 ([#2316](https://github.com/zizmorcore/zizmor/issues/2316)), credentials in the `registries` of `dependabot.yml`
 ([#1222](https://github.com/zizmorcore/zizmor/issues/1222)), and zizmor's precomputed snapshot of tags and advisories, which would cut the
@@ -495,10 +495,12 @@ Not reported: archives that are downloaded, extracted and run, `go install` or `
   an output of an earlier step is not followed (except the outputs of the actions that look up the pull request of a comment), and the head
   that a workflow passes to a local reusable workflow or composite action is followed one call at a time, not through a composite action
   that calls another one. "Runs it" is a list of commands: an unusual build tool that is not in the list of
-  commands that only read files counts as running code, while an action that builds the workspace and is not in the short list does
-  not. `untrusted-checkout` knows the protection of `actions/checkout` against the code of fork pull requests (zizmor
+  commands that only read files counts as running code, while an action that runs the workspace and is not in the list (a few dozen actions of poutine and CodeQL, some with an input
+  that must be set) does not. `untrusted-checkout` knows the protection of `actions/checkout` against the code of fork pull requests (zizmor
   [#2134](https://github.com/zizmorcore/zizmor/issues/2134), poutine#450): `allow-unsafe-pr-checkout: true` or an expression is a finding of
-  its own, and a checkout that a guarded version refuses is reported only with the option `pedantic`. Which versions are guarded is a
+  its own, and a checkout that a guarded version refuses is reported only with the option `pedantic`. TOCTOU refs (zizmor
+  [#935](https://github.com/zizmorcore/zizmor/issues/935)) are a message of the same rule: a gate that holds at one moment (an environment, a
+  label, the comment of a maintainer) and a branch as the ref, or a label that survives a push. Which versions are guarded is a
   list of floors and the version comment of a commit, which is not verified (see the checks document). Conditions on `needs` and `steps` are guards, and so is `github.event.pull_request.merged == true` for a checkout of the merged commit.
 - `untrusted-artifact` links the use to the download by the `path` of the artifact, or its `name` (a file in the root of the workspace
   that has another name is not linked), and takes any `=~`, numeric test or checksum as validation.
