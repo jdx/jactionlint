@@ -119,29 +119,48 @@ func (rule *RuleCommentTriggerAuthorization) VisitJobPre(n *Job) error {
 		return nil
 	}
 	steps := flattenSteps(n.Steps)
-	site, prev, step := (*String)(nil), []*Step(nil), (*Step)(nil)
+	// the condition of the job reads the text: the job is started by it, and a step of the job that checks the user (and
+	// fails) comes before the work. Otherwise each step whose condition reads the text is judged on its own: a guard
+	// step protects the steps after it, the condition or the environment of the job all of them.
 	if readsCommentBody(n.If) {
-		// the job is started by the text, and a step of the job that checks the user (and fails) comes before the work
-		site, prev = n.If, steps
-	} else {
-		for i, s := range steps {
-			if readsCommentBody(s.If) {
-				site, prev, step = s.If, steps[:i], s
-				break
-			}
+		if !rule.guardedByContext(n, n.If, steps, steps, nil) {
+			rule.report(n.If)
+		}
+		return nil
+	}
+	for i, s := range steps {
+		if readsCommentBody(s.If) && !rule.guardedByContext(n, s.If, steps[:i+1], steps[:i], s) {
+			rule.report(s.If) // once for the job: the first step that anybody can start
+			break
 		}
 	}
-	if site == nil || readsEarlierDecision(site) || runsGatedAgent(steps) {
-		return nil
+	return nil
+}
+
+// guardedByContext reports whether something decides who can reach the condition: an earlier job or step, the labels, an
+// AI agent action that checks the write access of the user itself, or the check of the user of agentic-actions. agents
+// are the steps that count for the agent, prev the steps before the one that is judged (nil step: the job as a whole).
+func (rule *RuleCommentTriggerAuthorization) guardedByContext(n *Job, site *String, agents, prev []*Step, step *Step) bool {
+	if readsEarlierDecision(site) || runsGatedAgent(agents) {
+		return true
+	}
+	// A step that is itself started by the text is a command, not a guard of the steps after it, even if its own
+	// condition mentions the user.
+	guards := make([]*Step, 0, len(prev))
+	for _, p := range prev {
+		if !readsCommentBody(p.If) {
+			guards = append(guards, p)
+		}
 	}
 	// without the online checks an environment counts as a guard
-	if guarded, _ := jobChecksWhoStarted(rule.wf, nil, n, prev, step); guarded {
-		return nil
-	}
+	guarded, _ := jobChecksWhoStarted(rule.wf, nil, n, guards, step)
+	return guarded
+}
+
+func (rule *RuleCommentTriggerAuthorization) report(site *String) {
 	rule.ReportIDf("comment-trigger-authorization", site.Pos,
 		"this condition starts the job from the text of a comment (the event is %q), and nothing checks who wrote it, so anyone who can comment can run the job with the token and the secrets of the repository. check github.event.comment.author_association (OWNER, MEMBER or COLLABORATOR), ask for the permission of github.actor in an earlier step or job, or run the job in an environment with required reviewers",
 		rule.trigger)
-	return nil
 }
 
 func init() {

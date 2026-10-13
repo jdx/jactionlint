@@ -132,6 +132,35 @@ jobs:
     steps:
       - uses: github/commands@v1
 
+  # A guarded step does not hide an unguarded one after it
+  mixed-steps:
+    runs-on: ubuntu-latest
+    steps:
+      - run: ./test.sh
+        if: startsWith(github.event.comment.body, '/test') && github.event.comment.author_association == 'MEMBER'
+      - run: ./deploy.sh
+        if: startsWith(github.event.comment.body, '/deploy')
+
+  # A guard step protects the steps after it
+  guard-step-first:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: lannonbr/repo-permission-check-action@2.0.5
+        with:
+          permission: write
+      - run: ./deploy.sh
+        if: startsWith(github.event.comment.body, '/deploy')
+
+  # ... and not the steps before it
+  guard-step-last:
+    runs-on: ubuntu-latest
+    steps:
+      - run: ./deploy.sh
+        if: startsWith(github.event.comment.body, '/deploy')
+      - uses: lannonbr/repo-permission-check-action@2.0.5
+        with:
+          permission: write
+
   # The command action itself
   command-action:
     runs-on: ubuntu-latest
