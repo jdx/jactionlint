@@ -1033,7 +1033,8 @@ func (rule *RuleCachePoisoning) VisitJobPre(n *Job) error {
 	}
 	for _, s := range steps {
 		a, ref := stepAction(s)
-		if a == nil || ref.Kind != UsesAction {
+		if a == nil || ref.Kind != UsesAction || a.InputsUnknown() {
+			// the inputs which turn the cache off may be in a "with:" that is an expression
 			continue
 		}
 		name := ref.CanonicalName()

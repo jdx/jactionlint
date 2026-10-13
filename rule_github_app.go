@@ -66,6 +66,9 @@ func (rule *RuleGitHubApp) VisitStep(n *Step) error {
 		rule.ReportID("github-app", a.Inputs["skip-token-revoke"].Value.Pos, "\"skip-token-revoke: true\" keeps the GitHub App token valid after the job ends. remove it so that the token is revoked in the post step")
 	}
 
+	if a.InputsUnknown() {
+		return nil // the inputs may have what is missing
+	}
 	_, hasOwner := a.input("owner")
 	repos, hasRepos := a.input("repositories")
 	if hasOwner && (!hasRepos || repos == "") && !orgOnly(a) {

@@ -82,8 +82,8 @@ func (rule *RuleAgenticActions) VisitJobPre(n *Job) error {
 	steps := flattenSteps(n.Steps)
 	for i, s := range steps {
 		a, ok := s.Exec.(*ExecAction)
-		if !ok {
-			continue
+		if !ok || a.InputsUnknown() {
+			continue // the inputs (the tools, the prompt) are not known when "with:" is an expression
 		}
 		if agent := agentOf(a); agent != nil {
 			rule.checkAgent(n, steps[:i], s, a, agent)
@@ -183,9 +183,12 @@ func (rule *RuleAgenticActions) checkSecretsInEnv(job *Job, step *Step, a *ExecA
 		if env == nil {
 			continue
 		}
-		if env.Expression != nil {
-			if ref, src := secretRefOf(env.Expression); ref != nil {
-				rule.ReportIDf("agentic-actions", env.Expression.Pos,
+		for _, x := range append([]*String{env.Expression}, env.Inserts...) {
+			if x == nil {
+				continue
+			}
+			if ref, src := secretRefOf(x); ref != nil {
+				rule.ReportIDf("agentic-actions", x.Pos,
 					"the secret %q is in the environment of %s, which outsiders can steer through the text of this workflow's %q trigger. its shell can print the environment. pass the secret only to the steps that need it, never to the agent, and use the GITHUB_TOKEN of the job with minimal permissions for GitHub",
 					ref.Display(src), agent.Title, trigger)
 			}

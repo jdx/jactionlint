@@ -16,6 +16,8 @@ jobs:
       - id: pr
         run: echo "number=$(cat pr/number)" >> "$GITHUB_OUTPUT"
       - run: gh pr comment ${{ steps.pr.outputs.number }} --body done
+        env:
+          GH_TOKEN: ${{ github.token }}
   deploy:
     runs-on: ubuntu-latest
     steps:
