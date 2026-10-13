@@ -463,12 +463,19 @@ func (l *Linter) reportBaselineNote(results []fileResult) {
 // entries, and returns the errors to report.
 func (l *Linter) printOne(r fileResult) ([]*Error, error) {
 	results := l.finishRun([]fileResult{r})
+	if err := l.changedError(); err != nil {
+		return nil, err
+	}
 	if err := l.printer.print(l.out, results, l.runInfo()); err != nil {
 		return nil, err
 	}
 	l.reportBaselineNote(results)
+	l.reportChangedNote()
 	l.reportRunHint(results)
 	l.reportToolNotes()
+	if l.changed != nil {
+		r.errs = results[0].errs // what --changed-since shows
+	}
 	if len(results) == 1 {
 		return r.errs, nil
 	}

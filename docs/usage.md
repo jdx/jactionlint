@@ -92,6 +92,8 @@ cat action.yml | jactionlint --stdin-filename action.yml -
 | `--finding-context` |  | Add the events of the workflow and the permissions of the token of the job to each finding of json, jsonl and sarif |
 | `--no-hints` |  | Do not print the hint line after a text run with many findings, nor the note that shellcheck or pyflakes was not found |
 | `--min-severity=LEVEL` |  | Hide findings less severe than LEVEL: info (default), warn or error |
+| `--changed-since=REV` |  | Show only the findings on the lines that changed since the merge base of REV and HEAD (commits, index, working tree, and every line of an untracked file). Every file is still checked, so the findings are those of a full run |
+| `--changed-scope=SCOPE` |  | With --changed-since: lines (default) shows the findings on the changed lines, files shows every finding of a changed file |
 | `--strict-exit` |  | Exit with status 1 also for findings of level warn and info |
 
 **Rules and configuration**
@@ -778,6 +780,37 @@ How an entry matches a finding, so that you know what an edit does to the baseli
 
 `--baseline` and `--baseline-write` do not take the file as a separate argument: write `--baseline=FILE`, because a following
 argument is a workflow file to check.
+
+### Show only what a pull request changed
+
+`--changed-since REV` shows only the findings on the lines that changed since `REV`, so a pull request check reports what the pull
+request adds and not what the repository already had:
+
+```sh
+jactionlint --changed-since origin/main
+```
+
+It is a filter of what is shown, not a way to check less. **Every file is checked and the whole call graph of the repository is read, as in
+a full run**: a finding on a changed line of a reusable workflow is still judged by the events and permissions of its callers, which did
+not change. The baseline is applied first, so the two combine (the baseline hides the findings you accepted, `--changed-since` the ones in
+code you did not touch). The exit status is that of the findings that are shown.
+
+- **What changed** is what the version control says between the merge base of `REV` and `HEAD` and the working tree (this uses `git`): the commits of
+  the branch, the staged and unstaged changes of tracked files, and every line of a file that is not tracked and not ignored. A moved file counts
+  as new. A block that was only deleted marks the lines on both sides of the place, since removing a `permissions:` or a guard can be the cause of
+  a finding next to it.
+- `--changed-scope files` shows every finding of a file that changed, for a team that wants the whole file clean once it touches it. The
+  default is `lines`.
+- **A change that makes a finding somewhere else is not shown there.** If a pull request changes the events of a caller so that the unchanged
+  line of a reusable workflow becomes a finding, that finding is at a line and in a file that did not change, so it is not shown. A full run shows
+  it, so run one on the default branch too. This is what a filter by position does; jactionlint does not guess which findings "belong" to a change.
+- **It fails when it cannot compare.** An unknown revision, a shallow clone without the merge base (give `actions/checkout` `fetch-depth: 0`),
+  or no `git` is an error with exit status 3, never an empty report that looks clean. It cannot be used with stdin, `--fix`, `--diff` or
+  `--baseline-write`, which would apply to a part of the file.
+- **What it says.** The text format prints `note: N finding(s) outside the changed lines since REV are not shown (--changed-since)` to stderr. The SARIF log has
+  `properties.changedSince` (`since`, `scope`, `hidden`), so a consumer can tell it from a full log. `json` and `jsonl` have no place for run
+  data and print no note. Without the option nothing changes in any format.
+- It is not `--diff` or `hk util sarif-diff`, which compute the patch of the fixes.
 
 ### Fix errors automatically
 

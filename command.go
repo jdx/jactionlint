@@ -251,6 +251,30 @@ func (cmd *Command) Main(args []string) int {
 		}
 		opts.NoIgnores = true
 	}
+	if flags.Changed("changed-scope") && f.changedSince == "" {
+		fmt.Fprintln(cmd.Stderr, "--changed-scope can be used only with --changed-since")
+		return ExitStatusInvalidCommandOption
+	}
+	if flags.Changed("changed-since") {
+		if f.changedSince == "" {
+			fmt.Fprintln(cmd.Stderr, "--changed-since needs a revision, such as --changed-since origin/main")
+			return ExitStatusInvalidCommandOption
+		}
+		scope, err := ParseChangedScope(f.changedScope)
+		if err != nil {
+			fmt.Fprintln(cmd.Stderr, err)
+			return ExitStatusInvalidCommandOption
+		}
+		if fix.mode != 0 || diff || baselineWrite.set || f.migrateIgnores || f.initConfig || f.migrateConfig {
+			fmt.Fprintln(cmd.Stderr, "--changed-since only filters what is reported, so it cannot be combined with --fix, --diff, --baseline-write, --migrate-ignores, --init-config or --migrate-config")
+			return ExitStatusInvalidCommandOption
+		}
+		if args := flags.Args(); len(args) == 1 && args[0] == "-" {
+			fmt.Fprintln(cmd.Stderr, "--changed-since cannot be used with stdin because there is no file to compare")
+			return ExitStatusInvalidCommandOption
+		}
+		opts.ChangedSince, opts.ChangedScope = f.changedSince, scope
+	}
 	for _, v := range f.selectRules {
 		opts.Select = append(opts.Select, strings.Split(v, ",")...)
 	}
