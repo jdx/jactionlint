@@ -34,6 +34,12 @@ func TestEventNameNeverReceived(t *testing.T) {
 		{"two events at once in a longer and", wf("[push, pull_request]", steps("github.ref && github.event_name == 'push' && github.run_id && github.event_name == 'pull_request'")), []int{7}},
 		{"in a matrix include", wf("push", "    strategy:\n      matrix:\n        x:\n          - ${{ github.event_name == 'release' }}\n    steps:\n      - run: echo\n"), []int{8}},
 
+		// conditions with spaces around them, or in a block
+		{"a condition in a literal block", wf("push", "    steps:\n      - run: echo\n        if: |\n          github.event_name == 'release'\n"), []int{8}},
+		{"a condition in a folded block", wf("push", "    steps:\n      - run: echo\n        if: >-\n          github.ref == 'x' &&\n          github.event_name == 'release'\n"), []int{9}},
+		{"a condition in quotes with spaces", wf("push", "    steps:\n      - run: echo\n        if: \"  github.event_name == 'release'  \"\n"), []int{7}},
+		{"a job condition in a block", wf("push", "    if: |\n      github.event_name == 'release'\n    steps:\n      - run: echo\n"), []int{6}},
+
 		// possible
 		{"the event", wf("push", steps("github.event_name == 'push'")), nil},
 		{"one of the events", wf("[push, pull_request]", steps("github.event_name == 'pull_request'")), nil},
@@ -69,5 +75,31 @@ func TestEventNameNeverReceivedMessage(t *testing.T) {
 	want := `"github.event_name == 'pull_request'" is always false: this workflow is never run by the event "pull_request", it runs on push, workflow_dispatch`
 	if errs[0].Message != want {
 		t.Errorf("message is %q", errs[0].Message)
+	}
+}
+
+// A string that the parser keeps in two fields (a mapping that is one expression) is reported once by the rule itself.
+func TestEventNameNeverReceivedNoDuplicates(t *testing.T) {
+	cond := "${{ github.event_name == 'release' && 'a' || 'b' }}"
+	src := "on: push\nconcurrency: " + cond + "\njobs:\n  a:\n    runs-on: ubuntu-latest\n    container: " + cond + "\n    strategy: " + cond + "\n    steps:\n      - run: echo\n"
+	w, errs := Parse([]byte(src))
+	if w == nil {
+		t.Fatal(errs)
+	}
+	rule := NewRuleEventNameNeverReceived([]byte(src))
+	if err := rule.VisitWorkflowPre(w); err != nil {
+		t.Fatal(err)
+	}
+	seen := map[string]int{}
+	for _, e := range rule.Errs() {
+		seen[e.Error()]++
+	}
+	if len(seen) != 3 {
+		t.Errorf("want one finding for each of the three places: %v", seen)
+	}
+	for k, n := range seen {
+		if n != 1 {
+			t.Errorf("reported %d times: %s", n, k)
+		}
 	}
 }

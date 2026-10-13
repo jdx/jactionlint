@@ -62,10 +62,23 @@ func (rule *RuleEventNameNeverReceived) VisitWorkflowPre(n *Workflow) error {
 	check := func(root ExprNode, pos func(*Token) *Pos) {
 		rule.checkExpr(root, events, list, pos)
 	}
-	// every ${{ }} of every string
+	// every ${{ }} of every string. The parser can keep one string in two fields (a mapping that is one expression), so a
+	// string is looked at once for each place and text.
+	type site struct {
+		line, col int
+		value     string
+	}
+	seen := map[site]bool{}
 	walkStrings(n, func(s *String) {
 		if s == nil || !strings.Contains(s.Value, "${{") {
 			return
+		}
+		if s.Pos != nil {
+			k := site{s.Pos.Line, s.Pos.Col, s.Value}
+			if seen[k] {
+				return
+			}
+			seen[k] = true
 		}
 		for _, sp := range rule.src.scanExprs(s) {
 			sp := sp
@@ -74,7 +87,9 @@ func (rule *RuleEventNameNeverReceived) VisitWorkflowPre(n *Workflow) error {
 	})
 	// the conditions which are not wrapped
 	cond := func(s *String) {
-		if s == nil || strings.Contains(s.Value, "${{") || strings.TrimSpace(s.Value) != s.Value {
+		// A condition may have spaces around it, or be a block scalar: the lexer skips them, and the offsets of the tokens
+		// are the offsets of the value
+		if s == nil || strings.Contains(s.Value, "${{") || strings.TrimSpace(s.Value) == "" {
 			return
 		}
 		if e, err := s.condExpr(); err == nil && e != nil {
