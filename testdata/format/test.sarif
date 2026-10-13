@@ -220,6 +220,21 @@
               "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
             },
             {
+              "id": "fail-fast-action-inputs",
+              "name": "FailFastActionInputs",
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "description": "Checks that actions which pass by default when nothing was produced or found are told to fail",
+                "queryURI": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+              },
+              "fullDescription": {
+                "text": "Checks that actions which pass by default when nothing was produced or found are told to fail"
+              },
+              "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+            },
+            {
               "id": "gate-job-skipped-on-failure",
               "name": "GateJobSkippedOnFailure",
               "defaultConfiguration": {

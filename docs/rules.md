@@ -68,6 +68,7 @@ rules:
 | [expired-ignore](#expired-ignore) | policy | error | correctness |
 | [expression-syntax](#expression-syntax) | correctness | error | correctness |
 | [expression-type](#expression-type) | correctness | error | correctness |
+| [fail-fast-action-inputs](#fail-fast-action-inputs) | correctness | warn | pedantic |
 | [forbidden-uses](#forbidden-uses) | policy | error | only when configured |
 | [gate-job-skipped-on-failure](#gate-job-skipped-on-failure) | correctness | error | default |
 | [gh-without-token](#gh-without-token) | correctness | error | correctness |
@@ -498,6 +499,16 @@ A ${{ }} expression has a type error.
 - Default level: error
 - Profile: correctness
 - Details and examples: [checks](./checks.md#check-type-check-expression)
+
+## fail-fast-action-inputs
+
+An action which passes by default when nothing was produced or found is not told to fail.
+
+- Group: correctness
+- Default level: warn
+- Profile: pedantic
+- Fixable: yes
+- Details and examples: [checks](./checks.md#check-fail-fast-action-inputs)
 
 ## forbidden-uses
 

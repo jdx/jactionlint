@@ -33,6 +33,7 @@ excessive-permissions default security error
 expired-ignore correctness policy error
 expression-syntax correctness correctness error
 expression-type correctness correctness error
+fail-fast-action-inputs pedantic correctness warn
 forbidden-uses configured policy error
 gate-job-skipped-on-failure default correctness error
 gh-without-token correctness correctness error
