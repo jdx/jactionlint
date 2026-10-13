@@ -82,6 +82,7 @@ rules:
 | [insecure-commands](#insecure-commands) | security | error | default |
 | [insecure-ssh-keyscan](#insecure-ssh-keyscan) | security | error | default |
 | [insecure-url-scheme](#insecure-url-scheme) | security | error | default |
+| [insufficient-permissions](#insufficient-permissions) | correctness | error | default |
 | [invalid-activity-type](#invalid-activity-type) | correctness | error | correctness |
 | [invalid-cron](#invalid-cron) | correctness | error | correctness |
 | [invalid-env-var-name](#invalid-env-var-name) | correctness | error | correctness |
@@ -638,6 +639,16 @@ A download uses http, ftp or git instead of https.
 - Default level: error
 - Profile: default
 - Details and examples: [checks](./checks.md#check-insecure-url-scheme)
+
+## insufficient-permissions
+
+The explicit permissions of a job do not grant what an action or command of the job needs from the GITHUB_TOKEN.
+
+- Group: correctness
+- Default level: error
+- Profile: default
+- Option `pedantic` (bool, no default): Also report actions/checkout without "contents: read", which only a private repository needs. Unset, it runs under the pedantic profile.
+- Details and examples: [checks](./checks.md#check-insufficient-permissions)
 
 ## invalid-activity-type
 
