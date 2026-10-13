@@ -721,6 +721,18 @@
           "description": "Whether gh auth token is asked for a token when no variable or file has one. The default is true.",
           "type": "boolean"
         },
+        "github-com-fallback": {
+          "description": "On a GitHub Enterprise Server, also ask api.github.com about the repositories which the Server answers 404 for (actions synced with GitHub Connect). The names of those repositories are sent to github.com: list internal ones in deny. The default is false.",
+          "type": "boolean"
+        },
+        "github-com-token-env": {
+          "description": "With github-com-fallback: the name of the environment variable which holds the token for api.github.com. It is read before GITHUB_COM_TOKEN. The token of the Server is never sent to github.com.",
+          "type": "string"
+        },
+        "github-com-token-file": {
+          "description": "With github-com-fallback: a file which holds the token for api.github.com.",
+          "type": "string"
+        },
         "max-rate-limit-wait": {
           "description": "The longest to wait for a rate limit to reset, as a duration like 30s. 0s never waits. The default is 30s.",
           "type": "string"
