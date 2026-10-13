@@ -88,6 +88,11 @@ func TestOutputClobbering(t *testing.T) {
 		{"two records in one echo, the value in the second", `echo -e "approved=false\nbody=$BODY" ` + out, 1},
 		{"two records in one printf, the value in the first", `printf 'body=%s\napproved=false\n' "$BODY" ` + out, 1},
 		{"two records in one string with a line break", "echo \"approved=false\nbody=$BODY\" " + out, 1},
+		{"a trusted conversion before the value", `printf 'approved=%s\nbody=%s\n' "$LIT" "$BODY" ` + out, 1},
+		{"a trusted variable before the value", `echo -e "approved=$LIT\nbody=$BODY" ` + out, 1},
+		{"a trusted variable after the value", `echo -e "body=$BODY\napproved=$LIT" ` + out, 1},
+		{"the value is in the record that the job reads", `printf 'approved=%s\nbody=%s\n' "$BODY" "$LIT" ` + out, 0},
+		{"a title and a comment in two records", `printf 'approved=%s\nbody=%s\n' "$TITLE" "$BODY" ` + out, 1},
 		{"two records in one printf, both hold the value", `printf 'approved=%s\nbody=%s\n' "$BODY" "$BODY" ` + out, 0},
 		{"tee with a here string", `tee -a "$GITHUB_OUTPUT" <<< "body=$BODY"`, 1},
 		{"tee with a here string of a literal", `tee -a "$GITHUB_OUTPUT" <<< "x=1"`, 0},
@@ -265,5 +270,25 @@ func TestExprMayHaveNewline(t *testing.T) {
 		if got := exprMayHaveNewline(tc.expr); got != tc.want {
 			t.Errorf("%q: got %v, want %v", tc.expr, got, tc.want)
 		}
+	}
+}
+
+// TestOutputClobberingNamesTheRecordOfTheValue: the message names the record whose value an outsider writes, not the
+// first record of the command.
+func TestOutputClobberingNamesTheRecordOfTheValue(t *testing.T) {
+	src := "on: issue_comment\npermissions: {}\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - id: gate\n        env:\n          BODY: ${{ github.event.comment.body }}\n          LIT: x\n        run: |\n          printf 'approved=%s\\nbody=%s\\n' \"$LIT\" \"$BODY\" >> \"$GITHUB_OUTPUT\"\n      - if: steps.gate.outputs.approved == 'true'\n        run: echo x\n"
+	cfg := &Config{Rules: map[string]RuleConfig{"output-clobbering": {Level: SeverityError}}}
+	n := 0
+	for _, e := range lintBatchD(t, "test.yaml", src, cfg) {
+		if e.ID != "output-clobbering" {
+			continue
+		}
+		n++
+		if !strings.Contains(e.Message, `the record "body=..."`) || strings.Contains(e.Message, `"approved=...`) {
+			t.Errorf("the message names the wrong record: %s", e.Message)
+		}
+	}
+	if n != 1 {
+		t.Errorf("%d findings, want 1", n)
 	}
 }

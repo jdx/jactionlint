@@ -22,8 +22,8 @@ func (c *Command) ShellString() (shell string, str *Word) {
 		if w.Dynamic() || !isShellName(w.Value) {
 			continue
 		}
-		if w != c.NameWord && !launchers[c.Name] {
-			continue // `echo bash -c x` prints the words
+		if w != c.NameWord && !launchers[c.Name] && !(multicall[c.Name] && i > 0 && c.Words[i-1] == c.NameWord) {
+			continue // `echo bash -c x` prints the words; `busybox sh -c x` names the applet that is a shell
 		}
 		if s := shellStringAfter(c.Words[i+1:]); s != nil {
 			return shellBase(w.Value), s
@@ -42,7 +42,30 @@ func shellBase(name string) string {
 
 func isShellName(name string) bool {
 	n := shellBase(name)
-	return shells[n] && n != "busybox"
+	return shells[n] && !multicall[n]
+}
+
+// multicall are the programs that hold several: the first word that is not an option is the applet to run.
+var multicall = set("busybox toybox")
+
+// appletShells are the applets of busybox and toybox that are shells.
+var appletShells = set("sh ash bash hush")
+
+// shellApplet reports whether the command is busybox or toybox running a shell applet (`busybox sh -c ...`).
+func (c *Command) shellApplet() bool {
+	if !multicall[c.Name] {
+		return false
+	}
+	for _, w := range c.Args {
+		if w.Dynamic() {
+			return false
+		}
+		if strings.HasPrefix(w.Value, "-") {
+			continue
+		}
+		return appletShells[w.Value]
+	}
+	return false
 }
 
 // shellStringAfter walks the options of a shell and returns the word that `-c` takes.
@@ -87,7 +110,9 @@ func shellStringAfter(words []*Word) *Word {
 func (c *Command) ReadsStdin() bool { return readsStdin(c) }
 
 // IsShell reports whether the command is a shell (sh, bash, zsh, ...), which can run what it is given as code.
-func (c *Command) IsShell() bool { return shells[c.Tool] && c.Name != "busybox" }
+func (c *Command) IsShell() bool {
+	return (shells[c.Tool] && !multicall[c.Name]) || c.shellApplet()
+}
 
 // ReplaceString returns the replacement string of `xargs -I STR` (`{}` for -i and --replace), "" when the
 // command has none.
