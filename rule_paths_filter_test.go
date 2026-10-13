@@ -199,7 +199,6 @@ jobs:
     paths:
       - 'vendor/lib/**'
       - '**/*.c'
-      - 'nothing/**'
       - 'vendor/*.txt'
 jobs:
   a:
@@ -208,6 +207,29 @@ jobs:
       - run: echo
 `)
 		checkLines(t, errs)
+	})
+
+	t.Run("an entry that cannot be decided does not stop the others", func(t *testing.T) {
+		files := copyRepo()
+		files[".gitmodules"] = "[submodule \"vendor/lib\"]\n\tpath = vendor/lib\n\turl = https://example.com/lib.git\n"
+		errs := lintPathsFilter(t, files, `on:
+  push:
+    paths:
+      - '**/*.c'
+      - 'nothing/**'
+    paths-ignore:
+      - 'vendor/lib/**'
+      - 'missing.txt'
+  pull_request:
+    paths:
+      - 'also-nothing'
+jobs:
+  a:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo
+`)
+		checkLines(t, errs, "5", "8", "11")
 	})
 
 	t.Run("a generated file is not looked at", func(t *testing.T) {

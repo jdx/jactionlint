@@ -76,8 +76,11 @@ func (rule *RuleUnmatchedPathsFilter) VisitWorkflowPre(n *Workflow) error {
 				if files == nil {
 					files = readRepoPaths(rule.root)
 				}
-				if files == nil || files.cannotDecide(m) {
-					return nil
+				if files == nil {
+					return nil // the repository cannot be read, or it has too many files
+				}
+				if files.cannotDecide(m) {
+					continue // this entry could match inside a submodule that is not checked out; the others can still be decided
 				}
 				if !files.matches(m) {
 					rule.ReportIDf("unmatched-paths-filter", v.Pos, "the entry %q of %q matches no file or directory of the repository, so %s. a path may have been renamed or moved, or have a typo", v.Value, f.where, f.effect)
