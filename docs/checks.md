@@ -7413,10 +7413,22 @@ and `echo` (or the trace of `set -x`) writes it in clear text. The check follows
 Not reported: the value as the argument of another command (`curl -H "Authorization: $KEY"`, `./deploy --key "$KEY"`), a value written to a
 file or to `$GITHUB_ENV` or `$GITHUB_OUTPUT`, a value piped into another command (`echo "$KEY" | base64 -d > key.pem`), the exact
 secret or a string that contains it, a hash (`sha256sum`) or a count (`wc -c`) of it, and the answer of a service that gets the secret as
-credentials (`curl -u "$S" ... | jq -r .id`). Substitutions inside substitutions, `${{ secrets.X }}` in a heredoc, copies (`B="$A"`),
-`+=` and `printf -v NAME ...` (which assigns and prints nothing) are followed, and under `set -x` every command that expands a cut
-value is reported, an assignment included. Only `bash` and `sh` scripts are looked at, and no function, loop or branch is followed
-separately: the order of the source decides.
+credentials (`curl -u "$S" ... | jq -r .id`).
+
+**The shell that is understood.** The check answers one question: what does a word hold, once the shell has expanded it? It asks it
+for the words of a command, the value of an assignment (`A=`, `A+=`, `export A=`), a here-string and an unquoted heredoc (also a
+`${{ secrets.X }}` in it). A command substitution holds what its last command prints, followed back along its pipe through `echo`,
+`printf`, `cat` and the tools above, also when substitutions are nested. A print is `echo`, `printf` or `cat` whose stdout is not
+redirected and not piped on (`echo "$KEY" | cat` prints, `echo "$KEY" | wc -c` does not); the input of `cat` is its here-string, its heredoc or
+the pipe. A `::add-mask::` masks only when it is printed that way. `printf -v NAME ...` assigns and prints nothing. Assignments
+inside a substitution stay in its subshell. Under `set -x` every command that expands a cut value is reported, an assignment included.
+Only `bash` and `sh` scripts are read, in the order of the source.
+
+**What is not understood, and so reported as nothing:** functions, loops and branches (the order of the source decides, so a mask in
+one `if` branch counts for the next), `eval`, `source`, `read`, `mapfile`, arrays, indirect expansion, a process substitution (`<(cmd)`
+is the name of a file), commands in the body of a heredoc as a source, a value that is written out by anything other than `echo`,
+`printf` and `cat` (`tee`, `logger`, `curl --data`), a secret that reaches the script through `with:` of an action, and `pwsh` or any
+other shell.
 
 <a id="check-secrets-outside-env"></a>
 ## Secrets outside an environment (pedantic)

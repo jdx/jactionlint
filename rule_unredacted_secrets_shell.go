@@ -158,6 +158,25 @@ func (f *shellSecretFlow) run() {
 			subSpans = append(subSpans, [2]int{a.Value.Offset, a.Value.End})
 		}
 	}
+	// ... and so do the substitutions of a redirect target (`<<<"$(cmd)"`) and the commands in the body of a heredoc
+	for _, r := range s.Redirects {
+		if r.Target != nil {
+			for _, sub := range r.Target.Subs {
+				f.inSub[sub] = true
+			}
+			if len(r.Target.Subs) > 0 {
+				subSpans = append(subSpans, [2]int{r.Target.Offset, r.Target.End})
+			}
+		}
+		if r.Heredoc != nil {
+			subSpans = append(subSpans, [2]int{r.Heredoc.Offset, r.Heredoc.End})
+			for _, c := range s.Commands {
+				if c.Offset >= r.Heredoc.Offset && c.Offset < r.Heredoc.End {
+					f.inSub[c] = true
+				}
+			}
+		}
+	}
 	inSubshell := func(offset int) bool {
 		return slices.ContainsFunc(subSpans, func(sp [2]int) bool { return offset >= sp[0] && offset < sp[1] })
 	}
@@ -237,7 +256,8 @@ func (f *shellSecretFlow) wordValue(w *runscript.Word) wval {
 	if s, ok := f.cutsSecret(w); ok {
 		v = better(v, wval{true, s, "a cut of its value", ""})
 	}
-	if len(w.Subs) > 0 {
+	// a process substitution is the name of a file, not its text: it is not followed
+	if len(w.Subs) > 0 && !w.ProcSubst {
 		v = better(v, f.substitutionValue(w))
 	}
 	return v
@@ -293,6 +313,13 @@ func (f *shellSecretFlow) substitutionValue(w *runscript.Word) wval {
 					nested[n] = true
 				}
 			}
+			if r.Heredoc != nil { // the commands in the body of a heredoc
+				for _, n := range w.Subs {
+					if n.Offset >= r.Heredoc.Offset && n.Offset < r.Heredoc.End {
+						nested[n] = true
+					}
+				}
+			}
 		}
 	}
 	var last *runscript.Command
@@ -304,17 +331,29 @@ func (f *shellSecretFlow) substitutionValue(w *runscript.Word) wval {
 	if last == nil {
 		return wval{}
 	}
-	chain := []*runscript.Command{last}
-	if last.Pipeline != nil {
-		chain = chain[:0]
-		for i := last.Stage; i >= 0; i-- {
-			if cs := last.Pipeline.Stages[i].Commands; len(cs) == 1 {
-				chain = append(chain, cs[0])
-			} else {
-				break
-			}
+	return f.chainValue(f.pipeChain(last, last.Stage))
+}
+
+// pipeChain is the commands of the pipeline of c from the stage back to the first, or c itself when it is in no pipeline.
+func (f *shellSecretFlow) pipeChain(c *runscript.Command, stage int) []*runscript.Command {
+	if c.Pipeline == nil {
+		return []*runscript.Command{c}
+	}
+	var chain []*runscript.Command
+	for i := stage; i >= 0; i-- {
+		if cs := c.Pipeline.Stages[i].Commands; len(cs) == 1 {
+			chain = append(chain, cs[0])
+		} else {
+			break
 		}
 	}
+	return chain
+}
+
+// chainValue is what the output of the first command of the chain holds, the chain going back along a pipe: it is cut from
+// a secret when only echo, printf, cat and the tools that cut a text stand between them, and holds nothing when another
+// command is in the way (`curl -u "$S" ... | jq -r .id` reads the answer of a service, `... | wc -c` counts).
+func (f *shellSecretFlow) chainValue(chain []*runscript.Command) wval {
 	how := ""
 	for _, c := range chain {
 		switch {
@@ -481,7 +520,8 @@ func (f *shellSecretFlow) command(c *runscript.Command) {
 			}
 		}
 	}
-	if isMask {
+	// the runner only reads the mask from the output of the step: a mask that is redirected to a file or piped on is none
+	if isMask && f.prints(c) {
 		for _, w := range c.Args {
 			for _, name := range w.Vars {
 				if d := f.derived[name]; d != nil {
@@ -495,7 +535,11 @@ func (f *shellSecretFlow) command(c *runscript.Command) {
 // printed returns what the command writes: the words of echo and printf, and the input of cat.
 func (f *shellSecretFlow) printed(c *runscript.Command) []wval {
 	if c.Name == "cat" {
-		return []wval{f.commandInput(c, false)}
+		v := f.commandInput(c, false)
+		if c.Pipeline != nil && c.Stage > 0 { // `echo "$KEY" | cat`: the input comes along the pipe
+			v = better(v, f.chainValue(f.pipeChain(c, c.Stage-1)))
+		}
+		return []wval{v}
 	}
 	var out []wval
 	for _, w := range c.Words {
