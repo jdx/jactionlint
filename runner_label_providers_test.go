@@ -29,7 +29,7 @@ func TestRunnerProviderLabels(t *testing.T) {
 		// https://depot.dev/docs/github-actions/runner-types
 		"depot-ubuntu-24.04", "depot-ubuntu-24.04-arm-8", "depot-ubuntu-latest", "depot-windows-2022-4", "depot-macos-26",
 		// https://ubicloud.com/docs/github-actions-integration/runner-types
-		"ubicloud", "ubicloud-arm", "ubicloud-standard-2", "ubicloud-standard-4-arm-ubuntu-2204",
+		"ubicloud", "ubicloud-arm", "ubicloud-standard-2", "ubicloud-standard-4-arm-ubuntu-2204", "ubicloud-premium-8", "ubicloud-premium-16-arm-ubuntu-2404",
 		// https://www.warpbuild.com/docs/ci/cloud-runners
 		"warp-ubuntu-latest-x64-4x", "warp-ubuntu-2404-arm64-8x", "warp-macos-26-arm64-6x", "warp-windows-2025-vs2026-x64-32x",
 		// https://namespace.so/docs/solutions/github-actions
@@ -49,7 +49,7 @@ func TestRunnerProviderLabels(t *testing.T) {
 func TestRunnerProviderLabelsNotAccepted(t *testing.T) {
 	for _, label := range []string{
 		"buildjet-2vcpu-ubuntu-2204", // the service was shut down on 2026-03-31
-		"blacksmith", "blacksmith-", "depot-", "depot-gpu", "warp", "warp-", "ubicloud-gpu", "ubicloud-", "namespace", "namespace-profile-",
+		"blacksmith", "blacksmith-", "depot-", "depot-gpu", "warp", "warp-", "ubicloud-gpu", "ubicloud-premium-", "ubicloud-premium", "ubicloud-", "namespace", "namespace-profile-",
 		"ubunt-latest", "ubuntu-24.4", "linux-latest", "gpu", "runner", "runs-on", "cpu", "image=",
 		"macos-latest-blacksmith", "xblacksmith-4vcpu",
 	} {

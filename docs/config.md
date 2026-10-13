@@ -136,7 +136,7 @@ extends:
   - `providers`: The hosted-runner providers whose labels the runner label check accepts without them being listed in `labels`:
     `blacksmith` (`blacksmith-*`), `depot` (`depot-ubuntu-*`, `depot-windows-*`, `depot-macos-*`), `namespace` (`namespace-profile-*`,
     `nscloud-*`, `namespace-features:*`), `runson` (`runs-on=...`, `runner=...`, `family=...`, `image=...` and the other keys of the
-    labels of RunsOn), `ubicloud` (`ubicloud`, `ubicloud-arm`, `ubicloud-standard-*`) and `warpbuild` (`warp-*`). The default, when the key is
+    labels of RunsOn), `ubicloud` (`ubicloud`, `ubicloud-arm`, `ubicloud-standard-*`, `ubicloud-premium-*`) and `warpbuild` (`warp-*`). The default, when the key is
     not set, is all of them. A list accepts only the providers in it, and an empty list none of them. Another service goes in `labels`. It is not
     used when `strict-labels` is `true`.
 - `config-variables`: [Configuration variables][vars]. When an array is set, jactionlint will check `vars` properties strictly.

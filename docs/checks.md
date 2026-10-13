@@ -2257,7 +2257,7 @@ same message as for the labels that went before it, whatever the version of jact
 The labels of the services that host runners for GitHub Actions are accepted without configuration, so that a workflow that runs fine
 is not an error: Blacksmith (`blacksmith-*`), Depot (`depot-ubuntu-*`, `depot-windows-*`, `depot-macos-*`), Namespace (`namespace-profile-*`,
 `nscloud-*`, `namespace-features:*`), RunsOn (`runs-on=...`, `runner=...`, `family=...`, `image=...`, `cpu=...`, `ram=...`, `spot=...`,
-`extras=...`, `pool=...`, `volume=...`, `retry=...`, `ami=...`, `sticky=...`), Ubicloud (`ubicloud`, `ubicloud-arm`, `ubicloud-standard-*`) and WarpBuild
+`extras=...`, `pool=...`, `volume=...`, `retry=...`, `ami=...`, `sticky=...`), Ubicloud (`ubicloud`, `ubicloud-arm`, `ubicloud-standard-*`, `ubicloud-premium-*`) and WarpBuild
 (`warp-*`). The prefixes are the ones the documentation of each service names, and a label needs something after the prefix. They do not take part in the check
 of conflicting labels, since the label of a service says nothing about the operating system. BuildJet is not in the list: the service was shut down
 on 2026-03-31. Labels of other services, or of a provider you want to be reported, are set with `self-hosted-runner.labels`, and

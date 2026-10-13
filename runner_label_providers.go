@@ -48,7 +48,9 @@ var runnerProviders = []runnerProvider{
 	{
 		name: "ubicloud", docs: "https://ubicloud.com/docs/github-actions-integration/runner-types",
 		exact:    []string{"ubicloud", "ubicloud-arm"},
-		prefixes: []string{"ubicloud-standard-"}, // ubicloud-standard-4-arm-ubuntu-2204
+		// The families of https://github.com/ubicloud/ubicloud/blob/main/config/github_runner_labels.yml are standard and
+		// premium. It has no gpu label.
+		prefixes: []string{"ubicloud-standard-", "ubicloud-premium-"}, // ubicloud-standard-4-arm-ubuntu-2204, ubicloud-premium-8
 	},
 	{
 		name: "warpbuild", docs: "https://www.warpbuild.com/docs/ci/cloud-runners",
