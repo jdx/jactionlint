@@ -132,6 +132,13 @@ single-dash long options of v1 are removed; the error names the replacement.
     Rewrite the trailing `# zizmor: ignore[...]` comments of the files (the workflows of the project
     by default) into `# jactionlint ignore=...` comments. zizmor comments are also honored as they are
 
+  * `--print-config-schema`:
+    Print the JSON Schema of the config file, with the rule IDs and the options of each rule, and exit.
+    `--init-config` writes a comment which points editors to it
+
+  * `--print-output-schema`:
+    Print the JSON Schema of the output of `--format json` and `jsonl`, and exit
+
   * `--min-severity` <LEVEL>:
     Hide the errors less severe than this level: `info` (default), `warn` or `error`
 

@@ -601,7 +601,8 @@ func loadGlobalConfig() (*Config, string, error) {
 }
 
 func writeDefaultConfigFile(path string) error {
-	b := []byte(`# Rules are enabled by profile, and each profile includes the one before it.
+	b := []byte(`# yaml-language-server: $schema=` + ConfigSchemaURL + `
+# Rules are enabled by profile, and each profile includes the one before it.
 # "correctness" is what actionlint checks plus the bug detectors of jactionlint.
 # "default" adds the security posture and policy rules worth failing a build on.
 # "pedantic" adds the noisy and opinionated rules. The --profile flag overrides

@@ -99,6 +99,8 @@ cat action.yml | jactionlint --stdin-filename action.yml -
 | `--init-config` |  | Write a default config file .github/jactionlint.yaml and exit |
 | `--migrate-config` |  | Rewrite the deprecated keys of the config file and exit |
 | `--migrate-ignores` |  | Rewrite "# zizmor: ignore[...]" comments into "# jactionlint ignore=..." comments and exit |
+| `--print-config-schema` |  | Print the JSON Schema of the config file (rule IDs and options included) and exit |
+| `--print-output-schema` |  | Print the JSON Schema of --format json and jsonl and exit |
 
 **Fixing**
 
@@ -313,6 +315,19 @@ An error object of `json` and `jsonl` has these fields.
 | `snippet`      | Code snippet to indicate the position of the error                                                                |
 | `fix`          | The automatic fix of the error: its `description` and the byte-range `edits`. It is omitted when there is no fix  |
 | `no_fix`       | Why a finding which the rule can fix has no fix (the SARIF log adds `unsafe-edit`, `edit-conflict` and `invalid-edit`, see the SARIF section below): a `code` (`option-required`, `option-invalid`, `online-required`, `lookup-failed`, `unsupported-shape` or `needs-judgment`), a `reason` and, for the options, the `option` to configure such as `missing-timeout.default-minutes`. It is omitted when there is a fix and for findings which are advice only |
+
+#### JSON Schema of the output
+
+`jactionlint --print-output-schema` prints the JSON Schema (draft-07) of the output of `--format json`, which is an array of the error objects
+above. Each line of `--format jsonl` is one error object, valid against `#/definitions/finding` of the same schema. The committed copy is
+[`schema/jactionlint-output.json`](https://github.com/jdx/jactionlint/blob/main/schema/jactionlint-output.json). It is the contract for programs which read the
+findings:
+
+- A field is not removed and does not change its meaning within a major version.
+- New fields can be added, so a reader has to ignore the fields it does not know (the schema does not set `additionalProperties: false`).
+- `message`, `line`, `column`, `end_line`, `end_column`, `kind`, `id` and `severity` are always present. The others are optional as described above.
+
+The same goes for the schema of [the config file](config.md#json-schema).
 
 #### Lines and columns
 

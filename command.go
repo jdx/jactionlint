@@ -189,6 +189,19 @@ func (cmd *Command) Main(args []string) int {
 		return ExitStatusSuccessNoProblem
 	}
 
+	if f.printConfigSchema || f.printOutputSchema {
+		if f.printConfigSchema && f.printOutputSchema {
+			fmt.Fprintln(cmd.Stderr, "--print-config-schema and --print-output-schema cannot be combined")
+			return ExitStatusInvalidCommandOption
+		}
+		if f.printConfigSchema {
+			cmd.Stdout.Write(ConfigSchema())
+		} else {
+			cmd.Stdout.Write(OutputSchema())
+		}
+		return ExitStatusSuccessNoProblem
+	}
+
 	sev, err := ParseSeverity(minSeverity)
 	if err != nil || sev == SeverityOff {
 		fmt.Fprintf(cmd.Stderr, "invalid value %q for --min-severity. available values are \"info\", \"warn\" and \"error\"\n", minSeverity)

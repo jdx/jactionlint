@@ -59,6 +59,8 @@ var cliOptions = []cliOption{
 	{"Rules and configuration", "init-config", "", "", false, "-init-config", "Write a default config file .github/jactionlint.yaml and exit"},
 	{"Rules and configuration", "migrate-config", "", "", false, "-migrate-config", "Rewrite the deprecated keys of the config file and exit"},
 	{"Rules and configuration", "migrate-ignores", "", "", false, "-migrate-ignores", "Rewrite \"# zizmor: ignore[...]\" comments into \"# jactionlint ignore=...\" comments and exit"},
+	{"Rules and configuration", "print-config-schema", "", "", false, "", "Print the JSON Schema of the config file (rule IDs and options included) and exit"},
+	{"Rules and configuration", "print-output-schema", "", "", false, "", "Print the JSON Schema of --format json and jsonl and exit"},
 
 	{"Fixing", "fix", "", "unsafe", true, "-fix", "Apply the safe automatic fixes in place. --fix=unsafe also applies the fixes that may change behavior"},
 	{"Fixing", "diff", "", "", false, "-diff", "Print what --fix would change as a unified diff and write nothing (implies --fix)"},
@@ -257,6 +259,8 @@ type commandFlags struct {
 	opts                     LinterOptions
 	ignorePats               []string
 	initConfig               bool
+	printConfigSchema        bool
+	printOutputSchema        bool
 	fix                      fixFlag
 	diff                     bool
 	fixRules                 string
@@ -318,6 +322,8 @@ func newCommandFlags() *commandFlags {
 	fs.BoolVar(&f.initConfig, "init-config", false, "")
 	fs.BoolVar(&f.migrateConfig, "migrate-config", false, "")
 	fs.BoolVar(&f.migrateIgnores, "migrate-ignores", false, "")
+	fs.BoolVar(&f.printConfigSchema, "print-config-schema", false, "")
+	fs.BoolVar(&f.printOutputSchema, "print-output-schema", false, "")
 
 	fs.Var(&f.fix, "fix", "")
 	opt("fix", "safe")

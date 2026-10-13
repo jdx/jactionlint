@@ -424,16 +424,42 @@ jactionlint --init-config
 vim .github/jactionlint.yaml
 ```
 
+The generated file starts with a `# yaml-language-server: $schema=...` comment, which gives editors that use
+[yaml-language-server][yls] (VS Code with the YAML extension, Neovim, Helix, ...) completion and checks for the keys, the rule IDs
+and the options of each rule. See [the JSON Schema](#json-schema).
+
 To rewrite an existing configuration which uses the [deprecated keys](#deprecated-keys):
 
 ```sh
 jactionlint --migrate-config
 ```
 
+## JSON Schema
+
+The config file has a [JSON Schema][jsonschema] (draft-07), generated from the rule registry: the rule IDs are an enum under `rules`
+(also in `fix.rules` and `ignores`), each rule lists its own options, and the other keys are described. Use it for completion and
+for checking the file in an editor or in CI.
+
+- In the file, add the comment `--init-config` writes at the top:
+
+  ```yaml
+  # yaml-language-server: $schema=https://raw.githubusercontent.com/jdx/jactionlint/main/schema/jactionlint-config.json
+  ```
+- Or print the schema of the installed version, which always matches the rules of that binary: `jactionlint --print-config-schema > jactionlint-config.json`.
+- Or validate in CI with any JSON Schema validator, for example `check-jsonschema --schemafile jactionlint-config.json .github/jactionlint.yaml`.
+
+The committed file is [`schema/jactionlint-config.json`](https://github.com/jdx/jactionlint/blob/main/schema/jactionlint-config.json). A test and `mise run schema:check`
+keep it in sync with the registry, `mise run schema` regenerates it. The parser of jactionlint is the authority: where the two
+differ, the parser wins, and the difference is a bug of the schema.
+
+The findings of `--format json` have a schema too, see [the usage document](usage.md#json-schema-of-the-output).
+
 ---
 
 [Checks](checks.md) | [Rules](rules.md) | [Installation](install.md) | [Usage](usage.md) | [Go API](api.md) | [References](reference.md)
 
+[yls]: https://github.com/redhat-developer/yaml-language-server
+[jsonschema]: https://json-schema.org/
 [xdg]: https://specifications.freedesktop.org/basedir-spec/latest/
 [Super-Linter]: https://github.com/super-linter/super-linter
 [pat]: https://pkg.go.dev/path#Match
