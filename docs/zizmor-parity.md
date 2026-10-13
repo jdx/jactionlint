@@ -251,9 +251,9 @@ actions.
 - `undocumented-permissions` accepts a comment above a scope as well as at its end of line (zizmor: end of line only), does not report
   a scope granted with `none`, and reports each scope without a comment where zizmor reports one finding for the whole block (see
   [permissions against zizmor](#permissions-against-zizmor)).
-- `excessive-permissions` and `undocumented-permissions` are policy rules, so they are skipped in generated files by default
-  (`generated-files: skip-policy`), and the job-level default-permissions finding of a reusable-only workflow is left to its callers
-  (see [permissions against zizmor](#permissions-against-zizmor)).
+- `missing-permissions` (zizmor reports a job without permissions as `excessive-permissions`) and `undocumented-permissions` are
+  policy rules, so they are skipped in generated files by default (`generated-files: skip-policy`), and `missing-permissions`
+  leaves the jobs of a reusable-only workflow to its callers (see [permissions against zizmor](#permissions-against-zizmor)).
 - `cache-poisoning` does not treat `push: {tags-ignore: ["*"]}` as a release workflow, and does not take a tag with read-only permissions, or a
   `branches:` filter with a release branch next to others, for a release unless the option `pedantic` is on (see
   [cache-poisoning against zizmor](#cache-poisoning-against-zizmor)).
@@ -364,7 +364,7 @@ are not reported. That accounts for 4,048 of the 4,618 misses. The 570 that are 
 | Cause | Findings | Kind |
 | --- | --: | --- |
 | a job of a reusable-only workflow (`on: workflow_call` alone) without `permissions:` | 417 | deliberate |
-| a job in a generated file (`generated-files: skip-policy` skips the policy rules) | 153 | deliberate |
+| a job in a generated file (`missing-permissions` is a policy rule, which `generated-files: skip-policy` skips) | 153 | deliberate |
 
 A reusable-only workflow is not a place to set the permissions of a job: the callee gets at most what its caller grants, and a
 value that is more than that makes GitHub reject the call, so no value written in the callee is right for every caller.
