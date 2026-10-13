@@ -165,7 +165,7 @@ func (rule *RuleUntrustedCheckout) checkoutsOf(j *Job, s *Step) []*untrustedChec
 			if in == nil || in.Value == nil {
 				continue
 			}
-			if what, bad := untrustedValue(in.Value.Value); bad {
+			if what, bad := untrustedString(in.Value); bad {
 				return []*untrustedCheckout{{pos: in.Value.Pos, what: what, dir: dir, step: s}}
 			}
 		}

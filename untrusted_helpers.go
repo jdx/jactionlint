@@ -115,6 +115,20 @@ func untrustedValue(value string) (string, bool) {
 		return value, true
 	}
 	refs, _ := stringExprRefs(value)
+	return untrustedRefs(refs)
+}
+
+// untrustedString is untrustedValue for a string of the workflow, which shares its parsed expressions
+// with the other rules.
+func untrustedString(s *String) (string, bool) {
+	if strings.Contains(s.Value, "refs/pull/") {
+		return s.Value, true
+	}
+	refs, _ := s.exprRefs()
+	return untrustedRefs(refs)
+}
+
+func untrustedRefs(refs []exprRef) (string, bool) {
 	if r, ok := refsMatchAny(refs, untrustedHeadContexts); ok {
 		return r.String(), true
 	}

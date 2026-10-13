@@ -625,7 +625,7 @@ func envDescs(env *Env, into map[string]string) {
 		}
 		into[v.Name.Value] = ""
 		if v.Value != nil {
-			if _, bad := untrustedValue(v.Value.Value); bad {
+			if _, bad := untrustedString(v.Value); bad {
 				into[v.Name.Value] = "$" + v.Name.Value
 			}
 		}

@@ -440,7 +440,7 @@ func (rule *RuleConcurrencyCancelsRelease) check(c *Concurrency, jobs []*Job) {
 	}
 	var groupRefs []exprRef
 	if c.Group != nil {
-		groupRefs, _ = stringExprRefs(c.Group.Value)
+		groupRefs, _ = c.Group.exprRefs()
 	}
 	jobLevel := c != rule.wf.Concurrency
 	for _, sc := range rule.scenarios {
