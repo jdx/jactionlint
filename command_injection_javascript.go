@@ -418,7 +418,7 @@ func (sc *jsScan) collectAliases() {
 // `||` and `??` outside of brackets and strings; the first alternative that is a source decides (`process.env || {}`,
 // `(context.payload?.comment ?? {})`, `{} || (process.env)`).
 func (sc *jsScan) destructuredSource(rhs, prop string) *jsSource {
-	rhs = strings.TrimSpace(strings.TrimSuffix(strings.TrimSpace(rhs), ";"))
+	rhs = strings.TrimSpace(strings.TrimSuffix(strings.TrimSpace(stripJSComments(rhs)), ";"))
 	rhs = strings.ReplaceAll(rhs, "?.", ".")
 	rhs = strings.TrimSpace(strings.TrimPrefix(rhs, "await "))
 	for len(rhs) > 1 && rhs[0] == '(' && jsWrapped(rhs) {
@@ -447,6 +447,46 @@ func (sc *jsScan) destructuredSource(rhs, prop string) *jsSource {
 	return nil
 }
 
+// stripJSComments removes the `//` and `/* */` comments of an expression that are outside of strings.
+func stripJSComments(s string) string {
+	if !strings.Contains(s, "//") && !strings.Contains(s, "/*") {
+		return s
+	}
+	var b strings.Builder
+	quote := byte(0)
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		switch {
+		case quote != 0:
+			b.WriteByte(c)
+			if c == '\\' && i+1 < len(s) {
+				i++
+				b.WriteByte(s[i])
+			} else if c == quote {
+				quote = 0
+			}
+		case c == '\'' || c == '"' || c == '`':
+			quote = c
+			b.WriteByte(c)
+		case c == '/' && i+1 < len(s) && s[i+1] == '/':
+			for i < len(s) && s[i] != '\n' {
+				i++
+			}
+			i-- // the line break stays
+		case c == '/' && i+1 < len(s) && s[i+1] == '*':
+			end := strings.Index(s[i+2:], "*/")
+			if end < 0 {
+				return b.String()
+			}
+			i += end + 3
+			b.WriteByte(' ')
+		default:
+			b.WriteByte(c)
+		}
+	}
+	return b.String()
+}
+
 // jsScanDepth walks a piece of an expression and calls f for each byte that is outside of strings, with the depth of the
 // brackets in front of it. f returns false to stop.
 func jsScanDepth(s string, f func(i, depth int) bool) {
@@ -458,6 +498,18 @@ func jsScanDepth(s string, f func(i, depth int) bool) {
 				i++
 			} else if c == quote {
 				quote = 0
+			}
+			continue
+		}
+		if c == '/' && i+1 < len(s) && (s[i+1] == '/' || s[i+1] == '*') {
+			if s[i+1] == '/' {
+				for i < len(s) && s[i] != '\n' {
+					i++
+				}
+			} else if end := strings.Index(s[i+2:], "*/"); end >= 0 {
+				i += end + 3
+			} else {
+				return
 			}
 			continue
 		}
