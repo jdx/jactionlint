@@ -47,6 +47,7 @@ var actionRuleScope = map[string]struct {
 	"mutable-runner-label":            {scope: actionNotApplicable},   // runs-on: belongs to the calling job
 	"pipeline-without-pipefail":       {scope: actionApplies},         // the scripts of the steps, with the shell of each step
 	"superfluous-actions":             {scope: actionApplies},         // the actions the steps use
+	"ubuntu-slim-limits":              {scope: actionNotApplicable},   // runs-on: belongs to the calling job
 	"unlocked-install":                {scope: actionApplies},         // the scripts of the steps
 	"unpinned-tools":                  {scope: actionApplies},         // the inputs of the actions the steps use
 	"unsound-prefix-match":            {scope: actionApplies},         // the if: conditions and expressions of the steps
@@ -59,6 +60,7 @@ var actionRuleScope = map[string]struct {
 	"use-trusted-publishing":          {scope: actionApplies},         // the publishing steps; the id-token permission is the caller's
 	"anonymous-definition":            {scope: actionNotApplicable},
 	"archived-uses":                   {scope: actionApplies},
+	"repojacking":                     {scope: actionApplies},
 	"artipacked":                      {scope: actionApplies},
 	"bot-conditions":                  {scope: actionCallerDependent},
 	"cache-poisoning":                 {scope: actionCallerDependent},

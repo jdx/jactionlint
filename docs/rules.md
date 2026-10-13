@@ -125,6 +125,7 @@ rules:
 | [recursive-alias](#recursive-alias) | correctness | error | correctness |
 | [ref-confusion](#ref-confusion) | security | warn | only with `--online` |
 | [ref-version-mismatch](#ref-version-mismatch) | security | warn | only with `--online` |
+| [repojacking](#repojacking) | security | warn | only with `--online` |
 | [require-expression-wrapping](#require-expression-wrapping) | style | error | pedantic |
 | [require-shell](#require-shell) | style | error | pedantic |
 | [required-actions](#required-actions) | policy | error | only when configured |
@@ -138,6 +139,7 @@ rules:
 | [template-injection](#template-injection) | security | error | correctness |
 | [timeout-too-long](#timeout-too-long) | policy | error | only when configured |
 | [typosquat-uses](#typosquat-uses) | security | error | default |
+| [ubuntu-slim-limits](#ubuntu-slim-limits) | correctness | error | default |
 | [undefined-function](#undefined-function) | correctness | error | correctness |
 | [undefined-job-needs](#undefined-job-needs) | correctness | error | correctness |
 | [undefined-property](#undefined-property) | correctness | error | correctness |
@@ -932,7 +934,7 @@ A job does not set timeout-minutes.
 - Default level: error
 - Profile: default
 - Fixable: yes
-- Option `default-minutes` (int, no default): The timeout-minutes which --fix adds to a job. There is no default: the rule has no fix unless this is set. It is lowered to the max of timeout-too-long when that is smaller.
+- Option `default-minutes` (int, no default): The timeout-minutes which --fix adds to a job. There is no default: the rule has no fix unless this is set. It is lowered to the max of timeout-too-long when that is smaller, and to 15 on a job that runs only on ubuntu-slim.
 - Details and examples: [checks](./checks.md#check-timeout-minutes)
 
 ## missing-workflow-input
@@ -1040,6 +1042,16 @@ The version comment of a hash-pinned action does not match the pinned commit.
 - Needs network access: yes (only with `--online`)
 - Details and examples: [checks](./checks.md#check-ref-version-mismatch)
 
+## repojacking
+
+An action or reusable workflow has an owner whose name anyone can register.
+
+- Group: security
+- Default level: warn
+- Profile: only with `--online`
+- Needs network access: yes (only with `--online`)
+- Details and examples: [checks](./checks.md#check-repojacking)
+
 ## require-expression-wrapping
 
 An if: condition is not wrapped in ${{ }}.
@@ -1087,11 +1099,13 @@ A job uses a secret but has no environment.
 
 ## self-hosted-runner
 
-A job runs on a self-hosted runner.
+A job runs on a self-hosted runner: the label self-hosted, a label of self-hosted-runner.labels or a runner group.
 
 - Group: security
 - Default level: info
 - Profile: pedantic
+- Option `allow` (strings, empty by default): Glob patterns of the labels and the runner groups of runners which are ephemeral or trusted. A job with one of them is not reported.
+- Option `pull-request-only` (bool, default false): Report only the jobs of workflows that a pull request event can start, which is the case that poutine reports.
 - Details and examples: [checks](./checks.md#check-self-hosted-runner)
 
 ## self-repository
@@ -1163,6 +1177,16 @@ An action is one typo away from a popular action of another owner.
 - Profile: default
 - Option `allow` (strings, empty by default): Slugs (owner/repo) of actions which are never reported, e.g. a legitimate fork.
 - Details and examples: [checks](./checks.md#check-typosquat-uses)
+
+## ubuntu-slim-limits
+
+A job on ubuntu-slim has a container, services or a Docker container action, which the single-CPU runner cannot run. With the option pedantic, a timeout-minutes above its limit of 15 minutes counts too.
+
+- Group: correctness
+- Default level: error
+- Profile: default
+- Option `pedantic` (bool, no default): Also report the pedantic checks, which are noisier. Unset, they run under the pedantic profile.
+- Details and examples: [checks](./checks.md#check-ubuntu-slim-limits)
 
 ## undefined-function
 
@@ -1337,11 +1361,12 @@ A workflow_run workflow uses an artifact of the triggering run without validatin
 
 ## untrusted-checkout
 
-A pull_request_target or workflow_run workflow checks out the code of a pull request and runs it.
+A pull_request_target or workflow_run workflow checks out the code of a pull request and runs it, or turns off the protection of actions/checkout against the code of fork pull requests. With the option pedantic, a checkout that actions/checkout refuses for a fork is reported too.
 
 - Group: security
 - Default level: error
 - Profile: default
+- Option `pedantic` (bool, no default): Also report the pedantic checks, which are noisier. Unset, they run under the pedantic profile.
 - Details and examples: [checks](./checks.md#check-untrusted-checkout)
 
 ## unused-anchor
