@@ -90,7 +90,8 @@ func TestMultilinePlainRunFix(t *testing.T) {
 		in   string // the steps
 		want string // "" when there is no fix
 	}{
-		{"plain", "      - run: echo a\n          x=1\n          echo $x\n", "      - run: |\n          echo a\n          x=1\n          echo $x\n"},
+		{"plain", "      - run: echo a\n          npm ci\n          npm test\n", "      - run: |\n          echo a\n          npm ci\n          npm test\n"},
+		{"a quote on a line of its own", "      - run: \"\n          echo a\n          npm ci\n          \"\n", "      - run: |\n          echo a\n          npm ci\n"},
 		{"deeper lines are aligned", "      - run: npm ci\n            npm test\n", "      - run: |\n          npm ci\n          npm test\n"},
 		{"key without a dash", "      - name: x\n        run: echo a\n          echo b\n", "      - name: x\n        run: |\n          echo a\n          echo b\n"},
 		{"double quoted", "      - run: \"echo a\n          echo b\"\n", "      - run: |\n          echo a\n          echo b\n"},
@@ -179,7 +180,7 @@ func TestMultilinePlainRunNoFixReasons(t *testing.T) {
 		want string
 	}{
 		{"blank line", "echo a\n\n          echo b\n          echo c", "the script has a blank line, which YAML keeps as a line break, so the fix is not exact. add `|` by hand"},
-		{"lines that continue", "make test\n          CC=gcc\n          echo x", "some lines continue the command before them and others start a new one, so the fix cannot tell which line break to keep as one. add `|` after `run:` and put each command on its own line by hand"},
+		{"lines that continue", "make test\n          CC=gcc\n          echo x", fixShapeReason},
 	}
 	for _, tc := range tests {
 		t.Run(tc.what, func(t *testing.T) {
@@ -189,5 +190,83 @@ func TestMultilinePlainRunNoFixReasons(t *testing.T) {
 				t.Fatalf("want no fix with the reason %q: %+v", tc.want, errs)
 			}
 		})
+	}
+}
+
+const fixShapeReason = "the fix is offered only when every line is a complete command that starts with a well-known command (no assignment, operator, open quote or bracket, heredoc or backslash), and this script is not like that. add `|` after `run:` and put each command on its own line by hand"
+
+// The finding for each of them is right or not reported; the fix refuses them, which is better than a wrong rewrite.
+func TestMultilinePlainRunMustNotBeFixed(t *testing.T) {
+	cfg := ruleConfig(multilineID)
+	tests := []struct{ what, run string }{
+		{"an assignment line", "echo a\n          x=1\n          echo $x"},
+		{"an assignment before the command", "FOO=1 npm ci\n          npm test"},
+		{"a declaration", "export A=1\n          B=2\n          echo x"},
+		{"an open quote in a line", "echo \"a\n          npm ci\n          npm test"},
+		{"an open bracket", "echo $(cat\n          npm ci\n          npm test)"},
+		{"an open substitution", "echo `cat\n          npm ci`\n          npm test"},
+		{"a heredoc", "cat <<EOF\n          npm ci\n          npm test"},
+		{"a backslash at the end", "echo a \\\n          npm ci\n          npm test"},
+		{"an operator at the end", "echo a &&\n          npm ci\n          npm test"},
+		{"a keyword at the end", "echo a; then\n          npm ci\n          npm test"},
+		{"a command that is not in the list", "echo a\n          ./build.sh\n          npm test"},
+		{"a shell", "echo a\n          bash x.sh\n          npm test"},
+		{"a wrapper", "echo a\n          time npm ci\n          npm test"},
+		{"an escape", "\"echo a\\tb\n          npm ci\n          npm test\""},
+		{"a comment", "echo a\n          npm ci # x\n          npm test"},
+		{"a blank line", "echo a\n\n          npm ci\n          npm test"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.what, func(t *testing.T) {
+			src := "on: push\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      - run: " + tc.run + "\n"
+			for _, e := range errsWithID(lintFileWithConfig(t, cfg, "ci.yaml", src), multilineID) {
+				if e.Fix != nil {
+					t.Fatalf("the fix must be refused: %+v", e.Fix)
+				}
+				if e.NoFix == nil || e.NoFix.Reason == "" {
+					t.Fatalf("a finding without a fix says why: %+v", e)
+				}
+			}
+		})
+	}
+}
+
+// An assignment-only line gives its variables to the command of the next line, so it does not start a command.
+func TestMultilinePlainRunAssignmentOnlyLine(t *testing.T) {
+	cfg := ruleConfig(multilineID)
+	for _, run := range []string{"FOO=1\n          make", "FOO=1 BAR=2\n          npm ci", "export A=1\n          B=2"} {
+		src := "on: push\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      - run: " + run + "\n"
+		wantLines(t, lintFileWithConfig(t, cfg, "ci.yaml", src), multilineID)
+	}
+}
+
+// What is left open at the end of a line belongs to the next line: a command substitution with backticks or $( ).
+func TestMultilinePlainRunOpenSubstitution(t *testing.T) {
+	cfg := ruleConfig(multilineID)
+	for _, run := range []string{"echo `date\n          npm ci`", "echo $(date\n          npm ci)", "echo ${{ a\n          npm ci }}"} {
+		src := "on: push\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      - run: " + run + "\n"
+		wantLines(t, lintFileWithConfig(t, cfg, "ci.yaml", src), multilineID)
+	}
+}
+
+// A line that only holds the quote of a quoted scalar is folded into a space, it is not a blank line.
+func TestMultilinePlainRunQuoteOnlyLine(t *testing.T) {
+	cfg := ruleConfig(multilineID)
+	src := "on: push\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      - run: \"\n          echo a\n          npm ci\n          \"\n"
+	errs := errsWithID(lintFileWithConfig(t, cfg, "ci.yaml", src), multilineID)
+	if len(errs) != 1 {
+		t.Fatalf("want one finding: %v", errs)
+	}
+	if strings.Contains(errs[0].Message, "blank line") || !strings.Contains(errs[0].Message, "`echo a npm ci`") {
+		t.Errorf("the message is about a blank line, or does not show the command: %s", errs[0].Message)
+	}
+	if errs[0].Fix == nil {
+		t.Errorf("the fix is expected: %+v", errs[0].NoFix)
+	}
+	// a real blank line is one
+	src = "on: push\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      - run: \"echo a\n\n          npm ci\n          npm test\"\n"
+	errs = errsWithID(lintFileWithConfig(t, cfg, "ci.yaml", src), multilineID)
+	if len(errs) != 1 || !strings.Contains(errs[0].Message, "blank line") || errs[0].Fix != nil {
+		t.Errorf("a blank line is described and not fixed: %v", errs)
 	}
 }

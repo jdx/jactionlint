@@ -77,10 +77,11 @@ func (rule *RuleMultilinePlainRun) VisitStep(n *Step) error {
 	if f == nil {
 		return nil
 	}
-	idx, ok := commandBoundary(f.lines)
+	idx, ok := commandBoundary(f.texts)
 	if !ok {
 		return nil
 	}
+	idx = f.textLine[idx]
 	line := f.startLine + idx
 	col := 1
 	if rule.src != nil && line <= len(rule.src.lineStarts) {
@@ -88,7 +89,7 @@ func (rule *RuleMultilinePlainRun) VisitStep(n *Step) error {
 		col = utf8.RuneCountInString(text[:len(text)-len(strings.TrimLeft(text, " \t"))]) + 1
 	}
 	shown := 0
-	for _, l := range f.lines {
+	for _, l := range f.texts {
 		if l != "" {
 			shown++
 		}
@@ -104,7 +105,7 @@ func (rule *RuleMultilinePlainRun) VisitStep(n *Step) error {
 func foldedMessage(f *foldedScalar, lines int) string {
 	head := "this \"run:\" is not a block scalar, so YAML folds its " + strconv.Itoa(lines) + " lines into one line"
 	blank, escape := false, false
-	for _, l := range f.lines {
+	for _, l := range f.texts {
 		blank = blank || l == ""
 		escape = escape || (f.style == '"' && strings.Contains(l, `\`))
 	}
@@ -115,7 +116,7 @@ func foldedMessage(f *foldedScalar, lines int) string {
 	if escape {
 		return head + " and the shell runs them as a single command (the text is not shown because the double quoted scalar has escapes). write `run: |` to keep the lines"
 	}
-	text := strings.Join(f.lines, " ")
+	text := strings.Join(f.texts, " ")
 	if f.style == '\'' {
 		text = strings.ReplaceAll(text, "''", "'")
 	}
@@ -163,18 +164,18 @@ func (rule *RuleMultilinePlainRun) fix(e *Error, s *String, f *foldedScalar) {
 		no("a comment follows the script, so the fix would move it into the script. add `|` after `run:` and put each command on its own line by hand")
 		return
 	}
-	for _, l := range f.lines {
+	for _, l := range f.texts {
 		if l == "" {
 			no("the script has a blank line, which YAML keeps as a line break, so the fix is not exact. add `|` by hand")
 			return
 		}
 	}
-	if !everyLineStartsACommand(f.lines) {
-		no("some lines continue the command before them and others start a new one, so the fix cannot tell which line break to keep as one. add `|` after `run:` and put each command on its own line by hand")
+	if !fixableLines(f.texts) {
+		no("the fix is offered only when every line is a complete command that starts with a well-known command (no assignment, operator, open quote or bracket, heredoc or backslash), and this script is not like that. add `|` after `run:` and put each command on its own line by hand")
 		return
 	}
-	body := make([]string, 0, len(f.lines))
-	for _, l := range f.lines {
+	body := make([]string, 0, len(f.texts))
+	for _, l := range f.texts {
 		switch {
 		case l == "":
 			no("the script has a blank line, which YAML keeps as a line break, so the fix is not exact. add `|` by hand")
@@ -214,6 +215,11 @@ type foldedScalar struct {
 	// first line starts at the first character of the value and the last one ends at its last character: quotes are
 	// not part of them. A blank line of the scalar is an empty string.
 	lines []string
+	// texts are the lines without the first and the last line of a quoted scalar when they only hold the quote: YAML folds
+	// that line break into a space, so it is not a blank line. A blank line of the scalar is still an empty string.
+	// textLine is, for each text, the index of its line in lines.
+	texts    []string
+	textLine []int
 	// startLine and endLine are the lines of the file of the first and the last line of the scalar.
 	startLine, endLine int
 	// startCol is the byte offset in the first line where the scalar starts (at the quote of a quoted one), and endCol the
@@ -269,6 +275,13 @@ func foldedScalarOf(s *String) *foldedScalar {
 		f.lines = append(f.lines, strings.TrimSpace(text[from:to]))
 	}
 	f.endCol = endCol
+	for i, l := range f.lines {
+		if l == "" && f.style != 0 && (i == 0 || i == len(f.lines)-1) {
+			continue // only the quote
+		}
+		f.texts = append(f.texts, l)
+		f.textLine = append(f.textLine, i)
+	}
 	return f
 }
 
@@ -332,6 +345,36 @@ func boundaryIn(lines []string) (int, bool) {
 	return 0, false
 }
 
+// fixWords is the closed list of commands that a line must start with for the fix to rewrite the lines: well-known commands
+// which are not assignments, keywords, wrappers, launchers or shells, so each line is a plain command of its own.
+var fixWords = set("echo cd mkdir rm cp mv cat ls chmod chown touch ln tar unzip zip curl wget npm npx yarn pnpm bun pip pip3 pipx uv poetry make cmake cargo rustup go git gh apt apt-get dpkg brew choco dotnet mvn gradle ./gradlew pytest tox nox flake8 black ruff mypy rsync scp sleep printf pwd mkdocs sphinx-build")
+
+// fixableLines reports whether the lines are in the narrow shape the fix rewrites: every line starts with a command of
+// fixWords, ends complete (no backslash, operator or keyword at its end, no quote, bracket, backtick or `$(` left open),
+// has no heredoc, and each one is a command of its own. When in doubt it is false.
+func fixableLines(lines []string) bool {
+	if !everyLineStartsACommand(lines) {
+		return false
+	}
+	for _, l := range lines {
+		if !fixWords[firstWord(l)] || assignmentRe.MatchString(firstWord(l)) {
+			return false
+		}
+		if strings.Contains(l, "<<") || opensMore(l) {
+			return false
+		}
+		for _, end := range continuationEnd {
+			if strings.HasSuffix(l, end) {
+				return false
+			}
+		}
+		if f := strings.Fields(l); len(f) > 0 && continuationWords[f[len(f)-1]] {
+			return false
+		}
+	}
+	return true
+}
+
 // everyLineStartsACommand reports whether each line after the first one is a command of its own, so that writing the
 // lines one below the other keeps what each line does. A script where some lines continue the command before them
 // (`make test` then `CC=gcc`) and others do not cannot be rewritten without a guess.
@@ -359,8 +402,8 @@ func firstWord(line string) string {
 }
 
 // effectiveWord returns the command which a line runs: the first word that is not an assignment (`DEBIAN_FRONTEND=x`),
-// a wrapper (`env`, `time`, `nohup`, ...) or an option of a wrapper. It is the first assignment when the line has
-// nothing else.
+// a wrapper (`env`, `time`, `nohup`, ...) or an option of a wrapper. It is "" when the line has nothing else: the
+// assignments then belong to the command of the next line.
 func effectiveWord(line string) string {
 	f := strings.Fields(line)
 	for _, w := range f {
@@ -369,17 +412,14 @@ func effectiveWord(line string) string {
 		}
 		return w
 	}
-	if len(f) > 0 {
-		return f[0]
-	}
 	return ""
 }
 
 // isNewCommand reports whether the line which starts with the word is a command of its own after the text, which is
 // the command cmd and the lines folded into it.
 func isNewCommand(cmd, text, w string) bool {
-	if !commandWords[cmd] && !assignmentRe.MatchString(cmd) {
-		return false // what the text is is not known: a script of the repository, a variable, ...
+	if !commandWords[cmd] {
+		return false // what the text is is not known: a script of the repository, a variable, an assignment, ...
 	}
 	if launcherWords[cmd] {
 		return false
@@ -406,7 +446,7 @@ func opensMore(text string) bool {
 	if strings.Count(text, "${{") > strings.Count(text, "}}") {
 		return true
 	}
-	var single, double bool
+	var single, double, backtick bool
 	depth := 0
 	for i := 0; i < len(text); i++ {
 		c := text[i]
@@ -417,13 +457,15 @@ func opensMore(text string) bool {
 			single = !single
 		case c == '"' && !single:
 			double = !double
+		case c == '`' && !single:
+			backtick = !backtick
 		case !single && !double && (c == '(' || c == '{' || c == '['):
 			depth++
 		case !single && !double && (c == ')' || c == '}' || c == ']'):
 			depth--
 		}
 	}
-	return single || double || depth > 0
+	return single || double || backtick || depth > 0
 }
 
 func init() {

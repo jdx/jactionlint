@@ -2839,9 +2839,12 @@ assignment (`x=1`) after a command that takes none (`echo a`), and the line befo
 an argument (`docker`, `ssh`, `sudo`, `xargs`, `find`, ...). Lines separated by a blank line are not compared (the blank line is kept as
 a line break). A script in a block, a script of `shell: python` and a script on one line are never reported.
 
-`--fix` writes the scalar as a block (`run: |`) with one line of the scalar on each line, when that is exact: the value starts on the line
-of the `run:` key, every line after the first starts a command (a script with some lines that continue a command, like `make test` then `CC=gcc`, is not rewritten), and it has no blank line, no `#` and no escape (in a double quoted scalar), and nothing follows it on its last line. The
-finding says why otherwise.
+`--fix` writes the scalar as a block (`run: |`) with one line of the scalar on each line, but only in the narrowest shape, because it
+rewrites a script: the value starts on the line of the `run:` key, and every line is a complete command that starts with a well-known
+command (`echo`, `cd`, `npm`, `git`, `make`, ...). A script with an assignment, a keyword, an operator, a backslash or a heredoc, a
+line that continues the command before it (`make test` then `CC=gcc`), a quote, bracket, backtick or `$(` that stays open at the end of
+a line, a blank line, a `#` or an escape in a double quoted scalar, or text after the scalar gets the finding without a fix, and the
+finding says why. A line that only holds the quote of a quoted scalar is folded into a space like any other line break.
 
 <a id="check-job-step-ids"></a>
 ## Job ID and step ID uniqueness
