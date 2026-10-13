@@ -82,6 +82,10 @@ type LinterOptions struct {
 	// --shellcheck-rcfile). A relative path is resolved from the working directory. It wins over the
 	// "shellcheck.rcfile" key of the configuration. The file must exist: the run fails when it does not.
 	ShellcheckRCFile string
+	// ShowDocURLs prints the URL of the documentation of the rule under each finding of the text format (not
+	// with Oneline) and in the message of the github format (the option --show-doc-urls). The json and sarif
+	// formats have it anyway.
+	ShowDocURLs bool
 	// IgnorePatterns is list of regular expression to filter errors. The pattern is applied to error
 	// messages. When an error is matched, the error is ignored.
 	IgnorePatterns []string
@@ -295,6 +299,7 @@ func NewLinter(out io.Writer, opts *LinterOptions) (*Linter, error) {
 	if err != nil {
 		return nil, &usageError{err}
 	}
+	prn = withDocURLs(prn, opts.ShowDocURLs)
 
 	cwd := "."
 	if opts.WorkingDir != "" {

@@ -142,6 +142,10 @@ single-dash long options of v1 are removed; the error names the replacement.
     config file. `strict` and `all`, the former names, are accepted in the config file only and
     mean `pedantic`
 
+  * `--show-doc-urls`:
+    Print the URL of the documentation of the rule of each finding: under the finding in the text
+    format (not with `oneline`) and in the message of the annotation in the `github` format
+
   * `--no-hints`:
     Do not print the line at the end of a text run with many findings (20 or more) that says how to
     count them (`--format summary`), adopt them gradually (`--baseline-write`) and get the checks of

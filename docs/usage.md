@@ -87,6 +87,7 @@ cat action.yml | jactionlint --stdin-filename action.yml -
 | `--rule-ids` |  | Accepted for compatibility. The text output always shows the rule ID at the end of each finding |
 | `--color[=WHEN]` |  | Colorize the output: always, never or auto (default). Bare --color means always |
 | `--no-color` |  | Same as --color=never |
+| `--show-doc-urls` |  | Print the documentation URL of the rule of each finding: under the finding (text) or in the message (github) |
 | `--no-hints` |  | Do not print the hint line after a text run with many findings |
 | `--min-severity=LEVEL` |  | Hide findings less severe than LEVEL: info (default), warn or error |
 | `--strict-exit` |  | Exit with status 1 also for findings of level warn and info |
@@ -307,6 +308,10 @@ pre-commit.ci: put `shellcheck: {rcfile: .shellcheckrc}` in `.github/jactionlint
 Any other value which has `{{ }}` is a custom template in [Go template syntax][go-template] as explained below. The output of
 the structured formats goes to stdout and the logs (including the deprecation warnings of the configuration) go to stderr, so the
 output can be piped to other tools safely.
+
+`--show-doc-urls` adds the URL of the documentation of the rule to each finding of the text format (a line `  = docs: https://jactionlint.jdx.dev/rules#unpinned-uses`
+under the snippet; not with `--format oneline`, which stays one line per finding) and of the `github` format (a second line `docs: URL` in the
+message of the annotation). The `json` and `jsonl` formats always have it as `doc_url`, and `sarif` as `helpUri`.
 
 The text format of errors is the same as in the former versions. An error whose level is lowered to `warn` or `info` in
 [the configuration](config.md#rules) has `warning: ` or `info: ` before the message. The rule ID, not the legacy kind, is at the end of the line.

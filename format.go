@@ -114,6 +114,25 @@ func isTemplateFormat(format string) bool {
 
 type textPrinter struct {
 	oneline bool
+	// docURLs prints the URL of the documentation of the rule under each finding (--show-doc-urls)
+	docURLs bool
+}
+
+// withDocURLs turns on the documentation URLs of the formats for people, the text and the github format. The other
+// formats have the URL as data already (doc_url of json, helpUri of sarif).
+func withDocURLs(p printer, on bool) printer {
+	if !on {
+		return p
+	}
+	switch p := p.(type) {
+	case textPrinter:
+		p.docURLs = !p.oneline // a line per finding stays one line
+		return p
+	case githubPrinter:
+		p.docURLs = true
+		return p
+	}
+	return p
 }
 
 func (p textPrinter) print(w io.Writer, results []fileResult, _ runInfo) error {
@@ -124,6 +143,9 @@ func (p textPrinter) print(w io.Writer, results []fileResult, _ runInfo) error {
 		}
 		for _, e := range r.errs {
 			e.prettyPrint(w, x, true)
+			if p.docURLs && e.DocURL != "" {
+				gray.Fprintf(w, "  = docs: %s\n", e.DocURL)
+			}
 		}
 	}
 	return nil
@@ -204,14 +226,17 @@ func (s Severity) gccName() string {
 	return "error"
 }
 
-type githubPrinter struct{}
+type githubPrinter struct {
+	// docURLs adds the URL of the documentation of the rule to the message (--show-doc-urls)
+	docURLs bool
+}
 
 var (
 	githubDataEscaper     = strings.NewReplacer("%", "%25", "\r", "%0D", "\n", "%0A")
 	githubPropertyEscaper = strings.NewReplacer("%", "%25", "\r", "%0D", "\n", "%0A", ":", "%3A", ",", "%2C")
 )
 
-func (githubPrinter) print(w io.Writer, results []fileResult, _ runInfo) error {
+func (p githubPrinter) print(w io.Writer, results []fileResult, _ runInfo) error {
 	for _, r := range results {
 		for _, e := range r.errs {
 			cmd := "error"
@@ -236,7 +261,11 @@ func (githubPrinter) print(w io.Writer, results []fileResult, _ runInfo) error {
 				}
 			}
 			props = append(props, "title="+githubPropertyEscaper.Replace(e.ID))
-			fmt.Fprintf(w, "::%s %s::%s\n", cmd, strings.Join(props, ","), githubDataEscaper.Replace(e.Message))
+			msg := e.Message
+			if p.docURLs && e.DocURL != "" {
+				msg += "\ndocs: " + e.DocURL
+			}
+			fmt.Fprintf(w, "::%s %s::%s\n", cmd, strings.Join(props, ","), githubDataEscaper.Replace(msg))
 		}
 	}
 	return nil
