@@ -1,1 +1,1 @@
-/test\.yaml:5:14: label "macos-12" is unknown\. .+/
+/test\.yaml:5:14: label "macos-12" is unknown\. GitHub retired it on 2024-12-03, so a job on it never gets a runner\. use "macos-15" or "macos-26" instead/
