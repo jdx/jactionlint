@@ -8770,8 +8770,9 @@ test.yaml:10:15: warning: action "actions/jekyll-build-pages@44a6e6beabd48582f86
 What is looked at:
 
 - **Only actions pinned to a full commit SHA.** An action pinned to a tag is reported by [`unpinned-uses`](#check-action-format) already.
-- **Composite steps.** `uses: owner/repo@v1` (a tag, a branch or a short SHA) and `uses: docker://image:tag` (no `@sha256:` digest) are reported. `uses: ./path` is
-  not: it is the same commit.
+- **Composite steps**, also those in a `parallel:` group. `uses: owner/repo@v1` (a tag, a branch or a short SHA) and `uses: docker://image:tag` (no
+  `@sha256:` digest) are reported. `uses: ./path` and `uses: $/path` are not followed: they are looked up in the workspace of the job which runs the
+  action at run time, not in the repository of the action, so there is nothing to read.
 - **Docker actions.** `runs.image: docker://image:tag` without a digest is reported. An action whose image is built from a `Dockerfile` is not: its `FROM` lines are not read.
 - **Two levels.** The steps of the pinned action, and the steps of the commit-pinned actions they use. A deeper chain is not read, and an action which
   uses itself is read once. The finding names the nested action which has the dependency.

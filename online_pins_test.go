@@ -267,3 +267,30 @@ func TestPinProblemsReadParallelGroups(t *testing.T) {
 		t.Errorf("problems:\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
 	}
 }
+
+// `./path` in a step of a remote composite action is looked up in the workspace of the caller at run time (see
+// self-repository), not in the repository of the action, so it cannot be followed and is not reported. An action
+// which two steps use is walked once, and one which uses itself ends.
+func TestPinProblemsDoNotFollowLocalPathsAndWalkEachActionOnce(t *testing.T) {
+	c := newFilesClient(t, map[string]string{
+		"o/a@" + pinSHA1 + ":action.yml": compositeOf(
+			stepUses("./.github/actions/x"),
+			stepUses("$/.github/actions/y"),
+			stepUses("o/a@"+pinSHA1), // itself
+			stepUses("o/dep@"+pinSHA2),
+			stepUses("o/dep@"+pinSHA2),
+		),
+		"o/dep@" + pinSHA2 + ":action.yml": compositeOf(stepUses("o/a@"+pinSHA1), stepUses("actions/setup-node@v4")),
+	})
+	w := pinWalk{s: newOnlineSession(context.Background(), c, nil), max: 10, seen: map[string]bool{}}
+	ps, err := w.walk("o", "a", "", pinSHA1, 1, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ps) != 1 || ps[0].target != "actions/setup-node@v4" {
+		t.Errorf("problems = %v", ps)
+	}
+	if n := c.calls.Load(); n != 2 {
+		t.Errorf("each action is read once: %d lookups %v", n, c.asked)
+	}
+}

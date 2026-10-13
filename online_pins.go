@@ -94,7 +94,7 @@ func uniquePinProblems(ps []pinProblem) []pinProblem {
 type pinWalk struct {
 	s    *onlineSession
 	max  int             // how many levels are read, see maxTransitivePinDepth
-	seen map[string]bool // the actions on the path from the pinned action, to end a cycle
+	seen map[string]bool // the actions walked for the pinned action
 }
 
 func actionSpec(owner, repo, subpath, ref string) string {
@@ -110,8 +110,9 @@ func (w *pinWalk) walk(owner, repo, subpath, sha string, depth int, holder strin
 	if w.seen[key] {
 		return nil, nil
 	}
+	// An action is walked once for the pinned action, whichever way it is reached: its problems are listed once, and a
+	// cycle ends
 	w.seen[key] = true
-	defer delete(w.seen, key)
 
 	meta, err := w.s.RemoteAction(owner, repo, subpath, sha)
 	if err != nil || meta == nil {
@@ -139,6 +140,9 @@ func (w *pinWalk) walk(owner, repo, subpath, sha string, depth int, holder strin
 			switch {
 			case u.Dynamic:
 				// Not known
+			case u.Kind == UsesLocal:
+				// `./path` and `$/path` are looked up in the workspace of the job which runs the action, not in the
+				// repository of the action, so nothing about them can be read from it
 			case u.Kind == UsesDocker:
 				if u.Digest == "" {
 					add(pinStepImage, spec)
