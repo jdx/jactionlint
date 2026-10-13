@@ -6,6 +6,8 @@ package jactionlint
 type RuleForbiddenUses struct {
 	RuleBase
 	allow, deny []UsesPattern
+	// urlUses reads `uses: https://host/owner/repo@ref` as owner/repo@ref (the platform is Forgejo or Gitea)
+	urlUses bool
 }
 
 // NewRuleForbiddenUses creates a new RuleForbiddenUses instance from the patterns of the allow and
@@ -46,7 +48,11 @@ func (rule *RuleForbiddenUses) check(uses *String) {
 	if uses == nil || uses.Pos == nil {
 		return
 	}
-	u := ParseUses(uses.Value)
+	value := uses.Value
+	if rule.urlUses {
+		value = repoOfURLUses(value)
+	}
+	u := ParseUses(value)
 	if !u.IsRepo() || u.Dynamic {
 		return
 	}
@@ -102,6 +108,7 @@ func init() {
 		if r == nil {
 			return nil
 		}
+		r.urlUses = env.config.allowsURLUses()
 		return []Rule{r}
 	})
 }
