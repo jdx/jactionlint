@@ -65,7 +65,7 @@ func (r *RuleActionsLock) VisitStep(n *Step) error {
 		return nil // Local actions, Docker images and reusable workflows are not part of the lock file
 	}
 	lock := r.scope.lock
-	reported := false
+	commentChecked := false
 	for _, key := range r.scope.keys {
 		if !lock.listsWorkflow(key) {
 			// Workflows are onboarded to the lock file one by one, so a workflow which is not listed is a choice,
@@ -79,17 +79,16 @@ func (r *RuleActionsLock) VisitStep(n *Step) error {
 		state, dep, others := lock.lookup(key, u)
 		switch state {
 		case lockMissing:
-			if !reported {
-				reported = true
-				r.ReportIDf("actions-lock", e.Uses.Pos, "action %q is not in %s for %s. a workflow which the lock file lists must list every action it uses. run `gh actions-lock` to add it", u.Raw, actionsLockPath, r.subject(key))
-			}
+			// One finding for each workflow which runs a local action: the message names it
+			r.ReportIDf("actions-lock", e.Uses.Pos, "action %q is not in %s for %s. a workflow which the lock file lists must list every action it uses. run `gh actions-lock` to add it", u.Raw, actionsLockPath, r.subject(key))
 		case lockOtherRef:
-			if !reported {
-				reported = true
-				r.ReportIDf("actions-lock", e.Uses.Pos, "action %q is not in %s for %s, which pins %s at %s. the ref was changed after the lock file was written. run `gh actions-lock` to lock the new ref", u.Raw, actionsLockPath, r.subject(key), strings.ToLower(u.Owner+"/"+u.Repo), quotes(others))
-			}
+			r.ReportIDf("actions-lock", e.Uses.Pos, "action %q is not in %s for %s, which pins %s at %s. the ref was changed after the lock file was written. run `gh actions-lock` to lock the new ref", u.Raw, actionsLockPath, r.subject(key), strings.ToLower(u.Owner+"/"+u.Repo), quotes(others))
 		case lockListed:
-			r.checkVersionComment(e, u, dep)
+			// The comment is about the line, not about a workflow: one finding even when several workflows list the pin
+			if !commentChecked {
+				commentChecked = true
+				r.checkVersionComment(e, u, dep)
+			}
 		}
 	}
 	return nil
@@ -285,8 +284,10 @@ func checkLockWorkflowPath(p string) string {
 	return ""
 }
 
+// isFullSHARef reports whether the ref is a full commit hash: 40 hex digits (SHA-1) or 64 (SHA-256), as the format
+// takes it.
 func isFullSHARef(ref string) bool {
-	return len(ref) == 40 && isHex(ref)
+	return (len(ref) == 40 || len(ref) == 64) && isHex(ref)
 }
 
 // lockUsage is what a workflow uses, as the lock file records it.
@@ -439,7 +440,7 @@ func (c *lockFileChecks) checkOnline(sess *onlineSession) {
 			continue // Another instance than the one the client talks to
 		}
 		hex := lockCommitHex(d.Commit)
-		if len(hex) != 40 || !validGitHubOwner(d.Pin.Owner) || !validGitHubRepo(d.Pin.Repo) {
+		if hex == "" || !validGitHubOwner(d.Pin.Owner) || !validGitHubRepo(d.Pin.Repo) {
 			continue
 		}
 		sha := strings.ToLower(hex)
@@ -460,6 +461,9 @@ func (c *lockFileChecks) checkOnline(sess *onlineSession) {
 			continue
 		}
 
+		if len(sha) != 40 {
+			continue // The client looks commits up by SHA-1: the identity of the repository was checked above
+		}
 		if d.HasRef && isFullVersion(d.Ref) {
 			if tagSHA, isTag, err := sess.TagCommit(owner, repo, d.Ref); err == nil && isTag && !strings.EqualFold(tagSHA, sha) {
 				c.reportDrift(d, "tag %q of %s points to commit %s now, but the lock file has %s. a version tag was moved, which is how a compromised release can look. check the tag before you run `gh actions-lock --relock`", d.Ref, slug, shortSHA(tagSHA), shortSHA(sha))
