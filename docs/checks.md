@@ -41,6 +41,7 @@ List of checks:
 - [Job ID and step ID uniqueness](#check-job-step-ids)
 - [Hardcoded credentials](#check-hardcoded-credentials)
 - [Dangerous writes to `GITHUB_ENV` and `GITHUB_PATH`](#check-github-env)
+- [Writes to the environment files that lose data](#check-environment-file-redirect)
 - [Packages installed by name](#check-adhoc-packages)
 - [Tools installed without an exact version](#check-unpinned-tools)
 - [Publishing with long-lived credentials](#check-use-trusted-publishing)
@@ -2861,6 +2862,59 @@ mention `$env:GITHUB_ENV` or `%GITHUB_ENV%` together with a redirection or `Out-
 
 To turn the rule off, put `github-env: off` in the `rules` section of the [configuration file](config.md) or write
 `# jactionlint ignore=github-env` after a reason.
+
+<a id="check-environment-file-redirect"></a>
+## Writes to the environment files that lose data
+
+Example input:
+
+```yaml
+on: push
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      # ERROR: without a $ this writes a file named GITHUB_OUTPUT in the working directory
+      - id: version
+        run: echo "version=1.2.3" >> GITHUB_OUTPUT
+      # ERROR: the second > empties the file, so "a" is lost
+      - id: pair
+        run: |
+          echo "a=1" >> "$GITHUB_OUTPUT"
+          echo "b=2" > "$GITHUB_OUTPUT"
+      # OK: the variable, appended
+      - run: echo "c=3" >> "$GITHUB_OUTPUT"
+      # OK: each step has its own file, so a lone > is harmless
+      - run: echo "d=4" > "$GITHUB_OUTPUT"
+```
+
+Output:
+
+```
+test.yaml:9:38: writing to "GITHUB_OUTPUT" creates a file with that name in the working directory, because without a `$` it is not the variable: the runner never sees it, so nothing is set as an output of the step. write `"$GITHUB_OUTPUT"` [environment-file-redirect]
+  |
+9 |         run: echo "version=1.2.3" >> GITHUB_OUTPUT
+  |                                      ^~~~~~~~~~~~~
+test.yaml:14:22: `>` empties $GITHUB_OUTPUT before it writes, so what this script wrote to it before is lost. append with `>>` [environment-file-redirect]
+   |
+14 |           echo "b=2" > "$GITHUB_OUTPUT"
+   |                      ^~~~~~~~~~~~~~~~~~
+```
+
+[Playground](https://jactionlint.jdx.dev/#eNp8jj3LwjAURvf+iofwrim0fadAOriokw7tLP0ItCJJ6U2c/PGSGMTgxxRyz7mHa7TA4mjKsrPpSWSAVWT9C6xOE/eC6522jl86zwIiqxZ6WADHPApc1Uqz0XEWtgXUMBmwiGSRl3nFUNfY7ptduzkd2ubYNklm6eY1bdyeX8ReJ4tQYX9Jh72JvSwZvnr89cZBVr+aiTvK/0/Z+wCol1U1)
+
+`GITHUB_OUTPUT`, `GITHUB_ENV`, `GITHUB_PATH`, `GITHUB_STEP_SUMMARY` and `GITHUB_STATE` are variables that hold the path of the file the
+runner reads after the step. `echo "a=b" >> GITHUB_OUTPUT` has no `$`, so the word is the name of a file: the shell creates it in the
+working directory, the runner never sees it, and `steps.<id>.outputs.a` is silently empty. The rule `environment-file-redirect` (in the
+`correctness` profile; [ghlint#646](https://github.com/TWiStErRob/net.twisterrob.ghlint/issues/646)) reports a redirect or a `tee` to one of these
+bare words in a bash or sh script, and `--fix` writes `"$GITHUB_OUTPUT"`. PowerShell (`$env:GITHUB_OUTPUT`) and cmd (`%GITHUB_OUTPUT%`)
+scripts are not analyzed, and a script that sets the variable itself is not reported.
+
+It also reports a `>` (or a `tee` without `-a`) to the file of the step after the same script has already written to it, because `>`
+empties the file and the earlier data is lost. Each step has files of its own, so a lone `>` is not reported, and neither is a `>` in the
+other branch of an `if`, or after a write which may not run (in a branch, a loop, a function or a pipeline). The fix writes `>>`; it is
+unsafe, because a script may reset the file on purpose, so `--fix` applies it only with `--fix=unsafe`.
 
 <a id="check-adhoc-packages"></a>
 ## Packages installed by name
@@ -8049,7 +8103,7 @@ way because any caller can pass attacker-controlled text. jactionlint does not l
 
 How the rules treat actions:
 
-- **Applies** to the steps (and the metadata) of an action: `action-syntax`, `adhoc-packages`, `archived-uses`, `artipacked`, `background-step-not-waited`, `checkout-static-credentials`, `constant-condition`, `context-availability`, `continue-on-error`, `deprecated-action-input`, `deprecated-commands`, `duplicate-key`, `duplicate-step-id`, `expired-ignore`, `expression-syntax`, `expression-type`, `fail-fast-action-inputs`, `forbidden-uses`, `github-app`, `if-always-true`, `impostor-commit`, `insecure-commands`, `insecure-ssh-keyscan`, `insecure-url-scheme`, `invalid-env-var-name`, `invalid-function-call`, `invalid-id`, `invalid-ignore-comment`, `invalid-local-action`, `invalid-parallel-step`, `invalid-shell-name`, `invalid-uses`, `invisible-characters`, `known-vulnerable-actions`, `max-run-lines`, `merge-key`, `misfeature`, `missing-action-input`, `obfuscation`, `outdated-action-runner`, `pipeline-without-pipefail`, `pyflakes`, `recursive-alias`, `ref-confusion`, `ref-version-mismatch`, `require-expression-wrapping`, `self-repository`, `shellcheck`, `stale-action-refs`, `superfluous-actions`, `template-injection`, `typosquat-uses`, `undefined-function`, `undefined-property`, `unknown-action-input`, `unlocked-install`, `unpinned-images`, `unpinned-tools`, `unpinned-uses`, `unsound-contains`, `unsound-prefix-match`, `unsound-ternary`, `unused-anchor`, `unused-ignore`, `unverified-download`, `use-trusted-publishing`, `yaml-syntax`.
+- **Applies** to the steps (and the metadata) of an action: `action-syntax`, `adhoc-packages`, `archived-uses`, `artipacked`, `background-step-not-waited`, `checkout-static-credentials`, `constant-condition`, `context-availability`, `continue-on-error`, `deprecated-action-input`, `deprecated-commands`, `duplicate-key`, `duplicate-step-id`, `environment-file-redirect`, `expired-ignore`, `expression-syntax`, `expression-type`, `fail-fast-action-inputs`, `forbidden-uses`, `github-app`, `if-always-true`, `impostor-commit`, `insecure-commands`, `insecure-ssh-keyscan`, `insecure-url-scheme`, `invalid-env-var-name`, `invalid-function-call`, `invalid-id`, `invalid-ignore-comment`, `invalid-local-action`, `invalid-parallel-step`, `invalid-shell-name`, `invalid-uses`, `invisible-characters`, `known-vulnerable-actions`, `max-run-lines`, `merge-key`, `misfeature`, `missing-action-input`, `obfuscation`, `outdated-action-runner`, `pipeline-without-pipefail`, `pyflakes`, `recursive-alias`, `ref-confusion`, `ref-version-mismatch`, `require-expression-wrapping`, `self-repository`, `shellcheck`, `stale-action-refs`, `superfluous-actions`, `template-injection`, `typosquat-uses`, `undefined-function`, `undefined-property`, `unknown-action-input`, `unlocked-install`, `unpinned-images`, `unpinned-tools`, `unpinned-uses`, `unsound-contains`, `unsound-prefix-match`, `unsound-ternary`, `unused-anchor`, `unused-ignore`, `unverified-download`, `use-trusted-publishing`, `yaml-syntax`.
 - **Caller-dependent**: `agentic-actions`, `bot-conditions`, `cache-poisoning`, `github-env` (its findings about untrusted input do not depend on the caller), `untrusted-artifact` and `untrusted-checkout`.
 - **Not applicable** because an action does not have what the rule checks, or because only the calling job can decide (`unused-baseline-entry` is about the baseline file, not about a workflow or an action): `anonymous-definition`, `concurrency-cancels-prs`, `concurrency-cancels-release`, `concurrency-limits`, `conflicting-runner-labels`, `cron-too-frequent`, `cyclic-job-needs`, `dangerous-triggers`, `dependabot-cooldown`, `dependabot-execution`, `dependabot-missing-actions-update`, `dependabot-syntax`, `duplicate-job-id`, `duplicate-job-needs`, `duplicate-triggers`, `excessive-permissions`, `gate-job-skipped-on-failure`, `gh-without-token`, `hardcoded-container-credentials`, `invalid-activity-type`, `invalid-cron`, `invalid-event-config`, `invalid-event-filter`, `invalid-glob`, `invalid-label-pattern`, `invalid-local-workflow`, `invalid-permissions`, `invalid-timezone`, `invalid-workflow-call`, `invalid-workflow-call-input`, `invalid-workflow-dispatch-input`, `local-action-checkout`, `matrix-duplicate-value`, `matrix-invalid-exclude`, `missing-permissions`, `missing-timeout`, `missing-workflow-input`, `missing-workflow-secret`, `mutable-runner-label`, `overprovisioned-secrets`, `require-shell`, `required-actions`, `secrets-inherit`, `secrets-outside-env`, `self-hosted-runner`, `timeout-too-long`, `undefined-job-needs`, `undocumented-permissions`, `unknown-event`, `unknown-runner-label`, `unknown-workflow-input`, `unknown-workflow-secret`, `unredacted-secrets`, `unused-baseline-entry`, `unused-job-output`, `unused-needs`, `unused-workflow-input`, `workflow-call-permissions`, `workflow-input-type`, `workflow-run-names`, `workflow-secret-scope`, `workflow-syntax`.
 

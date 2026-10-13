@@ -66,6 +66,7 @@ var actionRuleScope = map[string]struct {
 	"deprecated-commands":         {scope: actionApplies},
 	"env-var":                     {scope: actionApplies},
 	"events":                      {scope: actionNotApplicable},
+	"environment-file-redirect":   {scope: actionApplies},
 	"excessive-permissions":       {scope: actionNotApplicable},
 	"fail-fast-action-inputs":     {scope: actionApplies},
 	"expression":                  {scope: actionApplies},
