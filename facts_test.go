@@ -4,9 +4,14 @@ import (
 	"bytes"
 	"encoding/json"
 	"flag"
+	"fmt"
+	"go/ast"
+	goparser "go/parser"
+	"go/token"
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -421,5 +426,162 @@ func TestExportFactsInvalidPermissionIsUnknown(t *testing.T) {
 	want := map[string]string{"contents": "unknown", "issues": "unknown", "checks": "read"}
 	if diff := cmp.Diff(want, f.Workflows[0].Permissions.Scopes); diff != "" {
 		t.Errorf("scopes (-want +got): %s", diff)
+	}
+}
+
+// validateAgainst checks a decoded JSON value against the part of JSON Schema (draft-07) that FactsSchema uses: type,
+// enum, required, properties, additionalProperties, items, allOf and local $ref.
+func validateAgainst(schema map[string]any, defs map[string]any, v any, path string) []string {
+	if ref, ok := schema["$ref"].(string); ok {
+		return validateAgainst(defs[strings.TrimPrefix(ref, "#/definitions/")].(map[string]any), defs, v, path)
+	}
+	var errs []string
+	if all, ok := schema["allOf"].([]any); ok {
+		for _, sub := range all {
+			errs = append(errs, validateAgainst(sub.(map[string]any), defs, v, path)...)
+		}
+	}
+	if typ, ok := schema["type"].(string); ok {
+		okType := false
+		switch typ {
+		case "string":
+			_, okType = v.(string)
+		case "boolean":
+			_, okType = v.(bool)
+		case "number":
+			_, okType = v.(float64)
+		case "integer":
+			f, isNum := v.(float64)
+			okType = isNum && f == float64(int64(f))
+		case "array":
+			_, okType = v.([]any)
+		case "object":
+			_, okType = v.(map[string]any)
+		}
+		if !okType {
+			return append(errs, fmt.Sprintf("%s: %v is not of type %s", path, v, typ))
+		}
+	}
+	if enum, ok := schema["enum"].([]any); ok && !slices.Contains(enum, v) {
+		errs = append(errs, fmt.Sprintf("%s: %v is not one of %v", path, v, enum))
+	}
+	if obj, ok := v.(map[string]any); ok {
+		if req, ok := schema["required"].([]any); ok {
+			for _, r := range req {
+				if _, has := obj[r.(string)]; !has {
+					errs = append(errs, fmt.Sprintf("%s: %q is required", path, r))
+				}
+			}
+		}
+		props, _ := schema["properties"].(map[string]any)
+		for k, val := range obj {
+			switch {
+			case props[k] != nil:
+				errs = append(errs, validateAgainst(props[k].(map[string]any), defs, val, path+"."+k)...)
+			case schema["additionalProperties"] != nil:
+				if ap, ok := schema["additionalProperties"].(map[string]any); ok {
+					errs = append(errs, validateAgainst(ap, defs, val, path+"."+k)...)
+				}
+			}
+		}
+	}
+	if arr, ok := v.([]any); ok {
+		if items, ok := schema["items"].(map[string]any); ok {
+			for i, e := range arr {
+				errs = append(errs, validateAgainst(items, defs, e, fmt.Sprintf("%s[%d]", path, i))...)
+			}
+		}
+	}
+	return errs
+}
+
+func validateFactsDocument(t *testing.T, doc []byte) {
+	t.Helper()
+	var schema map[string]any
+	if err := json.Unmarshal(FactsSchema(), &schema); err != nil {
+		t.Fatal(err)
+	}
+	var v any
+	if err := json.Unmarshal(doc, &v); err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range validateAgainst(schema, schema["definitions"].(map[string]any), v, "$") {
+		t.Errorf("the document does not match the schema: %s", e)
+	}
+}
+
+// Every document is valid against the schema, also for the workflows that have no event of their own, whose lists
+// are empty and must be [] and not null.
+func TestExportFactsMatchesTheSchema(t *testing.T) {
+	repo := copyFactsRepo(t)
+	only := "on: workflow_call\njobs:\n  c:\n    uses: ./.github/workflows/release.yaml\n  d:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: ./.github/actions/setup\n"
+	if err := os.WriteFile(filepath.Join(repo, ".github", "workflows", "only-called.yaml"), []byte(only), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	l, err := NewLinter(&bytes.Buffer{}, &LinterOptions{WorkingDir: repo})
+	if err != nil {
+		t.Fatal(err)
+	}
+	f, err := l.ExportFacts(nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc, err := f.Marshal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(doc, []byte("null")) {
+		t.Errorf("the document has a null:\n%s", doc)
+	}
+	validateFactsDocument(t, doc)
+	// The golden fixture too
+	validateFactsDocument(t, mustMarshalFacts(t, exportTestFacts(t)))
+}
+
+func mustMarshalFacts(t *testing.T, f *Facts) []byte {
+	t.Helper()
+	b, err := f.Marshal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return b
+}
+
+// Every type that implements Event has a case in eventFacts: a trigger must not export as a name only.
+func TestEveryEventTypeHasFacts(t *testing.T) {
+	pos := &Pos{Line: 3, Col: 5}
+	str := func(v string) []*String { return []*String{{Value: v}} }
+	samples := map[string]Event{
+		"WebhookEvent":            &WebhookEvent{Hook: &String{Value: "push"}, Types: str("x"), Pos: pos},
+		"ScheduledEvent":          &ScheduledEvent{Pos: pos},
+		"WorkflowDispatchEvent":   &WorkflowDispatchEvent{Pos: pos},
+		"RepositoryDispatchEvent": &RepositoryDispatchEvent{Pos: pos},
+		"WorkflowCallEvent":       &WorkflowCallEvent{Pos: pos},
+		"ImageVersionEvent":       &ImageVersionEvent{Types: str("ready"), Names: str("ubuntu"), Versions: str("1.*"), Pos: pos},
+	}
+	fset := token.NewFileSet()
+	f, err := goparser.ParseFile(fset, "ast.go", nil, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, d := range f.Decls {
+		fn, ok := d.(*ast.FuncDecl)
+		if !ok || fn.Recv == nil || fn.Name.Name != "EventName" {
+			continue
+		}
+		name := fmt.Sprint(fn.Recv.List[0].Type.(*ast.StarExpr).X)
+		ev, ok := samples[name]
+		if !ok {
+			t.Errorf("%s implements Event: add a case to eventFacts and a sample to this test", name)
+			continue
+		}
+		got := eventFacts(ev)
+		if got.Location == nil || got.Location.Line != 3 {
+			t.Errorf("%s: eventFacts has no location: %+v", name, got)
+		}
+	}
+	got := eventFacts(samples["ImageVersionEvent"])
+	if diff := cmp.Diff(map[string][]string{"names": {"ubuntu"}, "versions": {"1.*"}}, got.Filters); diff != "" || len(got.Types) != 1 {
+		t.Errorf("image_version: %+v %s", got, diff)
 	}
 }

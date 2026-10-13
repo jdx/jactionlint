@@ -392,6 +392,17 @@ func eventFacts(e Event) *EventFacts {
 	case *RepositoryDispatchEvent:
 		f.Location = locationOf(ev.Pos)
 		f.Types = stringValues(ev.Types)
+	case *ImageVersionEvent:
+		f.Location = locationOf(ev.Pos)
+		f.Types = stringValues(ev.Types)
+		for key, vals := range map[string][]*String{"names": ev.Names, "versions": ev.Versions} {
+			if len(vals) > 0 {
+				if f.Filters == nil {
+					f.Filters = map[string][]string{}
+				}
+				f.Filters[key] = stringValues(vals)
+			}
+		}
 	case *WorkflowCallEvent:
 		f.Location = locationOf(ev.Pos)
 		for _, in := range ev.Inputs {
@@ -404,7 +415,7 @@ func eventFacts(e Event) *EventFacts {
 }
 
 func eventNames(evs []Event) []string {
-	var ret []string
+	ret := []string{} // an empty list and not null: the schema requires an array
 	for _, e := range evs {
 		if e == nil {
 			continue
