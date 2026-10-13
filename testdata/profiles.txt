@@ -29,6 +29,7 @@ duplicate-job-needs correctness correctness error
 duplicate-key correctness correctness error
 duplicate-step-id correctness correctness error
 duplicate-triggers default policy error
+environment-file-redirect correctness correctness error
 excessive-permissions default security error
 expired-ignore correctness policy error
 expression-syntax correctness correctness error

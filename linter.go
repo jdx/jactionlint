@@ -88,6 +88,10 @@ type LinterOptions struct {
 	// baseline (the option --no-ignores). The IgnorePatterns of the command line still apply. It is for audits and
 	// for finding what the ignores hide.
 	NoIgnores bool
+	// ShellcheckRCFile is a shellcheckrc file for shellcheck to read instead of --norc (the option
+	// --shellcheck-rcfile). A relative path is resolved from the working directory. It wins over the
+	// "shellcheck.rcfile" key of the configuration. The file must exist: the run fails when it does not.
+	ShellcheckRCFile string
 	// IgnorePatterns is list of regular expression to filter errors. The pattern is applied to error
 	// messages. When an error is matched, the error is ignored.
 	IgnorePatterns []string
@@ -188,7 +192,9 @@ type Linter struct {
 	printer    printer
 	shellcheck string
 	pyflakes   string
-	ignorePats IgnorePatterns
+	// shellcheckRC is LinterOptions.ShellcheckRCFile
+	shellcheckRC string
+	ignorePats   IgnorePatterns
 	// now returns the current time. It is time.Now unless LinterOptions.Now is set.
 	now func() time.Time
 	// ignoreRun is the state of the config "ignores" in the current run.
@@ -323,6 +329,7 @@ func NewLinter(out io.Writer, opts *LinterOptions) (*Linter, error) {
 		printer:        prn,
 		shellcheck:     opts.Shellcheck,
 		pyflakes:       opts.Pyflakes,
+		shellcheckRC:   opts.ShellcheckRCFile,
 		ignorePats:     ignore,
 		now:            opts.Now,
 		stdin:          stdin,
@@ -352,6 +359,9 @@ func NewLinter(out io.Writer, opts *LinterOptions) (*Linter, error) {
 		}
 	}
 	l.noIgnores = opts.NoIgnores
+	if _, err := shellcheckRCFile(opts.ShellcheckRCFile, cwd, nil, ""); err != nil {
+		return nil, err
+	}
 	l.warnRetiredIgnores(ignore...)
 	if opts.Profile != "" {
 		p, err := ParseProfile(string(opts.Profile))
@@ -887,9 +897,14 @@ func (l *Linter) check(
 			config:                 cfg,
 			shellcheck:             l.shellcheck,
 			pyflakes:               l.pyflakes,
+			shellcheckRCFile:       l.shellcheckRC,
+			cwd:                    l.cwd,
 			proc:                   proc,
 		}
 		rules := newBuiltinRules(env, l.log)
+		if env.err != nil {
+			return nil, env.err
+		}
 		skippedRules = env.skipped
 		if l.onRulesCreated != nil {
 			rules = l.onRulesCreated(rules)
