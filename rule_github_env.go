@@ -73,6 +73,9 @@ type RuleGitHubEnv struct {
 	// multilineOnly makes an input that is one line (a title, a branch name) an ordinary value: the output-clobbering
 	// rule is about a line break in the value.
 	multilineOnly bool
+	// freeTextOnly makes the name of a branch, of a label or of an account an ordinary value: the argument-injection rule
+	// is about text that a person types.
+	freeTextOnly bool
 }
 
 // NewRuleGitHubEnv creates a new RuleGitHubEnv instance.
@@ -321,7 +324,7 @@ func (rule *RuleGitHubEnv) judgeWord(s *runscript.Script, w *runscript.Word, dep
 	}
 	// the output of `gh pr view --json title` and of `git log --format=%s` is text of outsiders
 	for _, c := range subs {
-		if src, ok := rule.scriptTaint(s, c); ok && (!rule.multilineOnly || src.multiline()) && !(src.nameOnly() && rule.dest == "GITHUB_ENV") {
+		if src, ok := rule.scriptTaint(s, c); ok && (!rule.multilineOnly || src.multiline()) && !(src.nameOnly() && (rule.dest == "GITHUB_ENV" || rule.freeTextOnly)) {
 			// the name of a branch or of an account is one line: it cannot add a variable to the environment
 			return data{kind: dataUntrusted, input: src.desc, cmd: true, multiline: src.multiline()}
 		}
@@ -376,6 +379,9 @@ func (rule *RuleGitHubEnv) judgeExprList(exprs []string, depth int) data {
 // workflow can pass the title of an issue: it is an outsider's input, whichever event runs the action.
 func (rule *RuleGitHubEnv) judgeExpr(e string) data {
 	if rule.multilineOnly && !exprMayHaveNewline(e) {
+		return data{}
+	}
+	if rule.freeTextOnly && exprIsName(e) {
 		return data{}
 	}
 	if rule.wf != nil && rule.wf.Action != nil && !rule.skipInputs && exprReadsContext(e, "inputs") {

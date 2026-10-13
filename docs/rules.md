@@ -38,6 +38,7 @@ rules:
 | [agentic-actions](#agentic-actions) | security | error | default |
 | [anonymous-definition](#anonymous-definition) | policy | warn | pedantic |
 | [archived-uses](#archived-uses) | security | warn | only with `--online` |
+| [argument-injection](#argument-injection) | security | warn | pedantic |
 | [artipacked](#artipacked) | security | error | default |
 | [background-step-not-waited](#background-step-not-waited) | correctness | error | correctness |
 | [bot-conditions](#bot-conditions) | security | error | default |
@@ -218,6 +219,15 @@ An action or reusable workflow is in an archived repository.
 - Profile: only with `--online`
 - Needs network access: yes (only with `--online`)
 - Details and examples: [checks](./checks.md#check-archived-uses)
+
+## argument-injection
+
+Free text that an outsider writes is expanded into the program text or the options of sed, awk, find, tar and the like.
+
+- Group: security
+- Default level: warn
+- Profile: pedantic
+- Details and examples: [checks](./checks.md#check-argument-injection)
 
 ## artipacked
 

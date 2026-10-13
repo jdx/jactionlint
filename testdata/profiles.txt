@@ -3,6 +3,7 @@ adhoc-packages default security error
 agentic-actions default security error
 anonymous-definition pedantic policy warn
 archived-uses online security warn
+argument-injection pedantic security warn
 artipacked default security error
 background-step-not-waited correctness correctness error
 bot-conditions default security error

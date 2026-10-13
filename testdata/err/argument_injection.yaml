@@ -1,0 +1,35 @@
+# Free text of an outsider in the program of sed and awk, in find and in the options of tar and git clone
+on:
+  issue_comment:
+    types: [created]
+permissions: {}
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      BODY: ${{ github.event.comment.body }}
+      TITLE: ${{ github.event.issue.title }}
+      REF: ${{ github.head_ref }}
+    steps:
+      - run: sed "s/PLACEHOLDER/$BODY/g" template.txt > out.txt
+      - run: sed -i -e "s|x|$TITLE|" -e 's/a/b/' file
+      - run: awk "BEGIN { print \"$BODY\" }"
+      - run: find . -exec $BODY {} \;
+      - run: find . -name $TITLE
+      - run: tar -czf out.tgz "$BODY"
+      - run: git clone "$TITLE"
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          T=$(gh pr view 1 --json body --jq .body)
+          sed "s/PLACEHOLDER/$T/g" template.txt
+      # Not reported: the name of a branch, a program that does not expand the value, the end of the options, a value that was cut down
+      - run: sed "s/PLACEHOLDER/$REF/g" template.txt
+      - run: sed 's/PLACEHOLDER/$BODY/g' template.txt
+      - run: awk -v body="$BODY" '{ print body }' file
+      - run: find . -name "$TITLE"
+      - run: tar -czf out.tgz -- "$BODY"
+      - run: git clone "https://example.com/$TITLE"
+      - run: |
+          SAFE=$(echo "$BODY" | tr -cd 'a-z0-9-')
+          sed "s/PLACEHOLDER/$SAFE/g" template.txt

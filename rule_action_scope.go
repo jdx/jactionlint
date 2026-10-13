@@ -34,6 +34,7 @@ var actionRuleScope = map[string]struct {
 	"agentic-actions":             {scope: actionCallerDependent}, // an agent is steerable depending on the events of the callers
 	"checkout-static-credentials": {scope: actionApplies},         // the inputs of actions/checkout steps
 	"command-injection":           {scope: actionApplies},         // the scripts of the steps; inputs.* of the action is not judged
+	"argument-injection":          {scope: actionApplies},         // the scripts of the steps; inputs.* of the action is not judged
 	"output-clobbering":           {scope: actionApplies},         // the scripts of the steps; inputs.* of the action is not judged
 	"concurrency-cancels-prs":     {scope: actionNotApplicable},   // concurrency: belongs to the workflow
 	"concurrency-cancels-release": {scope: actionNotApplicable},   // concurrency: belongs to the workflow
