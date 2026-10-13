@@ -39,7 +39,7 @@ func TestSplitToolList(t *testing.T) {
 func TestRiskyToolRule(t *testing.T) {
 	risky := []string{
 		"Bash", "Bash(*)", "Bash(:*)", "bash(*:*)", "Bash()", "Bash(python:*)", "Bash(python3 *)", "Bash(sh*)", "Bash(curl:*)",
-		"Bash(xargs:*)", "Bash(python -c:*)", "Bash(node -e:*)", "Bash(bash -c *)", "Bash(curl -s:*)", "WebFetch", "WebFetch(*)", "WebFetch(domain:*)",
+		"Bash(xargs:*)", "Bash(aubx:*)", "Bash(python -c:*)", "Bash(node -e:*)", "Bash(bash -c *)", "Bash(curl -s:*)", "WebFetch", "WebFetch(*)", "WebFetch(domain:*)",
 	}
 	for _, r := range risky {
 		if riskyToolRule(r, "Bash", "WebFetch") == "" {

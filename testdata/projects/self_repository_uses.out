@@ -1,2 +1,7 @@
-/workflows/test\.yaml:14:15: missing input "name" which is required by action "My action" defined at "\$\/action"\. all required inputs are "name" \[action\]/
-/workflows/test\.yaml:16:11: input "nam" is not defined in action "My action" defined at "\$\/action"\. available inputs are "name" \[action\]/
+workflows/test.yaml:11:15: "$/action/missing" does not refer to an action: the repository has no action.yml or action.yaml in "./action/missing". a self-repository reference is resolved at the commit that runs the workflow, so the action must be in the repository [action]
+workflows/test.yaml:13:15: "$/nowhere" does not refer to an action: the repository has no action.yml or action.yaml in "./nowhere". a self-repository reference is resolved at the commit that runs the workflow, so the action must be in the repository [action]
+workflows/test.yaml:15:15: "$/action/ok@v1" has an "@ref" suffix, which a self-repository reference cannot have because "$/" always refers to the commit that runs the workflow. remove the suffix [action]
+workflows/test.yaml:17:15: "$/../action/ok" leaves the repository, but a self-repository reference names a path in the repository that runs the workflow [action]
+workflows/test.yaml:21:24: an expression is not allowed in "uses": the action or the reusable workflow is resolved when the workflow file is read, before any expression is evaluated. write the name of the action literally and choose its behavior with "with:" [expression]
+workflows/test.yaml:26:11: "$/workflows/reusable.yaml@v1" has an "@ref" suffix, which a self-repository reference cannot have because "$/" always refers to the commit that runs the workflow. remove the suffix [workflow-call]
+workflows/test.yaml:29:11: "$/../workflows/reusable.yaml" leaves the repository, but a self-repository reference names a path in the repository that runs the workflow [workflow-call]
