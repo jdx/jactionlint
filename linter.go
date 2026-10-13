@@ -383,6 +383,7 @@ func NewLinter(out io.Writer, opts *LinterOptions) (*Linter, error) {
 		}
 		if !sel["pyflakes"] {
 			l.pyflakes = ""
+			l.ruff = "" // ruff checks the same scripts, in the rule of pyflakes
 		}
 	}
 	l.noIgnores = opts.NoIgnores
