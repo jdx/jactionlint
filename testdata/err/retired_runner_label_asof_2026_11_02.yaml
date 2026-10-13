@@ -1,0 +1,21 @@
+on: push
+jobs:
+  # macos-14 is retired on 2026-11-02
+  mac:
+    runs-on: macos-14
+    steps:
+      - run: echo ...
+  mac-xlarge:
+    runs-on: macos-14-xlarge
+    steps:
+      - run: echo ...
+  # still available until 2027-04-17
+  linux:
+    runs-on: ubuntu-22.04
+    steps:
+      - run: echo ...
+  # a pool of self-hosted runners chooses its labels
+  pool:
+    runs-on: [self-hosted, macos-14]
+    steps:
+      - run: echo ...
