@@ -19,7 +19,7 @@ func countOutputClobbering(t *testing.T, name, src string) int {
 
 // TestOutputClobbering is the table of the rule. want is the number of findings.
 func TestOutputClobbering(t *testing.T) {
-	const head = "on: issue_comment\npermissions: {}\njobs:\n  j:\n    runs-on: ubuntu-latest\n    outputs:\n      approved: ${{ steps.check.outputs.approved }}\n    steps:\n      - id: check\n        env:\n          BODY: ${{ github.event.comment.body }}\n          TITLE: ${{ github.event.issue.title }}\n          REF: ${{ github.head_ref }}\n          LIT: fixed\n        run: |\n"
+	const head = "on: issue_comment\npermissions: {}\njobs:\n  j:\n    runs-on: ubuntu-latest\n    outputs:\n      approved: ${{ steps.check.outputs.approved }}\n    steps:\n      - id: check\n        env:\n          BODY: ${{ github.event.comment.body }}\n          TITLE: ${{ github.event.issue.title }}\n          REF: ${{ github.head_ref }}\n          LIT: fixed\n          RUNID: ${{ github.run_id }}\n          SECRETDELIM: ${{ secrets.DELIM }}\n        run: |\n"
 	const tail = "      - if: steps.check.outputs.approved == 'true'\n        run: echo approved\n"
 	const out = `>> "$GITHUB_OUTPUT"`
 	tests := []struct {
@@ -76,6 +76,14 @@ func TestOutputClobbering(t *testing.T) {
 		{"RANDOM in the old arithmetic", "d=\"EOF_$[RANDOM]\"\n{ echo \"body<<$d\"; echo \"$BODY\"; echo \"$d\"; } " + out, 0},
 		{"SRANDOM in the delimiter itself", "{ echo \"body<<EOF$(( SRANDOM ))\"; echo \"$BODY\"; } " + out, 0},
 		{"the word RANDOM in arithmetic of another variable", "d=\"EOF_$((NONRANDOM + 1))\"\n{ echo \"body<<$d\"; echo \"$BODY\"; echo \"$d\"; } " + out, 1},
+		{"the delimiter is the comment", "{ echo \"body<<$BODY\"; echo \"text\"; } " + out, 1},
+		{"the delimiter is a script variable that holds the comment", "d=$BODY\n{ echo \"body<<$d\"; echo \"$BODY\"; echo \"$d\"; } " + out, 1},
+		{"the delimiter is the id of the run", "{ echo \"body<<$RUNID\"; echo \"$BODY\"; echo \"$RUNID\"; } " + out, 1},
+		{"the delimiter is a secret", "{ echo \"body<<$SECRETDELIM\"; echo \"$BODY\"; echo \"$SECRETDELIM\"; } " + out, 0},
+		{"tee with a here string", `tee -a "$GITHUB_OUTPUT" <<< "body=$BODY"`, 1},
+		{"tee with a here string of a literal", `tee -a "$GITHUB_OUTPUT" <<< "x=1"`, 0},
+		{"tee with a here string of the title", `tee -a "$GITHUB_OUTPUT" <<< "t=$TITLE"`, 0},
+		{"cat with a here string", `cat <<< "body=$BODY" ` + out, 1},
 		{"a variable named uuid", "uuid=EOF\n{ echo \"body<<$uuid\"; echo \"$BODY\"; echo \"$uuid\"; } " + out, 1},
 		{"a variable named mktemp that holds a constant", "mktemp=EOF\nd=${mktemp}\n{ echo \"body<<$d\"; echo \"$BODY\"; echo \"$d\"; } " + out, 1},
 		{"a constant that is the word RANDOM", "d=RANDOM\n{ echo \"body<<$d\"; echo \"$BODY\"; echo \"$d\"; } " + out, 1},
