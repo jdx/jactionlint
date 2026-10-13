@@ -85,7 +85,7 @@ cat action.yml | jactionlint --stdin-filename action.yml -
 | `--rule-ids` |  | Accepted for compatibility. The text output always shows the rule ID at the end of each finding |
 | `--color[=WHEN]` |  | Colorize the output: always, never or auto (default). Bare --color means always |
 | `--no-color` |  | Same as --color=never |
-| `--no-hints` |  | Do not print the hint line after a text run with many findings |
+| `--no-hints` |  | Do not print the hint line after a text run with many findings, nor the note that shellcheck or pyflakes was not found |
 | `--min-severity=LEVEL` |  | Hide findings less severe than LEVEL: info (default), warn or error |
 | `--strict-exit` |  | Exit with status 1 also for findings of level warn and info |
 
@@ -137,8 +137,8 @@ cat action.yml | jactionlint --stdin-filename action.yml -
 
 | Option | Short | Description |
 | --- | --- | --- |
-| `--shellcheck=CMD` |  | Command or path of shellcheck (default shellcheck). Empty disables the integration |
-| `--pyflakes=CMD` |  | Command or path of pyflakes (default pyflakes). Empty disables the integration |
+| `--shellcheck=CMD` |  | Command or path of shellcheck (default shellcheck). Empty disables the integration. A command given here must exist (exit status 3 otherwise) |
+| `--pyflakes=CMD` |  | Command or path of pyflakes (default pyflakes). Empty disables the integration. A command given here must exist (exit status 3 otherwise) |
 
 Exit status: 0 no problem, 1 problems found, 2 invalid command line, 3 failure.
 
@@ -272,6 +272,38 @@ processes.
 ```sh
 jactionlint --shellcheck= --pyflakes=
 ```
+
+<a id="external-tools"></a>
+#### When shellcheck or pyflakes is missing
+
+A run that finds no `shellcheck` (or no `pyflakes` for a `shell: python` script) on `PATH` is not silent about it. It still exits 0, and
+prints one line per tool to stderr after the findings, with the number of scripts that were not checked:
+
+```
+note: shellcheck was not found, so it did not check 12 shell scripts. install it, or pass --shellcheck= to skip it on purpose
+```
+
+- The note is printed once per run, and only when a script needed the tool: a repository whose steps are all `uses:` gets none.
+- Silence it with `--shellcheck=` (or `--pyflakes=`), which says that you do not want the tool, or with `--no-hints` or
+  `JACTIONLINT_NO_HINTS=1`, which silence the other notes too. A tool turned off with an empty command is never noted.
+- A command you name yourself must exist. `--shellcheck=/bad/path` (or `--pyflakes=`) exits with status 3 and says that the path was not
+  found or is not executable, instead of running without the tool. `--shellcheck=shellcheck` counts as named too.
+- `--format sarif` prints no line. The same information is in the log: a notification in `invocations` and, for each tool that a
+  script needed, the property `externalTools` of the run, next to `onlineCoverage`. `status` is `ran` or `not found`, `scripts` is the
+  number of scripts the tool checked and `skippedScripts` the number that it would have checked. A tool turned off with an empty command
+  is not listed.
+
+  ```json
+  "properties": {
+    "externalTools": {
+      "pyflakes": {"status": "ran", "command": "pyflakes", "scripts": 1},
+      "shellcheck": {"status": "not found", "command": "shellcheck", "scripts": 0, "skippedScripts": 12}
+    }
+  }
+  ```
+
+In the Go API the same is `LinterOptions.ShellcheckRequired` and `PyflakesRequired` (`NewLinter` fails when the command is missing) and
+`Linter.ExternalTools()`.
 
 <a id="format"></a>
 ### Format error messages

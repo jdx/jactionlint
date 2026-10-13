@@ -980,7 +980,9 @@ applies shellcheck to scripts.
 
 By default, jactionlint checks if `shellcheck` command exists in your system and uses it when it is found. The `--shellcheck`
 option on running `jactionlint` command specifies the executable path of shellcheck. Setting empty string by `--shellcheck=`
-disables shellcheck integration explicitly.
+disables shellcheck integration explicitly. When the default is not found, the run prints a note on stderr that says how many scripts
+were not checked ([details](usage.md#external-tools)), and a path given with `--shellcheck` which does not exist is an error (exit
+status 3).
 
 Since both `${{ }}` expression syntax and ShellScript's variable access `$FOO` use `$`, the remaining `${{ }}` confuses
 shellcheck. To avoid it, jactionlint replaces `${{ }}` with underscores. For example `echo '${{ matrix.os }}'` is replaced
@@ -1096,7 +1098,8 @@ Python scripts in a workflow by checking `shell: python` at each step and `defau
 
 By default, jactionlint checks if `pyflakes` command exists in your system and uses it when found. The `--pyflakes` option
 of `jactionlint` command allows to specify the executable path of pyflakes. Setting empty string by `--pyflakes=` disables
-pyflakes integration explicitly.
+pyflakes integration explicitly. As with shellcheck, a missing default is noted on stderr and a missing path given with `--pyflakes`
+is an error (exit status 3), see [details](usage.md#external-tools).
 
 Since both `${{ }}` expression syntax is invalid as Python, remaining `${{ }}` might confuse pyflakes. To avoid it,
 jactionlint replaces `${{ }}` with underscores. For example `print('${{ matrix.os }}')` is replaced with

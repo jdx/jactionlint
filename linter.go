@@ -78,6 +78,12 @@ type LinterOptions struct {
 	// or file path like "/path/to/pyflakes", "path/to/pyflakes". When this value is empty, pyflakes
 	// won't run to check scripts in workflow file.
 	Pyflakes string
+	// ShellcheckRequired and PyflakesRequired say that the command was asked for explicitly (the command line
+	// option --shellcheck or --pyflakes was given). NewLinter then fails when the command cannot be found or is
+	// not executable, instead of running without it. A command which is not required and is missing is only
+	// noted in the log (see RunHints) and in the SARIF log: its scripts are not checked.
+	ShellcheckRequired bool
+	PyflakesRequired   bool
 	// IgnorePatterns is list of regular expression to filter errors. The pattern is applied to error
 	// messages. When an error is matched, the error is ignored.
 	IgnorePatterns []string
@@ -178,6 +184,9 @@ type Linter struct {
 	printer    printer
 	shellcheck string
 	pyflakes   string
+	// tools tracks whether shellcheck and pyflakes ran in this run.
+	tools      *externalTools
+	toolNoted  atomic.Bool
 	ignorePats IgnorePatterns
 	// now returns the current time. It is time.Now unless LinterOptions.Now is set.
 	now func() time.Time
@@ -310,6 +319,7 @@ func NewLinter(out io.Writer, opts *LinterOptions) (*Linter, error) {
 		printer:        prn,
 		shellcheck:     opts.Shellcheck,
 		pyflakes:       opts.Pyflakes,
+		tools:          newExternalTools(opts),
 		ignorePats:     ignore,
 		now:            opts.Now,
 		stdin:          stdin,
@@ -323,6 +333,9 @@ func NewLinter(out io.Writer, opts *LinterOptions) (*Linter, error) {
 		configFile:     opts.ConfigFile,
 		minSeverity:    opts.MinSeverity,
 		online:         onlineSettings{off: opts.OnlineOff, enabled: !opts.OnlineOff && (opts.Online || opts.OnlineOptions.Mode != OnlineModeDefault), client: opts.GitHubClient, ttl: opts.OnlineCacheTTL, ctx: opts.Context, opts: opts.OnlineOptions},
+	}
+	if err := l.tools.checkRequired(); err != nil {
+		return nil, err
 	}
 	l.warnRetiredIgnores(ignore...)
 	if opts.Profile != "" {
@@ -565,6 +578,7 @@ func (l *Linter) LintFiles(filepaths []string, project *Project) ([]*Error, erro
 	}
 	l.reportBaselineNote(results)
 	l.reportRunHint(results)
+	l.reportToolNotes()
 
 	l.log("Found", total, "errors in", n, "files")
 
@@ -859,6 +873,7 @@ func (l *Linter) check(
 			config:                 cfg,
 			shellcheck:             l.shellcheck,
 			pyflakes:               l.pyflakes,
+			tools:                  l.tools,
 			proc:                   proc,
 		}
 		rules := newBuiltinRules(env, l.log)
@@ -870,6 +885,9 @@ func (l *Linter) check(
 		v := NewVisitor()
 		for _, rule := range rules {
 			v.AddPass(rule)
+		}
+		for _, p := range env.observers {
+			v.AddPass(p)
 		}
 		if dbg != nil {
 			v.EnableDebug(dbg)
@@ -1138,7 +1156,31 @@ func (l *Linter) notifications() []string {
 // runInfo returns what the printers know about the run itself: the notifications and the coverage of the
 // online checks.
 func (l *Linter) runInfo() runInfo {
-	return runInfo{notes: l.notifications(), online: l.OnlineCoverage()}
+	notes := l.notifications()
+	if l.runHints {
+		notes = append(notes, l.tools.notes()...)
+	}
+	return runInfo{notes: notes, online: l.OnlineCoverage(), tools: l.ExternalTools()}
+}
+
+// ExternalTools says whether shellcheck and pyflakes ran in this run, keyed by "shellcheck" and "pyflakes". It
+// has an entry for each tool which some checked workflow or action needed, and it is nil when none did. A tool
+// which was not found checked nothing: SkippedScripts is the number of scripts it would have checked.
+func (l *Linter) ExternalTools() map[string]ExternalToolStatus {
+	return l.tools.statuses()
+}
+
+// reportToolNotes prints one line to the log output (stderr) for each external linter which was not found, so
+// that a missing shellcheck is not a silent loss of checks. It is printed once per run, only when the caller asked
+// for the hints (LinterOptions.RunHints, off with --no-hints), and never into a structured format, which carries
+// the same information as a notification and in the run properties.
+func (l *Linter) reportToolNotes() {
+	if !l.runHints || structured(l.printer) || !l.toolNoted.CompareAndSwap(false, true) {
+		return
+	}
+	for _, n := range l.tools.notes() {
+		fmt.Fprintln(l.logOut, "note:", n)
+	}
 }
 
 // annotateErrors fills the fields of the errors which are derived from the diagnostic ID: the
