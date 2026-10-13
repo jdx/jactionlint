@@ -3260,6 +3260,13 @@ the text of the workflow does not mention `GITHUB_TOKEN`, `github.token`, `GH_TO
 workflow runs and that pushes with the credentials left by `actions/checkout` is not visible, so check such a workflow before
 accepting the safe fix.
 
+A job whose actions need more than reading the repository gets a `permissions:` block of its own in the same fix, written from the
+table of [`insufficient-permissions`](#check-insufficient-permissions): for an action whose entry says that the listed scopes are all it
+needs (`actions/deploy-pages`, `peter-evans/create-pull-request`, `softprops/action-gh-release`, an OIDC login, ...) the job gets
+`contents: read` and those scopes, because the permissions of a job replace the ones of the workflow. Such a fix grants write access,
+so it is **unsafe**. An action whose entry is not exact (it has more needs in private repositories, or one of several scopes
+would do) adds nothing: the fix never invents a scope.
+
 A reusable workflow gets different treatment, because the workflow that calls it decides what the token can do, and a callee that
 asks for more than its caller grants makes GitHub reject the run:
 
@@ -3367,6 +3374,119 @@ rules:
 
 To silence one finding, put `# jactionlint ignore=excessive-permissions` above the scope, or list the rule in `paths.*.ignore`
 of the configuration for workflows which need it (a release workflow with a single job, for example).
+
+<a id="check-insufficient-permissions"></a>
+## Insufficient permissions
+
+Example input:
+
+```yaml
+on: push
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      # ERROR: the job has "contents: read" only, and the upload needs "security-events: write"
+      - uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: results.sarif
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+    steps:
+      # ERROR: the OIDC token of the deployment needs "id-token: write" as well
+      - uses: actions/deploy-pages@v4
+  login:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      # OK: the permissions of the job are what the action needs
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::123456789012:role/deploy
+          aws-region: us-east-1
+```
+
+Output:
+
+```
+test.yaml:11:15: github/codeql-action/upload-sarif needs "security-events: write", but the permissions of the workflow (this job sets none) give "security-events: none", so the step fails. grant "security-events: write" in the "permissions:" of the job, which replace the ones of the workflow, so list every scope the job needs [insufficient-permissions]
+   |
+11 |       - uses: github/codeql-action/upload-sarif@v3
+   |               ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+test.yaml:20:15: actions/deploy-pages needs "id-token: write", but the permissions of this job give "id-token: none", so the step fails. grant "id-token: write" in the "permissions:" of the job [insufficient-permissions]
+   |
+20 |       - uses: actions/deploy-pages@v4
+   |               ^~~~~~~~~~~~~~~~~~~~~~~
+```
+
+[Playground](https://jactionlint.jdx.dev/#eNqckF1OwzAQhN99ir2AKf3hz0+9CXKTbbrg7gbvuhG3R3YDqoAKiaco4xnNNyscYCx6cG7EfCRVEtbgADphQzYNkDH2zr3IrunaRa5fgFxYfc2XXWErPkVDtfakhqOeXQAeiqIGGMgOZbfopMe35GNnJLwoY5LYe42Z9tvTeo4ATGSH8PUH0AzPe0pYgbQk05umOYAexyTvf0J9G9ikOFSyKZPhdfAzqi7OPb6FtqeNA0gyEP+nmHpv8op82f3j5teBJvWfUJ3wnoaS0Ve1y9gjG8U0E/5+zSwJvYmPquWIAWLmECcNFI8hLFfrzd39w+PT7XIVqnMefpGvVRkHanvVY1Tzy48BADQitM8=)
+
+Once `permissions:` is set at the workflow level or on a job, every scope that is not listed is `none`, and the job of a workflow
+without `permissions:` of its own gets the permissions of the workflow, not the ones of the repository. A step whose action needs a
+scope that the job does not have then fails with "Resource not accessible by integration", or an OIDC login cannot get a token. This
+is the first failure of a workflow which has just been locked down. The rule `insufficient-permissions` reports it before the run.
+It is in the `default` profile and reports `error`.
+
+It checks the `permissions:` of the job, or of the workflow when the job has none, against a table of well-known actions. A workflow
+where neither sets `permissions:` has the default of the repository, which jactionlint cannot know, so it is not checked
+(`workflow-call-permissions` makes the same choice for the jobs which call a reusable workflow). `write-all` grants everything, and
+a value that is an expression is not judged. The table lists only what the documentation of an action says it needs:
+
+| Action | What it needs |
+| --- | --- |
+| `actions/deploy-pages` | `pages: write`, `id-token: write` |
+| `github/codeql-action/upload-sarif` | `security-events: write` |
+| `github/codeql-action/analyze` | `security-events: write`, unless `upload: never` |
+| `actions/attest`, `actions/attest-build-provenance` | `id-token: write`, `attestations: write` |
+| `actions/stale` | `issues: write` or `pull-requests: write`, unless `debug-only` |
+| `actions/labeler`, `marocchino/sticky-pull-request-comment` | `pull-requests: write` or `issues: write` |
+| `actions/dependency-review-action` | `pull-requests: write` with `comment-summary-in-pr: always` or `on-failure` |
+| `peter-evans/create-pull-request`, `googleapis/release-please-action` | `contents: write`, `pull-requests: write` |
+| `softprops/action-gh-release`, `ncipollo/release-action`, `JamesIves/github-pages-deploy-action`, `peaceiris/actions-gh-pages` (with `github_token`), `release-drafter/release-drafter` | `contents: write` (`softprops/action-gh-release` also `discussions: write` with `discussion_category_name`) |
+| `release-drafter/release-drafter/autolabeler` | `pull-requests: write` |
+| `dorny/test-reporter`, `EnricoMi/publish-unit-test-result-action` | `checks: write` |
+| `aws-actions/configure-aws-credentials` with `role-to-assume` and no access key, `google-github-actions/auth` with `workload_identity_provider`, `azure/login` with a `client-id` and no `creds`, `pypa/gh-action-pypi-publish` without `password`, `rubygems/configure-rubygems-credentials` with `role-to-assume`, `NuGet/login` | `id-token: write` |
+
+The source of each entry (the README or the `action.yml` of the action) is in the comment of `action_permissions.go`. A step is not
+checked when the action is given a token of its own (`token`, `repo-token`, `github-token`, an SSH key, a deploy key) or when an
+option says the scope is not used (`debug-only`, `upload: never`, `disable-releaser`), because then the `GITHUB_TOKEN` is not what the
+step uses. A step with `continue-on-error: true` or an `if:` that is false is not checked.
+
+Two kinds of commands in a `run:` script are checked, when the token of the command is the `GITHUB_TOKEN` of the job:
+
+- `gh release create|upload|edit|delete` (`contents: write`), `gh pr create` (`pull-requests: write`), `gh issue create`
+  (`issues: write`), `gh workflow run` and `gh run cancel|rerun` (`actions: write`) with `GH_TOKEN` or `GITHUB_TOKEN` set to
+  `${{ github.token }}` or `${{ secrets.GITHUB_TOKEN }}` in the `env:` of the step, job or workflow. A command with `--repo`, a token
+  written in front of it, a `GH_TOKEN=` in the script, or one that is allowed to fail (`|| true`, a condition) is skipped.
+- `git push` (`contents: write`) after an `actions/checkout` step of the job that keeps the credentials (no `token`, `ssh-key`,
+  `repository`, `path`, and no `persist-credentials: false`). A push to a URL or to a remote other than `origin`, a `--dry-run`, a
+  script that changes the directory, and a job that sets up the remote or the credentials of git (`git remote set-url`,
+  `credential.helper`, `insteadOf`, SSH keys) are skipped. `stefanzweifel/git-auto-commit-action` is judged the same way.
+
+The step of `actions/checkout` needs `contents: read` in a private repository only; in a public one the repository can be cloned
+without the scope. jactionlint does not know which it is, so that check is in the option `pedantic` (on under the `pedantic`
+profile):
+
+```yaml
+rules:
+  insufficient-permissions:
+    level: error
+    pedantic: true
+```
+
+The fix of [`missing-permissions`](#permissions) uses the same table: when a job without `permissions:` runs an action whose entry
+says that the listed scopes are all it needs, the fix writes a `permissions:` block with them on the job, next to the
+`contents: read` of the workflow.
+
+To silence one finding, put `# jactionlint ignore=insufficient-permissions` above the step.
 
 <a id="check-undocumented-permissions"></a>
 ## Undocumented permissions (pedantic)
@@ -7785,7 +7905,7 @@ How the rules treat actions:
 
 - **Applies** to the steps (and the metadata) of an action: `action-syntax`, `adhoc-packages`, `archived-uses`, `artipacked`, `background-step-not-waited`, `checkout-static-credentials`, `constant-condition`, `context-availability`, `continue-on-error`, `deprecated-action-input`, `deprecated-commands`, `duplicate-key`, `duplicate-step-id`, `expired-ignore`, `expression-syntax`, `expression-type`, `forbidden-uses`, `github-app`, `if-always-true`, `impostor-commit`, `insecure-commands`, `insecure-ssh-keyscan`, `insecure-url-scheme`, `invalid-env-var-name`, `invalid-function-call`, `invalid-id`, `invalid-ignore-comment`, `invalid-local-action`, `invalid-parallel-step`, `invalid-shell-name`, `invalid-uses`, `invisible-characters`, `known-vulnerable-actions`, `max-run-lines`, `merge-key`, `misfeature`, `missing-action-input`, `obfuscation`, `outdated-action-runner`, `pipeline-without-pipefail`, `pyflakes`, `recursive-alias`, `ref-confusion`, `ref-version-mismatch`, `require-expression-wrapping`, `self-repository`, `shellcheck`, `stale-action-refs`, `superfluous-actions`, `template-injection`, `typosquat-uses`, `undefined-function`, `undefined-property`, `unknown-action-input`, `unlocked-install`, `unpinned-images`, `unpinned-tools`, `unpinned-uses`, `unsound-contains`, `unsound-prefix-match`, `unsound-ternary`, `unused-anchor`, `unused-ignore`, `unverified-download`, `use-trusted-publishing`, `yaml-syntax`.
 - **Caller-dependent**: `agentic-actions`, `bot-conditions`, `cache-poisoning`, `github-env` (its findings about untrusted input do not depend on the caller), `untrusted-artifact` and `untrusted-checkout`.
-- **Not applicable** because an action does not have what the rule checks, or because only the calling job can decide (`unused-baseline-entry` is about the baseline file, not about a workflow or an action): `anonymous-definition`, `concurrency-cancels-prs`, `concurrency-cancels-release`, `concurrency-limits`, `conflicting-runner-labels`, `cron-too-frequent`, `cyclic-job-needs`, `dangerous-triggers`, `dependabot-cooldown`, `dependabot-execution`, `dependabot-missing-actions-update`, `dependabot-syntax`, `duplicate-job-id`, `duplicate-job-needs`, `duplicate-triggers`, `excessive-permissions`, `gate-job-skipped-on-failure`, `hardcoded-container-credentials`, `invalid-activity-type`, `invalid-cron`, `invalid-event-config`, `invalid-event-filter`, `invalid-glob`, `invalid-label-pattern`, `invalid-local-workflow`, `invalid-permissions`, `invalid-timezone`, `invalid-workflow-call`, `invalid-workflow-call-input`, `invalid-workflow-dispatch-input`, `local-action-checkout`, `matrix-duplicate-value`, `matrix-invalid-exclude`, `missing-permissions`, `missing-timeout`, `missing-workflow-input`, `missing-workflow-secret`, `mutable-runner-label`, `overprovisioned-secrets`, `require-shell`, `required-actions`, `secrets-inherit`, `secrets-outside-env`, `self-hosted-runner`, `timeout-too-long`, `undefined-job-needs`, `undocumented-permissions`, `unknown-event`, `unknown-runner-label`, `unknown-workflow-input`, `unknown-workflow-secret`, `unredacted-secrets`, `unused-baseline-entry`, `unused-job-output`, `unused-needs`, `unused-workflow-input`, `workflow-call-permissions`, `workflow-input-type`, `workflow-run-names`, `workflow-secret-scope`, `workflow-syntax`.
+- **Not applicable** because an action does not have what the rule checks, or because only the calling job can decide (`unused-baseline-entry` is about the baseline file, not about a workflow or an action): `anonymous-definition`, `concurrency-cancels-prs`, `concurrency-cancels-release`, `concurrency-limits`, `conflicting-runner-labels`, `cron-too-frequent`, `cyclic-job-needs`, `dangerous-triggers`, `dependabot-cooldown`, `dependabot-execution`, `dependabot-missing-actions-update`, `dependabot-syntax`, `duplicate-job-id`, `duplicate-job-needs`, `duplicate-triggers`, `excessive-permissions`, `gate-job-skipped-on-failure`, `hardcoded-container-credentials`, `insufficient-permissions`, `invalid-activity-type`, `invalid-cron`, `invalid-event-config`, `invalid-event-filter`, `invalid-glob`, `invalid-label-pattern`, `invalid-local-workflow`, `invalid-permissions`, `invalid-timezone`, `invalid-workflow-call`, `invalid-workflow-call-input`, `invalid-workflow-dispatch-input`, `local-action-checkout`, `matrix-duplicate-value`, `matrix-invalid-exclude`, `missing-permissions`, `missing-timeout`, `missing-workflow-input`, `missing-workflow-secret`, `mutable-runner-label`, `overprovisioned-secrets`, `require-shell`, `required-actions`, `secrets-inherit`, `secrets-outside-env`, `self-hosted-runner`, `timeout-too-long`, `undefined-job-needs`, `undocumented-permissions`, `unknown-event`, `unknown-runner-label`, `unknown-workflow-input`, `unknown-workflow-secret`, `unredacted-secrets`, `unused-baseline-entry`, `unused-job-output`, `unused-needs`, `unused-workflow-input`, `workflow-call-permissions`, `workflow-input-type`, `workflow-run-names`, `workflow-secret-scope`, `workflow-syntax`.
 
 Example input:
 

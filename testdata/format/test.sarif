@@ -295,6 +295,21 @@
               "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
             },
             {
+              "id": "insufficient-permissions",
+              "name": "InsufficientPermissions",
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "description": "Checks that the explicit permissions of a job grant what its actions and commands need from the GITHUB_TOKEN",
+                "queryURI": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+              },
+              "fullDescription": {
+                "text": "Checks that the explicit permissions of a job grant what its actions and commands need from the GITHUB_TOKEN"
+              },
+              "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+            },
+            {
               "id": "job-needs",
               "name": "JobNeeds",
               "defaultConfiguration": {
