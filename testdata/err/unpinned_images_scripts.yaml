@@ -18,6 +18,10 @@ jobs:
       - run: docker run ghcr.io/my-org/tool:1 && podman run mirror.example.com/x/y
       # ERROR: -t is the terminal of a run, not the tag of a build
       - run: docker run -t node:22 npm run build
+      # ERROR: --net is the alias of --network
+      - run: docker run --rm --net host alpine:3
+      # OK: a transport of podman names a file, not an image of a registry
+      - run: podman run docker-archive:/tmp/image.tar
       # OK: pinned by a digest
       - run: docker run alpine:3@sha256:0000000000000000000000000000000000000000000000000000000000000000
       # OK: the image is built by the workflow

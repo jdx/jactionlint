@@ -34,11 +34,18 @@ var dockerRunValueFlags = setOf(`--add-host --annotation --attach --blkio-weight
 --publish --pull --restart --runtime --security-opt --shm-size --stop-signal --stop-timeout --storage-opt --sysctl --tmpfs
 --ulimit --user --userns --uts --volume --volume-driver --volumes-from --workdir --authfile --pod --secret --systemd --tz
 --umask --timeout --cgroups --decryption-key --hostuser --mem-swap-limit --requires
+--net --net-alias --cgroup-conf --rdt-class --uidmap --gidmap --subuidname --subgidname --env-merge --unsetenv --image-volume
+--init-path --personality --pidfile --preserve-fds --seccomp-policy --sdnotify --passwd-entry --shm-size-systemd --stop-timeout
+--healthcheck-command --healthcheck-interval --healthcheck-retries --healthcheck-start-period --healthcheck-timeout
+--healthcheck-on-failure --health-on-failure --health-log-destination --health-max-log-count --health-max-log-size
+--log-opt --memory-swappiness --blkio-weight-device --cpu-count --cpu-percent --io-maxbandwidth --io-maxiops --kernel-memory
+--oom-score-adj --pids-limit --volumes-from --mac-address --add-host --dns --dns-opt --dns-option --dns-search
 -a -c -e -h -l -m -p -u -v -w`)
 
 // dockerRunBoolFlags are the options without a value.
 var dockerRunBoolFlags = setOf(`--detach --disable-content-trust --init --interactive --no-healthcheck --oom-kill-disable --privileged
---publish-all --quiet --read-only --rm --sig-proxy --tty --replace --help --http-proxy --read-only-tmpfs --rdt-class
+--publish-all --quiet --read-only --rm --sig-proxy --tty --replace --help --http-proxy --read-only-tmpfs --no-hosts --passwd
+--unsetenv-all --use-api-socket --oom-kill-disable --no-healthcheck --disable-content-trust
 -d -i -t -P -q`)
 
 // dockerPullValueFlags and dockerPullBoolFlags are the options of `docker pull` and `podman pull`.
@@ -78,6 +85,10 @@ func builtImagesOf(c *runscript.Command) bool {
 // imageWordRe matches a word which can be a reference to an image with a tag or a registry (with a port too): "app:ci", "ghcr.io/o/app",
 // "registry.local:5000/app:ci".
 var imageWordRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*(?::[0-9]+)?(?:/[A-Za-z0-9._-]+)*(?::[A-Za-z0-9._-]+)?(?:@sha256:[0-9a-f]+)?$`)
+
+// imageTransports are the transports of containers-transports(5) other than docker: the reference names a file, a directory or
+// a store and not an image of a registry.
+var imageTransports = setOf("docker-archive docker-daemon oci oci-archive dir containers-storage sif tarball ostree")
 
 // imageIDRe matches the id of an image, which a registry does not serve.
 var imageIDRe = regexp.MustCompile(`^(sha256:)?[0-9a-f]{12,64}$`)
@@ -190,17 +201,15 @@ func dockerImagesOf(c *runscript.Command) (dockerImage, bool) {
 	if strings.HasPrefix(ref, "./") || strings.HasPrefix(ref, "../") || strings.HasPrefix(ref, "/") || strings.HasSuffix(ref, ".tar") || strings.HasSuffix(ref, ".tar.gz") {
 		return dockerImage{}, false
 	}
-	// A transport of podman ("docker://alpine", "docker-archive:file", "oci:dir") names where the image is
+	// A transport of podman names where the image is, and only docker:// is a registry (containers-transports(5))
+	if t, _, ok := strings.Cut(ref, ":"); ok && imageTransports[t] {
+		return dockerImage{}, false
+	}
 	if scheme, rest, ok := strings.Cut(ref, "://"); ok {
 		if scheme != "docker" || rest == "" {
 			return dockerImage{}, false
 		}
 		ref = rest
-	} else if strings.Contains(strings.SplitN(ref, "/", 2)[0], ":") && !strings.Contains(ref, "/") {
-		// "name:tag" has a colon too, but "docker-archive:file" and "oci:dir" are known transports
-		if t, _, _ := strings.Cut(ref, ":"); t == "docker-archive" || t == "oci" || t == "oci-archive" || t == "dir" || t == "containers-storage" || t == "docker-daemon" {
-			return dockerImage{}, false
-		}
 	}
 	return dockerImage{Ref: ref, Word: img, Command: c.Name + " " + verb}, true
 }

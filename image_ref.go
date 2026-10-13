@@ -98,7 +98,13 @@ func parseImagePattern(s string) (imagePattern, error) {
 		}
 		p.res = append(p.res, re)
 	}
-	p.literal = len(s) - strings.Count(s, "*")
+	// The more specific pattern is the one with more literal characters in the longest of its forms, so that "node" (which is
+	// "docker.io/library/node") is more specific than "docker.io/library/*"
+	for _, f := range forms {
+		if n := len(f) - strings.Count(f, "*"); n > p.literal {
+			p.literal = n
+		}
+	}
 	return p, nil
 }
 

@@ -2,4 +2,5 @@ test.yaml:8:26: image "alpine" of "docker pull" in this script has no tag, so th
 test.yaml:10:43: image "ghcr.io/other/tool:latest" of "docker run" in this script uses the tag "latest", which changes whenever the registry is updated. pin it to a digest like "ghcr.io/other/tool@sha256:{digest}" [unpinned-images]
 test.yaml:16:13: image "node:20" of "docker run" in this script is pinned by a tag, which can be moved to another image. pin it to a digest like "node:20@sha256:{digest}" [unpinned-images]
 test.yaml:20:28: image "node:22" of "docker run" in this script is pinned by a tag, which can be moved to another image. pin it to a digest like "node:22@sha256:{digest}" [unpinned-images]
-test.yaml:35:27: image "busybox:1" of "docker run" in this script is pinned by a tag, which can be moved to another image. pin it to a digest like "busybox:1@sha256:{digest}" [unpinned-images]
+test.yaml:22:41: image "alpine:3" of "docker run" in this script is pinned by a tag, which can be moved to another image. pin it to a digest like "alpine:3@sha256:{digest}" [unpinned-images]
+test.yaml:39:27: image "busybox:1" of "docker run" in this script is pinned by a tag, which can be moved to another image. pin it to a digest like "busybox:1@sha256:{digest}" [unpinned-images]
