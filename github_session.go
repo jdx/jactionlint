@@ -448,8 +448,9 @@ func (s *onlineSession) record(err error, what string) {
 	s.streakLocked(err, kind)
 }
 
-// recordList accounts for the request of the list of advisories like record does, except that a failure is not a skipped
-// lookup and is not warned about: the lookups by action which follow it are, if they fail as well. A list which worked ends
+// recordList accounts for the request of the list of advisories like record does, except that a failure which leaves the
+// run able to go on is not a skipped lookup and is not warned about: the lookups by action which follow it are, if they fail as well.
+// A failure which blocks the run is counted and warned about like any other (failedLocked), as nothing follows to do it. A list which worked ends
 // the streak of failures in a row, a list which is too long is an answer too, and a failure counts in the streak like any other.
 func (s *onlineSession) recordList(err error) {
 	if errors.Is(err, errAdvisoryListUnavailable) {
@@ -468,7 +469,14 @@ func (s *onlineSession) recordList(err error) {
 		s.stopLocked(err)
 		return
 	}
-	s.streakLocked(err, classifyFailure(err))
+	kind := classifyFailure(err)
+	wasBlocked := s.blocked != nil
+	s.streakLocked(err, kind)
+	if s.blocked != nil && !wasBlocked {
+		// The list stopped the lookups of the run (a rate limit, a rejected token, an unreachable host, a streak of
+		// failures): the lookups which follow are skipped without a request, so this is the one that is warned about
+		s.failedLocked(kind, "the advisories", err)
+	}
 }
 
 // streakLocked counts the failure in the streak of failures in a row and blocks the run when asking again cannot work.
