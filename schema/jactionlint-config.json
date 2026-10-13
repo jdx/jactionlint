@@ -3963,7 +3963,7 @@
           ]
         },
         "untrusted-artifact": {
-          "description": "A workflow_run workflow uses an artifact of the triggering run without validating it. Group: security. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#untrusted-artifact",
+          "description": "A workflow_run workflow uses an artifact of the triggering run without validating it. With the option pedantic, also one that downloads every artifact of the run. Group: security. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#untrusted-artifact",
           "oneOf": [
             {
               "$ref": "#/definitions/level"
@@ -3978,6 +3978,10 @@
                     }
                   ],
                   "description": "The level of the rule: error, warn, info or off."
+                },
+                "pedantic": {
+                  "description": "Also report the pedantic checks, which are noisier. Unset, they run under the pedantic profile.",
+                  "type": "boolean"
                 }
               },
               "type": "object"
