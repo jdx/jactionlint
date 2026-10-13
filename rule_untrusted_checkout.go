@@ -735,11 +735,10 @@ func (rule *RuleUntrustedCheckout) checkoutsOf(j *Job, s *Step) []*untrustedChec
 			}
 		}
 		rule.carryEnv(script, taint, s.If != nil, &rule.carried)
-		if rule.comment && !rule.ghAny {
-			// the number of the pull request that a comment is on can be carried the same way
-			numEnv := map[string]string{}
-			maps.Copy(numEnv, rule.carriedNum)
-			rule.carryEnv(script, newNumberTaint(script, numEnv, rule.numberValue), s.If != nil, &rule.carriedNum)
+		if number != nil {
+			// the number of the pull request that a comment is on can be carried the same way: it has the env of the
+			// workflow, the job and the step, and what earlier steps wrote
+			rule.carryEnv(script, number, s.If != nil, &rule.carriedNum)
 		}
 		return ret
 	}
