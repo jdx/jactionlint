@@ -196,6 +196,28 @@ var cacheActions = []cacheAction{
 		}
 		return true, "set \"cache: false\""
 	}},
+	{"pnpm/action-setup", func(a *ExecAction, u *UsesRef) (bool, string) {
+		// "cache: true" caches the pnpm store (the input is "false" by default)
+		_, ok := inputEnabled(a, "cache")
+		return ok, "remove the \"cache\" input"
+	}},
+	{"pnpm/setup", func(a *ExecAction, u *UsesRef) (bool, string) {
+		// "cache: true" restores the pnpm store, keyed on the lock file. "save-cache: false" only stops the saving.
+		_, ok := inputEnabled(a, "cache")
+		return ok, "remove the \"cache\" input"
+	}},
+	{"graalvm/setup-graalvm", func(a *ExecAction, u *UsesRef) (bool, string) {
+		// "cache" names the build tool ("maven", "gradle" or "sbt") whose dependencies are cached
+		_, ok := inputEnabled(a, "cache")
+		return ok, "remove the \"cache\" input"
+	}},
+	{"ramsey/composer-install", func(a *ExecAction, u *UsesRef) (bool, string) {
+		// the Composer cache is restored unless "ignore-cache" says so (see ramsey/composer-install bin/should_cache.sh)
+		if v, ok := a.input("ignore-cache"); ok && composerIgnoresCache(v) {
+			return false, ""
+		}
+		return true, "set \"ignore-cache: true\""
+	}},
 	{"mlugg/setup-zig", func(a *ExecAction, u *UsesRef) (bool, string) {
 		if v, ok := a.input("use-cache"); ok && isFalseLiteral(v) {
 			return false, ""
@@ -229,6 +251,17 @@ var cacheActions = []cacheAction{
 	{"determinatesystems/magic-nix-cache-action", func(a *ExecAction, u *UsesRef) (bool, string) {
 		return true, "remove this step"
 	}},
+}
+
+// composerIgnoresCache reports whether the value of the "ignore-cache" input of ramsey/composer-install turns its cache
+// off. The action compares the text with 1, yes, Yes, y, Y, true and True; any other value (an expression included, which
+// is not known) leaves the cache on.
+func composerIgnoresCache(v string) bool {
+	switch strings.TrimSpace(v) {
+	case "1", "yes", "Yes", "y", "Y", "true", "True":
+		return true
+	}
+	return false
 }
 
 // buildxMayDownload is the pedantic reading of docker/setup-buildx-action: without "version" the action downloads
@@ -1014,6 +1047,9 @@ func (rule *RuleCachePoisoning) VisitJobPre(n *Job) error {
 	if rule.privileged != "" {
 		rule.checkWrite(n.CacheMode)
 	}
+	if rule.loose {
+		rule.checkCredentialCaches(n)
+	}
 
 	mode := n.CacheMode
 	if mode == nil {
@@ -1093,7 +1129,7 @@ func (rule *RuleCachePoisoning) callersTurnCacheOff(a *ExecAction, name string) 
 		if m == nil {
 			continue
 		}
-		if rule.everyReleaseCallerSets(m[1], g.offWhenTrue) {
+		if rule.everyReleaseCallerSets(m[1], g) {
 			return true
 		}
 	}
@@ -1104,13 +1140,14 @@ func (rule *RuleCachePoisoning) callersTurnCacheOff(a *ExecAction, name string) 
 // value that switches the cache off (the literal false, or true for an input that switches it off when true, or
 // an expression that evaluates to it in every scenario in which the caller publishes), or leaves the input out and
 // the default of the action switches it off. An expression which cannot be evaluated keeps the finding.
-func (rule *RuleCachePoisoning) everyReleaseCallerSets(input string, offWhenTrue bool) bool {
+func (rule *RuleCachePoisoning) everyReleaseCallerSets(input string, g cacheGate) bool {
+	offWhenTrue := g.offWhenTrue
 	// off reports whether the value passed by a caller switches the cache off in every run of the caller that
 	// publishes. A literal is decided as is; an expression is evaluated for each scenario with the evaluator
 	// of the conditions (cache_gate.go), and what it cannot decide counts as not off.
 	off := func(v string, scenarios []triggerScenario) bool {
 		v = strings.TrimSpace(v)
-		if offWhenTrue && isTrueLiteral(v) || !offWhenTrue && isFalseLiteral(v) {
+		if offWhenTrue && g.offs(v) || !offWhenTrue && isFalseLiteral(v) {
 			return true
 		}
 		if !strings.Contains(v, "${{") || len(scenarios) == 0 {
@@ -1121,7 +1158,7 @@ func (rule *RuleCachePoisoning) everyReleaseCallerSets(input string, offWhenTrue
 			return false
 		}
 		for _, sc := range scenarios {
-			if !valueSwitchesOff(evalGate(e, sc), offWhenTrue) {
+			if !valueSwitchesOff(evalGate(e, sc), g) {
 				return false
 			}
 		}
@@ -1159,13 +1196,16 @@ func (rule *RuleCachePoisoning) everyReleaseCallerSets(input string, offWhenTrue
 // valueSwitchesOff reports whether the evaluated value of an input switches the cache off: a boolean, or the
 // string a boolean becomes ("false", or "true" for an input that switches it off when true). An empty string
 // switches off the inputs that are on when set. A value that is not known never does.
-func valueSwitchesOff(v gateValue, offWhenTrue bool) bool {
+func valueSwitchesOff(v gateValue, g cacheGate) bool {
 	switch v.kind {
 	case 1:
-		return v.b == offWhenTrue
+		if g.offWhenTrue {
+			return g.offs(strconv.FormatBool(v.b)) // a boolean becomes the text "true" or "false"
+		}
+		return !v.b
 	case 2:
-		if offWhenTrue {
-			return isTrueLiteral(v.s)
+		if g.offWhenTrue {
+			return g.offs(v.s)
 		}
 		return v.s == "" || isFalseLiteral(v.s)
 	}
@@ -1177,6 +1217,18 @@ func valueSwitchesOff(v gateValue, offWhenTrue bool) bool {
 type cacheGate struct {
 	input       string
 	offWhenTrue bool
+	// offValue says which text switches the cache off, for an input of offWhenTrue which the action reads in its own way
+	// (ramsey/composer-install reads 1, yes, Yes, y, Y, true and True). Nil means a literal true, in any case.
+	offValue func(string) bool
+}
+
+// offs reports whether the value switches the cache off, for an input of offWhenTrue.
+func (g cacheGate) offs(v string) bool {
+	v = strings.TrimSpace(v)
+	if g.offValue != nil {
+		return g.offValue(v)
+	}
+	return isTrueLiteral(v)
 }
 
 // cacheGateInputs lists, for the actions of cacheActions, the inputs which decide whether the action
@@ -1224,6 +1276,10 @@ var cacheGateInputs = map[string][]cacheGate{
 	"oven-sh/setup-bun":                         {{input: "no-cache", offWhenTrue: true}},
 	"actions-rust-lang/setup-rust-toolchain":    {{input: "cache"}},
 	"mlugg/setup-zig":                           {{input: "use-cache"}},
+	"pnpm/setup":                                {{input: "cache"}},
+	"pnpm/action-setup":                         {{input: "cache"}},
+	"graalvm/setup-graalvm":                     {{input: "cache"}},
+	"ramsey/composer-install":                   {{input: "ignore-cache", offWhenTrue: true, offValue: composerIgnoresCache}},
 	"determinatesystems/magic-nix-cache-action": nil,
 }
 
@@ -1300,7 +1356,7 @@ var buildOutputPushRe = regexp.MustCompile(`(?i)(?:^|[\s,"'])(?:type=registry|pu
 
 func init() {
 	registerRules(
-		RuleInfo{ID: "cache-poisoning", Group: RuleGroupSecurity, Summary: "A cache is restored in a release job or written by a privileged trigger. With the option pedantic, a tag that only starts checks and a branch filter that names a release branch among others count as releases too.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-cache-poisoning", Options: []RuleOption{pedanticOption}},
+		RuleInfo{ID: "cache-poisoning", Group: RuleGroupSecurity, Summary: "A cache is restored in a release job or written by a privileged trigger. With the option pedantic, a tag that only starts checks and a branch filter that names a release branch among others count as releases too, and a cache that saves a file with credentials is reported.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-cache-poisoning", Options: []RuleOption{pedanticOption}},
 	)
 	registerRuleFactory("cache-poisoning", func(env *RuleEnv) []Rule {
 		r := NewRuleCachePoisoning()
