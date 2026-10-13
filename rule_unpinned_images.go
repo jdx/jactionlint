@@ -30,7 +30,10 @@ func NewRuleUnpinnedImages() *RuleUnpinnedImages {
 }
 
 // matrixImageRegex matches an image which is the value of one matrix variable.
-var matrixImageRegex = regexp.MustCompile(`^\$\{\{\s*matrix\.([A-Za-z0-9_-]+)\s*\}\}$`)
+var matrixImageRegex = regexp.MustCompile(`^\$\{\{\s*matrix((?:\.[A-Za-z0-9_-]+)+)\s*\}\}$`)
+
+// imageExprRegex finds the expressions of an image and captures what is inside of them.
+var imageExprRegex = regexp.MustCompile(`\$\{\{(.*?)\}\}`)
 
 // VisitWorkflowPre is callback when visiting Workflow node before visiting its children. It checks the
 // "image" of a Docker action (action.yml), which is a registry image when it starts with "docker://"
@@ -76,29 +79,131 @@ func (rule *RuleUnpinnedImages) checkContainer(job *Job, c *Container, subject f
 		rule.checkImage(c.Image.Value, c.Image.Pos, subject)
 		return
 	}
+	img := strings.TrimSpace(c.Image.Value)
 	// An image taken from the matrix is checked where the matrix writes it
-	m := matrixImageRegex.FindStringSubmatch(strings.TrimSpace(c.Image.Value))
-	if m == nil || job.Strategy == nil || job.Strategy.Matrix == nil {
+	if m := matrixImageRegex.FindStringSubmatch(img); m != nil {
+		values, complete := matrixStrings(job, m[1])
+		for _, v := range values {
+			rule.checkImage(v.Value, v.Pos(), subject)
+		}
+		if !complete && rule.pedantic("unpinned-images") {
+			// some value is only known when the workflow runs
+			rule.ReportIDf("unpinned-images", c.Image.Pos, "%s comes from an expression, so whether it is pinned by a digest is only known when the workflow runs. make the value end with a digest like \"image:tag@sha256:{digest}\"", subject(img))
+		}
 		return
 	}
-	name := strings.ToLower(m[1])
+	// An image which is made of text and matrix values (`postgres:${{ matrix.postgres }}`) is checked for each
+	// combination of the values, at the image
+	if images, ok := matrixImages(job, img); ok {
+		reported := map[string]bool{}
+		for _, v := range images {
+			if !reported[v] {
+				reported[v] = true
+				rule.checkImage(v, c.Image.Pos, subject)
+			}
+		}
+		return
+	}
+	// Any other expression is a value which is only known when the workflow runs. A digest is the last part of an
+	// image, so when the text after the last expression is written out (`${{ needs.build.outputs.image }}-bookworm`,
+	// `${{ vars.REGISTRY }}/tool:1.2`) and holds no digest, no value of the expression can make the image pinned.
+	// When the image ends with an expression, the expression may be the digest, which is not known.
+	end := strings.LastIndex(img, "}}") + 2
+	tail := img[end:]
+	switch {
+	case strings.Contains(strings.ToLower(img), "@sha256:"):
+		// pinned, or at least written as a digest
+	case tail != "":
+		rule.ReportIDf("unpinned-images", c.Image.Pos, "%s is not pinned by a digest: it ends with %q after the expression, so no value of the expression can add the digest. pin it to a digest like \"image:tag@sha256:{digest}\"", subject(img), tail)
+	case rule.pedantic("unpinned-images"):
+		rule.ReportIDf("unpinned-images", c.Image.Pos, "%s comes from an expression, so whether it is pinned by a digest is only known when the workflow runs. make the value end with a digest like \"image:tag@sha256:{digest}\"", subject(img))
+	}
+}
+
+// matrixImageRefRegex matches the matrix references an image can be built from: `matrix.name` and
+// `matrix.name.key`.
+var matrixImageRefRegex = regexp.MustCompile(`^matrix((?:\.[A-Za-z0-9_-]+)+)$`)
+
+// matrixStrings returns the string values that the matrix of the job has for the reference (`name` or `name.key`),
+// each with its position. A value that is not a plain string (an expression, a list) is left out, and complete is false
+// then: the values are not all known. It is false too when the matrix is an expression or has no value for the name.
+func matrixStrings(job *Job, ref string) (out []*RawYAMLString, complete bool) {
+	if job.Strategy == nil || job.Strategy.Matrix == nil || job.Strategy.Matrix.Expression != nil {
+		return nil, false
+	}
+	path := strings.Split(strings.ToLower(strings.TrimPrefix(ref, ".")), ".")
 	matrix := job.Strategy.Matrix
 	var values []RawYAMLValue
-	if row, ok := matrix.Rows[name]; ok && row != nil {
+	if row, ok := matrix.Rows[path[0]]; ok && row != nil {
+		if row.Expression != nil {
+			return nil, false
+		}
 		values = append(values, row.Values...)
 	}
 	if matrix.Include != nil {
 		for _, comb := range matrix.Include.Combinations {
-			if a, ok := comb.Assigns[name]; ok && a != nil {
+			if a, ok := comb.Assigns[path[0]]; ok && a != nil {
 				values = append(values, a.Value)
 			}
 		}
 	}
+	complete = len(values) > 0
 	for _, v := range values {
+		for _, key := range path[1:] {
+			o, ok := v.(*RawYAMLObject)
+			if !ok {
+				v = nil
+				break
+			}
+			v = o.Props[key]
+		}
 		if s, ok := v.(*RawYAMLString); ok && s.Value != "" && !ContainsExpression(s.Value) {
-			rule.checkImage(s.Value, s.Pos(), subject)
+			out = append(out, s)
+		} else {
+			complete = false
 		}
 	}
+	return out, complete
+}
+
+// maxMatrixImages bounds the images built from a matrix: more combinations than this are not expanded.
+const maxMatrixImages = 64
+
+// matrixImages builds the images that an image written as text and matrix references can be, one for each combination
+// of values. It returns false when some expression is not a plain matrix reference or has a value that is not known
+// (an expression, a matrix that fromJSON() writes), because the image is then not known either.
+func matrixImages(job *Job, img string) ([]string, bool) {
+	locs := imageExprRegex.FindAllStringSubmatchIndex(img, -1)
+	if len(locs) == 0 {
+		return nil, false
+	}
+	images := []string{""}
+	last := 0
+	for _, loc := range locs {
+		m := matrixImageRefRegex.FindStringSubmatch(strings.TrimSpace(img[loc[2]:loc[3]]))
+		if m == nil {
+			return nil, false
+		}
+		values, complete := matrixStrings(job, m[1])
+		if !complete {
+			return nil, false
+		}
+		var next []string
+		for _, prefix := range images {
+			for _, v := range values {
+				next = append(next, prefix+img[last:loc[0]]+v.Value)
+			}
+		}
+		if len(next) > maxMatrixImages {
+			return nil, false
+		}
+		images = next
+		last = loc[1]
+	}
+	for i := range images {
+		images[i] += img[last:]
+	}
+	return images, true
 }
 
 func (rule *RuleUnpinnedImages) checkImage(img string, pos *Pos, subject func(image string) string) {
@@ -148,7 +253,7 @@ func init() {
 		RuleInfo{
 			ID: "unpinned-images", Group: RuleGroupSecurity, Summary: "A container or service image is not pinned by a digest.",
 			DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-unpinned-images",
-			Options: []RuleOption{{Name: "require-digest", Kind: RuleOptionBool, Default: true, Summary: "Report images pinned by a tag other than latest too. Turn it off to report only images without a tag or with the latest tag."}},
+			Options: []RuleOption{{Name: "require-digest", Kind: RuleOptionBool, Default: true, Summary: "Report images pinned by a tag other than latest too. Turn it off to report only images without a tag or with the latest tag."}, pedanticOption},
 		},
 	)
 	registerRuleFactory("unpinned-images", func(env *RuleEnv) []Rule {

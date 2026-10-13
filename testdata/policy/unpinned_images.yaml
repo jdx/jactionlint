@@ -43,3 +43,49 @@ jobs:
     container: ${{ matrix.image }}
     steps:
       - run: echo hello
+  expression-with-a-tail:
+    runs-on: ubuntu-latest
+    container: ${{ vars.IMAGE }}-bookworm
+    services:
+      tool:
+        image: ${{ vars.REGISTRY }}/tool:1.2
+      digest-in-the-text:
+        image: ${{ vars.REGISTRY }}/tool@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+      digest-from-expression:
+        image: tool@sha256:${{ vars.DIGEST }}
+      value-from-expression:
+        image: ${{ vars.REGISTRY }}/${{ vars.TOOL }}
+    steps:
+      - run: echo hello
+  matrix-with-keys:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        leg:
+          - name: a
+            image: debian:12
+          - name: b
+            image: alpine@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+    container: ${{ matrix.leg.image }}
+    steps:
+      - run: echo hello
+  matrix-in-the-tag:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        postgres: ["15", "16"]
+    services:
+      db:
+        image: postgres:${{ matrix.postgres }}
+    steps:
+      - run: echo hello
+  matrix-in-the-tag-unknown:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        postgres: ${{ fromJSON(vars.VERSIONS) }}
+    services:
+      db:
+        image: postgres:${{ matrix.postgres }}
+    steps:
+      - run: echo hello

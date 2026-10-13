@@ -7,3 +7,8 @@ test.yaml:27:16: image "postgres@sha256:abc" of service "broken" has the digest 
 test.yaml:31:16: image "localhost:5000/team/image" of service "registry-port" has no tag, so the registry decides which image is pulled ("latest"). pin it to a digest like "localhost:5000/team/image@sha256:{digest}" [unpinned-images]
 test.yaml:38:17: container image "debian:12" is pinned by a tag, which can be moved to another image. pin it to a digest like "debian:12@sha256:{digest}" [unpinned-images]
 test.yaml:40:20: container image "ubuntu" has no tag, so the registry decides which image is pulled ("latest"). pin it to a digest like "ubuntu@sha256:{digest}" [unpinned-images]
+test.yaml:48:16: container image "${{ vars.IMAGE }}-bookworm" is not pinned by a digest: it ends with "-bookworm" after the expression, so no value of the expression can add the digest. pin it to a digest like "image:tag@sha256:{digest}" [unpinned-images]
+test.yaml:51:16: image "${{ vars.REGISTRY }}/tool:1.2" of service "tool" is not pinned by a digest: it ends with "/tool:1.2" after the expression, so no value of the expression can add the digest. pin it to a digest like "image:tag@sha256:{digest}" [unpinned-images]
+test.yaml:66:20: container image "debian:12" is pinned by a tag, which can be moved to another image. pin it to a digest like "debian:12@sha256:{digest}" [unpinned-images]
+test.yaml:79:16: image "postgres:15" of service "db" is pinned by a tag, which can be moved to another image. pin it to a digest like "postgres:15@sha256:{digest}" [unpinned-images]
+test.yaml:79:16: image "postgres:16" of service "db" is pinned by a tag, which can be moved to another image. pin it to a digest like "postgres:16@sha256:{digest}" [unpinned-images]

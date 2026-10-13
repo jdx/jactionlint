@@ -1,0 +1,5 @@
+test.yaml:6:16: container image "${{ vars.IMAGE }}" comes from an expression, so whether it is pinned by a digest is only known when the workflow runs. make the value end with a digest like "image:tag@sha256:{digest}" [unpinned-images]
+test.yaml:11:16: image "${{ vars.REGISTRY }}/tool:1.2" of service "tail" is not pinned by a digest: it ends with "/tool:1.2" after the expression, so no value of the expression can add the digest. pin it to a digest like "image:tag@sha256:{digest}" [unpinned-images]
+test.yaml:15:16: image "tool:${{ vars.TAG }}" of service "tag-from-expression" comes from an expression, so whether it is pinned by a digest is only known when the workflow runs. make the value end with a digest like "image:tag@sha256:{digest}" [unpinned-images]
+test.yaml:23:20: container image "debian:12" is pinned by a tag, which can be moved to another image. pin it to a digest like "debian:12@sha256:{digest}" [unpinned-images]
+test.yaml:25:16: container image "${{ matrix.image }}" comes from an expression, so whether it is pinned by a digest is only known when the workflow runs. make the value end with a digest like "image:tag@sha256:{digest}" [unpinned-images]
