@@ -42,6 +42,8 @@ func TestExpressionDelimiters(t *testing.T) {
 		{"unknown name", step("run: echo\n        env:\n          A: ${ foo.bar } ${ github }\n"), nil},
 		{"an expression in a string of an expression", step("run: echo\n        env:\n          A: ${{ format('{{ github.sha }}', 1) }}\n"), nil},
 		{"script of github-script", step("uses: actions/github-script@v7\n        with:\n          script: |\n            const x = `${ github.sha } {{ github.sha }}`\n"), nil},
+		{"camelCase code input", step("uses: a/b@v1\n        with:\n          afterBuild: echo ${ github.sha }\n"), nil},
+		{"camelCase input that is not code", step("uses: a/b@v1\n        with:\n          runId: ${ github.run_id }\n"), []int{8}},
 		{"command input", step("uses: a/b@v1\n        with:\n          run-command: echo ${ github.sha }\n"), nil},
 		{"three braces", step("run: echo\n        env:\n          A: \"{{{ github.sha }}}\"\n"), nil},
 		{"without closing braces", step("run: echo\n        env:\n          A: \"{{ github.sha\"\n"), nil},

@@ -89,7 +89,16 @@ func (rule *RuleExpressionDelimiters) VisitStep(n *Step) error {
 		}
 		sort.Strings(names)
 		for _, name := range names {
-			if in := e.Inputs[name]; in != nil && in.Value != nil && !inputHoldsCode(name) {
+			in := e.Inputs[name]
+			if in == nil || in.Value == nil {
+				continue
+			}
+			// The keys of the map are in lower case. The name as written tells the words of a camelCase name (afterBuild).
+			written := name
+			if in.Name != nil {
+				written = in.Name.Value
+			}
+			if !inputHoldsCode(written) {
 				rule.check(in.Value, true)
 			}
 		}
