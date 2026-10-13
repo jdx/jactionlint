@@ -468,6 +468,7 @@ func (l *Linter) printOne(r fileResult) ([]*Error, error) {
 	}
 	l.reportBaselineNote(results)
 	l.reportRunHint(results)
+	l.reportToolNotes()
 	if len(results) == 1 {
 		return r.errs, nil
 	}

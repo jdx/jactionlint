@@ -7,7 +7,7 @@ import (
 )
 
 // RuleAdhocPackages detects `run:` steps which install a package by name with a JavaScript package manager
-// (npm, yarn, pnpm, bun) or a Ruby tool (gem, bundle add), outside of a manifest that produces a lock file.
+// (npm, yarn, pnpm, bun, aube) or a Ruby tool (gem, bundle add), outside of a manifest that produces a lock file.
 //
 // A package installed this way is usually not pinned, and even when it is, its dependencies are resolved anew on
 // every run. Adding the package to package.json or a Gemfile, committing the lock file and installing with
@@ -150,6 +150,9 @@ func adhocInstall(c *runscript.Command) (manifest, instead string, ok bool) {
 		return "package.json and commit the pnpm-lock.yaml", "`pnpm install --frozen-lockfile`", true
 	case "bun":
 		return "package.json and commit the lock file", "`bun ci`", true
+	case "aube":
+		// aube keeps the lock file the project has (pnpm-lock.yaml, bun.lock, ...) and writes aube-lock.yaml otherwise
+		return "package.json and commit the lock file", "`aube ci`", true
 	}
 	return "", "", false
 }
@@ -244,7 +247,7 @@ func registryPackagesPinned(in *runscript.Install) bool {
 
 func init() {
 	registerRules(
-		RuleInfo{ID: "adhoc-packages", Group: RuleGroupSecurity, Summary: "A package is installed by name with npm, yarn, pnpm, bun, gem or bundle add outside of a lock file.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-adhoc-packages"},
+		RuleInfo{ID: "adhoc-packages", Group: RuleGroupSecurity, Summary: "A package is installed by name with npm, yarn, pnpm, bun, aube, gem or bundle add outside of a lock file.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-adhoc-packages"},
 	)
 	registerRuleFactory("adhoc-packages", func(env *RuleEnv) []Rule {
 		if !env.config.RuleEnabled("adhoc-packages") {

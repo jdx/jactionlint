@@ -52,8 +52,8 @@ var deployTools = map[string][]string{
 	"kubectl": {"apply", "rollout"}, "helm": {"upgrade", "install"}, "terraform": {"apply"}, "goreleaser": {"release"},
 }
 
-// launchers start a tool from a package: `bunx wrangler deploy`, `pnpm dlx wrangler deploy`.
-var launchers = map[string]bool{"npx": true, "bunx": true, "pnpx": true, "yarn": true, "pnpm": true, "bun": true, "npm": true, "dlx": true, "exec": true, "x": true, "-y": true, "--yes": true}
+// launchers start a tool from a package: `bunx wrangler deploy`, `pnpm dlx wrangler deploy`, `aubx wrangler deploy`.
+var launchers = map[string]bool{"npx": true, "bunx": true, "pnpx": true, "yarn": true, "pnpm": true, "bun": true, "npm": true, "aube": true, "aubx": true, "dlx": true, "exec": true, "x": true, "-y": true, "--yes": true}
 
 // deployCommand reports whether the command deploys or publishes something and describes it.
 func deployCommand(c *runscript.Command) (string, bool) {

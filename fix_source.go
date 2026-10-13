@@ -232,6 +232,12 @@ type jobSite struct {
 // locateJob finds the block-style mapping of the job in the source. It returns false when the job is
 // written in another style.
 func (d *srcDoc) locateJob(j *Job) (jobSite, bool) {
+	return d.locateJobWithout(j, "timeout-minutes")
+}
+
+// locateJobWithout is locateJob for a fix which adds the key `absent` to the job: it returns false when the job
+// has the key already, because the parser did not see it and the shape is not understood.
+func (d *srcDoc) locateJobWithout(j *Job, absent string) (jobSite, bool) {
 	if j.ID == nil || j.ID.Pos == nil || j.ID.Pos.Line < 1 || j.ID.Pos.Line > len(d.lines) {
 		return jobSite{}, false
 	}
@@ -277,7 +283,7 @@ func (d *srcDoc) locateJob(j *Job) (jobSite, bool) {
 			}
 			continue
 		}
-		if _, _, ok := d.keyLine(i, "timeout-minutes"); ok {
+		if _, _, ok := d.keyLine(i, absent); ok {
 			return jobSite{}, false
 		}
 		if strings.HasPrefix(d.text(i)[ind:], "<<") {
