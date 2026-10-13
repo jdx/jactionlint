@@ -171,7 +171,7 @@ func typeMatches(t string, doc any) bool {
 	return false
 }
 
-func loadSchema(t *testing.T, b []byte) schemaValidator {
+func loadJSONSchema(t *testing.T, b []byte) schemaValidator {
 	t.Helper()
 	var root map[string]any
 	if err := json.Unmarshal(b, &root); err != nil {
@@ -258,7 +258,7 @@ func sub(t *testing.T, m map[string]any, path ...string) map[string]any {
 // TestConfigSchemaKnowsTheKeysOfTheParser keeps the schema and the parser (which rejects unknown keys) in step: a
 // key added to one has to be added to the other.
 func TestConfigSchemaKnowsTheKeysOfTheParser(t *testing.T) {
-	root := loadSchema(t, ConfigSchema()).root
+	root := loadJSONSchema(t, ConfigSchema()).root
 	props := sub(t, root, "properties")
 	if got, want := keysOf(props), sorted(configTopKeys); !slices.Equal(got, want) {
 		t.Errorf("top-level keys of the schema differ from configTopKeys:\n got %v\nwant %v", got, want)
@@ -284,7 +284,7 @@ func TestConfigSchemaKnowsTheKeysOfTheParser(t *testing.T) {
 }
 
 func TestConfigSchemaHasEveryRuleAndOption(t *testing.T) {
-	root := loadSchema(t, ConfigSchema()).root
+	root := loadJSONSchema(t, ConfigSchema()).root
 	rules := sub(t, root, "properties", "rules", "properties")
 	if got, want := keysOf(rules), ruleIDs(); !slices.Equal(got, want) {
 		t.Fatalf("the rules of the schema differ from the registry")
@@ -317,7 +317,7 @@ func TestConfigSchemaHasEveryRuleAndOption(t *testing.T) {
 // nothing when an editor hovers over it.
 func TestSchemaPropertiesAreDescribed(t *testing.T) {
 	for name, b := range map[string][]byte{"config": ConfigSchema(), "output": OutputSchema()} {
-		root := loadSchema(t, b).root
+		root := loadJSONSchema(t, b).root
 		var walk func(path string, n any)
 		walk = func(path string, n any) {
 			m, ok := n.(map[string]any)
@@ -347,7 +347,7 @@ func TestSchemaPropertiesAreDescribed(t *testing.T) {
 }
 
 func TestConfigSchemaAcceptsRealConfigs(t *testing.T) {
-	v := loadSchema(t, ConfigSchema())
+	v := loadJSONSchema(t, ConfigSchema())
 	var files []string
 	err := filepath.WalkDir("testdata", func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -394,7 +394,7 @@ func TestConfigSchemaAcceptsRealConfigs(t *testing.T) {
 }
 
 func TestConfigSchemaRejectsMistakes(t *testing.T) {
-	v := loadSchema(t, ConfigSchema())
+	v := loadJSONSchema(t, ConfigSchema())
 	for _, tc := range []struct{ name, src, want string }{
 		{"unknown key", "profil: default\n", `unknown property "profil"`},
 		{"profile", "profile: strictest\n", "is not one of"},
@@ -456,7 +456,7 @@ func TestInitConfigWritesTheSchemaComment(t *testing.T) {
 	if _, err := ReadConfigFile(filepath.Join(dir, ".github", "jactionlint.yaml")); err != nil {
 		t.Errorf("the generated file is not a valid config: %v", err)
 	}
-	if errs := validateConfigYAML(t, loadSchema(t, ConfigSchema()), string(b)); len(errs) > 0 {
+	if errs := validateConfigYAML(t, loadJSONSchema(t, ConfigSchema()), string(b)); len(errs) > 0 {
 		t.Errorf("the generated file does not validate: %v", errs)
 	}
 }
@@ -482,7 +482,7 @@ func TestPrintSchemaFlags(t *testing.T) {
 // TestOutputSchemaDescribesTheJSONOutput lints files which give findings with fixes and with reasons for having
 // none, and validates what --format json and jsonl print.
 func TestOutputSchemaDescribesTheJSONOutput(t *testing.T) {
-	v := loadSchema(t, OutputSchema())
+	v := loadJSONSchema(t, OutputSchema())
 	finding := sub(t, v.root, "definitions", "finding")
 
 	files := []string{

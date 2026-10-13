@@ -1,2 +1,7 @@
 rules:
   unpinned-images: error
+paths:
+  "**":
+    ignore:
+      # a whole container object from the matrix, which actionlint does not accept as a template value
+      - "object, array, and null values should not be evaluated"

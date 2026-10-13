@@ -124,6 +124,7 @@
               "dependabot-syntax",
               "deprecated-action-input",
               "deprecated-commands",
+              "deprecated-runner-label",
               "duplicate-job-id",
               "duplicate-job-needs",
               "duplicate-key",
@@ -168,6 +169,7 @@
               "invisible-characters",
               "known-vulnerable-actions",
               "local-action-checkout",
+              "malformed-expression-delimiters",
               "matrix-duplicate-value",
               "matrix-invalid-exclude",
               "max-run-lines",
@@ -187,6 +189,7 @@
               "recursive-alias",
               "ref-confusion",
               "ref-version-mismatch",
+              "repojacking",
               "require-expression-wrapping",
               "require-shell",
               "required-actions",
@@ -312,6 +315,7 @@
                   "dependabot-syntax",
                   "deprecated-action-input",
                   "deprecated-commands",
+                  "deprecated-runner-label",
                   "duplicate-job-id",
                   "duplicate-job-needs",
                   "duplicate-key",
@@ -356,6 +360,7 @@
                   "invisible-characters",
                   "known-vulnerable-actions",
                   "local-action-checkout",
+                  "malformed-expression-delimiters",
                   "matrix-duplicate-value",
                   "matrix-invalid-exclude",
                   "max-run-lines",
@@ -375,6 +380,7 @@
                   "recursive-alias",
                   "ref-confusion",
                   "ref-version-mismatch",
+                  "repojacking",
                   "require-expression-wrapping",
                   "require-shell",
                   "required-actions",
@@ -453,6 +459,7 @@
                     "dependabot-syntax",
                     "deprecated-action-input",
                     "deprecated-commands",
+                    "deprecated-runner-label",
                     "duplicate-job-id",
                     "duplicate-job-needs",
                     "duplicate-key",
@@ -497,6 +504,7 @@
                     "invisible-characters",
                     "known-vulnerable-actions",
                     "local-action-checkout",
+                    "malformed-expression-delimiters",
                     "matrix-duplicate-value",
                     "matrix-invalid-exclude",
                     "max-run-lines",
@@ -516,6 +524,7 @@
                     "recursive-alias",
                     "ref-confusion",
                     "ref-version-mismatch",
+                    "repojacking",
                     "require-expression-wrapping",
                     "require-shell",
                     "required-actions",
@@ -936,8 +945,26 @@
           "description": "Jobs depend on each other in a cycle. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#cyclic-job-needs"
         },
         "dangerous-triggers": {
-          "$ref": "#/definitions/level",
-          "description": "A workflow uses pull_request_target, workflow_run or issue_comment. Group: security. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#dangerous-triggers"
+          "description": "A workflow uses pull_request_target, workflow_run or issue_comment. With the option pedantic, also one that cannot write and uses no secret. Group: security. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#dangerous-triggers",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "$ref": "#/definitions/level",
+                  "description": "The level of the rule."
+                },
+                "pedantic": {
+                  "description": "Also report the pedantic checks, which are noisier. Unset, they run under the pedantic profile.",
+                  "type": "boolean"
+                }
+              },
+              "type": "object"
+            }
+          ]
         },
         "dependabot-cooldown": {
           "description": "An update in dependabot.yml has no cooldown or a cooldown shorter than the minimum. Group: security. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#dependabot-cooldown",
@@ -987,6 +1014,10 @@
         "deprecated-commands": {
           "$ref": "#/definitions/level",
           "description": "A deprecated workflow command such as ::set-output is used. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#deprecated-commands"
+        },
+        "deprecated-runner-label": {
+          "$ref": "#/definitions/level",
+          "description": "A runner label is deprecated and GitHub is going to retire it on a known date, such as macos-14. Group: policy. Profile: pedantic. Default level: warn. https://jactionlint.jdx.dev/rules#deprecated-runner-label"
         },
         "duplicate-job-id": {
           "$ref": "#/definitions/level",
@@ -1251,6 +1282,28 @@
           "$ref": "#/definitions/level",
           "description": "A local action is used before any step checks out the repository. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#local-action-checkout"
         },
+        "malformed-expression-delimiters": {
+          "description": "Text such as ${ github.ref }, $ {{ x }} or {{ github.sha }} is meant to be an expression but is not one. With the option pedantic, so is a shell variable in the input of an action. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#malformed-expression-delimiters",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "$ref": "#/definitions/level",
+                  "description": "The level of the rule."
+                },
+                "pedantic": {
+                  "description": "Also report the pedantic checks, which are noisier. Unset, they run under the pedantic profile.",
+                  "type": "boolean"
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
         "matrix-duplicate-value": {
           "$ref": "#/definitions/level",
           "description": "A matrix has a duplicate value. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#matrix-duplicate-value"
@@ -1405,6 +1458,10 @@
           "$ref": "#/definitions/level",
           "description": "The version comment of a hash-pinned action does not match the pinned commit. Group: security. Runs only with --online. Default level: warn. https://jactionlint.jdx.dev/rules#ref-version-mismatch"
         },
+        "repojacking": {
+          "$ref": "#/definitions/level",
+          "description": "An action or reusable workflow has an owner whose name anyone can register. Group: security. Runs only with --online. Default level: warn. https://jactionlint.jdx.dev/rules#repojacking"
+        },
         "require-expression-wrapping": {
           "$ref": "#/definitions/level",
           "description": "An if: condition is not wrapped in ${{ }}. Group: style. Profile: pedantic. Default level: error. https://jactionlint.jdx.dev/rules#require-expression-wrapping"
@@ -1447,8 +1504,34 @@
           ]
         },
         "self-hosted-runner": {
-          "$ref": "#/definitions/level",
-          "description": "A job runs on a self-hosted runner. Group: security. Profile: pedantic. Default level: info. https://jactionlint.jdx.dev/rules#self-hosted-runner"
+          "description": "A job runs on a self-hosted runner: the label self-hosted, a label of self-hosted-runner.labels or a runner group. Group: security. Profile: pedantic. Default level: info. https://jactionlint.jdx.dev/rules#self-hosted-runner",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "allow": {
+                  "description": "Glob patterns of the labels and the runner groups of runners which are ephemeral or trusted. A job with one of them is not reported.",
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                "level": {
+                  "$ref": "#/definitions/level",
+                  "description": "The level of the rule."
+                },
+                "pull-request-only": {
+                  "default": false,
+                  "description": "Report only the jobs of workflows that a pull request event can start, which is the case that poutine reports.",
+                  "type": "boolean"
+                }
+              },
+              "type": "object"
+            }
+          ]
         },
         "self-repository": {
           "$ref": "#/definitions/level",
@@ -1598,7 +1681,7 @@
         },
         "unknown-runner-label": {
           "$ref": "#/definitions/level",
-          "description": "A runner label is unknown. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#unknown-runner-label"
+          "description": "A runner label is unknown, or is one that GitHub has retired. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#unknown-runner-label"
         },
         "unknown-workflow-input": {
           "$ref": "#/definitions/level",
@@ -1609,7 +1692,7 @@
           "description": "A secret which the reusable workflow does not define is passed. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#unknown-workflow-secret"
         },
         "unlocked-install": {
-          "description": "cargo install runs without --locked, or npm, yarn or pnpm install without freezing a lock file that the repository has. Group: security. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#unlocked-install",
+          "description": "cargo install runs without --locked, or npm, yarn or pnpm install without freezing a lock file that the repository has. With the option pedantic, also installs without a lock file npm, Yarn and bun installs that run the lifecycle scripts of the dependencies, and installs without a release-age cooldown. Group: security. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#unlocked-install",
           "oneOf": [
             {
               "$ref": "#/definitions/level"
@@ -1642,6 +1725,10 @@
                 "level": {
                   "$ref": "#/definitions/level",
                   "description": "The level of the rule."
+                },
+                "pedantic": {
+                  "description": "Also report the pedantic checks, which are noisier. Unset, they run under the pedantic profile.",
+                  "type": "boolean"
                 },
                 "require-digest": {
                   "default": true,
@@ -1741,8 +1828,26 @@
           "description": "A workflow_run workflow uses an artifact of the triggering run without validating it. Group: security. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#untrusted-artifact"
         },
         "untrusted-checkout": {
-          "$ref": "#/definitions/level",
-          "description": "A pull_request_target or workflow_run workflow checks out the code of a pull request and runs it. Group: security. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#untrusted-checkout"
+          "description": "A pull_request_target or workflow_run workflow checks out the code of a pull request and runs it, or turns off the protection of actions/checkout against the code of fork pull requests. With the option pedantic, a checkout that actions/checkout refuses for a fork is reported too. Group: security. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#untrusted-checkout",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "$ref": "#/definitions/level",
+                  "description": "The level of the rule."
+                },
+                "pedantic": {
+                  "description": "Also report the pedantic checks, which are noisier. Unset, they run under the pedantic profile.",
+                  "type": "boolean"
+                }
+              },
+              "type": "object"
+            }
+          ]
         },
         "unused-anchor": {
           "$ref": "#/definitions/level",

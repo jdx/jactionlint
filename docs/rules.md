@@ -59,6 +59,7 @@ rules:
 | [dependabot-syntax](#dependabot-syntax) | correctness | error | correctness |
 | [deprecated-action-input](#deprecated-action-input) | correctness | error | correctness |
 | [deprecated-commands](#deprecated-commands) | correctness | error | correctness |
+| [deprecated-runner-label](#deprecated-runner-label) | policy | warn | pedantic |
 | [duplicate-job-id](#duplicate-job-id) | correctness | error | correctness |
 | [duplicate-job-needs](#duplicate-job-needs) | correctness | error | correctness |
 | [duplicate-key](#duplicate-key) | correctness | error | correctness |
@@ -103,6 +104,7 @@ rules:
 | [invisible-characters](#invisible-characters) | security | error | default |
 | [known-vulnerable-actions](#known-vulnerable-actions) | security | error | only with `--online` |
 | [local-action-checkout](#local-action-checkout) | correctness | error | correctness |
+| [malformed-expression-delimiters](#malformed-expression-delimiters) | correctness | error | correctness |
 | [matrix-duplicate-value](#matrix-duplicate-value) | correctness | error | correctness |
 | [matrix-invalid-exclude](#matrix-invalid-exclude) | correctness | error | correctness |
 | [max-run-lines](#max-run-lines) | style | error | pedantic |
@@ -122,6 +124,7 @@ rules:
 | [recursive-alias](#recursive-alias) | correctness | error | correctness |
 | [ref-confusion](#ref-confusion) | security | warn | only with `--online` |
 | [ref-version-mismatch](#ref-version-mismatch) | security | warn | only with `--online` |
+| [repojacking](#repojacking) | security | warn | only with `--online` |
 | [require-expression-wrapping](#require-expression-wrapping) | style | error | pedantic |
 | [require-shell](#require-shell) | style | error | pedantic |
 | [required-actions](#required-actions) | policy | error | only when configured |
@@ -353,11 +356,12 @@ Jobs depend on each other in a cycle.
 
 ## dangerous-triggers
 
-A workflow uses pull_request_target, workflow_run or issue_comment.
+A workflow uses pull_request_target, workflow_run or issue_comment. With the option pedantic, also one that cannot write and uses no secret.
 
 - Group: security
 - Default level: error
 - Profile: default
+- Option `pedantic` (bool, no default): Also report the pedantic checks, which are noisier. Unset, they run under the pedantic profile.
 - Details and examples: [checks](./checks.md#check-dangerous-triggers)
 
 ## dependabot-cooldown
@@ -417,6 +421,15 @@ A deprecated workflow command such as ::set-output is used.
 - Default level: error
 - Profile: correctness
 - Details and examples: [checks](./checks.md#check-deprecated-workflow-commands)
+
+## deprecated-runner-label
+
+A runner label is deprecated and GitHub is going to retire it on a known date, such as macos-14.
+
+- Group: policy
+- Default level: warn
+- Profile: pedantic
+- Details and examples: [checks](./checks.md#check-deprecated-runner-label)
 
 ## duplicate-job-id
 
@@ -824,6 +837,17 @@ A local action is used before any step checks out the repository.
 - Profile: correctness
 - Details and examples: [checks](./checks.md#check-local-action-checkout)
 
+## malformed-expression-delimiters
+
+Text such as ${ github.ref }, $ {{ x }} or {{ github.sha }} is meant to be an expression but is not one. With the option pedantic, so is a shell variable in the input of an action.
+
+- Group: correctness
+- Default level: error
+- Profile: correctness
+- Fixable: yes
+- Option `pedantic` (bool, no default): Also report the pedantic checks, which are noisier. Unset, they run under the pedantic profile.
+- Details and examples: [checks](./checks.md#check-malformed-expression-delimiters)
+
 ## matrix-duplicate-value
 
 A matrix has a duplicate value.
@@ -1006,6 +1030,16 @@ The version comment of a hash-pinned action does not match the pinned commit.
 - Needs network access: yes (only with `--online`)
 - Details and examples: [checks](./checks.md#check-ref-version-mismatch)
 
+## repojacking
+
+An action or reusable workflow has an owner whose name anyone can register.
+
+- Group: security
+- Default level: warn
+- Profile: only with `--online`
+- Needs network access: yes (only with `--online`)
+- Details and examples: [checks](./checks.md#check-repojacking)
+
 ## require-expression-wrapping
 
 An if: condition is not wrapped in ${{ }}.
@@ -1053,11 +1087,13 @@ A job uses a secret but has no environment.
 
 ## self-hosted-runner
 
-A job runs on a self-hosted runner.
+A job runs on a self-hosted runner: the label self-hosted, a label of self-hosted-runner.labels or a runner group.
 
 - Group: security
 - Default level: info
 - Profile: pedantic
+- Option `allow` (strings, empty by default): Glob patterns of the labels and the runner groups of runners which are ephemeral or trusted. A job with one of them is not reported.
+- Option `pull-request-only` (bool, default false): Report only the jobs of workflows that a pull request event can start, which is the case that poutine reports.
 - Details and examples: [checks](./checks.md#check-self-hosted-runner)
 
 ## self-repository
@@ -1187,7 +1223,7 @@ An unknown Webhook event is used.
 
 ## unknown-runner-label
 
-A runner label is unknown.
+A runner label is unknown, or is one that GitHub has retired.
 
 - Group: correctness
 - Default level: error
@@ -1214,7 +1250,7 @@ A secret which the reusable workflow does not define is passed.
 
 ## unlocked-install
 
-cargo install runs without --locked, or npm, yarn or pnpm install without freezing a lock file that the repository has.
+cargo install runs without --locked, or npm, yarn or pnpm install without freezing a lock file that the repository has. With the option pedantic, also installs without a lock file npm, Yarn and bun installs that run the lifecycle scripts of the dependencies, and installs without a release-age cooldown.
 
 - Group: security
 - Default level: error
@@ -1231,6 +1267,7 @@ A container or service image is not pinned by a digest.
 - Default level: error
 - Profile: default
 - Option `require-digest` (bool, default true): Report images pinned by a tag other than latest too. Turn it off to report only images without a tag or with the latest tag.
+- Option `pedantic` (bool, no default): Also report the pedantic checks, which are noisier. Unset, they run under the pedantic profile.
 - Details and examples: [checks](./checks.md#check-unpinned-images)
 
 ## unpinned-tools
@@ -1302,11 +1339,12 @@ A workflow_run workflow uses an artifact of the triggering run without validatin
 
 ## untrusted-checkout
 
-A pull_request_target or workflow_run workflow checks out the code of a pull request and runs it.
+A pull_request_target or workflow_run workflow checks out the code of a pull request and runs it, or turns off the protection of actions/checkout against the code of fork pull requests. With the option pedantic, a checkout that actions/checkout refuses for a fork is reported too.
 
 - Group: security
 - Default level: error
 - Profile: default
+- Option `pedantic` (bool, no default): Also report the pedantic checks, which are noisier. Unset, they run under the pedantic profile.
 - Details and examples: [checks](./checks.md#check-untrusted-checkout)
 
 ## unused-anchor

@@ -201,6 +201,20 @@ func (cmd *Command) Main(args []string) int {
 		}
 		return ExitStatusSuccessNoProblem
 	}
+	if flags.Changed("completion") {
+		if err := writeCompletion(cmd.Stdout, f.completion); err != nil {
+			fmt.Fprintln(cmd.Stderr, err)
+			return ExitStatusInvalidCommandOption
+		}
+		return ExitStatusSuccessNoProblem
+	}
+	if flags.Changed("explain") {
+		if err := explainRule(cmd.Stdout, f.explain); err != nil {
+			fmt.Fprintln(cmd.Stderr, err)
+			return ExitStatusInvalidCommandOption
+		}
+		return ExitStatusSuccessNoProblem
+	}
 
 	sev, err := ParseSeverity(minSeverity)
 	if err != nil || sev == SeverityOff {
