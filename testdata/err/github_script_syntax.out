@@ -1,0 +1,6 @@
+test.yaml:14:22: the script of actions/github-script has a syntax error: Unexpected token ',' [github-script-syntax]
+test.yaml:21:19: the script of actions/github-script has a syntax error: Identifier 'exec' has already been declared [github-script-syntax]
+test.yaml:28:17: the script of actions/github-script has a syntax error: Identifier 'octokit' has already been declared [github-script-syntax]
+test.yaml:32:19: the script of actions/github-script has a syntax error: Unexpected end of input [github-script-syntax]
+test.yaml:39:25: the script of actions/github-script has a syntax error: missing ) after argument list [github-script-syntax]
+test.yaml:43:58: the script of actions/github-script has a syntax error: Unexpected token '*' [github-script-syntax]
