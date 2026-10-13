@@ -195,6 +195,26 @@ adopt), and not at all with `--no-hints` or `JACTIONLINT_NO_HINTS=1`. The advice
 applied. After `--baseline-write` the command prints the line that makes plain runs use the baseline (`baseline: auto` in the config
 file); without it only `jactionlint --baseline` reads the file.
 
+<a id="github-event"></a>
+### Typos in `github.event`
+
+`github.event` is the payload of the webhook event that started the run, and its properties are checked: `${{ github.event.worflow_run.head_commit.message }}`
+is an `undefined-property` error, because no webhook event has a property `worflow_run`. The names are checked as far as the
+payloads are known (see [the check](checks.md#check-contextual-github-event)), and not at all in a workflow which has
+`workflow_dispatch`, `repository_dispatch`, `schedule` or `workflow_call` in `on:`, in a composite action or for an event without a
+schema. The `pedantic` profile (or `strict-event-payloads: true` for the rule) also reports a property of another event than the ones of the
+workflow, such as `github.event.pull_request.number` in a workflow which runs on `push`:
+
+```yaml
+# .github/jactionlint.yaml
+rules:
+  undefined-property:
+    strict-event-payloads: true
+```
+
+A finding of it is ignored like any other: with `rules: {undefined-property: off}` (which also switches off the checks of other
+properties in expressions) or with an [ignore comment](#ignore-some-errors) on its line.
+
 ### Shell completion
 
 `jactionlint --completion=SHELL` prints a completion script for `bash`, `zsh`, `fish` or `powershell`. It completes the options, the values of

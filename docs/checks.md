@@ -17,6 +17,7 @@ List of checks:
 - [Contextual typing for `steps.<step_id>` objects](#check-contextual-step-object)
 - [Contextual typing for `matrix` object](#check-contextual-matrix-object)
 - [Contextual typing for `needs` object](#check-contextual-needs-object)
+- [Contextual typing for `github.event` object](#check-contextual-github-event)
 - [Strict type checks for comparison operators](#check-comparison-types)
 - [shellcheck integration for `run:`](#check-shellcheck-integ)
 - [pyflakes integration for `run:`](#check-pyflakes-integ)
@@ -116,6 +117,7 @@ List of checks:
 - [Failures hidden by continue-on-error (pedantic)](#check-continue-on-error)
 - [Mutable runner labels (pedantic)](#check-mutable-runner-label)
 - [Deprecated runner labels (pedantic)](#check-deprecated-runner-label)
+- [Node.js runtimes that GitHub removed (pedantic)](#check-deprecated-node-runtime)
 - [Invisible characters](#check-invisible-characters)
 - [Unsound prefix matches on names](#check-unsound-prefix-match)
 - [Composite actions](#check-composite-actions)
@@ -607,7 +609,7 @@ jobs:
       - run: echo "${{ startsWith('hello, world', github.event) }}"
       # Function overloads can be handled properly. contains() has string version and array version
       - run: echo "${{ contains('hello, world', 'lo,') }}"
-      - run: echo "${{ contains(github.event.labels.*.name, 'enhancement') }}"
+      - run: echo "${{ contains(github.event.issue.labels.*.name, 'enhancement') }}"
 ```
 
 Output:
@@ -635,7 +637,7 @@ test.yaml:15:51: 2nd argument of function call is not assignable. "object" canno
    |                                                   ^~~~~~~~~~~~~
 ```
 
-[Playground](https://jactionlint.jdx.dev/#eNqckEFKxjAQhfc9xVCEqKQ5QC/iUpI6mGo6UzoTK5TcXWJB/OFvF11l8b7v5TFMPcxZYvPBQfoGQFG0vgBLJulqnkMmzV3yNfuNRHGWnQLoKtkDDpHBPGwbZPokXul1YFL8VijFHKHvo8YcHH4hqRyAbQVF/aIvo8ZHEzEltrDykt6MBZPYmicopT115Y58zbI3q0876gX8SHJh9J/6/zOXfMAk7tmRn9CCQYqeBpyQdK/7GQBh6o/Y)
+[Playground](https://jactionlint.jdx.dev/#eNqckMFKxDAQhu/7FMMiRCXNA/RFPEpSBxPNziydGVcoeXeJBVGwPfSUw/99f36GaYSrST69cZLxBKAo2l+A2UiGnlsyUhtq7Nl3JIpXWSmAoZMj4JQZ3N2ygNE78Y2eJybFT4XW3Bb6WjRbCviBpLIBnjsoGmd9KprvXcZa2cON5/riPLjK3j1Aa+ddV/6Rj1n+z+rdjn6BWEgOjP5Rf38WiohhqDFhlfAYKF7Qg0PKkSa8IOla+jUA1HySLw==)
 
 [Contexts][contexts-doc] and [built-in functions][funcs-doc] are strongly typed. Typos in property access of contexts and
 function names can be checked. And invalid function calls like wrong number of arguments or type mismatch at parameter also
@@ -1018,6 +1020,87 @@ Outputs from the jobs can be accessed only from jobs following them via [`needs`
 
 jactionlint defines a type of `needs` variable contextually by looking at each job's `outputs:` section and `needs:` section.
 
+<a id="check-contextual-github-event"></a>
+## Contextual typing for `github.event` object
+
+Example input:
+
+```yaml
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    steps:
+      # ERROR: Typo of workflow_run
+      - run: echo "${{ github.event.worflow_run.conclusion }}"
+      # ERROR: Typo of a property of the workflow run
+      - run: echo "${{ github.event.workflow_run.head_brach }}"
+      # ERROR: Typo of a property of the elements of an array
+      - run: echo "${{ join(github.event.workflow_run.pull_requests.*.nubmer, ', ') }}"
+      # OK: These are in the payload
+      - run: echo "${{ github.event.workflow_run.conclusion }} ${{ github.event.workflow_run.pull_requests[0].number }}"
+```
+
+Output:
+
+```
+test.yaml:10:24: property "worflow_run" is not defined in github.event: no webhook event has it in its payload. did you mean "workflow_run"? [undefined-property]
+   |
+10 |       - run: echo "${{ github.event.worflow_run.conclusion }}"
+   |                        ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+test.yaml:12:24: property "head_brach" is not defined in github.event.workflow_run: no webhook event has it in its payload. did you mean "head_branch"? [undefined-property]
+   |
+12 |       - run: echo "${{ github.event.workflow_run.head_brach }}"
+   |                        ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+test.yaml:14:29: property "nubmer" is not defined in github.event.workflow_run.pull_requests.*: no webhook event has it in its payload. did you mean "number"? [undefined-property]
+   |
+14 |       - run: echo "${{ join(github.event.workflow_run.pull_requests.*.nubmer, ', ') }}"
+   |                             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+```
+
+[Playground](https://jactionlint.jdx.dev/#eNqcj09Lw0AQxe/9FEMRqtIsnnP15GcoIWS3o0ndzKzzxyCl312SotKDRTzO2/fb9x5TvQKYWF6fM0+t+HL/KFrD7vGpWTT7KDjficeS0XDfrA4cdQYEC4udUXHSiqkGj07mVe4M1ZYnNSx6dgFUs7MGTD3D+uZ4hJfBeo8B35EsTCxfjUJiStl1YILTaf1X/HtR6LHbt1G61F/jDzzQ7e+fFM+5FXxzVNNwH8jjiLKFzRY2d//rdbELrnsv4ncPTSAfI8oc/DkANsuZCg==)
+
+`github.event` is the payload of the webhook event which started the run. The type of `github.event` stays an untyped
+object, but the names of the properties which a workflow reads from it are checked: a property which no webhook event has at that
+place is an `undefined-property` error. The names are checked on the top level and in the objects below it
+(`github.event.pull_request`, `github.event.workflow_run.head_commit`, the elements of `github.event.commits` and so on), down to
+three levels of objects, which is as far as the payloads are known for certain.
+
+The payloads come from the JSON schemas of the webhooks of [octokit/webhooks][octokit-webhooks] and the webhooks of
+[the OpenAPI description of the REST API of GitHub][rest-api-description], both under the MIT licence: a property is known
+when either of them has it, in the payload of any activity type of any event. They are in `event_payloads.go`, which
+`go generate` (`mise run generate`) refreshes with [`scripts/generate-event-payloads`](https://github.com/jdx/jactionlint/tree/main/scripts/generate-event-payloads).
+To keep a false report out of the default profile, these are not checked:
+
+- the contents of an account, an app, an installation or a licence (`sender`, `pull_request.user`, `organization`, ...): GitHub adds
+  properties to them from time to time. The property itself (`github.event.sender`) is checked
+- objects which are arbitrary or hold the old values of an edit: `changes`, `inputs`, `client_payload` and `payload` (of a deployment),
+  and everything deeper than three levels of objects
+- the whole payload of a workflow which has `workflow_dispatch`, `repository_dispatch`, `schedule`, `workflow_call` or
+  `image_version` in `on:`, or an event which has no schema, and of composite actions and reusable workflows, whose payload
+  is the one of their callers
+
+By default a property is reported when no webhook event has it. A read of the property of another event, such as
+`github.event.pull_request.number` in a workflow which runs on `push`, is not reported: it evaluates to null, which
+workflows often rely on (`${{ github.event.pull_request.number || github.ref }}`). The option `strict-event-payloads` of
+`undefined-property` makes it report such a read too, with the properties of the events of the workflow (the union of
+their payloads, so a property which one of several events has is fine). The `pedantic` profile turns it on:
+
+```yaml
+rules:
+  undefined-property:
+    strict-event-payloads: true
+```
+
+With that option, the step `echo "${{ github.event.pull_request.number || github.ref }}"` of a workflow with `on: push` is reported:
+
+```
+test.yaml:6:24: property "pull_request" is not defined in github.event, the payload of the event "push". available properties are "after", "base_ref", "before", "commits", "compare", "created", "deleted", "enterprise", "forced", "head_commit", "installation", "organization", "pusher", "ref", "repository", "sender" [undefined-property]
+```
+
 <a id="check-comparison-types"></a>
 ## Strict type checks for comparison operators
 
@@ -1286,7 +1369,7 @@ jobs:
         run: echo '${{ toJSON(github.event.*.body) }}'
       - name: Do something with checking skip
         # OK: This placeholder uses an untrusted input, but the input cannot be injected to the script
-        run: if [ "${{ contains(github.event.pull_request.author.title, '[SKIP]') }}" = "true" ]; then echo "skip"; fi
+        run: if [ "${{ contains(github.event.pull_request.title, '[SKIP]') }}" = "true" ]; then echo "skip"; fi
 ```
 
 Output:
@@ -1306,7 +1389,7 @@ test.yaml:22:31: object filter extracts potentially untrusted properties "github
    |                               ^~~~~~~~~~~~~~~~~~~~
 ```
 
-[Playground](https://jactionlint.jdx.dev/#eNqMkUFrGzEQhe/+FY+lYKd0t8dShUIOLaUNJIHkFkKQ5YmlWqvZakYOJfi/F+0aE7cYclpm5+l7T0/J9mRwR6IzTgZDifEx0+9Sf8x+8VLMDFASrV8glyRtFZZlSVraaOtuXInSIJMKaDGBb3JIOlKxp0KDRtrLRqABOc+Yv3t5wTqoL8uOtpS0ex2mG49ht5sfHIqQGFingZN8FLWRLrafD+TnoN4cJiDTwK3yhpJBtRJymVS6u+vLb1fY7V5JR1Y75LYnEbsmg7dlw7MVuMhCqxMpJ0YrLodBL7afTqadFAaOk3CkLvJ68X9Dnuzq0XHfB+1sUc+5q73Xms7+eYnvpKhKSiqn2lf+eXt9tTiyeN8tefXn7Kj5ifiVIdyT+pDWY344T25TJ9mE4dgkPOEeTTVxnNSGJIvTfe6vMtb6AfP728sfNw/zmqHBFzSaCzV4OId6SlP8pjo253gKfwcAqP/kRg==)
+[Playground](https://jactionlint.jdx.dev/#eNqMkUFrGzEQhe/+FY+lYKd0t8dShUIOLaUNJIHkFkKQ5YmlWqvZakYOJfi/F+0GY7eY9iRG8/S9x1OyPRnckeiMk8FQYnzM9LPUi9kPXoqZAUqi9QRySdJWYVmWpKWNtu7GlSgNMqmAFhP4JoekIxWvVGjQSK+yEWhAzjPmb15esA7qy7KjLSXtDsN04zPsdvO9QxESA+s0cJL3ojbSxfbjnvwc1Jv9BGQauFXeUDKoVkIuk0p3d3355Qq73YF0ZLVDbnsSsWsy+L9seLYCF1lodSLlxGjF5TDoxfbDybSTwsBxEo7URV4v/m7Ik109Ou77oJ0t6jl3tfda09kfP/GVFFVJSeVU+8rfb6+vFkcWb7slr36dHTU/ET8zhHtSH9J6zA/nyW3qJJswHJuEJ9yjqSaOk9qQZPGPPt9hfn97+e3mYV7NG3xCo7lQg4dzqKc05W6qVXOOp/B7AFEp4YU=)
 
 Since `${{ }}` placeholders are evaluated and replaced directly by GitHub Actions runtime, you need to use them carefully in
 inline scripts at `run:`. For example, if we have step as follows,
@@ -1729,6 +1812,27 @@ rules:
 `missing-timeout` is enabled by default because a job without a timeout can run for six hours (and be billed for it) when a step
 hangs. Turn it off with `missing-timeout: off` in `rules`, or ignore one job with an
 [ignore comment](usage.md#ignore-some-errors) above it.
+
+#### Jobs whose steps all set a timeout
+
+[ghalint](https://github.com/suzuki-shunsuke/ghalint/blob/main/docs/policies/012.md) accepts a job without `timeout-minutes` when
+every step of it sets `timeout-minutes`. `missing-timeout` still reports such a job, because the timeout of a step does not
+cover everything a job does: GitHub applies it to the step, not to setting up the job (downloading the actions), to the post
+steps of actions (the cleanup of `actions/checkout`, saving a cache) or to completing the job, so a hang there still runs for
+six hours. When you do want ghalint's reading, say so with the `accept-step-timeouts` option:
+
+```yaml
+rules:
+  missing-timeout:
+    accept-step-timeouts: true
+```
+
+Then a job without `timeout-minutes` is accepted when it has steps and every one of them, `uses:` and `run:` steps alike, sets
+`timeout-minutes`. A value given by an expression `${{ }}` counts as set. A job where one step has none is still reported, and so
+is a job which sets none. Because the job is accepted, there is no finding and so no `--fix` for it; without the option the
+finding stays, and `--fix` with `default-minutes` adds the job-level key as for any other job. The option is off in every
+profile: in a corpus of 76 repositories (1,582 workflow files, 2,049 jobs without a job-level timeout) no job had a timeout on
+all its steps, so the exception would not have silenced anything there, and the gap above is a reason not to grant it unasked.
 
 #### Fixing missing timeouts
 
@@ -9657,7 +9761,84 @@ unknown, and [`unknown-runner-label`](#check-runner-labels) reports it as an err
 jactionlint does not know which image your jobs can move to. Every date is in one table, `runnerLabelRetirements` in `runner_label_retirement.go`, which
 is checked against the announcements: a deprecation that GitHub announces later is one more row.
 
+<a id="check-deprecated-node-runtime"></a>
+## Node.js runtimes that GitHub removed (pedantic)
+
+Example input:
+
+```yaml
+on: push
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      # ERROR: the major version declares node20
+      - uses: actions/checkout@v4
+      # ERROR: the same for a commit with a version comment
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      # OK
+      - uses: actions/checkout@v5
+```
+
+Output:
+<!-- Skip update output -->
+```
+test.yaml:8:15: warning: action "actions/checkout@v4" declares the Node.js runtime "node20" in its metadata, but Node.js 20 was removed from GitHub Actions on 2026-09-23, so the runner runs the action on Node.js 24 instead of the runtime it declares. update the action to "actions/checkout@v5" or newer, which declares "node24" [deprecated-node-runtime]
+  |
+8 |       - uses: actions/checkout@v4
+  |               ^~~~~~~~~~~~~~~~~~~
+test.yaml:10:15: warning: action "actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020" (checked as "actions/setup-node@v4": the version comment "# v4.4.0" says so, and nothing verifies the comment) declares the Node.js runtime "node20" in its metadata, but Node.js 20 was removed from GitHub Actions on 2026-09-23, so the runner runs the action on Node.js 24 instead of the runtime it declares. update the action to "actions/setup-node@v5" or newer, which declares "node24" [deprecated-node-runtime]
+   |
+10 |       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+   |               ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+```
+
+<!-- Skip playground link -->
+
+The output above is from the following `rules` section of the [configuration file](config.md):
+
+```yaml
+rules:
+  deprecated-node-runtime: warn
+```
+
+The rule `deprecated-node-runtime` (in the `pedantic` profile, as a warning) reports the Node.js runtimes that GitHub Actions no longer
+has. GitHub removed Node.js 20 on 2026-09-23 ([changelog][node20-removed]; the plan with its phases is in the
+[deprecation notice][node20-deprecation]): since then a runner on github.com runs every JavaScript action on Node.js 24 whatever its
+`runs.using` says. The runner still accepts `node20`, `node16` and `node12` in the metadata and starts the action on Node.js 24
+(`HandlerFactory.cs` and `NodeUtil.cs` of the [runner][runner-node]), so such an action keeps working unless its code breaks on Node.js 24.
+
+That is why the rule is not part of the `default` or `correctness` profile: the action does not fail, and jactionlint cannot tell
+a runner on github.com from GitHub Enterprise Server or an old self-hosted runner, where `node20` can still be the runtime that runs.
+The finding says what holds everywhere: the action declares a runtime that the runner on github.com does not provide. It checks two things.
+
+**The actions that a workflow uses.** The generated data of the popular actions (`PopularActionRuntimes`) records the `runs.using` of every
+major version they know, taken from the `action.yml` of that major when the data was generated. A `uses:` of a major that declares
+`node20` is reported, with the oldest newer major that does not (`actions/checkout@v4` gets `v5`; `actions/download-artifact@v5` gets `v7`
+because `v6` is also `node20`). The major version is found as the checks of the inputs find it: from the ref, from a full version
+such as `v4.2.2`, or from the version comment of a commit SHA (`# v4.2.2`), and the message says which. A commit without a version comment is
+not reported, because nothing says which release it is. Actions that are not in the data, local actions and `docker://` images are not
+reported, and neither is a major that declares a runtime older than `node20`: [`outdated-action-runner`](#detect-outdated-popular-actions)
+reports it as an error.
+
+**The metadata of an action.** The `runs.using` of the `action.yml` that is linted (a local action under `.github/actions`, or the
+one in the root of an action repository) is reported when it is `node20`, `node16` or `node12`, with the advice to declare `node24`:
+
+```yaml
+runs:
+  using: node20 # warning: Node.js 20 was removed from GitHub Actions on 2026-09-23 ...
+  main: dist/index.js
+```
+
+A workflow that calls a local action is not reported a second time: the metadata file of the action is. `node12` and `node16` in a local
+action are also reported by [`invalid-local-action`](#action-metadata-syntax) where a workflow calls it, because the runner does not document them
+anymore.
+
 [yamllint]: https://github.com/adrienverge/yamllint
+[node20-removed]: https://github.blog/changelog/2026-09-23-node-20-is-no-longer-available-in-github-actions
+[node20-deprecation]: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+[runner-node]: https://github.com/actions/runner/blob/main/src/Runner.Worker/Handlers/HandlerFactory.cs
 [issue-form]: https://github.com/jdx/jactionlint/issues/new
 [syntax-doc]: https://docs.github.com/en/actions/learn-github-actions/workflow-syntax-for-github-actions
 [filter-pattern-doc]: https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions#filter-pattern-cheat-sheet
@@ -9675,6 +9856,8 @@ is checked against the announcements: a deprecation that GitHub announces later 
 [contexts-doc]: https://docs.github.com/en/actions/learn-github-actions/contexts
 [funcs-doc]: https://docs.github.com/en/actions/learn-github-actions/expressions#functions
 [needs-doc]: https://docs.github.com/en/actions/learn-github-actions/workflow-syntax-for-github-actions#jobsjob_idneeds
+[octokit-webhooks]: https://github.com/octokit/webhooks/tree/main/payload-schemas
+[rest-api-description]: https://github.com/github/rest-api-description
 [needs-context-doc]: https://docs.github.com/en/actions/learn-github-actions/contexts#needs-context
 [shell-doc]: https://docs.github.com/en/actions/learn-github-actions/workflow-syntax-for-github-actions#using-a-specific-shell
 [matrix-doc]: https://docs.github.com/en/actions/learn-github-actions/workflow-syntax-for-github-actions#jobsjob_idstrategymatrix
@@ -9699,7 +9882,7 @@ SARIF and `--fix` work for them like for workflows.
 
 The `steps` of a composite action (`runs.using: composite`) are checked with the same rules as the steps of a workflow job, and
 the rule IDs are the same. Actions that run JavaScript (`node20`, `node24`, ...) or a container (`docker`) have no steps: only their
-metadata is checked (the syntax, and the `docker://` image of a Docker action by `unpinned-images`).
+metadata is checked (the syntax, the `docker://` image of a Docker action by `unpinned-images`, and a removed runtime such as `node20` by the pedantic [`deprecated-node-runtime`](#check-deprecated-node-runtime)).
 
 What differs from a workflow:
 
@@ -9730,7 +9913,7 @@ way because any caller can pass attacker-controlled text. jactionlint does not l
 
 How the rules treat actions:
 
-- **Applies** to the steps (and the metadata) of an action: `action-syntax`, `adhoc-packages`, `archived-uses`, `argument-injection`, `artipacked`, `background-step-not-waited`, `checkout-static-credentials`, `command-injection`, `conflicting-action-inputs`, `constant-condition`, `context-availability`, `continue-on-error`, `deprecated-action-input`, `deprecated-commands`, `duplicate-key`, `duplicate-step-id`, `environment-file-redirect`, `expired-ignore`, `expression-syntax`, `expression-type`, `fail-fast-action-inputs`, `forbidden-uses`, `github-app`, `if-always-true`, `impostor-commit`, `insecure-commands`, `insecure-ssh-keyscan`, `insecure-url-scheme`, `invalid-env-var-name`, `invalid-function-call`, `invalid-id`, `invalid-ignore-comment`, `invalid-local-action`, `invalid-parallel-step`, `invalid-shell-name`, `invalid-uses`, `invisible-characters`, `known-vulnerable-actions`, `malformed-expression-delimiters`, `max-run-lines`, `merge-key`, `misfeature`, `missing-action-input`, `multiline-plain-run`, `obfuscation`, `outdated-action-runner`, `output-clobbering`, `pipeline-without-pipefail`, `pyflakes`, `recursive-alias`, `ref-confusion`, `ref-version-mismatch`, `repojacking`, `require-expression-wrapping`, `self-repository`, `shellcheck`, `stale-action-refs`, `superfluous-actions`, `template-injection`, `typosquat-uses`, `undefined-function`, `undefined-property`, `unknown-action-input`, `unlocked-install`, `unpinnable-action`, `unpinned-images`, `unpinned-tools`, `unpinned-uses`, `unsound-contains`, `unsound-prefix-match`, `unsound-ternary`, `unused-anchor`, `unused-ignore`, `unverified-download`, `use-trusted-publishing`, `yaml-syntax`.
+- **Applies** to the steps (and the metadata) of an action: `action-syntax`, `adhoc-packages`, `archived-uses`, `argument-injection`, `artipacked`, `background-step-not-waited`, `checkout-static-credentials`, `command-injection`, `conflicting-action-inputs`, `constant-condition`, `context-availability`, `continue-on-error`, `deprecated-action-input`, `deprecated-commands`, `deprecated-node-runtime`, `duplicate-key`, `duplicate-step-id`, `environment-file-redirect`, `expired-ignore`, `expression-syntax`, `expression-type`, `fail-fast-action-inputs`, `forbidden-uses`, `github-app`, `if-always-true`, `impostor-commit`, `insecure-commands`, `insecure-ssh-keyscan`, `insecure-url-scheme`, `invalid-env-var-name`, `invalid-function-call`, `invalid-id`, `invalid-ignore-comment`, `invalid-local-action`, `invalid-parallel-step`, `invalid-shell-name`, `invalid-uses`, `invisible-characters`, `known-vulnerable-actions`, `malformed-expression-delimiters`, `max-run-lines`, `merge-key`, `misfeature`, `missing-action-input`, `multiline-plain-run`, `obfuscation`, `outdated-action-runner`, `output-clobbering`, `pipeline-without-pipefail`, `pyflakes`, `recursive-alias`, `ref-confusion`, `ref-version-mismatch`, `repojacking`, `require-expression-wrapping`, `self-repository`, `shellcheck`, `stale-action-refs`, `superfluous-actions`, `template-injection`, `typosquat-uses`, `undefined-function`, `undefined-property`, `unknown-action-input`, `unlocked-install`, `unpinnable-action`, `unpinned-images`, `unpinned-tools`, `unpinned-uses`, `unsound-contains`, `unsound-prefix-match`, `unsound-ternary`, `unused-anchor`, `unused-ignore`, `unverified-download`, `use-trusted-publishing`, `yaml-syntax`.
 - **Caller-dependent**: `agentic-actions`, `bot-conditions`, `cache-poisoning`, `github-env` (its findings about untrusted input do not depend on the caller), `untrusted-artifact` and `untrusted-checkout`.
 - **Not applicable** because an action does not have what the rule checks, or because only the calling job can decide (`unused-baseline-entry` is about the baseline file, not about a workflow or an action): `anonymous-definition`, `concurrency-cancels-prs`, `concurrency-cancels-release`, `concurrency-deadlock`, `concurrency-limits`, `conflicting-runner-labels`, `cron-too-frequent`, `cyclic-job-needs`, `dangerous-triggers`, `dependabot-cooldown`, `dependabot-execution`, `dependabot-missing-actions-update`, `dependabot-syntax`, `deprecated-runner-label`, `duplicate-job-id`, `duplicate-job-needs`, `duplicate-triggers`, `event-name-never-received`, `excessive-permissions`, `gate-job-skipped-on-failure`, `gh-without-token`, `hardcoded-container-credentials`, `insufficient-permissions`, `invalid-activity-type`, `invalid-cron`, `invalid-event-config`, `invalid-event-filter`, `invalid-glob`, `invalid-label-pattern`, `invalid-local-workflow`, `invalid-permissions`, `invalid-timezone`, `invalid-workflow-call`, `invalid-workflow-call-input`, `invalid-workflow-dispatch-input`, `local-action-checkout`, `matrix-duplicate-value`, `matrix-invalid-exclude`, `missing-permissions`, `missing-timeout`, `missing-workflow-input`, `missing-workflow-secret`, `mutable-runner-label`, `overprovisioned-secrets`, `require-shell`, `required-actions`, `secrets-inherit`, `secrets-outside-env`, `self-hosted-runner`, `timeout-too-long`, `ubuntu-slim-limits`, `undefined-job-needs`, `undocumented-permissions`, `unknown-event`, `unknown-runner-label`, `unknown-workflow-input`, `unknown-workflow-secret`, `unredacted-secrets`, `unused-baseline-entry`, `unused-job-output`, `unused-needs`, `unused-workflow-input`, `workflow-call-permissions`, `workflow-input-type`, `workflow-run-names`, `workflow-secret-scope`, `workflow-syntax`.
 
