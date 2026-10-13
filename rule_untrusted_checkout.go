@@ -24,6 +24,8 @@ type RuleUntrustedCheckout struct {
 	// carried are the variables that earlier steps of the job wrote to $GITHUB_ENV with an untrusted value, with where
 	// the value comes from.
 	carried map[string]string
+	// carriedNum are the variables that earlier steps wrote to $GITHUB_ENV with the number of the pull request that a comment is on.
+	carriedNum map[string]string
 	// scripts are the script files that were read, by path, nil for one that cannot be followed.
 	scripts map[string]*runscript.Script
 	// gates tells with the online checks whether the environment of a job holds it back, see environmentGates.
@@ -203,7 +205,7 @@ func (rule *RuleUntrustedCheckout) VisitJobPre(n *Job) error {
 	// step runs code depends on the directory only, so it is asked once for each directory and not for
 	// each checkout: a job with thousands of checkouts is not quadratic.
 	rule.job = n
-	rule.fetches, rule.carried = nil, nil
+	rule.fetches, rule.carried, rule.carriedNum = nil, nil, nil
 	if neededJobGated(rule.wf, n, rule.privileged, rule.environmentHolds, map[*Job]bool{}) {
 		return nil // a job that this one needs is skipped or stops unless the user is trusted
 	}
@@ -548,6 +550,7 @@ func (rule *RuleUntrustedCheckout) checkoutsOf(j *Job, s *Step) []*untrustedChec
 				envDescs(rule.wf.Env, numEnv, rule.numberStr)
 			}
 			envDescs(j.Env, numEnv, rule.numberStr)
+			maps.Copy(numEnv, rule.carriedNum) // what earlier steps wrote to $GITHUB_ENV
 			envDescs(s.Env, numEnv, rule.numberStr)
 			number = newNumberTaint(script, numEnv, rule.numberValue)
 			taint.num = number
@@ -615,7 +618,13 @@ func (rule *RuleUntrustedCheckout) checkoutsOf(j *Job, s *Step) []*untrustedChec
 				ret = append(ret, &untrustedCheckout{pos: pos, what: what, dir: dir, offset: fetchAt, step: s})
 			}
 		}
-		rule.carryEnv(script, taint, s.If != nil)
+		rule.carryEnv(script, taint, s.If != nil, &rule.carried)
+		if rule.comment && !rule.ghAny {
+			// the number of the pull request that a comment is on can be carried the same way
+			numEnv := map[string]string{}
+			maps.Copy(numEnv, rule.carriedNum)
+			rule.carryEnv(script, newNumberTaint(script, numEnv, rule.numberValue), s.If != nil, &rule.carriedNum)
+		}
 		return ret
 	}
 	return nil

@@ -413,8 +413,11 @@ func (rule *RuleUntrustedCheckout) localActionCheckouts(s *Step, e *ExecAction) 
 		for _, cs := range flattenSteps(j.Steps) {
 			if isPermissionGate(cs) {
 				// the action fails here for a user who may not write, and so does the step that calls it: what it checked
-				// out before is not run by the steps after the call
-				gated, ret = true, nil
+				// out before is run by the steps of the caller that run after a failure only
+				gated = true
+				for _, c := range ret {
+					c.afterFailure = true
+				}
 				continue
 			}
 			if gated && !stepRunsAfterFailure(cs) {
