@@ -1,8 +1,10 @@
 package jactionlint
 
 import (
+	"context"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path"
 	"path/filepath"
 	"regexp"
@@ -19,7 +21,9 @@ import (
 // whose path was renamed, moved or misspelled matches nothing, so the workflow does not start for the files that it
 // was written for, and nothing says so. In `paths-ignore` such an entry ignores nothing.
 //
-// The entries are matched against the files of the repository on disk (a walk of the project root, `.git` excluded).
+// The entries are matched against the files that git lists in the working tree (tracked, and untracked ones which are
+// not ignored), or, when git cannot say, a walk of the project root (`.git`, node_modules and virtual environments
+// excluded).
 // The rule is conservative in what it calls a mismatch, because a false report would hide a real one:
 //
 //   - it runs only when the file belongs to a project (not for stdin or a file outside a repository), and not for a
@@ -246,7 +250,49 @@ func readRepoPaths(root string) *repoPaths {
 	return p
 }
 
+// gitListedPaths returns the files that git knows in the working tree of root: the tracked ones, and the untracked
+// ones that are not ignored (a file which was just created and is not added yet is a file of the next commit). It
+// returns false when git cannot say (it is not installed, the root is not a work tree, the index is empty as after a
+// clone without checkout). GitHub matches the changed files of a commit, which are tracked, so an untracked tree such
+// as node_modules is not what an entry is about, and not reading it also keeps the bound of the walk for the files
+// that count.
+func gitListedPaths(root string) (map[string]struct{}, bool) {
+	if _, err := os.Stat(filepath.Join(root, ".git")); err != nil {
+		return nil, false
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, "git", "-C", root, "ls-files", "-z", "--cached", "--others", "--exclude-standard").Output()
+	if err != nil || len(out) == 0 {
+		return nil, false
+	}
+	seen := map[string]struct{}{}
+	for _, f := range strings.Split(string(out), "\x00") {
+		if f == "" {
+			continue
+		}
+		// The directories of the file are paths of the repository too
+		for i := 0; i < len(f); i++ {
+			if f[i] == '/' {
+				seen[strings.ToLower(f[:i])] = struct{}{}
+			}
+		}
+		if len(seen) > pathsFilterMaxEntries {
+			return nil, false
+		}
+		seen[strings.ToLower(f)] = struct{}{}
+	}
+	return seen, true
+}
+
+// skippedInstallDirs are the trees of installed packages, which are not part of the repository. The walk, used when
+// git cannot list the files, does not read them.
+var skippedInstallDirs = map[string]bool{"node_modules": true, ".venv": true, "venv": true}
+
 func walkRepoPaths(root string) *repoPaths {
+	if seen, ok := gitListedPaths(root); ok {
+		return newRepoPaths(root, seen)
+	}
 	seen := map[string]struct{}{}
 	n := 0
 	tooMany := false
@@ -261,7 +307,7 @@ func walkRepoPaths(root string) *repoPaths {
 		if err != nil || rel == "." {
 			return nil
 		}
-		if d.Name() == ".git" {
+		if d.Name() == ".git" || (d.IsDir() && skippedInstallDirs[d.Name()]) {
 			if d.IsDir() {
 				return filepath.SkipDir
 			}
@@ -278,6 +324,10 @@ func walkRepoPaths(root string) *repoPaths {
 	if err != nil || tooMany {
 		return nil
 	}
+	return newRepoPaths(root, seen)
+}
+
+func newRepoPaths(root string, seen map[string]struct{}) *repoPaths {
 	ps := make([]string, 0, len(seen))
 	for s := range seen {
 		ps = append(ps, s)

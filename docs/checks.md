@@ -2246,8 +2246,9 @@ GitHub starts a workflow for a push or a pull request only when a changed file m
 renamed or moved, or an entry has a typo (`.yml` for `.yaml`), the entry matches nothing, the workflow does not start for the files
 it was written for and nothing says so. The rule `unmatched-paths-filter` (in the `pedantic` profile, as a warning) matches every entry of
 `paths` and `paths-ignore` of `push`, `pull_request` and `pull_request_target` against the files of the repository, and reports the
-entries that match none. It reads the working tree of the project, so it reports nothing for `-` (stdin) or a workflow which is not in
-a repository.
+entries that match none. It matches the files that `git ls-files` lists in the project (the tracked ones and the untracked ones that are not
+ignored, so `node_modules` is not a file of the repository), or, when git cannot say, the files of the working tree without `.git`,
+`node_modules`, `.venv` and `venv`. It reports nothing for `-` (stdin) or a workflow which is not in a repository.
 
 It is careful about what it calls a mismatch, because the rule cannot know what GitHub would do in a few cases:
 
@@ -2257,7 +2258,7 @@ It is careful about what it calls a mismatch, because the rule cannot know what 
   [the glob syntax](#check-glob-pattern)), and a character class that is negated.
 - A submodule without files in the working tree hides every entry that could match inside it.
 - A generated file is skipped, because its entries come from another file, unless `generated-files: report` is set. A repository
-  with more than 300000 files is not looked at.
+  with more than 300000 files (of git, or of the walk) is not looked at.
 
 There is no automatic fix: the right path is not known.
 
