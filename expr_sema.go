@@ -383,6 +383,7 @@ type ExprSemanticsChecker struct {
 	availableSpecialFuncs []string
 	configVars            []string
 	configSecrets         []string
+	payload               *eventPayload
 }
 
 // NewExprSemanticsChecker creates new ExprSemanticsChecker instance. When checkUntrustedInput is
@@ -529,6 +530,13 @@ func (sema *ExprSemanticsChecker) UpdateDispatchInputs(ty *ObjectType) {
 
 	sema.ensureGithubVarCopied()
 	sema.vars["github"].(*ObjectType).Props["event"].(*ObjectType).Props["inputs"] = ty
+}
+
+// setEventPayload sets the payload of the events of the workflow, which is what is known of the properties of
+// github.event. With it, the checker reports a property of github.event which no event of the workflow has. The
+// type of github.event does not change: it stays an untyped object. Without it, nothing of github.event is checked.
+func (sema *ExprSemanticsChecker) setEventPayload(p *eventPayload) {
+	sema.payload = p
 }
 
 // UpdateJobs updates 'jobs' context object to given object type.
@@ -1202,6 +1210,7 @@ func (sema *ExprSemanticsChecker) Check(expr ExprNode) (ExprType, []*ExprError) 
 		sema.untrusted.Init()
 	}
 	ty := sema.check(expr)
+	sema.checkEventPayload(expr)
 	errs := sema.errs
 	if sema.untrusted != nil {
 		sema.untrusted.OnVisitEnd()
@@ -1254,6 +1263,7 @@ func init() {
 		RuleInfo{ID: "context-availability", Group: RuleGroupCorrectness, Summary: "A context or special function is used where it is not available.", DefaultLevel: SeverityError, Profile: ProfileCorrectness, DocsAnchor: "ctx-spfunc-availability"},
 		RuleInfo{ID: "invalid-function-call", Group: RuleGroupCorrectness, Summary: "A built-in function is called with wrong arguments.", DefaultLevel: SeverityError, Profile: ProfileCorrectness, DocsAnchor: "check-contexts-and-builtin-func"},
 		RuleInfo{ID: "undefined-function", Group: RuleGroupCorrectness, Summary: "An undefined function is called in an expression.", DefaultLevel: SeverityError, Profile: ProfileCorrectness, DocsAnchor: "check-contexts-and-builtin-func"},
-		RuleInfo{ID: "undefined-property", Group: RuleGroupCorrectness, Summary: "An undefined variable or property is accessed in an expression.", DefaultLevel: SeverityError, Profile: ProfileCorrectness, DocsAnchor: "check-contexts-and-builtin-func"},
+		RuleInfo{ID: "undefined-property", Group: RuleGroupCorrectness, Summary: "An undefined variable or property is accessed in an expression.", DefaultLevel: SeverityError, Profile: ProfileCorrectness, DocsAnchor: "check-contexts-and-builtin-func",
+			Options: []RuleOption{{Name: "strict-event-payloads", Kind: RuleOptionBool, Summary: "Report a property of github.event which the events of the workflow do not have, also when another event has it. Unset, a property is reported only when no webhook event has it, and the pedantic profile turns the option on."}}},
 	)
 }
