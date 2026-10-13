@@ -58,22 +58,29 @@ func (r *RuleDependabotMissingActionsUpdate) VisitDependabotPost(d *Dependabot) 
 				active = append(active, u)
 			}
 		}
-		switch {
-		case len(active) > 0:
+		if len(active) > 0 {
 			r.checkLocalActions(active)
-		case projectUsesExternalActions(r.project):
+			return nil
+		}
+		if where, advice, ok := r.whereActionsAreUsed(false); ok {
 			pos := updates[0].Pos
 			if pos == nil {
 				pos = d.Pos
 			}
-			r.ReportID("dependabot-missing-actions-update", pos, "this repository uses actions in its workflows or local actions but every update with the \"github-actions\" package ecosystem is disabled (\"open-pull-requests-limit: 0\", or an \"ignore\" of every dependency), so Dependabot never updates them. enable one of them")
+			r.ReportIDf("dependabot-missing-actions-update", pos, "this repository uses actions %s but every update with the \"github-actions\" package ecosystem is disabled (\"open-pull-requests-limit: 0\", or an \"ignore\" of every dependency), so Dependabot never updates them. enable one of them%s", where, advice)
 		}
 		return nil
 	}
-	if usesRenovate(r.project.RootDir()) || !projectUsesExternalActions(r.project) {
+	if usesRenovate(r.project.RootDir()) {
 		return nil
 	}
-	r.ReportID("dependabot-missing-actions-update", d.Pos, "this repository uses actions in its workflows but no update has the \"github-actions\" package ecosystem, so Dependabot never updates them. add an update with \"package-ecosystem: github-actions\" and \"directory: /\"")
+	if where, advice, ok := r.whereActionsAreUsed(true); ok {
+		directories := `"directory: /"`
+		if advice != "" {
+			directories = `"directories: [` + advice + `]"`
+		}
+		r.ReportIDf("dependabot-missing-actions-update", d.Pos, "this repository uses actions %s but no update has the \"github-actions\" package ecosystem, so Dependabot never updates them. add an update with \"package-ecosystem: github-actions\" and %s", where, directories)
+	}
 	return nil
 }
 
@@ -143,4 +150,30 @@ func init() {
 			return r, nil
 		},
 	})
+}
+
+// whereActionsAreUsed says where the repository uses actions that Dependabot can update, for the message ("in its workflows",
+// or with the local composite actions), and, when local actions use them, the entries of "directories" that cover the root and those
+// actions (the suggestion of the other finding of the rule, see suggestDirectories); ok is false when none does. For the message of
+// a disabled update the advice is the suffix ' with "directories: [...]"', for a missing update (entriesOnly) the entries alone.
+func (r *RuleDependabotMissingActionsUpdate) whereActionsAreUsed(entriesOnly bool) (where, advice string, ok bool) {
+	inWorkflows := hasExternalActions(r.project.WorkflowsDir())
+	locals := localActionsWithExternalUses(r.project)
+	switch {
+	case inWorkflows && len(locals) == 0:
+		where = "in its workflows"
+	case inWorkflows:
+		where = "in its workflows and in the local composite actions in " + showDirectories(locals)
+	case len(locals) > 0:
+		where = "in the local composite actions in " + showDirectories(locals)
+	default:
+		return "", "", false
+	}
+	if len(locals) > 0 {
+		advice = strings.Join(suggestDirectories(nil, locals, true), ", ")
+		if !entriesOnly {
+			advice = " with \"directories: [" + advice + "]\""
+		}
+	}
+	return where, advice, true
 }
