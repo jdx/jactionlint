@@ -61,14 +61,18 @@ var ghJQTokens = []struct {
 	re   *regexp.Regexp
 	kind int
 }{
-	{regexp.MustCompile(`\.body\b|\bbody\b|messageBody|\.message\b|\.filename\b|\bpath\b`), kindMulti},
+	{regexp.MustCompile(`\.body\b|\bbody\b|messageBody|\.message\b|\.filename\b|\bpath\b|\bcomments\b|\bfiles\b|\breviews\b|\blatestReviews\b|\bcommits\b`), kindMulti},
 	{regexp.MustCompile(`\.title\b|\btitle\b|messageHeadline`), kindText},
 	{regexp.MustCompile(`headRefName|\.head\.ref\b|\.head\b|\.user\b|\.login\b|\bauthor\b`), kindName},
 }
 
 var (
-	reGhAPIPath    = regexp.MustCompile(`(^|/)repos/[^\s]+/(pulls|issues)(/|$)`)
-	reGhTextPath   = regexp.MustCompile(`/(comments|reviews|files|commits)\b`)
+	// the path of the API that lists or reads pull requests and issues, also with a query (`pulls?state=open`)
+	reGhAPIPath = regexp.MustCompile(`(^|/)repos/[^\s]+/(pulls|issues)(?:[/?#]|$)`)
+	// the part of that path that holds text of many people: `pulls/7/comments`, `issues/comments`, `pulls/7/files`
+	reGhTextPath = regexp.MustCompile(`/(?:pulls|issues)/(?:[^/\s]+/)?(?:comments|reviews|files|commits)(?:[/?#]|$)`)
+	// a filter that provably prints a number, a state, a date or a count and no text
+	reJQHarmless   = regexp.MustCompile(`^\s*\.(?:number|state|id|url|mergeable|isDraft|draft|merged|mergedAt|createdAt|updatedAt|closedAt|additions|deletions|changedFiles|changed_files|headRefOid|locked|stateReason)(?:\s*\|\s*(?:tostring|not))?\s*$|^\s*\.(?:comments|files|reviews|commits|labels)\s*\|\s*length\s*$`)
 	rePullRefText  = regexp.MustCompile(`refs/pull/|\bpull/[^\s/]+/(head|merge)\b`)
 	gitSourceVerbs = map[string]bool{"log": true, "show": true, "diff": true, "diff-tree": true, "branch": true, "rev-parse": true, "symbolic-ref": true}
 	// the placeholders of a pretty format that print text of an outsider, by kind
@@ -109,27 +113,38 @@ func ghTaint(c *runscript.Command) (taintSource, bool) {
 			return taintSource{}, false
 		}
 		fields := ghTaintedFields[c.Verb()]
-		kinds := 0
+		kinds, unknown := 0, false
 		for _, f := range c.FlagValues("--json") {
 			if f.Dynamic() {
-				return taintSource{desc: ghDesc(c), kinds: kindMulti}, true // the fields are not known
+				unknown = true // the fields are not known
+				continue
 			}
 			for _, name := range strings.Split(f.Value, ",") {
 				kinds |= fields[strings.TrimSpace(name)]
 			}
 		}
-		if kinds == 0 {
+		if kinds == 0 && !unknown {
 			return taintSource{}, false
 		}
-		if jq, hasJQ := jqFilter(c); hasJQ {
-			// the filter decides what is printed: a filter that reads none of the free text properties (`.number`)
-			// clears the fields, one that reads a title is one line
-			if sel, ok := jqSelects(jq); ok {
-				if sel == 0 {
-					return taintSource{}, false
-				}
-				kinds = sel
+		jq, hasJQ := jqFilter(c)
+		if !hasJQ {
+			// without a filter gh prints compact JSON, where a line break of a text is written \n: one line
+			if kinds&^kindName != 0 || unknown {
+				kinds = kindText
 			}
+			return taintSource{desc: ghDesc(c), kinds: kinds}, true
+		}
+		if jqHarmless(jq) {
+			return taintSource{}, false
+		}
+		// a filter prints a string as it is, with its line breaks: what the filter reads decides, and a filter that
+		// does not name a property (`.`, `.comments`) prints all the fields that --json asked for
+		if sel := jqKinds(jq); sel != 0 {
+			kinds = sel
+		} else if unknown {
+			kinds = kindMulti
+		} else if kinds&(kindText|kindMulti) != 0 {
+			kinds |= kindMulti
 		}
 		return taintSource{desc: ghDesc(c), kinds: kinds}, true
 	case "api":
@@ -144,26 +159,28 @@ func ghTaint(c *runscript.Command) (taintSource, bool) {
 		if !hasJQ {
 			return taintSource{desc: ghDesc(c), kinds: kindText}, true // the JSON holds the title, the body ... on one line
 		}
-		sel, ok := jqSelects(jq)
-		if !ok {
+		if jqHarmless(jq) {
 			return taintSource{}, false
 		}
-		if sel == 0 && !reGhTextPath.MatchString(path) {
-			return taintSource{}, false
-		}
+		sel := jqKinds(jq)
 		if sel == 0 {
-			sel = kindMulti
+			// a filter that cannot be read prints what the endpoint has
+			sel = kindText
+			if reGhTextPath.MatchString(path) {
+				sel = kindMulti
+			}
 		}
 		return taintSource{desc: ghDesc(c), kinds: sel}, true
 	}
 	return taintSource{}, false
 }
 
-// jqSelects reports which kinds of text a jq filter reads, 0 when it reads none. ok is false when the filter is empty.
-func jqSelects(filter string) (kinds int, ok bool) {
-	if strings.TrimSpace(filter) == "" {
-		return 0, false
-	}
+// jqHarmless reports whether a static filter provably prints no text of an outsider: a number, a state, a date, a count.
+// A filter that is not known is not harmless.
+func jqHarmless(filter string) bool { return reJQHarmless.MatchString(filter) }
+
+// jqKinds reports which kinds of text a jq filter names, 0 when it names none.
+func jqKinds(filter string) (kinds int) {
 	for _, t := range ghJQTokens {
 		if t.re.MatchString(filter) {
 			kinds |= t.kind
@@ -172,7 +189,7 @@ func jqSelects(filter string) (kinds int, ok bool) {
 	if kinds != 0 && strings.Contains(filter, "[]") {
 		kinds |= kindMulti // a filter that iterates prints one line for each element
 	}
-	return kinds, true
+	return kinds
 }
 
 // ghDesc is the command line as the message shows it: `gh pr view --json title`, `gh api repos/$R/pulls/$N --jq .body`.

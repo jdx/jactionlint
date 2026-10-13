@@ -106,7 +106,7 @@ func (rule *RuleOutputClobbering) VisitStep(n *Step) error {
 				}
 				open = &outputDelimiter{name: m[1], text: m[2], random: rule.randomDelimiter(s, n, m[2], at)}
 				// a printf or an echo that writes the delimiter and the value in one command
-				if c.d.kind == dataUntrusted && exprMayHaveNewline(c.d.input) && !open.random {
+				if c.d.kind == dataUntrusted && c.d.mayHaveNewline() && !open.random {
 					rule.report(s, origin, n, w, c, open.name, open.text, "delimiter")
 				}
 				continue
