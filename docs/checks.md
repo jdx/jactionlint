@@ -3298,6 +3298,13 @@ not reported either, because the rule cannot judge whether the check is enough: 
 (`gh api repos/$REPO/collaborators/$USER/permission`). A pipeline whose later stage is a program that parses the text
 (`echo "$BODY" | python parse_args.py >> "$GITHUB_OUTPUT"`) is not followed: that program decides what is written.
 
+Where the text is a whole line (nothing constant in front of it, `echo "$BODY" >> "$GITHUB_OUTPUT"`), one line is already a record
+(`approved=true`), so a later stage that keeps the first line (`head -n 1`) or removes the line breaks (`tr -d '\n'`) does not make it
+safe: only a text cut down to letters, digits, `_` and `-` (`tr -cd 'a-z0-9'`), a hash or a checked value does. After a constant name
+(`body=$BODY`) one line is enough. A delimiter is judged as the shell expands it: the arguments of `printf 'body<<%s\n' "$d"` are
+followed, a variable that copies a secret or the token (`d=$DELIM` with `DELIM: ${{ secrets.DELIM }}`) is unguessable, and a time such as
+`date +%s` is not (`date +%s%N` is).
+
 Fix it by writing a value without line breaks, or by using a delimiter that nobody can guess:
 
 ```sh
