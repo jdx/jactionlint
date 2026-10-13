@@ -131,11 +131,6 @@ var workspaceActions = func() map[string]workspaceAction {
 	// setup-gradle up to v3 is the same entrypoint and runs gradle with `arguments` (deprecated); v4 and later refuse the
 	// input, so a workflow that sets it runs an older release
 	gated("gradle/actions/setup-gradle", runsGradle)
-	gated("azure/powershell", func(e *ExecAction) bool {
-		// the script is in the workflow; it runs the workspace when it invokes a file of it (the commands are read, not the text)
-		v, _ := e.input("inlineScript")
-		return powerShellRunsWorkspace(v)
-	})
 	gated("cypress-io/github-action", func(e *ExecAction) bool {
 		// it installs the dependencies (npm ci, with their scripts) and runs cypress, which executes cypress.config.js
 		install, installSet := e.input("install")

@@ -9124,25 +9124,14 @@ with a `context` that is a path of the workspace (a relative path, `${{ github.w
 `goreleaser/goreleaser-action` with `args` that has `release` or `build` and no `install-only` (it fails without `args`),
 `magefile/mage-action` unless `install-only` is true (it runs `mage` with the default target when `args` is empty),
 `gradle/gradle-build-action` and `gradle/actions/setup-gradle` with `arguments` (setup-gradle up to v3 runs Gradle with it; v4
-and later refuse the input), `azure/powershell` with an `inlineScript` that invokes a file of the
-workspace (see below), and `cypress-io/github-action` unless `install` and `runTests` are both false and it has no `build`, `start`, `start-windows` or `command`. Not listed although poutine or CodeQL
+and later refuse the input), and `cypress-io/github-action` unless `install` and `runTests` are both false and it has no `build`, `start`, `start-windows` or `command`. Not listed although poutine or CodeQL
 has them: `docker/setup-buildx-action`, `pre-commit-ci/lite-action` and `browniebroke/pre-commit-autoupdate-action` (they
 run nothing of the workspace) and `actions/jekyll-build-pages` (not verified). `gradle/actions/setup-gradle` without `arguments` only prepares a later
 step.
 
-The `inlineScript` of `azure/powershell` is read as PowerShell commands, not searched for text. Statements end at a newline, `;`, `&&`,
-`||`, `|` or a brace or a parenthesis, so every stage of a pipeline and every block is a command. A command runs the workspace when its
-word is a path (a word with a separator: `./x.ps1`, `.\x.ps1`, `scripts/x.ps1`, `$env:GITHUB_WORKSPACE\x.ps1`, `${{ github.workspace }}/x.ps1`;
-a bare `build.ps1` is not run from the current directory in PowerShell, and neither is a URL, an absolute path or a variable), after
-`&`, `.` or an assignment (`$x = ./b.ps1`, `[string]$x += & ./b.ps1`); when it is `pwsh` or `powershell` with `-File` and a path, or
-`-Command` with a script of its own; when an interpreter or a loader (`bash`, `python`, `node`, `Start-Process`, `Invoke-Command`,
-`Import-Module`, `Invoke-Expression`, ...) is given a path; or when it is a build or test tool (`npm`, `yarn`, `pnpm`, `make`, `dotnet`,
-`cargo`, `go`, `gradle`, `mvn`, `pip`, `pytest`, `terraform`, ...), which runs the files of the project. Comments (`#` and `<# #>`),
-strings that are only text and arguments that are not a path in command position (`Get-Content ./x.ps1`, `-OutFile install.ps1`) do not
-count, and neither does a name in quotes in the place of a command (`$x = 'npm'`, `'npm' ci`) unless `&` is in front of it, a number
-that is divided (`10/2`), a variable (`$a / $b`) or a cmdlet named with its module (`Microsoft.PowerShell.Management\Get-Item`). A
-statement that is not understood is not reported; the subset above is what is read, and the regression suite of it is
-`rule_untrusted_checkout_powershell_test.go`. It is a reader of a subset, not a parser of PowerShell.
+The inline scripts of actions are not analyzed: `azure/powershell` (`inlineScript`) is not in the list of actions that run the
+workspace, because the rule cannot tell whether an inline PowerShell script runs files of the repository (it is not
+parsed). A workflow that uses it after a checkout of the code of a pull request needs a manual review.
 
 In a job that sets `permissions: {}` the message does not claim a token, because the job has none, and in a job whose
 permissions are all `read` it says that the token can only read.
