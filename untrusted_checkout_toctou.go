@@ -331,10 +331,14 @@ func (rule *RuleUntrustedCheckout) reportToctou(c *untrustedCheckout, how string
 		)
 		return true
 	}
-	mutable := !c.verified && refIsMutable(c.what)
+	mutable := !c.verified && (c.mutable || refIsMutable(c.what) || (event == "workflow_dispatch" && refIsDispatchMutable(c.what)))
 	// an environment with reviewers pauses every run, the one of a new push too: the label is not the only gate then
 	lasts := g.label && rule.labelRerun && !slices.Contains(g.stale, "an environment")
 	gates := strings.Join(g.stale, " and ")
+	if event == "workflow_dispatch" {
+		// who started the run, not who wrote a comment
+		gates = strings.ReplaceAll(strings.ReplaceAll(gates, "who commented", "who dispatched"), "of the commenter", "of the user who dispatched")
+	}
 	switch {
 	case lasts:
 		rule.ReportIDf(

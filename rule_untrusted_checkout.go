@@ -85,6 +85,9 @@ func NewRuleUntrustedCheckout(project *Project) *RuleUntrustedCheckout {
 // untrustedCheckout is a step that puts code which someone else controls in the workspace.
 type untrustedCheckout struct {
 	pos *Pos
+	// mutable is whether any of the untrusted values of the ref can change after a gate (a branch beside a commit in
+	// `head.sha || head_ref`), which `what` does not say: it names the first one.
+	mutable bool
 	// events are the privileged events that the step of the checkout runs for.
 	events []string
 	// what is the reference that makes the code untrusted.
@@ -363,7 +366,7 @@ func (rule *RuleUntrustedCheckout) VisitJobPre(n *Job) error {
 			if c.guarded && !rule.loose {
 				continue // actions/checkout refuses it for a fork
 			}
-			c.gates = here
+			c.gates = c.gates.merge(here) // the gates of a step of a composite action are in c.gates already
 			c.events = stepEvents
 			if c.how != "" {
 				rule.report(c, c.how, gateInfo{})
@@ -429,7 +432,22 @@ func (rule *RuleUntrustedCheckout) reportUnused(c *untrustedCheckout) {
 // commentOnly is whether a comment is the only event of the job that is privileged: then who commented is not who wrote
 // the code.
 func (rule *RuleUntrustedCheckout) commentOnly() bool {
-	return slices.Contains(rule.privileged, "issue_comment") && !rule.ghAny
+	return rule.comment && !rule.ghAny
+}
+
+// valueMutable reports whether any untrusted value that the string reads can change after a gate: every alternative of an
+// expression is judged on its own.
+func (rule *RuleUntrustedCheckout) valueMutable(s *String) bool {
+	if strings.Contains(s.Value, "refs/pull/") && refIsMutable(s.Value) {
+		return true
+	}
+	refs, _ := s.exprRefs()
+	for _, r := range refs {
+		if what, ok := rule.untrustedIn("", []exprRef{r}); ok && refIsMutable(what) {
+			return true
+		}
+	}
+	return false
 }
 
 // report reports the checkout that the step runs. runner are the gates of the step that runs the code. A gate that holds at
@@ -644,7 +662,7 @@ func (rule *RuleUntrustedCheckout) actionCheckout(s *Step, e *ExecAction, u *Use
 			if at == nil {
 				at = in.Value.Pos
 			}
-			found = &untrustedCheckout{pos: at, what: what, dir: dir, step: s}
+			found = &untrustedCheckout{pos: at, what: what, dir: dir, step: s, mutable: rule.valueMutable(in.Value)}
 		}
 	}
 	if found == nil {

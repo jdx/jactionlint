@@ -570,7 +570,9 @@ func (rule *RuleUntrustedCheckout) localActionCheckouts(s *Step, e *ExecAction) 
 	defer func() { rule.inputTaint, rule.inputNumber, rule.calls = savedTaint, savedNumber, savedCalls }()
 
 	var ret []*untrustedCheckout
-	var gate permissionGateState
+	var gate, staleGate permissionGateState // the permission checks that hold, and the ones that hold at one moment
+	var stale gateInfo
+	commentOnly := rule.commentOnly()
 	for _, j := range action.Jobs {
 		steps, stepGroups := flattenStepsGroup(j.Steps)
 		for i, cs := range steps {
@@ -579,9 +581,18 @@ func (rule *RuleUntrustedCheckout) localActionCheckouts(s *Step, e *ExecAction) 
 				// the action fails here for a user who may not write, and so does the step that calls it: what it checked
 				// out before or beside the check (a parallel group runs together, and the check does not hold back what runs
 				// beside it) is run by the steps of the caller that run after a failure only.
-				gate.see(g)
-				for _, c := range ret {
-					c.afterFailure = true
+				if pg := permissionGate(commentOnly); pg.safe {
+					gate.see(g)
+					for _, c := range ret {
+						c.afterFailure = true
+					}
+				} else {
+					// the check holds at one moment: what was checked out before it is behind it too, for the ref to be judged
+					staleGate.see(g)
+					stale = stale.merge(pg)
+					for _, c := range ret {
+						c.gates = c.gates.merge(pg)
+					}
 				}
 				continue
 			}
@@ -589,12 +600,24 @@ func (rule *RuleUntrustedCheckout) localActionCheckouts(s *Step, e *ExecAction) 
 				continue // the steps after a permission check only run for a user who may write
 			}
 			ce, ok := cs.Exec.(*ExecAction)
-			if !ok || conditionIsGuard(cs.If) || len(eventsAfterCondition(rule.privileged, cs.If)) == 0 {
+			if !ok || len(eventsAfterCondition(rule.privileged, cs.If)) == 0 {
 				continue
+			}
+			// a condition that holds at one moment (a label of the event, the commenter) leaves the checkout to the check
+			// of the ref; one that holds after the code changes stops it
+			var stepGate gateInfo
+			if conditionIsGuard(cs.If) {
+				if stepGate = classifyCondition(cs.If, commentOnly); stepGate.safe || len(stepGate.stale) == 0 {
+					continue
+				}
+			}
+			if staleGate.holds(g) && !stepRunsAfterFailure(cs) {
+				stepGate = stepGate.merge(stale)
 			}
 			if _, cu := stepAction(cs); cu != nil && cu.isRepoAction("actions/checkout") {
 				if c := rule.actionCheckout(cs, ce, cu, action.Comments, subst, e.Uses.Pos); c != nil {
 					c.step = s
+					c.gates = stepGate
 					c.afterFailure = gate.set // after the check or beside it: only a step of the caller that also runs after a failure runs it
 					c.what += " in " + t.path
 					ret = append(ret, c)

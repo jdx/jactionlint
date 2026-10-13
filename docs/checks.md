@@ -9148,6 +9148,27 @@ A step is reported at its checkout when it puts untrusted code in the workspace 
 In a job that sets `permissions: {}` the message does not claim a token, because the job has none, and in a job whose
 permissions are all `read` it says that the token can only read.
 
+**The gates.** A gate in front of the job or the step decides whether a checkout is reported (the table
+`TestUntrustedCheckoutGateModel` runs every gate against every event):
+
+| Gate | `pull_request_target`, `workflow_run` | `issue_comment`, `workflow_dispatch` (option `pedantic`) |
+| --- | --- | --- |
+| nothing | reported | reported |
+| `environment:` with reviewers | one moment | one moment |
+| permission check step, `github.actor`, the association of the commenter | holds, nothing is reported | one moment |
+| `author_association` of the pull request (or of the issue) | holds | holds (comment) |
+| `labels.*.name` of the pull request | lasts | |
+| `github.event.label.name` (the `labeled` event, or `github.event.action == 'labeled'`) | one moment | |
+
+A gate that **holds** checks who wrote the code, and stops the job whatever is pushed later. A gate that holds at **one moment**
+lets the job start, and the author can push to the branch afterwards: the checkout is reported when the ref can change (a branch,
+`refs/pull/N/head`, `gh pr checkout`, or any alternative of an expression that is one: `head.sha || github.head_ref`), not for a
+commit. A label that **lasts** is reported whatever the ref is when the workflow runs again for each push, unless the job takes
+the label away or the label is tied to the event. For a comment or a dispatch, who commented or dispatched is not who wrote the
+code, so a check of that user is a gate of one moment. The same classification applies to the steps of a composite action that a
+step calls, and to the gates of the calls of a reusable workflow, of which only the ones that every call has count. A gate that
+reads a context that the event does not have (the labels of a pull request in a comment) is not judged.
+
 What is **not** reported: a checkout of the base (no `ref`, or `github.event.pull_request.base.*`), a checkout that nothing runs,
 a job with an `environment:` (its reviewers decide, unless `--online` finds that it has none, see
 [below](#check-untrusted-checkout-environment)) when it checks out a commit, and a job or step whose `if:` reads who or what started the workflow:

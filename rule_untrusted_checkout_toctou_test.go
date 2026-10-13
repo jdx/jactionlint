@@ -75,6 +75,15 @@ func TestRuleUntrustedCheckoutToctou(t *testing.T) {
 		// a step with a gate that holds at one moment does not stop a later step from running the code
 		{"a step for a label that runs the code of a commit, and a step that runs it again", prtJob(prtLabeled, "") + "      - uses: " + co + "\n        with:\n          ref: ${{ github.event.pull_request.head.sha }} # want\n      - run: make\n        if: github.event.label.name == 'safe to test'\n      - run: make test\n", false, ""},
 
+		// an expression with alternatives is a branch when one of them is
+		{"environment and a commit with the branch as a fallback", prtJob(prt, env) + "      - uses: " + co + "\n        with:\n          ref: ${{ github.event.pull_request.head.sha || github.head_ref }} # want\n      - run: make\n", false, ""},
+		{"environment and two commits", prtJob(prt, env) + "      - uses: " + co + "\n        with:\n          ref: ${{ github.event.pull_request.head.sha || github.event.pull_request.merge_commit_sha }}\n      - run: make\n", false, ""},
+
+		// a dispatch: who started the run is not what the pull request contains at the checkout
+		{"dispatch, an actor and a pull request number", "on:\n  workflow_dispatch:\n    inputs:\n      pr_number:\n        required: true\njobs:\n  j:\n    if: github.actor == 'maintainer'\n    runs-on: ubuntu-latest\n    steps:\n      - uses: " + co + "\n        with:\n          ref: refs/pull/${{ inputs.pr_number }}/head # want\n      - run: make\n", true, "who dispatched"},
+		{"dispatch, a permission check and a pull request number", "on:\n  workflow_dispatch:\n    inputs:\n      pr_number:\n        required: true\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: sushichop/action-repository-permission@v3\n        with:\n          required-permission: write\n      - uses: " + co + "\n        with:\n          ref: refs/pull/${{ inputs.pr_number }}/head # want\n      - run: make\n", true, "who dispatched"},
+		{"dispatch, an actor and gh pr checkout", "on:\n  workflow_dispatch:\n    inputs:\n      pr_number:\n        required: true\njobs:\n  j:\n    if: github.actor == 'maintainer'\n    runs-on: ubuntu-latest\n    steps:\n      - run: gh pr checkout ${{ inputs.pr_number }} # want\n      - run: make\n", true, ""},
+
 		// a label that lasts
 		{"a label that lasts and the commit", prtJob(prtPush, labelIf) + headSha, false, "stays true after the review"},
 		{"a label that lasts, default types and the commit", prtJob(prt, labelIf) + headSha, false, ""},
