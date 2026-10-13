@@ -56,11 +56,16 @@ func (s *onlineSession) ReleaseDate(owner, repo, tag, sha string) (*GitHubReleas
 		return nil, errOnlineExcluded
 	}
 	rc, ok := s.client.(GitHubReleaseDateClient)
-	if !ok {
-		return nil, errReleaseDatesUnsupported
-	}
 	what := owner + "/" + repo
 	return s.releaseDates.get(releaseDateKey{newRepoKey(owner, repo), tag, strings.ToLower(sha)}, func() (*GitHubReleaseDate, error) {
+		if !ok {
+			// Not silence: the rule which asked checked nothing for this version, which is a skipped lookup (and fails --online=strict)
+			s.mu.Lock()
+			defer s.mu.Unlock()
+			s.registryFailedLocked(failOther, "release-dates-unsupported", what, errReleaseDatesUnsupported,
+				"online: the client of GitHub cannot look up the date of a release, so action-release-cooldown checks nothing. --verbose lists every skipped lookup.")
+			return nil, errReleaseDatesUnsupported
+		}
 		return callFor(s, what, func(ctx context.Context) (*GitHubReleaseDate, error) {
 			return rc.ReleaseDate(ctx, owner, repo, tag, sha)
 		})
