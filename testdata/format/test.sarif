@@ -100,6 +100,21 @@
               "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
             },
             {
+              "id": "concurrency-deadlock",
+              "name": "ConcurrencyDeadlock",
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "description": "Checks for a concurrency group which a workflow and the reusable workflow it calls share",
+                "queryURI": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+              },
+              "fullDescription": {
+                "text": "Checks for a concurrency group which a workflow and the reusable workflow it calls share"
+              },
+              "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+            },
+            {
               "id": "continue-on-error",
               "name": "ContinueOnError",
               "defaultConfiguration": {

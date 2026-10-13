@@ -842,6 +842,7 @@ func (l *Linter) check(
 		if w != nil && project != nil {
 			w.inheritedSecrets = l.callersInheritSecrets(project, l.absFilePath(path))
 			w.callerEvents = l.workflowCallers(project, l.absFilePath(path))
+			w.calleeGroups = l.calleeGroups(project, l.absFilePath(path))
 		}
 	}
 
@@ -1214,6 +1215,16 @@ func (l *Linter) workflowCallers(p *Project, file string) *WorkflowCallers {
 		return nil
 	}
 	return l.callGraphOf(p).callerEventsOf(filepath.ToSlash(rel))
+}
+
+// calleeGroups returns the concurrency groups of the local reusable workflows which the workflow in the file calls, or nil
+// when the file is not in the project.
+func (l *Linter) calleeGroups(p *Project, file string) map[string]*workflowGroups {
+	rel, err := filepath.Rel(absPath(p.root), absPath(file))
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return nil
+	}
+	return l.callGraphOf(p).calleeGroupsOf(filepath.ToSlash(rel))
 }
 
 // actionCallers returns the local workflows which run the action defined in the file, or nil when the

@@ -1128,6 +1128,9 @@ type Workflow struct {
 	// callerEvents are the events of the local workflows which run this reusable workflow, directly or through other
 	// reusable workflows. It is nil when the linter did not look (no project), and then nothing is known about the callers.
 	callerEvents *WorkflowCallers
+	// calleeGroups are the concurrency groups of the local reusable workflows which this workflow calls, by their paths
+	// relative to the root of the repository. It is nil when the linter did not look or there is nothing to compare.
+	calleeGroups map[string]*workflowGroups
 	// Source is the content of the source file. Rules which offer a fix (Error.Fix) read it to turn
 	// positions into byte offsets. It is never nil for a workflow returned by Parse. Do not modify it.
 	Source []byte
