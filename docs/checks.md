@@ -1402,8 +1402,9 @@ versions, `glob` since v3, `exec` and `__original_require__` since v4, `octokit`
 that does not name a version (a commit, a branch) has the ones that every version has.
 
 An expression `${{ }}` in the script is replaced by underscores of the same length, as `shellcheck` does for `run:`, because GitHub
-replaces it before node sees the script. A script with an expression that spans lines, that follows a digit or that is not
-closed is not checked.
+replaces it before node sees the script. The replacement is sound only where any value could stand, so a script is not checked
+when an expression is not closed, spans lines, has `}}` inside a string, or touches a letter, a digit, `_` or `$` (`1${{ x }}`,
+`a${{ x }}b`), because the value could continue a number or a name.
 
 <a id="untrusted-inputs"></a>
 ## Script injection by potentially untrusted inputs
