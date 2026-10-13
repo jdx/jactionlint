@@ -210,6 +210,7 @@ func TestBaselineSurvivesMovingTheCheckout(t *testing.T) {
 // unpinned-uses produced fixes but were not marked). The fixers are found by linting the test data with every
 // rule on and watching which findings carry a fix.
 func TestEveryRuleWhichSetsAFixIsMarkedFixable(t *testing.T) {
+	t.Parallel()
 	cfg := mustParseConfig(t, `profile: pedantic
 rules:
   missing-timeout:

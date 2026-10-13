@@ -104,6 +104,18 @@ type OnlineOptions struct {
 	// GitHubCLI is whether "gh auth token" is asked for a token when no variable or file has one.
 	// Nil means true.
 	GitHubCLI *bool `yaml:"gh-cli"`
+	// GitHubComFallback makes the lookups of a GitHub Enterprise Server (or GHE.com) go to api.github.com for the
+	// repositories which the Server does not have, which is where the actions come from that GitHub Connect syncs.
+	// Nil or false asks the Server only. It has no effect when the API is api.github.com. The names of the
+	// repositories which the Server does not have are sent to github.com, so list the internal ones in Deny.
+	GitHubComFallback *bool `yaml:"github-com-fallback"`
+	// GitHubComTokenEnv names the environment variable which holds the token for api.github.com in the fallback. It
+	// is read before $GITHUB_COM_TOKEN. The token for the Server is never sent to github.com: $GITHUB_TOKEN and
+	// $GH_TOKEN are not used for it.
+	GitHubComTokenEnv string `yaml:"github-com-token-env"`
+	// GitHubComTokenFile is a file which holds the token for api.github.com in the fallback, read after
+	// GitHubComTokenEnv and before $GITHUB_COM_TOKEN.
+	GitHubComTokenFile string `yaml:"github-com-token-file"`
 }
 
 const (
@@ -221,6 +233,15 @@ func (o OnlineOptions) overlay(over OnlineOptions) OnlineOptions {
 	}
 	if over.GitHubCLI != nil {
 		o.GitHubCLI = over.GitHubCLI
+	}
+	if over.GitHubComFallback != nil {
+		o.GitHubComFallback = over.GitHubComFallback
+	}
+	if over.GitHubComTokenEnv != "" {
+		o.GitHubComTokenEnv = over.GitHubComTokenEnv
+	}
+	if over.GitHubComTokenFile != "" {
+		o.GitHubComTokenFile = over.GitHubComTokenFile
 	}
 	return o
 }

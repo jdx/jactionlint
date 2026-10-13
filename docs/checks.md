@@ -36,6 +36,7 @@ List of checks:
 - [CRON syntax and IANA timezone string at `on.schedule`](#check-cron-syntax-and-timezone)
 - [Runner labels](#check-runner-labels)
 - [Action format in `uses:`](#check-action-format)
+- [GitHub Actions lock file](#check-actions-lock)
 - [Local action inputs validation at `with:`](#check-local-action-inputs)
 - [Local action used before checkout](#check-local-action-checkout)
 - [Popular action inputs validation at `with:`](#check-popular-action-inputs)
@@ -102,6 +103,7 @@ List of checks:
 - [Known vulnerable actions (online)](#check-known-vulnerable-actions)
 - [Ref confusion (online)](#check-ref-confusion)
 - [Stale action refs (online)](#check-stale-action-refs)
+- [Pins that do not hold (online)](#check-unpinnable-action)
 - [Archived repositories (online)](#check-archived-uses)
 - [Repojacking (online)](#check-repojacking)
 - [Version comments of pinned actions (online)](#check-ref-version-mismatch)
@@ -2706,6 +2708,82 @@ answers), and one for the branch of the same name for each immutable one, which 
 the repositories which another policy matches, or for a configuration without `immutable-release`. The setting protects the tag, not the
 author: an immutable release of a repository which was taken over later still runs what its author published.
 
+<a id="check-actions-lock"></a>
+### GitHub Actions lock file
+
+> [!WARNING]
+> The Actions lock file is a **technical preview** of GitHub and its format is pre-1.0 (`version: 'v0.0.3'` today). It may change without
+> notice. jactionlint reads only what is described below, ignores the keys it does not know, and does not trust a file of a version
+> whose shape it does not know, so a change of the format brings back findings and never hides one.
+
+A repository can lock the actions of its workflows with the [`gh actions-lock`](https://github.com/github/gh-actions-lock)
+extension of the GitHub CLI. It writes `.github/workflows/actions.lock`, which records for each workflow which actions it uses and, for
+every action, the commit it was resolved to (the format is defined in [github/actions-lockfile](https://github.com/github/actions-lockfile)).
+A workflow which is listed there keeps `uses: actions/checkout@v6.0.2` in its YAML, and the runner checks out the locked commit. That is
+the reason why the `unpinned-uses` rule does not report such a tag:
+
+```yaml
+version: 'v0.0.3'
+workflows:
+    '.github/workflows/ci.yml':
+        - 'actions/checkout@v6.0.2'
+dependencies:
+    'actions/checkout@v6.0.2':
+        ref: 'v6.0.2'
+        commit: 'sha1-de0fac2e4500dabe0009e67214ff5f5447ce83dd'
+        owner_id: 44036562
+        repo_id: 197814629
+```
+
+`unpinned-uses` accepts a step `uses: owner/repo@ref` (or `owner/repo/path@ref`, a sub action is locked by its repository) when the lock
+file of the repository, which is `.github/workflows/actions.lock` at its root:
+
+- lists the workflow being checked under `workflows`, and the list has `owner/repo@ref` with the same ref (the owner and the repository
+  are compared case-insensitively, the ref is not);
+- has a `dependencies` entry for that pin whose `ref` is the same ref and whose `commit` is a full digest (`sha1-` and 40 hex digits, or
+  `sha256-` and 64).
+
+This is how [CodeQL](https://github.com/github/codeql/pull/22155) reads the file for its `actions/unpinned-tag` query, and it does not
+check anything else about it: the commit is not looked up on GitHub, and the actions inside a locked composite action are not followed.
+The rule is unchanged when:
+
+- the repository has no lock file, it is not valid YAML, it has not the shape of the format, it has no `version` or the version is not
+  `v0.0.2` or `v0.0.3` (`v0.0.1` is not read), or a key is repeated (a workflow, a dependency, or a key of one): the official parser
+  rejects such a file, so neither the first nor the last entry is trusted;
+- the workflow is not listed in the file: workflows are onboarded to the lock file one by one, and only a listed workflow is held
+  to it (`gh actions-lock --verify` reports the others);
+- the entry of the action is missing or malformed (a ref which differs from the one of the pin, a `commit` which is not a digest);
+- the `uses:` is a reusable workflow call (`owner/repo/.github/workflows/x.yml@ref`) or a Docker image. The current
+  `gh actions-lock` does not record them (and CodeQL leaves reusable workflows alone), so they are judged as before. Some lock files
+  in the wild do list the pins of reusable workflows, which is not relied on.
+
+A step of a local action (`action.yml`) is read the way the lock file records it: the actions which a local action uses are
+listed under the workflows that run it with `uses: $/path` or `./path` (directly or through other local actions; a reusable
+workflow in between is a workflow of its own). Such a step is accepted when every workflow which runs the action is listed in the
+lock file and pins it. An action which no workflow of the repository runs is not locked, so its steps are reported.
+
+The fix of `unpinned-uses` under `--online`, which writes the commit SHA in `uses:`, is not offered for a step of a workflow which
+the lock file lists, because a ref with a SHA is another pin than the one of the lock file and can make the workflow fail the lock
+check. Add the entry with `gh actions-lock` instead. The fix is unchanged for reusable workflow calls and for the workflows which the
+lock file does not list.
+
+The option `actions-lock` of `unpinned-uses` turns this off, for a repository which wants every action pinned in the YAML whatever the
+lock file says:
+
+```yaml
+rules:
+  unpinned-uses:
+    level: error
+    actions-lock: false
+```
+
+Sources of the format, which this was written from (all of them public): the README of
+[`gh actions-lock`](https://github.com/github/gh-actions-lock), the schema and the Go parser in
+[`github/actions-lockfile`](https://github.com/github/actions-lockfile) (`schema/lockfile-v0.0.3.json`, `go/pkg/lockfile`), and the
+CodeQL pull requests [#22487](https://github.com/github/codeql/pull/22487) (extraction) and
+[#22155](https://github.com/github/codeql/pull/22155) (the query). zizmor tracks the same support in
+[zizmor#2371](https://github.com/zizmorcore/zizmor/issues/2371), not built yet.
+
 <a id="check-local-action-checkout"></a>
 ### Local action used before checkout
 
@@ -5307,7 +5385,8 @@ jactionlint does several checks for both workflow calls (caller) and reusable wo
 - optional/required/undefined inputs and secrets at `uses:` in workflow calls
 - type checks for `outputs` objects used by downstream jobs of workflow calls
 
-These checks are described in this section.
+These checks are described in this section. With `--online` the workflow calls of reusable workflows of other repositories are
+checked too, see [below](#check-remote-reusable-workflows).
 
 ### Check input definitions of `workflow_call` event in reusable workflow
 
@@ -5684,7 +5763,8 @@ And reusable workflows must define types of their inputs by `type:` field. Workf
 expressions (`inputs: ${{ ... }}`) to the inputs or secrets. jactionlint checks types of values passed to inputs in workflow call.
 When a type of input doesn't match to its definition, jactionlint reports an error.
 
-Note that this check only works with a reusable workflow in the same repository (it starts with `./` or `$/`).
+Note that this check works with a reusable workflow in the same repository (it starts with `./` or `$/`). A reusable workflow of
+another repository is checked only with `--online`, see [below](#check-remote-reusable-workflows).
 
 ### Check outputs of workflow call in downstream jobs
 
@@ -5746,7 +5826,8 @@ object types in downstream jobs.
 In the above example, `get-build-info.yaml` has one output `version`. jactionlint types the outputs object of workflow call job
 as `{version: string}`. In the downstream job, jactionlint can report an error at undefined key `tag` in the object.
 
-Note that this check only works with a reusable workflow in the same repository (starting with `./` or `$/`).
+Note that this check works with a reusable workflow in the same repository (starting with `./` or `$/`). A reusable workflow of
+another repository is checked only with `--online`, see [below](#check-remote-reusable-workflows).
 
 ### Check caller/callee permissions in workflow call
 
@@ -5874,6 +5955,90 @@ reads anything else (`inputs`, `matrix`, `github.job`, `hashFiles()`, a `concurr
 group of a job of the caller is not compared with the called workflow either. I could not try the job-level case on GitHub, the
 reports of it come from the group of a job of a called workflow, which the issue above describes. The group of a workflow which calls
 another one in turn is compared with the direct callee only. `concurrency-limits` gives the same advice for the groups it suggests.
+
+<a id="check-remote-reusable-workflows"></a>
+### Reusable workflows of other repositories (online)
+
+With `--online` jactionlint reads the reusable workflow of `owner/repo/.github/workflows/x.yml@ref` from GitHub, at that ref, and runs
+the checks of [inputs and secrets in a workflow call](#check-inputs-and-secrets-in-workflow-call) and of [the outputs of a workflow call
+in downstream jobs](#check-outputs-of-workflow-call-in-downstream-jobs) on it, the way they run on a workflow in the same repository:
+
+- `missing-workflow-input`, `unknown-workflow-input` and `workflow-input-type` for `with:`
+- `missing-workflow-secret` and `unknown-workflow-secret` for `secrets:`
+- `undefined-property` for `needs.<id>.outputs.<name>` of the job which calls it
+
+Example input:
+
+```yaml
+# requires --online
+on: push
+jobs:
+  call:
+    uses: example/workflows/.github/workflows/ci.yml@v1
+    with:
+      # ERROR: "name" is required, and "nmae" is a typo
+      nmae: me
+      # ERROR: "count" is a number
+      count: many
+    # ERROR: the secret "token" is required
+    secrets:
+      extra: x
+  # OK
+  ok:
+    uses: example/workflows/.github/workflows/ci.yml@v1
+    with:
+      name: me
+    secrets:
+      token: ${{ secrets.TOKEN }}
+  use:
+    needs: ok
+    runs-on: ubuntu-latest
+    steps:
+      # ERROR: the workflow declares only "result"
+      - run: echo ${{ needs.ok.outputs.reslt }}
+```
+
+Output:
+
+```
+test.yaml:5:11: input "name" is required by "example/workflows/.github/workflows/ci.yml@v1" reusable workflow (read from GitHub with --online) [missing-workflow-input]
+  |
+5 |     uses: example/workflows/.github/workflows/ci.yml@v1
+  |           ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+test.yaml:5:11: secret "token" is required by "example/workflows/.github/workflows/ci.yml@v1" reusable workflow (read from GitHub with --online) [missing-workflow-secret]
+  |
+5 |     uses: example/workflows/.github/workflows/ci.yml@v1
+  |           ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+test.yaml:8:7: input "nmae" is not defined in "example/workflows/.github/workflows/ci.yml@v1" reusable workflow (read from GitHub with --online). defined inputs are "count", "dry-run", "name" [unknown-workflow-input]
+  |
+8 |       nmae: me
+  |       ^~~~~
+test.yaml:10:14: input "count" is typed as number by reusable workflow "example/workflows/.github/workflows/ci.yml@v1" (read from GitHub with --online). string value cannot be assigned [workflow-input-type]
+   |
+10 |       count: many
+   |              ^~~~
+test.yaml:26:23: property "reslt" is not defined in object type {result: string} [undefined-property]
+   |
+26 |       - run: echo ${{ needs.ok.outputs.reslt }}
+   |                       ^~~~~~~~~~~~~~~~~~~~~~
+```
+
+<!-- Skip playground link -->
+
+What is read, and what is not:
+
+- **One file, one request.** The workflow file is read once per run for each repository, path and ref, however many jobs and files call it.
+  The cache, the allow and deny lists, the rate limit and `--online=cache` work as described in [the online checks](usage.md#online-checks), and a
+  full commit SHA is kept in the cache whatever its age.
+- **Nothing is reported when the workflow is not known.** A private repository, a deny list, a rate limit, a timeout, a file which does not
+  exist at that ref, a file without `on.workflow_call` or one which jactionlint cannot read gives no finding, exactly as without `--online`. The
+  lookup is counted as skipped (`--online=strict` fails on it) except for the repositories which are left out on purpose. A workflow
+  of another repository which is not a reusable workflow is not reported as `invalid-local-workflow`, which is only about the repository
+  being linted.
+- **`secrets: inherit` passes every secret**, so the secrets of the call are not compared with the ones the workflow declares, as for a local workflow.
+- **The ref decides.** `@main` is read as it is now, not as it was when the workflow was written.
+- The permissions of the called jobs are not compared with the ones of the caller for a workflow of another repository
+  (the check of caller/callee permissions above only works with local workflows).
 
 <a id="id-naming-convention"></a>
 ## ID naming convention
@@ -8636,6 +8801,65 @@ test.yaml:10:15: info: action "actions/setup-node@3235b876344d2a9aa001b8d1453c93
 
 When the repository has more tags than jactionlint reads (1000), the rule reports nothing for a commit it did not find.
 
+<a id="check-unpinnable-action"></a>
+## Pins that do not hold (online)
+
+Pinning an action to a commit SHA freezes the code of that action, and nothing else. A composite action which runs `uses: actions/cache@v4`
+or a Docker action which runs `docker://alpine:3` pulls in a tag, which its owner, or whoever takes the account over, can move. The pin of
+the workflow then does not stop what runs from changing. The rule `unpinnable-action` reads the `action.yml` of every action pinned to a
+commit, with `--online`, and reports the ones whose pin does not hold. It is the same as the "unpinnable action" check of [poutine][poutine-unpinnable-action].
+
+It is a pedantic check, because it reads every pinned action, also the popular ones, and the finding is about someone else's code: it runs only with the option
+`pedantic` (on under `profile: pedantic`, or `rules: {unpinnable-action: {pedantic: true}}`).
+
+Example input:
+
+```yaml
+# requires --online
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      # ERROR: this composite action runs actions/cache@v4
+      - uses: pre-commit/action@2c7b3805fd2a0fd8c1884dcaebf91fc102a13ecd # v3.0.1
+      # ERROR: this Docker action runs an image tag
+      - uses: actions/jekyll-build-pages@44a6e6beabd48582f863aeeb6cb2151cc1716697 # v1.0.13
+      # OK: everything is pinned to a commit or a digest, also what it uses
+      - uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # v0.35.0
+      - uses: reviewdog/action-actionlint@a8ac3eea598697a830f7d8e701fc9fcbfde88974 # v1.80.0
+```
+
+Output:
+
+```
+test.yaml:8:15: warning: action "pre-commit/action@2c7b3805fd2a0fd8c1884dcaebf91fc102a13ecd" is pinned to commit 2c7b3805fd2a, but the pin does not hold: a composite step uses "actions/cache@v4", a ref which can move and not a commit SHA. so what runs can change without a change to this workflow. use an action which pins its dependencies, or fork it and pin them there [unpinnable-action]
+  |
+8 |       - uses: pre-commit/action@2c7b3805fd2a0fd8c1884dcaebf91fc102a13ecd # v3.0.1
+  |               ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+test.yaml:10:15: warning: action "actions/jekyll-build-pages@44a6e6beabd48582f863aeeb6cb2151cc1716697" is pinned to commit 44a6e6beabd4, but the pin does not hold: it runs the Docker image "docker://ghcr.io/actions/jekyll-build-pages:v1.0.13", a tag and not a digest. so what runs can change without a change to this workflow. use an action which pins its dependencies, or fork it and pin them there [unpinnable-action]
+   |
+10 |       - uses: actions/jekyll-build-pages@44a6e6beabd48582f863aeeb6cb2151cc1716697 # v1.0.13
+   |               ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+```
+
+<!-- Skip playground link -->
+
+What is looked at:
+
+- **Only actions pinned to a full commit SHA.** An action pinned to a tag is reported by [`unpinned-uses`](#check-action-format) already.
+- **Composite steps**, also those in a `parallel:` group. `uses: owner/repo@v1` (a tag, a branch or a short SHA) and `uses: docker://image:tag` (no
+  `@sha256:` digest) are reported. `uses: ./path` and `uses: $/path` are not followed: they are looked up in the workspace of the job which runs the
+  action at run time, not in the repository of the action, so there is nothing to read.
+- **Docker actions.** `runs.image: docker://image:tag` without a digest is reported. An action whose image is built from a `Dockerfile` is not: its `FROM` lines are not read.
+- **Two levels.** The steps of the pinned action, and the steps of the commit-pinned actions they use. A deeper chain is not read, and an action which
+  uses itself is read once. The finding names the nested action which has the dependency.
+- **A reusable workflow is not followed**, only actions.
+- **Nothing is reported when the metadata is not known** (private, 404, rate limit, a deny list): the lookup is counted as skipped, as for the other
+  online checks. The answer for a commit never changes, so it is kept in the cache whatever its age (see [the online checks](usage.md#online-checks)).
+- **Remedy.** An action which pins its dependencies, or a fork of it which does, pinned to the commit of your fork. A finding is not a statement that the action is
+  unsafe, only that its pin does not freeze what runs.
+
 <a id="check-archived-uses"></a>
 ## Archived repositories (online)
 
@@ -9002,6 +9226,7 @@ request is [zizmor#1533][zizmor-1533]).
 [zizmor-stale-action-refs]: https://docs.zizmor.sh/audits/#stale-action-refs
 [zizmor-archived-uses]: https://docs.zizmor.sh/audits/#archived-uses
 [zizmor-ref-version-mismatch]: https://docs.zizmor.sh/audits/#ref-version-mismatch
+[poutine-unpinnable-action]: https://github.com/boostsecurityio/poutine/blob/main/opa/rego/rules/unpinnable_action.rego
 
 ---
 
@@ -10196,7 +10421,7 @@ way because any caller can pass attacker-controlled text. jactionlint does not l
 
 How the rules treat actions:
 
-- **Applies** to the steps (and the metadata) of an action: `action-syntax`, `adhoc-packages`, `archived-uses`, `argument-injection`, `artipacked`, `background-step-not-waited`, `checkout-static-credentials`, `command-injection`, `conflicting-action-inputs`, `constant-condition`, `context-availability`, `continue-on-error`, `deprecated-action-input`, `deprecated-commands`, `deprecated-node-runtime`, `duplicate-key`, `duplicate-step-id`, `environment-file-redirect`, `expired-ignore`, `expression-syntax`, `expression-type`, `fail-fast-action-inputs`, `forbidden-uses`, `github-app`, `github-script-syntax`, `if-always-true`, `impostor-commit`, `insecure-commands`, `insecure-ssh-keyscan`, `insecure-url-scheme`, `invalid-env-var-name`, `invalid-function-call`, `invalid-id`, `invalid-ignore-comment`, `invalid-local-action`, `invalid-parallel-step`, `invalid-shell-name`, `invalid-uses`, `invisible-characters`, `known-vulnerable-actions`, `malformed-expression-delimiters`, `max-run-lines`, `merge-key`, `misfeature`, `missing-action-input`, `missing-version-comment`, `multiline-plain-run`, `obfuscation`, `outdated-action-runner`, `output-clobbering`, `pipeline-without-pipefail`, `pyflakes`, `recursive-alias`, `ref-confusion`, `ref-version-mismatch`, `repojacking`, `require-expression-wrapping`, `self-repository`, `shellcheck`, `stale-action-refs`, `superfluous-actions`, `template-injection`, `typosquat-uses`, `undefined-function`, `undefined-property`, `unknown-action-input`, `unlocked-install`, `unpinned-images`, `unpinned-tools`, `unpinned-uses`, `unsound-contains`, `unsound-prefix-match`, `unsound-ternary`, `unused-anchor`, `unused-ignore`, `unverified-download`, `use-trusted-publishing`, `yaml-syntax`.
+- **Applies** to the steps (and the metadata) of an action: `action-syntax`, `adhoc-packages`, `archived-uses`, `argument-injection`, `artipacked`, `background-step-not-waited`, `checkout-static-credentials`, `command-injection`, `conflicting-action-inputs`, `constant-condition`, `context-availability`, `continue-on-error`, `deprecated-action-input`, `deprecated-commands`, `deprecated-node-runtime`, `duplicate-key`, `duplicate-step-id`, `environment-file-redirect`, `expired-ignore`, `expression-syntax`, `expression-type`, `fail-fast-action-inputs`, `forbidden-uses`, `github-app`, `github-script-syntax`, `if-always-true`, `impostor-commit`, `insecure-commands`, `insecure-ssh-keyscan`, `insecure-url-scheme`, `invalid-env-var-name`, `invalid-function-call`, `invalid-id`, `invalid-ignore-comment`, `invalid-local-action`, `invalid-parallel-step`, `invalid-shell-name`, `invalid-uses`, `invisible-characters`, `known-vulnerable-actions`, `malformed-expression-delimiters`, `max-run-lines`, `merge-key`, `misfeature`, `missing-action-input`, `missing-version-comment`, `multiline-plain-run`, `obfuscation`, `outdated-action-runner`, `output-clobbering`, `pipeline-without-pipefail`, `pyflakes`, `recursive-alias`, `ref-confusion`, `ref-version-mismatch`, `repojacking`, `require-expression-wrapping`, `self-repository`, `shellcheck`, `stale-action-refs`, `superfluous-actions`, `template-injection`, `typosquat-uses`, `undefined-function`, `undefined-property`, `unknown-action-input`, `unlocked-install`, `unpinnable-action`, `unpinned-images`, `unpinned-tools`, `unpinned-uses`, `unsound-contains`, `unsound-prefix-match`, `unsound-ternary`, `unused-anchor`, `unused-ignore`, `unverified-download`, `use-trusted-publishing`, `yaml-syntax`.
 - **Caller-dependent**: `agentic-actions`, `bot-conditions`, `cache-poisoning`, `github-env` (its findings about untrusted input do not depend on the caller), `untrusted-artifact` and `untrusted-checkout`.
 - **Not applicable** because an action does not have what the rule checks, or because only the calling job can decide (`unused-baseline-entry` is about the baseline file, not about a workflow or an action): `anonymous-definition`, `concurrency-cancels-prs`, `concurrency-cancels-release`, `concurrency-deadlock`, `concurrency-limits`, `conflicting-runner-labels`, `cron-too-frequent`, `cyclic-job-needs`, `dangerous-triggers`, `dependabot-cooldown`, `dependabot-execution`, `dependabot-missing-actions-update`, `dependabot-syntax`, `deprecated-runner-label`, `duplicate-job-id`, `duplicate-job-needs`, `duplicate-triggers`, `event-name-never-received`, `excessive-permissions`, `gate-job-skipped-on-failure`, `gh-without-token`, `hardcoded-container-credentials`, `insufficient-permissions`, `invalid-activity-type`, `invalid-cron`, `invalid-event-config`, `invalid-event-filter`, `invalid-glob`, `invalid-label-pattern`, `invalid-local-workflow`, `invalid-permissions`, `invalid-timezone`, `invalid-workflow-call`, `invalid-workflow-call-input`, `invalid-workflow-dispatch-input`, `local-action-checkout`, `matrix-duplicate-value`, `matrix-invalid-exclude`, `missing-permissions`, `missing-timeout`, `missing-workflow-input`, `missing-workflow-secret`, `mutable-runner-label`, `overprovisioned-secrets`, `require-shell`, `required-actions`, `secrets-inherit`, `secrets-outside-env`, `self-hosted-runner`, `timeout-too-long`, `ubuntu-slim-limits`, `undefined-job-needs`, `undocumented-permissions`, `unknown-event`, `unknown-runner-label`, `unknown-workflow-input`, `unknown-workflow-secret`, `unredacted-secrets`, `unused-baseline-entry`, `unused-job-output`, `unused-needs`, `unused-workflow-input`, `unused-workflow-secret`, `workflow-call-permissions`, `workflow-input-type`, `workflow-run-names`, `workflow-secret-scope`, `workflow-syntax`.
 
