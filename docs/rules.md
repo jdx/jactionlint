@@ -228,7 +228,7 @@ An action or reusable workflow is in an archived repository.
 
 ## argument-injection
 
-Free text that an outsider writes is expanded into the program text or the options of sed, awk, find, tar and the like.
+Free text that an outsider writes is expanded into the program text or the options of sed, awk, find, curl, wget and git clone.
 
 - Group: security
 - Default level: warn

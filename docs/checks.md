@@ -3068,9 +3068,11 @@ A script can also read the text of an outsider itself, and the rule follows it f
 [command-injection](#check-command-injection) and [output-clobbering](#check-output-clobbering) as well):
 
 - `gh pr view` and `gh issue view` with a `--json` field that holds free text (`title`, `body`, `comments`, `headRefName`, `files`,
-  `author`, `reviews`, `commits`), `TITLE=$(gh pr view "$N" --json title --jq .title)`; a filter that reads none of them
-  (`--json title,number --jq .number`) clears it. Also `gh api repos/.../pulls` and `.../issues` (and their `comments`, `reviews`, `files`
-  and `commits`), with no filter or with a `--jq` filter that selects `.title`, `.body`, `.head.ref`, `.user.login`, `.filename` and the like.
+  `author`, `reviews`, `commits`), `TITLE=$(gh pr view "$N" --json title --jq .title)`. Also `gh api repos/.../pulls` and `.../issues` (and their
+  `comments`, `reviews`, `files` and `commits`). Without a `--jq` filter `gh` prints compact JSON, where a line break of a text is written `\n`, so the
+  text counts as one line. A filter prints a string as it is, with its line breaks: a filter that names a property (`.title`, `.body`,
+  `.comments[].body`, `.head.ref`) counts for what it names, and a filter that is not known (`.`, `.comments`, a variable) counts for what the
+  command can print. Only a filter that provably prints a number, a state, a date or a count (`.number`, `.state`, `.comments | length`) clears it.
 - `git log` and `git show` with a format that prints the subject, the body or the author (`%s`, `%b`, `%B`, `%an`, `%ae`, `--oneline`),
   `git diff` and `git diff-tree`, `git branch --show-current`, `git rev-parse --abbrev-ref` and `git symbolic-ref --short`, **once the
   pull request is checked out**: an earlier step of the job runs `actions/checkout` with a `ref` that names its head, or `gh pr checkout`, or a
