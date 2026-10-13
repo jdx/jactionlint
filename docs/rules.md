@@ -1529,7 +1529,7 @@ A secret is assigned to the workflow-level env and reaches multiple jobs. With t
 - Group: security
 - Default level: warn
 - Profile: pedantic
-- Option `job-level` (bool, default false): Also report a secret assigned to the env of a job with two or more steps, which reaches all of them.
+- Option `job-level` (bool, default false): Also report a secret assigned to the env of a job with two or more steps, which reaches those that do not set the variable themselves.
 - Details and examples: [checks](./checks.md#check-workflow-secret-scope)
 
 ## workflow-syntax

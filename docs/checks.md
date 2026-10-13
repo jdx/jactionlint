@@ -6927,9 +6927,9 @@ a compromised workflow.
 Move the secret to an environment, remove it from the repository secrets, and set `environment:` at the job. jactionlint
 cannot see where a secret is stored, so it assumes that the secrets of a job with an `environment:` are environment secrets.
 
-A job that calls a reusable workflow cannot have an `environment:`, and the environment of a job of the called workflow does not
-give its secrets to the workflow either, so a secret that the caller passes with `secrets:` is always a repository or organization
-secret. It is reported too (a message of its own, at the secret in the `secrets:` of the call; zizmor reports it as an auditor
+A job that calls a reusable workflow cannot have an `environment:`, so a secret that it passes with `secrets:` is a repository or
+organization secret, which no environment protects. (A job of the called workflow can have an environment of its own and use the
+secrets of that environment, which is a different secret: that design is not reported.) It is reported too (a message of its own, at the secret in the `secrets:` of the call; zizmor reports it as an auditor
 finding, [#1792](https://github.com/zizmorcore/zizmor/pull/1792)). `secrets: inherit` names no secret and is not reported here (see
 [`secrets-inherit`](#check-secrets-inherit)):
 

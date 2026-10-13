@@ -136,7 +136,7 @@ func (rule *RuleWorkflowSecretScope) VisitJobPre(n *Job) error {
 				if !ok || strings.EqualFold(secret, "github_token") {
 					return // Its permissions are decided by the workflow
 				}
-				rule.ReportIDf("workflow-secret-scope", o.PosOf(node), "secret %q is assigned to the env %q of the job, so it reaches all %d steps of the job, third-party actions included. set it at the step that needs it instead", strings.ToUpper(secret), v.Name.Value, reach)
+				rule.ReportIDf("workflow-secret-scope", o.PosOf(node), "secret %q is assigned to the env %q of the job, so it reaches %d steps of the job, third-party actions included. set it at the step that needs it instead", strings.ToUpper(secret), v.Name.Value, reach)
 			})
 		})
 	}
@@ -146,7 +146,7 @@ func (rule *RuleWorkflowSecretScope) VisitJobPre(n *Job) error {
 func init() {
 	registerRules(
 		RuleInfo{ID: "workflow-secret-scope", Group: RuleGroupSecurity, Summary: "A secret is assigned to the workflow-level env and reaches multiple jobs. With the option job-level, also one of the env of a job that reaches its steps.", DefaultLevel: SeverityWarning, Profile: ProfilePedantic, DocsAnchor: "check-workflow-secret-scope",
-			Options: []RuleOption{{Name: "job-level", Kind: RuleOptionBool, Default: false, Summary: "Also report a secret assigned to the env of a job with two or more steps, which reaches all of them."}}},
+			Options: []RuleOption{{Name: "job-level", Kind: RuleOptionBool, Default: false, Summary: "Also report a secret assigned to the env of a job with two or more steps, which reaches those that do not set the variable themselves."}}},
 	)
 	registerRuleFactory("workflow-secret-scope", func(env *RuleEnv) []Rule {
 		if !env.config.RuleEnabled("workflow-secret-scope") {

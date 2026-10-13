@@ -47,15 +47,15 @@ func (rule *RuleSecretsOutsideEnv) VisitWorkflowPre(n *Workflow) error {
 			return
 		}
 		if j.WorkflowCall != nil {
-			// A job which calls a reusable workflow cannot set "environment:", and the environment of a job of the called
-			// workflow does not give its secrets to the workflow (zizmor#1792). A secret passed there is a repository or
-			// organization secret, whatever the callee does.
+			// A job which calls a reusable workflow cannot set "environment:", so a secret that it passes with "secrets:" is
+			// a repository or organization secret (zizmor#1792). A job of the called workflow can have an environment of its
+			// own and use the secrets of it, which is a different secret: the one passed here is not behind an environment.
 			VisitExprNode(o.Root, func(node, _ ExprNode, entering bool) {
 				if !entering {
 					return
 				}
 				if name, ok := secretNameOf(node); ok && !isAllowed(name) {
-					rule.ReportIDf("secrets-outside-env", o.PosOf(node), "secret %q is passed to a reusable workflow by a job which cannot have an \"environment:\", so it is a repository or organization secret exposed to every job that asks for it. pass a token that the called workflow mints, or inline the workflow in a job with an environment", strings.ToUpper(name))
+					rule.ReportIDf("secrets-outside-env", o.PosOf(node), "secret %q is passed to a reusable workflow by a job which cannot have an \"environment:\", so it is a repository or organization secret exposed to every job that asks for it. pass a token that the called workflow mints, let a job of the called workflow use an environment of its own, or inline the workflow in a job with an environment", strings.ToUpper(name))
 				}
 			})
 			return
