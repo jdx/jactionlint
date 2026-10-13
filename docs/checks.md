@@ -2364,7 +2364,12 @@ The rule is unchanged when:
   to it (`gh actions-lock --verify` reports the others);
 - the entry of the action is missing or malformed (a ref which differs from the one of the pin, a `commit` which is not a digest);
 - the `uses:` is a reusable workflow call (`owner/repo/.github/workflows/x.yml@ref`) or a Docker image, which the lock file does
-  not cover, or it is in the metadata of an action (`action.yml`) and not in a workflow.
+  not cover.
+
+A step of a local action (`action.yml`) is read the way the lock file records it: the actions which a local action uses are
+listed under the workflows that run it with `uses: $/path` or `./path` (directly or through other local actions; a reusable
+workflow in between is a workflow of its own). Such a step is accepted when every workflow which runs the action is listed in the
+lock file and pins it. An action which no workflow of the repository runs is not locked, so its steps are reported.
 
 The fix of `unpinned-uses` under `--online`, which writes the commit SHA in `uses:`, is not offered for a step of a workflow which
 the lock file lists, because a ref with a SHA is another pin than the one of the lock file and can make the workflow fail the lock

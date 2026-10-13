@@ -858,12 +858,17 @@ func (l *Linter) check(
 		if err != nil {
 			return nil, err
 		}
+		var lockWorkflows []string
+		if isAction {
+			lockWorkflows = l.lockWorkflowsOf(project, path)
+		}
 		env := &RuleEnv{
 			online:                 sess,
 			path:                   path,
 			src:                    content,
 			action:                 isAction,
 			project:                project,
+			lockWorkflows:          lockWorkflows,
 			localActions:           localActions,
 			localReusableWorkflows: localReusableWorkflows,
 			config:                 cfg,

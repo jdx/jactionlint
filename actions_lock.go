@@ -4,8 +4,10 @@ import (
 	"errors"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -440,45 +442,118 @@ func (p *Project) workflowKeyOf(file string) string {
 	return filepath.ToSlash(rel)
 }
 
-// workflowLock returns what the lock file of the repository says about the workflow being linted, or nil
-// when there is nothing to apply: the file is no workflow (an action's metadata is not a workflow of the
-// lock file), the repository has no lock file or it cannot be trusted (see actionsLock.usable), or the
-// workflow is not listed in it.
+// workflowLock returns what the lock file of the repository says about the file being linted, or nil when
+// there is nothing to apply: the repository has no lock file or it cannot be trusted (see actionsLock.usable),
+// or the workflow is not listed in it.
+//
+// The file is a workflow, or the metadata of a local action. The lock file records the actions which an
+// action uses under the workflows which run it with `uses: $/path` (or `./path`), so the steps of an action are
+// pinned when every workflow which runs it, directly or through other local actions, lists the pin. An action
+// which no workflow of the repository runs is not locked.
 func (e *RuleEnv) workflowLock() *workflowLock {
-	if e == nil || e.action || e.project == nil {
+	if e == nil || e.project == nil {
 		return nil
 	}
 	lock := e.project.actionsLock()
 	if !lock.usable() {
 		return nil
 	}
-	p := e.path
-	if !filepath.IsAbs(p) {
-		p = filepath.Join(e.cwd, p)
+	var keys []string
+	if e.action {
+		keys = e.lockWorkflows
+	} else {
+		p := e.path
+		if !filepath.IsAbs(p) {
+			p = filepath.Join(e.cwd, p)
+		}
+		keys = []string{e.project.workflowKeyOf(absPath(p))}
 	}
-	key := e.project.workflowKeyOf(absPath(p))
-	if !lock.listsWorkflow(key) {
+	if len(keys) == 0 {
 		return nil
 	}
-	return &workflowLock{lock: lock, key: key}
+	for _, k := range keys {
+		if !lock.listsWorkflow(k) {
+			return nil
+		}
+	}
+	return &workflowLock{lock: lock, keys: keys}
 }
 
-// workflowLock is the lock file as it applies to one workflow which it lists.
+// workflowLock is the lock file as it applies to a file: the workflows which it lists and which run it.
 type workflowLock struct {
 	lock *actionsLock
-	key  string
+	keys []string
 }
 
-// pins reports whether the lock file pins the action to a commit for the workflow.
+// pins reports whether the lock file pins the action to a commit for every workflow of the lock.
 func (w *workflowLock) pins(u *UsesRef) bool {
-	return w != nil && w.lock.pinsAction(w.key, u)
-}
-
-// lockListsWorkflow reports whether the Actions lock file of the project lists the file, a workflow, so that
-// the workflow is held to the lock file.
-func (l *Linter) lockListsWorkflow(project *Project, path string) bool {
-	if project == nil || l.isActionFile(path) {
+	if w == nil {
 		return false
 	}
-	return project.actionsLock().listsWorkflow(project.workflowKeyOf(l.absFilePath(path)))
+	for _, k := range w.keys {
+		if !w.lock.pinsAction(k, u) {
+			return false
+		}
+	}
+	return true
+}
+
+// lockWorkflowsOf returns the workflows (paths relative to the root of the repository) which run the local action
+// in the file, for an action file of a project whose lock file is usable.
+func (l *Linter) lockWorkflowsOf(p *Project, file string) []string {
+	if p == nil || !p.actionsLock().usable() {
+		return nil
+	}
+	rel := p.workflowKeyOf(l.absFilePath(file))
+	if rel == "" {
+		return nil
+	}
+	return l.callGraphOf(p).workflowsRunning(path.Dir(rel))
+}
+
+// workflowsRunning returns the workflows whose own steps run the action in the directory (relative to the root
+// with "/"), directly or through other local actions, sorted. A reusable workflow in between is not followed:
+// it is a workflow of the lock file of its own.
+func (g *callGraph) workflowsRunning(dir string) []string {
+	dir = path.Clean(dir)
+	start := graphNode{'a', dir}
+	seen := map[graphNode]bool{start: true}
+	queue := []graphNode{start}
+	var out []string
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	for len(queue) > 0 {
+		n := queue[0]
+		queue = queue[1:]
+		for _, from := range g.callers[n] {
+			if seen[from] {
+				continue
+			}
+			seen[from] = true
+			if from.kind == 'w' {
+				out = append(out, from.path)
+			} else {
+				queue = append(queue, from)
+			}
+		}
+	}
+	slices.Sort(out)
+	return out
+}
+
+// lockListsWorkflow reports whether the Actions lock file of the project holds the file to itself: a workflow
+// which it lists, or an action which a workflow that it lists runs.
+func (l *Linter) lockListsWorkflow(project *Project, file string) bool {
+	if project == nil || !project.actionsLock().usable() {
+		return false
+	}
+	if l.isActionFile(file) {
+		for _, k := range l.lockWorkflowsOf(project, file) {
+			if project.actionsLock().listsWorkflow(k) {
+				return true
+			}
+		}
+		return false
+	}
+	return project.actionsLock().listsWorkflow(project.workflowKeyOf(l.absFilePath(file)))
 }

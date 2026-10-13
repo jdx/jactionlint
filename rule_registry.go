@@ -261,6 +261,8 @@ type RuleEnv struct {
 	proc    *concurrentProcess
 	online  *onlineSession // nil unless the online checks are on
 	action  bool           // the file is the metadata of an action (action.yml), see actionRuleScope
+	// lockWorkflows are the workflows which run the action, for the Actions lock file (see RuleEnv.workflowLock).
+	lockWorkflows []string
 
 	log  func(args ...interface{})
 	name string // the factory being run
