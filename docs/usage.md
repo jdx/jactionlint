@@ -99,6 +99,9 @@ cat action.yml | jactionlint --stdin-filename action.yml -
 | `--init-config` |  | Write a default config file .github/jactionlint.yaml and exit |
 | `--migrate-config` |  | Rewrite the deprecated keys of the config file and exit |
 | `--migrate-ignores` |  | Rewrite "# zizmor: ignore[...]" comments into "# jactionlint ignore=..." comments and exit |
+| `--select=RULES` |  | Report only these comma separated rule IDs, also those the profile does not enable. Repeatable |
+| `--no-ignores` |  | Apply no ignore comment, no "ignores" or "paths" ignore of the config file and no baseline (--ignore still applies) |
+| `--list-rules` |  | List every rule ID with its group, profile, level and summary, and exit. --format json prints it as JSON |
 
 **Fixing**
 
@@ -229,6 +232,33 @@ bumping an action) drops the comment at the end of it. Put an ignore on a line t
 it matches by rule, file, job, step and `uses:` and survives the rewrite: see [durable ignores](config.md#durable-ignores).
 
 A comment which suppresses nothing is reported by the [`unused-ignore`](rules.md#unused-ignore) rule of the `pedantic` profile.
+
+#### Run one rule, or run without the ignores
+
+`--select` reports only the rules you name, whatever the profile or the configuration says. It is for looking at one thing: a review of
+all the `template-injection` findings, a check in a hook, or the preview of a rule which your profile does not enable.
+
+```sh
+jactionlint --select unpinned-uses,missing-timeout
+jactionlint --select anonymous-definition   # a pedantic rule, on the default profile
+```
+
+- The option takes rule IDs separated by commas and can be repeated. An unknown ID is an error (exit status 2) with the closest ID.
+- A selected rule that the configuration turns off is turned on at its default level. A level the configuration sets (`unpinned-uses: warn`)
+  stays, and so do the options of the rule. Every other rule reports nothing.
+- Rules which need `--online` still need it. `shellcheck` and `pyflakes` run only when they are selected.
+- `jactionlint --list-rules` lists the IDs with their group, the profile that enables them (`online` and `opt-in` for the rules which
+  need `--online` or the configuration) and the default level. `--list-rules --format json` is the same as JSON.
+
+`--no-ignores` is the opposite for the things that hide findings. It applies none of: the ignore comments (`# jactionlint ignore=`, and the
+`# zizmor: ignore[...]` ones), the `ignores` and the `paths.<glob>.ignore` of the config file and the [baseline](#baseline), so the run
+shows what they accepted. The `--ignore` options of the same command stay: you wrote them for this run. The ignores are not checked either:
+`unused-ignore` and `expired-ignore` report nothing, since nothing was applied. It cannot be combined with `--baseline`,
+`--baseline-check` and `--baseline-write`.
+
+```sh
+jactionlint --no-ignores --format summary   # what do the ignores of the repository hide?
+```
 
 ### zizmor ignore comments
 
