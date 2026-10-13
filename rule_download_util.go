@@ -65,7 +65,7 @@ func (s *shellScope) analyze(run *ExecRun) (*runscript.Script, runscript.Origin)
 	if strings.Contains(shell, "${{") {
 		return nil, runscript.Origin{}
 	}
-	sc, err := runscript.Analyze(run.Run.Value, shell)
+	sc, err := run.Run.analyzeScript(shell)
 	if err != nil {
 		return nil, runscript.Origin{}
 	}

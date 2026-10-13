@@ -53,6 +53,9 @@ type String struct {
 
 	// exprs caches the parsed expressions of Value (see exprCache). It is filled by the rules.
 	exprs *stringExprs
+
+	// script caches the analysis of Value as a shell script (see analyzeScript). It is filled by the rules.
+	script *stringScript
 }
 
 // ContainsExpression checks if the given string contains a ${{ }} placeholder or not. This function
