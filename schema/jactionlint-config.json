@@ -150,6 +150,7 @@
               "insecure-commands",
               "insecure-ssh-keyscan",
               "insecure-url-scheme",
+              "insufficient-permissions",
               "invalid-activity-type",
               "invalid-cron",
               "invalid-env-var-name",
@@ -364,6 +365,7 @@
                   "insecure-commands",
                   "insecure-ssh-keyscan",
                   "insecure-url-scheme",
+                  "insufficient-permissions",
                   "invalid-activity-type",
                   "invalid-cron",
                   "invalid-env-var-name",
@@ -509,6 +511,7 @@
                     "insecure-commands",
                     "insecure-ssh-keyscan",
                     "insecure-url-scheme",
+                    "insufficient-permissions",
                     "invalid-activity-type",
                     "invalid-cron",
                     "invalid-env-var-name",
@@ -839,7 +842,7 @@
           ]
         },
         "adhoc-packages": {
-          "description": "A package is installed by name with npm, yarn, pnpm, bun, gem or bundle add outside of a lock file. Group: security. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#adhoc-packages",
+          "description": "A package is installed by name with npm, yarn, pnpm, bun, aube, gem or bundle add outside of a lock file. Group: security. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#adhoc-packages",
           "oneOf": [
             {
               "$ref": "#/definitions/level"
@@ -1930,6 +1933,32 @@
                     }
                   ],
                   "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "insufficient-permissions": {
+          "description": "The explicit permissions of a job do not grant what an action or command of the job needs from the GITHUB_TOKEN. Group: correctness. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#insufficient-permissions",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                },
+                "pedantic": {
+                  "description": "Also report actions/checkout without \"contents: read\", which only a private repository needs. Unset, it runs under the pedantic profile.",
+                  "type": "boolean"
                 }
               },
               "type": "object"
@@ -3491,7 +3520,7 @@
           ]
         },
         "unlocked-install": {
-          "description": "cargo install runs without --locked, or npm, yarn or pnpm install without freezing a lock file that the repository has. With the option pedantic, also installs without a lock file npm, Yarn and bun installs that run the lifecycle scripts of the dependencies, and installs without a release-age cooldown. Group: security. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#unlocked-install",
+          "description": "cargo install runs without --locked, or npm, yarn or pnpm install without freezing a lock file that the repository has. With the option pedantic, also installs without a lock file, npm, Yarn and bun installs that run the lifecycle scripts of the dependencies (and aube installs that allow every build), and installs without a release-age cooldown. Group: security. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#unlocked-install",
           "oneOf": [
             {
               "$ref": "#/definitions/level"
@@ -4080,6 +4109,17 @@
             "type": "string"
           },
           "type": "array"
+        },
+        "providers": {
+          "description": "The hosted-runner providers whose labels runs-on accepts without them being listed in labels: blacksmith, depot, namespace, runson, ubicloud, warpbuild. Names are not case sensitive. Unset (or null) accepts all of them, an empty list none. It has no effect with strict-labels.",
+          "items": {
+            "pattern": "^([bB][lL][aA][cC][kK][sS][mM][iI][tT][hH]|[dD][eE][pP][oO][tT]|[nN][aA][mM][eE][sS][pP][aA][cC][eE]|[rR][uU][nN][sS][oO][nN]|[uU][bB][iI][cC][lL][oO][uU][dD]|[wW][aA][rR][pP][bB][uU][iI][lL][dD])$",
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
         },
         "strict-labels": {
           "description": "When true, runs-on accepts only the labels listed in labels. The built-in labels are reported unless they are listed too. The default is false.",

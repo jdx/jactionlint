@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"slices"
 	"strings"
 )
@@ -120,6 +121,7 @@ func ConfigSchema() []byte {
 		"self-hosted-runner": sObject("Configuration for your self-hosted runners.", jsonObject{
 			"labels":        sStrings("Label names of your self-hosted runners. Glob patterns are supported."),
 			"strict-labels": sBool("When true, runs-on accepts only the labels listed in labels. The built-in labels are reported unless they are listed too. The default is false."),
+			"providers":     nullableArray("The hosted-runner providers whose labels runs-on accepts without them being listed in labels: "+strings.Join(runnerProviderNames(), ", ")+". Names are not case sensitive. Unset (or null) accepts all of them, an empty list none. It has no effect with strict-labels.", jsonObject{"type": "string", "pattern": caseInsensitiveAlternatives(runnerProviderNames())}),
 		}),
 		"config-variables": nullableStrings("Names of the configuration variables of your repository or organization. When it is a list, the vars context is checked against it (an empty list allows none). null disables the check."),
 		"config-secrets":   nullableStrings("Names of the secrets of your repository or organization. When it is a list, the secrets context is checked against it (an empty list allows none; GITHUB_TOKEN is always allowed). null disables the check."),
@@ -195,6 +197,31 @@ func ConfigSchema() []byte {
 			},
 		},
 	})
+}
+
+// caseInsensitiveAlternatives returns a pattern which matches exactly one of the names whatever the case of its letters
+// (the pattern language of JSON Schema has no flag for it).
+func caseInsensitiveAlternatives(names []string) string {
+	alts := make([]string, 0, len(names))
+	for _, n := range names {
+		var b strings.Builder
+		for _, r := range n {
+			if lo, up := strings.ToLower(string(r)), strings.ToUpper(string(r)); lo != up {
+				fmt.Fprintf(&b, "[%s%s]", lo, up)
+			} else {
+				b.WriteString(regexp.QuoteMeta(string(r)))
+			}
+		}
+		alts = append(alts, b.String())
+	}
+	return "^(" + strings.Join(alts, "|") + ")$"
+}
+
+// nullableArray is an array which can also be null (a key with no value is not set).
+func nullableArray(desc string, items jsonObject) jsonObject {
+	o := sArray(desc, items)
+	nullable(o)
+	return o
 }
 
 // nullable lets a schema accept null too.

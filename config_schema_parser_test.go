@@ -61,12 +61,14 @@ func TestConfigSchemaAgreesWithTheParser(t *testing.T) {
 	add(true, "profile: correctness\n", "profile: default\n", "profile: pedantic\n", "profile: strict\n", "profile:\n", "online: true\n", "online:\n",
 		"baseline: auto\n", "baseline: true\n", "baseline: false\n", "baseline: some/file.json\n", "extends: [a.yaml]\n",
 		"config-variables: null\n", "config-variables: []\n", "config-variables: [A]\n", "config-secrets: [A]\n",
-		"self-hosted-runner:\n  labels: [a]\n  strict-labels: true\n", "paths:\n  '**/*.yaml':\n    ignore: [a, 'b.*']\n",
+		"self-hosted-runner:\n  labels: [a]\n  strict-labels: true\n", "self-hosted-runner:\n  providers: [depot, Blacksmith, WARPBUILD]\n",
+		"self-hosted-runner:\n  providers: []\n", "self-hosted-runner:\n  providers:\n", "paths:\n  '**/*.yaml':\n    ignore: [a, 'b.*']\n",
 		"required-actions:\n  - action: actions/checkout\n    version: v4\n", "assume-default-permissions: restricted\n", "generated-files: skip\n",
 		"fix:\n  rules: ["+plain+"]\n", "online-options:\n  mode: cache,strict\n  retries: 3\n  cache-ttl: 1h\n  deny: [a/b]\n",
 		"rules:\n", "")
 	add(false, "profile: bogus\n", "profile: [default]\n", "online: maybe\n", "baseline: [a]\n", "extends: a.yaml\n",
 		"config-variables: A\n", "config-secrets: 1\n", "self-hosted-runner:\n  labels: a\n", "self-hosted-runner:\n  label: [a]\n",
+		"self-hosted-runner:\n  providers: [nope]\n", "self-hosted-runner:\n  providers: depot\n", "self-hosted-runner:\n  providers: [depotx]\n",
 		"paths:\n  a:\n    ignored: [a]\n", "required-actions:\n  - version: v4\n", "required-actions:\n  - action: a/b\n    extra: 1\n",
 		"assume-default-permissions: always\n", "generated-files: sometimes\n", "fix:\n  rules: [nope]\n", "online-options:\n  mode: sometimes\n",
 		"online-options:\n  retries: -1\n", "online-options:\n  nope: 1\n", "unknown-key: 1\n")
