@@ -1,0 +1,37 @@
+name: Schema drift
+description: What the runner rejects in the metadata of a composite action
+inputs:
+  ok-github:
+    description: The contexts of the default are github, strategy, matrix, job and runner
+    default: ${{ github.sha }}-${{ runner.os }}-${{ job.status }}-${{ hashFiles('**/go.sum') }}
+  ok-matrix:
+    description: Same
+    default: ${{ matrix.os }}-${{ strategy.job-index }}
+  bad-env:
+    description: The env context is not available in the default
+    default: ${{ env.BUILD_MODE }}
+  bad-inputs:
+    description: The inputs context does not exist yet when the default is evaluated
+    default: ${{ inputs.ok-github }}
+  bad-others:
+    description: Neither are these
+    default: ${{ vars.NAME }}-${{ secrets.TOKEN }}-${{ steps.a.outputs.b }}-${{ needs.a.result }}
+  bad-function:
+    description: A status function is not available in the default
+    default: ${{ success() }}
+runs:
+  using: composite
+  steps:
+    - run: echo no timeout
+      shell: bash
+      timeout-minutes: 5
+    - uses: actions/checkout@v4
+      timeout-minutes: 10
+    - run: echo fine
+      shell: bash
+      continue-on-error: true
+      working-directory: .
+    - uses: $/nowhere/action
+    - uses: $/../outside
+    - uses: $/action@v1
+    - uses: actions/checkout@${{ inputs.ref }}
