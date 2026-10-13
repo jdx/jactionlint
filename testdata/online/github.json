@@ -1,5 +1,13 @@
 {
   "_note": "Trimmed answers of the GitHub API recorded in 2026-10 (see github_fixture.go). Tag and branch lists keep only the entries the tests use. example/* repositories are made up.",
+  "owners": {
+    "actions": true,
+    "example": true,
+    "ghost-owner": false,
+    "former-owner": false,
+    "moved-org": true,
+    "new-owner": true
+  },
   "repos": {
     "astral-sh/setup-uv": {
       "repo": {
@@ -63,6 +71,136 @@
           "found": true,
           "immutable": true
         }
+      }
+    },
+    "ghost-owner/deploy": {
+      "missing": true
+    },
+    "former-owner/deploy": {
+      "repo": {
+        "archived": false,
+        "default_branch": "main",
+        "full_name": "new-owner/deploy"
+      },
+      "tags": {
+        "tags": [
+          {
+            "name": "v1",
+            "sha": "6666666666666666666666666666666666666666"
+          }
+        ]
+      },
+      "branches": {
+        "branches": [
+          {
+            "name": "main",
+            "sha": "7777777777777777777777777777777777777777"
+          }
+        ]
+      },
+      "refs": {
+        "heads/v1": {
+          "found": false
+        }
+      },
+      "advisories": {
+        "list": []
+      }
+    },
+    "moved-org/deploy": {
+      "repo": {
+        "archived": false,
+        "default_branch": "main",
+        "full_name": "new-owner/deploy"
+      },
+      "tags": {
+        "tags": [
+          {
+            "name": "v1",
+            "sha": "6666666666666666666666666666666666666666"
+          }
+        ]
+      },
+      "branches": {
+        "branches": [
+          {
+            "name": "main",
+            "sha": "7777777777777777777777777777777777777777"
+          }
+        ]
+      },
+      "refs": {
+        "heads/v1": {
+          "found": false
+        }
+      },
+      "advisories": {
+        "list": []
+      }
+    },
+    "new-owner/old-name": {
+      "repo": {
+        "archived": false,
+        "default_branch": "main",
+        "full_name": "new-owner/deploy"
+      },
+      "tags": {
+        "tags": [
+          {
+            "name": "v1",
+            "sha": "6666666666666666666666666666666666666666"
+          }
+        ]
+      },
+      "branches": {
+        "branches": [
+          {
+            "name": "main",
+            "sha": "7777777777777777777777777777777777777777"
+          }
+        ]
+      },
+      "refs": {
+        "heads/v1": {
+          "found": false
+        }
+      },
+      "advisories": {
+        "list": []
+      }
+    },
+    "new-owner/private": {
+      "missing": true
+    },
+    "new-owner/deploy": {
+      "repo": {
+        "archived": false,
+        "default_branch": "main",
+        "full_name": "new-owner/deploy"
+      },
+      "tags": {
+        "tags": [
+          {
+            "name": "v1",
+            "sha": "6666666666666666666666666666666666666666"
+          }
+        ]
+      },
+      "branches": {
+        "branches": [
+          {
+            "name": "main",
+            "sha": "7777777777777777777777777777777777777777"
+          }
+        ]
+      },
+      "refs": {
+        "heads/v1": {
+          "found": false
+        }
+      },
+      "advisories": {
+        "list": []
       }
     },
     "actions/checkout": {

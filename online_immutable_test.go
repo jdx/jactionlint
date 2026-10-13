@@ -12,7 +12,7 @@ import (
 )
 
 // immutableConfig turns the other online rules off, so that the requests of the tests are the ones for the releases.
-const immutableConfig = "rules:\n  impostor-commit: off\n  known-vulnerable-actions: off\n  ref-confusion: off\n  stale-action-refs: off\n  archived-uses: off\n  ref-version-mismatch: off\n  unpinned-uses:\n    level: error\n    policies:\n      o/*: immutable-release\n"
+const immutableConfig = "rules:\n  impostor-commit: off\n  known-vulnerable-actions: off\n  ref-confusion: off\n  stale-action-refs: off\n  archived-uses: off\n  ref-version-mismatch: off\n  repojacking: off\n  unpinned-uses:\n    level: error\n    policies:\n      o/*: immutable-release\n"
 
 func releaseJSON(tag string, immutable bool) string {
 	return fmt.Sprintf(`{"id":1,"tag_name":%q,"immutable":%v,"draft":false}`, tag, immutable)

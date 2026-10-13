@@ -149,6 +149,7 @@ type onlineSession struct {
 	compares   memo[compareKey, GitHubCompareStatus]
 	advisories memo[string, []GitHubAdvisory]
 	origins    memo[originKey, originResult]
+	owners     memo[string, *GitHubOwner]
 	releases   memo[releaseKey, *GitHubRelease]
 }
 
@@ -400,7 +401,7 @@ func (s *onlineSession) record(err error, what string) {
 	case err == nil, errors.Is(err, ErrGitHubNotFound):
 		s.transient = 0
 		return
-	case errors.Is(err, ErrGitHubBranchScanUnavailable), errors.Is(err, errOnlineExcluded):
+	case errors.Is(err, ErrGitHubBranchScanUnavailable), errors.Is(err, errOnlineExcluded), errors.Is(err, errNoOwnerLookup):
 		return // Not a failure: the caller does it another way, or was asked not to
 	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded) && s.ctx.Err() != nil:
 		s.stopLocked(err)

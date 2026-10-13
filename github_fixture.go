@@ -21,6 +21,8 @@ import (
 type gitHubFixtures struct {
 	// Repos maps "owner/repo" in lower case to the recorded data.
 	Repos map[string]*fixtureRepo `json:"repos"`
+	// Owners maps the login of a user or organization in lower case to whether it exists, see GitHubOwnerClient.
+	Owners map[string]bool `json:"owners,omitempty"`
 }
 
 type fixtureRepo struct {
