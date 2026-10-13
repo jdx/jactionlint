@@ -1,0 +1,65 @@
+# The script reads text of outsiders with gh and git, which the data flow of the rules follows like an input of the event
+on:
+  issue_comment:
+    types: [created]
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - id: pr
+        env:
+          NUM: ${{ github.event.issue.number }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TITLE=$(gh pr view "$NUM" --json title --jq .title)
+          echo "TITLE=$TITLE" >> "$GITHUB_ENV"
+          BR=$(gh pr view "$NUM" --json headRefName --jq .headRefName)
+          eval "echo $BR"
+          BODY=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$NUM" --jq .body)
+          USERNAME=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$NUM" --jq .user.name)
+          eval "echo $USERNAME"
+          echo "approved=false" >> "$GITHUB_OUTPUT"
+          echo "body=$BODY" >> "$GITHUB_OUTPUT"
+          # Not reported: a number, a value cut down to a set, and the title of a pull request on one line in the output file
+          gh pr view "$NUM" --json number --jq .number > number.txt
+          STATE=$(gh pr view "$NUM" --json state --jq .state)
+          bash -c "echo $STATE"
+          SAFE=$(gh pr view "$NUM" --json title --jq .title | tr -cd 'a-zA-Z0-9-')
+          echo "SAFE=$SAFE" >> "$GITHUB_ENV"
+          echo "title=$TITLE" >> "$GITHUB_OUTPUT"
+          echo "USERNAME=$USERNAME" >> "$GITHUB_ENV"
+      - if: steps.pr.outputs.approved == 'true'
+        run: echo approved
+      - run: gh pr checkout "$NUM"
+        env:
+          NUM: ${{ github.event.issue.number }}
+          GH_TOKEN: ${{ github.token }}
+      - run: |
+          MSG=$(git log -1 --format=%B)
+          echo "MSG=$MSG" >> "$GITHUB_ENV"
+          FILES=$(git diff --name-only HEAD~1)
+          bash -c "echo $FILES"
+          SUBJECT=$(git -C . --no-pager log -1 --format=%s)
+          echo "SUBJECT=$SUBJECT" >> "$GITHUB_ENV"
+          # Not reported: a hash and a date are not free text, and a path named diff is not the git subcommand
+          SHA=$(git rev-parse HEAD)
+          echo "SHA=$SHA" >> "$GITHUB_ENV"
+          ADDED=$(git add diff)
+          echo "ADDED=$ADDED" >> "$GITHUB_ENV"
+  grouped:
+    runs-on: ubuntu-latest
+    steps:
+      - parallel:
+          - run: gh pr checkout "$NUM"
+            env:
+              NUM: ${{ github.event.issue.number }}
+              GH_TOKEN: ${{ github.token }}
+          - run: |
+              # Not reported: the checkout of the group runs together with this step
+              MSG=$(git log -1 --format=%B)
+              echo "MSG=$MSG" >> "$GITHUB_ENV"
+      - run: |
+          MSG=$(git log -1 --format=%B)
+          echo "MSG=$MSG" >> "$GITHUB_ENV"

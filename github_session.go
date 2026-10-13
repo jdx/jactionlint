@@ -155,6 +155,7 @@ type onlineSession struct {
 	files      memo[fileKey, remoteFile]
 	actions    memo[remoteActionKey, *ActionMetadata]
 	owners     memo[string, *GitHubOwner]
+	releases   memo[releaseKey, *GitHubRelease]
 
 	environments memo[environmentKey, environmentResult]
 }

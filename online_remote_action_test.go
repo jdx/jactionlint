@@ -391,3 +391,27 @@ func TestRemoteActionFailureOfARepositoryIsKnownToConcurrentLookups(t *testing.T
 		t.Errorf("one repository must not look like an outage: %v", err)
 	}
 }
+
+// An action of the data set is not read from GitHub, however it is pinned: the version comment of a commit names
+// the entry of the data set, as the action rule reads it. The outputs of the step must not ask either.
+func TestPopularActionPinnedToACommitIsNotRead(t *testing.T) {
+	sha := strings.Repeat("a", 40)
+	for name, tc := range map[string]struct {
+		uses string
+		want int // lookups: action.yml and action.yaml of a commit which the data set does not know
+	}{
+		"major":              {"actions/checkout@v4", 0},
+		"tag":                {"actions/checkout@v4.2.2", 0},
+		"commit, comment":    {"actions/checkout@" + sha + " # v4.2.2", 0},
+		"commit, major":      {"actions/checkout@" + sha + " # v4", 0},
+		"commit, no comment": {"actions/checkout@" + sha, 2},
+	} {
+		t.Run(name, func(t *testing.T) {
+			c := newFilesClient(t, map[string]string{})
+			lintRemote(t, c, workflowWith("id: co\n        uses: "+tc.uses, "run: echo ${{ steps.co.outputs.ref }}"))
+			if n := c.calls.Load(); int(n) != tc.want {
+				t.Errorf("%d lookups, want %d: %v", n, tc.want, c.asked)
+			}
+		})
+	}
+}

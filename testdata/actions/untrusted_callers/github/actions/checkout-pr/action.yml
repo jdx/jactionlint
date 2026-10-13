@@ -1,0 +1,12 @@
+name: checkout-pr
+description: Checks out a ref
+inputs:
+  ref:
+    description: The ref to check out
+    default: main
+runs:
+  using: composite
+  steps:
+    - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      with:
+        ref: ${{ inputs.ref }}

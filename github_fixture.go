@@ -38,6 +38,8 @@ type fixtureRepo struct {
 	// listed does not exist: the lookup is optional for the checks which use it, and answering "not found" keeps
 	// the other recorded lookups of a test from failing because of one nobody recorded.
 	Files map[string]*fixtureFile `json:"files,omitempty"`
+	// Releases are the answers about the release of a tag by the name of the tag, see GitHubReleaseClient.
+	Releases map[string]*fixtureRelease `json:"releases,omitempty"`
 	// Environments are the answers about the environments by their lower case name, see GitHubEnvironmentClient.
 	Environments map[string]*fixtureEnvironment `json:"environments,omitempty"`
 }
