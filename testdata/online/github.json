@@ -244,7 +244,12 @@
     "actions/checkout": {
       "repo": {
         "archived": false,
-        "default_branch": "main"
+        "default_branch": "main",
+        "id": 197814629,
+        "full_name": "actions/checkout",
+        "owner": {
+          "id": 44036562
+        }
       },
       "tags": {
         "tags": [
@@ -417,7 +422,12 @@
     "actions/setup-node": {
       "repo": {
         "archived": false,
-        "default_branch": "main"
+        "default_branch": "main",
+        "id": 178564337,
+        "full_name": "actions/setup-node",
+        "owner": {
+          "id": 44036562
+        }
       },
       "tags": {
         "tags": [
@@ -511,6 +521,28 @@
     },
     "example/forgotten": {
       "missing": true
+    },
+    "example/renamed-action": {
+      "repo": {
+        "archived": false,
+        "default_branch": "main",
+        "id": 9001,
+        "full_name": "example/new-name",
+        "owner": {
+          "id": 9002
+        }
+      }
+    },
+    "example/transferred-action": {
+      "repo": {
+        "archived": false,
+        "default_branch": "main",
+        "id": 7001,
+        "full_name": "newowner/transferred-action",
+        "owner": {
+          "id": 7002
+        }
+      }
     },
     "example/archived-action": {
       "repo": {

@@ -103,6 +103,8 @@
           "items": {
             "enum": [
               "action-syntax",
+              "actions-lock",
+              "actions-lock-drift",
               "adhoc-packages",
               "agentic-actions",
               "anonymous-definition",
@@ -331,6 +333,8 @@
               {
                 "enum": [
                   "action-syntax",
+                  "actions-lock",
+                  "actions-lock-drift",
                   "adhoc-packages",
                   "agentic-actions",
                   "anonymous-definition",
@@ -490,6 +494,8 @@
                 "items": {
                   "enum": [
                     "action-syntax",
+                    "actions-lock",
+                    "actions-lock-drift",
                     "adhoc-packages",
                     "agentic-actions",
                     "anonymous-definition",
@@ -887,6 +893,54 @@
       "properties": {
         "action-syntax": {
           "description": "The action metadata does not follow the syntax of action.yml. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#action-syntax",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "actions-lock": {
+          "description": "The Actions lock file does not match the workflows: an action is missing from it, an entry is stale or malformed. Group: security. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#actions-lock",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                },
+                "pedantic": {
+                  "description": "Also report the pedantic checks, which are noisier. Unset, they run under the pedantic profile.",
+                  "type": "boolean"
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "actions-lock-drift": {
+          "description": "A pin of the Actions lock file no longer matches GitHub: the repository changed owner or was replaced, a version tag moved, or the commit is not in the history of the repository. Group: security. Runs only with --online. Default level: error. https://jactionlint.jdx.dev/rules#actions-lock-drift",
           "oneOf": [
             {
               "$ref": "#/definitions/level"

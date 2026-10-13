@@ -68,6 +68,7 @@ var actionRuleScope = map[string]struct {
 	"unverified-download":             {scope: actionApplies},         // the scripts of the steps
 	"use-trusted-publishing":          {scope: actionApplies},         // the publishing steps; the id-token permission is the caller's
 	"anonymous-definition":            {scope: actionNotApplicable},
+	"actions-lock":                    {scope: actionApplies}, // the actions the steps use, against the lock file of the workflows which run the action
 	"archived-uses":                   {scope: actionApplies},
 	"repojacking":                     {scope: actionApplies},
 	"artipacked":                      {scope: actionApplies},

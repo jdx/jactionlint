@@ -1,0 +1,24 @@
+version: 'v0.0.3'
+workflows:
+    '.github/workflows/local.yml':
+        - 'actions/checkout@v4'
+        - 'actions/setup-go@v5'
+    '.github/workflows/gone.yml':
+        - 'actions/checkout@v4'
+    '../outside.yml': []
+dependencies:
+    'actions/checkout@v4':
+        ref: 'v4'
+        commit: 'sha1-11d5960a326750d5838078e36cf38b85af677262'
+        owner_id: 44036562
+        repo_id: 197814629
+    'actions/setup-go@v5':
+        ref: 'v5'
+        commit: 'sha1-40f1582b2485089dde7abd97c1529aa768e1baff'
+        owner_id: 44036562
+        repo_id: 192624594
+    'old/unused@v1':
+        ref: 'v1'
+        commit: 'sha1-6666666666666666666666666666666666666666'
+        owner_id: 1
+        repo_id: 2
