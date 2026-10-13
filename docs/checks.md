@@ -7786,7 +7786,7 @@ without a tag. **That date is not always the date of the release**: a tag which 
 can be made long before it is released. The finding says which date it used. The version of a pin is the most specific version tag of its commit
 (`v4.2.2` for `v4`), so that the date is the one of the release, not of the moving tag.
 
-A branch is not checked: it moves by design and has no release. Without a lookup that works (no network, a rate limit, a repository left out by
+A branch is not checked: it moves by design and has no release. A repository with more tags than were read (1000) may hide the version tag of a commit, so a pin is then judged only by a tag written out in full (`v4.2.2`) or by the tag its comment names when the repository confirms it. Without a lookup that works (no network, a rate limit, a repository left out by
 `--online-deny`) the action is not reported. There is no fix: waiting is the fix, and which older version to use is for you to choose.
 
 <a id="check-invisible-characters"></a>
