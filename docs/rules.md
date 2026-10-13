@@ -911,6 +911,7 @@ A job does not set timeout-minutes.
 - Profile: default
 - Fixable: yes
 - Option `default-minutes` (int, no default): The timeout-minutes which --fix adds to a job. There is no default: the rule has no fix unless this is set. It is lowered to the max of timeout-too-long when that is smaller.
+- Option `accept-step-timeouts` (bool, default false): Do not report a job without timeout-minutes when every one of its steps sets timeout-minutes (ghalint's exception). Off by default: the timeout of a step does not cover setting up the job, the post steps of actions or completing the job.
 - Details and examples: [checks](./checks.md#check-timeout-minutes)
 
 ## missing-workflow-input

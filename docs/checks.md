@@ -1715,6 +1715,27 @@ rules:
 hangs. Turn it off with `missing-timeout: off` in `rules`, or ignore one job with an
 [ignore comment](usage.md#ignore-some-errors) above it.
 
+#### Jobs whose steps all set a timeout
+
+[ghalint](https://github.com/suzuki-shunsuke/ghalint/blob/main/docs/policies/012.md) accepts a job without `timeout-minutes` when
+every step of it sets `timeout-minutes`. `missing-timeout` still reports such a job, because the timeout of a step does not
+cover everything a job does: GitHub applies it to the step, not to setting up the job (downloading the actions), to the post
+steps of actions (the cleanup of `actions/checkout`, saving a cache) or to completing the job, so a hang there still runs for
+six hours. When you do want ghalint's reading, say so with the `accept-step-timeouts` option:
+
+```yaml
+rules:
+  missing-timeout:
+    accept-step-timeouts: true
+```
+
+Then a job without `timeout-minutes` is accepted when it has steps and every one of them, `uses:` and `run:` steps alike, sets
+`timeout-minutes`. A value given by an expression `${{ }}` counts as set. A job where one step has none is still reported, and so
+is a job which sets none. Because the job is accepted, there is no finding and so no `--fix` for it; without the option the
+finding stays, and `--fix` with `default-minutes` adds the job-level key as for any other job. The option is off in every
+profile: in a corpus of 76 repositories (1,582 workflow files, 2,049 jobs without a job-level timeout) no job had a timeout on
+all its steps, so the exception would not have silenced anything there, and the gap above is a reason not to grant it unasked.
+
 #### Fixing missing timeouts
 
 jactionlint has no built-in number of minutes, because the right limit depends on your jobs. The finding tells you to set

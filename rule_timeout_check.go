@@ -71,6 +71,22 @@ func (rule *RuleTimeoutCheck) fixMissing(n *Job) (*Fix, *NoFix) {
 	}, nil
 }
 
+// allStepsHaveTimeout reports whether the job has steps and every one of them sets "timeout-minutes". A
+// value given by an expression counts as set. This is the exception of ghalint policy 012. It does
+// not bound the whole job: GitHub does not apply the timeout of a step to setting up the job, to the
+// post step of an action (the cleanup of a checkout, the saving of a cache) or to completing the job.
+func allStepsHaveTimeout(n *Job) bool {
+	if len(n.Steps) == 0 {
+		return false
+	}
+	for _, s := range n.Steps {
+		if s == nil || s.TimeoutMinutes == nil {
+			return false
+		}
+	}
+	return true
+}
+
 // VisitJobPre is callback when visiting Job node before visiting its children.
 func (rule *RuleTimeoutCheck) VisitJobPre(n *Job) error {
 	cfg := rule.Config()
@@ -90,9 +106,18 @@ func (rule *RuleTimeoutCheck) VisitJobPre(n *Job) error {
 
 	if n.TimeoutMinutes == nil {
 		if required {
+			stepsBounded := allStepsHaveTimeout(n)
+			if stepsBounded {
+				if accept, _ := cfg.ruleOptionBool("missing-timeout", "accept-step-timeouts"); accept {
+					return nil
+				}
+			}
 			msg := "\"timeout-minutes\" is not set at this job. Set it to avoid wasting runner minutes when the job hangs"
 			if _, set := cfg.ruleOptionNumber("missing-timeout", "default-minutes"); !set {
 				msg += ". Set \"default-minutes\" in the \"missing-timeout\" rule options of the configuration to turn on the --fix fix"
+			}
+			if stepsBounded {
+				msg += ". Every step sets \"timeout-minutes\", which does not cover setting up the job or the post steps of actions. Set \"accept-step-timeouts\" in the \"missing-timeout\" rule options of the configuration to accept a job like this"
 			}
 			rule.ReportID("missing-timeout", n.Pos, msg)
 			last := rule.Errs()[len(rule.Errs())-1]
@@ -110,7 +135,7 @@ func (rule *RuleTimeoutCheck) VisitJobPre(n *Job) error {
 
 func init() {
 	registerRules(
-		RuleInfo{ID: "missing-timeout", Group: RuleGroupPolicy, Summary: "A job does not set timeout-minutes.", DefaultLevel: SeverityError, Profile: ProfileDefault, Fixable: true, DocsAnchor: "check-timeout-minutes", Options: []RuleOption{{Name: "default-minutes", Kind: RuleOptionInt, Summary: "The timeout-minutes which --fix adds to a job. There is no default: the rule has no fix unless this is set. It is lowered to the max of timeout-too-long when that is smaller."}}},
+		RuleInfo{ID: "missing-timeout", Group: RuleGroupPolicy, Summary: "A job does not set timeout-minutes.", DefaultLevel: SeverityError, Profile: ProfileDefault, Fixable: true, DocsAnchor: "check-timeout-minutes", Options: []RuleOption{{Name: "default-minutes", Kind: RuleOptionInt, Summary: "The timeout-minutes which --fix adds to a job. There is no default: the rule has no fix unless this is set. It is lowered to the max of timeout-too-long when that is smaller."}, {Name: "accept-step-timeouts", Kind: RuleOptionBool, Default: false, Summary: "Do not report a job without timeout-minutes when every one of its steps sets timeout-minutes (ghalint's exception). Off by default: the timeout of a step does not cover setting up the job, the post steps of actions or completing the job."}}},
 		RuleInfo{ID: "timeout-too-long", Group: RuleGroupPolicy, Summary: "timeout-minutes of a job exceeds the configured maximum.", DefaultLevel: SeverityError, DocsAnchor: "check-timeout-minutes", Options: []RuleOption{{Name: "max", Kind: RuleOptionNumber, Summary: "The maximum allowed timeout-minutes. The rule does nothing without it."}}},
 	)
 	registerRuleFactory("timeout-check", func(env *RuleEnv) []Rule {
