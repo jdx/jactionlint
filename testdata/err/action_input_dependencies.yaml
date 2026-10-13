@@ -1,0 +1,28 @@
+on: push
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      # run-id and repository are ignored without github-token
+      - uses: actions/download-artifact@v4
+        with:
+          name: build
+          run-id: ${{ github.event.workflow_run.id }}
+          repository: octo/other
+      # OK: with a token the action downloads from the other run
+      - uses: actions/download-artifact@v4
+        with:
+          name: build
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      # one of the timeouts is required
+      - uses: nick-fields/retry@v3
+        with:
+          max_attempts: 3
+          command: make
+      # only one of them may be given
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/1/locations/global/workloadIdentityPools/p/providers/g
+          credentials_json: '{"type": "service_account"}'
