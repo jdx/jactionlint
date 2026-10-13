@@ -15,6 +15,9 @@ func TestUnlockedInstallLifecycleScripts(t *testing.T) {
 			"jobs:\n  build:\n    runs-on: ubuntu-latest\n    timeout-minutes: 10\n    steps:\n" + step
 	}
 	run := func(c string) string { return "      - run: " + c + "\n" }
+	block := func(lines ...string) string {
+		return "      - run: |\n          " + strings.Join(lines, "\n          ") + "\n"
+	}
 	tests := []struct {
 		what  string
 		wf    string
@@ -61,6 +64,22 @@ func TestUnlockedInstallLifecycleScripts(t *testing.T) {
 		{"npm config set before", wf("", run("npm config set ignore-scripts true")+run("npm ci")), nil, 0},
 		{"npm config set after", wf("", run("npm ci")+run("npm config set ignore-scripts true")), nil, 1},
 		{"echo into npmrc", wf("", run(`echo "ignore-scripts=true" >> ~/.npmrc`)+run("npm ci")), nil, 0},
+		{"npm config set with =", wf("", run("npm config set ignore-scripts=true")+run("npm ci")), nil, 0},
+		{"npm config set underscore", wf("", run("npm config set ignore_scripts true")+run("npm ci")), nil, 0},
+		{"overwrite npmrc", wf("", run(`echo ignore-scripts=true > .npmrc`)+run("npm ci")), nil, 0},
+		{"tee into npmrc", wf("", run(`echo ignore-scripts=true | tee -a .npmrc`)+run("npm ci")), nil, 0},
+		{"heredoc into npmrc", wf("", block("cat >> .npmrc <<EOF", "ignore-scripts=true", "EOF")+run("npm ci")), nil, 0},
+		{"exported variable", wf("", block("export npm_config_ignore_scripts=true", "npm ci")), nil, 0},
+		{"variable of the command", wf("", run("npm_config_ignore_scripts=true npm ci")), nil, 0},
+		{"set to false in a script", wf("", run("npm config set ignore-scripts false")+run("npm ci")), nil, 1},
+		// a text that only prints the setting does not set it
+		{"echo of the setting", wf("", run(`echo "ignore-scripts=true"`)+run("npm ci")), nil, 1},
+		{"echo of the setting into a file", wf("", run(`echo "ignore-scripts=true" > notes.txt`)+run("npm ci")), nil, 1},
+		{"config get", wf("", run("npm config get ignore-scripts true")+run("npm ci")), nil, 1},
+		// in the script of the install itself only what comes before it counts
+		{"set before in the same script", wf("", block("npm config set ignore-scripts true", "npm ci")), nil, 0},
+		{"set after in the same script", wf("", block("npm ci", "npm config set ignore-scripts true")), nil, 1},
+		{"npmrc after in the same script", wf("", block("npm ci", "echo ignore-scripts=true >> .npmrc")), nil, 1},
 
 		// the files of the repository decide
 		{".npmrc ignore-scripts", wf("", run("npm ci")), map[string]string{".npmrc": "ignore-scripts=true\n"}, 0},
@@ -90,7 +109,8 @@ func TestUnlockedInstallLifecycleScripts(t *testing.T) {
 		{"yarn 4.14 defaults to no scripts", wf("", run("yarn install")), map[string]string{".yarnrc.yml": "nodeLinker: node-modules\n", "package.json": `{"packageManager": "yarn@4.14.0"}`}, 0},
 		{"yarn 6 defaults to no scripts", wf("", run("yarn install")), map[string]string{"package.json": `{"packageManager": "yarn@6.0.0"}`}, 0},
 		{"yarn 1", wf("", run("yarn install")), map[string]string{"package.json": `{"packageManager": "yarn@1.22.22"}`}, 1},
-		{"yarn 2+ of an unknown version", wf("", run("yarn install")), map[string]string{".yarnrc.yml": "nodeLinker: node-modules\n"}, 0},
+		{"yarn 2+ of an unknown version", wf("", run("yarn install")), map[string]string{".yarnrc.yml": "nodeLinker: node-modules\n"}, 1},
+		{"yarn 3", wf("", run("yarn install")), map[string]string{".yarnrc.yml": "nodeLinker: node-modules\n", "package.json": `{"packageManager": "yarn@3.8.7"}`}, 1},
 		{"a package.json that is not valid", wf("", run("npm ci")), map[string]string{"package.json": `{`}, 1},
 	}
 	for _, tc := range tests {
