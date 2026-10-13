@@ -32,7 +32,7 @@ https://github.com/jdx/jactionlint/blob/main/go.mod
 
 All documentations for jactionlint can be found in the following page.
 
-https://github.com/jdx/jactionlint/tree/main/docs
+https://jactionlint.jdx.dev/
 
 # License
 
