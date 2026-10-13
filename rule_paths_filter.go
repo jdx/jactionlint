@@ -176,14 +176,16 @@ func compilePathFilter(pat string) *pathFilter {
 			atom = true
 			inPrefix = false
 		case '\\':
-			if i+1 >= len(rs) {
-				return nil
+			// A backslash escapes only [ ? * + \ and !, anywhere else it is a character of the path (glob.go)
+			lit := '\\'
+			if i+1 < len(rs) && strings.ContainsRune(`[?*+\!`, rs[i+1]) {
+				i++
+				lit = rs[i]
 			}
-			i++
-			b.WriteString(regexp.QuoteMeta(string(rs[i])))
+			b.WriteString(regexp.QuoteMeta(string(lit)))
 			atom = true
 			if inPrefix {
-				prefix += string(rs[i])
+				prefix += string(lit)
 			}
 		default:
 			b.WriteString(regexp.QuoteMeta(string(c)))

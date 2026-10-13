@@ -13,7 +13,7 @@ func TestPathFilterMatching(t *testing.T) {
 	files := &repoPaths{}
 	for _, p := range []string{
 		"README.md", "main.go", "docs", "docs/index.md", "docs/guide/start.md", "src", "src/js", "src/js/app.js", "src/app.jsx",
-		"my-src", "my-src/code", "my-src/code/a.js", "db", "db/migrate-v1.sql", "Dockerfile", "v1.10", "ünï", "ünï/x.txt",
+		"my-src", "my-src/code", "my-src/code/a.js", "db", "db/migrate-v1.sql", "Dockerfile", "v1.10", `back\slash.txt`, "star*.md", "x+y", "ünï", "ünï/x.txt",
 	} {
 		files.paths = append(files.paths, strings.ToLower(p))
 	}
@@ -57,7 +57,12 @@ func TestPathFilterMatching(t *testing.T) {
 		{pat: "ünï/*", want: true},
 		{pat: "Docker*", want: true},
 		{pat: "\\*.md", want: false},
-		{pat: "main.g\\o", want: true},
+		// A backslash escapes only [ ? * + \ and !; anywhere else it is a character of the path (see glob.go)
+		{pat: "main.g\\o", want: false},
+		{pat: "back\\slash.txt", want: true},
+		{pat: "star\\*.md", want: true},
+		{pat: "x\\+y", want: true},
+		{pat: "back\\\\slash.txt", want: true}, // an escaped backslash is one backslash
 		{pat: ".github/workflows/ci.yml", want: false},
 		// Not evaluated
 		{pat: "!docs/missing/**", skip: true},
