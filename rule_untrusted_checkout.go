@@ -159,7 +159,7 @@ func (rule *RuleUntrustedCheckout) setEvents(events []string) {
 
 // VisitJobPre is callback when visiting Job node before visiting its children.
 func (rule *RuleUntrustedCheckout) VisitJobPre(n *Job) error {
-	rule.setEvents(eventsAfterCondition(rule.allPrivileged, n.If))
+	rule.setEvents(neededEvents(rule.wf, n, eventsAfterCondition(rule.allPrivileged, n.If), map[*Job]bool{}))
 	if len(rule.privileged) == 0 || conditionIsGuard(n.If) {
 		return nil
 	}
