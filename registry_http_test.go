@@ -185,7 +185,7 @@ func TestRegistryClientGHCR(t *testing.T) {
 
 	t.Run("without a token there is no second try", func(t *testing.T) {
 		ghcr := newFakeRegistry(t)
-		ghcr.manifest = func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusForbidden) }
+		ghcr.manifest = func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusUnauthorized) }
 		c := testRegistryClient(nil, ghcr, "")
 		if _, err := c.ImageDigest(ctx, registryGHCR, "acme/private", "1"); !errors.Is(err, ErrImageNotFound) {
 			t.Errorf("got %v", err)

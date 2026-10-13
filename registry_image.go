@@ -207,12 +207,16 @@ func (s *onlineSession) warnRegistryOnceLocked(key, message string) {
 
 // registryStatusError is a registry answering with a status that is not a success.
 type registryStatusError struct {
+	token    bool // the answer of the token service
 	registry string
 	status   int
 	message  string
 }
 
 func (e *registryStatusError) Error() string {
+	if e.token {
+		return fmt.Sprintf("the token service of %s answered with status %d", e.registry, e.status)
+	}
 	if e.message == "" {
 		return fmt.Sprintf("the registry %s answered with status %d", e.registry, e.status)
 	}
@@ -226,6 +230,8 @@ func classifyRegistryFailure(err error) failureKind {
 	switch {
 	case errors.Is(err, errRegistryRateLimited):
 		return failRateLimit
+	case errors.Is(err, ErrImageNotFound):
+		return failNotFound
 	case errors.As(err, &se):
 		switch {
 		case se.status == http.StatusUnauthorized:

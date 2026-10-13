@@ -96,24 +96,22 @@ func (c *registryClient) ImageDigest(ctx context.Context, registry, repository, 
 	d, err := c.manifestDigest(ctx, registry, base, repository, tag, false)
 	// ghcr.io answers 401, 403 or 404 for a package which is private, or does not exist. The token of GitHub can read
 	// the packages it has access to, so it is sent only now, to that host only.
-	if registry == registryGHCR && c.githubToken != nil && isDeniedStatus(err) {
+	if registry == registryGHCR && c.githubToken != nil && isDeniedManifest(err) {
 		if tok := c.githubToken(); tok != "" {
 			d, err = c.manifestDigest(ctx, registry, base, repository, tag, true)
 		}
 	}
-	if isDeniedStatus(err) && !errors.Is(err, ErrImageNotFound) {
-		// Refused to everyone we could be: the image is private, or does not exist
-		err = fmt.Errorf("%s/%s:%s is private or does not exist: %w", registry, repository, tag, ErrImageNotFound)
-	}
 	return d, err
 }
 
-func isDeniedStatus(err error) bool {
+// isDeniedManifest reports whether the registry refused the manifest request: an image which is private or absent (401, 404), or
+// refused to this token (403). A refused token service is not that.
+func isDeniedManifest(err error) bool {
 	var se *registryStatusError
-	if !errors.As(err, &se) {
-		return errors.Is(err, ErrImageNotFound)
+	if errors.As(err, &se) {
+		return !se.token && se.status == http.StatusForbidden
 	}
-	return se.status == http.StatusUnauthorized || se.status == http.StatusForbidden
+	return errors.Is(err, ErrImageNotFound)
 }
 
 func (c *registryClient) manifestDigest(ctx context.Context, registry, base, repository, tag string, withCreds bool) (string, error) {
@@ -146,6 +144,9 @@ func (c *registryClient) manifestDigest(ctx context.Context, registry, base, rep
 		return strings.ToLower(d), nil
 	case res.StatusCode == http.StatusNotFound:
 		return "", fmt.Errorf("%s/%s:%s: %w", registry, repository, tag, ErrImageNotFound)
+	case res.StatusCode == http.StatusUnauthorized:
+		// The registry answered, and the token it gave cannot read the image: it is private, or it does not exist
+		return "", fmt.Errorf("%s/%s:%s is private or does not exist: %w", registry, repository, tag, ErrImageNotFound)
 	case res.StatusCode == http.StatusTooManyRequests:
 		return "", fmt.Errorf("%w: %w", errRegistryRateLimited, &registryStatusError{registry: registry, status: res.StatusCode})
 	}
@@ -188,10 +189,10 @@ func (c *registryClient) token(ctx context.Context, registry, repository string,
 		return "", err
 	}
 	if res.StatusCode == http.StatusTooManyRequests {
-		return "", fmt.Errorf("%w: %w", errRegistryRateLimited, &registryStatusError{registry: registry, status: res.StatusCode})
+		return "", fmt.Errorf("%w: %w", errRegistryRateLimited, &registryStatusError{registry: registry, status: res.StatusCode, token: true})
 	}
 	if res.StatusCode != http.StatusOK {
-		return "", &registryStatusError{registry: registry, status: res.StatusCode}
+		return "", &registryStatusError{registry: registry, status: res.StatusCode, token: true}
 	}
 	var tok struct {
 		Token       string `json:"token"`
