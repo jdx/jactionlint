@@ -46,8 +46,6 @@ var (
 	envAllowAllBuildsRe     = regexp.MustCompile(`(?im)(?:\bexport\s+(?:-\w+\s+)*(?:aube|npm_config)_dangerously_allow_all_builds\s*=\s*["']?(?:true|1)\b|^.*\b(?:aube|npm_config)_dangerously_allow_all_builds\s*=\s*["']?(?:true|1)\b.*>>\s*["']?\$\{?GITHUB_ENV)`)
 	allowAllBuildsSettingRe = regexp.MustCompile(`(?i)dangerously[-_]?allow[-_]?all[-_]?builds\s*=\s*["']?(?:true|1)\b`)
 	aubeIgnoreScriptsRe     = regexp.MustCompile(`(?m)^ignoreScripts:\s*["']?true\b`)
-	allowBuildsFlowRe       = regexp.MustCompile(`(?m)^allowBuilds:\s*\{[^}]*["']?\*["']?\s*:\s*true\b`)
-	allowBuildsEntryRe      = regexp.MustCompile(`^\s+["']?\*["']?\s*:\s*["']?true\b`)
 	envIgnoreScriptsRe      = regexp.MustCompile(`(?i)\bnpm_config_ignore_scripts\s*=\s*["']?(?:true|1)\b`)
 	npmrcRedirectRe         = regexp.MustCompile(`(?:>>?|\btee\b(?:\s+-a)?)\s*["']?[^\s"'|;&]*\.npmrc\b`)
 	heredocStartRe          = regexp.MustCompile(`<<-?\s*["']?([A-Za-z_][A-Za-z0-9_]*)["']?`)
@@ -398,25 +396,64 @@ func scriptAllowsEveryBuild(text string) bool {
 }
 
 // allowBuildsHasWildcard reports whether the `allowBuilds` map of a workspace file has the entry `"*": true`, written as
-// a block or as a flow mapping.
+// a block or as a flow mapping. Only the key `*` alone is the catch-all: `"@babel/*": true` allows one scope.
 func allowBuildsHasWildcard(text string) bool {
-	if allowBuildsFlowRe.MatchString(text) {
-		return true
-	}
+	lines := strings.Split(text, "\n")
 	in := false
-	for _, line := range strings.Split(text, "\n") {
-		t := strings.TrimSpace(line)
+	for i, line := range lines {
+		t := strings.TrimSpace(stripYAMLComment(line))
 		switch {
 		case strings.HasPrefix(line, "allowBuilds:"):
-			in = strings.TrimSpace(strings.TrimPrefix(line, "allowBuilds:")) == ""
-		case t == "" || strings.HasPrefix(t, "#"):
+			rest := strings.TrimSpace(stripYAMLComment(strings.TrimPrefix(line, "allowBuilds:")))
+			in = rest == ""
+			if strings.HasPrefix(rest, "{") {
+				// a flow mapping, on this line or going on over the next ones until its closing brace
+				body := rest[1:]
+				for k := i + 1; !strings.Contains(body, "}") && k < len(lines) && k < i+50; k++ {
+					body += " " + stripYAMLComment(lines[k])
+				}
+				body, _, _ = strings.Cut(body, "}")
+				for _, entry := range strings.Split(body, ",") {
+					if key, value, ok := strings.Cut(entry, ":"); ok && isAllowEverything(key, value) {
+						return true
+					}
+				}
+			}
+		case t == "":
 		case line[0] != ' ' && line[0] != '\t':
 			in = false
-		case in && allowBuildsEntryRe.MatchString(line):
-			return true
+		case in:
+			if key, value, ok := strings.Cut(t, ":"); ok && isAllowEverything(key, value) {
+				return true
+			}
 		}
 	}
 	return false
+}
+
+// isAllowEverything reports whether an entry of `allowBuilds` is `*: true`, with the key and the value quoted or not.
+func isAllowEverything(key, value string) bool {
+	unquote := func(v string) string { return strings.Trim(strings.TrimSpace(v), `"'`) }
+	return unquote(key) == "*" && strings.EqualFold(unquote(value), "true")
+}
+
+// stripYAMLComment removes a trailing comment from a line of YAML: a `#` at the start or after white space, outside quotes.
+func stripYAMLComment(line string) string {
+	var quote byte
+	for i := 0; i < len(line); i++ {
+		c := line[i]
+		switch {
+		case quote != 0:
+			if c == quote {
+				quote = 0
+			}
+		case c == '"' || c == '\'':
+			quote = c
+		case c == '#' && (i == 0 || line[i-1] == ' ' || line[i-1] == '\t'):
+			return line[:i]
+		}
+	}
+	return line
 }
 
 // lastFlag returns the last flag of the command with the name, nil if there is none.
