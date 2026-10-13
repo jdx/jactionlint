@@ -309,6 +309,9 @@ func macosGnuForms(c *runscript.Command) []macosGnuForm {
 		if w == nil {
 			continue
 		}
+		if w.Value == "--" {
+			break // what follows is a pattern or a file name, not an option: grep -- -P file
+		}
 		v := w.Value // without the quotes: sed "-i" is sed -i
 		if c.Name == "grep" && i > 0 && c.Args[i-1] != nil && grepValueFlags[c.Args[i-1].Value] {
 			continue // the value of an option: grep -e -P

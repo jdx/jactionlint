@@ -82,3 +82,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - run: date -d yesterday
+  end-of-options:
+    runs-on: macos-latest
+    steps:
+      # The option comes before --
+      - run: grep -P -- x file.txt
