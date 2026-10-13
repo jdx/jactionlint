@@ -172,10 +172,19 @@ func (rule *RuleOutputClobbering) chunksOf(s *runscript.Script, w *runscript.Wri
 	for _, p := range producers {
 		f.at = p.Offset
 		f.loop = p.LoopBody || p.InFunc
-		if neutralCommands[p.Name] || !reachesFile(p, w.Redirect) {
+		if !reachesFile(p, w.Redirect) {
 			continue
 		}
-		out = append(out, outputChunk{text: printedText(p), d: f.judgeCommand(s, p), cmd: p})
+		text := printedText(p)
+		if text == "" {
+			// `tee -a "$GITHUB_OUTPUT" <<< "body=$BODY"`: the here string is what is written
+			for _, r := range p.Redirects {
+				if r.Op == "<<<" && r.Target != nil {
+					text = r.Target.Value
+				}
+			}
+		}
+		out = append(out, outputChunk{text: text, d: f.judgeCommand(s, p), cmd: p})
 	}
 	if h := w.Heredoc; h != nil {
 		f.at = w.Redirect.Offset
@@ -296,9 +305,12 @@ func (rule *RuleOutputClobbering) randomDelimiter(s *runscript.Script, step *Ste
 			continue
 		}
 		if v, ok := rule.flow.envValue(step, name); ok {
-			if !strings.Contains(v.Value, "${{") && !reRandomSource.MatchString(v.Value) {
-				continue // set to a constant by the workflow
+			// what the workflow set is a constant, an expression that has a value somebody can read or choose (the id of the
+			// run, text of the event), or a random source (`secrets.X`)
+			if reRandomSource.MatchString(v.Value) {
+				return true
 			}
+			continue
 		}
 		return true // not known: do not report
 	}
