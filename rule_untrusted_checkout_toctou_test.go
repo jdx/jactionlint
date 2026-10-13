@@ -49,6 +49,11 @@ func TestRuleUntrustedCheckoutToctou(t *testing.T) {
 		{"a permission check of the author in a pull_request_target workflow", prtJob(prt, "") + "      - uses: sushichop/action-repository-permission@v3\n        with:\n          required-permission: write\n" + headRefNoWant, false, ""},
 		{"a label on a step that runs the code, with the branch", prtJob(prtLabeled, "") + "      - uses: " + co + "\n        with:\n          ref: ${{ github.event.pull_request.head.ref }} # want\n      - run: make\n        if: github.event.label.name == 'safe to test'\n", false, ""},
 
+		{"a label that lasts and an environment: the commit", prtJob(prtPush, env+labelIf) + headShaNoWant, false, ""},
+		{"a label that lasts and an environment: the branch", prtJob(prtPush, env+labelIf) + headRef, false, "a label condition and an environment lets the job start, but"},
+		{"the branch that an action looks up behind an environment", prtJob(prt, env) + "      - id: o\n        uses: potiuk/get-workflow-origin@v1\n      - uses: " + co + "\n        with:\n          ref: ${{ steps.o.outputs.sourceHeadBranch }} # want\n      - run: make\n", false, ""},
+		{"the commit that an action looks up behind an environment", prtJob(prt, env) + "      - id: o\n        uses: potiuk/get-workflow-origin@v1\n      - uses: " + co + "\n        with:\n          ref: ${{ steps.o.outputs.sourceHeadSha }}\n      - run: make\n", false, ""},
+
 		// comments: the commenter is not the author of the pull request
 		{"a comment of a maintainer and the number of the issue", prtJob(comment, maintainers) + "      - uses: " + co + "\n        with:\n          ref: refs/pull/${{ github.event.issue.number }}/head # want\n      - run: make\n", false, "a check of the user who commented lets the job start"},
 		{"a comment of a maintainer and gh pr checkout", prtJob(comment, maintainers) + "      - run: gh pr checkout ${{ github.event.issue.number }} # want\n      - run: make\n", false, ""},
@@ -109,6 +114,7 @@ func TestRuleUntrustedCheckoutAnyCheckout(t *testing.T) {
 		{"the option is off in a pedantic profile", readsNoWant, "profile: pedantic\nrules:\n  untrusted-checkout: {level: error, any-checkout: false}\n", false},
 		{"the pedantic profile", reads, "profile: pedantic\nrules:\n  untrusted-checkout: error\n", true},
 		{"the option pedantic is not the option", readsNoWant, "rules:\n  untrusted-checkout: {level: error, pedantic: true}\n", false},
+		{"a step for the merged pull request runs it", "on:\n  pull_request_target:\n    types: [closed]\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: " + co + "\n        with:\n          ref: ${{ github.event.pull_request.head.sha }}\n      - run: make\n        if: github.event.pull_request.merged == true\n", "rules:\n  untrusted-checkout: {level: error, any-checkout: true}\n", false},
 		{"a gate in front of it", prt + "    environment: ci\n    steps:\n      - uses: " + co + "\n        with:\n          ref: ${{ github.event.pull_request.head.sha }}\n      - run: git diff --stat\n", "rules:\n  untrusted-checkout: {level: error, any-checkout: true}\n", false},
 		{"the code is run", prt + "    steps:\n      - uses: " + co + "\n        with:\n          ref: ${{ github.event.pull_request.head.sha }} # want\n      - run: make\n", "rules:\n  untrusted-checkout: {level: error, any-checkout: true}\n", true},
 		{"a checkout of the base", prt + "    steps:\n      - uses: " + co + "\n      - run: git diff --stat\n", "rules:\n  untrusted-checkout: {level: error, any-checkout: true}\n", false},

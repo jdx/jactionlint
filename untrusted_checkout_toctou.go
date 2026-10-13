@@ -105,9 +105,8 @@ func classifyCondition(cond *String, commentOnly bool) gateInfo {
 }
 
 // neededGates are the gates of the jobs that the job needs, at any depth: the job runs after them.
-func (rule *RuleUntrustedCheckout) neededGates(j *Job, commentOnly bool, seen map[*Job]bool) gateInfo {
+func (rule *RuleUntrustedCheckout) neededGates(w *Workflow, j *Job, events []string, commentOnly bool, seen map[*Job]bool) gateInfo {
 	var g gateInfo
-	w := rule.wf
 	if w == nil || j == nil || seen[j] || runsAfterSkippedNeeds(j.If) {
 		return g
 	}
@@ -120,12 +119,12 @@ func (rule *RuleUntrustedCheckout) neededGates(j *Job, commentOnly bool, seen ma
 		if need == nil {
 			continue
 		}
-		if len(eventsAfterCondition(rule.privileged, need.If)) == 0 {
+		if len(eventsAfterCondition(events, need.If)) == 0 {
 			g.safe = true // the job is skipped for these events, and so is the one that needs it
 			continue
 		}
 		g = g.merge(rule.ownGates(need, commentOnly, true))
-		g = g.merge(rule.neededGates(need, commentOnly, seen))
+		g = g.merge(rule.neededGates(w, need, events, commentOnly, seen))
 	}
 	return g
 }
@@ -169,7 +168,7 @@ func refIsMutable(what string) bool {
 	switch {
 	case strings.Contains(l, ".sha") || strings.Contains(l, "_sha") || strings.Contains(l, "head_commit.id"):
 		return false
-	case strings.Contains(l, "head.ref"), strings.Contains(l, "head_ref"), strings.Contains(l, "head_branch"),
+	case strings.Contains(l, "head.ref"), strings.Contains(l, "head_ref"), strings.Contains(l, "head_branch"), strings.Contains(l, "headbranch"),
 		strings.Contains(l, "refs/pull/"), strings.Contains(l, "gh pr checkout"), namesPullRef(what),
 		strings.Contains(l, "fork_ref"), strings.Contains(l, "outputs.ref"):
 		return true
@@ -288,7 +287,8 @@ func (rule *RuleUntrustedCheckout) reportToctou(c *untrustedCheckout, how string
 		return
 	}
 	mutable := !c.verified && refIsMutable(c.what)
-	lasts := g.label && rule.labelRerun
+	// an environment with reviewers pauses every run, the one of a new push too: the label is not the only gate then
+	lasts := g.label && rule.labelRerun && !slices.Contains(g.stale, "an environment")
 	gates := strings.Join(g.stale, " and ")
 	switch {
 	case lasts:

@@ -8275,6 +8275,10 @@ the review and the job runs what is there then, not what was reviewed (CodeQL `U
   that checks out `refs/pull/<input>/head` or runs `gh pr checkout <input>`. A maintainer dispatches it after reading the pull request,
   and a push in between runs unreviewed code (gato-x `dispatch_toctou`). Add a required `sha` input and check it out.
 
+The gates in front of the call of a reusable workflow or composite action are judged the same way, for the code of the callee, when every
+call that reaches it has them. An `environment:` and a label that lasts together are judged as an environment: its reviewers
+approve each run, the one of a new push too, so only a branch is reported.
+
 Check out the commit that was reviewed (`github.event.pull_request.head.sha`) instead of the branch.
 
 **A checkout that nothing runs.** The rule needs a later step that runs the code, which keeps it quiet for the workflows that only

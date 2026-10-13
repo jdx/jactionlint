@@ -188,44 +188,6 @@ func isPermissionGate(s *Step) bool {
 // collaborator, or the membership in an organization or a team.
 var reScriptChecksUser = regexp.MustCompile(`getCollaboratorPermissionLevel|getMembershipForUserInOrg|checkMembershipForUser|checkCollaborator|getMembershipForUser|getTeamMembershipForUserInOrg`)
 
-// jobHasGate reports whether a step of the job is a permission gate that stops the jobs that need it: not when the job
-// goes on after a failure (`continue-on-error`).
-func jobHasGate(j *Job) bool {
-	if j.ContinueOnError != nil && (j.ContinueOnError.Expression != nil || j.ContinueOnError.Value) {
-		return false
-	}
-	for _, s := range flattenSteps(j.Steps) {
-		if isPermissionGate(s) {
-			return true
-		}
-	}
-	return false
-}
-
-// neededJobGated reports whether a job that the job needs, at any depth, is skipped or fails unless the user is trusted:
-// its condition is a guard or is false for the events (it is skipped), it has an environment that holds it back (envHolds,
-// see environmentHolds) or a permission gate. The job is skipped with it, unless its own condition lets it run after a
-// skipped job (`always()`).
-func neededJobGated(w *Workflow, j *Job, events []string, envHolds func(*Job) bool, seen map[*Job]bool) bool {
-	if w == nil || j == nil || seen[j] || runsAfterSkippedNeeds(j.If) {
-		return false
-	}
-	seen[j] = true
-	for _, n := range j.Needs {
-		if n == nil {
-			continue
-		}
-		need := w.Jobs[strings.ToLower(n.Value)]
-		if need == nil {
-			continue
-		}
-		if len(eventsAfterCondition(events, need.If)) == 0 || conditionIsGuard(need.If) || envHolds(need) || jobHasGate(need) || neededJobGated(w, need, events, envHolds, seen) {
-			return true
-		}
-	}
-	return false
-}
-
 // numberValue reports whether the string reads the number of the pull request that a comment is on, or an input of a
 // dispatch that holds one.
 func (rule *RuleUntrustedCheckout) numberValue(value string) (string, bool) {

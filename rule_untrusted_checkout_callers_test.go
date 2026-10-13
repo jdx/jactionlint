@@ -290,3 +290,48 @@ func TestUntrustedCheckoutCallersGuard(t *testing.T) {
 		})
 	}
 }
+
+// The gates in front of a call hold at one moment too: the callee is judged for the code that follows them.
+func TestUntrustedCheckoutCallersToctou(t *testing.T) {
+	const head = "${{ github.event.pull_request.head.ref }}"
+	tests := []struct {
+		name  string
+		files map[string]string
+		want  int
+		text  string
+	}{
+		{"an environment on the call and a branch", map[string]string{"pr.yml": ucActionCaller("pull_request_target", "    environment: ci\n", head)}, 1, "an environment lets the job start"},
+		{"an environment on the call and a commit", map[string]string{"pr.yml": ucActionCaller("pull_request_target", "    environment: ci\n", headSHA)}, 0, ""},
+		{"a label on the call and a branch", map[string]string{"pr.yml": ucActionCaller("pull_request_target", "    if: github.event.label.name == 'safe to test'\n", head)}, 1, "a label condition lets the job start"},
+		{"an author who is a member on the call and a branch", map[string]string{"pr.yml": ucActionCaller("pull_request_target", "    if: github.event.pull_request.author_association == 'MEMBER'\n", head)}, 0, ""},
+		{"a gated call and a call that nothing holds back", map[string]string{
+			"a.yml": ucActionCaller("pull_request_target", "    environment: ci\n", head),
+			"b.yml": ucActionCaller("pull_request_target", "", headSHA),
+		}, 1, ".github/workflows/b.yml"},
+		{"a gated call and a call with a branch that nothing holds back", map[string]string{
+			"a.yml": ucActionCaller("pull_request_target", "    environment: ci\n", headSHA),
+			"b.yml": ucActionCaller("pull_request_target", "", head),
+		}, 1, ".github/workflows/b.yml"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			files := map[string]string{".github/actions/build/action.yml": strings.Replace(ucAction, "actions/checkout@v1", "actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2", 1)}
+			for k, v := range tc.files {
+				files[".github/workflows/"+k] = v
+			}
+			root := writeProject(t, files)
+			l := newActionLinter(t, root, io.Discard, LinterOptions{}, "rules:\n  untrusted-checkout: error\n")
+			errs, err := l.LintFiles([]string{filepath.Join(root, ".github", "actions", "build", "action.yml")}, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			errs = errsWithID(errs, "untrusted-checkout")
+			if len(errs) != tc.want {
+				t.Fatalf("want %d findings but got %v", tc.want, errs)
+			}
+			if tc.want > 0 && !strings.Contains(errs[0].Message, tc.text) {
+				t.Errorf("message lacks %q: %s", tc.text, errs[0].Message)
+			}
+		})
+	}
+}

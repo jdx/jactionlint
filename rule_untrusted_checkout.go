@@ -48,6 +48,8 @@ type RuleUntrustedCheckout struct {
 	dispatch []string
 	// labelRerun is whether the workflow runs again for each push to a pull request, so that a label stays.
 	labelRerun bool
+	// calleeGates are the gates in front of every call that reaches the reusable workflow or action being checked.
+	calleeGates gateInfo
 	// allPrivileged are the privileged events of the workflow, privileged those that the job being judged runs for.
 	allPrivileged []string
 	// stepActions are the steps of the job that have an id and run an action, by id: the lower case name of the action.
@@ -100,6 +102,9 @@ type untrustedCheckout struct {
 	gates gateInfo
 	// verified is whether a later step checks the commit that was checked out.
 	verified bool
+	// ran is whether a step runs the checkout, but not one that the rule counts (a step that only runs for a merged pull request, or
+	// after a failure of the permission check of an action).
+	ran bool
 	// afterFailure is whether the checkout is behind a failed permission check of an action: only a step that runs after a
 	// failure runs it.
 	afterFailure bool
@@ -166,11 +171,14 @@ func (rule *RuleUntrustedCheckout) VisitWorkflowPre(n *Workflow) error {
 		return nil
 	}
 	rule.privileged = privilegedEvents(n, rule.project, rule.siblings)
+	rule.calleeGates, rule.labelRerun = gateInfo{}, false
 	calleeKnown := false
 	if _, reusable := n.FindWorkflowCallEvent(); reusable || n.Action != nil {
 		// a reusable workflow and a composite action run for the events of the workflows that call them
 		if key := calleeKey(rule.project, rule.path); key != "" {
 			rule.calls = rule.callContexts(key, 0, map[string]bool{})
+			// the message names the call that nothing holds back first
+			slices.SortStableFunc(rule.calls, func(a, b callContext) int { return len(a.gates.stale) - len(b.gates.stale) })
 			rule.inputTaint, rule.inputNumber = map[string]callInput{}, map[string]string{}
 			events := slices.Clone(rule.privileged)
 			for _, c := range rule.calls {
@@ -182,6 +190,16 @@ func (rule *RuleUntrustedCheckout) VisitWorkflowPre(n *Workflow) error {
 					}
 				}
 			}
+			// the gates in front of the calls hold the callee back when every call has them and nothing else starts it
+			gated := len(rule.calls) > 0 && (n.Action != nil || len(rule.privileged) == 0)
+			for _, c := range rule.calls {
+				gated = gated && len(c.gates.stale) > 0
+				rule.calleeGates = rule.calleeGates.merge(c.gates)
+				rule.labelRerun = rule.labelRerun || c.rerun
+			}
+			if !gated {
+				rule.calleeGates = gateInfo{}
+			}
 			rule.privileged = sortedEvents(events)
 			calleeKnown = len(rule.calls) > 0 && ((n.Action != nil && n.Action.Callers.Known()) || (n.callerEvents != nil && n.callerEvents.Known))
 		}
@@ -190,7 +208,7 @@ func (rule *RuleUntrustedCheckout) VisitWorkflowPre(n *Workflow) error {
 	rule.guard = checkoutGuardEvents(n, rule.privileged, rule.project, rule.siblings, calleeKnown)
 	rule.loose = rule.pedantic("untrusted-checkout")
 	rule.anyCheckout = anyCheckoutOption(rule.Config())
-	rule.labelRerun = rerunsOnPush(n)
+	rule.labelRerun = rule.labelRerun || rerunsOnPush(n)
 	if rule.loose {
 		// a maintainer who dispatches the workflow for the number of a pull request
 		if rule.dispatch = dispatchInputs(n); len(rule.dispatch) > 0 {
@@ -220,7 +238,7 @@ func (rule *RuleUntrustedCheckout) VisitJobPre(n *Job) error {
 	// The reviewers of an environment decide, unless the online checks find that there are none (environmentGate)
 	rule.envJob = n.Environment != nil && n.Environment.Name != nil
 	// the steps of the job itself are counted as the loop reaches them
-	running := rule.ownGates(n, commentOnly, false).merge(rule.neededGates(n, commentOnly, map[*Job]bool{}))
+	running := rule.ownGates(n, commentOnly, false).merge(rule.neededGates(rule.wf, n, rule.privileged, commentOnly, map[*Job]bool{})).merge(rule.calleeGates)
 	if running.safe {
 		return nil
 	}
@@ -291,10 +309,12 @@ func (rule *RuleUntrustedCheckout) VisitJobPre(n *Job) error {
 				for _, c := range cs {
 					if merged && c.immutable() {
 						kept = append(kept, c) // a later step that does not need the merge runs it
+						c.ran = true
 						continue
 					}
 					if c.afterFailure && !stepRunsAfterFailure(s) {
 						kept = append(kept, c) // the step does not run after the check of the action failed
+						c.ran = true
 						continue
 					}
 					rule.report(c, how, here)
@@ -334,7 +354,7 @@ func (rule *RuleUntrustedCheckout) VisitJobPre(n *Job) error {
 		// the checkout that nothing visibly runs (Scorecard and Semgrep report it, and it catches what the heuristics miss)
 		for _, dir := range dirs {
 			for _, c := range pending[dir] {
-				if holds, _ := rule.environmentGate(); !c.gates.gated() && !holds && !(jobMerged && c.immutable()) {
+				if holds, _ := rule.environmentGate(); !c.gates.gated() && !holds && !c.ran && !(jobMerged && c.immutable()) {
 					rule.reportUnused(c)
 				}
 			}
