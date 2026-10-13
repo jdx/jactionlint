@@ -544,7 +544,7 @@ func (p *parser) parseWorkflowDispatchEventInput(name *String, n *yaml.Node) *Di
 		case "options":
 			ret.Options = p.parseStringSequence("options", e.val, false, true)
 		default:
-			p.unexpectedKey(e.key, "inputs", []string{"description", "required", "default"})
+			p.unexpectedKey(e.key, "inputs", []string{"description", "required", "default", "type", "options"})
 		}
 	}
 

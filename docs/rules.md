@@ -82,6 +82,7 @@ rules:
 | [insecure-commands](#insecure-commands) | security | error | default |
 | [insecure-ssh-keyscan](#insecure-ssh-keyscan) | security | error | default |
 | [insecure-url-scheme](#insecure-url-scheme) | security | error | default |
+| [insufficient-permissions](#insufficient-permissions) | correctness | error | default |
 | [invalid-activity-type](#invalid-activity-type) | correctness | error | correctness |
 | [invalid-cron](#invalid-cron) | correctness | error | correctness |
 | [invalid-env-var-name](#invalid-env-var-name) | correctness | error | correctness |
@@ -116,6 +117,7 @@ rules:
 | [missing-timeout](#missing-timeout) | policy | error | default |
 | [missing-workflow-input](#missing-workflow-input) | correctness | error | correctness |
 | [missing-workflow-secret](#missing-workflow-secret) | correctness | error | correctness |
+| [multiline-plain-run](#multiline-plain-run) | correctness | error | correctness |
 | [mutable-runner-label](#mutable-runner-label) | policy | warn | pedantic |
 | [obfuscation](#obfuscation) | security | error | default |
 | [outdated-action-runner](#outdated-action-runner) | correctness | error | correctness |
@@ -139,6 +141,7 @@ rules:
 | [template-injection](#template-injection) | security | error | correctness |
 | [timeout-too-long](#timeout-too-long) | policy | error | only when configured |
 | [typosquat-uses](#typosquat-uses) | security | error | default |
+| [ubuntu-slim-limits](#ubuntu-slim-limits) | correctness | error | default |
 | [undefined-function](#undefined-function) | correctness | error | correctness |
 | [undefined-job-needs](#undefined-job-needs) | correctness | error | correctness |
 | [undefined-property](#undefined-property) | correctness | error | correctness |
@@ -184,7 +187,7 @@ The action metadata does not follow the syntax of action.yml.
 
 ## adhoc-packages
 
-A package is installed by name with npm, yarn, pnpm, bun, gem or bundle add outside of a lock file.
+A package is installed by name with npm, yarn, pnpm, bun, aube, gem or bundle add outside of a lock file.
 
 - Group: security
 - Default level: error
@@ -637,6 +640,16 @@ A download uses http, ftp or git instead of https.
 - Profile: default
 - Details and examples: [checks](./checks.md#check-insecure-url-scheme)
 
+## insufficient-permissions
+
+The explicit permissions of a job do not grant what an action or command of the job needs from the GITHUB_TOKEN.
+
+- Group: correctness
+- Default level: error
+- Profile: default
+- Option `pedantic` (bool, no default): Also report actions/checkout without "contents: read", which only a private repository needs. Unset, it runs under the pedantic profile.
+- Details and examples: [checks](./checks.md#check-insufficient-permissions)
+
 ## invalid-activity-type
 
 An activity type is not available for the Webhook event.
@@ -932,7 +945,7 @@ A job does not set timeout-minutes.
 - Default level: error
 - Profile: default
 - Fixable: yes
-- Option `default-minutes` (int, no default): The timeout-minutes which --fix adds to a job. There is no default: the rule has no fix unless this is set. It is lowered to the max of timeout-too-long when that is smaller.
+- Option `default-minutes` (int, no default): The timeout-minutes which --fix adds to a job. There is no default: the rule has no fix unless this is set. It is lowered to the max of timeout-too-long when that is smaller, and to 15 on a job that runs only on ubuntu-slim.
 - Details and examples: [checks](./checks.md#check-timeout-minutes)
 
 ## missing-workflow-input
@@ -952,6 +965,16 @@ A required secret of a reusable workflow is not passed.
 - Default level: error
 - Profile: correctness
 - Details and examples: [checks](./checks.md#check-reusable-workflows)
+
+## multiline-plain-run
+
+A run: is written over several lines without |, so YAML folds the lines into one command.
+
+- Group: correctness
+- Default level: error
+- Profile: correctness
+- Fixable: yes
+- Details and examples: [checks](./checks.md#check-multiline-plain-run)
 
 ## mutable-runner-label
 
@@ -1176,6 +1199,16 @@ An action is one typo away from a popular action of another owner.
 - Option `allow` (strings, empty by default): Slugs (owner/repo) of actions which are never reported, e.g. a legitimate fork.
 - Details and examples: [checks](./checks.md#check-typosquat-uses)
 
+## ubuntu-slim-limits
+
+A job on ubuntu-slim has a container, services or a Docker container action, which the single-CPU runner cannot run. With the option pedantic, a timeout-minutes above its limit of 15 minutes counts too.
+
+- Group: correctness
+- Default level: error
+- Profile: default
+- Option `pedantic` (bool, no default): Also report the pedantic checks, which are noisier. Unset, they run under the pedantic profile.
+- Details and examples: [checks](./checks.md#check-ubuntu-slim-limits)
+
 ## undefined-function
 
 An undefined function is called in an expression.
@@ -1260,7 +1293,7 @@ A secret which the reusable workflow does not define is passed.
 
 ## unlocked-install
 
-cargo install runs without --locked, or npm, yarn or pnpm install without freezing a lock file that the repository has. With the option pedantic, also installs without a lock file npm, Yarn and bun installs that run the lifecycle scripts of the dependencies, and installs without a release-age cooldown.
+cargo install runs without --locked, or npm, yarn or pnpm install without freezing a lock file that the repository has. With the option pedantic, also installs without a lock file, npm, Yarn and bun installs that run the lifecycle scripts of the dependencies (and aube installs that allow every build), and installs without a release-age cooldown.
 
 - Group: security
 - Default level: error
@@ -1349,11 +1382,12 @@ A workflow_run workflow uses an artifact of the triggering run without validatin
 
 ## untrusted-checkout
 
-A pull_request_target or workflow_run workflow checks out the code of a pull request and runs it.
+A pull_request_target or workflow_run workflow checks out the code of a pull request and runs it, or turns off the protection of actions/checkout against the code of fork pull requests. With the option pedantic, a checkout that actions/checkout refuses for a fork is reported too.
 
 - Group: security
 - Default level: error
 - Profile: default
+- Option `pedantic` (bool, no default): Also report the pedantic checks, which are noisier. Unset, they run under the pedantic profile.
 - Details and examples: [checks](./checks.md#check-untrusted-checkout)
 
 ## unused-anchor
