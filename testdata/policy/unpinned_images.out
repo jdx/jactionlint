@@ -12,3 +12,4 @@ test.yaml:51:16: image "${{ vars.REGISTRY }}/tool:1.2" of service "tool" is not 
 test.yaml:66:20: container image "debian:12" is pinned by a tag, which can be moved to another image. pin it to a digest like "debian:12@sha256:{digest}" [unpinned-images]
 test.yaml:79:16: image "postgres:15" of service "db" is pinned by a tag, which can be moved to another image. pin it to a digest like "postgres:15@sha256:{digest}" [unpinned-images]
 test.yaml:79:16: image "postgres:16" of service "db" is pinned by a tag, which can be moved to another image. pin it to a digest like "postgres:16@sha256:{digest}" [unpinned-images]
+test.yaml:99:22: container image "fedora:41" is pinned by a tag, which can be moved to another image. pin it to a digest like "fedora:41@sha256:{digest}" [unpinned-images]

@@ -157,6 +157,10 @@ func matrixStrings(job *Job, ref string) (out []*RawYAMLString, complete bool) {
 			}
 			v = o.Props[key]
 		}
+		if o, ok := v.(*RawYAMLObject); ok {
+			// `container: ${{ matrix.container }}` where the matrix writes the whole container: its image is the one to check
+			v = o.Props["image"]
+		}
 		if s, ok := v.(*RawYAMLString); ok && s.Value != "" && !ContainsExpression(s.Value) {
 			out = append(out, s)
 		} else {

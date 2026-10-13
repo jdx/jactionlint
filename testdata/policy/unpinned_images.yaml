@@ -89,3 +89,16 @@ jobs:
         image: postgres:${{ matrix.postgres }}
     steps:
       - run: echo hello
+  matrix-with-containers:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - target: fedora
+            container:
+              image: fedora:41
+              options: --group-add 135
+          - target: web
+    container: ${{ matrix.container }}
+    steps:
+      - run: echo hello
