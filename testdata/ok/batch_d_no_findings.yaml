@@ -23,10 +23,10 @@ jobs:
           cat <<'EOF2' >> "$GITHUB_ENV"
           A=$NOT_EXPANDED
           EOF2
-      - run: npm ci
+      - run: npm ci --ignore-scripts
       - run: npm install --package-lock-only
-      - run: yarn install --immutable
-      - run: bun ci
+      - run: yarn install --immutable --ignore-scripts
+      - run: bun ci --ignore-scripts
       - run: pnpm install
       - run: pnpm install --frozen-lockfile
       - run: bundle install

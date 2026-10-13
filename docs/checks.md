@@ -3056,6 +3056,26 @@ as well (a lock file may be created in the job, or not exist yet), and two more 
 `--frozen-lockfile` (or use `bun ci`), and `pip install -r` (also `uv pip install -r`) without `--require-hashes` or a constraints
 file `-c`.
 
+The option reports a third kind of finding, about the lifecycle scripts of the dependencies
+([zizmor#1405](https://github.com/zizmorcore/zizmor/issues/1405)): `npm ci`, `npm install`, `yarn install`, `yarn add` and `bun install`
+without `--ignore-scripts` run the `preinstall`, `install` and `postinstall` scripts of every package of the dependency tree. That is how
+npm worms spread: a compromised release is installed, and its script runs on the runner with its tokens. Most workflows do not
+need the scripts of all their dependencies, and the few that do (`esbuild`, `sharp`, `node-gyp` builds) can run them with
+`npm rebuild <package>` after the install. The finding is not reported when the choice has been made:
+
+- the command has `--ignore-scripts` (Yarn 2 and later: `--mode=skip-build`), or only writes the lock file (`npm install --package-lock-only`);
+- the repository has `ignore-scripts=true` in its `.npmrc` (npm, Yarn 1 and bun read it), `ignoreScripts = true` in `bunfig.toml` or
+  `enableScripts: false` in `.yarnrc.yml`. The files are looked up in the root of the repository and in the `working-directory` of the step;
+- the environment of the step sets `npm_config_ignore_scripts` (`YARN_ENABLE_SCRIPTS=false` for Yarn), or an earlier step of the job
+  runs `npm config set ignore-scripts true`;
+- the package.json has an allow list: `trustedDependencies` for bun (bun runs the scripts of a default list of popular packages, and
+  an explicit list replaces it) and `allowScripts` for npm 12, which does not run the scripts of dependencies by default;
+- Yarn is 4.14 or later (`packageManager` in package.json), which does not run them by default either.
+
+pnpm is not reported: pnpm 10 and later run no script of a dependency unless the project allows it. Global installs (`npm install -g`)
+and `npx` are not reported, and neither is a command which follows a `cd`, because the configuration in force is not known.
+Whether the project's own scripts (`prepare`, `postinstall`) are needed is not known either: they run unless `--ignore-scripts` is given.
+
 Example input:
 
 ```yaml
@@ -3075,6 +3095,10 @@ test.yaml:6:14: "npm install" resolves the dependencies again and may update the
   |
 6 |       - run: npm install
   |              ^~~
+test.yaml:6:14: "npm install" runs the lifecycle scripts (preinstall, install, postinstall) of every dependency, and a compromised release uses them to run code on the runner. pass `--ignore-scripts` or set `ignore-scripts=true` in .npmrc, and run what a package needs with `npm rebuild` [unlocked-install]
+  |
+6 |       - run: npm install
+  |              ^~~
 test.yaml:7:14: "pip install -r requirements.txt" installs a requirements file without hashes or constraints, so the transitive dependencies are resolved anew on every run. use a lock file with hashes (`pip-compile --generate-hashes`) and pass --require-hashes, or pin them with -c [unlocked-install]
   |
 7 |       - run: pip install -r requirements.txt
@@ -3083,7 +3107,8 @@ test.yaml:7:14: "pip install -r requirements.txt" installs a requirements file w
 
 <!-- Skip playground link -->
 
-This is the output with the option `pedantic`, or with a `package-lock.json` in the repository for the first finding.
+This is the output with the option `pedantic`, or with a `package-lock.json` in the repository for the first finding. `npm ci --ignore-scripts`
+(and `ignore-scripts=true` in `.npmrc`) silences the second.
 
 Installing named packages is covered by [adhoc packages](#check-adhoc-packages) and [unpinned tools](#check-unpinned-tools).
 These rules have no equivalent in zizmor.

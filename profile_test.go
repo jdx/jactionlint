@@ -392,7 +392,7 @@ func TestUnlockedInstallNeedsALockFileInTheRepository(t *testing.T) {
 	}
 
 	// The pedantic option reports them without a lock file too
-	for _, run := range []string{"npm install", "yarn install", "bun install", "pip install -r requirements.txt"} {
+	for _, run := range []string{"npm install --ignore-scripts", "yarn install --ignore-scripts", "bun install --ignore-scripts", "pip install -r requirements.txt"} {
 		baselineProject(t, wf(run, ""), "profile: default\nrules:\n  unlocked-install:\n    pedantic: true\n")
 		if _, ids, _ := profileCmd(t); countID(ids, "unlocked-install") != 1 {
 			t.Errorf("%s with pedantic: %v", run, ids)
