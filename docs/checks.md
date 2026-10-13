@@ -20,6 +20,7 @@ List of checks:
 - [Contextual typing for `github.event` object](#check-contextual-github-event)
 - [Strict type checks for comparison operators](#check-comparison-types)
 - [shellcheck integration for `run:`](#check-shellcheck-integ)
+- [Syntax errors in shell scripts without shellcheck](#check-shell-syntax)
 - [pyflakes integration for `run:`](#check-pyflakes-integ)
 - [JavaScript syntax of `actions/github-script`](#check-github-script-syntax)
 - [Script injection by potentially untrusted inputs](#untrusted-inputs)
@@ -1276,6 +1277,91 @@ On GitHub Actions:
   env:
     SHELLCHECK_OPTS: --exclude=SC2129
 ```
+
+<a id="check-shell-syntax"></a>
+## Syntax errors in shell scripts without shellcheck
+
+[shellcheck][] reports a script that bash cannot read (an unclosed quote, a missing `fi`) with its SC1xxx codes, but only when it is
+installed. This is the rule `shell-syntax`: it reads the script of a `run:` step with a bash parser that is built into jactionlint
+([mvdan.cc/sh](https://github.com/mvdan/sh)), offline, and reports a syntax error where the step would stop with status 2. It is part
+of the default profile. To turn it off, set it in [the configuration file](config.md):
+
+```yaml
+rules:
+  shell-syntax: off
+```
+
+Example input:
+
+```yaml
+# without shellcheck
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          echo "building ${{ github.sha }}"
+          if [ -f build.log ]; then
+            cat build.log
+      - run: |
+          # OK: [[ ]], arrays, here-strings and process substitution are bash
+          arr=(a b c)
+          [[ ${#arr[@]} -gt 2 ]] && diff <(sort a) <(sort b) <<< "$arr"
+      # OK: pwsh is not read
+      - shell: pwsh
+        run: |
+          if ($true) { Write-Host "x"
+  test-win:
+    runs-on: windows-latest
+    steps:
+      # OK: the default shell of a Windows runner is pwsh
+      - run: Write-Host "x"
+      # This script is run with bash (Git Bash) due to 'shell:' configuration
+      - shell: bash
+        run: echo "unclosed
+```
+
+Output:
+
+```
+test.yaml:9:11: syntax error in the bash script of this step (line 2 of the script): `if` statement must end with `fi`. found by the built-in parser because shellcheck did not run [shell-syntax]
+  |
+9 |           if [ -f build.log ]; then
+  |           ^~
+test.yaml:26:19: syntax error in the bash script of this step (line 1 of the script): reached EOF without closing quote `"`. found by the built-in parser because shellcheck did not run [shell-syntax]
+   |
+26 |         run: echo "unclosed
+   |                   ^~~~~~~~~
+```
+
+<!-- Skip playground link -->
+
+The rule is for runs in which shellcheck does not check the script. It stays silent whenever shellcheck runs, so a mistake is never
+reported twice. It reports when shellcheck was not found, when it was turned off with `--shellcheck=`, and when the rule `shellcheck`
+is `off` in the configuration. Install shellcheck for the checks of everything else: this rule finds the errors that stop a script and
+nothing about quoting or style.
+
+jactionlint reads only what it can read as faithfully as bash does, and reports less rather than a script that bash accepts:
+
+- The shell must be `bash` or `sh`, or a custom template that starts with one of them (`bash -el {0}`). `pwsh`, `powershell`, `cmd`,
+  `python` and every other shell are not read. A step without `shell:` is read only when the job runs on a runner that is known to be
+  Linux or macOS (labels written out, none of them Windows): the default shell of a Windows runner is `pwsh`, and a runner chosen with
+  an expression (`${{ matrix.os }}`) or a self-hosted runner without an operating system in its labels can be one.
+- `sh` is read with the bash grammar as well, and reports only what is a syntax error in bash. The `/bin/sh` of a runner is `dash` on
+  Ubuntu but `bash` on macOS and in Git Bash for Windows, so `[[ ]]` or an array in a `shell: sh` script is not called an error here.
+- `${{ }}` expressions are replaced by underscores of the same length before the script is read, as for shellcheck, so a finding is
+  at the right place in the workflow file even when an expression spans several lines.
+- Only the mistakes that bash finds while it reads a script are reported: an unclosed quote or substitution, a `fi`, `done` or `esac`
+  that is missing or has nothing to close, a keyword where it does not belong, an operator without its operand. Bash finds the others
+  when it runs the command (a bad `${...}` substitution, the syntax of an arithmetic expression), and treats a here-document that is not
+  closed as a warning, so they are not reported.
+- Nothing after the first here-document (`<<`) or the first backquote of a script is reported, and a script with a carriage return is
+  not read. Bash does not read the body of a here-document, and it parses a command in backquotes only when it runs it, while the
+  parser reads both.
+
+The finding is at the token where the parser stopped, which is the opening token (the quote, the `if`, the `$(`) for a construct
+that is not closed.
 
 <a id="check-pyflakes-integ"></a>
 ## [pyflakes][] integration for `run:`
@@ -10853,7 +10939,7 @@ way because any caller can pass attacker-controlled text. jactionlint does not l
 
 How the rules treat actions:
 
-- **Applies** to the steps (and the metadata) of an action: `action-release-cooldown`, `action-syntax`, `actions-lock`, `actions-lock-drift`, `adhoc-packages`, `archived-uses`, `argument-injection`, `artipacked`, `background-step-not-waited`, `checkout-static-credentials`, `command-injection`, `conflicting-action-inputs`, `constant-condition`, `context-availability`, `continue-on-error`, `deprecated-action-input`, `deprecated-commands`, `deprecated-node-runtime`, `duplicate-key`, `duplicate-step-id`, `environment-file-redirect`, `expired-ignore`, `expression-syntax`, `expression-type`, `fail-fast-action-inputs`, `forbidden-uses`, `github-app`, `github-script-syntax`, `if-always-true`, `impostor-commit`, `insecure-commands`, `insecure-ssh-keyscan`, `insecure-url-scheme`, `invalid-env-var-name`, `invalid-function-call`, `invalid-id`, `invalid-ignore-comment`, `invalid-local-action`, `invalid-parallel-step`, `invalid-shell-name`, `invalid-uses`, `invisible-characters`, `known-vulnerable-actions`, `malformed-expression-delimiters`, `max-run-lines`, `merge-key`, `misfeature`, `missing-action-input`, `missing-version-comment`, `multiline-plain-run`, `obfuscation`, `outdated-action-runner`, `output-clobbering`, `pipeline-without-pipefail`, `pyflakes`, `recursive-alias`, `ref-confusion`, `ref-version-mismatch`, `repojacking`, `require-expression-wrapping`, `self-repository`, `shellcheck`, `stale-action-refs`, `superfluous-actions`, `template-injection`, `typosquat-uses`, `undefined-function`, `undefined-property`, `unknown-action-input`, `unlocked-install`, `unpinnable-action`, `unpinned-images`, `unpinned-tools`, `unpinned-uses`, `unsound-contains`, `unsound-prefix-match`, `unsound-ternary`, `unused-anchor`, `unused-ignore`, `unverified-download`, `use-trusted-publishing`, `yaml-syntax`.
+- **Applies** to the steps (and the metadata) of an action: `action-release-cooldown`, `action-syntax`, `actions-lock`, `actions-lock-drift`, `adhoc-packages`, `archived-uses`, `argument-injection`, `artipacked`, `background-step-not-waited`, `checkout-static-credentials`, `command-injection`, `conflicting-action-inputs`, `constant-condition`, `context-availability`, `continue-on-error`, `deprecated-action-input`, `deprecated-commands`, `deprecated-node-runtime`, `duplicate-key`, `duplicate-step-id`, `environment-file-redirect`, `expired-ignore`, `expression-syntax`, `expression-type`, `fail-fast-action-inputs`, `forbidden-uses`, `github-app`, `github-script-syntax`, `if-always-true`, `impostor-commit`, `insecure-commands`, `insecure-ssh-keyscan`, `insecure-url-scheme`, `invalid-env-var-name`, `invalid-function-call`, `invalid-id`, `invalid-ignore-comment`, `invalid-local-action`, `invalid-parallel-step`, `invalid-shell-name`, `invalid-uses`, `invisible-characters`, `known-vulnerable-actions`, `malformed-expression-delimiters`, `max-run-lines`, `merge-key`, `misfeature`, `missing-action-input`, `missing-version-comment`, `multiline-plain-run`, `obfuscation`, `outdated-action-runner`, `output-clobbering`, `pipeline-without-pipefail`, `pyflakes`, `recursive-alias`, `ref-confusion`, `ref-version-mismatch`, `repojacking`, `require-expression-wrapping`, `self-repository`, `shell-syntax`, `shellcheck`, `stale-action-refs`, `superfluous-actions`, `template-injection`, `typosquat-uses`, `undefined-function`, `undefined-property`, `unknown-action-input`, `unlocked-install`, `unpinnable-action`, `unpinned-images`, `unpinned-tools`, `unpinned-uses`, `unsound-contains`, `unsound-prefix-match`, `unsound-ternary`, `unused-anchor`, `unused-ignore`, `unverified-download`, `use-trusted-publishing`, `yaml-syntax`.
 - **Caller-dependent**: `agentic-actions`, `bot-conditions`, `cache-poisoning`, `github-env` (its findings about untrusted input do not depend on the caller), `untrusted-artifact` and `untrusted-checkout`.
 - **Not applicable** because an action does not have what the rule checks, or because only the calling job can decide (`unused-baseline-entry` is about the baseline file, not about a workflow or an action): `anonymous-definition`, `comment-trigger-authorization`, `concurrency-cancels-prs`, `concurrency-cancels-release`, `concurrency-deadlock`, `concurrency-limits`, `conflicting-runner-labels`, `cron-too-frequent`, `cyclic-job-needs`, `dangerous-triggers`, `dependabot-cooldown`, `dependabot-execution`, `dependabot-missing-actions-update`, `dependabot-syntax`, `deprecated-runner-label`, `duplicate-job-id`, `duplicate-job-needs`, `duplicate-triggers`, `event-name-never-received`, `excessive-permissions`, `gate-job-skipped-on-failure`, `gh-without-token`, `hardcoded-container-credentials`, `insufficient-permissions`, `invalid-activity-type`, `invalid-cron`, `invalid-event-config`, `invalid-event-filter`, `invalid-glob`, `invalid-label-pattern`, `invalid-local-workflow`, `invalid-permissions`, `invalid-timezone`, `invalid-workflow-call`, `invalid-workflow-call-input`, `invalid-workflow-dispatch-input`, `local-action-checkout`, `macos-gnu-flags`, `matrix-duplicate-value`, `matrix-invalid-exclude`, `missing-permissions`, `missing-timeout`, `missing-workflow-input`, `missing-workflow-secret`, `mutable-runner-label`, `overprovisioned-secrets`, `require-shell`, `required-actions`, `secrets-inherit`, `secrets-outside-env`, `self-hosted-runner`, `timeout-too-long`, `ubuntu-slim-limits`, `undefined-job-needs`, `undocumented-permissions`, `unknown-event`, `unknown-runner-label`, `unknown-workflow-input`, `unknown-workflow-secret`, `unmatched-paths-filter`, `unredacted-secrets`, `unused-baseline-entry`, `unused-job-output`, `unused-needs`, `unused-workflow-input`, `unused-workflow-secret`, `workflow-call-permissions`, `workflow-input-type`, `workflow-run-names`, `workflow-secret-scope`, `workflow-syntax`.
 

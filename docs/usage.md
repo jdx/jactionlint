@@ -396,6 +396,8 @@ note: shellcheck was not found, so it did not check 12 shell scripts. install it
 ```
 
 - The note is printed once per run, and only when a script needed the tool: a repository whose steps are all `uses:` gets none.
+- Without shellcheck, the rule [`shell-syntax`](checks.md#check-shell-syntax) still reads the bash and `sh` scripts with a built-in
+  parser and reports the syntax errors that stop a script. It does not replace shellcheck: it reports nothing else.
 - Silence it with `--shellcheck=` (or `--pyflakes=`), which says that you do not want the tool, or with `--no-hints` or
   `JACTIONLINT_NO_HINTS=1`, which silence the other notes too. A tool turned off with an empty command is never noted.
 - A command you name yourself must exist. `--shellcheck=/bad/path` (or `--pyflakes=/bad/path`) exits with status 3 and says that the path was not

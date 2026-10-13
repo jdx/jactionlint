@@ -149,6 +149,7 @@ rules:
 | [secrets-outside-env](#secrets-outside-env) | security | warn | pedantic |
 | [self-hosted-runner](#self-hosted-runner) | security | info | pedantic |
 | [self-repository](#self-repository) | security | info | pedantic |
+| [shell-syntax](#shell-syntax) | correctness | error | default |
 | [shellcheck](#shellcheck) | correctness | error | correctness |
 | [stale-action-refs](#stale-action-refs) | security | info | only with `--online` |
 | [superfluous-actions](#superfluous-actions) | security | error | default |
@@ -1292,6 +1293,15 @@ A local action or workflow is referenced as ./path instead of $/path.
 - Profile: pedantic
 - Fixable: yes
 - Details and examples: [checks](./checks.md#check-self-repository)
+
+## shell-syntax
+
+A shell script at "run:" has a syntax error (found without shellcheck).
+
+- Group: correctness
+- Default level: error
+- Profile: default
+- Details and examples: [checks](./checks.md#check-shell-syntax)
 
 ## shellcheck
 

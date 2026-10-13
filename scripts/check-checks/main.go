@@ -28,6 +28,10 @@ var exampleDay = time.Date(2026, time.October, 13, 0, 0, 0, 0, time.UTC)
 // instead (the same ones the tests of the checks use).
 const requiresOnlineMarker = "# requires --online\n"
 
+// withoutShellcheckMarker is the first line of the example of a check that runs only when shellcheck does not: the
+// example is run with `--shellcheck=`, whether or not the machine has the command.
+const withoutShellcheckMarker = "# without shellcheck\n"
+
 // Actionlint lints the example. The examples in the sections whose headings start with "Dependabot" are
 // Dependabot configuration files, and the ones in the sections whose headings start with "Composite action"
 // are the metadata of an action. The others are workflows.
@@ -60,6 +64,10 @@ func Actionlint(src []byte, heading string) ([]byte, error) {
 	p, err := jactionlint.NewProjects().At(".")
 	if err != nil {
 		return nil, err
+	}
+
+	if bytes.HasPrefix(src, []byte(withoutShellcheckMarker)) {
+		opts.Shellcheck = ""
 	}
 
 	if bytes.HasPrefix(src, []byte(requiresOnlineMarker)) {

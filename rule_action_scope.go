@@ -119,6 +119,7 @@ var actionRuleScope = map[string]struct {
 	"self-hosted-runner":              {scope: actionNotApplicable},
 	"self-repository":                 {scope: actionApplies},
 	"shell-name":                      {scope: actionApplies},
+	"shell-syntax":                    {scope: actionApplies},
 	"shellcheck":                      {scope: actionApplies},
 	"stale-action-refs":               {scope: actionApplies},
 	"timeout-check":                   {scope: actionNotApplicable},

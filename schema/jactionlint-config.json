@@ -218,6 +218,7 @@
               "secrets-outside-env",
               "self-hosted-runner",
               "self-repository",
+              "shell-syntax",
               "shellcheck",
               "stale-action-refs",
               "superfluous-actions",
@@ -452,6 +453,7 @@
                   "secrets-outside-env",
                   "self-hosted-runner",
                   "self-repository",
+                  "shell-syntax",
                   "shellcheck",
                   "stale-action-refs",
                   "superfluous-actions",
@@ -617,6 +619,7 @@
                     "secrets-outside-env",
                     "self-hosted-runner",
                     "self-repository",
+                    "shell-syntax",
                     "shellcheck",
                     "stale-action-refs",
                     "superfluous-actions",
@@ -3584,6 +3587,28 @@
         },
         "self-repository": {
           "description": "A local action or workflow is referenced as ./path instead of $/path. Group: security. Profile: pedantic. Default level: info. https://jactionlint.jdx.dev/rules#self-repository",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "shell-syntax": {
+          "description": "A shell script at \"run:\" has a syntax error (found without shellcheck). Group: correctness. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#shell-syntax",
           "oneOf": [
             {
               "$ref": "#/definitions/level"

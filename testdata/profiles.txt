@@ -114,6 +114,7 @@ secrets-inherit default security error
 secrets-outside-env pedantic security warn
 self-hosted-runner pedantic security info
 self-repository pedantic security info
+shell-syntax default correctness error
 shellcheck correctness correctness error
 stale-action-refs online security info
 superfluous-actions default security error

@@ -199,6 +199,7 @@ jactionlint" in the harness report. The idea behind some of them is an open issu
 | `actions-lock`, `actions-lock-drift` | default, online | GitHub's Actions lock file (`.github/workflows/actions.lock`, a technical preview): an action which a listed workflow uses and the file does not pin, entries which do not follow the format or which nothing uses, and with `--online` pins which no longer match GitHub (renamed or replaced repository, moved version tag, impostor commit). zizmor has not built support for the file ([zizmor#2371](https://github.com/zizmorcore/zizmor/issues/2371), woodruffw: auditing the lock file is its main job). Measured on 82 repositories with a lock file, see [the check](checks.md#check-actions-lock) | unit tests and fixtures |
 | `dependabot-missing-actions-update` | pedantic | `dependabot.yml` has no `github-actions` update although `.github/workflows` uses actions; skipped when the repository has a Renovate configuration. Also reports the local composite actions that use actions and that no `github-actions` update names (zizmor [#1806](https://github.com/zizmorcore/zizmor/issues/1806) is open), with an unsafe fix. [The check](checks.md#check-dependabot-missing-actions-update) | |
 | `pipeline-without-pipefail` | default | a failure in a pipeline of a `run:` script is hidden because the default shell (`bash -e {0}`) and `shell: sh` do not enable pipefail. zizmor [#288](https://github.com/zizmorcore/zizmor/issues/288) is the open idea | unit tests and fixtures |
+| `shell-syntax` | default | a syntax error in a bash or `sh` script of a `run:` step, found with a bash parser built into jactionlint (mvdan.cc/sh) when shellcheck does not run, and silent when it does. zizmor [#2322](https://github.com/zizmorcore/zizmor/issues/2322) is the open idea (it plans to look for `ERROR` nodes of a tree-sitter grammar) | [the check](checks.md#check-shell-syntax); the numbers are in [shell syntax without shellcheck](#shell-syntax-without-shellcheck) |
 | `agentic-actions` | default | AI agent actions ([zizmor#1605](https://github.com/zizmorcore/zizmor/issues/1605) is a proposal): an agent outsiders can steer without a check of the user, an open gate (`allowed_non_write_users: '*'`), settings that turn safeguards off, an agent on the code of a pull request. [The check](checks.md#check-agentic-actions) | [see below](#agentic-actions) |
 | `unverified-download` | default | a download piped into a shell or an interpreter, a downloaded file made executable and run without a checksum or signature check, TLS verification turned off. The idea is zizmor [#711](https://github.com/zizmorcore/zizmor/issues/711) | [see below](#downloads-and-credentials) |
 | `insecure-ssh-keyscan` | default | `ssh-keyscan` output written to a `known_hosts` file. The idea is zizmor [#2012](https://github.com/zizmorcore/zizmor/issues/2012) | [see below](#downloads-and-credentials) |
@@ -371,10 +372,37 @@ available or `version` is set). That removes 242 findings from the 964 of the sa
 runners, 63 on a matrix runner, 1 self-hosted, 4 in composite actions); the option `pedantic` brings them back. A self-hosted runner
 without buildx is the one case that this does not cover.
 
+## Shell syntax without shellcheck
+
+`shell-syntax` is the part of zizmor [#2322](https://github.com/zizmorcore/zizmor/issues/2322) that needs no tool: it parses the `bash`
+and `sh` scripts of `run:` steps with the Go parser of mvdan.cc/sh (not tree-sitter) and reports only what bash itself rejects while it
+reads a script. It is silent when shellcheck runs. zizmor has no audit of this name yet, so there is no comparison with its findings.
+What was measured, with bash 5.2.21 as the reference (`bash -n` on the same text, after the `${{ }}` expressions were replaced by
+underscores):
+
+- **Real workflows, 52 shallow clones made for this check** (`rust-lang/rust`, `pytorch/pytorch`, `home-assistant/core`,
+  `microsoft/vscode`, `kubernetes/kubernetes`, `NixOS/nixpkgs`, `apache/airflow`, `grafana/grafana`, `jdx/mise` and 43 more) and the 23
+  repositories of `scripts/zizmor-diff/corpus.txt` that exist on the machine: 4,472 workflow and composite action files, 22,437 `run:`
+  steps, of which 13,933 scripts were read (the others are `pwsh`, `python`, `cmd`, custom shells or steps on a runner that is not known to
+  be Linux or macOS), 1,331 of them with a `${{ }}` expression. **No finding**, and the parser and `bash -n` agreed on every script.
+- **Older, larger set of repositories from earlier runs of this project** (not deduplicated: 11,158 files, 62,283 scripts read, 5,208 with an
+  expression): **3 findings, all real**. `apache/superset` `release.yml` has a stray quote (`echo "HAS_TAGS=1" >> $GITHUB_ENV"`) and two
+  `hyperpolymath` repositories have `\"casket\\"}"}` in a `curl` call; `bash -n` fails on all three with "unexpected EOF while looking for matching".
+  The files are snapshots from when the set was made; they may have been fixed since.
+- **Mutated scripts.** Real scripts hide few errors, so 265,265 copies of the scripts above were damaged (a character deleted, a line
+  deleted or swapped, the text cut off, a token such as `"`, `$(`, `fi` or `<<EOF` inserted) with two fresh random seeds and compared with
+  `bash -n`: **0 were reported that bash accepts**, 38,495 were reported and rejected by bash too, and 9,591 were rejected by bash only
+  (not reported: that is the price of the checks below). Earlier rounds of this loop found the cases that the rule now leaves out: an
+  unclosed here-document (bash only warns), a bad `${...}` substitution and a bad arithmetic expression (bash fails at run time), the
+  body of a backquote substitution (parsed at run time), `[[ a =~&& b ]]`, `! ` after a redirection, and an invalid UTF-8 byte.
+
+Not measured: the rule against `dash` (a `shell: sh` script is read with the bash grammar), against the bash 3.2 of macOS and the bash of
+Git for Windows (only bash 5.2 was the reference), the effect of the real values of `${{ }}` expressions (an expression that expands to
+shell syntax can make a script that looks broken valid, or the other way round), scripts that are not UTF-8, and the run time of the rule.
+
 ## What is not done
 
-These ideas from the zizmor tracker are **not built**: shell syntax errors without shellcheck
-([#2322](https://github.com/zizmorcore/zizmor/issues/2322)), a rule for a SHA without a version comment
+These ideas from the zizmor tracker are **not built**: a rule for a SHA without a version comment
 ([#2316](https://github.com/zizmorcore/zizmor/issues/2316)), credentials in the `registries` of `dependabot.yml`
 ([#1222](https://github.com/zizmorcore/zizmor/issues/1222)), and zizmor's precomputed snapshot of tags and advisories, which would cut the
 first-run cost of `--online`. The registry of rules, [rules.md](rules.md), is the list of what exists.

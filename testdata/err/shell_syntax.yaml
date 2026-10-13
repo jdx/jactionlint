@@ -1,0 +1,122 @@
+on: push
+jobs:
+  reported:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          echo "building ${{ github.sha }}"
+          if [ -f build.log ]; then
+            cat build.log
+      - run: echo "unclosed
+      - run: |
+          for f in a b; do
+            echo "$f"
+      - run: |
+          echo a
+          fi
+      - run: |
+          echo ${{ format('{0}',
+            github.sha) }}
+          x=$(echo a
+      - shell: sh
+        run: |
+          case "$X" in
+            a) echo a ;;
+      - shell: bash -eo pipefail {0}
+        run: echo a | (cat
+  explicit-bash-on-windows:
+    runs-on: windows-latest
+    steps:
+      # run with bash (Git Bash) due to 'shell:'
+      - shell: bash
+        run: |
+          if true; then
+  defaults:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - run: |
+          done
+  not-reported:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        os: [ubuntu-latest]
+    steps:
+      # here-documents, also with an expression, indented and quoted
+      - run: |
+          cat <<EOF > out.txt
+          sha ${{ github.sha }} it's "quoted
+          EOF
+          cat <<-'EOF'
+          	$(not a substitution
+          	EOF
+      # a here-document that is not closed is a warning for bash
+      - run: |
+          cat <<EOF
+          body
+      # [[ ]], regular expressions and process substitution
+      - run: |
+          if [[ "$A" == b* && $x =~ ^(a|b)+$ ]]; then echo ok; fi
+          diff <(sort a) <(sort b)
+          tee >(cat) < /dev/null
+      # arrays, associative arrays and here-strings
+      - run: |
+          arr=(a b c)
+          declare -A map=([k]=v)
+          echo "${arr[@]}" "${#arr[@]}" "${map[k]}"
+          read -r a b <<< "x y"
+      # case with fallthrough
+      - run: |
+          case "$X" in
+            a) echo a ;;&
+            b) echo b ;&
+            *) echo other ;;
+          esac
+      # expressions in place of words, tests and numbers
+      - run: |
+          if ${{ contains(github.ref, 'x') }}; then
+            echo "${{ matrix.os }}" > ${{ env.OUT }}
+          fi
+          for f in ${{ github.ref_name }}; do echo $f; done
+          echo $(( ${{ github.run_number }} + 1 ))
+          echo '${{ toJSON(github.ref) }}' "${{ format('{0}', 'a') }}"
+      # arithmetic and substitutions that bash only checks when it runs them
+      - run: |
+          echo "${x<}" $(( 1 + ))
+      # sh is read as bash: [[ ]] and arrays are fine on macOS and in Git Bash
+      - shell: sh
+        run: |
+          arr=(1 2)
+          [[ -n $arr ]]
+      # not bash or sh
+      - shell: pwsh
+        run: |
+          if ($true) { Write-Host "x"
+      - shell: python
+        run: print("a"
+      - shell: perl {0}
+        run: print "unclosed;
+  windows-default-shell:
+    runs-on: windows-latest
+    steps:
+      # pwsh is the default shell of a Windows runner
+      - run: |
+          Get-ChildItem | % { $_ }
+          fi "
+  runner-not-known:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - run: fi
+  self-hosted-not-known:
+    runs-on: self-hosted
+    steps:
+      - run: fi
