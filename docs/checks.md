@@ -25,6 +25,7 @@ List of checks:
 - [Parallel steps](#check-parallel-step-refs)
 - [Background step results read before a wait](#check-background-step-not-waited)
 - [Timeout minutes of jobs](#check-timeout-minutes)
+- [Limits of ubuntu-slim](#check-ubuntu-slim-limits)
 - [Workflow names of `workflow_run` event](#check-workflow-run-names)
 - [Matrix values](#check-matrix-values)
 - [Webhook events validation](#check-webhook-events)
@@ -1733,11 +1734,69 @@ is the only way it can change a workflow, and one which really needs longer sets
 `runs-on:` (or after `name:`, or as the first key of the job when it has neither), with the indentation of the job's other keys
 and the line endings of the file. Without `default-minutes` the finding has no fix.
 
-When `timeout-too-long` has a `max` smaller than `default-minutes`, the fix uses `max` so the result stays clean. Jobs calling a
+When `timeout-too-long` has a `max` smaller than `default-minutes`, the fix uses `max` so the result stays clean. On a job that runs only on
+`ubuntu-slim` the fix writes at most 15, the [limit of that runner](#check-ubuntu-slim-limits), so that it does not add a finding of that check. Jobs calling a
 reusable workflow are skipped since they do not support `timeout-minutes`. A job written in the flow style (`job: {runs-on: ...}`)
 or with a YAML anchor is still reported but has no fix: jactionlint does not guess where to put a key there.
 
 [timeout-minutes-doc]: https://docs.github.com/en/actions/writing-workflows/workflow-syntax-for-github-actions#jobsjob_idtimeout-minutes
+
+<a id="check-ubuntu-slim-limits"></a>
+## Limits of ubuntu-slim
+
+Example input:
+
+```yaml
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-slim
+    container: node:22
+    services:
+      redis:
+        image: redis
+    steps:
+      - uses: docker://alpine:3.22
+```
+
+Output:
+
+```
+test.yaml:5:5: "container" cannot be used on ubuntu-slim: ubuntu-slim runs the job inside an unprivileged container, which has no Docker daemon, so the job container cannot start. use a runner with a VM such as ubuntu-latest [ubuntu-slim-limits]
+  |
+5 |     container: node:22
+  |     ^~~~~~~~~~
+test.yaml:7:7: "services" cannot be used on ubuntu-slim: ubuntu-slim runs the job inside an unprivileged container, which has no Docker daemon, so the service containers cannot start. use a runner with a VM such as ubuntu-latest [ubuntu-slim-limits]
+  |
+7 |       redis:
+  |       ^~~~~~
+test.yaml:10:15: the Docker container action "docker://alpine:3.22" cannot run on ubuntu-slim: ubuntu-slim runs the job inside an unprivileged container, which has no Docker daemon. use a runner with a VM such as ubuntu-latest [ubuntu-slim-limits]
+   |
+10 |       - uses: docker://alpine:3.22
+   |               ^~~~~~~~~~~~~~~~~~~~
+```
+
+<!-- Skip playground link -->
+
+`ubuntu-slim` is the single-CPU runner of GitHub. It runs a job inside an unprivileged container instead of a virtual machine. GitHub
+[documents][single-cpu-doc] that Docker-in-Docker is not supported there, and the image has a Docker client but no daemon. GitHub has told users that
+`container:` is not available on the runner (actions/runner-images#13541). So the job `container:`, the `services:` of the job and a Docker container
+action (a step with `uses: docker://...`, a local action whose `runs.using` is `docker`, or a local composite action which has such a step, at any depth of local composite actions that call each other) cannot work, and the rule `ubuntu-slim-limits` (in the
+`default` profile, as an error) reports each of them. A `run:` step which calls `docker` is not reported.
+
+It reports a job whose `runs-on` is only `ubuntu-slim`: the label itself, or a matrix whose values are all `ubuntu-slim`. A job that may also get
+another runner (a second label, a matrix with another value, a matrix or a runner that comes from an expression, `self-hosted`, a runner group) is never
+reported. Remote actions whose `action.yml` declares `runs.using: docker` are not known without the online checks and are not reported.
+
+The pedantic tier of the rule (the option `pedantic`, true under `profile: pedantic`) adds the job timeout: "The job timeout for single-CPU runners is
+15 minutes", so a `timeout-minutes` above 15 never takes effect and a job that runs longer fails at 15 minutes. It is pedantic because it is a
+setting that does nothing, not a failing job, until a job really runs that long; generated workflows set 45 on jobs that finish in seconds (the 334 jobs
+of github/gh-aw were the corpus for this decision). A `timeout-minutes` that is an expression is not reported.
+
+There is no automatic fix: the right change (a longer-running runner, no container) is a decision of the author. The fix of `missing-timeout` does not
+write more than 15 on such a job, so that it does not add a finding of this check.
+
+[single-cpu-doc]: https://docs.github.com/en/actions/reference/runners/github-hosted-runners#single-cpu-runners
 
 <a id="check-workflow-run-names"></a>
 ## Workflow names of `workflow_run` event
@@ -7858,7 +7917,7 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           ref: ${{ github.event.pull_request.head.sha }}
       - run: npm ci && npm test
@@ -7867,13 +7926,13 @@ jobs:
 Output:
 
 ```
-test.yaml:8:16: this step checks out code from a pull request (github.event.pull_request.head.sha) in a "pull_request_target" workflow and "npm" runs it afterwards. the workflow has a write token and secrets, so whoever controls that code can use them. run untrusted code in a "pull_request" workflow without secrets, or check out the base branch and only read the pull request as data [untrusted-checkout]
+test.yaml:8:16: this step checks out code from a pull request (github.event.pull_request.head.sha) in a "pull_request_target" workflow and "npm" runs it afterwards. the workflow has a write token and secrets, so whoever controls that code can use them. run untrusted code in a "pull_request" workflow without secrets, or check out the base branch and only read the pull request as data. the pinned actions/checkout (v4.2.2) predates the protection that refuses the code of a fork pull request here, upgrade to v4.4.0 or later [untrusted-checkout]
   |
 8 |           ref: ${{ github.event.pull_request.head.sha }}
   |                ^~~
 ```
 
-[Playground](https://jactionlint.jdx.dev/#eNpMjjHOwjAMRvee4ht+dWv+hSkTN6nSYJpASUpsl6Hq3VEKqphs6z3JLyeLWaepL/RUYunFlZGkueWBbQMIsdQJFE3cVV0HTaLd5CrbEQvN/LGADsrEFs5LzIn/fSB/zyrn5fQ1gFeUYI8LKHS1+FtXjFGCDoYWSmJ+u0wgdzEcHLbteFQ0WaT5AR/RtvtWm94DACIeQkk=)
+[Playground](https://jactionlint.jdx.dev/#eNpMj8FOwzAMhu97il8C7dawtFtLc+JNpiT1lkJJS2yPw7R3Rx1o4mRb/yfr/+bssOg0HQt9KbEcxZczyeZ9Duw2gBDLOoGimasV16BZtJr8mt0jFlr4lwIqKBM7+CjjnPklJoofs8qbtWHobL+zIdAh2LbZRSLfNUPdHfquafex96f2tcETLntTm/rvIfA9SnKPCyh0cni+XnEeJWkwdKEs5r+GSeQHw8njdnv0Kpod8vKJOGK7vW+rws8AsOBOKw==)
 
 The rule `untrusted-checkout` (in the `default` profile, as an error) reports a `pull_request_target` or `workflow_run`
 workflow that checks out the code of a pull request and then runs it. These events run in the context of the base repository,
@@ -7882,6 +7941,30 @@ a test, a `package.json` hook or a local action is enough to take over the token
 
 Run untrusted code in a `pull_request` workflow, which has no secrets for pull requests from forks. If a privileged workflow
 has to look at the pull request, check out the base branch and read the pull request as data.
+
+The protection of `actions/checkout`: since v7, and since 2026-07-20 in the floating tags of every older major version but v1,
+`actions/checkout` refuses to check out the code of a pull request from a fork in a `pull_request_target` workflow (and in a
+`workflow_run` workflow that a pull request event started). See
+[the announcement](https://github.blog/changelog/2026-06-18-safer-pull_request_target-defaults-for-github-actions-checkout/).
+It refuses a `repository` that is the fork, a `ref` of `refs/pull/N/head` or `refs/pull/N/merge`, and a `ref` that is the head
+or merge commit of the pull request. The input `allow-unsafe-pr-checkout: true` turns it off. The rule takes that into account:
+
+- A checkout that the protection refuses is **not reported**: the step fails for a fork, and a pull request from a branch of the
+  repository is written by someone with write access. The protection is in the floating tags (`@v4`, `@v6`, `@v7`), in a release
+  at or above the first one of its line (`v2.8.0`, `v3.7.0`, `v4.4.0`, `v5.1.0`, `v6.1.0`) and in a commit pinned with a version
+  comment that names such a release (`# v4.4.0`, not `# v4`). The comment is not verified (`ref-version-mismatch` does that
+  online), so a commit is only as guarded as its comment is true. With the option `pedantic` these checkouts are reported too,
+  and the message says that it is only a pull request from a branch of the repository that gets through.
+- A release below the first one of its line, a commit whose comment names such a release, `v1`, and a commit without a version
+  comment are **reported as before**, and the message says to upgrade when the version is known.
+- `allow-unsafe-pr-checkout: true`, or an expression, is a finding of its own on that line, when the workflow has an event that
+  the protection covers and the step has a `ref` or `repository` that is an expression or names `refs/pull/`: nothing stops the
+  step from checking out the code of the fork then. It is reported whether or not a later step runs the code.
+- `git` and `gh pr checkout` in a `run:` step, a branch name (`github.event.pull_request.head.ref`, `github.head_ref`) as the
+  only input, a `refs/pull/N/head` whose number does not come from the pull request of the event (`inputs.number`), and a workflow
+  that also has the event `issue_comment`, `issues` or `workflow_call` are **not covered by the protection**, so they are
+  reported as before. So is a `workflow_run` workflow unless every workflow in `workflows:` is in the repository and only runs
+  for `pull_request*` events.
 
 A step is reported at its checkout when it puts untrusted code in the workspace and a later step in the same job runs it:
 
@@ -8446,7 +8529,7 @@ How the rules treat actions:
 
 - **Applies** to the steps (and the metadata) of an action: `action-syntax`, `adhoc-packages`, `archived-uses`, `artipacked`, `background-step-not-waited`, `checkout-static-credentials`, `constant-condition`, `context-availability`, `continue-on-error`, `deprecated-action-input`, `deprecated-commands`, `duplicate-key`, `duplicate-step-id`, `environment-file-redirect`, `expired-ignore`, `expression-syntax`, `expression-type`, `fail-fast-action-inputs`, `forbidden-uses`, `github-app`, `if-always-true`, `impostor-commit`, `insecure-commands`, `insecure-ssh-keyscan`, `insecure-url-scheme`, `invalid-env-var-name`, `invalid-function-call`, `invalid-id`, `invalid-ignore-comment`, `invalid-local-action`, `invalid-parallel-step`, `invalid-shell-name`, `invalid-uses`, `invisible-characters`, `known-vulnerable-actions`, `malformed-expression-delimiters`, `max-run-lines`, `merge-key`, `misfeature`, `missing-action-input`, `obfuscation`, `outdated-action-runner`, `pipeline-without-pipefail`, `pyflakes`, `recursive-alias`, `ref-confusion`, `ref-version-mismatch`, `repojacking`, `require-expression-wrapping`, `self-repository`, `shellcheck`, `stale-action-refs`, `superfluous-actions`, `template-injection`, `typosquat-uses`, `undefined-function`, `undefined-property`, `unknown-action-input`, `unlocked-install`, `unpinned-images`, `unpinned-tools`, `unpinned-uses`, `unsound-contains`, `unsound-prefix-match`, `unsound-ternary`, `unused-anchor`, `unused-ignore`, `unverified-download`, `use-trusted-publishing`, `yaml-syntax`.
 - **Caller-dependent**: `agentic-actions`, `bot-conditions`, `cache-poisoning`, `github-env` (its findings about untrusted input do not depend on the caller), `untrusted-artifact` and `untrusted-checkout`.
-- **Not applicable** because an action does not have what the rule checks, or because only the calling job can decide (`unused-baseline-entry` is about the baseline file, not about a workflow or an action): `anonymous-definition`, `concurrency-cancels-prs`, `concurrency-cancels-release`, `concurrency-limits`, `conflicting-runner-labels`, `cron-too-frequent`, `cyclic-job-needs`, `dangerous-triggers`, `dependabot-cooldown`, `dependabot-execution`, `dependabot-missing-actions-update`, `dependabot-syntax`, `deprecated-runner-label`, `duplicate-job-id`, `duplicate-job-needs`, `duplicate-triggers`, `excessive-permissions`, `gate-job-skipped-on-failure`, `gh-without-token`, `hardcoded-container-credentials`, `invalid-activity-type`, `invalid-cron`, `invalid-event-config`, `invalid-event-filter`, `invalid-glob`, `invalid-label-pattern`, `invalid-local-workflow`, `invalid-permissions`, `invalid-timezone`, `invalid-workflow-call`, `invalid-workflow-call-input`, `invalid-workflow-dispatch-input`, `local-action-checkout`, `matrix-duplicate-value`, `matrix-invalid-exclude`, `missing-permissions`, `missing-timeout`, `missing-workflow-input`, `missing-workflow-secret`, `mutable-runner-label`, `overprovisioned-secrets`, `require-shell`, `required-actions`, `secrets-inherit`, `secrets-outside-env`, `self-hosted-runner`, `timeout-too-long`, `undefined-job-needs`, `undocumented-permissions`, `unknown-event`, `unknown-runner-label`, `unknown-workflow-input`, `unknown-workflow-secret`, `unredacted-secrets`, `unused-baseline-entry`, `unused-job-output`, `unused-needs`, `unused-workflow-input`, `workflow-call-permissions`, `workflow-input-type`, `workflow-run-names`, `workflow-secret-scope`, `workflow-syntax`.
+- **Not applicable** because an action does not have what the rule checks, or because only the calling job can decide (`unused-baseline-entry` is about the baseline file, not about a workflow or an action): `anonymous-definition`, `concurrency-cancels-prs`, `concurrency-cancels-release`, `concurrency-limits`, `conflicting-runner-labels`, `cron-too-frequent`, `cyclic-job-needs`, `dangerous-triggers`, `dependabot-cooldown`, `dependabot-execution`, `dependabot-missing-actions-update`, `dependabot-syntax`, `deprecated-runner-label`, `duplicate-job-id`, `duplicate-job-needs`, `duplicate-triggers`, `excessive-permissions`, `gate-job-skipped-on-failure`, `gh-without-token`, `hardcoded-container-credentials`, `invalid-activity-type`, `invalid-cron`, `invalid-event-config`, `invalid-event-filter`, `invalid-glob`, `invalid-label-pattern`, `invalid-local-workflow`, `invalid-permissions`, `invalid-timezone`, `invalid-workflow-call`, `invalid-workflow-call-input`, `invalid-workflow-dispatch-input`, `local-action-checkout`, `matrix-duplicate-value`, `matrix-invalid-exclude`, `missing-permissions`, `missing-timeout`, `missing-workflow-input`, `missing-workflow-secret`, `mutable-runner-label`, `overprovisioned-secrets`, `require-shell`, `required-actions`, `secrets-inherit`, `secrets-outside-env`, `self-hosted-runner`, `timeout-too-long`, `ubuntu-slim-limits`, `undefined-job-needs`, `undocumented-permissions`, `unknown-event`, `unknown-runner-label`, `unknown-workflow-input`, `unknown-workflow-secret`, `unredacted-secrets`, `unused-baseline-entry`, `unused-job-output`, `unused-needs`, `unused-workflow-input`, `workflow-call-permissions`, `workflow-input-type`, `workflow-run-names`, `workflow-secret-scope`, `workflow-syntax`.
 
 Example input:
 
