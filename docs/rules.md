@@ -1250,7 +1250,7 @@ A secret which the reusable workflow does not define is passed.
 
 ## unlocked-install
 
-cargo install runs without --locked, or npm, yarn or pnpm install without freezing a lock file that the repository has. With the option pedantic, also installs without a lock file npm, Yarn and bun installs that run the lifecycle scripts of the dependencies, and installs without a release-age cooldown.
+cargo install runs without --locked, or npm, yarn or pnpm install without freezing a lock file that the repository has. With the option pedantic, also installs without a lock file, npm, Yarn and bun installs that run the lifecycle scripts of the dependencies (and aube installs that allow every build), and installs without a release-age cooldown.
 
 - Group: security
 - Default level: error

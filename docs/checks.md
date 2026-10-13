@@ -3318,7 +3318,19 @@ need the scripts of all their dependencies, and the few that do (`esbuild`, `sha
   an explicit list replaces it) and `allowScripts` for npm 12, which does not run the scripts of dependencies by default;
 - Yarn is 4.14 or later (`packageManager` in package.json), which does not run them by default either. Yarn 2 to 4.13 do, so a `.yarnrc.yml` of a Yarn whose version is not known is not assumed to be one that does not.
 
-pnpm is not reported: pnpm 10 and later run no script of a dependency unless the project allows it. Global installs (`npm install -g`)
+pnpm is not reported: pnpm 10 and later run no script of a dependency unless the project allows it.
+
+[aube](https://aube.sh) is not reported either: it runs the scripts of a dependency only when `allowBuilds` allows the package or the package is on
+the built-in list of 368 trusted packages that aube takes from pnpm, and `--ignore-scripts` turns all of them off
+([lifecycle scripts](https://aube.sh/package-manager/lifecycle-scripts)). It is reported when the project opted out of that: `aube install` and
+`aube add` with `--dangerously-allow-all-builds`, the setting `dangerouslyAllowAllBuilds` (also `dangerously-allow-all-builds`) in `.npmrc`, in the
+environment (`AUBE_DANGEROUSLY_ALLOW_ALL_BUILDS`, `npm_config_dangerously_allow_all_builds`) or set by an earlier `aube config set`, and the entry
+`"*": true` in `allowBuilds` of `aube-workspace.yaml` (or of `pnpm-workspace.yaml`, which aube reads only when there is no `aube-workspace.yaml`) or
+of `aube.allowBuilds` and `pnpm.allowBuilds` in package.json. `aube ci` is never reported, because it turns the setting off itself. The command line
+decides over the other places, and `--ignore-scripts`, `ignore-scripts` or `ignoreScripts` in `.npmrc`, `ignoreScripts: true` in the workspace file
+and `AUBE_IGNORE_SCRIPTS` in the environment silence the finding. A value that is an expression is not known and is not reported.
+
+Global installs (`npm install -g`)
 and `npx` are not reported, and neither is a command which follows a `cd`, because the configuration in force is not known.
 Whether the project's own scripts (`prepare`, `postinstall`) are needed is not known either: they run unless `--ignore-scripts` is given.
 
@@ -3335,20 +3347,22 @@ compromised releases are found and pulled within days. A cooldown keeps only ver
 | pnpm | `minimumReleaseAge` (minutes) in `pnpm-workspace.yaml` (pnpm 10.16 to 10.x also read `minimum-release-age` from `.npmrc`; pnpm 11 does not, and a `.npmrc` entry does not change its default; the `min-release-age` and `before` of npm are not read); pnpm 11 waits one day by default | pnpm 10.16 |
 | Yarn | `npmMinimalAgeGate` in `.yarnrc.yml`; Yarn 4.15 waits one day by default; Yarn 1 has none | Yarn 4.10 |
 | bun | `--minimum-release-age` (seconds) or `minimumReleaseAge` under `[install]` in `bunfig.toml`; bun reads nothing of the kind from `.npmrc` | bun 1.3 |
+| aube | `minimumReleaseAge` (minutes) in `aube-workspace.yaml` (or `pnpm-workspace.yaml` when there is no aube file), `minimumReleaseAge` or `minimum-release-age` in `.npmrc` (the workspace file wins), `AUBE_MINIMUM_RELEASE_AGE` or `npm_config_minimum_release_age`; aube has no option for it and waits one day (1440) by default, so only a setting that turns it off is reported | all |
 
 Check the version of the tool on the runner before you add the setting: an option that the installed pip or npm does not know fails the
 install. The check reads the same places as the lifecycle scripts do (the repository's files, the environment of the step, an earlier
 script of the job), and so reads `uv.toml`, `pyproject.toml`, `.npmrc`, `pnpm-workspace.yaml`, `.yarnrc.yml` and `bunfig.toml`. It reports
 installs that resolve something. The environment variable, the option and the file are those of the tool that installs (`UV_EXCLUDE_NEWER`
 does nothing for npm), and `minimumReleaseAgeExclude` and `minimumReleaseAgeStrict` are not the age. One rule decides every place: the
-state is taken from the default of the version of the tool (pnpm 11, Yarn 4.15), then the files of the repository, the environment of the
+state is taken from the default of the version of the tool (pnpm 11, Yarn 4.15, aube), then the files of the repository, the environment of the
 workflow, of the job and of the step, the scripts of the job that run before the install, and the options of the install itself, and the
 **last** assignment wins (inside a place too, so `--min-release-age=7 --min-release-age=0` is off). Only npm differs: inside one place
 `before` wins over `min-release-age`. A value switches the age off when it is empty, `false`, `none`, `off` or a zero with or without a unit
 (`0`, `0d`, `0 days`, `P0D`, `PT0S`); a variable or an expression counts as on. It is silent about these:
 
-- installs that are bound to a lock file or to hashes (`npm ci`, `uv sync`, `--frozen-lockfile`, `--immutable`, `--require-hashes`,
-  a constraints file `-c`), and `npm install`, `pnpm install` and `yarn` without a package in a repository that has the lock file;
+- installs that are bound to a lock file or to hashes (`npm ci`, `aube ci`, `uv sync`, `--frozen-lockfile`, `--immutable`, `--require-hashes`,
+  a constraints file `-c`), and `npm install`, `pnpm install`, `aube install` and `yarn` without a package in a repository that has the lock file
+  (aube freezes it in CI by default; `--no-frozen-lockfile`, `--prefer-frozen-lockfile` and `--fix-lockfile` resolve again);
 - `npx`, `bunx` and `pnpm dlx`, which usually run a binary of the project, and ecosystems whose tool has no such setting (cargo, go, gem,
   apt, Homebrew);
 - a command that follows a `cd`, or has `--project`, `--directory` or `--config-file` for uv: the configuration in force is not known (`--no-config` is the opposite: uv reads no file, so only an option or `UV_EXCLUDE_NEWER` counts);

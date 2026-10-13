@@ -28,16 +28,32 @@ import (
 //
 // pnpm is not reported: pnpm 10 and later run no lifecycle script of a dependency unless it is allowed (a project on
 // pnpm 9 or earlier does run them, which the check cannot tell without knowing the version of pnpm).
+//
+// aube is not reported either, for the same reason: it runs the scripts of a dependency only when `allowBuilds` allows
+// the package or it is on the built-in list of trusted packages that aube takes from pnpm (368 names), and
+// `--ignore-scripts` turns the rest off (https://aube.sh/package-manager/lifecycle-scripts). It is reported when the
+// project opted out of that: `aube install --dangerously-allow-all-builds` (`aube ci` ignores the flag), the same setting as
+// `dangerouslyAllowAllBuilds` in .npmrc or in the environment (`AUBE_DANGEROUSLY_ALLOW_ALL_BUILDS`,
+// `npm_config_dangerously_allow_all_builds`), or an `allowBuilds` entry `"*": true` in aube-workspace.yaml (or the
+// pnpm-workspace.yaml that aube reads when there is none) or in `aube.allowBuilds` / `pnpm.allowBuilds` of package.json.
 
 var (
 	// the ways a script turns the option on, see scriptSetsIgnoreScripts
 	configSetIgnoreScriptsRe = regexp.MustCompile(`(?i)\bconfig\s+set\s+ignore[-_]scripts(?:\s+|\s*=\s*)["']?(?:true|1)\b`)
-	envIgnoreScriptsRe       = regexp.MustCompile(`(?i)\bnpm_config_ignore_scripts\s*=\s*["']?(?:true|1)\b`)
-	npmrcRedirectRe          = regexp.MustCompile(`(?:>>?|\btee\b(?:\s+-a)?)\s*["']?[^\s"'|;&]*\.npmrc\b`)
-	heredocStartRe           = regexp.MustCompile(`<<-?\s*["']?([A-Za-z_][A-Za-z0-9_]*)["']?`)
-	settingRe                = regexp.MustCompile(`(?i)ignore[-_]scripts\s*=\s*["']?(?:true|1)\b`)
-	bunfigIgnoreScriptsRe    = regexp.MustCompile(`(?m)^\s*ignoreScripts\s*=\s*true\b`)
-	yarnrcEnableScriptsRe    = regexp.MustCompile(`(?m)^enableScripts:\s*["']?(\w+)`)
+	// the ways a script turns on `dangerouslyAllowAllBuilds` of aube
+	configSetAllowAllBuildsRe = regexp.MustCompile(`(?i)\bconfig\s+set\s+(?:--?[\w-]+(?:=\S+)?\s+)*dangerously[-_]?allow[-_]?all[-_]?builds(?:\s+|\s*=\s*)["']?(?:true|1)\b`)
+	// only an `export` or a write to $GITHUB_ENV reaches a later command: `X=1 aube install` is the environment of that command
+	envAllowAllBuildsRe     = regexp.MustCompile(`(?im)(?:\bexport\s+(?:-\w+\s+)*(?:aube|npm_config)_dangerously_allow_all_builds\s*=\s*["']?(?:true|1)\b|^.*\b(?:aube|npm_config)_dangerously_allow_all_builds\s*=\s*["']?(?:true|1)\b.*>>\s*["']?\$\{?GITHUB_ENV)`)
+	allowAllBuildsSettingRe = regexp.MustCompile(`(?i)dangerously[-_]?allow[-_]?all[-_]?builds\s*=\s*["']?(?:true|1)\b`)
+	aubeIgnoreScriptsRe     = regexp.MustCompile(`(?m)^ignoreScripts:\s*["']?true\b`)
+	allowBuildsFlowRe       = regexp.MustCompile(`(?m)^allowBuilds:\s*\{[^}]*["']?\*["']?\s*:\s*true\b`)
+	allowBuildsEntryRe      = regexp.MustCompile(`^\s+["']?\*["']?\s*:\s*["']?true\b`)
+	envIgnoreScriptsRe      = regexp.MustCompile(`(?i)\bnpm_config_ignore_scripts\s*=\s*["']?(?:true|1)\b`)
+	npmrcRedirectRe         = regexp.MustCompile(`(?:>>?|\btee\b(?:\s+-a)?)\s*["']?[^\s"'|;&]*\.npmrc\b`)
+	heredocStartRe          = regexp.MustCompile(`<<-?\s*["']?([A-Za-z_][A-Za-z0-9_]*)["']?`)
+	settingRe               = regexp.MustCompile(`(?i)ignore[-_]scripts\s*=\s*["']?(?:true|1)\b`)
+	bunfigIgnoreScriptsRe   = regexp.MustCompile(`(?m)^\s*ignoreScripts\s*=\s*true\b`)
+	yarnrcEnableScriptsRe   = regexp.MustCompile(`(?m)^enableScripts:\s*["']?(\w+)`)
 )
 
 func (rule *RuleUnlockedInstall) checkLifecycleScripts(step *Step, s *runscript.Script, origin runscript.Origin, c *runscript.Command, in *runscript.Install) {
@@ -46,6 +62,9 @@ func (rule *RuleUnlockedInstall) checkLifecycleScripts(step *Step, s *runscript.
 	}
 	switch c.Tool {
 	case "npm", "yarn", "bun":
+	case "aube":
+		rule.checkAubeBuilds(step, s, origin, c, in)
+		return
 	default:
 		return
 	}
@@ -88,7 +107,7 @@ func (rule *RuleUnlockedInstall) checkLifecycleScripts(step *Step, s *runscript.
 // does not list as assignments of the command.
 func ignoreScriptsInCommandEnv(c *runscript.Command) bool {
 	on := func(name string, v *runscript.Word) bool {
-		return strings.EqualFold(name, "npm_config_ignore_scripts") && v != nil && (v.Dynamic() || strings.EqualFold(v.Value, "true") || v.Value == "1")
+		return (strings.EqualFold(name, "npm_config_ignore_scripts") || c.Tool == "aube" && strings.EqualFold(name, "aube_ignore_scripts")) && v != nil && (v.Dynamic() || strings.EqualFold(v.Value, "true") || v.Value == "1")
 	}
 	for _, a := range c.Assigns {
 		if on(a.Name, a.Value) {
@@ -126,8 +145,11 @@ func lifecycleVerb(in *runscript.Install) bool {
 // comes before the install.
 func (rule *RuleUnlockedInstall) scriptsDisabledByWorkflow(step *Step, tool, before string) bool {
 	names := []string{"npm_config_ignore_scripts", "NPM_CONFIG_IGNORE_SCRIPTS"}
-	if tool == "yarn" {
+	switch tool {
+	case "yarn":
 		names = append(names, "YARN_ENABLE_SCRIPTS")
+	case "aube":
+		names = append(names, "AUBE_IGNORE_SCRIPTS")
 	}
 	for _, n := range names {
 		v, ok := rule.envValue(step, n)
@@ -241,6 +263,13 @@ func (rule *RuleUnlockedInstall) scriptsDisabledByRepository(dirs []string, tool
 			if rule.yarnSkipsScripts(d, pkg) {
 				return true
 			}
+		case "aube":
+			if v, ok := rc["ignoreScripts"]; ok && strings.EqualFold(v, "true") {
+				return true
+			}
+			if text, ok := rule.aubeWorkspaceYAML(d); ok && aubeIgnoreScriptsRe.MatchString(text) {
+				return true
+			}
 		}
 	}
 	return false
@@ -261,4 +290,142 @@ func (rule *RuleUnlockedInstall) yarnSkipsScripts(dir string, pkg packageJSON) b
 		return major > 4 || major == 4 && minor >= 14
 	}
 	return false
+}
+
+// aubeWorkspaceYAML returns the workspace file that aube reads in the directory: aube-workspace.yaml, and the
+// pnpm-workspace.yaml only when there is none (aube ignores it next to an aube-workspace.yaml).
+func (rule *RuleUnlockedInstall) aubeWorkspaceYAML(dir string) (string, bool) {
+	if text, ok := rule.files.read(filepath.Join(dir, "aube-workspace.yaml")); ok {
+		return text, true
+	}
+	return rule.files.read(filepath.Join(dir, "pnpm-workspace.yaml"))
+}
+
+// checkAubeBuilds reports `aube install` and `aube add` that run the build scripts of every dependency because the
+// project opted out of the allow list of aube, see the comment at the top of this file.
+func (rule *RuleUnlockedInstall) checkAubeBuilds(step *Step, s *runscript.Script, origin runscript.Origin, c *runscript.Command, in *runscript.Install) {
+	switch in.Verb {
+	case "install", "i", "add", "a":
+	default:
+		return // `aube ci` sets dangerouslyAllowAllBuilds to false itself, and `aube dlx` has --allow-build=PKG
+	}
+	before := s.Source[:c.Offset]
+	if rule.scriptsDisabledByWorkflow(step, c.Tool, before) || ignoreScriptsInCommandEnv(c) {
+		return
+	}
+	dirs, ok := rule.commandDirs(rule.root, step, s, c)
+	if !ok || rule.scriptsDisabledByRepository(dirs, c.Tool) {
+		return
+	}
+	why := rule.aubeAllowsEveryBuild(step, c, before, dirs)
+	if why == "" {
+		return
+	}
+	name := c.Name + " " + in.Verb
+	start, end := commandRange(s, origin, c)
+	rule.errorIDAt("unlocked-install", start, quote(name)+" runs the lifecycle scripts of every dependency ("+why+"), and a compromised release uses them to run code on the runner. aube runs only the scripts that `allowBuilds` and its built-in list of trusted packages allow: remove this, review what was skipped with `aube ignored-builds` and approve the packages that need a build with `aube approve-builds`").endAt(end)
+}
+
+// aubeAllowsEveryBuild says how the install is told to run the build scripts of every dependency, "" if it is not.
+// Only a literal true counts: a value that is an expression is not known.
+func (rule *RuleUnlockedInstall) aubeAllowsEveryBuild(step *Step, c *runscript.Command, before string, dirs []string) string {
+	// the command line beats every other place, and the last flag wins
+	if f := lastFlag(c, "--dangerously-allow-all-builds"); f != nil {
+		if f.Value == nil || (!f.Value.Dynamic() && ageSettingOn(f.Value.Value)) {
+			return "`--dangerously-allow-all-builds`"
+		}
+		return ""
+	}
+	isTrue := func(v string) bool {
+		return strings.EqualFold(strings.TrimSpace(v), "true") || strings.TrimSpace(v) == "1"
+	}
+	for _, a := range c.Assigns {
+		if strings.EqualFold(a.Name, "aube_dangerously_allow_all_builds") || strings.EqualFold(a.Name, "npm_config_dangerously_allow_all_builds") {
+			if a.Value != nil && !a.Value.Dynamic() && isTrue(a.Value.Value) {
+				return "`" + a.Name + "` is true"
+			}
+		}
+	}
+	for _, n := range []string{"AUBE_DANGEROUSLY_ALLOW_ALL_BUILDS", "npm_config_dangerously_allow_all_builds", "NPM_CONFIG_DANGEROUSLY_ALLOW_ALL_BUILDS"} {
+		if v, ok := rule.envValue(step, n); ok && !v.ContainsExpression() && isTrue(v.Value) {
+			return "`" + n + "` is true"
+		}
+	}
+	if rule.jobScriptMatches(step, before, scriptAllowsEveryBuild) {
+		return "an earlier script sets `dangerouslyAllowAllBuilds`"
+	}
+	for _, d := range dirs {
+		rc := rule.files.npmrc(d)
+		for _, k := range []string{"dangerouslyAllowAllBuilds", "dangerously-allow-all-builds"} {
+			if v, ok := rc[k]; ok && isTrue(v) {
+				return "`" + k + "=true` in .npmrc"
+			}
+		}
+		if text, ok := rule.aubeWorkspaceYAML(d); ok && allowBuildsHasWildcard(text) {
+			return "`allowBuilds` has the entry `\"*\": true`"
+		}
+		if pkg, _ := rule.files.packageJSON(d); pkg.allowsEveryBuild() {
+			return "`allowBuilds` in package.json has the entry `\"*\": true`"
+		}
+	}
+	return ""
+}
+
+// scriptAllowsEveryBuild reports whether the script turns `dangerouslyAllowAllBuilds` on in the configuration that a later
+// install reads, the way scriptSetsIgnoreScripts does for `ignore-scripts`.
+func scriptAllowsEveryBuild(text string) bool {
+	if configSetAllowAllBuildsRe.MatchString(text) || envAllowAllBuildsRe.MatchString(text) {
+		return true
+	}
+	if !strings.Contains(strings.ToLower(text), "dangerously") {
+		return false
+	}
+	for _, loc := range npmrcRedirectRe.FindAllStringIndex(text, -1) {
+		start := lineStartOf(text, loc[0])
+		end := len(text)
+		if i := strings.IndexByte(text[start:], '\n'); i >= 0 {
+			end = start + i
+		}
+		line := text[start:end]
+		if allowAllBuildsSettingRe.MatchString(line) {
+			return true
+		}
+		if m := heredocStartRe.FindStringSubmatch(line); m != nil && allowAllBuildsSettingRe.MatchString(heredocBody(text[min(end+1, len(text)):], m[1])) {
+			return true
+		}
+	}
+	return false
+}
+
+// allowBuildsHasWildcard reports whether the `allowBuilds` map of a workspace file has the entry `"*": true`, written as
+// a block or as a flow mapping.
+func allowBuildsHasWildcard(text string) bool {
+	if allowBuildsFlowRe.MatchString(text) {
+		return true
+	}
+	in := false
+	for _, line := range strings.Split(text, "\n") {
+		t := strings.TrimSpace(line)
+		switch {
+		case strings.HasPrefix(line, "allowBuilds:"):
+			in = strings.TrimSpace(strings.TrimPrefix(line, "allowBuilds:")) == ""
+		case t == "" || strings.HasPrefix(t, "#"):
+		case line[0] != ' ' && line[0] != '\t':
+			in = false
+		case in && allowBuildsEntryRe.MatchString(line):
+			return true
+		}
+	}
+	return false
+}
+
+// lastFlag returns the last flag of the command with the name, nil if there is none.
+func lastFlag(c *runscript.Command, name string) *runscript.Flag {
+	var found *runscript.Flag
+	for _, f := range c.Flags {
+		if f.Name == name {
+			found = f
+		}
+	}
+	return found
 }
