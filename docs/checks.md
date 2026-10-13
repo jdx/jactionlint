@@ -10,6 +10,7 @@ List of checks:
 - [Unexpected empty mappings](#check-empty-mapping)
 - [Unexpected mapping values](#check-mapping-values)
 - [Syntax check for expression `${{ }}`](#check-syntax-expression)
+- [Expressions written with the wrong delimiters](#check-malformed-expression-delimiters)
 - [Type checks for expression syntax in `${{ }}`](#check-type-check-expression)
 - [Contexts and built-in functions](#check-contexts-and-builtin-func)
 - [Contextual typing for `steps.<step_id>` objects](#check-contextual-step-object)
@@ -311,6 +312,68 @@ test.yaml:13:38: unexpected end of input while parsing object property dereferen
 
 jactionlint lexes and parses expression in `${{ }}` following [the expression syntax document][expr-doc]. It can detect
 many syntax errors like invalid characters, missing parentheses, unexpected end of input, ...
+
+<a id="check-malformed-expression-delimiters"></a>
+## Expressions written with the wrong delimiters
+
+Example input:
+
+```yaml
+on: push
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      # ERROR: one brace, GitHub does not expand it
+      REF: ${ github.ref }
+      # ERROR: a space after the dollar
+      SHA: $ {{ github.sha }}
+      # ERROR: no dollar
+      TAG: v-{{ github.run_number }}
+      # OK: these are not expressions
+      TEMPLATE: "{{ .Values.image }}"
+      HOME_BIN: ${HOME}/bin
+    steps:
+      - run: echo "${GITHUB_REF} {{ github.sha }}"
+```
+
+Output:
+
+```
+test.yaml:8:12: "${ github.ref }" is not an expression: GitHub expands only `${{ }}` with two braces, so this text reaches the workflow as it is. write `${{ github.ref }}` [malformed-expression-delimiters]
+  |
+8 |       REF: ${ github.ref }
+  |            ^~~~~~~~~~~~~~~
+test.yaml:10:12: "$ {{ github.sha }}" is not an expression: the opening delimiter must be written `${{` without a space. write "${{ github.sha }}" [malformed-expression-delimiters]
+   |
+10 |       SHA: $ {{ github.sha }}
+   |            ^~~~~~~~~~~~~~~~~~
+test.yaml:12:14: "{{ github.run_number }}" is not an expression: it has no `$`, and GitHub expands only `${{ }}`, so this text reaches the workflow as it is. write "${{ github.run_number }}" [malformed-expression-delimiters]
+   |
+12 |       TAG: v-{{ github.run_number }}
+   |              ^~~~~~~~~~~~~~~~~~~~~~~
+```
+
+[Playground](https://jactionlint.jdx.dev/#eNpkz7FqwzAQxvHdT/FhvNrdtTmgxIGmLanb1VjlGrkkctDpsgi9e1Eat4VMEvz+w3ezUzgL26L4mg2rAgjEIb+AF8d1DsSIC1Ifx2xXInf5aYC9XitUEYcpWDGNp0+kG712rUKF+ItsR6RF+3ajcKn/1IsbnJwM+X+R3r08tr1WKGNE8z4ehbiZTuOBkFJ5q7rnnR5W26c8JP/Tg5nc1TjQmZepdT5JgT7sjLKKm23fva2GvV6nu43l9wDlrVHO)
+
+GitHub expands `${{ }}` and nothing else. The text `${ github.ref }`, `$ {{ github.sha }}` and `{{ github.sha }}` is passed on as
+it is: the environment variable, the input of the action or the condition then holds the text of the typo, and nothing says
+so. The rule `malformed-expression-delimiters` (in the `correctness` profile; [actionlint#417](https://github.com/rhysd/actionlint/issues/417),
+[actionlint#169](https://github.com/rhysd/actionlint/issues/169), [ghlint#144](https://github.com/TWiStErRob/net.twisterrob.ghlint/issues/144))
+reports them when the text inside starts with the name of a context (`github`, `env`, `vars`, `secrets`, `matrix`, `needs`, `steps`,
+`job`, `jobs`, `runner`, `inputs`, `strategy`) followed by a property, or with a function of expressions (`format(`, `contains(`,
+`fromJSON(`, ...). So the templates of Go, Jinja and Helm (`{{ .Values.image }}`), shell variables (`${HOME}`) and text in a `run:`
+script are never reported, and neither are the inputs that hold code (`script`, `command`, `args`, ...: `${...}` has a meaning of
+its own in JavaScript). `--fix` writes the intended expression (`${{ github.ref }}`) when the text is written so that the edit is
+exact and the text in the braces is a valid expression, and says why otherwise.
+
+With the option `pedantic` (on under `profile: pedantic`, or `rules: {malformed-expression-delimiters: {pedantic: true}}`) the rule
+also reports a shell variable (`$HOME`, `${GITHUB_WORKSPACE}`) in the value of an input of an action, which no shell expands, and
+suggests the expression that has its value (`${{ github.workspace }}`, `${{ runner.temp }}`, `${{ env.NAME }}` for a variable that
+the workflow sets). It looks only at one-line values of `with:` with an upper case name, and not at inputs that hold code. Some
+actions expand variables of their own (`${pull_title}` placeholders and the like): the findings of this tier can be wrong for them,
+which is why it is pedantic. A stray `}}` is not reported.
 
 <a id="check-type-check-expression"></a>
 ## Type checks for expression syntax in `${{ }}`
@@ -7775,7 +7838,7 @@ way because any caller can pass attacker-controlled text. jactionlint does not l
 
 How the rules treat actions:
 
-- **Applies** to the steps (and the metadata) of an action: `action-syntax`, `adhoc-packages`, `archived-uses`, `artipacked`, `background-step-not-waited`, `checkout-static-credentials`, `constant-condition`, `context-availability`, `continue-on-error`, `deprecated-action-input`, `deprecated-commands`, `duplicate-key`, `duplicate-step-id`, `expired-ignore`, `expression-syntax`, `expression-type`, `forbidden-uses`, `github-app`, `if-always-true`, `impostor-commit`, `insecure-commands`, `insecure-ssh-keyscan`, `insecure-url-scheme`, `invalid-env-var-name`, `invalid-function-call`, `invalid-id`, `invalid-ignore-comment`, `invalid-local-action`, `invalid-parallel-step`, `invalid-shell-name`, `invalid-uses`, `invisible-characters`, `known-vulnerable-actions`, `max-run-lines`, `merge-key`, `misfeature`, `missing-action-input`, `obfuscation`, `outdated-action-runner`, `pipeline-without-pipefail`, `pyflakes`, `recursive-alias`, `ref-confusion`, `ref-version-mismatch`, `require-expression-wrapping`, `self-repository`, `shellcheck`, `stale-action-refs`, `superfluous-actions`, `template-injection`, `typosquat-uses`, `undefined-function`, `undefined-property`, `unknown-action-input`, `unlocked-install`, `unpinned-images`, `unpinned-tools`, `unpinned-uses`, `unsound-contains`, `unsound-prefix-match`, `unsound-ternary`, `unused-anchor`, `unused-ignore`, `unverified-download`, `use-trusted-publishing`, `yaml-syntax`.
+- **Applies** to the steps (and the metadata) of an action: `action-syntax`, `adhoc-packages`, `archived-uses`, `artipacked`, `background-step-not-waited`, `checkout-static-credentials`, `constant-condition`, `context-availability`, `continue-on-error`, `deprecated-action-input`, `deprecated-commands`, `duplicate-key`, `duplicate-step-id`, `expired-ignore`, `expression-syntax`, `expression-type`, `forbidden-uses`, `github-app`, `if-always-true`, `impostor-commit`, `insecure-commands`, `insecure-ssh-keyscan`, `insecure-url-scheme`, `invalid-env-var-name`, `invalid-function-call`, `invalid-id`, `invalid-ignore-comment`, `invalid-local-action`, `invalid-parallel-step`, `invalid-shell-name`, `invalid-uses`, `invisible-characters`, `known-vulnerable-actions`, `malformed-expression-delimiters`, `max-run-lines`, `merge-key`, `misfeature`, `missing-action-input`, `obfuscation`, `outdated-action-runner`, `pipeline-without-pipefail`, `pyflakes`, `recursive-alias`, `ref-confusion`, `ref-version-mismatch`, `require-expression-wrapping`, `self-repository`, `shellcheck`, `stale-action-refs`, `superfluous-actions`, `template-injection`, `typosquat-uses`, `undefined-function`, `undefined-property`, `unknown-action-input`, `unlocked-install`, `unpinned-images`, `unpinned-tools`, `unpinned-uses`, `unsound-contains`, `unsound-prefix-match`, `unsound-ternary`, `unused-anchor`, `unused-ignore`, `unverified-download`, `use-trusted-publishing`, `yaml-syntax`.
 - **Caller-dependent**: `agentic-actions`, `bot-conditions`, `cache-poisoning`, `github-env` (its findings about untrusted input do not depend on the caller), `untrusted-artifact` and `untrusted-checkout`.
 - **Not applicable** because an action does not have what the rule checks, or because only the calling job can decide (`unused-baseline-entry` is about the baseline file, not about a workflow or an action): `anonymous-definition`, `concurrency-cancels-prs`, `concurrency-cancels-release`, `concurrency-limits`, `conflicting-runner-labels`, `cron-too-frequent`, `cyclic-job-needs`, `dangerous-triggers`, `dependabot-cooldown`, `dependabot-execution`, `dependabot-missing-actions-update`, `dependabot-syntax`, `duplicate-job-id`, `duplicate-job-needs`, `duplicate-triggers`, `excessive-permissions`, `gate-job-skipped-on-failure`, `hardcoded-container-credentials`, `invalid-activity-type`, `invalid-cron`, `invalid-event-config`, `invalid-event-filter`, `invalid-glob`, `invalid-label-pattern`, `invalid-local-workflow`, `invalid-permissions`, `invalid-timezone`, `invalid-workflow-call`, `invalid-workflow-call-input`, `invalid-workflow-dispatch-input`, `local-action-checkout`, `matrix-duplicate-value`, `matrix-invalid-exclude`, `missing-permissions`, `missing-timeout`, `missing-workflow-input`, `missing-workflow-secret`, `mutable-runner-label`, `overprovisioned-secrets`, `require-shell`, `required-actions`, `secrets-inherit`, `secrets-outside-env`, `self-hosted-runner`, `timeout-too-long`, `undefined-job-needs`, `undocumented-permissions`, `unknown-event`, `unknown-runner-label`, `unknown-workflow-input`, `unknown-workflow-secret`, `unredacted-secrets`, `unused-baseline-entry`, `unused-job-output`, `unused-needs`, `unused-workflow-input`, `workflow-call-permissions`, `workflow-input-type`, `workflow-run-names`, `workflow-secret-scope`, `workflow-syntax`.
 
