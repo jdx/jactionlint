@@ -1026,6 +1026,14 @@ image or a line with a comment that does not name the ref is left to you.
 jactionlint --online --fix
 ```
 
+`ref-version-mismatch` has an unsafe fix that rewrites the version of the comment to the tag of the pinned commit. Plain `--fix`
+leaves it, because a mismatch can also mean that the SHA is the wrong part, see [the check](checks.md#check-ref-version-mismatch). Apply it
+after you looked at the findings:
+
+```sh
+jactionlint --online --fix=unsafe
+```
+
 #### Pin container images to digests with `--online --fix=unsafe`
 
 The images of `container:`, `services:`, `uses: docker://` and `runs.image: docker://` (the findings of `unpinned-images` and of `unpinned-uses`) get the
