@@ -138,6 +138,9 @@ cat action.yml | jactionlint --stdin-filename action.yml -
 | `--online-api-url=URL` |  | REST API URL of a GitHub Enterprise Server, e.g. https://ghe.example.com/api/v3 |
 | `--online-token-env=NAME` |  | Name of the environment variable that holds the GitHub token |
 | `--online-token-file=FILE` |  | File that holds the GitHub token |
+| `--online-github-com-fallback` |  | On a GitHub Enterprise Server, look up the repositories which the Server does not have on api.github.com (actions synced with GitHub Connect). The token for it is GITHUB_COM_TOKEN. Their names are sent to github.com |
+| `--online-github-com-token-env=NAME` |  | With the fallback: name of the environment variable that holds the token for api.github.com (default GITHUB_COM_TOKEN) |
+| `--online-github-com-token-file=FILE` |  | With the fallback: file that holds the token for api.github.com |
 | `--online-allow=PATTERN` |  | Look up only repositories matching owner/repo PATTERN ("*" is a wildcard). Repeatable |
 | `--online-deny=PATTERN` |  | Never look up repositories matching owner/repo PATTERN. Repeatable |
 | `--online-cache-ttl=DURATION` |  | How long a cached GitHub answer is used without revalidation (default 1h; 0 always revalidates) |
@@ -876,7 +879,7 @@ and why an unsafe one is unsafe.
 <a id="online-checks"></a>
 ### Online checks
 
-Seven checks, and the input and output checks of any action, need to ask GitHub about the actions a workflow uses, so they are off unless you give `--online` (or set `online: true` in
+Eight checks, and the input, secret and output checks of any action and reusable workflow, need to ask GitHub about the actions a workflow uses, so they are off unless you give `--online` (or set `online: true` in
 [the configuration](config.md#configuration-file), or `JACTIONLINT_ONLINE=1` in the environment). **Without it jactionlint never uses
 the network.**
 
@@ -903,13 +906,15 @@ export it by itself:
 | [`archived-uses`](checks.md#check-archived-uses) | An action in an archived repository |
 | [`ref-version-mismatch`](checks.md#check-ref-version-mismatch) | A `# v1.2.3` comment that does not match the pinned commit |
 | [`repojacking`](checks.md#check-repojacking) | An action of an owner that does not exist, or that left a repository that GitHub only redirects: anyone can register the name |
+| [`unpinnable-action`](checks.md#check-unpinnable-action) | A hash-pinned action which itself uses an action by a tag or a Docker image by a tag (only with the option `pedantic`, on under `profile: pedantic`) |
 
 These rules run without `--online` too, and gain coverage with it:
 
 | Rule | What `--online` adds |
 | --- | --- |
 | `missing-action-input`, `unknown-action-input`, `deprecated-action-input` | The inputs of every action which is not in the built-in data set of popular actions are checked against its `action.yml` at the pinned ref ([inputs and outputs of any action](checks.md#check-remote-action-metadata)) |
-| `undefined-property` | `steps.<id>.outputs.<name>` of such a *composite* action is checked against its declared outputs |
+| `undefined-property` | `steps.<id>.outputs.<name>` of such a *composite* action is checked against its declared outputs, and `needs.<id>.outputs.<name>` of a job which calls a reusable workflow of another repository against the outputs it declares |
+| `missing-workflow-input`, `unknown-workflow-input`, `workflow-input-type`, `missing-workflow-secret`, `unknown-workflow-secret` | A call of a reusable workflow of another repository (`owner/repo/.github/workflows/x.yml@ref`) is checked against the workflow file at that ref, as a call of a local workflow is ([reusable workflows of other repositories](checks.md#check-remote-reusable-workflows)) |
 
 ```sh
 export GITHUB_TOKEN=$(gh auth token)   # or GH_TOKEN
@@ -933,7 +938,7 @@ jactionlint --online
   oldest time at which a cached answer that was used was received. **The timestamp is the clock of the machine running
   jactionlint when it last received the answer from GitHub or confirmed it with a `304`.** It is not a date from GitHub and says
   nothing about when a tag or branch last changed. `answers` is absent when the client does not track them (unknown, not
-  "fresh"). `immutable` counts the answers about a file at a full commit SHA (the `action.yml` of an action pinned to a commit),
+  "fresh"). `immutable` counts the answers about a file at a full commit SHA (the `action.yml` of an action or the file of a reusable workflow pinned to a commit),
   which cannot change, so they are used from the cache whatever their age: they are not in `cache`, and `oldestFetched` and
   `cacheTtlSeconds` do not describe them. `--online=strict` is unchanged: it fails on skipped lookups only, never on cached or stale answers.
 - **Coverage in JSON.** `--format json` is a bare array and `jsonl` one finding a line, so neither has a place for run-level
@@ -958,12 +963,28 @@ jactionlint --online
 - **GitHub Enterprise Server.** The API is `--online-api-url`, else `$GITHUB_API_URL` (set by GitHub Actions), else derived from
   `$GITHUB_SERVER_URL` or `$GH_HOST` (`https://HOST/api/v3`, or `https://api.NAME.ghe.com` for data residency), else
   `api.github.com`. Answers are cached per host.
+  - **Actions from github.com (`--online-github-com-fallback`).** With GitHub Connect an Enterprise Server runs `uses: actions/checkout@v4`
+    from github.com, so the Server's API answers 404 for the repository and every check which needs it is skipped. The option
+    `--online-github-com-fallback` (or `github-com-fallback: true` in [`online-options`](config.md#online-options)) asks the
+    Server first and, only for a repository which it answers 404 for, `api.github.com`; the host which has the repository
+    answers every later question about it, and the Server wins when both have it, as it does when it runs the action. It is off by
+    default, because **the names of the repositories which the Server does not have are sent to github.com**: list the internal
+    ones under `--online-deny` (they are never looked up) before you turn it on. It has no effect when the API is `api.github.com`.
+    The token for `api.github.com` is `$GITHUB_COM_TOKEN` (or the variable of `--online-github-com-token-env`, or the file of
+    `--online-github-com-token-file`, or `gh auth token --hostname github.com`, which is run without `GH_TOKEN` and
+    `GITHUB_TOKEN` because gh would print them). **The token of the Server is never sent to github.com** (`GITHUB_TOKEN` and `GH_TOKEN` are
+    not read for it) and the token for github.com is never sent to the Server. A rate limit or another failure of github.com is
+    counted and warned about like any other, but does not stop the lookups on the Server (after three timeouts or server errors in a row, or a rate limit or a rejected token, github.com is not asked again in the run). The advice of a rate limit of github.com names `GITHUB_COM_TOKEN`. ghcr.io is the registry of github.com: with the fallback on, the token for github.com is the one it gets (when the image pinning needs one), never the token of the Server, which a Server without the fallback does not give it either. Without a
+    token the requests to github.com are unauthenticated (60 an hour; a notice says so). Advisories (`known-vulnerable-actions`)
+    always come from github.com, which is where the database of advisories for actions is. One more request is needed for every
+    repository which the Server does not have (a 404, cached like any answer, so the next runs do not repeat it); a
+    repository the Server has costs nothing more. `--online-report` and the other counts add up both hosts.
 - **Rate limits.** `X-RateLimit-*` and `Retry-After` are read. A limit which resets within 30 seconds (`--online-max-wait`) is waited
   for; one which resets later skips the remaining lookups with a message naming the reset time, and answers in the cache are still
   used. Server errors (500, 502, 503, 504), a secondary rate limit and a request which timed out once are repeated with
   exponential backoff and jitter, at most twice (`retries`).
-- **How many requests.** An action which is not in the built-in data set costs one request (two when its file is `action.yaml`) for each
-  distinct action, path and ref in the run, on top of the requests of the other rules, and none when the answer is in the cache. A
+- **How many requests.** An action which is not in the built-in data set costs one request (two when its file is `action.yaml`), and a reusable workflow
+  of another repository one, for each distinct action or workflow, path and ref in the run (and `unpinnable-action`, when it is on, one for every action pinned to a commit), on top of the requests of the other rules, and none when the answer is in the cache. A
   run over 20 large public repositories made 2231 requests with a cold cache, 427 of them
   for these files, and none with a warm one. Without a token GitHub allows 60 requests an hour: set one (see **Token**) when a repository
   uses many actions.
@@ -971,7 +992,7 @@ jactionlint --online
   about matching repositories, `--online-allow 'actions/*'` asks only about matching ones. They are not failures and not warned about.
 - **Cache.** Answers are kept in `$XDG_CACHE_HOME/jactionlint` (`~/.cache/jactionlint`), at most 32 MiB, shared safely by parallel
   processes, keyed by API host and token. An answer is used for an hour (`--online-cache-ttl`, `cache-ttl`), then asked for again with
-  its ETag, which costs no rate limit when it did not change. The `action.yml` of an action pinned to a full commit SHA never changes, so it is
+  its ETag, which costs no rate limit when it did not change. The `action.yml` of an action, or a reusable workflow, pinned to a full commit SHA never changes, so it is
   used from the cache whatever its age; one pinned to a tag or a branch follows the hour. `--online-cache-ttl=0` checks every answer, those too. A public answer fetched
   without a token also serves a run with one. An answer fetched with a token is stored for that token, and also for every other
   token (so the `GITHUB_TOKEN` of a CI job, which changes every run, does not empty a restored cache) when the repository is known to
@@ -1024,6 +1045,14 @@ image or a line with a comment that does not name the ref is left to you.
 
 ```sh
 jactionlint --online --fix
+```
+
+`ref-version-mismatch` has an unsafe fix that rewrites the version of the comment to the tag of the pinned commit. Plain `--fix`
+leaves it, because a mismatch can also mean that the SHA is the wrong part, see [the check](checks.md#check-ref-version-mismatch). Apply it
+after you looked at the findings:
+
+```sh
+jactionlint --online --fix=unsafe
 ```
 
 #### Pin container images to digests with `--online --fix=unsafe`

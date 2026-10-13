@@ -23,3 +23,10 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # keep in sync with the docs
       # OK: no comment (the missing comment is not reported)
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      # OK: ratchet names the version of the commit
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # ratchet:actions/checkout@v4.2.2
+      # ERROR: ratchet names another version
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # ratchet:actions/checkout@v4.9.9
+      # OK: a ratchet comment about another action, or without a version
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # ratchet:actions/cache@v3
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # ratchet:exclude

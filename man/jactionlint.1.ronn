@@ -197,6 +197,12 @@ single-dash long options of v1 are removed; the error names the replacement.
     is sent only to the API host. Nothing uses the network without this option, `online: true` in the
     configuration, or `JACTIONLINT_ONLINE` in the environment (`1`, or a mode; `0` turns it off).
 
+  * `--online-github-com-fallback`, `--online-github-com-token-env` <NAME>, `--online-github-com-token-file` <PATH>:
+    On a GitHub Enterprise Server, look up the repositories which the Server answers 404 for on
+    `api.github.com` (actions that GitHub Connect syncs from github.com). The token for github.com is
+    `$GITHUB_COM_TOKEN` or the variable or file named; the token of the Server is never sent there.
+    The names of those repositories go to github.com, so keep internal ones out with `--online-deny`
+
   * `--online-allow` <PATTERN>, `--online-deny` <PATTERN>:
     Look up only (allow), or never look up (deny), the repositories matching `owner/repo`, where `*`
     is a wildcard, for example `--online-deny 'mycorp/*'` for private actions. Repeatable. Deny wins.

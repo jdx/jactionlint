@@ -1,0 +1,27 @@
+on: push
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      # Pinned by the lock file
+      - uses: actions/checkout@v6.0.2
+      - uses: Actions/Checkout@v6.0.2
+      - uses: actions/cache/save@v4
+        with: {path: x, key: y}
+      - uses: dtolnay/rust-toolchain@v1
+      - uses: cli/gh-extension-precompile@v2.1.0
+      - uses: sha256/action@v2
+      # The lock file does not pin these to a commit for this workflow
+      - uses: actions/checkout@V6.0.2
+      - uses: actions/checkout@v6
+      - uses: actions/cache@v5
+        with: {path: x, key: y}
+      - uses: other-workflow/action@v1
+      - uses: mismatched/action@v1
+      - uses: nodigest/action@v1
+      - uses: owner/entry-without-dependency@v1
+      - uses: missing/action@v1
+      # Not part of the lock file
+      - uses: docker://alpine:3.20
+  call:
+    uses: dtolnay/rust-toolchain/.github/workflows/reusable.yml@v1

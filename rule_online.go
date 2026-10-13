@@ -2,7 +2,6 @@ package jactionlint
 
 import (
 	"regexp"
-	"strings"
 )
 
 // This file has what the rules which query GitHub (the "online" rules) have in common: they look at
@@ -103,18 +102,6 @@ var reVersionToken = regexp.MustCompile(`^[vV]?\d+(?:\.\d+)*(?:-[0-9A-Za-z.-]+)?
 // a comment that starts with another directive ("# zizmor: ignore[cache-poisoning] v2"). It returns
 // false when the comment does not start with a version.
 func commentVersion(text string) (string, bool) {
-	text = strings.TrimSpace(text)
-	for _, p := range []string{"tag=", "tag:", "version=", "version:", "ver:", "ver="} {
-		if len(text) >= len(p) && strings.EqualFold(text[:len(p)], p) {
-			text = strings.TrimSpace(text[len(p):])
-			break
-		}
-	}
-	w, _, _ := strings.Cut(text, " ")
-	w, _, _ = strings.Cut(w, "\t")
-	w = strings.Trim(w, "`'\"(),;")
-	if reVersionToken.MatchString(w) {
-		return w, true
-	}
-	return "", false
+	v, _, _, ok := commentVersionAt(text, nil)
+	return v, ok
 }
