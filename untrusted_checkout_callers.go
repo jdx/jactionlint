@@ -136,6 +136,11 @@ type callContext struct {
 	// numbers are the inputs that the call fills with the number of the pull request that a comment is on, with where it
 	// comes from: the callee can give them to `gh pr checkout`.
 	numbers map[string]string
+	// gates are the gates that hold at one moment in front of the call (see untrusted_checkout_toctou.go), rerun whether the
+	// workflow that makes the call runs again for each push to a pull request.
+	gates gateInfo
+	rerun bool
+
 	// values are the values of the inputs that the call gives, as they are written (or the defaults of the callee), by lower case
 	// name: the protection of actions/checkout is decided for the value that the step gets.
 	values map[string]string
@@ -248,7 +253,7 @@ func (rule *RuleUntrustedCheckout) callContexts(key string, depth int, seen map[
 		if step != nil {
 			events = eventsAfterCondition(events, step.If) // a step that is not for these events is not a call for them
 		}
-		if len(events) == 0 || rule.callIsGuarded(cw, job, step, events) {
+		if len(events) == 0 {
 			continue
 		}
 		// only the callers that run for the events that reach this call pass something down
@@ -259,12 +264,30 @@ func (rule *RuleUntrustedCheckout) callContexts(key string, depth int, seen map[
 			}
 		}
 		outer = live
+		g := rule.callGates(cw, job, step, events)
+		if g.safe {
+			continue
+		}
+		// the gates of the workflows that call the caller count only when every one of those calls has gates
+		outerGates := gateInfo{}
+		rerun := rerunsOnPush(cw)
+		for i, o := range outer {
+			if i == 0 {
+				outerGates = o.gates
+			} else {
+				outerGates = outerGates.both(o.gates) // a gate counts when every one of those calls has it
+			}
+			rerun = rerun || o.rerun
+		}
+		if len(outerGates.stale) > 0 {
+			g = g.merge(outerGates)
+		}
 		for name, dv := range defaults {
 			if _, ok := call[name]; !ok {
 				call[name] = dv // an input that the call leaves out has its default
 			}
 		}
-		ctx := callContext{from: ref.file, events: events, inputs: map[string]callInput{}, numbers: map[string]string{}, values: call}
+		ctx := callContext{from: ref.file, events: events, inputs: map[string]callInput{}, numbers: map[string]string{}, values: call, gates: g, rerun: rerun}
 		for name, v := range call {
 			if what, ok := valueUntrustedFor(events, v); ok {
 				mergeInputs(ctx.inputs, map[string]callInput{name: {desc: what + " by " + ref.file, sources: []string{v}}})
@@ -307,27 +330,46 @@ func sortedEvents(events []string) []string {
 	return ret
 }
 
-// callIsGuarded reports whether the job of the call, or the step, only runs for someone who is trusted: the same guards
-// as for a checkout (environment, a guard condition, a needed job that is guarded), and a permission gate before the step.
-func (rule *RuleUntrustedCheckout) callIsGuarded(w *Workflow, job *Job, step *Step, events []string) bool {
-	if rule.environmentHolds(job) || conditionIsGuard(job.If) || neededJobGated(w, job, events, rule.environmentHolds, map[*Job]bool{}) {
-		return true
+// callGates are the gates in front of the job of the call and of the step: the same as for a checkout (an environment, a
+// guard condition, a needed job that is guarded, a permission check before the step). A call that is safe is not a call; the
+// gates that hold at one moment go to the callee, which judges them for the code that follows (see reportToctou).
+func (rule *RuleUntrustedCheckout) callGates(w *Workflow, job *Job, step *Step, events []string) gateInfo {
+	commentOnly := slices.Contains(events, "issue_comment") && !slices.Contains(events, "pull_request_target") && !slices.Contains(events, "workflow_run")
+	g := classifyCondition(job.If, commentOnly).merge(rule.neededGates(w, job, events, commentOnly, map[*Job]bool{}))
+	if rule.environmentHolds(job) {
+		g.stale = append(g.stale, "an environment")
 	}
 	if step == nil {
-		return false
+		return g
 	}
-	var gate permissionGateState
+	var gate, staleGate permissionGateState // the permission checks that hold, and the ones that hold at one moment
+	var stale gateInfo
 	steps, groups := flattenStepsGroup(job.Steps)
 	for i, s := range steps {
 		if s == step {
-			// a step that runs after a failure (always(), failure()) still runs when the permission check failed
-			return conditionIsGuard(s.If) || (gate.holds(groups[i]) && !stepRunsAfterFailure(s))
+			g = g.merge(classifyCondition(s.If, commentOnly))
+			// a step that runs after a failure (always(), failure()) still runs when the permission check failed, and a step
+			// beside the check in a parallel group is not behind it
+			if !stepRunsAfterFailure(s) {
+				if gate.holds(groups[i]) {
+					g.safe = true
+				}
+				if staleGate.holds(groups[i]) {
+					g = g.merge(stale)
+				}
+			}
+			return g
 		}
 		if isPermissionGate(s) {
-			gate.see(groups[i])
+			if pg := permissionGate(commentOnly); pg.safe {
+				gate.see(groups[i])
+			} else {
+				staleGate.see(groups[i])
+				stale = stale.merge(pg)
+			}
 		}
 	}
-	return false
+	return g
 }
 
 // inputDefaults are the defaults of the inputs of a reusable workflow, by lower case name.
@@ -522,7 +564,9 @@ func (rule *RuleUntrustedCheckout) localActionCheckouts(s *Step, e *ExecAction) 
 	defer func() { rule.inputTaint, rule.inputNumber, rule.calls = savedTaint, savedNumber, savedCalls }()
 
 	var ret []*untrustedCheckout
-	var gate permissionGateState
+	var gate, staleGate permissionGateState // the permission checks that hold, and the ones that hold at one moment
+	var stale gateInfo
+	commentOnly := rule.commentOnly()
 	for _, j := range action.Jobs {
 		steps, stepGroups := flattenStepsGroup(j.Steps)
 		for i, cs := range steps {
@@ -531,9 +575,18 @@ func (rule *RuleUntrustedCheckout) localActionCheckouts(s *Step, e *ExecAction) 
 				// the action fails here for a user who may not write, and so does the step that calls it: what it checked
 				// out before or beside the check (a parallel group runs together, and the check does not hold back what runs
 				// beside it) is run by the steps of the caller that run after a failure only.
-				gate.see(g)
-				for _, c := range ret {
-					c.afterFailure = true
+				if pg := permissionGate(commentOnly); pg.safe {
+					gate.see(g)
+					for _, c := range ret {
+						c.afterFailure = true
+					}
+				} else {
+					// the check holds at one moment: what was checked out before it is behind it too, for the ref to be judged
+					staleGate.see(g)
+					stale = stale.merge(pg)
+					for _, c := range ret {
+						c.gates = c.gates.merge(pg)
+					}
 				}
 				continue
 			}
@@ -541,12 +594,24 @@ func (rule *RuleUntrustedCheckout) localActionCheckouts(s *Step, e *ExecAction) 
 				continue // the steps after a permission check only run for a user who may write
 			}
 			ce, ok := cs.Exec.(*ExecAction)
-			if !ok || conditionIsGuard(cs.If) || len(eventsAfterCondition(rule.privileged, cs.If)) == 0 {
+			if !ok || len(eventsAfterCondition(rule.privileged, cs.If)) == 0 {
 				continue
+			}
+			// a condition that holds at one moment (a label of the event, the commenter) leaves the checkout to the check
+			// of the ref; one that holds after the code changes stops it
+			var stepGate gateInfo
+			if conditionIsGuard(cs.If) {
+				if stepGate = classifyCondition(cs.If, commentOnly); stepGate.safe || len(stepGate.stale) == 0 {
+					continue
+				}
+			}
+			if staleGate.holds(g) && !stepRunsAfterFailure(cs) {
+				stepGate = stepGate.merge(stale)
 			}
 			if _, cu := stepAction(cs); cu != nil && cu.isRepoAction("actions/checkout") {
 				if c := rule.actionCheckout(cs, ce, cu, action.Comments, subst, e.Uses.Pos); c != nil {
 					c.step = s
+					c.gates = stepGate
 					c.afterFailure = gate.set // after the check or beside it: only a step of the caller that also runs after a failure runs it
 					c.what += " in " + t.path
 					ret = append(ret, c)

@@ -1,0 +1,105 @@
+on:
+  workflow_dispatch:
+    inputs:
+      os:
+        type: string
+      node:
+        type: string
+
+jobs:
+  # The label is made of the value of the matrix and text
+  suffix:
+    strategy:
+      matrix:
+        os: [macos, linux, windows]
+    runs-on: ${{ matrix.os }}-latest
+    steps:
+      - run: echo ...
+  prefix:
+    strategy:
+      matrix:
+        version: ['24.04', '18.04']
+    runs-on: ubuntu-${{ matrix.version }}
+    steps:
+      - run: echo ...
+  both-sides:
+    strategy:
+      matrix:
+        os: [ubuntu]
+        include:
+          - os: freebsd
+    runs-on: ${{ matrix.os }}-latest
+    steps:
+      - run: echo ...
+  # A number is a part of the label when GitHub prints it as it is written
+  number:
+    strategy:
+      matrix:
+        version: [22.04, 21.10]
+    runs-on: ubuntu-${{ matrix.version }}
+    steps:
+      - run: echo ...
+  # A label next to others is checked too
+  with-other-labels:
+    strategy:
+      matrix:
+        os: [macos, linux]
+    runs-on: ['${{ matrix.os }}-latest', arm64]
+    steps:
+      - run: echo ...
+  # exclude removes a value of the matrix, and include adds it again as a new job
+  excluded-and-included:
+    strategy:
+      matrix:
+        os: [ubuntu, linux]
+        exclude:
+          - os: linux
+        include:
+          - os: linux
+            extra: yes
+    runs-on: ${{ matrix.os }}-latest
+    steps:
+      - run: echo ...
+  # An exclude with an expression can remove any value of the row, but not the one that include adds
+  expression-and-included:
+    strategy:
+      matrix:
+        os: [ubuntu]
+        exclude:
+          - os: ${{ github.event_name }}
+        include:
+          - os: haiku
+    runs-on: ${{ matrix.os }}-latest
+    steps:
+      - run: echo ...
+  # The values of the row are not known, but the one that include adds is
+  expression-row-and-included:
+    strategy:
+      matrix:
+        os: ${{ fromJSON(inputs.os) }}
+        include:
+          - os: plan9
+    runs-on: ${{ matrix.os }}-latest
+    steps:
+      - run: echo ...
+  # An exclude entry with several keys removes only the combinations that have all of them: linux still has a job
+  # with node 20
+  partial-exclude:
+    strategy:
+      matrix:
+        os: [ubuntu, linux]
+        node: [18, 20]
+        exclude:
+          - os: linux
+            node: 18
+    runs-on: ${{ matrix.os }}-latest
+    steps:
+      - run: echo ...
+  # 1.2.3 is a string in YAML 1.2, which GitHub reads, so it is the label as written
+  version-with-two-dots:
+    strategy:
+      matrix:
+        version: [1.2.3]
+    runs-on: macos-${{ matrix.version }}
+    steps:
+      - run: echo ...
