@@ -12,7 +12,11 @@ import (
 // tag the fix that pins them to the commit the tag points to, with the tag name as a comment:
 //
 //	uses: actions/checkout@v4
-//	uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+//	uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+//
+// The comment names the most specific version tag which points to the commit (see specificVersionTag),
+// so that it stays true when the moving tag "v4" is moved on. Its option "short-pin-comment" writes
+// the tag as it was written instead. A ref which is not a version is written as it is.
 //
 // It needs GitHub to resolve the tag, so it exists only with the online checks. The fix is safe, and
 // so offered, only when the result is the same code that runs today: the ref is the name of a tag
@@ -20,8 +24,9 @@ import (
 // which would make it ambiguous. A ref which is a branch, an abbreviated SHA or unknown to GitHub
 // gets no fix, and neither does a line this cannot edit without guessing (a comment which does
 // not mention the ref, or other content after the value).
-func (l *Linter) attachPinFixes(sess *onlineSession, src []byte, errs []*Error, locked bool) {
+func (l *Linter) attachPinFixes(sess *onlineSession, cfg *Config, src []byte, errs []*Error, locked bool) {
 	// With sess == nil (the online checks are off) the errors only get the reason why they have no fix.
+	short, _ := cfg.ruleOptionBool("unpinned-uses", "short-pin-comment")
 	var starts []int // Byte offset of each line
 	for _, e := range errs {
 		if e.ID != "unpinned-uses" || e.Fix != nil || e.Line <= 0 || e.Column <= 0 {
@@ -33,7 +38,7 @@ func (l *Linter) attachPinFixes(sess *onlineSession, src []byte, errs []*Error, 
 		if e.Line > len(starts) {
 			continue
 		}
-		fix, err := pinFix(sess, src, starts[e.Line-1], e.Column, locked)
+		fix, err := pinFix(sess, src, starts[e.Line-1], e.Column, short, locked)
 		if err != nil {
 			l.debug("No fix for the error at line %d: %v", e.Line, err)
 			e.NoFix = noFixOf(err)
@@ -83,8 +88,9 @@ func lineStarts(src []byte) []int {
 }
 
 // pinFix builds the fix for the `uses:` value which starts at the column (1-based, in characters) of
-// the line that starts at lineStart.
-func pinFix(sess *onlineSession, src []byte, lineStart, col int, locked bool) (*Fix, error) {
+// the line that starts at lineStart. With short the comment names the tag as written and not the most
+// specific one. With locked the workflow is held to the Actions lock file, which a commit SHA in uses: can fail.
+func pinFix(sess *onlineSession, src []byte, lineStart, col int, short, locked bool) (*Fix, error) {
 	lineEnd := len(src)
 	if i := bytes.IndexByte(src[lineStart:], '\n'); i >= 0 {
 		lineEnd = lineStart + i
@@ -174,7 +180,7 @@ func pinFix(sess *onlineSession, src []byte, lineStart, col int, locked bool) (*
 		if quote != 0 {
 			newText += string(quote)
 		}
-		newText += " # " + ref.Ref
+		newText += " # " + pinCommentVersion(sess, ref, sha, short)
 	case strings.HasPrefix(rest, "#") && commentNamesRef(rest[1:], ref.Ref):
 		// The comment already names the version
 	default:
@@ -190,4 +196,22 @@ func pinFix(sess *onlineSession, src []byte, lineStart, col int, locked bool) (*
 func commentNamesRef(comment, ref string) bool {
 	v, ok := commentVersion(comment)
 	return ok && v == ref
+}
+
+// pinCommentVersion is the version to name in the comment of the pin of the tag: the most specific
+// version tag of the commit, else the tag as it was written.
+func pinCommentVersion(sess *onlineSession, ref *UsesRef, sha string, short bool) string {
+	if short || ref.RefKind != RefSemverTag {
+		return ref.Ref
+	}
+	idx, err := sess.Tags(ref.Owner, ref.Repo)
+	if err != nil || idx.truncated {
+		// With more tags than were read the most specific one may be missing, and a less specific one from the partial list
+		// would be a comment that still moves: the tag is named as it was written
+		return ref.Ref
+	}
+	if name, ok := specificVersionTag(idx.bySHA[sha], ref.Ref); ok {
+		return name
+	}
+	return ref.Ref
 }

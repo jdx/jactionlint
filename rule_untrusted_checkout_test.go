@@ -12,6 +12,8 @@ const pedanticCheckout = "rules:\n  untrusted-checkout: {level: error, pedantic:
 
 func TestRuleUntrustedCheckout(t *testing.T) {
 	const prt = "on: pull_request_target\njobs:\n  j:\n    runs-on: ubuntu-latest\n"
+	// a label gate that only runs for the labeled event is a gate for a commit
+	const prtLabeled = "on:\n  pull_request_target:\n    types: [labeled]\njobs:\n  j:\n    runs-on: ubuntu-latest\n"
 	tests := []struct {
 		what   string
 		others map[string]string
@@ -32,7 +34,7 @@ func TestRuleUntrustedCheckout(t *testing.T) {
       - uses: ./.github/actions/label
 `},
 		{"workflow env", nil, "on: pull_request_target\nenv:\n  HEAD: ${{ github.event.pull_request.head.sha }}\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - run: | # want\n          git fetch origin \"$HEAD\"\n          git checkout \"$HEAD\"\n      - run: npm ci\n"},
-		{"guarded step that runs the code", nil, prt + `    steps:
+		{"guarded step that runs the code", nil, prtLabeled + `    steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha }}
@@ -260,7 +262,7 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
       - run: npm ci
 `},
-		{"label guard on a step", nil, prt + `    steps:
+		{"label guard on a step", nil, prtLabeled + `    steps:
       - uses: actions/checkout@v4
         if: contains(github.event.pull_request.labels.*.name, 'safe to test')
         with:

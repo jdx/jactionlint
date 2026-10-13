@@ -282,6 +282,10 @@ func TestUntrustedCheckoutLocalActionCheckout(t *testing.T) {
 		{"a commit and a branch passed to a checkout that refuses commits", action("actions/checkout@v4", "${{ inputs.ref }}"), prt + "      - uses: ./.github/actions/checkout-pr # want\n        with:\n          ref: ${{ github.event.pull_request.head.sha || github.head_ref }}\n      - run: make\n"},
 		{"free text in the ref, and a checkout that refuses a number", numberAction("actions/checkout@v4"), prt + "      - uses: ./.github/actions/checkout-pr # want\n        with:\n          n: ${{ github.head_ref }}\n      - run: make\n"},
 		{"a number in the ref that the call leaves out", numberAction("actions/checkout@v4"), prt + "      - uses: ./.github/actions/checkout-pr # want\n      - run: make\n"},
+		{"a permission check of the commenter in the action, and the number of the issue", "name: x\ndescription: d\ninputs:\n  n:\n    description: n\nruns:\n  using: composite\n  steps:\n    - uses: sushichop/action-repository-permission@v3\n      with:\n        required-permission: write\n    - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2\n      with:\n        ref: refs/pull/${{ inputs.n }}/head\n", "on: issue_comment\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: ./.github/actions/checkout-pr # want\n        with:\n          n: ${{ github.event.issue.number }}\n      - run: make\n"},
+		{"a permission check of the author in the action, and the head", "name: x\ndescription: d\ninputs:\n  n:\n    description: n\nruns:\n  using: composite\n  steps:\n    - uses: sushichop/action-repository-permission@v3\n      with:\n        required-permission: write\n    - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2\n      with:\n        ref: ${{ inputs.n }}\n", prt + "      - uses: ./.github/actions/checkout-pr\n        with:\n          n: " + headSHA + "\n      - run: make\n"},
+		{"a label of the event on the checkout of the action, and the branch", "name: x\ndescription: d\ninputs:\n  ref:\n    description: r\nruns:\n  using: composite\n  steps:\n    - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2\n      if: github.event.label.name == 'safe to test'\n      with:\n        ref: ${{ inputs.ref }}\n", "on:\n  pull_request_target:\n    types: [labeled]\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: ./.github/actions/checkout-pr # want\n        with:\n          ref: ${{ github.event.pull_request.head.ref }}\n      - run: make\n"},
+		{"a label of the event on the checkout of the action, and the commit", "name: x\ndescription: d\ninputs:\n  ref:\n    description: r\nruns:\n  using: composite\n  steps:\n    - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2\n      if: github.event.label.name == 'safe to test'\n      with:\n        ref: ${{ inputs.ref }}\n", "on:\n  pull_request_target:\n    types: [labeled]\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: ./.github/actions/checkout-pr\n        with:\n          ref: ${{ github.event.pull_request.head.sha }}\n      - run: make\n"},
 		{"the step is for maintainers", action("actions/checkout@v1", "${{ inputs.ref }}"), prt + "      - uses: ./.github/actions/checkout-pr\n        if: github.event.pull_request.author_association == 'MEMBER'\n        with:\n          ref: " + headSHA + "\n      - run: make\n"},
 	}
 	for _, tc := range tests {
@@ -339,6 +343,108 @@ func TestUntrustedCheckoutCallersGuard(t *testing.T) {
 				if len(errs) != want {
 					t.Fatalf("pedantic=%v: want %d findings but got %v", pedantic, want, errs)
 				}
+			}
+		})
+	}
+}
+
+// The gates in front of a call hold at one moment too: the callee is judged for the code that follows them.
+func TestUntrustedCheckoutCallersToctou(t *testing.T) {
+	const head = "${{ github.event.pull_request.head.ref }}"
+	tests := []struct {
+		name  string
+		files map[string]string
+		want  int
+		text  string
+	}{
+		{"an environment on the call and a branch", map[string]string{"pr.yml": ucActionCaller("pull_request_target", "    environment: ci\n", head)}, 1, "an environment lets the job start"},
+		{"an environment on the call and a commit", map[string]string{"pr.yml": ucActionCaller("pull_request_target", "    environment: ci\n", headSHA)}, 0, ""},
+		{"a label on the call and a branch", map[string]string{"pr.yml": ucActionCaller("pull_request_target", "    if: github.event.label.name == 'safe to test'\n", head)}, 1, "a label condition lets the job start"},
+		{"an author who is a member on the call and a branch", map[string]string{"pr.yml": ucActionCaller("pull_request_target", "    if: github.event.pull_request.author_association == 'MEMBER'\n", head)}, 0, ""},
+		{"an environment on one call and a label that lasts on another, with a commit", map[string]string{
+			"a.yml": ucActionCaller("pull_request_target", "    environment: ci\n", headSHA),
+			"b.yml": ucActionCaller("pull_request_target", "    if: contains(github.event.pull_request.labels.*.name, 'safe to test')\n", headSHA),
+		}, 1, ""},
+		{"an environment on both calls and a label that lasts on one, with a commit", map[string]string{
+			"a.yml": ucActionCaller("pull_request_target", "    environment: ci\n", headSHA),
+			"b.yml": ucActionCaller("pull_request_target", "    environment: ci\n    if: contains(github.event.pull_request.labels.*.name, 'safe to test')\n", headSHA),
+		}, 0, ""},
+		{"an environment on the call and a commit with a branch as a fallback", map[string]string{"pr.yml": ucActionCaller("pull_request_target", "    environment: ci\n", "${{ github.event.pull_request.head.sha || github.head_ref }}")}, 1, "an environment lets the job start"},
+		{"an environment on the call and a commit with a pull ref as a fallback", map[string]string{"pr.yml": ucActionCaller("pull_request_target", "    environment: ci\n", "${{ github.event.pull_request.head.sha || format('refs/pull/{0}/head', github.event.number) }}")}, 1, "an environment lets the job start"},
+		{"an environment on the call and two commits", map[string]string{"pr.yml": ucActionCaller("pull_request_target", "    environment: ci\n", "${{ github.event.pull_request.head.sha || github.event.pull_request.merge_commit_sha }}")}, 0, ""},
+		{"a gated call and a call that nothing holds back", map[string]string{
+			"a.yml": ucActionCaller("pull_request_target", "    environment: ci\n", head),
+			"b.yml": ucActionCaller("pull_request_target", "", headSHA),
+		}, 1, ".github/workflows/b.yml"},
+		{"two gated calls, one with a commit and one with a branch", map[string]string{
+			"a.yml": ucActionCaller("pull_request_target", "    environment: ci\n", headSHA),
+			"b.yml": ucActionCaller("pull_request_target", "    environment: ci\n", head),
+		}, 1, "an environment lets the job start"},
+		{"two gated calls, one with a branch and one with a commit", map[string]string{
+			"a.yml": ucActionCaller("pull_request_target", "    environment: ci\n", head),
+			"b.yml": ucActionCaller("pull_request_target", "    environment: ci\n", headSHA),
+		}, 1, "an environment lets the job start"},
+		{"two gated calls with a commit each", map[string]string{
+			"a.yml": ucActionCaller("pull_request_target", "    environment: ci\n", headSHA),
+			"b.yml": ucActionCaller("pull_request_target", "    environment: ci\n", "${{ github.event.pull_request.merge_commit_sha }}"),
+		}, 0, ""},
+		{"a gated call and a call with a branch that nothing holds back", map[string]string{
+			"a.yml": ucActionCaller("pull_request_target", "    environment: ci\n", headSHA),
+			"b.yml": ucActionCaller("pull_request_target", "", head),
+		}, 1, ".github/workflows/b.yml"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			files := map[string]string{".github/actions/build/action.yml": strings.Replace(ucAction, "actions/checkout@v1", "actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2", 1)}
+			for k, v := range tc.files {
+				files[".github/workflows/"+k] = v
+			}
+			root := writeProject(t, files)
+			l := newActionLinter(t, root, io.Discard, LinterOptions{}, "rules:\n  untrusted-checkout: error\n")
+			errs, err := l.LintFiles([]string{filepath.Join(root, ".github", "actions", "build", "action.yml")}, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			errs = errsWithID(errs, "untrusted-checkout")
+			if len(errs) != tc.want {
+				t.Fatalf("want %d findings but got %v", tc.want, errs)
+			}
+			if tc.want > 0 && !strings.Contains(errs[0].Message, tc.text) {
+				t.Errorf("message lacks %q: %s", tc.text, errs[0].Message)
+			}
+		})
+	}
+}
+
+// A command that checks out what a caller passes is judged for what every caller passes.
+func TestUntrustedCheckoutCallersToctouCommand(t *testing.T) {
+	const label = "    if: github.event.label.name == 'safe to test'\n"
+	const build = "on:\n  workflow_call:\n    inputs:\n      ref:\n        type: string\njobs:\n  build:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2\n      - run: |\n          git fetch origin ${{ inputs.ref }} && git checkout FETCH_HEAD\n          make\n"
+	branch := "${{ github.event.pull_request.head.ref }}"
+	tests := []struct {
+		name  string
+		files map[string]string
+		want  int
+	}{
+		{"a commit and a branch", map[string]string{"a.yml": ucCaller("pull_request_target", label, headSHA), "b.yml": ucCaller("pull_request_target", label, branch)}, 1},
+		{"a branch and a commit", map[string]string{"a.yml": ucCaller("pull_request_target", label, branch), "b.yml": ucCaller("pull_request_target", label, headSHA)}, 1},
+		{"two commits", map[string]string{"a.yml": ucCaller("pull_request_target", label, headSHA), "b.yml": ucCaller("pull_request_target", label, "${{ github.event.pull_request.merge_commit_sha }}")}, 0},
+		{"a commit with a branch as a fallback", map[string]string{"a.yml": ucCaller("pull_request_target", label, "${{ github.event.pull_request.head.sha || github.head_ref }}")}, 1},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			files := map[string]string{".github/workflows/build.yml": build}
+			for k, v := range tc.files {
+				files[".github/workflows/"+k] = v
+			}
+			root := writeProject(t, files)
+			l := newActionLinter(t, root, io.Discard, LinterOptions{}, "rules:\n  untrusted-checkout: error\n")
+			errs, err := l.LintFiles([]string{filepath.Join(root, ".github", "workflows", "build.yml")}, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if errs = errsWithID(errs, "untrusted-checkout"); len(errs) != tc.want {
+				t.Fatalf("want %d findings but got %v", tc.want, errs)
 			}
 		})
 	}
