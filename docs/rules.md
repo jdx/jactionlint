@@ -1256,11 +1256,12 @@ An action, reusable workflow or Docker image is not pinned to a commit SHA or di
 
 ## unredacted-secrets
 
-A secret is parsed with fromJSON(), so the fields of it are not redacted in logs.
+A secret is parsed with fromJSON(), so the fields of it are not redacted in logs. With the option pedantic, also a value that a script cuts from a secret and prints without masking it.
 
 - Group: security
 - Default level: error
 - Profile: default
+- Option `pedantic` (bool, no default): Also report the pedantic checks, which are noisier. Unset, they run under the pedantic profile.
 - Details and examples: [checks](./checks.md#check-unredacted-secrets)
 
 ## unsound-contains
