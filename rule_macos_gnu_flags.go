@@ -141,9 +141,14 @@ func macosLabelOf(j *Job) string {
 			labels = append(labels, runnersAfterExclude(vs, j.RunsOn.LabelsExpr, m)...)
 		}
 	}
-	for _, l := range labels {
-		if strings.EqualFold(l, "self-hosted") {
-			return ""
+	// A runs-on of one label that the matrix chooses makes one job for each value, so a value self-hosted is a job of
+	// its own and the GitHub-hosted macOS value is another one. With several labels the values are labels of the same
+	// job, and a self-hosted one makes the runner the one of its owner.
+	if len(j.RunsOn.Labels)+boolInt(j.RunsOn.LabelsExpr != nil) > 1 {
+		for _, l := range labels {
+			if strings.EqualFold(l, "self-hosted") {
+				return ""
+			}
 		}
 	}
 	for _, l := range labels {
@@ -152,6 +157,13 @@ func macosLabelOf(j *Job) string {
 		}
 	}
 	return ""
+}
+
+func boolInt(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
 }
 
 // matrixKeyOfLabel returns the lower case key of `runs-on: ${{ matrix.key }}` (or `matrix['key']`), read like
@@ -247,7 +259,7 @@ func portableTools(s *runscript.Script) map[string]bool {
 					out["stat"] = true
 				}
 			case "sed":
-				if sedInPlaceRe.MatchString(w.Value) && !sedAttachedEmptyRe.MatchString(w.Raw) && i+1 < len(c.Args) && c.Args[i+1] != nil && !c.Args[i+1].Dynamic() && isSedSuffix(c.Args[i+1].Value) {
+				if sedInPlaceRe.MatchString(w.Value) && i+1 < len(c.Args) && c.Args[i+1] != nil && !c.Args[i+1].Dynamic() && isSedSuffix(c.Args[i+1].Value) {
 					out["sed"] = true
 				}
 			case "tee":
@@ -283,9 +295,6 @@ var (
 	dateOptionRe = regexp.MustCompile(`^-u?d`)
 	// statFormatRe is the -c option of GNU stat, alone or with its value attached (-c%s, -Lc).
 	statFormatRe = regexp.MustCompile(`^-[LFlnqrsx]*c`)
-	// sedAttachedEmptyRe is the form -i'' or -i"" of a script which is written for both seds: the empty suffix is part of the
-	// word, which GNU sed reads as -i without a backup.
-	sedAttachedEmptyRe = regexp.MustCompile(`^-[A-Za-z]*i(?:''|"")$`)
 	// sedSuffixRe is a word that BSD sed takes as the suffix of the backup: ".bak", ".orig", "~", "bak".
 	sedSuffixRe = regexp.MustCompile(`^(?:\.[A-Za-z0-9_~.-]*|~|[A-Za-z]{3,})$`)
 )
@@ -313,7 +322,7 @@ func macosGnuForms(c *runscript.Command) []macosGnuForm {
 			switch {
 			case strings.HasPrefix(v, "--in-place") || v == "--in-place":
 				add(w, `"sed --in-place" is rejected by the sed of macOS: it has no long options.`, `Use "sed -i.bak" (and remove the backup), which both seds understand.`)
-			case sedInPlaceRe.MatchString(v) && !sedAttachedEmptyRe.MatchString(w.Raw) && i+1 < len(c.Args):
+			case sedInPlaceRe.MatchString(v) && i+1 < len(c.Args):
 				next := c.Args[i+1]
 				if _, plain := next.Var(); plain || strings.HasPrefix(next.Value, "-") || (!next.Dynamic() && (next.Value == "" || sedSuffixRe.MatchString(next.Value))) {
 					continue // a suffix (-i '' or -i .bak), a variable that may be one, or an option that makes it unclear what follows

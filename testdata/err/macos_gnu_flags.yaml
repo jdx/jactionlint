@@ -68,3 +68,17 @@ jobs:
       - run: grep "-P" x file
       - run: stat "-c" %s file
       - run: grep '-e' -P file && grep -P x file2 && true
+  attached-empty-suffix:
+    runs-on: macos-latest
+    steps:
+      # The shell removes the quotes, so this is sed -i and the script is the suffix
+      - run: sed -i'' 's/a/b/' file.txt
+      - run: sed -i"" 's/a/b/' file.txt
+  self-hosted-leg:
+    # The matrix chooses the whole runner: one job is self-hosted and another is GitHub-hosted macOS
+    strategy:
+      matrix:
+        os: [self-hosted, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - run: date -d yesterday

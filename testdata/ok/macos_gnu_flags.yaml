@@ -33,7 +33,6 @@ jobs:
       # What both seds understand, and what macOS has
       - run: sed -i.bak 's/a/b/' file.txt && rm file.txt.bak
       - run: sed -i '' 's/a/b/' file.txt
-      - run: sed -i"" 's/a/b/' file.txt
       - run: sed -i "$SUFFIX" 's/a/b/' file.txt
       - run: sed -i -e 's/a/b/' file.txt
       - run: sed -n 's/a/b/p' file.txt
