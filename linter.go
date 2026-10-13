@@ -890,6 +890,9 @@ func (l *Linter) check(
 			now:                    l.now,
 		}
 		rules := newBuiltinRules(env, l.log)
+		// The scripts which were counted are in the totals also when the visit fails (a command of shellcheck that
+		// fails ends it with an error): the note and the SARIF log say what was found
+		defer l.tools.record(path, env.tools)
 		if env.err != nil {
 			return nil, env.err
 		}
@@ -921,7 +924,6 @@ func (l *Linter) check(
 			l.debug("Error occurred while visiting workflow syntax tree: %v", err)
 			return nil, err
 		}
-		l.tools.record(path, env.tools)
 
 		for _, rule := range rules {
 			if sr, ok := rule.(interface{ sharedErrs() []*Error }); ok {

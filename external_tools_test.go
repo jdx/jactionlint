@@ -416,3 +416,34 @@ func TestToolScriptsAreCountedOncePerFile(t *testing.T) {
 		t.Errorf("the notes: %q", n)
 	}
 }
+
+// TestToolScriptsAreCountedWhenTheCommandFails: a shellcheck which fails ends the check with an error, and the scripts
+// that were found before it are still in the counts and in the note.
+func TestToolScriptsAreCountedWhenTheCommandFails(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the fake shellcheck is a shell script")
+	}
+	dir := emptyPath(t)
+	if err := os.WriteFile(filepath.Join(dir, "shellcheck"), []byte("#!/bin/sh\nexit 2\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	f := toolProject(t) // two bash scripts and one Python script
+	l, err := NewLinter(&bytes.Buffer{}, &LinterOptions{Shellcheck: "shellcheck", Pyflakes: "pyflakes"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := l.LintFile(f, nil); err == nil {
+		t.Fatal("a shellcheck which exits with 2 and prints nothing must fail the run")
+	}
+	got := l.ExternalTools()
+	if s := got["shellcheck"]; s.Status != ExternalToolRan || s.Scripts != 2 {
+		t.Errorf("shellcheck = %+v, want ran with 2 scripts", s)
+	}
+	if s := got["pyflakes"]; s.Status != ExternalToolNotFound || s.SkippedScripts != 1 {
+		t.Errorf("pyflakes = %+v, want not found with 1 skipped script", s)
+	}
+	l.runHints = true
+	if n := l.tools.notes(); len(n) != 1 || !strings.Contains(n[0], "pyflakes was not found, so it did not check 1 Python script") {
+		t.Errorf("notes = %q", n)
+	}
+}
