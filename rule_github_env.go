@@ -70,6 +70,9 @@ type RuleGitHubEnv struct {
 	varsOnly bool
 	// skipInputs makes `inputs.*` of a composite action an ordinary value instead of an outsider's input.
 	skipInputs bool
+	// multilineOnly makes an input that is one line (a title, a branch name) an ordinary value: the output-clobbering
+	// rule is about a line break in the value.
+	multilineOnly bool
 }
 
 // NewRuleGitHubEnv creates a new RuleGitHubEnv instance.
@@ -158,14 +161,14 @@ func (rule *RuleGitHubEnv) emit(d data, dest string, start, end *Pos) {
 	switch d.kind {
 	case dataUntrusted:
 		src := describeUntrusted(d)
-		e := rule.errorIDAt("github-env", start, "untrusted input "+src+" is written to "+dest+". "+effect+". do not write input that an outsider controls to "+dest+"; validate it first or pass it to the next step with $GITHUB_OUTPUT").endAt(end)
+		e := rule.errorIDAt("github-env", start, "untrusted input "+src+" is written to "+dest+". "+effect+". do not write input that an outsider controls to "+dest+"; validate it first, or pass it to the next step with $GITHUB_OUTPUT (only a value without line breaks, or one between a delimiter that nobody can guess, is safe there: see output-clobbering)").endAt(end)
 		e.RetiredID = "github-env-untrusted-input"
 	case dataUnknown:
 		trigger, ok := rule.privileged()
 		if !ok {
 			return
 		}
-		rule.errorIDAt("github-env", start, what+" that is not a literal is written to "+dest+" in a workflow triggered by "+quote(trigger)+", which runs with secrets and a write token for events that may come from a fork. "+effect+". write only literal values and values computed from trusted sources, or pass state with $GITHUB_OUTPUT").endAt(end)
+		rule.errorIDAt("github-env", start, what+" that is not a literal is written to "+dest+" in a workflow triggered by "+quote(trigger)+", which runs with secrets and a write token for events that may come from a fork. "+effect+". write only literal values and values computed from trusted sources, or pass state with $GITHUB_OUTPUT (only a value without line breaks, or one between a delimiter that nobody can guess, is safe there: see output-clobbering)").endAt(end)
 	}
 }
 
@@ -365,6 +368,9 @@ func (rule *RuleGitHubEnv) judgeExprList(exprs []string, depth int) data {
 // judgeExpr judges one expression. In the metadata of an action, `inputs.*` is whatever the caller passes, and a
 // workflow can pass the title of an issue: it is an outsider's input, whichever event runs the action.
 func (rule *RuleGitHubEnv) judgeExpr(e string) data {
+	if rule.multilineOnly && !exprMayHaveNewline(e) {
+		return data{}
+	}
 	if rule.wf != nil && rule.wf.Action != nil && !rule.skipInputs && exprReadsContext(e, "inputs") {
 		return data{kind: dataUntrusted, input: e}
 	}

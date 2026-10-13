@@ -69,6 +69,9 @@ func commandSanitizes(c *runscript.Command, dest string) sanitizeKind {
 	if c == nil {
 		return sanitizeNone
 	}
+	if dest == destOutput && cannotAddRecords(c) {
+		return sanitizeNewline
+	}
 	switch c.Name {
 	case "tr":
 		del, comp := c.HasFlag("-d"), c.HasFlag("-c", "-C")

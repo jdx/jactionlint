@@ -1,0 +1,76 @@
+# A comment can hold a line break: the second line becomes another record of the file
+on:
+  issue_comment:
+    types: [created]
+permissions: {}
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    outputs:
+      approved: ${{ steps.record.outputs.approved }}
+    steps:
+      - id: record
+        env:
+          BODY: ${{ github.event.comment.body }}
+        run: |
+          echo "approved=false" >> "$GITHUB_OUTPUT"
+          echo "body=$BODY" >> "$GITHUB_OUTPUT"
+      - id: delimiter
+        env:
+          BODY: ${{ github.event.comment.body }}
+        run: |
+          echo "approved=false" >> "$GITHUB_OUTPUT"
+          {
+            echo "body<<EOF"
+            echo "$BODY"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+      - id: heredoc
+        env:
+          BODY: ${{ github.event.comment.body }}
+        run: |
+          cat <<EOF >> "$GITHUB_OUTPUT"
+          approved=false
+          body=$BODY
+          EOF
+      # Not reported: one line, a delimiter that nobody can guess, a validated value
+      - id: title
+        env:
+          TITLE: ${{ github.event.issue.title }}
+        run: |
+          echo "approved=false" >> "$GITHUB_OUTPUT"
+          echo "title=$TITLE" >> "$GITHUB_OUTPUT"
+      - id: random
+        env:
+          BODY: ${{ github.event.comment.body }}
+        run: |
+          delimiter=$(uuidgen)
+          {
+            echo "body<<$delimiter"
+            echo "$BODY"
+            echo "$delimiter"
+          } >> "$GITHUB_OUTPUT"
+          echo "approved=false" >> "$GITHUB_OUTPUT"
+      - id: validated
+        env:
+          BODY: ${{ github.event.comment.body }}
+        run: |
+          [[ "$BODY" =~ ^[0-9]+$ ]] || exit 1
+          echo "number=$BODY" >> "$GITHUB_OUTPUT"
+          echo "approved=false" >> "$GITHUB_OUTPUT"
+      - id: counted
+        env:
+          BODY: ${{ github.event.comment.body }}
+        run: |
+          echo "lines=$(echo "$BODY" | wc -l)" >> "$GITHUB_OUTPUT"
+          echo "approved=false" >> "$GITHUB_OUTPUT"
+      # Not reported: the step has no id, so nothing reads its outputs
+      - env:
+          BODY: ${{ github.event.comment.body }}
+        run: |
+          echo "approved=false" >> "$GITHUB_OUTPUT"
+          echo "body=$BODY" >> "$GITHUB_OUTPUT"
+      - if: steps.record.outputs.approved == 'true' || steps.delimiter.outputs.approved == 'true' || steps.heredoc.outputs.approved == 'true'
+        run: echo approved
+      - if: steps.title.outputs.approved == 'true' || steps.random.outputs.approved == 'true' || steps.validated.outputs.approved == 'true' || steps.counted.outputs.approved == 'true'
+        run: echo approved

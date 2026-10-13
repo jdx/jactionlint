@@ -1,0 +1,228 @@
+package jactionlint
+
+import (
+	"strings"
+	"testing"
+)
+
+func countOutputClobbering(t *testing.T, name, src string) int {
+	t.Helper()
+	cfg := &Config{Rules: map[string]RuleConfig{"output-clobbering": {Level: SeverityError}}}
+	n := 0
+	for _, e := range lintBatchD(t, name, src, cfg) {
+		if e.ID == "output-clobbering" {
+			n++
+		}
+	}
+	return n
+}
+
+// TestOutputClobbering is the table of the rule. want is the number of findings.
+func TestOutputClobbering(t *testing.T) {
+	const head = "on: issue_comment\npermissions: {}\njobs:\n  j:\n    runs-on: ubuntu-latest\n    outputs:\n      approved: ${{ steps.check.outputs.approved }}\n    steps:\n      - id: check\n        env:\n          BODY: ${{ github.event.comment.body }}\n          TITLE: ${{ github.event.issue.title }}\n          REF: ${{ github.head_ref }}\n          LIT: fixed\n        run: |\n"
+	const tail = "      - if: steps.check.outputs.approved == 'true'\n        run: echo approved\n"
+	const out = `>> "$GITHUB_OUTPUT"`
+	tests := []struct {
+		what   string
+		script string
+		want   int
+	}{
+		// --- a record that an attacker can end ---
+		{"the record of a comment", `echo "approved=false" ` + out + "\n" + `echo "body=$BODY" ` + out, 1},
+		{"a record without another write", `echo "body=$BODY" ` + out, 1},
+		{"printf", `printf 'body=%s\n' "$BODY" ` + out, 1},
+		{"printf with a format that has the variable", `printf "body=$BODY\n" ` + out, 1},
+		{"tee", `echo "body=$BODY" | tee -a "$GITHUB_OUTPUT"`, 1},
+		{"a group", `{ echo "approved=false"; echo "body=$BODY"; } ` + out, 1},
+		{"a here document", "cat <<EOF " + out + "\nbody=$BODY\nEOF", 1},
+		{"a script variable", "V=$BODY\necho \"v=$V\" " + out, 1},
+		{"a substitution", `echo "v=$(echo "$BODY" | sed 's/a/b/')" ` + out, 1},
+		{"the value alone", `echo "$BODY" ` + out, 1},
+		{"braces and the file in a variable", "F=$GITHUB_OUTPUT\necho \"body=${BODY}\" >> \"$F\"", 1},
+		{"an expression in the script", `echo "body=${{ github.event.comment.body }}" ` + out, 1},
+		{"two writes of the comment", "echo \"a=$BODY\" " + out + "\necho \"b=$BODY\" " + out, 2},
+		// --- what reaches the file ---
+		{"through a filter", `echo "body=$BODY" | sed 's/a/b/' >> "$GITHUB_OUTPUT"`, 1},
+		{"through a filter and tee", `echo "body=$BODY" | grep -v x | tee -a "$GITHUB_OUTPUT"`, 1},
+		{"a program that parses it", `echo "$BODY" | python parse_args.py ` + out, 0},
+		{"a program in the middle", `echo "$BODY" | python parse_args.py | sed 's/a/b/' ` + out, 0},
+		{"the test of an if", "{\n  if printf '%s\n' \"$BODY\" | grep -Fqi -- '/deploy'; then echo \"clean=true\"; fi\n  echo \"approved=false\"\n} " + out, 0},
+		{"output sent elsewhere", `{ echo "approved=false"; echo "body=$BODY" >&2; echo "b=$BODY" > /dev/null; } ` + out, 0},
+		{"the output of grep -q", `{ echo "approved=false"; echo "$BODY" | grep -q x && echo "found=true"; } ` + out, 0},
+		{"base64", `echo "body=$(echo "$BODY" | base64)" ` + out, 0},
+		{"base64 decoded", `echo "body=$(echo "$BODY" | base64 -d)" ` + out, 1},
+		// --- a constant delimiter ---
+		{"a constant delimiter in a group", `{ echo "body<<EOF"; echo "$BODY"; echo "EOF"; } ` + out, 1},
+		{"a constant delimiter in three writes", "echo \"body<<EOF\" " + out + "\necho \"$BODY\" " + out + "\necho \"EOF\" " + out, 1},
+		{"a constant delimiter in a here document", "cat <<EOF " + out + "\nbody<<DELIM\n$BODY\nDELIM\nEOF", 1},
+		{"a constant delimiter that looks random", "delimiter=ghadelimiter_1234\n{ echo \"body<<$delimiter\"; echo \"$BODY\"; echo \"$delimiter\"; } " + out, 1},
+		{"a delimiter from nanoseconds", "d=\"EOF_$(date +%s%N)\"\n{ echo \"body<<$d\"; echo \"$BODY\"; echo \"$d\"; } " + out, 0},
+		{"a delimiter from the date", "d=$(date +%s)\n{ echo \"body<<$d\"; echo \"$BODY\"; echo \"$d\"; } " + out, 1},
+		{"a delimiter from the environment", "d=$LIT\n{ echo \"body<<$d\"; echo \"$BODY\"; echo \"$d\"; } " + out, 1},
+
+		// --- a random delimiter ---
+		{"uuidgen", "delimiter=$(uuidgen)\n{ echo \"body<<$delimiter\"; echo \"$BODY\"; echo \"$delimiter\"; } " + out, 0},
+		{"openssl", "EOF=$(openssl rand -hex 8)\n{ echo \"body<<$EOF\"; echo \"$BODY\"; echo \"$EOF\"; } " + out, 0},
+		{"RANDOM", "d=\"ghadelimiter_$RANDOM$RANDOM\"\n{ echo \"body<<$d\"; echo \"$BODY\"; echo \"$d\"; } " + out, 0},
+		{"urandom", "d=$(head -c 16 /dev/urandom | od -An -tx1 | tr -d ' \\n')\n{ echo \"body<<$d\"; echo \"$BODY\"; echo \"$d\"; } " + out, 0},
+		{"random in the delimiter itself", "{ echo \"body<<EOF$(uuidgen)\"; echo \"$BODY\"; } " + out, 0},
+		{"a delimiter that cannot be resolved", "{ echo \"body<<$D\"; echo \"$BODY\"; echo \"$D\"; } " + out, 0},
+
+		// --- not an input of an outsider with line breaks ---
+		{"a title is one line", `echo "title=$TITLE" ` + out, 0},
+		{"a branch name is one line", `echo "ref=$REF" ` + out, 0},
+		{"a literal", `echo "x=$LIT" ` + out, 0},
+		{"a literal and a substitution", `echo "x=$(date +%s)" ` + out, 0},
+		{"the title and the branch", `echo "t=$TITLE-$REF" ` + out, 0},
+		{"a title and a comment", `echo "t=$TITLE $BODY" ` + out, 1},
+		// --- the value was made safe ---
+		{"validated", "[[ \"$BODY\" =~ ^[0-9]+$ ]] || exit 1\necho \"n=$BODY\" " + out, 0},
+		{"first line", `echo "first=$(echo "$BODY" | head -n 1)" ` + out, 0},
+		{"newlines removed", `echo "one=$(echo "$BODY" | tr -d '\n')" ` + out, 0},
+		{"newlines replaced", `echo "one=$(echo "$BODY" | tr '\n' ' ')" ` + out, 0},
+		{"cut down to a set", `echo "n=${BODY//[^0-9]/}" ` + out, 0},
+		{"counted", `echo "n=$(echo "$BODY" | wc -l)" ` + out, 0},
+		{"hashed", `echo "h=$(echo "$BODY" | sha256sum | cut -c1-8)" ` + out, 0},
+		{"matches counted", `echo "n=$(echo "$BODY" | grep -c foo)" ` + out, 0},
+		{"overwritten", "V=$BODY\nV=fixed\necho \"v=$V\" " + out, 0},
+		// --- not a write to the file ---
+		{"the environment file", `echo "body=$BODY" >> "$GITHUB_ENV"`, 0},
+		{"a file of the workspace", `echo "body=$BODY" >> out.txt`, 0},
+		{"a file written as a variable", `echo "body=$BODY" >> "$GITHUB_STEP_SUMMARY"`, 0},
+		{"the value is only printed", `echo "body=$BODY"`, 0},
+	}
+	for _, tc := range tests {
+		t.Run(tc.what, func(t *testing.T) {
+			src := head
+			for _, l := range strings.Split(tc.script, "\n") {
+				src += "          " + l + "\n"
+			}
+			src += tail
+			if got := countOutputClobbering(t, "test.yaml", src); got != tc.want {
+				t.Errorf("%d findings, want %d\n%s", got, tc.want, src)
+			}
+		})
+	}
+}
+
+// TestOutputClobberingGates: a step that only trusted people reach is not reported, the rules cannot judge the check.
+func TestOutputClobberingGates(t *testing.T) {
+	mk := func(jobIf, stepIf, script string) string {
+		src := "on: issue_comment\npermissions: {}\njobs:\n  j:\n    runs-on: ubuntu-latest\n"
+		if jobIf != "" {
+			src += "    if: " + jobIf + "\n"
+		}
+		src += "    steps:\n      - id: check\n"
+		if stepIf != "" {
+			src += "        if: " + stepIf + "\n"
+		}
+		src += "        env:\n          BODY: ${{ github.event.comment.body }}\n        run: |\n"
+		for _, l := range strings.Split(script, "\n") {
+			src += "          " + l + "\n"
+		}
+		return src + "      - if: steps.check.outputs.approved == 'true'\n        run: echo x\n"
+	}
+	const write = `echo "body=$BODY" >> "$GITHUB_OUTPUT"`
+	tests := []struct {
+		what, jobIf, stepIf, script string
+		want                        int
+	}{
+		{"no gate", "github.event_name == 'issue_comment'", "", write, 1},
+		{"the association in the job", "contains(fromJSON('[\"OWNER\",\"MEMBER\"]'), github.event.comment.author_association)", "", write, 0},
+		{"the actor in the step", "", "github.actor == 'maintainer'", write, 0},
+		{"the permission in the script", "", "", "gh api \"repos/$R/collaborators/$USER/permission\" --jq .permission\n" + write, 0},
+	}
+	for _, tc := range tests {
+		t.Run(tc.what, func(t *testing.T) {
+			src := mk(tc.jobIf, tc.stepIf, tc.script)
+			if got := countOutputClobbering(t, "test.yaml", src); got != tc.want {
+				t.Errorf("%d findings, want %d\n%s", got, tc.want, src)
+			}
+		})
+	}
+}
+
+// TestOutputClobberingNeedsAnOutputToClobber: the attacker can only change what is read.
+func TestOutputClobberingNeedsAnOutputToClobber(t *testing.T) {
+	mk := func(id, outputs, reads string) string {
+		src := "on: issue_comment\npermissions: {}\njobs:\n  j:\n    runs-on: ubuntu-latest\n" + outputs + "    steps:\n"
+		if id != "" {
+			src += "      - id: " + id + "\n"
+		} else {
+			src += "      -\n"
+		}
+		src += "        env:\n          BODY: ${{ github.event.comment.body }}\n        run: |\n          echo \"approved=false\" >> \"$GITHUB_OUTPUT\"\n          echo \"body=$BODY\" >> \"$GITHUB_OUTPUT\"\n"
+		if reads != "" {
+			src += "      - if: " + reads + "\n        run: echo x\n"
+		}
+		return src
+	}
+	tests := []struct {
+		what, id, outputs, reads string
+		want                     int
+	}{
+		{"another output is read", "check", "", "steps.check.outputs.approved == 'true'", 1},
+		{"another output is a job output", "check", "    outputs:\n      ok: ${{ steps.check.outputs.approved }}\n", "", 1},
+		{"the whole object is read", "check", "", "contains(toJSON(steps.check.outputs), 'x')", 1},
+		{"the id is written in other letters", "check", "", "steps.CHECK.outputs.approved == 'true'", 1},
+		{"only the written output is read", "check", "", "steps.check.outputs.body == 'x'", 0},
+		{"nothing is read", "check", "", "", 0},
+		{"the output of another step is read", "check", "", "steps.other.outputs.approved == 'true'", 0},
+		{"the step has no id", "", "", "steps.check.outputs.approved == 'true'", 0},
+	}
+	for _, tc := range tests {
+		t.Run(tc.what, func(t *testing.T) {
+			src := mk(tc.id, tc.outputs, tc.reads)
+			if got := countOutputClobbering(t, "test.yaml", src); got != tc.want {
+				t.Errorf("%d findings, want %d\n%s", got, tc.want, src)
+			}
+		})
+	}
+}
+
+func TestOutputClobberingShells(t *testing.T) {
+	mk := func(shell, run string) string {
+		return "on: issue_comment\npermissions: {}\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - id: check\n        env:\n          BODY: ${{ github.event.comment.body }}\n" + shell + "        run: " + run + "\n      - if: steps.check.outputs.approved == 'true'\n        run: echo x\n"
+	}
+	bash := `echo "body=$BODY" >> "$GITHUB_OUTPUT"`
+	if got := countOutputClobbering(t, "test.yaml", mk("", bash)); got != 1 {
+		t.Errorf("default shell: %d findings, want 1", got)
+	}
+	if got := countOutputClobbering(t, "test.yaml", mk("        shell: sh\n", bash)); got != 1 {
+		t.Errorf("sh: %d findings, want 1", got)
+	}
+	if got := countOutputClobbering(t, "test.yaml", mk("        shell: pwsh\n", `"body=$env:BODY" >> $env:GITHUB_OUTPUT`)); got != 0 {
+		t.Errorf("pwsh: %d findings, want 0", got)
+	}
+	// An action: the outputs are those of the action, an input is not judged
+	action := "name: x\ndescription: x\ninputs:\n  v:\n    description: v\noutputs:\n  approved:\n    description: a\n    value: ${{ steps.check.outputs.approved }}\nruns:\n  using: composite\n  steps:\n    - id: check\n      shell: bash\n      env:\n        BODY: ${{ github.event.comment.body }}\n        V: ${{ inputs.v }}\n      run: |\n        echo \"v=$V\" >> \"$GITHUB_OUTPUT\"\n        echo \"body=$BODY\" >> \"$GITHUB_OUTPUT\"\n"
+	if got := countOutputClobbering(t, ".github/actions/x/action.yml", action); got != 1 {
+		t.Errorf("action: %d findings, want 1 (only the comment)", got)
+	}
+}
+
+func TestExprMayHaveNewline(t *testing.T) {
+	tests := []struct {
+		expr string
+		want bool
+	}{
+		{"github.event.comment.body", true},
+		{"github.event.issue.body", true},
+		{"github.event.head_commit.message", true},
+		{"github.event.commits.*.message", true},
+		{"github.event.issue.title", false},
+		{"github.event.pull_request.title", false},
+		{"github.head_ref", false},
+		{"github.event.pull_request.head.ref", false},
+		{"github.event.head_commit.author.name", false},
+		{"github.event.pull_request.title || 'x'", false},
+		{"github.event.pull_request.title || github.event.pull_request.body", true},
+		{"format('{0} {1}', github.event.issue.title, github.event.issue.body)", true},
+		{"not an expression )", true},
+	}
+	for _, tc := range tests {
+		if got := exprMayHaveNewline(tc.expr); got != tc.want {
+			t.Errorf("%q: got %v, want %v", tc.expr, got, tc.want)
+		}
+	}
+}

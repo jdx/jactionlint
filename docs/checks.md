@@ -42,6 +42,7 @@ List of checks:
 - [Hardcoded credentials](#check-hardcoded-credentials)
 - [Dangerous writes to `GITHUB_ENV` and `GITHUB_PATH`](#check-github-env)
 - [Input of an outsider that a script runs as code](#check-command-injection)
+- [Input of an outsider that adds records to `GITHUB_OUTPUT` (pedantic)](#check-output-clobbering)
 - [Writes to the environment files that lose data](#check-environment-file-redirect)
 - [Packages installed by name](#check-adhoc-packages)
 - [Tools installed without an exact version](#check-unpinned-tools)
@@ -2813,11 +2814,11 @@ jobs:
 Output:
 
 ```
-test.yaml:8:48: a value that is not a literal is written to $GITHUB_ENV in a workflow triggered by "pull_request_target", which runs with secrets and a write token for events that may come from a fork. an attacker who controls the value can set LD_PRELOAD or NODE_OPTIONS (a newline adds another variable) and run code in the next steps. write only literal values and values computed from trusted sources, or pass state with $GITHUB_OUTPUT [github-env]
+test.yaml:8:48: a value that is not a literal is written to $GITHUB_ENV in a workflow triggered by "pull_request_target", which runs with secrets and a write token for events that may come from a fork. an attacker who controls the value can set LD_PRELOAD or NODE_OPTIONS (a newline adds another variable) and run code in the next steps. write only literal values and values computed from trusted sources, or pass state with $GITHUB_OUTPUT (only a value without line breaks, or one between a delimiter that nobody can guess, is safe there: see output-clobbering) [github-env]
   |
 8 |       - run: echo "VERSION=$(cat version.txt)" >> "$GITHUB_ENV"
   |                                                ^~~~~~~~~~~~~~~~
-test.yaml:9:34: untrusted input from the variable TITLE (github.event.pull_request.title) is written to $GITHUB_ENV. an attacker who controls the value can set LD_PRELOAD or NODE_OPTIONS (a newline adds another variable) and run code in the next steps. do not write input that an outsider controls to $GITHUB_ENV; validate it first or pass it to the next step with $GITHUB_OUTPUT [github-env]
+test.yaml:9:34: untrusted input from the variable TITLE (github.event.pull_request.title) is written to $GITHUB_ENV. an attacker who controls the value can set LD_PRELOAD or NODE_OPTIONS (a newline adds another variable) and run code in the next steps. do not write input that an outsider controls to $GITHUB_ENV; validate it first, or pass it to the next step with $GITHUB_OUTPUT (only a value without line breaks, or one between a delimiter that nobody can guess, is safe there: see output-clobbering) [github-env]
   |
 9 |       - run: echo "TITLE=$TITLE" >> "$GITHUB_ENV"
   |                                  ^~~~~~~~~~~~~~~~
@@ -2856,7 +2857,9 @@ to hold no dot, slash or colon. A token minted by an earlier step of the job (th
 
 `echo "VERSION=1.0" >> "$GITHUB_ENV"` and `echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"` are fine. Use `$GITHUB_OUTPUT` to pass
 state between steps (`echo "version=$(cat version.txt)" >> "$GITHUB_OUTPUT"` is not reported) and validate or avoid the value
-otherwise. The rule understands `>>` and `>`, `tee`, groups (`{ ...; } >> "$GITHUB_ENV"`), here documents and a file name held
+otherwise. `$GITHUB_OUTPUT` is not a safe place for every value either: a value that can hold a line break, such as the body of a
+comment, adds records of its own there, and a multi-line record with a constant delimiter is no better. The check
+[output-clobbering](#check-output-clobbering) reports that. The rule understands `>>` and `>`, `tee`, groups (`{ ...; } >> "$GITHUB_ENV"`), here documents and a file name held
 in another variable. Scripts of `bash` and `sh` are parsed; for `pwsh`, `powershell` and `cmd` the rules look at the lines that
 mention `$env:GITHUB_ENV` or `%GITHUB_ENV%` together with a redirection or `Out-File`, `Add-Content`, `Set-Content` and
 `Tee-Object`.
@@ -2933,6 +2936,87 @@ value that only the output of a command makes untrusted. It does not follow a va
 
 To turn the rule off, put `command-injection: off` in the `rules` section of the [configuration file](config.md) or write
 `# jactionlint ignore=command-injection` after a reason.
+
+<a id="check-output-clobbering"></a>
+## Input of an outsider that adds records to `GITHUB_OUTPUT` (pedantic)
+
+Example input:
+
+```yaml
+on:
+  issue_comment:
+    types: [created]
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    outputs:
+      approved: ${{ steps.gate.outputs.approved }}
+    steps:
+      - id: gate
+        run: |
+          echo "approved=false" >> "$GITHUB_OUTPUT"
+          echo "body=$BODY" >> "$GITHUB_OUTPUT"
+        env:
+          BODY: ${{ github.event.comment.body }}
+```
+
+Output:
+<!-- Skip update output -->
+```
+test.yaml:13:29: warning: untrusted input from the variable BODY (github.event.comment.body) is written to $GITHUB_OUTPUT as the record "body=..." and can hold a line break: an attacker who controls it ends the record and adds others, so it sets the other outputs of the step (steps.gate.outputs.*) that later steps trust. write a value without line breaks (validate it, or cut it down with tr -d '\n'), or write it between a delimiter that nobody can guess (delimiter=$(uuidgen); echo "body<<$delimiter" ...; echo "$delimiter") [output-clobbering]
+   |
+13 |           echo "body=$BODY" >> "$GITHUB_OUTPUT"
+   |                             ^~~~~~~~~~~~~~~~~~~
+```
+
+<!-- Skip playground link -->
+
+The output above is from this `rules` section of the [configuration file](config.md):
+
+```yaml
+rules:
+  output-clobbering: warn
+```
+
+The runner reads `$GITHUB_OUTPUT` line by line. A line `name=value` sets an output, so a value that holds a line break ends
+the record and the rest is read as the next one. A comment whose second line is `approved=true` writes
+`approved=true` after the `approved=false` that the step wrote on purpose, and a later `if: steps.gate.outputs.approved == 'true'`, or a
+job that reads `needs.check.outputs.approved`, believes it. This is the same flaw as [`GITHUB_ENV`](#check-github-env) in a form that does not
+need a variable such as `LD_PRELOAD`. The multi-line form `name<<DELIMITER` has it too when the delimiter is a constant: the
+value can hold the delimiter on a line of its own and go on with more records. See CodeQL's
+[output clobbering query](https://github.com/github/codeql/blob/main/actions/ql/src/experimental/Security/CWE-074/OutputClobberingHigh.ql).
+
+The rule `output-clobbering` (in the `pedantic` profile) reports input that an outsider controls and that can hold a line break (the same
+list of inputs as the expression checks, such as the body of an issue, a comment or a review and the message of a commit) when it is
+written to `$GITHUB_OUTPUT` in a record (`echo "body=$BODY" >> "$GITHUB_OUTPUT"`, `printf`, `tee`, a group or a here document), alone
+(`echo "$BODY" >> "$GITHUB_OUTPUT"`), or between a constant delimiter. It reports only when the output can be misused: the step has an `id` and the job (or
+the outputs of the action) reads an output of that step other than the one that is written, `steps.gate.outputs.approved` in the example. A
+step with one output that nothing else reads gives the attacker nothing to change. A title, the name of a branch and the name of an
+account are one line and are not reported, and neither is `inputs.*` of a composite action. A step that only trusted people reach is
+not reported either, because the rule cannot judge whether the check is enough: its `if:` or the `if:` of the job reads
+`author_association`, the actor or the user of the event, or the script asks for the permission of the user
+(`gh api repos/$REPO/collaborators/$USER/permission`). A pipeline whose later stage is a program that parses the text
+(`echo "$BODY" | python parse_args.py >> "$GITHUB_OUTPUT"`) is not followed: that program decides what is written.
+
+Fix it by writing a value without line breaks, or by using a delimiter that nobody can guess:
+
+```sh
+delimiter=$(uuidgen)
+{
+  echo "body<<$delimiter"
+  echo "$BODY"
+  echo "$delimiter"
+} >> "$GITHUB_OUTPUT"
+```
+
+The rule accepts a delimiter taken from `uuidgen`, `openssl rand`, `/dev/urandom`, `$RANDOM` or `mktemp`, a value that was validated before
+(`[[ "$BODY" =~ ^[0-9]+$ ]] || exit 1`), the first line (`head -n 1`), a value cut down to a set of characters (`tr -cd`, `${BODY//[^0-9]/}`,
+`sed 's/[^a-z0-9]/-/g'`), without line breaks (`tr -d '\n'`), or reduced to a number or a hash (`wc`, `sha256sum`, `grep -c`). It judges variables like
+`github-env` does. It does not look at what other actions write to `$GITHUB_OUTPUT` (an artifact written to it is the business of
+[untrusted-artifact](#check-untrusted-artifact)), and the workflow command `::set-output` that prints the value is not analyzed.
+
+To turn the rule off, put `output-clobbering: off` in the `rules` section of the [configuration file](config.md) or write
+`# jactionlint ignore=output-clobbering` after a reason.
 
 <a id="check-environment-file-redirect"></a>
 ## Writes to the environment files that lose data
@@ -7666,7 +7750,7 @@ test.yaml:9:15: this step downloads an artifact of the run that triggered the wo
   |
 9 |       - uses: actions/download-artifact@v4
   |               ^~~~~~~~~~~~~~~~~~~~~~~~~~~~
-test.yaml:15:45: a value that is not a literal is written to $GITHUB_ENV in a workflow triggered by "workflow_run", which runs with secrets and a write token for events that may come from a fork. an attacker who controls the value can set LD_PRELOAD or NODE_OPTIONS (a newline adds another variable) and run code in the next steps. write only literal values and values computed from trusted sources, or pass state with $GITHUB_OUTPUT [github-env]
+test.yaml:15:45: a value that is not a literal is written to $GITHUB_ENV in a workflow triggered by "workflow_run", which runs with secrets and a write token for events that may come from a fork. an attacker who controls the value can set LD_PRELOAD or NODE_OPTIONS (a newline adds another variable) and run code in the next steps. write only literal values and values computed from trusted sources, or pass state with $GITHUB_OUTPUT (only a value without line breaks, or one between a delimiter that nobody can guess, is safe there: see output-clobbering) [github-env]
    |
 15 |       - run: echo "number=$(cat pr/number)" >> "$GITHUB_ENV"
    |                                             ^~~~~~~~~~~~~~~~
@@ -8090,7 +8174,7 @@ way because any caller can pass attacker-controlled text. jactionlint does not l
 
 How the rules treat actions:
 
-- **Applies** to the steps (and the metadata) of an action: `action-syntax`, `adhoc-packages`, `archived-uses`, `artipacked`, `background-step-not-waited`, `checkout-static-credentials`, `command-injection`, `constant-condition`, `context-availability`, `continue-on-error`, `deprecated-action-input`, `deprecated-commands`, `duplicate-key`, `duplicate-step-id`, `environment-file-redirect`, `expired-ignore`, `expression-syntax`, `expression-type`, `forbidden-uses`, `github-app`, `if-always-true`, `impostor-commit`, `insecure-commands`, `insecure-ssh-keyscan`, `insecure-url-scheme`, `invalid-env-var-name`, `invalid-function-call`, `invalid-id`, `invalid-ignore-comment`, `invalid-local-action`, `invalid-parallel-step`, `invalid-shell-name`, `invalid-uses`, `invisible-characters`, `known-vulnerable-actions`, `max-run-lines`, `merge-key`, `misfeature`, `missing-action-input`, `obfuscation`, `outdated-action-runner`, `pipeline-without-pipefail`, `pyflakes`, `recursive-alias`, `ref-confusion`, `ref-version-mismatch`, `require-expression-wrapping`, `self-repository`, `shellcheck`, `stale-action-refs`, `superfluous-actions`, `template-injection`, `typosquat-uses`, `undefined-function`, `undefined-property`, `unknown-action-input`, `unlocked-install`, `unpinned-images`, `unpinned-tools`, `unpinned-uses`, `unsound-contains`, `unsound-prefix-match`, `unsound-ternary`, `unused-anchor`, `unused-ignore`, `unverified-download`, `use-trusted-publishing`, `yaml-syntax`.
+- **Applies** to the steps (and the metadata) of an action: `action-syntax`, `adhoc-packages`, `archived-uses`, `artipacked`, `background-step-not-waited`, `checkout-static-credentials`, `command-injection`, `constant-condition`, `context-availability`, `continue-on-error`, `deprecated-action-input`, `deprecated-commands`, `duplicate-key`, `duplicate-step-id`, `environment-file-redirect`, `expired-ignore`, `expression-syntax`, `expression-type`, `forbidden-uses`, `github-app`, `if-always-true`, `impostor-commit`, `insecure-commands`, `insecure-ssh-keyscan`, `insecure-url-scheme`, `invalid-env-var-name`, `invalid-function-call`, `invalid-id`, `invalid-ignore-comment`, `invalid-local-action`, `invalid-parallel-step`, `invalid-shell-name`, `invalid-uses`, `invisible-characters`, `known-vulnerable-actions`, `max-run-lines`, `merge-key`, `misfeature`, `missing-action-input`, `obfuscation`, `outdated-action-runner`, `output-clobbering`, `pipeline-without-pipefail`, `pyflakes`, `recursive-alias`, `ref-confusion`, `ref-version-mismatch`, `require-expression-wrapping`, `self-repository`, `shellcheck`, `stale-action-refs`, `superfluous-actions`, `template-injection`, `typosquat-uses`, `undefined-function`, `undefined-property`, `unknown-action-input`, `unlocked-install`, `unpinned-images`, `unpinned-tools`, `unpinned-uses`, `unsound-contains`, `unsound-prefix-match`, `unsound-ternary`, `unused-anchor`, `unused-ignore`, `unverified-download`, `use-trusted-publishing`, `yaml-syntax`.
 - **Caller-dependent**: `agentic-actions`, `bot-conditions`, `cache-poisoning`, `github-env` (its findings about untrusted input do not depend on the caller), `untrusted-artifact` and `untrusted-checkout`.
 - **Not applicable** because an action does not have what the rule checks, or because only the calling job can decide (`unused-baseline-entry` is about the baseline file, not about a workflow or an action): `anonymous-definition`, `concurrency-cancels-prs`, `concurrency-cancels-release`, `concurrency-limits`, `conflicting-runner-labels`, `cron-too-frequent`, `cyclic-job-needs`, `dangerous-triggers`, `dependabot-cooldown`, `dependabot-execution`, `dependabot-missing-actions-update`, `dependabot-syntax`, `duplicate-job-id`, `duplicate-job-needs`, `duplicate-triggers`, `excessive-permissions`, `gate-job-skipped-on-failure`, `gh-without-token`, `hardcoded-container-credentials`, `invalid-activity-type`, `invalid-cron`, `invalid-event-config`, `invalid-event-filter`, `invalid-glob`, `invalid-label-pattern`, `invalid-local-workflow`, `invalid-permissions`, `invalid-timezone`, `invalid-workflow-call`, `invalid-workflow-call-input`, `invalid-workflow-dispatch-input`, `local-action-checkout`, `matrix-duplicate-value`, `matrix-invalid-exclude`, `missing-permissions`, `missing-timeout`, `missing-workflow-input`, `missing-workflow-secret`, `mutable-runner-label`, `overprovisioned-secrets`, `require-shell`, `required-actions`, `secrets-inherit`, `secrets-outside-env`, `self-hosted-runner`, `timeout-too-long`, `undefined-job-needs`, `undocumented-permissions`, `unknown-event`, `unknown-runner-label`, `unknown-workflow-input`, `unknown-workflow-secret`, `unredacted-secrets`, `unused-baseline-entry`, `unused-job-output`, `unused-needs`, `unused-workflow-input`, `workflow-call-permissions`, `workflow-input-type`, `workflow-run-names`, `workflow-secret-scope`, `workflow-syntax`.
 

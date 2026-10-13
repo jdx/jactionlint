@@ -117,6 +117,7 @@ rules:
 | [mutable-runner-label](#mutable-runner-label) | policy | warn | pedantic |
 | [obfuscation](#obfuscation) | security | error | default |
 | [outdated-action-runner](#outdated-action-runner) | correctness | error | correctness |
+| [output-clobbering](#output-clobbering) | security | warn | pedantic |
 | [overprovisioned-secrets](#overprovisioned-secrets) | security | error | default |
 | [pipeline-without-pipefail](#pipeline-without-pipefail) | correctness | error | default |
 | [pyflakes](#pyflakes) | correctness | error | correctness |
@@ -958,6 +959,15 @@ An action runs on a runtime which GitHub Actions no longer supports.
 - Default level: error
 - Profile: correctness
 - Details and examples: [checks](./checks.md#detect-outdated-popular-actions)
+
+## output-clobbering
+
+Input that an outsider controls is written to GITHUB_OUTPUT as a record, so a line break in it sets the other outputs of the step.
+
+- Group: security
+- Default level: warn
+- Profile: pedantic
+- Details and examples: [checks](./checks.md#check-output-clobbering)
 
 ## overprovisioned-secrets
 

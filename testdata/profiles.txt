@@ -82,6 +82,7 @@ missing-workflow-secret correctness correctness error
 mutable-runner-label pedantic policy warn
 obfuscation default security error
 outdated-action-runner correctness correctness error
+output-clobbering pedantic security warn
 overprovisioned-secrets default security error
 pipeline-without-pipefail default correctness error
 pyflakes correctness correctness error
