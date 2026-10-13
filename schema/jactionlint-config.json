@@ -266,6 +266,28 @@
       "description": "Findings to accept, matched by the rule and by where they are (file, job, step, uses) instead of by line, so they survive tools which rewrite the workflow. At least one of file, uses, job and step is required.",
       "items": {
         "additionalProperties": false,
+        "anyOf": [
+          {
+            "required": [
+              "file"
+            ]
+          },
+          {
+            "required": [
+              "uses"
+            ]
+          },
+          {
+            "required": [
+              "job"
+            ]
+          },
+          {
+            "required": [
+              "step"
+            ]
+          }
+        ],
         "description": "One accepted finding.",
         "properties": {
           "expires": {
@@ -791,11 +813,19 @@
       "description": "The level and the options of each rule by its rule ID. A rule which is not listed follows the profile. See https://jactionlint.jdx.dev/rules",
       "properties": {
         "action-syntax": {
-          "$ref": "#/definitions/level",
+          "allOf": [
+            {
+              "$ref": "#/definitions/level"
+            }
+          ],
           "description": "The action metadata does not follow the syntax of action.yml. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#action-syntax"
         },
         "adhoc-packages": {
-          "$ref": "#/definitions/level",
+          "allOf": [
+            {
+              "$ref": "#/definitions/level"
+            }
+          ],
           "description": "A package is installed by name with npm, yarn, pnpm, bun, gem or bundle add outside of a lock file. Group: security. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#adhoc-packages"
         },
         "agentic-actions": {
@@ -813,7 +843,11 @@
                   "type": "boolean"
                 },
                 "level": {
-                  "$ref": "#/definitions/level",
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/level"
+                    }
+                  ],
                   "description": "The level of the rule."
                 }
               },
@@ -822,23 +856,43 @@
           ]
         },
         "anonymous-definition": {
-          "$ref": "#/definitions/level",
+          "allOf": [
+            {
+              "$ref": "#/definitions/level"
+            }
+          ],
           "description": "A workflow has no top-level name:. Group: policy. Profile: pedantic. Default level: warn. https://jactionlint.jdx.dev/rules#anonymous-definition"
         },
         "archived-uses": {
-          "$ref": "#/definitions/level",
+          "allOf": [
+            {
+              "$ref": "#/definitions/level"
+            }
+          ],
           "description": "An action or reusable workflow is in an archived repository. Group: security. Runs only with --online. Default level: warn. https://jactionlint.jdx.dev/rules#archived-uses"
         },
         "artipacked": {
-          "$ref": "#/definitions/level",
+          "allOf": [
+            {
+              "$ref": "#/definitions/level"
+            }
+          ],
           "description": "actions/checkout persists the GITHUB_TOKEN credential in the git config. Group: security. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#artipacked"
         },
         "background-step-not-waited": {
-          "$ref": "#/definitions/level",
+          "allOf": [
+            {
+              "$ref": "#/definitions/level"
+            }
+          ],
           "description": "Outputs or results of a background step are read before a wait step covers it. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#background-step-not-waited"
         },
         "bot-conditions": {
-          "$ref": "#/definitions/level",
+          "allOf": [
+            {
+              "$ref": "#/definitions/level"
+            }
+          ],
           "description": "A condition trusts a bot by github.actor, which can be spoofed. Group: security. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#bot-conditions"
         },
         "cache-poisoning": {
@@ -851,7 +905,11 @@
               "additionalProperties": false,
               "properties": {
                 "level": {
-                  "$ref": "#/definitions/level",
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/level"
+                    }
+                  ],
                   "description": "The level of the rule."
                 },
                 "pedantic": {
@@ -880,7 +938,11 @@
                   "type": "array"
                 },
                 "level": {
-                  "$ref": "#/definitions/level",
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/level"
+                    }
+                  ],
                   "description": "The level of the rule."
                 },
                 "secret-tokens": {
@@ -893,27 +955,51 @@
           ]
         },
         "concurrency-cancels-prs": {
-          "$ref": "#/definitions/level",
+          "allOf": [
+            {
+              "$ref": "#/definitions/level"
+            }
+          ],
           "description": "A concurrency group that cancels runs is shared by all pull requests, so unrelated pull requests cancel each other. Group: correctness. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#concurrency-cancels-prs"
         },
         "concurrency-cancels-release": {
-          "$ref": "#/definitions/level",
+          "allOf": [
+            {
+              "$ref": "#/definitions/level"
+            }
+          ],
           "description": "cancel-in-progress can cancel a release or a deployment which is still running. Group: correctness. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#concurrency-cancels-release"
         },
         "concurrency-limits": {
-          "$ref": "#/definitions/level",
+          "allOf": [
+            {
+              "$ref": "#/definitions/level"
+            }
+          ],
           "description": "A workflow does not cancel superseded runs with concurrency:. Group: policy. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#concurrency-limits"
         },
         "conflicting-runner-labels": {
-          "$ref": "#/definitions/level",
+          "allOf": [
+            {
+              "$ref": "#/definitions/level"
+            }
+          ],
           "description": "The runner labels of a job conflict with each other. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#conflicting-runner-labels"
         },
         "constant-condition": {
-          "$ref": "#/definitions/level",
+          "allOf": [
+            {
+              "$ref": "#/definitions/level"
+            }
+          ],
           "description": "An if: condition is a constant expression. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#constant-condition"
         },
         "context-availability": {
-          "$ref": "#/definitions/level",
+          "allOf": [
+            {
+              "$ref": "#/definitions/level"
+            }
+          ],
           "description": "A context or special function is used where it is not available. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#context-availability"
         },
         "continue-on-error": {
@@ -926,7 +1012,11 @@
               "additionalProperties": false,
               "properties": {
                 "level": {
-                  "$ref": "#/definitions/level",
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/level"
+                    }
+                  ],
                   "description": "The level of the rule."
                 },
                 "steps": {
@@ -940,11 +1030,19 @@
           ]
         },
         "cron-too-frequent": {
-          "$ref": "#/definitions/level",
+          "allOf": [
+            {
+              "$ref": "#/definitions/level"
+            }
+          ],
           "description": "A scheduled job runs more often than once every 5 minutes. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#cron-too-frequent"
         },
         "cyclic-job-needs": {
-          "$ref": "#/definitions/level",
+          "allOf": [
+            {
+              "$ref": "#/definitions/level"
+            }
+          ],
           "description": "Jobs depend on each other in a cycle. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#cyclic-job-needs"
         },
         "dangerous-triggers": {
@@ -957,7 +1055,11 @@
               "additionalProperties": false,
               "properties": {
                 "level": {
-                  "$ref": "#/definitions/level",
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/level"
+                    }
+                  ],
                   "description": "The level of the rule."
                 },
                 "pedantic": {
@@ -990,7 +1092,11 @@
                   "type": "integer"
                 },
                 "level": {
-                  "$ref": "#/definitions/level",
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/level"
+                    }
+                  ],
                   "description": "The level of the rule."
                 }
               },
@@ -999,51 +1105,99 @@
           ]
         },
         "dependabot-execution": {
-          "$ref": "#/definitions/level",
+          "allOf": [
+            {
+              "$ref": "#/definitions/level"
+            }
+          ],
           "description": "An update in dependabot.yml allows insecure external code execution. Group: security. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#dependabot-execution"
         },
         "dependabot-missing-actions-update": {
-          "$ref": "#/definitions/level",
+          "allOf": [
+            {
+              "$ref": "#/definitions/level"
+            }
+          ],
           "description": "dependabot.yml has no github-actions update although the repository has workflows using actions. Group: policy. Profile: pedantic. Default level: warn. https://jactionlint.jdx.dev/rules#dependabot-missing-actions-update"
         },
         "dependabot-syntax": {
-          "$ref": "#/definitions/level",
+          "allOf": [
+            {
+              "$ref": "#/definitions/level"
+            }
+          ],
           "description": "The Dependabot configuration does not follow the syntax of dependabot.yml. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#dependabot-syntax"
         },
         "deprecated-action-input": {
-          "$ref": "#/definitions/level",
+          "allOf": [
+            {
+              "$ref": "#/definitions/level"
+            }
+          ],
           "description": "A deprecated input of an action is used. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#deprecated-action-input"
         },
         "deprecated-commands": {
-          "$ref": "#/definitions/level",
+          "allOf": [
+            {
+              "$ref": "#/definitions/level"
+            }
+          ],
           "description": "A deprecated workflow command such as ::set-output is used. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#deprecated-commands"
         },
         "deprecated-runner-label": {
-          "$ref": "#/definitions/level",
+          "allOf": [
+            {
+              "$ref": "#/definitions/level"
+            }
+          ],
           "description": "A runner label is deprecated and GitHub is going to retire it on a known date, such as macos-14. Group: policy. Profile: pedantic. Default level: warn. https://jactionlint.jdx.dev/rules#deprecated-runner-label"
         },
         "duplicate-job-id": {
-          "$ref": "#/definitions/level",
+          "allOf": [
+            {
+              "$ref": "#/definitions/level"
+            }
+          ],
           "description": "A job ID is defined more than once. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#duplicate-job-id"
         },
         "duplicate-job-needs": {
-          "$ref": "#/definitions/level",
+          "allOf": [
+            {
+              "$ref": "#/definitions/level"
+            }
+          ],
           "description": "A job ID is listed more than once in needs. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#duplicate-job-needs"
         },
         "duplicate-key": {
-          "$ref": "#/definitions/level",
+          "allOf": [
+            {
+              "$ref": "#/definitions/level"
+            }
+          ],
           "description": "A key is defined more than once in a mapping. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#duplicate-key"
         },
         "duplicate-step-id": {
-          "$ref": "#/definitions/level",
+          "allOf": [
+            {
+              "$ref": "#/definitions/level"
+            }
+          ],
           "description": "A step ID is not unique within its job. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#duplicate-step-id"
         },
         "duplicate-triggers": {
-          "$ref": "#/definitions/level",
+          "allOf": [
+            {
+              "$ref": "#/definitions/level"
+            }
+          ],
           "description": "push and pull_request both run the workflow for the same commit. Group: policy. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#duplicate-triggers"
         },
         "environment-file-redirect": {
-          "$ref": "#/definitions/level",
+          "allOf": [
+            {
+              "$ref": "#/definitions/level"
+            }
+          ],
           "description": "A script writes to GITHUB_OUTPUT or another environment file of the runner without the $, or empties it with > after it wrote to it. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#environment-file-redirect"
         },
         "excessive-permissions": {
@@ -1056,7 +1210,11 @@
               "additionalProperties": false,
               "properties": {
                 "level": {
-                  "$ref": "#/definitions/level",
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/level"
+                    }
+                  ],
                   "description": "The level of the rule."
                 },
                 "require-workflow-permissions": {
@@ -1069,15 +1227,27 @@
           ]
         },
         "expired-ignore": {
-          "$ref": "#/definitions/level",
+          "allOf": [
+            {
+              "$ref": "#/definitions/level"
+            }
+          ],
           "description": "An entry of \"ignores\" in the config file has expired or is about to. Group: policy. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#expired-ignore"
         },
         "expression-syntax": {
-          "$ref": "#/definitions/level",
+          "allOf": [
+            {
+              "$ref": "#/definitions/level"
+            }
+          ],
           "description": "A ${{ }} expression has a syntax error. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#expression-syntax"
         },
         "expression-type": {
-          "$ref": "#/definitions/level",
+          "allOf": [
+            {
+              "$ref": "#/definitions/level"
+            }
+          ],
           "description": "A ${{ }} expression has a type error. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#expression-type"
         },
         "forbidden-uses": {
@@ -1104,7 +1274,11 @@
                   "type": "array"
                 },
                 "level": {
-                  "$ref": "#/definitions/level",
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/level"
+                    }
+                  ],
                   "description": "The level of the rule."
                 }
               },
@@ -1113,27 +1287,51 @@
           ]
         },
         "gate-job-skipped-on-failure": {
-          "$ref": "#/definitions/level",
+          "allOf": [
+            {
+              "$ref": "#/definitions/level"
+            }
+          ],
           "description": "A job that reads the results of the jobs it needs is skipped when one of them fails. Group: correctness. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#gate-job-skipped-on-failure"
         },
         "gh-without-token": {
-          "$ref": "#/definitions/level",
+          "allOf": [
+            {
+              "$ref": "#/definitions/level"
+            }
+          ],
           "description": "A script runs the gh command although no GH_TOKEN or GITHUB_TOKEN reaches the step, so gh stops. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#gh-without-token"
         },
         "github-app": {
-          "$ref": "#/definitions/level",
+          "allOf": [
+            {
+              "$ref": "#/definitions/level"
+            }
+          ],
           "description": "A GitHub App token is issued with more access or a longer life than needed. Group: security. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#github-app"
         },
         "github-env": {
-          "$ref": "#/definitions/level",
+          "allOf": [
+            {
+              "$ref": "#/definitions/level"
+            }
+          ],
           "description": "Input that an outsider controls, or a value that is not a literal in a workflow triggered by pull_request_target or workflow_run, is written to GITHUB_ENV or GITHUB_PATH. Group: security. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#github-env"
         },
         "hardcoded-container-credentials": {
-          "$ref": "#/definitions/level",
+          "allOf": [
+            {
+              "$ref": "#/definitions/level"
+            }
+          ],
           "description": "A password for a container registry is written directly in the workflow. Group: security. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#hardcoded-container-credentials"
         },
         "if-always-true": {
-          "$ref": "#/definitions/level",
+          "allOf": [
+            {
+              "$ref": "#/definitions/level"
+            }
+          ],
           "description": "An if: condition is always true because of the characters around ${{ }}. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#if-always-true"
         },
         "impostor-commit": {
@@ -1146,7 +1344,11 @@
               "additionalProperties": false,
               "properties": {
                 "level": {
-                  "$ref": "#/definitions/level",
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/level"
+                    }
+                  ],
                   "description": "The level of the rule."
                 },
                 "max-branches": {
@@ -1161,99 +1363,195 @@
           ]
         },
         "insecure-commands": {
-          "$ref": "#/definitions/level",
+          "allOf": [
+            {
+              "$ref": "#/definitions/level"
+            }
+          ],
           "description": "ACTIONS_ALLOW_UNSECURE_COMMANDS enables the deprecated set-env and add-path commands. Group: security. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#insecure-commands"
         },
         "insecure-ssh-keyscan": {
-          "$ref": "#/definitions/level",
+          "allOf": [
+            {
+              "$ref": "#/definitions/level"
+            }
+          ],
           "description": "ssh-keyscan output is trusted as the host key without verification. Group: security. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#insecure-ssh-keyscan"
         },
         "insecure-url-scheme": {
-          "$ref": "#/definitions/level",
+          "allOf": [
+            {
+              "$ref": "#/definitions/level"
+            }
+          ],
           "description": "A download uses http, ftp or git instead of https. Group: security. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#insecure-url-scheme"
         },
         "invalid-activity-type": {
-          "$ref": "#/definitions/level",
+          "allOf": [
+            {
+              "$ref": "#/definitions/level"
+            }
+          ],
           "description": "An activity type is not available for the Webhook event. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#invalid-activity-type"
         },
         "invalid-cron": {
-          "$ref": "#/definitions/level",
+          "allOf": [
+            {
+              "$ref": "#/definitions/level"
+            }
+          ],
           "description": "A cron schedule has an invalid format. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#invalid-cron"
         },
         "invalid-env-var-name": {
-          "$ref": "#/definitions/level",
+          "allOf": [
+            {
+              "$ref": "#/definitions/level"
+            }
+          ],
           "description": "An environment variable name contains characters which are not allowed. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#invalid-env-var-name"
         },
         "invalid-event-config": {
-          "$ref": "#/definitions/level",
+          "allOf": [
+            {
+              "$ref": "#/definitions/level"
+            }
+          ],
           "description": "An event is configured with options it does not support. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#invalid-event-config"
         },
         "invalid-event-filter": {
-          "$ref": "#/definitions/level",
+          "allOf": [
+            {
+              "$ref": "#/definitions/level"
+            }
+          ],
           "description": "An event filter is not available for the event or conflicts with another filter. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#invalid-event-filter"
         },
         "invalid-function-call": {
-          "$ref": "#/definitions/level",
+          "allOf": [
+            {
+              "$ref": "#/definitions/level"
+            }
+          ],
           "description": "A built-in function is called with wrong arguments. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#invalid-function-call"
         },
         "invalid-glob": {
-          "$ref": "#/definitions/level",
+          "allOf": [
+            {
+              "$ref": "#/definitions/level"
+            }
+          ],
           "description": "A glob filter pattern is invalid. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#invalid-glob"
         },
         "invalid-id": {
-          "$ref": "#/definitions/level",
+          "allOf": [
+            {
+              "$ref": "#/definitions/level"
+            }
+          ],
           "description": "A job or step ID does not follow the naming convention. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#invalid-id"
         },
         "invalid-ignore-comment": {
-          "$ref": "#/definitions/level",
+          "allOf": [
+            {
+              "$ref": "#/definitions/level"
+            }
+          ],
           "description": "An inline ignore comment is invalid. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#invalid-ignore-comment"
         },
         "invalid-label-pattern": {
-          "$ref": "#/definitions/level",
+          "allOf": [
+            {
+              "$ref": "#/definitions/level"
+            }
+          ],
           "description": "A runner label pattern in the configuration is not a valid glob. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#invalid-label-pattern"
         },
         "invalid-local-action": {
-          "$ref": "#/definitions/level",
+          "allOf": [
+            {
+              "$ref": "#/definitions/level"
+            }
+          ],
           "description": "A local action cannot be loaded or its metadata is invalid. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#invalid-local-action"
         },
         "invalid-local-workflow": {
-          "$ref": "#/definitions/level",
+          "allOf": [
+            {
+              "$ref": "#/definitions/level"
+            }
+          ],
           "description": "A local reusable workflow cannot be loaded or is invalid. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#invalid-local-workflow"
         },
         "invalid-parallel-step": {
-          "$ref": "#/definitions/level",
+          "allOf": [
+            {
+              "$ref": "#/definitions/level"
+            }
+          ],
           "description": "A step is not allowed inside a parallel group or refers to a wrong step. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#invalid-parallel-step"
         },
         "invalid-permissions": {
-          "$ref": "#/definitions/level",
+          "allOf": [
+            {
+              "$ref": "#/definitions/level"
+            }
+          ],
           "description": "A permission scope or its value is invalid. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#invalid-permissions"
         },
         "invalid-shell-name": {
-          "$ref": "#/definitions/level",
+          "allOf": [
+            {
+              "$ref": "#/definitions/level"
+            }
+          ],
           "description": "A shell name is not available on the runner. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#invalid-shell-name"
         },
         "invalid-timezone": {
-          "$ref": "#/definitions/level",
+          "allOf": [
+            {
+              "$ref": "#/definitions/level"
+            }
+          ],
           "description": "A timezone of a schedule is not a valid IANA timezone name. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#invalid-timezone"
         },
         "invalid-uses": {
-          "$ref": "#/definitions/level",
+          "allOf": [
+            {
+              "$ref": "#/definitions/level"
+            }
+          ],
           "description": "A uses: value does not follow the format of an action or a Docker image. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#invalid-uses"
         },
         "invalid-workflow-call": {
-          "$ref": "#/definitions/level",
+          "allOf": [
+            {
+              "$ref": "#/definitions/level"
+            }
+          ],
           "description": "A reusable workflow call does not follow the format of a reusable workflow. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#invalid-workflow-call"
         },
         "invalid-workflow-call-input": {
-          "$ref": "#/definitions/level",
+          "allOf": [
+            {
+              "$ref": "#/definitions/level"
+            }
+          ],
           "description": "An input of the workflow_call event is invalid. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#invalid-workflow-call-input"
         },
         "invalid-workflow-dispatch-input": {
-          "$ref": "#/definitions/level",
+          "allOf": [
+            {
+              "$ref": "#/definitions/level"
+            }
+          ],
           "description": "An input of the workflow_dispatch event is invalid. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#invalid-workflow-dispatch-input"
         },
         "invisible-characters": {
-          "$ref": "#/definitions/level",
+          "allOf": [
+            {
+              "$ref": "#/definitions/level"
+            }
+          ],
           "description": "A file contains an invisible or bidirectional control character which hides what the text says. Group: security. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#invisible-characters"
         },
         "known-vulnerable-actions": {
@@ -1273,7 +1571,11 @@
                   "type": "array"
                 },
                 "level": {
-                  "$ref": "#/definitions/level",
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/level"
+                    }
+                  ],
                   "description": "The level of the rule."
                 }
               },
@@ -1282,7 +1584,11 @@
           ]
         },
         "local-action-checkout": {
-          "$ref": "#/definitions/level",
+          "allOf": [
+            {
+              "$ref": "#/definitions/level"
+            }
+          ],
           "description": "A local action is used before any step checks out the repository. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#local-action-checkout"
         },
         "malformed-expression-delimiters": {
@@ -1295,7 +1601,11 @@
               "additionalProperties": false,
               "properties": {
                 "level": {
-                  "$ref": "#/definitions/level",
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/level"
+                    }
+                  ],
                   "description": "The level of the rule."
                 },
                 "pedantic": {
@@ -1308,11 +1618,19 @@
           ]
         },
         "matrix-duplicate-value": {
-          "$ref": "#/definitions/level",
+          "allOf": [
+            {
+              "$ref": "#/definitions/level"
+            }
+          ],
           "description": "A matrix has a duplicate value. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#matrix-duplicate-value"
         },
         "matrix-invalid-exclude": {
-          "$ref": "#/definitions/level",
+          "allOf": [
+            {
+              "$ref": "#/definitions/level"
+            }
+          ],
           "description": "An exclude entry of a matrix does not match the matrix. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#matrix-invalid-exclude"
         },
         "max-run-lines": {
@@ -1325,7 +1643,11 @@
               "additionalProperties": false,
               "properties": {
                 "level": {
-                  "$ref": "#/definitions/level",
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/level"
+                    }
+                  ],
                   "description": "The level of the rule."
                 },
                 "max": {
@@ -1340,7 +1662,11 @@
           ]
         },
         "merge-key": {
-          "$ref": "#/definitions/level",
+          "allOf": [
+            {
+              "$ref": "#/definitions/level"
+            }
+          ],
           "description": "The YAML merge key << is used, which GitHub Actions does not support. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#merge-key"
         },
         "misfeature": {
@@ -1353,7 +1679,11 @@
               "additionalProperties": false,
               "properties": {
                 "level": {
-                  "$ref": "#/definitions/level",
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/level"
+                    }
+                  ],
                   "description": "The level of the rule."
                 },
                 "pedantic": {
@@ -1366,11 +1696,19 @@
           ]
         },
         "missing-action-input": {
-          "$ref": "#/definitions/level",
+          "allOf": [
+            {
+              "$ref": "#/definitions/level"
+            }
+          ],
           "description": "A required input of an action is not specified. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#missing-action-input"
         },
         "missing-permissions": {
-          "$ref": "#/definitions/level",
+          "allOf": [
+            {
+              "$ref": "#/definitions/level"
+            }
+          ],
           "description": "Neither the workflow nor the job sets permissions:. Group: policy. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#missing-permissions"
         },
         "missing-timeout": {
@@ -1388,7 +1726,11 @@
                   "type": "integer"
                 },
                 "level": {
-                  "$ref": "#/definitions/level",
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/level"
+                    }
+                  ],
                   "description": "The level of the rule."
                 }
               },
@@ -1397,11 +1739,19 @@
           ]
         },
         "missing-workflow-input": {
-          "$ref": "#/definitions/level",
+          "allOf": [
+            {
+              "$ref": "#/definitions/level"
+            }
+          ],
           "description": "A required input of a reusable workflow is not specified. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#missing-workflow-input"
         },
         "missing-workflow-secret": {
-          "$ref": "#/definitions/level",
+          "allOf": [
+            {
+              "$ref": "#/definitions/level"
+            }
+          ],
           "description": "A required secret of a reusable workflow is not passed. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#missing-workflow-secret"
         },
         "mutable-runner-label": {
@@ -1414,7 +1764,11 @@
               "additionalProperties": false,
               "properties": {
                 "level": {
-                  "$ref": "#/definitions/level",
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/level"
+                    }
+                  ],
                   "description": "The level of the rule."
                 },
                 "pin": {
@@ -1430,55 +1784,107 @@
           ]
         },
         "obfuscation": {
-          "$ref": "#/definitions/level",
+          "allOf": [
+            {
+              "$ref": "#/definitions/level"
+            }
+          ],
           "description": "A path at uses: or an expression is written in an obfuscated way. Group: security. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#obfuscation"
         },
         "outdated-action-runner": {
-          "$ref": "#/definitions/level",
+          "allOf": [
+            {
+              "$ref": "#/definitions/level"
+            }
+          ],
           "description": "An action runs on a runtime which GitHub Actions no longer supports. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#outdated-action-runner"
         },
         "overprovisioned-secrets": {
-          "$ref": "#/definitions/level",
+          "allOf": [
+            {
+              "$ref": "#/definitions/level"
+            }
+          ],
           "description": "An expression uses the whole secrets context. Group: security. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#overprovisioned-secrets"
         },
         "pipeline-without-pipefail": {
-          "$ref": "#/definitions/level",
+          "allOf": [
+            {
+              "$ref": "#/definitions/level"
+            }
+          ],
           "description": "A failing command in a pipeline of a run: script is hidden because the shell does not enable pipefail. Group: correctness. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#pipeline-without-pipefail"
         },
         "pyflakes": {
-          "$ref": "#/definitions/level",
+          "allOf": [
+            {
+              "$ref": "#/definitions/level"
+            }
+          ],
           "description": "pyflakes reported an issue in a Python script. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#pyflakes"
         },
         "recursive-alias": {
-          "$ref": "#/definitions/level",
+          "allOf": [
+            {
+              "$ref": "#/definitions/level"
+            }
+          ],
           "description": "A YAML alias refers to itself. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#recursive-alias"
         },
         "ref-confusion": {
-          "$ref": "#/definitions/level",
+          "allOf": [
+            {
+              "$ref": "#/definitions/level"
+            }
+          ],
           "description": "The ref of an action is both a branch and a tag of its repository. Group: security. Runs only with --online. Default level: warn. https://jactionlint.jdx.dev/rules#ref-confusion"
         },
         "ref-version-mismatch": {
-          "$ref": "#/definitions/level",
+          "allOf": [
+            {
+              "$ref": "#/definitions/level"
+            }
+          ],
           "description": "The version comment of a hash-pinned action does not match the pinned commit. Group: security. Runs only with --online. Default level: warn. https://jactionlint.jdx.dev/rules#ref-version-mismatch"
         },
         "repojacking": {
-          "$ref": "#/definitions/level",
+          "allOf": [
+            {
+              "$ref": "#/definitions/level"
+            }
+          ],
           "description": "An action or reusable workflow has an owner whose name anyone can register. Group: security. Runs only with --online. Default level: warn. https://jactionlint.jdx.dev/rules#repojacking"
         },
         "require-expression-wrapping": {
-          "$ref": "#/definitions/level",
+          "allOf": [
+            {
+              "$ref": "#/definitions/level"
+            }
+          ],
           "description": "An if: condition is not wrapped in ${{ }}. Group: style. Profile: pedantic. Default level: error. https://jactionlint.jdx.dev/rules#require-expression-wrapping"
         },
         "require-shell": {
-          "$ref": "#/definitions/level",
+          "allOf": [
+            {
+              "$ref": "#/definitions/level"
+            }
+          ],
           "description": "A run: step does not set the shell explicitly. Group: style. Profile: pedantic. Default level: error. https://jactionlint.jdx.dev/rules#require-shell"
         },
         "required-actions": {
-          "$ref": "#/definitions/level",
+          "allOf": [
+            {
+              "$ref": "#/definitions/level"
+            }
+          ],
           "description": "An action listed in required-actions is not used by a workflow. Group: policy. Runs only when configured. Default level: error. https://jactionlint.jdx.dev/rules#required-actions"
         },
         "secrets-inherit": {
-          "$ref": "#/definitions/level",
+          "allOf": [
+            {
+              "$ref": "#/definitions/level"
+            }
+          ],
           "description": "A reusable workflow is called with secrets: inherit. Group: security. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#secrets-inherit"
         },
         "secrets-outside-env": {
@@ -1498,7 +1904,11 @@
                   "type": "array"
                 },
                 "level": {
-                  "$ref": "#/definitions/level",
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/level"
+                    }
+                  ],
                   "description": "The level of the rule."
                 }
               },
@@ -1523,7 +1933,11 @@
                   "type": "array"
                 },
                 "level": {
-                  "$ref": "#/definitions/level",
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/level"
+                    }
+                  ],
                   "description": "The level of the rule."
                 },
                 "pull-request-only": {
@@ -1537,15 +1951,27 @@
           ]
         },
         "self-repository": {
-          "$ref": "#/definitions/level",
+          "allOf": [
+            {
+              "$ref": "#/definitions/level"
+            }
+          ],
           "description": "A local action or workflow is referenced as ./path instead of $/path. Group: security. Profile: pedantic. Default level: info. https://jactionlint.jdx.dev/rules#self-repository"
         },
         "shellcheck": {
-          "$ref": "#/definitions/level",
+          "allOf": [
+            {
+              "$ref": "#/definitions/level"
+            }
+          ],
           "description": "shellcheck reported an issue in a shell script. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#shellcheck"
         },
         "stale-action-refs": {
-          "$ref": "#/definitions/level",
+          "allOf": [
+            {
+              "$ref": "#/definitions/level"
+            }
+          ],
           "description": "A hash-pinned action uses a commit which no tag of the repository points to. Group: security. Runs only with --online. Default level: info. https://jactionlint.jdx.dev/rules#stale-action-refs"
         },
         "superfluous-actions": {
@@ -1558,7 +1984,11 @@
               "additionalProperties": false,
               "properties": {
                 "level": {
-                  "$ref": "#/definitions/level",
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/level"
+                    }
+                  ],
                   "description": "The level of the rule."
                 },
                 "pedantic": {
@@ -1580,7 +2010,11 @@
               "additionalProperties": false,
               "properties": {
                 "level": {
-                  "$ref": "#/definitions/level",
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/level"
+                    }
+                  ],
                   "description": "The level of the rule."
                 },
                 "pedantic": {
@@ -1602,7 +2036,11 @@
               "additionalProperties": false,
               "properties": {
                 "level": {
-                  "$ref": "#/definitions/level",
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/level"
+                    }
+                  ],
                   "description": "The level of the rule."
                 },
                 "max": {
@@ -1632,7 +2070,11 @@
                   "type": "array"
                 },
                 "level": {
-                  "$ref": "#/definitions/level",
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/level"
+                    }
+                  ],
                   "description": "The level of the rule."
                 }
               },
@@ -1650,7 +2092,11 @@
               "additionalProperties": false,
               "properties": {
                 "level": {
-                  "$ref": "#/definitions/level",
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/level"
+                    }
+                  ],
                   "description": "The level of the rule."
                 },
                 "pedantic": {
@@ -1663,15 +2109,27 @@
           ]
         },
         "undefined-function": {
-          "$ref": "#/definitions/level",
+          "allOf": [
+            {
+              "$ref": "#/definitions/level"
+            }
+          ],
           "description": "An undefined function is called in an expression. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#undefined-function"
         },
         "undefined-job-needs": {
-          "$ref": "#/definitions/level",
+          "allOf": [
+            {
+              "$ref": "#/definitions/level"
+            }
+          ],
           "description": "A job needs a job which does not exist. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#undefined-job-needs"
         },
         "undefined-property": {
-          "$ref": "#/definitions/level",
+          "allOf": [
+            {
+              "$ref": "#/definitions/level"
+            }
+          ],
           "description": "An undefined variable or property is accessed in an expression. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#undefined-property"
         },
         "undocumented-permissions": {
@@ -1688,7 +2146,11 @@
                   "type": "boolean"
                 },
                 "level": {
-                  "$ref": "#/definitions/level",
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/level"
+                    }
+                  ],
                   "description": "The level of the rule."
                 }
               },
@@ -1697,23 +2159,43 @@
           ]
         },
         "unknown-action-input": {
-          "$ref": "#/definitions/level",
+          "allOf": [
+            {
+              "$ref": "#/definitions/level"
+            }
+          ],
           "description": "An input which the action does not define is specified. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#unknown-action-input"
         },
         "unknown-event": {
-          "$ref": "#/definitions/level",
+          "allOf": [
+            {
+              "$ref": "#/definitions/level"
+            }
+          ],
           "description": "An unknown Webhook event is used. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#unknown-event"
         },
         "unknown-runner-label": {
-          "$ref": "#/definitions/level",
+          "allOf": [
+            {
+              "$ref": "#/definitions/level"
+            }
+          ],
           "description": "A runner label is unknown, or is one that GitHub has retired. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#unknown-runner-label"
         },
         "unknown-workflow-input": {
-          "$ref": "#/definitions/level",
+          "allOf": [
+            {
+              "$ref": "#/definitions/level"
+            }
+          ],
           "description": "An input which the reusable workflow does not define is specified. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#unknown-workflow-input"
         },
         "unknown-workflow-secret": {
-          "$ref": "#/definitions/level",
+          "allOf": [
+            {
+              "$ref": "#/definitions/level"
+            }
+          ],
           "description": "A secret which the reusable workflow does not define is passed. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#unknown-workflow-secret"
         },
         "unlocked-install": {
@@ -1726,7 +2208,11 @@
               "additionalProperties": false,
               "properties": {
                 "level": {
-                  "$ref": "#/definitions/level",
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/level"
+                    }
+                  ],
                   "description": "The level of the rule."
                 },
                 "pedantic": {
@@ -1748,7 +2234,11 @@
               "additionalProperties": false,
               "properties": {
                 "level": {
-                  "$ref": "#/definitions/level",
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/level"
+                    }
+                  ],
                   "description": "The level of the rule."
                 },
                 "pedantic": {
@@ -1775,7 +2265,11 @@
               "additionalProperties": false,
               "properties": {
                 "level": {
-                  "$ref": "#/definitions/level",
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/level"
+                    }
+                  ],
                   "description": "The level of the rule."
                 },
                 "pedantic": {
@@ -1797,7 +2291,11 @@
               "additionalProperties": false,
               "properties": {
                 "level": {
-                  "$ref": "#/definitions/level",
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/level"
+                    }
+                  ],
                   "description": "The level of the rule."
                 },
                 "policies": {
@@ -1814,11 +2312,19 @@
           ]
         },
         "unredacted-secrets": {
-          "$ref": "#/definitions/level",
+          "allOf": [
+            {
+              "$ref": "#/definitions/level"
+            }
+          ],
           "description": "A secret is parsed with fromJSON(), so the fields of it are not redacted in logs. Group: security. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#unredacted-secrets"
         },
         "unsound-contains": {
-          "$ref": "#/definitions/level",
+          "allOf": [
+            {
+              "$ref": "#/definitions/level"
+            }
+          ],
           "description": "A condition uses contains() on a string literal, which also matches substrings. Group: security. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#unsound-contains"
         },
         "unsound-prefix-match": {
@@ -1831,7 +2337,11 @@
               "additionalProperties": false,
               "properties": {
                 "level": {
-                  "$ref": "#/definitions/level",
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/level"
+                    }
+                  ],
                   "description": "The level of the rule."
                 },
                 "refs": {
@@ -1845,11 +2355,19 @@
           ]
         },
         "unsound-ternary": {
-          "$ref": "#/definitions/level",
+          "allOf": [
+            {
+              "$ref": "#/definitions/level"
+            }
+          ],
           "description": "The a && b || c idiom has a falsy b so it always evaluates to c. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#unsound-ternary"
         },
         "untrusted-artifact": {
-          "$ref": "#/definitions/level",
+          "allOf": [
+            {
+              "$ref": "#/definitions/level"
+            }
+          ],
           "description": "A workflow_run workflow uses an artifact of the triggering run without validating it. Group: security. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#untrusted-artifact"
         },
         "untrusted-checkout": {
@@ -1862,7 +2380,11 @@
               "additionalProperties": false,
               "properties": {
                 "level": {
-                  "$ref": "#/definitions/level",
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/level"
+                    }
+                  ],
                   "description": "The level of the rule."
                 },
                 "pedantic": {
@@ -1875,11 +2397,19 @@
           ]
         },
         "unused-anchor": {
-          "$ref": "#/definitions/level",
+          "allOf": [
+            {
+              "$ref": "#/definitions/level"
+            }
+          ],
           "description": "A YAML anchor is defined but never used. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#unused-anchor"
         },
         "unused-baseline-entry": {
-          "$ref": "#/definitions/level",
+          "allOf": [
+            {
+              "$ref": "#/definitions/level"
+            }
+          ],
           "description": "A baseline entry matches no finding any more, so the baseline can shrink. Group: policy. Profile: correctness. Default level: info. https://jactionlint.jdx.dev/rules#unused-baseline-entry"
         },
         "unused-ignore": {
@@ -1892,7 +2422,11 @@
               "additionalProperties": false,
               "properties": {
                 "level": {
-                  "$ref": "#/definitions/level",
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/level"
+                    }
+                  ],
                   "description": "The level of the rule."
                 },
                 "zizmor": {
@@ -1906,15 +2440,27 @@
           ]
         },
         "unused-job-output": {
-          "$ref": "#/definitions/level",
+          "allOf": [
+            {
+              "$ref": "#/definitions/level"
+            }
+          ],
           "description": "An output of a job is never read by another job or by a workflow_call output. Group: policy. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#unused-job-output"
         },
         "unused-needs": {
-          "$ref": "#/definitions/level",
+          "allOf": [
+            {
+              "$ref": "#/definitions/level"
+            }
+          ],
           "description": "A needs entry is neither read by the job nor needed for the order of jobs. Group: style. Profile: pedantic. Default level: info. https://jactionlint.jdx.dev/rules#unused-needs"
         },
         "unused-workflow-input": {
-          "$ref": "#/definitions/level",
+          "allOf": [
+            {
+              "$ref": "#/definitions/level"
+            }
+          ],
           "description": "An input of workflow_dispatch or workflow_call is never used. Group: policy. Profile: pedantic. Default level: warn. https://jactionlint.jdx.dev/rules#unused-workflow-input"
         },
         "unverified-download": {
@@ -1934,7 +2480,11 @@
                   "type": "array"
                 },
                 "level": {
-                  "$ref": "#/definitions/level",
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/level"
+                    }
+                  ],
                   "description": "The level of the rule."
                 }
               },
@@ -1943,31 +2493,59 @@
           ]
         },
         "use-trusted-publishing": {
-          "$ref": "#/definitions/level",
+          "allOf": [
+            {
+              "$ref": "#/definitions/level"
+            }
+          ],
           "description": "A package is published with a long-lived credential although the registry supports trusted publishing. Group: security. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#use-trusted-publishing"
         },
         "workflow-call-permissions": {
-          "$ref": "#/definitions/level",
+          "allOf": [
+            {
+              "$ref": "#/definitions/level"
+            }
+          ],
           "description": "A caller job grants fewer permissions than a reusable workflow requires. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#workflow-call-permissions"
         },
         "workflow-input-type": {
-          "$ref": "#/definitions/level",
+          "allOf": [
+            {
+              "$ref": "#/definitions/level"
+            }
+          ],
           "description": "The type of a value passed to a reusable workflow does not match its input. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#workflow-input-type"
         },
         "workflow-run-names": {
-          "$ref": "#/definitions/level",
+          "allOf": [
+            {
+              "$ref": "#/definitions/level"
+            }
+          ],
           "description": "A workflow_run event refers to a workflow which does not exist in the repository. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#workflow-run-names"
         },
         "workflow-secret-scope": {
-          "$ref": "#/definitions/level",
+          "allOf": [
+            {
+              "$ref": "#/definitions/level"
+            }
+          ],
           "description": "A secret is assigned to the workflow-level env and reaches multiple jobs. Group: security. Profile: pedantic. Default level: warn. https://jactionlint.jdx.dev/rules#workflow-secret-scope"
         },
         "workflow-syntax": {
-          "$ref": "#/definitions/level",
+          "allOf": [
+            {
+              "$ref": "#/definitions/level"
+            }
+          ],
           "description": "The workflow does not follow the syntax of GitHub Actions workflows. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#workflow-syntax"
         },
         "yaml-syntax": {
-          "$ref": "#/definitions/level",
+          "allOf": [
+            {
+              "$ref": "#/definitions/level"
+            }
+          ],
           "description": "The file is not valid YAML. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#yaml-syntax"
         }
       },

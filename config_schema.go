@@ -61,6 +61,12 @@ func sObject(desc string, props jsonObject, required ...string) jsonObject {
 
 func sRef(name string) jsonObject { return jsonObject{"$ref": "#/definitions/" + name} }
 
+// sDescribedRef is a reference with a description. In draft-07 every keyword next to a "$ref" is ignored, so the
+// reference goes in an allOf and the description stays beside it.
+func sDescribedRef(desc, name string) jsonObject {
+	return jsonObject{"description": desc, "allOf": []jsonObject{sRef(name)}}
+}
+
 func sDeprecated(o jsonObject) jsonObject {
 	o["deprecated"] = true
 	return o
@@ -234,7 +240,10 @@ func sIgnore(ids []string) jsonObject {
 			"reason":  sStr("Why the finding is accepted. It is for the readers of the file."),
 			"expires": jsonObject{"type": "string", "description": "The last day (YYYY-MM-DD, UTC) the entry accepts findings. After it the findings come back and the expired-ignore rule reports the entry.", "pattern": `^\d{4}-\d{2}-\d{2}$`},
 		},
-		"required":             []string{"rule"},
+		"required": []string{"rule"},
+		// The parser rejects an entry which says nothing about where: it would turn the rule off everywhere, which is
+		// what "rules" is for
+		"anyOf":                []jsonObject{{"required": []string{"file"}}, {"required": []string{"uses"}}, {"required": []string{"job"}}, {"required": []string{"step"}}},
 		"additionalProperties": false,
 	}
 }
@@ -269,9 +278,9 @@ func ruleSchema(r RuleInfo) jsonObject {
 	}
 	desc += fmt.Sprintf("Default level: %s. %s", r.DefaultLevel, r.DocURL())
 	if len(r.Options) == 0 {
-		return jsonObject{"description": desc, "$ref": "#/definitions/level"}
+		return sDescribedRef(desc, "level")
 	}
-	opts := jsonObject{"level": jsonObject{"description": "The level of the rule.", "$ref": "#/definitions/level"}}
+	opts := jsonObject{"level": sDescribedRef("The level of the rule.", "level")}
 	for _, o := range r.Options {
 		opts[o.Name] = optionSchema(o)
 	}

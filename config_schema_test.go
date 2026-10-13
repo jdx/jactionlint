@@ -30,7 +30,7 @@ type schemaValidator struct {
 var knownSchemaKeywords = map[string]bool{
 	"$schema": true, "$id": true, "$ref": true, "title": true, "description": true, "default": true, "deprecated": true, "format": true,
 	"type": true, "enum": true, "properties": true, "additionalProperties": true, "required": true, "items": true, "minItems": true,
-	"minimum": true, "pattern": true, "oneOf": true, "definitions": true,
+	"minimum": true, "pattern": true, "oneOf": true, "allOf": true, "anyOf": true, "definitions": true,
 }
 
 func (v schemaValidator) validate(schema map[string]any, doc any, path string) []string {
@@ -76,6 +76,23 @@ func (v schemaValidator) validate(schema map[string]any, doc any, path string) [
 	if m, ok := schema["minimum"].(float64); ok {
 		if f, ok := toFloat(doc); ok && f < m {
 			errs = append(errs, fmt.Sprintf("%s: %v is less than %v", path, doc, m))
+		}
+	}
+	if all, ok := schema["allOf"].([]any); ok {
+		for _, s := range all {
+			errs = append(errs, v.validate(s.(map[string]any), doc, path)...)
+		}
+	}
+	if alts, ok := schema["anyOf"].([]any); ok {
+		matched := false
+		for _, s := range alts {
+			if len(v.validate(s.(map[string]any), doc, path)) == 0 {
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			errs = append(errs, fmt.Sprintf("%s: %v matches none of the anyOf alternatives", path, doc))
 		}
 	}
 	if one, ok := schema["oneOf"].([]any); ok {
@@ -292,7 +309,7 @@ func TestConfigSchemaHasEveryRuleAndOption(t *testing.T) {
 	for _, r := range ruleRegistry {
 		s := rules[r.ID].(map[string]any)
 		if len(r.Options) == 0 {
-			if s["$ref"] != "#/definitions/level" {
+			if all, _ := s["allOf"].([]any); len(all) != 1 || all[0].(map[string]any)["$ref"] != "#/definitions/level" {
 				t.Errorf("%s has no options and must be a level: %v", r.ID, s)
 			}
 			continue
@@ -536,5 +553,59 @@ func TestOutputSchemaDescribesTheJSONOutput(t *testing.T) {
 	bad := map[string]any{"message": "x", "line": 0.0}
 	if errs := v.validate(finding, bad, "$"); len(errs) == 0 {
 		t.Error("an incomplete finding must not validate")
+	}
+}
+
+// TestSchemaRefsStandAlone: in draft-07 every keyword next to a "$ref" is ignored, so a description beside it never
+// reaches the editor. A reference must be the only keyword of its object (apart from comments and definitions).
+func TestSchemaRefsStandAlone(t *testing.T) {
+	for name, b := range map[string][]byte{"config": ConfigSchema(), "output": OutputSchema()} {
+		var doc any
+		if err := json.Unmarshal(b, &doc); err != nil {
+			t.Fatal(err)
+		}
+		var walk func(path string, n any)
+		walk = func(path string, n any) {
+			switch n := n.(type) {
+			case map[string]any:
+				if _, ok := n["$ref"]; ok {
+					for k := range n {
+						if k != "$ref" && k != "$comment" && k != "definitions" {
+							t.Errorf("%s schema: %s has %q next to $ref, which draft-07 ignores", name, path, k)
+						}
+					}
+				}
+				for k, v := range n {
+					walk(path+"."+k, v)
+				}
+			case []any:
+				for i, v := range n {
+					walk(fmt.Sprintf("%s[%d]", path, i), v)
+				}
+			}
+		}
+		walk("$", doc)
+	}
+}
+
+// TestConfigSchemaIgnoresNeedAPlace: the parser rejects an entry of "ignores" which has only a rule.
+func TestConfigSchemaIgnoresNeedAPlace(t *testing.T) {
+	v := loadJSONSchema(t, ConfigSchema())
+	for _, key := range []string{"file: a.yaml", "uses: actions/checkout", "job: build", "step: Build"} {
+		src := "ignores:\n  - rule: unpinned-uses\n    " + key + "\n"
+		if errs := validateConfigYAML(t, v, src); len(errs) > 0 {
+			t.Errorf("%q must be valid: %v", src, errs)
+		}
+		if _, err := ParseConfig([]byte(src)); err != nil {
+			t.Errorf("the parser rejects %q: %v", src, err)
+		}
+	}
+	for _, src := range []string{"ignores:\n  - rule: unpinned-uses\n", "ignores:\n  - rule: unpinned-uses\n    reason: why\n    expires: 2027-01-01\n"} {
+		if errs := validateConfigYAML(t, v, src); len(errs) == 0 {
+			t.Errorf("%q must be invalid", src)
+		}
+		if _, err := ParseConfig([]byte(src)); err == nil {
+			t.Errorf("the parser accepts %q", src)
+		}
 	}
 }
