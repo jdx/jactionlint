@@ -37,7 +37,7 @@ func TestActionsLockDocsExample(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	sec := string(doc)
+	sec := strings.ReplaceAll(string(doc), "\r\n", "\n") // the document may be checked out with CRLF
 	i := strings.Index(sec, "<a id=\"check-actions-lock\"></a>")
 	if i < 0 {
 		t.Fatal("no section for the lock file in docs/checks.md")
@@ -54,9 +54,8 @@ func TestActionsLockDocsExample(t *testing.T) {
 		t.Fatal("the output block is not closed")
 	}
 	want := strings.TrimSpace(sec[:end])
-	// Windows writes the paths with backslashes and the document may be checked out with CRLF
+	// Windows writes the paths with backslashes
 	got := strings.ReplaceAll(strings.ReplaceAll(out.String(), "\r\n", "\n"), `\`, "/")
-	want = strings.ReplaceAll(want, "\r\n", "\n")
 	if got := strings.TrimSpace(got); got != want {
 		t.Errorf("the output of the example in docs/checks.md is stale.\ngot:\n%s\nwant:\n%s", got, want)
 	}
