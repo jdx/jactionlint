@@ -1,0 +1,36 @@
+on:
+  issues:
+    types: [edited]
+  pull_request_target:
+    types: [edited]
+  gollum:
+  merge_group:
+  workflow_run:
+    workflows: [ci]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      # ERROR: the previous title and text of an edited issue or pull request are what its author typed
+      - run: echo "${{ github.event.changes.title.from }} ${{ github.event.changes.body.from }}"
+      # ERROR: a pull request which changed its base keeps the name of the old one
+      - run: echo "${{ github.event.changes.base.ref.from }}"
+      # ERROR: the owner of the fork types the website of the repository
+      - run: echo "${{ github.event.pull_request.head.repo.homepage }}"
+      # ERROR: anyone who may edit the wiki names a page
+      - run: echo "${{ github.event.pages[0].title }}"
+      # ERROR: the commit of a merge queue has the title and the text of the pull request
+      - run: echo "${{ github.event.merge_group.head_commit.message }} ${{ github.event.merge_group.head_commit.author.name }}"
+      # ERROR: the file of the workflow of a pull request from a fork can have any name
+      - run: echo "${{ github.event.workflow_run.path }}"
+      - run: echo "${{ github.event.workflow.path }}"
+      - run: echo "${{ github.event.workflow_run.referenced_workflows[0].path }}"
+      # OK: the merge queue fills these from accounts and the name of its branch (pedantic reports them)
+      - run: echo "${{ github.event.merge_group.head_commit.author.email }} ${{ github.event.merge_group.head_ref }}"
+      # OK: no payload has this field (the one of a pull request which changed its base is changes.base.ref.from)
+      - run: echo "${{ github.event.changes.head.ref.from }}"
+      # OK: the value reaches the script through an environment variable
+      - run: echo "$OLD"
+        env:
+          OLD: ${{ github.event.changes.title.from }}

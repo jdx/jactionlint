@@ -64,6 +64,7 @@ rules:
 | [duplicate-key](#duplicate-key) | correctness | error | correctness |
 | [duplicate-step-id](#duplicate-step-id) | correctness | error | correctness |
 | [duplicate-triggers](#duplicate-triggers) | policy | error | default |
+| [environment-file-redirect](#environment-file-redirect) | correctness | error | correctness |
 | [excessive-permissions](#excessive-permissions) | security | error | default |
 | [expired-ignore](#expired-ignore) | policy | error | correctness |
 | [expression-syntax](#expression-syntax) | correctness | error | correctness |
@@ -462,6 +463,16 @@ push and pull_request both run the workflow for the same commit.
 - Profile: default
 - Details and examples: [checks](./checks.md#check-duplicate-triggers)
 
+## environment-file-redirect
+
+A script writes to GITHUB_OUTPUT or another environment file of the runner without the $, or empties it with > after it wrote to it.
+
+- Group: correctness
+- Default level: error
+- Profile: correctness
+- Fixable: yes
+- Details and examples: [checks](./checks.md#check-environment-file-redirect)
+
 ## excessive-permissions
 
 The GITHUB_TOKEN gets write access that is broader than needed.
@@ -469,7 +480,7 @@ The GITHUB_TOKEN gets write access that is broader than needed.
 - Group: security
 - Default level: error
 - Profile: default
-- Option `require-workflow-permissions` (bool, default false): Also report a workflow which has no top-level permissions, even when its jobs set their own.
+- Option `require-workflow-permissions` (bool, no default): Also report a workflow which has no top-level permissions, even when its jobs set their own. Unset, it runs under the pedantic profile.
 - Details and examples: [checks](./checks.md#check-excessive-permissions)
 
 ## expired-ignore
@@ -1155,7 +1166,7 @@ A permission scope above read has no comment explaining it.
 - Group: policy
 - Default level: info
 - Profile: pedantic
-- Option `include-read` (bool, default false): Also require a comment for scopes granted with read, except contents: read.
+- Option `include-read` (bool, no default): Also require a comment for scopes granted with read, except contents: read. Unset, it runs under the pedantic profile.
 - Details and examples: [checks](./checks.md#check-undocumented-permissions)
 
 ## unknown-action-input
@@ -1222,6 +1233,7 @@ A container or service image is not pinned by a digest.
 - Default level: error
 - Profile: default
 - Option `require-digest` (bool, default true): Report images pinned by a tag other than latest too. Turn it off to report only images without a tag or with the latest tag.
+- Option `pedantic` (bool, no default): Also report the pedantic checks, which are noisier. Unset, they run under the pedantic profile.
 - Details and examples: [checks](./checks.md#check-unpinned-images)
 
 ## unpinned-tools

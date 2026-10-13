@@ -1,0 +1,3 @@
+test.yaml:6:10: invalid value "invalid" for "queue" in "concurrency" section. valid values are "max" and "single" [syntax-check]
+test.yaml:14:14: "queue: max" cannot be combined with "cancel-in-progress: true" in "concurrency" section [syntax-check]
+test.yaml:22:14: "queue: max" cannot be combined with "cancel-in-progress: true" in "concurrency" section [syntax-check]
