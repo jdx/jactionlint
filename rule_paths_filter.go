@@ -40,7 +40,7 @@ type RuleUnmatchedPathsFilter struct {
 }
 
 // pathsFilterMaxEntries bounds the number of files and directories that the rule reads.
-const pathsFilterMaxEntries = 300000
+var pathsFilterMaxEntries = 300000
 
 // NewRuleUnmatchedPathsFilter creates a new RuleUnmatchedPathsFilter instance for the project at root.
 func NewRuleUnmatchedPathsFilter(root string) *RuleUnmatchedPathsFilter {
@@ -100,6 +100,9 @@ type pathFilter struct {
 	re *regexp.Regexp
 	// prefix is the text that every path which matches starts with, in lower case.
 	prefix string
+	// deep is whether the filter can match a path in a directory below the one of its prefix: it has `**`, or a `/`
+	// after the prefix. A filter that is not deep (`*.md`) cannot reach into a submodule.
+	deep bool
 }
 
 // compilePathFilter compiles an entry of `paths`. It returns nil for an entry that is not looked at.
@@ -118,6 +121,7 @@ func compilePathFilter(pat string) *pathFilter {
 	rs := []rune(pat)
 	atom := false // the last thing written can be repeated by `?` and `+`
 	prefix, inPrefix := "", true
+	deep := false
 	for i := 0; i < len(rs); i++ {
 		c := rs[i]
 		switch c {
@@ -127,6 +131,7 @@ func compilePathFilter(pat string) *pathFilter {
 				j++
 			}
 			if j > i {
+				deep = true
 				// `**/` also matches nothing at all in front of the next name: `**/README.md` is README.md
 				if j+1 < len(rs) && rs[j+1] == '/' {
 					b.WriteString("(?:.*/)?")
@@ -185,6 +190,8 @@ func compilePathFilter(pat string) *pathFilter {
 			atom = true
 			if inPrefix {
 				prefix += string(c)
+			} else if c == '/' {
+				deep = true
 			}
 		}
 	}
@@ -193,7 +200,7 @@ func compilePathFilter(pat string) *pathFilter {
 	if err != nil {
 		return nil
 	}
-	return &pathFilter{re: re, prefix: prefix}
+	return &pathFilter{re: re, prefix: prefix, deep: deep}
 }
 
 // repoPaths are the files and directories of a repository, in lower case and sorted.
@@ -217,7 +224,10 @@ func (r *repoPaths) matches(m *pathFilter) bool {
 // cannotDecide reports whether the filter could match something in a directory that is not available.
 func (r *repoPaths) cannotDecide(m *pathFilter) bool {
 	for _, o := range r.opaque {
-		if m.prefix == "" || strings.HasPrefix(m.prefix, o+"/") || m.prefix == o || strings.HasPrefix(o+"/", m.prefix) {
+		// The filter names a path inside the submodule, or its wildcard can reach into it from a shorter prefix
+		// (`**/*.js`, `vendor/**`): then a file that it matches may be there. A filter like `*.md` cannot reach
+		// below the top directory and is decided by the files of the repository itself.
+		if m.prefix == o || strings.HasPrefix(m.prefix, o+"/") || (m.deep && strings.HasPrefix(o+"/", m.prefix)) {
 			return true
 		}
 	}
@@ -250,21 +260,34 @@ func readRepoPaths(root string) *repoPaths {
 	return p
 }
 
+// gitListing says what the files of git are worth.
+type gitListing int
+
+const (
+	// gitUnavailable: git cannot say (it is not installed, the root is not a work tree, it failed), so the tree can be
+	// walked instead.
+	gitUnavailable gitListing = iota
+	// gitListed: the files are the ones of the repository.
+	gitListed
+	// gitUnusable: git answered, but there is nothing to match against (no file at all) or the repository has more files
+	// than the bound. The walk would not do better, so the rule says nothing.
+	gitUnusable
+)
+
 // gitListedPaths returns the files that git knows in the working tree of root: the tracked ones, and the untracked
-// ones that are not ignored (a file which was just created and is not added yet is a file of the next commit). It
-// returns false when git cannot say (it is not installed, the root is not a work tree, the index is empty as after a
-// clone without checkout). GitHub matches the changed files of a commit, which are tracked, so an untracked tree such
-// as node_modules is not what an entry is about, and not reading it also keeps the bound of the walk for the files
-// that count.
-func gitListedPaths(root string) (map[string]struct{}, bool) {
+// ones that are not ignored (a file which was just created and is not added yet is a file of the next commit). A
+// submodule is one path, its gitlink. GitHub matches the changed files of a commit, which are tracked, so an untracked
+// tree such as node_modules is not what an entry is about, and not reading it also keeps the bound for the files that
+// count.
+func gitListedPaths(root string) (map[string]struct{}, gitListing) {
 	if _, err := os.Stat(filepath.Join(root, ".git")); err != nil {
-		return nil, false
+		return nil, gitUnavailable
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	out, err := exec.CommandContext(ctx, "git", "-C", root, "ls-files", "-z", "--cached", "--others", "--exclude-standard").Output()
-	if err != nil || len(out) == 0 {
-		return nil, false
+	if err != nil {
+		return nil, gitUnavailable
 	}
 	seen := map[string]struct{}{}
 	for _, f := range strings.Split(string(out), "\x00") {
@@ -278,11 +301,14 @@ func gitListedPaths(root string) (map[string]struct{}, bool) {
 			}
 		}
 		if len(seen) > pathsFilterMaxEntries {
-			return nil, false
+			return nil, gitUnusable
 		}
 		seen[strings.ToLower(f)] = struct{}{}
 	}
-	return seen, true
+	if len(seen) == 0 {
+		return nil, gitUnusable
+	}
+	return seen, gitListed
 }
 
 // skippedInstallDirs are the trees of installed packages, which are not part of the repository. The walk, used when
@@ -290,8 +316,11 @@ func gitListedPaths(root string) (map[string]struct{}, bool) {
 var skippedInstallDirs = map[string]bool{"node_modules": true, ".venv": true, "venv": true}
 
 func walkRepoPaths(root string) *repoPaths {
-	if seen, ok := gitListedPaths(root); ok {
+	switch seen, st := gitListedPaths(root); st {
+	case gitListed:
 		return newRepoPaths(root, seen)
+	case gitUnusable:
+		return nil
 	}
 	seen := map[string]struct{}{}
 	n := 0

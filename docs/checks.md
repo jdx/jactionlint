@@ -2256,7 +2256,10 @@ It is careful about what it calls a mismatch, because the rule cannot know what 
   a `/` at the end is ignored, and the case of letters is not compared.
 - An entry starting with `!` is skipped, as is one with `${{ }}`, one starting with `/` or `./`, an invalid pattern (see
   [the glob syntax](#check-glob-pattern)), and a character class that is negated.
-- A submodule without files in the working tree hides every entry that could match inside it.
+- A submodule without files in the list (git lists a submodule as one path) hides the entries that could match inside it: one that
+  names a path in it, or whose wildcard can reach into it (`**/*.js`, `vendor/**`). An entry that cannot go below the top
+  directory (`*.md`) is decided by the files of the repository itself.
+- When git lists no file, or more than 300000, the rule says nothing, and it does not walk the tree then.
 - A generated file is skipped, because its entries come from another file, unless `generated-files: report` is set. A repository
   with more than 300000 files (of git, or of the walk) is not looked at.
 
