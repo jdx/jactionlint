@@ -392,8 +392,8 @@ func (rule *RuleUntrustedCheckout) inputForksPR(name, value string) bool {
 			continue
 		}
 		for _, src := range ti.sources {
-			if !checkoutInputForksPR(name, src) {
-				return false
+			if !checkoutInputForksPR(name, src) || rule.uncoveredUntrusted(name, src) {
+				return false // a branch that the caller passes beside the commit gets through the protection
 			}
 		}
 		found = true
@@ -447,7 +447,7 @@ func (rule *RuleUntrustedCheckout) callsForkPR(name, value string) bool {
 	}
 	for _, c := range rule.calls {
 		sub := substituteInputs(value, func(n string) (string, bool) { v, ok := c.values[n]; return v, ok })
-		if sub == value || !checkoutInputForksPR(name, sub) {
+		if sub == value || !checkoutInputForksPR(name, sub) || rule.uncoveredUntrusted(name, sub) {
 			return false
 		}
 	}
