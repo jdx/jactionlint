@@ -64,6 +64,12 @@ type RuleGitHubEnv struct {
 	errexit bool
 	// loop is whether the write is in the body of a loop.
 	loop bool
+	// varsOnly makes the judgement ignore the `${{ }}` expressions written in the script and judge only what reaches
+	// it through variables. The command-injection rule uses it: an expression in the script is a finding of
+	// template-injection.
+	varsOnly bool
+	// skipInputs makes `inputs.*` of a composite action an ordinary value instead of an outsider's input.
+	skipInputs bool
 }
 
 // NewRuleGitHubEnv creates a new RuleGitHubEnv instance.
@@ -151,10 +157,7 @@ func (rule *RuleGitHubEnv) emit(d data, dest string, start, end *Pos) {
 	}
 	switch d.kind {
 	case dataUntrusted:
-		src := quote(d.input)
-		if d.via != "" {
-			src = "from the variable " + d.via + " (" + d.input + ")"
-		}
+		src := describeUntrusted(d)
 		e := rule.errorIDAt("github-env", start, "untrusted input "+src+" is written to "+dest+". "+effect+". do not write input that an outsider controls to "+dest+"; validate it first or pass it to the next step with $GITHUB_OUTPUT").endAt(end)
 		e.RetiredID = "github-env-untrusted-input"
 	case dataUnknown:
@@ -225,7 +228,10 @@ func (rule *RuleGitHubEnv) judgeCommand(s *runscript.Script, c *runscript.Comman
 var reExpressionSpan = regexp.MustCompile(`(?s)\$\{\{.*?\}\}`)
 
 func (rule *RuleGitHubEnv) judgeHeredoc(s *runscript.Script, h *runscript.Heredoc) data {
-	d := rule.judgeExprList(h.Exprs, 0)
+	d := data{}
+	if !rule.varsOnly {
+		d = rule.judgeExprList(h.Exprs, 0)
+	}
 	if h.Quoted || (!strings.Contains(h.Body, "$") && !strings.Contains(h.Body, "`")) {
 		return d
 	}
@@ -273,7 +279,10 @@ func benignSubs(subs []*runscript.Command) bool {
 // judgeWordArgs judges the expressions and variables of an argument of a command in a substitution; nested
 // substitutions are judged on their own, as the commands of Word.Subs are listed at any depth.
 func (rule *RuleGitHubEnv) judgeWordArgs(s *runscript.Script, w *runscript.Word, depth int) data {
-	d := rule.judgeExprList(w.Exprs, depth)
+	d := data{}
+	if !rule.varsOnly {
+		d = rule.judgeExprList(w.Exprs, depth)
+	}
 	for _, v := range w.Vars {
 		d = d.worse(rule.judgeVar(s, v, depth))
 	}
@@ -284,6 +293,9 @@ func (rule *RuleGitHubEnv) judgeWordArgs(s *runscript.Script, w *runscript.Word,
 // script it expands.
 func (rule *RuleGitHubEnv) judgeWord(s *runscript.Script, w *runscript.Word, depth int) data {
 	exprs, vars, subs := w.Exprs, w.Vars, w.Subs
+	if rule.varsOnly {
+		exprs = nil
+	}
 	if rule.dest != "" {
 		// What a pipeline of the substitution or an expansion has made safe does not count.
 		if cover := sanitizedCommands(w, rule.dest); len(cover) > 0 {
@@ -353,7 +365,7 @@ func (rule *RuleGitHubEnv) judgeExprList(exprs []string, depth int) data {
 // judgeExpr judges one expression. In the metadata of an action, `inputs.*` is whatever the caller passes, and a
 // workflow can pass the title of an issue: it is an outsider's input, whichever event runs the action.
 func (rule *RuleGitHubEnv) judgeExpr(e string) data {
-	if rule.wf != nil && rule.wf.Action != nil && exprReadsContext(e, "inputs") {
+	if rule.wf != nil && rule.wf.Action != nil && !rule.skipInputs && exprReadsContext(e, "inputs") {
 		return data{kind: dataUntrusted, input: e}
 	}
 	if rule.mintedByJob(e) {

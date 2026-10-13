@@ -33,6 +33,7 @@ var actionRuleScope = map[string]struct {
 	"adhoc-packages":              {scope: actionApplies},         // package installs in the scripts of the steps
 	"agentic-actions":             {scope: actionCallerDependent}, // an agent is steerable depending on the events of the callers
 	"checkout-static-credentials": {scope: actionApplies},         // the inputs of actions/checkout steps
+	"command-injection":           {scope: actionApplies},         // the scripts of the steps; inputs.* of the action is not judged
 	"concurrency-cancels-prs":     {scope: actionNotApplicable},   // concurrency: belongs to the workflow
 	"concurrency-cancels-release": {scope: actionNotApplicable},   // concurrency: belongs to the workflow
 	"continue-on-error":           {scope: actionApplies},         // the steps option; an action has no jobs

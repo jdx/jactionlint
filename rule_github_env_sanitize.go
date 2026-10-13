@@ -27,9 +27,15 @@ const (
 	sanitizeCharset
 )
 
-// satisfies reports whether the guarantee is enough for a write to the destination ("GITHUB_ENV" or "GITHUB_PATH").
+// destShell is the destination of the command-injection rule: the value is parsed as shell code. Only a value cut
+// down to harmless characters is safe there, a value without newlines is not (`;` and `$(...)` still run), and the
+// characters of a path do not matter (`.`, `/` and `:` are harmless in a command).
+const destShell = "SHELL"
+
+// satisfies reports whether the guarantee is enough for a write to the destination ("GITHUB_ENV" or "GITHUB_PATH")
+// or for the code of a shell (destShell).
 func (k sanitizeKind) satisfies(dest string) bool {
-	if dest == "GITHUB_PATH" {
+	if dest == "GITHUB_PATH" || dest == destShell {
 		return k == sanitizeCharset
 	}
 	return k != sanitizeNone
@@ -91,6 +97,19 @@ func commandSanitizes(c *runscript.Command, dest string) sanitizeKind {
 	case "head":
 		if f := firstLineOnly(c); f {
 			return sanitizeNewline
+		}
+	case "printf":
+		if dest == destShell && printfQuotes(c) {
+			return sanitizeCharset
+		}
+	case "wc", "md5sum", "sha1sum", "sha224sum", "sha256sum", "sha384sum", "sha512sum", "b2sum", "cksum", "shasum", "sum":
+		// what they print is a number or a hexadecimal digest, whatever they read
+		if dest == destShell {
+			return sanitizeCharset
+		}
+	case "base64":
+		if dest == destShell && !c.HasFlag("-d", "-D", "--decode") {
+			return sanitizeCharset
 		}
 	case "sed":
 		var scripts []*runscript.Word
@@ -294,7 +313,31 @@ func sanitizedCommands(w *runscript.Word, dest string) map[*runscript.Command]bo
 	return out
 }
 
+// rePrintfConversion matches a conversion of a printf format.
+var rePrintfConversion = regexp.MustCompile(`%[-+ #0-9.*]*[a-zA-Z%]`)
+
+// printfQuotes reports whether the command is a `printf` that only prints its arguments quoted for the shell
+// (`printf '%q' "$x"`): the format has no conversion other than %q (and %%).
+func printfQuotes(c *runscript.Command) bool {
+	if len(c.Positional) == 0 || !staticWord(c.Positional[0]) {
+		return false
+	}
+	found := false
+	for _, m := range rePrintfConversion.FindAllString(c.Positional[0].Value, -1) {
+		switch m[len(m)-1] {
+		case 'q':
+			found = true
+		case '%':
+		default:
+			return false
+		}
+	}
+	return found
+}
+
 var reSanitizedExpansion = regexp.MustCompile(`\$\{([A-Za-z_][A-Za-z0-9_]*)//([^/]+)/([^}]*)\}`)
+
+var reQuotedExpansion = regexp.MustCompile(`\$\{([A-Za-z_][A-Za-z0-9_]*)@Q\}`)
 
 // sanitizedExpansions returns the names of the variables which the word expands with all occurrences of
 // something replaced, so no newline (or nothing but a harmless set) is left: `${v//[^a-zA-Z0-9]/}`, `${v//$'\n'/}`.
@@ -315,6 +358,12 @@ func sanitizedExpansions(raw, dest string) []string {
 			}
 		}
 		if kind.satisfies(dest) {
+			names = append(names, m[1])
+		}
+	}
+	if dest == destShell {
+		// ${v@Q} quotes the value for reuse as shell input
+		for _, m := range reQuotedExpansion.FindAllStringSubmatch(raw, -1) {
 			names = append(names, m[1])
 		}
 	}
@@ -345,6 +394,8 @@ func subtractOnce(list, items []string) []string {
 // expressions of harmless characters, escaped punctuation, groups, alternation, quantifiers and literals.
 var reSafeRegexAtom = regexp.MustCompile(`^(?:\[[^\]^]+\]|\\[.+*?()\[\]{}|\-/_]|\\[wd]|[A-Za-z0-9_\-]|[()|+*?]|\{[0-9]+(?:,[0-9]*)?\})+$`)
 
+var reShellSyntaxEscape = regexp.MustCompile(`\\[()|{}\[\]]`)
+
 // validatingRegex reports whether the regular expression of a `[[ x =~ re ]]` test holds an anchored
 // pattern that no newline can match, and the character set it allows is harmless for the destination.
 func validatingRegex(re, dest string) bool {
@@ -362,6 +413,9 @@ func validatingRegex(re, dest string) bool {
 	}
 	if dest == "GITHUB_PATH" && (strings.ContainsAny(inner, "./") || strings.Contains(inner, `\w`)) {
 		return false
+	}
+	if dest == destShell && reShellSyntaxEscape.MatchString(inner) {
+		return false // `\(`, `\|`, `\{` ... match the characters that a shell parses
 	}
 	return !strings.Contains(inner, `\n`)
 }
