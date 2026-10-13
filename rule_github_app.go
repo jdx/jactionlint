@@ -30,6 +30,13 @@ const (
 // peter-murray/workflow-application-token-action.
 type RuleGitHubApp struct {
 	RuleBase
+	wf *Workflow
+}
+
+// VisitWorkflowPre is callback when visiting Workflow node before visiting its children.
+func (rule *RuleGitHubApp) VisitWorkflowPre(n *Workflow) error {
+	rule.wf = n
+	return nil
 }
 
 // orgOnlyPermissions are the permission inputs which affect the organization and not the repositories. A token that
@@ -78,7 +85,12 @@ func (rule *RuleGitHubApp) VisitStep(n *Step) error {
 	}
 	switch {
 	case ref.isRepoAction(tibdexGitHubAppAction):
-		rule.checkTibdex(a)
+		// The version 1 of the action has "repository" (the current one by default) and no "repositories"
+		v1 := false
+		if major, ok := majorOf(withCommentVersion(rule.wf, a, ref)); ok && major < 2 {
+			v1 = true
+		}
+		rule.checkTibdex(a, v1)
 		return nil
 	case ref.isRepoAction(peterMurrayGitHubAppAction):
 		rule.checkPeterMurray(a)
@@ -113,15 +125,15 @@ func (rule *RuleGitHubApp) VisitStep(n *Step) error {
 	return nil
 }
 
-// checkTibdex checks a use of tibdex/github-app-token.
-func (rule *RuleGitHubApp) checkTibdex(a *ExecAction) {
+// checkTibdex checks a use of tibdex/github-app-token. The version 1 has no "repositories" to check.
+func (rule *RuleGitHubApp) checkTibdex(a *ExecAction, v1 bool) {
 	if v, ok := a.input("revoke"); ok && isFalseLiteral(v) {
 		rule.ReportID("github-app", a.Inputs["revoke"].Value.Pos, "\"revoke: false\" keeps the GitHub App token valid after the job ends. remove it so that the token is revoked in the post step")
 	}
 	if a.InputsUnknown() {
 		return // the inputs may have what is missing
 	}
-	if v, ok := a.input("repositories"); !ok || strings.TrimSpace(v) == "" {
+	if v, ok := a.input("repositories"); !v1 && (!ok || strings.TrimSpace(v) == "") {
 		rule.ReportID("github-app", a.Uses.Pos, "no \"repositories\" input is set, so the token has access to every repository that the installation of the GitHub App can access. list the repositories the token is for, as a JSON array like '[\"owner/repo\"]'")
 	}
 	if v, ok := a.input("permissions"); !ok || strings.TrimSpace(v) == "" {

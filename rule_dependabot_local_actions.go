@@ -6,6 +6,7 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -190,7 +191,20 @@ func (r *RuleDependabotMissingActionsUpdate) checkLocalActions(updates []*Depend
 			suggest = append(suggest, fmt.Sprintf("%q", entry))
 		}
 	}
-	add("/")
+	rootNamed := slices.Contains(missing, "/")
+	for _, u := range updates {
+		if u.Directory != nil && normalizeDependabotDirectory(u.Directory.Value) == "/" {
+			rootNamed = true
+		}
+		for _, d := range u.Directories {
+			if d != nil && normalizeDependabotDirectory(d.Value) == "/" {
+				rootNamed = true
+			}
+		}
+	}
+	if rootNamed {
+		add("/") // the workflows are read from the root
+	}
 	for _, u := range updates {
 		if u.Directory != nil {
 			add(u.Directory.Value)
@@ -209,7 +223,7 @@ func (r *RuleDependabotMissingActionsUpdate) checkLocalActions(updates []*Depend
 			add(d)
 		}
 	}
-	msg := fmt.Sprintf("the \"github-actions\" update does not cover the local composite actions in %s, which use actions, so Dependabot never updates them: it reads \"action.yml\" of the directories it is given, and \"directory: /\" is the workflows and the root. add them: \"directories: [%s]\"", strings.Join(shown, ", "), strings.Join(suggest, ", "))
+	msg := fmt.Sprintf("the \"github-actions\" update does not cover the local composite actions in %s, which use actions, so Dependabot never updates them: it reads the workflows and the \"action.yml\" of the directories it is given, and the directory \"/\" is the workflows and the root only. add them: \"directories: [%s]\"", strings.Join(shown, ", "), strings.Join(suggest, ", "))
 	r.ReportID("dependabot-missing-actions-update", pos, msg)
 	e := r.errs[len(r.errs)-1]
 	if fix, why := r.localActionsFix(updates, suggest); fix != nil {

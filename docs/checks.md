@@ -4380,7 +4380,7 @@ Two other actions which issue app tokens are checked with their own inputs:
 
 | Action | Reported |
 | --- | --- |
-| `tibdex/github-app-token` (archived) | no `permissions` (a JSON object like `'{"contents": "read"}'`): every permission of the app; no `repositories` (a JSON array): every repository of the installation; `revoke: false` |
+| `tibdex/github-app-token` (archived) | no `permissions` (a JSON object like `'{"contents": "read"}'`): every permission of the app; no `repositories` (a JSON array, since version 2: the version 1 has `repository`, the current repository by default): every repository of the installation; `revoke: false` |
 | `peter-murray/workflow-application-token-action` | no `permissions` (`contents:read,issues:write`): every permission of the app; `revoke_token` missing or false, since the token is revoked only when it is `true`. The action has no list of repositories, `organization` only picks the installation |
 
 Other actions which issue app tokens are not known to the rule.
