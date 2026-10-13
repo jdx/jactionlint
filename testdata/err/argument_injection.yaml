@@ -16,6 +16,7 @@ jobs:
       - run: awk "BEGIN { print \"$BODY\" }"
       - run: find . -exec $BODY {} \;
       - run: find . -name $TITLE
+      - run: find -O3 . "$TITLE"
       - run: curl -o out.txt "$BODY"
       - run: git clone "$TITLE"
       - env:
@@ -28,6 +29,7 @@ jobs:
       - run: sed 's/PLACEHOLDER/$BODY/g' template.txt
       - run: awk -v body="$BODY" '{ print body }' file
       - run: find . -name "$TITLE"
+      - run: find -D tree -O3 "$TITLE" -type f
       - run: curl -o out.txt -- "$BODY"
       - run: git clone "https://example.com/$TITLE"
       - run: |

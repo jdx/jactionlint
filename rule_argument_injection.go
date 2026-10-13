@@ -95,18 +95,22 @@ func (rule *RuleArgumentInjection) judge(s *runscript.Script, c *runscript.Comma
 	return d
 }
 
+// reFindOptimise is the global option -O<n> of find, which sets the level of the optimiser.
+var reFindOptimise = regexp.MustCompile(`^-O\d*$`)
+
 // findArgPredicates are the predicates of find that take one word as their operand.
 var findArgPredicates = map[string]bool{
 	"-name": true, "-iname": true, "-path": true, "-ipath": true, "-wholename": true, "-iwholename": true, "-regex": true, "-iregex": true,
 	"-lname": true, "-ilname": true, "-type": true, "-xtype": true, "-perm": true, "-user": true, "-group": true, "-uid": true, "-gid": true,
 	"-newer": true, "-anewer": true, "-cnewer": true, "-size": true, "-mtime": true, "-atime": true, "-ctime": true, "-mmin": true,
 	"-amin": true, "-cmin": true, "-maxdepth": true, "-mindepth": true, "-samefile": true, "-fstype": true, "-links": true, "-inum": true,
-	"-used": true, "-printf": true, "-fprint": true, "-fprint0": true, "-context": true, "-D": true, "-O": true,
+	"-used": true, "-printf": true, "-fprint": true, "-fprint0": true, "-context": true,
 }
 
 // findSink looks at the words of find that can run code or add a predicate: the command of -exec, a value that the shell
 // splits (outside double quotes), and a quoted value in the place of a predicate (after the first path), where a value that
-// starts with a dash such as -delete or -exec is read as one. The first path, the operands of the predicates and the words
+// starts with a dash such as -delete or -exec is read as one. The global options before the starting points (-H, -L, -P,
+// -D <opts>, -O<n>), the first path, the operands of the predicates and the words
 // of the command of -exec are left alone.
 func (rule *RuleArgumentInjection) findSink(s *runscript.Script, c *runscript.Command) (*runscript.Word, data, string) {
 	args := c.Args
@@ -133,6 +137,17 @@ func (rule *RuleArgumentInjection) findSink(s *runscript.Script, c *runscript.Co
 			}
 			continue
 		case static && (v == "-H" || v == "-L" || v == "-P"):
+			continue
+		case static && !seenPredicate && paths == 0 && (v == "-D" || reFindOptimise.MatchString(v)):
+			// the global options come before the starting points: -D takes the next word, -O<n> has its level attached
+			if v == "-D" && i+1 < len(args) {
+				i++
+				if isUnquotedExpansion(args[i]) {
+					if d := rule.judge(s, c, args[i]); d.kind == dataUntrusted {
+						return args[i], d, "find-split"
+					}
+				}
+			}
 			continue
 		case static && (strings.HasPrefix(v, "-") && len(v) > 1 || v == "(" || v == `\(` || v == "!" || v == `\!`):
 			seenPredicate = true
