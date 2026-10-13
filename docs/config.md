@@ -85,7 +85,7 @@ ignores:
     uses: actions/checkout
     file: .github/workflows/release.yaml
     reason: pinned by an organization ruleset
-    expires: 2027-06-30
+    expires: "2027-06-30"
 
 # How shellcheck is run for the scripts of 'run:' steps. All keys are optional. By default shellcheck runs with --norc.
 shellcheck:
@@ -344,7 +344,7 @@ ignores:
     job: release                   # optional job ID
     step: checkout                 # optional step id or name
     reason: pinned by an organization ruleset
-    expires: 2027-06-30
+    expires: "2027-06-30"
 ```
 
 | Key       | Meaning                                                                                                                                      |

@@ -308,12 +308,6 @@ func TestConfigSchemaHasEveryRuleAndOption(t *testing.T) {
 	}
 	for _, r := range ruleRegistry {
 		s := rules[r.ID].(map[string]any)
-		if len(r.Options) == 0 {
-			if all, _ := s["allOf"].([]any); len(all) != 1 || all[0].(map[string]any)["$ref"] != "#/definitions/level" {
-				t.Errorf("%s has no options and must be a level: %v", r.ID, s)
-			}
-			continue
-		}
 		alt := s["oneOf"].([]any)[1].(map[string]any)["properties"].(map[string]any)
 		want := []string{"level"}
 		for _, o := range r.Options {

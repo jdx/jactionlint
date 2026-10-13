@@ -181,10 +181,15 @@ func ConfigSchema() []byte {
 		"additionalProperties": false,
 		"properties":           props,
 		"definitions": jsonObject{
+			"severity": jsonObject{
+				"description": "The level of a rule: error (fails the run), warn, info or off.",
+				"type":        "string",
+				"enum":        levelValues,
+			},
 			"level": jsonObject{
-				"description": "The level of a rule: error (fails the run), warn, info or off. true enables the rule at its default level and false is off.",
+				"description": "The value of a rule: a level (error, warn, info or off), true for the default level of the rule, or false for off.",
 				"oneOf": []jsonObject{
-					{"type": "string", "enum": levelValues},
+					sRef("severity"),
 					{"type": "boolean"},
 				},
 			},
@@ -238,7 +243,7 @@ func sIgnore(ids []string) jsonObject {
 			"job":     sStr("The ID of the job."),
 			"step":    sStr("The id or the name of the step."),
 			"reason":  sStr("Why the finding is accepted. It is for the readers of the file."),
-			"expires": jsonObject{"type": "string", "description": "The last day (YYYY-MM-DD, UTC) the entry accepts findings. After it the findings come back and the expired-ignore rule reports the entry.", "pattern": `^\d{4}-\d{2}-\d{2}$`},
+			"expires": jsonObject{"type": "string", "description": "The last day (YYYY-MM-DD, UTC) the entry accepts findings. After it the findings come back and the expired-ignore rule reports the entry. Quote it (\"2027-06-30\") if your editor reads an unquoted date as a timestamp, which has no string type.", "pattern": `^\d{4}-\d{2}-\d{2}$`},
 		},
 		"required": []string{"rule"},
 		// The parser rejects an entry which says nothing about where: it would turn the rule off everywhere, which is
@@ -277,10 +282,8 @@ func ruleSchema(r RuleInfo) jsonObject {
 		desc += fmt.Sprintf("Profile: %s. ", r.Profile)
 	}
 	desc += fmt.Sprintf("Default level: %s. %s", r.DefaultLevel, r.DocURL())
-	if len(r.Options) == 0 {
-		return sDescribedRef(desc, "level")
-	}
-	opts := jsonObject{"level": sDescribedRef("The level of the rule.", "level")}
+	// Inside a mapping the level is a severity: true and false are the whole value of a rule only
+	opts := jsonObject{"level": sDescribedRef("The level of the rule: error, warn, info or off.", "severity")}
 	for _, o := range r.Options {
 		opts[o.Name] = optionSchema(o)
 	}

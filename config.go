@@ -680,7 +680,7 @@ paths:
 #    uses: actions/checkout
 #    file: .github/workflows/release.yaml
 #    reason: pinned by an organization ruleset
-#    expires: 2027-06-30
+#    expires: "2027-06-30"
 
 # Controls what permissions are assumed for a caller workflow that declares no
 # "permissions:" block at all when checking reusable workflow calls. Unset, only
