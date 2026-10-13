@@ -1,0 +1,2 @@
+test.yaml:9:38: writing to "GITHUB_OUTPUT" creates a file with that name in the working directory, because without a `$` it is not the variable: the runner never sees it, so nothing is set as an output of the step. write `"$GITHUB_OUTPUT"` [environment-file-redirect]
+test.yaml:14:22: `>` empties $GITHUB_OUTPUT before it writes, so what this script wrote to it before is lost. append with `>>` [environment-file-redirect]

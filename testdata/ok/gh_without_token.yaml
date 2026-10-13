@@ -1,0 +1,130 @@
+on:
+  workflow_dispatch:
+    inputs:
+      runner:
+        type: string
+env:
+  GLOBAL: x
+jobs:
+  step-env:
+    runs-on: ubuntu-latest
+    steps:
+      - run: gh pr list
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - run: gh pr list
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - run: gh pr list
+        env:
+          GH_HOST: ghe.example.com
+          GH_ENTERPRISE_TOKEN: ${{ secrets.GHE_TOKEN }}
+  job-env:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - run: gh pr list
+  container-env:
+    runs-on: ubuntu-latest
+    container:
+      image: alpine
+      env:
+        GH_TOKEN: ${{ github.token }}
+    steps:
+      - run: gh pr list
+  env-from-an-expression:
+    runs-on: ubuntu-latest
+    env: ${{ fromJSON(vars.ENV) }}
+    steps:
+      - run: gh pr list
+  token-in-the-script:
+    runs-on: ubuntu-latest
+    steps:
+      - run: GH_TOKEN=${{ github.token }} gh pr list
+      - run: env GH_TOKEN=${{ github.token }} gh pr list
+      - run: |
+          export GH_TOKEN=${{ github.token }}
+          gh pr list
+      - run: echo "${{ github.token }}" | gh auth login --with-token
+  token-written-by-a-step:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "GH_TOKEN=${{ secrets.APP_TOKEN }}" >> "$GITHUB_ENV"
+      - run: gh pr list
+  token-exported-by-a-script-of-an-action:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: core.exportVariable('GH_TOKEN', 'x')
+      - run: gh pr list
+  login:
+    runs-on: ubuntu-latest
+    steps:
+      - run: gh auth login --with-token < token.txt
+      - run: gh pr list
+      - run: gh auth status
+  after-a-local-action:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: ./.github/actions/setup
+      - run: gh pr list
+  commands-that-need-no-token:
+    runs-on: ubuntu-latest
+    steps:
+      - run: gh --version
+      - run: gh pr list --help
+      - run: gh help
+      - run: gh completion -s bash
+      - run: gh config set prompt disabled
+      - run: gh extension install octo/gh-x
+      - run: gh my-extension foo
+      - run: gh
+  not-a-command:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "gh pr list"
+      - run: |
+          # gh pr list
+          cat <<EOF
+          gh pr list
+          EOF
+      - run: command -v gh
+      - run: brew install gh
+      - run: ssh host gh pr list
+      - run: ./gh-wrapper.sh pr list
+      - run: $GH pr list
+  runners-that-may-be-logged-in:
+    runs-on: [self-hosted, linux]
+    steps:
+      - run: gh pr list
+  runner-group:
+    runs-on:
+      group: my-group
+    steps:
+      - run: gh pr list
+  runner-from-an-input:
+    runs-on: ${{ inputs.runner }}
+    steps:
+      - run: gh pr list
+  matrix-with-a-self-hosted-runner:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, self-hosted]
+    steps:
+      - run: gh pr list
+  not-bash:
+    runs-on: windows-latest
+    steps:
+      - run: gh pr list
+      - run: gh pr list
+        shell: pwsh
+  matrix-with-windows:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - run: gh pr list

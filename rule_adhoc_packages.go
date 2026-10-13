@@ -50,20 +50,71 @@ func (rule *RuleAdhocPackages) VisitStep(n *Step) error {
 	}
 	s, origin := rule.script(run)
 	if s == nil {
+		rule.checkLines(run)
 		return nil
 	}
 	for _, c := range s.Commands {
 		if tool, instead, ok := adhocInstall(c); ok {
 			start, end := commandRange(s, origin, c)
-			resolved := "its version and its dependencies are resolved anew on every run"
-			if in := c.Installs(); in != nil && registryPackagesPinned(in) {
-				// The version is fixed, but the packages it depends on are not
-				resolved = "its dependencies are resolved anew on every run, although its version is pinned"
-			}
-			rule.errorIDAt("adhoc-packages", start, "command "+quote(c.Name+" "+c.Verb())+" installs a package outside of a lock file: "+resolved+". add the package to "+tool+" and install with "+instead).endAt(end)
+			rule.reportInstall(c, tool, instead, start, end)
 		}
 	}
 	return nil
+}
+
+func (rule *RuleAdhocPackages) reportInstall(c *runscript.Command, tool, instead string, start, end *Pos) {
+	resolved := "its version and its dependencies are resolved anew on every run"
+	if in := c.Installs(); in != nil && registryPackagesPinned(in) {
+		// The version is fixed, but the packages it depends on are not
+		resolved = "its dependencies are resolved anew on every run, although its version is pinned"
+	}
+	rule.errorIDAt("adhoc-packages", start, "command "+quote(c.Name+" "+c.Verb())+" installs a package outside of a lock file: "+resolved+". add the package to "+tool+" and install with "+instead).endAt(end)
+}
+
+// pwshSyntax are the characters that make a line of a pwsh, powershell or cmd script more than a plain command with
+// words: variables, subexpressions, pipes, redirections, statement separators, escapes and blocks. Such a line is not
+// read.
+const pwshSyntax = "$`;|&<>(){}%^"
+
+// checkLines looks for installs in the scripts of the shells the analyzer does not parse (pwsh, powershell, cmd), line by
+// line. A line that is a plain command (`npm install typescript`, the same words in every shell) is read like a bash
+// command. A line with anything of the syntax of the shell, and the lines of a statement that go on over several lines, are
+// left alone: what they run is not known, so there is no finding.
+func (rule *RuleAdhocPackages) checkLines(run *ExecRun) {
+	switch rule.shellName(run) {
+	case "pwsh", "powershell", "cmd":
+	default:
+		return
+	}
+	origin := run.Run.scriptOrigin()
+	off := 0
+	for i, line := range strings.Split(run.Run.Value, "\n") {
+		lineStart := off
+		off += len(line) + 1
+		t := strings.TrimSpace(strings.TrimSuffix(line, "\r"))
+		if t == "" || strings.ContainsAny(t, pwshSyntax) || strings.HasSuffix(t, ",") {
+			continue
+		}
+		lead := strings.Index(line, t)
+		s, err := runscript.Analyze(t, "bash")
+		if err != nil {
+			continue
+		}
+		for _, c := range s.Commands {
+			tool, instead, ok := adhocInstall(c)
+			if !ok {
+				continue
+			}
+			pos := func(offset int) *Pos {
+				if l, col, ok := run.Run.valueAt(lineStart + lead + offset); ok {
+					return &Pos{Line: l, Col: col}
+				}
+				p := origin.Map(i+1, lead+offset+1)
+				return &Pos{Line: p.Line, Col: p.Col}
+			}
+			rule.reportInstall(c, tool, instead, pos(c.Offset), pos(c.End))
+		}
+	}
 }
 
 // adhocInstall reports whether the command installs packages by name with a tool whose packages should come from

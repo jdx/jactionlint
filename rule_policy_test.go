@@ -661,6 +661,9 @@ func FuzzArtipackedFix(f *testing.F) {
 		"on: push\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - {uses: actions/checkout@v4, with: {path: x}}\n",
 		"on: push\r\njobs:\r\n  j:\r\n    runs-on: ubuntu-latest\r\n    steps:\r\n      -   uses:   actions/checkout@v4   # c\r\n",
 		"on: push\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n        with: &w\n          path: x\n",
+		// a "with:" that is an expression, and one with a ${{ insert }} key, are not judged
+		"on: push\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n        with: ${{ fromJSON(vars.W) }}\n",
+		"on: push\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n        with:\n          ${{ insert }}: ${{ fromJSON(vars.W) }}\n          path: x\n",
 	} {
 		f.Add(s)
 	}

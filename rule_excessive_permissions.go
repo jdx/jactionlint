@@ -17,6 +17,7 @@ var scopeWriteImpact = map[string]string{
 	"copilot-requests":     "make Copilot requests",
 	"deployments":          "create and modify deployments",
 	"discussions":          "create and modify discussions",
+	"drives":               "commit changes to the persistent workspace storage of GitHub Drives",
 	"id-token":             "request OIDC tokens to authenticate to cloud providers and package registries",
 	"issues":               "create and modify issues and comments",
 	"packages":             "publish and delete packages",
@@ -38,7 +39,10 @@ var scopeWriteImpact = map[string]string{
 // A job without any `permissions:` in a workflow without any is the business of the missing-permissions
 // rule. The "require-workflow-permissions" option also reports a workflow without a top-level
 // `permissions:`, even when its jobs set their own, so that the default permissions of the repository
-// apply to no job added later.
+// apply to no job added later. Unset, the option is on under the pedantic profile, like the pedantic persona
+// of zizmor, which reports every workflow without a top-level `permissions:`. The finding is reported at the
+// first key of the workflow (zizmor reports the start of the document), not at line 1, which a license header
+// of comments would move away from it.
 type RuleExcessivePermissions struct {
 	RuleBase
 	// trigger is the name of the privileged trigger of the workflow, or "".
@@ -71,10 +75,15 @@ func (rule *RuleExcessivePermissions) VisitWorkflowPre(n *Workflow) error {
 		return nil
 	}
 	if n.Permissions == nil {
-		if on, _ := rule.Config().ruleOptionBool("excessive-permissions", "require-workflow-permissions"); on {
+		// A workflow without events or jobs is a syntax error (workflow-syntax) and has no token to restrict
+		if n.Action == nil && len(n.On) > 0 && len(n.Jobs) > 0 && rule.requireWorkflowPermissions() {
+			pos := &Pos{Line: 1, Col: 1}
+			if line, ok := firstKeyLine(n.Source); ok {
+				pos = &Pos{Line: line, Col: 1}
+			}
 			rule.ReportID(
 				"excessive-permissions",
-				&Pos{Line: 1, Col: 1},
+				pos,
 				"the workflow has no top-level \"permissions:\", so every job without its own gets the default permissions of the repository. set \"permissions: {}\" at the workflow level and grant the scopes to the jobs which need them",
 			)
 		}
@@ -82,6 +91,16 @@ func (rule *RuleExcessivePermissions) VisitWorkflowPre(n *Workflow) error {
 	}
 	rule.check(n.Permissions, false)
 	return nil
+}
+
+// requireWorkflowPermissions reports whether a workflow without a top-level "permissions:" is reported. An
+// explicit "require-workflow-permissions" decides; unset, the pedantic profile turns it on and the others
+// leave it off (a job without any permissions is the business of missing-permissions in every profile).
+func (rule *RuleExcessivePermissions) requireWorkflowPermissions() bool {
+	if on, ok := rule.Config().ruleOptionBool("excessive-permissions", "require-workflow-permissions"); ok {
+		return on
+	}
+	return rule.Config() != nil && rule.Config().Profile == ProfilePedantic
 }
 
 // VisitJobPre is callback when visiting Job node before visiting its children.
@@ -133,8 +152,8 @@ func (rule *RuleExcessivePermissions) check(p *Permissions, job bool) {
 		if s == nil || s.Name == nil || s.Value == nil || s.Value.Value != "write" {
 			continue
 		}
-		if _, ok := allPermissionScopes[name]; !ok {
-			continue // reported by the permissions rule
+		if levels, ok := allPermissionScopes[name]; !ok || !slices.Contains(levels, "write") {
+			continue // an unknown scope, or a level the scope does not have (models: write): reported by the permissions rule
 		}
 		impact := scopeWriteImpact[name]
 		if job {
@@ -179,7 +198,7 @@ func init() {
 		RuleInfo{
 			ID: "excessive-permissions", Group: RuleGroupSecurity, Summary: "The GITHUB_TOKEN gets write access that is broader than needed.",
 			DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-excessive-permissions",
-			Options: []RuleOption{{Name: "require-workflow-permissions", Kind: RuleOptionBool, Default: false, Summary: "Also report a workflow which has no top-level permissions, even when its jobs set their own."}},
+			Options: []RuleOption{{Name: "require-workflow-permissions", Kind: RuleOptionBool, Summary: "Also report a workflow which has no top-level permissions, even when its jobs set their own. Unset, it runs under the pedantic profile."}},
 		},
 	)
 	registerRuleFactory("excessive-permissions", func(env *RuleEnv) []Rule {
