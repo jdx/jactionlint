@@ -21,6 +21,7 @@ List of checks:
 - [Strict type checks for comparison operators](#check-comparison-types)
 - [shellcheck integration for `run:`](#check-shellcheck-integ)
 - [pyflakes integration for `run:`](#check-pyflakes-integ)
+- [JavaScript syntax of `actions/github-script`](#check-github-script-syntax)
 - [Script injection by potentially untrusted inputs](#untrusted-inputs)
 - [Job dependencies validation](#check-job-deps)
 - [Parallel steps](#check-parallel-step-refs)
@@ -1340,6 +1341,73 @@ Since both `${{ }}` expression syntax is invalid as Python, remaining `${{ }}` m
 jactionlint replaces `${{ }}` with underscores. For example `print('${{ matrix.os }}')` is replaced with
 `print('________________')`.
 
+<a id="check-github-script-syntax"></a>
+## JavaScript syntax of `actions/github-script`
+
+Example input:
+
+```yaml
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      # Yay! No error
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const { data } = await github.rest.pulls.list({ ...context.repo })
+            return data.length
+      # ERROR: The comma is not followed by a value
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const issue = await github.rest.issues.get({
+              ...context.issue,
+              state: ,
+            })
+      # ERROR: exec is an argument of the function which runs the script since v4
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const exec = require('child_process').exec
+            exec('ls')
+```
+
+Output:
+
+```
+test.yaml:18:22: the script of actions/github-script has a syntax error: Unexpected token ',' [github-script-syntax]
+   |
+18 |               state: ,
+   |                      ^
+test.yaml:24:19: the script of actions/github-script has a syntax error: Identifier 'exec' has already been declared [github-script-syntax]
+   |
+24 |             const exec = require('child_process').exec
+   |                   ^
+```
+
+<!-- Skip playground link -->
+
+The `script` input of [actions/github-script](https://github.com/actions/github-script) is JavaScript. The action runs it as the
+body of an `async` function (`new AsyncFunction(...names, script)`), which is why `await` and `return` can be used at the top
+level, and the names of its arguments (`github`, `context`, `core`, `exec`, `glob`, `io`, `require`, ...) are already taken in
+it. A syntax error is found by GitHub only when the step runs, and the message of the action does not say where it is.
+
+jactionlint checks the script with `node --check`, wrapped in a function with the arguments of the version of the action, and
+reports the first syntax error at its place in the workflow file. It needs `node` (version 20 or later) in the `PATH`; without it
+the rule does nothing and the run says so in a note (and in the `externalTools` property of the SARIF log, see [usage](usage.md)). Only the syntax is checked: node does not run the script, so a module which does not exist or a variable which is not
+defined is not reported.
+
+The arguments of the function are those of the version in the reference: `context`, `core`, `github`, `io` and `require` for all
+versions, `glob` since v3, `exec` and `__original_require__` since v4, `octokit` since v8 and `getOctokit` since v9. A reference
+that does not name a version (a commit, a branch) has the ones that every version has.
+
+An expression `${{ }}` in the script is replaced by underscores of the same length, as `shellcheck` does for `run:`, because GitHub
+replaces it before node sees the script. The replacement is sound only where any value could stand, so a script is not checked
+when an expression is not closed, spans lines, has `}}` inside a string, or touches a letter, a digit, `_` or `$` (`1${{ x }}`,
+`a${{ x }}b`), because the value could continue a number or a name.
+
 <a id="untrusted-inputs"></a>
 ## Script injection by potentially untrusted inputs
 
@@ -2417,6 +2485,15 @@ to run the job. So specifying proper labels at `runs-on:` is important.
 
 jactionlint checks proper label is used at `runs-on:` configuration. Even if an expression is used in the section like
 `runs-on: ${{ matrix.foo }}`, jactionlint parses the expression and resolves the possible values, then validates the values.
+A label that is a matrix value written together with text (`runs-on: ${{ matrix.os }}-latest`, `ubuntu-${{ matrix.version }}`)
+is resolved the same way: with `os: [macos, linux]` the labels are `macos-latest` and `linux-latest`, and the second one is
+reported at `linux` in the matrix. It is resolved only when the label has one matrix name (`${{ matrix.os }}-${{ matrix.arch }}` is
+not, because `exclude` and `include` decide which pairs run), when the values are strings (a number such as `20.10`, which GitHub
+prints as `20.1`, is skipped), and a value of the row is used only when a job certainly has it. The matrix is modelled as GitHub
+documents it: the base is the cross product of the rows, an `exclude` entry removes the combinations that have all of its
+pairs (so `{os: linux, node: 18}` leaves `linux` with `node: 20`), and `include` adds jobs afterwards, so a value that `include` names
+always has one. Wherever an expression makes the effect unknown (a value in an `exclude` entry, an entry or the whole `exclude`,
+a row of another key) the value is not reported.
 
 When you define some custom labels for your self-hosted runner, jactionlint does not know the labels. Please set the label
 names in [`jactionlint.yaml` configuration file](config.md) to let jactionlint know them. A job that has the label `self-hosted`
@@ -2593,6 +2670,9 @@ Owners and repositories are compared case-insensitively. When several patterns m
 they are written in: in the example, `actions/checkout` needs a commit SHA while the other `actions/*` actions only need a ref.
 Reusable workflow calls follow the same patterns. Patterns describe repositories, so a Docker image follows the `*` pattern.
 Invalid patterns and unknown policies are errors when the configuration is read.
+
+With `--online --fix` a tag is pinned to its commit and the tag is named in a comment: the most specific version tag of the commit
+(`# v4.2.2` for `@v4`), or as written with the option `short-pin-comment: true`. See [the usage document](usage.md#online-checks).
 
 <a id="check-immutable-release"></a>
 #### Tags of immutable releases (online)
@@ -4845,6 +4925,24 @@ fewer `*`, (3) a pattern with a tag beats the same name without one, (4) the lon
 these, the first one in lexical order. So `node` beats `docker.io/library/*`, `docker.io/library/*` beats `docker.io/*`, `node:20`
 beats `node`, and `ghcr.io/org/app` beats `ghcr.io/org/*`, which beats `ghcr.io/*` and `*`. A policy wins over `require-digest`. `node` and `docker.io/library/node` are the same image.
 To forbid or allow images by name, see the options `images-allow` and `images-deny` of [`forbidden-uses`](#check-forbidden-uses).
+
+With `--online --fix=unsafe` the digest is written for you: `postgres:16` becomes `postgres:16@sha256:...` (the format Renovate keeps up to date), and an
+image without a tag becomes `image:latest@sha256:...`, because that is what Docker pulls. It works for `container:`, `services:`, the values a
+matrix writes, `uses: docker://` and the `runs.image: docker://` of an action. The digest is asked of the registry (the v2 API, a HEAD request of the
+manifest) and is the one `docker pull image:tag` resolves today: for a multi-platform image the digest of its index. Only
+Docker Hub (`docker.io`, `ubuntu`, `owner/image`) and ghcr.io are asked, and an image of another registry gets the reason in the finding instead of a
+request. Both give an anonymous token for a public image; for a private image on ghcr.io the token of GitHub (`GITHUB_TOKEN`) is sent to ghcr.io as
+its password when the anonymous request is refused, and to no other host. The fix is **unsafe** (`--fix=unsafe`): the image behind a tag moves,
+and the digest is the image of this moment, so look at what you are pinning. It never updates a pin to a newer image. `--online-allow` and `--online-deny`
+apply to images as `owner/image` (`library/ubuntu` for an official image of Docker Hub), whichever registry it is on, and `--online=cache` does not look images up at all (a digest is not kept in the cache, because a tag moves; the finding says that the fix needs `--online`, and it is no skipped lookup for `strict`). It does not ask
+the registry. A tag that does not exist, a private image and a registry which fails leave the finding without a fix, with the reason.
+What the answers of the registries mean (the same for Docker Hub and ghcr.io):
+
+| Request | Answer | Meaning |
+| --- | --- | --- |
+| token service | 401, 403, 404, 429, 5xx, no answer | the registry fails: the finding says so, and after three failures in a row (at once for a rate limit) the registry is not asked again in this run |
+| manifest | 401, 403, 404 | the registry answered: the image is private or does not exist for this token. No failure, no backoff. ghcr.io is asked once more with the GitHub token first |
+| manifest | 429, 5xx, no answer | the registry fails, as above |
 
 <a id="check-self-repository"></a>
 ## Self-repository syntax (pedantic)
@@ -9975,7 +10073,7 @@ has. GitHub removed Node.js 20 on 2026-09-23 ([changelog][node20-removed]; the p
 
 That is why the rule is not part of the `default` or `correctness` profile: the action does not fail, and jactionlint cannot tell
 a runner on github.com from GitHub Enterprise Server or an old self-hosted runner, where `node20` can still be the runtime that runs.
-The finding says what holds everywhere: the action declares a runtime that the runner on github.com does not provide. It checks two things.
+The finding says what holds everywhere: the action declares a runtime that the runner on github.com does not provide. It checks three things.
 
 **The actions that a workflow uses.** The generated data of the popular actions (`PopularActionRuntimes`) records the `runs.using` of every
 major version they know, taken from the `action.yml` of that major when the data was generated. A `uses:` of a major that declares
@@ -9998,6 +10096,21 @@ runs:
 A workflow that calls a local action is not reported a second time: the metadata file of the action is. `node12` and `node16` in a local
 action are also reported by [`invalid-local-action`](#action-metadata-syntax) where a workflow calls it, because the runner does not document them
 anymore.
+
+**The variables that chose the runtime.** `ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION` kept JavaScript actions on Node.js 20 after Node.js 24
+became the default on 2026-06-16, and `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24` ran them on Node.js 24 before that. The runner reads both in
+`NodeUtil.DetermineActionsNodeVersion` and ignores both once its server side flag `requirenode24` is on, which is the case since Node.js 20 was
+removed. The [changelog][node20-removed] says that the opt-out "is no longer available"; it does not mention the other variable, which the
+runner source shows to be redundant by the same flag. A key of that name in `env:` of the workflow, of a job or of a step (also of the steps
+of a composite action) is reported at the name, whatever its value is:
+
+```yaml
+env:
+  ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true # warning: no longer does anything
+```
+
+The `env:` of a `container:` or of a service is not looked at, and neither is a variable written to `$GITHUB_ENV` by a script or
+set in the environment of a self-hosted runner.
 
 [yamllint]: https://github.com/adrienverge/yamllint
 [node20-removed]: https://github.blog/changelog/2026-09-23-node-20-is-no-longer-available-in-github-actions
@@ -10077,7 +10190,7 @@ way because any caller can pass attacker-controlled text. jactionlint does not l
 
 How the rules treat actions:
 
-- **Applies** to the steps (and the metadata) of an action: `action-syntax`, `adhoc-packages`, `archived-uses`, `argument-injection`, `artipacked`, `background-step-not-waited`, `checkout-static-credentials`, `command-injection`, `conflicting-action-inputs`, `constant-condition`, `context-availability`, `continue-on-error`, `deprecated-action-input`, `deprecated-commands`, `deprecated-node-runtime`, `duplicate-key`, `duplicate-step-id`, `environment-file-redirect`, `expired-ignore`, `expression-syntax`, `expression-type`, `fail-fast-action-inputs`, `forbidden-uses`, `github-app`, `if-always-true`, `impostor-commit`, `insecure-commands`, `insecure-ssh-keyscan`, `insecure-url-scheme`, `invalid-env-var-name`, `invalid-function-call`, `invalid-id`, `invalid-ignore-comment`, `invalid-local-action`, `invalid-parallel-step`, `invalid-shell-name`, `invalid-uses`, `invisible-characters`, `known-vulnerable-actions`, `malformed-expression-delimiters`, `max-run-lines`, `merge-key`, `misfeature`, `missing-action-input`, `multiline-plain-run`, `obfuscation`, `outdated-action-runner`, `output-clobbering`, `pipeline-without-pipefail`, `pyflakes`, `recursive-alias`, `ref-confusion`, `ref-version-mismatch`, `repojacking`, `require-expression-wrapping`, `self-repository`, `shellcheck`, `stale-action-refs`, `superfluous-actions`, `template-injection`, `typosquat-uses`, `undefined-function`, `undefined-property`, `unknown-action-input`, `unlocked-install`, `unpinned-images`, `unpinned-tools`, `unpinned-uses`, `unsound-contains`, `unsound-prefix-match`, `unsound-ternary`, `unused-anchor`, `unused-ignore`, `unverified-download`, `use-trusted-publishing`, `yaml-syntax`.
+- **Applies** to the steps (and the metadata) of an action: `action-syntax`, `adhoc-packages`, `archived-uses`, `argument-injection`, `artipacked`, `background-step-not-waited`, `checkout-static-credentials`, `command-injection`, `conflicting-action-inputs`, `constant-condition`, `context-availability`, `continue-on-error`, `deprecated-action-input`, `deprecated-commands`, `deprecated-node-runtime`, `duplicate-key`, `duplicate-step-id`, `environment-file-redirect`, `expired-ignore`, `expression-syntax`, `expression-type`, `fail-fast-action-inputs`, `forbidden-uses`, `github-app`, `github-script-syntax`, `if-always-true`, `impostor-commit`, `insecure-commands`, `insecure-ssh-keyscan`, `insecure-url-scheme`, `invalid-env-var-name`, `invalid-function-call`, `invalid-id`, `invalid-ignore-comment`, `invalid-local-action`, `invalid-parallel-step`, `invalid-shell-name`, `invalid-uses`, `invisible-characters`, `known-vulnerable-actions`, `malformed-expression-delimiters`, `max-run-lines`, `merge-key`, `misfeature`, `missing-action-input`, `multiline-plain-run`, `obfuscation`, `outdated-action-runner`, `output-clobbering`, `pipeline-without-pipefail`, `pyflakes`, `recursive-alias`, `ref-confusion`, `ref-version-mismatch`, `repojacking`, `require-expression-wrapping`, `self-repository`, `shellcheck`, `stale-action-refs`, `superfluous-actions`, `template-injection`, `typosquat-uses`, `undefined-function`, `undefined-property`, `unknown-action-input`, `unlocked-install`, `unpinned-images`, `unpinned-tools`, `unpinned-uses`, `unsound-contains`, `unsound-prefix-match`, `unsound-ternary`, `unused-anchor`, `unused-ignore`, `unverified-download`, `use-trusted-publishing`, `yaml-syntax`.
 - **Caller-dependent**: `agentic-actions`, `bot-conditions`, `cache-poisoning`, `github-env` (its findings about untrusted input do not depend on the caller), `untrusted-artifact` and `untrusted-checkout`.
 - **Not applicable** because an action does not have what the rule checks, or because only the calling job can decide (`unused-baseline-entry` is about the baseline file, not about a workflow or an action): `anonymous-definition`, `comment-trigger-authorization`, `concurrency-cancels-prs`, `concurrency-cancels-release`, `concurrency-deadlock`, `concurrency-limits`, `conflicting-runner-labels`, `cron-too-frequent`, `cyclic-job-needs`, `dangerous-triggers`, `dependabot-cooldown`, `dependabot-execution`, `dependabot-missing-actions-update`, `dependabot-syntax`, `deprecated-runner-label`, `duplicate-job-id`, `duplicate-job-needs`, `duplicate-triggers`, `event-name-never-received`, `excessive-permissions`, `gate-job-skipped-on-failure`, `gh-without-token`, `hardcoded-container-credentials`, `insufficient-permissions`, `invalid-activity-type`, `invalid-cron`, `invalid-event-config`, `invalid-event-filter`, `invalid-glob`, `invalid-label-pattern`, `invalid-local-workflow`, `invalid-permissions`, `invalid-timezone`, `invalid-workflow-call`, `invalid-workflow-call-input`, `invalid-workflow-dispatch-input`, `local-action-checkout`, `matrix-duplicate-value`, `matrix-invalid-exclude`, `missing-permissions`, `missing-timeout`, `missing-workflow-input`, `missing-workflow-secret`, `mutable-runner-label`, `overprovisioned-secrets`, `require-shell`, `required-actions`, `secrets-inherit`, `secrets-outside-env`, `self-hosted-runner`, `timeout-too-long`, `ubuntu-slim-limits`, `undefined-job-needs`, `undocumented-permissions`, `unknown-event`, `unknown-runner-label`, `unknown-workflow-input`, `unknown-workflow-secret`, `unredacted-secrets`, `unused-baseline-entry`, `unused-job-output`, `unused-needs`, `unused-workflow-input`, `unused-workflow-secret`, `workflow-call-permissions`, `workflow-input-type`, `workflow-run-names`, `workflow-secret-scope`, `workflow-syntax`.
 

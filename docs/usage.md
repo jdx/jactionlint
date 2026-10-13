@@ -402,6 +402,7 @@ note: shellcheck was not found, so it did not check 12 shell scripts. install it
   number of scripts the tool checked and `skippedScripts` the number that it would have checked. A tool which no script needed (pyflakes in a
   repository without `shell: python`) and a tool turned off with an empty command are not listed, so a `ran` has `scripts` of at least 1 and a
   `not found` has `skippedScripts` of at least 1, and the log says the same as the note.
+  `node` is a third tool, for the rule `github-script-syntax`; it has no option, so the note says to turn the rule off.
 
   ```json
   "properties": {
@@ -1002,7 +1003,19 @@ it points to and naming the tag in a comment, the format Dependabot and Renovate
 ```yaml
 - uses: actions/checkout@v4
 # becomes
-- uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+- uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+```
+
+The comment names the most specific version tag that points to the commit (`# v4.2.2`, not `# v4`), as zizmor, pinact and Renovate
+do, because the moving tag `v4` will point somewhere else after the next release. A tag which is not a version (`release`), and
+a commit with two different versions of the same specificity (`v2.0.1` and `v2.0.2`), are named as written. The tag chosen is always
+a refinement of the one written (`v4` can become `v4.2.2`, never `v5.0.0`). A comment that is already there is not rewritten, and neither is the tag refined when the repository has more tags than were read. To keep the
+tag as written (`# v4`), set `short-pin-comment` of the rule:
+
+```yaml
+rules:
+  unpinned-uses:
+    short-pin-comment: true
 ```
 
 The fix is applied by plain `--fix` because it keeps the code the same: it is offered only when the ref is the name of a tag
@@ -1011,6 +1024,26 @@ image or a line with a comment that does not name the ref is left to you.
 
 ```sh
 jactionlint --online --fix
+```
+
+#### Pin container images to digests with `--online --fix=unsafe`
+
+The images of `container:`, `services:`, `uses: docker://` and `runs.image: docker://` (the findings of `unpinned-images` and of `unpinned-uses`) get the
+digest which their tag has in the registry, in the format of Renovate:
+
+```yaml
+container: postgres:16
+# becomes
+container: postgres:16@sha256:ca0bd484cb98bf4b24eb1010e73fb3fcbd6714d240fbc1a10eea5b7dbecb641d
+```
+
+The fix is unsafe, so it needs `--fix=unsafe`: a tag moves, and the digest pins the image of today. Docker Hub and ghcr.io are asked
+(anonymously, and with the GitHub token for a private image of ghcr.io); another registry is not, and the finding says so. The registries
+are asked once for each image and tag, with a timeout, and `--online-allow` and `--online-deny` apply (an image is matched as `owner/image`). See
+[the check](checks.md#check-unpinned-images).
+
+```sh
+jactionlint --online --fix=unsafe
 ```
 
 <a id="hk"></a>
