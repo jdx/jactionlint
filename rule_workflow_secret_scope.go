@@ -28,7 +28,7 @@ func envOverrides(env *Env, name string) bool {
 	if env == nil {
 		return false
 	}
-	if env.Expression != nil {
+	if env.Dynamic() {
 		return true
 	}
 	for _, v := range env.Vars {

@@ -1,0 +1,92 @@
+on: push
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      # ERROR: v4 from the version comment of the commit; the input is a typo
+      - uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
+        with:
+          keys: x
+          path: p
+      # ERROR: v4 from the tag
+      - uses: actions/cache@v4.2.4
+        with:
+          keys: x
+          path: p
+      # ERROR: other spellings of a version tag
+      - uses: actions/cache@v4.2
+        with:
+          keys: x
+          path: p
+      - uses: actions/cache@4.2.4
+        with:
+          keys: x
+          path: p
+      # ERROR: the comment of renovate
+      - uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # tag=v4.2.4
+        with:
+          keys: x
+          path: p
+      # ERROR: a comment with a note
+      - uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # v4 (pinned by hand)
+        with:
+          keys: x
+          path: p
+      # ERROR: the comment is the only evidence, and it names v3, a major which is outdated
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v3.6.0
+      # ERROR: the runner of a tag
+      - uses: actions/checkout@v3.6.0
+      # ERROR: the data of the major version of the comment is used even when the commit is another one
+      - uses: actions/cache@1111111111111111111111111111111111111111 # v4.2.4
+        with:
+          keys: x
+          path: p
+      # OK: no version comment, so nothing is known
+      - uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809
+        with:
+          keys: x
+          path: p
+      # OK: the comment is about something else
+      - uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # keep in sync with v4
+        with:
+          keys: x
+          path: p
+      # OK: the comment names two versions, which one is meant is not known
+      - uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # v4 -> v5
+        with:
+          keys: x
+          path: p
+      # OK: a bare number is not taken for a version
+      - uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # 4
+        with:
+          keys: x
+          path: p
+      # OK: a pre-release is not resolved
+      - uses: actions/cache@v4.2.4-beta.1
+        with:
+          keys: x
+          path: p
+      # OK: an action which is not in the data set
+      - uses: example/unknown-action@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
+        with:
+          keys: x
+      - uses: example/unknown-action@v4.2.4
+        with:
+          keys: x
+      # OK: a version which the data set does not have
+      - uses: actions/cache@v99.1.0
+        with:
+          keys: x
+      - uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # v99.1.0
+        with:
+          keys: x
+      # OK: correct inputs
+      - uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
+        with:
+          key: x
+          path: p
+      - uses: actions/cache@v4.2.4
+        with:
+          key: x
+          path: p

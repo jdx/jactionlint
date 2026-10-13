@@ -35,6 +35,7 @@ expression-syntax correctness correctness error
 expression-type correctness correctness error
 forbidden-uses configured policy error
 gate-job-skipped-on-failure default correctness error
+gh-without-token correctness correctness error
 github-app default security error
 github-env default security error
 hardcoded-container-credentials correctness security error

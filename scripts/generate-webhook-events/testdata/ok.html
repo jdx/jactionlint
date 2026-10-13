@@ -68,6 +68,32 @@
         </table>
         <p>Runs your workflow when someone forks a repository.</p>
 
+        <h2 id="merge_group" tabindex="-1">
+          <a class="heading-link" href="#merge_group">
+            <code>merge_group</code>
+            <span class="heading-link-symbol" aria-hidden="true"></span>
+          </a>
+        </h2>
+        <table aria-labelledby="merge_group">
+          <thead>
+            <tr>
+              <th scope="col">Webhook event payload</th>
+              <th scope="col">Activity types</th>
+              <th scope="col"><code>GITHUB_SHA</code></th>
+              <th scope="col"><code>GITHUB_REF</code></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><a href="/en/webhooks-and-events/webhooks/webhook-events-and-payloads#merge_group"><code>merge_group</code></a></td>
+              <td>- <code>checks_requested</code></td>
+              <td>SHA of the merge group</td>
+              <td>Ref of the merge group</td>
+            </tr>
+          </tbody>
+        </table>
+        <p>Runs your workflow when a pull request is added to a merge queue.</p>
+
         <h2 id="repository_dispatch" tabindex="-1">
           <a class="heading-link" href="#repository_dispatch">
             <code>repository_dispatch</code>

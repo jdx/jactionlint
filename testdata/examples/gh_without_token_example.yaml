@@ -1,0 +1,14 @@
+on: push
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      # ERROR: gh stops because neither GH_TOKEN nor GITHUB_TOKEN is set
+      - run: gh pr list --state open
+      # OK: the token is set for the step
+      - run: gh pr list --state open
+        env:
+          GH_TOKEN: ${{ github.token }}
+      # OK: gh --version and gh help need no token
+      - run: gh --version
