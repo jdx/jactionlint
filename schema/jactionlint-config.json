@@ -129,6 +129,7 @@
               "duplicate-key",
               "duplicate-step-id",
               "duplicate-triggers",
+              "environment-file-redirect",
               "excessive-permissions",
               "expired-ignore",
               "expression-syntax",
@@ -316,6 +317,7 @@
                   "duplicate-key",
                   "duplicate-step-id",
                   "duplicate-triggers",
+                  "environment-file-redirect",
                   "excessive-permissions",
                   "expired-ignore",
                   "expression-syntax",
@@ -456,6 +458,7 @@
                     "duplicate-key",
                     "duplicate-step-id",
                     "duplicate-triggers",
+                    "environment-file-redirect",
                     "excessive-permissions",
                     "expired-ignore",
                     "expression-syntax",
@@ -1004,6 +1007,10 @@
         "duplicate-triggers": {
           "$ref": "#/definitions/level",
           "description": "push and pull_request both run the workflow for the same commit. Group: policy. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#duplicate-triggers"
+        },
+        "environment-file-redirect": {
+          "$ref": "#/definitions/level",
+          "description": "A script writes to GITHUB_OUTPUT or another environment file of the runner without the $, or empties it with > after it wrote to it. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#environment-file-redirect"
         },
         "excessive-permissions": {
           "description": "The GITHUB_TOKEN gets write access that is broader than needed. Group: security. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#excessive-permissions",
@@ -1853,6 +1860,34 @@
         "strict-labels": {
           "description": "When true, runs-on accepts only the labels listed in labels. The built-in labels are reported unless they are listed too. The default is false.",
           "type": "boolean"
+        }
+      },
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "shellcheck": {
+      "additionalProperties": false,
+      "description": "How shellcheck is run for the scripts of run steps. By default it runs with --norc.",
+      "properties": {
+        "args": {
+          "description": "More arguments for shellcheck, one option per item with its value attached, such as --exclude=SC2129. The options jactionlint sets itself (--format, --color, --shell, --norc, --rcfile, --version, --wiki-link-count) and file names are errors.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "enable": {
+          "description": "Optional checks of shellcheck to turn on (--enable=NAME,...), such as avoid-nullary-conditions, or all.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "rcfile": {
+          "description": "A shellcheckrc file to read instead of --norc. A relative path is resolved from the repository root. The file must exist. A config file of the repository can name only a file inside the repository.",
+          "type": "string"
         }
       },
       "type": [

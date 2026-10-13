@@ -270,6 +270,7 @@ func TestConfigSchemaKnowsTheKeysOfTheParser(t *testing.T) {
 	}{
 		{"self-hosted-runner", []string{"properties", "self-hosted-runner", "properties"}, selfHostedRunnerKeys},
 		{"fix", []string{"properties", "fix", "properties"}, fixConfigKeys},
+		{"shellcheck", []string{"properties", "shellcheck", "properties"}, shellcheckConfigKeys},
 		{"online-options", []string{"properties", "online-options", "properties"}, onlineOptionsKeys},
 		{"paths", []string{"properties", "paths", "additionalProperties", "properties"}, pathConfigKeys},
 		{"ignores", []string{"properties", "ignores", "items", "properties"}, configIgnoreKeys},
@@ -382,6 +383,7 @@ func TestConfigSchemaAcceptsRealConfigs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	b = bytes.ReplaceAll(b, []byte("\r\n"), []byte("\n")) // a Windows checkout can have CRLF
 	m := regexp.MustCompile("(?s)## Configuration file\n.*?```yaml\n(.*?)```").FindSubmatch(b)
 	if m == nil {
 		t.Fatal("the example of docs/config.md is not found")
@@ -408,6 +410,7 @@ func TestConfigSchemaRejectsMistakes(t *testing.T) {
 		{"fix rule", "fix:\n  rules: [nope]\n", "is not one of"},
 		{"generated-files", "generated-files: maybe\n", "is not one of"},
 		{"required-actions", "required-actions:\n  - version: v4\n", `"action" is required`},
+		{"shellcheck key", "shellcheck:\n  rcfil: x\n", `unknown property "rcfil"`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			errs := validateConfigYAML(t, v, tc.src)

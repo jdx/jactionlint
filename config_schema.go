@@ -136,6 +136,11 @@ func ConfigSchema() []byte {
 			"enum":        []string{GeneratedFilesReport, GeneratedFilesSkipPolicy, GeneratedFilesSkip},
 			"default":     GeneratedFilesSkipPolicy,
 		},
+		"shellcheck": sObject("How shellcheck is run for the scripts of run steps. By default it runs with --norc.", jsonObject{
+			"rcfile": sStr("A shellcheckrc file to read instead of --norc. A relative path is resolved from the repository root. The file must exist. A config file of the repository can name only a file inside the repository."),
+			"args":   sStrings("More arguments for shellcheck, one option per item with its value attached, such as --exclude=SC2129. The options jactionlint sets itself (--format, --color, --shell, --norc, --rcfile, --version, --wiki-link-count) and file names are errors."),
+			"enable": sStrings("Optional checks of shellcheck to turn on (--enable=NAME,...), such as avoid-nullary-conditions, or all."),
+		}),
 		"fix": sObject("Configuration of --fix.", jsonObject{
 			"rules": sArray("Apply only the fixes of these rules, like --fix-rules (which overrides it). All fixes are applied when the list is empty.", jsonObject{"type": "string", "enum": ids}),
 		}),
