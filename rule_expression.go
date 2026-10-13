@@ -1437,6 +1437,16 @@ func (rule *RuleExpression) remoteActionOutputsType(spec *String) *ObjectType {
 	if !remoteActionLookup(ref) {
 		return nil
 	}
+	// An action of the data set is not read from GitHub: the data set has what there is to know about it, and the
+	// action rule checks its inputs with it. The outputs of a commit are not typed from its version comment (see
+	// getActionOutputsType), but the comment still tells that the action is in the data set.
+	var comments *CommentIndex
+	if rule.workflow != nil {
+		comments = rule.workflow.Comments
+	}
+	if _, ok := resolvePopularSpec(ref, spec, comments, knownPopularAction); ok {
+		return nil
+	}
 	meta, err := rule.online.RemoteAction(ref.Owner, ref.Repo, ref.Subpath, ref.Ref)
 	if err != nil || meta == nil {
 		rule.Debug("%s: no action metadata to type the outputs with: %v", ref.Raw, err)
