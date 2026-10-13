@@ -8940,11 +8940,21 @@ with a `context` that is a path of the workspace (a relative path, `${{ github.w
 `magefile/mage-action` unless `install-only` is true (it runs `mage` with the default target when `args` is empty),
 `gradle/gradle-build-action` and `gradle/actions/setup-gradle` with `arguments` (setup-gradle up to v3 runs Gradle with it; v4
 and later refuse the input), `azure/powershell` with an `inlineScript` that invokes a file of the
-workspace (a command that is a relative path, `& ./x.ps1`, `. ./x.ps1`, `pwsh -File ./x.ps1` or `Import-Module ./x.psm1`; comments, strings, URLs and
-arguments are not read as calls), and `cypress-io/github-action` unless `install` and `runTests` are both false and it has no `build`, `start`, `start-windows` or `command`. Not listed although poutine or CodeQL
+workspace (see below), and `cypress-io/github-action` unless `install` and `runTests` are both false and it has no `build`, `start`, `start-windows` or `command`. Not listed although poutine or CodeQL
 has them: `docker/setup-buildx-action`, `pre-commit-ci/lite-action` and `browniebroke/pre-commit-autoupdate-action` (they
 run nothing of the workspace) and `actions/jekyll-build-pages` (not verified). `gradle/actions/setup-gradle` without `arguments` only prepares a later
 step.
+
+The `inlineScript` of `azure/powershell` is read as PowerShell commands, not searched for text. Statements end at a newline, `;`, `&&`,
+`||`, `|` or a brace or a parenthesis, so every stage of a pipeline and every block is a command. A command runs the workspace when its
+word is a path (a word with a separator: `./x.ps1`, `.\x.ps1`, `scripts/x.ps1`, `$env:GITHUB_WORKSPACE\x.ps1`, `${{ github.workspace }}/x.ps1`;
+a bare `build.ps1` is not run from the current directory in PowerShell, and neither is a URL, an absolute path or a variable), after
+`&`, `.` or an assignment (`$x = ./b.ps1`, `[string]$x += & ./b.ps1`); when it is `pwsh` or `powershell` with `-File` and a path, or
+`-Command` with a script of its own; when an interpreter or a loader (`bash`, `python`, `node`, `Start-Process`, `Invoke-Command`,
+`Import-Module`, `Invoke-Expression`, ...) is given a path; or when it is a build or test tool (`npm`, `yarn`, `pnpm`, `make`, `dotnet`,
+`cargo`, `go`, `gradle`, `mvn`, `pip`, `pytest`, `terraform`, ...), which runs the files of the project. Comments (`#` and `<# #>`),
+strings that are only text and arguments that are not a path in command position (`Get-Content ./x.ps1`, `-OutFile install.ps1`) do not
+count. A statement that is not understood is not reported; the subset above is what is read.
 
 In a job that sets `permissions: {}` the message does not claim a token, because the job has none, and in a job whose
 permissions are all `read` it says that the token can only read.

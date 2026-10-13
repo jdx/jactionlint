@@ -1,6 +1,9 @@
 package jactionlint
 
-import "strings"
+import (
+	"regexp"
+	"strings"
+)
 
 // powerShellRunsWorkspace reports whether a PowerShell script invokes a file of the workspace: a command that is a relative
 // path (`./build.ps1`, `& .\build.ps1`, `. ./lib.ps1`), `pwsh -File ./x.ps1` (or `powershell`), or `Import-Module ./x.psm1`.
@@ -72,6 +75,22 @@ func powerShellCommands(script string) [][]psWord {
 				}
 				word.WriteRune(rs[i])
 			}
+		case c == '$' && i+1 < len(rs) && rs[i+1] == '{':
+			// ${{ github.workspace }} (an expression of the workflow) and ${env:X}: one word, with the braces
+			inWord = true
+			closer := "}"
+			if i+2 < len(rs) && rs[i+2] == '{' {
+				closer = "}}"
+			}
+			end := strings.Index(string(rs[i:]), closer)
+			if end < 0 {
+				word.WriteString(string(rs[i:]))
+				i = len(rs)
+			} else {
+				chunk := string(rs[i : i+len([]rune(string(rs[i:])[:end]))+len(closer)])
+				word.WriteString(chunk)
+				i += len([]rune(chunk)) - 1
+			}
 		case c == '`' && i+1 < len(rs):
 			i++
 			inWord = true
@@ -92,8 +111,44 @@ func powerShellCommands(script string) [][]psWord {
 	return cmds
 }
 
-// powerShellCommandRunsWorkspace reads the words of one command.
+// reAssignedVar matches the start of an assignment: `$x`, `[string]$x`, `$env:X`, `${x}`, with the operator glued or not.
+var reAssignedVar = regexp.MustCompile(`^(\[[^\]]*\])*\$(\{[^}]*\}|[\w:.]+)(\+|-|\*|/|%|\?\?)?=`)
+
+var (
+	reVarOnly  = regexp.MustCompile(`^(\[[^\]]*\])*\$(\{[^}]*\}|[\w:.]+)$`)
+	reAssignOp = regexp.MustCompile(`^(\+|-|\*|/|%|\?\?)?=$`)
+)
+
+// workspaceRunners are the commands that run what is in the workspace whatever their arguments are: the tools that build,
+// test and install a project. A script that calls one after a checkout of a pull request runs its code.
+var workspaceRunners = map[string]bool{
+	"npm": true, "npx": true, "yarn": true, "pnpm": true, "make": true, "dotnet": true, "msbuild": true, "cargo": true, "go": true,
+	"gradle": true, "gradlew": true, "mvn": true, "mvnw": true, "pip": true, "pytest": true, "tox": true, "terraform": true,
+	"bundle": true, "rake": true, "composer": true, "nuget": true, "cmake": true,
+}
+
+// workspaceInterpreters run a file that is given to them: they count when an argument is a path.
+var workspaceInterpreters = map[string]bool{
+	"bash": true, "sh": true, "python": true, "python3": true, "node": true, "ruby": true, "perl": true, "php": true, "bun": true, "deno": true,
+	"start-process": true, "invoke-item": true, "ii": true, "invoke-command": true, "icm": true, "import-module": true, "ipmo": true,
+	"invoke-expression": true, "iex": true,
+}
+
+// powerShellCommandRunsWorkspace reads the words of one command. A statement that is not understood is reported when a word of
+// it is a path that is invoked, rather than left alone: a missed invocation is worse than an extra report.
 func powerShellCommandRunsWorkspace(words []psWord) bool {
+	// an assignment: what is on the right is the command (`$x = ./b.ps1`, `$x += & ./b.ps1`, `[int]$x=./b.ps1`)
+	if len(words) > 0 && !words[0].quoted {
+		if loc := reAssignedVar.FindStringIndex(words[0].text); loc != nil {
+			rest := words[0].text[loc[1]:]
+			words = words[1:]
+			if rest != "" {
+				words = append([]psWord{{text: rest}}, words...)
+			}
+		} else if len(words) > 1 && reVarOnly.MatchString(words[0].text) && !words[1].quoted && reAssignOp.MatchString(words[1].text) {
+			words = words[2:] // `$x = ...`, `[string]$x += ...`
+		}
+	}
 	i := 0
 	// the call operator and the dot-source operator: the next word is what runs
 	for i < len(words) && !words[i].quoted && (words[i].text == "&" || words[i].text == ".") {
@@ -108,7 +163,11 @@ func powerShellCommandRunsWorkspace(words []psWord) bool {
 		return true
 	}
 	rest := words[i+1:]
-	switch strings.ToLower(strings.TrimSuffix(head.text, ".exe")) {
+	name := strings.ToLower(strings.TrimSuffix(head.text, ".exe"))
+	if workspaceRunners[name] {
+		return true
+	}
+	switch name {
 	case "pwsh", "powershell":
 		// pwsh -File ./x.ps1, -f ./x.ps1; -Command is a script of its own and is read as one
 		for j, w := range rest {
@@ -130,7 +189,8 @@ func powerShellCommandRunsWorkspace(words []psWord) bool {
 				}
 			}
 		}
-	case "import-module", "ipmo":
+	}
+	if workspaceInterpreters[name] {
 		for _, w := range rest {
 			if isWorkspacePath(w.text) {
 				return true
@@ -140,17 +200,23 @@ func powerShellCommandRunsWorkspace(words []psWord) bool {
 	return false
 }
 
-// isWorkspacePath reports whether the word is a relative path (`./x`, `.\x`, `../x`) or a path below the workspace
-// (`$env:GITHUB_WORKSPACE\x`, `${{ github.workspace }}/x`). A URL, an absolute path and a bare name are not.
+var reWorkspaceExpr = regexp.MustCompile(`(?i)^\$\{\{\s*github\.workspace\s*\}\}`)
+
+// isWorkspacePath reports whether the word is a path of the workspace: a relative path (a word with a separator, `./x`,
+// `.\x`, `../x`, `scripts/x.ps1`) or a path below the workspace (`$env:GITHUB_WORKSPACE\x`, `${{ github.workspace }}/x`). In
+// PowerShell a word with a separator is a path, and a bare name (`build.ps1`) is not run from the current directory. A URL, an
+// absolute path and a variable are not.
 func isWorkspacePath(w string) bool {
 	l := strings.ToLower(strings.TrimSpace(w))
 	switch {
-	case strings.Contains(l, "://"):
+	case l == "", strings.Contains(l, "://"):
 		return false
-	case strings.HasPrefix(l, "./"), strings.HasPrefix(l, `.\`), strings.HasPrefix(l, "../"), strings.HasPrefix(l, `..\`):
+	case strings.HasPrefix(l, "$env:github_workspace"), strings.HasPrefix(l, "${env:github_workspace}"), reWorkspaceExpr.MatchString(l):
 		return true
-	case strings.HasPrefix(l, "$env:github_workspace"), strings.HasPrefix(l, "${env:github_workspace}"), strings.HasPrefix(l, "${{ github.workspace }}"):
-		return true
+	case strings.HasPrefix(l, "-"), strings.HasPrefix(l, "$"), strings.HasPrefix(l, "~"), strings.HasPrefix(l, "/"), strings.HasPrefix(l, `\`):
+		return false // an option, a variable, a path of the home or the root
+	case len(l) >= 2 && l[1] == ':':
+		return false // a drive
 	}
-	return false
+	return strings.ContainsAny(l, `/\`)
 }
