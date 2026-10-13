@@ -229,7 +229,7 @@
               "unknown-workflow-input",
               "unknown-workflow-secret",
               "unlocked-install",
-              "unmatched-paths-filter",
+              "unpinnable-action",
               "unpinned-images",
               "unpinned-tools",
               "unpinned-uses",
@@ -456,7 +456,7 @@
                   "unknown-workflow-input",
                   "unknown-workflow-secret",
                   "unlocked-install",
-                  "unmatched-paths-filter",
+                  "unpinnable-action",
                   "unpinned-images",
                   "unpinned-tools",
                   "unpinned-uses",
@@ -614,7 +614,7 @@
                     "unknown-workflow-input",
                     "unknown-workflow-secret",
                     "unlocked-install",
-                    "unmatched-paths-filter",
+                    "unpinnable-action",
                     "unpinned-images",
                     "unpinned-tools",
                     "unpinned-uses",
@@ -3839,8 +3839,8 @@
             }
           ]
         },
-        "unmatched-paths-filter": {
-          "description": "An entry of paths or paths-ignore matches no file of the repository. Group: correctness. Profile: pedantic. Default level: warn. https://jactionlint.jdx.dev/rules#unmatched-paths-filter",
+        "unpinnable-action": {
+          "description": "A hash-pinned action pulls in an action or a Docker image by a tag or a branch, so its pin does not freeze what runs. Only with the option pedantic. Group: security. Runs only with --online. Default level: warn. https://jactionlint.jdx.dev/rules#unpinnable-action",
           "oneOf": [
             {
               "$ref": "#/definitions/level"
@@ -3855,6 +3855,10 @@
                     }
                   ],
                   "description": "The level of the rule: error, warn, info or off."
+                },
+                "pedantic": {
+                  "description": "Also report the pedantic checks, which are noisier. Unset, they run under the pedantic profile.",
+                  "type": "boolean"
                 }
               },
               "type": "object"
@@ -3935,6 +3939,11 @@
             {
               "additionalProperties": false,
               "properties": {
+                "actions-lock": {
+                  "default": true,
+                  "description": "Accept an action which is not pinned to a commit in a workflow when the Actions lock file of the repository (.github/workflows/actions.lock) pins it to a full commit for that workflow. The lock file is a technical preview of GitHub whose format may change. Set it to false to ignore the lock file.",
+                  "type": "boolean"
+                },
                 "level": {
                   "allOf": [
                     {

@@ -24,7 +24,7 @@ import (
 // which would make it ambiguous. A ref which is a branch, an abbreviated SHA or unknown to GitHub
 // gets no fix, and neither does a line this cannot edit without guessing (a comment which does
 // not mention the ref, or other content after the value).
-func (l *Linter) attachPinFixes(sess *onlineSession, cfg *Config, src []byte, errs []*Error) {
+func (l *Linter) attachPinFixes(sess *onlineSession, cfg *Config, src []byte, errs []*Error, locked bool) {
 	// With sess == nil (the online checks are off) the errors only get the reason why they have no fix.
 	short, _ := cfg.ruleOptionBool("unpinned-uses", "short-pin-comment")
 	var starts []int // Byte offset of each line
@@ -38,7 +38,7 @@ func (l *Linter) attachPinFixes(sess *onlineSession, cfg *Config, src []byte, er
 		if e.Line > len(starts) {
 			continue
 		}
-		fix, err := pinFix(sess, src, starts[e.Line-1], e.Column, short)
+		fix, err := pinFix(sess, src, starts[e.Line-1], e.Column, short, locked)
 		if err != nil {
 			l.debug("No fix for the error at line %d: %v", e.Line, err)
 			e.NoFix = noFixOf(err)
@@ -89,8 +89,8 @@ func lineStarts(src []byte) []int {
 
 // pinFix builds the fix for the `uses:` value which starts at the column (1-based, in characters) of
 // the line that starts at lineStart. With short the comment names the tag as written and not the most
-// specific one.
-func pinFix(sess *onlineSession, src []byte, lineStart, col int, short bool) (*Fix, error) {
+// specific one. With locked the workflow is held to the Actions lock file, which a commit SHA in uses: can fail.
+func pinFix(sess *onlineSession, src []byte, lineStart, col int, short, locked bool) (*Fix, error) {
 	lineEnd := len(src)
 	if i := bytes.IndexByte(src[lineStart:], '\n'); i >= 0 {
 		lineEnd = lineStart + i
@@ -141,6 +141,13 @@ func pinFix(sess *onlineSession, src []byte, lineStart, col int, short bool) (*F
 		return nil, shapeErr("%q is not a GitHub repository", spec)
 	}
 
+	if locked && ref.Kind == UsesAction {
+		// The lock file pins the version, which the runner checks against the entry of this ref. A commit
+		// SHA in `uses:` is a different ref which has no entry (or one that was never checked), so the
+		// workflow would stop matching the lock file. See "GitHub Actions lock file" in docs/checks.md.
+		return nil, judgmentErr("the workflow is listed in %s, which pins the version: a commit SHA written in uses: can fail the lock check, so add the entry with `gh actions-lock` instead", actionsLockPath)
+	}
+
 	if sess == nil {
 		return nil, &pinFixError{code: NoFixOnlineRequired, msg: "pinning needs GitHub to resolve the tag, run with --online to enable the fix"}
 	}
@@ -174,7 +181,7 @@ func pinFix(sess *onlineSession, src []byte, lineStart, col int, short bool) (*F
 			newText += string(quote)
 		}
 		newText += " # " + pinCommentVersion(sess, ref, sha, short)
-	case strings.HasPrefix(rest, "#") && commentNamesRef(rest[1:], ref.Ref):
+	case strings.HasPrefix(rest, "#") && commentNamesRef(rest[1:], ref):
 		// The comment already names the version
 	default:
 		return nil, shapeErr("the line has other content after the value, or a comment which does not name the ref")
@@ -185,10 +192,11 @@ func pinFix(sess *onlineSession, src []byte, lineStart, col int, short bool) (*F
 	}, nil
 }
 
-// commentNamesRef reports whether the comment names the ref as its version.
-func commentNamesRef(comment, ref string) bool {
-	v, ok := commentVersion(comment)
-	return ok && v == ref
+// commentNamesRef reports whether the comment names the ref as its version, in the form of the bots
+// ("# v4", "# tag=v4") or of ratchet ("# ratchet:actions/checkout@v4").
+func commentNamesRef(comment string, ref *UsesRef) bool {
+	v, _, _, ok := commentVersionAt(comment, ref)
+	return ok && v == ref.Ref
 }
 
 // pinCommentVersion is the version to name in the comment of the pin of the tag: the most specific

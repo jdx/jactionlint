@@ -161,6 +161,8 @@ type onlineSession struct {
 	registryFailures map[string]int   // failures in a row, by registry
 	files            memo[fileKey, remoteFile]
 	actions          memo[remoteActionKey, *ActionMetadata]
+	workflows        memo[remoteWorkflowKey, *ReusableWorkflowMetadata]
+	pins             memo[pinProblemsKey, []pinProblem]
 	owners           memo[string, *GitHubOwner]
 	releases         memo[releaseKey, *GitHubRelease]
 
