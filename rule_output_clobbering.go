@@ -141,8 +141,9 @@ var (
 	reRecordStart = regexp.MustCompile(`^([A-Za-z_][A-Za-z0-9_.-]*)<<(.+)$`)
 	// reRecordName matches the name of a `name=value` record.
 	reRecordName = regexp.MustCompile(`^([A-Za-z_][A-Za-z0-9_.-]*)=`)
-	// reRandomSource matches what makes the delimiter a value that nobody can guess.
-	reRandomSource = regexp.MustCompile(`\bS?RANDOM\b|uuidgen|/dev/u?random|openssl\s+rand|\bshuf\b|\bmktemp\b|\bsecrets\b|\buuid\b|\bdate\s[^)]*%N`)
+	// reRandomSource matches what makes the delimiter a value that nobody can guess: $RANDOM, a command that prints a random
+	// value, a random device. A command is not matched as the name of a variable ($uuid, ${mktemp}).
+	reRandomSource = regexp.MustCompile(`\$\{?S?RANDOM\b|(?:^|[^$\w{])(?:uuidgen|uuid|mktemp|shuf|secrets)(?:$|\W)|/dev/u?random|\bopenssl\s+rand\b|\bdate\s[^)]*%N`)
 	reVarRef       = regexp.MustCompile(`\$\{?([A-Za-z_][A-Za-z0-9_]*)`)
 )
 
