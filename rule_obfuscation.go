@@ -170,10 +170,11 @@ func (rule *RuleExpression) checkObfuscation(expr ExprNode, line, col int, workf
 		if !entering {
 			return
 		}
-		if !isIf && reducibleOperation(sema, n) {
+		if !(isIf && ExprNode(n) == expr) && reducibleOperation(sema, n) {
 			// A part that has a constant result in the middle of an expression that does not, such as
 			// `toJSON('ubuntu-24.04')` or `'true' && 'false'`. A call of format() with literals has its own message below,
-			// and fromJSON() is not a constant function: it is how a workflow writes a list or an object in a matrix.
+			// and fromJSON() is not a constant function: it is how a workflow writes a list or an object in a matrix. A whole
+			// constant condition of an if: is the business of constant-condition, a part of one is not.
 			tok := n.Token()
 			rule.ReportIDf("obfuscation", rule.exprPos(tok.Line, tok.Column, line, col), "this part of the expression has a constant result, so it can be replaced by its value. write the value itself")
 			inside = n

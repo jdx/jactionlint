@@ -6526,7 +6526,7 @@ in the `default` profile and reports:
 - a part of an expression that has a constant result although the expression as a whole does not, such as
   `fromJSON(format('{{"group":{0},"labels":{1}}}', toJSON(vars.GROUP), toJSON('ubuntu-24.04')))` (`toJSON('ubuntu-24.04')` is
   the string `"ubuntu-24.04"`) or `inputs.deploy || 'true' && 'false'`. A call of `fromJSON()` is not one of these, it is how a
-  workflow writes a list or an object. In `if:` such a part is not reported;
+  workflow writes a list or an object. In an `if:` the same holds for a part of the condition, while a condition that is constant as a whole is [`constant-condition`](#check-constant-condition);
 - `fromJSON(toJSON(x))`, unless `x` is a property of a context (`fromJSON(toJSON(matrix.container))` is a known way to turn the
   value into an object);
 - an index which is computed, like `vars[format('NAME_{0}', github.job)]`. It hides which property is read. An index that is a

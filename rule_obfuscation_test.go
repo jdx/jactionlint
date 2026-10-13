@@ -157,4 +157,17 @@ func TestObfuscationLeavesConstantIfToConstantCondition(t *testing.T) {
 			t.Errorf("%s: want no obfuscation finding but got %v", cond, got)
 		}
 	}
+	// a constant part of a condition that is not constant as a whole is not reported by constant-condition
+	for cond, want := range map[string]int{
+		"'shadow' == 'execute' && github.event_name == 'push'":     1,
+		"${{ 'shadow' == 'execute' && github.event_name != 'x' }}": 1,
+		"github.event_name == 'push' || 'a' == 'b'":                1,
+		"github.event_name == 'push' && !cancelled()":              0,
+		"github.ref_name == 'main'":                                0,
+	} {
+		src := "on: push\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo\n        if: \"" + cond + "\"\n"
+		if got := errsWithID(lintWithConfig(t, cfg, src), "obfuscation"); len(got) != want {
+			t.Errorf("%s: want %d obfuscation findings but got %v", cond, want, got)
+		}
+	}
 }
