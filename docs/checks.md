@@ -7519,8 +7519,14 @@ the interval. The advice differs from the one above on purpose:
   `cancel-in-progress: true`: a scheduled run that is cancelled is not started again, so the work of the run (a release, a
   synchronization, a report) is lost or left half done. A group without `cancel-in-progress` makes a new run wait for the running one.
   Set `cancel-in-progress: true` only when a run can be thrown away without loss.
-- For a manual run that takes inputs the message adds that a run that waits is replaced by a newer one that waits: put the inputs in
-  the group, or add `queue: max` when no run may be skipped.
+- Only one run can wait in a group: while one run is going and two more start, the newer waiting run replaces the older waiting one,
+  so an occurrence of the schedule can be skipped. The message says so and names `queue: max` (up to 100 runs wait; GitHub does not
+  allow it together with `cancel-in-progress: true`) for a workflow in which every occurrence must run. For a manual run that takes
+  inputs it adds that the inputs belong in the group, so that runs with other inputs do not replace each other.
+- The group of a workflow and the groups of its jobs are one set of names, and at most one run holds a group at a time, so a job
+  whose `concurrency.group` equals the group of its own workflow run waits for the run that contains it. When a job already uses the
+  suggested group (compared without regard to spaces inside `${{ }}`), the message suggests `${{ github.workflow }}-workflow`
+  instead, and so on if that one is used too.
 - A `concurrency:` that is only a group name (`concurrency: nightly`) is reported too, because zizmor reports it. It already behaves
   like `cancel-in-progress: false`, so the advice is to write the mapping form with an explicit `cancel-in-progress: false`. It is not
   reported for a workflow that releases or deploys, where the plain group is what is wanted.

@@ -75,15 +75,22 @@ func TestConcurrencyLimitsScheduledAdvice(t *testing.T) {
 			t.Errorf("message lacks %q: %s", want, e.Message)
 		}
 	}
-	if strings.Contains(e.Message, "pull request") || strings.Contains(e.Message, "queue: max") {
-		t.Errorf("advice for a pull request or a queue where there is none: %s", e.Message)
+	if strings.Contains(e.Message, "pull request") {
+		t.Errorf("advice for a pull request where there is none: %s", e.Message)
+	}
+	// Only one run can be pending: a newer pending run replaces the older one, so an occurrence can be skipped.
+	// "queue: max" (up to 100 pending runs) is documented for concurrency, so it is the way to run every occurrence.
+	for _, want := range []string{"replaces the older one that is waiting", "\"queue: max\"", "every occurrence"} {
+		if !strings.Contains(e.Message, want) {
+			t.Errorf("message lacks %q: %s", want, e.Message)
+		}
 	}
 	if e.Fix != nil {
 		t.Errorf("a fix is offered: %+v", e.Fix)
 	}
 
 	e = msg("on:\n  workflow_dispatch:\n    inputs:\n      env:\n        type: string\n" + job)
-	if !strings.Contains(e.Message, "add them to the group") || !strings.Contains(e.Message, "queue: max") {
+	if !strings.Contains(e.Message, "add them to the group") || !strings.Contains(e.Message, "\"queue: max\"") {
 		t.Errorf("a manual run with inputs gets no advice on the group: %s", e.Message)
 	}
 
@@ -91,6 +98,29 @@ func TestConcurrencyLimitsScheduledAdvice(t *testing.T) {
 	e = msg("on: workflow_dispatch\n" + reusable)
 	if !strings.Contains(e.Message, "${{ github.workflow }}-caller") || !strings.Contains(e.Message, "cancelled at once") {
 		t.Errorf("no advice on the group of a caller: %s", e.Message)
+	}
+
+	// A group is shared by the workflow and its jobs, and one run holds it: a job in the group of its own workflow run
+	// would wait for the run that contains it. The group that is suggested must not be one that a job already uses.
+	jobGroup := func(group string) string {
+		return "jobs:\n  a:\n    concurrency:\n      group: " + group + "\n" + batchAJob + "  b:\n" + batchAJob
+	}
+	cron := "on:\n  schedule:\n    - cron: '0 6 * * 1'\n"
+	e = msg(cron + jobGroup("${{ github.workflow }}"))
+	if !strings.Contains(e.Message, "such as \"${{ github.workflow }}-workflow\"") {
+		t.Errorf("the suggested group is the one a job uses: %s", e.Message)
+	}
+	e = msg(cron + jobGroup("${{github.workflow}}"))
+	if !strings.Contains(e.Message, "such as \"${{ github.workflow }}-workflow\"") {
+		t.Errorf("the suggested group is the one a job uses, written without spaces: %s", e.Message)
+	}
+	e = msg(cron + "jobs:\n  a:\n    concurrency: ${{ github.workflow }}\n" + batchAJob + "  b:\n    concurrency:\n      group: ${{ github.workflow }}-workflow\n" + batchAJob + "  c:\n" + batchAJob)
+	if !strings.Contains(e.Message, "such as \"${{ github.workflow }}-workflow-workflow\"") {
+		t.Errorf("the second choice is used by a job too: %s", e.Message)
+	}
+	e = msg(cron + jobGroup("other-${{ github.workflow }}"))
+	if !strings.Contains(e.Message, "such as \"${{ github.workflow }}\"") {
+		t.Errorf("a group that no job uses is not changed: %s", e.Message)
 	}
 
 	e = msg("on: workflow_dispatch\nconcurrency: g\n" + job)

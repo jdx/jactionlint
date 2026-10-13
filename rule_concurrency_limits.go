@@ -117,10 +117,21 @@ func scheduledMessage(w *Workflow, path string) string {
 	if callsReusableWorkflow(w) {
 		group += callerGroupSuffix(w, path)
 	}
-	msg := "workflow has no \"concurrency:\", so a run that a schedule or a person starts executes at the same time as a run that is still going. add a top-level \"concurrency:\" with a \"group:\" such as \"" + group + "\", so that a new run waits for the running one. do not add \"cancel-in-progress: true\" unless a run can be thrown away without losing work: nothing supersedes such a run, so a cancelled one is not started again"
+	// The group of a workflow and the groups of its jobs are one namespace and at most one run holds a group, so a job
+	// in the group of its own workflow run waits for the run that contains it. Take a group no job uses.
+	used := map[string]bool{}
+	for _, j := range w.Jobs {
+		if j != nil && j.Concurrency != nil && j.Concurrency.Group != nil {
+			used[strings.Join(strings.Fields(strings.ReplaceAll(strings.ReplaceAll(j.Concurrency.Group.Value, "{{", "{{ "), "}}", " }}")), " ")] = true
+		}
+	}
+	for used[group] {
+		group += "-workflow"
+	}
+	msg := "workflow has no \"concurrency:\", so a run that a schedule or a person starts executes at the same time as a run that is still going. add a top-level \"concurrency:\" with a \"group:\" such as \"" + group + "\", so that a new run waits for the running one. do not add \"cancel-in-progress: true\" unless a run can be thrown away without losing work: nothing supersedes such a run, so a cancelled one is not started again. only one run can wait, and a newer run that is waiting replaces the older one that is waiting, so an occurrence can be skipped: add \"queue: max\" (up to 100 runs wait) when every occurrence must run"
 	for _, e := range w.On {
 		if d, ok := e.(*WorkflowDispatchEvent); ok && len(d.Inputs) > 0 {
-			msg += ". a run that is waiting is replaced by a newer one that is waiting, so for a manual run that takes inputs add them to the group, or add \"queue: max\" when no run may be skipped"
+			msg += ". for a manual run that takes inputs add them to the group, so that runs with other inputs do not replace each other"
 			break
 		}
 	}
