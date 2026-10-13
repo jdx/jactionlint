@@ -177,14 +177,36 @@ func (r *RuleDependabotMissingActionsUpdate) checkLocalActions(updates []*Depend
 		}
 		shown = append(shown, fmt.Sprintf("%q", d))
 	}
-	suggest := make([]string, 0, len(missing)+1)
-	suggest = append(suggest, `"/"`)
+	// What the updates name now stays, and the directories they miss come after it
+	var suggest []string
+	seenDir := map[string]bool{}
+	add := func(entry string) {
+		key := normalizeDependabotDirectory(entry)
+		if strings.ContainsAny(entry, "*?") {
+			key = strings.TrimSpace(entry)
+		}
+		if !seenDir[key] {
+			seenDir[key] = true
+			suggest = append(suggest, fmt.Sprintf("%q", entry))
+		}
+	}
+	add("/")
+	for _, u := range updates {
+		if u.Directory != nil {
+			add(u.Directory.Value)
+		}
+		for _, d := range u.Directories {
+			if d != nil {
+				add(d.Value)
+			}
+		}
+	}
 	if glob != "" {
-		suggest = append(suggest, fmt.Sprintf("%q", glob))
+		add(glob)
 	}
 	for _, d := range missing {
 		if !strings.HasPrefix(d, "/.github/actions/") {
-			suggest = append(suggest, fmt.Sprintf("%q", d))
+			add(d)
 		}
 	}
 	msg := fmt.Sprintf("the \"github-actions\" update does not cover the local composite actions in %s, which use actions, so Dependabot never updates them: it reads \"action.yml\" of the directories it is given, and \"directory: /\" is the workflows and the root. add them: \"directories: [%s]\"", strings.Join(shown, ", "), strings.Join(suggest, ", "))

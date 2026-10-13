@@ -26,7 +26,7 @@ func TestGitHubAppOtherActions(t *testing.T) {
 		{"tibdex with both", step(tib, "          app_id: 1\n          private_key: x\n          repositories: '[\"o/r\"]'\n          permissions: '{\"contents\": \"read\"}'\n"), nil},
 		{"tibdex that does not revoke", step(tib, "          repositories: '[\"o/r\"]'\n          permissions: '{\"contents\": \"read\"}'\n          revoke: false\n"), []string{`"revoke: false" keeps the GitHub App token valid`}},
 		{"tibdex that revokes", step(tib, "          repositories: '[\"o/r\"]'\n          permissions: '{\"contents\": \"read\"}'\n          revoke: true\n"), nil},
-		{"tibdex with an expression as the inputs", step(tib, "          ${{ fromJSON(vars.W) }}\n"), nil},
+		{"tibdex with an expression as the inputs", step(tib, "          ${{ insert }}: ${{ fromJSON(vars.W) }}\n"), nil},
 		{"tibdex with the permissions in an expression", step(tib, "          repositories: ${{ vars.R }}\n          permissions: ${{ vars.P }}\n"), nil},
 		{"peter-murray with nothing", step(pm, "          application_id: 1\n          application_private_key: x\n"), []string{`the GitHub App token is not revoked`, `no "permissions" input`}},
 		{"peter-murray with everything", step(pm, "          permissions: contents:read\n          revoke_token: true\n"), nil},

@@ -131,15 +131,16 @@ func (rule *RuleGitHubApp) checkTibdex(a *ExecAction) {
 
 // checkPeterMurray checks a use of peter-murray/workflow-application-token-action.
 func (rule *RuleGitHubApp) checkPeterMurray(a *ExecAction) {
+	const notRevoked = "the GitHub App token is not revoked at the end of the job: \"revoke_token\" is false unless it is set to true. set \"revoke_token: true\" so that the token is revoked in the post step"
+	// An explicit false is reported whatever else the inputs hold, like "revoke: false" of tibdex's action
+	if v, ok := a.input("revoke_token"); ok && isFalseLiteral(v) {
+		rule.ReportID("github-app", a.Inputs["revoke_token"].Value.Pos, notRevoked)
+	}
 	if a.InputsUnknown() {
 		return // the inputs may have what is missing
 	}
-	if v, ok := a.input("revoke_token"); !ok || strings.TrimSpace(v) == "" || isFalseLiteral(v) {
-		pos := a.Uses.Pos
-		if in := a.Inputs["revoke_token"]; ok && in != nil && in.Value != nil && in.Value.Pos != nil {
-			pos = in.Value.Pos
-		}
-		rule.ReportID("github-app", pos, "the GitHub App token is not revoked at the end of the job: \"revoke_token\" is false unless it is set to true. set \"revoke_token: true\" so that the token is revoked in the post step")
+	if v, ok := a.input("revoke_token"); !ok || strings.TrimSpace(v) == "" {
+		rule.ReportID("github-app", a.Uses.Pos, notRevoked)
 	}
 	if v, ok := a.input("permissions"); !ok || strings.TrimSpace(v) == "" {
 		rule.ReportID("github-app", a.Uses.Pos, "no \"permissions\" input is set, so the token gets every permission granted to the GitHub App. request only what the job needs, for instance \"permissions: contents:read\"")
