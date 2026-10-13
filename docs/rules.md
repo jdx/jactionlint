@@ -124,6 +124,7 @@ rules:
 | [recursive-alias](#recursive-alias) | correctness | error | correctness |
 | [ref-confusion](#ref-confusion) | security | warn | only with `--online` |
 | [ref-version-mismatch](#ref-version-mismatch) | security | warn | only with `--online` |
+| [repojacking](#repojacking) | security | warn | only with `--online` |
 | [require-expression-wrapping](#require-expression-wrapping) | style | error | pedantic |
 | [require-shell](#require-shell) | style | error | pedantic |
 | [required-actions](#required-actions) | policy | error | only when configured |
@@ -356,11 +357,12 @@ Jobs depend on each other in a cycle.
 
 ## dangerous-triggers
 
-A workflow uses pull_request_target, workflow_run or issue_comment.
+A workflow uses pull_request_target, workflow_run or issue_comment. With the option pedantic, also one that cannot write and uses no secret.
 
 - Group: security
 - Default level: error
 - Profile: default
+- Option `pedantic` (bool, no default): Also report the pedantic checks, which are noisier. Unset, they run under the pedantic profile.
 - Details and examples: [checks](./checks.md#check-dangerous-triggers)
 
 ## dependabot-cooldown
@@ -1029,6 +1031,16 @@ The version comment of a hash-pinned action does not match the pinned commit.
 - Needs network access: yes (only with `--online`)
 - Details and examples: [checks](./checks.md#check-ref-version-mismatch)
 
+## repojacking
+
+An action or reusable workflow has an owner whose name anyone can register.
+
+- Group: security
+- Default level: warn
+- Profile: only with `--online`
+- Needs network access: yes (only with `--online`)
+- Details and examples: [checks](./checks.md#check-repojacking)
+
 ## require-expression-wrapping
 
 An if: condition is not wrapped in ${{ }}.
@@ -1076,11 +1088,13 @@ A job uses a secret but has no environment.
 
 ## self-hosted-runner
 
-A job runs on a self-hosted runner.
+A job runs on a self-hosted runner: the label self-hosted, a label of self-hosted-runner.labels or a runner group.
 
 - Group: security
 - Default level: info
 - Profile: pedantic
+- Option `allow` (strings, empty by default): Glob patterns of the labels and the runner groups of runners which are ephemeral or trusted. A job with one of them is not reported.
+- Option `pull-request-only` (bool, default false): Report only the jobs of workflows that a pull request event can start, which is the case that poutine reports.
 - Details and examples: [checks](./checks.md#check-self-hosted-runner)
 
 ## self-repository
