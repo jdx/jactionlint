@@ -43,6 +43,7 @@ rules:
 | [bot-conditions](#bot-conditions) | security | error | default |
 | [cache-poisoning](#cache-poisoning) | security | error | default |
 | [checkout-static-credentials](#checkout-static-credentials) | security | error | default |
+| [comment-trigger-authorization](#comment-trigger-authorization) | security | warn | pedantic |
 | [concurrency-cancels-prs](#concurrency-cancels-prs) | correctness | error | default |
 | [concurrency-cancels-release](#concurrency-cancels-release) | correctness | error | default |
 | [concurrency-limits](#concurrency-limits) | policy | error | default |
@@ -266,6 +267,15 @@ actions/checkout is given an SSH key or a token that does not expire.
 - Option `secret-tokens` (bool, no default): Also report a token input taken from a secret other than GITHUB_TOKEN (a personal access token). The ssh-key input is always reported. Unset, it is on under the pedantic profile and off otherwise.
 - Option `allow` (strings, empty by default): Names of secrets which may be given to actions/checkout (for example a deploy key).
 - Details and examples: [checks](./checks.md#check-checkout-static-credentials)
+
+## comment-trigger-authorization
+
+A job of a comment-triggered workflow is started by the text of the comment and nothing checks who wrote it.
+
+- Group: security
+- Default level: warn
+- Profile: pedantic
+- Details and examples: [checks](./checks.md#check-comment-trigger-authorization)
 
 ## concurrency-cancels-prs
 

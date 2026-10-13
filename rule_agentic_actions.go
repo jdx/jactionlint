@@ -296,10 +296,16 @@ func checksOutPullRequest(s *Step) bool {
 // step that checks the permission of the actor. It is a heuristic: it cannot tell a condition that is
 // correct from one that merely mentions the actor.
 func (rule *RuleAgenticActions) agentGuarded(job *Job, prev []*Step, step *Step) bool {
+	return jobChecksWhoStarted(rule.wf, job, prev, step)
+}
+
+// jobChecksWhoStarted is the check of the user that agentic-actions and comment-trigger-authorization share. The
+// step is the one that is judged (nil when the job as a whole is), and prev are the steps of the job before it.
+func jobChecksWhoStarted(wf *Workflow, job *Job, prev []*Step, step *Step) bool {
 	if job.Environment != nil {
 		return true
 	}
-	if guardInCond(job.If) || guardInCond(step.If) {
+	if guardInCond(job.If) || step != nil && guardInCond(step.If) {
 		return true
 	}
 	if stepsGuard(prev) {
@@ -309,7 +315,7 @@ func (rule *RuleAgenticActions) agentGuarded(job *Job, prev []*Step, step *Step)
 		if id == nil {
 			continue
 		}
-		if j := rule.wf.Jobs[strings.ToLower(id.Value)]; j != nil {
+		if j := wf.Jobs[strings.ToLower(id.Value)]; j != nil {
 			if j.Environment != nil || guardInCond(j.If) || stepsGuard(flattenSteps(j.Steps)) {
 				return true
 			}
@@ -331,6 +337,10 @@ func guardInCond(c *String) bool {
 	return false
 }
 
+// commandActionsCheckingUser are the actions that read a command from a comment and check that the commenter has
+// write access (their input "permission" or "permission-level" says how much, "none" turns it off).
+var commandActionsCheckingUser = []string{"peter-evans/slash-command-dispatch", "xt0rted/slash-command-action", "github/command", "github/branch-deploy"}
+
 func stepsGuard(steps []*Step) bool {
 	for _, s := range steps {
 		if guardInCond(s.If) {
@@ -340,13 +350,35 @@ func stepsGuard(steps []*Step) bool {
 		case *ExecRun:
 			if e.Run != nil {
 				lower := strings.ToLower(e.Run.Value)
-				if strings.Contains(lower, "collaborators/") || strings.Contains(lower, "/permission") || strings.Contains(lower, "author_association") {
+				if strings.Contains(lower, "collaborators/") || strings.Contains(lower, "/permission") || strings.Contains(lower, "author_association") || strings.Contains(lower, "github_actor") || strings.Contains(lower, "github.actor") || strings.Contains(lower, "user.login") || strings.Contains(lower, "sender.login") {
 					return true
 				}
 			}
 		case *ExecAction:
-			if e.Uses != nil && strings.Contains(strings.ToLower(e.Uses.Value), "permission") {
-				return true
+			if e.Uses != nil {
+				lower := strings.ToLower(e.Uses.Value)
+				if strings.Contains(lower, "permission") || strings.Contains(lower, "membership") {
+					return true
+				}
+				// the command actions that look up the permission of the commenter themselves (unless told not to)
+				for _, c := range commandActionsCheckingUser {
+					if strings.HasPrefix(lower, c) {
+						if v, ok := inputValue(e, "permission"); ok && strings.EqualFold(v, "none") {
+							break
+						}
+						if v, ok := inputValue(e, "permission-level"); ok && strings.EqualFold(v, "none") {
+							break
+						}
+						return true
+					}
+				}
+				// a script that asks the API who the user is: actions/github-script
+				if in := e.Inputs["script"]; in != nil && in.Value != nil && strings.HasPrefix(lower, "actions/github-script") {
+					script := strings.ToLower(in.Value.Value)
+					if strings.Contains(script, "collaborator") || strings.Contains(script, "membership") || strings.Contains(script, "permission") || strings.Contains(script, "author_association") || strings.Contains(script, "user.login") || strings.Contains(script, "sender.login") || strings.Contains(script, "context.actor") {
+						return true
+					}
+				}
 			}
 		}
 	}

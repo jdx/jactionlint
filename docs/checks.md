@@ -73,6 +73,7 @@ List of checks:
 - [Static credentials for actions/checkout](#check-checkout-static-credentials)
 - [Insecure URL schemes](#check-insecure-url-scheme)
 - [Dangerous triggers](#check-dangerous-triggers)
+- [Comment triggers without a check of the user (pedantic)](#check-comment-trigger-authorization)
 - [Self-hosted runners (pedantic)](#check-self-hosted-runner)
 - [Unsound `contains()` on a string](#check-unsound-contains)
 - [Overprovisioned secrets](#check-overprovisioned-secrets)
@@ -5971,6 +5972,68 @@ The rule only looks at the trigger, so a workflow that uses one of them safely i
 `# jactionlint ignore=dangerous-triggers` and a reason, as in `zizmor: ignore[dangerous-triggers]`. zizmor 1.30.1 does not report
 `issue_comment` yet.
 
+<a id="check-comment-trigger-authorization"></a>
+## Comment triggers without a check of the user (pedantic)
+
+Example input:
+
+```yaml
+on:
+  issue_comment:
+    types: [created]
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    if: github.event.issue.pull_request && contains(github.event.comment.body, '/deploy')
+    steps:
+      - run: ./deploy.sh
+        env:
+          TOKEN: ${{ secrets.DEPLOY_TOKEN }}
+```
+
+Output:
+<!-- Skip update output -->
+```
+test.yaml:7:9: warning: this condition starts the job from the text of a comment (the event is "issue_comment"), and nothing checks who wrote it, so anyone who can comment can run the job with the token and the secrets of the repository. check github.event.comment.author_association (OWNER, MEMBER or COLLABORATOR), ask for the permission of github.actor in an earlier step or job, or run the job in an environment with required reviewers [comment-trigger-authorization]
+  |
+7 |     if: github.event.issue.pull_request && contains(github.event.comment.body, '/deploy')
+  |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+```
+
+<!-- Skip playground link -->
+
+The output above is from this `rules` section of the [configuration file](config.md):
+
+```yaml
+rules:
+  comment-trigger-authorization: warn
+```
+
+A command bot starts a job from a comment (`/deploy`, `/test`, `@bot run`). The condition looks like a restriction, but it only reads
+what the commenter chose to write: on a public repository everybody on GitHub can comment, and the job runs in the base repository with
+the default token and the secrets ([zizmor#459](https://github.com/zizmorcore/zizmor/issues/459)). The rule `comment-trigger-authorization`
+(in the `pedantic` profile, at the `warn` level) reports a job of a workflow with the trigger `issue_comment`,
+`pull_request_review_comment` or `discussion_comment` whose `if:` (or the `if:` of one of its steps) reads
+`github.event.comment.body`, when nothing checks who the commenter is. It is [`dangerous-triggers`](#check-dangerous-triggers) with a
+finer eye: that rule reports the trigger of every workflow, this one the jobs that anybody can start. It is the same check of the user as
+that of [`agentic-actions`](#check-agentic-actions). It looks for:
+
+- a condition on the association or the user (`github.event.comment.author_association`, `github.actor`, `github.event.comment.user.login`, ...);
+- an `environment:` (which can require reviewers), or a condition on the labels of the issue or the pull request, which only people with triage access set;
+- a step of the job that asks for the permission of the commenter: an action whose name has `permission` or `membership`, a `run:` that looks
+  at `collaborators/` or `/permission`, an `actions/github-script` with a script that does, and the command actions
+  `peter-evans/slash-command-dispatch`, `xt0rted/slash-command-action`, `github/command` and `github/branch-deploy` (they check the permission
+  `write` by default; `permission: none` turns it off);
+- a job that the job `needs` and that has one of these, or a condition that reads `needs` or `steps` (an earlier job or step decided);
+- an AI agent action that checks the write access of the user itself (`anthropics/claude-code-action` unless `allowed_non_write_users` is `*`).
+
+A job that calls a reusable workflow is not looked into, because the callee may check the user.
+
+It is a heuristic and the tier is pedantic for that reason: it cannot tell a check that is correct from a mention of the actor, and an action or
+script of the repository that checks the commenter in a way that is not recognized (a custom action, a script file) is reported. Whether the job
+is harmful depends on what it does with the token and secrets; the rule does not judge that, so a job that only adds a reaction is reported
+as well.
+
 <a id="check-self-hosted-runner"></a>
 ## Self-hosted runners (pedantic)
 
@@ -8023,7 +8086,7 @@ How the rules treat actions:
 
 - **Applies** to the steps (and the metadata) of an action: `action-syntax`, `adhoc-packages`, `archived-uses`, `artipacked`, `background-step-not-waited`, `checkout-static-credentials`, `constant-condition`, `context-availability`, `continue-on-error`, `deprecated-action-input`, `deprecated-commands`, `duplicate-key`, `duplicate-step-id`, `environment-file-redirect`, `expired-ignore`, `expression-syntax`, `expression-type`, `forbidden-uses`, `github-app`, `if-always-true`, `impostor-commit`, `insecure-commands`, `insecure-ssh-keyscan`, `insecure-url-scheme`, `invalid-env-var-name`, `invalid-function-call`, `invalid-id`, `invalid-ignore-comment`, `invalid-local-action`, `invalid-parallel-step`, `invalid-shell-name`, `invalid-uses`, `invisible-characters`, `known-vulnerable-actions`, `max-run-lines`, `merge-key`, `misfeature`, `missing-action-input`, `obfuscation`, `outdated-action-runner`, `pipeline-without-pipefail`, `pyflakes`, `recursive-alias`, `ref-confusion`, `ref-version-mismatch`, `require-expression-wrapping`, `self-repository`, `shellcheck`, `stale-action-refs`, `superfluous-actions`, `template-injection`, `typosquat-uses`, `undefined-function`, `undefined-property`, `unknown-action-input`, `unlocked-install`, `unpinned-images`, `unpinned-tools`, `unpinned-uses`, `unsound-contains`, `unsound-prefix-match`, `unsound-ternary`, `unused-anchor`, `unused-ignore`, `unverified-download`, `use-trusted-publishing`, `yaml-syntax`.
 - **Caller-dependent**: `agentic-actions`, `bot-conditions`, `cache-poisoning`, `github-env` (its findings about untrusted input do not depend on the caller), `untrusted-artifact` and `untrusted-checkout`.
-- **Not applicable** because an action does not have what the rule checks, or because only the calling job can decide (`unused-baseline-entry` is about the baseline file, not about a workflow or an action): `anonymous-definition`, `concurrency-cancels-prs`, `concurrency-cancels-release`, `concurrency-limits`, `conflicting-runner-labels`, `cron-too-frequent`, `cyclic-job-needs`, `dangerous-triggers`, `dependabot-cooldown`, `dependabot-execution`, `dependabot-missing-actions-update`, `dependabot-syntax`, `duplicate-job-id`, `duplicate-job-needs`, `duplicate-triggers`, `excessive-permissions`, `gate-job-skipped-on-failure`, `gh-without-token`, `hardcoded-container-credentials`, `invalid-activity-type`, `invalid-cron`, `invalid-event-config`, `invalid-event-filter`, `invalid-glob`, `invalid-label-pattern`, `invalid-local-workflow`, `invalid-permissions`, `invalid-timezone`, `invalid-workflow-call`, `invalid-workflow-call-input`, `invalid-workflow-dispatch-input`, `local-action-checkout`, `matrix-duplicate-value`, `matrix-invalid-exclude`, `missing-permissions`, `missing-timeout`, `missing-workflow-input`, `missing-workflow-secret`, `mutable-runner-label`, `overprovisioned-secrets`, `require-shell`, `required-actions`, `secrets-inherit`, `secrets-outside-env`, `self-hosted-runner`, `timeout-too-long`, `undefined-job-needs`, `undocumented-permissions`, `unknown-event`, `unknown-runner-label`, `unknown-workflow-input`, `unknown-workflow-secret`, `unredacted-secrets`, `unused-baseline-entry`, `unused-job-output`, `unused-needs`, `unused-workflow-input`, `workflow-call-permissions`, `workflow-input-type`, `workflow-run-names`, `workflow-secret-scope`, `workflow-syntax`.
+- **Not applicable** because an action does not have what the rule checks, or because only the calling job can decide (`unused-baseline-entry` is about the baseline file, not about a workflow or an action): `anonymous-definition`, `comment-trigger-authorization`, `concurrency-cancels-prs`, `concurrency-cancels-release`, `concurrency-limits`, `conflicting-runner-labels`, `cron-too-frequent`, `cyclic-job-needs`, `dangerous-triggers`, `dependabot-cooldown`, `dependabot-execution`, `dependabot-missing-actions-update`, `dependabot-syntax`, `duplicate-job-id`, `duplicate-job-needs`, `duplicate-triggers`, `excessive-permissions`, `gate-job-skipped-on-failure`, `gh-without-token`, `hardcoded-container-credentials`, `invalid-activity-type`, `invalid-cron`, `invalid-event-config`, `invalid-event-filter`, `invalid-glob`, `invalid-label-pattern`, `invalid-local-workflow`, `invalid-permissions`, `invalid-timezone`, `invalid-workflow-call`, `invalid-workflow-call-input`, `invalid-workflow-dispatch-input`, `local-action-checkout`, `matrix-duplicate-value`, `matrix-invalid-exclude`, `missing-permissions`, `missing-timeout`, `missing-workflow-input`, `missing-workflow-secret`, `mutable-runner-label`, `overprovisioned-secrets`, `require-shell`, `required-actions`, `secrets-inherit`, `secrets-outside-env`, `self-hosted-runner`, `timeout-too-long`, `undefined-job-needs`, `undocumented-permissions`, `unknown-event`, `unknown-runner-label`, `unknown-workflow-input`, `unknown-workflow-secret`, `unredacted-secrets`, `unused-baseline-entry`, `unused-job-output`, `unused-needs`, `unused-workflow-input`, `workflow-call-permissions`, `workflow-input-type`, `workflow-run-names`, `workflow-secret-scope`, `workflow-syntax`.
 
 Example input:
 

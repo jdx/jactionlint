@@ -1,0 +1,119 @@
+on:
+  issue_comment:
+    types: [created]
+  workflow_dispatch:
+
+jobs:
+  # The text of the comment starts the job, and nothing asks who wrote it
+  deploy:
+    runs-on: ubuntu-latest
+    if: github.event.issue.pull_request && contains(github.event.comment.body, '/deploy')
+    steps:
+      - run: ./deploy.sh
+        env:
+          TOKEN: ${{ secrets.DEPLOY_TOKEN }}
+
+  # The same with the condition on a step
+  step-condition:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - run: ./build.sh
+        if: startsWith(github.event.comment.body, '/build')
+
+  # The condition checks the association of the commenter
+  association:
+    runs-on: ubuntu-latest
+    if: >-
+      contains(github.event.comment.body, '/deploy') &&
+      contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association)
+    steps:
+      - run: ./deploy.sh
+
+  # An environment with required reviewers
+  environment:
+    runs-on: ubuntu-latest
+    environment: production
+    if: contains(github.event.comment.body, '/deploy')
+    steps:
+      - run: ./deploy.sh
+
+  # A step of the job asks for the permission of the commenter
+  permission-step:
+    runs-on: ubuntu-latest
+    if: contains(github.event.comment.body, '/deploy')
+    steps:
+      - uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        with:
+          script: |
+            const { data } = await github.rest.repos.getCollaboratorPermissionLevel({
+              owner: context.repo.owner, repo: context.repo.repo, username: context.actor,
+            });
+            if (!['admin', 'write'].includes(data.permission)) core.setFailed('not allowed');
+      - run: ./deploy.sh
+
+  # A command action that checks the permission of the commenter
+  dispatch:
+    runs-on: ubuntu-latest
+    if: startsWith(github.event.comment.body, '/')
+    steps:
+      - uses: peter-evans/slash-command-dispatch@9bdcd7914ec1b75590b790b844aa3b8eee7970f4 # v3.0.2
+        with:
+          token: ${{ secrets.PAT }}
+          commands: deploy
+
+  # ... unless it is told not to
+  dispatch-for-everybody:
+    runs-on: ubuntu-latest
+    if: startsWith(github.event.comment.body, '/')
+    steps:
+      - uses: peter-evans/slash-command-dispatch@9bdcd7914ec1b75590b790b844aa3b8eee7970f4 # v3.0.2
+        with:
+          token: ${{ secrets.PAT }}
+          commands: deploy
+          permission: none
+
+  # An earlier job decides
+  authorize:
+    runs-on: ubuntu-latest
+    if: contains(github.event.comment.body, '/deploy')
+    outputs:
+      allowed: ${{ steps.check.outputs.allowed }}
+    steps:
+      - id: check
+        uses: lannonbr/repo-permission-check-action@2.0.5
+        with:
+          permission: write
+  after-authorize:
+    needs: authorize
+    runs-on: ubuntu-latest
+    if: needs.authorize.outputs.allowed == 'true' && contains(github.event.comment.body, '/deploy')
+    steps:
+      - run: ./deploy.sh
+
+  # Only people who can set labels start it
+  label:
+    runs-on: ubuntu-latest
+    if: contains(github.event.comment.body, '/deploy') && contains(github.event.issue.labels.*.name, 'deploy-ok')
+    steps:
+      - run: ./deploy.sh
+
+  # An agent action that checks the write access of the user itself
+  agent:
+    runs-on: ubuntu-latest
+    if: contains(github.event.comment.body, '@claude')
+    steps:
+      - uses: anthropics/claude-code-action@64c7a0ef71df67b14cb4d6fdbf1b77a1c6fc1d3c # v1.0.9
+
+  # The callee is not looked into
+  call:
+    if: contains(github.event.comment.body, '/deploy')
+    uses: octo-org/example/.github/workflows/deploy.yaml@8e5e7e5ab8b370d6c329ec480221332ada57f0ab
+
+  # Not started by the text
+  by-the-text-only-in-the-script:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "$BODY"
+        env:
+          BODY: ${{ github.event.comment.body }}
