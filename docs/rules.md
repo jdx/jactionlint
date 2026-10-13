@@ -468,7 +468,7 @@ The GITHUB_TOKEN gets write access that is broader than needed.
 - Group: security
 - Default level: error
 - Profile: default
-- Option `require-workflow-permissions` (bool, default false): Also report a workflow which has no top-level permissions, even when its jobs set their own.
+- Option `require-workflow-permissions` (bool, no default): Also report a workflow which has no top-level permissions, even when its jobs set their own. Unset, it runs under the pedantic profile.
 - Details and examples: [checks](./checks.md#check-excessive-permissions)
 
 ## expired-ignore
@@ -1143,7 +1143,7 @@ A permission scope above read has no comment explaining it.
 - Group: policy
 - Default level: info
 - Profile: pedantic
-- Option `include-read` (bool, default false): Also require a comment for scopes granted with read, except contents: read.
+- Option `include-read` (bool, no default): Also require a comment for scopes granted with read, except contents: read. Unset, it runs under the pedantic profile.
 - Details and examples: [checks](./checks.md#check-undocumented-permissions)
 
 ## unknown-action-input

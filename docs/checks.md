@@ -3348,7 +3348,8 @@ the workflow level and the scopes a job needs on that job. Read scopes and `none
 
 A job which has no `permissions:` in a workflow which has none is the business of the [`missing-permissions`](#permissions)
 rule, which reports the jobs the default permissions of the repository apply to. To also have a workflow without a top-level
-`permissions:` reported when its jobs set their own, turn on `require-workflow-permissions`:
+`permissions:` reported when its jobs set their own, turn on `require-workflow-permissions`. Unset, it is on under the `pedantic`
+profile and off under the others. The finding is at the first key of the workflow, where zizmor reports it:
 
 ```yaml
 rules:
@@ -3417,7 +3418,8 @@ it. Comments which only configure a tool, such as `# jactionlint ignore=...`, do
 `permissions:` are checked; `write-all` and `read-all` are the business of `excessive-permissions`.
 
 With the `include-read` option the scopes granted with `read` need a comment too, except `contents: read`, which every job needs
-to check out the repository:
+to check out the repository. Unset, the option is on under the `pedantic` profile (where this rule runs by default) and off when
+you enable the rule in another profile:
 
 ```yaml
 rules:
@@ -3427,6 +3429,8 @@ rules:
 ```
 
 [zizmor](https://docs.zizmor.sh/audits/#undocumented-permissions) behaves like `include-read: true`, and counts only a comment at the end of the line.
+It reports one finding for a whole `permissions:` block, jactionlint one for each scope without a comment. A scope granted with
+`none` is not reported, because it grants nothing.
 
 <a id="check-unpinned-images"></a>
 ## Unpinned container images
