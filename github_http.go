@@ -85,6 +85,7 @@ type httpGitHubClient struct {
 	token       string
 	limit       *GitHubRateLimitError // set once the limit is reached
 	noticedAnon bool
+	noTokenHint string
 	// visibility remembers per repository ("owner/repo", lower case) whether it is public, as the answer of
 	// the repository endpoint said when it was last asked. A repository that is not in the map is unknown,
 	// which counts as private.
@@ -130,6 +131,8 @@ type httpGitHubOptions struct {
 	GraphQLURL string
 	// Debug receives a line for every request and cache hit. It can be nil.
 	Debug func(format string, args ...any)
+	// NoTokenHint replaces the list of places a token is looked for in the notice about unauthenticated requests.
+	NoTokenHint string
 }
 
 // newHTTPGitHubClient creates the client.
@@ -156,7 +159,7 @@ func newHTTPGitHubClient(o httpGitHubOptions) (*httpGitHubClient, error) {
 		base: base, hc: hc, ttl: o.TTL, token: o.Token, tokenSource: o.TokenSource, notify: o.Notify, debug: o.Debug,
 		sem: make(chan struct{}, min(conc, maxOnlineInFlight)), offline: o.Offline,
 		retries: defaultOnlineRetries, maxWait: defaultOnlineMaxWait,
-		now: time.Now, sleep: sleepContext, jitter: jitterBackoff,
+		now: time.Now, sleep: sleepContext, jitter: jitterBackoff, noTokenHint: o.NoTokenHint,
 	}
 	if o.Retries != nil {
 		c.retries = max(*o.Retries, 0)
@@ -274,8 +277,66 @@ func newDefaultGitHubClient(o defaultClientOptions) (GitHubClient, error) {
 			o.Verbose("online: no token for %s", base.Host)
 		}
 	}
+	primary, err := newHTTPGitHubClient(co)
+	if err != nil {
+		return nil, err
+	}
+	if o.Options.GitHubComFallback == nil || !*o.Options.GitHubComFallback {
+		return primary, nil
+	}
+	if base.Host == "api.github.com" {
+		if o.Notify != nil {
+			o.Notify("online-options.github-com-fallback has no effect: the API is api.github.com already")
+		}
+		return primary, nil
+	}
+	secondary, err := newGitHubComClient(ctx, o, co)
+	if err != nil {
+		return nil, err
+	}
+	if o.Verbose != nil {
+		o.Verbose("online: repositories which %s does not have are looked up on api.github.com", base.Host)
+	}
+	return newFallbackGitHubClient(primary, secondary), nil
+}
+
+// newGitHubComClient creates the client for api.github.com of the fallback of an Enterprise Server. co are the
+// options of the client of the Server, which it shares everything with but the host, the token and the cache
+// keys (answers are kept per host). The token of the Server is never used for it: $GITHUB_TOKEN and $GH_TOKEN are
+// the token of the Server there, so the token is $GITHUB_COM_TOKEN (or the variable or file of the options, or
+// "gh auth token --hostname github.com").
+func newGitHubComClient(ctx context.Context, o defaultClientOptions, co httpGitHubOptions) (*httpGitHubClient, error) {
+	useGH := o.Options.GitHubCLI == nil || *o.Options.GitHubCLI
+	d := tokenDiscovery{
+		host: "github.com", dotCom: true, trusted: true,
+		tokenEnv: o.Options.GitHubComTokenEnv, tokenFile: o.Options.GitHubComTokenFile, useGH: useGH,
+		envNames: []string{githubComTokenEnv},
+		getenv:   os.Getenv, readFile: readTokenFileLimited, runGH: runGHAuthTokenOfTheKeyring,
+	}
+	tok, notices := d.discover(ctx)
+	for _, n := range notices {
+		if o.Notify != nil {
+			o.Notify("api.github.com: " + n)
+		}
+	}
+	co.BaseURL, co.GraphQLURL = gitHubComAPIURL, ""
+	co.Token, co.TokenSource = tok.token, tok.source
+	co.NoTokenHint = githubComTokenEnv + " or gh auth login --hostname github.com"
+	if o.Verbose != nil {
+		if tok.token != "" {
+			o.Verbose("online: using the token from %s for api.github.com", tok.source)
+		} else {
+			o.Verbose("online: no token for api.github.com")
+		}
+	}
 	return newHTTPGitHubClient(co)
 }
+
+// gitHubComAPIURL is the API of the fallback. The tests point it at a server of their own.
+var gitHubComAPIURL = defaultGitHubAPIURL
+
+// githubComTokenEnv is the variable which holds the token for api.github.com when the API is an Enterprise Server.
+const githubComTokenEnv = "GITHUB_COM_TOKEN"
 
 func orDefault(s, def string) string {
 	if s == "" {
@@ -317,7 +378,7 @@ func (c *httpGitHubClient) rateLimited() *GitHubRateLimitError {
 func (c *httpGitHubClient) setRateLimited(reset time.Time, authenticated bool) *GitHubRateLimitError {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.limit = &GitHubRateLimitError{Reset: reset, Authenticated: authenticated, now: c.now}
+	c.limit = &GitHubRateLimitError{Reset: reset, Authenticated: authenticated, TokenHint: c.noTokenHint, now: c.now}
 	return c.limit
 }
 
@@ -813,7 +874,11 @@ func (c *httpGitHubClient) noticeAnonymous() {
 	c.noticedAnon = true
 	c.mu.Unlock()
 	if first {
-		c.noticef("no token found (GITHUB_TOKEN, GH_TOKEN, --online-token-file or gh auth login) so the online checks use unauthenticated requests, which GitHub limits to 60 per hour. set a token to raise the limit")
+		hint := c.noTokenHint
+		if hint == "" {
+			hint = "GITHUB_TOKEN, GH_TOKEN, --online-token-file or gh auth login"
+		}
+		c.noticef("no token found (%s) so the online checks use unauthenticated requests, which GitHub limits to 60 per hour. set a token to raise the limit", hint)
 	}
 }
 

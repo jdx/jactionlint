@@ -119,6 +119,7 @@ var actionRuleScope = map[string]struct {
 	"stale-action-refs":               {scope: actionApplies},
 	"timeout-check":                   {scope: actionNotApplicable},
 	"typosquat-uses":                  {scope: actionApplies},
+	"unpinnable-action":               {scope: actionApplies},
 	"undocumented-permissions":        {scope: actionNotApplicable},
 	"unpinned-images":                 {scope: actionApplies},
 	"unredacted-secrets":              {scope: actionNotApplicable},

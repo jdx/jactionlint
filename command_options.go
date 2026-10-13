@@ -84,6 +84,9 @@ var cliOptions = []cliOption{
 	{"GitHub API (online checks)", "online-api-url", "", "URL", false, "-online-api-url", "REST API URL of a GitHub Enterprise Server, e.g. https://ghe.example.com/api/v3"},
 	{"GitHub API (online checks)", "online-token-env", "", "NAME", false, "-online-token-env", "Name of the environment variable that holds the GitHub token"},
 	{"GitHub API (online checks)", "online-token-file", "", "FILE", false, "-online-token-file", "File that holds the GitHub token"},
+	{"GitHub API (online checks)", "online-github-com-fallback", "", "", false, "", "On a GitHub Enterprise Server, look up the repositories which the Server does not have on api.github.com (actions synced with GitHub Connect). The token for it is GITHUB_COM_TOKEN. Their names are sent to github.com"},
+	{"GitHub API (online checks)", "online-github-com-token-env", "", "NAME", false, "", "With the fallback: name of the environment variable that holds the token for api.github.com (default GITHUB_COM_TOKEN)"},
+	{"GitHub API (online checks)", "online-github-com-token-file", "", "FILE", false, "", "With the fallback: file that holds the token for api.github.com"},
 	{"GitHub API (online checks)", "online-allow", "", "PATTERN", false, "-online-allow", "Look up only repositories matching owner/repo PATTERN (\"*\" is a wildcard). Repeatable"},
 	{"GitHub API (online checks)", "online-deny", "", "PATTERN", false, "-online-deny", "Never look up repositories matching owner/repo PATTERN. Repeatable"},
 	{"GitHub API (online checks)", "online-cache-ttl", "", "DURATION", false, "-online-cache-ttl", "How long a cached GitHub answer is used without revalidation (default 1h; 0 always revalidates)"},
@@ -290,6 +293,7 @@ type commandFlags struct {
 	baseline, baselineWrite  optionalValueFlag
 	noBaseline, noOnline     bool
 	onlineReport             string
+	onlineGitHubComFallback  bool
 	online                   onlineFlag
 	onlineAllow, onlineDeny  stringListFlag
 	fs                       *pflag.FlagSet
@@ -365,6 +369,9 @@ func newCommandFlags() *commandFlags {
 	fs.StringVar(&o.OnlineOptions.APIURL, "online-api-url", "", "")
 	fs.StringVar(&o.OnlineOptions.TokenEnv, "online-token-env", "", "")
 	fs.StringVar(&o.OnlineOptions.TokenFile, "online-token-file", "", "")
+	fs.BoolVar(&f.onlineGitHubComFallback, "online-github-com-fallback", false, "")
+	fs.StringVar(&o.OnlineOptions.GitHubComTokenEnv, "online-github-com-token-env", "", "")
+	fs.StringVar(&o.OnlineOptions.GitHubComTokenFile, "online-github-com-token-file", "", "")
 	fs.Var(&f.onlineAllow, "online-allow", "")
 	fs.Var(&f.onlineDeny, "online-deny", "")
 	fs.DurationVar(&f.onlineTTL, "online-cache-ttl", defaultOnlineCacheTTL, "")

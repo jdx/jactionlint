@@ -161,6 +161,8 @@ type onlineSession struct {
 	registryFailures map[string]int   // failures in a row, by registry
 	files            memo[fileKey, remoteFile]
 	actions          memo[remoteActionKey, *ActionMetadata]
+	workflows        memo[remoteWorkflowKey, *ReusableWorkflowMetadata]
+	pins             memo[pinProblemsKey, []pinProblem]
 	owners           memo[string, *GitHubOwner]
 	releases         memo[releaseKey, *GitHubRelease]
 	releaseDates     memo[releaseDateKey, *GitHubReleaseDate]
@@ -337,8 +339,14 @@ func failureMessage(kind failureKind, what string, err error) string {
 	const tail = " --verbose lists every skipped lookup."
 	switch kind {
 	case failRateLimit:
+		if host := hostOf(err); host != "" {
+			return fmt.Sprintf("online: %s. the lookups on %s are skipped until then and the others go on, so some findings may be missing.", err, host) + tail
+		}
 		return fmt.Sprintf("online: %s. the lookups which need GitHub are skipped until then, so some findings may be missing.", err) + tail
 	case failUnauthorized:
+		if host := hostOf(err); host != "" {
+			return fmt.Sprintf("online: %s rejected the token (%s). the remaining lookups on it are skipped and the others go on; fix the token or run without one for public repositories.", host, err) + tail
+		}
 		return fmt.Sprintf("online: GitHub rejected the token (%s). the remaining lookups are skipped; fix the token or run without one for public repositories.", err) + tail
 	case failForbidden:
 		return fmt.Sprintf("online: %s. the lookup was skipped. a token with access to the repository, or listing it under online-options.deny, avoids this.", lookup) + tail
@@ -354,6 +362,15 @@ func failureMessage(kind failureKind, what string, err error) string {
 		return fmt.Sprintf("online: %s has no cached answer and --online=cache does not use the network. run once with --online to fill the cache.", orSomething(what)) + tail
 	}
 	return fmt.Sprintf("online: %s. the lookup was skipped.", lookup) + tail
+}
+
+// hostOf returns the host whose failure the error is (see hostScopedError), or "" for a failure of the whole session.
+func hostOf(err error) string {
+	var hs *hostScopedError
+	if errors.As(err, &hs) {
+		return hs.host
+	}
+	return ""
 }
 
 func orSomething(what string) string {
@@ -424,6 +441,10 @@ func (s *onlineSession) record(err error, what string) {
 	}
 	kind := classifyFailure(err)
 	s.failedLocked(kind, what, err)
+	var scoped *hostScopedError
+	if errors.As(err, &scoped) {
+		return // the failure of one host does not stop the lookups of the other one
+	}
 	switch kind {
 	case failRateLimit:
 		var rl *GitHubRateLimitError

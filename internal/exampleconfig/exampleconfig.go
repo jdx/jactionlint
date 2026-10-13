@@ -5,7 +5,8 @@ package exampleconfig
 
 // YAML is the configuration file. Every example is a minimal workflow showing one check, so it lacks what the
 // rules of the default profile ask every real workflow for: timeouts, permissions, pinned actions, a
-// concurrency group. Turning those rules off keeps the outputs about the check being explained.
+// concurrency group. Turning those rules off keeps the outputs about the check being explained. The online
+// rule which only has a pedantic tier is on, since its example needs it.
 const YAML = `rules:
   artipacked: off
   concurrency-limits: off
@@ -14,6 +15,8 @@ const YAML = `rules:
   missing-permissions: off
   missing-timeout: off
   obfuscation: off
+  unpinnable-action:
+    pedantic: true
   unpinned-images: off
   unpinned-uses: off
 `

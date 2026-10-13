@@ -297,17 +297,20 @@ func sIgnore(ids []string) jsonObject {
 
 func onlineOptionsSchema() jsonObject {
 	return sObject("Tunes the online checks. Every key is optional. The command line flags win over them.", jsonObject{
-		"mode":                sEnum("cache never uses the network and answers from the disk cache, strict makes the exit status 3 when a lookup is skipped, cache,strict is both. A mode other than the default also turns the online checks on, unless online is false.", "cache", "strict", "cache,strict"),
-		"api-url":             sStr("The REST API URL of a GitHub Enterprise Server, like https://ghe.example.com/api/v3. A token is not sent to a host named here by the config file of a repository."),
-		"token-env":           sStr("The name of the environment variable which holds the token. It is read before GITHUB_TOKEN and GH_TOKEN."),
-		"token-file":          sStr("A file which holds the token."),
-		"allow":               sStrings("Look up only the repositories matching one of these owner/repo patterns (* is a wildcard within a part). Empty allows all."),
-		"deny":                sStrings("Never look up the repositories matching one of these owner/repo patterns. It wins over allow."),
-		"cache-ttl":           sStr("How long a cached answer is used without asking GitHub again, as a duration like 1h. 0s always revalidates. The default is 1h."),
-		"max-rate-limit-wait": sStr("The longest to wait for a rate limit to reset, as a duration like 30s. 0s never waits. The default is 30s."),
-		"retries":             sIntMax(fmt.Sprintf("How often a request is repeated after a server error or a secondary rate limit (at most %d). The default is %d.", maxOnlineRetries, defaultOnlineRetries), maxOnlineRetries),
-		"concurrency":         sIntMax(fmt.Sprintf("How many requests are in flight at most (at most %d; 0 is the default, %d).", maxOnlineInFlight, defaultOnlineInFlight), maxOnlineInFlight),
-		"gh-cli":              sBool("Whether gh auth token is asked for a token when no variable or file has one. The default is true."),
+		"mode":                  sEnum("cache never uses the network and answers from the disk cache, strict makes the exit status 3 when a lookup is skipped, cache,strict is both. A mode other than the default also turns the online checks on, unless online is false.", "cache", "strict", "cache,strict"),
+		"api-url":               sStr("The REST API URL of a GitHub Enterprise Server, like https://ghe.example.com/api/v3. A token is not sent to a host named here by the config file of a repository."),
+		"token-env":             sStr("The name of the environment variable which holds the token. It is read before GITHUB_TOKEN and GH_TOKEN."),
+		"token-file":            sStr("A file which holds the token."),
+		"allow":                 sStrings("Look up only the repositories matching one of these owner/repo patterns (* is a wildcard within a part). Empty allows all."),
+		"deny":                  sStrings("Never look up the repositories matching one of these owner/repo patterns. It wins over allow."),
+		"cache-ttl":             sStr("How long a cached answer is used without asking GitHub again, as a duration like 1h. 0s always revalidates. The default is 1h."),
+		"max-rate-limit-wait":   sStr("The longest to wait for a rate limit to reset, as a duration like 30s. 0s never waits. The default is 30s."),
+		"retries":               sIntMax(fmt.Sprintf("How often a request is repeated after a server error or a secondary rate limit (at most %d). The default is %d.", maxOnlineRetries, defaultOnlineRetries), maxOnlineRetries),
+		"concurrency":           sIntMax(fmt.Sprintf("How many requests are in flight at most (at most %d; 0 is the default, %d).", maxOnlineInFlight, defaultOnlineInFlight), maxOnlineInFlight),
+		"gh-cli":                sBool("Whether gh auth token is asked for a token when no variable or file has one. The default is true."),
+		"github-com-fallback":   sBool("On a GitHub Enterprise Server, also ask api.github.com about the repositories which the Server answers 404 for (actions synced with GitHub Connect). The names of those repositories are sent to github.com: list internal ones in deny. The default is false."),
+		"github-com-token-env":  sStr("With github-com-fallback: the name of the environment variable which holds the token for api.github.com. It is read before GITHUB_COM_TOKEN. The token of the Server is never sent to github.com."),
+		"github-com-token-file": sStr("With github-com-fallback: a file which holds the token for api.github.com."),
 	})
 }
 

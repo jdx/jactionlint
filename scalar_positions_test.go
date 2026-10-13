@@ -226,13 +226,15 @@ func TestWorkflowRunNamesRegion(t *testing.T) {
 
 // The JSON output and the SARIF log give the same region (the JSON end is inclusive, the SARIF end is not).
 func TestJSONAndSARIFRegionsAgree(t *testing.T) {
+	t.Parallel()
+	jsonLinter, sarifLinter := newFormatLinter(t, FormatJSON), newFormatLinter(t, FormatSARIF)
 	for _, file := range positionFixtures(t) {
 		src, err := os.ReadFile(file)
 		if err != nil {
 			t.Fatal(err)
 		}
 		var list []ErrorTemplateFields
-		if err := json.Unmarshal([]byte(lintFormatted(t, FormatJSON, file, src)), &list); err != nil {
+		if err := json.Unmarshal([]byte(jsonLinter.lint(t, file, src)), &list); err != nil {
 			t.Fatalf("%s: %v", file, err)
 		}
 		var doc struct {
@@ -247,7 +249,7 @@ func TestJSONAndSARIFRegionsAgree(t *testing.T) {
 				}
 			}
 		}
-		if err := json.Unmarshal([]byte(lintFormatted(t, FormatSARIF, file, src)), &doc); err != nil {
+		if err := json.Unmarshal([]byte(sarifLinter.lint(t, file, src)), &doc); err != nil {
 			t.Fatalf("%s: %v", file, err)
 		}
 		results := doc.Runs[0].Results

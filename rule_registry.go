@@ -274,6 +274,10 @@ type RuleEnv struct {
 	online    *onlineSession   // nil unless the online checks are on
 	action    bool             // the file is the metadata of an action (action.yml), see actionRuleScope
 	now       func() time.Time // LinterOptions.Now; nil means time.Now
+	// lockWorkflows are the workflows which run the action, for the Actions lock file (see RuleEnv.workflowLock).
+	lockWorkflows []string
+	// actionsLock is the Actions lock file of the project, nil when it has none (see Linter.actionsLockOf).
+	actionsLock *actionsLock
 
 	log  func(args ...interface{})
 	name string // the factory being run
