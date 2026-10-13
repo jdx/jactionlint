@@ -59,6 +59,7 @@ rules:
 | [dependabot-syntax](#dependabot-syntax) | correctness | error | correctness |
 | [deprecated-action-input](#deprecated-action-input) | correctness | error | correctness |
 | [deprecated-commands](#deprecated-commands) | correctness | error | correctness |
+| [deprecated-runner-label](#deprecated-runner-label) | policy | warn | pedantic |
 | [duplicate-job-id](#duplicate-job-id) | correctness | error | correctness |
 | [duplicate-job-needs](#duplicate-job-needs) | correctness | error | correctness |
 | [duplicate-key](#duplicate-key) | correctness | error | correctness |
@@ -355,11 +356,12 @@ Jobs depend on each other in a cycle.
 
 ## dangerous-triggers
 
-A workflow uses pull_request_target, workflow_run or issue_comment.
+A workflow uses pull_request_target, workflow_run or issue_comment. With the option pedantic, also one that cannot write and uses no secret.
 
 - Group: security
 - Default level: error
 - Profile: default
+- Option `pedantic` (bool, no default): Also report the pedantic checks, which are noisier. Unset, they run under the pedantic profile.
 - Details and examples: [checks](./checks.md#check-dangerous-triggers)
 
 ## dependabot-cooldown
@@ -419,6 +421,15 @@ A deprecated workflow command such as ::set-output is used.
 - Default level: error
 - Profile: correctness
 - Details and examples: [checks](./checks.md#check-deprecated-workflow-commands)
+
+## deprecated-runner-label
+
+A runner label is deprecated and GitHub is going to retire it on a known date, such as macos-14.
+
+- Group: policy
+- Default level: warn
+- Profile: pedantic
+- Details and examples: [checks](./checks.md#check-deprecated-runner-label)
 
 ## duplicate-job-id
 
@@ -1210,7 +1221,7 @@ An unknown Webhook event is used.
 
 ## unknown-runner-label
 
-A runner label is unknown.
+A runner label is unknown, or is one that GitHub has retired.
 
 - Group: correctness
 - Default level: error
@@ -1237,7 +1248,7 @@ A secret which the reusable workflow does not define is passed.
 
 ## unlocked-install
 
-cargo install runs without --locked, or npm, yarn or pnpm install without freezing a lock file that the repository has.
+cargo install runs without --locked, or npm, yarn or pnpm install without freezing a lock file that the repository has. With the option pedantic, also installs without a lock file npm, Yarn and bun installs that run the lifecycle scripts of the dependencies, and installs without a release-age cooldown.
 
 - Group: security
 - Default level: error

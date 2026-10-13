@@ -127,12 +127,26 @@ func (rule *RuleEvents) checkExclusiveFilters(filter, ignore *WebhookEventFilter
 	}
 }
 
+// legacyEvents are the events which the workflow schema of GitHub still lists but which the documentation of
+// the events that trigger workflows does not have any more, with what to say about each of them.
+// https://github.com/actions/languageservices/blob/main/workflow-parser/src/workflow-v1.0.json
+var legacyEvents = map[string]string{
+	"pull_request_comment": "it is not an event to run a workflow on. to run a workflow for a comment on a pull request, use \"issue_comment\"",
+	"project":              "it belongs to classic Projects, which GitHub has sunset, and the documentation of the events that trigger workflows does not list it any more. remove it",
+	"project_card":         "it belongs to classic Projects, which GitHub has sunset, and the documentation of the events that trigger workflows does not list it any more. remove it",
+	"project_column":       "it belongs to classic Projects, which GitHub has sunset, and the documentation of the events that trigger workflows does not list it any more. remove it",
+}
+
 // https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#webhook-events
 func (rule *RuleEvents) checkWebhookEvent(event *WebhookEvent) {
 	hook := event.Hook.Value
 
 	types, ok := AllWebhookTypes[hook]
 	if !ok {
+		if why, ok := legacyEvents[hook]; ok {
+			rule.ReportIDf("unknown-event", event.Pos, "unknown Webhook event %q. %s. see https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#webhook-events for list of all Webhook event names", hook, why)
+			return
+		}
 		rule.ReportIDf("unknown-event", event.Pos, "unknown Webhook event %q. see https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#webhook-events for list of all Webhook event names", hook)
 		return
 	}
