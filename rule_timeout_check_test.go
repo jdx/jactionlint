@@ -123,3 +123,87 @@ func TestConfigTimeoutMinutes(t *testing.T) {
 		t.Error("non-mapping value should be an error")
 	}
 }
+
+// A job without timeout-minutes whose steps all set it is ghalint's exception (policy 012). It is
+// accepted only with the accept-step-timeouts option, because the timeout of a step does not cover
+// setting up the job or the post steps of actions.
+func TestRuleTimeoutCheckStepTimeouts(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("testdata", "timeout_check", "step_timeouts.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	src := string(data)
+	const hint = `Every step sets "timeout-minutes"`
+
+	tests := []struct {
+		what  string
+		cfg   *Config
+		lines []int // lines of the reported jobs
+		hints []bool
+	}{
+		{
+			"every step with a timeout is reported by default, with a hint about the option",
+			mustParseConfig(t, "profile: default\n"),
+			[]int{3, 10, 15, 21}, []bool{true, true, false, false},
+		},
+		{
+			"every step with a timeout is reported in the pedantic profile too",
+			mustParseConfig(t, "profile: pedantic\n"),
+			[]int{3, 10, 15, 21}, []bool{true, true, false, false},
+		},
+		{
+			"the option accepts a job whose steps all set timeout-minutes, an expression included",
+			mustParseConfig(t, "profile: default\nrules:\n  missing-timeout:\n    accept-step-timeouts: true\n"),
+			[]int{15, 21}, []bool{false, false},
+		},
+		{
+			"the option can be false",
+			mustParseConfig(t, "profile: default\nrules:\n  missing-timeout:\n    accept-step-timeouts: false\n"),
+			[]int{3, 10, 15, 21}, []bool{true, true, false, false},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.what, func(t *testing.T) {
+			errs := lintTimeoutCheck(t, src, tc.cfg)
+			if len(errs) != len(tc.lines) {
+				t.Fatalf("wanted %d errors but got %d: %v", len(tc.lines), len(errs), errs)
+			}
+			for i, e := range errs {
+				if e.Line != tc.lines[i] {
+					t.Errorf("error %d: wanted line %d but got %d: %v", i, tc.lines[i], e.Line, e)
+				}
+				if got := strings.Contains(e.Message, hint); got != tc.hints[i] {
+					t.Errorf("error %d: hint present is %v, wanted %v: %q", i, got, tc.hints[i], e.Message)
+				}
+			}
+		})
+	}
+}
+
+func TestRuleTimeoutCheckStepTimeoutsFix(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("testdata", "timeout_check", "step_timeouts.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	const rules = "profile: default\nrules:\n  missing-timeout:\n    default-minutes: 15\n"
+	// Without the option the job is still reported, and the fix adds a job-level timeout
+	errs := lintTimeoutCheck(t, string(data), mustParseConfig(t, rules))
+	if len(errs) != 4 {
+		t.Fatalf("wanted 4 errors: %v", errs)
+	}
+	for _, e := range errs {
+		if e.Fix == nil {
+			t.Errorf("wanted a fix for %v", e)
+		}
+	}
+	// With the option the accepted jobs have neither a finding nor a fix
+	errs = lintTimeoutCheck(t, string(data), mustParseConfig(t, rules+"    accept-step-timeouts: true\n"))
+	if len(errs) != 2 {
+		t.Fatalf("wanted 2 errors: %v", errs)
+	}
+	for _, e := range errs {
+		if e.Line == 3 || e.Line == 10 {
+			t.Errorf("a job whose steps all set timeout-minutes must be accepted: %v", e)
+		}
+	}
+}

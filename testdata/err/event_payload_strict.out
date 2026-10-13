@@ -1,0 +1,4 @@
+test.yaml:7:37: property "pull_request" is not defined in github.event, the payload of the events "issues", "push" [expression]
+test.yaml:14:24: property "comment" is not defined in github.event, the payload of the events "issues", "push" [expression]
+test.yaml:16:24: property "isue" is not defined in github.event, the payload of the events "issues", "push". did you mean "issue"? [expression]
+test.yaml:20:24: property "inputs" is not defined in github.event, the payload of the events "issues", "push" [expression]

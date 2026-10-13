@@ -113,6 +113,10 @@ func TestCompositeActionFixtures(t *testing.T) {
 					t.Fatal(err)
 				}
 				l.defaultConfig = fixtureConfig()
+				// A fixture can have the configuration it needs in a file next to it
+				if cfg := fixtureConfigFile(t, base+".config"); cfg != nil {
+					l.defaultConfig = cfg
+				}
 				errs, err := l.Lint(compositeFixturePath, src, &Project{root: filepath.Dir(f)})
 				if err != nil {
 					t.Fatal(err)

@@ -141,6 +141,9 @@ type onlineSession struct {
 	skippedBy  map[failureKind]int // skipped by the kind of failure
 	excluded   map[string]bool     // repositories left out by the allow and deny lists
 	seen       map[failureKind]bool
+	// fileFailures is the failure of the first file lookup of a repository which failed, see file.
+	fileFailures map[repoKey]error
+	fileLocks    map[repoKey]*sync.Mutex
 
 	repos        memo[repoKey, *GitHubRepo]
 	tags         memo[repoKey, *tagIndex]
@@ -149,9 +152,11 @@ type onlineSession struct {
 	compares     memo[compareKey, GitHubCompareStatus]
 	advisories   memo[string, []GitHubAdvisory]
 	origins      memo[originKey, originResult]
-	releaseDates memo[releaseDateKey, *GitHubReleaseDate]
+	files        memo[fileKey, remoteFile]
+	actions      memo[remoteActionKey, *ActionMetadata]
 	owners       memo[string, *GitHubOwner]
 	releases     memo[releaseKey, *GitHubRelease]
+	releaseDates memo[releaseDateKey, *GitHubReleaseDate]
 
 	environments memo[environmentKey, environmentResult]
 }
@@ -404,7 +409,7 @@ func (s *onlineSession) record(err error, what string) {
 	case err == nil, errors.Is(err, ErrGitHubNotFound):
 		s.transient = 0
 		return
-	case errors.Is(err, ErrGitHubBranchScanUnavailable), errors.Is(err, errOnlineExcluded), errors.Is(err, errNoOwnerLookup):
+	case errors.Is(err, ErrGitHubBranchScanUnavailable), errors.Is(err, errOnlineExcluded), errors.Is(err, errNoOwnerLookup), errors.Is(err, errOnlineNoFiles):
 		return // Not a failure: the caller does it another way, or was asked not to
 	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded) && s.ctx.Err() != nil:
 		s.stopLocked(err)
