@@ -159,6 +159,9 @@ type outputChunk struct {
 	text string
 	d    data
 	cmd  *runscript.Command
+	// names are the names of the records of the lines that hold a value (a variable or a conversion of printf): what the
+	// attacker writes there is not what he adds.
+	names []string
 }
 
 // chunksOf splits a write into its pieces in the order they are written: the commands that print, then the lines of
@@ -184,7 +187,7 @@ func (rule *RuleOutputClobbering) chunksOf(s *runscript.Script, w *runscript.Wri
 				}
 			}
 		}
-		out = append(out, outputChunk{text: text, d: f.judgeCommand(s, p), cmd: p})
+		out = append(out, outputChunk{text: text, d: f.judgeCommand(s, p), cmd: p, names: valueRecordNames(printedLines(p))})
 	}
 	if h := w.Heredoc; h != nil {
 		f.at = w.Redirect.Offset
@@ -272,6 +275,45 @@ func printedText(c *runscript.Command) string {
 	return ""
 }
 
+// printedLines is printedText for all the lines that the command prints: the text of echo -e and printf has `\n` for a
+// line break, and a quoted string can hold real ones.
+func printedLines(c *runscript.Command) []string {
+	if c.Name != "echo" && c.Name != "printf" {
+		return nil
+	}
+	escapes := c.Name == "printf"
+	for _, a := range c.Args {
+		if c.Name == "echo" && strings.HasPrefix(a.Value, "-") && !a.Dynamic() {
+			escapes = escapes || strings.Contains(a.Value, "e")
+			continue
+		}
+		v := a.Value
+		if escapes {
+			v = strings.ReplaceAll(v, `\n`, "\n")
+		}
+		return strings.Split(strings.TrimRight(v, "\n"), "\n")
+	}
+	return nil
+}
+
+// valueRecordNames returns the names of the records among the lines that hold a value: a line with a variable, an expression
+// or a conversion of printf. The record of a line without a name is not in the list.
+func valueRecordNames(lines []string) []string {
+	var names []string
+	for _, l := range lines {
+		if !strings.ContainsAny(l, "$%") {
+			continue
+		}
+		l = strings.TrimSpace(l)
+		if m := reRecordStart.FindStringSubmatch(l); m != nil {
+			names = append(names, m[1])
+		} else if m := reRecordName.FindStringSubmatch(l); m != nil {
+			names = append(names, m[1])
+		}
+	}
+	return names
+}
+
 // randomDelimiter reports whether the delimiter of a record is a value that nobody can guess. A delimiter that the
 // rule cannot resolve is taken as random: the rule reports only what it knows.
 func (rule *RuleOutputClobbering) randomDelimiter(s *runscript.Script, step *Step, text string, at int) bool {
@@ -355,7 +397,7 @@ func (rule *RuleOutputClobbering) outputRefs() *refSet {
 }
 
 // clobberable reports whether the job reads an output of the step other than name: that is what an attacker can set.
-func (rule *RuleOutputClobbering) clobberable(id, name string) bool {
+func (rule *RuleOutputClobbering) clobberable(id string, names ...string) bool {
 	rs := rule.outputRefs()
 	if rs.unknown {
 		return false // a reference may be in an expression that does not parse; the rule reports only what it knows
@@ -368,7 +410,13 @@ func (rule *RuleOutputClobbering) clobberable(id, name string) bool {
 		if len(c) == 3 {
 			return true // the whole object: toJSON(steps.id.outputs)
 		}
-		if c[3] != strings.ToLower(name) {
+		written := false
+		for _, n := range names {
+			if c[3] == strings.ToLower(n) {
+				written = true
+			}
+		}
+		if !written {
 			return true
 		}
 	}
@@ -376,7 +424,13 @@ func (rule *RuleOutputClobbering) clobberable(id, name string) bool {
 }
 
 func (rule *RuleOutputClobbering) report(s *runscript.Script, origin runscript.Origin, step *Step, w *runscript.Write, c outputChunk, name, delim, kind string) {
-	if !rule.clobberable(step.ID.Value, name) {
+	// the record of the line that holds the value is the one that the attacker writes; the other lines of the command are
+	// records of the script
+	names := c.names
+	if kind == "delimiter" || len(names) == 0 {
+		names = []string{name}
+	}
+	if !rule.clobberable(step.ID.Value, names...) {
 		return
 	}
 	r := w.Redirect
