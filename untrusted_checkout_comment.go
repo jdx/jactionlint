@@ -103,7 +103,10 @@ func (rule *RuleUntrustedCheckout) untrustedIn(value string, refs []exprRef) (st
 		// empty, only a ref that is built from the number of the issue names the pull request
 		return value, true
 	}
-	return rule.actionOutput(refs)
+	if what, ok := rule.actionOutput(refs); ok {
+		return what, true
+	}
+	return rule.inputUntrusted(refs)
 }
 
 // associationIsGuard reports whether the conditions that read `author_association` restrict it to people who can write:

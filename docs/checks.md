@@ -7563,6 +7563,29 @@ race). The rule does not report that yet.
 A job or step whose `if:` is false for the privileged events of the workflow, as far as it reads `github.event_name`
 (`if: github.event_name == 'workflow_dispatch'`), is not judged for them, and a job that needs a skipped job is skipped too.
 
+**Reusable workflows and composite actions** run for the events of the workflows that call them, and the head of the pull request
+is often passed down as an input: the caller (`pull_request_target`) has `with: ref: ${{ github.event.pull_request.head.sha }}`
+and the callee has `actions/checkout` with `ref: ${{ inputs.ref }}` and then `make`. The rule judges a local reusable workflow
+(`uses: ./.github/workflows/x.yml`) or a local composite action for each call in a workflow of the project:
+
+- A call counts when its workflow has a privileged event and the job and the step of the call are not guarded (an
+  `environment:`, a guard condition, a permission gate before the step, a needed job that is guarded, or a condition on
+  `github.event_name` that is false for the event). If the caller is itself a reusable workflow, the calls of it count too, up to
+  three levels. The callee is then judged for those events, also for the head that it names itself
+  (`github.event.pull_request.head.sha` in a reusable workflow that a `pull_request_target` workflow calls).
+- An input is untrusted when a counting call gives it a value that names the head of a pull request (a context, or `refs/pull/...`)
+  or reads an input of its own caller that is. The finding is at the checkout of the callee and says which call does it
+  (`inputs.ref, given github.event.pull_request.head.sha by .github/workflows/pr.yaml`).
+- A composite action that only checks out the head, with the steps that run it in the caller, is a checkout of the step that calls
+  the action: the finding is at that `uses:` and the later steps of the caller run the code. The values of the call replace the
+  inputs of the action (its defaults for the inputs the call leaves out); a step of the action that is guarded is not followed.
+- The protection of `actions/checkout` is judged for the events that reach the callee, and a `workflow_call` workflow is only
+  covered when all its callers are in the project.
+
+What is not known stays out: a reusable workflow or action that no workflow of the project calls (it is published for other
+repositories), a call through a composite action that calls another one, a value from a step output, a matrix or an
+`needs` output, a `uses:` with an expression, and a call made by a composite action.
+
 A step is reported at its checkout when it puts untrusted code in the workspace and a later step in the same job runs it:
 
 - `actions/checkout` with a `ref` or `repository` that names the head of a pull request or of the triggering run

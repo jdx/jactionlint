@@ -461,7 +461,9 @@ Not reported: archives that are downloaded, extracted and run, `go install` or `
 ## Limits of the workflow rules
 
 - `untrusted-checkout` follows `actions/checkout`, `gh pr checkout` and `git` commands with a literal reference. A ref that comes from
-  an output of an earlier step is not followed. "Runs it" is a list of commands: an unusual build tool that is not in the list of
+  an output of an earlier step is not followed (except the outputs of the actions that look up the pull request of a comment), and the head
+  that a workflow passes to a local reusable workflow or composite action is followed one call at a time, not through a composite action
+  that calls another one. "Runs it" is a list of commands: an unusual build tool that is not in the list of
   commands that only read files counts as running code, while an action that builds the workspace and is not in the short list does
   not. `untrusted-checkout` knows the protection of `actions/checkout` against the code of fork pull requests (zizmor
   [#2134](https://github.com/zizmorcore/zizmor/issues/2134), poutine#450): `allow-unsafe-pr-checkout: true` or an expression is a finding of

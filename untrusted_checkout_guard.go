@@ -182,8 +182,9 @@ type checkoutEvents struct {
 	all bool
 }
 
-// checkoutGuardEvents classifies the events of the workflow, privileged being what privilegedEvents returned.
-func checkoutGuardEvents(w *Workflow, privileged []string, project *Project, sib *siblingWorkflows) checkoutEvents {
+// checkoutGuardEvents classifies the events of the workflow, privileged being what privilegedEvents returned (and the events
+// of the calls that reach a reusable workflow). calleeKnown is true for a reusable workflow whose callers are all known.
+func checkoutGuardEvents(w *Workflow, privileged []string, project *Project, sib *siblingWorkflows, calleeKnown bool) checkoutEvents {
 	var ev checkoutEvents
 	ev.all = len(privileged) > 0
 	for _, event := range privileged {
@@ -206,8 +207,9 @@ func checkoutGuardEvents(w *Workflow, privileged []string, project *Project, sib
 			ev.all = false
 		}
 	}
+	// workflow_call is a gap, unless every caller is known and the events that reach the workflow are the covered ones
 	for _, e := range []string{"issue_comment", "issues", "workflow_call"} {
-		if hasEvent(w, e) {
+		if hasEvent(w, e) && !(e == "workflow_call" && calleeKnown) {
 			ev.all = false
 		}
 	}

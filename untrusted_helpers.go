@@ -598,6 +598,9 @@ type siblingWorkflows struct {
 
 	namesOnce sync.Once
 	nameSet   workflowNames
+
+	// calls are the calls of local reusable workflows and actions, see untrusted_checkout_callers.go
+	calls callIndex
 }
 
 // parsed returns, for the workflows of the project by their lower-cased names, whether they have events and all of
