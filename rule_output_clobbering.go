@@ -89,6 +89,10 @@ func (rule *RuleOutputClobbering) VisitStep(n *Step) error {
 	for _, w := range writes {
 		for _, c := range rule.chunksOf(s, w) {
 			t := strings.TrimSpace(c.text)
+			// a text that is a whole line is judged strictly, except inside a multi-line record (its delimiter decides)
+			if open == nil && isWholeLine(t) && !reRecordStart.MatchString(t) {
+				c.d = c.dLine
+			}
 			if open != nil {
 				if t == open.text {
 					open = nil
@@ -104,7 +108,8 @@ func (rule *RuleOutputClobbering) VisitStep(n *Step) error {
 				if c.cmd != nil {
 					at = c.cmd.Offset
 				}
-				open = &outputDelimiter{name: m[1], text: m[2], random: rule.randomDelimiter(s, n, m[2], at)}
+				delim := printfDelimiter(c.cmd, t, m[2])
+				open = &outputDelimiter{name: m[1], text: delim, random: rule.randomDelimiter(s, n, delim, at)}
 				// a printf or an echo that writes the delimiter and the value in one command
 				if c.d.kind == dataUntrusted && c.d.mayHaveNewline() && !open.random {
 					rule.report(s, origin, n, w, c, open.name, open.text, "delimiter")
@@ -159,8 +164,10 @@ type outputDelimiter struct {
 type outputChunk struct {
 	// text is the first line of the chunk as written (`$BODY`, `body=$BODY`, `body<<EOF`).
 	text string
-	d    data
-	cmd  *runscript.Command
+	// d is the judgement of the text as the value of a record with a constant name; dLine the judgement when the text is a
+	// whole line (nothing constant in front of it), which only a strict cut-down makes safe.
+	d, dLine data
+	cmd      *runscript.Command
 	// names are the names of the records of the lines that hold a value (a variable or a conversion of printf): what the
 	// attacker writes there is not what he adds.
 	names []string
@@ -174,10 +181,16 @@ func (rule *RuleOutputClobbering) chunksOf(s *runscript.Script, w *runscript.Wri
 	sort.SliceStable(producers, func(i, j int) bool { return producers[i].Offset < producers[j].Offset })
 	f.loop = false
 	var out []outputChunk
+	judge := func(dest string, fn func() data) data {
+		f.dest = dest
+		defer func() { f.dest = destOutput }()
+		return fn()
+	}
 	for _, p := range producers {
 		f.at = p.Offset
 		f.loop = p.LoopBody || p.InFunc
-		if !reachesFile(p, w.Redirect) {
+		reachV, reachL := reachesFile(p, w.Redirect, destOutput), reachesFile(p, w.Redirect, destOutputLine)
+		if !reachV && !reachL {
 			continue
 		}
 		text := printedText(p)
@@ -189,21 +202,35 @@ func (rule *RuleOutputClobbering) chunksOf(s *runscript.Script, w *runscript.Wri
 				}
 			}
 		}
-		out = append(out, outputChunk{text: text, d: f.judgeCommand(s, p), cmd: p, names: rule.untrustedRecordNames(s, p)})
+		c := outputChunk{text: text, cmd: p, names: rule.untrustedRecordNames(s, p)}
+		if reachV {
+			c.d = judge(destOutput, func() data { return f.judgeCommand(s, p) })
+		}
+		if reachL {
+			c.dLine = judge(destOutputLine, func() data { return f.judgeCommand(s, p) })
+		}
+		out = append(out, c)
 	}
 	if h := w.Heredoc; h != nil {
 		f.at = w.Redirect.Offset
 		for _, line := range strings.Split(strings.TrimSuffix(h.Body, "\n"), "\n") {
-			d := data{}
-			if !h.Quoted {
-				d = f.judgeHeredoc(s, &runscript.Heredoc{Quoted: h.Quoted, Body: line, Exprs: exprsIn(line)})
-			} else {
-				d = f.judgeExprList(exprsIn(line), 0)
+			one := func() data {
+				if !h.Quoted {
+					return f.judgeHeredoc(s, &runscript.Heredoc{Quoted: h.Quoted, Body: line, Exprs: exprsIn(line)})
+				}
+				return f.judgeExprList(exprsIn(line), 0)
 			}
-			out = append(out, outputChunk{text: line, d: d})
+			out = append(out, outputChunk{text: line, d: judge(destOutput, one), dLine: judge(destOutputLine, one)})
 		}
 	}
 	return out
+}
+
+// isWholeLine reports whether the first line of a text has no constant record name in front of it (`name=` or `name<<`): an
+// outsider who controls it controls the whole record, and one line is enough to forge another output.
+func isWholeLine(text string) bool {
+	t := strings.TrimSpace(text)
+	return !reRecordStart.MatchString(t) && !reRecordName.MatchString(t)
 }
 
 // transparentCommands pass on the text that they read, perhaps changed: what an earlier stage of a pipeline printed
@@ -216,9 +243,10 @@ var transparentCommands = map[string]bool{
 
 // reachesFile reports whether what the command prints goes into the file: it is not the test of an `if` or a loop, its
 // output is not redirected elsewhere, and every later stage of its pipeline passes the text on without cutting it
-// down to something that cannot add a record. A program that is not in transparentCommands (a script that parses the
+// down to something that cannot add a record: for a value after a constant name a later stage that leaves one line is
+// enough, for a whole line (dest destOutputLine) it has to cut the text down to a strict set. A program that is not in transparentCommands (a script that parses the
 // text) decides what is written, and the rule does not know what that is.
-func reachesFile(c *runscript.Command, file *runscript.Redirect) bool {
+func reachesFile(c *runscript.Command, file *runscript.Redirect, dest string) bool {
 	if c.Tested || c.LoopCond {
 		return false
 	}
@@ -236,7 +264,7 @@ func reachesFile(c *runscript.Command, file *runscript.Redirect) bool {
 	}
 	for _, st := range c.Pipeline.Stages[c.Stage+1:] {
 		for _, sc := range st.Commands {
-			if !transparentCommands[sc.Name] || commandSanitizes(sc, destOutput).satisfies(destOutput) || discardsOutput(sc) {
+			if !transparentCommands[sc.Name] || commandSanitizes(sc, dest).satisfies(dest) || discardsOutput(sc) {
 				return false
 			}
 		}
@@ -329,6 +357,11 @@ func (rule *RuleOutputClobbering) untrustedRecordNames(s *runscript.Script, p *r
 	var names []string
 	for _, l := range printedLines(p) {
 		tainted := false
+		whole := isWholeLine(l)
+		f.dest = destOutput
+		if whole {
+			f.dest = destOutputLine
+		}
 		for _, m := range reVarRef.FindAllStringSubmatch(l, -1) {
 			for _, v := range first.Vars {
 				if v == m[1] && hostile(f.judgeVar(s, v, 0)) {
@@ -357,23 +390,32 @@ func (rule *RuleOutputClobbering) untrustedRecordNames(s *runscript.Script, p *r
 			names = append(names, m[1])
 		} else if m := reRecordName.FindStringSubmatch(strings.TrimSpace(l)); m != nil {
 			names = append(names, m[1])
+		} else {
+			names = append(names, "") // a whole line: the attacker writes the name too
 		}
 	}
+	f.dest = destOutput
 	return names
 }
 
 // randomDelimiter reports whether the delimiter of a record is a value that nobody can guess. A delimiter that the
 // rule cannot resolve is taken as random: the rule reports only what it knows.
 func (rule *RuleOutputClobbering) randomDelimiter(s *runscript.Script, step *Step, text string, at int) bool {
-	text = strings.Trim(text, `"'`)
-	if strings.Contains(text, "%") {
-		return true // a printf format: the delimiter is one of its arguments, which the rule does not follow
-	}
+	return rule.randomText(s, step, strings.Trim(text, `"'`), at, 0)
+}
+
+// randomText reports whether the text, as the shell expands it at the offset, holds something that nobody can guess: a
+// random source, a variable of the script that was assigned one (its value is followed), or an environment value of the
+// workflow that holds a secret or the token.
+func (rule *RuleOutputClobbering) randomText(s *runscript.Script, step *Step, text string, at, depth int) bool {
 	if !strings.ContainsAny(text, "$`") {
 		return false // EOF, END_OF_OUTPUT, ghadelimiter: a constant
 	}
 	if reRandomSource.MatchString(text) {
 		return true
+	}
+	if depth > 4 {
+		return true // too deep to follow: do not report
 	}
 	for _, m := range reVarRef.FindAllStringSubmatch(text, -1) {
 		name := m[1]
@@ -389,14 +431,14 @@ func (rule *RuleOutputClobbering) randomDelimiter(s *runscript.Script, step *Ste
 			}
 		}
 		if last != nil {
-			if reRandomSource.MatchString(last.Value.Raw) {
+			if rule.randomText(s, step, last.Value.Raw, last.Offset, depth+1) {
 				return true
 			}
 			continue
 		}
 		if v, ok := rule.flow.envValue(step, name); ok {
 			// what the workflow set is a constant, an expression that has a value somebody can read or choose (the id of the
-			// run, text of the event), or a random source (`secrets.X`)
+			// run, text of the event), or a secret or the token
 			if exprsUnguessable(v.Value) {
 				return true
 			}
@@ -405,6 +447,32 @@ func (rule *RuleOutputClobbering) randomDelimiter(s *runscript.Script, step *Ste
 		return true // not known: do not report
 	}
 	return false
+}
+
+// printfDelimiter resolves the conversions of the delimiter of a record that printf writes (`printf 'body<<%s\n' "$d"`) to
+// the words they take, so that the delimiter is judged like the one of echo. It returns the text unchanged for any other
+// command, and "$" (an unknown, never reported) when an argument is missing.
+func printfDelimiter(c *runscript.Command, line, delim string) string {
+	if c == nil || c.Name != "printf" || !strings.Contains(delim, "%") {
+		return delim
+	}
+	words := append([]*runscript.Word(nil), c.Args...)
+	if len(words) == 0 {
+		return delim
+	}
+	args := words[1:]
+	idx := len(reConversion.FindAllString(strings.TrimSuffix(line, delim), -1))
+	return reConversion.ReplaceAllStringFunc(delim, func(cv string) string {
+		if cv == "%%" {
+			return "%"
+		}
+		if idx < len(args) {
+			idx++
+			return strings.Trim(args[idx-1].Raw, `"'`)
+		}
+		idx++
+		return "$UNKNOWN_PRINTF_ARGUMENT"
+	})
 }
 
 // exprsUnguessable reports whether a value of the workflow holds an expression that nobody can guess: a secret or the token.
