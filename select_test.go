@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"sort"
 	"strings"
@@ -138,6 +139,9 @@ func TestSelectAndTheConfiguration(t *testing.T) {
 }
 
 func TestSelectDoesNotRunTheExternalTools(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the fake shellcheck is a shell script")
+	}
 	// A shellcheck which would fail the run when it is started
 	dir := t.TempDir()
 	script := filepath.Join(dir, "shellcheck")
