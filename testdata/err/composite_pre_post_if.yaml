@@ -1,0 +1,14 @@
+name: Pre and post conditions
+description: The conditions of pre and post of a JavaScript action are expressions
+inputs:
+  mode:
+    description: A mode
+runs:
+  using: node24
+  main: dist/index.js
+  pre: dist/setup.js
+  # OK
+  pre-if: runner.os == 'Linux' && inputs.mode == 'fast'
+  post: dist/cleanup.js
+  # ERROR: `foo` is no context and `unknownFunc` is no function
+  post-if: foo == 'bar' || unknownFunc(github.sha)

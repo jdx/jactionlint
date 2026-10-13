@@ -1,19 +1,29 @@
 on: push
-
 jobs:
-  test:
+  steps:
     runs-on: ubuntu-latest
     steps:
-      - id: ok
-        uses: $/action
-        with:
-          name: rhysd
-      - run: echo '${{ steps.ok.outputs.greeting }}'
-      # ERROR: The input name is misspelled, so it is both undefined and missing a required one.
-      # Both errors prove the metadata behind "$/" was resolved rather than skipped.
-      - uses: $/action
-        with:
-          nam: rhysd
-
-  call:
+      # OK: the action is in the repository
+      - uses: $/action/ok
+      # OK: the directory is a submodule, which is not in the commit
+      - uses: $/vendor/module/action
+      # ERROR: no action.yml or action.yaml in the directory
+      - uses: $/action/missing
+      # ERROR: the directory does not exist
+      - uses: $/nowhere
+      # ERROR: "$/" always refers to the commit that runs the workflow, so there is no ref
+      - uses: $/action/ok@v1
+      # ERROR: the path leaves the repository
+      - uses: $/../action/ok
+      # OK: "./" is looked up in the workspace at run time, so a missing directory is not reported
+      - uses: ./action/missing
+      # ERROR: an expression is not allowed in "uses"
+      - uses: $/action/${{ github.job }}
+  call-ok:
     uses: $/workflows/reusable.yaml
+  call-ref:
+    # ERROR: no ref after "$/"
+    uses: $/workflows/reusable.yaml@v1
+  call-outside:
+    # ERROR: the path leaves the repository
+    uses: $/../workflows/reusable.yaml

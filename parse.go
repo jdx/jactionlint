@@ -482,9 +482,11 @@ func (p *parser) parseScheduleEvent(pos *Pos, n *yaml.Node) *ScheduledEvent {
 	schedules := make([]*ScheduleEntry, 0, len(n.Content))
 	for _, c := range n.Content {
 		entry := &ScheduleEntry{}
+		sawCron := false
 		for e := range p.parseMappingAt("element of \"schedule\" section", c, false, true) {
 			switch e.id {
 			case "cron":
+				sawCron = true
 				if s := p.parseString(e.val, false); s.Value != "" {
 					entry.Cron = s
 				}
@@ -495,6 +497,11 @@ func (p *parser) parseScheduleEvent(pos *Pos, n *yaml.Node) *ScheduledEvent {
 			default:
 				p.unexpectedKey(e.key, "element of \"schedule\" section", []string{"cron", "timezone"})
 			}
+		}
+		if !sawCron && c.Kind == yaml.MappingNode && len(c.Content) > 0 {
+			// "cron" is required since "timezone" was added: the entry would have nothing to run on
+			// https://github.com/actions/languageservices/commit/a7f581bd
+			p.error(c, "\"cron\" is missing in the element of \"schedule\" section. a schedule needs a cron expression, \"timezone\" alone does not schedule anything")
 		}
 		if entry.Cron != nil {
 			schedules = append(schedules, entry)
@@ -1540,6 +1547,7 @@ func (p *parser) parseStep(sec string, n *yaml.Node) *Step {
 			ret.ContinueOnError = p.parseBool(e.val)
 		case "timeout-minutes":
 			ret.TimeoutMinutes = p.parseTimeoutMinutes(e.val)
+			ret.timeoutKey = e.key.Pos
 		case "background":
 			ret.Background = p.parseBool(e.val)
 		case "uses":
