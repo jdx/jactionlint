@@ -70,6 +70,9 @@ type triggerPrivileges struct {
 	// undeclared is true when a job sets no permissions and neither does the workflow, so the default of the repository
 	// applies, which is a write token unless the repository restricts it.
 	undeclared bool
+	// expression is true when the permissions of a job are an expression, or a scope has a value that is one, so what
+	// the token can do is not known: it may write.
+	expression bool
 	// secrets are the names (upper case, sorted) of the secrets which an expression reads, other than GITHUB_TOKEN.
 	secrets []string
 	// allSecrets is true when the workflow can read secrets whose names it does not write: "secrets: inherit" of a call of a
@@ -79,19 +82,23 @@ type triggerPrivileges struct {
 
 // any reports whether the workflow can write with its token or read a secret.
 func (p *triggerPrivileges) any() bool {
-	return len(p.writes) > 0 || p.undeclared || len(p.secrets) > 0 || p.allSecrets
+	return len(p.writes) > 0 || p.undeclared || p.expression || len(p.secrets) > 0 || p.allSecrets
 }
 
 // describe lists what the workflow has, for the message.
 func (p *triggerPrivileges) describe() string {
 	var parts []string
-	switch {
-	case len(p.writes) > 0 && p.writes[0] == "every scope":
+	// every kind of token that a job of the workflow has
+	if len(p.writes) > 0 && p.writes[0] == "every scope" {
 		parts = append(parts, "a token that can write every scope")
-	case len(p.writes) > 0:
+	} else if len(p.writes) > 0 {
 		parts = append(parts, "a write token ("+strings.Join(p.writes, ", ")+")")
-	case p.undeclared:
+	}
+	if p.undeclared {
 		parts = append(parts, "the default token of the repository (it can write unless the settings of the repository restrict it)")
+	}
+	if p.expression {
+		parts = append(parts, "a token whose permissions are an expression, so it may write")
 	}
 	switch {
 	case len(p.secrets) > 0 && p.allSecrets:
@@ -103,9 +110,10 @@ func (p *triggerPrivileges) describe() string {
 	default:
 		parts = append(parts, "no secrets")
 	}
-	if len(p.writes) == 0 && !p.undeclared {
+	if len(p.writes) == 0 && !p.undeclared && !p.expression {
 		return "a token that cannot write and " + parts[0]
 	}
+	// the tokens of the jobs, then the secrets: "a write token (issues) and the default token of the repository (...) and no secrets"
 	return strings.Join(parts, " and ")
 }
 
@@ -134,13 +142,24 @@ func privilegesOf(w *Workflow) *triggerPrivileges {
 		case perms == nil:
 			p.undeclared = true
 		case perms.All != nil:
-			if strings.EqualFold(perms.All.Value, "write-all") {
+			switch strings.ToLower(strings.TrimSpace(perms.All.Value)) {
+			case "write-all":
 				writes["every scope"] = true
+			case "read-all", "":
+			default:
+				p.expression = true // an expression: not known
 			}
 		default:
 			for name, sc := range perms.Scopes {
-				if sc != nil && sc.Value != nil && strings.EqualFold(sc.Value.Value, "write") {
+				if sc == nil || sc.Value == nil {
+					continue
+				}
+				switch strings.ToLower(strings.TrimSpace(sc.Value.Value)) {
+				case "write":
 					writes[strings.ToLower(name)] = true
+				case "read", "none":
+				default:
+					p.expression = true
 				}
 			}
 		}

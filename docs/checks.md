@@ -5995,7 +5995,8 @@ The message says what the workflow can do with the token and the secrets, so tha
 
 - the scopes that the token of a job can write (`permissions:` of the job, else of the workflow; `write-all` is every scope). A job
   that sets no permissions, in a workflow that sets none, gets the default of the repository, which can write unless the settings
-  of the repository restrict it;
+  of the repository restrict it. When some jobs set permissions and others do not, the message names both tokens. Permissions
+  (or a scope) written as an expression are not known, so the token may write;
 - the names of the secrets that an expression reads (not `GITHUB_TOKEN`), or that the workflow passes on without naming them
   (`secrets: inherit`, `toJSON(secrets)`, `secrets[matrix.name]`).
 
