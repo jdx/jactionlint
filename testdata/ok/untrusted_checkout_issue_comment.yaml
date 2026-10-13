@@ -1,0 +1,38 @@
+# Bots that build a pull request when a maintainer comments on it, or that comment only
+on:
+  issue_comment:
+    types: [created]
+
+jobs:
+  maintainers:
+    if: contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association) && startsWith(github.event.comment.body, '/test')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refs/pull/${{ github.event.issue.number }}/head
+      - run: make test
+  permission-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: sushichop/action-repository-permission@v3
+        with:
+          required-permission: write
+      - run: gh pr checkout ${{ github.event.issue.number }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - run: make test
+  branch-for-the-fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          git checkout -b fix-${{ github.event.issue.number }}
+          make fix
+  only-reads-the-pull-request:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: gh pr diff ${{ github.event.issue.number }} | wc -l
+        env:
+          GH_TOKEN: ${{ github.token }}

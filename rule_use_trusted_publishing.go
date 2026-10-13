@@ -47,6 +47,7 @@ func (rule *RuleUseTrustedPublishing) VisitJobPre(n *Job) error {
 
 // VisitJobPost is callback when visiting Job node after visiting its children.
 func (rule *RuleUseTrustedPublishing) VisitJobPost(n *Job) error {
+	rule.checkJobPedantic(n)
 	rule.leaveJob()
 	return nil
 }
@@ -115,11 +116,8 @@ func (rule *RuleUseTrustedPublishing) checkRun(step *Step, run *ExecRun) {
 		}
 		info := trustedPublishing[eco]
 		cred := rule.credentialVar(step, eco)
-		for _, f := range c.Flags {
-			// -p is the password of twine, and the package of cargo (`cargo publish -p crate`)
-			if cred == "" && f.Value != nil && slices.Contains([]string{"--token", "--password", "--api-key", "-p"}, f.Name) && c.Tool != "gh" && (f.Name != "-p" || eco == "pypi") && !rule.exchangedToken(f.Value.Exprs) {
-				cred = f.Name
-			}
+		if cred == "" {
+			cred = rule.credentialFlag(c, eco)
 		}
 		if granted && cred == "" {
 			continue
@@ -127,6 +125,18 @@ func (rule *RuleUseTrustedPublishing) checkRun(step *Step, run *ExecRun) {
 		start, end := commandRange(s, origin, c)
 		rule.errorIDAt("use-trusted-publishing", start, trustedPublishingMessage(cmd, info.registry, info.instead, cred, granted)).endAt(end)
 	}
+}
+
+// credentialFlag returns the name of the option of the publish command that carries a long-lived credential, or "".
+// `-p` is the password of twine, and the package of cargo (`cargo publish -p crate`), so it counts for PyPI only. An
+// option whose value is the token of an exchange of the OIDC token is not one.
+func (rule *RuleUseTrustedPublishing) credentialFlag(c *runscript.Command, eco string) string {
+	for _, f := range c.Flags {
+		if f.Value != nil && slices.Contains([]string{"--token", "--password", "--api-key", "-p"}, f.Name) && c.Tool != "gh" && (f.Name != "-p" || eco == "pypi") && !rule.exchangedToken(f.Value.Exprs) {
+			return f.Name
+		}
+	}
+	return ""
 }
 
 // npmRegistrySettings are the keys of the configuration of npm, pnpm, aube and yarn that choose the registry.
@@ -566,11 +576,11 @@ func publishCommand(c *runscript.Command, resolve func(string) string) (eco, cmd
 	switch {
 	case c.Name == "pdm" && pos(0) == "publish":
 		return "pypi", "pdm publish", true
-	case c.Name == "nuget" || c.Name == "nuget.exe":
+	case strings.EqualFold(c.Name, "nuget") || strings.EqualFold(c.Name, "nuget.exe"):
 		if pos(0) == "push" {
 			return "nuget", "nuget push", true
 		}
-	case c.Name == "dotnet" && pos(0) == "nuget" && pos(1) == "push":
+	case (strings.EqualFold(c.Name, "dotnet") || strings.EqualFold(c.Name, "dotnet.exe")) && pos(0) == "nuget" && pos(1) == "push":
 		return "nuget", "dotnet nuget push", true
 	case c.Name == "bundle" && pos(0) == "exec" && pos(1) == "gem" && pos(2) == "push":
 		return "rubygems", "bundle exec gem push", true
@@ -707,7 +717,7 @@ func (rule *RuleUseTrustedPublishing) checkAction(e *ExecAction) {
 
 func init() {
 	registerRules(
-		RuleInfo{ID: "use-trusted-publishing", Group: RuleGroupSecurity, Summary: "A package is published with a long-lived credential although the registry supports trusted publishing.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-use-trusted-publishing"},
+		RuleInfo{ID: "use-trusted-publishing", Group: RuleGroupSecurity, Summary: "A package is published with a long-lived credential although the registry supports trusted publishing. With the option pedantic, also trusted publishing in a job that builds the package or has no environment, and attestations that are switched off.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-use-trusted-publishing", Options: []RuleOption{pedanticOption}},
 	)
 	registerRuleFactory("use-trusted-publishing", func(env *RuleEnv) []Rule {
 		if !env.config.RuleEnabled("use-trusted-publishing") {
