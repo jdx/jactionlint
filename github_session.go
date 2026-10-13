@@ -407,6 +407,10 @@ func (s *onlineSession) record(err error, what string) {
 	}
 	kind := classifyFailure(err)
 	s.failedLocked(kind, what, err)
+	var scoped *hostScopedError
+	if errors.As(err, &scoped) {
+		return // the failure of one host does not stop the lookups of the other one
+	}
 	switch kind {
 	case failRateLimit:
 		var rl *GitHubRateLimitError

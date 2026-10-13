@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"sync"
 )
 
 // fallbackGitHubClient is the GitHubClient of a GitHub Enterprise Server (or GHE.com) whose actions come from
@@ -18,6 +19,48 @@ import (
 type fallbackGitHubClient struct {
 	primary, secondary GitHubClient
 	routes             memo[repoKey, fallbackRoute]
+
+	mu   sync.Mutex
+	down error // why github.com cannot be asked any more in this run, see fromSecondary
+}
+
+// hostScopedError is the failure of one of the two hosts. The online session counts and warns about it like any
+// other, but does not stop the lookups because of it: the rate limit of github.com (60 an hour without a token) says
+// nothing about the Server, which can go on answering for the repositories it has.
+type hostScopedError struct{ err error }
+
+func (e *hostScopedError) Error() string { return e.err.Error() }
+func (e *hostScopedError) Unwrap() error { return e.err }
+
+// fromSecondary makes the error of a call to github.com one of the host. A failure which asking again cannot fix (the rate
+// limit, a rejected token, no network) is remembered, so that the next repositories do not ask in vain.
+func (c *fallbackGitHubClient) fromSecondary(err error) error {
+	if err == nil || errors.Is(err, ErrGitHubNotFound) || errors.Is(err, ErrGitHubBranchScanUnavailable) {
+		return err
+	}
+	var scoped *hostScopedError
+	if errors.As(err, &scoped) {
+		return err
+	}
+	switch classifyFailure(err) {
+	case failRateLimit, failUnauthorized, failNetwork:
+		c.mu.Lock()
+		if c.down == nil {
+			c.down = err
+		}
+		c.mu.Unlock()
+	}
+	return &hostScopedError{err}
+}
+
+// secondaryDown returns the failure which stops the lookups on github.com, or nil.
+func (c *fallbackGitHubClient) secondaryDown() error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.down == nil {
+		return nil
+	}
+	return &hostScopedError{c.down}
 }
 
 // fallbackRoute is which host has a repository.
@@ -47,6 +90,9 @@ func (c *fallbackGitHubClient) route(ctx context.Context, owner, repo string) fa
 		if !errors.Is(err, ErrGitHubNotFound) {
 			return fallbackRoute{client: c.primary, err: err}, nil
 		}
+		if down := c.secondaryDown(); down != nil {
+			return fallbackRoute{client: c.secondary, err: down, secondary: true}, nil
+		}
 		info2, err2 := c.secondary.Repository(ctx, owner, repo)
 		switch {
 		case err2 == nil:
@@ -54,7 +100,7 @@ func (c *fallbackGitHubClient) route(ctx context.Context, owner, repo string) fa
 		case errors.Is(err2, ErrGitHubNotFound):
 			return fallbackRoute{client: c.primary, err: err}, nil // on neither: the answer of the Server
 		}
-		return fallbackRoute{client: c.secondary, err: err2, secondary: true}, nil
+		return fallbackRoute{client: c.secondary, err: c.fromSecondary(err2), secondary: true}, nil
 	})
 	return r
 }
@@ -75,7 +121,8 @@ func (c *fallbackGitHubClient) Tags(ctx context.Context, owner, repo string) (*G
 	if r.err != nil {
 		return nil, r.err
 	}
-	return r.client.Tags(ctx, owner, repo)
+	v, err := r.client.Tags(ctx, owner, repo)
+	return v, c.fromHost(r, err)
 }
 
 // ResolveRef implements GitHubClient.
@@ -84,7 +131,8 @@ func (c *fallbackGitHubClient) ResolveRef(ctx context.Context, owner, repo strin
 	if r.err != nil {
 		return "", false, r.err
 	}
-	return r.client.ResolveRef(ctx, owner, repo, ns, name)
+	sha, found, err := r.client.ResolveRef(ctx, owner, repo, ns, name)
+	return sha, found, c.fromHost(r, err)
 }
 
 // Branches implements GitHubClient.
@@ -93,7 +141,8 @@ func (c *fallbackGitHubClient) Branches(ctx context.Context, owner, repo string,
 	if r.err != nil {
 		return nil, r.err
 	}
-	return r.client.Branches(ctx, owner, repo, limit)
+	v, err := r.client.Branches(ctx, owner, repo, limit)
+	return v, c.fromHost(r, err)
 }
 
 // Compare implements GitHubClient.
@@ -102,26 +151,44 @@ func (c *fallbackGitHubClient) Compare(ctx context.Context, owner, repo, base, h
 	if r.err != nil {
 		return "", r.err
 	}
-	return r.client.Compare(ctx, owner, repo, base, head)
+	v, err := r.client.Compare(ctx, owner, repo, base, head)
+	return v, c.fromHost(r, err)
 }
 
 // Advisories implements GitHubClient. The advisories of the actions are the ones of github.com, whichever host
 // has the repository: an Enterprise Server has no database of them for actions.
 func (c *fallbackGitHubClient) Advisories(ctx context.Context, owner, repo string) ([]GitHubAdvisory, error) {
-	return c.secondary.Advisories(ctx, owner, repo)
+	if down := c.secondaryDown(); down != nil {
+		return nil, down
+	}
+	v, err := c.secondary.Advisories(ctx, owner, repo)
+	return v, c.fromSecondary(err)
 }
 
 // AdvisoriesForPackages implements GitHubPackageAdvisoryClient.
 func (c *fallbackGitHubClient) AdvisoriesForPackages(ctx context.Context, packages []string) ([]GitHubAdvisory, error) {
+	if down := c.secondaryDown(); down != nil {
+		return nil, down
+	}
 	if pc, ok := c.secondary.(GitHubPackageAdvisoryClient); ok {
-		return pc.AdvisoriesForPackages(ctx, packages)
+		v, err := pc.AdvisoriesForPackages(ctx, packages)
+		return v, c.fromSecondary(err)
 	}
 	if len(packages) == 0 {
 		return nil, nil
 	}
 	owner, rest, _ := strings.Cut(packages[0], "/")
 	repo, _, _ := strings.Cut(rest, "/")
-	return c.secondary.Advisories(ctx, owner, repo)
+	v, err := c.secondary.Advisories(ctx, owner, repo)
+	return v, c.fromSecondary(err)
+}
+
+// fromHost marks the error of a call to the host of the route as the one of that host when it is github.com.
+func (c *fallbackGitHubClient) fromHost(r fallbackRoute, err error) error {
+	if r.secondary {
+		return c.fromSecondary(err)
+	}
+	return err
 }
 
 // CommitOnAnyBranch implements GitHubBranchScanner for the host which has the repository.
@@ -131,7 +198,8 @@ func (c *fallbackGitHubClient) CommitOnAnyBranch(ctx context.Context, owner, rep
 		return GitHubBranchScan{}, ErrGitHubBranchScanUnavailable
 	}
 	if s, ok := r.client.(GitHubBranchScanner); ok {
-		return s.CommitOnAnyBranch(ctx, owner, repo, sha, limit)
+		v, err := s.CommitOnAnyBranch(ctx, owner, repo, sha, limit)
+		return v, c.fromHost(r, err)
 	}
 	return GitHubBranchScan{}, ErrGitHubBranchScanUnavailable
 }

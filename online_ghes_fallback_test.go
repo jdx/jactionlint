@@ -308,3 +308,38 @@ func TestFallbackClientRouting(t *testing.T) {
 		t.Error("the route of a repository is not remembered")
 	}
 }
+
+// The rate limit of github.com (60 an hour without a token) does not stop the lookups on the Server.
+func TestGitHubComFallbackRateLimitDoesNotStopTheServer(t *testing.T) {
+	h := newTwoHosts(t, false)
+	limit := func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-RateLimit-Remaining", "0")
+		w.Header().Set("X-RateLimit-Reset", fmt.Sprint(4102444800)) // 2100
+		w.WriteHeader(http.StatusForbidden)
+		fmt.Fprint(w, `{"message":"API rate limit exceeded"}`)
+	}
+	for _, p := range []string{"/repos/actions/checkout", "/repos/example/archived", "/repos/nowhere/none", "/advisories"} {
+		h.dotcom.handle(p, limit)
+	}
+	// The repositories of github.com come first, the one of the Server last
+	_, wf := onlineProject(t, workflowWith("uses: actions/checkout@v4", "uses: example/archived@v1", "uses: nowhere/none@v1", "uses: corp/internal@v1"), fallbackConfig)
+	_, stdout, stderr := runOnlineCommand(t, "--online", "--online-github-com-fallback", wf)
+	if !strings.Contains(stdout, `"corp/internal@v1" is in the archived repository corp/internal`) {
+		t.Errorf("the Server must still answer:\n%s%s", stdout, stderr)
+	}
+	if n := h.dotcom.total(); n > 2 {
+		t.Errorf("%d requests to github.com after its rate limit was reached", n)
+	}
+	if n := strings.Count(stderr, "rate limit"); n != 1 {
+		t.Errorf("want one warning about the rate limit:\n%s", stderr)
+	}
+}
+
+// gh prints $GH_TOKEN and $GITHUB_TOKEN as the token of github.com, which on a Server are its tokens.
+func TestWithoutTokenVariables(t *testing.T) {
+	env := []string{"PATH=/bin", "GH_TOKEN=a", "github_token=b", "GITHUB_TOKEN=c", "GH_HOST=x", "GITHUB_TOKEN_OF_SOMEONE=d", "GH_ENTERPRISE_TOKEN=e"}
+	got := strings.Join(withoutTokenVariables(env), " ")
+	if got != "PATH=/bin GH_HOST=x GITHUB_TOKEN_OF_SOMEONE=d GH_ENTERPRISE_TOKEN=e" {
+		t.Errorf("%s", got)
+	}
+}

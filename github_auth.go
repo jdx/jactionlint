@@ -189,6 +189,41 @@ func runGHAuthToken(ctx context.Context, host string) (string, error) {
 	return out.String(), nil
 }
 
+// runGHAuthTokenOfTheKeyring is runGHAuthToken for the token of github.com in the fallback of an Enterprise Server. gh
+// treats $GH_TOKEN and $GITHUB_TOKEN as the token of github.com and would print them, but on the machine of a Server they
+// are the token of the Server, which must never reach github.com: the command gets neither, and so prints only what
+// "gh auth login" stored.
+func runGHAuthTokenOfTheKeyring(ctx context.Context, host string) (string, error) {
+	path, err := exec.LookPath("gh")
+	if err != nil {
+		return "", err
+	}
+	ctx, cancel := context.WithTimeout(ctx, ghCLITimeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, path, "auth", "token", "--hostname", host)
+	cmd.Env = append(withoutTokenVariables(os.Environ()), "GH_PROMPT_DISABLED=1", "GH_NO_UPDATE_NOTIFIER=1", "NO_COLOR=1")
+	var out bytes.Buffer
+	cmd.Stdout = &out
+	if err := cmd.Run(); err != nil {
+		return "", err
+	}
+	return out.String(), nil
+}
+
+// withoutTokenVariables returns the environment without the variables which gh takes as the token of github.com.
+func withoutTokenVariables(env []string) []string {
+	var kept []string
+	for _, kv := range env {
+		name, _, _ := strings.Cut(kv, "=")
+		switch strings.ToUpper(name) { // the variables of Windows are case insensitive
+		case "GH_TOKEN", "GITHUB_TOKEN":
+			continue
+		}
+		kept = append(kept, kv)
+	}
+	return kept
+}
+
 // tokenIsSafeToSend reports whether a token may be sent to the API at base: over TLS, or to a loopback
 // address (a local test server or proxy).
 func tokenIsSafeToSend(base *url.URL) bool {

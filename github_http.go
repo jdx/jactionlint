@@ -310,7 +310,7 @@ func newGitHubComClient(ctx context.Context, o defaultClientOptions, co httpGitH
 		host: "github.com", dotCom: true, trusted: true,
 		tokenEnv: o.Options.GitHubComTokenEnv, tokenFile: o.Options.GitHubComTokenFile, useGH: useGH,
 		envNames: []string{githubComTokenEnv},
-		getenv:   os.Getenv, readFile: readTokenFileLimited, runGH: runGHAuthToken,
+		getenv:   os.Getenv, readFile: readTokenFileLimited, runGH: runGHAuthTokenOfTheKeyring,
 	}
 	tok, notices := d.discover(ctx)
 	for _, n := range notices {

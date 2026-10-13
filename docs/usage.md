@@ -796,8 +796,10 @@ jactionlint --online
     default, because **the names of the repositories which the Server does not have are sent to github.com**: list the internal
     ones under `--online-deny` (they are never looked up) before you turn it on. It has no effect when the API is `api.github.com`.
     The token for `api.github.com` is `$GITHUB_COM_TOKEN` (or the variable of `--online-github-com-token-env`, or the file of
-    `--online-github-com-token-file`, or `gh auth token --hostname github.com`). **The token of the Server is never sent to
-    github.com** (`GITHUB_TOKEN` and `GH_TOKEN` are not read for it) and the token for github.com is never sent to the Server. Without a
+    `--online-github-com-token-file`, or `gh auth token --hostname github.com`, which is run without `GH_TOKEN` and
+    `GITHUB_TOKEN` because gh would print them). **The token of the Server is never sent to github.com** (`GITHUB_TOKEN` and `GH_TOKEN` are
+    not read for it) and the token for github.com is never sent to the Server. A rate limit or another failure of github.com is
+    counted and warned about like any other, but does not stop the lookups on the Server. Without a
     token the requests to github.com are unauthenticated (60 an hour; a notice says so). Advisories (`known-vulnerable-actions`)
     always come from github.com, which is where the database of advisories for actions is. One more request is needed for every
     repository which the Server does not have (a 404, cached like any answer, so the next runs do not repeat it); a
