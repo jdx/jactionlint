@@ -112,6 +112,7 @@ List of checks:
 - [Untrusted artifacts in workflow_run workflows](#check-untrusted-artifact)
 - [Unused job outputs](#check-unused-job-output)
 - [Unused workflow inputs (pedantic)](#check-unused-workflow-input)
+- [Unused workflow secrets (pedantic)](#check-unused-workflow-secret)
 - [Needs entries that do nothing (pedantic)](#check-unused-needs)
 - [Duplicate triggers](#check-duplicate-triggers)
 - [Failures hidden by continue-on-error (pedantic)](#check-continue-on-error)
@@ -2484,6 +2485,15 @@ to run the job. So specifying proper labels at `runs-on:` is important.
 
 jactionlint checks proper label is used at `runs-on:` configuration. Even if an expression is used in the section like
 `runs-on: ${{ matrix.foo }}`, jactionlint parses the expression and resolves the possible values, then validates the values.
+A label that is a matrix value written together with text (`runs-on: ${{ matrix.os }}-latest`, `ubuntu-${{ matrix.version }}`)
+is resolved the same way: with `os: [macos, linux]` the labels are `macos-latest` and `linux-latest`, and the second one is
+reported at `linux` in the matrix. It is resolved only when the label has one matrix name (`${{ matrix.os }}-${{ matrix.arch }}` is
+not, because `exclude` and `include` decide which pairs run), when the values are strings (a number such as `20.10`, which GitHub
+prints as `20.1`, is skipped), and a value of the row is used only when a job certainly has it. The matrix is modelled as GitHub
+documents it: the base is the cross product of the rows, an `exclude` entry removes the combinations that have all of its
+pairs (so `{os: linux, node: 18}` leaves `linux` with `node: 20`), and `include` adds jobs afterwards, so a value that `include` names
+always has one. Wherever an expression makes the effect unknown (a value in an `exclude` entry, an entry or the whole `exclude`,
+a row of another key) the value is not reported.
 
 When you define some custom labels for your self-hosted runner, jactionlint does not know the labels. Please set the label
 names in [`jactionlint.yaml` configuration file](config.md) to let jactionlint know them. A job that has the label `self-hosted`
@@ -2660,6 +2670,9 @@ Owners and repositories are compared case-insensitively. When several patterns m
 they are written in: in the example, `actions/checkout` needs a commit SHA while the other `actions/*` actions only need a ref.
 Reusable workflow calls follow the same patterns. Patterns describe repositories, so a Docker image follows the `*` pattern.
 Invalid patterns and unknown policies are errors when the configuration is read.
+
+With `--online --fix` a tag is pinned to its commit and the tag is named in a comment: the most specific version tag of the commit
+(`# v4.2.2` for `@v4`), or as written with the option `short-pin-comment: true`. See [the usage document](usage.md#online-checks).
 
 <a id="check-immutable-release"></a>
 #### Tags of immutable releases (online)
@@ -4912,6 +4925,24 @@ fewer `*`, (3) a pattern with a tag beats the same name without one, (4) the lon
 these, the first one in lexical order. So `node` beats `docker.io/library/*`, `docker.io/library/*` beats `docker.io/*`, `node:20`
 beats `node`, and `ghcr.io/org/app` beats `ghcr.io/org/*`, which beats `ghcr.io/*` and `*`. A policy wins over `require-digest`. `node` and `docker.io/library/node` are the same image.
 To forbid or allow images by name, see the options `images-allow` and `images-deny` of [`forbidden-uses`](#check-forbidden-uses).
+
+With `--online --fix=unsafe` the digest is written for you: `postgres:16` becomes `postgres:16@sha256:...` (the format Renovate keeps up to date), and an
+image without a tag becomes `image:latest@sha256:...`, because that is what Docker pulls. It works for `container:`, `services:`, the values a
+matrix writes, `uses: docker://` and the `runs.image: docker://` of an action. The digest is asked of the registry (the v2 API, a HEAD request of the
+manifest) and is the one `docker pull image:tag` resolves today: for a multi-platform image the digest of its index. Only
+Docker Hub (`docker.io`, `ubuntu`, `owner/image`) and ghcr.io are asked, and an image of another registry gets the reason in the finding instead of a
+request. Both give an anonymous token for a public image; for a private image on ghcr.io the token of GitHub (`GITHUB_TOKEN`) is sent to ghcr.io as
+its password when the anonymous request is refused, and to no other host. The fix is **unsafe** (`--fix=unsafe`): the image behind a tag moves,
+and the digest is the image of this moment, so look at what you are pinning. It never updates a pin to a newer image. `--online-allow` and `--online-deny`
+apply to images as `owner/image` (`library/ubuntu` for an official image of Docker Hub), whichever registry it is on, and `--online=cache` does not look images up at all (a digest is not kept in the cache, because a tag moves; the finding says that the fix needs `--online`, and it is no skipped lookup for `strict`). It does not ask
+the registry. A tag that does not exist, a private image and a registry which fails leave the finding without a fix, with the reason.
+What the answers of the registries mean (the same for Docker Hub and ghcr.io):
+
+| Request | Answer | Meaning |
+| --- | --- | --- |
+| token service | 401, 403, 404, 429, 5xx, no answer | the registry fails: the finding says so, and after three failures in a row (at once for a rate limit) the registry is not asked again in this run |
+| manifest | 401, 403, 404 | the registry answered: the image is private or does not exist for this token. No failure, no backoff. ghcr.io is asked once more with the GitHub token first |
+| manifest | 429, 5xx, no answer | the registry fails, as above |
 
 <a id="check-self-repository"></a>
 ## Self-repository syntax (pedantic)
@@ -7613,6 +7644,83 @@ not know that a field of a JSON document is a secret too, so the extracted value
 Store each field in its own secret (`secrets.CREDENTIALS_PASSWORD`). Passing the whole parsed secret on (`fromJSON(secrets.X)`
 without a property access) is not reported. There is no automatic fix.
 
+With the option `pedantic` (on under the `pedantic` profile) the rule also follows the **shell** form of the same problem
+(sisakulint's `secret-in-log`, CodeQL's `UnmaskedSecretExposure`): a script cuts a value out of a secret and prints it.
+
+Example input:
+
+```yaml
+on: push
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          KEY=$(jq -r .private_key <<<"$CREDENTIALS")
+          echo "$KEY"
+        env:
+          CREDENTIALS: ${{ secrets.CREDENTIALS }}
+```
+
+Output:
+<!-- Skip update output -->
+```
+test.yaml:8:11: warning: the variable "KEY" is extracted from the secret CREDENTIALS with jq and printed here. the runner masks only the exact value of a secret, not a part of it, so the value is in the log in clear text. mask it first with `echo "::add-mask::$VALUE"` [unredacted-secrets]
+  |
+8 |           echo "$KEY"
+  |           ^~~~~
+```
+
+<!-- Skip playground link -->
+
+This is the output with the option `pedantic`, set for the rule in [the config file](config.md):
+
+```yaml
+rules:
+  unredacted-secrets:
+    pedantic: true
+```
+
+The runner masks a secret in the log by its exact value. `jq -r .private_key` makes a different string, which the runner does not know,
+and `echo` (or the trace of `set -x`) writes it in clear text. The check follows the variables of one `run:` script in the order of the source:
+
+- A variable is a **secret** when the `env:` of the step, the job or the workflow gives it a value with `secrets.X`, and so is a copy of
+  one (`A="$SECRET"`; the exact value stays masked). A `${{ secrets.X }}` written in the script counts as well.
+- A variable is **derived** when it is set from a command substitution which reads a secret and in which only `echo`, `printf`, `cat` and
+  the tools that cut a text (`jq`, `yq`, `cut`, `awk`, `sed`, `tr`, `base64`, `grep`, `head`, `tail`, `xxd`, `rev`, `fold`, `python`,
+  `node`, `perl`, `ruby`) stand between the secret and the value (`echo "$S" | base64 -d | jq -r .key`), from a parameter expansion that
+  cuts one (`${SECRET#prefix}`, `${SECRET:0:8}`), or when it is a copy of a derived variable.
+- It is reported where the variable is **printed**: `echo` or `printf` of it, `cat <<<"$KEY"` or a heredoc which expands it, or `echo "$(jq ... <<<"$S")"`.
+  And where `set -x` is on (also `set -euxo pipefail`, `set -o xtrace`) at the assignment or at a command that uses the value, because the
+  trace shows both with the values expanded; the value is in the log before any mask can take effect, so turn the trace off with `set +x`.
+- `echo "::add-mask::$KEY"` after the assignment and before the print makes it safe.
+
+Not reported: the value as the argument of another command (`curl -H "Authorization: $KEY"`, `./deploy --key "$KEY"`), a value written to a
+file or to `$GITHUB_ENV` or `$GITHUB_OUTPUT`, a value piped into another command (`echo "$KEY" | base64 -d > key.pem`), the exact
+secret or a string that contains it, a hash (`sha256sum`) or a count (`wc -c`) of it, and the answer of a service that gets the secret as
+credentials (`curl -u "$S" ... | jq -r .id`).
+
+**The shell that is understood.** The check answers one question: what does a word hold, once the shell has expanded it? It asks it
+for the words of a command, the value of an assignment (`A=`, `A+=`, `export A=`), a here-string and an unquoted heredoc (also a
+`${{ secrets.X }}` in it). A command substitution holds what its last command prints, followed back along its pipe through `echo`,
+`printf`, `cat` and the tools above, also when substitutions are nested. A print is `echo`, `printf` or `cat` whose stdout is not
+redirected and not piped on (`echo "$KEY" | cat` prints, `echo "$KEY" | wc -c` does not); the input of `cat` is its here-string, its heredoc or
+the pipe. An expansion in a heredoc is valued as the same word on a command line (`${KEY:0:8}` is a cut, a masked variable is exact).
+A `::add-mask::` masks only when it is the whole line and printed that way: `echo "::add-mask::$KEY"` with that one argument, or
+`printf '::add-mask::%s\n' "$KEY"`, of exactly one variable or one `$(...)`. A mask of a cut (`${KEY:0:4}`), with more text or
+more arguments masks another string, and is an ordinary print. `printf -v NAME ...` (with `-v` as the first argument) assigns and
+prints nothing; `-v` after the format is data. Assignments
+inside a substitution stay in its subshell. Under `set -x` every command that expands a cut value is reported, an assignment included.
+Only `bash` and `sh` scripts are read, in the order of the source.
+The supported subset is pinned by a table of snippets, each reported or not (`TestUnredactedSecretsShellTable`), next to the golden
+`testdata/err/unredacted_secrets_shell.yaml`.
+
+**What is not understood, and so reported as nothing:** functions, loops and branches (the order of the source decides, so a mask in
+one `if` branch counts for the next), `eval`, `source`, `read`, `mapfile`, arrays, indirect expansion, a process substitution (`<(cmd)`
+is the name of a file), commands in the body of a heredoc as a source, a value that is written out by anything other than `echo`,
+`printf` and `cat` (`tee`, `logger`, `curl --data`), a secret that reaches the script through `with:` of an action, and `pwsh` or any
+other shell.
+
 <a id="check-secrets-outside-env"></a>
 ## Secrets outside an environment (pedantic)
 
@@ -7655,6 +7763,21 @@ a compromised workflow.
 
 Move the secret to an environment, remove it from the repository secrets, and set `environment:` at the job. jactionlint
 cannot see where a secret is stored, so it assumes that the secrets of a job with an `environment:` are environment secrets.
+
+A job that calls a reusable workflow cannot have an `environment:`, so a secret that it passes with `secrets:` is a repository or
+organization secret, which no environment protects. (A job of the called workflow can have an environment of its own and use the
+secrets of that environment, which is a different secret: that design is not reported.) It is reported too (a message of its own, at the secret in the `secrets:` of the call; zizmor reports it as an auditor
+finding, [#1792](https://github.com/zizmorcore/zizmor/pull/1792)). `secrets: inherit` names no secret and is not reported here (see
+[`secrets-inherit`](#check-secrets-inherit)). Only the values under `secrets:` are read: a secret in another field of the job (`with:`, `if:`,
+`name:`, where the `secrets` context is not available and the expression check reports it) is not a secret that is passed on:
+
+```yaml
+jobs:
+  deploy:
+    uses: ./.github/workflows/deploy.yaml
+    secrets:
+      token: ${{ secrets.DEPLOY_TOKEN }}
+```
 
 `GITHUB_TOKEN` is never reported because its permissions are set by the workflow. Workflows that run through `workflow_call`
 are skipped: environment secrets do not reach a reusable workflow unless the caller inherits all secrets. Secrets that are fine
@@ -7714,6 +7837,28 @@ Set the value at the job or the step that needs it. A workflow with a single job
 variable itself does not receive the workflow-level value, and a job that calls a reusable workflow does not pass `env:` on, so
 neither counts. `GITHUB_TOKEN` is never reported. There is no automatic fix because moving the value changes where it is visible
 to expressions.
+
+The option `job-level` (off unless set) does the same for the `env:` of a job: a secret there reaches every step of the job,
+third-party actions included, so it is reported when the job has two or more steps that do not set the variable themselves
+(ghalint `job_secrets`, zizmor [#1816](https://github.com/zizmorcore/zizmor/issues/1816)):
+
+```yaml
+rules:
+  workflow-secret-scope:
+    level: warn
+    job-level: true
+```
+
+```yaml
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}   # reaches both steps
+    steps:
+      - uses: actions/checkout@v4
+      - run: ./deploy.sh                      # the only step that needs it
+```
 
 <a id="check-typosquat-uses"></a>
 ## Typosquatting of actions
@@ -9102,9 +9247,7 @@ A comment run is safe when the person who commented, or the pull request author,
   `environment:` or has a gate step: when it is skipped or fails, so does this job, unless its own `if:` calls `always()`,
   `cancelled()` or `failure()`.
 
-These gates do not protect against a pull request that changes after the person has looked at it: a maintainer comments
-`/test`, the author pushes, and the job checks out the new head, which the author controls (a time-of-check to time-of-use
-race). The rule does not report that yet.
+Some gates hold at one moment only, and are judged for the code that follows them (see "Time of check to time of use" below).
 
 A job or step whose `if:` is false for the privileged events of the workflow, as far as it reads `github.event_name`
 (`if: github.event_name == 'workflow_dispatch'`), is not judged for them, and a job that needs a skipped job is skipped too.
@@ -9131,6 +9274,44 @@ and the callee has `actions/checkout` with `ref: ${{ inputs.ref }}` and then `ma
 What is not known stays out: a reusable workflow or action that no workflow of the project calls (it is published for other
 repositories), a call through a composite action that calls another one, a value from a step output, a matrix or an
 `needs` output, a `uses:` with an expression, and a call made by a composite action.
+
+**Time of check to time of use.** A gate that lets a job start is only as good as the code that runs after it. An `environment:`
+whose reviewers approve, a label that a maintainer adds and a comment of a maintainer hold at one moment. If the job then checks
+out a branch (`github.event.pull_request.head.ref`, `github.head_ref`, `workflow_run.head_branch`, `head_ref` of the actions that
+look up a pull request, `refs/pull/N/head` or `refs/pull/N/merge`, `gh pr checkout`), the author of the pull request pushes after
+the review and the job runs what is there then, not what was reviewed (CodeQL `UntrustedCheckoutTOCTOU`, gato-x `approval_gate`,
+[ActionsTOCTOU](https://github.com/AdnaneKhan/ActionsTOCTOU)). The rule reports it as another message of the same rule:
+
+- **A gate that holds at one moment, and a ref that can change.** The gates that count are an `environment:`, a label condition
+  (`github.event.label.name`, or `github.event.pull_request.labels`), and, in a workflow that only a comment starts, a check of the
+  commenter (`author_association`, `github.actor`, `github.event.comment.user`, a permission check). The author of the pull request
+  is not the commenter. A commit (`head.sha`, `merge_commit_sha`, `head_sha` of a step) is never reported for these gates: the
+  reviewer saw that commit. A gate that checks the author, such as `author_association` of the pull request, the repository of the
+  head, `github.actor` or a permission check in a `pull_request_target` workflow, still holds after a push, and so do conditions on
+  `needs` and `steps`, which are not judged. A step that reads the commit after the checkout (`git rev-parse HEAD`, `git log -1`),
+  compares it with something named sha, revision, commit, expected or verified and stops the job is taken for a check that it is the
+  commit that was reviewed.
+- **A label that lasts.** `if: contains(github.event.pull_request.labels.*.name, 'safe to test')` in a `pull_request_target` workflow
+  that also runs for `opened`, `synchronize` or `reopened` (the default types): the label stays after the review, so each later
+  push runs with it although nobody has looked at it, whatever the ref is, also a commit. It is not reported when the job takes
+  the label away (`gh pr edit --remove-label`, `removeLabel`), or when the condition is tied to the event
+  (`github.event.action == 'labeled'`, `github.event.label.name`).
+- **A dispatch with the number of a pull request** (with the option `pedantic`): `workflow_dispatch` with an input that holds the
+  number of a pull request (`pr`, `pr_number`, `pull`, ...) and no required input for a commit (`sha`, `commit`, `rev` in its name),
+  that checks out `refs/pull/<input>/head` or runs `gh pr checkout <input>`. A maintainer dispatches it after reading the pull request,
+  and a push in between runs unreviewed code (gato-x `dispatch_toctou`). Add a required `sha` input and check it out.
+
+The gates in front of the call of a reusable workflow or composite action are judged the same way, for the code of the callee, when every
+call that reaches it has them. An `environment:` and a label that lasts together are judged as an environment: its reviewers
+approve each run, the one of a new push too, so only a branch is reported.
+
+Check out the commit that was reviewed (`github.event.pull_request.head.sha`) instead of the branch.
+
+**A checkout that nothing runs.** The rule needs a later step that runs the code, which keeps it quiet for the workflows that only
+read the pull request (`git diff`). Scorecard (Dangerous-Workflow) and Semgrep report the checkout alone, and it also catches what
+the rule does not recognize as running code. With the option `any-checkout` (on under `profile: pedantic`; `rules:
+{untrusted-checkout: {level: error, any-checkout: true}}` otherwise) the checkout of the code of a pull request in a
+`pull_request_target` or `workflow_run` workflow is reported when no later step visibly runs it and no gate is in front of it.
 
 A step is reported at its checkout when it puts untrusted code in the workspace and a later step in the same job runs it:
 
@@ -9168,7 +9349,7 @@ A step is reported at its checkout when it puts untrusted code in the workspace 
   a step output or a here document written to `$GITHUB_ENV` with anything but `NAME=value` and `NAME<<DELIM` lines. The same
   holds for a revision that a step passes to a command other than `git`.
 - "Runs it" is a later step with a `run:` command that can execute workspace code (a script, `npm`, `cargo`, `make`, an
-  interpreter, ...), a local action (`uses: ./...`), or one of a few actions that build the workspace. Commands that only read or
+  interpreter, ...), a local action (`uses: ./...`), or an action that runs the workspace (below). Commands that only read or
   move files (`cat`, `git diff`, `grep`, `jq`, `tar`, `gh`, ...) do not count, except when an option makes them run a file of
   the workspace (a relative path or one below `$GITHUB_WORKSPACE`, not `/tmp/x` or `$RUNNER_TEMP/x`): `sed -f script.sed`,
   `awk -f prog.awk`, `tar -xPf a.tar` (absolute names) and `unzip -: a.zip` (`../` in names), which poutine and CodeQL list as
@@ -9178,12 +9359,57 @@ A step is reported at its checkout when it puts untrusted code in the workspace 
   step works in that directory (`working-directory`, `cd`, or an argument below it); `python3 base/check.py --root pr-head` runs a
   script from the base checkout and only reads `pr-head`, so it does not count either.
 
+The actions that run the workspace are the ones that poutine and CodeQL list (their source is the
+[LOTP catalog](https://boostsecurityio.github.io/lotp/), whose entries for actions are `actions/setup-node`,
+`oxsecurity/megalinter` and local actions), where the action runs a tool on the files of the repository: a linter with the
+configuration and the plugins of the repository (`oxsecurity/megalinter`, `super-linter/super-linter`, `trunk-io/trunk-action`,
+`bridgecrewio/checkov-action`, `sonarsource/sonarcloud-github-action`, `sonarsource/sonarqube-scan-action`, `errata-ai/vale-action`,
+`reviewdog/action-eslint`, `-rubocop`, `-tflint`, `-flake8`, `-stylelint`, `-golangci-lint`, `-mypy`,
+`pre-commit/action` and the other eslint, rubocop, mypy, stylelint, phpstan and pre-commit actions of poutine), a build or an
+installer (`dflook/terraform-plan`, `-apply`, `dflook/tofu-plan`, `-apply`, `JS-DevTools/npm-publish`, `pypa/cibuildwheel`,
+`PyO3/maturin-action`, `hynek/build-and-inspect-python-package`, `cypress-io/github-action`, `actions-rs/cargo`,
+`github/codeql-action/autobuild` and `analyze`, the Maven, mkdocs and pip actions of poutine). Some actions run it only for an
+input, which is checked: `ruby/setup-ruby` with `bundler-cache: true`, `actions/setup-node` with `cache` set to `npm`, `yarn` or `pnpm`, `golangci/golangci-lint-action` unless `install-only` is true, `docker/build-push-action`
+with a `context` that is a path of the workspace (a relative path, `${{ github.workspace }}` or `cwd://`; the default, `{{defaultContext}}` and the URL and `github.com/` contexts are remote and do not read the workspace),
+`goreleaser/goreleaser-action` with `args` that has `release` or `build` and no `install-only` (it fails without `args`),
+`magefile/mage-action` unless `install-only` is true (it runs `mage` with the default target when `args` is empty),
+`gradle/gradle-build-action` and `gradle/actions/setup-gradle` with `arguments` (setup-gradle up to v3 runs Gradle with it; v4
+and later refuse the input), and `cypress-io/github-action` unless `install` and `runTests` are both false and it has no `build`, `start`, `start-windows` or `command`. Not listed although poutine or CodeQL
+has them: `docker/setup-buildx-action`, `pre-commit-ci/lite-action` and `browniebroke/pre-commit-autoupdate-action` (they
+run nothing of the workspace) and `actions/jekyll-build-pages` (not verified). `gradle/actions/setup-gradle` without `arguments` only prepares a later
+step.
+
+The inline scripts of actions are not analyzed: `azure/powershell` (`inlineScript`) is not in the list of actions that run the
+workspace, because the rule cannot tell whether an inline PowerShell script runs files of the repository (it is not
+parsed). A workflow that uses it after a checkout of the code of a pull request needs a manual review.
+
 In a job that sets `permissions: {}` the message does not claim a token, because the job has none, and in a job whose
 permissions are all `read` it says that the token can only read.
 
+**The gates.** A gate in front of the job or the step decides whether a checkout is reported (the table
+`TestUntrustedCheckoutGateModel` runs every gate against every event):
+
+| Gate | `pull_request_target`, `workflow_run` | `issue_comment`, `workflow_dispatch` (option `pedantic`) |
+| --- | --- | --- |
+| nothing | reported | reported |
+| `environment:` with reviewers | one moment | one moment |
+| permission check step, `github.actor`, the association of the commenter | holds, nothing is reported | one moment |
+| `author_association` of the pull request (or of the issue) | holds | holds (comment) |
+| `labels.*.name` of the pull request | lasts | |
+| `github.event.label.name` (the `labeled` event, or `github.event.action == 'labeled'`) | one moment | |
+
+A gate that **holds** checks who wrote the code, and stops the job whatever is pushed later. A gate that holds at **one moment**
+lets the job start, and the author can push to the branch afterwards: the checkout is reported when the ref can change (a branch,
+`refs/pull/N/head`, `gh pr checkout`, or any alternative of an expression that is one: `head.sha || github.head_ref`), not for a
+commit. A label that **lasts** is reported whatever the ref is when the workflow runs again for each push, unless the job takes
+the label away or the label is tied to the event. For a comment or a dispatch, who commented or dispatched is not who wrote the
+code, so a check of that user is a gate of one moment. The same classification applies to the steps of a composite action that a
+step calls, and to the gates of the calls of a reusable workflow, of which only the ones that every call has count. A gate that
+reads a context that the event does not have (the labels of a pull request in a comment) is not judged.
+
 What is **not** reported: a checkout of the base (no `ref`, or `github.event.pull_request.base.*`), a checkout that nothing runs,
 a job with an `environment:` (its reviewers decide, unless `--online` finds that it has none, see
-[below](#check-untrusted-checkout-environment)), and a job or step whose `if:` reads who or what started the workflow:
+[below](#check-untrusted-checkout-environment)) when it checks out a commit, and a job or step whose `if:` reads who or what started the workflow:
 `github.actor`, the author or labels of the pull request, `github.event.pull_request.head.repo`, `github.event.workflow_run.event`,
 `needs` or `steps`. A job or step that only runs for a pull request that was merged (`if: github.event.pull_request.merged == true`,
 alone or in a conjunction) is not reported for a checkout of `github.event.pull_request.merge_commit_sha` or `head.sha`: that is
@@ -9431,6 +9657,57 @@ The rule is not in the `default` profile because an input can exist for someone 
 (for example the `distinct_id` that `codex-/return-dispatch` passes) or a caller in another repository needs it even when the
 workflow never reads it. Silence such an input with `# jactionlint ignore=unused-workflow-input` on its line. There is no
 automatic fix because removing an input of `workflow_call` breaks the callers that still pass it.
+
+<a id="check-unused-workflow-secret"></a>
+## Unused workflow secrets (pedantic)
+
+Example input:
+
+```yaml
+on:
+  workflow_call:
+    secrets:
+      token:
+        required: true
+      npm-token:
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - run: ./release.sh
+        env:
+          TOKEN: ${{ secrets.token }}
+```
+
+Output:
+<!-- Skip update output -->
+```
+test.yaml:6:7: warning: secret "npm-token" of "workflow_call" is never used: no expression reads "secrets.npm-token". remove it from the workflow and from the callers, so that nothing passes a credential which is not needed, or use it [unused-workflow-secret]
+  |
+6 |       npm-token:
+  |       ^~~~~~~~~
+```
+
+<!-- Skip playground link -->
+
+The output above is from the following `rules` section of the [configuration file](config.md):
+
+```yaml
+rules:
+  unused-workflow-secret: warn
+```
+
+The rule `unused-workflow-secret` (in the `pedantic` profile, as a warning) is the sibling of
+[`unused-workflow-input`](#check-unused-workflow-input) for `on.workflow_call.secrets`: a secret that the workflow declares and
+no expression reads. A caller has to pass a required one and passes an optional one for nothing, so every unused secret hands a
+credential to a workflow that does not need it (zizmor [#1044](https://github.com/zizmorcore/zizmor/issues/1044) asks for it).
+
+A secret is read as `secrets.<name>` (names are case-insensitive) or `secrets['<name>']`. A read of the whole context
+(`toJSON(secrets)`, `secrets[matrix.name]`) counts as a read of every secret, and so does a job that calls another workflow with
+`secrets: inherit`, which passes every secret on. A workflow where an expression does not parse is skipped. It is not in the
+`default` profile for the same reason as the inputs: the secret may be passed for a reason that the file does not show. Silence one
+with `# jactionlint ignore=unused-workflow-secret` on its line. There is no automatic fix because removing a secret of `workflow_call`
+breaks the callers that still pass it.
 
 <a id="check-unused-needs"></a>
 ## Needs entries that do nothing (pedantic)
@@ -9837,7 +10114,7 @@ How the rules treat actions:
 
 - **Applies** to the steps (and the metadata) of an action: `action-syntax`, `adhoc-packages`, `archived-uses`, `argument-injection`, `artipacked`, `background-step-not-waited`, `checkout-static-credentials`, `command-injection`, `conflicting-action-inputs`, `constant-condition`, `context-availability`, `continue-on-error`, `deprecated-action-input`, `deprecated-commands`, `deprecated-node-runtime`, `duplicate-key`, `duplicate-step-id`, `environment-file-redirect`, `expired-ignore`, `expression-syntax`, `expression-type`, `fail-fast-action-inputs`, `forbidden-uses`, `github-app`, `if-always-true`, `impostor-commit`, `insecure-commands`, `insecure-ssh-keyscan`, `insecure-url-scheme`, `invalid-env-var-name`, `invalid-function-call`, `invalid-id`, `invalid-ignore-comment`, `invalid-local-action`, `invalid-parallel-step`, `invalid-shell-name`, `invalid-uses`, `invisible-characters`, `known-vulnerable-actions`, `malformed-expression-delimiters`, `max-run-lines`, `merge-key`, `misfeature`, `missing-action-input`, `multiline-plain-run`, `obfuscation`, `outdated-action-runner`, `output-clobbering`, `pipeline-without-pipefail`, `pyflakes`, `recursive-alias`, `ref-confusion`, `ref-version-mismatch`, `repojacking`, `require-expression-wrapping`, `self-repository`, `shellcheck`, `stale-action-refs`, `superfluous-actions`, `template-injection`, `typosquat-uses`, `undefined-function`, `undefined-property`, `unknown-action-input`, `unlocked-install`, `unpinned-images`, `unpinned-tools`, `unpinned-uses`, `unsound-contains`, `unsound-prefix-match`, `unsound-ternary`, `unused-anchor`, `unused-ignore`, `unverified-download`, `use-trusted-publishing`, `yaml-syntax`.
 - **Caller-dependent**: `agentic-actions`, `bot-conditions`, `cache-poisoning`, `github-env` (its findings about untrusted input do not depend on the caller), `untrusted-artifact` and `untrusted-checkout`.
-- **Not applicable** because an action does not have what the rule checks, or because only the calling job can decide (`unused-baseline-entry` is about the baseline file, not about a workflow or an action): `anonymous-definition`, `concurrency-cancels-prs`, `concurrency-cancels-release`, `concurrency-deadlock`, `concurrency-limits`, `conflicting-runner-labels`, `cron-too-frequent`, `cyclic-job-needs`, `dangerous-triggers`, `dependabot-cooldown`, `dependabot-execution`, `dependabot-missing-actions-update`, `dependabot-syntax`, `deprecated-runner-label`, `duplicate-job-id`, `duplicate-job-needs`, `duplicate-triggers`, `event-name-never-received`, `excessive-permissions`, `gate-job-skipped-on-failure`, `gh-without-token`, `hardcoded-container-credentials`, `insufficient-permissions`, `invalid-activity-type`, `invalid-cron`, `invalid-event-config`, `invalid-event-filter`, `invalid-glob`, `invalid-label-pattern`, `invalid-local-workflow`, `invalid-permissions`, `invalid-timezone`, `invalid-workflow-call`, `invalid-workflow-call-input`, `invalid-workflow-dispatch-input`, `local-action-checkout`, `matrix-duplicate-value`, `matrix-invalid-exclude`, `missing-permissions`, `missing-timeout`, `missing-workflow-input`, `missing-workflow-secret`, `mutable-runner-label`, `overprovisioned-secrets`, `require-shell`, `required-actions`, `secrets-inherit`, `secrets-outside-env`, `self-hosted-runner`, `timeout-too-long`, `ubuntu-slim-limits`, `undefined-job-needs`, `undocumented-permissions`, `unknown-event`, `unknown-runner-label`, `unknown-workflow-input`, `unknown-workflow-secret`, `unmatched-paths-filter`, `unredacted-secrets`, `unused-baseline-entry`, `unused-job-output`, `unused-needs`, `unused-workflow-input`, `workflow-call-permissions`, `workflow-input-type`, `workflow-run-names`, `workflow-secret-scope`, `workflow-syntax`.
+- **Not applicable** because an action does not have what the rule checks, or because only the calling job can decide (`unused-baseline-entry` is about the baseline file, not about a workflow or an action): `anonymous-definition`, `concurrency-cancels-prs`, `concurrency-cancels-release`, `concurrency-deadlock`, `concurrency-limits`, `conflicting-runner-labels`, `cron-too-frequent`, `cyclic-job-needs`, `dangerous-triggers`, `dependabot-cooldown`, `dependabot-execution`, `dependabot-missing-actions-update`, `dependabot-syntax`, `deprecated-runner-label`, `duplicate-job-id`, `duplicate-job-needs`, `duplicate-triggers`, `event-name-never-received`, `excessive-permissions`, `gate-job-skipped-on-failure`, `gh-without-token`, `hardcoded-container-credentials`, `insufficient-permissions`, `invalid-activity-type`, `invalid-cron`, `invalid-event-config`, `invalid-event-filter`, `invalid-glob`, `invalid-label-pattern`, `invalid-local-workflow`, `invalid-permissions`, `invalid-timezone`, `invalid-workflow-call`, `invalid-workflow-call-input`, `invalid-workflow-dispatch-input`, `local-action-checkout`, `matrix-duplicate-value`, `matrix-invalid-exclude`, `missing-permissions`, `missing-timeout`, `missing-workflow-input`, `missing-workflow-secret`, `mutable-runner-label`, `overprovisioned-secrets`, `require-shell`, `required-actions`, `secrets-inherit`, `secrets-outside-env`, `self-hosted-runner`, `timeout-too-long`, `ubuntu-slim-limits`, `undefined-job-needs`, `undocumented-permissions`, `unknown-event`, `unknown-runner-label`, `unknown-workflow-input`, `unknown-workflow-secret`, `unmatched-paths-filter`, `unredacted-secrets`, `unused-baseline-entry`, `unused-job-output`, `unused-needs`, `unused-workflow-input`, `unused-workflow-secret`, `workflow-call-permissions`, `workflow-input-type`, `workflow-run-names`, `workflow-secret-scope`, `workflow-syntax`.
 
 Example input:
 
