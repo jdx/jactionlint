@@ -8,6 +8,8 @@ jobs:
           echo start
           gh api repos/o/r/releases | jq -r '.[0].tag_name'
           cat build.log | tee out.txt
+        env:
+          GH_TOKEN: ${{ github.token }}
       - run: |
           if true; then
             docker build . | tail -n 5

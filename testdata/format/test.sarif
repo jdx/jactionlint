@@ -175,6 +175,21 @@
               "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
             },
             {
+              "id": "environment-file-redirect",
+              "name": "EnvironmentFileRedirect",
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "description": "Checks for writes to GITHUB_OUTPUT and the other environment files that lose the data at \"run:\"",
+                "queryURI": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+              },
+              "fullDescription": {
+                "text": "Checks for writes to GITHUB_OUTPUT and the other environment files that lose the data at \"run:\""
+              },
+              "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+            },
+            {
               "id": "events",
               "name": "Events",
               "defaultConfiguration": {
@@ -231,6 +246,21 @@
               },
               "fullDescription": {
                 "text": "Checks that a job which reads the result of the jobs it needs runs when they fail"
+              },
+              "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+            },
+            {
+              "id": "gh-without-token",
+              "name": "GhWithoutToken",
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "description": "Checks for the gh command at \"run:\" without GH_TOKEN or GITHUB_TOKEN",
+                "queryURI": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+              },
+              "fullDescription": {
+                "text": "Checks for the gh command at \"run:\" without GH_TOKEN or GITHUB_TOKEN"
               },
               "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
             },

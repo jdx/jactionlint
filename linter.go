@@ -84,6 +84,10 @@ type LinterOptions struct {
 	// noted in the log (see RunHints) and in the SARIF log: its scripts are not checked.
 	ShellcheckRequired bool
 	PyflakesRequired   bool
+	// ShellcheckRCFile is a shellcheckrc file for shellcheck to read instead of --norc (the option
+	// --shellcheck-rcfile). A relative path is resolved from the working directory. It wins over the
+	// "shellcheck.rcfile" key of the configuration. The file must exist: the run fails when it does not.
+	ShellcheckRCFile string
 	// IgnorePatterns is list of regular expression to filter errors. The pattern is applied to error
 	// messages. When an error is matched, the error is ignored.
 	IgnorePatterns []string
@@ -185,9 +189,11 @@ type Linter struct {
 	shellcheck string
 	pyflakes   string
 	// tools tracks whether shellcheck and pyflakes ran in this run.
-	tools      *externalTools
-	toolNoted  atomic.Bool
-	ignorePats IgnorePatterns
+	tools     *externalTools
+	toolNoted atomic.Bool
+	// shellcheckRC is LinterOptions.ShellcheckRCFile
+	shellcheckRC string
+	ignorePats   IgnorePatterns
 	// now returns the current time. It is time.Now unless LinterOptions.Now is set.
 	now func() time.Time
 	// ignoreRun is the state of the config "ignores" in the current run.
@@ -320,6 +326,7 @@ func NewLinter(out io.Writer, opts *LinterOptions) (*Linter, error) {
 		shellcheck:     opts.Shellcheck,
 		pyflakes:       opts.Pyflakes,
 		tools:          newExternalTools(opts),
+		shellcheckRC:   opts.ShellcheckRCFile,
 		ignorePats:     ignore,
 		now:            opts.Now,
 		stdin:          stdin,
@@ -335,6 +342,9 @@ func NewLinter(out io.Writer, opts *LinterOptions) (*Linter, error) {
 		online:         onlineSettings{off: opts.OnlineOff, enabled: !opts.OnlineOff && (opts.Online || opts.OnlineOptions.Mode != OnlineModeDefault), client: opts.GitHubClient, ttl: opts.OnlineCacheTTL, ctx: opts.Context, opts: opts.OnlineOptions},
 	}
 	if err := l.tools.checkRequired(); err != nil {
+		return nil, err
+	}
+	if _, err := shellcheckRCFile(opts.ShellcheckRCFile, cwd, nil, ""); err != nil {
 		return nil, err
 	}
 	l.warnRetiredIgnores(ignore...)
@@ -874,9 +884,14 @@ func (l *Linter) check(
 			shellcheck:             l.shellcheck,
 			pyflakes:               l.pyflakes,
 			tools:                  l.tools,
+			shellcheckRCFile:       l.shellcheckRC,
+			cwd:                    l.cwd,
 			proc:                   proc,
 		}
 		rules := newBuiltinRules(env, l.log)
+		if env.err != nil {
+			return nil, env.err
+		}
 		skippedRules = env.skipped
 		if l.onRulesCreated != nil {
 			rules = l.onRulesCreated(rules)

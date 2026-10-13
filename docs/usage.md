@@ -139,6 +139,7 @@ cat action.yml | jactionlint --stdin-filename action.yml -
 | --- | --- | --- |
 | `--shellcheck=CMD` |  | Command or path of shellcheck (default shellcheck). Empty disables the integration. A command given here must exist (exit status 3 otherwise) |
 | `--pyflakes=CMD` |  | Command or path of pyflakes (default pyflakes). Empty disables the integration. A command given here must exist (exit status 3 otherwise) |
+| `--shellcheck-rcfile=FILE` |  | Let shellcheck read this shellcheckrc instead of passing --norc. Overrides "shellcheck.rcfile" of the config file |
 
 Exit status: 0 no problem, 1 problems found, 2 invalid command line, 3 failure.
 
@@ -272,6 +273,18 @@ processes.
 ```sh
 jactionlint --shellcheck= --pyflakes=
 ```
+
+jactionlint runs shellcheck with `--norc`, so the results do not depend on a `.shellcheckrc` in the directory you run it from.
+To use a shellcheckrc, to pass arguments or to turn on optional checks of shellcheck, set the
+[`shellcheck` section](config.md#shellcheck) of the config file, or give a file with `--shellcheck-rcfile`:
+
+```sh
+jactionlint --shellcheck-rcfile=.shellcheckrc
+```
+
+The file must exist (exit status 3 otherwise), and a relative path is resolved from the working directory. This is the way to keep
+the settings with the repository where `SHELLCHECK_OPTS` cannot be set, for example in a [pre-commit](#pre-commit) hook on
+pre-commit.ci: put `shellcheck: {rcfile: .shellcheckrc}` in `.github/jactionlint.yaml`. `SHELLCHECK_OPTS` still works as before.
 
 <a id="external-tools"></a>
 #### When shellcheck or pyflakes is missing
@@ -1138,7 +1151,8 @@ out of the box. Running MegaLinter in your repository automatically runs jaction
 ### pre-commit
 
 [pre-commit][] is a framework for managing and maintaining multi-language Git pre-commit hooks. jactionlint is available as a
-pre-commit hook to check workflow files in `.github/workflows/` directory.
+pre-commit hook. The hooks run for the files jactionlint lints: the workflows in `.github/workflows/`, the metadata files of
+actions (`action.yml` and `action.yaml` in any directory) and `.github/dependabot.yml`, so editing any of them runs the hook.
 
 Add this to your `.pre-commit-config.yaml` in your repository:
 
@@ -1151,13 +1165,17 @@ repos:
       - id: jactionlint
 ```
 
-As alternatives to `jactionlint` hook, `jactionlint-docker` or `jactionlint-system` hooks are available.
+As alternatives to `jactionlint` hook, `jactionlint-shellcheck`, `jactionlint-docker` or `jactionlint-system` hooks are available.
 
 | Hook ID | Explanation |
 |-|-|
 | `jactionlint` | Automatically installs `jactionlint` command in isolated `$GOPATH` directory using [Go toolchain][go-install]. |
+| `jactionlint-shellcheck` | Like `jactionlint`, and also installs a `shellcheck` built from Go ([go-shellcheck][]) next to it, so the scripts are checked without a system `shellcheck`, and the results match CI. |
 | `jactionlint-docker` | Automatically pulls [the jactionlint Docker image](#docker). |
 | `jactionlint-system` | Uses system-installed `jactionlint` command. The command is necessary to be [installed manually](install.md). |
+
+Without a `shellcheck` on `PATH` the `jactionlint` hook does not check the scripts with shellcheck (see [the shellcheck integration](checks.md#check-shellcheck-integ)).
+Use `jactionlint-shellcheck` for pre-commit.ci and for machines without shellcheck.
 
 ### VS Code
 
@@ -1248,6 +1266,7 @@ You can also see actionlint issues inline in VS Code via the [Trunk VS Code exte
 [jactionlint-matcher]: https://raw.githubusercontent.com/jdx/jactionlint/main/.github/jactionlint-matcher.json
 [preinstall-ubuntu]: https://github.com/actions/runner-images/blob/main/images/ubuntu/Ubuntu2404-Readme.md
 [pre-commit]: https://pre-commit.com
+[go-shellcheck]: https://github.com/wasilibs/go-shellcheck
 [go-install]: https://go.dev/doc/install
 [docker]: https://www.docker.com/
 [docker-image]: https://github.com/jdx/jactionlint/pkgs/container/jactionlint
