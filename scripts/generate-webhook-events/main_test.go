@@ -110,3 +110,34 @@ func TestFetchURL(t *testing.T) {
 		t.Fatal("Fetched source is empty")
 	}
 }
+
+func TestExtraTypes(t *testing.T) {
+	t.Run("added once", func(t *testing.T) {
+		p := map[string][]string{"merge_group": {"checks_requested"}}
+		for i := 0; i < 2; i++ {
+			if err := applyExtraTypes(p); err != nil {
+				t.Fatal(err)
+			}
+		}
+		want := []string{"checks_requested", "destroyed"}
+		if diff := cmp.Diff(want, p["merge_group"]); diff != "" {
+			t.Fatal(diff)
+		}
+	})
+	t.Run("already documented", func(t *testing.T) {
+		p := map[string][]string{"merge_group": {"destroyed", "checks_requested"}}
+		if err := applyExtraTypes(p); err != nil {
+			t.Fatal(err)
+		}
+		want := []string{"destroyed", "checks_requested"}
+		if diff := cmp.Diff(want, p["merge_group"]); diff != "" {
+			t.Fatal(diff)
+		}
+	})
+	t.Run("event missing in the document", func(t *testing.T) {
+		err := applyExtraTypes(map[string][]string{"fork": {}})
+		if err == nil || !strings.Contains(err.Error(), `event "merge_group"`) {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+}

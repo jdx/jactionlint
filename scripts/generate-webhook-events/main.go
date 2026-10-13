@@ -24,6 +24,39 @@ import (
 
 const theURL = "https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows"
 
+// extraTypes are activity types which the documentation does not list but jactionlint must accept. They are
+// added to the types scraped from the documentation, so that regenerating the table does not drop them.
+// An event of this table which is missing in the documentation is an error because it means the entry is stale.
+var extraTypes = map[string][]string{
+	// GitHub documents "destroyed" for the merge_group webhook event, while the page of workflow triggers only
+	// lists "checks_requested". Workflows using both types must lint clean. (23f9662c)
+	"merge_group": {"destroyed"},
+}
+
+// applyExtraTypes adds the activity types of extraTypes which are not in parsed yet.
+func applyExtraTypes(parsed map[string][]string) error {
+	for event, extra := range extraTypes {
+		types, ok := parsed[event]
+		if !ok {
+			return fmt.Errorf("event %q of the extra activity types was not found in the document", event)
+		}
+		for _, e := range extra {
+			found := false
+			for _, t := range types {
+				if t == e {
+					found = true
+					break
+				}
+			}
+			if !found {
+				types = append(types, e)
+			}
+		}
+		parsed[event] = types
+	}
+	return nil
+}
+
 var dbg = log.New(io.Discard, "", log.LstdFlags)
 
 // Parse the activity types of each webhook event. The keys of the map are names of the webhook events
@@ -372,6 +405,10 @@ func run(args []string, stdout, dbgout io.Writer, srcURL string) error {
 
 	p, err := parse(src)
 	if err != nil {
+		return err
+	}
+
+	if err := applyExtraTypes(p); err != nil {
 		return err
 	}
 
