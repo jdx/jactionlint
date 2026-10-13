@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"strconv"
 	"strings"
 )
 
@@ -303,6 +302,8 @@ type RuleAction struct {
 	cache *LocalActionsCache
 	// shared are the findings about a local action itself (see reportOnce).
 	shared []*Error
+	// wf is the file being checked, for the version comments of the steps.
+	wf *Workflow
 }
 
 // NewRuleAction creates new RuleAction instance.
@@ -314,6 +315,12 @@ func NewRuleAction(cache *LocalActionsCache) *RuleAction {
 		},
 		cache: cache,
 	}
+}
+
+// VisitWorkflowPre is callback when visiting Workflow node before visiting its children.
+func (rule *RuleAction) VisitWorkflowPre(n *Workflow) error {
+	rule.wf = n
+	return nil
 }
 
 // VisitStep is callback when visiting Step node.
@@ -359,22 +366,32 @@ func (rule *RuleAction) checkRepoAction(ref *UsesRef, exec *ExecAction) {
 		rule.ReportID("unpinned-uses", exec.Uses.Pos, msg)
 	}
 
-	meta, ok := PopularActions[spec]
-	if !ok {
-		if _, ok := OutdatedPopularActionSpecs[spec]; ok {
-			rule.ReportIDf("outdated-action-runner", exec.Uses.Pos, "the runner of %q action is too old to run on GitHub Actions. update the action's version to fix this issue", spec)
-			return
-		}
+	var comments *CommentIndex
+	if rule.wf != nil {
+		comments = rule.wf.Comments
+	}
+	ps, found := resolvePopularSpec(ref, exec.Uses, comments, knownPopularAction)
+	if !found {
 		rule.Debug("This action is not found in popular actions data set: %s", spec)
 		return
 	}
+	meta, ok := PopularActions[ps.Key]
+	if !ok {
+		// Not in the data set of inputs, but known to run on a runtime which is gone
+		msg := "the runner of %q action is too old to run on GitHub Actions%s. update the action's version to fix this issue"
+		if ps.Source == popularFromComment {
+			msg += ", or the version comment if it is out of date"
+		}
+		rule.ReportIDf("outdated-action-runner", exec.Uses.Pos, msg, spec, ps.note())
+		return
+	}
 	if meta.SkipInputs {
-		rule.Debug("This action skips to check inputs: %s", spec)
+		rule.Debug("This action skips to check inputs: %s", ps.Key)
 		return
 	}
 
 	rule.checkAction(meta, exec, func(m *ActionMetadata) string {
-		return strconv.Quote(spec)
+		return ps.describe(spec)
 	})
 }
 

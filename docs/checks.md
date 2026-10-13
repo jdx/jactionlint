@@ -2427,8 +2427,24 @@ jactionlint checks inputs of many popular actions such as `actions/checkout@v4`.
 this is done by checking `with:` section items with a small database collected at building `jactionlint` binary. jactionlint
 can check popular actions without fetching any `action.yml` of the actions from the remote so that it can run efficiently.
 
-Note that it only supports the case of specifying major versions like `actions/checkout@v4`. Fixing version of action like
-`actions/checkout@v4.0.1` and using the HEAD of action like `actions/checkout@main` are not supported for now.
+The data set has one entry per major version of an action. jactionlint looks it up with the major version of
+
+- a version tag, however precise: `actions/cache@v4.2.4`, `actions/cache@v4.2` and `actions/cache@4.2.4` are checked as
+  `actions/cache@v4`
+- a commit SHA with a version comment after it, the form `pinact`, Dependabot and Renovate keep up to date and the `default`
+  profile asks for: `actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4` is checked as `actions/cache@v4`. The
+  comment must start with the version (`# v4`, `# v4.2.4`, `# 4.2.4`, `# tag=v4.2.4`, `# v4.2.4 (some note)`).
+
+When the version comes from a comment the finding says so, because nothing verifies the comment offline: a comment that
+went stale (the commit is another major version than the comment says) makes jactionlint check the inputs against the wrong
+version. [Version comments of pinned actions](#check-ref-version-mismatch) finds those with `--online`.
+
+jactionlint does not guess. A commit without a version comment, a comment that names several versions (`# v4 -> v5`) or none
+(`# keep in sync with v4`), a bare number (`# 4`), a pre-release (`v4.2.4-beta.1`), a branch (`actions/checkout@main`) and a
+major version which is not in the data set are not checked. The data set holds the inputs of the latest release of each major
+version, so an input which a later release of the major version added or removed is judged by that release even when you pin
+an older one. The outputs of `steps.<id>.outputs` are looked up the same way for a version tag, but not for a commit with a
+comment.
 
 So far, jactionlint supports more than 100 popular actions The data set is embedded at [`popular_actions.go`](https://github.com/jdx/jactionlint/blob/main/popular_actions.go)
 and were automatically collected by [a script][generate-popular-actions]. If you want more checks for other actions, please
@@ -2464,6 +2480,10 @@ test.yaml:8:15: the runner of "actions/checkout@v3" action is too old to run on 
 In addition to the checks for inputs of actions described in [the previous section](#check-popular-action-inputs), jactionlint
 reports an error when a popular action is 'outdated'. An action is outdated when the runner used by the action is no longer
 supported by GitHub Actions runtime. For example, `node12` is no longer available so any actions can not use `node12` runner.
+
+The version is found as described in [the previous section](#check-popular-action-inputs): `actions/checkout@v3.6.0` and
+`actions/checkout@<sha> # v3.6.0` are reported like `actions/checkout@v3`. For a commit the finding says that it rests on the
+version comment, which may be out of date.
 
 Note that this check doesn't report that the action version is up-to-date. For example, even if you use `actions/checkout@v4` and
 newer version `actions/checkout@v5` is available, jactionlint reports no error as long as `actions/checkout@v4` is not outdated.
@@ -6840,6 +6860,10 @@ jobs:
 Output:
 
 ```
+test.yaml:10:15: the runner of "actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683" action is too old to run on GitHub Actions (checked as "actions/checkout@v3": the version comment "# v3.0.0" says so, and nothing verifies the comment). update the action's version to fix this issue, or the version comment if it is out of date [outdated-action-runner]
+   |
+10 |       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v3.0.0
+   |               ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 test.yaml:10:15: warning: the version comment "# v3.0.0" does not match the commit pinned in action "actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683": tag "v3.0.0" points to commit a12a3943b4bd, but the pinned commit is tagged "v4.2.2". update the comment, or pin the commit of the version you mean [ref-version-mismatch]
    |
 10 |       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v3.0.0
