@@ -300,6 +300,7 @@ func TestCachePoisoningEveryTagPatternIsARun(t *testing.T) {
 }
 
 func TestCachePoisoningHandoffFollowsTheConditions(t *testing.T) {
+	t.Parallel()
 	const head = "on:\n  push:\n    tags: ['v*']\n  workflow_dispatch:\npermissions:\n  contents: read\n"
 	build := func(uploadIf string) string {
 		return "jobs:\n  build:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: Swatinem/rust-cache@v2\n      - uses: actions/upload-artifact@v4\n" + uploadIf + "        with:\n          name: d\n          path: d\n"

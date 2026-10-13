@@ -38,28 +38,50 @@ func sourceColumns(src []byte) []int {
 	return ret
 }
 
-func lintFormatted(t *testing.T, format string, name string, src []byte) string {
+// formatLinter lints many sources with one Linter. A Linter reads the workflows of the repository once to
+// build its call graph, so a test which lints every fixture takes a Linter per test instead of one per file.
+type formatLinter struct {
+	l   *Linter
+	out strings.Builder
+}
+
+func newFormatLinter(t *testing.T, format string) *formatLinter {
 	t.Helper()
-	var b strings.Builder
-	l, err := NewLinter(&b, &LinterOptions{Format: format})
+	f := &formatLinter{}
+	l, err := NewLinter(&f.out, &LinterOptions{Format: format})
 	if err != nil {
 		t.Fatal(err)
 	}
 	l.defaultConfig = &Config{Profile: ProfilePedantic}
-	if _, err := l.Lint(name, src, nil); err != nil {
+	f.l = l
+	return f
+}
+
+// lint returns what the Linter printed for the source.
+func (f *formatLinter) lint(t *testing.T, name string, src []byte) string {
+	t.Helper()
+	f.out.Reset()
+	if _, err := f.l.Lint(name, src, nil); err != nil {
 		t.Fatal(err)
 	}
-	return b.String()
+	return f.out.String()
+}
+
+func lintFormatted(t *testing.T, format string, name string, src []byte) string {
+	t.Helper()
+	return newFormatLinter(t, format).lint(t, name, src)
 }
 
 func TestSARIFRegionsAreValid(t *testing.T) {
+	t.Parallel()
+	sarif := newFormatLinter(t, FormatSARIF)
 	for _, file := range positionFixtures(t) {
 		src, err := os.ReadFile(file)
 		if err != nil {
 			t.Fatal(err)
 		}
 		cols := sourceColumns(src)
-		out := lintFormatted(t, FormatSARIF, file, src)
+		out := sarif.lint(t, file, src)
 		var doc struct {
 			Runs []struct {
 				ColumnKind string `json:"columnKind"`
@@ -130,6 +152,8 @@ func TestSARIFRegionsAreValid(t *testing.T) {
 }
 
 func TestJSONColumnsAreConsistent(t *testing.T) {
+	t.Parallel()
+	jsonLinter := newFormatLinter(t, FormatJSON)
 	for _, file := range positionFixtures(t) {
 		src, err := os.ReadFile(file)
 		if err != nil {
@@ -137,7 +161,7 @@ func TestJSONColumnsAreConsistent(t *testing.T) {
 		}
 		cols := sourceColumns(src)
 		var list []ErrorTemplateFields
-		if err := json.Unmarshal([]byte(lintFormatted(t, FormatJSON, file, src)), &list); err != nil {
+		if err := json.Unmarshal([]byte(jsonLinter.lint(t, file, src)), &list); err != nil {
 			t.Fatalf("%s: %v", file, err)
 		}
 		for _, e := range list {

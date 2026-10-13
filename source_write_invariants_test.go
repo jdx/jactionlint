@@ -112,6 +112,7 @@ func keptLines(src string) []string {
 }
 
 func TestFixKeepsCommentsUsesAndLineEndingsForEveryFixture(t *testing.T) {
+	t.Parallel()
 	cfg := fixerConfig(t, "")
 	modes := map[string]FixMode{"safe": FixModeSafe, "unsafe": FixModeUnsafe}
 	for _, f := range fixtureWorkflows(t) {
@@ -122,6 +123,7 @@ func TestFixKeepsCommentsUsesAndLineEndingsForEveryFixture(t *testing.T) {
 		for vname, content := range sourceVariants(string(raw)) {
 			for mname, mode := range modes {
 				t.Run(filepath.Base(f)+"/"+vname+"/"+mname, func(t *testing.T) {
+					t.Parallel()
 					out, _, _ := fixWith(t, []byte(content), cfg, mode)
 					got := string(out)
 

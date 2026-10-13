@@ -344,6 +344,7 @@ var staleOption = regexp.MustCompile(`(^|[^-A-Za-z0-9_./])-(help|profile|format|
 // workflows and the messages of the command. The migration table in docs/v2-migration.md may name them: it sits
 // between the legacy-options markers.
 func TestNoStaleV1Options(t *testing.T) {
+	t.Parallel()
 	wholeFiles := []string{"README.md", "CONTRIBUTING.md", "hk.pkl", "mise.toml", "Dockerfile", ".pre-commit-hooks.yaml"}
 	roots := []string{"docs", "man", "scripts", ".github", "testdata", "cmd", "playground", "internal"}
 	var files []string
