@@ -71,6 +71,12 @@ func TestOutputClobbering(t *testing.T) {
 		{"newlines removed after the record", `echo "body=$BODY" | tr -d '\n' ` + out, 0},
 		{"the first line after the record", `echo "body=$BODY" | head -n 1 ` + out, 0},
 		{"a filter after the record that keeps lines", `echo "body=$BODY" | sed 's/a/b/' ` + out, 1},
+		{"a variable named uuid", "uuid=EOF\n{ echo \"body<<$uuid\"; echo \"$BODY\"; echo \"$uuid\"; } " + out, 1},
+		{"a variable named mktemp that holds a constant", "mktemp=EOF\nd=${mktemp}\n{ echo \"body<<$d\"; echo \"$BODY\"; echo \"$d\"; } " + out, 1},
+		{"a constant that is the word RANDOM", "d=RANDOM\n{ echo \"body<<$d\"; echo \"$BODY\"; echo \"$d\"; } " + out, 1},
+		{"the uuid of the kernel", "d=$(cat /proc/sys/kernel/random/uuid)\n{ echo \"body<<$d\"; echo \"$BODY\"; echo \"$d\"; } " + out, 0},
+		{"mktemp", "d=$(mktemp -u)\n{ echo \"body<<$d\"; echo \"$BODY\"; echo \"$d\"; } " + out, 0},
+		{"a random value in backticks", "d=`uuidgen`\n{ echo \"body<<$d\"; echo \"$BODY\"; echo \"$d\"; } " + out, 0},
 		// --- a random delimiter ---
 		{"uuidgen", "delimiter=$(uuidgen)\n{ echo \"body<<$delimiter\"; echo \"$BODY\"; echo \"$delimiter\"; } " + out, 0},
 		{"openssl", "EOF=$(openssl rand -hex 8)\n{ echo \"body<<$EOF\"; echo \"$BODY\"; echo \"$EOF\"; } " + out, 0},
