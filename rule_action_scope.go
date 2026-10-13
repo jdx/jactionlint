@@ -44,6 +44,7 @@ var actionRuleScope = map[string]struct {
 	"insecure-ssh-keyscan":            {scope: actionApplies},         // the scripts of the steps
 	"insecure-url-scheme":             {scope: actionApplies},         // the scripts and inputs of the steps
 	"malformed-expression-delimiters": {scope: actionApplies},         // the strings of the steps
+	"multiline-plain-run":             {scope: actionApplies},         // the scripts of the steps
 	"mutable-runner-label":            {scope: actionNotApplicable},   // runs-on: belongs to the calling job
 	"pipeline-without-pipefail":       {scope: actionApplies},         // the scripts of the steps, with the shell of each step
 	"superfluous-actions":             {scope: actionApplies},         // the actions the steps use
@@ -72,6 +73,7 @@ var actionRuleScope = map[string]struct {
 	"events":                          {scope: actionNotApplicable},
 	"environment-file-redirect":       {scope: actionApplies},
 	"excessive-permissions":           {scope: actionNotApplicable},
+	"fail-fast-action-inputs":         {scope: actionApplies},
 	"insufficient-permissions":        {scope: actionNotApplicable},
 	"expression":                      {scope: actionApplies},
 	"forbidden-uses":                  {scope: actionApplies},

@@ -39,6 +39,7 @@ List of checks:
 - [Popular action inputs validation at `with:`](#check-popular-action-inputs)
 - [Outdated popular actions detection at `uses:`](#detect-outdated-popular-actions)
 - [Shell name validation at `shell:`](#check-shell-names)
+- [Scripts folded into one line](#check-multiline-plain-run)
 - [Run script policy (pedantic)](#check-run-policy)
 - [Job ID and step ID uniqueness](#check-job-step-ids)
 - [Hardcoded credentials](#check-hardcoded-credentials)
@@ -2862,6 +2863,61 @@ need `shell:` so they are not affected.
 `max-run-lines` counts non-blank lines in a `run:` script. Comment lines are counted. Its default `max` is 100 lines when the rule
 is enabled by a profile.
 
+<a id="check-multiline-plain-run"></a>
+## Scripts folded into one line
+
+Example input:
+
+```yaml
+on: push
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      # ERROR: without | YAML folds the lines into one, so this is one echo command
+      - run: echo "building"
+          npm ci
+          npm test
+      # OK: a block scalar keeps the lines
+      - run: |
+          echo "building"
+          npm ci
+          npm test
+      # OK: one command wrapped over several lines
+      - run: docker build
+          --tag app
+          .
+```
+
+Output:
+
+```
+test.yaml:9:11: this "run:" is not a block scalar, so YAML folds its 3 lines into one line and the shell runs the single command `echo "building" npm ci npm test`. write `run: |` to keep the lines [multiline-plain-run]
+  |
+9 |           npm ci
+  |           ^~~~~~
+```
+
+[Playground](https://jactionlint.jdx.dev/#eNqkzDEOwyAMheGdUzxldw+Q2wBBCW1qrNjeeviKVkKoa1mQnj/9jVeI6xHCvSVdA2BFrf/A5azUgSdnczpjvwUAUCuiXwVQlytKPhqW5PXcKu9LwHgsT+T6M4zWCLwm8Xdsa/lRLnwKEyayuCOKTNvtPQD6TkJF)
+
+A `run:` that is not written with `|` (or `>`) but over several lines is a plain or quoted YAML scalar, and YAML folds its line breaks into
+spaces. The shell then runs one line: `echo "building" npm ci npm test` prints its arguments and nothing else happens
+([actionlint#441](https://github.com/rhysd/actionlint/issues/441)). The rule `multiline-plain-run` (in the `correctness` profile) reports
+the first line which looks like a command of its own. Wrapping one long command over several lines is common and right, so the rule is
+conservative: a line counts only when it starts with the name of a well-known command (`echo`, `cd`, `npm`, `make`, ...), or with an
+assignment (`x=1`) after a command that takes none (`echo a`), and the line before it is not unfinished: it does not end with `&&`, `|`,
+`\` and the like, does not leave a quote, a bracket or a `${{ }}` open, and does not start with a command that takes another command as
+an argument (`docker`, `ssh`, `sudo`, `xargs`, `find`, ...). Lines separated by a blank line are not compared (the blank line is kept as
+a line break). A script in a block, a script of `shell: python` and a script on one line are never reported.
+
+`--fix` writes the scalar as a block (`run: |`) with one line of the scalar on each line, but only in the narrowest shape, because it
+rewrites a script: the value starts on the line of the `run:` key, and every line is a complete command that starts with a well-known
+command (`echo`, `cd`, `npm`, `git`, `make`, ...). A script with an assignment, a keyword, an operator, a backslash or a heredoc, a
+line that continues the command before it (`make test` then `CC=gcc`), a quote, bracket, backtick or `$(` that stays open at the end of
+a line, a blank line, a `#` or an escape in a double quoted scalar, or text after the scalar gets the finding without a fix, and the
+finding says why. A line that only holds the quote of a quoted scalar is folded into a space like any other line break.
+
 <a id="check-job-step-ids"></a>
 ## Job ID and step ID uniqueness
 
@@ -3963,6 +4019,93 @@ rules:
 [zizmor](https://docs.zizmor.sh/audits/#undocumented-permissions) behaves like `include-read: true`, and counts only a comment at the end of the line.
 It reports one finding for a whole `permissions:` block, jactionlint one for each scope without a comment. A scope granted with
 `none` is not reported, because it grants nothing.
+
+<a id="check-fail-fast-action-inputs"></a>
+## Actions that do not fail by default (pedantic)
+
+Example input:
+
+```yaml
+on:
+  push:
+    tags: [v*]
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: make dist
+      # ERROR: warns and goes on when "dist" has no file, the release has no assets
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist
+      # ERROR: the release is created without the files that match nothing
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+      # OK: logs of a failed run may be missing, so the step is best effort
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: logs
+          path: build/logs
+      # OK: the decision is written down
+      - uses: actions/upload-artifact@v4
+        with:
+          name: optional
+          path: extras
+          if-no-files-found: ignore
+```
+
+Output:
+<!-- Skip update output -->
+```
+test.yaml:12:15: warning: actions/upload-artifact does not fail by default: the step only warns when "path" matches no file, so a build which produced nothing stays green and the artifact is missing. set "if-no-files-found: error" (the default is "warn") [fail-fast-action-inputs]
+   |
+12 |       - uses: actions/upload-artifact@v4
+   |               ^~~~~~~~~~~~~~~~~~~~~~~~~~
+test.yaml:17:15: warning: softprops/action-gh-release does not fail by default: the release is created without the files when a "files" pattern matches nothing. set "fail_on_unmatched_files: true" (the default is "false") [fail-fast-action-inputs]
+   |
+17 |       - uses: softprops/action-gh-release@v2
+   |               ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+```
+
+<!-- Skip playground link -->
+
+Some actions pass when the thing they exist for did not happen: `actions/upload-artifact` only warns when its `path` matches no file,
+`softprops/action-gh-release` creates the release without the `files` that matched nothing, and a test report action passes when it
+found no test result. A broken build is then green, and nobody notices until the artifact or the release is needed. Each of them has an
+input which makes it fail. The rule `fail-fast-action-inputs` asks for it. It is in the `pedantic` profile with the level `warn`,
+because a missing file is sometimes fine and nothing in the workflow says which jobs it is for. The output above is from the following
+`rules` section of [the configuration file](config.md):
+
+```yaml
+rules:
+  fail-fast-action-inputs: warn
+```
+
+The table, from the `action.yml` of each action (the source of each entry is in `action_fail_fast.go`):
+
+| Action | Input to set | Default | Looked at when |
+| --- | --- | --- | --- |
+| `actions/upload-artifact` (not `v1`, which has no such input) | `if-no-files-found: error` | `warn` | always |
+| `softprops/action-gh-release` | `fail_on_unmatched_files: true` | `false` | `files` is set |
+| `ncipollo/release-action` | `artifactErrorsFailBuild: true` | `false` | `artifacts` is set |
+| `EnricoMi/publish-unit-test-result-action` and its variants | `action_fail_on_inconclusive: true` | `false` | always |
+| `mikepenz/action-junit-report` | `require_tests: true` | `false` | always |
+
+A step which gives the input with any value (`if-no-files-found: warn` or `ignore` included) has decided and is not reported. A step
+that can only run after a failure or a cancellation (`if: failure()`, `if: cancelled()`, `if: failure() && matrix.os == 'linux'`),
+which uploads logs on a best effort basis, a step with `continue-on-error` and a step that never runs are not reported either. The
+condition of a job, or of a group of `parallel:` steps, counts for the steps in it. A condition which is true after a success too
+(`always()`, `!cancelled()`, `!failure()`, `success() || failure()`) does not make a step best effort, because a missing file
+would keep the job green.
+
+`jactionlint --fix=unsafe` adds the input under `with:` of the step (and the `with:` when there is none). The fix is **unsafe**:
+a build which was green without the files is red with the input. That is the point of the finding, but it changes what the workflow
+does, so it is not applied by `--fix`.
 
 <a id="check-unpinned-images"></a>
 ## Unpinned container images
@@ -8659,7 +8802,7 @@ way because any caller can pass attacker-controlled text. jactionlint does not l
 
 How the rules treat actions:
 
-- **Applies** to the steps (and the metadata) of an action: `action-syntax`, `adhoc-packages`, `archived-uses`, `artipacked`, `background-step-not-waited`, `checkout-static-credentials`, `constant-condition`, `context-availability`, `continue-on-error`, `deprecated-action-input`, `deprecated-commands`, `duplicate-key`, `duplicate-step-id`, `environment-file-redirect`, `expired-ignore`, `expression-syntax`, `expression-type`, `forbidden-uses`, `github-app`, `if-always-true`, `impostor-commit`, `insecure-commands`, `insecure-ssh-keyscan`, `insecure-url-scheme`, `invalid-env-var-name`, `invalid-function-call`, `invalid-id`, `invalid-ignore-comment`, `invalid-local-action`, `invalid-parallel-step`, `invalid-shell-name`, `invalid-uses`, `invisible-characters`, `known-vulnerable-actions`, `malformed-expression-delimiters`, `max-run-lines`, `merge-key`, `misfeature`, `missing-action-input`, `obfuscation`, `outdated-action-runner`, `pipeline-without-pipefail`, `pyflakes`, `recursive-alias`, `ref-confusion`, `ref-version-mismatch`, `repojacking`, `require-expression-wrapping`, `self-repository`, `shellcheck`, `stale-action-refs`, `superfluous-actions`, `template-injection`, `typosquat-uses`, `undefined-function`, `undefined-property`, `unknown-action-input`, `unlocked-install`, `unpinned-images`, `unpinned-tools`, `unpinned-uses`, `unsound-contains`, `unsound-prefix-match`, `unsound-ternary`, `unused-anchor`, `unused-ignore`, `unverified-download`, `use-trusted-publishing`, `yaml-syntax`.
+- **Applies** to the steps (and the metadata) of an action: `action-syntax`, `adhoc-packages`, `archived-uses`, `artipacked`, `background-step-not-waited`, `checkout-static-credentials`, `constant-condition`, `context-availability`, `continue-on-error`, `deprecated-action-input`, `deprecated-commands`, `duplicate-key`, `duplicate-step-id`, `environment-file-redirect`, `expired-ignore`, `expression-syntax`, `expression-type`, `fail-fast-action-inputs`, `forbidden-uses`, `github-app`, `if-always-true`, `impostor-commit`, `insecure-commands`, `insecure-ssh-keyscan`, `insecure-url-scheme`, `invalid-env-var-name`, `invalid-function-call`, `invalid-id`, `invalid-ignore-comment`, `invalid-local-action`, `invalid-parallel-step`, `invalid-shell-name`, `invalid-uses`, `invisible-characters`, `known-vulnerable-actions`, `malformed-expression-delimiters`, `max-run-lines`, `merge-key`, `misfeature`, `missing-action-input`, `multiline-plain-run`, `obfuscation`, `outdated-action-runner`, `pipeline-without-pipefail`, `pyflakes`, `recursive-alias`, `ref-confusion`, `ref-version-mismatch`, `repojacking`, `require-expression-wrapping`, `self-repository`, `shellcheck`, `stale-action-refs`, `superfluous-actions`, `template-injection`, `typosquat-uses`, `undefined-function`, `undefined-property`, `unknown-action-input`, `unlocked-install`, `unpinned-images`, `unpinned-tools`, `unpinned-uses`, `unsound-contains`, `unsound-prefix-match`, `unsound-ternary`, `unused-anchor`, `unused-ignore`, `unverified-download`, `use-trusted-publishing`, `yaml-syntax`.
 - **Caller-dependent**: `agentic-actions`, `bot-conditions`, `cache-poisoning`, `github-env` (its findings about untrusted input do not depend on the caller), `untrusted-artifact` and `untrusted-checkout`.
 - **Not applicable** because an action does not have what the rule checks, or because only the calling job can decide (`unused-baseline-entry` is about the baseline file, not about a workflow or an action): `anonymous-definition`, `concurrency-cancels-prs`, `concurrency-cancels-release`, `concurrency-limits`, `conflicting-runner-labels`, `cron-too-frequent`, `cyclic-job-needs`, `dangerous-triggers`, `dependabot-cooldown`, `dependabot-execution`, `dependabot-missing-actions-update`, `dependabot-syntax`, `deprecated-runner-label`, `duplicate-job-id`, `duplicate-job-needs`, `duplicate-triggers`, `excessive-permissions`, `gate-job-skipped-on-failure`, `gh-without-token`, `hardcoded-container-credentials`, `insufficient-permissions`, `invalid-activity-type`, `invalid-cron`, `invalid-event-config`, `invalid-event-filter`, `invalid-glob`, `invalid-label-pattern`, `invalid-local-workflow`, `invalid-permissions`, `invalid-timezone`, `invalid-workflow-call`, `invalid-workflow-call-input`, `invalid-workflow-dispatch-input`, `local-action-checkout`, `matrix-duplicate-value`, `matrix-invalid-exclude`, `missing-permissions`, `missing-timeout`, `missing-workflow-input`, `missing-workflow-secret`, `mutable-runner-label`, `overprovisioned-secrets`, `require-shell`, `required-actions`, `secrets-inherit`, `secrets-outside-env`, `self-hosted-runner`, `timeout-too-long`, `ubuntu-slim-limits`, `undefined-job-needs`, `undocumented-permissions`, `unknown-event`, `unknown-runner-label`, `unknown-workflow-input`, `unknown-workflow-secret`, `unredacted-secrets`, `unused-baseline-entry`, `unused-job-output`, `unused-needs`, `unused-workflow-input`, `workflow-call-permissions`, `workflow-input-type`, `workflow-run-names`, `workflow-secret-scope`, `workflow-syntax`.
 

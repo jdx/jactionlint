@@ -139,6 +139,7 @@
               "expired-ignore",
               "expression-syntax",
               "expression-type",
+              "fail-fast-action-inputs",
               "forbidden-uses",
               "gate-job-skipped-on-failure",
               "gh-without-token",
@@ -185,6 +186,7 @@
               "missing-timeout",
               "missing-workflow-input",
               "missing-workflow-secret",
+              "multiline-plain-run",
               "mutable-runner-label",
               "obfuscation",
               "outdated-action-runner",
@@ -354,6 +356,7 @@
                   "expired-ignore",
                   "expression-syntax",
                   "expression-type",
+                  "fail-fast-action-inputs",
                   "forbidden-uses",
                   "gate-job-skipped-on-failure",
                   "gh-without-token",
@@ -400,6 +403,7 @@
                   "missing-timeout",
                   "missing-workflow-input",
                   "missing-workflow-secret",
+                  "multiline-plain-run",
                   "mutable-runner-label",
                   "obfuscation",
                   "outdated-action-runner",
@@ -500,6 +504,7 @@
                     "expired-ignore",
                     "expression-syntax",
                     "expression-type",
+                    "fail-fast-action-inputs",
                     "forbidden-uses",
                     "gate-job-skipped-on-failure",
                     "gh-without-token",
@@ -546,6 +551,7 @@
                     "missing-timeout",
                     "missing-workflow-input",
                     "missing-workflow-secret",
+                    "multiline-plain-run",
                     "mutable-runner-label",
                     "obfuscation",
                     "outdated-action-runner",
@@ -1679,6 +1685,28 @@
             }
           ]
         },
+        "fail-fast-action-inputs": {
+          "description": "An action which passes by default when nothing was produced or found is not told to fail. Group: correctness. Profile: pedantic. Default level: warn. https://jactionlint.jdx.dev/rules#fail-fast-action-inputs",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
         "forbidden-uses": {
           "description": "An action or reusable workflow is not allowed or is denied by the configuration. Group: policy. Runs only when configured. Default level: error. https://jactionlint.jdx.dev/rules#forbidden-uses",
           "oneOf": [
@@ -2721,6 +2749,28 @@
         },
         "missing-workflow-secret": {
           "description": "A required secret of a reusable workflow is not passed. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#missing-workflow-secret",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "multiline-plain-run": {
+          "description": "A run: is written over several lines without |, so YAML folds the lines into one command. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#multiline-plain-run",
           "oneOf": [
             {
               "$ref": "#/definitions/level"

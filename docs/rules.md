@@ -70,6 +70,7 @@ rules:
 | [expired-ignore](#expired-ignore) | policy | error | correctness |
 | [expression-syntax](#expression-syntax) | correctness | error | correctness |
 | [expression-type](#expression-type) | correctness | error | correctness |
+| [fail-fast-action-inputs](#fail-fast-action-inputs) | correctness | warn | pedantic |
 | [forbidden-uses](#forbidden-uses) | policy | error | only when configured |
 | [gate-job-skipped-on-failure](#gate-job-skipped-on-failure) | correctness | error | default |
 | [gh-without-token](#gh-without-token) | correctness | error | correctness |
@@ -116,6 +117,7 @@ rules:
 | [missing-timeout](#missing-timeout) | policy | error | default |
 | [missing-workflow-input](#missing-workflow-input) | correctness | error | correctness |
 | [missing-workflow-secret](#missing-workflow-secret) | correctness | error | correctness |
+| [multiline-plain-run](#multiline-plain-run) | correctness | error | correctness |
 | [mutable-runner-label](#mutable-runner-label) | policy | warn | pedantic |
 | [obfuscation](#obfuscation) | security | error | default |
 | [outdated-action-runner](#outdated-action-runner) | correctness | error | correctness |
@@ -524,6 +526,16 @@ A ${{ }} expression has a type error.
 - Default level: error
 - Profile: correctness
 - Details and examples: [checks](./checks.md#check-type-check-expression)
+
+## fail-fast-action-inputs
+
+An action which passes by default when nothing was produced or found is not told to fail.
+
+- Group: correctness
+- Default level: warn
+- Profile: pedantic
+- Fixable: yes
+- Details and examples: [checks](./checks.md#check-fail-fast-action-inputs)
 
 ## forbidden-uses
 
@@ -954,6 +966,16 @@ A required secret of a reusable workflow is not passed.
 - Default level: error
 - Profile: correctness
 - Details and examples: [checks](./checks.md#check-reusable-workflows)
+
+## multiline-plain-run
+
+A run: is written over several lines without |, so YAML folds the lines into one command.
+
+- Group: correctness
+- Default level: error
+- Profile: correctness
+- Fixable: yes
+- Details and examples: [checks](./checks.md#check-multiline-plain-run)
 
 ## mutable-runner-label
 
