@@ -34,6 +34,7 @@ var (
 	configSetIgnoreScriptsRe = regexp.MustCompile(`(?i)\bconfig\s+set\s+ignore[-_]scripts(?:\s+|\s*=\s*)["']?(?:true|1)\b`)
 	envIgnoreScriptsRe       = regexp.MustCompile(`(?i)\bnpm_config_ignore_scripts\s*=\s*["']?(?:true|1)\b`)
 	npmrcRedirectRe          = regexp.MustCompile(`(?:>>?|\btee\b(?:\s+-a)?)\s*["']?[^\s"'|;&]*\.npmrc\b`)
+	heredocStartRe           = regexp.MustCompile(`<<-?\s*["']?([A-Za-z_][A-Za-z0-9_]*)["']?`)
 	settingRe                = regexp.MustCompile(`(?i)ignore[-_]scripts\s*=\s*["']?(?:true|1)\b`)
 	bunfigIgnoreScriptsRe    = regexp.MustCompile(`(?m)^\s*ignoreScripts\s*=\s*true\b`)
 	yarnrcEnableScriptsRe    = regexp.MustCompile(`(?m)^enableScripts:\s*["']?(\w+)`)
@@ -54,11 +55,8 @@ func (rule *RuleUnlockedInstall) checkLifecycleScripts(step *Step, s *runscript.
 	if rule.scriptsDisabledByWorkflow(step, c.Tool, s.Source[:c.Offset]) {
 		return
 	}
-	for _, a := range c.Assigns {
-		// `npm_config_ignore_scripts=true npm ci`
-		if strings.EqualFold(a.Name, "npm_config_ignore_scripts") && a.Value != nil && (a.Value.Dynamic() || strings.EqualFold(a.Value.Value, "true") || a.Value.Value == "1") {
-			return
-		}
+	if ignoreScriptsInCommandEnv(c) {
+		return
 	}
 	dirs, ok := rule.commandDirs(rule.root, step, s, c)
 	if !ok {
@@ -83,6 +81,34 @@ func (rule *RuleUnlockedInstall) checkLifecycleScripts(step *Step, s *runscript.
 	start, end := commandRange(s, origin, c)
 	rule.errorIDAt("unlocked-install", start, msg).endAt(end)
 }
+
+// ignoreScriptsInCommandEnv reports whether the environment of the command itself turns the scripts off:
+// `npm_config_ignore_scripts=true npm ci`, and the wrappers that take assignments as arguments
+// (`env npm_config_ignore_scripts=true npm ci`, `sudo -E npm_config_ignore_scripts=true npm ci`), which the parser
+// does not list as assignments of the command.
+func ignoreScriptsInCommandEnv(c *runscript.Command) bool {
+	on := func(name string, v *runscript.Word) bool {
+		return strings.EqualFold(name, "npm_config_ignore_scripts") && v != nil && (v.Dynamic() || strings.EqualFold(v.Value, "true") || v.Value == "1")
+	}
+	for _, a := range c.Assigns {
+		if on(a.Name, a.Value) {
+			return true
+		}
+	}
+	for _, w := range c.Words {
+		if w == c.NameWord {
+			break
+		}
+		if name, value, ok := strings.Cut(w.Value, "="); ok && shellVarNameRe.MatchString(name) {
+			if on(name, &runscript.Word{Value: value, Raw: w.Raw[min(len(name)+1, len(w.Raw)):]}) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+var shellVarNameRe = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 
 // lifecycleVerb reports whether the command installs packages (which runs their scripts) and does not only
 // look at them.
@@ -152,12 +178,35 @@ func scriptSetsIgnoreScripts(text string) bool {
 		return false
 	}
 	for _, loc := range npmrcRedirectRe.FindAllStringIndex(text, -1) {
-		// the setting on the same line (`echo ignore-scripts=true >> .npmrc`) or in the heredoc after it
-		if settingRe.MatchString(text[lineStartOf(text, loc[0]):]) {
+		// the setting on the same line (`echo ignore-scripts=true >> .npmrc`) or in the heredoc of that command, and
+		// nowhere else: a later echo or a comment does not write it
+		start := lineStartOf(text, loc[0])
+		end := len(text)
+		if i := strings.IndexByte(text[start:], '\n'); i >= 0 {
+			end = start + i
+		}
+		line := text[start:end]
+		if settingRe.MatchString(line) {
+			return true
+		}
+		if m := heredocStartRe.FindStringSubmatch(line); m != nil && settingRe.MatchString(heredocBody(text[min(end+1, len(text)):], m[1])) {
 			return true
 		}
 	}
 	return false
+}
+
+// heredocBody returns the lines of a heredoc, from the start of text up to the line that is the delimiter.
+func heredocBody(text, delim string) string {
+	var body strings.Builder
+	for _, l := range strings.Split(text, "\n") {
+		if strings.TrimSpace(l) == delim {
+			break
+		}
+		body.WriteString(l)
+		body.WriteByte('\n')
+	}
+	return body.String()
 }
 
 func lineStartOf(text string, i int) int {
