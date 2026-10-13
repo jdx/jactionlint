@@ -47,6 +47,8 @@ type fixtureRepo struct {
 	ReleaseDates map[string]*GitHubReleaseDate `json:"release_dates,omitempty"`
 	// Environments are the answers about the environments by their lower case name, see GitHubEnvironmentClient.
 	Environments map[string]*fixtureEnvironment `json:"environments,omitempty"`
+	// WorkflowRuns are the recorded successful runs of a workflow file ("ci.yaml") and the jobs of each run, see GitHubRunsClient.
+	WorkflowRuns map[string]*fixtureRuns `json:"workflow_runs,omitempty"`
 }
 
 type fixtureFile struct {

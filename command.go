@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -73,7 +74,7 @@ type fixRequest struct {
 	result *FixResult
 }
 
-func (cmd *Command) runLinter(args []string, opts *LinterOptions, initConfig, migrateConfig, migrateIgnores bool, fix *fixRequest, baselineWrite *optionalValueFlag, onlineFailed *int, onlineReport string) ([]*Error, error) {
+func (cmd *Command) runLinter(args []string, opts *LinterOptions, initConfig, migrateConfig, migrateIgnores bool, suggest *TimeoutOptions, fix *fixRequest, baselineWrite *optionalValueFlag, onlineFailed *int, onlineReport string) ([]*Error, error) {
 	l, err := NewLinter(cmd.Stdout, opts)
 	if err != nil {
 		return nil, err
@@ -94,6 +95,31 @@ func (cmd *Command) runLinter(args []string, opts *LinterOptions, initConfig, mi
 	}
 	if migrateConfig {
 		return nil, l.MigrateConfig("")
+	}
+
+	if suggest != nil {
+		if len(args) == 1 && args[0] == "-" {
+			return nil, &usageError{errors.New("--suggest-timeouts cannot be used with stdin because the report is about the workflows of a repository")}
+		}
+		if fix.mode != 0 || baselineWrite.set || migrateIgnores {
+			return nil, &usageError{errors.New("--suggest-timeouts cannot be combined with --fix, --diff, --baseline-write or --migrate-ignores: it only reads")}
+		}
+		if opts.Format != "" && opts.Format != FormatText && opts.Format != FormatJSON {
+			return nil, &usageError{errors.New("--suggest-timeouts prints the formats text and json only")}
+		}
+		rep, err := l.SuggestTimeouts(args, nil, *suggest)
+		if err != nil {
+			return nil, err
+		}
+		if opts.Format == FormatJSON {
+			b, err := rep.JSON()
+			if err != nil {
+				return nil, err
+			}
+			_, err = cmd.Stdout.Write(b)
+			return nil, err
+		}
+		return nil, rep.WriteText(cmd.Stdout)
 	}
 
 	if baselineWrite.set {
@@ -284,6 +310,26 @@ func (cmd *Command) Main(args []string) int {
 			f.noOnline = true
 		}
 	}
+	var suggest *TimeoutOptions
+	if f.suggestTimeouts {
+		if f.noOnline {
+			fmt.Fprintln(cmd.Stderr, "--suggest-timeouts reads the runs of the workflows from GitHub, so it cannot be combined with --no-online or JACTIONLINT_ONLINE=0")
+			return ExitStatusInvalidCommandOption
+		}
+		if f.timeoutRuns < 1 || f.timeoutRuns > maxWorkflowRuns {
+			fmt.Fprintf(cmd.Stderr, "--timeout-history-runs must be between 1 and %d\n", maxWorkflowRuns)
+			return ExitStatusInvalidCommandOption
+		}
+		if !(f.timeoutBuffer >= 1) || math.IsInf(f.timeoutBuffer, 0) {
+			fmt.Fprintln(cmd.Stderr, "--timeout-buffer must be a number of at least 1")
+			return ExitStatusInvalidCommandOption
+		}
+		online.set = true
+		suggest = &TimeoutOptions{Runs: f.timeoutRuns, Buffer: f.timeoutBuffer}
+	} else if flags.Changed("timeout-history-runs") || flags.Changed("timeout-buffer") {
+		fmt.Fprintln(cmd.Stderr, "--timeout-history-runs and --timeout-buffer can be used only with --suggest-timeouts")
+		return ExitStatusInvalidCommandOption
+	}
 	opts.IgnorePatterns = f.ignorePats
 	// A command the user named must exist: the default is looked up on PATH and a missing one only costs a note
 	opts.ShellcheckRequired = flags.Changed("shellcheck") && opts.Shellcheck != ""
@@ -359,7 +405,7 @@ func (cmd *Command) Main(args []string) int {
 		}
 	}
 	var onlineFailed int
-	errs, err := cmd.runLinter(flags.Args(), &opts, f.initConfig, f.migrateConfig, f.migrateIgnores, req, &baselineWrite, &onlineFailed, f.onlineReport)
+	errs, err := cmd.runLinter(flags.Args(), &opts, f.initConfig, f.migrateConfig, f.migrateIgnores, suggest, req, &baselineWrite, &onlineFailed, f.onlineReport)
 	if err != nil {
 		fmt.Fprintln(cmd.Stderr, err.Error())
 		var ue *usageError

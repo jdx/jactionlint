@@ -90,6 +90,9 @@ var cliOptions = []cliOption{
 	{"GitHub API (online checks)", "online-allow", "", "PATTERN", false, "-online-allow", "Look up only repositories matching owner/repo PATTERN (\"*\" is a wildcard). Repeatable"},
 	{"GitHub API (online checks)", "online-deny", "", "PATTERN", false, "-online-deny", "Never look up repositories matching owner/repo PATTERN. Repeatable"},
 	{"GitHub API (online checks)", "online-cache-ttl", "", "DURATION", false, "-online-cache-ttl", "How long a cached GitHub answer is used without revalidation (default 1h; 0 always revalidates)"},
+	{"GitHub API (online checks)", "suggest-timeouts", "", "", false, "", "Report how long the jobs of the workflows really took in their latest successful runs, with a timeout-minutes to consider for each. Implies --online, writes nothing and suggests no value without enough runs. --format text or json"},
+	{"GitHub API (online checks)", "timeout-history-runs", "", "N", false, "", "With --suggest-timeouts: how many of the latest successful runs of each workflow are read (1 to 100, default 20). Each run costs a request"},
+	{"GitHub API (online checks)", "timeout-buffer", "", "FACTOR", false, "", "With --suggest-timeouts: the longest duration on record is multiplied by FACTOR (at least 1, default 2) and rounded up to whole minutes"},
 	{"GitHub API (online checks)", "online-report", "", "FILE", false, "", "Write how complete the online checks were (checked, excluded, skipped lookups, cache age) to FILE as JSON, whatever the --format. The file always says whether they ran"},
 	{"GitHub API (online checks)", "online-max-wait", "", "DURATION", false, "-online-max-wait", "The longest to wait for a GitHub rate limit to reset (default 30s; 0 never waits)"},
 
@@ -289,6 +292,9 @@ type commandFlags struct {
 	minSeverity              string
 	profileName              string
 	strictExit               bool
+	suggestTimeouts          bool
+	timeoutRuns              int
+	timeoutBuffer            float64
 	onlineTTL, onlineMaxWait time.Duration
 	baseline, baselineWrite  optionalValueFlag
 	noBaseline, noOnline     bool
@@ -374,6 +380,9 @@ func newCommandFlags() *commandFlags {
 	fs.StringVar(&o.OnlineOptions.GitHubComTokenFile, "online-github-com-token-file", "", "")
 	fs.Var(&f.onlineAllow, "online-allow", "")
 	fs.Var(&f.onlineDeny, "online-deny", "")
+	fs.BoolVar(&f.suggestTimeouts, "suggest-timeouts", false, "")
+	fs.IntVar(&f.timeoutRuns, "timeout-history-runs", DefaultTimeoutHistoryRuns, "")
+	fs.Float64Var(&f.timeoutBuffer, "timeout-buffer", DefaultTimeoutBuffer, "")
 	fs.DurationVar(&f.onlineTTL, "online-cache-ttl", defaultOnlineCacheTTL, "")
 	fs.StringVar(&f.onlineReport, "online-report", "", "")
 	fs.DurationVar(&f.onlineMaxWait, "online-max-wait", defaultOnlineMaxWait, "")

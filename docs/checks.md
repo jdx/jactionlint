@@ -1888,6 +1888,10 @@ rules:
 hangs. Turn it off with `missing-timeout: off` in `rules`, or ignore one job with an
 [ignore comment](usage.md#ignore-some-errors) above it.
 
+jactionlint never chooses a number of minutes. To see how long your jobs took, `jactionlint --suggest-timeouts` reports the durations of the
+jobs of the latest successful runs, from GitHub, with the numbers of samples and the limits of what they say
+([timeouts from the history of the runs](usage.md#suggest-timeouts)).
+
 #### Jobs whose steps all set a timeout
 
 [ghalint](https://github.com/suzuki-shunsuke/ghalint/blob/main/docs/policies/012.md) accepts a job without `timeout-minutes` when

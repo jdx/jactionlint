@@ -215,6 +215,18 @@ single-dash long options of v1 are removed; the error names the replacement.
     The environment variable and the file which hold the GitHub token, read before `GITHUB_TOKEN`
     and `GH_TOKEN`
 
+  * `--suggest-timeouts`:
+    Report how long the jobs of the workflows really took in the latest successful runs of each workflow, read
+    from GitHub (it implies `--online`), with a `timeout-minutes` to consider for each job that has enough
+    samples. Nothing is written and no rule uses the numbers: a timeout is a decision of the person. The
+    report says how many runs and samples it read, what it could not match to a job of the file, and that
+    the longest run on record is not a bound on the next one
+
+  * `--timeout-history-runs` <N>, `--timeout-buffer` <FACTOR>:
+    With `--suggest-timeouts`: how many of the latest successful runs of each workflow are read (1 to 100,
+    default 20; each costs a request), and the factor by which the longest duration is multiplied (at least
+    1, default 2)
+
   * `--online-report` <FILE>:
     Write how complete the online checks were to FILE as JSON, whatever the `--format`: `status`
     (`complete`, `incomplete` or `disabled`), the skipped lookups by kind, the excluded repositories

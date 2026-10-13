@@ -168,6 +168,9 @@ type onlineSession struct {
 	releaseDates     memo[releaseDateKey, *GitHubReleaseDate]
 
 	environments memo[environmentKey, environmentResult]
+
+	runs    memo[runsKey, []GitHubWorkflowRun]
+	runJobs memo[runJobsKey, *GitHubRunJobs]
 }
 
 type originKey struct {

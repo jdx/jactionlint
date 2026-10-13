@@ -145,6 +145,9 @@ cat action.yml | jactionlint --stdin-filename action.yml -
 | `--online-deny=PATTERN` |  | Never look up repositories matching owner/repo PATTERN. Repeatable |
 | `--online-cache-ttl=DURATION` |  | How long a cached GitHub answer is used without revalidation (default 1h; 0 always revalidates) |
 | `--online-report=FILE` |  | Write how complete the online checks were (checked, excluded, skipped lookups, cache age) to FILE as JSON, whatever the --format. The file always says whether they ran |
+| `--suggest-timeouts` |  | Report how long the jobs of the workflows really took in their latest successful runs, with a timeout-minutes to consider for each. Implies --online, writes nothing and suggests no value without enough runs. --format text or json |
+| `--timeout-history-runs=N` |  | With --suggest-timeouts: how many of the latest successful runs of each workflow are read (1 to 100, default 20). Each run costs a request |
+| `--timeout-buffer=FACTOR` |  | With --suggest-timeouts: the longest duration on record is multiplied by FACTOR (at least 1, default 2) and rounded up to whole minutes |
 | `--online-max-wait=DURATION` |  | The longest to wait for a GitHub rate limit to reset (default 30s; 0 never waits) |
 
 **External tools**
@@ -1078,6 +1081,54 @@ are asked once for each image and tag, with a timeout, and `--online-allow` and 
 ```sh
 jactionlint --online --fix=unsafe
 ```
+
+<a id="suggest-timeouts"></a>
+#### Timeouts from the history of the runs
+
+`missing-timeout` never chooses a number of minutes: its fix needs `default-minutes`, and a person has to choose it. `--suggest-timeouts` gives that
+person the data. It asks GitHub for the latest successful runs of each workflow and the jobs of each run, and reports how long each job took, from
+its start on a runner to its end (the wait for a runner is not in it):
+
+```sh
+jactionlint --suggest-timeouts
+```
+
+For the five runs of a repository of the tests (`--timeout-history-runs 5`; the numbers are those of the test fixtures):
+
+```
+.github/workflows/ci.yaml (4 runs, 2026-09-30 to 2026-10-04)
+  build                      timeout-minutes not set  samples 4  min 1    median 1.8  max 3.3  suggested 7
+  test (matrix, 2 legs)      timeout-minutes: 20      samples 8  min 5    median 7.8  max 15   suggested 30
+  rare                       timeout-minutes not set  samples 2  min 1.7  median 1.9  max 2.2  only 2 sample(s): too few for a suggestion
+  deploy (calls a workflow)  timeout-minutes not set  samples 0                                a call of a reusable workflow: the timeouts belong to the jobs of the called workflow, which this report does not follow
+  not matched to a job of the file: "Custom name" (2 samples; a job that was renamed since, or a name the report cannot parse)
+
+The largest suggestion is 30 minutes: a single default-minutes of the rule missing-timeout has to be at least this long not to cancel the slowest job on record.
+```
+
+(followed by a paragraph that says what the numbers are not).
+
+It is a report and nothing else: **it writes no file, no rule or fix uses its numbers, and it states what it cannot know.**
+
+- **The number** is the longest duration on record times `--timeout-buffer` (default 2), rounded up to whole minutes, for a job with at least 3
+  samples. A job with fewer gets no number. The buffer is yours to choose: a longest run on record is not a bound on the next one, which can be
+  slower on a busy runner, with a cold cache, or after a change that the runs on record predate. The report prints the largest suggestion, which is
+  the least that a single `default-minutes` of `missing-timeout` can be without cancelling the slowest job on record.
+- **How much it read** is in the output: the number of runs and their dates for each workflow, and the number of samples for each job. `--timeout-history-runs`
+  (default 20, at most 100) sets how many runs are read; each costs one request, on top of one for each workflow, so a repository with 20 workflows
+  reads 420 with the default (cached for the hour, like any answer, see [Cache](#online-checks)). GitHub allows 60 requests an hour without a token, so give it one.
+- **Which runs**: successful runs of the workflow, of any event and any branch. Jobs that failed, were cancelled or were skipped in those runs are
+  left out. The runs may predate the current file.
+- **Matching a job to the file is by name**, and the report says what it could not match. A job is found by its `name:` (an expression in it matches any text),
+  or by its ID, with the values of the matrix in parentheses that GitHub adds. A **matrix** is one job whose legs share the timeout, so its numbers are
+  those of all the legs and the suggestion is for the slowest. A job that **calls a reusable workflow** has no numbers (its timeout belongs to the jobs of the
+  called workflow, which this report does not follow). Names in the runs that fit no job of the file (a job renamed since, or two jobs that a name fits) are listed as not
+  matched, and are in no number.
+- **It can be incomplete**: a lookup that failed (a rate limit, a token that cannot read the runs) is counted and the report says so, as the other online
+  checks do (`--online=strict` fails on it). Runs with more than 100 jobs are read in part, and the report says so.
+- The repository is `GITHUB_REPOSITORY`, or the remote `origin` of the clone on github.com. `--format json` prints the same as one document
+  (`{"version": 1, "repository": ..., "complete": ..., "workflows": [{"path": ..., "jobs": [{"id": ..., "samples": ..., "max_minutes": ..., "suggested_minutes": ...}]}]}`);
+  other formats are an error.
 
 <a id="hk"></a>
 ### hk
