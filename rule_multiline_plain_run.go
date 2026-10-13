@@ -108,8 +108,12 @@ func foldedMessage(f *foldedScalar, lines int) string {
 		blank = blank || l == ""
 		escape = escape || (f.style == '"' && strings.Contains(l, `\`))
 	}
-	if blank || escape {
-		return head + " (a blank line stays a line break), and the shell gets the lines as parts of one command. write `run: |` to keep the lines"
+	if blank {
+		// YAML joins the lines between two blank lines only
+		return "this \"run:\" is not a block scalar, so YAML joins the lines of each group between blank lines into one line (a blank line stays a line break), and the shell runs each group as a single command. write `run: |` to keep the lines"
+	}
+	if escape {
+		return head + " and the shell runs them as a single command (the text is not shown because the double quoted scalar has escapes). write `run: |` to keep the lines"
 	}
 	text := strings.Join(f.lines, " ")
 	if f.style == '\'' {
@@ -158,6 +162,12 @@ func (rule *RuleMultilinePlainRun) fix(e *Error, s *String, f *foldedScalar) {
 	if strings.TrimSpace(last[end:]) != "" {
 		no("a comment follows the script, so the fix would move it into the script. add `|` after `run:` and put each command on its own line by hand")
 		return
+	}
+	for _, l := range f.lines {
+		if l == "" {
+			no("the script has a blank line, which YAML keeps as a line break, so the fix is not exact. add `|` by hand")
+			return
+		}
 	}
 	if !everyLineStartsACommand(f.lines) {
 		no("some lines continue the command before them and others start a new one, so the fix cannot tell which line break to keep as one. add `|` after `run:` and put each command on its own line by hand")

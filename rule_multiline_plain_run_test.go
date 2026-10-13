@@ -154,8 +154,8 @@ func TestMultilinePlainRunMessage(t *testing.T) {
 	}{
 		{"folded text", "echo a\n          echo b", "runs the single command `echo a echo b`", ""},
 		{"single quoted quote", "'echo ''a'' b\n          echo c'", "`echo 'a' b echo c`", "''"},
-		{"blank line", "echo a\n\n          echo b\n          echo c", "a blank line stays a line break", "single command"},
-		{"escape", "\"echo a\\tb\n          echo c\"", "parts of one command", "single command"},
+		{"blank line", "echo a\n\n          echo b\n          echo c", "joins the lines of each group between blank lines into one line", "folds its"},
+		{"escape", "\"echo a\\tb\n          echo c\"", "the double quoted scalar has escapes", "blank line"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.what, func(t *testing.T) {
@@ -166,6 +166,27 @@ func TestMultilinePlainRunMessage(t *testing.T) {
 			}
 			if !strings.Contains(errs[0].Message, tc.want) || (tc.notWant != "" && strings.Contains(errs[0].Message, tc.notWant)) {
 				t.Errorf("message is %q", errs[0].Message)
+			}
+		})
+	}
+}
+
+func TestMultilinePlainRunNoFixReasons(t *testing.T) {
+	cfg := ruleConfig(multilineID)
+	tests := []struct {
+		what string
+		run  string
+		want string
+	}{
+		{"blank line", "echo a\n\n          echo b\n          echo c", "the script has a blank line, which YAML keeps as a line break, so the fix is not exact. add `|` by hand"},
+		{"lines that continue", "make test\n          CC=gcc\n          echo x", "some lines continue the command before them and others start a new one, so the fix cannot tell which line break to keep as one. add `|` after `run:` and put each command on its own line by hand"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.what, func(t *testing.T) {
+			src := "on: push\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      - run: " + tc.run + "\n"
+			errs := errsWithID(lintFileWithConfig(t, cfg, "ci.yaml", src), multilineID)
+			if len(errs) != 1 || errs[0].Fix != nil || errs[0].NoFix == nil || errs[0].NoFix.Reason != tc.want {
+				t.Fatalf("want no fix with the reason %q: %+v", tc.want, errs)
 			}
 		})
 	}
