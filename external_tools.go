@@ -45,6 +45,9 @@ type externalTool struct {
 	required bool
 	// kind is what the tool checks, for the note: "shell script" or "Python script".
 	kind string
+	// what names the tool in the note when the bare name is not enough ("node 20 or later"), and off says how to
+	// skip it on purpose when there is no command line option for it. Both are optional.
+	what, off string
 
 	mu      sync.Mutex
 	status  string // "" until a rule factory looked for the command
@@ -97,13 +100,21 @@ func (t *externalTool) note() string {
 	if !ok || s.Status != ExternalToolNotFound || s.SkippedScripts == 0 || t.required {
 		return ""
 	}
-	return fmt.Sprintf("%s was not found, so it did not check %s. install it, or pass --%s= to skip it on purpose", t.name, countNoun(s.SkippedScripts, t.kind), t.name)
+	what, off := t.name, "pass --"+t.name+"= to skip it on purpose"
+	if t.what != "" {
+		what = t.what
+	}
+	if t.off != "" {
+		off = t.off
+	}
+	return fmt.Sprintf("%s was not found, so it did not check %s. install it, or %s", what, countNoun(s.SkippedScripts, t.kind), off)
 }
 
 // externalTools are the external linters of a run.
 type externalTools struct {
 	shellcheck *externalTool
 	pyflakes   *externalTool
+	node       *externalTool // runs the check of github-script-syntax; it has no command line option
 
 	// seen are the files which the totals already have. --fix and --diff lint a file again for each pass, and the
 	// scripts of a file count once per run, as the first check of it saw them.
@@ -118,9 +129,9 @@ func (ts *externalTools) forCheck() *externalTools {
 		return nil
 	}
 	cp := func(t *externalTool) *externalTool {
-		return &externalTool{name: t.name, command: t.command, required: t.required, kind: t.kind}
+		return &externalTool{name: t.name, command: t.command, required: t.required, kind: t.kind, what: t.what, off: t.off}
 	}
-	return &externalTools{shellcheck: cp(ts.shellcheck), pyflakes: cp(ts.pyflakes)}
+	return &externalTools{shellcheck: cp(ts.shellcheck), pyflakes: cp(ts.pyflakes), node: cp(ts.node)}
 }
 
 // record adds what the check of the file saw to the totals, unless an earlier check of the same file did.
@@ -138,7 +149,7 @@ func (ts *externalTools) record(path string, check *externalTools) {
 	}
 	ts.seen[path] = true
 	ts.mu.Unlock()
-	for _, p := range [][2]*externalTool{{ts.shellcheck, check.shellcheck}, {ts.pyflakes, check.pyflakes}} {
+	for _, p := range [][2]*externalTool{{ts.shellcheck, check.shellcheck}, {ts.pyflakes, check.pyflakes}, {ts.node, check.node}} {
 		total, one := p[0], p[1]
 		if s, ok := one.snapshot(); ok {
 			total.setStatus(s.Status)
@@ -152,6 +163,8 @@ func newExternalTools(opts *LinterOptions) *externalTools {
 	return &externalTools{
 		shellcheck: &externalTool{name: "shellcheck", command: opts.Shellcheck, required: opts.ShellcheckRequired, kind: "shell script"},
 		pyflakes:   &externalTool{name: "pyflakes", command: pyflakesCommand(opts), required: opts.PyflakesRequired && opts.Ruff == "", kind: "Python script"},
+		node: &externalTool{name: "node", command: "node", kind: "JavaScript script", what: "node 20 or later",
+			off: `turn the check off with "rules: {github-script-syntax: off}" in the configuration`},
 	}
 }
 
@@ -173,6 +186,8 @@ func (ts *externalTools) tool(name string) *externalTool {
 		return ts.shellcheck
 	case "pyflakes":
 		return ts.pyflakes
+	case "node":
+		return ts.node
 	}
 	return nil
 }
@@ -186,7 +201,7 @@ func (ts *externalTools) statuses() map[string]ExternalToolStatus {
 		return nil
 	}
 	var ret map[string]ExternalToolStatus
-	for _, t := range []*externalTool{ts.shellcheck, ts.pyflakes} {
+	for _, t := range []*externalTool{ts.shellcheck, ts.pyflakes, ts.node} {
 		if s, ok := t.snapshot(); ok && s.Status != ExternalToolDisabled && s.Scripts+s.SkippedScripts > 0 {
 			if ret == nil {
 				ret = map[string]ExternalToolStatus{}
@@ -203,7 +218,7 @@ func (ts *externalTools) notes() []string {
 		return nil
 	}
 	var ret []string
-	for _, t := range []*externalTool{ts.shellcheck, ts.pyflakes} {
+	for _, t := range []*externalTool{ts.shellcheck, ts.pyflakes, ts.node} {
 		if n := t.note(); n != "" {
 			ret = append(ret, n)
 		}

@@ -208,7 +208,8 @@ See the [contribution guide](./CONTRIBUTING.md) for more details.
 
 ## License
 
-jactionlint is distributed under [the MIT license](./LICENSE.txt).
+jactionlint is distributed under [the MIT license](./LICENSE.txt). See [NOTICE.md](./NOTICE.md) for the projects it is built on,
+including actionlint, zizmor and ghlint.
 
 [ci-badge]: https://github.com/jdx/jactionlint/actions/workflows/ci.yaml/badge.svg
 [ci]: https://github.com/jdx/jactionlint/actions/workflows/ci.yaml
@@ -224,16 +225,16 @@ jactionlint is distributed under [the MIT license](./LICENSE.txt).
 [filter-pattern-doc]: https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions#filter-pattern-cheat-sheet
 [script-injection-doc]: https://docs.github.com/en/actions/reference/security/secure-use#good-practices-for-mitigating-script-injection-attacks
 [releases]: https://github.com/jdx/jactionlint/releases
-[checks]: https://github.com/jdx/jactionlint/blob/main/docs/checks.md
-[install]: https://github.com/jdx/jactionlint/blob/main/docs/install.md
-[usage]: https://github.com/jdx/jactionlint/blob/main/docs/usage.md
-[config]: https://github.com/jdx/jactionlint/blob/main/docs/config.md
-[rules]: https://github.com/jdx/jactionlint/blob/main/docs/rules.md
-[migration]: https://github.com/jdx/jactionlint/blob/main/docs/v2-migration.md
-[zizmor-parity]: https://github.com/jdx/jactionlint/blob/main/docs/zizmor-parity.md
+[checks]: https://jactionlint.jdx.dev/checks
+[install]: https://jactionlint.jdx.dev/install
+[usage]: https://jactionlint.jdx.dev/usage
+[config]: https://jactionlint.jdx.dev/config
+[rules]: https://jactionlint.jdx.dev/rules
+[migration]: https://jactionlint.jdx.dev/v2-migration
+[zizmor-parity]: https://jactionlint.jdx.dev/zizmor-parity
 [zizmor]: https://docs.zizmor.sh/
-[usage-hk]: https://github.com/jdx/jactionlint/blob/main/docs/usage.md#hk
-[from-actionlint]: https://github.com/jdx/jactionlint/blob/main/docs/actionlint.md
-[api]: https://github.com/jdx/jactionlint/blob/main/docs/api.md
-[refs]: https://github.com/jdx/jactionlint/blob/main/docs/reference.md
+[usage-hk]: https://jactionlint.jdx.dev/usage#hk
+[from-actionlint]: https://jactionlint.jdx.dev/actionlint
+[api]: https://jactionlint.jdx.dev/api
+[refs]: https://jactionlint.jdx.dev/reference
 [issue-form]: https://github.com/jdx/jactionlint/issues/new
