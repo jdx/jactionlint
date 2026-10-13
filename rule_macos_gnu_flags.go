@@ -78,8 +78,10 @@ func (rule *RuleMacosGnuFlags) VisitStep(n *Step) error {
 	}
 	portable := portableTools(s)
 	for _, c := range s.Commands {
-		if c.Tested || portable[c.Name] {
-			continue // the script handles the failure (`date -d ... || date -v ...`) or has the form of macOS too
+		if (c.Tested && !c.AndOnly) || portable[c.Name] {
+			// the script handles the failure (`if grep -P ...`, `date -d ... || date -v ...`: not the left side of &&,
+			// whose failure is the status of the list) or has the form of macOS too
+			continue
 		}
 		for _, f := range macosGnuForms(c) {
 			start, end := scriptPos(s, origin, f.word.Offset), scriptPos(s, origin, f.word.End)
@@ -93,7 +95,7 @@ func (rule *RuleMacosGnuFlags) VisitStep(n *Step) error {
 }
 
 // macosSystemRe matches what a script says when it picks the system or installs the GNU tools.
-var macosSystemRe = regexp.MustCompile(`(?i)runner[._]os|uname|ostype|darwin|macos|sw_vers|\bgnu\b|gnu-|coreutils|findutils|\bg(?:sed|grep|date|stat|find|tee|cp|xargs)\b|\bbrew\b|\bnix\b`)
+var macosSystemRe = regexp.MustCompile(`(?i)\brunner[._]os\b|\buname\b|\bostype\b|\bdarwin\b|\bmacos\b|\bsw_vers\b|\bgnu\b|\bgnu-|\bcoreutils\b|\bfindutils\b|\bg(?:sed|grep|date|stat|find|tee|cp|xargs)\b|\bbrew\b|\bnix\b`)
 
 // mayBeForAnotherSystem reports whether the step may not run on macOS, or may run with GNU tools.
 func (rule *RuleMacosGnuFlags) mayBeForAnotherSystem(n *Step, run *ExecRun) bool {

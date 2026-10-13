@@ -33,6 +33,15 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - run: date -d yesterday
+  words-that-are-not-the-system:
+    runs-on: macos-latest
+    steps:
+      # MY_OSTYPE_FILE is not $OSTYPE, and the left side of && has no fallback
+      - run: |
+          echo "${MY_OSTYPE_FILE:-none}"
+          sed -i 's/a/b/' file.txt
+      - run: date -d yesterday && echo done
+      - run: grep -P x file && echo found
   macos-excluded-and-included:
     strategy:
       matrix:
