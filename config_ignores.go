@@ -526,6 +526,8 @@ type ignoreContext struct {
 	scopes  *scopeIndex
 	// skipped are the rules which could not be created for the file (see RuleEnv.skipped)
 	skipped map[string]bool
+	// finding is the context to put in the findings (--finding-context), or nil
+	finding *findingContext
 }
 
 // ignoreRun records, for one run of the linter, which configuration ignores suppressed something and
