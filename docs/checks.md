@@ -4288,8 +4288,11 @@ rules:
 ```
 
 The policies are `hash-pin` (a digest), `tag-pin` (a tag other than `latest`, or a digest) and `any`. A pattern is a glob of the
-image name where `*` matches any characters, `/` included. A pattern with a tag is more specific than one without, then the one with
-more literal characters wins, and a policy wins over `require-digest`. `node` and `docker.io/library/node` are the same image.
+image name where `*` matches any characters, `/` included. When several patterns match an image, the most specific one decides, in this order: (1) more literal characters before the first
+`*` of the pattern with the registry written out (`node` is `docker.io/library/node`, and `docker.io/*` is `docker.io/library/*`), (2)
+fewer `*`, (3) a pattern with a tag beats the same name without one, (4) the longer pattern as written, and, for patterns that tie on all of
+these, the first one in lexical order. So `node` beats `docker.io/library/*`, `docker.io/library/*` beats `docker.io/*`, `node:20`
+beats `node`, and `ghcr.io/org/app` beats `ghcr.io/org/*`, which beats `ghcr.io/*` and `*`. A policy wins over `require-digest`. `node` and `docker.io/library/node` are the same image.
 To forbid or allow images by name, see the options `images-allow` and `images-deny` of [`forbidden-uses`](#check-forbidden-uses).
 
 <a id="check-self-repository"></a>

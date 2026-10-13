@@ -1333,7 +1333,7 @@ A container or service image is not pinned by a digest.
 - Default level: error
 - Profile: default
 - Option `require-digest` (bool, default true): Report images pinned by a tag other than latest too. Turn it off to report only images without a tag or with the latest tag.
-- Option `policies` (string-map, default empty): How strongly to pin the images matching a pattern: hash-pin (a digest, the default of require-digest), tag-pin (a tag other than latest, or a digest) or any. The most specific pattern that matches (one with a tag, then the most literal characters) wins over require-digest. Patterns are globs of the image name, where * matches any characters: "*", "ghcr.io/my-org/*", "registry.example.com/team/tool" or "node:20". The registry of Docker Hub can be left out ("node" is "docker.io/library/node").
+- Option `policies` (string-map, default empty): How strongly to pin the images matching a pattern: hash-pin (a digest, the default of require-digest), tag-pin (a tag other than latest, or a digest) or any. The most specific pattern that matches wins over require-digest: more literal characters before the first *, in the pattern with the registry written out, then fewer *, then a tag, then the longer pattern. Patterns are globs of the image name, where * matches any characters: "*", "ghcr.io/my-org/*", "registry.example.com/team/tool" or "node:20". The registry of Docker Hub can be left out ("node" is "docker.io/library/node").
 - Option `pedantic` (bool, no default): Also report the pedantic checks, which are noisier. Unset, they run under the pedantic profile.
 - Details and examples: [checks](./checks.md#check-unpinned-images)
 

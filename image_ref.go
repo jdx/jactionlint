@@ -52,9 +52,31 @@ type imagePattern struct {
 	raw string
 	// res are the expressions of the name as written and, when it differs, of the name with the registry written out
 	// ("node" and "docker.io/library/node"): a pattern matches an image which either form of it matches.
-	res     []*regexp.Regexp
-	hasTag  bool
-	literal int // the number of characters that are not "*": the more specific pattern wins
+	res    []*regexp.Regexp
+	hasTag bool
+	// prefix is the number of literal characters before the first "*" of the normalized form of the name (the form with the
+	// registry written out, the longer one when both have a prefix), and wildcards the number of "*" of that form.
+	prefix, wildcards int
+}
+
+// moreSpecific reports whether pattern a is more specific than pattern b, in this order:
+//
+//  1. more literal characters before the first wildcard, in the normalized pattern ("node" is "docker.io/library/node");
+//  2. fewer wildcards;
+//  3. a pattern with a tag beats the same name without one;
+//  4. the longer pattern as written.
+//
+// Patterns that tie on all of these are equally specific: the caller keeps the first one in lexical order.
+func moreSpecific(a, b imagePattern) bool {
+	switch {
+	case a.prefix != b.prefix:
+		return a.prefix > b.prefix
+	case a.wildcards != b.wildcards:
+		return a.wildcards < b.wildcards
+	case a.hasTag != b.hasTag:
+		return a.hasTag
+	}
+	return len(a.raw) > len(b.raw)
 }
 
 // globRegexp turns a name with "*" (which matches any characters) into an anchored expression, with the tag when it has one.
@@ -98,11 +120,13 @@ func parseImagePattern(s string) (imagePattern, error) {
 		}
 		p.res = append(p.res, re)
 	}
-	// The more specific pattern is the one with more literal characters in the longest of its forms, so that "node" (which is
-	// "docker.io/library/node") is more specific than "docker.io/library/*"
-	for _, f := range forms {
-		if n := len(f) - strings.Count(f, "*"); n > p.literal {
-			p.literal = n
+	for k, f := range forms {
+		prefix := len(f)
+		if i := strings.IndexByte(f, '*'); i >= 0 {
+			prefix = i
+		}
+		if k == 0 || prefix > p.prefix {
+			p.prefix, p.wildcards = prefix, strings.Count(f, "*")
 		}
 	}
 	return p, nil
@@ -184,30 +208,26 @@ func validateImagePolicies(v any) error {
 	return nil
 }
 
-// imagePolicyFor returns the policy of the first pattern with the most literal characters which matches the image,
-// or the fallback when no pattern does.
+// imagePolicyFor returns the policy of the most specific pattern that matches the image (see moreSpecific), or the fallback
+// when no pattern does. Patterns are tried in lexical order, so two that are equally specific give the same answer every run.
 func imagePolicyFor(policies map[string]string, ref string, fallback imagePolicy) imagePolicy {
 	pats := make([]string, 0, len(policies))
 	for p := range policies {
 		pats = append(pats, p)
 	}
 	sort.Strings(pats)
-	best, bestSpec := fallback, -1
+	best, found := fallback, false
+	var bestPat imagePattern
 	for _, raw := range pats {
 		p, err := parseImagePattern(raw)
 		if err != nil || !p.matches(ref) {
 			continue
 		}
-		spec := p.literal
-		if p.hasTag {
-			spec += 1 << 20 // a pattern with a tag is more specific than the one of the name alone
-		}
-		if spec <= bestSpec {
+		pol, ok := parseImagePolicy(policies[raw])
+		if !ok || (found && !moreSpecific(p, bestPat)) {
 			continue
 		}
-		if pol, ok := parseImagePolicy(policies[raw]); ok {
-			best, bestSpec = pol, spec
-		}
+		best, bestPat, found = pol, p, true
 	}
 	return best
 }

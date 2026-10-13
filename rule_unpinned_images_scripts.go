@@ -8,7 +8,7 @@ import (
 // unpinnedImagesPolicies is the "policies" option of the unpinned-images rule.
 var unpinnedImagesPolicies = RuleOption{
 	Name: "policies", Kind: RuleOptionStringMap, Default: map[string]string{},
-	Summary:  "How strongly to pin the images matching a pattern: hash-pin (a digest, the default of require-digest), tag-pin (a tag other than latest, or a digest) or any. The most specific pattern that matches (one with a tag, then the most literal characters) wins over require-digest. Patterns are globs of the image name, where * matches any characters: \"*\", \"ghcr.io/my-org/*\", \"registry.example.com/team/tool\" or \"node:20\". The registry of Docker Hub can be left out (\"node\" is \"docker.io/library/node\").",
+	Summary:  "How strongly to pin the images matching a pattern: hash-pin (a digest, the default of require-digest), tag-pin (a tag other than latest, or a digest) or any. The most specific pattern that matches wins over require-digest: more literal characters before the first *, in the pattern with the registry written out, then fewer *, then a tag, then the longer pattern. Patterns are globs of the image name, where * matches any characters: \"*\", \"ghcr.io/my-org/*\", \"registry.example.com/team/tool\" or \"node:20\". The registry of Docker Hub can be left out (\"node\" is \"docker.io/library/node\").",
 	Validate: validateImagePolicies,
 }
 
