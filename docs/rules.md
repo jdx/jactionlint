@@ -82,6 +82,7 @@ rules:
 | [gh-without-token](#gh-without-token) | correctness | error | correctness |
 | [github-app](#github-app) | security | error | default |
 | [github-env](#github-env) | security | error | default |
+| [github-script-syntax](#github-script-syntax) | correctness | error | correctness |
 | [hardcoded-container-credentials](#hardcoded-container-credentials) | security | error | correctness |
 | [if-always-true](#if-always-true) | correctness | error | correctness |
 | [impostor-commit](#impostor-commit) | security | error | only with `--online` |
@@ -647,6 +648,15 @@ Input that an outsider controls, or a value that is not a literal in a workflow 
 - Default level: error
 - Profile: default
 - Details and examples: [checks](./checks.md#check-github-env)
+
+## github-script-syntax
+
+The script of actions/github-script has a JavaScript syntax error.
+
+- Group: correctness
+- Default level: error
+- Profile: correctness
+- Details and examples: [checks](./checks.md#check-github-script-syntax)
 
 ## hardcoded-container-credentials
 
