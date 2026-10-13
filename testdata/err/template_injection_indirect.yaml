@@ -20,6 +20,7 @@ jobs:
       - uses: nick-fields/retry@v3
         with:
           command: echo ${{ github.head_ref }}
+          timeout_minutes: 5
       # ERROR: The same for github-script
       - uses: actions/github-script@v7
         with:
