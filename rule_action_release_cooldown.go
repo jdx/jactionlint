@@ -172,7 +172,7 @@ func init() {
 	registerRules(
 		RuleInfo{
 			ID: "action-release-cooldown", Group: RuleGroupSecurity, Summary: "An action is pinned to a version released less than the cooldown ago.",
-			DefaultLevel: SeverityWarning, Online: true, DocsAnchor: "check-action-release-cooldown",
+			DefaultLevel: SeverityWarning, Online: true, OptIn: true, DocsAnchor: "check-action-release-cooldown",
 			Options: []RuleOption{{
 				Name: "days", Kind: RuleOptionInt, Default: actionReleaseCooldownDefaultDays,
 				Summary: "How many days a version must be old. The date is the publication of its release on GitHub, else the date of its commit. The rule runs only when \"rules\" has an entry for it, and only with the online checks.",
@@ -180,8 +180,8 @@ func init() {
 		},
 	)
 	registerRuleFactory("action-release-cooldown", func(env *RuleEnv) []Rule {
-		// Opt-in: a number of days is a policy, so the rule runs only when the configuration names it
-		if env.online == nil || !env.config.ruleConfigured("action-release-cooldown") || !env.config.RuleEnabled("action-release-cooldown") {
+		// Opt-in (see RuleInfo.OptIn): RuleEnabled is false until the configuration has an entry for the rule
+		if env.online == nil || !env.config.RuleEnabled("action-release-cooldown") {
 			return nil
 		}
 		days := actionReleaseCooldownDefaultDays

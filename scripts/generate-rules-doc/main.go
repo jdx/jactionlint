@@ -25,6 +25,9 @@ func profileText(p jactionlint.Profile) string {
 // ruleProfileText describes when a rule is enabled. Online rules do not follow a profile: they run
 // when the online checks are on.
 func ruleProfileText(r jactionlint.RuleInfo) string {
+	if r.Online && r.OptIn {
+		return "only with `--online`, and only when `rules` has an entry for it (opt-in)"
+	}
 	if r.Online {
 		return "only with `--online`"
 	}

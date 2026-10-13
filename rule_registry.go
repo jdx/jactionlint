@@ -125,6 +125,9 @@ type RuleInfo struct {
 	// Online is whether the rule needs network access. Online rules run only with --online and are
 	// independent of the profile.
 	Online bool
+	// OptIn is whether the rule runs only when the "rules" of the configuration has an entry for it, whatever the profile and
+	// the online checks are. A rule of a number of days, for example, is a decision of the project.
+	OptIn bool
 	// Fixable is whether the rule can attach an automatic fix (Error.Fix) to its findings.
 	Fixable bool
 	// DocsAnchor is the anchor of the section describing the rule in docs/checks.md. It can be empty.
