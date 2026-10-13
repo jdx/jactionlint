@@ -294,58 +294,58 @@ Documents for more details are available online.
 
 ### Checks
 
-https://github.com/jdx/jactionlint/blob/main/docs/checks.md
+https://jactionlint.jdx.dev/checks
 
 Full list of all checks done by jactionlint with example inputs, outputs, and playground links.
 
 ### Rules
 
-https://github.com/jdx/jactionlint/blob/main/docs/rules.md
+https://jactionlint.jdx.dev/rules
 
 Reference of all rule IDs with their group, default level and profile.
 
 ### Installation
 
-https://github.com/jdx/jactionlint/blob/main/docs/install.md
+https://jactionlint.jdx.dev/install
 
 Installation instructions. Prebuilt binaries, Homebrew package, building from source, a Docker
 image, a download script (for CI) are available.
 
 ### Usage
 
-https://github.com/jdx/jactionlint/blob/main/docs/usage.md
+https://jactionlint.jdx.dev/usage
 
 How to use `jactionlint` command locally or on GitHub Actions, the online playground, an official
 Docker image, and integrations with reviewdog, Problem Matchers, super-linter, pre-commit.
 
 ### Configuration
 
-https://github.com/jdx/jactionlint/blob/main/docs/config.md
+https://jactionlint.jdx.dev/config
 
 How to configure jactionlint behavior by the configuration file `jactionlint.yaml`: the profile, the
 level of each rule, runner labels, ignores, the baseline and the online options.
 
 ### Coming from actionlint
 
-https://github.com/jdx/jactionlint/blob/main/docs/actionlint.md
+https://jactionlint.jdx.dev/actionlint
 
 How to get the checks of actionlint with `--profile correctness`.
 
 ### Migrating to v2
 
-https://github.com/jdx/jactionlint/blob/main/docs/v2-migration.md
+https://jactionlint.jdx.dev/v2-migration
 
 What changed since v1 and what to do about it.
 
 ### Go API
 
-https://github.com/jdx/jactionlint/blob/main/docs/api.md
+https://jactionlint.jdx.dev/api
 
 How to use jactionlint as Go library.
 
 ### References
 
-https://github.com/jdx/jactionlint/blob/main/docs/reference.md
+https://jactionlint.jdx.dev/reference
 
 Links to resources.
 

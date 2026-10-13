@@ -446,11 +446,6 @@ func usageMessage(err error) error {
 
 // printHelp writes the help text, which --help prints to stdout.
 func printHelp(out io.Writer) {
-	v := getCommandVersion()
-	b := "main"
-	if isReleaseVersion(v) {
-		b = "v" + v
-	}
 	fmt.Fprint(out, `Usage: jactionlint [OPTIONS] [FILES...] [-]
 
 jactionlint is a linter for GitHub Actions workflow files and Dependabot configuration.
@@ -482,24 +477,11 @@ Options with an optional value (--color, --fix, --baseline, --baseline-write, --
 Exit status: 0 no problem, 1 problems found, 2 invalid command line, 3 failure.
 
 Documents:
-  Usage          https://github.com/jdx/jactionlint/tree/%[1]s/docs/usage.md
-  Checks         https://github.com/jdx/jactionlint/tree/%[1]s/docs/checks.md
-  Rule IDs       https://github.com/jdx/jactionlint/tree/%[1]s/docs/rules.md
-  Configuration  https://github.com/jdx/jactionlint/tree/%[1]s/docs/config.md
-`, b)
-}
-
-func isReleaseVersion(v string) bool {
-	parts := strings.Split(v, ".")
-	if len(parts) != 3 {
-		return false
-	}
-	for _, p := range parts {
-		if p == "" || strings.Trim(p, "0123456789") != "" {
-			return false
-		}
-	}
-	return true
+  Usage          https://jactionlint.jdx.dev/usage
+  Checks         https://jactionlint.jdx.dev/checks
+  Rule IDs       https://jactionlint.jdx.dev/rules
+  Configuration  https://jactionlint.jdx.dev/config
+`)
 }
 
 // optionSyntax is how the option is written in the help, e.g. "-c, --config-file=FILE".
