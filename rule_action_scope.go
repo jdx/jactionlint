@@ -74,6 +74,7 @@ var actionRuleScope = map[string]struct {
 	"credentials":                     {scope: actionNotApplicable},
 	"dangerous-triggers":              {scope: actionNotApplicable},
 	"deprecated-commands":             {scope: actionApplies},
+	"deprecated-node-runtime":         {scope: actionApplies},
 	"env-var":                         {scope: actionApplies},
 	"events":                          {scope: actionNotApplicable},
 	"event-name-never-received":       {scope: actionNotApplicable}, // the events are the ones of the workflow, and an action has the events of its callers

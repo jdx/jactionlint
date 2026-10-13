@@ -36,6 +36,12 @@ go run ./scripts/generate-popular-actions -d -w -r scripts/generate-popular-acti
 
 Please see output of `-help` flag for more details.
 
+## What is generated
+
+`popular_actions.go` has three maps: `PopularActions` (the inputs and outputs of each known version), `OutdatedPopularActionSpecs` (the
+versions that run on a runtime older than `node20`, which are not kept in the first map) and `PopularActionRuntimes` (the `runs.using` of
+every other version that runs JavaScript, such as `"actions/checkout@v4": "node20"`). The rule `deprecated-node-runtime` reads the last one.
+
 ## The data source file
 
 The data source of the popular actions is defined in [`popular_actions.json`](./popular_actions.json). This file contains an array

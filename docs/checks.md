@@ -115,6 +115,7 @@ List of checks:
 - [Failures hidden by continue-on-error (pedantic)](#check-continue-on-error)
 - [Mutable runner labels (pedantic)](#check-mutable-runner-label)
 - [Deprecated runner labels (pedantic)](#check-deprecated-runner-label)
+- [Node.js runtimes that GitHub removed (pedantic)](#check-deprecated-node-runtime)
 - [Invisible characters](#check-invisible-characters)
 - [Unsound prefix matches on names](#check-unsound-prefix-match)
 - [Composite actions](#check-composite-actions)
@@ -9505,7 +9506,84 @@ unknown, and [`unknown-runner-label`](#check-runner-labels) reports it as an err
 jactionlint does not know which image your jobs can move to. Every date is in one table, `runnerLabelRetirements` in `runner_label_retirement.go`, which
 is checked against the announcements: a deprecation that GitHub announces later is one more row.
 
+<a id="check-deprecated-node-runtime"></a>
+## Node.js runtimes that GitHub removed (pedantic)
+
+Example input:
+
+```yaml
+on: push
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      # ERROR: the major version declares node20
+      - uses: actions/checkout@v4
+      # ERROR: the same for a commit with a version comment
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      # OK
+      - uses: actions/checkout@v5
+```
+
+Output:
+<!-- Skip update output -->
+```
+test.yaml:8:15: warning: action "actions/checkout@v4" declares the Node.js runtime "node20" in its metadata, but Node.js 20 was removed from GitHub Actions on 2026-09-23, so the runner runs the action on Node.js 24 instead of the runtime it declares. update the action to "actions/checkout@v5" or newer, which declares "node24" [deprecated-node-runtime]
+  |
+8 |       - uses: actions/checkout@v4
+  |               ^~~~~~~~~~~~~~~~~~~
+test.yaml:10:15: warning: action "actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020" (checked as "actions/setup-node@v4": the version comment "# v4.4.0" says so, and nothing verifies the comment) declares the Node.js runtime "node20" in its metadata, but Node.js 20 was removed from GitHub Actions on 2026-09-23, so the runner runs the action on Node.js 24 instead of the runtime it declares. update the action to "actions/setup-node@v5" or newer, which declares "node24" [deprecated-node-runtime]
+   |
+10 |       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+   |               ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+```
+
+<!-- Skip playground link -->
+
+The output above is from the following `rules` section of the [configuration file](config.md):
+
+```yaml
+rules:
+  deprecated-node-runtime: warn
+```
+
+The rule `deprecated-node-runtime` (in the `pedantic` profile, as a warning) reports the Node.js runtimes that GitHub Actions no longer
+has. GitHub removed Node.js 20 on 2026-09-23 ([changelog][node20-removed]; the plan with its phases is in the
+[deprecation notice][node20-deprecation]): since then a runner on github.com runs every JavaScript action on Node.js 24 whatever its
+`runs.using` says. The runner still accepts `node20`, `node16` and `node12` in the metadata and starts the action on Node.js 24
+(`HandlerFactory.cs` and `NodeUtil.cs` of the [runner][runner-node]), so such an action keeps working unless its code breaks on Node.js 24.
+
+That is why the rule is not part of the `default` or `correctness` profile: the action does not fail, and jactionlint cannot tell
+a runner on github.com from GitHub Enterprise Server or an old self-hosted runner, where `node20` can still be the runtime that runs.
+The finding says what holds everywhere: the action declares a runtime that the runner on github.com does not provide. It checks two things.
+
+**The actions that a workflow uses.** The generated data of the popular actions (`PopularActionRuntimes`) records the `runs.using` of every
+major version they know, taken from the `action.yml` of that major when the data was generated. A `uses:` of a major that declares
+`node20` is reported, with the oldest newer major that does not (`actions/checkout@v4` gets `v5`; `actions/download-artifact@v5` gets `v7`
+because `v6` is also `node20`). The major version is found as the checks of the inputs find it: from the ref, from a full version
+such as `v4.2.2`, or from the version comment of a commit SHA (`# v4.2.2`), and the message says which. A commit without a version comment is
+not reported, because nothing says which release it is. Actions that are not in the data, local actions and `docker://` images are not
+reported, and neither is a major that declares a runtime older than `node20`: [`outdated-action-runner`](#detect-outdated-popular-actions)
+reports it as an error.
+
+**The metadata of an action.** The `runs.using` of the `action.yml` that is linted (a local action under `.github/actions`, or the
+one in the root of an action repository) is reported when it is `node20`, `node16` or `node12`, with the advice to declare `node24`:
+
+```yaml
+runs:
+  using: node20 # warning: Node.js 20 was removed from GitHub Actions on 2026-09-23 ...
+  main: dist/index.js
+```
+
+A workflow that calls a local action is not reported a second time: the metadata file of the action is. `node12` and `node16` in a local
+action are also reported by [`invalid-local-action`](#action-metadata-syntax) where a workflow calls it, because the runner does not document them
+anymore.
+
 [yamllint]: https://github.com/adrienverge/yamllint
+[node20-removed]: https://github.blog/changelog/2026-09-23-node-20-is-no-longer-available-in-github-actions
+[node20-deprecation]: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+[runner-node]: https://github.com/actions/runner/blob/main/src/Runner.Worker/Handlers/HandlerFactory.cs
 [issue-form]: https://github.com/jdx/jactionlint/issues/new
 [syntax-doc]: https://docs.github.com/en/actions/learn-github-actions/workflow-syntax-for-github-actions
 [filter-pattern-doc]: https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions#filter-pattern-cheat-sheet
@@ -9547,7 +9625,7 @@ SARIF and `--fix` work for them like for workflows.
 
 The `steps` of a composite action (`runs.using: composite`) are checked with the same rules as the steps of a workflow job, and
 the rule IDs are the same. Actions that run JavaScript (`node20`, `node24`, ...) or a container (`docker`) have no steps: only their
-metadata is checked (the syntax, and the `docker://` image of a Docker action by `unpinned-images`).
+metadata is checked (the syntax, the `docker://` image of a Docker action by `unpinned-images`, and a removed runtime such as `node20` by the pedantic [`deprecated-node-runtime`](#check-deprecated-node-runtime)).
 
 What differs from a workflow:
 
@@ -9578,7 +9656,7 @@ way because any caller can pass attacker-controlled text. jactionlint does not l
 
 How the rules treat actions:
 
-- **Applies** to the steps (and the metadata) of an action: `action-syntax`, `adhoc-packages`, `archived-uses`, `argument-injection`, `artipacked`, `background-step-not-waited`, `checkout-static-credentials`, `command-injection`, `conflicting-action-inputs`, `constant-condition`, `context-availability`, `continue-on-error`, `deprecated-action-input`, `deprecated-commands`, `duplicate-key`, `duplicate-step-id`, `environment-file-redirect`, `expired-ignore`, `expression-syntax`, `expression-type`, `fail-fast-action-inputs`, `forbidden-uses`, `github-app`, `if-always-true`, `impostor-commit`, `insecure-commands`, `insecure-ssh-keyscan`, `insecure-url-scheme`, `invalid-env-var-name`, `invalid-function-call`, `invalid-id`, `invalid-ignore-comment`, `invalid-local-action`, `invalid-parallel-step`, `invalid-shell-name`, `invalid-uses`, `invisible-characters`, `known-vulnerable-actions`, `malformed-expression-delimiters`, `max-run-lines`, `merge-key`, `misfeature`, `missing-action-input`, `multiline-plain-run`, `obfuscation`, `outdated-action-runner`, `output-clobbering`, `pipeline-without-pipefail`, `pyflakes`, `recursive-alias`, `ref-confusion`, `ref-version-mismatch`, `repojacking`, `require-expression-wrapping`, `self-repository`, `shellcheck`, `stale-action-refs`, `superfluous-actions`, `template-injection`, `typosquat-uses`, `undefined-function`, `undefined-property`, `unknown-action-input`, `unlocked-install`, `unpinned-images`, `unpinned-tools`, `unpinned-uses`, `unsound-contains`, `unsound-prefix-match`, `unsound-ternary`, `unused-anchor`, `unused-ignore`, `unverified-download`, `use-trusted-publishing`, `yaml-syntax`.
+- **Applies** to the steps (and the metadata) of an action: `action-syntax`, `adhoc-packages`, `archived-uses`, `argument-injection`, `artipacked`, `background-step-not-waited`, `checkout-static-credentials`, `command-injection`, `conflicting-action-inputs`, `constant-condition`, `context-availability`, `continue-on-error`, `deprecated-action-input`, `deprecated-commands`, `deprecated-node-runtime`, `duplicate-key`, `duplicate-step-id`, `environment-file-redirect`, `expired-ignore`, `expression-syntax`, `expression-type`, `fail-fast-action-inputs`, `forbidden-uses`, `github-app`, `if-always-true`, `impostor-commit`, `insecure-commands`, `insecure-ssh-keyscan`, `insecure-url-scheme`, `invalid-env-var-name`, `invalid-function-call`, `invalid-id`, `invalid-ignore-comment`, `invalid-local-action`, `invalid-parallel-step`, `invalid-shell-name`, `invalid-uses`, `invisible-characters`, `known-vulnerable-actions`, `malformed-expression-delimiters`, `max-run-lines`, `merge-key`, `misfeature`, `missing-action-input`, `multiline-plain-run`, `obfuscation`, `outdated-action-runner`, `output-clobbering`, `pipeline-without-pipefail`, `pyflakes`, `recursive-alias`, `ref-confusion`, `ref-version-mismatch`, `repojacking`, `require-expression-wrapping`, `self-repository`, `shellcheck`, `stale-action-refs`, `superfluous-actions`, `template-injection`, `typosquat-uses`, `undefined-function`, `undefined-property`, `unknown-action-input`, `unlocked-install`, `unpinned-images`, `unpinned-tools`, `unpinned-uses`, `unsound-contains`, `unsound-prefix-match`, `unsound-ternary`, `unused-anchor`, `unused-ignore`, `unverified-download`, `use-trusted-publishing`, `yaml-syntax`.
 - **Caller-dependent**: `agentic-actions`, `bot-conditions`, `cache-poisoning`, `github-env` (its findings about untrusted input do not depend on the caller), `untrusted-artifact` and `untrusted-checkout`.
 - **Not applicable** because an action does not have what the rule checks, or because only the calling job can decide (`unused-baseline-entry` is about the baseline file, not about a workflow or an action): `anonymous-definition`, `concurrency-cancels-prs`, `concurrency-cancels-release`, `concurrency-deadlock`, `concurrency-limits`, `conflicting-runner-labels`, `cron-too-frequent`, `cyclic-job-needs`, `dangerous-triggers`, `dependabot-cooldown`, `dependabot-execution`, `dependabot-missing-actions-update`, `dependabot-syntax`, `deprecated-runner-label`, `duplicate-job-id`, `duplicate-job-needs`, `duplicate-triggers`, `event-name-never-received`, `excessive-permissions`, `gate-job-skipped-on-failure`, `gh-without-token`, `hardcoded-container-credentials`, `insufficient-permissions`, `invalid-activity-type`, `invalid-cron`, `invalid-event-config`, `invalid-event-filter`, `invalid-glob`, `invalid-label-pattern`, `invalid-local-workflow`, `invalid-permissions`, `invalid-timezone`, `invalid-workflow-call`, `invalid-workflow-call-input`, `invalid-workflow-dispatch-input`, `local-action-checkout`, `matrix-duplicate-value`, `matrix-invalid-exclude`, `missing-permissions`, `missing-timeout`, `missing-workflow-input`, `missing-workflow-secret`, `mutable-runner-label`, `overprovisioned-secrets`, `require-shell`, `required-actions`, `secrets-inherit`, `secrets-outside-env`, `self-hosted-runner`, `timeout-too-long`, `ubuntu-slim-limits`, `undefined-job-needs`, `undocumented-permissions`, `unknown-event`, `unknown-runner-label`, `unknown-workflow-input`, `unknown-workflow-secret`, `unredacted-secrets`, `unused-baseline-entry`, `unused-job-output`, `unused-needs`, `unused-workflow-input`, `workflow-call-permissions`, `workflow-input-type`, `workflow-run-names`, `workflow-secret-scope`, `workflow-syntax`.
 
