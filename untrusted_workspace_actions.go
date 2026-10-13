@@ -1,6 +1,9 @@
 package jactionlint
 
-import "strings"
+import (
+	"slices"
+	"strings"
+)
 
 // The actions that run what is in the workspace. After a checkout of the code of a pull request in a privileged workflow, a step
 // of one of them is "a step that runs it", like `make` or `npm ci` in a `run:` step.
@@ -44,7 +47,9 @@ var workspaceActions = func() map[string]workspaceAction {
 	}
 
 	// the actions of the first version of the rule
-	always("github/codeql-action/autobuild", "github/codeql-action/analyze", "pre-commit/action", "golangci/golangci-lint-action")
+	always("github/codeql-action/autobuild", "github/codeql-action/analyze", "pre-commit/action")
+	// golangci-lint runs the linters and the plugins of the repository unless install-only is true
+	gated("golangci/golangci-lint-action", func(e *ExecAction) bool { return !inputIsTrue(e, "install-only") })
 
 	// linters and checkers with the configuration, the plugins and the custom checks of the repository (eslint configuration
 	// and plugins are code, `.mega-linter.yml` has `PRE_COMMANDS`, checkov loads custom checks and `.checkov.yaml`,
@@ -85,8 +90,9 @@ var workspaceActions = func() map[string]workspaceAction {
 	gated("ruby/setup-ruby", func(e *ExecAction) bool { return inputIsTrue(e, "bundler-cache") }) // bundle install: the Gemfile is Ruby
 	gated("actions/setup-node", func(e *ExecAction) bool {
 		// cache: runs npm, yarn or pnpm in the workspace to find the cache, and `yarnPath` of .yarnrc.yml is a script (LOTP)
+		// (the values that setup-node accepts are npm, yarn and pnpm: `false` or an empty value does not run anything)
 		v, ok := e.input("cache")
-		return ok && v != "" && !strings.Contains(v, "${{")
+		return ok && slices.Contains([]string{"npm", "yarn", "pnpm"}, strings.ToLower(strings.TrimSpace(v)))
 	})
 	gated("docker/build-push-action", func(e *ExecAction) bool {
 		// the default context is the git context of the repository, not the workspace: only a path runs its Dockerfile
@@ -136,7 +142,16 @@ var workspaceActions = func() map[string]workspaceAction {
 		// it installs the dependencies (npm ci, with their scripts) and runs cypress, which executes cypress.config.js
 		install, installSet := e.input("install")
 		runTests, runSet := e.input("runtests")
-		return !((installSet && strings.EqualFold(install, "false")) && (runSet && strings.EqualFold(runTests, "false")))
+		if !((installSet && strings.EqualFold(install, "false")) && (runSet && strings.EqualFold(runTests, "false"))) {
+			return true
+		}
+		// the build, the server and the command run what is in the workspace whatever install and runTests say
+		for _, name := range []string{"build", "start", "start-windows", "command"} {
+			if v, ok := e.input(name); ok && strings.TrimSpace(v) != "" {
+				return true
+			}
+		}
+		return false
 	})
 	return m
 }()
