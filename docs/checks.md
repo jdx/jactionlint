@@ -2173,6 +2173,16 @@ runs on a runner of its owner, who chooses the other labels, so a label next to 
 (`ubuntu-latest-16-cores`, `ubuntu-24.04-xl`, `macos-14-xlarge`, `windows-2022-32cpu`) is accepted too; the names that an
 organization gives to its larger runners are custom labels, set them in the configuration file.
 
+The labels of the services that host runners for GitHub Actions are accepted without configuration, so that a workflow that runs fine
+is not an error: Blacksmith (`blacksmith-*`), Depot (`depot-ubuntu-*`, `depot-windows-*`, `depot-macos-*`), Namespace (`namespace-profile-*`,
+`nscloud-*`, `namespace-features:*`), RunsOn (`runs-on=...`, `runner=...`, `family=...`, `image=...`, `cpu=...`, `ram=...`, `spot=...`,
+`extras=...`, `pool=...`, `volume=...`, `retry=...`, `ami=...`, `sticky=...`), Ubicloud (`ubicloud`, `ubicloud-arm`, `ubicloud-standard-*`) and WarpBuild
+(`warp-*`). The prefixes are the ones the documentation of each service names, and a label needs something after the prefix. They do not take part in the check
+of conflicting labels, since the label of a service says nothing about the operating system. BuildJet is not in the list: the service was shut down
+on 2026-03-31. Labels of other services, or of a provider you want to be reported, are set with `self-hosted-runner.labels`, and
+`self-hosted-runner.providers` names the providers which are accepted (all of them when it is not set, none for `[]`); see the [configuration](config.md).
+`self-hosted-runner.strict-labels` accepts only the labels in `labels`, as before.
+
 In addition to checking label values, jactionlint checks combinations of labels. `runs-on:` section can be an array that contains
 multiple labels. In this case, a runner which has all the labels will be selected. However, those labels combinations can have
 conflicts.
