@@ -367,6 +367,13 @@ func TestPitfallSuperfluousActionsMayBeSelfHosted(t *testing.T) {
 		{"self-hosted next to a matrix entry", "      matrix:\n        x: [ubuntu-24.04]\n", "[self-hosted, \"${{ matrix.x }}\"]", 0},
 		{"undefined property", "      matrix:\n        x: [ubuntu-24.04]\n", "${{ matrix.r }}", 0},
 		{"hosted arrays", "      matrix:\n        r: [[ubuntu-24.04, x64], macos-14]\n        include:\n          - r: windows-2025\n", "${{ matrix.r }}", 1},
+		{"text around a matrix value", "      matrix:\n        os: [ubuntu, macos]\n", "${{ matrix.os }}-latest", 1},
+		{"two matrix values", "      matrix:\n        os: [ubuntu, macos]\n        v: [\"22.04\", \"24.04\"]\n", "${{ matrix.os }}-${{ matrix.v }}", 1},
+		{"key of an object value", "      matrix:\n        target:\n          - os: ubuntu-24.04\n          - os: macos-14\n", "${{ matrix.target.os }}", 1},
+		{"self-hosted in the key of an object value", "      matrix:\n        target:\n          - os: ubuntu-24.04\n          - os: self-hosted\n", "${{ matrix.target.os }}", 0},
+		{"expression in the key of an object value", "      matrix:\n        target:\n          - os: ubuntu-24.04\n          - os: \"${{ inputs.os }}\"\n", "${{ matrix.target.os }}", 0},
+		{"object value without the key", "      matrix:\n        target:\n          - os: ubuntu-24.04\n          - arch: arm\n", "${{ matrix.target.os }}", 0},
+		{"text around an unknown value", "      matrix:\n        os: ${{ fromJSON(needs.x.outputs.os) }}\n", "${{ matrix.os }}-latest", 0},
 	}
 	for _, c := range cases {
 		if got := errsWithID(lintFileWithConfig(t, cfg, "ci.yaml", wf(c.strategy, c.runsOn)), "superfluous-actions"); len(got) != c.want {

@@ -4,8 +4,8 @@ import "testing"
 
 // Actions that run what is in the workspace count as running the code of a pull request that an earlier step checked out.
 func TestRuleUntrustedCheckoutWorkspaceActions(t *testing.T) {
-	const head = "on: pull_request_target\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n        with:\n          ref: ${{ github.event.pull_request.head.sha }} # want\n"
-	const headNoWant = "on: pull_request_target\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n        with:\n          ref: ${{ github.event.pull_request.head.sha }}\n"
+	const head = "on: pull_request_target\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2\n        with:\n          ref: ${{ github.event.pull_request.head.sha }} # want\n"
+	const headNoWant = "on: pull_request_target\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2\n        with:\n          ref: ${{ github.event.pull_request.head.sha }}\n"
 	tests := []struct {
 		what string
 		step string
@@ -78,7 +78,7 @@ func TestRuleUntrustedCheckoutWorkspaceActions(t *testing.T) {
 
 // With a checkout in a subdirectory an action that works on the root of the workspace does not run it.
 func TestRuleUntrustedCheckoutWorkspaceActionInDirectory(t *testing.T) {
-	const src = "on: pull_request_target\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n        with:\n          ref: ${{ github.event.pull_request.head.sha }}\n          path: pr\n      - uses: reviewdog/action-eslint@v1\n"
+	const src = "on: pull_request_target\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2\n        with:\n          ref: ${{ github.event.pull_request.head.sha }}\n          path: pr\n      - uses: reviewdog/action-eslint@v1\n"
 	errs := onlyID(lintInProject(t, nil, src, "rules:\n  untrusted-checkout: error\n"), "untrusted-checkout")
 	checkLines(t, errs)
 }
