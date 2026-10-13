@@ -62,7 +62,7 @@ func (r *RuleDependabotMissingActionsUpdate) VisitDependabotPost(d *Dependabot) 
 			r.checkLocalActions(active)
 			return nil
 		}
-		if where, advice, ok := r.whereActionsAreUsed(false); ok {
+		if where, advice, ok := r.whereActionsAreUsed(updates, false); ok {
 			pos := updates[0].Pos
 			if pos == nil {
 				pos = d.Pos
@@ -74,7 +74,7 @@ func (r *RuleDependabotMissingActionsUpdate) VisitDependabotPost(d *Dependabot) 
 	if usesRenovate(r.project.RootDir()) {
 		return nil
 	}
-	if where, advice, ok := r.whereActionsAreUsed(true); ok {
+	if where, advice, ok := r.whereActionsAreUsed(nil, true); ok {
 		directories := `"directory: /"`
 		if advice != "" {
 			directories = `"directories: [` + advice + `]"`
@@ -156,7 +156,7 @@ func init() {
 // or with the local composite actions), and, when local actions use them, the entries of "directories" that cover the root and those
 // actions (the suggestion of the other finding of the rule, see suggestDirectories); ok is false when none does. For the message of
 // a disabled update the advice is the suffix ' with "directories: [...]"', for a missing update (entriesOnly) the entries alone.
-func (r *RuleDependabotMissingActionsUpdate) whereActionsAreUsed(entriesOnly bool) (where, advice string, ok bool) {
+func (r *RuleDependabotMissingActionsUpdate) whereActionsAreUsed(updates []*DependabotUpdate, entriesOnly bool) (where, advice string, ok bool) {
 	inWorkflows := hasExternalActions(r.project.WorkflowsDir())
 	locals := localActionsWithExternalUses(r.project)
 	switch {
@@ -170,7 +170,7 @@ func (r *RuleDependabotMissingActionsUpdate) whereActionsAreUsed(entriesOnly boo
 		return "", "", false
 	}
 	if len(locals) > 0 {
-		advice = strings.Join(suggestDirectories(nil, locals, true), ", ")
+		advice = strings.Join(suggestDirectories(updates, locals, true), ", ")
 		if !entriesOnly {
 			advice = " with \"directories: [" + advice + "]\""
 		}
