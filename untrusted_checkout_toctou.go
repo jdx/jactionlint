@@ -105,8 +105,9 @@ func classifyCondition(cond *String, commentOnly bool) gateInfo {
 }
 
 // neededGates are the gates of the jobs that the job needs, at any depth: the job runs after them.
-func neededGates(w *Workflow, j *Job, commentOnly bool, seen map[*Job]bool) gateInfo {
+func (rule *RuleUntrustedCheckout) neededGates(j *Job, commentOnly bool, seen map[*Job]bool) gateInfo {
 	var g gateInfo
+	w := rule.wf
 	if w == nil || j == nil || seen[j] || runsAfterSkippedNeeds(j.If) {
 		return g
 	}
@@ -119,22 +120,29 @@ func neededGates(w *Workflow, j *Job, commentOnly bool, seen map[*Job]bool) gate
 		if need == nil {
 			continue
 		}
-		g = g.merge(ownGates(need, commentOnly, true))
-		g = g.merge(neededGates(w, need, commentOnly, seen))
+		if len(eventsAfterCondition(rule.privileged, need.If)) == 0 {
+			g.safe = true // the job is skipped for these events, and so is the one that needs it
+			continue
+		}
+		g = g.merge(rule.ownGates(need, commentOnly, true))
+		g = g.merge(rule.neededGates(need, commentOnly, seen))
 	}
 	return g
 }
 
-// ownGates are the gates of the job itself: its environment, its condition and, with withSteps, the permission checks among
-// its steps.
-func ownGates(j *Job, commentOnly, withSteps bool) gateInfo {
+// ownGates are the gates of the job itself: its condition and, for a job that the job being judged needs, its environment and
+// the permission checks among its steps.
+func (rule *RuleUntrustedCheckout) ownGates(j *Job, commentOnly, needed bool) gateInfo {
 	var g gateInfo
-	if j.Environment != nil && j.Environment.Name != nil {
+	g = g.merge(classifyCondition(j.If, commentOnly))
+	if !needed {
+		return g // the environment of the job is judged where a finding is made (environmentGate), its steps as they come
+	}
+	if rule.environmentHolds(j) {
 		g.stale = append(g.stale, "an environment")
 	}
-	g = g.merge(classifyCondition(j.If, commentOnly))
-	if !withSteps {
-		return g
+	if j.ContinueOnError != nil && (j.ContinueOnError.Expression != nil || j.ContinueOnError.Value) {
+		return g // a failed permission check does not stop the jobs that need this one
 	}
 	for _, s := range flattenSteps(j.Steps) {
 		if isPermissionGate(s) {

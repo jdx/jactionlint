@@ -135,6 +135,43 @@ func TestUntrustedCheckoutCallers(t *testing.T) {
 			"a.yml": ucActionCaller("pull_request_target", "    environment: ci\n", headSHA),
 			"b.yml": ucActionCaller("pull_request_target", "", headSHA),
 		}, ".github/actions/build/action.yml", 1, ".github/workflows/b.yml"},
+		{"composite action, the call step runs after the permission check failed", map[string]string{
+			"pr.yml": "on: pull_request_target\njobs:\n  call:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: sushichop/action-repository-permission@v3\n        with:\n          required-permission: write\n      - uses: ./.github/actions/build\n        if: always()\n        with:\n          ref: " + headSHA + "\n",
+		}, ".github/actions/build/action.yml", 1, ".github/workflows/pr.yml"},
+		{"composite action, the call step after a permission check", map[string]string{
+			"pr.yml": "on: pull_request_target\njobs:\n  call:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: sushichop/action-repository-permission@v3\n        with:\n          required-permission: write\n      - uses: ./.github/actions/build\n        with:\n          ref: " + headSHA + "\n",
+		}, ".github/actions/build/action.yml", 0, ""},
+		{"composite action, an input and a call in another case", map[string]string{
+			"pr.yml": "on: pull_request_target\njobs:\n  call:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: ./.github/actions/build\n        with:\n          REF: " + headSHA + "\n",
+		}, ".github/actions/build/action.yml", 1, "inputs.ref"},
+		{"composite action, the call step after a permission check runs for cancelled runs only", map[string]string{
+			"pr.yml": "on: pull_request_target\njobs:\n  call:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: sushichop/action-repository-permission@v3\n        with:\n          required-permission: write\n      - uses: ./.github/actions/build\n        if: cancelled()\n        with:\n          ref: " + headSHA + "\n",
+		}, ".github/actions/build/action.yml", 0, ""},
+		{"composite action, the call step after a permission check runs unless cancelled", map[string]string{
+			"pr.yml": "on: pull_request_target\njobs:\n  call:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: sushichop/action-repository-permission@v3\n        with:\n          required-permission: write\n      - uses: ./.github/actions/build\n        if: ${{ !cancelled() }}\n        with:\n          ref: " + headSHA + "\n",
+		}, ".github/actions/build/action.yml", 1, ".github/workflows/pr.yml"},
+		{"composite action, the call step is for another event", map[string]string{
+			"pr.yml": "on: [pull_request_target, push]\njobs:\n  call:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: ./.github/actions/build\n        if: github.event_name == 'push'\n        with:\n          ref: " + headSHA + "\n",
+		}, ".github/actions/build/action.yml", 0, ""},
+		{"reusable workflow, two callers through another workflow, a branch and a commit", map[string]string{
+			"build.yml": strings.Replace(ucReusable, "actions/checkout@v1", "actions/checkout@v4", 1),
+			"mid.yml":   "on:\n  workflow_call:\n    inputs:\n      sha:\n        type: string\njobs:\n  b:\n    uses: ./.github/workflows/build.yml\n    with:\n      ref: ${{ inputs.sha }}\n",
+			"a.yml":     "on: pull_request_target\njobs:\n  call:\n    uses: ./.github/workflows/mid.yml\n    with:\n      sha: ${{ github.event.pull_request.head.ref }}\n",
+			"z.yml":     "on: pull_request_target\njobs:\n  call:\n    uses: ./.github/workflows/mid.yml\n    with:\n      sha: " + headSHA + "\n",
+		}, "build.yml", 1, "head.ref by .github/workflows/a.yml"},
+		{"reusable workflow, the number of the pull request of a comment", map[string]string{
+			"build.yml": "on:\n  workflow_call:\n    inputs:\n      pr:\n        type: string\njobs:\n  b:\n    runs-on: ubuntu-latest\n    steps:\n      - run: gh pr checkout ${{ inputs.pr }}\n      - run: make\n",
+			"c.yml":     "on: issue_comment\njobs:\n  call:\n    uses: ./.github/workflows/build.yml\n    with:\n      pr: ${{ github.event.issue.number }}\n",
+		}, "build.yml", 1, "gh pr checkout"},
+		{"reusable workflow, a number that is not the one of the comment", map[string]string{
+			"build.yml": "on:\n  workflow_call:\n    inputs:\n      pr:\n        type: string\njobs:\n  b:\n    runs-on: ubuntu-latest\n    steps:\n      - run: gh pr checkout ${{ inputs.pr }}\n      - run: make\n",
+			"c.yml":     "on: issue_comment\njobs:\n  call:\n    uses: ./.github/workflows/build.yml\n    with:\n      pr: '123'\n",
+		}, "build.yml", 0, ""},
+		{"reusable workflow, the number of a comment in a script that the callee runs", map[string]string{
+			"build.yml":   "on:\n  workflow_call:\n    inputs:\n      pr:\n        type: string\njobs:\n  b:\n    runs-on: ubuntu-latest\n    steps:\n      - run: ./co.sh \"${{ inputs.pr }}\"\n      - run: make\n",
+			"../../co.sh": "gh pr checkout \"$1\"\n",
+			"c.yml":       "on: issue_comment\njobs:\n  call:\n    uses: ./.github/workflows/build.yml\n    with:\n      pr: ${{ github.event.issue.number }}\n",
+		}, "build.yml", 1, "gh pr checkout"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -185,6 +222,13 @@ func TestUntrustedCheckoutLocalActionCheckout(t *testing.T) {
 		{"nothing runs the code", action("actions/checkout@v1", "${{ inputs.ref }}"), prt + "      - uses: ./.github/actions/checkout-pr\n        with:\n          ref: " + headSHA + "\n      - run: git diff --stat\n"},
 		{"the protection refuses it", action("actions/checkout@v4", "${{ inputs.ref }}"), prt + "      - uses: ./.github/actions/checkout-pr\n        with:\n          ref: " + headSHA + "\n      - run: make\n"},
 		{"the action is not composite", "name: x\ndescription: d\nruns:\n  using: node20\n  main: index.js\n", prt + "      - uses: ./.github/actions/checkout-pr\n        with:\n          ref: " + headSHA + "\n      - run: make\n"},
+		{"a permission check before the checkout in the action", "name: x\ndescription: d\nruns:\n  using: composite\n  steps:\n    - uses: sushichop/action-repository-permission@v3\n      with:\n        required-permission: write\n    - uses: actions/checkout@v1\n      with:\n        ref: ${{ inputs.ref }}\n", prt + "      - uses: ./.github/actions/checkout-pr\n        with:\n          ref: " + headSHA + "\n      - run: make\n"},
+		{"the checkout in the action is for another event", action("actions/checkout@v1", "${{ inputs.ref }}") + "      if: github.event_name == 'push'\n", "on: [pull_request_target, push]\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: ./.github/actions/checkout-pr\n        with:\n          ref: " + headSHA + "\n      - run: make\n"},
+		{"a permission check in the action, and a checkout that runs after a failure", "name: x\ndescription: d\nruns:\n  using: composite\n  steps:\n    - uses: sushichop/action-repository-permission@v3\n      with:\n        required-permission: write\n    - uses: actions/checkout@v1\n      if: always()\n      with:\n        ref: ${{ inputs.ref }}\n", prt + "      - uses: ./.github/actions/checkout-pr # want\n        with:\n          ref: " + headSHA + "\n      - run: make\n        if: always()\n"},
+		{"a permission check in the action, a checkout that runs after a failure and a step that does not", "name: x\ndescription: d\nruns:\n  using: composite\n  steps:\n    - uses: sushichop/action-repository-permission@v3\n      with:\n        required-permission: write\n    - uses: actions/checkout@v1\n      if: always()\n      with:\n        ref: ${{ inputs.ref }}\n", prt + "      - uses: ./.github/actions/checkout-pr\n        with:\n          ref: " + headSHA + "\n      - run: make\n"},
+		{"a checkout in the action before a permission check, and a step that runs after a failure", "name: x\ndescription: d\nruns:\n  using: composite\n  steps:\n    - uses: actions/checkout@v1\n      with:\n        ref: ${{ inputs.ref }}\n    - uses: sushichop/action-repository-permission@v3\n      with:\n        required-permission: write\n", prt + "      - uses: ./.github/actions/checkout-pr # want\n        with:\n          ref: " + headSHA + "\n      - run: make\n        if: failure()\n"},
+		{"a checkout in the action before a permission check, and a step for cancelled runs", "name: x\ndescription: d\nruns:\n  using: composite\n  steps:\n    - uses: actions/checkout@v1\n      with:\n        ref: ${{ inputs.ref }}\n    - uses: sushichop/action-repository-permission@v3\n      with:\n        required-permission: write\n", prt + "      - uses: ./.github/actions/checkout-pr\n        with:\n          ref: " + headSHA + "\n      - run: make\n        if: cancelled()\n"},
+		{"a checkout in the action before a permission check", "name: x\ndescription: d\nruns:\n  using: composite\n  steps:\n    - uses: actions/checkout@v1\n      with:\n        ref: ${{ inputs.ref }}\n    - uses: sushichop/action-repository-permission@v3\n      with:\n        required-permission: write\n", prt + "      - uses: ./.github/actions/checkout-pr\n        with:\n          ref: " + headSHA + "\n      - run: make\n"},
 		{"the step is for maintainers", action("actions/checkout@v1", "${{ inputs.ref }}"), prt + "      - uses: ./.github/actions/checkout-pr\n        if: github.event.pull_request.author_association == 'MEMBER'\n        with:\n          ref: " + headSHA + "\n      - run: make\n"},
 	}
 	for _, tc := range tests {
@@ -208,6 +252,9 @@ func TestUntrustedCheckoutCallersGuard(t *testing.T) {
 		{"floating tag, a number from a comment", map[string]string{"build.yml": floating, "c.yml": ucCaller("issue_comment", "", "refs/pull/${{ github.event.issue.number }}/head")}, 1},
 		{"floating tag, called on a comment and on a pull request", map[string]string{
 			"build.yml": floating, "pr.yml": ucCaller("pull_request_target", "", headSHA), "c.yml": ucCaller("issue_comment", "", "refs/pull/${{ github.event.issue.number }}/head"),
+		}, 1},
+		{"floating tag, called on workflow_run of a workflow that is not known to be a pull request one", map[string]string{
+			"build.yml": floating, "wr.yml": "on:\n  workflow_run:\n    workflows: [Other]\n    types: [completed]\njobs:\n  call:\n    uses: ./.github/workflows/build.yml\n    with:\n      ref: ${{ github.event.workflow_run.head_sha }}\n",
 		}, 1},
 		{"floating tag, a caller that is not known", map[string]string{
 			"build.yml": floating, "mid.yml": "on: workflow_call\njobs:\n  b:\n    uses: ./.github/workflows/build.yml\n    with:\n      ref: " + headSHA + "\n",

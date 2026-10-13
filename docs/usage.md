@@ -75,6 +75,7 @@ cat action.yml | jactionlint --stdin-filename action.yml -
 | `--verbose` | `-v` | Print verbose logs to stderr |
 | `--debug` |  | Print debug logs to stderr (for development) |
 | `--stdin-filename=NAME` |  | File name used in the output when reading stdin (default `<stdin>`) |
+| `--completion=SHELL` |  | Print the completion script of a shell (bash, zsh, fish or powershell) and exit. It completes the options, their values and the rule IDs |
 
 **Output**
 
@@ -85,7 +86,7 @@ cat action.yml | jactionlint --stdin-filename action.yml -
 | `--rule-ids` |  | Accepted for compatibility. The text output always shows the rule ID at the end of each finding |
 | `--color[=WHEN]` |  | Colorize the output: always, never or auto (default). Bare --color means always |
 | `--no-color` |  | Same as --color=never |
-| `--no-hints` |  | Do not print the hint line after a text run with many findings |
+| `--no-hints` |  | Do not print the hint line after a text run with many findings, nor the note that shellcheck or pyflakes was not found |
 | `--min-severity=LEVEL` |  | Hide findings less severe than LEVEL: info (default), warn or error |
 | `--strict-exit` |  | Exit with status 1 also for findings of level warn and info |
 
@@ -99,6 +100,10 @@ cat action.yml | jactionlint --stdin-filename action.yml -
 | `--init-config` |  | Write a default config file .github/jactionlint.yaml and exit |
 | `--migrate-config` |  | Rewrite the deprecated keys of the config file and exit |
 | `--migrate-ignores` |  | Rewrite "# zizmor: ignore[...]" comments into "# jactionlint ignore=..." comments and exit |
+| `--select=RULES` |  | Report only these comma separated rule IDs, also those the profile does not enable. Repeatable |
+| `--no-ignores` |  | Apply no ignore comment, no "ignores" or "paths" ignore of the config file and no baseline (--ignore still applies) |
+| `--list-rules` |  | List every rule ID with its group, profile, level and summary, and exit. --format json prints it as JSON |
+| `--explain=RULE` |  | Print the documentation of a rule ID (summary, group, profile, level, options, fixes and its section of the checks document) and exit |
 
 **Fixing**
 
@@ -137,8 +142,9 @@ cat action.yml | jactionlint --stdin-filename action.yml -
 
 | Option | Short | Description |
 | --- | --- | --- |
-| `--shellcheck=CMD` |  | Command or path of shellcheck (default shellcheck). Empty disables the integration |
-| `--pyflakes=CMD` |  | Command or path of pyflakes (default pyflakes). Empty disables the integration |
+| `--shellcheck=CMD` |  | Command or path of shellcheck (default shellcheck). Empty disables the integration. A command given here must exist (exit status 3 otherwise) |
+| `--pyflakes=CMD` |  | Command or path of pyflakes (default pyflakes). Empty disables the integration. A command given here must exist (exit status 3 otherwise) |
+| `--shellcheck-rcfile=FILE` |  | Let shellcheck read this shellcheckrc instead of passing --norc. Overrides "shellcheck.rcfile" of the config file |
 
 Exit status: 0 no problem, 1 problems found, 2 invalid command line, 3 failure.
 
@@ -181,6 +187,37 @@ It is shown only when stderr is a terminal or the process runs in CI (`CI` or `G
 adopt), and not at all with `--no-hints` or `JACTIONLINT_NO_HINTS=1`. The advice to write a baseline is left out once a baseline is
 applied. After `--baseline-write` the command prints the line that makes plain runs use the baseline (`baseline: auto` in the config
 file); without it only `jactionlint --baseline` reads the file.
+
+### Shell completion
+
+`jactionlint --completion=SHELL` prints a completion script for `bash`, `zsh`, `fish` or `powershell`. It completes the options, the values of
+`--format`, `--profile`, `--min-severity`, `--color`, `--fix`, `--online` and `--completion`, and the [rule IDs](rules.md) for `--ignore`,
+`--fix-rules` and `--explain` (a comma separated list for `--fix-rules`). The script is generated from the options and the rules of the binary, so
+generate it again after an upgrade.
+
+```sh
+# bash: in ~/.bashrc
+source <(jactionlint --completion=bash)
+
+# zsh: in ~/.zshrc (after compinit), or save the output as _jactionlint in a directory of $fpath
+source <(jactionlint --completion=zsh)
+
+# fish
+jactionlint --completion=fish > ~/.config/fish/completions/jactionlint.fish
+
+# PowerShell: in $PROFILE
+jactionlint --completion=powershell | Out-String | Invoke-Expression
+```
+
+### Explain a rule
+
+`jactionlint --explain RULE` prints what the installed version knows about a rule: its summary, group, profile, default level, whether it has a fix, its
+options, the configuration and the ignore comment to use, and the section about it of [the checks document](checks.md) (with the examples). It
+needs no network. An unknown ID is an error with the closest ID. The IDs are in [the list of rules](rules.md), and the [completion](#shell-completion) offers them.
+
+```sh
+jactionlint --explain missing-timeout
+```
 
 ### Ignore some errors
 
@@ -230,6 +267,33 @@ it matches by rule, file, job, step and `uses:` and survives the rewrite: see [d
 
 A comment which suppresses nothing is reported by the [`unused-ignore`](rules.md#unused-ignore) rule of the `pedantic` profile.
 
+#### Run one rule, or run without the ignores
+
+`--select` reports only the rules you name, whatever the profile or the configuration says. It is for looking at one thing: a review of
+all the `template-injection` findings, a check in a hook, or the preview of a rule which your profile does not enable.
+
+```sh
+jactionlint --select unpinned-uses,missing-timeout
+jactionlint --select anonymous-definition   # a pedantic rule, on the default profile
+```
+
+- The option takes rule IDs separated by commas and can be repeated. An unknown ID is an error (exit status 2) with the closest ID.
+- A selected rule that the configuration turns off is turned on at its default level. A level the configuration sets (`unpinned-uses: warn`)
+  stays, and so do the options of the rule. Every other rule reports nothing.
+- Rules which need `--online` still need it. `shellcheck` and `pyflakes` run only when they are selected.
+- `jactionlint --list-rules` lists the IDs with their group, the profile that enables them (`online` and `opt-in` for the rules which
+  need `--online` or the configuration) and the default level. `--list-rules --format json` is the same as JSON.
+
+`--no-ignores` is the opposite for the things that hide findings. It applies none of: the ignore comments (`# jactionlint ignore=`, and the
+`# zizmor: ignore[...]` ones), the `ignores` and the `paths.<glob>.ignore` of the config file and the [baseline](#baseline), so the run
+shows what they accepted. The `--ignore` options of the same command stay: you wrote them for this run. The ignores are not checked either:
+`unused-ignore` and `expired-ignore` report nothing, since nothing was applied. It cannot be combined with `--baseline`,
+`--baseline-check` and `--baseline-write`.
+
+```sh
+jactionlint --no-ignores --format summary   # what do the ignores of the repository hide?
+```
+
 ### zizmor ignore comments
 
 A repository which used [zizmor](https://docs.zizmor.sh/usage/#ignoring-results) keeps the findings it has already triaged:
@@ -272,6 +336,51 @@ processes.
 ```sh
 jactionlint --shellcheck= --pyflakes=
 ```
+
+jactionlint runs shellcheck with `--norc`, so the results do not depend on a `.shellcheckrc` in the directory you run it from.
+To use a shellcheckrc, to pass arguments or to turn on optional checks of shellcheck, set the
+[`shellcheck` section](config.md#shellcheck) of the config file, or give a file with `--shellcheck-rcfile`:
+
+```sh
+jactionlint --shellcheck-rcfile=.shellcheckrc
+```
+
+The file must exist (exit status 3 otherwise), and a relative path is resolved from the working directory. This is the way to keep
+the settings with the repository where `SHELLCHECK_OPTS` cannot be set, for example in a [pre-commit](#pre-commit) hook on
+pre-commit.ci: put `shellcheck: {rcfile: .shellcheckrc}` in `.github/jactionlint.yaml`. `SHELLCHECK_OPTS` still works as before.
+
+<a id="external-tools"></a>
+#### When shellcheck or pyflakes is missing
+
+A run that finds no `shellcheck` (or no `pyflakes` for a `shell: python` script) on `PATH` is not silent about it. It still exits 0, and
+prints one line per tool to stderr after the findings, with the number of scripts that were not checked:
+
+```
+note: shellcheck was not found, so it did not check 12 shell scripts. install it, or pass --shellcheck= to skip it on purpose
+```
+
+- The note is printed once per run, and only when a script needed the tool: a repository whose steps are all `uses:` gets none.
+- Silence it with `--shellcheck=` (or `--pyflakes=`), which says that you do not want the tool, or with `--no-hints` or
+  `JACTIONLINT_NO_HINTS=1`, which silence the other notes too. A tool turned off with an empty command is never noted.
+- A command you name yourself must exist. `--shellcheck=/bad/path` (or `--pyflakes=/bad/path`) exits with status 3 and says that the path was not
+  found or is not executable, instead of running without the tool. `--shellcheck=shellcheck` counts as named too.
+- `--format sarif` prints no line. The same information is in the log: a notification in `invocations` and, for each tool that a
+  script needed, the property `externalTools` of the run, next to `onlineCoverage`. `status` is `ran` or `not found`, `scripts` is the
+  number of scripts the tool checked and `skippedScripts` the number that it would have checked. A tool which no script needed (pyflakes in a
+  repository without `shell: python`) and a tool turned off with an empty command are not listed, so a `ran` has `scripts` of at least 1 and a
+  `not found` has `skippedScripts` of at least 1, and the log says the same as the note.
+
+  ```json
+  "properties": {
+    "externalTools": {
+      "pyflakes": {"status": "ran", "command": "pyflakes", "scripts": 1},
+      "shellcheck": {"status": "not found", "command": "shellcheck", "scripts": 0, "skippedScripts": 12}
+    }
+  }
+  ```
+
+In the Go API the same is `LinterOptions.ShellcheckRequired` and `PyflakesRequired` (`NewLinter` fails when the command is missing) and
+`Linter.ExternalTools()`.
 
 <a id="format"></a>
 ### Format error messages
@@ -700,7 +809,7 @@ and why an unsafe one is unsafe.
 <a id="online-checks"></a>
 ### Online checks
 
-Six checks need to ask GitHub about the actions a workflow uses, so they are off unless you give `--online` (or set `online: true` in
+Seven checks need to ask GitHub about the actions a workflow uses, so they are off unless you give `--online` (or set `online: true` in
 [the configuration](config.md#configuration-file), or `JACTIONLINT_ONLINE=1` in the environment). **Without it jactionlint never uses
 the network.**
 
@@ -726,6 +835,7 @@ export it by itself:
 | [`stale-action-refs`](checks.md#check-stale-action-refs) | A pinned commit that no tag points to |
 | [`archived-uses`](checks.md#check-archived-uses) | An action in an archived repository |
 | [`ref-version-mismatch`](checks.md#check-ref-version-mismatch) | A `# v1.2.3` comment that does not match the pinned commit |
+| [`repojacking`](checks.md#check-repojacking) | An action of an owner that does not exist, or that left a repository that GitHub only redirects: anyone can register the name |
 
 ```sh
 export GITHUB_TOKEN=$(gh auth token)   # or GH_TOKEN
@@ -789,11 +899,15 @@ jactionlint --online
 - **Offline.** `--online=cache` never uses the network: it answers from the cache whatever the age of the answers, and a lookup with
   nothing cached is skipped with one warning (run once with `--online` to fill the cache). `--online=cache,strict` fails on such a
   lookup. Good for a laptop on a plane or a sandboxed CI job that restores the cache directory.
+- **Environments.** Three other rules use the online checks without being online rules: `untrusted-checkout`, `untrusted-artifact`
+  and `agentic-actions` trust the `environment:` of a job ("its reviewers decide"), and with `--online` they look at the environment
+  (`GET /repos/{owner}/{repo}/environments/{name}`, the repository from `GITHUB_REPOSITORY` or the `origin` remote) and report the job
+  when it has no required reviewers. See [environments without reviewers](checks.md#check-untrusted-checkout-environment).
 - **Few requests.** Every repository, tag and commit is asked for once per run however often it is used, and the checks share what
   they learn. At most six requests are in flight (`concurrency`). The number of requests grows with the number of different
   actions, not steps. Interrupting with Ctrl-C stops the lookups.
 - **Levels.** The online rules do not belong to a profile; `--online` turns them on at their own level (`impostor-commit` and
-  `known-vulnerable-actions` are errors, `ref-confusion`, `archived-uses` and `ref-version-mismatch` warnings, `stale-action-refs` is
+  `known-vulnerable-actions` are errors, `ref-confusion`, `archived-uses`, `ref-version-mismatch` and `repojacking` warnings, `stale-action-refs` is
   informational). Set a level or `off` in `rules` as for any rule.
 - **Not in the playground.** The WebAssembly build has no network access, so `--online` is an error there.
 

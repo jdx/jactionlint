@@ -132,6 +132,21 @@ single-dash long options of v1 are removed; the error names the replacement.
     Rewrite the trailing `# zizmor: ignore[...]` comments of the files (the workflows of the project
     by default) into `# jactionlint ignore=...` comments. zizmor comments are also honored as they are
 
+  * `--select` <ID>[,<ID>...]:
+    Report only the findings of these rule IDs, also of the rules which the profile does not enable.
+    A level which the configuration sets for a selected rule stays, and a selected rule which the
+    configuration turns off runs at its default level. It can be repeated. `shellcheck` and
+    `pyflakes` run only when they are selected
+
+  * `--no-ignores`:
+    Apply no ignore comment, no `ignores` and `paths` ignore of the configuration file and no baseline,
+    so that the run shows what they hide. The `--ignore` options of the command stay. It cannot be
+    combined with `--baseline`, `--baseline-check` and `--baseline-write`
+
+  * `--list-rules`:
+    List every rule ID with its group, the profile which enables it, its default level and a
+    summary, and exit. With `--format json` or `jsonl` the list is JSON
+
   * `--min-severity` <LEVEL>:
     Hide the errors less severe than this level: `info` (default), `warn` or `error`
 
@@ -146,8 +161,8 @@ single-dash long options of v1 are removed; the error names the replacement.
     Do not print the line at the end of a text run with many findings (20 or more) that says how to
     count them (`--format summary`), adopt them gradually (`--baseline-write`) and get the checks of
     actionlint only (`--profile correctness`). It is printed to stderr only when stderr is a terminal
-    or `CI` or `GITHUB_ACTIONS` is set, and never with another format. `JACTIONLINT_NO_HINTS=1`
-    does the same.
+    or `CI` or `GITHUB_ACTIONS` is set, and never with another format. It also silences the note
+    that `shellcheck` or `pyflakes` was not found. `JACTIONLINT_NO_HINTS=1` does the same.
 
   * `--no-color`:
     Disable colorful output. The same as `--color=never`
@@ -158,7 +173,7 @@ single-dash long options of v1 are removed; the error names the replacement.
 
   * `--online`[=<MODE>]:
     Enable the checks which query the GitHub API (`impostor-commit`, `known-vulnerable-actions`,
-    `ref-confusion`, `stale-action-refs`, `archived-uses` and `ref-version-mismatch`), and let `--fix`
+    `ref-confusion`, `stale-action-refs`, `archived-uses`, `ref-version-mismatch` and `repojacking`), and let `--fix`
     pin tags to commit SHAs. `--online=cache` uses only the answers in the disk cache and never the
     network. `--online=strict` exits with status 3 when a lookup had to be skipped (`cache,strict`
     does both). A lookup which fails (404, 403, server error, timeout, rate limit) is skipped with
@@ -207,11 +222,20 @@ single-dash long options of v1 are removed; the error names the replacement.
 
   * `--pyflakes` <EXECUTABLE>:
     Command name or file path of "pyflakes" external command. If empty, pyflakes integration will be
-    disabled (default "pyflakes")
+    disabled (default "pyflakes"). A command given with this option must exist: the exit status is
+    3 when it is not found or not executable. When the default is not found, one note on stderr
+    says how many scripts were not checked
 
   * `--shellcheck` <EXECUTABLE>:
     Command name or file path of "shellcheck" external command. If empty, shellcheck integration will
-    be disabled (default "shellcheck")
+    be disabled (default "shellcheck"). A command given with this option must exist: the exit status
+    is 3 when it is not found or not executable. When the default is not found, one note on stderr
+    says how many scripts were not checked
+
+  * `--shellcheck-rcfile` <FILE>:
+    Let shellcheck read this shellcheckrc file instead of running it with `--norc`. A relative path is
+    resolved from the working directory and the file must exist (exit status 3 otherwise). It
+    overrides `shellcheck.rcfile` of the configuration file, which also has `args` and `enable`
 
   * `--strict-exit`:
     Exit with status 1 also when only errors of `warn` or `info` level are found. By default only
@@ -219,6 +243,14 @@ single-dash long options of v1 are removed; the error names the replacement.
 
   * `-v`, `--verbose`:
     Enable verbose output
+
+  * `--completion` <SHELL>:
+    Print the completion script of a shell (`bash`, `zsh`, `fish` or `powershell`) and exit. It
+    completes the options, their values and the rule IDs of this version
+
+  * `--explain` <RULE>:
+    Print the documentation of a rule ID and exit: summary, group, profile, default level, options,
+    fixes, and its section of the checks document
 
   * `--stdin-filename` <NAME>:
     File name when reading input from stdin (default "&lt;stdin&gt;")

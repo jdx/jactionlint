@@ -121,6 +121,16 @@ func associationIsGuard(exprs []ExprNode) bool {
 	return guard
 }
 
+// associationIsNegated reports whether the condition turns the check of the association around: `!contains(..., association)`,
+// `!(association == 'OWNER')` or `association != 'OWNER'` let everyone but the named associations through.
+func associationIsNegated(r exprRef) bool {
+	if r.negated {
+		return true
+	}
+	c, ok := r.parent.(*CompareOpNode)
+	return ok && c.Kind == CompareOpNodeKindNotEq
+}
+
 var reAssociation = regexp.MustCompile(`[A-Z_]+`)
 
 // isPermissionGate reports whether the step stops the job unless the user who started it, the author of the comment, has
@@ -178,8 +188,12 @@ func isPermissionGate(s *Step) bool {
 // collaborator, or the membership in an organization or a team.
 var reScriptChecksUser = regexp.MustCompile(`getCollaboratorPermissionLevel|getMembershipForUserInOrg|checkMembershipForUser|checkCollaborator|getMembershipForUser|getTeamMembershipForUserInOrg`)
 
-// jobHasGate reports whether a step of the job is a permission gate.
+// jobHasGate reports whether a step of the job is a permission gate that stops the jobs that need it: not when the job
+// goes on after a failure (`continue-on-error`).
 func jobHasGate(j *Job) bool {
+	if j.ContinueOnError != nil && (j.ContinueOnError.Expression != nil || j.ContinueOnError.Value) {
+		return false
+	}
 	for _, s := range flattenSteps(j.Steps) {
 		if isPermissionGate(s) {
 			return true
@@ -189,9 +203,10 @@ func jobHasGate(j *Job) bool {
 }
 
 // neededJobGated reports whether a job that the job needs, at any depth, is skipped or fails unless the user is trusted:
-// its condition is a guard, it has an environment or a permission gate. The job is skipped with it, unless its own
-// condition lets it run after a skipped job (`always()`).
-func neededJobGated(w *Workflow, j *Job, seen map[*Job]bool) bool {
+// its condition is a guard or is false for the events (it is skipped), it has an environment that holds it back (envHolds,
+// see environmentHolds) or a permission gate. The job is skipped with it, unless its own condition lets it run after a
+// skipped job (`always()`).
+func neededJobGated(w *Workflow, j *Job, events []string, envHolds func(*Job) bool, seen map[*Job]bool) bool {
 	if w == nil || j == nil || seen[j] || runsAfterSkippedNeeds(j.If) {
 		return false
 	}
@@ -204,7 +219,7 @@ func neededJobGated(w *Workflow, j *Job, seen map[*Job]bool) bool {
 		if need == nil {
 			continue
 		}
-		if conditionIsGuard(need.If) || (need.Environment != nil && need.Environment.Name != nil) || jobHasGate(need) || neededJobGated(w, need, seen) {
+		if len(eventsAfterCondition(events, need.If)) == 0 || conditionIsGuard(need.If) || envHolds(need) || jobHasGate(need) || neededJobGated(w, need, events, envHolds, seen) {
 			return true
 		}
 	}
@@ -227,6 +242,11 @@ func (rule *RuleUntrustedCheckout) numberStr(s *String) (string, bool) {
 func (rule *RuleUntrustedCheckout) numberRefs(refs []exprRef) (string, bool) {
 	if what, ok := issueNumberRefs(refs); ok {
 		return what, true
+	}
+	for _, name := range inputsOfRefs(refs) {
+		if d, ok := rule.inputNumber[name]; ok {
+			return "inputs." + name + ", given " + d, true
+		}
 	}
 	if len(rule.dispatch) > 0 {
 		return dispatchInputRefs(refs, rule.dispatch)

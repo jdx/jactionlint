@@ -24,8 +24,14 @@ type RuleUntrustedCheckout struct {
 	// carried are the variables that earlier steps of the job wrote to $GITHUB_ENV with an untrusted value, with where
 	// the value comes from.
 	carried map[string]string
+	// carriedNum are the variables that earlier steps wrote to $GITHUB_ENV with the number of the pull request that a comment is on.
+	carriedNum map[string]string
 	// scripts are the script files that were read, by path, nil for one that cannot be followed.
 	scripts map[string]*runscript.Script
+	// gates tells with the online checks whether the environment of a job holds it back, see environmentGates.
+	gates *environmentGates
+	// envJob is whether the job being checked has an environment, which is trusted unless the gates say it is no gate.
+	envJob bool
 	// guard is which events of the workflow the protection of actions/checkout covers, see untrusted_checkout_guard.go.
 	guard checkoutEvents
 	// path is the file being linted. calls are the calls of it as a reusable workflow or composite action that reach it with a
@@ -33,6 +39,9 @@ type RuleUntrustedCheckout struct {
 	path       string
 	calls      []callContext
 	inputTaint map[string]callInput
+	// inputNumber are the inputs that the calls fill with the number of the pull request that a comment is on, with where it
+	// comes from.
+	inputNumber map[string]string
 	// actions are the local composite actions that were read, by directory
 	actions map[string]*Workflow
 	// dispatch are the inputs of the workflow_dispatch event that hold the number of a pull request (pedantic only).
@@ -91,6 +100,9 @@ type untrustedCheckout struct {
 	gates gateInfo
 	// verified is whether a later step checks the commit that was checked out.
 	verified bool
+	// afterFailure is whether the checkout is behind a failed permission check of an action: only a step that runs after a
+	// failure runs it.
+	afterFailure bool
 	// note says why a checkout that the protection could cover is not guarded: the version of actions/checkout predates it.
 	note string
 }
@@ -149,7 +161,7 @@ func isMergedContext(e ExprNode) bool {
 
 // VisitWorkflowPre is callback when visiting Workflow node before visiting its children.
 func (rule *RuleUntrustedCheckout) VisitWorkflowPre(n *Workflow) error {
-	rule.privileged, rule.wf, rule.calls, rule.inputTaint, rule.dispatch = nil, n, nil, nil, nil
+	rule.privileged, rule.wf, rule.calls, rule.inputTaint, rule.inputNumber, rule.dispatch = nil, n, nil, nil, nil, nil
 	if !rule.Config().RuleEnabled("untrusted-checkout") {
 		return nil
 	}
@@ -159,11 +171,16 @@ func (rule *RuleUntrustedCheckout) VisitWorkflowPre(n *Workflow) error {
 		// a reusable workflow and a composite action run for the events of the workflows that call them
 		if key := calleeKey(rule.project, rule.path); key != "" {
 			rule.calls = rule.callContexts(key, 0, map[string]bool{})
-			rule.inputTaint = map[string]callInput{}
+			rule.inputTaint, rule.inputNumber = map[string]callInput{}, map[string]string{}
 			events := slices.Clone(rule.privileged)
 			for _, c := range rule.calls {
 				events = append(events, c.events...)
 				mergeInputs(rule.inputTaint, c.inputs)
+				for name, d := range c.numbers {
+					if _, ok := rule.inputNumber[name]; !ok {
+						rule.inputNumber[name] = d
+					}
+				}
 			}
 			rule.privileged = sortedEvents(events)
 			calleeKnown = len(rule.calls) > 0 && ((n.Action != nil && n.Action.Callers.Known()) || (n.callerEvents != nil && n.callerEvents.Known))
@@ -200,8 +217,10 @@ func (rule *RuleUntrustedCheckout) VisitJobPre(n *Job) error {
 	// A gate that holds after the code changes stops the job. One that holds at one moment (an environment, a label, a
 	// comment of a maintainer) leaves the job to the check for a ref that can change.
 	commentOnly := rule.commentOnly()
+	// The reviewers of an environment decide, unless the online checks find that there are none (environmentGate)
+	rule.envJob = n.Environment != nil && n.Environment.Name != nil
 	// the steps of the job itself are counted as the loop reaches them
-	running := ownGates(n, commentOnly, false).merge(neededGates(rule.wf, n, commentOnly, map[*Job]bool{}))
+	running := rule.ownGates(n, commentOnly, false).merge(rule.neededGates(n, commentOnly, map[*Job]bool{}))
 	if running.safe {
 		return nil
 	}
@@ -209,7 +228,7 @@ func (rule *RuleUntrustedCheckout) VisitJobPre(n *Job) error {
 	// step runs code depends on the directory only, so it is asked once for each directory and not for
 	// each checkout: a job with thousands of checkouts is not quadratic.
 	rule.job = n
-	rule.fetches, rule.carried = nil, nil
+	rule.fetches, rule.carried, rule.carriedNum = nil, nil, nil
 	rule.stepActions = map[string]string{}
 	for _, s := range flattenSteps(n.Steps) {
 		if _, u := stepAction(s); u != nil && s.ID != nil && s.ID.Value != "" && u.Kind == UsesAction {
@@ -217,6 +236,9 @@ func (rule *RuleUntrustedCheckout) VisitJobPre(n *Job) error {
 		}
 	}
 	removesLabel := jobRemovesLabel(n)
+	jobEvents := rule.privileged
+	defer rule.setEvents(jobEvents)
+	gated := false
 	pending := map[string][]*untrustedCheckout{}
 	var dirs []string // the keys of pending in the order they were added
 	jobMerged := conditionRequiresMerged(n.If)
@@ -224,14 +246,20 @@ func (rule *RuleUntrustedCheckout) VisitJobPre(n *Job) error {
 		if isPermissionGate(s) {
 			g := permissionGate(commentOnly)
 			if g.safe {
-				break // the steps after a permission check only run for a user who may write
+				gated = true // the steps after a permission check only run for a user who may write
+				continue
 			}
 			running = running.merge(g)
 			continue
 		}
-		if len(eventsAfterCondition(rule.privileged, s.If)) == 0 {
+		if gated && !stepRunsAfterFailure(s) {
+			continue
+		}
+		stepEvents := eventsAfterCondition(jobEvents, s.If)
+		if len(stepEvents) == 0 {
 			continue // the step does not run for the events that this rule judges
 		}
+		rule.setEvents(stepEvents) // what ghAny, comment and the event of the message say is about this step
 		var stepGate gateInfo
 		if conditionIsGuard(s.If) {
 			stepGate = classifyCondition(s.If, commentOnly)
@@ -263,6 +291,10 @@ func (rule *RuleUntrustedCheckout) VisitJobPre(n *Job) error {
 				for _, c := range cs {
 					if merged && c.immutable() {
 						kept = append(kept, c) // a later step that does not need the merge runs it
+						continue
+					}
+					if c.afterFailure && !stepRunsAfterFailure(s) {
+						kept = append(kept, c) // the step does not run after the check of the action failed
 						continue
 					}
 					rule.report(c, how, here)
@@ -302,7 +334,7 @@ func (rule *RuleUntrustedCheckout) VisitJobPre(n *Job) error {
 		// the checkout that nothing visibly runs (Scorecard and Semgrep report it, and it catches what the heuristics miss)
 		for _, dir := range dirs {
 			for _, c := range pending[dir] {
-				if !c.gates.gated() && !(jobMerged && c.immutable()) {
+				if holds, _ := rule.environmentGate(); !c.gates.gated() && !holds && !(jobMerged && c.immutable()) {
 					rule.reportUnused(c)
 				}
 			}
@@ -350,6 +382,9 @@ func (rule *RuleUntrustedCheckout) report(c *untrustedCheckout, how string, runn
 	g := c.gates.merge(runner)
 	if g.safe {
 		return
+	}
+	if holds, _ := rule.environmentGate(); holds {
+		g = g.merge(gateInfo{stale: []string{"an environment"}})
 	}
 	if len(g.stale) > 0 || rule.privileged[0] == "workflow_dispatch" {
 		rule.reportToctou(c, how, g)
@@ -399,7 +434,44 @@ func (rule *RuleUntrustedCheckout) privilegeText() string {
 	} else if rule.job != nil && rule.wf != nil && tokenIsReadOnly(rule.wf, rule.job) {
 		privileges = "the job's GITHUB_TOKEN can only read, but the code still runs on the runner with everything else the job gives it, such as secrets passed to a step and the cache, and whoever controls it can use them"
 	}
+	if note, ok := rule.environmentNote(); ok && note != "" {
+		privileges += ". " + note // the online checks found that the environment is no gate
+	}
 	return privileges
+}
+
+// environmentHolds tells whether the environment of the job holds it back: it does unless the online checks prove that it has no
+// required reviewers. It is the one predicate for the environment of the job being checked, of the jobs that it needs and of
+// the jobs that call it.
+func (rule *RuleUntrustedCheckout) environmentHolds(job *Job) bool {
+	if job == nil || job.Environment == nil || job.Environment.Name == nil {
+		return false
+	}
+	if rule.gates == nil {
+		return true
+	}
+	_, none := rule.gates.noGate(job)
+	return !none
+}
+
+// environmentGate tells whether the environment of the job being judged holds it back (see environmentHolds), and the note
+// that says why it does not, for the message.
+func (rule *RuleUntrustedCheckout) environmentGate() (holds bool, note string) {
+	if !rule.envJob {
+		return false, ""
+	}
+	if rule.gates == nil {
+		return true, ""
+	}
+	note, none := rule.gates.noGate(rule.job)
+	return !none, note
+}
+
+// environmentNote tells whether a finding of the job is reported and what the environment adds to the message: a job with an
+// environment that holds it back is judged for the code that follows it (see reportToctou), not reported here.
+func (rule *RuleUntrustedCheckout) environmentNote() (note string, report bool) {
+	holds, note := rule.environmentGate()
+	return note, !holds
 }
 
 // reportOptOut reports an `actions/checkout` step that turns off the protection against the code of fork pull requests
@@ -429,11 +501,18 @@ func (rule *RuleUntrustedCheckout) reportOptOut(s *Step) {
 	if !named {
 		return
 	}
+	gate, ok := rule.environmentNote()
+	if !ok {
+		return // the reviewers of the environment decide
+	}
+	if gate != "" {
+		gate = ". " + gate
+	}
 	rule.ReportIDf(
 		"untrusted-checkout",
 		opt.Value.Pos,
-		"this step sets \"allow-unsafe-pr-checkout\", which turns off the protection of actions/checkout that refuses to check out the code of a pull request from a fork in a %q workflow. the step then checks out whatever \"ref\" and \"repository\" name, so nothing stops the code of the pull request from reaching a privileged workflow, which has secrets and may have a write token. remove the input and check out the base branch, or document why the code is safe to run",
-		rule.privileged[0],
+		"this step sets \"allow-unsafe-pr-checkout\", which turns off the protection of actions/checkout that refuses to check out the code of a pull request from a fork in a %q workflow. the step then checks out whatever \"ref\" and \"repository\" name, so nothing stops the code of the pull request from reaching a privileged workflow, which has secrets and may have a write token%s. remove the input and check out the base branch, or document why the code is safe to run",
+		rule.privileged[0], gate,
 	)
 }
 
@@ -587,8 +666,10 @@ func (rule *RuleUntrustedCheckout) checkoutsOf(j *Job, s *Step) []*untrustedChec
 				envDescs(rule.wf.Env, numEnv, rule.numberStr)
 			}
 			envDescs(j.Env, numEnv, rule.numberStr)
+			maps.Copy(numEnv, rule.carriedNum) // what earlier steps wrote to $GITHUB_ENV
 			envDescs(s.Env, numEnv, rule.numberStr)
 			number = newNumberTaint(script, numEnv, rule.numberValue)
+			taint.num = number
 		}
 		var ret []*untrustedCheckout
 		earlier := rule.fetches
@@ -653,7 +734,13 @@ func (rule *RuleUntrustedCheckout) checkoutsOf(j *Job, s *Step) []*untrustedChec
 				ret = append(ret, &untrustedCheckout{pos: pos, what: what, dir: dir, offset: fetchAt, step: s})
 			}
 		}
-		rule.carryEnv(script, taint, s.If != nil)
+		rule.carryEnv(script, taint, s.If != nil, &rule.carried)
+		if rule.comment && !rule.ghAny {
+			// the number of the pull request that a comment is on can be carried the same way
+			numEnv := map[string]string{}
+			maps.Copy(numEnv, rule.carriedNum)
+			rule.carryEnv(script, newNumberTaint(script, numEnv, rule.numberValue), s.If != nil, &rule.carriedNum)
+		}
 		return ret
 	}
 	return nil
@@ -807,6 +894,7 @@ func init() {
 		r := NewRuleUntrustedCheckout(env.project)
 		r.siblings = env.localActions.siblings()
 		r.path = env.path
+		r.gates = newEnvironmentGates(env, r.Debug)
 		return []Rule{r}
 	})
 }

@@ -133,6 +133,9 @@ type callContext struct {
 	from   string   // the workflow that makes the call
 	events []string // privileged events, in the order of privilegedTriggers
 	inputs map[string]callInput
+	// numbers are the inputs that the call fills with the number of the pull request that a comment is on, with where it
+	// comes from: the callee can give them to `gh pr checkout`.
+	numbers map[string]string
 }
 
 // calleeKey returns the key of the file in the call index, "" when it is neither a workflow nor an action of the project.
@@ -239,22 +242,34 @@ func (rule *RuleUntrustedCheckout) callContexts(key string, depth int, seen map[
 			}
 		}
 		events = eventsAfterCondition(sortedEvents(events), job.If)
-		if len(events) == 0 || callIsGuarded(cw, job, step) {
+		if step != nil {
+			events = eventsAfterCondition(events, step.If) // a step that is not for these events is not a call for them
+		}
+		if len(events) == 0 || rule.callIsGuarded(cw, job, step, events) {
 			continue
 		}
-		ctx := callContext{from: ref.file, events: events, inputs: map[string]callInput{}}
+		ctx := callContext{from: ref.file, events: events, inputs: map[string]callInput{}, numbers: map[string]string{}}
 		for name, v := range call {
 			if what, ok := valueUntrustedFor(events, v); ok {
-				ctx.inputs[name] = callInput{desc: what + " by " + ref.file, sources: []string{v}}
+				mergeInputs(ctx.inputs, map[string]callInput{name: {desc: what + " by " + ref.file, sources: []string{v}}})
 				continue
 			}
-			// an input of the caller that is untrusted in the context that reaches the caller
+			refs, _ := stringExprRefs(v)
+			if what, ok := issueNumberRefs(refs); ok && slices.Contains(events, "issue_comment") {
+				ctx.numbers[name] = what + " by " + ref.file
+			}
+			// an input of the caller that is untrusted in the context that reaches the caller: the sources of every call
+			// that reaches it count, the one that passes a branch as well as the one that passes a commit
 			for _, o := range outer {
-				refs, _ := stringExprRefs(v)
 				for _, r := range refs {
 					if len(r.chain) == 2 && r.chain[0] == "inputs" {
 						if in, ok := o.inputs[r.chain[1]]; ok {
-							ctx.inputs[name] = callInput{desc: in.desc + ", passed on by " + ref.file, sources: in.sources}
+							mergeInputs(ctx.inputs, map[string]callInput{name: {desc: in.desc + ", passed on by " + ref.file, sources: in.sources}})
+						}
+						if d, ok := o.numbers[r.chain[1]]; ok {
+							if _, set := ctx.numbers[name]; !set {
+								ctx.numbers[name] = d + ", passed on by " + ref.file
+							}
 						}
 					}
 				}
@@ -278,19 +293,21 @@ func sortedEvents(events []string) []string {
 
 // callIsGuarded reports whether the job of the call, or the step, only runs for someone who is trusted: the same guards
 // as for a checkout (environment, a guard condition, a needed job that is guarded), and a permission gate before the step.
-func callIsGuarded(w *Workflow, job *Job, step *Step) bool {
-	if (job.Environment != nil && job.Environment.Name != nil) || conditionIsGuard(job.If) || neededJobGated(w, job, map[*Job]bool{}) {
+func (rule *RuleUntrustedCheckout) callIsGuarded(w *Workflow, job *Job, step *Step, events []string) bool {
+	if rule.environmentHolds(job) || conditionIsGuard(job.If) || neededJobGated(w, job, events, rule.environmentHolds, map[*Job]bool{}) {
 		return true
 	}
 	if step == nil {
 		return false
 	}
+	gated := false
 	for _, s := range flattenSteps(job.Steps) {
 		if s == step {
-			return conditionIsGuard(s.If)
+			// a step that runs after a failure (always(), failure()) still runs when the permission check failed
+			return conditionIsGuard(s.If) || (gated && !stepRunsAfterFailure(s))
 		}
 		if isPermissionGate(s) {
-			return true
+			gated = true
 		}
 	}
 	return false
@@ -391,15 +408,29 @@ func (rule *RuleUntrustedCheckout) localActionCheckouts(s *Step, e *ExecAction) 
 		})
 	}
 	var ret []*untrustedCheckout
+	gated := false
 	for _, j := range action.Jobs {
 		for _, cs := range flattenSteps(j.Steps) {
+			if isPermissionGate(cs) {
+				// the action fails here for a user who may not write, and so does the step that calls it: what it checked
+				// out before is run by the steps of the caller that run after a failure only
+				gated = true
+				for _, c := range ret {
+					c.afterFailure = true
+				}
+				continue
+			}
+			if gated && !stepRunsAfterFailure(cs) {
+				continue // the steps after a permission check only run for a user who may write
+			}
 			ce, ok := cs.Exec.(*ExecAction)
-			if !ok || conditionIsGuard(cs.If) {
+			if !ok || conditionIsGuard(cs.If) || len(eventsAfterCondition(rule.privileged, cs.If)) == 0 {
 				continue
 			}
 			if _, cu := stepAction(cs); cu != nil && cu.isRepoAction("actions/checkout") {
 				if c := rule.actionCheckout(cs, ce, cu, action.Comments, subst, e.Uses.Pos); c != nil {
 					c.step = s
+					c.afterFailure = gated // only a step of the caller that also runs after a failure runs it
 					c.what += " in " + t.path
 					ret = append(ret, c)
 				}

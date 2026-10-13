@@ -78,6 +78,26 @@ type LinterOptions struct {
 	// or file path like "/path/to/pyflakes", "path/to/pyflakes". When this value is empty, pyflakes
 	// won't run to check scripts in workflow file.
 	Pyflakes string
+	// Select makes the run report only the findings of these rule IDs (the option --select). A selected rule which
+	// the profile or the configuration turns off is turned on at its default level; the other rules report
+	// nothing. An unknown ID is an error from NewLinter. The empty list selects nothing: every rule follows the
+	// configuration.
+	Select []string
+	// NoIgnores makes the run apply none of the ways to accept a finding which the repository carries: the inline
+	// ignore comments (also those of zizmor), the "ignores" and "paths" ignores of the config file and the
+	// baseline (the option --no-ignores). The IgnorePatterns of the command line still apply. It is for audits and
+	// for finding what the ignores hide.
+	NoIgnores bool
+	// ShellcheckRequired and PyflakesRequired say that the command was asked for explicitly (the command line
+	// option --shellcheck or --pyflakes was given). NewLinter then fails when the command cannot be found or is
+	// not executable, instead of running without it. A command which is not required and is missing is only
+	// noted in the log (see RunHints) and in the SARIF log: its scripts are not checked.
+	ShellcheckRequired bool
+	PyflakesRequired   bool
+	// ShellcheckRCFile is a shellcheckrc file for shellcheck to read instead of --norc (the option
+	// --shellcheck-rcfile). A relative path is resolved from the working directory. It wins over the
+	// "shellcheck.rcfile" key of the configuration. The file must exist: the run fails when it does not.
+	ShellcheckRCFile string
 	// IgnorePatterns is list of regular expression to filter errors. The pattern is applied to error
 	// messages. When an error is matched, the error is ignored.
 	IgnorePatterns []string
@@ -178,7 +198,12 @@ type Linter struct {
 	printer    printer
 	shellcheck string
 	pyflakes   string
-	ignorePats IgnorePatterns
+	// tools tracks whether shellcheck and pyflakes ran in this run.
+	tools     *externalTools
+	toolNoted atomic.Bool
+	// shellcheckRC is LinterOptions.ShellcheckRCFile
+	shellcheckRC string
+	ignorePats   IgnorePatterns
 	// now returns the current time. It is time.Now unless LinterOptions.Now is set.
 	now func() time.Time
 	// ignoreRun is the state of the config "ignores" in the current run.
@@ -194,9 +219,12 @@ type Linter struct {
 	minSeverity    Severity
 	online         onlineSettings
 	baseline       linterBaseline
-	warnedOnce     sync.Map    // string -> struct{}: the messages warnOnce printed
-	profile        Profile     // the --profile override, empty when the configuration decides
-	profiled       sync.Map    // *Config -> *Config: the configs with the profile override applied
+	warnedOnce     sync.Map // string -> struct{}: the messages warnOnce printed
+	profile        Profile  // the --profile override, empty when the configuration decides
+	profiled       sync.Map // *Config -> *Config: the configs with the profile override applied
+	selected       sync.Map // *Config -> *Config: the configs with --select applied
+	selectIDs      map[string]bool
+	noIgnores      bool
 	warned         sync.Map    // *Config -> struct{}: configs whose deprecations were already reported
 	graphs         sync.Map    // root directory -> *sync.Once-guarded *callGraph, see callGraphOf
 	runHints       bool        // LinterOptions.RunHints
@@ -310,6 +338,8 @@ func NewLinter(out io.Writer, opts *LinterOptions) (*Linter, error) {
 		printer:        prn,
 		shellcheck:     opts.Shellcheck,
 		pyflakes:       opts.Pyflakes,
+		tools:          newExternalTools(opts),
+		shellcheckRC:   opts.ShellcheckRCFile,
 		ignorePats:     ignore,
 		now:            opts.Now,
 		stdin:          stdin,
@@ -324,6 +354,27 @@ func NewLinter(out io.Writer, opts *LinterOptions) (*Linter, error) {
 		minSeverity:    opts.MinSeverity,
 		online:         onlineSettings{off: opts.OnlineOff, enabled: !opts.OnlineOff && (opts.Online || opts.OnlineOptions.Mode != OnlineModeDefault), client: opts.GitHubClient, ttl: opts.OnlineCacheTTL, ctx: opts.Context, opts: opts.OnlineOptions},
 	}
+	if len(opts.Select) > 0 {
+		sel, err := parseSelect(opts.Select)
+		if err != nil {
+			return nil, &usageError{err}
+		}
+		l.selectIDs = sel
+		// A tool which no selected rule needs is not run at all
+		if !sel["shellcheck"] {
+			l.shellcheck = ""
+		}
+		if !sel["pyflakes"] {
+			l.pyflakes = ""
+		}
+	}
+	l.noIgnores = opts.NoIgnores
+	if err := l.tools.checkRequired(); err != nil {
+		return nil, err
+	}
+	if _, err := shellcheckRCFile(opts.ShellcheckRCFile, cwd, nil, ""); err != nil {
+		return nil, err
+	}
 	l.warnRetiredIgnores(ignore...)
 	if opts.Profile != "" {
 		p, err := ParseProfile(string(opts.Profile))
@@ -333,7 +384,7 @@ func NewLinter(out io.Writer, opts *LinterOptions) (*Linter, error) {
 		l.profile = p
 	}
 	l.baseline.on = opts.Baseline
-	l.baseline.off = opts.NoBaseline
+	l.baseline.off = opts.NoBaseline || opts.NoIgnores
 	l.baseline.check = opts.BaselineCheck
 	l.baseline.hideInSARIF = opts.SARIFHideBaselined
 	if opts.BaselineFile != "" {
@@ -565,6 +616,7 @@ func (l *Linter) LintFiles(filepaths []string, project *Project) ([]*Error, erro
 	}
 	l.reportBaselineNote(results)
 	l.reportRunHint(results)
+	l.reportToolNotes()
 
 	l.log("Found", total, "errors in", n, "files")
 
@@ -859,9 +911,19 @@ func (l *Linter) check(
 			config:                 cfg,
 			shellcheck:             l.shellcheck,
 			pyflakes:               l.pyflakes,
+			tools:                  l.tools.forCheck(),
+			shellcheckRCFile:       l.shellcheckRC,
+			cwd:                    l.cwd,
 			proc:                   proc,
+			now:                    l.now,
 		}
 		rules := newBuiltinRules(env, l.log)
+		// The scripts which were counted are in the totals also when the visit fails (a command of shellcheck that
+		// fails ends it with an error): the note and the SARIF log say what was found
+		defer l.tools.record(path, env.tools)
+		if env.err != nil {
+			return nil, env.err
+		}
 		skippedRules = env.skipped
 		if l.onRulesCreated != nil {
 			rules = l.onRulesCreated(rules)
@@ -870,6 +932,9 @@ func (l *Linter) check(
 		v := NewVisitor()
 		for _, rule := range rules {
 			v.AddPass(rule)
+		}
+		for _, p := range env.observers {
+			v.AddPass(p)
 		}
 		if dbg != nil {
 			v.EnableDebug(dbg)
@@ -939,13 +1004,19 @@ func (l *Linter) finishCheck(path string, content []byte, all []*Error, cfg *Con
 	var skipped map[string]bool
 	if ic != nil {
 		skipped = ic.skipped
-		l.trackIgnoreConfig(cfg, ic.project, path, ic.skipped)
-		cfgHit = l.matchConfigIgnores(all, cfg, ic.project, path, ic.scopes)
+		if !l.noIgnores {
+			l.trackIgnoreConfig(cfg, ic.project, path, ic.skipped)
+			cfgHit = l.matchConfigIgnores(all, cfg, ic.project, path, ic.scopes)
+		}
 	}
 
 	// Inline ignores are applied first so that every pattern sees all errors, which tells whether it
 	// is used. The order of the filters does not change which errors remain.
 	inlineIgnores, orphans, ignoreErrs := parseInlineIgnoresWithOrphans(content)
+	if l.noIgnores {
+		// Nothing is accepted by a comment, so there are no unused comments and no broken ones to report either
+		inlineIgnores, orphans, ignoreErrs = nil, nil, nil
+	}
 	for _, ig := range inlineIgnores {
 		for _, e := range ig.entries {
 			l.warnRetiredIgnores(e.pat)
@@ -961,14 +1032,20 @@ func (l *Linter) finishCheck(path string, content []byte, all []*Error, cfg *Con
 		}
 	}
 	l.warnKindPatterns(all, inlinePats)
-	inlineIgnores = append(inlineIgnores, parseZizmorIgnores(content)...)
+	if !l.noIgnores {
+		inlineIgnores = append(inlineIgnores, parseZizmorIgnores(content)...)
+	}
 	all = l.filterInlineIgnores(all, inlineIgnores)
 	all = dropIgnored(all, cfgHit)
 	unused := unusedInlineIgnores(inlineIgnores, orphans, cfg, l.onlineOn(cfg), skipped)
 	dropFixesChangingYAML(content, unused)
 	all = append(all, l.annotateErrors(unused, content, cfg)...)
 
-	all = l.filterErrors(all, cfg.PathConfigs(path))
+	pathConfigs := cfg.PathConfigs(path)
+	if l.noIgnores {
+		pathConfigs = nil
+	}
+	all = l.filterErrors(all, pathConfigs)
 	all = append(all, l.annotateErrors(ignoreErrs, content, cfg)...)
 	// The findings which nobody can act on in a generated file are dropped last: an ignore comment for a dropped
 	// rule is not unused, and "skip" reports nothing, also nothing about the ignore comments.
@@ -1138,7 +1215,31 @@ func (l *Linter) notifications() []string {
 // runInfo returns what the printers know about the run itself: the notifications and the coverage of the
 // online checks.
 func (l *Linter) runInfo() runInfo {
-	return runInfo{notes: l.notifications(), online: l.OnlineCoverage()}
+	notes := l.notifications()
+	if l.runHints {
+		notes = append(notes, l.tools.notes()...)
+	}
+	return runInfo{notes: notes, online: l.OnlineCoverage(), tools: l.ExternalTools()}
+}
+
+// ExternalTools says whether shellcheck and pyflakes ran in this run, keyed by "shellcheck" and "pyflakes". It
+// has an entry for each tool which some checked workflow or action needed, and it is nil when none did. A tool
+// which was not found checked nothing: SkippedScripts is the number of scripts it would have checked.
+func (l *Linter) ExternalTools() map[string]ExternalToolStatus {
+	return l.tools.statuses()
+}
+
+// reportToolNotes prints one line to the log output (stderr) for each external linter which was not found, so
+// that a missing shellcheck is not a silent loss of checks. It is printed once per run, only when the caller asked
+// for the hints (LinterOptions.RunHints, off with --no-hints), and never into a structured format, which carries
+// the same information as a notification and in the run properties.
+func (l *Linter) reportToolNotes() {
+	if !l.runHints || structured(l.printer) || !l.toolNoted.CompareAndSwap(false, true) {
+		return
+	}
+	for _, n := range l.tools.notes() {
+		fmt.Fprintln(l.logOut, "note:", n)
+	}
 }
 
 // annotateErrors fills the fields of the errors which are derived from the diagnostic ID: the

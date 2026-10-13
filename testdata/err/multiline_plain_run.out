@@ -1,0 +1,6 @@
+test.yaml:7:11: this "run:" is not a block scalar, so YAML folds its 3 lines into one line and the shell runs the single command `echo "start é" npm ci npm test`. write `run: |` to keep the lines [multiline-plain-run]
+test.yaml:10:11: this "run:" is not a block scalar, so YAML folds its 3 lines into one line and the shell runs the single command `echo a x=1 echo $x`. write `run: |` to keep the lines [multiline-plain-run]
+test.yaml:13:11: this "run:" is not a block scalar, so YAML folds its 2 lines into one line and the shell runs the single command `cd app npm ci`. write `run: |` to keep the lines [multiline-plain-run]
+test.yaml:15:11: this "run:" is not a block scalar, so YAML folds its 2 lines into one line and the shell runs the single command `git commit -m 'x' git push`. write `run: |` to keep the lines [multiline-plain-run]
+test.yaml:19:11: this "run:" is not a block scalar, so YAML folds its 2 lines into one line and the shell runs the single command `echo a echo b`. write `run: |` to keep the lines [multiline-plain-run]
+test.yaml:22:11: this "run:" is not a block scalar, so YAML folds its 3 lines into one line and the shell runs the single command `cd x && npm ci npm test`. write `run: |` to keep the lines [multiline-plain-run]

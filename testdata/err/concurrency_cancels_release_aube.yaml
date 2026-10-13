@@ -1,0 +1,18 @@
+on:
+  push:
+    tags: ["v*"]
+
+concurrency:
+  group: release
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - run: aubx wrangler deploy
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - run: aube ci
+      - run: aube run build

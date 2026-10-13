@@ -192,8 +192,11 @@ func checkoutGuardEvents(w *Workflow, privileged []string, project *Project, sib
 		case "pull_request_target":
 			ev.applies = true
 		case "workflow_run":
-			covered := true
-			for _, we := range webhookEvents(w, event) {
+			// the upstream workflows are the ones of the events of this file: a reusable workflow that a workflow_run workflow
+			// calls has none, so what reaches it is not known to be the run of a pull request
+			evs := webhookEvents(w, event)
+			covered := len(evs) > 0
+			for _, we := range evs {
 				if !upstreamWorkflowsPROnly(project, sib, we) {
 					covered = false
 				}
