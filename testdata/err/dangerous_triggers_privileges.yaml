@@ -1,0 +1,26 @@
+on:
+  pull_request_target:
+    types: [opened]
+  issue_comment:
+
+permissions:
+  contents: read
+
+jobs:
+  comment:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      issues: write
+    steps:
+      - run: gh pr comment "$NUMBER" --body hello
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NUMBER: ${{ github.event.number }}
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "$NPM_TOKEN" | wc -c
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          OTHER: ${{ secrets['DEPLOY_KEY'] }}

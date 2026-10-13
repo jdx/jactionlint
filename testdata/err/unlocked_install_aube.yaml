@@ -1,0 +1,26 @@
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      # aube freezes the lock file by itself when CI is set (GitHub sets it), unless the command opts out
+      - run: aube install --no-frozen-lockfile
+      - run: aube i --prefer-frozen-lockfile
+      - run: aube install --fix-lockfile
+      - run: aube -C web install --no-frozen-lockfile
+      - run: aube --filter app install --no-frozen-lockfile
+      # Bound to the lock file
+      - run: aube install
+      - run: aube i
+      - run: aube install --frozen-lockfile
+      - run: aube install --prod --frozen-lockfile
+      - run: aube ci
+      - run: aube ci --ignore-scripts
+      - run: aube ic
+      - run: aube install --lockfile-only
+      # Not an install from the manifest
+      - run: aube add -D vitest@1.0.0
+      - run: aube dlx cowsay@1.6.0 hi
+      - run: aubr build
+      - run: aube run --no-install test
+      - run: echo "aube install --no-frozen-lockfile"

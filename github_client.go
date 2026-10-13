@@ -44,6 +44,14 @@ type GitHubRepo struct {
 	Archived bool `json:"archived"`
 	// DefaultBranch is the name of the default branch.
 	DefaultBranch string `json:"default_branch"`
+	// Private is true when the repository is private or internal, or the answer does not say that it is public: what
+	// GitHub does not show to a token which cannot read it is then not proof that it does not exist. A client which does
+	// not know leaves it false, which means public.
+	Private bool `json:"private,omitempty"`
+	// FullName is "owner/repo" as GitHub spells it now. It differs from the name that was asked for when the
+	// repository was renamed or transferred and GitHub redirected the request. It can be empty (a client which
+	// does not know it).
+	FullName string `json:"full_name,omitempty"`
 }
 
 // GitHubTag is a tag and the commit it points to.
