@@ -5,6 +5,11 @@ import (
 	"testing"
 )
 
+// pedanticCheckout is the configuration of the tests that look at what the rule follows and runs. With the option pedantic
+// a checkout that actions/checkout refuses for a fork is reported as well, and most of the workflows here use the floating
+// tag of actions/checkout. TestRuleUntrustedCheckoutGuard has the tests of the protection.
+const pedanticCheckout = "rules:\n  untrusted-checkout: {level: error, pedantic: true}\n"
+
 func TestRuleUntrustedCheckout(t *testing.T) {
 	const prt = "on: pull_request_target\njobs:\n  j:\n    runs-on: ubuntu-latest\n"
 	tests := []struct {
@@ -1052,16 +1057,16 @@ jobs:
 	}
 	for _, tc := range tests {
 		t.Run(tc.what, func(t *testing.T) {
-			errs := onlyID(lintInProject(t, tc.others, tc.src, "rules:\n  untrusted-checkout: error\n"), "untrusted-checkout")
+			errs := onlyID(lintInProject(t, tc.others, tc.src, pedanticCheckout), "untrusted-checkout")
 			checkLines(t, errs, markedWantLines(tc.src)...)
 			crlf := strings.ReplaceAll(tc.src, "\n", "\r\n")
-			checkLines(t, onlyID(lintInProject(t, tc.others, crlf, "rules:\n  untrusted-checkout: error\n"), "untrusted-checkout"), markedWantLines(tc.src)...)
+			checkLines(t, onlyID(lintInProject(t, tc.others, crlf, pedanticCheckout), "untrusted-checkout"), markedWantLines(tc.src)...)
 		})
 	}
 }
 
 func TestRuleUntrustedCheckoutNoTokenMessage(t *testing.T) {
-	const src = "on: pull_request_target\njobs:\n  j:\n    runs-on: ubuntu-latest\n    permissions: {}\n    steps:\n      - uses: actions/checkout@v4\n        with:\n          ref: ${{ github.event.pull_request.head.sha }}\n      - run: make\n"
+	const src = "on: pull_request_target\njobs:\n  j:\n    runs-on: ubuntu-latest\n    permissions: {}\n    steps:\n      - uses: actions/checkout@v1\n        with:\n          ref: ${{ github.event.pull_request.head.sha }}\n      - run: make\n"
 	errs := onlyID(lintInProject(t, nil, src, "rules:\n  untrusted-checkout: error\n"), "untrusted-checkout")
 	if len(errs) != 1 {
 		t.Fatalf("want one finding, got %v", errs)

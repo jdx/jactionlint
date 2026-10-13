@@ -46,6 +46,10 @@ type Install struct {
 	// Locked is whether the installation is bound to a lock file or hashes: `npm ci`, `--frozen-lockfile`,
 	// `--immutable`, `--locked`, `--frozen`, `--require-hashes`, `uv sync`.
 	Locked bool
+	// NoScripts is whether the command, as written, does not run the lifecycle scripts of the packages it installs:
+	// `--ignore-scripts` (also `--ignore-scripts=true`), Yarn's `--mode=skip-build`, or an npm command that only
+	// writes the lock file (`--package-lock-only`, `--dry-run`). Only set for npm, pnpm, yarn, bun and aube.
+	NoScripts bool
 	// FromManifest is whether no package is named: the project's manifest and lock file decide (`npm install`,
 	// `pip install -r file`, `uv sync`).
 	FromManifest bool
@@ -103,7 +107,7 @@ func installOf(c *Command) *Install {
 		ok = in.pipx(c)
 	case "npm", "pnpm", "yarn", "bun", "aube":
 		ok = in.node(c)
-	case "npx", "bunx", "pnpm-dlx":
+	case "npx", "bunx", "pnpm-dlx", "aubx":
 		in.Ecosystem, in.Run, in.Verb = "npm", true, "run"
 		in.runTarget(c, c.Positional, "--package", npmPackage, "-p")
 		ok = true
@@ -274,9 +278,10 @@ func npmPackage(w *Word) *Package {
 		p.Kind, p.Name = KindURL, v
 		p.Pinned = reDigest.MatchString(v)
 	default:
-		name, ver := v, ""
-		if i := strings.LastIndex(v, "@"); i > 0 {
-			name, ver = v[:i], v[i+1:]
+		// `jsr:@std/path@1.0.0` (pnpm, yarn 4, bun, aube) and `npm:left-pad@1.3.0` name a registry package
+		name, ver := strings.TrimPrefix(strings.TrimPrefix(v, "jsr:"), "npm:"), ""
+		if i := strings.LastIndex(name, "@"); i > 0 {
+			name, ver = name[:i], name[i+1:]
 		}
 		p.Name, p.Version = name, ver
 		p.Pinned = ver != "" && (reExactNPM.MatchString(ver) || versionIsDynamic(ver))
@@ -412,6 +417,15 @@ func (in *Install) pipx(c *Command) bool {
 var (
 	nodeInstallVerbs = set("install i add in ins inst insta instal isnt isnta isntal isntall a")
 	nodeCIVerbs      = set("ci clean-install cit clean-install-test install-ci-test")
+
+	// The commands of aube (the usage spec of aube 2.7). `install` takes no package: `aube add` does. `ci` is a frozen
+	// install that deletes node_modules first. `exec` (alias `x`) only runs a binary that is installed; it never fetches
+	// one, unlike `npm exec`: the commands that fetch a tool are `dlx` and `aubx`. `recursive` (`multi`, `m`) runs
+	// another command in every package of the workspace, like `-r`.
+	aubeInstallVerbs   = set("install i install-test it")
+	aubeAddVerbs       = set("add a")
+	aubeCIVerbs        = set("ci clean-install ic install-clean")
+	aubeRecursiveVerbs = set("recursive multi m")
 )
 
 // node handles npm, pnpm, yarn, bun and aube.
@@ -423,7 +437,8 @@ func (in *Install) node(c *Command) bool {
 		global, pos = true, pos[1:]
 	}
 	in.Global = global
-	in.Locked = c.HasFlag("--frozen-lockfile", "--immutable", "--ci") && !c.HasFlag("--no-frozen-lockfile")
+	in.Locked = freezesLockfile(c)
+	in.NoScripts = skipsScripts(c)
 	if len(pos) == 0 {
 		switch c.Tool {
 		case "yarn": // `yarn` installs
@@ -434,6 +449,9 @@ func (in *Install) node(c *Command) bool {
 	}
 	if pos[0].Dynamic() {
 		return false
+	}
+	if c.Tool == "aube" {
+		return in.aube(c, pos)
 	}
 	verb := pos[0].Value
 	switch {
@@ -446,12 +464,97 @@ func (in *Install) node(c *Command) bool {
 		return true
 	case nodeInstallVerbs[verb]:
 		in.Verb = verb
-		if verb == "a" && c.Tool != "bun" && c.Tool != "aube" {
+		if verb == "a" && c.Tool != "bun" {
 			return false
 		}
-		if c.Tool == "bun" || c.Tool == "aube" || c.Tool == "pnpm" || c.Tool == "yarn" || c.Tool == "npm" {
+		if c.Tool == "bun" || c.Tool == "pnpm" || c.Tool == "yarn" || c.Tool == "npm" {
 			in.addAll(pos[1:], npmPackage)
 		}
+		return true
+	}
+	return false
+}
+
+// aubeVerb returns the command of an aube command line: the first positional word, or the one after `recursive` (`multi`, `m`),
+// which runs another command in every package of the workspace like `-r` does. "" if there is none or it is dynamic.
+func aubeVerb(c *Command) string {
+	if v := c.Verb(); aubeRecursiveVerbs[v] && c.Sub(1) != "" {
+		return c.Sub(1)
+	}
+	return c.Verb()
+}
+
+// aube handles `aube`, whose positional words start with the command (and `aube recursive` with another command).
+// pos is not empty and its first word is not dynamic.
+func (in *Install) aube(c *Command, pos []*Word) bool {
+	if aubeRecursiveVerbs[pos[0].Value] && len(pos) > 1 && !pos[1].Dynamic() {
+		pos = pos[1:]
+	}
+	verb := pos[0].Value
+	switch {
+	case verb == "dlx":
+		in.Verb, in.Run = verb, true
+		in.runTarget(c, pos[1:], "--package", npmPackage, "-p")
+		return true
+	case aubeCIVerbs[verb]:
+		in.Verb, in.Locked = "ci", true
+		return true
+	case aubeInstallVerbs[verb]:
+		in.Verb = "install"
+		return true
+	case aubeAddVerbs[verb]:
+		in.Verb = "add"
+		in.addAll(pos[1:], npmPackage)
+		return true
+	}
+	return false
+}
+
+// freezesLockfile reports whether an npm, pnpm, yarn or bun command is bound to the lock file: `--frozen-lockfile`,
+// `--immutable` or `--ci`, none of which counts when it is given the value false (`--frozen-lockfile=false` turns the
+// freeze off) or when `--no-frozen-lockfile` comes with it.
+func freezesLockfile(c *Command) bool {
+	if c.HasFlag("--no-frozen-lockfile") {
+		return false
+	}
+	for _, f := range c.Flags {
+		switch f.Name {
+		case "--frozen-lockfile", "--immutable", "--ci":
+			if f.Value == nil || f.Value.Dynamic() || !isFalseWord(f.Value.Value) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// skipsScripts reports whether the flags of an npm, pnpm, yarn or bun command keep it from running lifecycle scripts.
+// The last of `--ignore-scripts` and `--no-ignore-scripts` wins, `--ignore-scripts=false` is the same as the second.
+// A value that is not known (`--ignore-scripts=$X`) counts as set: the author made the choice.
+func skipsScripts(c *Command) bool {
+	ignore := false
+	for _, f := range c.Flags {
+		switch f.Name {
+		case "--ignore-scripts":
+			ignore = f.Value == nil || f.Value.Dynamic() || !isFalseWord(f.Value.Value)
+		case "--no-ignore-scripts":
+			ignore = false
+		case "--mode":
+			// Yarn 2+: `--mode=skip-build` skips the build scripts of the dependencies
+			if f.Value != nil && f.Value.Value == "skip-build" {
+				return true
+			}
+		}
+	}
+	if ignore {
+		return true
+	}
+	return c.Tool == "npm" && c.HasFlag("--package-lock-only", "--lockfile-only", "--dry-run")
+}
+
+func isFalseWord(v string) bool {
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "false", "0", "no", "off":
 		return true
 	}
 	return false

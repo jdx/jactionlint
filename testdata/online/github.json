@@ -8,7 +8,175 @@
     "docker.io/library/ubuntu:22.04": "sha256:5ec03bb3441e8b0bf3b4f9cd4629a1ae763010dc3035bb8da3ae6cf026486401",
     "ghcr.io/astral-sh/uv:0.5.0": "sha256:0e0fb77970aceaa106c1fee7103ec3e4885f6c4289e32a596123af06d2e9db9d"
   },
+  "owners": {
+    "actions": true,
+    "example": true,
+    "ghost-owner": false,
+    "former-owner": false,
+    "moved-org": true,
+    "new-owner": true
+  },
   "repos": {
+    "example/environments": {
+      "repo": {
+        "archived": false,
+        "default_branch": "main"
+      },
+      "environments": {
+        "release": {
+          "found": true,
+          "required_reviewers": true
+        },
+        "staging": {
+          "found": true
+        },
+        "prodution": {
+          "found": false
+        }
+      }
+    },
+    "example/private-environments": {
+      "repo": {
+        "archived": false,
+        "default_branch": "main",
+        "private": true
+      },
+      "environments": {
+        "production": {
+          "found": false
+        }
+      }
+    },
+    "ghost-owner/deploy": {
+      "missing": true
+    },
+    "former-owner/deploy": {
+      "repo": {
+        "archived": false,
+        "default_branch": "main",
+        "full_name": "new-owner/deploy"
+      },
+      "tags": {
+        "tags": [
+          {
+            "name": "v1",
+            "sha": "6666666666666666666666666666666666666666"
+          }
+        ]
+      },
+      "branches": {
+        "branches": [
+          {
+            "name": "main",
+            "sha": "7777777777777777777777777777777777777777"
+          }
+        ]
+      },
+      "refs": {
+        "heads/v1": {
+          "found": false
+        }
+      },
+      "advisories": {
+        "list": []
+      }
+    },
+    "moved-org/deploy": {
+      "repo": {
+        "archived": false,
+        "default_branch": "main",
+        "full_name": "new-owner/deploy"
+      },
+      "tags": {
+        "tags": [
+          {
+            "name": "v1",
+            "sha": "6666666666666666666666666666666666666666"
+          }
+        ]
+      },
+      "branches": {
+        "branches": [
+          {
+            "name": "main",
+            "sha": "7777777777777777777777777777777777777777"
+          }
+        ]
+      },
+      "refs": {
+        "heads/v1": {
+          "found": false
+        }
+      },
+      "advisories": {
+        "list": []
+      }
+    },
+    "new-owner/old-name": {
+      "repo": {
+        "archived": false,
+        "default_branch": "main",
+        "full_name": "new-owner/deploy"
+      },
+      "tags": {
+        "tags": [
+          {
+            "name": "v1",
+            "sha": "6666666666666666666666666666666666666666"
+          }
+        ]
+      },
+      "branches": {
+        "branches": [
+          {
+            "name": "main",
+            "sha": "7777777777777777777777777777777777777777"
+          }
+        ]
+      },
+      "refs": {
+        "heads/v1": {
+          "found": false
+        }
+      },
+      "advisories": {
+        "list": []
+      }
+    },
+    "new-owner/private": {
+      "missing": true
+    },
+    "new-owner/deploy": {
+      "repo": {
+        "archived": false,
+        "default_branch": "main",
+        "full_name": "new-owner/deploy"
+      },
+      "tags": {
+        "tags": [
+          {
+            "name": "v1",
+            "sha": "6666666666666666666666666666666666666666"
+          }
+        ]
+      },
+      "branches": {
+        "branches": [
+          {
+            "name": "main",
+            "sha": "7777777777777777777777777777777777777777"
+          }
+        ]
+      },
+      "refs": {
+        "heads/v1": {
+          "found": false
+        }
+      },
+      "advisories": {
+        "list": []
+      }
+    },
     "actions/checkout": {
       "repo": {
         "archived": false,

@@ -24,6 +24,8 @@ type gitHubFixtures struct {
 	// Images maps "registry/repository:tag" ("docker.io/library/ubuntu:22.04") to the digest of the image, or to
 	// "not-found" for an image which the registry does not have.
 	Images map[string]string `json:"images,omitempty"`
+	// Owners maps the login of a user or organization in lower case to whether it exists, see GitHubOwnerClient.
+	Owners map[string]bool `json:"owners,omitempty"`
 }
 
 type fixtureRepo struct {
@@ -35,6 +37,8 @@ type fixtureRepo struct {
 	Refs       map[string]*fixtureRef         `json:"refs,omitempty"`    // "heads/main", "tags/v1"
 	Compare    map[string]GitHubCompareStatus `json:"compare,omitempty"` // "base...head"; "not-found" for unknown commits
 	Advisories *fixtureAdvisories             `json:"advisories,omitempty"`
+	// Environments are the answers about the environments by their lower case name, see GitHubEnvironmentClient.
+	Environments map[string]*fixtureEnvironment `json:"environments,omitempty"`
 }
 
 type fixtureRef struct {
