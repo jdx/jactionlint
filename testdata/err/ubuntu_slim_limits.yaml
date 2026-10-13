@@ -1,0 +1,78 @@
+on: push
+jobs:
+  timeout:
+    runs-on: ubuntu-slim
+    timeout-minutes: 60
+    steps:
+      - run: echo ...
+  container:
+    runs-on: [ubuntu-slim]
+    timeout-minutes: 10
+    container: node:22
+    steps:
+      - run: echo ...
+  services:
+    runs-on: ubuntu-slim
+    timeout-minutes: 10
+    services:
+      redis:
+        image: redis
+    steps:
+      - run: echo ...
+  docker-action:
+    runs-on: ubuntu-slim
+    timeout-minutes: 10
+    steps:
+      - uses: docker://alpine:3.22
+        with:
+          args: echo hello
+  matrix-all-slim:
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      matrix:
+        os: [ubuntu-slim]
+    steps:
+      - run: echo ...
+  # Not reported: 15 minutes, no limit that applies, other runners, and what is not known
+  at-the-limit:
+    runs-on: ubuntu-slim
+    timeout-minutes: 15
+    steps:
+      - run: docker version
+  matrix-other-runner:
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    container: node:22
+    strategy:
+      matrix:
+        os: [ubuntu-slim, ubuntu-latest]
+    steps:
+      - run: echo ...
+  both-labels:
+    runs-on: [ubuntu-slim, ubuntu-latest]
+    timeout-minutes: 60
+    services:
+      redis:
+        image: redis
+    steps:
+      - run: echo ...
+  other-runner:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    container: node:22
+    steps:
+      - uses: docker://alpine:3.22
+  timeout-expression:
+    runs-on: ubuntu-slim
+    timeout-minutes: ${{ fromJSON(vars.TIMEOUT) }}
+    steps:
+      - run: echo ...
+  unknown-matrix:
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      matrix:
+        os: ${{ fromJSON(vars.OS) }}
+    steps:
+      - run: echo ...

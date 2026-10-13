@@ -1,0 +1,8 @@
+name: 'foo'
+description: 'An action of the repository, which the examples of local-action-checkout use'
+
+runs:
+  using: 'composite'
+  steps:
+    - run: echo foo
+      shell: bash

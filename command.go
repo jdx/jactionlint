@@ -189,6 +189,21 @@ func (cmd *Command) Main(args []string) int {
 		return ExitStatusSuccessNoProblem
 	}
 
+	if flags.Changed("completion") {
+		if err := writeCompletion(cmd.Stdout, f.completion); err != nil {
+			fmt.Fprintln(cmd.Stderr, err)
+			return ExitStatusInvalidCommandOption
+		}
+		return ExitStatusSuccessNoProblem
+	}
+	if flags.Changed("explain") {
+		if err := explainRule(cmd.Stdout, f.explain); err != nil {
+			fmt.Fprintln(cmd.Stderr, err)
+			return ExitStatusInvalidCommandOption
+		}
+		return ExitStatusSuccessNoProblem
+	}
+
 	sev, err := ParseSeverity(minSeverity)
 	if err != nil || sev == SeverityOff {
 		fmt.Fprintf(cmd.Stderr, "invalid value %q for --min-severity. available values are \"info\", \"warn\" and \"error\"\n", minSeverity)
@@ -234,6 +249,9 @@ func (cmd *Command) Main(args []string) int {
 		}
 	}
 	opts.IgnorePatterns = f.ignorePats
+	// A command the user named must exist: the default is looked up on PATH and a missing one only costs a note
+	opts.ShellcheckRequired = flags.Changed("shellcheck") && opts.Shellcheck != ""
+	opts.PyflakesRequired = flags.Changed("pyflakes") && opts.Pyflakes != ""
 	opts.OnRulesCreated = cmd.onRulesCreated
 	opts.RunHints = !f.noHints && !HintsDisabledByEnv()
 	opts.LogWriter = cmd.Stderr
