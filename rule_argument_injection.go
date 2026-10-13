@@ -14,9 +14,10 @@ import (
 //     GNU sed runs a command with the `e` command and the `e` flag of `s`, and `w` and `r` write and read files, so
 //     `a/g;1e id;#` runs `id`. The text of an `awk` program is the same (`system()`), and so is the command that
 //     `find -exec` runs, and an unquoted value that the shell splits into words can add `-exec` to a `find`.
-//   - `tar`, `zip`, `wget`, `curl` and `git clone` take a quoted value as one word, and a value that starts with a dash
-//     is an option: `--checkpoint-action=exec=sh x.sh`, `--use-compress-program`, `--upload-pack`, `--output`. The value
-//     must be the whole word or start it, and nothing may end the options with `--` before it.
+//   - `wget`, `curl` and `git clone` take a quoted value as one word, and a value that starts with a dash is an option:
+//     `-o`, `--output`, `--upload-pack`. The value must be the whole word or start it, it must be a word that is not the
+//     value of an option, and nothing may end the options with `--` before it. Commands whose options the rule does not
+//     know (tar, zip, rsync) are left out: it cannot tell their operands from the values of their options.
 //
 // Only free text counts: a body, a comment, a title, a commit message, a name an author chose. The name of a branch,
 // of a label or of an account is left out, as in the models of CodeQL (actions/ql/lib/ext/config/argument_injection_sinks.yml
@@ -32,7 +33,7 @@ type RuleArgumentInjection struct {
 // NewRuleArgumentInjection creates a new RuleArgumentInjection instance.
 func NewRuleArgumentInjection() *RuleArgumentInjection {
 	return &RuleArgumentInjection{
-		RuleBase: NewRuleBase("argument-injection", "Checks for free text of an outsider in the program text or the options of sed, awk, find, tar and the like"),
+		RuleBase: NewRuleBase("argument-injection", "Checks for free text of an outsider in the program text or the options of sed, awk, find, curl, wget and git clone"),
 		// GITHUB_PATH: only a value cut down to letters, digits, "_" and "-" is safe (a dot and a slash are not)
 		flow: &RuleGitHubEnv{dest: "GITHUB_PATH", varsOnly: true, skipInputs: true, freeTextOnly: true},
 	}
@@ -94,8 +95,85 @@ func (rule *RuleArgumentInjection) judge(s *runscript.Script, c *runscript.Comma
 	return d
 }
 
-// optionCommands are the commands where a value that starts a word can be an option that runs code or writes a file.
-var optionCommands = map[string]bool{"tar": true, "zip": true, "unzip": true, "wget": true, "curl": true, "rsync": true}
+// gitGlobalValueFlags are the options of git before the subcommand that take the next word as their value.
+var gitGlobalValueFlags = map[string]bool{"-C": true, "-c": true, "--git-dir": true, "--work-tree": true, "--namespace": true, "--super-prefix": true, "--config-env": true, "--exec-path": false}
+
+// gitCloneValueFlags are the options of git clone that take the next word as their value.
+var gitCloneValueFlags = map[string]bool{
+	"-b": true, "--branch": true, "-o": true, "--origin": true, "-c": true, "--config": true, "--depth": true, "-j": true, "--jobs": true,
+	"--reference": true, "--reference-if-able": true, "--separate-git-dir": true, "--template": true, "-u": true, "--upload-pack": true,
+	"--server-option": true, "--filter": true, "--shallow-since": true, "--shallow-exclude": true, "--bundle-uri": true,
+	"--ref-format": true, "--revision": true,
+}
+
+// optionOperands returns the words of the command that are neither an option nor the value of one and come before `--`:
+// the words where a value that starts with a dash is read as an option. Only the commands whose options are known are
+// covered: curl and wget (the tables of the run-script analyzer) and `git clone`; for any other command it returns
+// nothing, because a word that is the value of an option that the rule does not know would look like an operand.
+func optionOperands(c *runscript.Command) []*runscript.Word {
+	var words []*runscript.Word
+	switch {
+	case c.Name == "curl" || c.Name == "wget":
+		words = c.Positional
+	case c.Name == "git":
+		words = gitCloneOperands(c)
+	}
+	end := -1
+	for _, a := range c.Args {
+		if !a.Dynamic() && a.Value == "--" {
+			end = a.Offset
+			break
+		}
+	}
+	var out []*runscript.Word
+	for _, w := range words {
+		if end < 0 || w.Offset < end {
+			out = append(out, w)
+		}
+	}
+	return out
+}
+
+// gitCloneOperands returns the operands of `git clone`: the repository and the directory, after the options of git and
+// of clone with their values. It returns nothing for another subcommand.
+func gitCloneOperands(c *runscript.Command) []*runscript.Word {
+	args := c.Args
+	i := 0
+	for ; i < len(args); i++ {
+		v := args[i].Value
+		if args[i].Dynamic() {
+			return nil
+		}
+		if gitGlobalValueFlags[v] {
+			i++
+			continue
+		}
+		if strings.HasPrefix(v, "-") {
+			continue
+		}
+		break
+	}
+	if i >= len(args) || args[i].Value != "clone" {
+		return nil
+	}
+	var out []*runscript.Word
+	for i++; i < len(args); i++ {
+		w := args[i]
+		v := w.Value
+		switch {
+		case !w.Dynamic() && v == "--":
+			out = append(out, args[i+1:]...) // the operands after -- are cut off by the caller
+			return out
+		case !w.Dynamic() && strings.HasPrefix(v, "-"):
+			if gitCloneValueFlags[v] {
+				i++
+			}
+		default:
+			out = append(out, w)
+		}
+	}
+	return out
+}
 
 // sinkOf returns the word of the command that holds free text of an outsider in a place that can run code, with the
 // kind of the place.
@@ -130,21 +208,12 @@ func (rule *RuleArgumentInjection) sinkOf(s *runscript.Script, c *runscript.Comm
 			}
 		}
 	}
-	if optionCommands[c.Name] || (c.Name == "git" && c.Verb() == "clone") {
-		// the words that are not an option or the value of one: `-d "$PAYLOAD"` gives the value to the option
-		past := false
-		for _, a := range c.Args {
-			if a.Value == "--" {
-				past = true
-			}
+	for _, w := range optionOperands(c) {
+		if !startsWithVar(w) || !rule.isEnvValue(s, c, w) {
+			continue
 		}
-		for _, w := range c.Positional {
-			if past || !startsWithVar(w) || !rule.isEnvValue(s, c, w) {
-				continue
-			}
-			if d := rule.judge(s, c, w); d.kind == dataUntrusted {
-				return w, d, "option"
-			}
+		if d := rule.judge(s, c, w); d.kind == dataUntrusted {
+			return w, d, "option"
 		}
 	}
 	return nil, data{}, ""
@@ -164,7 +233,7 @@ func exprIsName(text string) bool {
 	collectExprRefs(n, nil, &refs)
 	untrusted := false
 	for _, r := range refs {
-		if !exprReadsUntrustedInput(strings.Join(r.chain, ".")) {
+		if !nodeReadsUntrustedInput(r.node) {
 			continue
 		}
 		untrusted = true
@@ -215,7 +284,7 @@ func sedPrograms(c *runscript.Command) []*runscript.Word {
 
 // awkPrograms is like sedPrograms for awk, where a program file is -f and gawk also has --source and -e.
 func awkPrograms(c *runscript.Command) []*runscript.Word {
-	return expanding(programWords(c, "-e --source", "-f --file", "-v -F --assign --field-separator -i --include -l --load -E"))
+	return expanding(programWords(c, "-e --source", "-f --file -E", "-v -F --assign --field-separator -i --include -l --load"))
 }
 
 // programWords reads the options of sed or awk and returns the program words: the values of the options in progFlags,
@@ -250,6 +319,10 @@ func programWords(c *runscript.Command, progFlags, fileFlags, skipFlags string) 
 		case has(file, v):
 			hasFile = true
 			i++
+		case strings.HasPrefix(v, "--file=") || attachedFile(v, file):
+			hasFile = true
+		case v == "-i" && strings.HasSuffix(c.Name, "sed") && i+1 < len(c.Args) && !c.Args[i+1].Dynamic() && c.Args[i+1].Value == "":
+			i++ // BSD sed: the suffix of the backup is the next word, and it is empty
 		case has(skip, v):
 			i++
 		case strings.HasPrefix(v, "--expression=") || strings.HasPrefix(v, "--source="):
@@ -266,6 +339,16 @@ func programWords(c *runscript.Command, progFlags, fileFlags, skipFlags string) 
 		}
 	}
 	return out
+}
+
+// attachedFile reports whether the word is a short option that names a script file with the name attached (`-fprog.awk`).
+func attachedFile(v string, fileFlags []string) bool {
+	for _, f := range fileFlags {
+		if len(f) == 2 && f[0] == '-' && f[1] != '-' && strings.HasPrefix(v, f) && len(v) > 2 && !strings.HasPrefix(v, "--") {
+			return true
+		}
+	}
+	return false
 }
 
 // expanding keeps the words that expand a variable or a command substitution: a single quoted program holds none.
@@ -295,12 +378,12 @@ func argumentMessage(c *runscript.Command, d data, kind string) string {
 	case "find-split":
 		return src + " is expanded without quotes in find: the shell splits it into words, so it can add an option such as -exec. quote it, and give it as the argument of an option such as -name"
 	}
-	return src + " starts a word of " + name + ": a value that starts with a dash is an option, and options of this command can run code or write files (--checkpoint-action, --use-compress-program, --upload-pack, --output). put -- before the value, or give the value as the argument of an option (--file=\"$VALUE\")"
+	return src + " starts a word of " + name + ": a value that starts with a dash is an option, and options of this command can run code or write files (--output, -o, --upload-pack). put -- before the value, or give the value as the argument of an option"
 }
 
 func init() {
 	registerRules(
-		RuleInfo{ID: "argument-injection", Group: RuleGroupSecurity, Summary: "Free text that an outsider writes is expanded into the program text or the options of sed, awk, find, tar and the like.", DefaultLevel: SeverityWarning, Profile: ProfilePedantic, DocsAnchor: "check-argument-injection"},
+		RuleInfo{ID: "argument-injection", Group: RuleGroupSecurity, Summary: "Free text that an outsider writes is expanded into the program text or the options of sed, awk, find, curl, wget and git clone.", DefaultLevel: SeverityWarning, Profile: ProfilePedantic, DocsAnchor: "check-argument-injection"},
 	)
 	registerRuleFactory("argument-injection", func(env *RuleEnv) []Rule {
 		if !env.config.RuleEnabled("argument-injection") {

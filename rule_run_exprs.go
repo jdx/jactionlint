@@ -67,6 +67,12 @@ func exprReadsUntrustedInput(text string) bool {
 	if n == nil {
 		return false
 	}
+	return nodeReadsUntrustedInput(n)
+}
+
+// nodeReadsUntrustedInput is exprReadsUntrustedInput for a parsed expression. A reference with an index
+// (`pull_requests[0].head.ref`) cannot be written again as text, so the rules that look at the references use this one.
+func nodeReadsUntrustedInput(n ExprNode) bool {
 	u := NewUntrustedInputChecker(BuiltinUntrustedInputs)
 	u.Init()
 	VisitExprNode(n, func(node, _ ExprNode, entering bool) {

@@ -387,7 +387,7 @@ func exprMayHaveNewline(text string) bool {
 	collectExprRefs(n, nil, &refs)
 	untrusted := false
 	for _, r := range refs {
-		if !exprReadsUntrustedInput(strings.Join(r.chain, ".")) {
+		if !nodeReadsUntrustedInput(r.node) {
 			continue
 		}
 		untrusted = true

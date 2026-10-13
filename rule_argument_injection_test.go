@@ -19,7 +19,7 @@ func countArgumentInjection(t *testing.T, src string) int {
 
 // TestArgumentInjection is the table of the rule. want is the number of findings.
 func TestArgumentInjection(t *testing.T) {
-	const head = "on: issue_comment\npermissions: {}\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - env:\n          BODY: ${{ github.event.comment.body }}\n          TITLE: ${{ github.event.issue.title }}\n          REF: ${{ github.head_ref }}\n          LIT: fixed\n        run: |\n"
+	const head = "on: issue_comment\npermissions: {}\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - env:\n          BODY: ${{ github.event.comment.body }}\n          TITLE: ${{ github.event.issue.title }}\n          REF: ${{ github.head_ref }}\n          LIT: fixed\n          RUNREF: ${{ github.event.workflow_run.pull_requests[0].head.ref }}\n        run: |\n"
 	tests := []struct {
 		what   string
 		script string
@@ -37,13 +37,23 @@ func TestArgumentInjection(t *testing.T) {
 		// --- find ---
 		{"find -exec with the value as the command", `find . -exec $BODY {} \;`, 1},
 		{"find with an unquoted value", `find . -name $TITLE`, 1},
-		// --- options of tar, zip, git clone ---
-		{"tar with a quoted value", `tar -czf out.tgz "$BODY"`, 1},
-		{"tar with an unquoted value", `tar -czf out.tgz $BODY`, 1},
-		{"zip", `zip out.zip "$TITLE"`, 1},
+		// --- options of curl, wget, git clone ---
 		{"git clone", `git clone "$BODY"`, 1},
+		{"git clone with a global option", `git -C dir clone "$BODY"`, 1},
+		{"git clone with a configuration", `git -c core.x=y clone "$BODY" dest`, 1},
+		{"git clone with the value before the end of the options", `git clone "$BODY" -- dest`, 1},
+		{"git clone with the value after the end of the options", `git clone url -- "$BODY"`, 0},
+		{"git clone with the value of an option", `git clone --branch "$BODY" url`, 0},
+		{"git clone with the value of a short option", `git clone -b "$TITLE" url`, 0},
+		{"another subcommand", `git checkout "$BODY"`, 0},
 		{"wget", `wget "$BODY"`, 1},
+		{"wget after an option", `wget -O out "$BODY"`, 1},
 		{"curl", `curl "$TITLE"`, 1},
+		{"curl after an option", `curl -o out.txt "$TITLE"`, 1},
+		{"curl with the value of an option", `curl -d "$BODY" https://example.com`, 0},
+		{"curl with a header", `curl -H "$BODY" https://example.com`, 0},
+		{"tar is not modeled", `tar -czf out.tgz "$BODY"`, 0},
+		{"zip is not modeled", `zip out.zip "$TITLE"`, 0},
 
 		// --- not a program, not an option ---
 		{"a literal program", `sed 's/a/b/' file`, 0},
@@ -55,12 +65,19 @@ func TestArgumentInjection(t *testing.T) {
 		{"the value is a variable of awk", `awk -v v="$BODY" '{ print v }' file`, 0},
 		{"the value is a pattern of find", `find . -name "$TITLE"`, 0},
 		{"the value is a directory of find", `find "$TITLE" -type f`, 0},
-		{"the end of the options", `tar -czf out.tgz -- "$BODY"`, 0},
-		{"the value is in the middle of the word", `tar -czf "dir/$BODY.tgz" file`, 0},
+		{"the end of the options", `curl -- "$BODY"`, 0},
+		{"the value is in the middle of the word", `curl "dir/$BODY.tgz"`, 0},
 		{"a url made of the value", `git clone "https://example.com/$BODY"`, 0},
 		{"git clone after --", `git clone -- "$BODY"`, 0},
-		{"an option that takes the value", `tar --file="$BODY" -t`, 0},
-		{"the name of a branch is not an option", `tar -czf out.tgz "$REF"`, 0},
+		{"an option that takes the value", `curl --output="$BODY" https://example.com`, 0},
+		{"the name of a branch is not an option", `curl "$REF"`, 0},
+		{"a script file that is attached", `sed --file=prog.sed "$BODY"`, 0},
+		{"a short script file that is attached", `sed -fprog.sed "$BODY"`, 0},
+		{"an awk program file that is attached", `awk -fprog.awk "$BODY"`, 0},
+		{"a gawk program file", `gawk -E prog.awk "$BODY"`, 0},
+		{"BSD sed with the suffix of the backup", `sed -i '' "s/a/$BODY/" file`, 1},
+		{"BSD sed with the suffix and a file", `sed -i '' 's/a/b/' "$BODY"`, 0},
+		{"a pull request of the run is a branch", "sed \"s/a/$RUNREF/\" file", 0},
 		{"another command", `echo "$BODY"`, 0},
 		{"cut down to letters and digits", "V=$(echo \"$BODY\" | tr -cd 'a-z0-9')\nsed \"s/a/$V/\" file", 0},
 		{"cut down with an expansion", `sed "s/a/${BODY//[^a-z0-9]/}/" file`, 0},

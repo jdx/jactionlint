@@ -3311,9 +3311,8 @@ rules:
 Passing the input through `env:` makes `"$BODY"` safe as an argument, but not as part of the program that a command reads. In
 `sed "s/PLACEHOLDER/$BODY/g"` a slash in the value ends the `s` command and the rest is a program of its own: GNU sed runs a
 command with the `e` command and the `e` flag (`a/g;1e id;#`) and writes files with `w`. The program of `awk` can call `system()`.
-`find -exec $BODY` runs the value, and an unquoted value in `find` is split into words that can add `-exec`. For `tar`, `zip`,
-`unzip`, `wget`, `curl`, `rsync` and `git clone` a value that starts a word and starts with a dash is an option: `--checkpoint-action=exec=sh x.sh`,
-`--use-compress-program`, `--upload-pack`, `-O`. See CodeQL's [argument injection query](https://github.com/github/codeql/blob/main/actions/ql/src/experimental/Security/CWE-088/ArgumentInjectionCritical.ql)
+`find -exec $BODY` runs the value, and an unquoted value in `find` is split into words that can add `-exec`. For `wget`, `curl` and
+`git clone` a value that starts a word and starts with a dash is an option: `-o`, `--output`, `--upload-pack`. See CodeQL's [argument injection query](https://github.com/github/codeql/blob/main/actions/ql/src/experimental/Security/CWE-088/ArgumentInjectionCritical.ql)
 and [its commands](https://github.com/github/codeql/blob/main/actions/ql/lib/ext/config/argument_injection_sinks.yml).
 
 The rule `argument-injection` (in the `pedantic` profile) reports free text that an outsider types (a body, a comment, a title,
@@ -3321,8 +3320,9 @@ a commit message, the name of an author, and what a script reads with `gh pr vie
 when it is expanded in one of these places. It leaves out the name of a branch, of a label and of an account, as CodeQL does: git does not
 accept a branch that starts with a dash, and the characters of an account name are fixed. A single quoted program (`sed 's/a/$BODY/'`)
 does not expand anything and is fine, and so are the value of `awk -v name="$BODY"`, a pattern (`find -name "$TITLE"`), a value after
-`--`, and a value in the middle of a word (`"dir/$BODY.tgz"`). For the options of `tar` and the like the value must be the environment variable
-as the step got it: a value that the script computed first is not followed.
+`--`, and a value in the middle of a word (`"dir/$BODY.tgz"`). For the options of `curl`, `wget` and `git clone` the word must be an operand (not the value of an option, such as `--branch "$BODY"`
+or `-d "$BODY"`, and not after `--`), and the value must be the environment variable as the step got it: a value that the script computed first
+is not followed. `tar`, `zip`, `unzip` and `rsync` are not covered, because the rule does not know their options well enough to tell an operand from the value of an option.
 
 The only safe shape of a value for a program is letters, digits, `_` and `-`: `tr -cd 'a-z0-9-'`, `${BODY//[^a-z0-9]/}`,
 `sed 's/[^a-z0-9-]//g'` or a check with an anchored pattern before the use. A dot and a slash are enough to break a sed program. An expression

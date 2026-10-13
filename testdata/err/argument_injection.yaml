@@ -1,4 +1,4 @@
-# Free text of an outsider in the program of sed and awk, in find and in the options of tar and git clone
+# Free text of an outsider in the program of sed and awk, in find and in the options of curl and git clone
 on:
   issue_comment:
     types: [created]
@@ -16,7 +16,7 @@ jobs:
       - run: awk "BEGIN { print \"$BODY\" }"
       - run: find . -exec $BODY {} \;
       - run: find . -name $TITLE
-      - run: tar -czf out.tgz "$BODY"
+      - run: curl -o out.txt "$BODY"
       - run: git clone "$TITLE"
       - env:
           GH_TOKEN: ${{ github.token }}
@@ -28,7 +28,7 @@ jobs:
       - run: sed 's/PLACEHOLDER/$BODY/g' template.txt
       - run: awk -v body="$BODY" '{ print body }' file
       - run: find . -name "$TITLE"
-      - run: tar -czf out.tgz -- "$BODY"
+      - run: curl -o out.txt -- "$BODY"
       - run: git clone "https://example.com/$TITLE"
       - run: |
           SAFE=$(echo "$BODY" | tr -cd 'a-z0-9-')
