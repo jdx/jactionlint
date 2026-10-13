@@ -1,0 +1,37 @@
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      # one command wrapped over several lines
+      - run: docker build
+          --tag app
+          .
+      - run: echo x |
+          sort
+      - run: echo x
+          && echo y
+      - run: echo x
+          >> "$GITHUB_OUTPUT"
+      - run: make test
+          CC=gcc exec=no
+      - run: docker run --rm image
+          git status
+      - run: ssh host
+          git status
+      - run: echo "one
+          echo two"
+      - run: node build.js "${{
+          github.sha }}"
+      # a blank line keeps the line break
+      - run: echo a
+
+          echo b
+      # blocks keep the lines
+      - run: |
+          echo a
+          echo b
+      - run: >
+          echo a
+          echo b
+      - run: echo a; echo b

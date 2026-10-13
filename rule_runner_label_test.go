@@ -3,6 +3,7 @@ package jactionlint
 import (
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestRuleRunnerLabelCheckLabels(t *testing.T) {
@@ -421,6 +422,9 @@ func TestRuleRunnerLabelCheckLabels(t *testing.T) {
 			}
 
 			rule := NewRuleRunnerLabel()
+			// macos-14 and ubuntu-22.04 are retired on a known day (runnerLabelRetirements): these cases are about the
+			// labels of a day before that
+			rule.now = func() time.Time { return time.Date(2026, 10, 13, 0, 0, 0, 0, time.UTC) }
 			cfg := Config{}
 			cfg.SelfHostedRunner.Labels = tc.known
 			rule.SetConfig(&cfg)

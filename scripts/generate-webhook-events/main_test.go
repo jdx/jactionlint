@@ -165,6 +165,10 @@ func TestExtraTypes(t *testing.T) {
 }
 
 func TestExistingOutputSurvivesError(t *testing.T) {
+	prev := extraTypes
+	extraTypes = map[string][]string{"merge_group": {"destroyed"}}
+	t.Cleanup(func() { extraTypes = prev })
+
 	ok, err := os.ReadFile(filepath.Join("testdata", "ok.html"))
 	if err != nil {
 		t.Fatal(err)
