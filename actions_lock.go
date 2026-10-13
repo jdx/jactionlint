@@ -201,6 +201,72 @@ func readActionsLock(path string) *actionsLock {
 	return l
 }
 
+// parseActionsLock parses the content of a lock file, which was not read from the disk (the linter was given it).
+func parseActionsLock(path string, b []byte) *actionsLock {
+	l := &actionsLock{Path: path, workflows: map[string]*lockWorkflow{}, deps: map[string]*lockDependency{}}
+	if len(b) > actionsLockMaxSize {
+		l.fail(1, 1, "the lock file is larger than 1 MiB, which GitHub's tools do not read")
+		return l
+	}
+	l.parse(b)
+	return l
+}
+
+// lockState says what the lock file has for an action which a workflow uses.
+type lockState int
+
+const (
+	// lockMissing: the lock file lists no entry of the repository for the workflow.
+	lockMissing lockState = iota
+	// lockOtherRef: it lists the repository, but at another ref.
+	lockOtherRef
+	// lockListed: it lists the pin (or, for a commit SHA, an entry which was resolved to that commit).
+	lockListed
+)
+
+// lookup tells what the entry of the workflow has for the action u, the way gh actions-lock decides it: the pin
+// owner/repo@ref is listed, or, when the ref is a full commit SHA, an entry of the repository whose commit is that
+// SHA is (the workflow was pinned by hand and the entry has the tag it was found by). It returns the dependency of the
+// pin which was found, or the refs of the repository which are listed instead.
+func (l *actionsLock) lookup(workflowKey string, u *UsesRef) (lockState, *lockDependency, []string) {
+	w := l.workflows[workflowKey]
+	if w == nil {
+		return lockMissing, nil, nil
+	}
+	nwo := strings.ToLower(u.Owner + "/" + u.Repo)
+	want := nwo + "@" + u.Ref
+	sha := ""
+	if u.RefKind == RefFullSHA {
+		sha = strings.ToLower(u.Ref)
+	}
+	var others []string
+	for _, p := range w.Pins {
+		if p.Key == want {
+			return lockListed, l.deps[p.Key], nil
+		}
+		if strings.ToLower(p.Owner+"/"+p.Repo) != nwo {
+			continue
+		}
+		if d := l.deps[p.Key]; d != nil && sha != "" && strings.EqualFold(lockCommitHex(d.Commit), sha) {
+			return lockListed, d, nil
+		}
+		others = append(others, p.Ref)
+	}
+	if len(others) > 0 {
+		return lockOtherRef, nil, others
+	}
+	return lockMissing, nil, nil
+}
+
+// lockCommitHex returns the hex digits of a commit digest such as "sha1-ab12...", or "" when it is not one.
+func lockCommitHex(commit string) string {
+	_, hex, ok := strings.Cut(commit, "-")
+	if !ok || !reLockCommit.MatchString(commit) {
+		return ""
+	}
+	return hex
+}
+
 func (l *actionsLock) fail(line, col int, msg string) {
 	l.fatal = true
 	l.Problems = append(l.Problems, lockProblem{Line: line, Col: col, Msg: msg, Fatal: true})
@@ -442,15 +508,11 @@ func (p *Project) workflowKeyOf(file string) string {
 	return filepath.ToSlash(rel)
 }
 
-// workflowLock returns what the lock file of the repository says about the file being linted, or nil when
-// there is nothing to apply: the repository has no lock file or it cannot be trusted (see actionsLock.usable),
-// or the workflow is not listed in it.
-//
-// The file is a workflow, or the metadata of a local action. The lock file records the actions which an
-// action uses under the workflows which run it with `uses: $/path` (or `./path`), so the steps of an action are
-// pinned when every workflow which runs it, directly or through other local actions, lists the pin. An action
-// which no workflow of the repository runs is not locked.
-func (e *RuleEnv) workflowLock() *workflowLock {
+// lockScope returns the usable lock file of the repository and the workflows it has to say something about for the file
+// being linted: the workflow itself, or for the metadata of a local action the workflows which run it. It returns nil
+// when there is none: the repository has no lock file or it cannot be trusted (see actionsLock.usable), or no
+// workflow runs the action. The workflows are not necessarily listed in the lock file.
+func (e *RuleEnv) lockScope() *lockScope {
 	if e == nil || e.project == nil {
 		return nil
 	}
@@ -466,17 +528,40 @@ func (e *RuleEnv) workflowLock() *workflowLock {
 		if !filepath.IsAbs(p) {
 			p = filepath.Join(e.cwd, p)
 		}
-		keys = []string{e.project.workflowKeyOf(absPath(p))}
+		if k := e.project.workflowKeyOf(absPath(p)); k != "" {
+			keys = []string{k}
+		}
 	}
 	if len(keys) == 0 {
 		return nil
 	}
-	for _, k := range keys {
-		if !lock.listsWorkflow(k) {
+	return &lockScope{lock: lock, keys: keys}
+}
+
+// lockScope is the lock file and the workflows which it is read for.
+type lockScope struct {
+	lock *actionsLock
+	keys []string
+}
+
+// workflowLock returns the lock file as it holds the file being linted to itself, or nil when there is nothing to
+// apply: see lockScope, and every workflow must be listed in the lock file.
+//
+// The file is a workflow, or the metadata of a local action. The lock file records the actions which an
+// action uses under the workflows which run it with `uses: $/path` (or `./path`), so the steps of an action are
+// pinned when every workflow which runs it, directly or through other local actions, lists the pin. An action
+// which no workflow of the repository runs is not locked.
+func (e *RuleEnv) workflowLock() *workflowLock {
+	sc := e.lockScope()
+	if sc == nil {
+		return nil
+	}
+	for _, k := range sc.keys {
+		if !sc.lock.listsWorkflow(k) {
 			return nil
 		}
 	}
-	return &workflowLock{lock: lock, keys: keys}
+	return &workflowLock{lock: sc.lock, keys: sc.keys}
 }
 
 // workflowLock is the lock file as it applies to a file: the workflows which it lists and which run it.

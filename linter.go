@@ -460,6 +460,7 @@ func (l *Linter) repositoryFiles(dir string) ([]string, *Project, error) {
 		return nil, nil, err // a repository with only actions has no workflows directory
 	}
 	files = append(files, p.DependabotFiles()...)
+	files = append(files, p.actionsLockFiles()...)
 	files = append(files, l.callGraphOf(p).actionPaths()...)
 	if len(files) == 0 {
 		return nil, nil, fmt.Errorf("no YAML file was found in %q", p.WorkflowsDir())
@@ -827,6 +828,9 @@ func (l *Linter) check(
 
 	if l.isDependabotFile(path) {
 		return l.checkDependabot(path, content, project, cfg, bl, start)
+	}
+	if l.isActionsLockFile(path) {
+		return l.checkActionsLock(path, content, project, cfg, bl, start)
 	}
 
 	isAction := l.isActionFile(path)

@@ -2387,6 +2387,114 @@ rules:
     actions-lock: false
 ```
 
+#### The rule `actions-lock`
+
+The rule `actions-lock` reads the lock file the way `gh actions-lock --verify-local` does (offline, nothing is looked up), and
+reports where the lock file and the workflows disagree. It reports nothing in a repository which has no lock file, and nothing
+from a lock file whose version is not `v0.0.2` or `v0.0.3` (but a version which is not a version number at all). It is in the `default`
+profile and reports `error`, because a workflow which the lock file lists must list every action it uses (README of `gh actions-lock`:
+"Workflows that are onboarded to the lockfile enforce that all dependencies are present in the lockfile"). The lock file is checked with the
+workflows when the repository is linted (`jactionlint` with no file names), or when you name `.github/workflows/actions.lock`.
+
+An example: a workflow and the lock file of the repository.
+
+```yaml
+# .github/workflows/ci.yml
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      # ERROR: the lock file pins actions/checkout at v4, not at v5
+      - uses: actions/checkout@v5
+      # ERROR: the lock file has no entry for it
+      - uses: actions/setup-node@v4
+```
+
+```yaml
+# .github/workflows/actions.lock
+version: 'v0.0.3'
+workflows:
+    '.github/workflows/ci.yml':
+        - 'actions/cache@v4'     # ERROR: the workflow does not use it any more
+        - 'actions/checkout@v4'  # ERROR: the workflow uses v5 now
+dependencies:
+    'actions/cache@v4':
+        ref: 'v4'
+        commit: 'sha1-0057852bfaa89a56745cba8c7296529d2fc39830'
+        owner_id: 44036562
+        repo_id: 54212171
+    'actions/checkout@v4':
+        ref: 'v4'
+        commit: 'sha1-11bd71901bbe5b1630ceea73d27597364c9af683'
+        owner_id: 44036562
+        repo_id: 197814629
+```
+
+The output of `jactionlint` for this repository:
+
+```
+.github/workflows/ci.yml:7:15: action "actions/checkout@v5" is not in .github/workflows/actions.lock for this workflow, which pins actions/checkout at "v4". the ref was changed after the lock file was written. run `gh actions-lock` to lock the new ref [actions-lock]
+  |
+7 |       - uses: actions/checkout@v5
+  |               ^~~~~~~~~~~~~~~~~~~
+.github/workflows/ci.yml:9:15: action "actions/setup-node@v4" is not in .github/workflows/actions.lock for this workflow. a workflow which the lock file lists must list every action it uses. run `gh actions-lock` to add it [actions-lock]
+  |
+9 |       - uses: actions/setup-node@v4
+  |               ^~~~~~~~~~~~~~~~~~~~~
+.github/workflows/actions.lock:4:11: "actions/cache@v4" is listed for the workflow ".github/workflows/ci.yml" but the workflow does not use it. run `gh actions-lock` to prune the entry [actions-lock]
+  |
+4 |         - 'actions/cache@v4'
+  |           ^~~~~~~~~~~~~~~~~~
+.github/workflows/actions.lock:5:11: "actions/checkout@v4" is listed for the workflow ".github/workflows/ci.yml" but the workflow does not use it. run `gh actions-lock` to prune the entry [actions-lock]
+  |
+5 |         - 'actions/checkout@v4'
+  |           ^~~~~~~~~~~~~~~~~~~~~
+```
+
+What it reports:
+
+- **In a workflow, or in a local action which a listed workflow runs:** an action (`owner/repo@ref`) which the lock file does not
+  list for the workflow, or lists at another ref. A commit SHA in `uses:` is matched with the entry that was resolved to that
+  commit, as `gh actions-lock` does. Reusable workflows and Docker images are not checked, the current `gh actions-lock` does not
+  record them.
+- **In the lock file, an entry which does not follow the format:** a file that is not YAML or has not the keys `version`,
+  `workflows` and `dependencies` of the right shape; a pin that is not `owner/repo@ref`; a dependency without `ref`, without a
+  `commit` that is a digest (`sha1-` and 40 hex digits, or `sha256-` and 64), or without a positive `owner_id` and `repo_id`; a `ref` that
+  differs from the ref of the key (unless the key is a commit SHA, where `ref` is the tag it was found by); a key which is a
+  commit SHA with another `commit`; a `hostname` which is not `github.com` or a tenant of `ghe.com`; a workflow path that goes out of
+  the repository; a pin that has no entry under `dependencies`; dependencies which use each other in a circle. Keys which the
+  rule does not know are ignored.
+- **In the lock file, an entry which nothing uses:** a workflow which does not exist any more, a pin which a listed workflow does not
+  use any more (a version bump without `gh actions-lock` leaves the old pin behind and the new one missing, as in the example), and a
+  dependency which no workflow reaches. The actions which a workflow reaches through `$/path` or `./path` local actions count as used. When something the workflow
+  runs cannot be read (an expression in `uses:`, a local action that does not exist), its pins are not reported as stale.
+
+The option `pedantic` (true under the `pedantic` profile) adds two checks which are a matter of taste: a workflow which the lock file
+does not list (workflows are onboarded one by one, so this can be on purpose), and a commit SHA whose version comment
+(`# v4.0.0`) names another version than the one the lock file resolved the commit from (`# v4` is accepted for `v4.3.1`).
+
+```yaml
+rules:
+  actions-lock:
+    level: error
+    pedantic: true
+```
+
+##### Online: `actions-lock-drift`
+
+With `--online` the rule `actions-lock-drift` compares each pin of the lock file with GitHub, with the answers the other online
+checks use. It reports a pin whose:
+
+- repository is not the one which was locked: GitHub has other IDs for the name than `repo_id` and `owner_id` (the repository was deleted
+  and created again, or the name was taken over), or the repository was renamed or transferred, which the runner refuses;
+- full version tag (`v4.2.1`) points to another commit than `commit` now, which is a moved tag;
+- commit is on no branch or tag of the repository (an impostor commit, as the rule `impostor-commit` finds for a commit in `uses:`).
+
+Mutable refs (`v4`, a branch) may move, so only the history of the commit is checked for them. A repository which GitHub does not
+show (private, deleted) gets no verdict, and neither does a commit which GitHub does not know at all, because both look the same
+to the API. Pins of another instance than `github.com` (`hostname` is a `ghe.com` tenant) are not looked up.
+
 Sources of the format, which this was written from (all of them public): the README of
 [`gh actions-lock`](https://github.com/github/gh-actions-lock), the schema and the Go parser in
 [`github/actions-lockfile`](https://github.com/github/actions-lockfile) (`schema/lockfile-v0.0.3.json`, `go/pkg/lockfile`), and the
@@ -8125,7 +8233,7 @@ way because any caller can pass attacker-controlled text. jactionlint does not l
 
 How the rules treat actions:
 
-- **Applies** to the steps (and the metadata) of an action: `action-syntax`, `adhoc-packages`, `archived-uses`, `artipacked`, `background-step-not-waited`, `checkout-static-credentials`, `constant-condition`, `context-availability`, `continue-on-error`, `deprecated-action-input`, `deprecated-commands`, `duplicate-key`, `duplicate-step-id`, `environment-file-redirect`, `expired-ignore`, `expression-syntax`, `expression-type`, `forbidden-uses`, `github-app`, `if-always-true`, `impostor-commit`, `insecure-commands`, `insecure-ssh-keyscan`, `insecure-url-scheme`, `invalid-env-var-name`, `invalid-function-call`, `invalid-id`, `invalid-ignore-comment`, `invalid-local-action`, `invalid-parallel-step`, `invalid-shell-name`, `invalid-uses`, `invisible-characters`, `known-vulnerable-actions`, `max-run-lines`, `merge-key`, `misfeature`, `missing-action-input`, `obfuscation`, `outdated-action-runner`, `pipeline-without-pipefail`, `pyflakes`, `recursive-alias`, `ref-confusion`, `ref-version-mismatch`, `require-expression-wrapping`, `self-repository`, `shellcheck`, `stale-action-refs`, `superfluous-actions`, `template-injection`, `typosquat-uses`, `undefined-function`, `undefined-property`, `unknown-action-input`, `unlocked-install`, `unpinned-images`, `unpinned-tools`, `unpinned-uses`, `unsound-contains`, `unsound-prefix-match`, `unsound-ternary`, `unused-anchor`, `unused-ignore`, `unverified-download`, `use-trusted-publishing`, `yaml-syntax`.
+- **Applies** to the steps (and the metadata) of an action: `action-syntax`, `actions-lock`, `actions-lock-drift`, `adhoc-packages`, `archived-uses`, `artipacked`, `background-step-not-waited`, `checkout-static-credentials`, `constant-condition`, `context-availability`, `continue-on-error`, `deprecated-action-input`, `deprecated-commands`, `duplicate-key`, `duplicate-step-id`, `environment-file-redirect`, `expired-ignore`, `expression-syntax`, `expression-type`, `forbidden-uses`, `github-app`, `if-always-true`, `impostor-commit`, `insecure-commands`, `insecure-ssh-keyscan`, `insecure-url-scheme`, `invalid-env-var-name`, `invalid-function-call`, `invalid-id`, `invalid-ignore-comment`, `invalid-local-action`, `invalid-parallel-step`, `invalid-shell-name`, `invalid-uses`, `invisible-characters`, `known-vulnerable-actions`, `max-run-lines`, `merge-key`, `misfeature`, `missing-action-input`, `obfuscation`, `outdated-action-runner`, `pipeline-without-pipefail`, `pyflakes`, `recursive-alias`, `ref-confusion`, `ref-version-mismatch`, `require-expression-wrapping`, `self-repository`, `shellcheck`, `stale-action-refs`, `superfluous-actions`, `template-injection`, `typosquat-uses`, `undefined-function`, `undefined-property`, `unknown-action-input`, `unlocked-install`, `unpinned-images`, `unpinned-tools`, `unpinned-uses`, `unsound-contains`, `unsound-prefix-match`, `unsound-ternary`, `unused-anchor`, `unused-ignore`, `unverified-download`, `use-trusted-publishing`, `yaml-syntax`.
 - **Caller-dependent**: `agentic-actions`, `bot-conditions`, `cache-poisoning`, `github-env` (its findings about untrusted input do not depend on the caller), `untrusted-artifact` and `untrusted-checkout`.
 - **Not applicable** because an action does not have what the rule checks, or because only the calling job can decide (`unused-baseline-entry` is about the baseline file, not about a workflow or an action): `anonymous-definition`, `concurrency-cancels-prs`, `concurrency-cancels-release`, `concurrency-limits`, `conflicting-runner-labels`, `cron-too-frequent`, `cyclic-job-needs`, `dangerous-triggers`, `dependabot-cooldown`, `dependabot-execution`, `dependabot-missing-actions-update`, `dependabot-syntax`, `duplicate-job-id`, `duplicate-job-needs`, `duplicate-triggers`, `excessive-permissions`, `gate-job-skipped-on-failure`, `gh-without-token`, `hardcoded-container-credentials`, `invalid-activity-type`, `invalid-cron`, `invalid-event-config`, `invalid-event-filter`, `invalid-glob`, `invalid-label-pattern`, `invalid-local-workflow`, `invalid-permissions`, `invalid-timezone`, `invalid-workflow-call`, `invalid-workflow-call-input`, `invalid-workflow-dispatch-input`, `local-action-checkout`, `matrix-duplicate-value`, `matrix-invalid-exclude`, `missing-permissions`, `missing-timeout`, `missing-workflow-input`, `missing-workflow-secret`, `mutable-runner-label`, `overprovisioned-secrets`, `require-shell`, `required-actions`, `secrets-inherit`, `secrets-outside-env`, `self-hosted-runner`, `timeout-too-long`, `undefined-job-needs`, `undocumented-permissions`, `unknown-event`, `unknown-runner-label`, `unknown-workflow-input`, `unknown-workflow-secret`, `unredacted-secrets`, `unused-baseline-entry`, `unused-job-output`, `unused-needs`, `unused-workflow-input`, `workflow-call-permissions`, `workflow-input-type`, `workflow-run-names`, `workflow-secret-scope`, `workflow-syntax`.
 

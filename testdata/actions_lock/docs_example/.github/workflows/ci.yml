@@ -1,0 +1,9 @@
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      # ERROR: the lock file pins actions/checkout at v4, not at v5
+      - uses: actions/checkout@v5
+      # ERROR: the lock file has no entry for it
+      - uses: actions/setup-node@v4

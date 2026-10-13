@@ -1,0 +1,6 @@
+name: setup
+description: setup
+runs:
+  using: composite
+  steps:
+    - uses: jdx/mise-action@v5.1.1
