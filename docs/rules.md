@@ -59,6 +59,7 @@ rules:
 | [dependabot-syntax](#dependabot-syntax) | correctness | error | correctness |
 | [deprecated-action-input](#deprecated-action-input) | correctness | error | correctness |
 | [deprecated-commands](#deprecated-commands) | correctness | error | correctness |
+| [deprecated-node-runtime](#deprecated-node-runtime) | policy | warn | pedantic |
 | [duplicate-job-id](#duplicate-job-id) | correctness | error | correctness |
 | [duplicate-job-needs](#duplicate-job-needs) | correctness | error | correctness |
 | [duplicate-key](#duplicate-key) | correctness | error | correctness |
@@ -417,6 +418,15 @@ A deprecated workflow command such as ::set-output is used.
 - Default level: error
 - Profile: correctness
 - Details and examples: [checks](./checks.md#check-deprecated-workflow-commands)
+
+## deprecated-node-runtime
+
+A Node.js runtime that GitHub Actions removed is declared or configured.
+
+- Group: policy
+- Default level: warn
+- Profile: pedantic
+- Details and examples: [checks](./checks.md#check-deprecated-node-runtime)
 
 ## duplicate-job-id
 
