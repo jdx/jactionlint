@@ -421,7 +421,7 @@ A deprecated workflow command such as ::set-output is used.
 
 ## deprecated-node-runtime
 
-A Node.js runtime that GitHub Actions removed is declared or configured.
+A Node.js runtime that GitHub Actions removed is declared by an action or by an action that is used.
 
 - Group: policy
 - Default level: warn

@@ -151,11 +151,11 @@
                 "level": "error"
               },
               "properties": {
-                "description": "Checks for Node.js runtimes which GitHub Actions removed: runs.using of an action",
+                "description": "Checks for Node.js runtimes which GitHub Actions removed: runs.using of an action and the popular actions at majors that declare one",
                 "queryURI": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
               },
               "fullDescription": {
-                "text": "Checks for Node.js runtimes which GitHub Actions removed: runs.using of an action"
+                "text": "Checks for Node.js runtimes which GitHub Actions removed: runs.using of an action and the popular actions at majors that declare one"
               },
               "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
             },

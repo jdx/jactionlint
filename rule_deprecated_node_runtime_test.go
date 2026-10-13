@@ -2,6 +2,8 @@ package jactionlint
 
 import (
 	"io"
+	"regexp"
+	"strings"
 	"testing"
 )
 
@@ -74,6 +76,92 @@ func TestDeprecatedNodeRuntimeIsPedantic(t *testing.T) {
 	found := deprecatedNodeRuntimeFindings(lintActionWithConfig(t, &Config{Profile: ProfilePedantic}, src))
 	if len(found) != 1 || found[0].Severity != SeverityWarning {
 		t.Errorf("the pedantic profile reports a warning: %v", found)
+	}
+}
+
+func lintWorkflowForRuntime(t *testing.T, steps string) []*Error {
+	t.Helper()
+	src := "on: push\npermissions: {}\njobs:\n  a:\n    runs-on: ubuntu-latest\n    timeout-minutes: 5\n    steps:\n" + steps
+	cfg := &Config{Rules: map[string]RuleConfig{"deprecated-node-runtime": {Level: SeverityWarning}}}
+	return deprecatedNodeRuntimeFindings(lintWithConfig(t, cfg, src))
+}
+
+func TestDeprecatedNodeRuntimeOfPopularActions(t *testing.T) {
+	const sha = "11bd71901bbe5b1630ceea73d27597364c9af683"
+	tests := []struct {
+		name  string
+		uses  string
+		want  string // a substring of the message, or "" when nothing is reported
+		notIn string // a substring that the message must not have
+	}{
+		{name: "a node20 major", uses: "actions/checkout@v4", want: `update the action to "actions/checkout@v5" or newer, which declares "node24"`},
+		{name: "a full version of a node20 major", uses: "actions/checkout@v4.2.2", want: `(checked as "actions/checkout@v4", the major version of the tag)`},
+		{name: "a commit with a version comment", uses: "actions/checkout@" + sha + " # v4.2.2", want: `the version comment "# v4.2.2" says so`},
+		{name: "an action in a subdirectory", uses: "actions/cache/restore@v4", want: `"actions/cache/restore@v5" or newer`},
+		{name: "a newer major which is also node20 is skipped", uses: "actions/download-artifact@v5", want: `"actions/download-artifact@v7" or newer`},
+		{name: "a path of the CodeQL action", uses: "github/codeql-action/analyze@v3", want: `"github/codeql-action/analyze@v4" or newer`},
+		{name: "a key which is not a major version", uses: "actions/download-artifact@v3-node20", want: `update the action to a release that declares "node24"`, notIn: "or newer"},
+		{name: "the node24 major", uses: "actions/checkout@v5"},
+		{name: "the latest major", uses: "actions/checkout@v7"},
+		{name: "a runtime older than node20 is outdated-action-runner's", uses: "actions/checkout@v3"},
+		{name: "a commit without a version comment", uses: "actions/checkout@" + sha},
+		{name: "a branch", uses: "actions/checkout@main"},
+		{name: "an action that is not known", uses: "someone/unknown-action@v1"},
+		{name: "a local action", uses: "./.github/actions/setup"},
+		{name: "a docker image", uses: "docker://alpine:3"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			found := lintWorkflowForRuntime(t, "      - uses: "+tc.uses+"\n")
+			if tc.want == "" {
+				if len(found) != 0 {
+					t.Fatalf("unexpected: %v", found)
+				}
+				return
+			}
+			if len(found) != 1 || !strings.Contains(found[0].Message, tc.want) {
+				t.Fatalf("want one finding with %q, got %v", tc.want, found)
+			}
+			if tc.notIn != "" && strings.Contains(found[0].Message, tc.notIn) {
+				t.Errorf("the message must not have %q: %v", tc.notIn, found[0])
+			}
+			if found[0].Line != 8 || found[0].Severity != SeverityWarning {
+				t.Errorf("want a warning at line 8, got %v", found[0])
+			}
+		})
+	}
+}
+
+// The steps of a composite action use popular actions like the steps of a job do.
+func TestDeprecatedNodeRuntimeInCompositeSteps(t *testing.T) {
+	src := "name: x\ndescription: x\nruns:\n  using: composite\n  steps:\n    - uses: actions/setup-node@v4\n"
+	cfg := &Config{Rules: map[string]RuleConfig{"deprecated-node-runtime": {Level: SeverityWarning}}}
+	found := deprecatedNodeRuntimeFindings(lintActionWithConfig(t, cfg, src))
+	if len(found) != 1 || found[0].Line != 6 {
+		t.Fatalf("want one finding at line 6, got %v", found)
+	}
+}
+
+// The data of the runtimes is generated next to the inputs of the actions: it names known actions, and an outdated action
+// is not in it.
+func TestPopularActionRuntimesData(t *testing.T) {
+	isNode := regexp.MustCompile(`^node[0-9]+$`)
+	for spec, rt := range PopularActionRuntimes {
+		if _, ok := PopularActions[spec]; !ok {
+			t.Errorf("%s has a runtime but no metadata", spec)
+		}
+		if _, ok := OutdatedPopularActionSpecs[spec]; ok {
+			t.Errorf("%s is outdated and has a runtime", spec)
+		}
+		if !isNode.MatchString(rt) {
+			t.Errorf("%s has the runtime %q", spec, rt)
+		}
+	}
+	// A released major keeps its runtime
+	for spec, want := range map[string]string{"actions/checkout@v4": "node20", "actions/checkout@v5": "node24", "github/codeql-action/init@v3": "node20"} {
+		if got := PopularActionRuntimes[spec]; got != want {
+			t.Errorf("%s: want %s, got %q", spec, want, got)
+		}
 	}
 }
 

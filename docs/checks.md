@@ -7983,26 +7983,36 @@ A label in a matrix is reported but never fixed, because the same value may be c
 Example input:
 
 ```yaml
-name: Build
-description: Builds the project
-runs:
-  # ERROR: Node.js 20 is gone, the runner runs this action on Node.js 24
-  using: node20
-  main: dist/index.js
+on: push
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      # ERROR: the major version declares node20
+      - uses: actions/checkout@v4
+      # ERROR: the same for a commit with a version comment
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      # OK
+      - uses: actions/checkout@v5
 ```
 
 Output:
 <!-- Skip update output -->
 ```
-.github/actions/example/action.yml:5:10: warning: "runs.using" of this action is "node20", but Node.js 20 was removed from GitHub Actions on 2026-09-23, so the runner runs the action on Node.js 24 instead of the runtime it declares. declare "node24" and test the action on Node.js 24 (GitHub Enterprise Server and old self-hosted runners may still need the old name) [deprecated-node-runtime]
+test.yaml:8:15: warning: action "actions/checkout@v4" declares the Node.js runtime "node20" in its metadata, but Node.js 20 was removed from GitHub Actions on 2026-09-23, so the runner runs the action on Node.js 24 instead of the runtime it declares. update the action to "actions/checkout@v5" or newer, which declares "node24" [deprecated-node-runtime]
   |
-5 |   using: node20
-  |          ^~~~~~~
+8 |       - uses: actions/checkout@v4
+  |               ^~~~~~~~~~~~~~~~~~~
+test.yaml:10:15: warning: action "actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020" (checked as "actions/setup-node@v4": the version comment "# v4.4.0" says so, and nothing verifies the comment) declares the Node.js runtime "node20" in its metadata, but Node.js 20 was removed from GitHub Actions on 2026-09-23, so the runner runs the action on Node.js 24 instead of the runtime it declares. update the action to "actions/setup-node@v5" or newer, which declares "node24" [deprecated-node-runtime]
+   |
+10 |       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+   |               ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 ```
 
 <!-- Skip playground link -->
 
-The example input is the metadata file of a JavaScript action (`action.yml`). The output above is from the following `rules` section of the [configuration file](config.md):
+The output above is from the following `rules` section of the [configuration file](config.md):
 
 ```yaml
 rules:
@@ -8017,13 +8027,29 @@ has. GitHub removed Node.js 20 on 2026-09-23 ([changelog][node20-removed]; the p
 
 That is why the rule is not part of the `default` or `correctness` profile: the action does not fail, and jactionlint cannot tell
 a runner on github.com from GitHub Enterprise Server or an old self-hosted runner, where `node20` can still be the runtime that runs.
-The finding says what is true everywhere: the action declares a runtime that was never the one it runs on at GitHub, so nobody
-tested it there. Declare `node24`, test the action on Node.js 24 and publish a new release.
+The finding says what holds everywhere: the action declares a runtime that the runner on github.com does not provide. It checks two things.
 
-This check covers `runs.using` of the action file that is linted (a local action under `.github/actions`, or the one in the root
-of an action repository). A workflow that calls a local action is not reported again: the metadata file of the action is.
-`node12` and `node16` in a local action are also reported by [`invalid-local-action`](#action-metadata-syntax) where a workflow
-calls it, because the runner does not document them anymore.
+**The actions that a workflow uses.** The generated data of the popular actions (`PopularActionRuntimes`) records the `runs.using` of every
+major version they know, taken from the `action.yml` of that major when the data was generated. A `uses:` of a major that declares
+`node20` is reported, with the oldest newer major that does not (`actions/checkout@v4` gets `v5`; `actions/download-artifact@v5` gets `v7`
+because `v6` is also `node20`). The major version is found as the checks of the inputs find it: from the ref, from a full version
+such as `v4.2.2`, or from the version comment of a commit SHA (`# v4.2.2`), and the message says which. A commit without a version comment is
+not reported, because nothing says which release it is. Actions that are not in the data, local actions and `docker://` images are not
+reported, and neither is a major that declares a runtime older than `node20`: [`outdated-action-runner`](#detect-outdated-popular-actions)
+reports it as an error.
+
+**The metadata of an action.** The `runs.using` of the `action.yml` that is linted (a local action under `.github/actions`, or the
+one in the root of an action repository) is reported when it is `node20`, `node16` or `node12`, with the advice to declare `node24`:
+
+```yaml
+runs:
+  using: node20 # warning: Node.js 20 was removed from GitHub Actions on 2026-09-23 ...
+  main: dist/index.js
+```
+
+A workflow that calls a local action is not reported a second time: the metadata file of the action is. `node12` and `node16` in a local
+action are also reported by [`invalid-local-action`](#action-metadata-syntax) where a workflow calls it, because the runner does not document them
+anymore.
 
 [yamllint]: https://github.com/adrienverge/yamllint
 [node20-removed]: https://github.blog/changelog/2026-09-23-node-20-is-no-longer-available-in-github-actions
