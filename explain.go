@@ -19,7 +19,7 @@ var reAnchorLine = regexp.MustCompile(`^<a id="([^"]+)"></a>\s*$`)
 // checksSection returns the section of docs/checks.md which starts at the anchor, as Markdown: from its heading
 // to the next heading of the same level. It is empty when there is no such anchor.
 func checksSection(doc, anchor string) string {
-	lines := strings.Split(doc, "\n")
+	lines := strings.Split(strings.ReplaceAll(doc, "\r\n", "\n"), "\n") // a Windows checkout can have CRLF
 	start := -1
 	for i, l := range lines {
 		if m := reAnchorLine.FindStringSubmatch(l); m != nil && m[1] == anchor {
