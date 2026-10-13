@@ -7498,6 +7498,10 @@ that of [`agentic-actions`](#check-agentic-actions). It looks for:
 - a job that the job `needs` and that has one of these, or a condition that reads `needs` or `steps` (an earlier job or step decided);
 - an AI agent action that checks the write access of the user itself (`anthropics/claude-code-action` unless `allowed_non_write_users` is `*`).
 
+A step that checks, or an agent that does, protects the steps after it and itself, not the steps before it: a check after the work does not
+stop the work from running with the token and the secrets (a checkout before the check does not count as work). An agent that another comment
+starts (`@claude` in a `/deploy` job) does not run for this comment, so it protects nothing.
+
 A job that calls a reusable workflow is not looked into, because the callee may check the user.
 
 It is a heuristic and the tier is pedantic for that reason: it cannot tell a check that is correct from a mention of the actor, and an action or

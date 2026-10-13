@@ -336,3 +336,42 @@ jobs:
       - uses: anthropics/claude-code-action@64c7a0ef71df67b14cb4d6fdbf1b77a1c6fc1d3c # v1.0.9
         if: startsWith(github.event.comment.body, '/deploy')
       - run: ./deploy.sh
+
+  # The check has to come before the work: a check after it does not stop it from running with the token and the secrets
+  job-condition-check-after-work:
+    runs-on: ubuntu-latest
+    if: contains(github.event.comment.body, '/deploy')
+    steps:
+      - run: ./deploy.sh
+        env:
+          TOKEN: ${{ secrets.DEPLOY_TOKEN }}
+      - uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        with:
+          script: |
+            const { data } = await github.rest.repos.getCollaboratorPermissionLevel({
+              owner: context.repo.owner, repo: context.repo.repo, username: context.actor,
+            });
+            if (!['admin', 'write'].includes(data.permission)) core.setFailed('not allowed');
+
+  # ... a command action after the work, too
+  job-condition-command-after-work:
+    runs-on: ubuntu-latest
+    if: startsWith(github.event.comment.body, '/')
+    steps:
+      - run: ./deploy.sh
+      - uses: github/command@v1
+
+  # ... a checkout runs no code, so a check after it is in time
+  job-condition-check-after-checkout:
+    runs-on: ubuntu-latest
+    if: contains(github.event.comment.body, '/deploy')
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        with:
+          script: |
+            const { data } = await github.rest.repos.getCollaboratorPermissionLevel({
+              owner: context.repo.owner, repo: context.repo.repo, username: context.actor,
+            });
+            if (!['admin', 'write'].includes(data.permission)) core.setFailed('not allowed');
+      - run: ./deploy.sh

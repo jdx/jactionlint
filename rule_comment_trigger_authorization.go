@@ -1,5 +1,7 @@
 package jactionlint
 
+import "strings"
+
 // commentTriggers are the events whose payload is a comment that anyone who can comment writes.
 var commentTriggers = []string{"issue_comment", "pull_request_review_comment", "discussion_comment"}
 
@@ -120,12 +122,26 @@ func (rule *RuleCommentTriggerAuthorization) VisitJobPre(n *Job) error {
 		return nil
 	}
 	steps := flattenSteps(n.Steps)
-	// the condition of the job reads the text: the job is started by it, and a step of the job that checks the user (and
-	// fails) comes before the work. Otherwise each step whose condition reads the text is judged on its own: a guard
-	// step protects the steps after it, the condition or the environment of the job all of them.
+	// The condition of the job reads the text: the job is started by it, and every step is judged, the first that anybody
+	// can start is reported. Otherwise each step whose condition reads the text is judged on its own. For both the same
+	// rule of order holds: a guard protects the steps after it (and a step that is a guard, itself), never the steps before
+	// it; the condition or the environment of the job protects all of them.
 	if readsCommentBody(n.If) {
-		if !rule.guardedByContext(n, n.If, steps, steps, nil) {
-			rule.report(n.If)
+		if len(steps) == 0 {
+			if !rule.guardedByContext(n, n.If, nil, nil, nil) {
+				rule.report(n.If)
+			}
+			return nil
+		}
+		for i, s := range steps {
+			// a checkout runs no code: a check after it is in time
+			if a, ok := s.Exec.(*ExecAction); ok && i < len(steps)-1 && usesAction(strings.ToLower(a.Uses.Value), "actions/checkout") {
+				continue
+			}
+			if !rule.guardedByContext(n, n.If, steps[:i+1], steps[:i], s) {
+				rule.report(n.If) // once for the job
+				break
+			}
 		}
 		return nil
 	}
