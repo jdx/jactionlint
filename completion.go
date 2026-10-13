@@ -188,9 +188,9 @@ func zshOptionSpec(o compOption) string {
 	switch {
 	case o.arg == "":
 	case o.rules == compRuleList:
-		action = fmt.Sprintf(":%s:_values -s , 'rule ID' $rules", zshEscape(strings.ToLower(o.arg)))
+		action = fmt.Sprintf(":%s:{_values -s , \"rule ID\" $rules}", zshEscape(strings.ToLower(o.arg)))
 	case o.rules == compRuleID:
-		action = fmt.Sprintf(":%s:($rules)", zshEscape(strings.ToLower(o.arg)))
+		action = fmt.Sprintf(":%s:{compadd -a rules}", zshEscape(strings.ToLower(o.arg)))
 	case len(o.choices) > 0:
 		action = fmt.Sprintf(":%s:(%s)", zshEscape(strings.ToLower(o.arg)), strings.Join(zshWords(o.choices), " "))
 	case o.file:
@@ -285,7 +285,8 @@ func writePowerShellCompletion(w io.Writer, opts []compOption, ids []string) err
 	b.WriteString("    param($wordToComplete, $commandAst, $cursorPosition)\n")
 	var psOpts []string
 	for _, o := range opts {
-		psOpts = append(psOpts, fmt.Sprintf("@{ Name = %s; Short = %s; Arg = %s; Help = %s }", psQuote("--"+o.long), psQuote(shortName(o)), psQuote(o.arg), psQuote(o.help)))
+		psOpts = append(psOpts, fmt.Sprintf("@{ Name = %s; Short = %s; Arg = %s; Optional = %s; File = %s; List = %s; Help = %s }",
+			psQuote("--"+o.long), psQuote(shortName(o)), psQuote(o.arg), psBool(o.optional), psBool(o.file), psBool(o.rules == compRuleList), psQuote(o.help)))
 	}
 	b.WriteString("    $options = @(\n        " + strings.Join(psOpts, ",\n        ") + "\n    )\n")
 	b.WriteString("    $values = @{\n")
@@ -302,19 +303,30 @@ func writePowerShellCompletion(w io.Writer, opts []compOption, ids []string) err
 	}
 	b.WriteString("    }\n")
 	b.WriteString(`    $words = @($commandAst.CommandElements | ForEach-Object { $_.ToString() })
-    $prev = if ($wordToComplete -eq '' ) { $words[-1] } elseif ($words.Count -ge 2) { $words[-2] } else { '' }
-    $opt = $null; $prefix = ''; $word = $wordToComplete
-    if ($word -match '^(--[^=]+)=(.*)$') { $opt = $Matches[1]; $prefix = $opt + '='; $word = $Matches[2] }
-    elseif ($prev -like '--*' -or $prev -like '-?') {
-        $o = $options | Where-Object { ($_.Name -eq $prev -or $_.Short -eq $prev) -and $_.Arg -ne '' } | Select-Object -First 1
-        if ($o) { $opt = $o.Name }
+    $prev = if ($wordToComplete -eq '') { $words[-1] } elseif ($words.Count -ge 2) { $words[-2] } else { '' }
+    $o = $null; $prefix = ''; $word = $wordToComplete
+    if ($word -match '^(--[^=]+)=(.*)$') {
+        $o = $options | Where-Object { $_.Name -eq $Matches[1] -and $_.Arg -ne '' } | Select-Object -First 1
+        if ($o) { $prefix = $Matches[1] + '='; $word = $Matches[2] }
+    } elseif ($words.Count -ge 2 -and $words[-1] -match '^(--[^=]+)=.*,') {
+        # --option=a,b,c: PowerShell reads a list and completes its last element only, which replaces just that element
+        $o = $options | Where-Object { $_.Name -eq $Matches[1] -and $_.Arg -ne '' } | Select-Object -First 1
+    } elseif ($prev -like '-*') {
+        # A value which is optional follows only "=": after a space it is a file name, not "--color always"
+        $o = $options | Where-Object { ($_.Name -eq $prev -or $_.Short -eq $prev) -and $_.Arg -ne '' -and -not $_.Optional } | Select-Object -First 1
     }
-    if ($opt) {
+    if ($o) {
+        # A comma separated list: complete its last element and keep the ones before it
         $head = ''
-        # In a comma separated list PowerShell completes the last element only
-        if ($values.ContainsKey($opt)) {
-            $values[$opt] | Where-Object { $_ -like "$word*" } | ForEach-Object {
+        if ($o.List -and $word.Contains(',')) { $i = $word.LastIndexOf(','); $head = $word.Substring(0, $i + 1); $word = $word.Substring($i + 1) }
+        if ($values.ContainsKey($o.Name)) {
+            $values[$o.Name] | Where-Object { $_ -like "$word*" } | ForEach-Object {
                 [System.Management.Automation.CompletionResult]::new($prefix + $head + $_, $_, 'ParameterValue', $_)
+            }
+        } elseif ($o.File -and $prefix -ne '') {
+            # After "--option=" PowerShell does not complete file names itself. Elsewhere returning nothing does
+            [System.Management.Automation.CompletionCompleters]::CompleteFilename($word) | ForEach-Object {
+                [System.Management.Automation.CompletionResult]::new($prefix + $_.CompletionText, $_.ListItemText, $_.ResultType, $_.ToolTip)
             }
         }
         return
@@ -325,10 +337,18 @@ func writePowerShellCompletion(w io.Writer, opts []compOption, ids []string) err
             if ($_.Short -and $_.Short -like "$wordToComplete*") { [System.Management.Automation.CompletionResult]::new($_.Short, $_.Short, 'ParameterName', $_.Help) }
         }
     }
+    # Anything else (the files to lint) falls back to the file name completion of PowerShell
 }
 `)
 	_, err := io.WriteString(w, b.String())
 	return err
+}
+
+func psBool(b bool) string {
+	if b {
+		return "$true"
+	}
+	return "$false"
 }
 
 func shortName(o compOption) string {

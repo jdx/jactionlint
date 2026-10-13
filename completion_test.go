@@ -189,3 +189,147 @@ try 2 jactionlint --config-file nothing-here
 		t.Error("sarif must be offered for --format")
 	}
 }
+
+// TestZshSpecsAreBalanced checks the quotes of the specs of _arguments. Each spec is one single quoted word, so a quote
+// inside it ends it early and the rest becomes words of their own (zsh -n does not see that).
+func TestZshSpecsAreBalanced(t *testing.T) {
+	script := completionScript(t, "zsh")
+	_, body, _ := strings.Cut(script, "_arguments -s -S \\\n")
+	body, _, _ = strings.Cut(body, "}\n")
+	n := 0
+	for _, line := range strings.Split(body, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		line = strings.TrimSuffix(line, " \\")
+		n++
+		if !strings.HasPrefix(line, "'") || !strings.HasSuffix(line, "'") {
+			t.Errorf("a spec is not one quoted word: %s", line)
+			continue
+		}
+		// A single quote of the text is written as '\'' (end, a quoted quote, start)
+		inner := strings.ReplaceAll(line, `'\''`, "")
+		if c := strings.Count(inner, "'"); c != 2 {
+			t.Errorf("%d unescaped single quotes in the spec, want 2: %s", c, line)
+		}
+	}
+	if n < len(cliOptions) {
+		t.Errorf("%d specs for %d options", n, len(cliOptions))
+	}
+}
+
+// TestZshArgumentsWords runs the zsh function with an _arguments which lists its words: every word is an option spec,
+// so none of them was split by a quote.
+func TestZshArgumentsWords(t *testing.T) {
+	zsh, err := exec.LookPath("zsh")
+	if err != nil || runtime.GOOS == "windows" {
+		t.Skip("zsh is not available")
+	}
+	f := writeTemp(t, "c.zsh", completionScript(t, "zsh"))
+	out, err := exec.Command(zsh, "-f", "-c", `_arguments() { print -rl -- "$@"; }; compdef() { :; }; source "$1"; _jactionlint`, "zsh", f).CombinedOutput()
+	if err != nil {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	specs := 0
+	for _, w := range strings.Split(strings.TrimSuffix(string(out), "\n"), "\n") {
+		switch {
+		case w == "-s" || w == "-S":
+		case strings.HasPrefix(w, "-"), strings.HasPrefix(w, "(- *)"), strings.HasPrefix(w, "*:"):
+			specs++
+		default:
+			t.Errorf("a stray word given to _arguments: %q", w)
+		}
+	}
+	if specs < len(cliOptions) {
+		t.Errorf("%d specs for %d options", specs, len(cliOptions))
+	}
+	if !strings.Contains(string(out), `:rules:{_values -s , "rule ID" $rules}`) {
+		t.Errorf("the list of rule IDs is not completed as a comma separated list:\n%s", out)
+	}
+}
+
+// TestPowerShellCompleterText checks what the PowerShell completer knows about the options.
+func TestPowerShellCompleterText(t *testing.T) {
+	s := completionScript(t, "powershell")
+	for _, want := range []string{
+		"Name = '--color'; Short = ''; Arg = 'WHEN'; Optional = $true;",
+		"Name = '--fix'; Short = ''; Arg = 'unsafe'; Optional = $true;",
+		"Name = '--fix-rules'; Short = ''; Arg = 'RULES'; Optional = $false; File = $false; List = $true;",
+		"Name = '--config-file'; Short = '-c'; Arg = 'FILE'; Optional = $false; File = $true;",
+		"CompleteFilename",
+	} {
+		if !strings.Contains(s, want) {
+			t.Errorf("the PowerShell script does not contain %q", want)
+		}
+	}
+}
+
+// TestPowerShellCompletion drives the completer with TabExpansion2 when a working pwsh is available. The shim of a
+// version manager does not run outside of its project, so JACTIONLINT_TEST_PWSH names the real one.
+func TestPowerShellCompletion(t *testing.T) {
+	name := os.Getenv("JACTIONLINT_TEST_PWSH")
+	if name == "" {
+		name = "pwsh"
+	}
+	pwsh, err := exec.LookPath(name)
+	if err != nil {
+		t.Skip("pwsh is not installed")
+	}
+	if err := exec.Command(pwsh, "-NoProfile", "-Command", "1").Run(); err != nil {
+		t.Skipf("pwsh does not run: %v", err)
+	}
+	script := writeTemp(t, "c.ps1", completionScript(t, "powershell"))
+	cases := []struct {
+		line string
+		want []string // some completion has this text
+		not  []string // no completion has this text
+	}{
+		{"jactionlint --format ", []string{"sarif"}, nil},
+		{"jactionlint --fix-rules missing-timeout,unpinned-u", []string{"unpinned-uses"}, nil},
+		{"jactionlint --fix-rules=missing-timeout,unpinned-u", []string{"unpinned-uses"}, nil},
+		{"jactionlint --fix-rules=a,missing-timeout,unpinned-u", []string{"unpinned-uses"}, nil},
+		{"jactionlint --color=al", []string{"--color=always"}, nil},
+		{"jactionlint --color ", nil, []string{"always", "never", "auto"}},
+		{"jactionlint --fix ", nil, []string{"unsafe"}},
+		{"jactionlint --fix=un", []string{"--fix=unsafe"}, nil},
+		{"jactionlint --config-file=docs/us", []string{"--config-file=./docs/usage.md"}, nil},
+		{"jactionlint --config-file docs/us", []string{"./docs/usage.md"}, nil},
+		{"jactionlint docs/us", []string{"./docs/usage.md"}, nil},
+	}
+	var cmds strings.Builder
+	cmds.WriteString(". $env:JACTIONLINT_TEST_PS1\n")
+	for _, c := range cases {
+		cmds.WriteString("$l = '" + c.line + "'; $r = TabExpansion2 -inputScript $l -cursorColumn $l.Length; '=== ' + $l; $r.CompletionMatches | ForEach-Object { $_.CompletionText }\n")
+	}
+	cmd := exec.Command(pwsh, "-NoProfile", "-NonInteractive", "-Command", cmds.String())
+	cmd.Env = append(os.Environ(), "JACTIONLINT_TEST_PS1="+script)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	results := map[string][]string{}
+	var cur string
+	for _, l := range strings.Split(strings.ReplaceAll(string(out), "\r\n", "\n"), "\n") {
+		if strings.HasPrefix(l, "=== ") {
+			cur = strings.TrimPrefix(l, "=== ")
+			continue
+		}
+		if l != "" {
+			results[cur] = append(results[cur], l)
+		}
+	}
+	for _, c := range cases {
+		got := results[c.line]
+		for _, w := range c.want {
+			if !slices.Contains(got, w) {
+				t.Errorf("%q: no completion %q in %v", c.line, w, got[:min(len(got), 5)])
+			}
+		}
+		for _, n := range c.not {
+			if slices.Contains(got, n) {
+				t.Errorf("%q: completion %q must not be offered (%v)", c.line, n, got[:min(len(got), 5)])
+			}
+		}
+	}
+}
