@@ -182,64 +182,127 @@ func (f *shellSecretFlow) run() {
 	}
 }
 
-// sourcesOf returns the secret and the variable names that the word reads, and the tool that changes them when the
-// word is a command substitution.
-func (f *shellSecretFlow) sourcesOf(w *runscript.Word) (secret, how string, ok bool) {
-	// the word itself: variables and expressions
-	read := func(w *runscript.Word) (string, bool) {
-		for _, name := range w.Vars {
-			if s, ok := f.secrets[name]; ok {
-				return s, true
-			}
-			if d, ok := f.derived[name]; ok {
-				return d.secret, true
+// The model has one question and one answer: what does this word hold, in terms of secrets, once the shell has expanded
+// it (wordValue)? Everything else asks it: an assignment gives the variable that value, a print looks at the value of the
+// words it writes, and the trace of `set -x` looks at every command that expands one.
+//
+//   - a variable holds what the script put into it (a secret, or a cut of one);
+//   - `${{ secrets.X }}` holds the secret;
+//   - `${SECRET#prefix}` and its kind hold a cut;
+//   - a command substitution holds what its last command prints: followed back along the pipe, through echo, printf, cat and
+//     the tools that cut a text, down to a command that reads a secret (a here-string, a heredoc or, for the tools that run a
+//     program, an argument), and each of those reads is a word or a heredoc again. Any other command in the way (curl,
+//     wc, sha256sum) holds nothing.
+//
+// The value is "exact" (how is empty: the runner masks it) or "cut" (how names the tool).
+
+// wval is what a word holds.
+type wval struct {
+	ok     bool   // it holds a secret, exactly or cut
+	secret string // the name of the secret
+	how    string // empty for the exact secret, else how it was cut
+	name   string // the variable that holds it, when it comes from one
+}
+
+func (v wval) derived() bool { return v.ok && v.how != "" }
+
+// better keeps the value that is the cut one, and the first of two that are alike.
+func better(a, b wval) wval {
+	if !a.ok || a.how == "" && b.ok && b.how != "" {
+		return b
+	}
+	return a
+}
+
+// wordValue is what the word holds after it is expanded.
+func (f *shellSecretFlow) wordValue(w *runscript.Word) wval {
+	var v wval
+	for _, name := range w.Vars {
+		if s, ok := f.secrets[name]; ok {
+			v = better(v, wval{true, s, "", name})
+		}
+		if d, ok := f.derived[name]; ok {
+			if d.masked { // the runner knows the value now, as it knows a secret
+				v = better(v, wval{true, d.secret, "", name})
+			} else {
+				v = better(v, wval{true, d.secret, d.how, name})
 			}
 		}
-		for _, e := range w.Exprs {
-			if m := secretExprRe.FindStringSubmatch(e); m != nil {
-				return strings.ToUpper(m[1] + m[2]), true
-			}
+	}
+	for _, e := range w.Exprs {
+		if m := secretExprRe.FindStringSubmatch(e); m != nil {
+			v = better(v, wval{true, strings.ToUpper(m[1] + m[2]), "", ""})
 		}
-		return "", false
 	}
-	if len(w.Subs) == 0 {
-		return "", "", false
+	if s, ok := f.cutsSecret(w); ok {
+		v = better(v, wval{true, s, "a cut of its value", ""})
 	}
-	// stdinSecret is the secret that a command reads as data: a here-string or heredoc, or (for the tools that run
-	// code) an argument.
-	reads := func(c *runscript.Command, args bool) (string, bool) {
-		for _, r := range f.redirects[c] {
-			if r.Op == "<<<" && r.Target != nil {
-				if s, ok := read(r.Target); ok {
-					return s, true
+	if len(w.Subs) > 0 {
+		v = better(v, f.substitutionValue(w))
+	}
+	return v
+}
+
+// commandInput is the best value that the command reads as data: a here-string, a heredoc that expands, and, with args,
+// its arguments (the tools that run a program take the secret there).
+func (f *shellSecretFlow) commandInput(c *runscript.Command, args bool) wval {
+	var v wval
+	for _, r := range f.redirects[c] {
+		if r.Op == "<<<" && r.Target != nil {
+			v = better(v, f.wordValue(r.Target))
+		}
+		if r.Heredoc != nil && !r.Heredoc.Quoted {
+			for _, name := range varsIn(r.Heredoc.Body) {
+				if s, ok := f.secrets[name]; ok {
+					v = better(v, wval{true, s, "", name})
+				}
+				if d, ok := f.derived[name]; ok && !d.masked {
+					v = better(v, wval{true, d.secret, d.how, name})
 				}
 			}
-			if r.Heredoc != nil && !r.Heredoc.Quoted {
-				for _, name := range varsIn(r.Heredoc.Body) {
-					if s, ok := f.secretOf(name); ok {
-						return s, true
-					}
+			for _, e := range r.Heredoc.Exprs {
+				if m := secretExprRe.FindStringSubmatch(e); m != nil {
+					v = better(v, wval{true, strings.ToUpper(m[1] + m[2]), "", ""})
 				}
 			}
 		}
-		if args {
-			for _, sw := range c.Words {
-				if s, ok := read(sw); ok {
-					return s, true
-				}
-			}
-		}
-		return "", false
 	}
-	// The value of the substitution is what its last command prints. Follow it back along the pipeline: it is cut from
-	// the secret when only echo, printf, cat and the tools that cut a text stand between them (`echo "$S" | base64 -d |
-	// jq -r .key`), and not when another command is in the way (`curl -u "$S" ... | jq -r .id` reads the answer of a
-	// service, `... | wc -c` counts).
+	if args {
+		for _, w := range c.Words {
+			v = better(v, f.wordValue(w))
+		}
+	}
+	return v
+}
+
+// substitutionValue is what the command substitutions of the word hold: what the last command prints, followed back along
+// its pipe.
+func (f *shellSecretFlow) substitutionValue(w *runscript.Word) wval {
+	// the commands that are inside the words or the here-strings of another command of the substitution are its inputs,
+	// not its last command
+	nested := map[*runscript.Command]bool{}
+	for _, sub := range w.Subs {
+		for _, sw := range sub.Words {
+			for _, n := range sw.Subs {
+				nested[n] = true
+			}
+		}
+		for _, r := range f.redirects[sub] {
+			if r.Target != nil {
+				for _, n := range r.Target.Subs {
+					nested[n] = true
+				}
+			}
+		}
+	}
 	var last *runscript.Command
 	for _, sub := range w.Subs {
-		if last == nil || sub.End > last.End {
+		if !nested[sub] && (last == nil || sub.End > last.End) {
 			last = sub
 		}
+	}
+	if last == nil {
+		return wval{}
 	}
 	chain := []*runscript.Command{last}
 	if last.Pipeline != nil {
@@ -252,24 +315,28 @@ func (f *shellSecretFlow) sourcesOf(w *runscript.Word) (secret, how string, ok b
 			}
 		}
 	}
+	how := ""
 	for _, c := range chain {
 		switch {
 		case isDerivationTool(c.Name):
 			if how == "" {
 				how = c.Name
 			}
-			if s, ok := reads(c, codeTools[c.Name] || pythonToolNameRe.MatchString(c.Name)); ok {
-				return s, how, true
+			if in := f.commandInput(c, codeTools[c.Name] || pythonToolNameRe.MatchString(c.Name)); in.ok {
+				return wval{true, in.secret, how, ""}
 			}
 		case c.Name == "echo" || c.Name == "printf" || c.Name == "cat":
-			if s, ok := reads(c, true); ok {
-				return s, how, how != ""
+			if in := f.commandInput(c, true); in.ok {
+				if how == "" {
+					how = in.how // a cut value that is only passed on is still that cut
+				}
+				return wval{true, in.secret, how, ""}
 			}
 		default:
-			return "", "", false
+			return wval{}
 		}
 	}
-	return "", "", false
+	return wval{}
 }
 
 // codeTools are the derivation tools that take a program as an argument, which can hold the secret as data.
@@ -289,14 +356,11 @@ func isDerivationTool(name string) bool {
 	return slices.Contains(derivationTools, name) || pythonToolNameRe.MatchString(name)
 }
 
-// cutsSecret reports whether the word expands a secret variable in a way that cuts it
+// cutsSecret reports whether the word expands a variable that holds a secret in a way that cuts it
 // (`${SECRET#prefix}`, `${SECRET:0:8}`, `${SECRET//x/y}`).
 func (f *shellSecretFlow) cutsSecret(w *runscript.Word) (secret string, ok bool) {
 	for _, name := range w.Vars {
-		s, isSecret := f.secrets[name]
-		if d, isDerived := f.derived[name]; isDerived && !isSecret {
-			s, isSecret = d.secret, true
-		}
+		s, isSecret := f.secretOf(name)
 		if !isSecret {
 			continue
 		}
@@ -318,51 +382,39 @@ func (f *shellSecretFlow) secretOf(name string) (string, bool) {
 	return "", false
 }
 
-func (f *shellSecretFlow) assign(a *runscript.Assignment) {
-	name := a.Name
-	if a.Append && !a.Array {
-		// `KEY+=suffix` keeps the derived value it extends, and a secret it extends still holds the whole secret
-		if f.derived[name] != nil {
-			return
+// set gives a variable the value: an exact secret stays one, a cut value is derived, and anything else is neither. With
+// appends the old value stays in it. Under `set -x` the shell shows the assignment with the value expanded.
+func (f *shellSecretFlow) set(loc runscript.Loc, name string, v wval, appends bool) {
+	if appends {
+		if f.derived[name] == nil && v.derived() {
+			f.derived[name] = &derived{secret: v.secret, how: v.how}
 		}
-		if a.Value != nil {
-			if secret, how, ok := f.sourcesOf(a.Value); ok {
-				f.derived[name] = &derived{secret: secret, how: how}
-				if f.xtrace {
-					f.report(a.Loc, name, f.derived[name], "xtrace")
-				}
-			}
-		}
-		return
-	}
-	delete(f.derived, name)
-	if a.Value == nil || a.Array {
-		delete(f.secrets, name)
-		return
-	}
-	w := a.Value
-	if v, ok := w.Var(); ok {
-		// a copy: the exact value of a secret is still masked, a derived one still is not
-		if d := f.derived[v]; d != nil {
-			f.derived[name] = &derived{secret: d.secret, how: d.how, masked: d.masked}
-			return
-		}
-		if s, ok := f.secrets[v]; ok {
-			f.secrets[name] = s
-			return
-		}
-	}
-	delete(f.secrets, name)
-	if secret, how, ok := f.sourcesOf(w); ok {
-		f.derived[name] = &derived{secret: secret, how: how}
-	} else if secret, ok := f.cutsSecret(w); ok {
-		f.derived[name] = &derived{secret: secret, how: "a cut of its value"}
 	} else {
+		delete(f.derived, name)
+		delete(f.secrets, name)
+		switch {
+		case v.ok && v.how == "":
+			f.secrets[name] = v.secret
+		case v.derived():
+			f.derived[name] = &derived{secret: v.secret, how: v.how}
+		}
+	}
+	if d := f.derived[name]; d != nil && f.xtrace && !d.masked && !d.reported {
+		f.report(loc, name, d, "xtrace")
+	}
+}
+
+func (f *shellSecretFlow) assign(a *runscript.Assignment) {
+	if a.Array {
+		delete(f.derived, a.Name)
+		delete(f.secrets, a.Name)
 		return
 	}
-	if f.xtrace {
-		f.report(a.Loc, name, f.derived[name], "xtrace")
+	var v wval
+	if a.Value != nil {
+		v = f.wordValue(a.Value)
 	}
+	f.set(a.Loc, a.Name, v, a.Append)
 }
 
 func (f *shellSecretFlow) command(c *runscript.Command) {
@@ -382,38 +434,50 @@ func (f *shellSecretFlow) command(c *runscript.Command) {
 		}
 		return
 	}
+	// `printf -v NAME FORMAT ARGS` assigns the text to NAME and prints nothing
+	if c.Name == "printf" {
+		for i, a := range c.Args {
+			if a.Value == "-v" && i+2 <= len(c.Args)-1 && !c.Args[i+1].Dynamic() {
+				var v wval
+				for _, w := range c.Args[i+2:] {
+					v = better(v, f.wordValue(w))
+				}
+				f.set(c.Loc, c.Args[i+1].Value, v, false)
+				return
+			}
+		}
+	}
 	isMask := false
 	for _, w := range c.Args {
 		if strings.HasPrefix(w.Value, "::add-mask::") && (c.Name == "echo" || c.Name == "printf") {
 			isMask = true
 		}
 	}
-	prints := f.prints(c)
-	for _, name := range f.usedVars(c) {
-		d := f.derived[name]
-		if d == nil || d.masked || d.reported {
-			continue
+	switch {
+	case f.xtrace:
+		// the trace shows every command with its expansions: a variable that is cut from a secret, also inside a
+		// substitution, and a substitution that cuts one
+		for _, name := range f.allVars(c) {
+			if d := f.derived[name]; d != nil && !d.masked && !d.reported {
+				f.report(c.Loc, name, d, "xtrace")
+			}
 		}
-		switch {
-		case f.xtrace:
-			f.report(c.Loc, name, d, "xtrace")
-		case prints && !isMask:
-			f.report(c.Loc, name, d, "print")
-		}
-	}
-	// a value cut by a substitution in the words of the command: printed by the command, or by the trace of `set -x`
-	// (which shows every command with its substitutions expanded, whatever the command is)
-	if (prints && !isMask) || f.xtrace {
 		for _, w := range c.Words {
-			if len(w.Subs) == 0 {
+			if len(w.Subs) > 0 {
+				if v := f.substitutionValue(w); v.derived() {
+					f.report(c.Loc, "", &derived{secret: v.secret, how: v.how}, "xtrace")
+				}
+			}
+		}
+	case f.prints(c) && !isMask:
+		for _, v := range f.printed(c) {
+			if !v.derived() {
 				continue
 			}
-			if secret, how, ok := f.sourcesOf(w); ok {
-				kind := "print"
-				if f.xtrace {
-					kind = "xtrace"
-				}
-				f.report(c.Loc, "", &derived{secret: secret, how: how}, kind)
+			if v.name == "" {
+				f.report(c.Loc, "", &derived{secret: v.secret, how: v.how}, "print")
+			} else if d := f.derived[v.name]; d != nil && !d.masked && !d.reported {
+				f.report(c.Loc, v.name, d, "print")
 			}
 		}
 	}
@@ -428,19 +492,39 @@ func (f *shellSecretFlow) command(c *runscript.Command) {
 	}
 }
 
-// usedVars returns the shell variables that the command expands: in its words, in a here-string and in a heredoc
-// that expands them.
-func (f *shellSecretFlow) usedVars(c *runscript.Command) []string {
-	var out []string
-	for _, w := range c.Words {
-		out = append(out, w.Vars...)
+// printed returns what the command writes: the words of echo and printf, and the input of cat.
+func (f *shellSecretFlow) printed(c *runscript.Command) []wval {
+	if c.Name == "cat" {
+		return []wval{f.commandInput(c, false)}
 	}
-	for _, r := range f.redirects[c] {
-		if r.Op == "<<<" && r.Target != nil {
-			out = append(out, r.Target.Vars...)
+	var out []wval
+	for _, w := range c.Words {
+		out = append(out, f.wordValue(w))
+	}
+	return out
+}
+
+// allVars returns the shell variables that the command expands: in its words, in the commands inside its substitutions, in
+// a here-string and in a heredoc that expands them.
+func (f *shellSecretFlow) allVars(c *runscript.Command) []string {
+	var out []string
+	one := func(c *runscript.Command) {
+		for _, w := range c.Words {
+			out = append(out, w.Vars...)
 		}
-		if r.Heredoc != nil && !r.Heredoc.Quoted {
-			out = append(out, varsIn(r.Heredoc.Body)...)
+		for _, r := range f.redirects[c] {
+			if r.Op == "<<<" && r.Target != nil {
+				out = append(out, r.Target.Vars...)
+			}
+			if r.Heredoc != nil && !r.Heredoc.Quoted {
+				out = append(out, varsIn(r.Heredoc.Body)...)
+			}
+		}
+	}
+	one(c)
+	for _, w := range c.Words {
+		for _, sub := range w.Subs { // at any depth
+			one(sub)
 		}
 	}
 	return out
@@ -475,26 +559,6 @@ func (f *shellSecretFlow) prints(c *runscript.Command) bool {
 		if strings.HasPrefix(w.Value, "::set-output") || strings.HasPrefix(w.Value, "::save-state") {
 			return false
 		}
-	}
-	if c.Name == "cat" {
-		// `cat <<<"$KEY"` and a heredoc that expands it
-		for _, r := range f.redirects[c] {
-			if r.Op == "<<<" && r.Target != nil {
-				for _, name := range r.Target.Vars {
-					if d := f.derived[name]; d != nil && !d.masked {
-						return true
-					}
-				}
-			}
-			if r.Heredoc != nil && !r.Heredoc.Quoted {
-				for _, name := range varsIn(r.Heredoc.Body) {
-					if d := f.derived[name]; d != nil && !d.masked {
-						return true
-					}
-				}
-			}
-		}
-		return false
 	}
 	return true
 }

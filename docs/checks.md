@@ -7413,7 +7413,9 @@ and `echo` (or the trace of `set -x`) writes it in clear text. The check follows
 Not reported: the value as the argument of another command (`curl -H "Authorization: $KEY"`, `./deploy --key "$KEY"`), a value written to a
 file or to `$GITHUB_ENV` or `$GITHUB_OUTPUT`, a value piped into another command (`echo "$KEY" | base64 -d > key.pem`), the exact
 secret or a string that contains it, a hash (`sha256sum`) or a count (`wc -c`) of it, and the answer of a service that gets the secret as
-credentials (`curl -u "$S" ... | jq -r .id`). Only `bash` and `sh` scripts are looked at, and no function, loop or branch is followed
+credentials (`curl -u "$S" ... | jq -r .id`). Substitutions inside substitutions, `${{ secrets.X }}` in a heredoc, copies (`B="$A"`),
+`+=` and `printf -v NAME ...` (which assigns and prints nothing) are followed, and under `set -x` every command that expands a cut
+value is reported, an assignment included. Only `bash` and `sh` scripts are looked at, and no function, loop or branch is followed
 separately: the order of the source decides.
 
 <a id="check-secrets-outside-env"></a>
