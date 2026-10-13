@@ -1,0 +1,3 @@
+test.yaml:8:12: "${ github.ref }" is not an expression: GitHub expands only `${{ }}` with two braces, so this text reaches the workflow as it is. write `${{ github.ref }}` [malformed-expression-delimiters]
+test.yaml:10:12: "$ {{ github.sha }}" is not an expression: the opening delimiter must be written `${{` without a space. write "${{ github.sha }}" [malformed-expression-delimiters]
+test.yaml:12:14: "{{ github.run_number }}" is not an expression: it has no `$`, and GitHub expands only `${{ }}`, so this text reaches the workflow as it is. write "${{ github.run_number }}" [malformed-expression-delimiters]

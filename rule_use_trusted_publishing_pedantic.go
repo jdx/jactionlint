@@ -100,7 +100,7 @@ func (rule *RuleUseTrustedPublishing) checkJobPedantic(job *Job) {
 				continue
 			}
 			for _, c := range s.Commands {
-				if eco, cmd, ok := publishCommand(c); ok {
+				if eco, cmd, ok := publishCommand(c, func(v string) string { return rule.registryFromEnv(step, v) }); ok {
 					if eco == "npm" && rule.npmRegistryIsPrivate(step, s, c) {
 						continue
 					}

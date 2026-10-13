@@ -107,7 +107,7 @@ func (rule *RuleUseTrustedPublishing) checkRun(step *Step, run *ExecRun) {
 		return
 	}
 	for _, c := range s.Commands {
-		eco, cmd, ok := publishCommand(c)
+		eco, cmd, ok := publishCommand(c, func(v string) string { return rule.registryFromEnv(step, v) })
 		if !ok {
 			continue
 		}
@@ -149,7 +149,7 @@ var npmRegistrySettings = []string{"registry", "npmregistryserver", "npmpublishr
 func (rule *RuleUseTrustedPublishing) npmRegistryIsPrivate(step *Step, s *runscript.Script, publish *runscript.Command) bool {
 	for _, f := range publish.Flags {
 		if f.Name == "--registry" && f.Value != nil {
-			return !registryValueIsPublic(f.Value.Value)
+			return !registryValueIsPublic(rule.registryFromEnv(step, f.Value.Value))
 		}
 	}
 	envPublic := false
@@ -190,7 +190,7 @@ func (rule *RuleUseTrustedPublishing) npmRegistryIsPrivate(step *Step, s *runscr
 				continue
 			}
 			if r, ok := inputValue(e, "registry-url"); ok && r != "" {
-				private = !registryValueIsPublic(r)
+				private = !registryValueIsPublic(rule.registryFromEnv(st, r))
 			}
 		}
 	}
@@ -361,6 +361,23 @@ func (rule *RuleUseTrustedPublishing) registryEnvAppliesTo(name, tool string) bo
 	return tool == "npm" || tool == "pnpm" || tool == "yarn"
 }
 
+// envRegistryRegex matches a registry that is the whole value of a variable of the `env` context.
+var envRegistryRegex = regexp.MustCompile(`^\$\{\{\s*env\.([A-Za-z_][A-Za-z0-9_]*)\s*\}\}$`)
+
+// registryFromEnv returns the registry that an expression of the form `${{ env.NAME }}` stands for, when the workflow
+// sets NAME for the step (at the step, the job or the workflow) to a value that is written out. Any other value is
+// returned as it is.
+func (rule *RuleUseTrustedPublishing) registryFromEnv(step *Step, v string) string {
+	m := envRegistryRegex.FindStringSubmatch(strings.TrimSpace(strings.Trim(strings.TrimSpace(v), `"'`)))
+	if m == nil {
+		return v
+	}
+	if val, ok := rule.envValue(step, m[1]); ok && !val.ContainsExpression() {
+		return val.Value
+	}
+	return v
+}
+
 // registryValueIsPublic reports whether the value is the public registry of npm or empty. An expression is not.
 func registryValueIsPublic(v string) bool {
 	v = strings.TrimSpace(strings.Trim(strings.TrimSpace(v), `"'`))
@@ -509,8 +526,9 @@ func (rule *RuleUseTrustedPublishing) checkPowerShell(step *Step, run *ExecRun, 
 }
 
 // publishCommand reports whether the command publishes a package to a public registry that supports trusted
-// publishing. It returns the ecosystem and the command as written in messages.
-func publishCommand(c *runscript.Command) (eco, cmd string, ok bool) {
+// publishing. It returns the ecosystem and the command as written in messages. resolve turns the value of a registry
+// that is a variable of the workflow (`${{ env.REGISTRY }}`) into what the workflow sets it to.
+func publishCommand(c *runscript.Command, resolve func(string) string) (eco, cmd string, ok bool) {
 	if p := c.Publishes(); p != nil {
 		if p.Kind != "package" || p.DryRun {
 			return "", "", false
@@ -527,7 +545,7 @@ func publishCommand(c *runscript.Command) (eco, cmd string, ok bool) {
 		default:
 			return "", "", false
 		}
-		if p.Registry != nil && !registryIsPublic(p.Registry) {
+		if p.Registry != nil && !registryIsPublic(p.Registry, resolve) {
 			return "", "", false
 		}
 		return eco, strings.TrimSpace(p.Tool + " " + p.Verb), true
@@ -597,11 +615,16 @@ func fallbackRegistryIsPrivate(c *runscript.Command) bool {
 	return false
 }
 
-func registryIsPublic(w *runscript.Word) bool {
+func registryIsPublic(w *runscript.Word, resolve func(string) string) bool {
+	v := w.Value
 	if w.Dynamic() {
-		return false
+		// a variable of the workflow with a value that is written out is not dynamic
+		v = resolve(w.Value)
+		if v == w.Value || ContainsExpression(v) {
+			return false
+		}
 	}
-	return slices.Contains(publicRegistries, w.Value)
+	return slices.Contains(publicRegistries, strings.TrimSpace(v))
 }
 
 // publishingAction is an action that publishes to a registry which supports trusted publishing.
