@@ -25,6 +25,21 @@
               "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
             },
             {
+              "id": "action-input-dependencies",
+              "name": "ActionInputDependencies",
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "description": "Checks inputs of well-known actions which only work together",
+                "queryURI": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+              },
+              "fullDescription": {
+                "text": "Checks inputs of well-known actions which only work together"
+              },
+              "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+            },
+            {
               "id": "artipacked",
               "name": "Artipacked",
               "defaultConfiguration": {
@@ -96,6 +111,21 @@
               },
               "fullDescription": {
                 "text": "Checks that cancel-in-progress does not cancel a release or a deployment which is running"
+              },
+              "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+            },
+            {
+              "id": "concurrency-deadlock",
+              "name": "ConcurrencyDeadlock",
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "description": "Checks for a concurrency group which a workflow and the reusable workflow it calls share",
+                "queryURI": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+              },
+              "fullDescription": {
+                "text": "Checks for a concurrency group which a workflow and the reusable workflow it calls share"
               },
               "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
             },
@@ -201,6 +231,21 @@
               },
               "fullDescription": {
                 "text": "Checks for writes to GITHUB_OUTPUT and the other environment files that lose the data at \"run:\""
+              },
+              "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+            },
+            {
+              "id": "event-name-never-received",
+              "name": "EventNameNeverReceived",
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "description": "Checks for \"github.event_name\" compared with an event that the workflow never receives",
+                "queryURI": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+              },
+              "fullDescription": {
+                "text": "Checks for \"github.event_name\" compared with an event that the workflow never receives"
               },
               "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
             },

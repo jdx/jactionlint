@@ -67,6 +67,12 @@ func exprReadsUntrustedInput(text string) bool {
 	if n == nil {
 		return false
 	}
+	return nodeReadsUntrustedInput(n)
+}
+
+// nodeReadsUntrustedInput is exprReadsUntrustedInput for a parsed expression. A reference with an index
+// (`pull_requests[0].head.ref`) cannot be written again as text, so the rules that look at the references use this one.
+func nodeReadsUntrustedInput(n ExprNode) bool {
 	u := NewUntrustedInputChecker(BuiltinUntrustedInputs)
 	u.Init()
 	VisitExprNode(n, func(node, _ ExprNode, entering bool) {
@@ -194,6 +200,17 @@ type data struct {
 	input string
 	// via is the environment variable the untrusted input went through, "" when it is used directly.
 	via string
+	// cmd is true when input is not an expression but the command of the script that printed the text (see
+	// script_taint.go), multiline whether that text can hold a line break.
+	cmd, multiline bool
+}
+
+// mayHaveNewline reports whether the untrusted text can hold a line break.
+func (d data) mayHaveNewline() bool {
+	if d.cmd {
+		return d.multiline
+	}
+	return exprMayHaveNewline(d.input)
 }
 
 func (d data) worse(o data) data {
