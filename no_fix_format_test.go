@@ -19,7 +19,7 @@ var updateNoFixGoldens = flag.Bool("update-nofix-goldens", false, "rewrite the e
 // missing option (missing-timeout), a lookup that is off (unpinned-uses), an unsafe fix (insecure-commands),
 // and one that needs a person (template-injection), next to findings with a safe fix and with none by design.
 func noFixGoldenConfig(t *testing.T) *Config {
-	return mustParseConfig(t, "rules:\n  missing-timeout: error\n  unpinned-uses: error\n  insecure-commands: error\n  template-injection: error\n")
+	return mustParseConfig(t, "rules:\n  missing-timeout: error\n  unpinned-uses: error\n  missing-permissions: error\n  concurrency-limits: error\n  insecure-commands: error\n  template-injection: error\n")
 }
 
 func lintNoFixGolden(t *testing.T, format string) string {
@@ -91,16 +91,27 @@ func TestNoFixSARIFContract(t *testing.T) {
 		} else if !ok && code != "" {
 			t.Errorf("%s: unexpected noFixCode %q", id, code)
 		}
-		if _, has := res["fixes"]; !has && id == "missing-permissions" {
-			t.Errorf("a finding with a safe fix lost its fixes")
-		}
-		if id == "concurrency-limits" && code != "" {
-			t.Errorf("an advice-only finding must have no reason: %v", props)
+		switch id {
+		case "missing-permissions":
+			seen[id] = true
+			if _, has := res["fixes"]; !has {
+				t.Errorf("a finding with a safe fix lost its fixes")
+			}
+		case "concurrency-limits":
+			seen[id] = true
+			if code != "" {
+				t.Errorf("an advice-only finding must have no reason: %v", props)
+			}
 		}
 	}
 	for id := range want {
 		if !seen[id] {
 			t.Errorf("%s: noFixCode %q not found", id, want[id])
+		}
+	}
+	for _, id := range []string{"missing-permissions", "concurrency-limits"} {
+		if !seen[id] {
+			t.Errorf("%s was not reported, so its case is not tested", id)
 		}
 	}
 }
