@@ -174,8 +174,8 @@ func init() {
 			ID: "action-release-cooldown", Group: RuleGroupSecurity, Summary: "An action is pinned to a version released less than the cooldown ago.",
 			DefaultLevel: SeverityWarning, Online: true, OptIn: true, DocsAnchor: "check-action-release-cooldown",
 			Options: []RuleOption{{
-				Name: "days", Kind: RuleOptionInt, Default: actionReleaseCooldownDefaultDays,
-				Summary: "How many days a version must be old. The date is the publication of its release on GitHub, else the date of its commit. The rule runs only when \"rules\" has an entry for it, and only with the online checks.",
+				Name: "days", Kind: RuleOptionInt, Min: 1, Default: actionReleaseCooldownDefaultDays,
+				Summary: "How many days a version must be old (at least 1). The date is the publication of its release on GitHub, else the date of its commit. The rule runs only when \"rules\" has an entry for it, and only with the online checks.",
 			}},
 		},
 	)

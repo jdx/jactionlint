@@ -195,7 +195,7 @@ An action is pinned to a version released less than the cooldown ago.
 - Default level: warn
 - Profile: only with `--online`, and only when `rules` has an entry for it (opt-in)
 - Needs network access: yes (only with `--online`)
-- Option `days` (int, default 7): How many days a version must be old. The date is the publication of its release on GitHub, else the date of its commit. The rule runs only when "rules" has an entry for it, and only with the online checks.
+- Option `days` (int, default 7): How many days a version must be old (at least 1). The date is the publication of its release on GitHub, else the date of its commit. The rule runs only when "rules" has an entry for it, and only with the online checks.
 - Details and examples: [checks](./checks.md#check-action-release-cooldown)
 
 ## action-syntax

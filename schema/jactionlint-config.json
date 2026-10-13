@@ -884,8 +884,8 @@
               "properties": {
                 "days": {
                   "default": 7,
-                  "description": "How many days a version must be old. The date is the publication of its release on GitHub, else the date of its commit. The rule runs only when \"rules\" has an entry for it, and only with the online checks.",
-                  "minimum": 0,
+                  "description": "How many days a version must be old (at least 1). The date is the publication of its release on GitHub, else the date of its commit. The rule runs only when \"rules\" has an entry for it, and only with the online checks.",
+                  "minimum": 1,
                   "type": "integer"
                 },
                 "level": {

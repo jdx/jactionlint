@@ -101,6 +101,9 @@ type RuleOption struct {
 	Default any
 	// Summary describes the option.
 	Summary string
+	// Min is the smallest value of an int option, when it is not 0. It is checked when the configuration is read and is the
+	// "minimum" of the JSON schema.
+	Min int
 	// Validate checks the value after it was normalized to the type of Kind. It can be nil.
 	Validate func(v any) error
 }
