@@ -138,22 +138,25 @@ func (rule *RuleCommentTriggerAuthorization) VisitJobPre(n *Job) error {
 	return nil
 }
 
+// agentsForComment returns the steps that can run for the comment that the condition site reads: a step that is started by
+// another comment (`@claude` for a `/deploy` job) does not run for this one, so its agent guards nothing here. A step whose
+// condition does not read the text runs for every comment; one that reads it counts when it is the step that is judged, or
+// has the very condition of the site (the job, or the step, that is judged).
+func agentsForComment(steps []*Step, site *String, step *Step) []*Step {
+	own := make([]*Step, 0, len(steps))
+	for _, s := range steps {
+		if s == step || !readsCommentBody(s.If) || site != nil && s.If != nil && s.If.Value == site.Value {
+			own = append(own, s)
+		}
+	}
+	return own
+}
+
 // guardedByContext reports whether something decides who can reach the condition: an earlier job or step, the labels, an
 // AI agent action that checks the write access of the user itself, or the check of the user of agentic-actions. agents
 // are the steps that count for the agent, prev the steps before the one that is judged (nil step: the job as a whole).
 func (rule *RuleCommentTriggerAuthorization) guardedByContext(n *Job, site *String, agents, prev []*Step, step *Step) bool {
-	// An earlier step that is started by another comment (`@claude`) does not run for this one, so its agent guards
-	// nothing here; the step that is judged may be the agent itself.
-	if step != nil {
-		own := make([]*Step, 0, len(agents))
-		for _, a := range agents {
-			if a == step || !readsCommentBody(a.If) {
-				own = append(own, a)
-			}
-		}
-		agents = own
-	}
-	if readsEarlierDecision(site) || runsGatedAgent(agents) {
+	if readsEarlierDecision(site) || runsGatedAgent(agentsForComment(agents, site, step)) {
 		return true
 	}
 	// A step that is itself started by the text is a command, not a guard of the steps after it, even if its own

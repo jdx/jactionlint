@@ -310,3 +310,29 @@ jobs:
     if: startsWith(github.event.comment.body, '/')
     steps:
       - uses: github/command@v1
+
+  # The same holds when the job condition is the one that reads the text: an agent that another comment starts does not guard it
+  job-condition-other-agent:
+    runs-on: ubuntu-latest
+    if: startsWith(github.event.comment.body, '/deploy')
+    steps:
+      - uses: anthropics/claude-code-action@64c7a0ef71df67b14cb4d6fdbf1b77a1c6fc1d3c # v1.0.9
+        if: contains(github.event.comment.body, '@claude')
+      - run: ./deploy.sh
+
+  # ... an agent without a condition on the text runs for this comment, and checks the user
+  job-condition-agent-always:
+    runs-on: ubuntu-latest
+    if: startsWith(github.event.comment.body, '/deploy')
+    steps:
+      - uses: anthropics/claude-code-action@64c7a0ef71df67b14cb4d6fdbf1b77a1c6fc1d3c # v1.0.9
+      - run: ./deploy.sh
+
+  # ... and so does an agent that has the same condition as the job
+  job-condition-agent-same:
+    runs-on: ubuntu-latest
+    if: startsWith(github.event.comment.body, '/deploy')
+    steps:
+      - uses: anthropics/claude-code-action@64c7a0ef71df67b14cb4d6fdbf1b77a1c6fc1d3c # v1.0.9
+        if: startsWith(github.event.comment.body, '/deploy')
+      - run: ./deploy.sh
