@@ -25,6 +25,13 @@
           "minimum": 1,
           "type": "integer"
         },
+        "events": {
+          "description": "The sorted names of the events which trigger the workflow. Only with --finding-context, and for a workflow.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
         "filepath": {
           "description": "The path of the file, relative to the working directory when possible. It is omitted for the input of stdin without a name.",
           "type": "string"
@@ -123,6 +130,13 @@
             "code",
             "reason"
           ],
+          "type": "object"
+        },
+        "permissions": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "The permissions of the token of the job the finding is in, scope to read, write, none or unknown (an expression decides it); the scope * is read-all, write-all, an empty mapping (none) or an expression (unknown). Only with --finding-context, and when the file configures them.",
           "type": "object"
         },
         "severity": {

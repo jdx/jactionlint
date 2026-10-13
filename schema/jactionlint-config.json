@@ -115,6 +115,7 @@
               "concurrency-cancels-prs",
               "concurrency-cancels-release",
               "concurrency-limits",
+              "conflicting-action-inputs",
               "conflicting-runner-labels",
               "constant-condition",
               "context-availability",
@@ -135,6 +136,7 @@
               "duplicate-step-id",
               "duplicate-triggers",
               "environment-file-redirect",
+              "event-name-never-received",
               "excessive-permissions",
               "expired-ignore",
               "expression-syntax",
@@ -332,6 +334,7 @@
                   "concurrency-cancels-prs",
                   "concurrency-cancels-release",
                   "concurrency-limits",
+                  "conflicting-action-inputs",
                   "conflicting-runner-labels",
                   "constant-condition",
                   "context-availability",
@@ -352,6 +355,7 @@
                   "duplicate-step-id",
                   "duplicate-triggers",
                   "environment-file-redirect",
+                  "event-name-never-received",
                   "excessive-permissions",
                   "expired-ignore",
                   "expression-syntax",
@@ -480,6 +484,7 @@
                     "concurrency-cancels-prs",
                     "concurrency-cancels-release",
                     "concurrency-limits",
+                    "conflicting-action-inputs",
                     "conflicting-runner-labels",
                     "constant-condition",
                     "context-availability",
@@ -500,6 +505,7 @@
                     "duplicate-step-id",
                     "duplicate-triggers",
                     "environment-file-redirect",
+                    "event-name-never-received",
                     "excessive-permissions",
                     "expired-ignore",
                     "expression-syntax",
@@ -739,6 +745,19 @@
       "description": "Configuration for the files matching a glob pattern, relative to the repository root. The path separator is always /.",
       "type": [
         "object",
+        "null"
+      ]
+    },
+    "platform": {
+      "description": "The system which runs the workflows: github (the default), or forgejo or gitea, which also accept `uses: https://host/owner/repo@ref` for an action. That form stays an error on github.",
+      "enum": [
+        "github",
+        "forgejo",
+        "gitea",
+        null
+      ],
+      "type": [
+        "string",
         "null"
       ]
     },
@@ -1113,6 +1132,28 @@
         },
         "concurrency-limits": {
           "description": "A workflow does not cancel superseded runs with concurrency:. Group: policy. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#concurrency-limits",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "conflicting-action-inputs": {
+          "description": "Two inputs of a well-known action exclude each other. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#conflicting-action-inputs",
           "oneOf": [
             {
               "$ref": "#/definitions/level"
@@ -1573,6 +1614,28 @@
         },
         "environment-file-redirect": {
           "description": "A script writes to GITHUB_OUTPUT or another environment file of the runner without the $, or empties it with > after it wrote to it. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#environment-file-redirect",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "event-name-never-received": {
+          "description": "github.event_name is compared with an event that the workflow never receives, so the comparison is always false. Group: correctness. Profile: pedantic. Default level: warn. https://jactionlint.jdx.dev/rules#event-name-never-received",
           "oneOf": [
             {
               "$ref": "#/definitions/level"
