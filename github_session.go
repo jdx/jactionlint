@@ -445,6 +445,34 @@ func (s *onlineSession) record(err error, what string) {
 	}
 	kind := classifyFailure(err)
 	s.failedLocked(kind, what, err)
+	s.streakLocked(err, kind)
+}
+
+// recordList accounts for the request of the list of advisories like record does, except that a failure is not a skipped
+// lookup and is not warned about: the lookups by action which follow it are, if they fail as well. A list which worked ends
+// the streak of failures in a row, a list which is too long is an answer too, and a failure counts in the streak like any other.
+func (s *onlineSession) recordList(err error) {
+	if errors.Is(err, errAdvisoryListUnavailable) {
+		return // nothing was asked
+	}
+	if errors.Is(err, ErrGitHubListTruncated) {
+		err = nil // the API answered
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	switch {
+	case err == nil, errors.Is(err, ErrGitHubNotFound):
+		s.transient = 0
+		return
+	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded) && s.ctx.Err() != nil:
+		s.stopLocked(err)
+		return
+	}
+	s.streakLocked(err, classifyFailure(err))
+}
+
+// streakLocked counts the failure in the streak of failures in a row and blocks the run when asking again cannot work.
+func (s *onlineSession) streakLocked(err error, kind failureKind) {
 	var scoped *hostScopedError
 	if errors.As(err, &scoped) {
 		return // the failure of one host does not stop the lookups of the other one
@@ -630,7 +658,9 @@ func (s *onlineSession) actionAdvisories() ([]GitHubAdvisory, bool) {
 		if err := s.blockedErr(); err != nil {
 			return nil, err
 		}
-		return lc.ActionAdvisories(s.ctx)
+		l, err := lc.ActionAdvisories(s.ctx)
+		s.recordList(err)
+		return l, err
 	})
 	if err != nil {
 		s.advisoryListFailed(err)
