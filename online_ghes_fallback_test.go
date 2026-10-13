@@ -14,6 +14,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 )
 
 // twoHosts makes a fake Enterprise Server and a fake github.com, and points the client at them. The Server has the
@@ -372,13 +373,18 @@ func TestFallbackClientEnvironmentsAreTheServers(t *testing.T) {
 // stubClient answers every question of a repository with the error, and counts the questions.
 type stubClient struct {
 	GitHubClient
-	err error
-	n   atomic.Int32
+	err  error
+	repo *GitHubRepo // the answer when there is no err
+	n    atomic.Int32
 }
 
 func (c *stubClient) Repository(context.Context, string, string) (*GitHubRepo, error) {
 	c.n.Add(1)
-	return nil, c.err
+	if c.err != nil {
+		return nil, c.err
+	}
+	cp := *c.repo
+	return &cp, nil
 }
 
 // A github.com which does not answer (a firewall which drops the packets, a proxy which hangs) costs the whole timeout of each
@@ -475,5 +481,128 @@ func TestRateLimitAdviceWithoutAFallback(t *testing.T) {
 	}
 	if s := (&GitHubRateLimitError{Authenticated: true, TokenHint: "X"}).Error(); strings.Contains(s, "X") {
 		t.Errorf("a request with a token needs no advice: %s", s)
+	}
+}
+
+// The count of failures in a row restarts at every answer of github.com: a repository it has, one it does not have, and also a refusal
+// (403) or a rejected request (422), which prove that the host is there. Only timeouts, server errors and the like count.
+func TestFallbackClientAnyAnswerOfGitHubComEndsTheStreak(t *testing.T) {
+	timeout := &net.OpError{Op: "dial", Err: timeoutErr{}}
+	for _, tc := range []struct {
+		name   string
+		answer func(c *fallbackGitHubClient, sec *stubClient)
+	}{
+		{"a repository which it has", func(c *fallbackGitHubClient, sec *stubClient) {
+			sec.err, sec.repo = nil, &GitHubRepo{}
+			c.Repository(context.Background(), "o", "found")
+		}},
+		{"a repository which it does not have", func(c *fallbackGitHubClient, sec *stubClient) {
+			sec.err = fmt.Errorf("x: %w", ErrGitHubNotFound)
+			c.Repository(context.Background(), "o", "missing")
+		}},
+		{"a refusal", func(c *fallbackGitHubClient, sec *stubClient) {
+			c.fromSecondary(&GitHubStatusError{Status: http.StatusForbidden})
+		}},
+		{"a rejected request", func(c *fallbackGitHubClient, sec *stubClient) {
+			c.fromSecondary(&GitHubStatusError{Status: http.StatusUnprocessableEntity})
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			sec := &stubClient{err: timeout}
+			c := newFallbackGitHubClient(&stubClient{err: fmt.Errorf("x: %w", ErrGitHubNotFound)}, sec)
+			for i := 0; i < maxConsecutiveGitHubFailures-1; i++ {
+				c.fromSecondary(timeout)
+			}
+			tc.answer(c, sec)
+			for i := 0; i < maxConsecutiveGitHubFailures-1; i++ {
+				c.fromSecondary(timeout)
+			}
+			if c.secondaryDown() != nil {
+				t.Error("github.com was given up although it answered in between")
+			}
+			c.fromSecondary(timeout)
+			if c.secondaryDown() == nil {
+				t.Error("github.com was not given up after failures in a row")
+			}
+		})
+	}
+	// A server error is an outage, like a timeout
+	c := newFallbackGitHubClient(&stubClient{}, &stubClient{})
+	for i := 0; i < maxConsecutiveGitHubFailures; i++ {
+		c.fromSecondary(&GitHubStatusError{Status: http.StatusBadGateway})
+	}
+	if c.secondaryDown() == nil {
+		t.Error("server errors in a row did not make github.com down")
+	}
+}
+
+// The release of a tag is looked up on the host which has the repository.
+func TestFallbackClientReleasesAreOfTheHostWhichHasTheRepository(t *testing.T) {
+	mk := func(data string) *FixtureGitHubClient {
+		c, err := NewFixtureGitHubClient([]byte(data))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return c
+	}
+	primary := mk(`{"repos":{"corp/a":{"repo":{},"releases":{"v1":{"found":true,"immutable":true}}},"actions/checkout":{"missing":true},"both/x":{"repo":{},"releases":{"v1":{"found":true}}}}}`)
+	secondary := mk(`{"repos":{"actions/checkout":{"repo":{},"releases":{"v4.2.2":{"found":true,"immutable":true},"v4":{"found":false}}},"both/x":{"repo":{},"releases":{"v1":{"found":true,"immutable":true}}}}}`)
+	c := newFallbackGitHubClient(primary, secondary)
+	ctx := context.Background()
+
+	// The Server has the repository: its release counts, github.com is not asked
+	if r, err := c.Release(ctx, "corp", "a", "v1"); err != nil || !r.Immutable {
+		t.Errorf("%+v, %v", r, err)
+	}
+	// Only github.com has it
+	if r, err := c.Release(ctx, "actions", "checkout", "v4.2.2"); err != nil || !r.Immutable {
+		t.Errorf("%+v, %v", r, err)
+	}
+	// ... and a tag without a release there is not found, not looked up on the Server again
+	before := primary.Calls()
+	if _, err := c.Release(ctx, "actions", "checkout", "v4"); !errors.Is(err, ErrGitHubNotFound) {
+		t.Errorf("%v", err)
+	}
+	if primary.Calls() != before {
+		t.Error("the Server was asked about a repository of github.com")
+	}
+	// Both have it: the Server wins
+	if r, err := c.Release(ctx, "both", "x", "v1"); err != nil || r.Immutable {
+		t.Errorf("the Server must win: %+v, %v", r, err)
+	}
+}
+
+// A github.com which is down answers no release, as a failure of the host, and the Server goes on.
+func TestFallbackClientReleaseWithGitHubComDown(t *testing.T) {
+	primary, err := NewFixtureGitHubClient([]byte(`{"repos":{"corp/a":{"repo":{},"releases":{"v1":{"found":true,"immutable":true}}},"actions/checkout":{"missing":true},"actions/setup-go":{"missing":true}}}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	secondary := &stubClient{err: &GitHubRateLimitError{Reset: time.Now().Add(time.Hour)}}
+	c := newFallbackGitHubClient(primary, secondary)
+	ctx := context.Background()
+	_, err = c.Release(ctx, "actions", "checkout", "v4.2.2")
+	var scoped *hostScopedError
+	if !errors.As(err, &scoped) || !errors.Is(err, ErrGitHubRateLimited) {
+		t.Errorf("want the rate limit of the host: %v", err)
+	}
+	if r, err := c.Release(ctx, "corp", "a", "v1"); err != nil || !r.Immutable {
+		t.Errorf("the Server must go on: %+v, %v", r, err)
+	}
+	// github.com is not asked again
+	if _, err := c.Release(ctx, "actions", "setup-go", "v7.0.0"); !errors.Is(err, ErrGitHubRateLimited) {
+		t.Errorf("%v", err)
+	}
+	if secondary.n.Load() != 1 {
+		t.Errorf("github.com was asked %d times", secondary.n.Load())
+	}
+}
+
+// A client of the pair which cannot look up releases says so, and nothing is counted.
+func TestFallbackClientReleaseWithoutLookup(t *testing.T) {
+	c := newFallbackGitHubClient(&stubClient{}, &stubClient{})
+	c.primary = &stubClient{repo: &GitHubRepo{}}
+	if _, err := c.Release(context.Background(), "o", "r", "v1"); !errors.Is(err, errNoReleaseLookup) {
+		t.Errorf("%v", err)
 	}
 }

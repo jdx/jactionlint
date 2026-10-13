@@ -44,36 +44,48 @@ func (e *hostScopedError) Unwrap() error { return e.err }
 // limit, a rejected token, no network) is remembered, so that the next repositories do not ask in vain, and so are
 // timeouts and server errors when there are several in a row, like the session does for a host: a github.com which a firewall
 // blackholes would otherwise make every action which the Server does not have wait for the whole timeout.
+//
+// Every result of a call to github.com goes through here, and this is the one place which counts: an answer of any kind (a
+// repository, "not found", a refusal, a rejected request) proves that the host is there and ends the streak, and only the failures
+// which say that it is not (a timeout, a server error, a connection which broke) extend it.
 func (c *fallbackGitHubClient) fromSecondary(err error) error {
 	if err == nil || errors.Is(err, ErrGitHubNotFound) {
-		c.mu.Lock()
-		c.transient = 0
-		c.mu.Unlock()
+		c.answered()
 		return err
 	}
 	if errors.Is(err, ErrGitHubBranchScanUnavailable) {
-		return err
+		return err // nothing was asked
 	}
 	var scoped *hostScopedError
 	if errors.As(err, &scoped) {
 		return err
 	}
-	switch classifyFailure(err) {
-	case failRateLimit, failUnauthorized, failNetwork:
+	var status *GitHubStatusError
+	switch kind := classifyFailure(err); {
+	case kind == failRateLimit || kind == failUnauthorized || kind == failNetwork:
 		c.mu.Lock()
 		if c.down == nil {
 			c.down = err
 		}
 		c.mu.Unlock()
-	case failTimeout, failServer, failOther:
+	case kind == failTimeout || kind == failServer || (kind == failOther && !errors.As(err, &status)):
 		c.mu.Lock()
 		c.transient++
 		if c.transient >= maxConsecutiveGitHubFailures && c.down == nil {
 			c.down = fmt.Errorf("skipped after %d failed lookups in a row: %w", c.transient, err)
 		}
 		c.mu.Unlock()
+	default:
+		c.answered() // a refusal or a rejected request: the host answered
 	}
 	return &hostScopedError{err, gitHubComHost}
+}
+
+// answered ends the streak of failures of github.com.
+func (c *fallbackGitHubClient) answered() {
+	c.mu.Lock()
+	c.transient = 0
+	c.mu.Unlock()
 }
 
 // secondaryDown returns the failure which stops the lookups on github.com, or nil.
@@ -117,13 +129,14 @@ func (c *fallbackGitHubClient) route(ctx context.Context, owner, repo string) fa
 			return fallbackRoute{client: c.secondary, err: down, secondary: true}, nil
 		}
 		info2, err2 := c.secondary.Repository(ctx, owner, repo)
+		err2 = c.fromSecondary(err2) // also the answers which are no failure end the streak of failures
 		switch {
 		case err2 == nil:
 			return fallbackRoute{client: c.secondary, repo: info2, secondary: true}, nil
 		case errors.Is(err2, ErrGitHubNotFound):
 			return fallbackRoute{client: c.primary, err: err}, nil // on neither: the answer of the Server
 		}
-		return fallbackRoute{client: c.secondary, err: c.fromSecondary(err2), secondary: true}, nil
+		return fallbackRoute{client: c.secondary, err: err2, secondary: true}, nil
 	})
 	return r
 }
