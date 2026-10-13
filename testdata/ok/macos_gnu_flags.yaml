@@ -93,6 +93,10 @@ jobs:
           date -v1d +%F || date -d 'first day' +%F
           date -v-1H +%s || date -d '1 hour ago' +%s
           date -vmon +%F || date -d monday +%F
+      # An attached value is not a further option: -fc is the format c of stat of macOS
+      - run: |
+          stat -fc file.txt
+          date -rd file.txt
       # After -- come the patterns and the file names
       - run: |
           grep -- -P file.txt

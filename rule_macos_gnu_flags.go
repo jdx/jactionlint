@@ -294,10 +294,6 @@ var (
 	// dateBSDOptionRe is an option that only the date of macOS has: -j (also in a cluster, -jf or -uj) and -v with or
 	// without its adjustment, signed or not (-v, -v-1d, -v+1H, -v1d, -vmon).
 	dateBSDOptionRe = regexp.MustCompile(`^-(?:[uInR]*j[uInRjfr]*|[uInRj]*v[-+0-9A-Za-z]*)$`)
-	// dateOptionRe is the -d option of GNU date, alone or with its value attached (-d@1700000000, -ud).
-	dateOptionRe = regexp.MustCompile(`^-u?d`)
-	// statFormatRe is the -c option of GNU stat, alone or with its value attached (-c%s, -Lc).
-	statFormatRe = regexp.MustCompile(`^-[LFlnqrsx]*c`)
 	// sedSuffixRe is a word that BSD sed takes as the suffix of the backup: ".bak", ".orig", "~", "bak".
 	sedSuffixRe = regexp.MustCompile(`^(?:\.[A-Za-z0-9_~.-]*|~|[A-Za-z]{3,})$`)
 )
@@ -338,7 +334,7 @@ func macosGnuForms(c *runscript.Command) []macosGnuForm {
 				add(w, `"sed -i" without a suffix takes the script as the suffix of the backup on macOS, so the file is read as the script ("invalid command code").`, `Use "sed -i.bak" (and remove the backup), which both seds understand, or "sed -i ''" on macOS only.`)
 			}
 		case "date":
-			if dateOptionRe.MatchString(v) || v == "--date" || strings.HasPrefix(v, "--date=") {
+			if hasDateOption(v) || v == "--date" || strings.HasPrefix(v, "--date=") {
 				add(w, `"date -d" does not exist in the date of macOS ("illegal option -- d").`, `Use "date -j -f FORMAT ..." or "date -v", or install coreutils and call "gdate".`)
 			}
 		case "grep":
@@ -346,7 +342,7 @@ func macosGnuForms(c *runscript.Command) []macosGnuForm {
 				add(w, `"grep -P" is rejected by the grep of macOS ("invalid option -- P"): it has no Perl regular expressions.`, `Use "grep -E" if the pattern allows it, or "perl -ne", which macOS has too.`)
 			}
 		case "stat":
-			if statFormatRe.MatchString(v) || v == "--format" || strings.HasPrefix(v, "--format=") || v == "--printf" || strings.HasPrefix(v, "--printf=") {
+			if hasStatFormatOption(v) || v == "--format" || strings.HasPrefix(v, "--format=") || v == "--printf" || strings.HasPrefix(v, "--printf=") {
 				add(w, `"stat -c" does not exist in the stat of macOS: its format option is -f.`, `Use "stat -f FORMAT" on macOS, or read the value in another way (wc -c < file for the size).`)
 			}
 		case "find":
@@ -386,4 +382,42 @@ func init() {
 	registerRuleFactory("macos-gnu-flags", func(env *RuleEnv) []Rule {
 		return []Rule{NewRuleMacosGnuFlags()}
 	})
+}
+
+// hasStatFormatOption reports whether the word is the -c option of GNU stat, read left to right like getopt: the
+// options of BSD stat without a value (F, l, L, n, q, r, s, x) may come before it, and f or t takes the rest of the word
+// as its value, so `-fc` is the BSD -f with the format `c`, and `-cf` is GNU -c with the format `f`.
+func hasStatFormatOption(w string) bool {
+	if len(w) < 2 || w[0] != '-' || w[1] == '-' {
+		return false
+	}
+	for _, c := range w[1:] {
+		switch c {
+		case 'F', 'l', 'L', 'n', 'q', 'r', 's', 'x':
+		case 'c':
+			return true
+		default:
+			return false // f and t take the rest of the word; another letter is not an option of stat
+		}
+	}
+	return false
+}
+
+// hasDateOption reports whether the word is the -d option of GNU date, read left to right like getopt: the options of
+// BSD date without a value (j, n, R, u) may come before it, and f, r, v, z and I take the rest of the word as value, so
+// `-ud` and `-d@1700000000` are GNU -d and `-rd` is the BSD -r with the file `d`.
+func hasDateOption(w string) bool {
+	if len(w) < 2 || w[0] != '-' || w[1] == '-' {
+		return false
+	}
+	for _, c := range w[1:] {
+		switch c {
+		case 'j', 'n', 'R', 'u':
+		case 'd':
+			return true
+		default:
+			return false
+		}
+	}
+	return false
 }

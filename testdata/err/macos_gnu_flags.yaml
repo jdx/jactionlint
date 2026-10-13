@@ -98,3 +98,10 @@ jobs:
       - run: |
           tee -- -a
           echo x | tee --append out.txt
+  clusters-like-getopt:
+    runs-on: macos-latest
+    steps:
+      - run: |
+          stat -cf file.txt
+          stat -Lc%s file.txt
+          date -ud yesterday
