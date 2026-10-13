@@ -375,7 +375,7 @@ func jsMessage(h jsHit) string {
 
 func init() {
 	registerRules(
-		RuleInfo{ID: "command-injection", Group: RuleGroupSecurity, Summary: "Input that an outsider controls is run as code by a script after it was moved to an environment variable: eval, sh -c, a variable as a command, a pipe into a shell, an inline program, child_process in github-script.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-command-injection"},
+		RuleInfo{ID: "command-injection", Group: RuleGroupSecurity, Summary: "Input that an outsider controls is run as code by a script after it was moved to an environment variable: eval, sh -c, a variable as a command, a pipe into a shell, an inline program, child_process in github-script.", DefaultLevel: SeverityWarning, Profile: ProfilePedantic, DocsAnchor: "check-command-injection"},
 	)
 	registerRuleFactory("command-injection", func(env *RuleEnv) []Rule {
 		if !env.config.RuleEnabled("command-injection") {

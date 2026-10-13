@@ -1,0 +1,3 @@
+rules:
+  unpinned-images:
+    pedantic: true

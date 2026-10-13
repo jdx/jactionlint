@@ -9,7 +9,7 @@ background-step-not-waited correctness correctness error
 bot-conditions default security error
 cache-poisoning default security error
 checkout-static-credentials default security error
-command-injection default security error
+command-injection pedantic security warn
 concurrency-cancels-prs default correctness error
 concurrency-cancels-release default correctness error
 concurrency-limits default policy error
