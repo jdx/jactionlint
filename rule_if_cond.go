@@ -50,8 +50,10 @@ func (rule *RuleIfCond) checkIfCond(n *String) {
 }
 
 func (rule *RuleIfCond) checkPlaceholder(n *String, start, end int) {
-	// Check number of ${{ }} for conditions like `${{ false }} || ${{ true }}` which are always evaluated to true
-	if start > 0 || end+len("}}") < len(n.Value) || strings.Count(n.Value, "${{") > 1 {
+	// Check number of ${{ }} for conditions like `${{ false }} || ${{ true }}` which are always evaluated to true.
+	// Newlines at the end are not extra characters: a block scalar (`if: |`) ends with one and GitHub trims it
+	// (changelog 2026-01-29), which the runs of a job with `if: |` and a false expression confirm.
+	if start > 0 || end+len("}}") < len(strings.TrimRight(n.Value, "\r\n")) || strings.Count(n.Value, "${{") > 1 {
 		rule.ReportIDf(
 			"if-always-true",
 			n.Pos,

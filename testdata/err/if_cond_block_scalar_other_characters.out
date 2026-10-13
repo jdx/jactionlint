@@ -1,0 +1,5 @@
+test.yaml:9:13: if: condition "${{ github.event_name == 'push' }} && true\n" is always evaluated to true because extra characters are around ${{ }} [if-cond]
+test.yaml:12:13: if: condition "${{ github.event_name == 'push' }}\n&& ${{ github.ref_name == 'main' }}\n" is always evaluated to true because extra characters are around ${{ }} [if-cond]
+test.yaml:16:13: if: condition "${{ github.event_name == 'push' }}\n " is always evaluated to true because extra characters are around ${{ }} [if-cond]
+test.yaml:18:13: if: condition "\n${{ github.event_name == 'push' }}" is always evaluated to true because extra characters are around ${{ }} [if-cond]
+test.yaml:21:13: constant expression "true" in condition. remove the if: section [if-cond]
