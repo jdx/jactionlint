@@ -318,6 +318,9 @@ func init() {
 		RuleInfo{ID: "unmatched-paths-filter", Group: RuleGroupCorrectness, Summary: "An entry of paths or paths-ignore matches no file of the repository.", DefaultLevel: SeverityWarning, Profile: ProfilePedantic, DocsAnchor: "check-unmatched-paths-filter"},
 	)
 	registerRuleFactory("unmatched-paths-filter", func(env *RuleEnv) []Rule {
+		if !env.config.RuleEnabled("unmatched-paths-filter") {
+			return nil // the pedantic rule is off: do not walk the repository for nothing
+		}
 		if env.project == nil {
 			env.Skip("the workflow does not belong to a project, so there are no files to match")
 			return nil

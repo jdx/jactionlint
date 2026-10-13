@@ -318,3 +318,37 @@ func TestUnmatchedPathsFilterDocsExample(t *testing.T) {
 		t.Errorf("the output in docs/checks.md is outdated (-docs +linter):\n%s", diff)
 	}
 }
+
+// TestUnmatchedPathsFilterDoesNotWalkWhenOff checks that the repository is not read when the rule is off, which is
+// the case in every run of the default profile.
+func TestUnmatchedPathsFilterDoesNotWalkWhenOff(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	src := "on:\n  push:\n    paths: ['missing/**']\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo\n"
+	lint := func(cfg string) {
+		l, err := NewLinter(io.Discard, &LinterOptions{WorkingDir: dir})
+		if err != nil {
+			t.Fatal(err)
+		}
+		l.defaultConfig = mustParseConfig(t, cfg)
+		if _, err := l.Lint("ci.yaml", []byte(src), &Project{root: dir}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	walked := func() bool {
+		repoPathsMu.Lock()
+		defer repoPathsMu.Unlock()
+		_, ok := repoPathsCache[dir]
+		return ok
+	}
+	lint("profile: default\n")
+	if walked() {
+		t.Fatal("the repository was read although the rule is off in the default profile")
+	}
+	lint("profile: pedantic\n")
+	if !walked() {
+		t.Fatal("the repository was not read although the rule is on in the pedantic profile")
+	}
+}
