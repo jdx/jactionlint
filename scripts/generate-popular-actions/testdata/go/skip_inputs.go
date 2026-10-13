@@ -17,3 +17,11 @@ var PopularActions = map[string]*ActionMetadata{
 // OutdatedPopularActionSpecs is a spec set of known outdated popular actions. The word 'outdated'
 // means that the runner used by the action is no longer available such as "node12", "node16".
 var OutdatedPopularActionSpecs = map[string]struct{}{}
+
+// PopularActionRuntimes is the Node.js runtime ("runs.using") of the popular actions that run JavaScript, by
+// spec. An action of another kind ("composite", "docker") is not in it, and neither is an outdated action (see
+// OutdatedPopularActionSpecs). A runtime older than the one the runners have, such as "node20", means that the
+// action declares a runtime which GitHub Actions removed.
+var PopularActionRuntimes = map[string]string{
+	"rhysd/action-setup-vim@v1": "node20",
+}

@@ -1,0 +1,35 @@
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+  pull_request_target:
+  push:
+
+run-name: ${{ github.event.pul_request.title }}
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    steps:
+      # ERROR: workflow_run is misspelled
+      - run: echo '${{ github.event.worflow_run.conclusion }}'
+      # ERROR: The properties of objects and of elements of arrays are checked
+      - run: echo '${{ github.event.workflow_run.head_brach }}'
+      - run: echo '${{ github.event.pull_request.head.rfe }}'
+      - run: echo '${{ github.event.workflow_run.pull_requests[0].numbr }}'
+      - run: echo '${{ join(github.event.commits.*.mesage, ', ') }}'
+      - run: echo '${{ github['event']['head_comit'] }}'
+      # ERROR: This property is not in the payload of any event, not even of the events of other workflows
+      - run: echo '${{ github.event.push.ref }}'
+      # OK: These are properties of payloads, also of events which this workflow does not have
+      - run: echo '${{ github.event.workflow_run.conclusion }} ${{ github.event.workflow_run.pull_requests[0].number }}'
+      - run: echo '${{ github.event.pull_request.number || github.event.number || github.ref }}'
+      - run: echo '${{ github.event.issue.pull_request.url }} ${{ github.event.release.tag_name }}'
+      - run: echo '${{ github.event.head_commit.id }} ${{ join(github.event.commits.*.id) }}'
+      # OK: Names are not case sensitive
+      - run: echo '${{ github.event.WORKFLOW_RUN.Conclusion }}'
+      # OK: What is arbitrary, and the contents of accounts, are not looked into
+      - run: echo '${{ github.event.sender.anything }} ${{ github.event.pull_request.user.anything }}'
+      - run: echo '${{ github.event.changes.title.from }} ${{ github.event.inputs.name }} ${{ github.event.client_payload.value }}'
+      # OK: Objects deeper than three levels are not looked into
+      - run: echo '${{ github.event.pull_request.head.repo.anything }}'

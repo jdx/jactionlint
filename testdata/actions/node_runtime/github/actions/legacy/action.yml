@@ -1,0 +1,5 @@
+name: legacy
+description: Declares a runtime that GitHub removed long ago
+runs:
+  using: node16
+  main: dist/index.js

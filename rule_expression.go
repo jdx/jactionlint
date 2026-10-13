@@ -29,6 +29,7 @@ type RuleExpression struct {
 	inputsTy         *ObjectType
 	dispatchInputsTy *ObjectType
 	jobsTy           *ObjectType
+	payload          *eventPayload // what is known of github.event, or nil
 	workflow         *Workflow
 	localActions     *LocalActionsCache
 	localWorkflows   *LocalReusableWorkflowCache
@@ -68,6 +69,7 @@ func NewRuleExpression(actionsCache *LocalActionsCache, workflowCache *LocalReus
 
 // VisitWorkflowPre is callback when visiting Workflow node before visiting its children.
 func (rule *RuleExpression) VisitWorkflowPre(n *Workflow) error {
+	rule.payload = payloadOfWorkflow(n, rule.config.strictEventPayloads())
 	if n.Action != nil {
 		rule.workflow = n
 		rule.visitActionPre(n.Action)
@@ -1065,6 +1067,7 @@ func (rule *RuleExpression) checkSemanticsOfExprNode(expr ExprNode, line, col in
 	if rule.jobsTy != nil {
 		c.UpdateJobs(rule.jobsTy)
 	}
+	c.setEventPayload(rule.payload)
 	if workflowKey != "" {
 		ctx, sp := WorkflowKeyAvailability(workflowKey)
 		if a, ok := actionKeyAvailability[workflowKey]; ok {
