@@ -130,6 +130,7 @@ cat action.yml | jactionlint --stdin-filename action.yml -
 | `--online-allow=PATTERN` |  | Look up only repositories matching owner/repo PATTERN ("*" is a wildcard). Repeatable |
 | `--online-deny=PATTERN` |  | Never look up repositories matching owner/repo PATTERN. Repeatable |
 | `--online-cache-ttl=DURATION` |  | How long a cached GitHub answer is used without revalidation (default 1h; 0 always revalidates) |
+| `--online-report=FILE` |  | Write how complete the online checks were (checked, excluded, skipped lookups, cache age) to FILE as JSON, whatever the --format. The file always says whether they ran |
 | `--online-max-wait=DURATION` |  | The longest to wait for a GitHub rate limit to reset (default 30s; 0 never waits) |
 
 **External tools**
@@ -740,7 +741,22 @@ jactionlint --online
   `status` (`complete`, or `incomplete` when `skippedLookups` is not zero), `mode`, `skippedLookups`, `excludedRepositories` (left out
   on purpose by `allow`/`deny`) and `evidence` (`network` or `cache`). The property is absent when the online checks were off, so
   "not checked" is distinguishable from "checked, nothing found". It is evidence about the run, not a trust guarantee: a resolved ref
-  or a timestamp does not prove that a tag was never repointed.
+  or a timestamp does not prove that a tag was never repointed. `skippedBy` counts the skipped lookups by the kind of failure
+  (`rate limit`, `unauthorized`, `forbidden`, `not found`, `server error`, `timeout`, `network`, `not cached`, `other`) and
+  `answers` says where the answers the checks used came from: `network` (GitHub answered, including a `304` that confirmed a
+  cached answer), `cache` (read from the disk cache without asking, at most `cacheTtlSeconds` old, or of any age with
+  `--online=cache`) and `stale` (an expired cached answer used because the rate limit left no other), and `oldestFetched`, the
+  oldest time at which a cached answer that was used was received. **The timestamp is the clock of the machine running
+  jactionlint when it last received the answer from GitHub or confirmed it with a `304`.** It is not a date from GitHub and says
+  nothing about when a tag or branch last changed. `answers` is absent when the client does not track them (unknown, not
+  "fresh"). `--online=strict` is unchanged: it fails on skipped lookups only, never on cached or stale answers.
+- **Coverage in JSON.** `--format json` is a bare array and `jsonl` one finding a line, so neither has a place for run-level
+  data. `--online-report=FILE` writes the same coverage to FILE as one JSON document (`{"version": 1, "status": ...}`) for any
+  `--format`, and `status` is `disabled` when the online checks did not run, so "not checked" is a value instead of a missing
+  file. The four states a consumer needs: `complete` with `skippedLookups: 0` (checked; findings, if any, are in the output),
+  `disabled` (the checks were off), `incomplete` (`skippedLookups` is not zero: `skippedBy` says why, and the checks which needed
+  those lookups reported nothing), and `excludedRepositories` (left out by `allow`/`deny` on purpose; not counted as skipped).
+  A cached answer shows in `answers.cache` and `answers.oldestFetched`.
 - **Token.** The first of these is used: the variable named by `--online-token-env`, the file named by `--online-token-file`,
   `GITHUB_TOKEN`, `GH_TOKEN` (for a GitHub Enterprise Server `GITHUB_ENTERPRISE_TOKEN` and `GH_ENTERPRISE_TOKEN` come first), and
   finally the output of `gh auth token --hostname HOST` when `gh` is installed (set `gh-cli: false` in

@@ -11,7 +11,8 @@ import (
 // (such as an ignore comment) do not explain anything.
 //
 // With the "include-read" option every scope is checked except `contents: read`, which everybody
-// needs to check out the repository.
+// needs to check out the repository. Unset, the option is on under the pedantic profile, like the pedantic
+// persona of zizmor, which asks for a comment on every read scope other than `contents: read`.
 type RuleUndocumentedPermissions struct {
 	RuleBase
 	comments *CommentIndex
@@ -48,7 +49,10 @@ func (rule *RuleUndocumentedPermissions) check(p *Permissions) {
 	if p == nil || p.All != nil {
 		return
 	}
-	includeRead, _ := rule.Config().ruleOptionBool("undocumented-permissions", "include-read")
+	includeRead, set := rule.Config().ruleOptionBool("undocumented-permissions", "include-read")
+	if !set {
+		includeRead = rule.Config() != nil && rule.Config().Profile == ProfilePedantic
+	}
 
 	names := make([]string, 0, len(p.Scopes))
 	for name := range p.Scopes {
@@ -110,7 +114,7 @@ func init() {
 		RuleInfo{
 			ID: "undocumented-permissions", Group: RuleGroupPolicy, Summary: "A permission scope above read has no comment explaining it.",
 			DefaultLevel: SeverityInfo, Profile: ProfilePedantic, DocsAnchor: "check-undocumented-permissions",
-			Options: []RuleOption{{Name: "include-read", Kind: RuleOptionBool, Default: false, Summary: "Also require a comment for scopes granted with read, except contents: read."}},
+			Options: []RuleOption{{Name: "include-read", Kind: RuleOptionBool, Summary: "Also require a comment for scopes granted with read, except contents: read. Unset, it runs under the pedantic profile."}},
 		},
 	)
 	registerRuleFactory("undocumented-permissions", func(env *RuleEnv) []Rule {

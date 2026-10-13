@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "status": "incomplete",
+  "mode": "online",
+  "skippedLookups": 3,
+  "excludedRepositories": 1,
+  "evidence": "network",
+  "skippedBy": {
+    "forbidden": 1,
+    "rate limit": 2
+  },
+  "answers": {
+    "network": 4,
+    "cache": 5,
+    "stale": 1,
+    "oldestFetched": "2026-10-12T08:30:00Z",
+    "cacheTtlSeconds": 3600
+  }
+}

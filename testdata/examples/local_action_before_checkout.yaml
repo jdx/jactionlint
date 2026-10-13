@@ -37,6 +37,8 @@ jobs:
       - run: |
           echo cloning
           gh repo clone owner/repo
+        env:
+          GH_TOKEN: ${{ github.token }}
       - uses: ./
   self-repository-syntax:
     runs-on: ubuntu-latest

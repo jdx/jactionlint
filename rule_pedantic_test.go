@@ -113,9 +113,11 @@ func TestRuleMutableRunnerLabel(t *testing.T) {
 func TestMutableRunnerLabelMessage(t *testing.T) {
 	for label, want := range map[string]string{
 		"ubuntu-latest":         `"ubuntu-24.04"`,
-		"macos-latest":          `"macos-15"`,
-		"windows-latest":        `"windows-2022"`,
-		"macos-latest-xlarge":   `"macos-15-xlarge"`,
+		"macos-latest":          `"macos-26"`,
+		"windows-latest":        `"windows-2025"`,
+		"macos-latest-xlarge":   `"macos-26-xlarge"`,
+		"macos-latest-large":    `"macos-26-large"`,
+		"WINDOWS-LATEST":        `"windows-2025"`,
 		"ubuntu-latest-4-cores": "use a label with a version",
 	} {
 		src := "on: push\njobs:\n  j:\n    runs-on: " + label + "\n    steps:\n      - run: echo\n"

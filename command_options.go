@@ -78,6 +78,7 @@ var cliOptions = []cliOption{
 	{"GitHub API (online checks)", "online-allow", "", "PATTERN", false, "-online-allow", "Look up only repositories matching owner/repo PATTERN (\"*\" is a wildcard). Repeatable"},
 	{"GitHub API (online checks)", "online-deny", "", "PATTERN", false, "-online-deny", "Never look up repositories matching owner/repo PATTERN. Repeatable"},
 	{"GitHub API (online checks)", "online-cache-ttl", "", "DURATION", false, "-online-cache-ttl", "How long a cached GitHub answer is used without revalidation (default 1h; 0 always revalidates)"},
+	{"GitHub API (online checks)", "online-report", "", "FILE", false, "", "Write how complete the online checks were (checked, excluded, skipped lookups, cache age) to FILE as JSON, whatever the --format. The file always says whether they ran"},
 	{"GitHub API (online checks)", "online-max-wait", "", "DURATION", false, "-online-max-wait", "The longest to wait for a GitHub rate limit to reset (default 30s; 0 never waits)"},
 
 	{"External tools", "shellcheck", "", "CMD", false, "-shellcheck", "Command or path of shellcheck (default shellcheck). Empty disables the integration"},
@@ -270,6 +271,7 @@ type commandFlags struct {
 	onlineTTL, onlineMaxWait time.Duration
 	baseline, baselineWrite  optionalValueFlag
 	noBaseline, noOnline     bool
+	onlineReport             string
 	online                   onlineFlag
 	onlineAllow, onlineDeny  stringListFlag
 	fs                       *pflag.FlagSet
@@ -339,6 +341,7 @@ func newCommandFlags() *commandFlags {
 	fs.Var(&f.onlineAllow, "online-allow", "")
 	fs.Var(&f.onlineDeny, "online-deny", "")
 	fs.DurationVar(&f.onlineTTL, "online-cache-ttl", defaultOnlineCacheTTL, "")
+	fs.StringVar(&f.onlineReport, "online-report", "", "")
 	fs.DurationVar(&f.onlineMaxWait, "online-max-wait", defaultOnlineMaxWait, "")
 
 	fs.StringVar(&o.Shellcheck, "shellcheck", "shellcheck", "")
