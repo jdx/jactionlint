@@ -177,6 +177,16 @@ func TestUntrustedCheckoutCallers(t *testing.T) {
 			"build.yml": strings.Replace(ucReusable, "actions/checkout@v1", "actions/checkout@v4", 1),
 			"pr.yml":    "on: pull_request_target\njobs:\n  call:\n    uses: ./.github/workflows/build.yml\n    with:\n      ref: ${{ github.event.pull_request.head.sha || github.head_ref }}\n",
 		}, "build.yml", 1, "inputs.ref, given"},
+		{"reusable workflow, two callers to a checkout that refuses commits, one with a branch", map[string]string{
+			"build.yml": strings.Replace(ucReusable, "actions/checkout@v1", "actions/checkout@v4", 1),
+			"a.yml":     "on: pull_request_target\njobs:\n  call:\n    uses: ./.github/workflows/build.yml\n    with:\n      ref: ${{ github.event.pull_request.head.sha }}\n",
+			"b.yml":     "on: pull_request_target\njobs:\n  call:\n    uses: ./.github/workflows/build.yml\n    with:\n      ref: ${{ github.event.pull_request.head.ref }}\n",
+		}, "build.yml", 1, "inputs.ref, given"},
+		{"reusable workflow, two callers to a checkout that refuses commits, both with a commit", map[string]string{
+			"build.yml": strings.Replace(ucReusable, "actions/checkout@v1", "actions/checkout@v4", 1),
+			"a.yml":     "on: pull_request_target\njobs:\n  call:\n    uses: ./.github/workflows/build.yml\n    with:\n      ref: ${{ github.event.pull_request.head.sha }}\n",
+			"b.yml":     "on: pull_request_target\njobs:\n  call:\n    uses: ./.github/workflows/build.yml\n    with:\n      ref: ${{ github.event.pull_request.merge_commit_sha }}\n",
+		}, "build.yml", 0, ""},
 		{"reusable workflow, a commit passed to a checkout that refuses commits", map[string]string{
 			"build.yml": strings.Replace(ucReusable, "actions/checkout@v1", "actions/checkout@v4", 1),
 			"pr.yml":    "on: pull_request_target\njobs:\n  call:\n    uses: ./.github/workflows/build.yml\n    with:\n      ref: ${{ github.event.pull_request.head.sha || github.event.pull_request.merge_commit_sha }}\n",
