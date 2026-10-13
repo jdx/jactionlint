@@ -66,7 +66,7 @@ func (rule *RuleFailFastActionInputs) VisitJobPre(n *Job) error {
 	}
 	for _, s := range flattenSteps(n.Steps) {
 		a, ref := stepAction(s)
-		if a == nil || ref.Kind != UsesAction || isStaticallyFalse(s.If) {
+		if a == nil || ref.Kind != UsesAction || a.InputsUnknown() || isStaticallyFalse(s.If) {
 			continue
 		}
 		entry, ok := failFastTable[ref.CanonicalName()]

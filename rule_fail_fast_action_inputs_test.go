@@ -28,6 +28,11 @@ func TestRuleFailFastActionInputs(t *testing.T) {
 		{"junit report", head + "      - uses: mikepenz/action-junit-report@v5 # want\n        with:\n          report_paths: '**/TEST-*.xml'\n"},
 		{"a job that runs on a condition of its own", head + "      - uses: actions/upload-artifact@v4 # want\n        if: github.event_name == 'push'\n        with:\n          path: dist\n"},
 
+		// The inputs may come from an expression: the input may be among them
+		{"a with that is one expression", head + "      - uses: actions/upload-artifact@v4\n        with: ${{ fromJSON(inputs.upload) }}\n"},
+		{"a with with an insert key", head + "      - uses: actions/upload-artifact@v4\n        with:\n          path: dist\n          ${{ insert }}: ${{ matrix.inputs }}\n"},
+		{"gh-release with an insert key", head + "      - uses: softprops/action-gh-release@v2\n        with:\n          files: dist/*\n          ${{ insert }}: ${{ matrix.inputs }}\n"},
+
 		// The input is given, whatever its value: the person decided
 		{"error", head + "      - uses: actions/upload-artifact@v4\n        with:\n          path: dist\n          if-no-files-found: error\n"},
 		{"warn on purpose", head + "      - uses: actions/upload-artifact@v4\n        with:\n          path: dist\n          if-no-files-found: warn\n"},
