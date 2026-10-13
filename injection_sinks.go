@@ -168,6 +168,10 @@ func (c *tiContext) sinkHitOf(sp *exprSpan) *sinkHit {
 		case untrustedSubtree:
 			return &sinkHit{Tier: tiSubtree, Ref: r, Source: leaf}
 		}
+		// Free text of an outsider which the table does not list (the previous title of an issue, the title of a wiki page)
+		if c.outsiderEventText(r.Path) != "" {
+			return &sinkHit{Tier: tiDirect, Ref: r, Source: r.String()}
+		}
 	}
 	if c.step == nil {
 		return nil // the env context is not available where there is no step

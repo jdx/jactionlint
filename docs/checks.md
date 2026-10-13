@@ -6168,7 +6168,23 @@ workflow either, and GitHub does not validate them. `template-injection` reports
 - `github.event.client_payload.*`, which the sender of a `repository_dispatch` event chooses;
 - `github.event.release.tag_name`, `name`, `body` and `target_commitish`, and the names of the release assets;
 - `github.ref_name`, `github.base_ref` and `github.event.pull_request.base.ref`: a branch or tag name can hold shell syntax such
-  as `a$(cmd)`. Creating a branch takes write access, which is why zizmor reports them as well.
+  as `a$(cmd)`. Creating a branch takes write access, which is why zizmor reports them as well;
+- text that the table of actionlint lacks and an outsider types: the previous title and text of an edited issue or pull request
+  (`github.event.changes.title.from`, `changes.body.from`, and `changes.base.ref.from`, the branch the pull request had),
+  `github.event.pull_request.head.repo.homepage` (the website of the fork, which its owner types), the title of the pages of a
+  `gollum` event (`github.event.pages[*].title`, like `page_name`), and the message and the author's name of the commit of a
+  merge queue (`github.event.merge_group.head_commit.message`, `.author.name`), which holds the title and the text of the pull
+  requests;
+- in a workflow started by `workflow_run`, the path of the workflow file that started it: `github.event.workflow_run.path`,
+  `github.event.workflow.path` and `github.event.workflow_run.referenced_workflows[*].path`. A pull request from a fork can add a
+  workflow file with any name (`$(cmd).yaml` is a valid file name), and GitHub fills the path from it. In other workflows
+  (`github.event.workflow` of a `workflow_dispatch` is the file that someone with write access chose) the path is not reported.
+
+Not reported: `github.event.changes.head.ref.from` (listed by CodeQL and gato-x, but no payload has the field),
+`github.event.merge_group.head_commit.author.email` and `.committer.*` (the commit is made by GitHub's queue and an email is one that
+an account verified, so there is no evidence that an outsider chooses them) and `github.event.merge_group.head_ref` (a name which
+the queue makes). The pedantic option of the
+[expansions](#check-template-injection-expansion) still reports them as every other `${{ }}` in a script.
 
 `github.actor`, SHAs, numbers and the IDs of events are not reported: GitHub restricts their characters. `steps.*.outputs.*`,
 `needs.*.outputs.*`, `matrix.*` and `env.*` are values of the workflow itself, which the pedantic option of the

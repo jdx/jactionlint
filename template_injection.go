@@ -355,10 +355,83 @@ func (c *tiContext) externalText(path []string) string {
 				if len(path) == 5 && path[3] == "base" && path[4] == "ref" {
 					return "a branch name"
 				}
+				return c.outsiderEventText(path)
+			default:
+				return c.outsiderEventText(path)
 			}
 		}
 	}
 	return ""
+}
+
+// outsiderEventText returns what kind of value the property of github.event is when it is free text which a
+// person outside of the workflow types, and "" when it is not. It covers the properties which the table of
+// attacker controlled properties lacks, so the correctness profile (what actionlint reports) does not know them.
+// The path is in lower case.
+//
+// The properties which CodeQL and gato-x list and this does not cover: github.event.changes.head.ref.from (no payload has
+// it, the field of a pull request which changed its base is changes.base.ref.from), github.event.merge_group.committer.*
+// (the payload has head_commit.committer, the commit of the merge queue which GitHub creates), the email of the author
+// of that commit (GitHub fills it from a verified address) and github.event.merge_group.head_ref (the name of the queue's branch).
+func (c *tiContext) outsiderEventText(path []string) string {
+	if len(path) < 4 || path[0] != "github" || path[1] != "event" {
+		return ""
+	}
+	isElem := func(s string) bool { return s == "*" || s == "[]" }
+	rest := strings.Join(path[3:], ".")
+	switch path[2] {
+	case "pull_request":
+		if rest == "head.repo.homepage" {
+			return "the website of the repository which the pull request comes from"
+		}
+	case "changes":
+		// The previous values of an edited issue or pull request: text which its author typed before.
+		switch rest {
+		case "title.from":
+			return "the previous title of an edited issue or pull request"
+		case "body.from":
+			return "the previous text of an edited issue or pull request"
+		case "base.ref.from":
+			return "a branch name"
+		}
+	case "pages":
+		// A gollum event: the pages of a wiki, which anyone who may edit the wiki names.
+		if len(path) == 5 && isElem(path[3]) && path[4] == "title" {
+			return "the title of a wiki page"
+		}
+	case "merge_group":
+		// The commit of a merge queue has the title and the text of the pull requests.
+		switch rest {
+		case "head_commit.message":
+			return "the message of a merge queue commit"
+		case "head_commit.author.name":
+			return "the name of the author of a merge queue commit"
+		}
+	case "workflow_run", "workflow":
+		// The path of the workflow file which started a workflow_run is a name which the author of a pull request
+		// from a fork chooses: the file may be new in the pull request. github.event.workflow is also the workflow of
+		// a workflow_dispatch event, which only someone with write access starts.
+		if !c.hasTrigger("workflow_run") {
+			return ""
+		}
+		if rest == "path" || (path[2] == "workflow_run" && len(path) == 6 && path[3] == "referenced_workflows" && isElem(path[4]) && path[5] == "path") {
+			return "the path of the workflow file that started this run"
+		}
+	}
+	return ""
+}
+
+// hasTrigger reports whether the workflow (for an action, one of the workflows which call it) is started by one of the events.
+func (c *tiContext) hasTrigger(events ...string) bool {
+	if c.wf == nil {
+		return false
+	}
+	for _, e := range c.wf.TriggerEvents() {
+		if w, ok := e.(*WebhookEvent); ok && w.Hook != nil && slices.Contains(events, w.Hook.Value) {
+			return true
+		}
+	}
+	return false
 }
 
 // matrixIsLiteral reports whether every value of the matrix variable is written in the workflow.
