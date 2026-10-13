@@ -12,6 +12,7 @@ import (
 // Every error of the built-in rules must carry a registered ID, a severity, the documentation URL
 // and a region, whichever rule reported it.
 func TestDiagnosticsOfBuiltinRulesAreComplete(t *testing.T) {
+	t.Parallel()
 	var shellcheck, pyflakes string
 	if p, err := execabs.LookPath("shellcheck"); err == nil {
 		shellcheck = p
@@ -28,16 +29,17 @@ func TestDiagnosticsOfBuiltinRulesAreComplete(t *testing.T) {
 			t.Fatal(err)
 		}
 		proj := &Project{root: dir}
+		// One Linter for the directory: it reads the workflows of the project once, not for every file
+		l, err := NewLinter(io.Discard, &LinterOptions{Shellcheck: shellcheck, Pyflakes: pyflakes})
+		if err != nil {
+			t.Fatal(err)
+		}
+		l.defaultConfig = withoutMissingTimeout(&Config{})
 		for _, infile := range infiles {
 			b, err := os.ReadFile(infile)
 			if err != nil {
 				t.Fatal(err)
 			}
-			l, err := NewLinter(io.Discard, &LinterOptions{Shellcheck: shellcheck, Pyflakes: pyflakes})
-			if err != nil {
-				t.Fatal(err)
-			}
-			l.defaultConfig = withoutMissingTimeout(&Config{})
 			errs, err := l.Lint("test.yaml", b, proj)
 			if err != nil {
 				t.Fatal(err)
