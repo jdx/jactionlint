@@ -13,11 +13,15 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/jdx/jactionlint/v2"
 	"github.com/jdx/jactionlint/v2/internal/exampleconfig"
 )
+
+// exampleDay is the day the outputs of the examples of the document are made on.
+var exampleDay = time.Date(2026, time.October, 13, 0, 0, 0, 0, time.UTC)
 
 // requiresOnlineMarker is the first line of the examples of the online checks. Those checks need the
 // GitHub API, so the example is run with the recorded answers in testdata/online/github.json
@@ -48,6 +52,9 @@ func Actionlint(src []byte, heading string) ([]byte, error) {
 		Shellcheck:    "shellcheck",
 		Pyflakes:      "pyflakes",
 		Color:         jactionlint.ColorOptionKindNever,
+		// The outputs of the examples must not change when a date of the checks passes (the retirement of a runner
+		// label changes the list of the available labels), so they are made as of this day
+		Now: func() time.Time { return exampleDay },
 	}
 
 	p, err := jactionlint.NewProjects().At(".")

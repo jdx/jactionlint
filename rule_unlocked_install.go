@@ -22,13 +22,16 @@ import (
 //     package-lock.json, yarn.lock or pnpm-lock.yaml), because only then the lock file is being ignored. Without
 //     the lock file there is nothing to bind to.
 //   - with the option "pedantic", the same installs without a lock file in the repository, `bun install` without a
-//     frozen lock file, and `pip install -r` without hashes or constraints.
+//     frozen lock file, `pip install -r` without hashes or constraints, and npm, Yarn and bun installs that run the
+//     lifecycle scripts of the dependencies (see checkLifecycleScripts), and installs of packages without a release-age
+//     cooldown (see checkReleaseAge).
 type RuleUnlockedInstall struct {
 	RuleBase
 	runContext
-	src  *fileOffsets
-	root string // the root directory of the project, empty when the file is not in one
-	step *Step
+	src   *fileOffsets
+	root  string // the root directory of the project, empty when the file is not in one
+	step  *Step
+	files repoFiles
 }
 
 // NewRuleUnlockedInstall creates a new RuleUnlockedInstall instance. The source is the content of the file; it is
@@ -81,6 +84,8 @@ func (rule *RuleUnlockedInstall) VisitStep(n *Step) error {
 		}
 		rule.checkCargo(s, origin, c, in)
 		rule.checkManifest(s, origin, c, in)
+		rule.checkLifecycleScripts(n, s, origin, c, in)
+		rule.checkReleaseAge(n, s, origin, c, in)
 	}
 	return nil
 }
@@ -215,7 +220,7 @@ func (rule *RuleUnlockedInstall) checkManifest(s *runscript.Script, origin runsc
 
 func init() {
 	registerRules(
-		RuleInfo{ID: "unlocked-install", Group: RuleGroupSecurity, Summary: "cargo install runs without --locked, or npm, yarn or pnpm install without freezing a lock file that the repository has.", DefaultLevel: SeverityError, Profile: ProfileDefault, Fixable: true, DocsAnchor: "check-unlocked-install", Options: []RuleOption{pedanticOption}},
+		RuleInfo{ID: "unlocked-install", Group: RuleGroupSecurity, Summary: "cargo install runs without --locked, or npm, yarn or pnpm install without freezing a lock file that the repository has. With the option pedantic, also installs without a lock file npm, Yarn and bun installs that run the lifecycle scripts of the dependencies, and installs without a release-age cooldown.", DefaultLevel: SeverityError, Profile: ProfileDefault, Fixable: true, DocsAnchor: "check-unlocked-install", Options: []RuleOption{pedanticOption}},
 	)
 	registerRuleFactory("unlocked-install", func(env *RuleEnv) []Rule {
 		if !env.config.RuleEnabled("unlocked-install") {

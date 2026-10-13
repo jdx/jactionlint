@@ -44,6 +44,10 @@ type GitHubRepo struct {
 	Archived bool `json:"archived"`
 	// DefaultBranch is the name of the default branch.
 	DefaultBranch string `json:"default_branch"`
+	// FullName is "owner/repo" as GitHub spells it now. It differs from the name that was asked for when the
+	// repository was renamed or transferred and GitHub redirected the request. It can be empty (a client which
+	// does not know it).
+	FullName string `json:"full_name,omitempty"`
 }
 
 // GitHubTag is a tag and the commit it points to.

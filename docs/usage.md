@@ -713,7 +713,7 @@ and why an unsafe one is unsafe.
 <a id="online-checks"></a>
 ### Online checks
 
-Six checks need to ask GitHub about the actions a workflow uses, so they are off unless you give `--online` (or set `online: true` in
+Seven checks need to ask GitHub about the actions a workflow uses, so they are off unless you give `--online` (or set `online: true` in
 [the configuration](config.md#configuration-file), or `JACTIONLINT_ONLINE=1` in the environment). **Without it jactionlint never uses
 the network.**
 
@@ -739,6 +739,7 @@ export it by itself:
 | [`stale-action-refs`](checks.md#check-stale-action-refs) | A pinned commit that no tag points to |
 | [`archived-uses`](checks.md#check-archived-uses) | An action in an archived repository |
 | [`ref-version-mismatch`](checks.md#check-ref-version-mismatch) | A `# v1.2.3` comment that does not match the pinned commit |
+| [`repojacking`](checks.md#check-repojacking) | An action of an owner that does not exist, or that left a repository that GitHub only redirects: anyone can register the name |
 
 ```sh
 export GITHUB_TOKEN=$(gh auth token)   # or GH_TOKEN
@@ -806,7 +807,7 @@ jactionlint --online
   they learn. At most six requests are in flight (`concurrency`). The number of requests grows with the number of different
   actions, not steps. Interrupting with Ctrl-C stops the lookups.
 - **Levels.** The online rules do not belong to a profile; `--online` turns them on at their own level (`impostor-commit` and
-  `known-vulnerable-actions` are errors, `ref-confusion`, `archived-uses` and `ref-version-mismatch` warnings, `stale-action-refs` is
+  `known-vulnerable-actions` are errors, `ref-confusion`, `archived-uses`, `ref-version-mismatch` and `repojacking` warnings, `stale-action-refs` is
   informational). Set a level or `off` in `rules` as for any rule.
 - **Not in the playground.** The WebAssembly build has no network access, so `--online` is an error there.
 

@@ -37,6 +37,7 @@ var actionRuleScope = map[string]struct {
 	"concurrency-cancels-prs":         {scope: actionNotApplicable},   // concurrency: belongs to the workflow
 	"concurrency-cancels-release":     {scope: actionNotApplicable},   // concurrency: belongs to the workflow
 	"continue-on-error":               {scope: actionApplies},         // the steps option; an action has no jobs
+	"deprecated-runner-label":         {scope: actionNotApplicable},   // runs-on: belongs to the calling job
 	"duplicate-triggers":              {scope: actionNotApplicable},   // on: belongs to the workflow
 	"gate-job-skipped-on-failure":     {scope: actionNotApplicable},   // needs: between the jobs of a workflow
 	"gh-without-token":                {scope: actionNotApplicable},   // the token comes from the env of the calling job, which a composite action cannot see
@@ -59,6 +60,7 @@ var actionRuleScope = map[string]struct {
 	"use-trusted-publishing":          {scope: actionApplies},         // the publishing steps; the id-token permission is the caller's
 	"anonymous-definition":            {scope: actionNotApplicable},
 	"archived-uses":                   {scope: actionApplies},
+	"repojacking":                     {scope: actionApplies},
 	"artipacked":                      {scope: actionApplies},
 	"bot-conditions":                  {scope: actionCallerDependent},
 	"cache-poisoning":                 {scope: actionCallerDependent},
