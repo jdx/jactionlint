@@ -1,6 +1,9 @@
 package jactionlint
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 const multilineID = "multiline-plain-run"
 
@@ -27,6 +30,21 @@ func TestMultilinePlainRun(t *testing.T) {
 		{"an assignment after echo", step("run: echo a\n          X=1\n"), []int{7}},
 		{"on a windows runner with bash", "on: push\njobs:\n  a:\n    runs-on: windows-latest\n    steps:\n      - shell: bash\n        run: echo a\n          echo b\n", []int{8}},
 		{"two groups, only the second is a bug", step("run: echo a\n\n          echo b\n          cat x\n"), []int{9}},
+
+		// the end of the line is a word, not a keyword
+		{"a line that ends with in", step("run: git checkout main\n          npm ci\n"), []int{7}},
+		{"a path that ends with in", step("run: ls /usr/bin\n          cat x\n"), []int{7}},
+		{"a line that ends with do", step("run: git push origin\n          npm test\n"), []int{7}},
+		{"assignments before a command", step("run: FOO=1 npm ci\n          npm test\n"), []int{7}},
+		{"a wrapper before a command", step("run: time npm ci\n          npm test\n"), []int{7}},
+
+		// the command is run by a launcher
+		{"an assignment before sudo", step("run: DEBIAN_FRONTEND=noninteractive sudo\n          apt-get install x\n"), nil},
+		{"an assignment before docker", step("run: FOO=1 docker run --rm image\n          git status\n"), nil},
+		{"env before ssh", step("run: env FOO=1 ssh host\n          git status\n"), nil},
+		{"time before docker", step("run: time docker run x\n          git status\n"), nil},
+		{"export takes assignments", step("run: export A=1\n          B=2\n"), nil},
+		{"unset takes names", step("run: unset A\n          B=2\n"), nil},
 
 		// one command wrapped over several lines
 		{"options", step("run: docker build\n          --tag x\n          --file Dockerfile\n          .\n"), nil},
@@ -80,6 +98,9 @@ func TestMultilinePlainRunFix(t *testing.T) {
 		{"followed by a key", "      - run: echo a\n          echo b\n        env:\n          X: y\n", "      - run: |\n          echo a\n          echo b\n        env:\n          X: y\n"},
 		{"more steps", "      - run: echo a\n          echo b\n      - run: echo c\n", "      - run: |\n          echo a\n          echo b\n      - run: echo c\n"},
 
+		{"a declaration with more assignments", "      - run: export A=1\n          B=2\n          echo x\n", ""},
+		{"a wrapped line next to commands", "      - run: make test\n          CC=gcc\n          echo x\n", ""},
+		{"a wrapped argument next to commands", "      - run: git commit -m\n          'x'\n          git push\n", ""},
 		{"the value is on the next line", "      - run:\n          echo a\n          echo b\n", ""},
 		{"a comment follows", "      - run: echo a\n          echo b # c\n", ""},
 		{"escape in double quotes", "      - run: \"echo a\\tx\n          echo b\"\n", ""},
@@ -120,5 +141,32 @@ func TestMultilinePlainRunPosition(t *testing.T) {
 	errs := errsWithID(lintFileWithConfig(t, cfg, "ci.yaml", src), multilineID)
 	if len(errs) != 1 || errs[0].Line != 7 || errs[0].Column != 11 {
 		t.Fatalf("unexpected findings: %v", errs)
+	}
+}
+
+func TestMultilinePlainRunMessage(t *testing.T) {
+	cfg := ruleConfig(multilineID)
+	tests := []struct {
+		what    string
+		run     string
+		want    string
+		notWant string
+	}{
+		{"folded text", "echo a\n          echo b", "runs the single command `echo a echo b`", ""},
+		{"single quoted quote", "'echo ''a'' b\n          echo c'", "`echo 'a' b echo c`", "''"},
+		{"blank line", "echo a\n\n          echo b\n          echo c", "a blank line stays a line break", "single command"},
+		{"escape", "\"echo a\\tb\n          echo c\"", "parts of one command", "single command"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.what, func(t *testing.T) {
+			src := "on: push\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      - run: " + tc.run + "\n"
+			errs := errsWithID(lintFileWithConfig(t, cfg, "ci.yaml", src), multilineID)
+			if len(errs) != 1 {
+				t.Fatalf("want one finding: %v", errs)
+			}
+			if !strings.Contains(errs[0].Message, tc.want) || (tc.notWant != "" && strings.Contains(errs[0].Message, tc.notWant)) {
+				t.Errorf("message is %q", errs[0].Message)
+			}
+		})
 	}
 }

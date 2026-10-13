@@ -2816,7 +2816,7 @@ an argument (`docker`, `ssh`, `sudo`, `xargs`, `find`, ...). Lines separated by 
 a line break). A script in a block, a script of `shell: python` and a script on one line are never reported.
 
 `--fix` writes the scalar as a block (`run: |`) with one line of the scalar on each line, when that is exact: the value starts on the line
-of the `run:` key, and has no blank line, no `#` and no escape (in a double quoted scalar), and nothing follows it on its last line. The
+of the `run:` key, every line after the first starts a command (a script with some lines that continue a command, like `make test` then `CC=gcc`, is not rewritten), and it has no blank line, no `#` and no escape (in a double quoted scalar), and nothing follows it on its last line. The
 finding says why otherwise.
 
 <a id="check-job-step-ids"></a>

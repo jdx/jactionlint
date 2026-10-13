@@ -87,20 +87,39 @@ func (rule *RuleMultilinePlainRun) VisitStep(n *Step) error {
 		text := string(rule.src.src[rule.src.lineStarts[line-1]:rule.src.lineEnd(line)])
 		col = utf8.RuneCountInString(text[:len(text)-len(strings.TrimLeft(text, " \t"))]) + 1
 	}
-	var shown []string
+	shown := 0
 	for _, l := range f.lines {
 		if l != "" {
-			shown = append(shown, l)
+			shown++
 		}
 	}
-	joined := strings.Join(shown, " ")
-	if utf8.RuneCountInString(joined) > 80 {
-		r := []rune(joined)
-		joined = string(r[:77]) + "..."
-	}
-	e := rule.errorIDAt("multiline-plain-run", &Pos{Line: line, Col: col}, "this \"run:\" is not a block scalar, so YAML folds its "+strconv.Itoa(len(shown))+" lines into one line and the shell runs the single command `"+joined+"`. write `run: |` to keep the lines").endAt(&Pos{Line: line, Col: col + utf8.RuneCountInString(f.lines[idx])})
+	e := rule.errorIDAt("multiline-plain-run", &Pos{Line: line, Col: col}, foldedMessage(f, shown)).endAt(&Pos{Line: line, Col: col + utf8.RuneCountInString(f.lines[idx])})
 	rule.fix(e, run.Run, f)
 	return nil
+}
+
+// foldedMessage describes what the shell gets. The text is given only when it is known exactly: YAML folds the lines of
+// the scalar into spaces and keeps a blank line as a line break, `”` of a single quoted scalar is one quote, and the
+// escapes of a double quoted scalar are not decoded here.
+func foldedMessage(f *foldedScalar, lines int) string {
+	head := "this \"run:\" is not a block scalar, so YAML folds its " + strconv.Itoa(lines) + " lines into one line"
+	blank, escape := false, false
+	for _, l := range f.lines {
+		blank = blank || l == ""
+		escape = escape || (f.style == '"' && strings.Contains(l, `\`))
+	}
+	if blank || escape {
+		return head + " (a blank line stays a line break), and the shell gets the lines as parts of one command. write `run: |` to keep the lines"
+	}
+	text := strings.Join(f.lines, " ")
+	if f.style == '\'' {
+		text = strings.ReplaceAll(text, "''", "'")
+	}
+	if utf8.RuneCountInString(text) > 80 {
+		r := []rune(text)
+		text = string(r[:77]) + "..."
+	}
+	return head + " and the shell runs the single command `" + text + "`. write `run: |` to keep the lines"
 }
 
 // keyPrefix matches the text in front of the value of a `run:` key written on one line: the indentation, an optional
@@ -138,6 +157,10 @@ func (rule *RuleMultilinePlainRun) fix(e *Error, s *String, f *foldedScalar) {
 	}
 	if strings.TrimSpace(last[end:]) != "" {
 		no("a comment follows the script, so the fix would move it into the script. add `|` after `run:` and put each command on its own line by hand")
+		return
+	}
+	if !everyLineStartsACommand(f.lines) {
+		no("some lines continue the command before them and others start a new one, so the fix cannot tell which line break to keep as one. add `|` after `run:` and put each command on its own line by hand")
 		return
 	}
 	body := make([]string, 0, len(f.lines))
@@ -246,7 +269,7 @@ var commandWords = set("echo cd export mkdir rm cp mv cat ls chmod chown touch l
 var launcherWords = set("docker kubectl helm ssh sudo doas env time nice nohup xargs exec timeout watch parallel find bash sh python python3 node xvfb-run command builtin xcrun")
 
 // assignmentFree are the commands after which `x=1` on the next line is a separate statement and not an argument.
-var assignmentFree = set("echo cd mkdir rm cp mv cat ls chmod chown touch ln tar unzip zip curl wget npm npx yarn pnpm bun pip pip3 pipx cargo go git gh apt apt-get brew sleep printf export unset")
+var assignmentFree = set("echo cd mkdir rm cp mv cat ls chmod chown touch ln tar unzip zip curl wget npm npx yarn pnpm bun pip pip3 pipx cargo go git gh apt apt-get brew sleep printf")
 
 var assignmentRe = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*=`)
 
@@ -259,7 +282,14 @@ func set(words string) map[string]bool {
 }
 
 // continuationEnd are the endings of a line which continue the command on the next one.
-var continuationEnd = []string{"&&", "||", "|", ";", "&", `\`, "(", "{", "!", "=", ",", "--", "then", "do", "else", "elif", "in", "|&", ">", ">>", "<"}
+var continuationEnd = []string{"&&", "||", "|", ";", "&", `\`, "(", "{", "!", "=", ",", "--", "|&", ">", ">>", "<"}
+
+// continuationWords are the shell keywords which, as the last word of a line, continue the command on the next one.
+var continuationWords = set("then do else elif in")
+
+// wrapperWords are the commands which run the command that follows them with a changed environment, and do not change
+// which command it is.
+var wrapperWords = set("env command exec time nohup nice")
 
 // commandBoundary returns the index of the first line of the lines which starts a command of its own after a
 // line of another command, or false when the lines may be one wrapped command.
@@ -281,17 +311,33 @@ func boundaryIn(lines []string) (int, bool) {
 	if len(lines) < 2 {
 		return 0, false
 	}
-	cmd := firstWord(lines[0]) // the command the lines so far belong to
-	text := lines[0]           // the text of the lines so far
+	cmd := effectiveWord(lines[0]) // the command the lines so far belong to
+	text := lines[0]               // the text of the lines so far
 	for i := 1; i < len(lines); i++ {
-		next := lines[i]
-		w := firstWord(next)
-		if isNewCommand(cmd, text, w, next) {
+		if isNewCommand(cmd, text, firstWord(lines[i])) {
 			return i, true
 		}
-		text += " " + next
+		text += " " + lines[i]
 	}
 	return 0, false
+}
+
+// everyLineStartsACommand reports whether each line after the first one is a command of its own, so that writing the
+// lines one below the other keeps what each line does. A script where some lines continue the command before them
+// (`make test` then `CC=gcc`) and others do not cannot be rewritten without a guess.
+func everyLineStartsACommand(lines []string) bool {
+	if len(lines) < 2 {
+		return false
+	}
+	cmd := effectiveWord(lines[0])
+	text := lines[0]
+	for _, l := range lines[1:] {
+		if !isNewCommand(cmd, text, firstWord(l)) {
+			return false
+		}
+		cmd, text = effectiveWord(l), l
+	}
+	return true
 }
 
 func firstWord(line string) string {
@@ -302,9 +348,26 @@ func firstWord(line string) string {
 	return f[0]
 }
 
+// effectiveWord returns the command which a line runs: the first word that is not an assignment (`DEBIAN_FRONTEND=x`),
+// a wrapper (`env`, `time`, `nohup`, ...) or an option of a wrapper. It is the first assignment when the line has
+// nothing else.
+func effectiveWord(line string) string {
+	f := strings.Fields(line)
+	for _, w := range f {
+		if assignmentRe.MatchString(w) || wrapperWords[w] || (strings.HasPrefix(w, "-") && len(w) > 1) {
+			continue
+		}
+		return w
+	}
+	if len(f) > 0 {
+		return f[0]
+	}
+	return ""
+}
+
 // isNewCommand reports whether the line which starts with the word is a command of its own after the text, which is
-// the command whose first word is cmd and the lines folded into it.
-func isNewCommand(cmd, text, w, line string) bool {
+// the command cmd and the lines folded into it.
+func isNewCommand(cmd, text, w string) bool {
 	if !commandWords[cmd] && !assignmentRe.MatchString(cmd) {
 		return false // what the text is is not known: a script of the repository, a variable, ...
 	}
@@ -315,6 +378,9 @@ func isNewCommand(cmd, text, w, line string) bool {
 		if strings.HasSuffix(text, end) {
 			return false
 		}
+	}
+	if f := strings.Fields(text); len(f) > 0 && continuationWords[f[len(f)-1]] {
+		return false
 	}
 	if opensMore(text) {
 		return false
