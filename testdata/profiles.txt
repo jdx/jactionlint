@@ -29,6 +29,7 @@ duplicate-job-needs correctness correctness error
 duplicate-key correctness correctness error
 duplicate-step-id correctness correctness error
 duplicate-triggers default policy error
+environment-file-redirect correctness correctness error
 excessive-permissions default security error
 expired-ignore correctness policy error
 expression-syntax correctness correctness error
@@ -68,6 +69,7 @@ invalid-workflow-dispatch-input correctness correctness error
 invisible-characters default security error
 known-vulnerable-actions online security error
 local-action-checkout correctness correctness error
+malformed-expression-delimiters correctness correctness error
 matrix-duplicate-value correctness correctness error
 matrix-invalid-exclude correctness correctness error
 max-run-lines pedantic style error

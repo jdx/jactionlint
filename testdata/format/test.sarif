@@ -175,6 +175,21 @@
               "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
             },
             {
+              "id": "environment-file-redirect",
+              "name": "EnvironmentFileRedirect",
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "description": "Checks for writes to GITHUB_OUTPUT and the other environment files that lose the data at \"run:\"",
+                "queryURI": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+              },
+              "fullDescription": {
+                "text": "Checks for writes to GITHUB_OUTPUT and the other environment files that lose the data at \"run:\""
+              },
+              "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+            },
+            {
               "id": "events",
               "name": "Events",
               "defaultConfiguration": {
@@ -351,6 +366,21 @@
               },
               "fullDescription": {
                 "text": "Checks that a local action is not used before checking out the repository (opt-in)"
+              },
+              "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+            },
+            {
+              "id": "malformed-expression-delimiters",
+              "name": "MalformedExpressionDelimiters",
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "description": "Checks for expressions written with the wrong delimiters, like \"${ github.ref }\" or \"{{ github.sha }}\"",
+                "queryURI": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+              },
+              "fullDescription": {
+                "text": "Checks for expressions written with the wrong delimiters, like \"${ github.ref }\" or \"{{ github.sha }}\""
               },
               "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
             },
