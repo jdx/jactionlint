@@ -16,6 +16,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 
@@ -388,21 +389,8 @@ func run(args []string, stdout, dbgout io.Writer, srcURL string) error {
 		return err
 	}
 
-	var out io.Writer
-	var dst string
-	if len(args) == 0 || args[len(args)-1] == "-" {
-		out = stdout
-		dst = "stdout"
-	} else {
-		dst = args[len(args)-1]
-		f, err := os.Create(dst)
-		if err != nil {
-			return err
-		}
-		defer f.Close()
-		out = f
-	}
-
+	// Everything which can fail because of the input happens before the destination is touched, so that a
+	// failed refresh never empties the existing output.
 	p, err := parse(src)
 	if err != nil {
 		return err
@@ -412,14 +400,47 @@ func run(args []string, stdout, dbgout io.Writer, srcURL string) error {
 		return err
 	}
 
-	if err := write(p, out); err != nil {
-		return err
+	if len(args) == 0 || args[len(args)-1] == "-" {
+		if err := write(p, stdout); err != nil {
+			return err
+		}
+		dbg.Println("Wrote the output to stdout")
+	} else {
+		dst := args[len(args)-1]
+		if err := writeFile(p, dst); err != nil {
+			return err
+		}
+		dbg.Println("Wrote the output to", dst)
 	}
-
-	dbg.Println("Wrote the output to", dst)
 	dbg.Println("Done generate-webhook-events script successfully")
 
 	return nil
+}
+
+// writeFile writes the output to a temporary file next to dst and renames it over dst, so that dst is either
+// the complete new output or untouched.
+func writeFile(parsed map[string][]string, dst string) error {
+	buf := &bytes.Buffer{}
+	if err := write(parsed, buf); err != nil {
+		return err
+	}
+	f, err := os.CreateTemp(filepath.Dir(dst), filepath.Base(dst)+".tmp*")
+	if err != nil {
+		return err
+	}
+	tmp := f.Name()
+	defer os.Remove(tmp) // no-op after a successful rename
+	if _, err := f.Write(buf.Bytes()); err != nil {
+		f.Close()
+		return fmt.Errorf("could not write output: %w", err)
+	}
+	if err := f.Close(); err != nil {
+		return err
+	}
+	if err := os.Chmod(tmp, 0o644); err != nil {
+		return err
+	}
+	return os.Rename(tmp, dst)
 }
 
 func main() {

@@ -141,3 +141,64 @@ func TestExtraTypes(t *testing.T) {
 		}
 	})
 }
+
+func TestExistingOutputSurvivesError(t *testing.T) {
+	ok, err := os.ReadFile(filepath.Join("testdata", "ok.html"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	// merge_group is missing in the document, which is an error of the extra activity types
+	noMergeGroup := filepath.Join(dir, "no_merge_group.html")
+	if err := os.WriteFile(noMergeGroup, []byte(strings.ReplaceAll(string(ok), "merge_group", "merge_groups")), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, in := range []string{noMergeGroup, filepath.Join("testdata", "no_tables.html")} {
+		dst := filepath.Join(dir, "all_webhooks.go")
+		const existing = "package jactionlint // existing output\n"
+		if err := os.WriteFile(dst, []byte(existing), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := run([]string{in, dst}, io.Discard, io.Discard, ""); err == nil {
+			t.Fatalf("%s: error did not occur", in)
+		}
+		b, err := os.ReadFile(dst)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(b) != existing {
+			t.Fatalf("%s: existing output was modified: %q", in, b)
+		}
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, e := range entries {
+			if strings.Contains(e.Name(), ".tmp") {
+				t.Fatalf("%s: temporary file was left: %s", in, e.Name())
+			}
+		}
+	}
+}
+
+func TestWriteFileOK(t *testing.T) {
+	dst := filepath.Join(t.TempDir(), "all_webhooks.go")
+	if err := os.WriteFile(dst, []byte("old"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := run([]string{filepath.Join("testdata", "ok.html"), dst}, io.Discard, io.Discard, ""); err != nil {
+		t.Fatal(err)
+	}
+	have, err := os.ReadFile(dst)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, err := os.ReadFile(filepath.Join("testdata", "ok.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if diff := cmp.Diff(strings.ReplaceAll(string(want), "\r\n", "\n"), strings.ReplaceAll(string(have), "\r\n", "\n")); diff != "" {
+		t.Fatal(diff)
+	}
+}
