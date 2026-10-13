@@ -210,6 +210,11 @@ extends:
     **A token is not sent to a host named here when the file is a repository's `.github/jactionlint.yaml`**, only when it is your
     user-global config or the file of `--config-file`.
   - `token-env`, `token-file`: The variable and the file which hold the token, read before `GITHUB_TOKEN` and `GH_TOKEN`.
+  - `github-com-fallback` (default `false`), `github-com-token-env`, `github-com-token-file`: On a GitHub Enterprise Server, also
+    ask `api.github.com` about the repositories which the Server does not have, with its own token (`GITHUB_COM_TOKEN`, or the
+    variable or the file named here). The names of those repositories are sent to github.com: list internal ones in `deny`. Same as
+    `--online-github-com-fallback`, `--online-github-com-token-env` and `--online-github-com-token-file`. See
+    [the usage document](usage.md#online-checks).
   - `allow`, `deny`: Patterns `owner/repo` with `*` wildcards (`mycorp/*`, `*/setup-*`; case does not matter) of the repositories
     which may or may not be looked up. `deny` wins.
   - `cache-ttl` (default `1h`), `max-rate-limit-wait` (default `30s`; `0s` never waits), `retries` (default `2`),

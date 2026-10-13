@@ -143,3 +143,36 @@ func TestCommandRemoteActionIsInTheCoverageOfTheRun(t *testing.T) {
 		t.Errorf("the second run is within the TTL: %v", rep)
 	}
 }
+
+func TestCommandRemoteReusableWorkflowIsCheckedAndCached(t *testing.T) {
+	f := newFakeGitHub(t)
+	f.json("/repos/corp/w/contents/.github/workflows/ci.yml", contentsJSON(remoteCallee))
+	setOnlineEnv(t, f, "tok")
+	_, wf := onlineProject(t, jobsWith(
+		"  a:\n    uses: corp/w/.github/workflows/ci.yml@v1\n    with:\n      nmae: x\n",
+		"  b:\n    uses: corp/w/.github/workflows/ci.yml@"+remoteTestSHA+"\n    with:\n      name: x\n    secrets: inherit\n",
+		"  c:\n    needs: b\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo ${{ needs.b.outputs.reslt }}\n",
+	), onlyMetadataConfig)
+
+	_, stdout, stderr := runOnlineCommand(t, "--online", wf)
+	for _, want := range []string{"[missing-workflow-input]", "[missing-workflow-secret]", "[unknown-workflow-input]", "[undefined-property]"} {
+		if !strings.Contains(stdout, want) {
+			t.Errorf("%q is missing in\n%s", want, stdout)
+		}
+	}
+	if stderr != "" {
+		t.Errorf("nothing should be on stderr:\n%s", stderr)
+	}
+	if n := f.count("/repos/corp/w/contents/.github/workflows/ci.yml"); n != 2 {
+		t.Errorf("%d requests for the workflow, want 2 (one for each ref)", n)
+	}
+	first := f.total()
+	_, again, _ := runOnlineCommand(t, "--online", wf)
+	if f.total() != first || again != stdout {
+		t.Errorf("a second run made %d requests, and the output changed:\n%s", f.total()-first, again)
+	}
+	_, withoutOnline, _ := runOnlineCommand(t, wf)
+	if f.total() != first || strings.Contains(withoutOnline, "workflow-input") {
+		t.Errorf("without --online nothing is asked or reported: %d requests\n%s", f.total()-first, withoutOnline)
+	}
+}

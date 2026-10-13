@@ -158,6 +158,9 @@ type GitHubRateLimitError struct {
 	// Authenticated is whether the request carried a token. Unauthenticated requests have a much
 	// lower limit.
 	Authenticated bool
+	// TokenHint says where to set the token which raises the limit, when it is not the usual GITHUB_TOKEN and GH_TOKEN
+	// (the token for github.com in the fallback of an Enterprise Server). Empty means the usual ones.
+	TokenHint string
 
 	now func() time.Time // for tests
 }
@@ -176,7 +179,11 @@ func (e *GitHubRateLimitError) Error() string {
 		s += ")"
 	}
 	if !e.Authenticated {
-		s += ". set GITHUB_TOKEN (or GH_TOKEN) to raise the limit"
+		if e.TokenHint != "" {
+			s += ". set a token (" + e.TokenHint + ") to raise the limit"
+		} else {
+			s += ". set GITHUB_TOKEN (or GH_TOKEN) to raise the limit"
+		}
 	}
 	return s
 }

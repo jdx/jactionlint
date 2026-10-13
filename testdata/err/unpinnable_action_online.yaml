@@ -1,0 +1,31 @@
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      # ERROR: pinned, but it uses actions/checkout@v4 and others by a ref which can move. The leaf it pins has one too
+      - uses: example/composite-loose@1111111111111111111111111111111111111111
+      # ERROR: the Docker image is a tag
+      - uses: example/docker-tag@4444444444444444444444444444444444444444
+      # ERROR: two levels down, through a commit-pinned action
+      - uses: example/outer@4444444444444444444444444444444444444444
+      # ERROR: five dependencies by a tag
+      - uses: example/many@4444444444444444444444444444444444444444
+      # ERROR: the steps of a parallel group count too
+      - uses: example/parallel@9999999999999999999999999999999999999999
+      # ERROR: a cycle of pinned actions is read once
+      - uses: example/cycle-a@7777777777777777777777777777777777777778
+      # ERROR: real actions. pre-commit/action uses actions/cache@v4, jekyll-build-pages runs an image tag
+      - uses: pre-commit/action@2c7b3805fd2a0fd8c1884dcaebf91fc102a13ecd # v3.0.1
+      - uses: actions/jekyll-build-pages@44a6e6beabd48582f863aeeb6cb2151cc1716697 # v1.0.13
+      # OK: everything is pinned to a digest or to a commit
+      - uses: example/docker-digest@4444444444444444444444444444444444444444
+      - uses: example/tidy@3333333333333333333333333333333333333334
+      - uses: reviewdog/action-actionlint@a8ac3eea598697a830f7d8e701fc9fcbfde88974 # v1.80.0
+      - uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # v0.35.0
+      # OK: the image is built from a Dockerfile, which is not read
+      - uses: example/dockerfile@4444444444444444444444444444444444444444
+      # OK: nothing is known about an action which cannot be read
+      - uses: example/private-action@5555555555555555555555555555555555555555
+      # OK: not pinned to a commit. unpinned-uses reports that
+      - uses: example/composite-loose@v1
