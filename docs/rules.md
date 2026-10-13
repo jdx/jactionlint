@@ -43,7 +43,7 @@ rules:
 | [bot-conditions](#bot-conditions) | security | error | default |
 | [cache-poisoning](#cache-poisoning) | security | error | default |
 | [checkout-static-credentials](#checkout-static-credentials) | security | error | default |
-| [command-injection](#command-injection) | security | error | default |
+| [command-injection](#command-injection) | security | warn | pedantic |
 | [concurrency-cancels-prs](#concurrency-cancels-prs) | correctness | error | default |
 | [concurrency-cancels-release](#concurrency-cancels-release) | correctness | error | default |
 | [concurrency-limits](#concurrency-limits) | policy | error | default |
@@ -273,8 +273,8 @@ actions/checkout is given an SSH key or a token that does not expire.
 Input that an outsider controls is run as code by a script after it was moved to an environment variable: eval, sh -c, a variable as a command, a pipe into a shell, an inline program, child_process in github-script.
 
 - Group: security
-- Default level: error
-- Profile: default
+- Default level: warn
+- Profile: pedantic
 - Details and examples: [checks](./checks.md#check-command-injection)
 
 ## concurrency-cancels-prs

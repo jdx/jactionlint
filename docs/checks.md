@@ -41,7 +41,7 @@ List of checks:
 - [Job ID and step ID uniqueness](#check-job-step-ids)
 - [Hardcoded credentials](#check-hardcoded-credentials)
 - [Dangerous writes to `GITHUB_ENV` and `GITHUB_PATH`](#check-github-env)
-- [Input of an outsider that a script runs as code](#check-command-injection)
+- [Input of an outsider that a script runs as code (pedantic)](#check-command-injection)
 - [Writes to the environment files that lose data](#check-environment-file-redirect)
 - [Packages installed by name](#check-adhoc-packages)
 - [Tools installed without an exact version](#check-unpinned-tools)
@@ -2865,7 +2865,7 @@ To turn the rule off, put `github-env: off` in the `rules` section of the [confi
 `# jactionlint ignore=github-env` after a reason.
 
 <a id="check-command-injection"></a>
-## Input of an outsider that a script runs as code
+## Input of an outsider that a script runs as code (pedantic)
 
 Example input:
 
@@ -2883,15 +2883,22 @@ jobs:
 ```
 
 Output:
-
+<!-- Skip update output -->
 ```
-test.yaml:8:14: untrusted input from the variable BODY (github.event.comment.body) is expanded into the command string of "bash -c", which the shell then parses as code: a value with shell syntax (a ;, a quote or $(...)) runs commands in this step. pass the value as an argument of the command string instead (bash -c 'cmd "$1"' _ "$VALUE"), or validate it against a fixed list or a strict pattern first [command-injection]
+test.yaml:8:14: warning: untrusted input from the variable BODY (github.event.comment.body) is expanded into the command string of "bash -c", which the shell then parses as code: a value with shell syntax (a ;, a quote or $(...)) runs commands in this step. pass the value as an argument of the command string instead (bash -c 'cmd "$1"' _ "$VALUE"), or validate it against a fixed list or a strict pattern first [command-injection]
   |
 8 |       - run: bash -c "echo $BODY"
   |              ^~~~~~~~~~~~~~~~~~~~
 ```
 
-[Playground](https://jactionlint.jdx.dev/#eNo8zrEKg0AMxvHdp/gQ1/MBbizdO5dSineGatGcmEQQ8d3LVemY/H/Dl9gXQC9i9IppHIk1PwBdJxKPR5ypUWqfxScFySlYP7SHmY3FJfawYKzmhkZJ9JdEaZJDAS5Lj9BIBxdRUuwSqsvtei9PARAv/n8AOXpU24Z3r52FmhZirc+JdUjtin3/DgBUPjhY)
+<!-- Skip playground link -->
+
+The output above is from this `rules` section of the [configuration file](config.md):
+
+```yaml
+rules:
+  command-injection: warn
+```
 
 The usual advice for [template injection](#untrusted-inputs) is to pass the input to the script through `env:` and to read it as
 `"$BODY"`. That is safe while the shell only expands the variable, and it is not when the script parses the value again.
@@ -2899,7 +2906,7 @@ The usual advice for [template injection](#untrusted-inputs) is to pass the inpu
 `$(id)` runs commands in the step, with the token and the secrets of the job. The same holds for `eval "$BODY"`, which runs the value
 itself. See CodeQL's [command injection query](https://github.com/github/codeql/blob/main/actions/ql/src/experimental/Security/CWE-078/CommandInjectionCritical.ql).
 
-The rule `command-injection` (in the `default` profile) reports an environment variable or a variable of the script that holds
+The rule `command-injection` (in the `pedantic` profile) reports an environment variable or a variable of the script that holds
 input an outsider controls (the same list of inputs as the expression checks, such as `github.event.comment.body`, `github.head_ref`
 or the title of a pull request) when the script:
 
@@ -2930,6 +2937,10 @@ Three things are left to other rules: an expression written in the script (`eval
 [template-injection](#untrusted-inputs)), `inputs.*` of a composite action (an action can take a command on purpose), and a
 value that only the output of a command makes untrusted. It does not follow a value through a function of the script
 (`run() { eval "$1"; }; run "$BODY"`), and it does not parse scripts of `pwsh`, `cmd` and `python`.
+
+The rule is `pedantic` because it has no finding yet on a corpus of about 500 repositories (6,900 workflow files), so it has no measured
+false-positive rate, and the policy of this project asks for a real case before a security rule fails a build by default. Each shape it reports has no
+harmless reading once the value is text that an outsider writes, so it can move to the `default` profile when real findings have been reviewed.
 
 To turn the rule off, put `command-injection: off` in the `rules` section of the [configuration file](config.md) or write
 `# jactionlint ignore=command-injection` after a reason.
