@@ -1,0 +1,9 @@
+on: push
+env:
+  ACTIONS_ALLOW_UNSECURE_COMMANDS: true
+jobs:
+  a:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: echo ${{ github.head_ref }}

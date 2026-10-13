@@ -26,6 +26,8 @@ Followings are unexhaustive list of interesting APIs.
   and `ParseConfig()` parses bytes. `Config.RuleLevel()` tells at which `Severity` a rule runs. Unknown keys are errors.
 - `Error` is a finding. It has the stable rule ID (`ID`), the `Severity`, the region (`Line`, `Column`, `EndLine` and `EndColumn`),
   the documentation URL (`DocURL`) and an optional automatic `Fix`, which is a list of byte-range `TextEdit`s.
+  `NoFix` says why a finding which the rule can fix has no `Fix` (`NoFixCode` and a reason); it is nil for findings which are advice only. The SARIF
+  log (which never has an unsafe fix) uses the codes `unsafe-edit`, `edit-conflict` and `invalid-edit` for a fix that exists but is not offered there.
 - `Rules()` returns the `RuleInfo` of every rule (ID, group, summary, default level, profile and options). `LookupRule()`
   finds one by its ID. The IDs are stable. `RuleDocURL()` returns the URL of the documentation of a rule.
 - `Severity` is the level of a finding: `SeverityInfo`, `SeverityWarning` or `SeverityError`. `SeverityOff` disables a rule.
