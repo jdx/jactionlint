@@ -40,6 +40,7 @@ var actionRuleScope = map[string]struct {
 	"gate-job-skipped-on-failure": {scope: actionNotApplicable},   // needs: between the jobs of a workflow
 	"gh-without-token":            {scope: actionNotApplicable},   // the token comes from the env of the calling job, which a composite action cannot see
 	"github-env":                  {scope: actionCallerDependent}, // privileged only for the events of the callers; its findings about untrusted input do not depend on them
+	"github-script-syntax":        {scope: actionApplies},         // the script input of the github-script steps
 	"insecure-ssh-keyscan":        {scope: actionApplies},         // the scripts of the steps
 	"insecure-url-scheme":         {scope: actionApplies},         // the scripts and inputs of the steps
 	"mutable-runner-label":        {scope: actionNotApplicable},   // runs-on: belongs to the calling job

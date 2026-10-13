@@ -78,6 +78,9 @@ func TestLinterLintOK(t *testing.T) {
 			if strings.Contains(f, "pyflakes") && pyflakes == "" {
 				t.Skip("skipping", f, "because \"pyflakes\" command does not exist in system")
 			}
+			if strings.Contains(f, "github_script") {
+				skipWithoutNode(t)
+			}
 
 			opts := LinterOptions{
 				Shellcheck: shellcheck,
@@ -229,6 +232,10 @@ func TestLinterLintError(t *testing.T) {
 					o.Pyflakes = pyflakes
 				}
 
+				if strings.Contains(testName, "github_script") {
+					skipWithoutNode(t)
+				}
+
 				l, err := NewLinter(io.Discard, &o)
 				if err != nil {
 					t.Fatal(err)
@@ -328,7 +335,7 @@ CheckFiles:
 				continue CheckFiles
 			}
 		}
-		if !strings.Contains(f, "pyflakes") && !strings.Contains(f, "shellcheck") {
+		if !strings.Contains(f, "pyflakes") && !strings.Contains(f, "shellcheck") && !strings.Contains(f, "github_script") {
 			t.Errorf("Workflow %q caused no error: %v", f, errs)
 		}
 	}
