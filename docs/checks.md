@@ -9057,6 +9057,12 @@ GitHub publishes security advisories for actions, such as the leak of secrets th
 out which version the workflow runs, and reports it when an advisory covers that version. This is the same as the
 [zizmor audit][zizmor-known-vulnerable-actions] of that name.
 
+The advisories come from one request for the whole run: the list of all advisories of the actions ecosystem (a single page of 100
+at the time of writing, 56 advisories), which also names no repository of yours to GitHub. If that list cannot be read (the endpoint
+answers an error, or the list is longer than 5 pages), the rule asks about each action instead, as before; the findings are the same.
+The data is always live (or the cache of the last live answer, see [the online section of the usage document](usage.md#online-checks)), never a copy
+shipped with jactionlint.
+
 The version comes from the ref: a version tag such as `v45.0.2` is the version. For `v45`, or a commit SHA, the rule takes the most
 specific version tag on the same commit. A branch has no version and is never reported. The finding names the first patched
 version when there is one.

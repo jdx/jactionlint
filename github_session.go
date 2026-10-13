@@ -138,9 +138,11 @@ type onlineSession struct {
 	blockUntil time.Time
 	transient  int // lookups in a row which failed in a way that suggests an outage
 	skipped    int
-	skippedBy  map[failureKind]int // skipped by the kind of failure
-	excluded   map[string]bool     // repositories left out by the allow and deny lists
-	seen       map[failureKind]bool
+	// advisoryListNoted is set once the failure of the advisory list was said (--verbose).
+	advisoryListNoted bool
+	skippedBy         map[failureKind]int // skipped by the kind of failure
+	excluded          map[string]bool     // repositories left out by the allow and deny lists
+	seen              map[failureKind]bool
 	// fileFailures is the failure of the first file lookup of a repository which failed, see file.
 	fileFailures map[repoKey]error
 	fileLocks    map[repoKey]*sync.Mutex
@@ -151,7 +153,9 @@ type onlineSession struct {
 	branches   memo[repoKey, *GitHubBranchList]
 	compares   memo[compareKey, GitHubCompareStatus]
 	advisories memo[string, []GitHubAdvisory]
-	origins    memo[originKey, originResult]
+	// advisoryList is the list of all advisories of the actions ecosystem, asked for once (see actionAdvisories).
+	advisoryList memo[struct{}, []GitHubAdvisory]
+	origins      memo[originKey, originResult]
 
 	// images answers the digest of container images. It is nil when the client itself can (ImageDigestClient).
 	images           ImageDigestClient
@@ -598,6 +602,9 @@ func (s *onlineSession) Advisories(owner, repo, subpath string) ([]GitHubAdvisor
 		packages = append(packages, packages[0]+"/"+sub)
 	}
 	return s.advisories.get(strings.Join(packages, ","), func() ([]GitHubAdvisory, error) {
+		if list, ok := s.actionAdvisories(); ok {
+			return advisoriesOfPackages(list, packages), nil
+		}
 		return callFor(s, owner+"/"+repo, func(ctx context.Context) ([]GitHubAdvisory, error) {
 			if pc, ok := s.client.(GitHubPackageAdvisoryClient); ok {
 				return pc.AdvisoriesForPackages(ctx, packages)
@@ -605,4 +612,55 @@ func (s *onlineSession) Advisories(owner, repo, subpath string) ([]GitHubAdvisor
 			return s.client.Advisories(ctx, owner, repo)
 		})
 	})
+}
+
+// actionAdvisories returns every advisory of the actions ecosystem, from one list request for the whole run instead
+// of one request for each action. It reports false, and the caller asks about its action, when the client cannot list them,
+// the run was stopped or is blocked, or the list failed or is longer than the client reads. A failed
+// list is not counted as a skipped lookup: the lookups by action that follow are, if they fail too, and say why.
+func (s *onlineSession) actionAdvisories() ([]GitHubAdvisory, bool) {
+	lc, ok := s.client.(GitHubAdvisoryListClient)
+	if !ok {
+		return nil, false
+	}
+	list, err := s.advisoryList.get(struct{}{}, func() ([]GitHubAdvisory, error) {
+		if err := s.stopped(); err != nil {
+			return nil, err
+		}
+		if err := s.blockedErr(); err != nil {
+			return nil, err
+		}
+		return lc.ActionAdvisories(s.ctx)
+	})
+	if err != nil {
+		s.advisoryListFailed(err)
+		return nil, false
+	}
+	return list, true
+}
+
+// advisoryListFailed says once, with --verbose, why the advisories are asked for one action at a time.
+func (s *onlineSession) advisoryListFailed(err error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.advisoryListNoted || s.detail == nil {
+		return
+	}
+	s.advisoryListNoted = true
+	s.detail("online: the list of advisories is not available (%v); asking about each action instead", err)
+}
+
+// advisoriesOfPackages returns the advisories of the list which have a vulnerability in one of the packages
+// ("owner/repo" or "owner/repo/subpath", lower case), as the lookup by package does.
+func advisoriesOfPackages(list []GitHubAdvisory, packages []string) []GitHubAdvisory {
+	var ret []GitHubAdvisory
+	for _, a := range list {
+		for _, v := range a.Vulnerabilities {
+			if slices.Contains(packages, strings.ToLower(v.Package)) {
+				ret = append(ret, a)
+				break
+			}
+		}
+	}
+	return ret
 }
