@@ -44,9 +44,9 @@ jobs:
           # The test is allowed to fail: its output is what the pull request is about
           go test -run TestSchemaConformance -count=1 . 2>&1 | head -n 200 | cut -c1-400 > "$RUNNER_TEMP/test.txt" || true
           {
-            echo 'This PR moves the pinned commit of actions/runner (`testdata/schema/runner`) to the latest.'
+            echo 'This PR moves the pinned commit of actions/runner (testdata/schema/runner) to the latest.'
             echo
-            echo '`TestSchemaConformance` compares the parser with the workflow schemas of that commit. If its check fails, GitHub changed its syntax: make the parser follow, or explain the difference in `schemaConformanceAllowed` with the reason. Output of the test on this commit:'
+            echo 'TestSchemaConformance compares the parser with the workflow schemas of that commit. If its check fails, GitHub changed its syntax: make the parser follow, or explain the difference in schemaConformanceAllowed with the reason. Output of the test on this commit:'
             echo
             echo '```'
             cat "$RUNNER_TEMP/test.txt"
