@@ -90,3 +90,33 @@ func TestRuleUntrustedCheckoutGuard(t *testing.T) {
 		})
 	}
 }
+
+// Only the contexts that hold the number of a pull request are numbers that the protection knows, not what is below them.
+func TestRefIsPullNumber(t *testing.T) {
+	tests := []struct {
+		expr string
+		want bool
+	}{
+		{"github.event.number", true},
+		{"github.event.pull_request.number", true},
+		{"github.event.workflow_run.pull_requests[0].number", true},
+		{"github.event.workflow_run.pull_requests.*.number", true},
+		{"github.event.workflow_run.pull_requests[0].milestone.number", false},
+		{"github.event.workflow_run.pull_requests[0].base.repo.id", false},
+		{"github.event.workflow_run.pull_requests[0].head.repo.number", false},
+		{"github.event.workflow_run.pull_requests[0].number.x", false},
+		{"github.event.workflow_run.pull_requests.number", false},
+		{"github.event.pull_request.title", false},
+		{"github.event.pull_request.milestone.number", false},
+		{"github.event.number.x", false},
+	}
+	for _, tc := range tests {
+		refs, ok := stringExprRefs("${{ " + tc.expr + " }}")
+		if !ok || len(refs) != 1 {
+			t.Fatalf("%s: no single reference: %v", tc.expr, refs)
+		}
+		if got := refIsPullNumber(refs[0].chain); got != tc.want {
+			t.Errorf("refIsPullNumber(%s) = %v, want %v", tc.expr, got, tc.want)
+		}
+	}
+}
