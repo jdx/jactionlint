@@ -220,6 +220,11 @@ single-dash long options of v1 are removed; the error names the replacement.
     Command name or file path of "shellcheck" external command. If empty, shellcheck integration will
     be disabled (default "shellcheck")
 
+  * `--shellcheck-rcfile` <FILE>:
+    Let shellcheck read this shellcheckrc file instead of running it with `--norc`. A relative path is
+    resolved from the working directory and the file must exist (exit status 3 otherwise). It
+    overrides `shellcheck.rcfile` of the configuration file, which also has `args` and `enable`
+
   * `--strict-exit`:
     Exit with status 1 also when only errors of `warn` or `info` level are found. By default only
     errors of `error` level make the exit status 1

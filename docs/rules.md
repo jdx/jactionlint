@@ -64,6 +64,7 @@ rules:
 | [duplicate-key](#duplicate-key) | correctness | error | correctness |
 | [duplicate-step-id](#duplicate-step-id) | correctness | error | correctness |
 | [duplicate-triggers](#duplicate-triggers) | policy | error | default |
+| [environment-file-redirect](#environment-file-redirect) | correctness | error | correctness |
 | [excessive-permissions](#excessive-permissions) | security | error | default |
 | [expired-ignore](#expired-ignore) | policy | error | correctness |
 | [expression-syntax](#expression-syntax) | correctness | error | correctness |
@@ -461,6 +462,16 @@ push and pull_request both run the workflow for the same commit.
 - Default level: error
 - Profile: default
 - Details and examples: [checks](./checks.md#check-duplicate-triggers)
+
+## environment-file-redirect
+
+A script writes to GITHUB_OUTPUT or another environment file of the runner without the $, or empties it with > after it wrote to it.
+
+- Group: correctness
+- Default level: error
+- Profile: correctness
+- Fixable: yes
+- Details and examples: [checks](./checks.md#check-environment-file-redirect)
 
 ## excessive-permissions
 
