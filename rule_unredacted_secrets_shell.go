@@ -299,7 +299,7 @@ func (f *shellSecretFlow) heredocValue(h *runscript.Heredoc) wval {
 		if len(names) == 0 {
 			continue
 		}
-		v = better(v, f.wordValue(&runscript.Word{Raw: tok, Value: tok, Vars: names[:1]}))
+		v = better(v, f.wordValue(&runscript.Word{Raw: tok, Value: tok, Vars: names}))
 	}
 	for _, e := range h.Exprs {
 		if m := secretExprRe.FindStringSubmatch(e); m != nil {
