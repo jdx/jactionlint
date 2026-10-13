@@ -37,7 +37,7 @@ var derivationTools = []string{"jq", "yq", "cut", "awk", "sed", "tr", "base64", 
 
 var (
 	secretExprRe     = regexp.MustCompile(`secrets(?:\.([A-Za-z0-9_-]+)|\[\s*['"]([^'"]+)['"]\s*\])`)
-	paramCutRe       = `(?:#{1,2}|%{1,2}|/|\^{1,2}|,{1,2}|:[0-9]|: +-?[0-9])`
+	paramCutRe       = `(?:#{1,2}|%{1,2}|/|\^{1,2}|,{1,2}|::?[0-9]|: +-?[0-9])`
 	xtraceOptionRe   = regexp.MustCompile(`^[-+][a-zA-Z]*x[a-zA-Z]*$`)
 	pythonToolNameRe = regexp.MustCompile(`^python[0-9.]*$`)
 )
@@ -93,6 +93,9 @@ func (rule *RuleUnredactedSecrets) VisitStep(n *Step) error {
 			if v == nil || v.Name == nil || v.Value == nil {
 				continue
 			}
+			// a scope that sets the name again replaces what the scope before it set: a literal or another expression
+			// is no secret
+			delete(f.secrets, v.Name.Value)
 			if refs, ok := v.Value.exprRefs(); ok {
 				for _, r := range refs {
 					if len(r.chain) >= 2 && strings.EqualFold(r.chain[0], "secrets") {
@@ -141,9 +144,26 @@ func (f *shellSecretFlow) run() {
 			}
 		}
 	}
+	// the assignments inside a command substitution run in a subshell: they do not set a variable of the script
+	var subSpans [][2]int
+	for _, c := range s.Commands {
+		for _, w := range c.Words {
+			if len(w.Subs) > 0 {
+				subSpans = append(subSpans, [2]int{w.Offset, w.End})
+			}
+		}
+	}
+	for _, a := range s.Assignments {
+		if a.Value != nil && len(a.Value.Subs) > 0 {
+			subSpans = append(subSpans, [2]int{a.Value.Offset, a.Value.End})
+		}
+	}
+	inSubshell := func(offset int) bool {
+		return slices.ContainsFunc(subSpans, func(sp [2]int) bool { return offset >= sp[0] && offset < sp[1] })
+	}
 	var events []secretFlowEvent
 	for _, a := range s.Assignments {
-		if a.Cmd == nil || a.Cmd.Decl {
+		if (a.Cmd == nil || a.Cmd.Decl) && !inSubshell(a.Offset) {
 			events = append(events, secretFlowEvent{offset: a.Offset, a: a})
 		}
 	}
@@ -196,7 +216,7 @@ func (f *shellSecretFlow) sourcesOf(w *runscript.Word) (secret, how string, ok b
 			}
 			if r.Heredoc != nil && !r.Heredoc.Quoted {
 				for _, name := range varsIn(r.Heredoc.Body) {
-					if s, ok := f.secrets[name]; ok {
+					if s, ok := f.secretOf(name); ok {
 						return s, true
 					}
 				}
@@ -287,8 +307,34 @@ func (f *shellSecretFlow) cutsSecret(w *runscript.Word) (secret string, ok bool)
 	return "", false
 }
 
+// secretOf returns the secret that a variable holds or was cut from.
+func (f *shellSecretFlow) secretOf(name string) (string, bool) {
+	if s, ok := f.secrets[name]; ok {
+		return s, true
+	}
+	if d, ok := f.derived[name]; ok {
+		return d.secret, true
+	}
+	return "", false
+}
+
 func (f *shellSecretFlow) assign(a *runscript.Assignment) {
 	name := a.Name
+	if a.Append && !a.Array {
+		// `KEY+=suffix` keeps the derived value it extends, and a secret it extends still holds the whole secret
+		if f.derived[name] != nil {
+			return
+		}
+		if a.Value != nil {
+			if secret, how, ok := f.sourcesOf(a.Value); ok {
+				f.derived[name] = &derived{secret: secret, how: how}
+				if f.xtrace {
+					f.report(a.Loc, name, f.derived[name], "xtrace")
+				}
+			}
+		}
+		return
+	}
 	delete(f.derived, name)
 	if a.Value == nil || a.Array {
 		delete(f.secrets, name)
@@ -355,13 +401,19 @@ func (f *shellSecretFlow) command(c *runscript.Command) {
 			f.report(c.Loc, name, d, "print")
 		}
 	}
-	if prints && !isMask && !f.xtrace {
+	// a value cut by a substitution in the words of the command: printed by the command, or by the trace of `set -x`
+	// (which shows every command with its substitutions expanded, whatever the command is)
+	if (prints && !isMask) || f.xtrace {
 		for _, w := range c.Words {
 			if len(w.Subs) == 0 {
 				continue
 			}
 			if secret, how, ok := f.sourcesOf(w); ok {
-				f.report(c.Loc, "", &derived{secret: secret, how: how}, "print")
+				kind := "print"
+				if f.xtrace {
+					kind = "xtrace"
+				}
+				f.report(c.Loc, "", &derived{secret: secret, how: how}, kind)
 			}
 		}
 	}
