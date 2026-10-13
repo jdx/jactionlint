@@ -338,6 +338,14 @@ func TestUntrustedCheckoutCallersToctou(t *testing.T) {
 		{"an environment on the call and a commit", map[string]string{"pr.yml": ucActionCaller("pull_request_target", "    environment: ci\n", headSHA)}, 0, ""},
 		{"a label on the call and a branch", map[string]string{"pr.yml": ucActionCaller("pull_request_target", "    if: github.event.label.name == 'safe to test'\n", head)}, 1, "a label condition lets the job start"},
 		{"an author who is a member on the call and a branch", map[string]string{"pr.yml": ucActionCaller("pull_request_target", "    if: github.event.pull_request.author_association == 'MEMBER'\n", head)}, 0, ""},
+		{"an environment on one call and a label that lasts on another, with a commit", map[string]string{
+			"a.yml": ucActionCaller("pull_request_target", "    environment: ci\n", headSHA),
+			"b.yml": ucActionCaller("pull_request_target", "    if: contains(github.event.pull_request.labels.*.name, 'safe to test')\n", headSHA),
+		}, 1, ""},
+		{"an environment on both calls and a label that lasts on one, with a commit", map[string]string{
+			"a.yml": ucActionCaller("pull_request_target", "    environment: ci\n", headSHA),
+			"b.yml": ucActionCaller("pull_request_target", "    environment: ci\n    if: contains(github.event.pull_request.labels.*.name, 'safe to test')\n", headSHA),
+		}, 0, ""},
 		{"a gated call and a call that nothing holds back", map[string]string{
 			"a.yml": ucActionCaller("pull_request_target", "    environment: ci\n", head),
 			"b.yml": ucActionCaller("pull_request_target", "", headSHA),

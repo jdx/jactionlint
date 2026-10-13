@@ -269,14 +269,17 @@ func (rule *RuleUntrustedCheckout) callContexts(key string, depth int, seen map[
 			continue
 		}
 		// the gates of the workflows that call the caller count only when every one of those calls has gates
-		outerGates, outerGated := gateInfo{}, len(outer) > 0
+		outerGates := gateInfo{}
 		rerun := rerunsOnPush(cw)
-		for _, o := range outer {
-			outerGated = outerGated && len(o.gates.stale) > 0
-			outerGates = outerGates.merge(o.gates)
+		for i, o := range outer {
+			if i == 0 {
+				outerGates = o.gates
+			} else {
+				outerGates = outerGates.both(o.gates) // a gate counts when every one of those calls has it
+			}
 			rerun = rerun || o.rerun
 		}
-		if outerGated {
+		if len(outerGates.stale) > 0 {
 			g = g.merge(outerGates)
 		}
 		for name, dv := range defaults {
@@ -339,14 +342,21 @@ func (rule *RuleUntrustedCheckout) callGates(w *Workflow, job *Job, step *Step, 
 	if step == nil {
 		return g
 	}
-	var gate permissionGateState
+	var gate, staleGate permissionGateState // the permission checks that hold, and the ones that hold at one moment
+	var stale gateInfo
 	steps, groups := flattenStepsGroup(job.Steps)
 	for i, s := range steps {
 		if s == step {
 			g = g.merge(classifyCondition(s.If, commentOnly))
-			// a step that runs after a failure (always(), failure()) still runs when the permission check failed
-			if gate.holds(groups[i]) && !stepRunsAfterFailure(s) {
-				g.safe = true
+			// a step that runs after a failure (always(), failure()) still runs when the permission check failed, and a step
+			// beside the check in a parallel group is not behind it
+			if !stepRunsAfterFailure(s) {
+				if gate.holds(groups[i]) {
+					g.safe = true
+				}
+				if staleGate.holds(groups[i]) {
+					g = g.merge(stale)
+				}
 			}
 			return g
 		}
@@ -354,7 +364,8 @@ func (rule *RuleUntrustedCheckout) callGates(w *Workflow, job *Job, step *Step, 
 			if pg := permissionGate(commentOnly); pg.safe {
 				gate.see(groups[i])
 			} else {
-				g = g.merge(pg)
+				staleGate.see(groups[i])
+				stale = stale.merge(pg)
 			}
 		}
 	}

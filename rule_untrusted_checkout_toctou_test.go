@@ -67,6 +67,14 @@ func TestRuleUntrustedCheckoutToctou(t *testing.T) {
 		{"a permission check in a job for a pull request and a comment, and a step for the comment", "on:\n  pull_request_target:\n  issue_comment:\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: sushichop/action-repository-permission@v3\n        with:\n          required-permission: write\n      - uses: " + co + "\n        if: github.event_name == 'issue_comment'\n        with:\n          ref: refs/pull/${{ github.event.issue.number }}/head # want\n      - run: make\n        if: github.event_name == 'issue_comment'\n", false, "a permission check of the user who commented"},
 		{"a permission check in a job for a pull request and a comment, and a step for the pull request", "on:\n  pull_request_target:\n  issue_comment:\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: sushichop/action-repository-permission@v3\n        with:\n          required-permission: write\n      - uses: " + co + "\n        if: github.event_name == 'pull_request_target'\n        with:\n          ref: ${{ github.event.pull_request.head.ref }}\n      - run: make\n        if: github.event_name == 'pull_request_target'\n", false, ""},
 
+		// what a permission check of the commenter does not hold back
+		{"a permission check of the commenter and a commit, behind it", prtJob(comment, "") + "      - uses: sushichop/action-repository-permission@v3\n        with:\n          required-permission: write\n      - id: pr\n        uses: xt0rted/pull-request-comment-branch@v3\n" + "      - uses: " + co + "\n        with:\n          ref: ${{ steps.pr.outputs.head_sha }}\n      - run: make\n", false, ""},
+		{"a permission check of the commenter and a commit, in steps that run after a failure", prtJob(comment, "") + "      - uses: sushichop/action-repository-permission@v3\n        with:\n          required-permission: write\n      - id: pr\n        uses: xt0rted/pull-request-comment-branch@v3\n        if: always()\n" + "      - uses: " + co + "\n        if: always()\n        with:\n          ref: ${{ steps.pr.outputs.head_sha }} # want\n      - run: make\n        if: always()\n", false, ""},
+		{"a permission check of the commenter and a commit, and a step that runs the code beside it in a parallel group", prtJob(comment, "") + "      - id: pr\n        uses: xt0rted/pull-request-comment-branch@v3\n      - uses: " + co + "\n        with:\n          ref: ${{ steps.pr.outputs.head_sha }} # want\n      - parallel:\n          - uses: sushichop/action-repository-permission@v3\n            with:\n              required-permission: write\n          - run: make\n", false, ""},
+
+		// a step with a gate that holds at one moment does not stop a later step from running the code
+		{"a step for a label that runs the code of a commit, and a step that runs it again", prtJob(prtLabeled, "") + "      - uses: " + co + "\n        with:\n          ref: ${{ github.event.pull_request.head.sha }} # want\n      - run: make\n        if: github.event.label.name == 'safe to test'\n      - run: make test\n", false, ""},
+
 		// a label that lasts
 		{"a label that lasts and the commit", prtJob(prtPush, labelIf) + headSha, false, "stays true after the review"},
 		{"a label that lasts, default types and the commit", prtJob(prt, labelIf) + headSha, false, ""},
@@ -132,5 +140,28 @@ func TestRuleUntrustedCheckoutAnyCheckout(t *testing.T) {
 			errs := onlyID(lintInProject(t, nil, tc.src, tc.cfg), "untrusted-checkout")
 			checkLines(t, errs, markedWantLines(tc.src)...)
 		})
+	}
+}
+
+// The kind of a ref is judged from the value that the caller passes, not from the name of the input or the file of the caller.
+func TestRefIsMutableOfDescriptions(t *testing.T) {
+	tests := []struct {
+		what string
+		want bool
+	}{
+		{"inputs.ref, given github.event.pull_request.head.ref by .github/workflows/pr.yaml", true},
+		{"inputs.head_sha, given github.event.pull_request.head.ref by .github/workflows/pr.yaml", true},
+		{"inputs.ref, given github.event.pull_request.head.ref by .github/workflows/pr_sha.yaml", true},
+		{"inputs.head_sha, given github.event.pull_request.head.sha by .github/workflows/pr.yaml", false},
+		{"inputs.ref, given github.event.pull_request.head.sha by .github/workflows/pr_head.yaml", false},
+		{"inputs.ref, given github.event.pull_request.head.sha by a.yml, or github.event.pull_request.head.ref by b_sha.yml", true},
+		{"inputs.ref, given github.event.pull_request.head.ref by a.yml, passed on by .github/workflows/c_sha.yml", true},
+		{"github.event.pull_request.head.ref", true},
+		{"github.event.pull_request.head.sha", false},
+	}
+	for _, tc := range tests {
+		if got := refIsMutable(tc.what); got != tc.want {
+			t.Errorf("refIsMutable(%q) = %v, want %v", tc.what, got, tc.want)
+		}
 	}
 }

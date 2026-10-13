@@ -194,12 +194,15 @@ func (rule *RuleUntrustedCheckout) VisitWorkflowPre(n *Workflow) error {
 			}
 			// the gates in front of the calls hold the callee back when every call has them and nothing else starts it
 			gated := len(rule.calls) > 0 && (n.Action != nil || len(rule.privileged) == 0)
-			for _, c := range rule.calls {
-				gated = gated && len(c.gates.stale) > 0
-				rule.calleeGates = rule.calleeGates.merge(c.gates)
+			for i, c := range rule.calls {
+				if i == 0 {
+					rule.calleeGates = c.gates
+				} else {
+					rule.calleeGates = rule.calleeGates.both(c.gates) // a gate counts when every call has it
+				}
 				rule.labelRerun = rule.labelRerun || c.rerun
 			}
-			if !gated {
+			if !gated || len(rule.calleeGates.stale) == 0 {
 				rule.calleeGates = gateInfo{}
 			}
 			rule.privileged = sortedEvents(events)
@@ -289,11 +292,12 @@ func (rule *RuleUntrustedCheckout) VisitJobPre(n *Job) error {
 		if gate.holds(groups[i]) {
 			// the steps after a permission check only run for a user who may write. For a comment, the check is about the one
 			// who commented, who is not the author of the code.
-			if g := permissionGate(commentOnly); g.safe {
-				if !stepRunsAfterFailure(s) {
+			// A step that runs after a failure (always(), failure()) is not behind the check, whoever is judged.
+			if !stepRunsAfterFailure(s) {
+				g := permissionGate(commentOnly)
+				if g.safe {
 					continue
 				}
-			} else {
 				here = here.merge(g)
 			}
 		}
@@ -336,7 +340,15 @@ func (rule *RuleUntrustedCheckout) VisitJobPre(n *Job) error {
 						c.ran = true
 						continue
 					}
-					rule.report(c, how, here)
+					if rule.report(c, how, here) {
+						continue
+					}
+					if len(stepGate.stale) > 0 && !stepGate.safe {
+						// the gate of the step lets the code run at one moment and nothing was reported: a later step that is not
+						// behind it can run it too
+						kept = append(kept, c)
+						c.ran = true
+					}
 				}
 				pending[dir] = kept
 			}
@@ -422,17 +434,16 @@ func (rule *RuleUntrustedCheckout) commentOnly() bool {
 
 // report reports the checkout that the step runs. runner are the gates of the step that runs the code. A gate that holds at
 // one moment only lets the report through for a ref that can change (see untrusted_checkout_toctou.go).
-func (rule *RuleUntrustedCheckout) report(c *untrustedCheckout, how string, runner gateInfo) {
+func (rule *RuleUntrustedCheckout) report(c *untrustedCheckout, how string, runner gateInfo) bool {
 	g := c.gates.merge(runner)
 	if g.safe {
-		return
+		return false
 	}
 	if holds, _ := rule.environmentGate(); holds {
 		g = g.merge(gateInfo{stale: []string{"an environment"}})
 	}
 	if len(g.stale) > 0 || rule.privileged[0] == "workflow_dispatch" {
-		rule.reportToctou(c, how, g)
-		return
+		return rule.reportToctou(c, how, g)
 	}
 	event := rule.privileged[0]
 	source, privileges := rule.sourceOf(event), rule.privilegeText()
@@ -443,7 +454,7 @@ func (rule *RuleUntrustedCheckout) report(c *untrustedCheckout, how string, runn
 			"this step checks out code from %s (%s) in a %q workflow and %s runs it afterwards, but this version of actions/checkout refuses to check out the code of a pull request from a fork here, so only a pull request from a branch of this repository gets through, and whoever pushes such a branch can write to the repository. %s. if the code of other pull requests is not meant to run, check out the base branch and only read the pull request as data",
 			source, c.what, event, how, privileges,
 		)
-		return
+		return true
 	}
 	suffix := ""
 	if c.note != "" {
@@ -455,6 +466,7 @@ func (rule *RuleUntrustedCheckout) report(c *untrustedCheckout, how string, runn
 		"this step checks out code from %s (%s) in a %q workflow and %s runs it afterwards. %s. run untrusted code in a \"pull_request\" workflow without secrets, or check out the base branch and only read the pull request as data%s",
 		source, c.what, event, how, privileges, suffix,
 	)
+	return true
 }
 
 // sourceOf says where the code comes from for the event of the message.

@@ -53,6 +53,17 @@ func (g gateInfo) merge(o gateInfo) gateInfo {
 	return g
 }
 
+// both are the gates that every one of two calls has: a gate counts for the callee only when each call is behind it.
+func (g gateInfo) both(o gateInfo) gateInfo {
+	r := gateInfo{safe: g.safe && o.safe, label: g.label && o.label}
+	for _, s := range g.stale {
+		if slices.Contains(o.stale, s) {
+			r.stale = append(r.stale, s)
+		}
+	}
+	return r
+}
+
 func (g gateInfo) gated() bool { return g.safe || len(g.stale) > 0 }
 
 var (
@@ -168,6 +179,7 @@ func refIsMutable(what string) bool {
 	if parts := strings.Split(what, descAlternative); len(parts) > 1 {
 		return slices.ContainsFunc(parts, refIsMutable)
 	}
+	what = sourceOfDescription(what)
 	l := strings.ToLower(what)
 	switch {
 	case strings.Contains(l, ".sha") || strings.Contains(l, "_sha") || strings.Contains(l, "head_commit.id"):
@@ -178,6 +190,18 @@ func refIsMutable(what string) bool {
 		return true
 	}
 	return false
+}
+
+// sourceOfDescription cuts the metadata from the description of an input that a caller fills (`inputs.head_sha, given
+// <value> by <file>, passed on by <file>`): the name of the input and the path of the caller say nothing about the value.
+func sourceOfDescription(what string) string {
+	if _, v, ok := strings.Cut(what, ", given "); ok && strings.HasPrefix(what, "inputs.") {
+		what = v
+	}
+	if v, _, ok := strings.Cut(what, " by "); ok && !strings.Contains(what, "gh pr checkout") {
+		what = v
+	}
+	return what
 }
 
 // stepVerifiesRevision reports whether the step reads the commit that is checked out and can stop the job: taken for a check
@@ -273,14 +297,15 @@ func dispatchInputRefs(refs []exprRef, names []string) (string, bool) {
 }
 
 // reportToctou reports a checkout that gates which hold at one moment let through: the gates, and the way the ref can change.
-// A gate is effective for a commit, so nothing is reported for one; a label that lasts is reported whatever the ref is.
-func (rule *RuleUntrustedCheckout) reportToctou(c *untrustedCheckout, how string, g gateInfo) {
+// A gate is effective for a commit, so nothing is reported for one; a label that lasts is reported whatever the ref is. It says
+// whether it reported.
+func (rule *RuleUntrustedCheckout) reportToctou(c *untrustedCheckout, how string, g gateInfo) bool {
 	event := rule.privileged[0]
 	source, privileges := rule.sourceOf(event), rule.privilegeText()
 	if len(g.stale) == 0 {
 		// workflow_dispatch: the dispatch is the gate, and it names the pull request, not a commit
 		if c.verified || !refIsDispatchMutable(c.what) {
-			return
+			return false
 		}
 		rule.ReportIDf(
 			"untrusted-checkout",
@@ -288,7 +313,7 @@ func (rule *RuleUntrustedCheckout) reportToctou(c *untrustedCheckout, how string
 			"this step checks out code from %s (%s) in a %q workflow and %s runs it afterwards. a maintainer dispatches the workflow after reading the pull request, and whoever can push to it changes the code between that review and the run, because the input names the pull request and not a commit. %s. add a required \"sha\" input and check out that commit",
 			source, c.what, event, how, privileges,
 		)
-		return
+		return true
 	}
 	mutable := !c.verified && refIsMutable(c.what)
 	// an environment with reviewers pauses every run, the one of a new push too: the label is not the only gate then
@@ -302,6 +327,7 @@ func (rule *RuleUntrustedCheckout) reportToctou(c *untrustedCheckout, how string
 			"this step checks out code from %s (%s) in a %q workflow and %s runs it afterwards. %s lets the job start, but it stays true after the review: the workflow runs again for each push to the pull request, so the code of a new push runs with the label although nobody has looked at it. %s. run only for the \"labeled\" event and check out the commit of that event, or take the label away in the job (\"gh pr edit --remove-label\")",
 			source, c.what, event, how, gates, privileges,
 		)
+		return true
 	case mutable:
 		rule.ReportIDf(
 			"untrusted-checkout",
@@ -309,7 +335,9 @@ func (rule *RuleUntrustedCheckout) reportToctou(c *untrustedCheckout, how string
 			"this step checks out code from %s (%s) in a %q workflow and %s runs it afterwards. %s lets the job start, but %s is not a commit: whoever wrote the pull request can push to it after the check (an approval, a label, a comment) and the job runs what is there then, not what was reviewed. %s. check out the commit that was reviewed (\"github.event.pull_request.head.sha\") and not the branch",
 			source, c.what, event, how, gates, c.what, privileges,
 		)
+		return true
 	}
+	return false
 }
 
 // refIsDispatchMutable reports whether the ref that a dispatch names is the number of a pull request: `refs/pull/<number>/...`
