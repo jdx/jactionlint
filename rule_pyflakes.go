@@ -36,6 +36,8 @@ type RulePyflakes struct {
 	mu                    sync.Mutex
 	// ruff is true when the command is ruff instead of pyflakes (the option --ruff)
 	ruff bool
+	// tool counts the scripts which were checked, or which were not because the command is unavailable.
+	tool *externalTool
 }
 
 func newRulePyflakes(cmd *externalCommand) *RulePyflakes {
@@ -78,6 +80,14 @@ type ruffDiagnostic struct {
 	} `json:"location"`
 }
 
+// newRulePyflakesUnavailable creates the rule for a run where pyflakes cannot be used (it is disabled or was not
+// found). It reports nothing and counts the Python scripts that pyflakes would have checked.
+func newRulePyflakesUnavailable(tool *externalTool) *RulePyflakes {
+	r := newRulePyflakes(nil)
+	r.tool = tool
+	return r
+}
+
 // NewRulePyflakes creates new RulePyflakes instance. Parameter executable can be command name
 // or relative/absolute file path. When the given executable is not found in system, it returns
 // an error.
@@ -115,7 +125,10 @@ func (rule *RulePyflakes) VisitWorkflowPre(n *Workflow) error {
 // VisitWorkflowPost is callback when visiting Workflow node after visiting its children.
 func (rule *RulePyflakes) VisitWorkflowPost(n *Workflow) error {
 	rule.workflowShellIsPython = shellIsPythonKindUnspecified // reset
-	return rule.cmd.wait()                                    // Wait until all processes running for this rule
+	if rule.cmd == nil {
+		return nil // pyflakes is unavailable, see newRulePyflakesUnavailable
+	}
+	return rule.cmd.wait() // Wait until all processes running for this rule
 }
 
 // VisitStep is callback when visiting Step node.
@@ -146,6 +159,11 @@ func (rule *RulePyflakes) isPythonShell(r *ExecRun) bool {
 }
 
 func (rule *RulePyflakes) runPyflakes(src string, pos *Pos) {
+	if rule.cmd == nil {
+		rule.tool.skip()
+		return
+	}
+	rule.tool.checked()
 	src = sanitizeExpressionsInScript(src) // Defined at rule_shellcheck.go
 	rule.Debug("%s: Running %s for Python script:\n%s", pos, rule.cmd.exe, src)
 
@@ -234,23 +252,34 @@ func init() {
 		RuleInfo{ID: "pyflakes", Group: RuleGroupCorrectness, Summary: "pyflakes reported an issue in a Python script.", DefaultLevel: SeverityError, Profile: ProfileCorrectness, DocsAnchor: "check-pyflakes-integ"},
 	)
 	registerRuleFactory("pyflakes", func(env *RuleEnv) []Rule {
+		t := env.tools.tool("pyflakes")
 		if env.ruff != "" {
 			r, err := NewRuleRuff(env.ruff, env.proc)
 			if err != nil {
 				env.Skip(err.Error())
+				t.missing()
+				env.observe(newRulePyflakesUnavailable(t))
 				return nil
 			}
+			t.found()
+			r.tool = t
 			return []Rule{r}
 		}
 		if env.pyflakes == "" {
 			env.Skip("pyflakes command name was empty")
+			t.disabled()
+			env.observe(newRulePyflakesUnavailable(t))
 			return nil
 		}
 		r, err := NewRulePyflakes(env.pyflakes, env.proc)
 		if err != nil {
 			env.Skip(err.Error())
+			t.missing()
+			env.observe(newRulePyflakesUnavailable(t))
 			return nil
 		}
+		t.found()
+		r.tool = t
 		return []Rule{r}
 	})
 }

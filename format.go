@@ -69,6 +69,7 @@ type printer interface {
 type runInfo struct {
 	notes  []string
 	online *OnlineCoverage
+	tools  map[string]ExternalToolStatus // shellcheck and pyflakes: did they run?
 }
 
 // structured reports whether the printer makes a document which other tools parse. For such a format the
@@ -577,8 +578,14 @@ func (p sarifPrinter) print(w io.Writer, results []fileResult, info runInfo) err
 		}
 		run.Invocations = []sarifInvocation{inv}
 	}
-	if info.online != nil {
-		run.Properties = map[string]any{"onlineCoverage": info.online}
+	if info.online != nil || len(info.tools) > 0 {
+		run.Properties = map[string]any{}
+		if info.online != nil {
+			run.Properties["onlineCoverage"] = info.online
+		}
+		if len(info.tools) > 0 {
+			run.Properties["externalTools"] = info.tools
+		}
 	}
 	d := &run.Tool.Driver
 	d.Name = "jactionlint"

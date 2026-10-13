@@ -365,6 +365,10 @@ func (rule *RuleRunnerLabel) verifyRunnerLabel(label *String) runnerOSCompat {
 		}
 	}
 
+	if _, ok := runnerProviderOf(l, rule.getProviders()); ok {
+		return compatInvalid // a label of a hosted-runner provider, which is not in the table of GitHub
+	}
+
 	if rule.selfHosted {
 		return compatInvalid // a label of the runner of its owner
 	}
@@ -496,6 +500,14 @@ func (rule *RuleRunnerLabel) getKnownLabels() []string {
 		return nil
 	}
 	return rule.config.SelfHostedRunner.Labels
+}
+
+// getProviders returns the providers whose labels are accepted: nil means all of them.
+func (rule *RuleRunnerLabel) getProviders() []string {
+	if rule.config == nil {
+		return nil
+	}
+	return rule.config.SelfHostedRunner.Providers
 }
 
 func (rule *RuleRunnerLabel) isStrict() bool {
