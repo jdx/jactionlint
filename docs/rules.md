@@ -165,6 +165,7 @@ rules:
 | [unknown-workflow-input](#unknown-workflow-input) | correctness | error | correctness |
 | [unknown-workflow-secret](#unknown-workflow-secret) | correctness | error | correctness |
 | [unlocked-install](#unlocked-install) | security | error | default |
+| [unmatched-paths-filter](#unmatched-paths-filter) | correctness | warn | pedantic |
 | [unpinnable-action](#unpinnable-action) | security | warn | only with `--online` |
 | [unpinned-images](#unpinned-images) | security | error | default |
 | [unpinned-tools](#unpinned-tools) | security | error | default |
@@ -1444,6 +1445,15 @@ cargo install runs without --locked, or npm, yarn or pnpm install without freezi
 - Fixable: yes
 - Option `pedantic` (bool, no default): Also report the pedantic checks, which are noisier. Unset, they run under the pedantic profile.
 - Details and examples: [checks](./checks.md#check-unlocked-install)
+
+## unmatched-paths-filter
+
+An entry of paths or paths-ignore matches no file of the repository.
+
+- Group: correctness
+- Default level: warn
+- Profile: pedantic
+- Details and examples: [checks](./checks.md#check-unmatched-paths-filter)
 
 ## unpinnable-action
 
