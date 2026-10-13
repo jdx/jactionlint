@@ -34,6 +34,8 @@ func TestRuleUntrustedCheckoutGuard(t *testing.T) {
 		{"release above the floor", nil, prt + head("actions/checkout@v5.2.1", ""), true, ""},
 		{"commit with the version of the floor in its comment", nil, prt + head("actions/checkout@"+sha+" # v4.4.0", ""), true, ""},
 		{"commit with a later major version in its comment", nil, prt + head("actions/checkout@"+sha+" # tag=v7.0.1", ""), true, ""},
+		{"the head commit beside a branch name that the protection does not look at", nil, prt + "      - uses: actions/checkout@v4\n        with:\n          ref: ${{ github.event.pull_request.head.sha || github.head_ref }} # want\n      - run: make\n", false, ""},
+		{"the head commit twice", nil, prt + "      - uses: actions/checkout@v4\n        with:\n          ref: ${{ github.event.pull_request.head.sha || github.event.pull_request.merge_commit_sha }}\n      - run: make\n", true, ""},
 		{"release below the floor", nil, prt + wantRef("actions/checkout@v4.3.0", ""), false, "upgrade to v4.4.0"},
 		{"commit with a version below the floor in its comment", nil, prt + wantRef("actions/checkout@"+sha+" # v4.2.2", ""), false, "(v4.2.2) predates"},
 		{"commit with a comment that is only a major version", nil, prt + wantRef("actions/checkout@"+sha+" # v4", ""), false, ""},
