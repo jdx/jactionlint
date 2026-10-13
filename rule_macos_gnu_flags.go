@@ -141,7 +141,8 @@ func macosLabelOf(j *Job) string {
 	// job, and a self-hosted one makes the runner the one of its owner.
 	if len(j.RunsOn.Labels)+boolInt(j.RunsOn.LabelsExpr != nil) > 1 {
 		for _, l := range labels {
-			if strings.EqualFold(l, "self-hosted") {
+			// A label that GitHub does not give to its macOS runners selects a runner of the owner
+			if strings.EqualFold(l, "self-hosted") || !(isMacOSRunnerLabel(l) || isOSOrArchLabel(l)) {
 				return ""
 			}
 		}
@@ -152,6 +153,16 @@ func macosLabelOf(j *Job) string {
 		}
 	}
 	return ""
+}
+
+// isOSOrArchLabel reports whether the label is one of the labels of the operating system and the architecture that go
+// with the label of a GitHub-hosted runner (macOS, ARM64, X64).
+func isOSOrArchLabel(l string) bool {
+	switch strings.ToLower(l) {
+	case "macos", "arm64", "x64":
+		return true
+	}
+	return false
 }
 
 func boolInt(b bool) int {
@@ -307,8 +318,10 @@ func macosGnuForms(c *runscript.Command) []macosGnuForm {
 				add(w, `"sed --in-place" is rejected by the sed of macOS: it has no long options.`, `Use "sed -i.bak" (and remove the backup), which both seds understand.`)
 			case sedInPlaceRe.MatchString(v) && i+1 < len(c.Args):
 				next := c.Args[i+1]
-				if _, plain := next.Var(); plain || strings.HasPrefix(next.Value, "-") || (!next.Dynamic() && (next.Value == "" || sedSuffixRe.MatchString(next.Value))) {
-					continue // a suffix (-i '' or -i .bak), a variable that may be one, or an option that makes it unclear what follows
+				if next.Dynamic() || strings.HasPrefix(next.Value, "-") || next.Value == "" || sedSuffixRe.MatchString(next.Value) {
+					// A suffix (-i '' or -i .bak), a word with an expansion ($suffix.bak, "$SUF", ${{ matrix.x }}: it may be one), or
+					// an option that makes it unclear what follows. Only a word that is statically a script is reported.
+					continue
 				}
 				add(w, `"sed -i" without a suffix takes the script as the suffix of the backup on macOS, so the file is read as the script ("invalid command code").`, `Use "sed -i.bak" (and remove the backup), which both seds understand, or "sed -i ''" on macOS only.`)
 			}

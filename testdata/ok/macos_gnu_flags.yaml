@@ -114,6 +114,12 @@ jobs:
       - run: |
           sudo -u deploy gsed -i 's/a/b/' file.txt
           env -u FOO gdate -d yesterday
+      # Any word with an expansion after -i may be the suffix of the backup
+      - run: |
+          sed -i "$SUFFIX" 's/a/b/' file.txt
+          sed -i "${suffix}.bak" 's/a/b/' file.txt
+          sed -i "s/$OLD/$NEW/" config.yml
+          sed -i ${{ github.run_id }} 's/a/b/' file.txt
       # After -- come the patterns and the file names
       - run: |
           grep -- -P file.txt

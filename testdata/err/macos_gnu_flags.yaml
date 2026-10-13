@@ -16,7 +16,7 @@ jobs:
       - run: cp --parents src/a.go dist/
       - run: |
           set -eu
-          sed -i "s/$OLD/$NEW/" config.yml
+          sed -i "s/old/new/" config.yml
           cat config.yml | tee --append log.txt
       # The value of the option is glued to it, and other options come before
       - run: date -d@1700000000 +%F
@@ -155,3 +155,14 @@ jobs:
     steps:
       - run: xargs -n 1 gsed -i 's/a/b/'
       - run: env -S 'gsed -i s/a/b/ file.txt'
+  gnu-only-as-a-word:
+    runs-on: macos-latest
+    steps:
+      # GNU is only a word here, the script does not look for it in the version of a tool
+      - run: |
+          echo GNU
+          grep -P x file.txt
+  labels-of-github:
+    runs-on: [macos-14, ARM64]
+    steps:
+      - run: date -d yesterday

@@ -54,6 +54,11 @@ func TestScriptIsForMoreSystems(t *testing.T) {
 		`env -S 'sudo -u deploy gsed -i x'`: true,
 		`env -S 'sed -i x f'`:               false,
 		`env -S "sed -i $X"`:                false,
+		// The word GNU is a marker only where a version is searched for it
+		`sed --version 2>&1 | grep -q GNU`:  true,
+		`echo GNU; grep -P x f`:             false,
+		`grep GNU notes.txt`:                false,
+		`echo GNU; sed --version | head -1`: false,
 		// A script that cannot be read is not known
 		`if [ -z "$X" ]; then`: true,
 		// Words that only look like them

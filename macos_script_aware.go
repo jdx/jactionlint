@@ -247,7 +247,7 @@ func stepConditionReadsTheSystem(cond *String) bool {
 //   - one of its command words is a GNU tool by its Homebrew name (`gsed`, `gdate`, ...), or it names a `gnubin` directory
 //     (which Homebrew puts the GNU tools under with their plain names). `brew install coreutils` alone is not enough: the
 //     formula is keg-only, so the BSD tool stays first on the PATH;
-//   - it compares or prints the word GNU (`sed --version | grep GNU`).
+//   - it asks a tool for its version and looks for the word GNU in it with grep (`sed --version | grep GNU`).
 //
 // A script that cannot be parsed counts as written for more systems: nothing is known about it.
 func scriptIsForMoreSystems(script string) bool {
@@ -258,7 +258,7 @@ func scriptIsForMoreSystems(script string) bool {
 	if err != nil {
 		return true
 	}
-	found := false
+	found, looksForGNU, asksVersion := false, false, false
 	syntax.Walk(f, func(node syntax.Node) bool {
 		if found {
 			return false
@@ -266,24 +266,45 @@ func scriptIsForMoreSystems(script string) bool {
 		switch n := node.(type) {
 		case *syntax.CallExpr:
 			found = callIsForMoreSystems(n)
+			looksForGNU = looksForGNU || callLooksForGNU(n)
 		case *syntax.ParamExp:
 			if n.Param != nil && (n.Param.Value == "OSTYPE" || n.Param.Value == "RUNNER_OS") {
 				found = true
 			}
 		case *syntax.Lit:
-			found = literalNamesTheSystem(n.Value)
+			found = strings.Contains(n.Value, "gnubin")
+			asksVersion = asksVersion || n.Value == "--version"
 		case *syntax.SglQuoted:
-			found = literalNamesTheSystem(n.Value)
+			found = strings.Contains(n.Value, "gnubin")
 		}
 		return !found
 	})
-	return found
+	// The word GNU is a marker only where a script looks for it in the output of a tool that is asked for its version:
+	// `sed --version | grep GNU`. A word GNU anywhere else (`echo GNU`) is only a word.
+	return found || (looksForGNU && asksVersion)
 }
 
-// literalNamesTheSystem reports whether a word of the script is the directory of the GNU names of Homebrew, or the
-// word that a script looks for in the version of a tool (`sed --version | grep GNU`).
-func literalNamesTheSystem(v string) bool {
-	return v == "GNU" || strings.Contains(v, "gnubin")
+// callLooksForGNU reports whether the command is grep (or egrep, fgrep, rg) with the word GNU as an argument.
+func callLooksForGNU(c *syntax.CallExpr) bool {
+	var words []cmdWord
+	for _, a := range c.Args {
+		words = append(words, cmdWord{text: literalWord(a)})
+	}
+	words, i := commandWordOf(words)
+	if i < 0 || i >= len(words) {
+		return false
+	}
+	switch path.Base(words[i].text) {
+	case "grep", "egrep", "fgrep", "rg":
+	default:
+		return false
+	}
+	for _, w := range words[i+1:] {
+		if w.text == "GNU" {
+			return true
+		}
+	}
+	return false
 }
 
 // callIsForMoreSystems looks at the command word of a simple command, after the wrappers.
