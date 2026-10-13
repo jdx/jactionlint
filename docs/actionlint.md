@@ -76,7 +76,7 @@ a key it does not know, so a file shared by both tools can keep `profile: correc
 | Format of `uses:` | `invalid-uses` |
 | Inputs of local and popular actions (and of any action with `--online`) | `missing-action-input`, `unknown-action-input`, `invalid-local-action`, `deprecated-action-input` |
 | Outdated popular actions | `outdated-action-runner` |
-| Reusable workflows (`workflow_call`) | `invalid-workflow-call`, `invalid-workflow-call-input`, `missing-workflow-input`, `unknown-workflow-input`, `missing-workflow-secret`, `unknown-workflow-secret`, `workflow-input-type`, `workflow-call-permissions`, `invalid-local-workflow` |
+| Reusable workflows (`workflow_call`, and with `--online` those of other repositories) | `invalid-workflow-call`, `invalid-workflow-call-input`, `missing-workflow-input`, `unknown-workflow-input`, `missing-workflow-secret`, `unknown-workflow-secret`, `workflow-input-type`, `workflow-call-permissions`, `invalid-local-workflow` |
 | Shell names | `invalid-shell-name` |
 | Job and step IDs | `duplicate-job-id`, `duplicate-step-id`, `invalid-id` |
 | Hardcoded credentials of containers | `hardcoded-container-credentials` |

@@ -713,7 +713,7 @@ and why an unsafe one is unsafe.
 <a id="online-checks"></a>
 ### Online checks
 
-Six checks, and the input and output checks of any action, need to ask GitHub about the actions a workflow uses, so they are off unless you give `--online` (or set `online: true` in
+Six checks, and the input, secret and output checks of any action and reusable workflow, need to ask GitHub about the actions a workflow uses, so they are off unless you give `--online` (or set `online: true` in
 [the configuration](config.md#configuration-file), or `JACTIONLINT_ONLINE=1` in the environment). **Without it jactionlint never uses
 the network.**
 
@@ -745,7 +745,8 @@ These rules run without `--online` too, and gain coverage with it:
 | Rule | What `--online` adds |
 | --- | --- |
 | `missing-action-input`, `unknown-action-input`, `deprecated-action-input` | The inputs of every action which is not in the built-in data set of popular actions are checked against its `action.yml` at the pinned ref ([inputs and outputs of any action](checks.md#check-remote-action-metadata)) |
-| `undefined-property` | `steps.<id>.outputs.<name>` of such a *composite* action is checked against its declared outputs |
+| `undefined-property` | `steps.<id>.outputs.<name>` of such a *composite* action is checked against its declared outputs, and `needs.<id>.outputs.<name>` of a job which calls a reusable workflow of another repository against the outputs it declares |
+| `missing-workflow-input`, `unknown-workflow-input`, `workflow-input-type`, `missing-workflow-secret`, `unknown-workflow-secret` | A call of a reusable workflow of another repository (`owner/repo/.github/workflows/x.yml@ref`) is checked against the workflow file at that ref, as a call of a local workflow is ([reusable workflows of other repositories](checks.md#check-remote-reusable-workflows)) |
 
 ```sh
 export GITHUB_TOKEN=$(gh auth token)   # or GH_TOKEN
@@ -769,7 +770,7 @@ jactionlint --online
   oldest time at which a cached answer that was used was received. **The timestamp is the clock of the machine running
   jactionlint when it last received the answer from GitHub or confirmed it with a `304`.** It is not a date from GitHub and says
   nothing about when a tag or branch last changed. `answers` is absent when the client does not track them (unknown, not
-  "fresh"). `immutable` counts the answers about a file at a full commit SHA (the `action.yml` of an action pinned to a commit),
+  "fresh"). `immutable` counts the answers about a file at a full commit SHA (the `action.yml` of an action or the file of a reusable workflow pinned to a commit),
   which cannot change, so they are used from the cache whatever their age: they are not in `cache`, and `oldestFetched` and
   `cacheTtlSeconds` do not describe them. `--online=strict` is unchanged: it fails on skipped lookups only, never on cached or stale answers.
 - **Coverage in JSON.** `--format json` is a bare array and `jsonl` one finding a line, so neither has a place for run-level
@@ -798,8 +799,8 @@ jactionlint --online
   for; one which resets later skips the remaining lookups with a message naming the reset time, and answers in the cache are still
   used. Server errors (500, 502, 503, 504), a secondary rate limit and a request which timed out once are repeated with
   exponential backoff and jitter, at most twice (`retries`).
-- **How many requests.** An action which is not in the built-in data set costs one request (two when its file is `action.yaml`) for each
-  distinct action, path and ref in the run, on top of the requests of the other rules, and none when the answer is in the cache. A
+- **How many requests.** An action which is not in the built-in data set costs one request (two when its file is `action.yaml`), and a reusable workflow
+  of another repository one, for each distinct action or workflow, path and ref in the run, on top of the requests of the other rules, and none when the answer is in the cache. A
   run over 20 large public repositories made 2231 requests with a cold cache, 427 of them
   for these files, and none with a warm one. Without a token GitHub allows 60 requests an hour: set one (see **Token**) when a repository
   uses many actions.
@@ -807,7 +808,7 @@ jactionlint --online
   about matching repositories, `--online-allow 'actions/*'` asks only about matching ones. They are not failures and not warned about.
 - **Cache.** Answers are kept in `$XDG_CACHE_HOME/jactionlint` (`~/.cache/jactionlint`), at most 32 MiB, shared safely by parallel
   processes, keyed by API host and token. An answer is used for an hour (`--online-cache-ttl`, `cache-ttl`), then asked for again with
-  its ETag, which costs no rate limit when it did not change. The `action.yml` of an action pinned to a full commit SHA never changes, so it is
+  its ETag, which costs no rate limit when it did not change. The `action.yml` of an action, or a reusable workflow, pinned to a full commit SHA never changes, so it is
   used from the cache whatever its age; one pinned to a tag or a branch follows the hour. `--online-cache-ttl=0` checks every answer, those too. A public answer fetched
   without a token also serves a run with one. An answer fetched with a token is stored for that token, and also for every other
   token (so the `GITHUB_TOKEN` of a CI job, which changes every run, does not empty a restored cache) when the repository is known to

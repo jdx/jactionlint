@@ -1,0 +1,36 @@
+on: push
+jobs:
+  call:
+    uses: example/workflows/.github/workflows/ci.yml@v1
+    with:
+      name: me
+      count: ${{ fromJSON(2) }}
+      dry-run: false
+    secrets:
+      token: ${{ secrets.TOKEN }}
+  inherit:
+    uses: example/workflows/.github/workflows/ci.yml@v1
+    with:
+      name: me
+    secrets: inherit
+  use-outputs:
+    needs: [call, inherit]
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo ${{ needs.call.outputs.result }} ${{ needs.inherit.outputs.RESULT }}
+  # Nothing is known about a workflow which is not reusable, does not exist or is not visible
+  not-reusable:
+    uses: example/workflows/.github/workflows/not-reusable.yml@v1
+    with:
+      anything: goes
+    secrets:
+      anything: goes
+  gone:
+    uses: example/workflows/.github/workflows/gone.yml@v1
+  private:
+    uses: example/private-action/.github/workflows/ci.yml@v1
+  outputs-of-unknown:
+    needs: [not-reusable, gone, private]
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo ${{ needs.gone.outputs.anything }} ${{ needs.private.outputs.anything }} ${{ needs.not-reusable.outputs.anything }}

@@ -9,8 +9,9 @@ import (
 )
 
 // This file reads the metadata of an action which is not in the data set built into jactionlint
-// (PopularActions) from GitHub, at the ref the workflow pins, so that the checks of the inputs and of the
-// outputs of an action run on any action the way they run on a local one.
+// (PopularActions), and the declaration of a reusable workflow of another repository, from GitHub at the
+// ref the workflow pins, so that the checks of the inputs, secrets and outputs run on any action and
+// reusable workflow the way they run on a local one.
 
 // errOnlineNoFiles is why a file lookup was not made: the GitHubClient cannot read files (it does not
 // implement GitHubContentClient). It is not a failure of the API.
@@ -165,5 +166,47 @@ func (s *onlineSession) RemoteAction(owner, repo, subpath, ref string) (*ActionM
 		missing := fmt.Errorf("%s has no action.yml or action.yaml: %w", spec, ErrGitHubNotFound)
 		s.noteMissing("the action.yml of "+spec, missing)
 		return nil, nil
+	})
+}
+
+type remoteWorkflowKey struct {
+	repoKey
+	path, ref string
+}
+
+// RemoteWorkflow returns what a reusable workflow of another repository declares under `on.workflow_call`
+// (inputs, secrets, outputs) and the permissions of its jobs, read from the file at path at the ref on GitHub.
+// The metadata is nil, with a nil error, when GitHub has no such file. The error says why it could not be read:
+// the lookup failed, or the file is not a reusable workflow jactionlint can read. Like RemoteAction, it is
+// looked up once per run.
+func (s *onlineSession) RemoteWorkflow(owner, repo, path, ref string) (*ReusableWorkflowMetadata, error) {
+	if !s.allows(owner, repo) {
+		return nil, errOnlineExcluded
+	}
+	if _, ok := s.client.(GitHubContentClient); !ok {
+		return nil, errOnlineNoFiles
+	}
+	path = strings.Trim(path, "/")
+	ref = normalizeFileRef(ref)
+	return s.workflows.get(remoteWorkflowKey{newRepoKey(owner, repo), path, ref}, func() (*ReusableWorkflowMetadata, error) {
+		spec := owner + "/" + repo + "/" + path + "@" + ref
+		f, err := s.file(owner, repo, ref, path)
+		if err != nil {
+			return nil, err
+		}
+		if !f.found {
+			s.noteMissing("the reusable workflow "+spec, fmt.Errorf("%s: %w", spec, ErrGitHubNotFound))
+			return nil, nil
+		}
+		m, err := parseReusableWorkflowMetadata(f.content)
+		if err != nil {
+			// The file is there but jactionlint cannot use it: the checks which need it did not run
+			err = fmt.Errorf("%s is not a reusable workflow jactionlint can read: %s", spec, strings.ReplaceAll(err.Error(), "\n", " "))
+			s.mu.Lock()
+			s.failedLocked(failOther, "the reusable workflow "+spec, err)
+			s.mu.Unlock()
+			return nil, err
+		}
+		return m, nil
 	})
 }

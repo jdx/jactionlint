@@ -4101,7 +4101,8 @@ jactionlint does several checks for both workflow calls (caller) and reusable wo
 - optional/required/undefined inputs and secrets at `uses:` in workflow calls
 - type checks for `outputs` objects used by downstream jobs of workflow calls
 
-These checks are described in this section.
+These checks are described in this section. With `--online` the workflow calls of reusable workflows of other repositories are
+checked too, see [below](#check-remote-reusable-workflows).
 
 ### Check input definitions of `workflow_call` event in reusable workflow
 
@@ -4478,7 +4479,8 @@ And reusable workflows must define types of their inputs by `type:` field. Workf
 expressions (`inputs: ${{ ... }}`) to the inputs or secrets. jactionlint checks types of values passed to inputs in workflow call.
 When a type of input doesn't match to its definition, jactionlint reports an error.
 
-Note that this check only works with a reusable workflow in the same repository (it starts with `./` or `$/`).
+Note that this check works with a reusable workflow in the same repository (it starts with `./` or `$/`). A reusable workflow of
+another repository is checked only with `--online`, see [below](#check-remote-reusable-workflows).
 
 ### Check outputs of workflow call in downstream jobs
 
@@ -4540,7 +4542,8 @@ object types in downstream jobs.
 In the above example, `get-build-info.yaml` has one output `version`. jactionlint types the outputs object of workflow call job
 as `{version: string}`. In the downstream job, jactionlint can report an error at undefined key `tag` in the object.
 
-Note that this check only works with a reusable workflow in the same repository (starting with `./` or `$/`).
+Note that this check works with a reusable workflow in the same repository (starting with `./` or `$/`). A reusable workflow of
+another repository is checked only with `--online`, see [below](#check-remote-reusable-workflows).
 
 ### Check caller/callee permissions in workflow call
 
@@ -4610,6 +4613,90 @@ When the caller workflow is itself a reusable workflow (`on.workflow_call`) with
 skipped: such a workflow inherits the token permissions of its own caller, which jactionlint cannot see.
 
 Note that this check only works with local reusable workflows (starting with `./` or `$/`).
+
+<a id="check-remote-reusable-workflows"></a>
+### Reusable workflows of other repositories (online)
+
+With `--online` jactionlint reads the reusable workflow of `owner/repo/.github/workflows/x.yml@ref` from GitHub, at that ref, and runs
+the checks of [inputs and secrets in a workflow call](#check-inputs-and-secrets-in-workflow-call) and of [the outputs of a workflow call
+in downstream jobs](#check-outputs-of-workflow-call-in-downstream-jobs) on it, the way they run on a workflow in the same repository:
+
+- `missing-workflow-input`, `unknown-workflow-input` and `workflow-input-type` for `with:`
+- `missing-workflow-secret` and `unknown-workflow-secret` for `secrets:`
+- `undefined-property` for `needs.<id>.outputs.<name>` of the job which calls it
+
+Example input:
+
+```yaml
+# requires --online
+on: push
+jobs:
+  call:
+    uses: example/workflows/.github/workflows/ci.yml@v1
+    with:
+      # ERROR: "name" is required, and "nmae" is a typo
+      nmae: me
+      # ERROR: "count" is a number
+      count: many
+    # ERROR: the secret "token" is required
+    secrets:
+      extra: x
+  # OK
+  ok:
+    uses: example/workflows/.github/workflows/ci.yml@v1
+    with:
+      name: me
+    secrets:
+      token: ${{ secrets.TOKEN }}
+  use:
+    needs: ok
+    runs-on: ubuntu-latest
+    steps:
+      # ERROR: the workflow declares only "result"
+      - run: echo ${{ needs.ok.outputs.reslt }}
+```
+
+Output:
+
+```
+test.yaml:5:11: input "name" is required by "example/workflows/.github/workflows/ci.yml@v1" reusable workflow (read from GitHub with --online) [missing-workflow-input]
+  |
+5 |     uses: example/workflows/.github/workflows/ci.yml@v1
+  |           ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+test.yaml:5:11: secret "token" is required by "example/workflows/.github/workflows/ci.yml@v1" reusable workflow (read from GitHub with --online) [missing-workflow-secret]
+  |
+5 |     uses: example/workflows/.github/workflows/ci.yml@v1
+  |           ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+test.yaml:8:7: input "nmae" is not defined in "example/workflows/.github/workflows/ci.yml@v1" reusable workflow (read from GitHub with --online). defined inputs are "count", "dry-run", "name" [unknown-workflow-input]
+  |
+8 |       nmae: me
+  |       ^~~~~
+test.yaml:10:14: input "count" is typed as number by reusable workflow "example/workflows/.github/workflows/ci.yml@v1" (read from GitHub with --online). string value cannot be assigned [workflow-input-type]
+   |
+10 |       count: many
+   |              ^~~~
+test.yaml:26:23: property "reslt" is not defined in object type {result: string} [undefined-property]
+   |
+26 |       - run: echo ${{ needs.ok.outputs.reslt }}
+   |                       ^~~~~~~~~~~~~~~~~~~~~~
+```
+
+<!-- Skip playground link -->
+
+What is read, and what is not:
+
+- **One file, one request.** The workflow file is read once per run for each repository, path and ref, however many jobs and files call it.
+  The cache, the allow and deny lists, the rate limit and `--online=cache` work as described in [the online checks](usage.md#online-checks), and a
+  full commit SHA is kept in the cache whatever its age.
+- **Nothing is reported when the workflow is not known.** A private repository, a deny list, a rate limit, a timeout, a file which does not
+  exist at that ref, a file without `on.workflow_call` or one which jactionlint cannot read gives no finding, exactly as without `--online`. The
+  lookup is counted as skipped (`--online=strict` fails on it) except for the repositories which are left out on purpose. A workflow
+  of another repository which is not a reusable workflow is not reported as `invalid-local-workflow`, which is only about the repository
+  being linted.
+- **`secrets: inherit` passes every secret**, so the secrets of the call are not compared with the ones the workflow declares, as for a local workflow.
+- **The ref decides.** `@main` is read as it is now, not as it was when the workflow was written.
+- The permissions of the called jobs are not compared with the ones of the caller for a workflow of another repository
+  (the check of caller/callee permissions above only works with local workflows).
 
 <a id="id-naming-convention"></a>
 ## ID naming convention

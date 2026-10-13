@@ -577,6 +577,45 @@
       "advisories": {
         "list": []
       }
+    },
+    "example/workflows": {
+      "repo": {
+        "archived": false,
+        "default_branch": "main"
+      },
+      "tags": {
+        "tags": [
+          {
+            "name": "v1",
+            "sha": "3333333333333333333333333333333333333333"
+          }
+        ]
+      },
+      "refs": {
+        "heads/v1": {
+          "found": false
+        }
+      },
+      "files": {
+        "v1:.github/workflows/ci.yml": {
+          "found": true,
+          "content": "on:\n  workflow_call:\n    inputs:\n      name:\n        description: Who\n        type: string\n        required: true\n      count:\n        type: number\n        default: 1\n      dry-run:\n        type: boolean\n        required: false\n    secrets:\n      token:\n        required: true\n      extra:\n        required: false\n    outputs:\n      result:\n        description: The result\n        value: ${{ jobs.build.outputs.result }}\npermissions:\n  contents: read\njobs:\n  build:\n    runs-on: ubuntu-latest\n    outputs:\n      result: ${{ steps.x.outputs.r }}\n    steps:\n      - id: x\n        run: echo \"r=1\" >> \"$GITHUB_OUTPUT\"\n"
+        },
+        "3333333333333333333333333333333333333333:.github/workflows/ci.yml": {
+          "found": true,
+          "content": "on:\n  workflow_call:\n    inputs:\n      name:\n        description: Who\n        type: string\n        required: true\n      count:\n        type: number\n        default: 1\n      dry-run:\n        type: boolean\n        required: false\n    secrets:\n      token:\n        required: true\n      extra:\n        required: false\n    outputs:\n      result:\n        description: The result\n        value: ${{ jobs.build.outputs.result }}\npermissions:\n  contents: read\njobs:\n  build:\n    runs-on: ubuntu-latest\n    outputs:\n      result: ${{ steps.x.outputs.r }}\n    steps:\n      - id: x\n        run: echo \"r=1\" >> \"$GITHUB_OUTPUT\"\n"
+        },
+        "v1:.github/workflows/not-reusable.yml": {
+          "found": true,
+          "content": "on: push\njobs:\n  build:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo\n"
+        },
+        "v1:.github/workflows/gone.yml": {
+          "found": false
+        }
+      },
+      "advisories": {
+        "list": []
+      }
     }
   }
 }

@@ -15,6 +15,8 @@ type RuleWorkflowCall struct {
 	cache                *LocalReusableWorkflowCache
 	workflow             *Workflow
 	curJob               *Job
+	// online reads the workflows of other repositories; nil when the online checks are off.
+	online *onlineSession
 }
 
 // NewRuleWorkflowCall creates a new RuleWorkflowCall instance. 'workflowPath' is a file path to
@@ -69,6 +71,7 @@ func (rule *RuleWorkflowCall) VisitJobPre(n *Job) error {
 		if msg := unpinnedUsesMessage(rule.Config(), ref, true); msg != "" {
 			rule.ReportID("unpinned-uses", u.Pos, msg)
 		}
+		rule.checkWorkflowCallUsesRemote(n.WorkflowCall, ref)
 		return nil
 	}
 
@@ -100,11 +103,49 @@ func (rule *RuleWorkflowCall) checkWorkflowCallUsesLocal(call *WorkflowCall) {
 		return
 	}
 
+	rule.checkWorkflowCallInputsAndSecrets(call, m, strconv.Quote(u.Value)+" reusable workflow")
+	rule.checkWorkflowCallPermissions(call, m)
+
+	rule.Debug("Validated reusable workflow %q", u.Value)
+}
+
+// remoteWorkflowLookup returns whether GitHub can be asked for the reusable workflow of the `uses:` value:
+// {owner}/{repo}/{path}.yml@{ref} (or .yaml) with plain names and no expression.
+func remoteWorkflowLookup(ref *UsesRef) bool {
+	if !ref.isRepoWorkflowCall() || ref.Dynamic || !ref.HasRef || ref.RefKind == RefShortSHA {
+		return false
+	}
+	if !validGitHubOwner(ref.Owner) || !validGitHubRepo(ref.Repo) || !validGitRefName(ref.Ref) {
+		return false
+	}
+	return isWorkflowFilePath(ref.Subpath) && validRepoFilePath(ref.Subpath)
+}
+
+// checkWorkflowCallUsesRemote checks a call of a reusable workflow of another repository against the workflow
+// file at the pinned ref, read from GitHub with --online. When the file cannot be read nothing is reported.
+func (rule *RuleWorkflowCall) checkWorkflowCallUsesRemote(call *WorkflowCall, ref *UsesRef) {
+	if rule.online == nil || !remoteWorkflowLookup(ref) {
+		return
+	}
+	m, err := rule.online.RemoteWorkflow(ref.Owner, ref.Repo, ref.Subpath, ref.Ref)
+	if err != nil || m == nil {
+		rule.Debug("%s: no workflow metadata to check the call against: %v", ref.Raw, err)
+		return
+	}
+	rule.checkWorkflowCallInputsAndSecrets(call, m, strconv.Quote(ref.Raw)+" reusable workflow (read from GitHub with --online)")
+	rule.Debug("Validated reusable workflow %q read from GitHub", ref.Raw)
+}
+
+// checkWorkflowCallInputsAndSecrets compares the inputs and the secrets of a call with the ones the workflow declares.
+// what names the workflow in the messages.
+func (rule *RuleWorkflowCall) checkWorkflowCallInputsAndSecrets(call *WorkflowCall, m *ReusableWorkflowMetadata, what string) {
+	u := call.Uses
+
 	// Validate inputs
 	for n, i := range m.Inputs {
 		if i != nil && i.Required {
 			if _, ok := call.Inputs[n]; !ok {
-				rule.ReportIDf("missing-workflow-input", u.Pos, "input %q is required by %q reusable workflow", i.Name, u.Value)
+				rule.ReportIDf("missing-workflow-input", u.Pos, "input %q is required by %s", i.Name, what)
 			}
 		}
 	}
@@ -122,7 +163,7 @@ func (rule *RuleWorkflowCall) checkWorkflowCallUsesLocal(call *WorkflowCall) {
 					note = "defined inputs are " + sortedQuotes(is)
 				}
 			}
-			rule.ReportIDf("unknown-workflow-input", i.Name.Pos, "input %q is not defined in %q reusable workflow. %s", i.Name.Value, u.Value, note)
+			rule.ReportIDf("unknown-workflow-input", i.Name.Pos, "input %q is not defined in %s. %s", i.Name.Value, what, note)
 		}
 	}
 
@@ -131,7 +172,7 @@ func (rule *RuleWorkflowCall) checkWorkflowCallUsesLocal(call *WorkflowCall) {
 		for n, s := range m.Secrets {
 			if s.Required {
 				if _, ok := call.Secrets[n]; !ok {
-					rule.ReportIDf("missing-workflow-secret", u.Pos, "secret %q is required by %q reusable workflow", s.Name, u.Value)
+					rule.ReportIDf("missing-workflow-secret", u.Pos, "secret %q is required by %s", s.Name, what)
 				}
 			}
 		}
@@ -149,15 +190,10 @@ func (rule *RuleWorkflowCall) checkWorkflowCallUsesLocal(call *WorkflowCall) {
 						note = "defined secrets are " + sortedQuotes(ss)
 					}
 				}
-				rule.ReportIDf("unknown-workflow-secret", s.Name.Pos, "secret %q is not defined in %q reusable workflow. %s", s.Name.Value, u.Value, note)
+				rule.ReportIDf("unknown-workflow-secret", s.Name.Pos, "secret %q is not defined in %s. %s", s.Name.Value, what, note)
 			}
 		}
 	}
-
-	// Validate permissions
-	rule.checkWorkflowCallPermissions(call, m)
-
-	rule.Debug("Validated reusable workflow %q", u.Value)
 }
 
 // checkWorkflowCallPermissions compares each callee job's effective `permissions:` requirement
@@ -299,6 +335,8 @@ func init() {
 		RuleInfo{ID: "workflow-call-permissions", Group: RuleGroupCorrectness, Summary: "A caller job grants fewer permissions than a reusable workflow requires.", DefaultLevel: SeverityError, Profile: ProfileCorrectness, DocsAnchor: "check-reusable-workflows"},
 	)
 	registerRuleFactory("workflow-call", func(env *RuleEnv) []Rule {
-		return []Rule{NewRuleWorkflowCall(env.path, env.localReusableWorkflows)}
+		r := NewRuleWorkflowCall(env.path, env.localReusableWorkflows)
+		r.online = env.online
+		return []Rule{r}
 	})
 }
