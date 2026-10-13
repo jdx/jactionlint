@@ -47,6 +47,7 @@ func (rule *RuleUseTrustedPublishing) VisitJobPre(n *Job) error {
 
 // VisitJobPost is callback when visiting Job node after visiting its children.
 func (rule *RuleUseTrustedPublishing) VisitJobPost(n *Job) error {
+	rule.checkJobPedantic(n)
 	rule.leaveJob()
 	return nil
 }
@@ -684,7 +685,7 @@ func (rule *RuleUseTrustedPublishing) checkAction(e *ExecAction) {
 
 func init() {
 	registerRules(
-		RuleInfo{ID: "use-trusted-publishing", Group: RuleGroupSecurity, Summary: "A package is published with a long-lived credential although the registry supports trusted publishing.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-use-trusted-publishing"},
+		RuleInfo{ID: "use-trusted-publishing", Group: RuleGroupSecurity, Summary: "A package is published with a long-lived credential although the registry supports trusted publishing. With the option pedantic, also trusted publishing in a job that builds the package or has no environment, and attestations that are switched off.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-use-trusted-publishing", Options: []RuleOption{pedanticOption}},
 	)
 	registerRuleFactory("use-trusted-publishing", func(env *RuleEnv) []Rule {
 		if !env.config.RuleEnabled("use-trusted-publishing") {

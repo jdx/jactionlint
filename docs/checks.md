@@ -3115,6 +3115,70 @@ that `actions/setup-node` writes, so that npm falls back to the OIDC token (the 
 and a variable set from the output of `rust-lang/crates-io-auth-action` or `NuGet/login` of the same job (for example
 `CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}`) holds a token that is valid for minutes. Both are trusted publishing.
 
+With the option `pedantic` (on under the `pedantic` profile) the rule also looks at the jobs that **do** use trusted publishing
+([zizmor#1968](https://github.com/zizmorcore/zizmor/issues/1968), [#237](https://github.com/zizmorcore/zizmor/issues/237),
+[#938](https://github.com/zizmorcore/zizmor/issues/938)). The OIDC token replaces a stored secret, but everything that runs in the job
+while it can request the token can use it to publish:
+
+- **A job that builds and publishes.** The job publishes with the OIDC token, has an `actions/checkout` step and, before the
+  publish, runs a build or an install of the dependencies (`pip install -r`, `npm ci`, `python -m build`, `uv build`, `make`,
+  `cargo build`, a build action such as `PyO3/maturin-action` or `ruby/setup-ruby` with `bundler-cache`, ...). The code of the repository
+  and of every dependency can publish a package. Build it in another job without `id-token: write`, upload the files as an artifact and
+  publish from a job that only downloads and publishes them. Not reported: installing the tools of publishing (`pip install twine`,
+  `npm install -g npm@latest`), jobs without a checkout, a build after the publish, and the publishes that build the package themselves and
+  cannot be separated from the build (`cargo publish`, `rubygems/release-gem`).
+- **A job without an `environment:`.** The trusted publisher of PyPI, npm, crates.io and RubyGems can be tied to an environment, and the
+  environment can require an approval, so that a run that someone else started cannot publish on its own. Only the absence of the key is
+  reported: whether the environment has protection rules is not in the file.
+- **`attestations: false`** of `pypa/gh-action-pypi-publish` or `rubygems/release-gem`. Both publish attestations by default
+  (PEP 740, sigstore), which let the users of the package check where and how it was built.
+
+Example input:
+
+```yaml
+on:
+  release:
+    types: [published]
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - run: python -m build
+      - uses: pypa/gh-action-pypi-publish@76f52bc884231f62b9a034ebfe128415bbaabdfc # v1.12.4
+        with:
+          attestations: false
+```
+
+Output:
+<!-- Skip update output -->
+```
+test.yaml:12:15: "pypa/gh-action-pypi-publish@76f52bc884231f62b9a034ebfe128415bbaabdfc" publishes to PyPI with the OIDC token of the job ("id-token: write"), and the job has no "environment:". tie the trusted publisher to an environment and add it to the job (with required reviewers if you can), so that a run that someone else started cannot publish on its own [use-trusted-publishing]
+   |
+12 |       - uses: pypa/gh-action-pypi-publish@76f52bc884231f62b9a034ebfe128415bbaabdfc # v1.12.4
+   |               ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+test.yaml:12:15: "pypa/gh-action-pypi-publish@76f52bc884231f62b9a034ebfe128415bbaabdfc" publishes to PyPI with the OIDC token of the job ("id-token: write"), but the job also checks out the repository and runs "python -m build" before it, so that code and the code of its dependencies can use the token as well. build the package in another job without "id-token: write", pass it on as an artifact, and publish from a job that only downloads and publishes it [use-trusted-publishing]
+   |
+12 |       - uses: pypa/gh-action-pypi-publish@76f52bc884231f62b9a034ebfe128415bbaabdfc # v1.12.4
+   |               ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+test.yaml:14:25: action "pypa/gh-action-pypi-publish@76f52bc884231f62b9a034ebfe128415bbaabdfc" is told not to publish attestations ("attestations: false"), although it does by default: they let the users of the package check where and how it was built. remove the input [use-trusted-publishing]
+   |
+14 |           attestations: false
+   |                         ^~~~~
+```
+
+<!-- Skip playground link -->
+
+This is the output with the option `pedantic`, set for the rule in [the config file](config.md):
+
+```yaml
+rules:
+  use-trusted-publishing:
+    pedantic: true
+```
+
 <a id="check-superfluous-actions"></a>
 ## Superfluous actions
 
