@@ -406,7 +406,7 @@ func (rule *RuleUntrustedCheckout) inputForksPR(name, value string) bool {
 // `github.event.pull_request.head.sha` is a branch that it lets through). The inputs are judged through their callers.
 func (rule *RuleUntrustedCheckout) uncoveredUntrusted(name, value string) bool {
 	refs, _ := stringExprRefs(value)
-	covered := forkCommitContexts
+	var covered [][]string
 	switch name {
 	case "repository":
 		covered = forkRepoContexts
@@ -526,7 +526,6 @@ func (rule *RuleUntrustedCheckout) localActionCheckouts(s *Step, e *ExecAction) 
 
 	var ret []*untrustedCheckout
 	var gate permissionGateState
-	var groups []int // the group of each checkout in ret
 	for _, j := range action.Jobs {
 		steps, stepGroups := flattenStepsGroup(j.Steps)
 		for i, cs := range steps {
@@ -554,7 +553,6 @@ func (rule *RuleUntrustedCheckout) localActionCheckouts(s *Step, e *ExecAction) 
 					c.afterFailure = gate.set // after the check or beside it: only a step of the caller that also runs after a failure runs it
 					c.what += " in " + t.path
 					ret = append(ret, c)
-					groups = append(groups, g)
 				}
 			}
 		}
