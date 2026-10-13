@@ -94,29 +94,15 @@ func (rule *RuleMacosGnuFlags) VisitStep(n *Step) error {
 	return nil
 }
 
-// macosSystemRe matches what a script says when it is written for more than one system: it tests the operating
-// system (`uname`, `$OSTYPE`, `RUNNER_OS`, `runner.os`, `matrix.os`, `Darwin`, `macOS`, `sw_vers`) or it uses the GNU
-// tools: by their names with a g in front (`gsed`, `gdate`, ... as command words, in lower case, so GCP and gcloud are not
-// matched), by the directory of the GNU names of Homebrew (`gnubin`, `gnu-sed`), or by installing them
-// (`brew install coreutils`). It is case-sensitive on purpose.
-var macosSystemRe = regexp.MustCompile(
-	`\buname\b|\bOSTYPE\b|\bRUNNER_OS\b|(?i:\brunner\.os\b|\bmatrix\.os\b|\bdarwin\b|\bmacos\b)|\bsw_vers\b` +
-		`|\bg(?:sed|date|stat|tar|grep|awk|cp|mv|ls|readlink|xargs|find|tee|sort|head|tail|wc|cut|tr|mktemp|base64|timeout|du|install)\b` +
-		`|\bgnubin\b|\bgnu-(?:sed|tar|which|getopt|indent|time)\b|\bGNU\b` +
-		`|\bbrew\s+(?:re)?install\b[^\n]*\b(?:coreutils|findutils|diffutils|grep|gawk|gnu-[a-z]+)\b`)
-
 // mayBeForAnotherSystem reports whether the step may not run on macOS, or may run with GNU tools.
 func (rule *RuleMacosGnuFlags) mayBeForAnotherSystem(n *Step, run *ExecRun) bool {
-	if n.If != nil {
-		c := strings.ToLower(n.If.Value)
-		if strings.Contains(c, "runner.") || strings.Contains(c, "matrix.") || strings.Contains(c, "matrix[") || strings.Contains(c, "runner[") {
-			return true
-		}
+	if stepConditionReadsTheSystem(n.If) {
+		return true
 	}
 	if rule.job != nil && rule.job.Container != nil {
 		return true // the steps run in a Linux container
 	}
-	return macosSystemRe.MatchString(run.Run.Value)
+	return scriptIsForMoreSystems(run.Run.Value)
 }
 
 // macosLabelOf returns the label of the runner that makes the job run on macOS: a `macos` label of `runs-on`, or a
@@ -262,13 +248,15 @@ func portableTools(s *runscript.Script) map[string]bool {
 			}
 			switch c.Name {
 			case "date":
-				// The options of BSD date: -j, -v (with its adjustment), -f and -z
-				if optionClusterHasAny(w.Value, "jnRu", "frvzI", "jfvz") {
+				// The options of BSD date: -j, -v (with its adjustment) and -z. -f is also an option of GNU date (--file)
+				if optionClusterHasAny(w.Value, "jnRu", "frvzI", "jvz") {
 					out["date"] = true
 				}
 			case "stat":
-				// The options of BSD stat: -f (its format), -x, -s, -r and the ones GNU stat has no letter for
-				if optionClusterHasAny(w.Value, "FlLnqrsx", "ft", "fxsrFlnq") {
+				// The options of BSD stat that GNU stat has no letter for (-x, -s, -r, -F, -l, -n, -q), and -f with a format,
+				// which is the BSD form (GNU -f takes no argument, and a format has a %): `-f %m`, `-Lf %m`, `-f%m`
+				if optionClusterHasAny(w.Value, "FlLnqrsx", "ft", "xsrFlnq") ||
+					(optionClusterHasAny(w.Value, "FlLnqrsx", "ft", "f") && (strings.Contains(w.Value, "%") || i+1 < len(c.Args) && c.Args[i+1] != nil && strings.Contains(c.Args[i+1].Value, "%"))) {
 					out["stat"] = true
 				}
 			case "sed":

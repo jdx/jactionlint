@@ -7158,8 +7158,11 @@ Forms that look GNU-only and work on macOS are not reported: `xargs -r` (accepte
 The rule leaves out what may be meant for another system: a job on a self-hosted runner (its owner can have installed the GNU
 tools), a job that runs in a `container:`, a command whose failure the script handles (`if grep -P ...`), a script that also calls the
 command in the form of macOS (`date -j -f ... || date -d ...`, `stat -f` next to `stat -c`, `sed -i bak` next to `sed -i`, `tee -a`), and a step
-whose `if:` reads `runner.` or `matrix.` or whose script mentions the system or the GNU tools (`RUNNER_OS`, `uname`, `Darwin`,
-`gsed`, `gnu-sed`, `coreutils`, `brew`, ...). Scripts of other shells than bash and sh are not looked at.
+whose `if:` reads the `runner` or `matrix` context, or whose script is written for more than one system. That is decided
+from the parsed script, not from its text: it expands `$OSTYPE` or `$RUNNER_OS`, reads `runner.os` or `matrix.os` in an
+expression, calls `uname` or `sw_vers`, has a GNU tool by its Homebrew name as a command word (`gsed`, `gdate`, ...), calls
+`brew install` with `coreutils`, `findutils`, `grep`, `gawk` or a `gnu-*` formula as an argument, or names a `gnubin` directory. Scripts
+of other shells than bash and sh are not looked at.
 
 There is no automatic fix: the portable form depends on the script.
 

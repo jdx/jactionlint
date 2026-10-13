@@ -113,3 +113,12 @@ jobs:
           gcloud auth login
           echo "$GCP_PROJECT"
           sed -i 's/a/b/' file.txt
+  not-written-for-other-systems:
+    runs-on: macos-latest
+    steps:
+      # grep after the install of something else is the grep of macOS
+      - run: brew install jq && grep -P x file.txt
+      # -f is also an option of GNU date (--file): it does not show the form of macOS
+      - run: |
+          date -f dates.txt
+          date -d yesterday

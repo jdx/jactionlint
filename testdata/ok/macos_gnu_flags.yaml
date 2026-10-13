@@ -100,6 +100,10 @@ jobs:
       # Clustered options of stat of macOS: the script handles both systems
       - run: |
           stat -Lf %m file.txt || stat -c %Y file.txt
+      # The GNU grep is installed, which is what the script uses
+      - run: |
+          brew install grep
+          grep -P x file.txt
       # After -- come the patterns and the file names
       - run: |
           grep -- -P file.txt
