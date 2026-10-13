@@ -16,6 +16,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 
@@ -23,6 +24,50 @@ import (
 )
 
 const theURL = "https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows"
+
+// extraTypes are activity types which the documentation does not list but jactionlint must accept. They are
+// added to the types scraped from the documentation, so that regenerating the table does not drop them.
+// An event of this table which is missing in the documentation is an error because it means the entry is stale.
+//
+// Add an entry only with a source that shows that GitHub accepts the type. The sources are the schema of the language
+// service, https://github.com/actions/languageservices (workflow-parser/src/workflow-v1.0.json), and the one of the
+// runner, https://github.com/actions/runner (src/Sdk/WorkflowParser/workflow-v1.0.json).
+var extraTypes = map[string][]string{
+	// GitHub documents "destroyed" for the merge_group webhook event, while the page of workflow triggers only
+	// lists "checks_requested". Workflows using both types must lint clean. (23f9662c)
+	"merge_group": {"destroyed"},
+	// https://github.com/actions/languageservices/pull/384 ("The `stacked` activity type is now available on
+	// `pull_request` and `pull_request_target` events for Actions.")
+	"pull_request":        {"stacked"},
+	"pull_request_target": {"stacked"},
+	// `image-version-activity-type` of the schema allows created, ready and deleted. The documentation says
+	// "Not applicable" for the activity types of the event.
+	"image_version": {"created", "ready", "deleted"},
+}
+
+// applyExtraTypes adds the activity types of extraTypes which are not in parsed yet.
+func applyExtraTypes(parsed map[string][]string) error {
+	for event, extra := range extraTypes {
+		types, ok := parsed[event]
+		if !ok {
+			return fmt.Errorf("event %q of the extra activity types was not found in the document", event)
+		}
+		for _, e := range extra {
+			found := false
+			for _, t := range types {
+				if t == e {
+					found = true
+					break
+				}
+			}
+			if !found {
+				types = append(types, e)
+			}
+		}
+		parsed[event] = types
+	}
+	return nil
+}
 
 var dbg = log.New(io.Discard, "", log.LstdFlags)
 
@@ -355,36 +400,58 @@ func run(args []string, stdout, dbgout io.Writer, srcURL string) error {
 		return err
 	}
 
-	var out io.Writer
-	var dst string
-	if len(args) == 0 || args[len(args)-1] == "-" {
-		out = stdout
-		dst = "stdout"
-	} else {
-		dst = args[len(args)-1]
-		f, err := os.Create(dst)
-		if err != nil {
-			return err
-		}
-		defer f.Close()
-		out = f
-	}
-
+	// Everything which can fail because of the input happens before the destination is touched, so that a
+	// failed refresh never empties the existing output.
 	p, err := parse(src)
 	if err != nil {
 		return err
 	}
 
-	applyOverrides(p, typeOverrides)
-
-	if err := write(p, out); err != nil {
+	if err := applyExtraTypes(p); err != nil {
 		return err
 	}
 
-	dbg.Println("Wrote the output to", dst)
+	if len(args) == 0 || args[len(args)-1] == "-" {
+		if err := write(p, stdout); err != nil {
+			return err
+		}
+		dbg.Println("Wrote the output to stdout")
+	} else {
+		dst := args[len(args)-1]
+		if err := writeFile(p, dst); err != nil {
+			return err
+		}
+		dbg.Println("Wrote the output to", dst)
+	}
 	dbg.Println("Done generate-webhook-events script successfully")
 
 	return nil
+}
+
+// writeFile writes the output to a temporary file next to dst and renames it over dst, so that dst is either
+// the complete new output or untouched.
+func writeFile(parsed map[string][]string, dst string) error {
+	buf := &bytes.Buffer{}
+	if err := write(parsed, buf); err != nil {
+		return err
+	}
+	f, err := os.CreateTemp(filepath.Dir(dst), filepath.Base(dst)+".tmp*")
+	if err != nil {
+		return err
+	}
+	tmp := f.Name()
+	defer os.Remove(tmp) // no-op after a successful rename
+	if _, err := f.Write(buf.Bytes()); err != nil {
+		f.Close()
+		return fmt.Errorf("could not write output: %w", err)
+	}
+	if err := f.Close(); err != nil {
+		return err
+	}
+	if err := os.Chmod(tmp, 0o644); err != nil {
+		return err
+	}
+	return os.Rename(tmp, dst)
 }
 
 func main() {

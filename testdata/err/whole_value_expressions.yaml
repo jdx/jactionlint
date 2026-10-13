@@ -1,0 +1,67 @@
+on: push
+
+# The schema of GitHub does not allow an expression for the "run" section of the defaults of a workflow
+defaults:
+  run: ${{ fromJSON(vars.RUN_DEFAULTS) }}
+
+jobs:
+  # an expression of the wrong type
+  wrong-types:
+    runs-on: ubuntu-latest
+    strategy: ${{ github.sha }}
+    defaults:
+      run: ${{ github.ref }}
+    container:
+      image: node:20
+      ports: ${{ github.sha }}
+      volumes: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with: ${{ github.sha }}
+      - run: echo hi
+        env:
+          ${{ insert }}: ${{ github.sha }}
+      - uses: actions/checkout@v4
+        with:
+          ${{ insert }}: ${{ github.sha }}
+
+  # an expression which uses a context that is not available there
+  wrong-contexts:
+    runs-on: ubuntu-latest
+    strategy: ${{ fromJSON(matrix.x) }}
+    defaults:
+      run: ${{ fromJSON(steps.x.outputs.y) }}
+    steps:
+      - uses: actions/checkout@v4
+        with: ${{ fromJSON(secrets.INPUTS) }}
+
+  # the inputs of the action are not known, but its other mistakes are
+  unknown-inputs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          unknown-input: x
+          ${{ insert }}: ${{ fromJSON(vars.INPUTS) }}
+
+  # something else than an expression
+  not-expressions:
+    runs-on: ubuntu-latest
+    strategy: plain
+    container:
+      image: node:20
+      ports: 8080
+    steps:
+      - uses: actions/checkout@v4
+        with: plain
+      - run: echo hi
+        env:
+          ${{ insert }}: plain
+      - run: echo hi
+        env:
+          ${{ insert }}: [a, b]
+
+  # a reusable workflow call does not take an expression for "with"
+  call:
+    uses: owner/repo/.github/workflows/reusable.yaml@v1
+    with: ${{ fromJSON(vars.INPUTS) }}

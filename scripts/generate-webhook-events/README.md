@@ -33,14 +33,9 @@ For debugging, specifying `-` to `dstfile` outputs the generated source to stdou
 go run ./scripts/generate-webhook-events ./input.html -
 ```
 
-## Overrides
-
-The documentation lags behind the workflow schema of GitHub. Activity types that GitHub accepts but the documentation
-does not list yet are in [`overrides.go`](./overrides.go) with their sources. They are added to the parsed tables each
-time the file is generated, so do not edit `all_webhooks.go` by hand.
-
 ## Notes
 
 - `Not applicable` activity types are generated as an empty slice: `[]string{}`
 - `Custom` activity types are generated as `nil`
 - The output is sorted by webhook name so the generated file is stable
+- Activity types that the documentation lacks but jactionlint must accept are listed in `extraTypes` in `main.go` (`merge_group`: `destroyed`, `stacked` of `pull_request` and `pull_request_target`, the types of `image_version`, each with its source) and are added to the scraped types, so that regenerating does not drop them. The script fails when the event of such an entry is missing in the document

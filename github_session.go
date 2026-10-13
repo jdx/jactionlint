@@ -138,7 +138,8 @@ type onlineSession struct {
 	blockUntil time.Time
 	transient  int // lookups in a row which failed in a way that suggests an outage
 	skipped    int
-	excluded   map[string]bool // repositories left out by the allow and deny lists
+	skippedBy  map[failureKind]int // skipped by the kind of failure
+	excluded   map[string]bool     // repositories left out by the allow and deny lists
 	seen       map[failureKind]bool
 
 	repos      memo[repoKey, *GitHubRepo]
@@ -173,6 +174,24 @@ func (s *onlineSession) skippedLookups() int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.skipped
+}
+
+func (s *onlineSession) countKindLocked(kind failureKind) {
+	if s.skippedBy == nil {
+		s.skippedBy = map[failureKind]int{}
+	}
+	s.skippedBy[kind]++
+}
+
+// skippedByKind is skippedLookups by the kind of failure.
+func (s *onlineSession) skippedByKind() map[string]int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := make(map[string]int, len(s.skippedBy))
+	for k, n := range s.skippedBy {
+		out[string(k)] = n
+	}
+	return out
 }
 
 // allows reports whether the repository may be looked up.
@@ -341,6 +360,7 @@ func (s *onlineSession) noteMissing(what string, err error) {
 // failedLocked counts a skipped lookup, logs it, and warns the first time its kind is seen.
 func (s *onlineSession) failedLocked(kind failureKind, what string, err error) {
 	s.skipped++
+	s.countKindLocked(kind)
 	if s.detail != nil {
 		s.detail("online: skipped %s: %v", orSomething(what), err)
 	}
@@ -425,6 +445,7 @@ func callFor[T any](s *onlineSession, what string, fn func(ctx context.Context) 
 	if err := s.blockedErr(); err != nil {
 		s.mu.Lock()
 		s.skipped++
+		s.countKindLocked(classifyFailure(err))
 		if s.detail != nil {
 			s.detail("online: skipped %s: %v", orSomething(what), err)
 		}

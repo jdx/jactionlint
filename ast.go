@@ -392,10 +392,14 @@ type Permissions struct {
 // DefaultsRun is configuration that shell is how to be run.
 // https://docs.github.com/en/actions/learn-github-actions/workflow-syntax-for-github-actions#defaultsrun
 type DefaultsRun struct {
-	// Shell is shell name to be run.
+	// Shell is shell name to be run. When the section is written as one expression (Expression), it is that
+	// expression, so that a rule treats the shell as chosen by an expression and unknown.
 	Shell *String
-	// WorkingDirectory is a default working directory path.
+	// WorkingDirectory is a default working directory path. It is the Expression too when that is set.
 	WorkingDirectory *String
+	// Expression is the expression of a section written as one expression, such as `run: ${{ fromJSON(vars.RUN) }}`.
+	// It is allowed in the defaults of a job only. Otherwise nil.
+	Expression *String
 	// Pos is a position in source.
 	Pos *Pos
 }
@@ -419,8 +423,13 @@ type Concurrency struct {
 	// Queue is the queue strategy for pending workflow runs. Valid values are "single" (default) and "max".
 	Queue *String
 	// Bare is true when the concurrency is written as a plain group name (`concurrency: my-group`)
-	// instead of a mapping. This form cannot cancel runs in progress.
+	// instead of a mapping. This form cannot cancel runs in progress. It is false for `concurrency: ${{ ... }}`
+	// (see Expression).
 	Bare bool
+	// Expression is the expression of a concurrency written as one expression, such as
+	// `concurrency: ${{ fromJSON(vars.CONCURRENCY) }}`. It can evaluate to a group name or to a mapping, so the form
+	// is not known. Group is the same expression. Otherwise nil.
+	Expression *String
 	// Pos is a position in source.
 	Pos *Pos
 }
@@ -430,6 +439,9 @@ type Concurrency struct {
 type Environment struct {
 	// Name is a name of environment which the workflow uses.
 	Name *String
+	// Expression is the expression of an environment written as one expression, such as `environment: ${{ matrix.env }}`.
+	// It can evaluate to a name or to a mapping. Name is the same expression. Otherwise nil.
+	Expression *String
 	// URL is the URL mapped to 'environment_url' in the deployments API. Empty value means no value was specified.
 	URL *String
 	// Deployment is whether GitHub should create a deployment for this job. false skips auto-deployment while still applying environment protection rules and secrets.
@@ -493,7 +505,15 @@ type ExecAction struct {
 	// https://docs.github.com/en/actions/learn-github-actions/workflow-syntax-for-github-actions#jobsjob_idstepsuses
 	Uses *String
 	// Inputs represents inputs to the action to execute in 'with' section. Keys are in lower case since they are case-insensitive.
+	// It is empty when the whole section is an expression (see InputsExpression).
 	Inputs map[string]*Input
+	// InputsExpression is the expression of a 'with' section written as one expression, such as
+	// `with: ${{ fromJSON(vars.INPUTS) }}`. Nil when the section is a mapping. Inputs is empty then, and the inputs of
+	// the step are unknown: a rule which reports an input that is missing or not set must skip the step (see InputsUnknown).
+	InputsExpression *String
+	// InputInserts are the values of the `${{ insert }}` keys of the 'with' section, such as
+	// `${{ insert }}: ${{ matrix.inputs }}`. Each is an expression which evaluates to a mapping of more inputs.
+	InputInserts []*String
 	// Entrypoint represents optional 'entrypoint' field in 'with' section. Nil field means nothing specified
 	// https://docs.github.com/en/actions/learn-github-actions/workflow-syntax-for-github-actions#jobsjob_idstepswithentrypoint
 	Entrypoint *String
@@ -505,6 +525,13 @@ type ExecAction struct {
 // Kind returns kind of the step execution.
 func (e *ExecAction) Kind() ExecKind {
 	return ExecKindAction
+}
+
+// InputsUnknown reports whether the inputs of the step are not all known from the source because the 'with' section is
+// an expression, or has a `${{ insert }}` key. The inputs in Inputs are given, but others may be given too. A rule
+// which reports that an input is missing or not set must not report the step.
+func (e *ExecAction) InputsUnknown() bool {
+	return e.InputsExpression != nil || len(e.InputInserts) > 0
 }
 
 // ExecWait is configuration of a step that waits for background steps to complete. It corresponds to
@@ -786,8 +813,12 @@ type Matrix struct {
 // Strategy is strategy configuration of how the job is run.
 // https://docs.github.com/en/actions/learn-github-actions/workflow-syntax-for-github-actions#jobsjob_idstrategy
 type Strategy struct {
-	// Matrix is matrix of combinations of values. Each combination will run the job once.
+	// Matrix is matrix of combinations of values. Each combination will run the job once. When the whole strategy is
+	// an expression (Expression), it is a matrix with the same Expression, so that a rule treats the matrix as unknown.
 	Matrix *Matrix
+	// Expression is the expression of a strategy written as one expression, such as
+	// `strategy: ${{ fromJSON(needs.setup.outputs.strategy) }}`. Otherwise nil.
+	Expression *String
 	// FailFast is flag to show if other jobs should stop when one job fails.
 	// https://docs.github.com/en/actions/learn-github-actions/workflow-syntax-for-github-actions#jobsjob_idstrategyfail-fast
 	FailFast *Bool
@@ -813,6 +844,15 @@ type Env struct {
 	// Expression is an expression string which contains ${{ ... }}. When this value is not empty,
 	// Vars should be nil.
 	Expression *String
+	// Inserts are the values of the `${{ insert }}` keys, such as `${{ insert }}: ${{ matrix.env }}`. Each is an
+	// expression which evaluates to a mapping of more variables.
+	Inserts []*String
+}
+
+// Dynamic reports whether the variables are not all known from the source because the whole section is an
+// expression or it has a `${{ insert }}` key. A rule which reports that a variable is not set must not report then.
+func (e *Env) Dynamic() bool {
+	return e != nil && (e.Expression != nil || len(e.Inserts) > 0)
 }
 
 // Step is step configuration. Step runs one action or one shell script.
@@ -855,9 +895,13 @@ type Credentials struct {
 // Container is configuration of how to run the container.
 // https://docs.github.com/en/actions/learn-github-actions/workflow-syntax-for-github-actions#jobsjob_idcontainer
 type Container struct {
-	// Image is specification of Docker image.
+	// Image is specification of Docker image. When the whole container is written as one expression (Expression),
+	// it is that expression.
 	// https://docs.github.com/en/actions/learn-github-actions/workflow-syntax-for-github-actions#jobsjob_idcontainerimage
 	Image *String
+	// Expression is the expression of a container written as a single value that is an image name or a whole
+	// configuration, such as `container: ${{ matrix.container }}`. Otherwise nil.
+	Expression *String
 	// Credentials is credentials configuration of the Docker container.
 	Credentials *Credentials
 	// Env is environment variables setup in the container.
@@ -866,9 +910,14 @@ type Container struct {
 	// Ports is list of port number mappings of the container.
 	// https://docs.github.com/en/actions/learn-github-actions/workflow-syntax-for-github-actions#jobsjob_idcontainerports
 	Ports []*String
+	// PortsExpression is the expression of a section written as one expression, such as `ports: ${{ fromJSON(vars.P) }}`.
+	// Ports is empty then.
+	PortsExpression *String
 	// Volumes are list of volumes to be mounted to the container.
 	// https://docs.github.com/en/actions/learn-github-actions/workflow-syntax-for-github-actions#jobsjob_idcontainervolumes
 	Volumes []*String
+	// VolumesExpression is the expression of a section written as one expression. Volumes is empty then.
+	VolumesExpression *String
 	// Options is options string to run the container.
 	// https://docs.github.com/en/actions/learn-github-actions/workflow-syntax-for-github-actions#jobsjob_idcontaineroptions
 	Options *String

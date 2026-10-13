@@ -135,8 +135,12 @@ type exprSite struct {
 // matrix value, so a rule which looks at expressions does not miss one in "strategy:", the timeouts
 // or "continue-on-error:". TestWorkflowExprSitesVisitEveryExpression keeps it in sync with ast.go.
 func workflowExprSites(w *Workflow, f func(site exprSite)) {
+	// A string can be held by two fields: `container: ${{ ... }}` is the Image and the Expression of the container.
+	// It is visited once.
+	seen := map[*String]bool{}
 	emit := func(j *Job, s *String, cond bool) {
-		if s != nil {
+		if s != nil && !seen[s] {
+			seen[s] = true
 			f(exprSite{Job: j, Str: s, Cond: cond})
 		}
 	}
@@ -196,15 +200,18 @@ func workflowExprSites(w *Workflow, f func(site exprSite)) {
 		for _, v := range e.Vars {
 			emit(j, v.Value, false)
 		}
+		emitAll(j, e.Inserts)
 	}
 	defaults := func(j *Job, d *Defaults) {
 		if d != nil && d.Run != nil {
+			emit(j, d.Run.Expression, false)
 			emit(j, d.Run.Shell, false)
 			emit(j, d.Run.WorkingDirectory, false)
 		}
 	}
 	conc := func(j *Job, c *Concurrency) {
 		if c != nil {
+			emit(j, c.Expression, false)
 			emit(j, c.Group, false)
 			emit(j, c.Queue, false)
 			emitBool(j, c.CancelInProgress)
@@ -214,6 +221,7 @@ func workflowExprSites(w *Workflow, f func(site exprSite)) {
 		if c == nil {
 			return
 		}
+		emit(j, c.Expression, false)
 		emit(j, c.Image, false)
 		if c.Credentials != nil {
 			emit(j, c.Credentials.Expression, false)
@@ -222,7 +230,9 @@ func workflowExprSites(w *Workflow, f func(site exprSite)) {
 		}
 		env(j, c.Env)
 		emitAll(j, c.Ports)
+		emit(j, c.PortsExpression, false)
 		emitAll(j, c.Volumes)
+		emit(j, c.VolumesExpression, false)
 		emit(j, c.Options, false)
 		emit(j, c.Command, false)
 		emit(j, c.Entrypoint, false)
@@ -299,6 +309,7 @@ func workflowExprSites(w *Workflow, f func(site exprSite)) {
 		defaults(j, j.Defaults)
 		conc(j, j.Concurrency)
 		if j.Environment != nil {
+			emit(j, j.Environment.Expression, false)
 			emit(j, j.Environment.Name, false)
 			emit(j, j.Environment.URL, false)
 			emitBool(j, j.Environment.Deployment)
@@ -321,6 +332,7 @@ func workflowExprSites(w *Workflow, f func(site exprSite)) {
 			}
 		}
 		if st := j.Strategy; st != nil {
+			emit(j, st.Expression, false)
 			emitBool(j, st.FailFast)
 			emitInt(j, st.MaxParallel)
 			if m := st.Matrix; m != nil {
@@ -370,6 +382,8 @@ func workflowExprSites(w *Workflow, f func(site exprSite)) {
 				emit(j, e.WorkingDirectory, false)
 			case *ExecAction:
 				emit(j, e.Uses, false)
+				emit(j, e.InputsExpression, false)
+				emitAll(j, e.InputInserts)
 				for _, in := range e.Inputs {
 					if in != nil {
 						emit(j, in.Value, false)

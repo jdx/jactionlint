@@ -3,6 +3,7 @@ package jactionlint
 import (
 	"sort"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 )
 
@@ -102,7 +103,11 @@ func (x *sourceIndex) scanExprs(s *String) []exprSpan {
 // parseExprString parses a condition or another value which is a whole expression, wrapped in ${{ }}
 // or not. It returns the syntax tree and the byte offset in value where the expression text starts.
 // The boolean is false when the value is not exactly one expression.
-func parseWholeExpr(value string) (ExprNode, string, int, bool) {
+//
+// The value is the one of a string of the workflow so that the expression is the one the other rules
+// have parsed, when it is the same text. Otherwise it is parsed here.
+func parseWholeExpr(s *String) (ExprNode, string, int, bool) {
+	value := s.Value
 	trimmed := strings.TrimSpace(value)
 	lead := len(value) - len(strings.TrimLeft(value, " \t\r\n"))
 	if strings.HasPrefix(trimmed, "${{") {
@@ -110,6 +115,12 @@ func parseWholeExpr(value string) (ExprNode, string, int, bool) {
 			return nil, "", 0, false
 		}
 		inner := strings.TrimSuffix(strings.TrimPrefix(trimmed, "${{"), "}}")
+		// The placeholder is the whole trimmed value when it starts right after its "${{" and ends at its
+		// end. Then its text is inner, and its syntax tree has the same positions.
+		start := len(value) - len(strings.TrimLeftFunc(value, unicode.IsSpace))
+		if c := s.placeholders(); !c.failed && len(c.list) == 1 && c.list[0].after == start+len("${{") && c.list[0].after+c.list[0].n == start+len(trimmed) {
+			return c.list[0].node, inner, lead + len("${{"), true
+		}
 		node, err := NewExprParser().Parse(NewExprLexer(inner + "}}"))
 		if err != nil {
 			return nil, "", 0, false
@@ -118,6 +129,15 @@ func parseWholeExpr(value string) (ExprNode, string, int, bool) {
 	}
 	if strings.Contains(value, "${{") {
 		return nil, "", 0, false
+	}
+	if trimmed == value {
+		// Nothing is trimmed, so the cached tree is the one of the text. White space which the lexer does
+		// not skip, such as a no-break space, must be trimmed before the parse, so it is not shared.
+		node, err := s.condExpr()
+		if err != nil {
+			return nil, "", 0, false
+		}
+		return node, trimmed, lead, true
 	}
 	node, err := NewExprParser().Parse(NewExprLexer(trimmed + "}}"))
 	if err != nil {

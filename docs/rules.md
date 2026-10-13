@@ -70,6 +70,7 @@ rules:
 | [expression-type](#expression-type) | correctness | error | correctness |
 | [forbidden-uses](#forbidden-uses) | policy | error | only when configured |
 | [gate-job-skipped-on-failure](#gate-job-skipped-on-failure) | correctness | error | default |
+| [gh-without-token](#gh-without-token) | correctness | error | correctness |
 | [github-app](#github-app) | security | error | default |
 | [github-env](#github-env) | security | error | default |
 | [hardcoded-container-credentials](#hardcoded-container-credentials) | security | error | correctness |
@@ -468,7 +469,7 @@ The GITHUB_TOKEN gets write access that is broader than needed.
 - Group: security
 - Default level: error
 - Profile: default
-- Option `require-workflow-permissions` (bool, default false): Also report a workflow which has no top-level permissions, even when its jobs set their own.
+- Option `require-workflow-permissions` (bool, no default): Also report a workflow which has no top-level permissions, even when its jobs set their own. Unset, it runs under the pedantic profile.
 - Details and examples: [checks](./checks.md#check-excessive-permissions)
 
 ## expired-ignore
@@ -517,6 +518,15 @@ A job that reads the results of the jobs it needs is skipped when one of them fa
 - Default level: error
 - Profile: default
 - Details and examples: [checks](./checks.md#check-gate-job-skipped-on-failure)
+
+## gh-without-token
+
+A script runs the gh command although no GH_TOKEN or GITHUB_TOKEN reaches the step, so gh stops.
+
+- Group: correctness
+- Default level: error
+- Profile: correctness
+- Details and examples: [checks](./checks.md#check-gh-without-token)
 
 ## github-app
 
@@ -1143,7 +1153,7 @@ A permission scope above read has no comment explaining it.
 - Group: policy
 - Default level: info
 - Profile: pedantic
-- Option `include-read` (bool, default false): Also require a comment for scopes granted with read, except contents: read.
+- Option `include-read` (bool, no default): Also require a comment for scopes granted with read, except contents: read. Unset, it runs under the pedantic profile.
 - Details and examples: [checks](./checks.md#check-undocumented-permissions)
 
 ## unknown-action-input

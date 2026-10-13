@@ -11,7 +11,7 @@ func isStaticallyFalse(s *String) bool {
 	if s == nil {
 		return false
 	}
-	node, _, _, ok := parseWholeExpr(s.Value)
+	node, _, _, ok := parseWholeExpr(s)
 	if !ok {
 		return false
 	}

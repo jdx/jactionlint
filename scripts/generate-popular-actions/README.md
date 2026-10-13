@@ -26,6 +26,14 @@ Detect new releases on GitHub:
 go run ./scripts/generate-popular-actions -d
 ```
 
+Detect new releases and register them in the data source file (adds the new tag to `tags` and advances `next`).
+This is what the [Generate workflow](../../.github/workflows/generate.yaml) runs, so that detecting a new major version
+does not fail the workflow. Without `-w` the exit status is 2 when a new release is detected:
+
+```sh
+go run ./scripts/generate-popular-actions -d -w -r scripts/generate-popular-actions/popular_actions.json
+```
+
 Please see output of `-help` flag for more details.
 
 ## The data source file

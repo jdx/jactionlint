@@ -101,7 +101,7 @@ func (rule *RuleConcurrencyCancelsPRs) check(c *Concurrency, jobs []*Job) {
 	if c == nil || c.Group == nil || c.CancelInProgress == nil {
 		return
 	}
-	refs, ok := stringExprRefs(c.Group.Value)
+	refs, ok := c.Group.exprRefs()
 	if !ok {
 		return
 	}

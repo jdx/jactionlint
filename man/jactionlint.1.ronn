@@ -179,6 +179,11 @@ single-dash long options of v1 are removed; the error names the replacement.
     The environment variable and the file which hold the GitHub token, read before `GITHUB_TOKEN`
     and `GH_TOKEN`
 
+  * `--online-report` <FILE>:
+    Write how complete the online checks were to FILE as JSON, whatever the `--format`: `status`
+    (`complete`, `incomplete` or `disabled`), the skipped lookups by kind, the excluded repositories
+    and where the answers came from (network or cache, with the age of the oldest cached one)
+
   * `--online-max-wait` <DURATION>:
     The longest to wait for a GitHub rate limit to reset (default 30s). A limit which resets later
     skips the lookups. 0 never waits

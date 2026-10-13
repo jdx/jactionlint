@@ -742,6 +742,15 @@ func TestSARIFOmitsFixesWhichCannotBeApplied(t *testing.T) {
 	if diff := cmp.Diff([]bool{false, true, false}, has); diff != "" {
 		t.Errorf("(-want +got): %s", diff)
 	}
+	// ... and each says why in its properties, without a fixes entry
+	for i, want := range []string{"unsafe-edit", "", "edit-conflict"} {
+		props, _ := results[i].(sarifDoc)["properties"].(sarifDoc)
+		code, _ := props["noFixCode"].(string)
+		reason, _ := props["noFixReason"].(string)
+		if code != want || (want != "" && reason == "") {
+			t.Errorf("result %d: noFixCode %q, noFixReason %q, want code %q and a reason", i, code, reason, want)
+		}
+	}
 
 	for name, f := range map[string]*Fix{
 		"out of range": {Edits: []TextEdit{{0, len(src) + 1, ""}}},
@@ -760,6 +769,9 @@ func TestSARIFOmitsFixesWhichCannotBeApplied(t *testing.T) {
 		})
 		if strings.Contains(out, `"fixes"`) {
 			t.Errorf("%s: an invalid fix must be left out: %s", name, out)
+		}
+		if !strings.Contains(out, `"noFixCode": "invalid-edit"`) {
+			t.Errorf("%s: an invalid fix must say why: %s", name, out)
 		}
 	}
 }
