@@ -254,6 +254,8 @@ type RuleEnv struct {
 	config                 *Config
 	shellcheck             string
 	pyflakes               string
+	shellcheckRCFile       string // --shellcheck-rcfile, relative to cwd
+	cwd                    string
 	// skipped holds the names of the rules whose factory could not create them (the external command is
 	// missing). Such a rule did not run, so an ignore for it is not unused.
 	skipped map[string]bool
@@ -264,6 +266,9 @@ type RuleEnv struct {
 
 	log  func(args ...interface{})
 	name string // the factory being run
+	// err is a configuration error which a factory found. The file is not checked and the run fails with it,
+	// instead of the rule being silently skipped.
+	err error
 }
 
 // Now returns the current time, which a rule that depends on a date (the retirement of a runner label) reads.

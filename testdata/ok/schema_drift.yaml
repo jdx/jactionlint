@@ -1,0 +1,46 @@
+# Keys and values which the workflow schema of GitHub accepts but the documentation of GitHub does not list (yet).
+name: Schema drift
+description: A top-level description of the workflow
+on:
+  pull_request:
+    types: [opened, stacked]
+  pull_request_target:
+    types: [stacked]
+  workflow_dispatch:
+    inputs:
+      flavor:
+        type: choice
+        description: An empty option makes the choice optional
+        options: ["", staging, production]
+        default: ""
+  image_version:
+    types: [created, ready, deleted]
+    names: [my-image]
+permissions:
+  contents: read
+  drives: write
+env:
+  SNAP: "1"
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    cancel-timeout-minutes: ${{ strategy.job-index }}
+    snapshot:
+      image-name: my-image
+      if: ${{ success() && steps.build.outcome == 'success' && env.SNAP == '1' && job.status == 'success' && runner.os == 'Linux' && hashFiles('**/go.sum') != '' }}
+    steps:
+      - id: build
+        run: echo "$ARTIFACTS $ARTIFACTS_LIST"
+        env:
+          ARTIFACTS: ${{ github.artifacts }}
+          ARTIFACTS_LIST: ${{ github.artifacts_list }}
+  other:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    cancel-timeout-minutes: 2
+    snapshot:
+      image-name: another-image
+      if: failure() || cancelled() || always()
+    steps:
+      - run: echo hello

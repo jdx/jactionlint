@@ -1,0 +1,35 @@
+on: push
+env:
+  REF: ${ github.ref }
+jobs:
+  test:
+    name: Test ${ matrix.os }
+    runs-on: ubuntu-latest
+    outputs:
+      sha: ${ steps.sha.outputs.sha }
+    env:
+      SPACE_AFTER_DOLLAR: $ {{ github.sha }}
+      SPACE_BETWEEN: ${ { github.sha }}
+      NO_DOLLAR: "{{ github.run_number }}"
+      NO_DOLLAR_IN_TEXT: image-{{ github.sha }}-é
+      FUNCTION: ${ format('{0}-{1}', github.sha, github.run_id) }
+      TWICE: ${ github.sha }-${ github.ref }
+    steps:
+      - id: sha
+        uses: actions/setup-node@v4
+        if: ${ github.ref == 'refs/heads/main' }
+        with:
+          node-version: ${ matrix.node }
+          cache: "${ inputs.cache }"
+      - uses: actions/cache@v4
+        with:
+          path: |
+            one ${ github.sha }
+          key: x
+      # not fixable: the expression is not valid, or is folded over lines
+      - run: echo
+        env:
+          INVALID: ${ github.sha == }
+          FOLDED: one ${ github.sha ==
+            'x' }
+          ESCAPES: "tab\t${ github.sha }"

@@ -78,6 +78,10 @@ type LinterOptions struct {
 	// or file path like "/path/to/pyflakes", "path/to/pyflakes". When this value is empty, pyflakes
 	// won't run to check scripts in workflow file.
 	Pyflakes string
+	// ShellcheckRCFile is a shellcheckrc file for shellcheck to read instead of --norc (the option
+	// --shellcheck-rcfile). A relative path is resolved from the working directory. It wins over the
+	// "shellcheck.rcfile" key of the configuration. The file must exist: the run fails when it does not.
+	ShellcheckRCFile string
 	// IgnorePatterns is list of regular expression to filter errors. The pattern is applied to error
 	// messages. When an error is matched, the error is ignored.
 	IgnorePatterns []string
@@ -178,7 +182,9 @@ type Linter struct {
 	printer    printer
 	shellcheck string
 	pyflakes   string
-	ignorePats IgnorePatterns
+	// shellcheckRC is LinterOptions.ShellcheckRCFile
+	shellcheckRC string
+	ignorePats   IgnorePatterns
 	// now returns the current time. It is time.Now unless LinterOptions.Now is set.
 	now func() time.Time
 	// ignoreRun is the state of the config "ignores" in the current run.
@@ -310,6 +316,7 @@ func NewLinter(out io.Writer, opts *LinterOptions) (*Linter, error) {
 		printer:        prn,
 		shellcheck:     opts.Shellcheck,
 		pyflakes:       opts.Pyflakes,
+		shellcheckRC:   opts.ShellcheckRCFile,
 		ignorePats:     ignore,
 		now:            opts.Now,
 		stdin:          stdin,
@@ -323,6 +330,9 @@ func NewLinter(out io.Writer, opts *LinterOptions) (*Linter, error) {
 		configFile:     opts.ConfigFile,
 		minSeverity:    opts.MinSeverity,
 		online:         onlineSettings{off: opts.OnlineOff, enabled: !opts.OnlineOff && (opts.Online || opts.OnlineOptions.Mode != OnlineModeDefault), client: opts.GitHubClient, ttl: opts.OnlineCacheTTL, ctx: opts.Context, opts: opts.OnlineOptions},
+	}
+	if _, err := shellcheckRCFile(opts.ShellcheckRCFile, cwd, nil, ""); err != nil {
+		return nil, err
 	}
 	l.warnRetiredIgnores(ignore...)
 	if opts.Profile != "" {
@@ -859,10 +869,15 @@ func (l *Linter) check(
 			config:                 cfg,
 			shellcheck:             l.shellcheck,
 			pyflakes:               l.pyflakes,
+			shellcheckRCFile:       l.shellcheckRC,
+			cwd:                    l.cwd,
 			proc:                   proc,
 			now:                    l.now,
 		}
 		rules := newBuiltinRules(env, l.log)
+		if env.err != nil {
+			return nil, env.err
+		}
 		skippedRules = env.skipped
 		if l.onRulesCreated != nil {
 			rules = l.onRulesCreated(rules)

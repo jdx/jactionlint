@@ -9,7 +9,9 @@ List of checks:
 - [Missing required keys or key duplicates](#check-missing-required-duplicate-keys)
 - [Unexpected empty mappings](#check-empty-mapping)
 - [Unexpected mapping values](#check-mapping-values)
+- [Expressions for a whole mapping or list](#check-whole-value-expressions)
 - [Syntax check for expression `${{ }}`](#check-syntax-expression)
+- [Expressions written with the wrong delimiters](#check-malformed-expression-delimiters)
 - [Type checks for expression syntax in `${{ }}`](#check-type-check-expression)
 - [Contexts and built-in functions](#check-contexts-and-builtin-func)
 - [Contextual typing for `steps.<step_id>` objects](#check-contextual-step-object)
@@ -40,6 +42,7 @@ List of checks:
 - [Job ID and step ID uniqueness](#check-job-step-ids)
 - [Hardcoded credentials](#check-hardcoded-credentials)
 - [Dangerous writes to `GITHUB_ENV` and `GITHUB_PATH`](#check-github-env)
+- [Writes to the environment files that lose data](#check-environment-file-redirect)
 - [Packages installed by name](#check-adhoc-packages)
 - [Tools installed without an exact version](#check-unpinned-tools)
 - [Publishing with long-lived credentials](#check-use-trusted-publishing)
@@ -134,7 +137,7 @@ jobs:
 Output:
 
 ```
-test.yaml:6:5: unexpected key "default" for "job" section. expected one of "cache-mode", "concurrency", "container", "continue-on-error", "defaults", "env", "environment", "if", "name", "needs", "outputs", "permissions", "runs-on", "secrets", "services", "snapshot", "steps", "strategy", "timeout-minutes", "uses", "with" [workflow-syntax]
+test.yaml:6:5: unexpected key "default" for "job" section. expected one of "cache-mode", "cancel-timeout-minutes", "concurrency", "container", "continue-on-error", "defaults", "env", "environment", "if", "name", "needs", "outputs", "permissions", "runs-on", "secrets", "services", "snapshot", "steps", "strategy", "timeout-minutes", "uses", "with" [workflow-syntax]
   |
 6 |     default:
   |     ^~~~~~~~
@@ -267,6 +270,78 @@ Some mapping values are restricted to some constant strings. Several mapping val
 jactionlint checks such constant strings are used properly while parsing and reports an error when an unexpected value is
 specified.
 
+<a id="check-whole-value-expressions"></a>
+## Expressions for a whole mapping or list
+
+Example input:
+
+```yaml
+on: push
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    # OK: the strategy and its matrix are whatever the expression evaluates to
+    strategy: ${{ fromJSON(vars.STRATEGY) }}
+    # OK: the "run" defaults of a job, the ports and volumes of a container, and "with" can be one expression
+    defaults:
+      run: ${{ fromJSON(vars.RUN_DEFAULTS) }}
+    container:
+      image: node:20
+      ports: ${{ fromJSON(vars.PORTS) }}
+    env:
+      # OK: "${{ insert }}" adds the entries of a mapping
+      ${{ insert }}: ${{ matrix.env || fromJSON('{}') }}
+    steps:
+      # OK: the inputs are not known, so no input is reported as missing
+      - uses: actions/cache@v4
+        with: ${{ fromJSON(vars.CACHE_INPUTS) }}
+  wrong:
+    runs-on: ubuntu-latest
+    # ERROR: The steps context is not available in "strategy"
+    strategy: ${{ fromJSON(steps.setup.outputs.strategy) }}
+    steps:
+      # ERROR: A string is not a mapping
+      - uses: actions/checkout@v4
+        with: ${{ github.sha }}
+```
+
+Output:
+
+```
+test.yaml:23:28: context "steps" is not allowed here. available contexts are "github", "inputs", "needs", "vars". see https://docs.github.com/en/actions/learn-github-actions/contexts#context-availability for more details [context-availability]
+   |
+23 |     strategy: ${{ fromJSON(steps.setup.outputs.strategy) }}
+   |                            ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+test.yaml:27:15: type of expression at "with" must be object but found type string [expression-type]
+   |
+27 |         with: ${{ github.sha }}
+   |               ^~~
+```
+
+[Playground](https://jactionlint.jdx.dev/#eNqMkU1PMkEQhO/8ij68CS8HRmM87UmC+BUDhI+DJzIszc4ozGymuxcNzH83Cyyo2RhPm2xVPanq8S6BXMg0Xv2ckgYAI3H5BQjiqF3q/7ZbWGsO9l15ghj3KnHQjNnHQV4Gv34aD/r/Cx1IjSejzqR3/9KqzAtcalkxHcB7dF1uNO3Pbnt3nenzZHzKpt6xtg5DFbZrnWECzi8wubo8/sx9YKpjDgejLzB0RYUprdYRBoYYv41EV8Bud+Y0t7HZOu/G/LSjDUJICeiUrXd0kerU4E1xfZQBNpZNXatup/vQmz32h9NTuU3wLvtxeZmLY2mvdPkqv51930oRsuTKC+fCpCrrH6sbTN+8cH37zLKRuSKjIcbPAQCqSa3j)
+
+The schema of GitHub Actions gives some keys a list of contexts, and a value that is one expression `${{ }}` is valid there
+instead of the mapping or the list. These are `strategy` and its `matrix`, `include` and `exclude`, `env`, the `run` section of
+`defaults` of a job, `container` and `services` (the whole value, `env`, `credentials`, `ports` and `volumes`),
+`concurrency`, `environment`, `runs-on` and `with` of a step. An expression is not valid for `defaults` of a workflow,
+`with` and `secrets` of a job that calls a reusable workflow, `needs`, `steps` and `permissions`, which have no contexts.
+
+jactionlint checks such an expression with the contexts that are available at its key (see
+[the context availability](#check-contexts-and-builtin-func)) and checks its type: a mapping is expected where `with`, `strategy`
+or `env` are, and a list where `ports` or `volumes` are. Rules which depend on what the expression evaluates to treat it as
+unknown instead of guessing:
+
+- `matrix` is any object when `strategy` is an expression, so no property of it is reported as undefined.
+- The inputs of a step are unknown when its `with` is an expression or has a `${{ insert }}` key, so `missing-action-input` and
+  the rules which look for an input that is not set (`artipacked`, `cache-poisoning`, `github-app`, `unpinned-tools` and
+  `agentic-actions`) do not report the step. The inputs written next to the expression are still checked
+  (`unknown-action-input`).
+- The shell of a job is unknown when its `defaults.run` is an expression, so the rules which judge a script by its shell skip it.
+- `concurrency: ${{ ... }}` can be a group name or a whole configuration, so `concurrency-limits` does not take it for a
+  group name that cannot cancel runs.
+- A constant is evaluated where a check needs its value: `queue: ${{ 'max' }}` together with `cancel-in-progress: true` is
+  reported like `queue: max`.
+
 <a id="check-syntax-expression"></a>
 ## Syntax check for expression `${{ }}`
 
@@ -313,6 +388,68 @@ test.yaml:13:38: unexpected end of input while parsing object property dereferen
 
 jactionlint lexes and parses expression in `${{ }}` following [the expression syntax document][expr-doc]. It can detect
 many syntax errors like invalid characters, missing parentheses, unexpected end of input, ...
+
+<a id="check-malformed-expression-delimiters"></a>
+## Expressions written with the wrong delimiters
+
+Example input:
+
+```yaml
+on: push
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      # ERROR: one brace, GitHub does not expand it
+      REF: ${ github.ref }
+      # ERROR: a space after the dollar
+      SHA: $ {{ github.sha }}
+      # ERROR: no dollar
+      TAG: v-{{ github.run_number }}
+      # OK: these are not expressions
+      TEMPLATE: "{{ .Values.image }}"
+      HOME_BIN: ${HOME}/bin
+    steps:
+      - run: echo "${GITHUB_REF} {{ github.sha }}"
+```
+
+Output:
+
+```
+test.yaml:8:12: "${ github.ref }" is not an expression: GitHub expands only `${{ }}` with two braces, so this text reaches the workflow as it is. write `${{ github.ref }}` [malformed-expression-delimiters]
+  |
+8 |       REF: ${ github.ref }
+  |            ^~~~~~~~~~~~~~~
+test.yaml:10:12: "$ {{ github.sha }}" is not an expression: the opening delimiter must be written `${{` without a space. write "${{ github.sha }}" [malformed-expression-delimiters]
+   |
+10 |       SHA: $ {{ github.sha }}
+   |            ^~~~~~~~~~~~~~~~~~
+test.yaml:12:14: "{{ github.run_number }}" is not an expression: it has no `$`, and GitHub expands only `${{ }}`, so this text reaches the workflow as it is. write "${{ github.run_number }}" [malformed-expression-delimiters]
+   |
+12 |       TAG: v-{{ github.run_number }}
+   |              ^~~~~~~~~~~~~~~~~~~~~~~
+```
+
+[Playground](https://jactionlint.jdx.dev/#eNpkz7FqwzAQxvHdT/FhvNrdtTmgxIGmLanb1VjlGrkkctDpsgi9e1Eat4VMEvz+w3ezUzgL26L4mg2rAgjEIb+AF8d1DsSIC1Ifx2xXInf5aYC9XitUEYcpWDGNp0+kG712rUKF+ItsR6RF+3ajcKn/1IsbnJwM+X+R3r08tr1WKGNE8z4ehbiZTuOBkFJ5q7rnnR5W26c8JP/Tg5nc1TjQmZepdT5JgT7sjLKKm23fva2GvV6nu43l9wDlrVHO)
+
+GitHub expands `${{ }}` and nothing else. The text `${ github.ref }`, `$ {{ github.sha }}` and `{{ github.sha }}` is passed on as
+it is: the environment variable, the input of the action or the condition then holds the text of the typo, and nothing says
+so. The rule `malformed-expression-delimiters` (in the `correctness` profile; [actionlint#417](https://github.com/rhysd/actionlint/issues/417),
+[actionlint#169](https://github.com/rhysd/actionlint/issues/169), [ghlint#144](https://github.com/TWiStErRob/net.twisterrob.ghlint/issues/144))
+reports them when the text inside starts with the name of a context (`github`, `env`, `vars`, `secrets`, `matrix`, `needs`, `steps`,
+`job`, `jobs`, `runner`, `inputs`, `strategy`) followed by a property, or with a function of expressions (`format(`, `contains(`,
+`fromJSON(`, ...). So the templates of Go, Jinja and Helm (`{{ .Values.image }}`), shell variables (`${HOME}`) and text in a `run:`
+script are never reported, and neither are the inputs that hold code (`script`, `command`, `args`, ...: `${...}` has a meaning of
+its own in JavaScript). `--fix` writes the intended expression (`${{ github.ref }}`) when the text is written so that the edit is
+exact and the text in the braces is a valid expression, and says why otherwise.
+
+With the option `pedantic` (on under `profile: pedantic`, or `rules: {malformed-expression-delimiters: {pedantic: true}}`) the rule
+also reports a shell variable (`$HOME`, `${GITHUB_WORKSPACE}`) in the value of an input of an action, which no shell expands, and
+suggests the expression that has its value (`${{ github.workspace }}`, `${{ runner.temp }}`, `${{ env.NAME }}` for a variable that
+the workflow sets). It looks only at one-line values of `with:` with an upper case name, and not at inputs that hold code. Some
+actions expand variables of their own (`${pull_title}` placeholders and the like): the findings of this tier can be wrong for them,
+which is why it is pedantic. A stray `}}` is not reported.
 
 <a id="check-type-check-expression"></a>
 ## Type checks for expression syntax in `${{ }}`
@@ -470,7 +607,7 @@ test.yaml:7:24: undefined variable "unknown_context". available variables are "e
   |
 7 |       - run: echo '${{ unknown_context }}'
   |                        ^~~~~~~~~~~~~~~
-test.yaml:9:24: property "events" is not defined in object type {action: string; action_path: string; action_ref: string; action_repository: string; action_status: string; actor: string; actor_id: string; api_url: string; artifact_cache_size_limit: number; base_ref: string; env: string; event: object; event_name: string; event_path: string; graphql_url: string; head_ref: string; job: string; job_workflow_sha: string; output: string; path: string; ref: string; ref_name: string; ref_protected: bool; ref_type: string; repository: string; repository_id: string; repository_owner: string; repository_owner_id: string; repository_visibility: string; repositoryurl: string; retention_days: number; run_attempt: string; run_id: string; run_number: string; secret_source: string; server_url: string; sha: string; state: string; step_summary: string; token: string; triggering_actor: string; workflow: string; workflow_ref: string; workflow_sha: string; workspace: string} [undefined-property]
+test.yaml:9:24: property "events" is not defined in object type {action: string; action_path: string; action_ref: string; action_repository: string; action_status: string; actor: string; actor_id: string; api_url: string; artifact_cache_size_limit: number; artifacts: string; artifacts_list: string; base_ref: string; env: string; event: object; event_name: string; event_path: string; graphql_url: string; head_ref: string; job: string; job_workflow_sha: string; output: string; path: string; ref: string; ref_name: string; ref_protected: bool; ref_type: string; repository: string; repository_id: string; repository_owner: string; repository_owner_id: string; repository_visibility: string; repositoryurl: string; retention_days: number; run_attempt: string; run_id: string; run_number: string; secret_source: string; server_url: string; sha: string; state: string; step_summary: string; token: string; triggering_actor: string; workflow: string; workflow_ref: string; workflow_sha: string; workspace: string} [undefined-property]
   |
 9 |       - run: echo '${{ github.events }}'
   |                        ^~~~~~~~~~~~~
@@ -1015,7 +1152,9 @@ false positives can be avoided by showing the shell name explicitly. It is also 
   shell: pwsh
 ```
 
-When you want to control shellcheck behavior, [`SHELLCHECK_OPTS` environment variable][shellcheck-env-var] is useful.
+When you want to control shellcheck behavior, the [`shellcheck` section of the config file](config.md#shellcheck) (a `rcfile`, more
+`args`, optional checks to `enable`) or the `--shellcheck-rcfile` option keep the settings with the repository. jactionlint runs
+shellcheck with `--norc` unless a rc file is given. The [`SHELLCHECK_OPTS` environment variable][shellcheck-env-var] is useful too.
 
 From command line:
 
@@ -2796,6 +2935,59 @@ mention `$env:GITHUB_ENV` or `%GITHUB_ENV%` together with a redirection or `Out-
 To turn the rule off, put `github-env: off` in the `rules` section of the [configuration file](config.md) or write
 `# jactionlint ignore=github-env` after a reason.
 
+<a id="check-environment-file-redirect"></a>
+## Writes to the environment files that lose data
+
+Example input:
+
+```yaml
+on: push
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      # ERROR: without a $ this writes a file named GITHUB_OUTPUT in the working directory
+      - id: version
+        run: echo "version=1.2.3" >> GITHUB_OUTPUT
+      # ERROR: the second > empties the file, so "a" is lost
+      - id: pair
+        run: |
+          echo "a=1" >> "$GITHUB_OUTPUT"
+          echo "b=2" > "$GITHUB_OUTPUT"
+      # OK: the variable, appended
+      - run: echo "c=3" >> "$GITHUB_OUTPUT"
+      # OK: each step has its own file, so a lone > is harmless
+      - run: echo "d=4" > "$GITHUB_OUTPUT"
+```
+
+Output:
+
+```
+test.yaml:9:38: writing to "GITHUB_OUTPUT" creates a file with that name in the working directory, because without a `$` it is not the variable: the runner never sees it, so nothing is set as an output of the step. write `"$GITHUB_OUTPUT"` [environment-file-redirect]
+  |
+9 |         run: echo "version=1.2.3" >> GITHUB_OUTPUT
+  |                                      ^~~~~~~~~~~~~
+test.yaml:14:22: `>` empties $GITHUB_OUTPUT before it writes, so what this script wrote to it before is lost. append with `>>` [environment-file-redirect]
+   |
+14 |           echo "b=2" > "$GITHUB_OUTPUT"
+   |                      ^~~~~~~~~~~~~~~~~~
+```
+
+[Playground](https://jactionlint.jdx.dev/#eNp8jj3LwjAURvf+iofwrim0fadAOriokw7tLP0ItCJJ6U2c/PGSGMTgxxRyz7mHa7TA4mjKsrPpSWSAVWT9C6xOE/eC6522jl86zwIiqxZ6WADHPApc1Uqz0XEWtgXUMBmwiGSRl3nFUNfY7ptduzkd2ubYNklm6eY1bdyeX8ReJ4tQYX9Jh72JvSwZvnr89cZBVr+aiTvK/0/Z+wCol1U1)
+
+`GITHUB_OUTPUT`, `GITHUB_ENV`, `GITHUB_PATH`, `GITHUB_STEP_SUMMARY` and `GITHUB_STATE` are variables that hold the path of the file the
+runner reads after the step. `echo "a=b" >> GITHUB_OUTPUT` has no `$`, so the word is the name of a file: the shell creates it in the
+working directory, the runner never sees it, and `steps.<id>.outputs.a` is silently empty. The rule `environment-file-redirect` (in the
+`correctness` profile; [ghlint#646](https://github.com/TWiStErRob/net.twisterrob.ghlint/issues/646)) reports a redirect or a `tee` to one of these
+bare words in a bash or sh script, and `--fix` writes `"$GITHUB_OUTPUT"`. PowerShell (`$env:GITHUB_OUTPUT`) and cmd (`%GITHUB_OUTPUT%`)
+scripts are not analyzed, and a script that sets the variable itself is not reported.
+
+It also reports a `>` (or a `tee` without `-a`) to the file of the step after the same script has already written to it, because `>`
+empties the file and the earlier data is lost. Each step has files of its own, so a lone `>` is not reported, and neither is a `>` in the
+other branch of an `if`, or after a write which may not run (in a branch, a loop, a function or a pipeline). The fix writes `>>`; it is
+unsafe, because a script may reset the file on purpose, so `--fix` applies it only with `--fix=unsafe`.
+
 <a id="check-adhoc-packages"></a>
 ## Packages installed by name
 
@@ -2836,6 +3028,10 @@ Add the package to a manifest that produces a lock file (`package.json`, a `Gemf
 a command that follows it: `npm ci`, `yarn install --immutable`, `pnpm install --frozen-lockfile`, `bun ci` or
 `bundle install`. Installing from a manifest (`npm install`, `npm ci`), from the checkout (`npm install .`) and from a gem file
 (`gem install ./pkg.gem`) is not reported. See [unlocked installs](#check-unlocked-install) for the lock file.
+
+A script of `shell: pwsh`, `powershell` or `cmd` (also the default shell of a Windows runner) is not parsed, so only a line
+that is a plain command is read, like `npm install typescript`. A line with the syntax of the shell (a variable, a pipe, a
+`;`, a block) is left alone, and so is a command that goes on over several lines.
 
 Installing a tool for the workflow itself, such as `pip install` and `cargo install`, is covered by
 [unpinned tools](#check-unpinned-tools). The rule is the audit `adhoc-packages` of zizmor, which does not look at `pip`.
@@ -2981,7 +3177,8 @@ shell of the Windows runners) and `powershell` are searched for the publish comm
 An npm publish to another registry than the public one is not reported even when the command does not say so: the script set it
 before (`npm config set registry URL`, `yarn config set npmRegistryServer URL`), the environment sets `npm_config_registry` or
 `YARN_NPM_REGISTRY_SERVER`, or an earlier `actions/setup-node` step has a `registry-url` of another registry (GitHub Packages,
-`npm.pkg.github.com`, has no trusted publishing).
+`npm.pkg.github.com`, has no trusted publishing). A registry that is written as a variable of the workflow (`registry-url: ${{ env.NPM_REGISTRY_URL }}`,
+`--registry ${{ env.REGISTRY }}`) is read from the `env:` of the step, the job or the workflow, when the value is written out there; any other expression is taken for a registry of your own.
 A registry that is set for one scope (`npm config set @acme:registry URL`) hides the publish only when the package is of that scope:
 the name is read from the `package.json` of the repository (in the `working-directory` of the step, or the folder that
 `npm publish` is given) and a package that is unscoped or of another scope is reported. When the name cannot be known with
@@ -3035,7 +3232,10 @@ misses a feature: `peter-evans/create-pull-request`, `peter-evans/create-or-upda
 `rule_superfluous_actions.go` names its source (the audit of zizmor, or the README of the archived action).
 
 Nothing is reported for a job that runs on a `self-hosted` runner, because the tools of the GitHub-hosted images are not there and the
-action is what installs them.
+action is what installs them. A runner that cannot be shown to be hosted counts as self-hosted, so nothing is reported for a
+`runs-on:` that is an expression of anything but the matrix (`${{ inputs.runner }}`, a runner group, a label of a provider such
+as `runs-on=...`), or a matrix that is computed or has a value that is not known. A label that is text and matrix values
+(`${{ matrix.os }}-latest`, `${{ matrix.target.os }}`) is resolved for each value of the matrix.
 
 <a id="check-unlocked-install"></a>
 ## Installs without a lock file
@@ -3232,7 +3432,7 @@ test.yaml:4:14: "write" is invalid for permission for all the scopes. available 
   |
 4 | permissions: write
   |              ^~~~~
-test.yaml:11:7: unknown permission scope "check". all available permission scopes are "actions", "artifact-metadata", "attestations", "checks", "code-quality", "contents", "copilot-requests", "deployments", "discussions", "id-token", "issues", "models", "packages", "pages", "pull-requests", "repository-projects", "security-events", "statuses", "vulnerability-alerts" [invalid-permissions]
+test.yaml:11:7: unknown permission scope "check". all available permission scopes are "actions", "artifact-metadata", "attestations", "checks", "code-quality", "contents", "copilot-requests", "deployments", "discussions", "drives", "id-token", "issues", "models", "packages", "pages", "pull-requests", "repository-projects", "security-events", "statuses", "vulnerability-alerts" [invalid-permissions]
    |
 11 |       check: write
    |       ^~~~~~
@@ -3529,8 +3729,19 @@ rules:
     require-digest: false
 ```
 
-Images written with an expression (`image: ${{ vars.IMAGE }}`) are skipped since they cannot be checked statically. Docker
-images used as actions (`uses: docker://alpine:3.20`) are checked by the [`unpinned-uses`](#check-action-format) rule.
+An image written with an expression is checked as far as it can be known:
+
+- an image from the matrix (`image: ${{ matrix.image }}`, `${{ matrix.config.image }}`) is checked at the values the matrix
+  writes, and an image made of text and matrix values (`postgres:${{ matrix.postgres }}`) for each combination of the values.
+  A matrix that is computed (`fromJSON()`) or has a value that is an expression is not known;
+- an image whose text after the last expression is written out and has no digest (`${{ needs.build.outputs.image }}-bookworm`,
+  `${{ vars.REGISTRY }}/tool:1.2`) is reported: a digest is the end of an image, so no value of the expression can make it
+  pinned;
+- any other image from an expression (`image: ${{ vars.IMAGE }}`, `ghcr.io/org/tool:${{ inputs.tag }}`) may or may not end in a
+  digest, which is only known when the workflow runs. It is reported with the option `pedantic` (on under `profile: pedantic`, or
+  `rules: {unpinned-images: {level: warn, pedantic: true}}`), like zizmor does for its pedantic persona.
+
+Docker images used as actions (`uses: docker://alpine:3.20`) are checked by the [`unpinned-uses`](#check-action-format) rule.
 
 <a id="check-self-repository"></a>
 ## Self-repository syntax (pedantic)
@@ -3703,6 +3914,11 @@ rules:
 
 Set `persist-credentials: false` unless a later step needs to push. An explicit `persist-credentials: true` says that the
 credential is needed, so it is not reported, and neither is a value given by an expression.
+
+A checkout that a later step pushes with (a `git push` command, or an action known to push) is not reported either, unless a
+step uploads the workspace. A command is found in the script as a command: `git push` in a comment, in the text of `echo` or
+`printf`, or in a heredoc is not a push. A command that runs another (`bash -c "git push"`, `xargs git push`, `retry git push`) is
+matched on its words, and so is a script of a shell that is not bash or sh.
 
 The rule has a fix: `jactionlint --fix` adds `persist-credentials: false` under `with:` of the step, and creates `with:` when
 the step has none. The fix is applied by `--fix` only when no later step of the job looks like it needs the credential. When a
@@ -4499,7 +4715,7 @@ test.yaml:30:20: context "env" is not allowed here. no context is available here
    |
 30 |         shell: ${{ env.SHELL}}
    |                    ^~~~~~~~~
-test.yaml:32:33: calling function "success" is not allowed here. "success" is only available in "jobs.<job_id>.if", "jobs.<job_id>.steps.if". see https://docs.github.com/en/actions/learn-github-actions/contexts#context-availability for more details [context-availability]
+test.yaml:32:33: calling function "success" is not allowed here. "success" is only available in "jobs.<job_id>.if", "jobs.<job_id>.steps.if", "jobs.<job_id>.snapshot.if". see https://docs.github.com/en/actions/learn-github-actions/contexts#context-availability for more details [context-availability]
    |
 32 |         run: echo 'Success? ${{ success() }}'
    |                                 ^~~~~~~~~
@@ -6262,7 +6478,23 @@ workflow either, and GitHub does not validate them. `template-injection` reports
 - `github.event.client_payload.*`, which the sender of a `repository_dispatch` event chooses;
 - `github.event.release.tag_name`, `name`, `body` and `target_commitish`, and the names of the release assets;
 - `github.ref_name`, `github.base_ref` and `github.event.pull_request.base.ref`: a branch or tag name can hold shell syntax such
-  as `a$(cmd)`. Creating a branch takes write access, which is why zizmor reports them as well.
+  as `a$(cmd)`. Creating a branch takes write access, which is why zizmor reports them as well;
+- text that the table of actionlint lacks and an outsider types: the previous title and text of an edited issue or pull request
+  (`github.event.changes.title.from`, `changes.body.from`, and `changes.base.ref.from`, the branch the pull request had),
+  `github.event.pull_request.head.repo.homepage` (the website of the fork, which its owner types), the title of the pages of a
+  `gollum` event (`github.event.pages[*].title`, like `page_name`), and the message and the author's name of the commit of a
+  merge queue (`github.event.merge_group.head_commit.message`, `.author.name`), which holds the title and the text of the pull
+  requests;
+- in a workflow started by `workflow_run`, the path of the workflow file that started it: `github.event.workflow_run.path`,
+  `github.event.workflow.path` and `github.event.workflow_run.referenced_workflows[*].path`. A pull request from a fork can add a
+  workflow file with any name (`$(cmd).yaml` is a valid file name), and GitHub fills the path from it. In other workflows
+  (`github.event.workflow` of a `workflow_dispatch` is the file that someone with write access chose) the path is not reported.
+
+Not reported: `github.event.changes.head.ref.from` (listed by CodeQL and gato-x, but no payload has the field),
+`github.event.merge_group.head_commit.author.email` and `.committer.*` (the commit is made by GitHub's queue and an email is one that
+an account verified, so there is no evidence that an outsider chooses them) and `github.event.merge_group.head_ref` (a name which
+the queue makes). The pedantic option of the
+[expansions](#check-template-injection-expansion) still reports them as every other `${{ }}` in a script.
 
 `github.actor`, SHAs, numbers and the IDs of events are not reported: GitHub restricts their characters. `steps.*.outputs.*`,
 `needs.*.outputs.*`, `matrix.*` and `env.*` are values of the workflow itself, which the pedantic option of the
@@ -6594,6 +6826,10 @@ in the `default` profile and reports:
   `../` of a local path is not reported because it refers to a repository checked out next to the workspace;
 - `format()` with literal arguments only, and any other expression which is a constant, outside of `if:` (constant conditions are
   reported by `constant-condition`);
+- a part of an expression that has a constant result although the expression as a whole does not, such as
+  `fromJSON(format('{{"group":{0},"labels":{1}}}', toJSON(vars.GROUP), toJSON('ubuntu-24.04')))` (`toJSON('ubuntu-24.04')` is
+  the string `"ubuntu-24.04"`) or `inputs.deploy || 'true' && 'false'`. A call of `fromJSON()` is not one of these, it is how a
+  workflow writes a list or an object. In an `if:` the same holds for a part of the condition, while a condition that is constant as a whole is [`constant-condition`](#check-constant-condition);
 - `fromJSON(toJSON(x))`, unless `x` is a property of a context (`fromJSON(toJSON(matrix.container))` is a known way to turn the
   value into an object);
 - an index which is computed, like `vars[format('NAME_{0}', github.job)]`. It hides which property is read. An index that is a
@@ -7925,7 +8161,7 @@ way because any caller can pass attacker-controlled text. jactionlint does not l
 
 How the rules treat actions:
 
-- **Applies** to the steps (and the metadata) of an action: `action-syntax`, `adhoc-packages`, `archived-uses`, `artipacked`, `background-step-not-waited`, `checkout-static-credentials`, `constant-condition`, `context-availability`, `continue-on-error`, `deprecated-action-input`, `deprecated-commands`, `duplicate-key`, `duplicate-step-id`, `expired-ignore`, `expression-syntax`, `expression-type`, `forbidden-uses`, `github-app`, `if-always-true`, `impostor-commit`, `insecure-commands`, `insecure-ssh-keyscan`, `insecure-url-scheme`, `invalid-env-var-name`, `invalid-function-call`, `invalid-id`, `invalid-ignore-comment`, `invalid-local-action`, `invalid-parallel-step`, `invalid-shell-name`, `invalid-uses`, `invisible-characters`, `known-vulnerable-actions`, `max-run-lines`, `merge-key`, `misfeature`, `missing-action-input`, `obfuscation`, `outdated-action-runner`, `pipeline-without-pipefail`, `pyflakes`, `recursive-alias`, `ref-confusion`, `ref-version-mismatch`, `require-expression-wrapping`, `self-repository`, `shellcheck`, `stale-action-refs`, `superfluous-actions`, `template-injection`, `typosquat-uses`, `undefined-function`, `undefined-property`, `unknown-action-input`, `unlocked-install`, `unpinned-images`, `unpinned-tools`, `unpinned-uses`, `unsound-contains`, `unsound-prefix-match`, `unsound-ternary`, `unused-anchor`, `unused-ignore`, `unverified-download`, `use-trusted-publishing`, `yaml-syntax`.
+- **Applies** to the steps (and the metadata) of an action: `action-syntax`, `adhoc-packages`, `archived-uses`, `artipacked`, `background-step-not-waited`, `checkout-static-credentials`, `constant-condition`, `context-availability`, `continue-on-error`, `deprecated-action-input`, `deprecated-commands`, `duplicate-key`, `duplicate-step-id`, `environment-file-redirect`, `expired-ignore`, `expression-syntax`, `expression-type`, `forbidden-uses`, `github-app`, `if-always-true`, `impostor-commit`, `insecure-commands`, `insecure-ssh-keyscan`, `insecure-url-scheme`, `invalid-env-var-name`, `invalid-function-call`, `invalid-id`, `invalid-ignore-comment`, `invalid-local-action`, `invalid-parallel-step`, `invalid-shell-name`, `invalid-uses`, `invisible-characters`, `known-vulnerable-actions`, `malformed-expression-delimiters`, `max-run-lines`, `merge-key`, `misfeature`, `missing-action-input`, `obfuscation`, `outdated-action-runner`, `pipeline-without-pipefail`, `pyflakes`, `recursive-alias`, `ref-confusion`, `ref-version-mismatch`, `require-expression-wrapping`, `self-repository`, `shellcheck`, `stale-action-refs`, `superfluous-actions`, `template-injection`, `typosquat-uses`, `undefined-function`, `undefined-property`, `unknown-action-input`, `unlocked-install`, `unpinned-images`, `unpinned-tools`, `unpinned-uses`, `unsound-contains`, `unsound-prefix-match`, `unsound-ternary`, `unused-anchor`, `unused-ignore`, `unverified-download`, `use-trusted-publishing`, `yaml-syntax`.
 - **Caller-dependent**: `agentic-actions`, `bot-conditions`, `cache-poisoning`, `github-env` (its findings about untrusted input do not depend on the caller), `untrusted-artifact` and `untrusted-checkout`.
 - **Not applicable** because an action does not have what the rule checks, or because only the calling job can decide (`unused-baseline-entry` is about the baseline file, not about a workflow or an action): `anonymous-definition`, `concurrency-cancels-prs`, `concurrency-cancels-release`, `concurrency-limits`, `conflicting-runner-labels`, `cron-too-frequent`, `cyclic-job-needs`, `dangerous-triggers`, `dependabot-cooldown`, `dependabot-execution`, `dependabot-missing-actions-update`, `dependabot-syntax`, `deprecated-runner-label`, `duplicate-job-id`, `duplicate-job-needs`, `duplicate-triggers`, `excessive-permissions`, `gate-job-skipped-on-failure`, `gh-without-token`, `hardcoded-container-credentials`, `invalid-activity-type`, `invalid-cron`, `invalid-event-config`, `invalid-event-filter`, `invalid-glob`, `invalid-label-pattern`, `invalid-local-workflow`, `invalid-permissions`, `invalid-timezone`, `invalid-workflow-call`, `invalid-workflow-call-input`, `invalid-workflow-dispatch-input`, `local-action-checkout`, `matrix-duplicate-value`, `matrix-invalid-exclude`, `missing-permissions`, `missing-timeout`, `missing-workflow-input`, `missing-workflow-secret`, `mutable-runner-label`, `overprovisioned-secrets`, `require-shell`, `required-actions`, `secrets-inherit`, `secrets-outside-env`, `self-hosted-runner`, `timeout-too-long`, `undefined-job-needs`, `undocumented-permissions`, `unknown-event`, `unknown-runner-label`, `unknown-workflow-input`, `unknown-workflow-secret`, `unredacted-secrets`, `unused-baseline-entry`, `unused-job-output`, `unused-needs`, `unused-workflow-input`, `workflow-call-permissions`, `workflow-input-type`, `workflow-run-names`, `workflow-secret-scope`, `workflow-syntax`.
 

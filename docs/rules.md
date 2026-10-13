@@ -65,6 +65,7 @@ rules:
 | [duplicate-key](#duplicate-key) | correctness | error | correctness |
 | [duplicate-step-id](#duplicate-step-id) | correctness | error | correctness |
 | [duplicate-triggers](#duplicate-triggers) | policy | error | default |
+| [environment-file-redirect](#environment-file-redirect) | correctness | error | correctness |
 | [excessive-permissions](#excessive-permissions) | security | error | default |
 | [expired-ignore](#expired-ignore) | policy | error | correctness |
 | [expression-syntax](#expression-syntax) | correctness | error | correctness |
@@ -103,6 +104,7 @@ rules:
 | [invisible-characters](#invisible-characters) | security | error | default |
 | [known-vulnerable-actions](#known-vulnerable-actions) | security | error | only with `--online` |
 | [local-action-checkout](#local-action-checkout) | correctness | error | correctness |
+| [malformed-expression-delimiters](#malformed-expression-delimiters) | correctness | error | correctness |
 | [matrix-duplicate-value](#matrix-duplicate-value) | correctness | error | correctness |
 | [matrix-invalid-exclude](#matrix-invalid-exclude) | correctness | error | correctness |
 | [max-run-lines](#max-run-lines) | style | error | pedantic |
@@ -472,6 +474,16 @@ push and pull_request both run the workflow for the same commit.
 - Profile: default
 - Details and examples: [checks](./checks.md#check-duplicate-triggers)
 
+## environment-file-redirect
+
+A script writes to GITHUB_OUTPUT or another environment file of the runner without the $, or empties it with > after it wrote to it.
+
+- Group: correctness
+- Default level: error
+- Profile: correctness
+- Fixable: yes
+- Details and examples: [checks](./checks.md#check-environment-file-redirect)
+
 ## excessive-permissions
 
 The GITHUB_TOKEN gets write access that is broader than needed.
@@ -822,6 +834,17 @@ A local action is used before any step checks out the repository.
 - Default level: error
 - Profile: correctness
 - Details and examples: [checks](./checks.md#check-local-action-checkout)
+
+## malformed-expression-delimiters
+
+Text such as ${ github.ref }, $ {{ x }} or {{ github.sha }} is meant to be an expression but is not one. With the option pedantic, so is a shell variable in the input of an action.
+
+- Group: correctness
+- Default level: error
+- Profile: correctness
+- Fixable: yes
+- Option `pedantic` (bool, no default): Also report the pedantic checks, which are noisier. Unset, they run under the pedantic profile.
+- Details and examples: [checks](./checks.md#check-malformed-expression-delimiters)
 
 ## matrix-duplicate-value
 
@@ -1230,6 +1253,7 @@ A container or service image is not pinned by a digest.
 - Default level: error
 - Profile: default
 - Option `require-digest` (bool, default true): Report images pinned by a tag other than latest too. Turn it off to report only images without a tag or with the latest tag.
+- Option `pedantic` (bool, no default): Also report the pedantic checks, which are noisier. Unset, they run under the pedantic profile.
 - Details and examples: [checks](./checks.md#check-unpinned-images)
 
 ## unpinned-tools
