@@ -233,3 +233,37 @@ func TestPinProblemsOfSiblingActionsAreNotRepeated(t *testing.T) {
 		t.Errorf("want the problem of dep once and the one of o/other, got %d: %v", len(ps), ps)
 	}
 }
+
+// The steps of a parallel group of a composite action are steps of the action: what they use is not frozen by the
+// pin either, and the group of a nested action is read too.
+func TestPinProblemsReadParallelGroups(t *testing.T) {
+	c := newFilesClient(t, map[string]string{
+		"o/a@" + pinSHA1 + ":action.yml": "name: x\ndescription: d\nruns:\n  using: composite\n  steps:\n" +
+			"    - uses: o/dep@" + pinSHA2 + "\n" +
+			"    - parallel:\n" +
+			"        - uses: actions/cache@v4\n" +
+			"        - uses: docker://alpine:3\n" +
+			"        - run: echo\n          shell: bash\n" +
+			"        - uses: o/dep@" + pinSHA2 + "\n" +
+			"    - uses: o/other@v1\n",
+		"o/dep@" + pinSHA2 + ":action.yml": "name: x\ndescription: d\nruns:\n  using: composite\n  steps:\n    - parallel:\n        - uses: actions/setup-node@v4\n",
+	})
+	s := newOnlineSession(context.Background(), c, nil)
+	ps, err := s.PinProblems("o", "a", "", pinSHA1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, p := range ps {
+		got = append(got, p.target+"|"+p.holder)
+	}
+	want := []string{
+		"actions/setup-node@v4|o/dep@" + pinSHA2,
+		"actions/cache@v4|",
+		"docker://alpine:3|",
+		"o/other@v1|",
+	}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Errorf("problems:\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+}

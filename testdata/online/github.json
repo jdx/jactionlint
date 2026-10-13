@@ -1200,6 +1200,21 @@
       "advisories": {
         "list": []
       }
+    },
+    "example/parallel": {
+      "repo": {
+        "archived": false,
+        "default_branch": "main"
+      },
+      "files": {
+        "9999999999999999999999999999999999999999:action.yml": {
+          "found": true,
+          "content": "name: Parallel\ndescription: A composite action with a parallel group\nruns:\n  using: composite\n  steps:\n    - parallel:\n        - uses: actions/cache@v4\n        - uses: docker://alpine:3\n        - run: echo\n          shell: bash\n"
+        }
+      },
+      "advisories": {
+        "list": []
+      }
     }
   }
 }

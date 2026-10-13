@@ -11,6 +11,8 @@ jobs:
       - uses: example/outer@4444444444444444444444444444444444444444
       # ERROR: five dependencies by a tag
       - uses: example/many@4444444444444444444444444444444444444444
+      # ERROR: the steps of a parallel group count too
+      - uses: example/parallel@9999999999999999999999999999999999999999
       # ERROR: a cycle of pinned actions is read once
       - uses: example/cycle-a@7777777777777777777777777777777777777778
       # ERROR: real actions. pre-commit/action uses actions/cache@v4, jekyll-build-pages runs an image tag

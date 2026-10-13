@@ -130,13 +130,9 @@ func (w *pinWalk) walk(owner, repo, subpath, sha string, depth int, holder strin
 			}
 		}
 	case "composite":
-		for _, step := range meta.Runs.Steps {
-			m, ok := step.(map[string]any)
-			if !ok {
-				continue
-			}
-			spec, ok := m["uses"].(string)
-			if !ok || spec == "" {
+		// stepsUses reads the steps of the parallel groups too
+		for _, spec := range stepsUses(meta.Runs.Steps) {
+			if spec == "" {
 				continue
 			}
 			u := ParseUses(spec)
