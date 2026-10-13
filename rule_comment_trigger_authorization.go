@@ -164,6 +164,11 @@ func (rule *RuleCommentTriggerAuthorization) guardedByContext(n *Job, site *Stri
 			guards = append(guards, p)
 		}
 	}
+	// The action of the step itself may be the check (a command or permission action with the condition on its own step),
+	// with the same rules as for the steps before it.
+	if step != nil {
+		guards = append(guards, step)
+	}
 	// without the online checks an environment counts as a guard
 	guarded, _ := jobChecksWhoStarted(rule.wf, nil, n, guards, step)
 	return guarded

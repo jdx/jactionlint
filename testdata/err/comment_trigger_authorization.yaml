@@ -161,6 +161,41 @@ jobs:
         with:
           permission: write
 
+  # The condition on the step of a command action: the action checks the commenter itself
+  command-step-condition:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: github/command@v1
+        if: startsWith(github.event.comment.body, '/deploy')
+  dispatch-step-condition:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: peter-evans/slash-command-dispatch@9bdcd7914ec1b75590b790b844aa3b8eee7970f4 # v3.0.2
+        if: startsWith(github.event.comment.body, '/deploy')
+        with:
+          token: ${{ secrets.PAT }}
+          commands: deploy
+  permission-action-step-condition:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: lannonbr/repo-permission-check-action@2.0.5
+        if: startsWith(github.event.comment.body, '/deploy')
+        with:
+          permission: write
+  # ... and when it is told to let everybody in, or is no such action, the step is reported
+  command-step-condition-open:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: github/command@v1
+        if: startsWith(github.event.comment.body, '/deploy')
+        with:
+          permissions: read
+  plain-step-condition:
+    runs-on: ubuntu-latest
+    steps:
+      - run: ./deploy.sh
+        if: startsWith(github.event.comment.body, '/deploy')
+
   # Each command action has its own input for the level, and a level that everybody has is no check
   github-command-open:
     runs-on: ubuntu-latest
