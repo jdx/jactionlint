@@ -102,6 +102,7 @@
           "description": "Apply only the fixes of these rules, like --fix-rules (which overrides it). All fixes are applied when the list is empty.",
           "items": {
             "enum": [
+              "action-release-cooldown",
               "action-syntax",
               "actions-lock",
               "actions-lock-drift",
@@ -335,6 +336,7 @@
             "oneOf": [
               {
                 "enum": [
+                  "action-release-cooldown",
                   "action-syntax",
                   "actions-lock",
                   "actions-lock-drift",
@@ -499,6 +501,7 @@
               {
                 "items": {
                   "enum": [
+                    "action-release-cooldown",
                     "action-syntax",
                     "actions-lock",
                     "actions-lock-drift",
@@ -900,6 +903,34 @@
       "additionalProperties": false,
       "description": "The level and the options of each rule by its rule ID. A rule which is not listed follows the profile. See https://jactionlint.jdx.dev/rules",
       "properties": {
+        "action-release-cooldown": {
+          "description": "An action is pinned to a version released less than the cooldown ago. Group: security. Runs only with --online. Default level: warn. https://jactionlint.jdx.dev/rules#action-release-cooldown",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "days": {
+                  "default": 7,
+                  "description": "How many days a version must be old (at least 1). The date is the publication of its release on GitHub, else the date of its commit. The rule runs only when \"rules\" has an entry for it, and only with the online checks.",
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
         "action-syntax": {
           "description": "The action metadata does not follow the syntax of action.yml. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#action-syntax",
           "oneOf": [

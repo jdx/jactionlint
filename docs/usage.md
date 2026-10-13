@@ -905,6 +905,7 @@ export it by itself:
 | [`stale-action-refs`](checks.md#check-stale-action-refs) | A pinned commit that no tag points to |
 | [`archived-uses`](checks.md#check-archived-uses) | An action in an archived repository |
 | [`ref-version-mismatch`](checks.md#check-ref-version-mismatch) | A `# v1.2.3` comment that does not match the pinned commit |
+| [`action-release-cooldown`](checks.md#check-action-release-cooldown) | A version released less than N days ago. It runs only when `rules` has an entry for it (opt-in) |
 | [`repojacking`](checks.md#check-repojacking) | An action of an owner that does not exist, or that left a repository that GitHub only redirects: anyone can register the name |
 | [`unpinnable-action`](checks.md#check-unpinnable-action) | A hash-pinned action which itself uses an action by a tag or a Docker image by a tag (only with the option `pedantic`, on under `profile: pedantic`) |
 

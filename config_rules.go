@@ -27,6 +27,9 @@ func (c *Config) RuleLevel(id string) Severity {
 	if c != nil && id == "required-actions" && len(c.RequiredActions) > 0 {
 		return info.DefaultLevel
 	}
+	if info.OptIn {
+		return SeverityOff // Only an entry in "rules", which is looked at above, turns it on
+	}
 	if info.Online {
 		// Online rules do not follow the profile. They exist only when the online checks are on
 		// (--online or "online: true"), and then run at their own level.
@@ -140,6 +143,9 @@ func (c *Config) normalizeRules() error {
 				return fmt.Errorf("unknown option %q for rule %q in \"rules\"%s", name, id, suggestOption(name, info))
 			}
 			nv, err := normalizeOption(opt, v)
+			if n, ok := nv.(int); err == nil && ok && opt.Kind == RuleOptionInt && n < opt.Min {
+				err = fmt.Errorf("it must be at least %d", opt.Min)
+			}
 			if err == nil && opt.Validate != nil {
 				err = opt.Validate(nv)
 			}

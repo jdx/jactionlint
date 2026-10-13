@@ -165,6 +165,7 @@ type onlineSession struct {
 	pins             memo[pinProblemsKey, []pinProblem]
 	owners           memo[string, *GitHubOwner]
 	releases         memo[releaseKey, *GitHubRelease]
+	releaseDates     memo[releaseDateKey, *GitHubReleaseDate]
 
 	environments memo[environmentKey, environmentResult]
 }

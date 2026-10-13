@@ -43,6 +43,8 @@ type fixtureRepo struct {
 	Files map[string]*fixtureFile `json:"files,omitempty"`
 	// Releases are the answers about the release of a tag by the name of the tag, see GitHubReleaseClient.
 	Releases map[string]*fixtureRelease `json:"releases,omitempty"`
+	// ReleaseDates are the dates of a release, by "tags/<tag>" or, for a commit without a tag, "commits/<sha>".
+	ReleaseDates map[string]*GitHubReleaseDate `json:"release_dates,omitempty"`
 	// Environments are the answers about the environments by their lower case name, see GitHubEnvironmentClient.
 	Environments map[string]*fixtureEnvironment `json:"environments,omitempty"`
 }
