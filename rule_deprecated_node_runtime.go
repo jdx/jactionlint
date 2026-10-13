@@ -4,6 +4,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 )
 
 // nodeRuntimeRemoved says what GitHub did to a Node.js runtime of JavaScript actions, by the name that
@@ -111,23 +112,46 @@ func (rule *RuleDeprecatedNodeRuntime) checkUses(a *ExecAction) {
 
 var popularKeyRe = regexp.MustCompile(`^(.+)@v([0-9]+)(?:\.[0-9]+)*$`)
 
+// newerMajor is the answer of newerPopularMajor for one key.
+type newerMajor struct {
+	spec, runtime string
+	ok            bool
+}
+
+// newerMajorCache holds the answers of newerPopularMajor by key. The data is fixed and the answer takes a scan of
+// all of it, while a workflow can use the same action thousands of times.
+var newerMajorCache sync.Map
+
 // newerPopularMajor returns the oldest major version, newer than the one of the key, whose runtime is not a removed
 // one. It is the spec ("actions/checkout@v5") and the runtime that the major declares ("node24"), which is empty for
 // an action that does not run JavaScript.
 func newerPopularMajor(key string) (spec, runtime string, ok bool) {
+	if v, found := newerMajorCache.Load(key); found {
+		n := v.(newerMajor)
+		return n.spec, n.runtime, n.ok
+	}
+	n := findNewerPopularMajor(key)
+	newerMajorCache.Store(key, n)
+	return n.spec, n.runtime, n.ok
+}
+
+func findNewerPopularMajor(key string) newerMajor {
 	m := popularKeyRe.FindStringSubmatch(key)
 	if m == nil {
-		return "", "", false
+		return newerMajor{}
 	}
 	cur, err := strconv.Atoi(m[2])
 	if err != nil {
-		return "", "", false
+		return newerMajor{}
 	}
 	best := -1
 	for k := range PopularActions {
+		if !strings.HasPrefix(k, m[1]+"@v") {
+			continue // another action
+		}
 		km := popularKeyRe.FindStringSubmatch(k)
 		if km == nil || km[1] != m[1] || k != km[1]+"@v"+km[2] {
-			continue // another action, or not the key of a major version such as "v4.3.6" or "v3-node20"
+			continue // not the key of a major version such as "v4.3.6" or "v3-node20"
 		}
 		v, err := strconv.Atoi(km[2])
 		if err != nil || v <= cur || (best >= 0 && v >= best) {
@@ -139,10 +163,10 @@ func newerPopularMajor(key string) (spec, runtime string, ok bool) {
 		best = v
 	}
 	if best < 0 {
-		return "", "", false
+		return newerMajor{}
 	}
-	spec = m[1] + "@v" + strconv.Itoa(best)
-	return spec, PopularActionRuntimes[spec], true
+	spec := m[1] + "@v" + strconv.Itoa(best)
+	return newerMajor{spec: spec, runtime: PopularActionRuntimes[spec], ok: true}
 }
 
 func init() {
