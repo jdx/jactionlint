@@ -2062,7 +2062,7 @@ This rule can catch the mistake so that users can notice their mistakes.
 <a id="check-unmatched-paths-filter"></a>
 ## Path filters that match no file (pedantic)
 
-Example input, in a repository that has the directories `src` and `docs` (not `source` and not `doc`):
+Example input:
 
 ```yaml
 on:
@@ -2096,7 +2096,8 @@ test.yaml:9:9: warning: the entry "doc/**" of "paths-ignore" matches no file or 
 
 <!-- Skip playground link -->
 
-The output above is from the following `rules` section of the [configuration file](config.md):
+The output above is for a repository that has the directories `src` and `docs`, and not `source` and `doc`. It is from the
+following `rules` section of the [configuration file](config.md):
 
 ```yaml
 rules:
@@ -2112,8 +2113,8 @@ a repository.
 
 It is careful about what it calls a mismatch, because the rule cannot know what GitHub would do in a few cases:
 
-- An entry matches when it matches a file or a directory (GitHub does not document whether `docs` alone matches the files in it), and
-  the case of letters is not compared.
+- An entry matches when it matches a file or a directory (GitHub does not document whether `docs` alone matches the files in it),
+  a `/` at the end is ignored, and the case of letters is not compared.
 - An entry starting with `!` is skipped, as is one with `${{ }}`, one starting with `/` or `./`, an invalid pattern (see
   [the glob syntax](#check-glob-pattern)), and a character class that is negated.
 - A submodule without files in the working tree hides every entry that could match inside it.

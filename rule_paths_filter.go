@@ -101,7 +101,11 @@ func compilePathFilter(pat string) *pathFilter {
 		strings.Contains(pat, "${{") || len(ValidatePathGlob(pat)) > 0 {
 		return nil
 	}
-	pat = strings.ToLower(pat)
+	// GitHub does not say whether `dir/` matches the files in the directory, so it is read as `dir`
+	pat = strings.ToLower(strings.TrimSuffix(pat, "/"))
+	if pat == "" {
+		return nil
+	}
 	var b strings.Builder
 	b.WriteString("^")
 	rs := []rune(pat)

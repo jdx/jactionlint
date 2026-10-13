@@ -27,13 +27,14 @@ func TestPathFilterMatching(t *testing.T) {
 		{pat: "README.md", want: true},
 		{pat: "readme.md", want: true}, // case is not compared
 		{pat: "docs", want: true},      // a directory
-		{pat: "docs/", want: false},    // a path never ends with a slash
+		{pat: "docs/", want: true},     // read as docs
 		{pat: "docs/*", want: true},
 		{pat: "docs/**", want: true},
 		{pat: "docs/**/*.md", want: true},
 		{pat: "docs/*/*.md", want: true},
 		{pat: "docs/*/*/*.md", want: false},
 		{pat: "docs/**/start.md", want: true},
+		{pat: "docs/missing/", want: false},
 		{pat: "docs/missing/**", want: false},
 		{pat: "documents/**", want: false},
 		{pat: "*.go", want: true},
@@ -262,7 +263,7 @@ func TestUnmatchedPathsFilterDocsExample(t *testing.T) {
 	if i := strings.Index(section, `<a id="`); i >= 0 {
 		section = section[:i]
 	}
-	input, ok1 := docsBlock(section, "Example input, in a repository that has the directories `src` and `docs` (not `source` and not `doc`):\n\n```yaml\n")
+	input, ok1 := docsBlock(section, "Example input:\n\n```yaml\n")
 	output, ok2 := docsBlock(section, "Output:\n<!-- Skip update output -->\n```\n")
 	cfgText, ok3 := docsBlock(section, "```yaml\nrules:\n")
 	if !ok1 || !ok2 || !ok3 {
