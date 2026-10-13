@@ -110,14 +110,20 @@ func (rule *RuleUnlockedInstall) scriptsDisabledByWorkflow(step *Step, tool stri
 			return true
 		}
 	}
-	if rule.job != nil {
-		for _, st := range rule.job.Steps {
-			if r, ok := st.Exec.(*ExecRun); ok && r.Run != nil && ignoreScriptsInScriptRe.MatchString(r.Run.Value) {
-				return true
-			}
-			if st == step {
-				break
-			}
+	return rule.jobScriptMentions(step, ignoreScriptsInScriptRe)
+}
+
+// jobScriptMentions reports whether the script of a step of the job, up to the step itself, matches the pattern.
+func (rule *RuleUnlockedInstall) jobScriptMentions(step *Step, re *regexp.Regexp) bool {
+	if rule.job == nil {
+		return false
+	}
+	for _, st := range rule.job.Steps {
+		if r, ok := st.Exec.(*ExecRun); ok && r.Run != nil && re.MatchString(r.Run.Value) {
+			return true
+		}
+		if st == step {
+			break
 		}
 	}
 	return false
@@ -161,10 +167,10 @@ func (rule *RuleUnlockedInstall) yarnSkipsScripts(dir string, pkg packageJSON) b
 		}
 		// Yarn 2+ without the setting: 4.14 changed the default to false, and the version is not known unless
 		// package.json names it
-		major, minor, ok := pkg.yarnVersion()
+		major, minor, ok := pkg.managerVersion("yarn")
 		return !ok || major > 4 || major == 4 && minor >= 14
 	}
-	if major, minor, ok := pkg.yarnVersion(); ok {
+	if major, minor, ok := pkg.managerVersion("yarn"); ok {
 		return major > 4 || major == 4 && minor >= 14
 	}
 	return false

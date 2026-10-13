@@ -4,6 +4,9 @@ on:
     types: [opened]
 env:
   CHANNEL: stable
+  UV_EXCLUDE_NEWER: 7 days
+  PIP_UPLOADED_PRIOR_TO: P7D
+  npm_config_min_release_age: 7
 jobs:
   literals:
     runs-on: ubuntu-latest

@@ -98,11 +98,11 @@ func (r *repoFiles) packageJSON(dir string) (packageJSON, bool) {
 	return p, true
 }
 
-// yarnMajor returns the version of Yarn that package.json asks for with "packageManager": "yarn@4.14.0+sha224.abc".
+// managerVersion returns the version of the package manager that package.json asks for with "packageManager": "yarn@4.14.0+sha224.abc".
 // The major, minor and the ok are zero and false when it names no version.
-func (p packageJSON) yarnVersion() (major, minor int, ok bool) {
+func (p packageJSON) managerVersion(manager string) (major, minor int, ok bool) {
 	name, ver, found := strings.Cut(strings.TrimPrefix(p.PackageManager, "^"), "@")
-	if !found || name != "yarn" {
+	if !found || name != manager {
 		return 0, 0, false
 	}
 	m := yarnVersionRe.FindStringSubmatch(ver)

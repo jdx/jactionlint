@@ -9,12 +9,12 @@ var toolValueFlags = map[string]map[string]bool{
 		--prefix --root --src --platform --python-version --implementation --abi --upgrade-strategy --only-binary --no-binary
 		--global-option --install-option --config-settings -C --log --proxy --retries --timeout --exists-action --cert
 		--client-cert --trusted-host --cache-dir --python --report --progress-bar --use-feature --use-deprecated
-		--keyring-provider`),
+		--keyring-provider --uploaded-prior-to`),
 	"pipx": set(`--python --pip-args --index-url -i --spec --suffix --preinstall`),
 	"uv": set(`-r --requirement -c --constraint -e --editable --index-url -i --extra-index-url -f --find-links --index
 		--default-index --python -p --target --prefix --python-version --python-platform --from --with --with-requirements
 		--with-editable --extra --group --only-group --no-binary --only-binary --no-build --config-setting -C
-		--link-mode --exclude-newer --resolution --prerelease --index-strategy --keyring-provider --cache-dir --directory
+		--link-mode --exclude-newer --exclude-newer-package --resolution --prerelease --index-strategy --keyring-provider --cache-dir --directory
 		--project --config-file --color --python-preference --python-downloads --reinstall-package -P --upgrade-package
 		--no-build-package --no-binary-package --env-file --package --tag --branch --rev --git --marker`),
 	"npm": set(`--prefix --registry --tag -w --workspace --cache --loglevel --userconfig --globalconfig --omit --include

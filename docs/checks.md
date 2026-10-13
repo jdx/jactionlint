@@ -3076,6 +3076,34 @@ pnpm is not reported: pnpm 10 and later run no script of a dependency unless the
 and `npx` are not reported, and neither is a command which follows a `cd`, because the configuration in force is not known.
 Whether the project's own scripts (`prepare`, `postinstall`) are needed is not known either: they run unless `--ignore-scripts` is given.
 
+The option reports a fourth kind, an install **without a release-age cooldown**
+([zizmor#2044](https://github.com/zizmorcore/zizmor/issues/2044)), the counterpart of [`dependabot-cooldown`](#check-dependabot-cooldown) for
+the installs of a `run:` script. An install that resolves versions takes the newest release of every dependency, however new, and most
+compromised releases are found and pulled within days. A cooldown keeps only versions that are some days old. The setting of each tool:
+
+| Tool | Setting | From |
+| ---- | ------- | ---- |
+| uv (`uv pip install`, `uv add`, `uv tool install`, `uvx`) | `--exclude-newer` (a date or a duration), `UV_EXCLUDE_NEWER`, `exclude-newer` in `uv.toml` or `[tool.uv]` of `pyproject.toml` | all |
+| pip, pipx | `--uploaded-prior-to` (a date, or a duration in days such as `P7D`), `PIP_UPLOADED_PRIOR_TO`; only for indexes that tell the upload time | pip 26.0 |
+| npm | `--min-release-age=DAYS` or `min-release-age` in `.npmrc`; `--before=DATE` | npm 11.10 |
+| pnpm | `minimumReleaseAge` (minutes) in `pnpm-workspace.yaml`; pnpm 11 waits one day by default | pnpm 10.16 |
+| Yarn | `npmMinimalAgeGate` in `.yarnrc.yml`; Yarn 4.15 waits one day by default; Yarn 1 has none | Yarn 4.10 |
+| bun | `minimumReleaseAge` (seconds) under `[install]` in `bunfig.toml` | bun 1.3 |
+
+Check the version of the tool on the runner before you add the setting: an option that the installed pip or npm does not know fails the
+install. The check reads the same places as the lifecycle scripts do (the repository's files, the environment of the step, an earlier
+script of the job), and so reads `uv.toml`, `pyproject.toml`, `.npmrc`, `pnpm-workspace.yaml`, `.yarnrc.yml` and `bunfig.toml`. It reports
+installs that resolve something and is silent about these:
+
+- installs that are bound to a lock file or to hashes (`npm ci`, `uv sync`, `--frozen-lockfile`, `--immutable`, `--require-hashes`,
+  a constraints file `-c`), and `npm install`, `pnpm install` and `yarn` without a package in a repository that has the lock file;
+- `npx`, `bunx` and `pnpm dlx`, which usually run a binary of the project, and ecosystems whose tool has no such setting (cargo, go, gem,
+  apt, Homebrew);
+- a command that follows a `cd`, or has `--project`, `--directory` or `--config-file` for uv: the configuration in force is not known;
+- Yarn 2+ of an unknown version, because the default depends on it.
+
+An install of an exact version (`pip install requests==2.32.3`) is reported too: the dependencies of the package are still resolved anew.
+
 Example input:
 
 ```yaml
@@ -3094,21 +3122,29 @@ Output:
 test.yaml:6:14: "npm install" resolves the dependencies again and may update the package-lock.json instead of failing when it is out of date. use `npm ci` [unlocked-install]
   |
 6 |       - run: npm install
-  |              ^~~
+  |              ^~~~~~~~~~~
 test.yaml:6:14: "npm install" runs the lifecycle scripts (preinstall, install, postinstall) of every dependency, and a compromised release uses them to run code on the runner. pass `--ignore-scripts` or set `ignore-scripts=true` in .npmrc, and run what a package needs with `npm rebuild` [unlocked-install]
   |
 6 |       - run: npm install
-  |              ^~~
+  |              ^~~~~~~~~~~
+test.yaml:6:14: "npm install" takes the newest release of every dependency, however new, so a compromised release reaches the workflow before it is found and pulled. pass `--min-release-age=7` or set `min-release-age=7` in .npmrc (npm 11.10 and later) [unlocked-install]
+  |
+6 |       - run: npm install
+  |              ^~~~~~~~~~~
 test.yaml:7:14: "pip install -r requirements.txt" installs a requirements file without hashes or constraints, so the transitive dependencies are resolved anew on every run. use a lock file with hashes (`pip-compile --generate-hashes`) and pass --require-hashes, or pin them with -c [unlocked-install]
   |
 7 |       - run: pip install -r requirements.txt
-  |              ^~~
+  |              ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+test.yaml:7:14: "pip install" takes the newest release of every dependency, however new, so a compromised release reaches the workflow before it is found and pulled. pass `--uploaded-prior-to` (pip 26.0 and later; a date, or a duration such as `P7D`), or install with uv and `--exclude-newer` [unlocked-install]
+  |
+7 |       - run: pip install -r requirements.txt
+  |              ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 ```
 
 <!-- Skip playground link -->
 
 This is the output with the option `pedantic`, or with a `package-lock.json` in the repository for the first finding. `npm ci --ignore-scripts`
-(and `ignore-scripts=true` in `.npmrc`) silences the second.
+(and `ignore-scripts=true` in `.npmrc`) silences the second, `--min-release-age=7` the third.
 
 Installing named packages is covered by [adhoc packages](#check-adhoc-packages) and [unpinned tools](#check-unpinned-tools).
 These rules have no equivalent in zizmor.
