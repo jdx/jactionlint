@@ -8247,8 +8247,9 @@ installer (`dflook/terraform-plan`, `-apply`, `dflook/tofu-plan`, `-apply`, `JS-
 `github/codeql-action/autobuild` and `analyze`, the Maven, mkdocs and pip actions of poutine). Some actions run it only for an
 input, which is checked: `ruby/setup-ruby` with `bundler-cache: true`, `actions/setup-node` with `cache`, `docker/build-push-action`
 with a `context` that is a path (the default is the git context of the repository, not the workspace),
-`goreleaser/goreleaser-action` with `args` that has `release` or `build` and no `install-only`, `magefile/mage-action` with
-`args`, `gradle/gradle-build-action` with `arguments`, `azure/powershell` with an `inlineScript` that calls a script of the
+`goreleaser/goreleaser-action` with `args` that has `release` or `build` and no `install-only` (it fails without `args`),
+`magefile/mage-action` unless `install-only` is true (it runs `mage` with the default target when `args` is empty),
+`gradle/gradle-build-action` with `arguments`, `azure/powershell` with an `inlineScript` that calls a script of the
 workspace, and `cypress-io/github-action` unless both `install` and `runTests` are false. Not listed although poutine or CodeQL
 has them: `docker/setup-buildx-action`, `pre-commit-ci/lite-action` and `browniebroke/pre-commit-autoupdate-action` (they
 run nothing of the workspace) and `actions/jekyll-build-pages` (not verified). `gradle/actions/setup-gradle` only prepares a later

@@ -116,7 +116,8 @@ var workspaceActions = func() map[string]workspaceAction {
 		}
 		return false
 	})
-	gated("magefile/mage-action", runsArgs)
+	// mage runs `mage ${args}` unless install-only is true: without arguments it runs the default target of magefile.go
+	gated("magefile/mage-action", func(e *ExecAction) bool { return !inputIsTrue(e, "install-only") })
 	gated("gradle/gradle-build-action", func(e *ExecAction) bool {
 		// only with `arguments` does the action run gradle (the build script is code); without it, it prepares a later step
 		v, ok := e.input("arguments")

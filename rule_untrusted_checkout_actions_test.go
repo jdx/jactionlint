@@ -50,6 +50,8 @@ func TestRuleUntrustedCheckoutWorkspaceActions(t *testing.T) {
 		{"goreleaser installed and told to release", "goreleaser/goreleaser-action@v6\n        with:\n          args: release\n          install-only: true", false},
 		{"goreleaser without arguments", "goreleaser/goreleaser-action@v6", false},
 		{"mage with a target", "magefile/mage-action@v3\n        with:\n          args: build", true},
+		{"mage without arguments runs the default target", "magefile/mage-action@v3", true},
+		{"mage with arguments that are not known", "magefile/mage-action@v3\n        with:\n          args: ${{ inputs.target }}", true},
 		{"mage only installed", "magefile/mage-action@v3\n        with:\n          install-only: true", false},
 		{"gradle build action with arguments", "gradle/gradle-build-action@v3\n        with:\n          arguments: build", true},
 		{"gradle build action without arguments", "gradle/gradle-build-action@v3", false},
