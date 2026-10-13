@@ -71,8 +71,8 @@ func (rule *RuleIfCond) checkPlaceholder(n *String, start, end int) {
 
 // checkBare checks an "if:" condition without ${{ }}.
 func (rule *RuleIfCond) checkBare(n *String) {
-	if strings.TrimLeft(n.Value, " \t\r\n") == n.Value {
-		// Same tree as the one of the trimmed text: white space is not a token.
+	if strings.TrimSpace(n.Value) == n.Value {
+		// Nothing is trimmed, so the cached tree is the one of the text.
 		if e, err := n.condExpr(); err == nil {
 			rule.checkConstant(n.Pos, strings.TrimSpace(n.Value), e)
 		}

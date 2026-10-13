@@ -50,6 +50,10 @@ func TestParseWholeExprMatchesAFreshParse(t *testing.T) {
 		"${{ github.actor == 'x' }}", "  ${{ github.actor == 'x' }}  ", "${{github.actor}}", "${{ '}}' }}",
 		"${{ a }} ${{ b }}", "${{ a }} junk", "${{ ( }}", "", "github.actor", "  github.actor ", "!cancelled() ",
 		"\n  true", "a }} b", "${{ a ",
+		// white space which the lexer does not skip
+		"true\u00a0", "\u00a0false", "\u2003true\u2003", "${{ a }}\u00a0", "\u00a0${{ a }}\u00a0", "${{ a\u00a0}}",
+		// text after the first placeholder
+		"${{ a }} && ${{ b }}", "${{ a }} && b", "${{ a }}x", "${{ a }} }}", "${{ a }}\n${{ b }}",
 	} {
 		s := &String{Value: v}
 		node, text, base, ok := parseWholeExpr(s)

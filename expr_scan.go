@@ -3,6 +3,7 @@ package jactionlint
 import (
 	"sort"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 )
 
@@ -114,9 +115,10 @@ func parseWholeExpr(s *String) (ExprNode, string, int, bool) {
 			return nil, "", 0, false
 		}
 		inner := strings.TrimSuffix(strings.TrimPrefix(trimmed, "${{"), "}}")
-		// The text of the first placeholder starts at the same byte as inner, so its syntax tree has
-		// the same positions.
-		if c := s.placeholders(); !c.failed && len(c.list) == 1 && c.list[0].after == lead+len("${{") {
+		// The placeholder is the whole trimmed value when it starts right after its "${{" and ends at its
+		// end. Then its text is inner, and its syntax tree has the same positions.
+		start := len(value) - len(strings.TrimLeftFunc(value, unicode.IsSpace))
+		if c := s.placeholders(); !c.failed && len(c.list) == 1 && c.list[0].after == start+len("${{") && c.list[0].after+c.list[0].n == start+len(trimmed) {
 			return c.list[0].node, inner, lead + len("${{"), true
 		}
 		node, err := NewExprParser().Parse(NewExprLexer(inner + "}}"))
@@ -128,8 +130,9 @@ func parseWholeExpr(s *String) (ExprNode, string, int, bool) {
 	if strings.Contains(value, "${{") {
 		return nil, "", 0, false
 	}
-	if lead == 0 {
-		// The cached tree is of the value which is not trimmed; trailing white space does not change it.
+	if trimmed == value {
+		// Nothing is trimmed, so the cached tree is the one of the text. White space which the lexer does
+		// not skip, such as a no-break space, must be trimmed before the parse, so it is not shared.
 		node, err := s.condExpr()
 		if err != nil {
 			return nil, "", 0, false
