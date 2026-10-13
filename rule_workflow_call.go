@@ -60,6 +60,15 @@ func (rule *RuleWorkflowCall) VisitJobPre(n *Job) error {
 
 	ref := ParseUses(u.Value)
 
+	if msg := selfRepositoryProblem(u.Value); msg != "" {
+		if s, ok := canonLocalUsesSpec(u.Value); ok {
+			// Do not report that the file cannot be read in addition
+			rule.cache.writeCache(s, nil)
+		}
+		rule.ReportID("invalid-workflow-call", u.Pos, msg)
+		return nil
+	}
+
 	if ref.isLocalWorkflowCall() {
 		rule.checkWorkflowCallUsesLocal(n.WorkflowCall)
 		return nil

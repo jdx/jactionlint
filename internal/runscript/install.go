@@ -46,6 +46,10 @@ type Install struct {
 	// Locked is whether the installation is bound to a lock file or hashes: `npm ci`, `--frozen-lockfile`,
 	// `--immutable`, `--locked`, `--frozen`, `--require-hashes`, `uv sync`.
 	Locked bool
+	// NoScripts is whether the command, as written, does not run the lifecycle scripts of the packages it installs:
+	// `--ignore-scripts` (also `--ignore-scripts=true`), Yarn's `--mode=skip-build`, or an npm command that only
+	// writes the lock file (`--package-lock-only`, `--dry-run`). Only set for npm, pnpm, yarn, bun and aube.
+	NoScripts bool
 	// FromManifest is whether no package is named: the project's manifest and lock file decide (`npm install`,
 	// `pip install -r file`, `uv sync`).
 	FromManifest bool
@@ -423,7 +427,8 @@ func (in *Install) node(c *Command) bool {
 		global, pos = true, pos[1:]
 	}
 	in.Global = global
-	in.Locked = c.HasFlag("--frozen-lockfile", "--immutable", "--ci") && !c.HasFlag("--no-frozen-lockfile")
+	in.Locked = freezesLockfile(c)
+	in.NoScripts = skipsScripts(c)
 	if len(pos) == 0 {
 		switch c.Tool {
 		case "yarn": // `yarn` installs
@@ -452,6 +457,56 @@ func (in *Install) node(c *Command) bool {
 		if c.Tool == "bun" || c.Tool == "aube" || c.Tool == "pnpm" || c.Tool == "yarn" || c.Tool == "npm" {
 			in.addAll(pos[1:], npmPackage)
 		}
+		return true
+	}
+	return false
+}
+
+// freezesLockfile reports whether an npm, pnpm, yarn or bun command is bound to the lock file: `--frozen-lockfile`,
+// `--immutable` or `--ci`, none of which counts when it is given the value false (`--frozen-lockfile=false` turns the
+// freeze off) or when `--no-frozen-lockfile` comes with it.
+func freezesLockfile(c *Command) bool {
+	if c.HasFlag("--no-frozen-lockfile") {
+		return false
+	}
+	for _, f := range c.Flags {
+		switch f.Name {
+		case "--frozen-lockfile", "--immutable", "--ci":
+			if f.Value == nil || f.Value.Dynamic() || !isFalseWord(f.Value.Value) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// skipsScripts reports whether the flags of an npm, pnpm, yarn or bun command keep it from running lifecycle scripts.
+// The last of `--ignore-scripts` and `--no-ignore-scripts` wins, `--ignore-scripts=false` is the same as the second.
+// A value that is not known (`--ignore-scripts=$X`) counts as set: the author made the choice.
+func skipsScripts(c *Command) bool {
+	ignore := false
+	for _, f := range c.Flags {
+		switch f.Name {
+		case "--ignore-scripts":
+			ignore = f.Value == nil || f.Value.Dynamic() || !isFalseWord(f.Value.Value)
+		case "--no-ignore-scripts":
+			ignore = false
+		case "--mode":
+			// Yarn 2+: `--mode=skip-build` skips the build scripts of the dependencies
+			if f.Value != nil && f.Value.Value == "skip-build" {
+				return true
+			}
+		}
+	}
+	if ignore {
+		return true
+	}
+	return c.Tool == "npm" && c.HasFlag("--package-lock-only", "--lockfile-only", "--dry-run")
+}
+
+func isFalseWord(v string) bool {
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "false", "0", "no", "off":
 		return true
 	}
 	return false

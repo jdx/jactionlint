@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -616,12 +617,17 @@ func (rule *RuleAction) checkLocalActionMetadata(meta *ActionMetadata, action *E
 
 // https://docs.github.com/en/actions/learn-github-actions/workflow-syntax-for-github-actions#example-using-action-in-the-same-repository-as-the-workflow
 func (rule *RuleAction) checkLocalAction(spec string, action *ExecAction) {
+	if msg := selfRepositoryProblem(spec); msg != "" {
+		rule.ReportID("invalid-local-action", action.Uses.Pos, msg)
+		return
+	}
 	meta, err := rule.cache.Lookup(spec)
 	if err != nil {
 		rule.reportOnce(func() { rule.ReportID("invalid-local-action", action.Uses.Pos, err.Error()) })
 		return
 	}
 	if meta == nil {
+		rule.checkSelfRepositoryActionExists(spec, action)
 		return
 	}
 
@@ -631,6 +637,51 @@ func (rule *RuleAction) checkLocalAction(spec string, action *ExecAction) {
 	rule.checkAction(meta, action, func(m *ActionMetadata) string {
 		return fmt.Sprintf("%q defined at %q", m.Name, spec)
 	})
+}
+
+// checkSelfRepositoryActionExists reports a "$/path" reference of an action which the repository does not have.
+// Unlike "./path", which is looked up in the workspace at run time (where an earlier step can have put the
+// action), "$/" refers to the repository at the commit that runs the workflow, so a directory without action.yml
+// is a certain failure. Nothing is reported when the repository is not known (standard input), or when the path
+// is in a submodule, whose files are not part of the commit.
+func (rule *RuleAction) checkSelfRepositoryActionExists(spec string, action *ExecAction) {
+	rel, ok := strings.CutPrefix(spec, selfRepositoryUsesPrefix)
+	if !ok || rule.cache == nil || rule.cache.proj == nil {
+		return
+	}
+	root := rule.cache.proj.RootDir()
+	if root == "" || inSubmodule(root, rel) {
+		return
+	}
+	dir := "./"
+	if c := path.Clean(rel); c != "." {
+		dir += c
+	}
+	rule.ReportIDf(
+		"invalid-local-action",
+		action.Uses.Pos,
+		"%q does not refer to an action: the repository has no action.yml or action.yaml in %q. a self-repository reference is resolved at the commit that runs the workflow, so the action must be in the repository",
+		spec, dir,
+	)
+}
+
+// inSubmodule reports whether the path (relative to the root of the repository) is in a submodule listed in .gitmodules.
+func inSubmodule(root, rel string) bool {
+	b, err := os.ReadFile(filepath.Join(root, ".gitmodules"))
+	if err != nil {
+		return false
+	}
+	rel = path.Clean(rel)
+	for _, l := range strings.Split(string(b), "\n") {
+		k, v, ok := strings.Cut(strings.TrimSpace(l), "=")
+		if !ok || strings.TrimSpace(k) != "path" {
+			continue
+		}
+		if p := path.Clean(strings.TrimSpace(v)); rel == p || strings.HasPrefix(rel, p+"/") {
+			return true
+		}
+	}
+	return false
 }
 
 // reportOnce runs report and flags the findings it reported as findings about the action, not about this use of
