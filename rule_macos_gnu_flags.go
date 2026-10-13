@@ -309,7 +309,7 @@ func macosGnuForms(c *runscript.Command) []macosGnuForm {
 			break
 		}
 		v := w.Value // without the quotes: sed "-i" is sed -i
-		if c.Name == "grep" && i > 0 && c.Args[i-1] != nil && grepValueFlags[c.Args[i-1].Value] {
+		if c.Name == "grep" && i > 0 && c.Args[i-1] != nil && clusterTakesNextWord(c.Args[i-1].Value, grepNoValueLetters, grepValueLetters, grepValueFlags) {
 			continue // the value of an option: grep -e -P
 		}
 		switch c.Name {
@@ -333,7 +333,7 @@ func macosGnuForms(c *runscript.Command) []macosGnuForm {
 				add(w, `"date -d" does not exist in the date of macOS ("illegal option -- d").`, `Use "date -j -f FORMAT ..." or "date -v", or install coreutils and call "gdate".`)
 			}
 		case "grep":
-			if v == "--perl-regexp" || (strings.HasPrefix(v, "-") && !strings.HasPrefix(v, "--") && len(v) > 1 && strings.Contains(v[1:], "P") && clusterOfFlags(v)) {
+			if v == "--perl-regexp" || optionClusterHasAny(v, grepNoValueLetters, grepValueLetters, "P") {
 				add(w, `"grep -P" is rejected by the grep of macOS ("invalid option -- P"): it has no Perl regular expressions.`, `Use "grep -E" if the pattern allows it, or "perl -ne", which macOS has too.`)
 			}
 		case "stat":
@@ -353,21 +353,38 @@ func macosGnuForms(c *runscript.Command) []macosGnuForm {
 	return out
 }
 
-// grepValueFlags are the options of grep which take the next word as a value.
-var grepValueFlags = map[string]bool{"-e": true, "-f": true, "-m": true, "-A": true, "-B": true, "-C": true, "-d": true, "-D": true,
-	"--regexp": true, "--file": true, "--max-count": true, "--include": true, "--exclude": true}
+// The options of grep, for reading a cluster of letters like getopt: the letters without a value, the letters that
+// take a value (the rest of the word, or the next word when the letter ends the word), and the long options that take
+// the next word.
+const (
+	grepNoValueLetters = "EFGHILOPRSUVXZabchilnopqrsuvwxyz0123456789"
+	grepValueLetters   = "efmABCdD"
+)
 
-// clusterOfFlags reports whether a word like -oP or -rnP is a cluster of single letters of grep, not an option with a
-// value glued to it (-A3, -m1, -ePATTERN, -fFILE, -d recurse) in which a P can be part of the value.
-func clusterOfFlags(w string) bool {
-	for _, r := range w[1:] {
-		switch r {
-		case 'A', 'B', 'C', 'D', 'd', 'e', 'f', 'm':
-			// An option with a value: what follows is the value, a P in it is not an option
-			return strings.IndexRune(w[1:], 'P') < strings.IndexRune(w[1:], r)
+var grepValueFlags = map[string]bool{"--regexp": true, "--file": true, "--max-count": true, "--include": true, "--exclude": true,
+	"--after-context": true, "--before-context": true, "--directories": true, "--devices": true}
+
+// clusterTakesNextWord reports whether the word is an option which takes the next word as its value: a long option of
+// the list, or a cluster of single letters whose last letter takes a value (`-e`, `-ne`, `-rnf`). A letter that takes
+// a value and is followed by more letters has its value in the word (`-A3`, `-ePATTERN`), so the next word is free.
+func clusterTakesNextWord(word, withoutValue, withValue string, long map[string]bool) bool {
+	if long[word] {
+		return true
+	}
+	if len(word) < 2 || word[0] != '-' || word[1] == '-' {
+		return false
+	}
+	rest := word[1:]
+	for i, c := range rest {
+		switch {
+		case strings.ContainsRune(withValue, c):
+			return i == len(rest)-1
+		case strings.ContainsRune(withoutValue, c):
+		default:
+			return false
 		}
 	}
-	return true
+	return false
 }
 
 func init() {

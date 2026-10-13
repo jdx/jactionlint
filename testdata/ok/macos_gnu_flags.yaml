@@ -104,6 +104,10 @@ jobs:
       - run: |
           brew install grep
           grep -P x file.txt
+      # The value of an option that ends a cluster is the next word: -P is the pattern here
+      - run: |
+          grep -ne -P file.txt
+          grep -n -e -P file.txt
       # After -- come the patterns and the file names
       - run: |
           grep -- -P file.txt

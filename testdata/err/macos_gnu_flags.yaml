@@ -122,3 +122,8 @@ jobs:
       - run: |
           date -f dates.txt
           date -d yesterday
+  grep-clusters:
+    runs-on: macos-latest
+    steps:
+      - run: grep -nP x file.txt
+      - run: grep -nA3 -P x file.txt
