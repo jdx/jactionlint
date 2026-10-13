@@ -3308,7 +3308,7 @@ compromised releases are found and pulled within days. A cooldown keeps only ver
 | uv (`uv pip install`, `uv add`, `uv tool install`, `uvx`) | `--exclude-newer` (a date or a duration), `UV_EXCLUDE_NEWER`, `exclude-newer` in `uv.toml` or `[tool.uv]` of `pyproject.toml` | all |
 | pip, pipx | `--uploaded-prior-to` (a date, or a duration in days such as `P7D`), `PIP_UPLOADED_PRIOR_TO`; only for indexes that tell the upload time | pip 26.0 |
 | npm | `--min-release-age=DAYS` or `min-release-age` in `.npmrc`; `--before=DATE` | npm 11.10 |
-| pnpm | `minimumReleaseAge` (minutes) in `pnpm-workspace.yaml` (up to pnpm 10 also `minimum-release-age` in `.npmrc`; the `min-release-age` and `before` of npm are not read); pnpm 11 waits one day by default | pnpm 10.16 |
+| pnpm | `minimumReleaseAge` (minutes) in `pnpm-workspace.yaml` (pnpm 10.16 to 10.x also read `minimum-release-age` from `.npmrc`; pnpm 11 does not, and a `.npmrc` entry does not change its default; the `min-release-age` and `before` of npm are not read); pnpm 11 waits one day by default | pnpm 10.16 |
 | Yarn | `npmMinimalAgeGate` in `.yarnrc.yml`; Yarn 4.15 waits one day by default; Yarn 1 has none | Yarn 4.10 |
 | bun | `--minimum-release-age` (seconds) or `minimumReleaseAge` under `[install]` in `bunfig.toml`; bun reads nothing of the kind from `.npmrc` | bun 1.3 |
 

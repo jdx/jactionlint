@@ -340,8 +340,12 @@ func (rule *RuleUnlockedInstall) releaseAgeAt(dirs []string, step *Step, c *runs
 	if rule.ageDefaultOn(dirs, step, c, before) {
 		st = ageState{set: true, on: true}
 	}
+	npmrcMode := pnpmNpmrcIgnored
+	if c.Tool == "pnpm" {
+		npmrcMode = rule.pnpmNpmrcMode(dirs, step, before)
+	}
 	for _, d := range dirs {
-		for _, as := range rule.ageFiles(d, c) {
+		for _, as := range rule.ageFiles(d, c, npmrcMode) {
 			st = st.after(as)
 		}
 	}
@@ -399,9 +403,48 @@ func (rule *RuleUnlockedInstall) ageDefaultOn(dirs []string, step *Step, c *runs
 	return false
 }
 
+// pnpmNpmrcMode says what the `minimum-release-age` of a .npmrc means for pnpm.
+type pnpmNpmrcMode int
+
+const (
+	// pnpmNpmrcIgnored: the version of pnpm does not read the key from .npmrc (11 and later read only
+	// pnpm-workspace.yaml and their config file; before 10.16 there is no such setting).
+	pnpmNpmrcIgnored pnpmNpmrcMode = iota
+	// pnpmNpmrcRead: pnpm 10.16 up to 11 read it.
+	pnpmNpmrcRead
+	// pnpmNpmrcUnknown: the version is not known, so a value that turns the age on is believed and one that turns it
+	// off is not, because the version may be 11 and keep its default.
+	pnpmNpmrcUnknown
+)
+
+// pnpmNpmrcMode decides the mode from the version of pnpm that package.json (packageManager) or the job
+// (pnpm/action-setup, pnpm@N in a script) names.
+func (rule *RuleUnlockedInstall) pnpmNpmrcMode(dirs []string, step *Step, before string) pnpmNpmrcMode {
+	major, minor, known := 0, 0, false
+	for _, d := range dirs {
+		pkg, _ := rule.files.packageJSON(d)
+		if ma, mi, ok := pkg.managerVersion("pnpm"); ok {
+			major, minor, known = ma, mi, true
+		}
+	}
+	if !known {
+		if ma := rule.pnpmVersionInJob(step, before); ma > 0 {
+			// only the major version is named: 10 is taken as one that has the setting
+			major, minor, known = ma, 16, true
+		}
+	}
+	switch {
+	case !known:
+		return pnpmNpmrcUnknown
+	case major == 10 && minor >= 16:
+		return pnpmNpmrcRead
+	}
+	return pnpmNpmrcIgnored
+}
+
 // ageFiles returns the assignments of the files of the directory that the tool reads, one slice for each file, the
 // weakest first.
-func (rule *RuleUnlockedInstall) ageFiles(dir string, c *runscript.Command) [][]ageAssignment {
+func (rule *RuleUnlockedInstall) ageFiles(dir string, c *runscript.Command, npmrcMode pnpmNpmrcMode) [][]ageAssignment {
 	read := func(name string) (string, bool) { return rule.files.read(filepath.Join(dir, name)) }
 	var out [][]ageAssignment
 	switch c.Tool {
@@ -426,7 +469,7 @@ func (rule *RuleUnlockedInstall) ageFiles(dir string, c *runscript.Command) [][]
 		out = append(out, as)
 	case "pnpm":
 		// up to pnpm 10 .npmrc, in this spelling; pnpm-workspace.yaml wins
-		if v, ok := rule.files.npmrc(dir)["minimum-release-age"]; ok {
+		if v, ok := rule.files.npmrc(dir)["minimum-release-age"]; ok && (npmrcMode == pnpmNpmrcRead || npmrcMode == pnpmNpmrcUnknown && ageSettingOn(v)) {
 			out = append(out, []ageAssignment{{"minimum-release-age", v}})
 		}
 		if text, ok := read("pnpm-workspace.yaml"); ok {
