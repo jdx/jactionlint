@@ -16,6 +16,8 @@ jobs:
             node:20 npm test
       # OK: the policies accept the tag of the images of my-org, and any image of the mirror
       - run: docker run ghcr.io/my-org/tool:1 && podman run mirror.example.com/x/y
+      # ERROR: -t is the terminal of a run, not the tag of a build
+      - run: docker run -t node:22 npm run build
       # OK: pinned by a digest
       - run: docker run alpine:3@sha256:0000000000000000000000000000000000000000000000000000000000000000
       # OK: the image is built by the workflow

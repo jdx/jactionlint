@@ -224,38 +224,32 @@ func localImagesOf(s *runscript.Script) (names []string, unknown bool) {
 		default:
 			continue
 		}
-		words := make([]string, 0, len(c.Args))
-		for _, a := range c.Args {
-			words = append(words, a.Value)
-		}
-		// -t is the tag of a build, but the terminal of a run
-		build := false
-		for _, w := range words {
-			if w == "build" || w == "buildx" {
-				build = true
-			}
-		}
-		for k, w := range words {
-			switch w {
-			case "load", "import", "compose", "bake":
-				unknown = true
-			case "-t", "--tag":
-				if build && k+1 < len(words) {
-					names = append(names, words[k+1])
-				}
-			case "tag", "commit":
-				// docker tag SRC DST, docker commit CONTAINER IMAGE
-				if k == 0 || words[k-1] == "image" || words[k-1] == "container" {
-					if k+2 < len(words) {
-						names = append(names, words[k+2])
-					}
-				}
-			default:
-				if v, ok := strings.CutPrefix(w, "--tag="); ok && build {
-					names = append(names, v)
-				} else if build && len(w) > 2 && strings.HasPrefix(w, "-t") && !strings.HasPrefix(w, "--") && c.Name != "buildah" {
+		verb, rest := dockerSubcommand(c)
+		switch verb {
+		case "load", "import", "compose", "bake", "buildx bake", "image load", "image import":
+			unknown = true
+		case "build", "buildx build", "builder build", "image build":
+			// -t is the tag of a build (and the terminal of a run, which is another subcommand)
+			for k, w := range rest {
+				switch {
+				case (w == "-t" || w == "--tag") && k+1 < len(rest):
+					names = append(names, rest[k+1])
+				case strings.HasPrefix(w, "--tag="):
+					names = append(names, strings.TrimPrefix(w, "--tag="))
+				case len(w) > 2 && strings.HasPrefix(w, "-t") && !strings.HasPrefix(w, "--") && c.Name != "buildah":
 					names = append(names, w[2:])
 				}
+			}
+		case "tag", "image tag", "commit", "container commit":
+			// docker tag SRC DST, docker commit CONTAINER IMAGE
+			var pos []string
+			for _, w := range rest {
+				if !strings.HasPrefix(w, "-") {
+					pos = append(pos, w)
+				}
+			}
+			if len(pos) >= 2 {
+				names = append(names, pos[1])
 			}
 		}
 		if c.Name == "docker-compose" || c.Name == "buildah" || c.Name == "kaniko" || c.Name == "buildctl" || c.Name == "earthly" {
@@ -263,4 +257,39 @@ func localImagesOf(s *runscript.Script) (names []string, unknown bool) {
 		}
 	}
 	return names, unknown
+}
+
+// dockerSubcommand returns the subcommand of a docker, podman or nerdctl command, after its global options: "run", "build",
+// or two words for "buildx build", "image tag", and so on. rest are the words after it. It returns "" for a command whose
+// global options it does not know, which the other checks then read as no subcommand at all.
+func dockerSubcommand(c *runscript.Command) (string, []string) {
+	words := make([]string, 0, len(c.Args))
+	for _, a := range c.Args {
+		words = append(words, a.Value)
+	}
+	i := 0
+	for i < len(words) && strings.HasPrefix(words[i], "-") && words[i] != "--" {
+		name, _, hasValue := strings.Cut(words[i], "=")
+		switch {
+		case hasValue || dockerGlobalBoolFlags[name]:
+			i++
+		case dockerGlobalValueFlags[name]:
+			i += 2
+		default:
+			return "", nil
+		}
+	}
+	if i >= len(words) {
+		return "", nil
+	}
+	verb := words[i]
+	i++
+	switch verb {
+	case "container", "image", "builder", "buildx", "manifest":
+		if i < len(words) {
+			verb += " " + words[i]
+			i++
+		}
+	}
+	return verb, words[i:]
 }
