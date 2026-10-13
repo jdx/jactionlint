@@ -146,6 +146,12 @@ single-dash long options of v1 are removed; the error names the replacement.
   * `--list-rules`:
     List every rule ID with its group, the profile which enables it, its default level and a
     summary, and exit. With `--format json` or `jsonl` the list is JSON
+  * `--print-config-schema`:
+    Print the JSON Schema of the config file, with the rule IDs and the options of each rule, and exit.
+    `--init-config` writes a comment which points editors to it
+
+  * `--print-output-schema`:
+    Print the JSON Schema of the output of `--format json` and `jsonl`, and exit
 
   * `--min-severity` <LEVEL>:
     Hide the errors less severe than this level: `info` (default), `warn` or `error`
@@ -156,6 +162,15 @@ single-dash long options of v1 are removed; the error names the replacement.
     opinionated rules). Each profile includes the one before it. It overrides `profile` of the
     config file. `strict` and `all`, the former names, are accepted in the config file only and
     mean `pedantic`
+
+  * `--show-doc-urls`:
+    Print the URL of the documentation of the rule of each finding: under the finding in the text
+    format (not with `oneline`) and in the message of the annotation in the `github` format
+
+  * `--finding-context`:
+    Add `events` (the events of `on:` of the workflow) and `permissions` (the permissions of the token
+    of the job the finding is in, scope to `read`, `write` or `none`) to each finding of the `json`,
+    `jsonl` and `sarif` formats. Without it they are not in the output
 
   * `--no-hints`:
     Do not print the line at the end of a text run with many findings (20 or more) that says how to
@@ -231,6 +246,11 @@ single-dash long options of v1 are removed; the error names the replacement.
     disabled (default "pyflakes"). A command given with this option must exist: the exit status is
     3 when it is not found or not executable. When the default is not found, one note on stderr
     says how many scripts were not checked
+
+  * `--ruff` <EXECUTABLE>:
+    Check the Python scripts of `shell: python` with this ruff (only its pyflakes rules `F`, without
+    the configuration of the working directory) instead of pyflakes. The command must exist: the
+    exit status is 3 when it is not found or not executable
 
   * `--shellcheck` <EXECUTABLE>:
     Command name or file path of "shellcheck" external command. If empty, shellcheck integration will

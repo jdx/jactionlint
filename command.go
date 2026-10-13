@@ -196,6 +196,21 @@ func (cmd *Command) Main(args []string) int {
 		}
 		return ExitStatusSuccessNoProblem
 	}
+	if f.printConfigSchema || f.printOutputSchema {
+		if f.printConfigSchema && f.printOutputSchema {
+			fmt.Fprintln(cmd.Stderr, "--print-config-schema and --print-output-schema cannot be combined")
+			return ExitStatusInvalidCommandOption
+		}
+		schema := OutputSchema()
+		if f.printConfigSchema {
+			schema = ConfigSchema()
+		}
+		if _, err := cmd.Stdout.Write(schema); err != nil {
+			fmt.Fprintf(cmd.Stderr, "could not write the schema: %v\n", err)
+			return ExitStatusFailure
+		}
+		return ExitStatusSuccessNoProblem
+	}
 	if flags.Changed("completion") {
 		if err := writeCompletion(cmd.Stdout, f.completion); err != nil {
 			fmt.Fprintln(cmd.Stderr, err)

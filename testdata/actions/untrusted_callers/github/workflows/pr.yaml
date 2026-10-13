@@ -1,0 +1,58 @@
+name: pr
+on:
+  pull_request_target:
+permissions: {}
+jobs:
+  reusable:
+    uses: ./.github/workflows/build.yaml
+    with:
+      ref: ${{ github.event.pull_request.head.sha }}
+  composite:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: ./.github/actions/build
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+  checkout-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: ./.github/actions/checkout-pr
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - run: make test
+  gated-and-built-after-a-failure:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: ./.github/actions/gated-checkout
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - run: make test
+        if: failure()
+  gated-and-built:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: ./.github/actions/gated-checkout
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - run: make test
+  gated-and-built-for-cancelled-runs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: ./.github/actions/gated-checkout
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - run: make test
+        if: cancelled()
+  base:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: ./.github/actions/checkout-pr
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+      - run: make test

@@ -8,6 +8,8 @@ This document describes how to use [jactionlint](https://github.com/jdx/jactionl
 With no argument, jactionlint finds all workflow files in the current repository and checks them. It checks the Dependabot
 configuration `.github/dependabot.yml` (or `.github/dependabot.yaml`) of the repository and its [composite actions](checks.md#check-composite-actions)
 (`action.yml` in the root, under `.github/actions`, in any other directory of the repository, and the directories which a local `uses: ./path` refers to) as well.
+The repository is the nearest directory upwards which has a `.git` (a directory, or a file in a worktree or a submodule) or a `.jj` (a [Jujutsu][jujutsu]
+workspace, a secondary one of which has no `.git`) and a `.github/workflows` directory, a root `action.yml` or a `.github/actions` directory.
 
 ```sh
 jactionlint
@@ -86,6 +88,8 @@ cat action.yml | jactionlint --stdin-filename action.yml -
 | `--rule-ids` |  | Accepted for compatibility. The text output always shows the rule ID at the end of each finding |
 | `--color[=WHEN]` |  | Colorize the output: always, never or auto (default). Bare --color means always |
 | `--no-color` |  | Same as --color=never |
+| `--show-doc-urls` |  | Print the documentation URL of the rule of each finding: under the finding (text) or in the message (github) |
+| `--finding-context` |  | Add the events of the workflow and the permissions of the token of the job to each finding of json, jsonl and sarif |
 | `--no-hints` |  | Do not print the hint line after a text run with many findings, nor the note that shellcheck or pyflakes was not found |
 | `--min-severity=LEVEL` |  | Hide findings less severe than LEVEL: info (default), warn or error |
 | `--strict-exit` |  | Exit with status 1 also for findings of level warn and info |
@@ -103,6 +107,8 @@ cat action.yml | jactionlint --stdin-filename action.yml -
 | `--select=RULES` |  | Report only these comma separated rule IDs, also those the profile does not enable. Repeatable |
 | `--no-ignores` |  | Apply no ignore comment, no "ignores" or "paths" ignore of the config file and no baseline (--ignore still applies) |
 | `--list-rules` |  | List every rule ID with its group, profile, level and summary, and exit. --format json prints it as JSON |
+| `--print-config-schema` |  | Print the JSON Schema of the config file (rule IDs and options included) and exit |
+| `--print-output-schema` |  | Print the JSON Schema of --format json and jsonl and exit |
 | `--explain=RULE` |  | Print the documentation of a rule ID (summary, group, profile, level, options, fixes and its section of the checks document) and exit |
 
 **Fixing**
@@ -147,6 +153,7 @@ cat action.yml | jactionlint --stdin-filename action.yml -
 | --- | --- | --- |
 | `--shellcheck=CMD` |  | Command or path of shellcheck (default shellcheck). Empty disables the integration. A command given here must exist (exit status 3 otherwise) |
 | `--pyflakes=CMD` |  | Command or path of pyflakes (default pyflakes). Empty disables the integration. A command given here must exist (exit status 3 otherwise) |
+| `--ruff=CMD` |  | Check the Python scripts with ruff (its pyflakes rules F) instead of pyflakes. The command must exist (exit status 3 otherwise) |
 | `--shellcheck-rcfile=FILE` |  | Let shellcheck read this shellcheckrc instead of passing --norc. Overrides "shellcheck.rcfile" of the config file |
 
 Exit status: 0 no problem, 1 problems found, 2 invalid command line, 3 failure.
@@ -340,6 +347,12 @@ processes.
 jactionlint --shellcheck= --pyflakes=
 ```
 
+<a id="external-tools-ruff"></a>`--ruff=ruff` checks the Python scripts (`shell: python`) with [ruff][ruff] instead of pyflakes (actionlint#439). jactionlint runs
+`ruff check --isolated --no-cache --select F --output-format json -`: only the rules `F` of ruff, which are the ones of pyflakes, and none of the
+configuration of the directory, so the result does not depend on a `pyproject.toml` in the working directory. The findings have the same rule ID
+`pyflakes`, with the message `ruff reported issue in this script: 2:7: F821 Undefined name ...`, and `--pyflakes` is not used then. The command
+must exist: the exit status is 3 when it does not.
+
 jactionlint runs shellcheck with `--norc`, so the results do not depend on a `.shellcheckrc` in the directory you run it from.
 To use a shellcheckrc, to pass arguments or to turn on optional checks of shellcheck, set the
 [`shellcheck` section](config.md#shellcheck) of the config file, or give a file with `--shellcheck-rcfile`:
@@ -405,6 +418,10 @@ Any other value which has `{{ }}` is a custom template in [Go template syntax][g
 the structured formats goes to stdout and the logs (including the deprecation warnings of the configuration) go to stderr, so the
 output can be piped to other tools safely.
 
+`--show-doc-urls` adds the URL of the documentation of the rule to each finding of the text format (a line `  = docs: https://jactionlint.jdx.dev/rules#unpinned-uses`
+under the snippet; not with `--format oneline`, which stays one line per finding) and of the `github` format (a second line `docs: URL` in the
+message of the annotation). The `json` and `jsonl` formats always have it as `doc_url`, and `sarif` as `helpUri`.
+
 The text format of errors is the same as in the former versions. An error whose level is lowered to `warn` or `info` in
 [the configuration](config.md#rules) has `warning: ` or `info: ` before the message. The rule ID, not the legacy kind, is at the end of the line.
 
@@ -425,6 +442,35 @@ An error object of `json` and `jsonl` has these fields.
 | `snippet`      | Code snippet to indicate the position of the error                                                                |
 | `fix`          | The automatic fix of the error: its `description` and the byte-range `edits`. It is omitted when there is no fix  |
 | `no_fix`       | Why a finding which the rule can fix has no fix (the SARIF log adds `unsafe-edit`, `edit-conflict` and `invalid-edit`, see the SARIF section below): a `code` (`option-required`, `option-invalid`, `online-required`, `lookup-failed`, `unsupported-shape` or `needs-judgment`), a `reason` and, for the options, the `option` to configure such as `missing-timeout.default-minutes`. It is omitted when there is a fix and for findings which are advice only |
+
+#### Events and token permissions of a finding
+
+`--finding-context` adds two fields to each finding of `json`, `jsonl` and `sarif` (to `properties` of the result), so that the findings of many
+repositories can be filtered by what can trigger the workflow and what its token can do (for instance with `jq`):
+
+| Field | Description |
+|-|-|
+| `events` | The sorted names of the events of `on:`, such as `["pull_request_target", "push"]`. Omitted for a file which is not a workflow (an action, `dependabot.yml`) |
+| `permissions` | The permissions of the token of the job that the finding is in: its `permissions:`, or else the ones of the workflow. A mapping from the scope to `read`, `write` or `none`. `read-all` and `write-all` are `{"*": "read"}` and `{"*": "write"}`, and an empty `permissions: {}` is `{"*": "none"}`. What an expression decides (`permissions: ${{ ... }}`, or the value of a scope) is `"unknown"`, never `"none"`: `{"*": "unknown"}` or `{"contents": "unknown"}`. Omitted when neither the job nor the workflow sets it: the default token then depends on a setting of the repository, which jactionlint does not know. A finding outside of the jobs has the permissions of the workflow |
+
+```sh
+jactionlint --format json --finding-context | jq '.[] | select(.events | index("pull_request_target")) | select(.permissions["contents"] == "write")'
+```
+
+The fields are not in the output without the option, so existing consumers see no change.
+
+#### JSON Schema of the output
+
+`jactionlint --print-output-schema` prints the JSON Schema (draft-07) of the output of `--format json`, which is an array of the error objects
+above. Each line of `--format jsonl` is one error object, valid against `#/definitions/finding` of the same schema. The committed copy is
+[`schema/jactionlint-output.json`](https://github.com/jdx/jactionlint/blob/main/schema/jactionlint-output.json). It is the contract for programs which read the
+findings:
+
+- A field is not removed and does not change its meaning within a major version.
+- New fields can be added, so a reader has to ignore the fields it does not know (the schema does not set `additionalProperties: false`).
+- `message`, `line`, `column`, `end_line`, `end_column`, `kind`, `id` and `severity` are always present. The others are optional as described above.
+
+The same goes for the schema of [the config file](config.md#json-schema).
 
 #### Lines and columns
 
@@ -918,6 +964,8 @@ jactionlint --online
 - **Offline.** `--online=cache` never uses the network: it answers from the cache whatever the age of the answers, and a lookup with
   nothing cached is skipped with one warning (run once with `--online` to fill the cache). `--online=cache,strict` fails on such a
   lookup. Good for a laptop on a plane or a sandboxed CI job that restores the cache directory.
+- **Immutable releases.** With the policy `immutable-release` of the `unpinned-uses` rule, `--online` accepts the tag of an immutable GitHub
+  release (`uses: astral-sh/setup-uv@v10.3.0`) like a commit SHA. See [tags of immutable releases](checks.md#check-immutable-release).
 - **Environments.** Three other rules use the online checks without being online rules: `untrusted-checkout`, `untrusted-artifact`
   and `agentic-actions` trust the `environment:` of a job ("its reviewers decide"), and with `--online` they look at the environment
   (`GET /repos/{owner}/{repo}/environments/{name}`, the repository from `GITHUB_REPOSITORY` or the `origin` remote) and report the job
@@ -1354,6 +1402,8 @@ You can also see actionlint issues inline in VS Code via the [Trunk VS Code exte
 [jactionlint-matcher]: https://raw.githubusercontent.com/jdx/jactionlint/main/.github/jactionlint-matcher.json
 [preinstall-ubuntu]: https://github.com/actions/runner-images/blob/main/images/ubuntu/Ubuntu2404-Readme.md
 [pre-commit]: https://pre-commit.com
+[ruff]: https://docs.astral.sh/ruff/
+[jujutsu]: https://jj-vcs.github.io/jj/
 [go-shellcheck]: https://github.com/wasilibs/go-shellcheck
 [go-install]: https://go.dev/doc/install
 [docker]: https://www.docker.com/

@@ -2,6 +2,7 @@ package jactionlint
 
 import (
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -124,14 +125,20 @@ var (
 		{"github", "event", "pull_request", "head", "repo"},
 		{"github", "event", "workflow_run", "head_repository"},
 	}
-	// pullRequestNumberContexts are the contexts that hold the number of a pull request of the event that started the run, so a
-	// `refs/pull/<number>/merge` made from them is the pull request that the protection looks at.
-	pullRequestNumberContexts = [][]string{
-		{"github", "event", "number"},
-		{"github", "event", "pull_request"},
-		{"github", "event", "workflow_run", "pull_requests"},
-	}
 )
+
+// refIsPullNumber reports whether the chain is exactly a context that holds the number of a pull request of the event that
+// started the run, so a `refs/pull/<number>/merge` made from it is the pull request that the protection looks at. Not a
+// prefix: `github.event.pull_request.title` and `.head.ref` are other values.
+func refIsPullNumber(chain []string) bool {
+	switch {
+	case slices.Equal(chain, []string{"github", "event", "number"}), slices.Equal(chain, []string{"github", "event", "pull_request", "number"}):
+		return true
+	case len(chain) == 6 && slices.Equal(chain[:4], []string{"github", "event", "workflow_run", "pull_requests"}) && chain[4] == "*" && chain[5] == "number":
+		return true // github.event.workflow_run.pull_requests[0].number, and nothing after it
+	}
+	return false
+}
 
 var reRefsPull = regexp.MustCompile(`(?i)^refs/pull/((?:\$\{\{[^}]*\}\}|[^/])+)/(head|merge)$`)
 
@@ -162,7 +169,7 @@ func checkoutInputForksPR(name, value string) bool {
 			return true
 		}
 		for _, r := range nums {
-			if _, ok := refsMatchAny([]exprRef{r}, pullRequestNumberContexts); !ok {
+			if !refIsPullNumber(r.chain) {
 				return false
 			}
 		}
@@ -182,8 +189,9 @@ type checkoutEvents struct {
 	all bool
 }
 
-// checkoutGuardEvents classifies the events of the workflow, privileged being what privilegedEvents returned.
-func checkoutGuardEvents(w *Workflow, privileged []string, project *Project, sib *siblingWorkflows) checkoutEvents {
+// checkoutGuardEvents classifies the events of the workflow, privileged being what privilegedEvents returned (and the events
+// of the calls that reach a reusable workflow). calleeKnown is true for a reusable workflow whose callers are all known.
+func checkoutGuardEvents(w *Workflow, privileged []string, project *Project, sib *siblingWorkflows, calleeKnown bool) checkoutEvents {
 	var ev checkoutEvents
 	ev.all = len(privileged) > 0
 	for _, event := range privileged {
@@ -191,8 +199,11 @@ func checkoutGuardEvents(w *Workflow, privileged []string, project *Project, sib
 		case "pull_request_target":
 			ev.applies = true
 		case "workflow_run":
-			covered := true
-			for _, we := range webhookEvents(w, event) {
+			// the upstream workflows are the ones of the events of this file: a reusable workflow that a workflow_run workflow
+			// calls has none, so what reaches it is not known to be the run of a pull request
+			evs := webhookEvents(w, event)
+			covered := len(evs) > 0
+			for _, we := range evs {
 				if !upstreamWorkflowsPROnly(project, sib, we) {
 					covered = false
 				}
@@ -206,8 +217,9 @@ func checkoutGuardEvents(w *Workflow, privileged []string, project *Project, sib
 			ev.all = false
 		}
 	}
+	// workflow_call is a gap, unless every caller is known and the events that reach the workflow are the covered ones
 	for _, e := range []string{"issue_comment", "issues", "workflow_call"} {
-		if hasEvent(w, e) {
+		if hasEvent(w, e) && !(e == "workflow_call" && calleeKnown) {
 			ev.all = false
 		}
 	}

@@ -150,6 +150,7 @@ type onlineSession struct {
 	advisories memo[string, []GitHubAdvisory]
 	origins    memo[originKey, originResult]
 	owners     memo[string, *GitHubOwner]
+	releases   memo[releaseKey, *GitHubRelease]
 
 	environments memo[environmentKey, environmentResult]
 }
