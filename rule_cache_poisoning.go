@@ -1129,7 +1129,7 @@ func (rule *RuleCachePoisoning) callersTurnCacheOff(a *ExecAction, name string) 
 		if m == nil {
 			continue
 		}
-		if rule.everyReleaseCallerSets(m[1], g.offWhenTrue) {
+		if rule.everyReleaseCallerSets(m[1], g) {
 			return true
 		}
 	}
@@ -1140,13 +1140,14 @@ func (rule *RuleCachePoisoning) callersTurnCacheOff(a *ExecAction, name string) 
 // value that switches the cache off (the literal false, or true for an input that switches it off when true, or
 // an expression that evaluates to it in every scenario in which the caller publishes), or leaves the input out and
 // the default of the action switches it off. An expression which cannot be evaluated keeps the finding.
-func (rule *RuleCachePoisoning) everyReleaseCallerSets(input string, offWhenTrue bool) bool {
+func (rule *RuleCachePoisoning) everyReleaseCallerSets(input string, g cacheGate) bool {
+	offWhenTrue := g.offWhenTrue
 	// off reports whether the value passed by a caller switches the cache off in every run of the caller that
 	// publishes. A literal is decided as is; an expression is evaluated for each scenario with the evaluator
 	// of the conditions (cache_gate.go), and what it cannot decide counts as not off.
 	off := func(v string, scenarios []triggerScenario) bool {
 		v = strings.TrimSpace(v)
-		if offWhenTrue && isTrueLiteral(v) || !offWhenTrue && isFalseLiteral(v) {
+		if offWhenTrue && g.offs(v) || !offWhenTrue && isFalseLiteral(v) {
 			return true
 		}
 		if !strings.Contains(v, "${{") || len(scenarios) == 0 {
@@ -1157,7 +1158,7 @@ func (rule *RuleCachePoisoning) everyReleaseCallerSets(input string, offWhenTrue
 			return false
 		}
 		for _, sc := range scenarios {
-			if !valueSwitchesOff(evalGate(e, sc), offWhenTrue) {
+			if !valueSwitchesOff(evalGate(e, sc), g) {
 				return false
 			}
 		}
@@ -1195,13 +1196,16 @@ func (rule *RuleCachePoisoning) everyReleaseCallerSets(input string, offWhenTrue
 // valueSwitchesOff reports whether the evaluated value of an input switches the cache off: a boolean, or the
 // string a boolean becomes ("false", or "true" for an input that switches it off when true). An empty string
 // switches off the inputs that are on when set. A value that is not known never does.
-func valueSwitchesOff(v gateValue, offWhenTrue bool) bool {
+func valueSwitchesOff(v gateValue, g cacheGate) bool {
 	switch v.kind {
 	case 1:
-		return v.b == offWhenTrue
+		if g.offWhenTrue {
+			return g.offs(strconv.FormatBool(v.b)) // a boolean becomes the text "true" or "false"
+		}
+		return !v.b
 	case 2:
-		if offWhenTrue {
-			return isTrueLiteral(v.s)
+		if g.offWhenTrue {
+			return g.offs(v.s)
 		}
 		return v.s == "" || isFalseLiteral(v.s)
 	}
@@ -1213,6 +1217,18 @@ func valueSwitchesOff(v gateValue, offWhenTrue bool) bool {
 type cacheGate struct {
 	input       string
 	offWhenTrue bool
+	// offValue says which text switches the cache off, for an input of offWhenTrue which the action reads in its own way
+	// (ramsey/composer-install reads 1, yes, Yes, y, Y, true and True). Nil means a literal true, in any case.
+	offValue func(string) bool
+}
+
+// offs reports whether the value switches the cache off, for an input of offWhenTrue.
+func (g cacheGate) offs(v string) bool {
+	v = strings.TrimSpace(v)
+	if g.offValue != nil {
+		return g.offValue(v)
+	}
+	return isTrueLiteral(v)
 }
 
 // cacheGateInputs lists, for the actions of cacheActions, the inputs which decide whether the action
@@ -1263,7 +1279,7 @@ var cacheGateInputs = map[string][]cacheGate{
 	"pnpm/setup":                                {{input: "cache"}},
 	"pnpm/action-setup":                         {{input: "cache"}},
 	"graalvm/setup-graalvm":                     {{input: "cache"}},
-	"ramsey/composer-install":                   {{input: "ignore-cache", offWhenTrue: true}},
+	"ramsey/composer-install":                   {{input: "ignore-cache", offWhenTrue: true, offValue: composerIgnoresCache}},
 	"determinatesystems/magic-nix-cache-action": nil,
 }
 
