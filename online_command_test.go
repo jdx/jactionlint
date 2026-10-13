@@ -140,7 +140,7 @@ func TestCommandOnlineRateLimitedWarnsOnce(t *testing.T) {
 		w.WriteHeader(http.StatusForbidden)
 		fmt.Fprint(w, `{"message":"API rate limit exceeded"}`)
 	}
-	for _, p := range []string{"/repos/actions/checkout", "/repos/actions/checkout/tags", "/advisories"} {
+	for _, p := range []string{"/repos/actions/checkout", "/repos/actions/checkout/tags", "/repos/actions/checkout/contents/action.yml", "/advisories"} {
 		f.handle(p, limit)
 	}
 	setOnlineEnv(t, f, "tok")

@@ -133,6 +133,7 @@
               "dependabot-syntax",
               "deprecated-action-input",
               "deprecated-commands",
+              "deprecated-node-runtime",
               "deprecated-runner-label",
               "duplicate-job-id",
               "duplicate-job-needs",
@@ -357,6 +358,7 @@
                   "dependabot-syntax",
                   "deprecated-action-input",
                   "deprecated-commands",
+                  "deprecated-node-runtime",
                   "deprecated-runner-label",
                   "duplicate-job-id",
                   "duplicate-job-needs",
@@ -512,6 +514,7 @@
                     "dependabot-syntax",
                     "deprecated-action-input",
                     "deprecated-commands",
+                    "deprecated-node-runtime",
                     "deprecated-runner-label",
                     "duplicate-job-id",
                     "duplicate-job-needs",
@@ -1563,6 +1566,28 @@
         },
         "deprecated-commands": {
           "description": "A deprecated workflow command such as ::set-output is used. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#deprecated-commands",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "deprecated-node-runtime": {
+          "description": "A Node.js runtime that GitHub Actions removed is declared by an action or by an action that is used. Group: policy. Profile: pedantic. Default level: warn. https://jactionlint.jdx.dev/rules#deprecated-node-runtime",
           "oneOf": [
             {
               "$ref": "#/definitions/level"
@@ -2887,6 +2912,11 @@
             {
               "additionalProperties": false,
               "properties": {
+                "accept-step-timeouts": {
+                  "default": false,
+                  "description": "Do not report a job without timeout-minutes when every one of its steps sets timeout-minutes (ghalint's exception). Off by default: the timeout of a step does not cover setting up the job, the post steps of actions or completing the job.",
+                  "type": "boolean"
+                },
                 "default-minutes": {
                   "description": "The timeout-minutes which --fix adds to a job. There is no default: the rule has no fix unless this is set. It is lowered to the max of timeout-too-long when that is smaller, and to 15 on a job that runs only on ubuntu-slim.",
                   "minimum": 0,
@@ -3631,6 +3661,10 @@
                     }
                   ],
                   "description": "The level of the rule: error, warn, info or off."
+                },
+                "strict-event-payloads": {
+                  "description": "Report a property of github.event which the events of the workflow do not have, also when another event has it. Unset, a property is reported only when no webhook event has it, and the pedantic profile turns the option on.",
+                  "type": "boolean"
                 }
               },
               "type": "object"

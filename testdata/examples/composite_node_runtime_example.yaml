@@ -1,0 +1,6 @@
+name: Build
+description: Builds the project
+runs:
+  # ERROR: Node.js 20 is gone, the runner runs this action on Node.js 24
+  using: node20
+  main: dist/index.js

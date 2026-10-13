@@ -81,3 +81,26 @@ func validGitSHA(s string) bool {
 	}
 	return true
 }
+
+const maxGitHubFilePathLen = 255
+
+// validRepoFilePath reports whether s can be the path of a file of a repository as the online checks look
+// it up: slash separated segments of letters, digits, '.', '_' and '-', none of them empty, "." or "..".
+// Anything else (a space, an escape, a backslash, an expression) is not looked up at all.
+func validRepoFilePath(s string) bool {
+	if s == "" || len(s) > maxGitHubFilePathLen {
+		return false
+	}
+	for _, seg := range strings.Split(s, "/") {
+		if seg == "" || seg == "." || seg == ".." {
+			return false
+		}
+		for i := 0; i < len(seg); i++ {
+			c := seg[i]
+			if !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '-' || c == '_' || c == '.') {
+				return false
+			}
+		}
+	}
+	return true
+}
