@@ -40,3 +40,6 @@ jobs:
     services:
       redis:
         image: redis
+  # an expression is not allowed in "uses"
+  call10:
+    uses: ${{ 'oooops' }}
