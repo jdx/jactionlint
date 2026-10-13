@@ -73,6 +73,8 @@ type RuleGitHubEnv struct {
 	// multilineOnly makes an input that is one line (a title, a branch name) an ordinary value: the output-clobbering
 	// rule is about a line break in the value.
 	multilineOnly bool
+	// checkouts caches, for the earlier steps of the job, whether the script checks out a pull request.
+	checkouts map[*Step]bool
 }
 
 // NewRuleGitHubEnv creates a new RuleGitHubEnv instance.
