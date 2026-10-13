@@ -4,6 +4,8 @@ ARG ALPINE_VER=latest
 FROM golang:${GOLANG_VER} AS builder
 WORKDIR /go/src/app
 COPY go.* *.go ./
+# --explain embeds the document of the checks
+COPY docs/checks.md docs/checks.md
 COPY cmd cmd/
 COPY internal internal/
 ENV CGO_ENABLED=0

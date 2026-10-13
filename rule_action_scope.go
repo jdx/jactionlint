@@ -59,6 +59,7 @@ var actionRuleScope = map[string]struct {
 	"use-trusted-publishing":          {scope: actionApplies},         // the publishing steps; the id-token permission is the caller's
 	"anonymous-definition":            {scope: actionNotApplicable},
 	"archived-uses":                   {scope: actionApplies},
+	"repojacking":                     {scope: actionApplies},
 	"artipacked":                      {scope: actionApplies},
 	"bot-conditions":                  {scope: actionCallerDependent},
 	"cache-poisoning":                 {scope: actionCallerDependent},

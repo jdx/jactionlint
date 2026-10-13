@@ -93,6 +93,7 @@ List of checks:
 - [Ref confusion (online)](#check-ref-confusion)
 - [Stale action refs (online)](#check-stale-action-refs)
 - [Archived repositories (online)](#check-archived-uses)
+- [Repojacking (online)](#check-repojacking)
 - [Version comments of pinned actions (online)](#check-ref-version-mismatch)
 - [Concurrency that cancels unrelated pull requests](#check-concurrency-cancels-prs)
 - [Concurrency that cancels a release](#check-concurrency-cancels-release)
@@ -6123,7 +6124,7 @@ jobs:
 Output:
 <!-- Skip update output -->
 ```
-test.yaml:2:3: warning: trigger "pull_request_target" is dangerous: it runs in the context of the base repository with a write token and secrets even when the pull request comes from a fork. use "pull_request" unless write access is required, and never check out or run code of the pull request [dangerous-triggers]
+test.yaml:2:3: warning: trigger "pull_request_target" is dangerous: it runs in the context of the base repository with the default token of the repository (it can write unless the settings of the repository restrict it) and no secrets, even when the pull request comes from a fork. use "pull_request" unless write access is required, and never check out or run code of the pull request [dangerous-triggers]
   |
 2 |   pull_request_target:
   |   ^~~~~~~~~~~~~~~~~~~~
@@ -6139,7 +6140,7 @@ rules:
 ```
 
 The rule `dangerous-triggers` (in the `default` profile) reports the triggers `pull_request_target`, `workflow_run` and
-`issue_comment`. They run with the secrets and the write token of the repository (in the context of the default branch) while
+`issue_comment`. They run with the secrets and the token of the repository (in the context of the default branch) while
 a fork, or any commenter, controls part of the event. Making them safe is hard: it is not enough to avoid checking out the
 pull request, because arguments, environment variables and files that come from the event can still lead to code execution. See
 [Keeping your GitHub Actions and workflows secure: preventing pwn requests](https://securitylab.github.com/resources/github-actions-preventing-pwn-requests/).
@@ -6148,7 +6149,38 @@ Prefer `pull_request` unless the workflow really needs write access (to leave a 
 of `workflow_run`, and a label added by a maintainer instead of a comment as the trigger. A workflow whose steps are only
 `actions/labeler` is accepted for `pull_request_target`, since it never runs code from the pull request.
 
-The rule only looks at the trigger, so a workflow that uses one of them safely is reported as well. Ignore it with
+The message says what the workflow can do with the token and the secrets, so that you see what is at stake:
+
+- the scopes that the token of a job can write (`permissions:` of the job, else of the workflow; `write-all` is every scope). A job
+  that sets no permissions, in a workflow that sets none, gets the default of the repository, which can write unless the settings
+  of the repository restrict it. When some jobs set permissions and others do not, the message names both tokens. Permissions
+  (or a scope) written as an expression are not known, so the token may write;
+- the names of the secrets that an expression reads (not `GITHUB_TOKEN`), or that the workflow passes on without naming them
+  (`secrets: inherit`, `toJSON(secrets)`, `secrets[matrix.name]`).
+
+A workflow that cannot write (`permissions: {}`, `read-all` or only `read` scopes in every job) and reads no secret has little to
+lose: an attacker gets the cache, the artifacts and the compute of the runs, not the repository or its secrets. It is the
+pedantic finding of the rule, as [zizmor#398](https://github.com/zizmorcore/zizmor/issues/398) asks. The option `pedantic` (true
+under the `pedantic` profile) reports it, with a message that says so:
+
+```yaml
+rules:
+  dangerous-triggers:
+    pedantic: true
+```
+
+Since a workflow like that is not the pwn request which the trigger is known for, `untrusted-checkout`, `untrusted-artifact` and
+`template-injection` are the rules which report what it does with the event.
+
+GitHub is also removing the most common way to be bitten: for public repositories which have no Actions event policy,
+[workflow execution protections](https://github.blog/changelog/2026-09-17-workflow-execution-protections-in-github-actions-generally-available)
+add a default rule that disables `pull_request_target`. It is enforced from 2026-11-02 for the repositories that used the default
+policy before (it runs in evaluate mode until then) and does not apply to private or internal repositories. A workflow that needs
+the trigger has to be allowed by an event policy (they can name a workflow file), so a finding of this rule on a public
+repository is also a workflow that GitHub is about to stop. The rule does not know the policy of your repository, so it reports
+the trigger either way.
+
+The rule otherwise only looks at the trigger, so a workflow that uses one of them safely is reported as well. Ignore it with
 `# jactionlint ignore=dangerous-triggers` and a reason, as in `zizmor: ignore[dangerous-triggers]`. zizmor 1.30.1 does not report
 `issue_comment` yet.
 
@@ -6184,12 +6216,37 @@ rules:
   self-hosted-runner: info
 ```
 
-The rule `self-hosted-runner` (in the `pedantic` profile, at the `info` level) points out jobs that have the `self-hosted` label in
-`runs-on:`, also when it comes from a literal value of the matrix. [Self-hosted runners][self-hosted-runner-security] are hard
-to secure: unless they are ephemeral, a job can leave something behind for the next one, and GitHub does not recommend them for
-public repositories, where any pull request can run code on them. The rule is informational because it cannot see how a runner
-is set up. Runner labels of third party providers (without the `self-hosted` label) are not reported, and neither are labels
-that come from an expression it cannot resolve.
+The rule `self-hosted-runner` (in the `pedantic` profile, at the `info` level) points out jobs that run on a self-hosted runner:
+
+- a job with the `self-hosted` label in `runs-on:`, also when it comes from a literal value of the matrix;
+- a job with a label that `self-hosted-runner.labels` of the [configuration file](config.md) lists (it can be a glob such as
+  `arc-*`). The runners of an ARC runner set have no `self-hosted` label, only the name of the set. The list is also where larger
+  runners of GitHub with a name of your choice are listed to be accepted by `runner-label`, and the rule reports them too: use
+  the option `allow` for them;
+- a job in a runner group, `runs-on: {group: ...}`, which holds self-hosted runners or larger runners.
+
+[Self-hosted runners][self-hosted-runner-security] are hard to secure: unless they are ephemeral, a job can leave something behind
+for the next one, and GitHub does not recommend them for public repositories, where any pull request can run code on them. When a
+pull request event (`pull_request`, `pull_request_target`, `pull_request_review`, `pull_request_review_comment`, also of a workflow
+that calls a reusable workflow) starts the workflow, the message says so: that is the case which poutine reports as
+`pr_runs_on_self_hosted`. The rule is informational because it cannot see how a runner is set up, nor whether the repository is
+public. It is not a default finding for that reason: in a private repository, or with approval and ephemeral runners, a pull
+request on a self-hosted runner is normal. Runner labels of third party providers (without the `self-hosted` label) are not
+reported, and neither are labels that come from an expression it cannot resolve.
+
+Two options narrow it down:
+
+```yaml
+rules:
+  self-hosted-runner:
+    allow: ["arc-ephemeral-*", "ci-runners"]  # glob patterns of labels and runner groups which are ephemeral or trusted
+    pull-request-only: true                    # only workflows that a pull request event can start
+```
+
+The labels written in `runs-on` all apply to the runner, so one allowed label (or an allowed group) leaves the job alone. The values that a matrix gives to an expression are alternatives, one run each, so an allowed value leaves only its own run out and the others are judged. A group written with an expression is not matched against `allow`. A reusable workflow is judged by its own events and by those of the workflows that call it; when its callers are not all known, `pull-request-only` reports it.
+
+For the check that matters, set the level you want for the pull request case, for example `self-hosted-runner: {level: warn,
+pull-request-only: true}`.
 
 If you must use self-hosted runners in a public repository, require approval for the workflows of outside contributors and use
 ephemeral (just-in-time) runners.
@@ -7224,6 +7281,64 @@ test.yaml:8:15: warning: action "example/archived-action@v1" is in the archived 
 
 <!-- Skip playground link -->
 
+<a id="check-repojacking"></a>
+## Repojacking (online)
+
+`uses: owner/repo@v1` names the owner of the repository, and a user name or an organization name that nobody holds can be registered
+by anyone. When the owner of an action has deleted the account, or renamed it and let GitHub redirect the old repository name, the
+name is free: whoever registers it and creates the repository publishes what this workflow runs, with its token and secrets, the next
+time it starts. The rule `repojacking` reports an action or a reusable workflow when
+
+- the repository does not exist and neither does its owner: `GET /users/{owner}` answers 404, or
+- GitHub redirects the repository to another owner (the answer of `GET /repos/{owner}/{repo}` names another `full_name`), and the owner
+  of the old name does not exist any more.
+
+Example input:
+
+```yaml
+# requires --online
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      # ERROR: the owner does not exist, so anyone can register it
+      - uses: ghost-owner/deploy@v1
+      # ERROR: the repository moved and the old owner is gone
+      - uses: former-owner/deploy@v1
+      # OK: transferred, and the old owner still exists
+      - uses: moved-org/deploy@v1
+      # OK
+      - uses: actions/checkout@v4
+```
+
+Output:
+
+```
+test.yaml:8:15: warning: action "ghost-owner/deploy@v1" has the owner "ghost-owner", which does not exist on GitHub, so anyone can register that name and publish ghost-owner/deploy under it, and this workflow runs their code. replace it with one of an owner you trust [repojacking]
+  |
+8 |       - uses: ghost-owner/deploy@v1
+  |               ^~~~~~~~~~~~~~~~~~~~~
+test.yaml:10:15: warning: action "former-owner/deploy@v1" has moved to new-owner/deploy and the owner "former-owner" no longer exists on GitHub, so anyone can register that name and create the repository former-owner/deploy, which GitHub then serves instead of the redirect, and this workflow runs their code. use the owner "new-owner" instead [repojacking]
+   |
+10 |       - uses: former-owner/deploy@v1
+   |               ^~~~~~~~~~~~~~~~~~~~~~
+```
+
+<!-- Skip playground link -->
+
+What is **not** reported: a repository that GitHub does not show (a private repository answers 404 like a missing one, so only a
+missing *owner* counts), a repository that was transferred while its old owner still exists (only that owner can create the
+repository again), and a repository renamed within its owner. GitHub retires the names of popular repositories, so an owner that
+no longer exists may not be exploitable for a repository that many people cloned; the API does not tell, and the rule reports what
+the API shows. The rule works with the API of `api.github.com` only: an Enterprise Server runs the actions of github.com through
+GitHub Connect, so its API does not know their owners and an answer "not found" would mean nothing there (nothing is asked and nothing
+is reported). There is no automatic fix: the new owner may be the right one, or the action may have to go.
+
+Requests: the repository (shared with the other online checks, so none more when `archived-uses` or another one runs) and, only when
+that is a 404 or a redirect to another owner, one `GET /users/{owner}` for each owner of the run. The answers are cached like the
+others. A failed lookup is skipped and counted.
+
 <a id="check-ref-version-mismatch"></a>
 ## Version comments of pinned actions (online)
 
@@ -7662,7 +7777,7 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           ref: ${{ github.event.pull_request.head.sha }}
       - run: npm ci && npm test
@@ -7671,13 +7786,13 @@ jobs:
 Output:
 
 ```
-test.yaml:8:16: this step checks out code from a pull request (github.event.pull_request.head.sha) in a "pull_request_target" workflow and "npm" runs it afterwards. the workflow has a write token and secrets, so whoever controls that code can use them. run untrusted code in a "pull_request" workflow without secrets, or check out the base branch and only read the pull request as data [untrusted-checkout]
+test.yaml:8:16: this step checks out code from a pull request (github.event.pull_request.head.sha) in a "pull_request_target" workflow and "npm" runs it afterwards. the workflow has a write token and secrets, so whoever controls that code can use them. run untrusted code in a "pull_request" workflow without secrets, or check out the base branch and only read the pull request as data. the pinned actions/checkout (v4.2.2) predates the protection that refuses the code of a fork pull request here, upgrade to v4.4.0 or later [untrusted-checkout]
   |
 8 |           ref: ${{ github.event.pull_request.head.sha }}
   |                ^~~
 ```
 
-[Playground](https://jactionlint.jdx.dev/#eNpMjjHOwjAMRvee4ht+dWv+hSkTN6nSYJpASUpsl6Hq3VEKqphs6z3JLyeLWaepL/RUYunFlZGkueWBbQMIsdQJFE3cVV0HTaLd5CrbEQvN/LGADsrEFs5LzIn/fSB/zyrn5fQ1gFeUYI8LKHS1+FtXjFGCDoYWSmJ+u0wgdzEcHLbteFQ0WaT5AR/RtvtWm94DACIeQkk=)
+[Playground](https://jactionlint.jdx.dev/#eNpMj8FOwzAMhu97il8C7dawtFtLc+JNpiT1lkJJS2yPw7R3Rx1o4mRb/yfr/+bssOg0HQt9KbEcxZczyeZ9Duw2gBDLOoGimasV16BZtJr8mt0jFlr4lwIqKBM7+CjjnPklJoofs8qbtWHobL+zIdAh2LbZRSLfNUPdHfquafex96f2tcETLntTm/rvIfA9SnKPCyh0cni+XnEeJWkwdKEs5r+GSeQHw8njdnv0Kpod8vKJOGK7vW+rws8AsOBOKw==)
 
 The rule `untrusted-checkout` (in the `default` profile, as an error) reports a `pull_request_target` or `workflow_run`
 workflow that checks out the code of a pull request and then runs it. These events run in the context of the base repository,
@@ -7686,6 +7801,30 @@ a test, a `package.json` hook or a local action is enough to take over the token
 
 Run untrusted code in a `pull_request` workflow, which has no secrets for pull requests from forks. If a privileged workflow
 has to look at the pull request, check out the base branch and read the pull request as data.
+
+The protection of `actions/checkout`: since v7, and since 2026-07-20 in the floating tags of every older major version but v1,
+`actions/checkout` refuses to check out the code of a pull request from a fork in a `pull_request_target` workflow (and in a
+`workflow_run` workflow that a pull request event started). See
+[the announcement](https://github.blog/changelog/2026-06-18-safer-pull_request_target-defaults-for-github-actions-checkout/).
+It refuses a `repository` that is the fork, a `ref` of `refs/pull/N/head` or `refs/pull/N/merge`, and a `ref` that is the head
+or merge commit of the pull request. The input `allow-unsafe-pr-checkout: true` turns it off. The rule takes that into account:
+
+- A checkout that the protection refuses is **not reported**: the step fails for a fork, and a pull request from a branch of the
+  repository is written by someone with write access. The protection is in the floating tags (`@v4`, `@v6`, `@v7`), in a release
+  at or above the first one of its line (`v2.8.0`, `v3.7.0`, `v4.4.0`, `v5.1.0`, `v6.1.0`) and in a commit pinned with a version
+  comment that names such a release (`# v4.4.0`, not `# v4`). The comment is not verified (`ref-version-mismatch` does that
+  online), so a commit is only as guarded as its comment is true. With the option `pedantic` these checkouts are reported too,
+  and the message says that it is only a pull request from a branch of the repository that gets through.
+- A release below the first one of its line, a commit whose comment names such a release, `v1`, and a commit without a version
+  comment are **reported as before**, and the message says to upgrade when the version is known.
+- `allow-unsafe-pr-checkout: true`, or an expression, is a finding of its own on that line, when the workflow has an event that
+  the protection covers and the step has a `ref` or `repository` that is an expression or names `refs/pull/`: nothing stops the
+  step from checking out the code of the fork then. It is reported whether or not a later step runs the code.
+- `git` and `gh pr checkout` in a `run:` step, a branch name (`github.event.pull_request.head.ref`, `github.head_ref`) as the
+  only input, a `refs/pull/N/head` whose number does not come from the pull request of the event (`inputs.number`), and a workflow
+  that also has the event `issue_comment`, `issues` or `workflow_call` are **not covered by the protection**, so they are
+  reported as before. So is a `workflow_run` workflow unless every workflow in `workflows:` is in the repository and only runs
+  for `pull_request*` events.
 
 A step is reported at its checkout when it puts untrusted code in the workspace and a later step in the same job runs it:
 
@@ -8248,7 +8387,7 @@ way because any caller can pass attacker-controlled text. jactionlint does not l
 
 How the rules treat actions:
 
-- **Applies** to the steps (and the metadata) of an action: `action-syntax`, `adhoc-packages`, `archived-uses`, `artipacked`, `background-step-not-waited`, `checkout-static-credentials`, `constant-condition`, `context-availability`, `continue-on-error`, `deprecated-action-input`, `deprecated-commands`, `duplicate-key`, `duplicate-step-id`, `environment-file-redirect`, `expired-ignore`, `expression-syntax`, `expression-type`, `forbidden-uses`, `github-app`, `if-always-true`, `impostor-commit`, `insecure-commands`, `insecure-ssh-keyscan`, `insecure-url-scheme`, `invalid-env-var-name`, `invalid-function-call`, `invalid-id`, `invalid-ignore-comment`, `invalid-local-action`, `invalid-parallel-step`, `invalid-shell-name`, `invalid-uses`, `invisible-characters`, `known-vulnerable-actions`, `malformed-expression-delimiters`, `max-run-lines`, `merge-key`, `misfeature`, `missing-action-input`, `obfuscation`, `outdated-action-runner`, `pipeline-without-pipefail`, `pyflakes`, `recursive-alias`, `ref-confusion`, `ref-version-mismatch`, `require-expression-wrapping`, `self-repository`, `shellcheck`, `stale-action-refs`, `superfluous-actions`, `template-injection`, `typosquat-uses`, `undefined-function`, `undefined-property`, `unknown-action-input`, `unlocked-install`, `unpinned-images`, `unpinned-tools`, `unpinned-uses`, `unsound-contains`, `unsound-prefix-match`, `unsound-ternary`, `unused-anchor`, `unused-ignore`, `unverified-download`, `use-trusted-publishing`, `yaml-syntax`.
+- **Applies** to the steps (and the metadata) of an action: `action-syntax`, `adhoc-packages`, `archived-uses`, `artipacked`, `background-step-not-waited`, `checkout-static-credentials`, `constant-condition`, `context-availability`, `continue-on-error`, `deprecated-action-input`, `deprecated-commands`, `duplicate-key`, `duplicate-step-id`, `environment-file-redirect`, `expired-ignore`, `expression-syntax`, `expression-type`, `forbidden-uses`, `github-app`, `if-always-true`, `impostor-commit`, `insecure-commands`, `insecure-ssh-keyscan`, `insecure-url-scheme`, `invalid-env-var-name`, `invalid-function-call`, `invalid-id`, `invalid-ignore-comment`, `invalid-local-action`, `invalid-parallel-step`, `invalid-shell-name`, `invalid-uses`, `invisible-characters`, `known-vulnerable-actions`, `malformed-expression-delimiters`, `max-run-lines`, `merge-key`, `misfeature`, `missing-action-input`, `obfuscation`, `outdated-action-runner`, `pipeline-without-pipefail`, `pyflakes`, `recursive-alias`, `ref-confusion`, `ref-version-mismatch`, `repojacking`, `require-expression-wrapping`, `self-repository`, `shellcheck`, `stale-action-refs`, `superfluous-actions`, `template-injection`, `typosquat-uses`, `undefined-function`, `undefined-property`, `unknown-action-input`, `unlocked-install`, `unpinned-images`, `unpinned-tools`, `unpinned-uses`, `unsound-contains`, `unsound-prefix-match`, `unsound-ternary`, `unused-anchor`, `unused-ignore`, `unverified-download`, `use-trusted-publishing`, `yaml-syntax`.
 - **Caller-dependent**: `agentic-actions`, `bot-conditions`, `cache-poisoning`, `github-env` (its findings about untrusted input do not depend on the caller), `untrusted-artifact` and `untrusted-checkout`.
 - **Not applicable** because an action does not have what the rule checks, or because only the calling job can decide (`unused-baseline-entry` is about the baseline file, not about a workflow or an action): `anonymous-definition`, `concurrency-cancels-prs`, `concurrency-cancels-release`, `concurrency-limits`, `conflicting-runner-labels`, `cron-too-frequent`, `cyclic-job-needs`, `dangerous-triggers`, `dependabot-cooldown`, `dependabot-execution`, `dependabot-missing-actions-update`, `dependabot-syntax`, `deprecated-runner-label`, `duplicate-job-id`, `duplicate-job-needs`, `duplicate-triggers`, `excessive-permissions`, `gate-job-skipped-on-failure`, `gh-without-token`, `hardcoded-container-credentials`, `invalid-activity-type`, `invalid-cron`, `invalid-event-config`, `invalid-event-filter`, `invalid-glob`, `invalid-label-pattern`, `invalid-local-workflow`, `invalid-permissions`, `invalid-timezone`, `invalid-workflow-call`, `invalid-workflow-call-input`, `invalid-workflow-dispatch-input`, `local-action-checkout`, `matrix-duplicate-value`, `matrix-invalid-exclude`, `missing-permissions`, `missing-timeout`, `missing-workflow-input`, `missing-workflow-secret`, `mutable-runner-label`, `overprovisioned-secrets`, `require-shell`, `required-actions`, `secrets-inherit`, `secrets-outside-env`, `self-hosted-runner`, `timeout-too-long`, `undefined-job-needs`, `undocumented-permissions`, `unknown-event`, `unknown-runner-label`, `unknown-workflow-input`, `unknown-workflow-secret`, `unredacted-secrets`, `unused-baseline-entry`, `unused-job-output`, `unused-needs`, `unused-workflow-input`, `workflow-call-permissions`, `workflow-input-type`, `workflow-run-names`, `workflow-secret-scope`, `workflow-syntax`.
 
