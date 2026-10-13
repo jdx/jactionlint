@@ -17,7 +17,7 @@ func TestConcurrencyDeadlockDocsExample(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	doc := string(b)
+	doc := strings.ReplaceAll(string(b), "\r\n", "\n") // a Windows checkout may convert the line breaks
 	i := strings.Index(doc, `<a id="check-concurrency-deadlock"></a>`)
 	if i < 0 {
 		t.Fatal("the section is missing")
