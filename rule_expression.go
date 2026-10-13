@@ -412,8 +412,11 @@ func (rule *RuleExpression) getActionOutputsType(spec *String) *ObjectType {
 
 	// When the action run at this step is a popular action, we know what outputs are set by it.
 	// Set the output names to `steps.{step_id}.outputs.{name}`.
-	if meta, ok := PopularActions[spec.Value]; ok {
-		return typeOfActionOutputs(meta)
+	// A version tag more specific than the major version (v4.2.4) stands for the major version. A version
+	// comment of a commit does not: an output reported from a comment that went stale could not say so.
+	known := func(s string) bool { _, ok := PopularActions[s]; return ok }
+	if ps, ok := resolvePopularSpec(ParseUses(spec.Value), spec, nil, known); ok {
+		return typeOfActionOutputs(PopularActions[ps.Key])
 	}
 
 	return NewMapObjectType(StringType{})

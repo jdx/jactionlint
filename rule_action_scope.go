@@ -38,6 +38,7 @@ var actionRuleScope = map[string]struct {
 	"continue-on-error":               {scope: actionApplies},         // the steps option; an action has no jobs
 	"duplicate-triggers":              {scope: actionNotApplicable},   // on: belongs to the workflow
 	"gate-job-skipped-on-failure":     {scope: actionNotApplicable},   // needs: between the jobs of a workflow
+	"gh-without-token":                {scope: actionNotApplicable},   // the token comes from the env of the calling job, which a composite action cannot see
 	"github-env":                      {scope: actionCallerDependent}, // privileged only for the events of the callers; its findings about untrusted input do not depend on them
 	"insecure-ssh-keyscan":            {scope: actionApplies},         // the scripts of the steps
 	"insecure-url-scheme":             {scope: actionApplies},         // the scripts and inputs of the steps

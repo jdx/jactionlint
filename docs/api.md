@@ -56,7 +56,10 @@ Followings are unexhaustive list of interesting APIs.
   `Online` no client is ever called, and the WebAssembly build has no built-in client. `LinterOptions.OnlineOptions` sets the
   mode (`OnlineModeCache` answers from the cache only, `OnlineModeStrict` makes `Linter.OnlineFailed()` true when a lookup was
   skipped), the API URL, the token source, the allow and deny lists and the retry behavior; `Linter.OnlineSkipped()` is the
-  number of lookups that failed and were skipped. A failed lookup never makes a `Lint` call fail.
+  number of lookups that failed and were skipped. `Linter.OnlineCoverage()` returns the same facts as a struct (`Status`, `SkippedBy`,
+  `ExcludedRepositories`, and `Answers` with the number of answers from the network, from the cache and stale, and the time of
+  the oldest cached one; `nil` when the online checks were off), which `--online-report` writes as JSON. The time is the local
+  clock when the answer was last received from GitHub, not a date from GitHub. A failed lookup never makes a `Lint` call fail.
 - `Pass` is a visitor to traverse a workflow syntax tree. Multiple passes can be applied at single pass using `Visitor`.
 - `Rule` is an interface for rule checkers and `RuleBase` is a base struct to implement a rule checker. `RuleBase.ReportID()`
   reports an error with the stable ID of the diagnostic. `RuleBase.Error()` reports it with the name of the rule as the ID.

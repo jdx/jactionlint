@@ -45,7 +45,7 @@ func (rule *RuleIfCond) checkIfCond(n *String) {
 		if rule.Config().RuleEnabled("require-expression-wrapping") && strings.TrimSpace(n.Value) != "" {
 			rule.ReportIDf("require-expression-wrapping", n.Pos, "if: condition %q must be wrapped in ${{ }} because \"require-expression-wrapping\" is enabled", n.Value)
 		}
-		rule.checkExpression(n.Pos, n.Value)
+		rule.checkBare(n)
 	}
 }
 
@@ -60,16 +60,38 @@ func (rule *RuleIfCond) checkPlaceholder(n *String, start, end int) {
 		)
 		return
 	}
+	// The string has parsed its expression for the other rules. It is the text which is checked here
+	// when it ends at the first "}}"; a "}}" inside a string literal ends the text here earlier.
+	if c := n.placeholders(); !c.failed && len(c.list) == 1 && c.list[0].after == start+len("${{") && c.list[0].after+c.list[0].n == end+len("}}") {
+		rule.checkConstant(n.Pos, strings.TrimSpace(n.Value[start+len("${{"):end]), c.list[0].node)
+		return
+	}
 	rule.checkExpression(n.Pos, n.Value[start+len("${{"):end])
+}
+
+// checkBare checks an "if:" condition without ${{ }}.
+func (rule *RuleIfCond) checkBare(n *String) {
+	if strings.TrimSpace(n.Value) == n.Value {
+		// Nothing is trimmed, so the cached tree is the one of the text.
+		if e, err := n.condExpr(); err == nil {
+			rule.checkConstant(n.Pos, strings.TrimSpace(n.Value), e)
+		}
+		return
+	}
+	rule.checkExpression(n.Pos, n.Value)
 }
 
 func (rule *RuleIfCond) checkExpression(pos *Pos, input string) {
 	i := strings.TrimSpace(input)
 	l := NewExprLexer(i + "}}")
 	if e, err := NewExprParser().Parse(l); err == nil {
-		if NewExprSemanticsChecker(false, nil, nil).IsConstant(e) {
-			rule.ReportIDf("constant-condition", pos, "constant expression %q in condition. remove the if: section", i)
-		}
+		rule.checkConstant(pos, i, e)
+	}
+}
+
+func (rule *RuleIfCond) checkConstant(pos *Pos, text string, e ExprNode) {
+	if NewExprSemanticsChecker(false, nil, nil).IsConstant(e) {
+		rule.ReportIDf("constant-condition", pos, "constant expression %q in condition. remove the if: section", text)
 	}
 }
 

@@ -23,6 +23,14 @@ func TestRuleIfCond(t *testing.T) {
 		{"${{ foo }} ", false},
 		{" ${{ foo }}", false},
 		{"${{ true }} && ${{ true }}", false},
+		// White space which the lexer does not skip is trimmed before the expression is parsed.
+		{"true\u00a0", false},
+		{"\u00a0false", false},
+		{"\u2003true\u2003", false},
+		{"github.ref_name == 'foo'\u00a0", true},
+		{"${{ true }}\u00a0", false},
+		{"\u00a0${{ true }}", false},
+		{"${{ true }} && x", false},
 	}
 
 	for _, tc := range tests {

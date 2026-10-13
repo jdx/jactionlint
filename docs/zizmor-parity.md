@@ -31,7 +31,7 @@ How to read the table:
 | `dangerous-triggers` | `dangerous-triggers` | default | full; adds `issue_comment`, which zizmor flags from 1.31; reported at the trigger, zizmor reports at `on:`. `pull_request_target` with only `actions/labeler` is exempt in both |
 | `dependabot-cooldown` | `dependabot-cooldown` | default | full on the corpus, plus true positives that zizmor 1.30.1 misses (it stops at the first update which satisfies the minimum). `--fix` needs the `default-days` option; zizmor has a built-in 7. The `semver-*-days` keys are checked by neither |
 | `dependabot-execution` | `dependabot-execution` | default | not measured: no `allow` on the corpus, so both tools report nothing. Covered by unit tests only. The fix is unsafe (zizmor offers it too) |
-| `excessive-permissions` | `excessive-permissions` | default | partial: write scopes, `write-all`, `read-all`, workflow-level default permissions (option) and, with `missing-permissions`, job-level default permissions. zizmor grades findings by persona and confidence, jactionlint has one level per rule |
+| `excessive-permissions` | `excessive-permissions` | default | partial: workflow-level write scopes, `write-all`, `read-all`, a workflow without a top-level `permissions:` (option `require-workflow-permissions`, on under the `pedantic` profile; reported at the first key of the file, as zizmor does) and, with `missing-permissions`, jobs without any permissions. 95.6% of the findings of zizmor on the corpus are reported; the rest are generated files and reusable-only workflows, see [permissions against zizmor](#permissions-against-zizmor). zizmor grades findings by persona and confidence, jactionlint has one level per rule |
 | `forbidden-uses` | `forbidden-uses` | configured | partial: patterns follow zizmor documentation but were not measured against zizmor |
 | `github-app` | `github-app` | default | partial: `actions/create-github-app-token` only, no dependabot side yet |
 | `github-env` | `github-env` | default | partial: no finding on the corpus in either tool. jactionlint accepts values of trusted contexts (`github.sha`, `runner.*`) and `mktemp`/`date` substitutions that zizmor reports in `pull_request_target` and `workflow_run` workflows, and reports untrusted input under every trigger. Writes of values from step outputs or computed in the script are reported only for `pull_request_target` and `workflow_run`. `pwsh` and `cmd` are matched line by line. `inputs.*` of a composite action counts as an outsider's input. See [the check](checks.md#check-github-env) |
@@ -53,7 +53,7 @@ How to read the table:
 | `superfluous-actions` | `superfluous-actions` | default | full: the same findings as zizmor, split like its personas (regular, and the pedantic ones with the option `pedantic`, which the `pedantic` profile turns on). jactionlint adds the archived `actions/create-release` and `actions/upload-release-asset`. See [the check](checks.md#check-superfluous-actions) |
 | `template-injection` | `template-injection` | correctness | partial: see [template injection](#template-injection) |
 | `typosquat-uses` | `typosquat-uses` | default | partial: one typo of the slug, not all of the transformations of zizmor |
-| `undocumented-permissions` | `undocumented-permissions` | pedantic | partial: a comment above a scope counts, where zizmor accepts only a comment at the end of the line; `include-read` for zizmor's read scopes |
+| `undocumented-permissions` | `undocumented-permissions` | pedantic | partial: scopes granted with `write` and, with `include-read` (on under the `pedantic` profile), `read` other than `contents: read`. A comment above a scope counts, where zizmor accepts only a comment at the end of the line; a `none` scope is not reported; one finding per scope, where zizmor reports one per `permissions:` block. 68.7% of the findings of zizmor on the corpus are reported; most of the rest are generated files, see [permissions against zizmor](#permissions-against-zizmor) |
 | `unpinned-images` | `unpinned-images` | default | partial: no per-persona split (an image without a tag against a tag without a digest; the `require-digest` option switches between them), images in `docker://` are `unpinned-uses`. For `container: ${{ matrix.image }}` zizmor points at the container and jactionlint at the matrix value that is not pinned |
 | `unpinned-tools` | `unpinned-tools` | default | full for the 4 actions zizmor knows. The option `pedantic` (on under the `pedantic` profile) adds `run:` installs without an exact version and three more actions. An input that is an expression is not reported, zizmor reports it with low confidence. See [the check](checks.md#check-unpinned-tools) |
 | `unpinned-uses` | `unpinned-uses` | default | partial: `hash-pin`, `ref-pin`, `any` policies with the patterns `*`, `owner/*`, `owner/repo` and `owner/repo/path`; other pattern forms are rejected when the configuration is read. Docker images follow the `*` pattern only |
@@ -125,8 +125,8 @@ numbers are measured again with the harness before each release. Audits with mis
 
 | zizmor audit | zizmor | also reported by jactionlint | missed |
 | --- | --: | --: | --: |
-| `excessive-permissions` | 12,856 | 8,238 | 4,618 |
-| `undocumented-permissions` | 9,244 | 5,178 | 4,066 |
+| `excessive-permissions` | 12,856 | 12,286 | 570 |
+| `undocumented-permissions` | 9,244 | 6,348 | 2,896 |
 | `concurrency-limits` | 5,693 | 4,253 | 1,440 |
 | `anonymous-definition` | 10,011 | 9,048 | 963 |
 | `unpinned-uses` | 21,203 | 20,447 | 756 |
@@ -145,14 +145,18 @@ numbers are measured again with the harness before each release. Audits with mis
 | `bot-conditions` | 38 | 34 | 4 |
 | `self-repository` | 10,729 | 10,728 | 1 |
 
+The rows of `excessive-permissions` and `undocumented-permissions` were measured again with jactionlint from `main` after the
+changes described in [permissions against zizmor](#permissions-against-zizmor); the other rows are those of v2.1.0.
+
 These audits have findings and no misses: `github-app`, `misfeature`, `overprovisioned-secrets`, `secrets-inherit`, `unpinned-tools`,
 `unsound-condition`, `unsound-contains` and `unsound-ternary`. Every audit not listed has no finding on either side. `archived-uses` is
 0 of 109 because it is an online audit here: the offline run of zizmor reports it and jactionlint does not without `--online`.
 
 What the comparison does **not** say. The misses were not analyzed one by one, so none of them is claimed to be a known gap or a
-regression, except what is partial by design (`excessive-permissions`, `undocumented-permissions`, `cache-poisoning`). The online audits
-are not part of it, and the jactionlint-only surplus is not reviewed. The largest groups of misses (`excessive-permissions`,
-`undocumented-permissions`, `concurrency-limits`, `anonymous-definition`) are the candidates for a closer look.
+regression, except what is partial by design (`cache-poisoning`) and the two audits that
+[permissions against zizmor](#permissions-against-zizmor) accounts for. The online audits
+are not part of it, and the jactionlint-only surplus is not reviewed. The largest groups of misses (`concurrency-limits`,
+`anonymous-definition`) are the candidates for a closer look.
 
 jactionlint also reports findings that zizmor does not: `require-shell`, `require-expression-wrapping`, `mutable-runner-label`,
 `secrets-outside-env`, `missing-timeout`, `pipeline-without-pipefail`, `unknown-runner-label`, `checkout-static-credentials`,
@@ -162,7 +166,7 @@ jactionlint also reports findings that zizmor does not: `require-shell`, `requir
 
 Known causes of differences between the tools:
 
-- `undocumented-permissions`: zizmor accepts only a comment at the end of the line, jactionlint accepts one above the scope too.
+- `undocumented-permissions`: zizmor accepts only a comment at the end of the line, jactionlint accepts one above the scope too. See [permissions against zizmor](#permissions-against-zizmor).
 - `artipacked` and `cache-poisoning`: a checkout or a step with a `# zizmor: ignore[...]` comment is hidden for zizmor and reported
   by jactionlint unless the comment maps onto a rule; see [ignore comments](#ignore-comments).
 - `cache-poisoning`: zizmor treats a workflow with `push: {tags-ignore: ["*"]}` as a release workflow, which says the opposite, so
@@ -244,7 +248,12 @@ actions.
 
 - `dangerous-triggers` also reports `issue_comment` (zizmor flags it from the version after 1.30.1) and reports at the trigger, where
   zizmor reports at `on:`.
-- `undocumented-permissions` accepts a comment above a scope as well as at its end of line (zizmor: end of line only).
+- `undocumented-permissions` accepts a comment above a scope as well as at its end of line (zizmor: end of line only), does not report
+  a scope granted with `none`, and reports each scope without a comment where zizmor reports one finding for the whole block (see
+  [permissions against zizmor](#permissions-against-zizmor)).
+- `missing-permissions` (zizmor reports a job without permissions as `excessive-permissions`) and `undocumented-permissions` are
+  policy rules, so they are skipped in generated files by default (`generated-files: skip-policy`), and `missing-permissions`
+  leaves the jobs of a reusable-only workflow to its callers (see [permissions against zizmor](#permissions-against-zizmor)).
 - `cache-poisoning` does not treat `push: {tags-ignore: ["*"]}` as a release workflow, and does not take a tag with read-only permissions, or a
   `branches:` filter with a release branch next to others, for a release unless the option `pedantic` is on (see
   [cache-poisoning against zizmor](#cache-poisoning-against-zizmor)).
@@ -335,6 +344,68 @@ pull request controls (zizmor [#2134](https://github.com/zizmorcore/zizmor/issue
 ([#479](https://github.com/zizmorcore/zizmor/issues/479)), and zizmor's precomputed snapshot of tags and advisories, which would cut the
 first-run cost of `--online`. The registry of rules, [rules.md](rules.md), is the list of what exists.
 
+## Permissions against zizmor
+
+`excessive-permissions` and `undocumented-permissions` had the most misses in the comparison with zizmor. Every miss of the
+corpus run was sorted by cause with a script that reads the workflow, and examples of every cause were read with both messages and
+the workflow open. The numbers below are counts of the harness run over the 1,109 repositories, with the `pedantic` profile and
+zizmor `--persona pedantic`.
+
+### Excessive permissions
+
+zizmor reports a workflow without a top-level `permissions:` once at the start of the document, whatever its jobs set (the
+pedantic persona always, the regular persona for some workflows with more than one job), and once more for every job without
+permissions. jactionlint reported only the jobs (`missing-permissions`): the workflow-level finding is the option
+`require-workflow-permissions` of `excessive-permissions`, which was off, and it was reported at line 1, which a license header
+of comments moves away from the first key (and so does a byte order mark). It is on under the `pedantic` profile now, reported at
+the first key of the file. Composite actions and workflows without `on:` or without jobs (a `workflow-syntax` error of their own)
+are not reported. That accounts for 4,048 of the 4,618 misses. The 570 that are left, from 12,856 findings of zizmor:
+
+| Cause | Findings | Kind |
+| --- | --: | --- |
+| a job of a reusable-only workflow (`on: workflow_call` alone) without `permissions:` | 417 | deliberate |
+| a job in a generated file (`missing-permissions` is a policy rule, which `generated-files: skip-policy` skips) | 153 | deliberate |
+
+A reusable-only workflow is not a place to set the permissions of a job: the callee gets at most what its caller grants, and a
+value that is more than that makes GitHub reject the call, so no value written in the callee is right for every caller.
+`missing-permissions` does not report it (the workflow-level finding above still is). zizmor reports the jobs of such a
+workflow. `generated-files: report` brings the 153 back.
+
+### Undocumented permissions
+
+zizmor reports one finding for a `permissions:` block (at its first scope) when a scope other than `contents: read` has no comment
+at the end of its line, and it does that for read scopes too. jactionlint asked for a comment on write scopes only unless
+`include-read` was on, which accounted for 1,170 of the 4,066 misses. `include-read` is on under the `pedantic` profile now, where
+this rule runs. The 2,896 that are left, from 9,244 findings of zizmor:
+
+| Cause | Findings | Kind |
+| --- | --: | --- |
+| a scope in a generated file (`generated-files: skip-policy`; mostly `*.lock.yml` of gh-aw and `cargo-dist` workflows) | 2,678 | deliberate |
+| a comment on the line above the scope, which zizmor does not count | 184 | deliberate |
+| a scope granted with `none` (`contents: none` is the common one) | 34 | deliberate |
+
+A comment above a scope is how most people write it, and it is read by a reviewer as the explanation, so it counts. `none`
+grants nothing: asking why a scope is *not* granted is not what the audit is for. `generated-files: report` brings the first
+group back.
+
+### Findings only jactionlint reports
+
+With these changes jactionlint-only findings of the three rules (`excessive-permissions`, `missing-permissions`,
+`undocumented-permissions`) go from 308 to 546 on the same run: `excessive-permissions` 39 to 94, `missing-permissions` 65 to 65,
+`undocumented-permissions` 204 to 387. All 238 new ones were read by cause:
+
+- 181 are `undocumented-permissions` for the second and later scopes of a block that zizmor reports once. zizmor reports the
+  block at its first scope; jactionlint points at each scope without a comment, so a fix can be made scope by scope.
+- 55 are `excessive-permissions` for a workflow that zizmor does not audit: 31 in 3 repositories where zizmor 1.30.1 stops with
+  `fatal: no audit was performed` because it cannot load one file (`failed to load file://./action.yaml as action`), so it reports
+  nothing for the repository (4 repositories of the corpus); 12 in `openclaw/openclaw`, whose `zizmor.yml` disables the audit; 9 in files that start with a byte
+  order mark, which zizmor 1.30.1 does not report (a copy of `Terrain3D/.github/workflows/linux.yml` without the mark is
+  reported); 2 in `nrwl/nx`, where zizmor never starts because mise cannot install the tools of the repository; 1 in a workflow
+  with a `workflow-syntax` error.
+- 2 are `undocumented-permissions` in `nrwl/nx`, for the same reason.
+
+jactionlint does not report one finding per block, and does not report a `none` scope, to match zizmor.
+
 ## Template injection
 
 `template-injection` reports attacker controlled contexts, objects holding them and env variables set from them in `run:`,
@@ -393,7 +464,7 @@ Not reported: archives that are downloaded, extracted and run, `go install` or `
 - `untrusted-checkout` follows `actions/checkout`, `gh pr checkout` and `git` commands with a literal reference. A ref that comes from
   an output of an earlier step is not followed. "Runs it" is a list of commands: an unusual build tool that is not in the list of
   commands that only read files counts as running code, while an action that builds the workspace and is not in the short list does
-  not. Conditions on `needs` and `steps` are guards.
+  not. Conditions on `needs` and `steps` are guards, and so is `github.event.pull_request.merged == true` for a checkout of the merged commit.
 - `untrusted-artifact` links the use to the download by the `path` of the artifact, or its `name` (a file in the root of the workspace
   that has another name is not linked), and takes any `=~`, numeric test or checksum as validation.
 - `concurrency-cancels-release` knows a fixed list of publish and deploy actions and commands. A release done by a script of the
