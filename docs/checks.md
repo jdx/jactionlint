@@ -6054,6 +6054,8 @@ rules:
     pull-request-only: true                    # only workflows that a pull request event can start
 ```
 
+The labels written in `runs-on` all apply to the runner, so one allowed label (or an allowed group) leaves the job alone. The values that a matrix gives to an expression are alternatives, one run each, so an allowed value leaves only its own run out and the others are judged. A group written with an expression is not matched against `allow`. A reusable workflow is judged by its own events and by those of the workflows that call it; when its callers are not all known, `pull-request-only` reports it.
+
 For the check that matters, set the level you want for the pull request case, for example `self-hosted-runner: {level: warn,
 pull-request-only: true}`.
 

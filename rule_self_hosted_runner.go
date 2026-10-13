@@ -19,6 +19,9 @@ type RuleSelfHostedRunner struct {
 	wf     *Workflow
 	// pullRequests are the pull request events which start the workflow, in the order of the workflow.
 	pullRequests []string
+	// callersUnknown is true for a reusable workflow which may be called by workflows that are not known (nothing in the
+	// repository calls it, or a caller cannot be followed): a pull request event may reach it, which is not known.
+	callersUnknown bool
 }
 
 // NewRuleSelfHostedRunner creates a new RuleSelfHostedRunner instance.
@@ -36,7 +39,27 @@ func NewRuleSelfHostedRunner() *RuleSelfHostedRunner {
 func (rule *RuleSelfHostedRunner) VisitWorkflowPre(n *Workflow) error {
 	rule.wf = n
 	rule.pullRequests = nil
-	events, _ := n.actorEvents()
+	// The events of the workflow itself and, for a reusable workflow, those of the workflows that call it
+	rule.callersUnknown = false
+	var events []Event
+	called := false
+	for _, e := range n.On {
+		if _, ok := e.(*WorkflowCallEvent); ok {
+			called = true
+		} else {
+			events = append(events, e)
+		}
+	}
+	if called {
+		if n.callerEvents != nil && n.callerEvents.Known {
+			events = append(events, n.callerEvents.Events...)
+		} else {
+			rule.callersUnknown = true
+		}
+	}
+	if n.Action != nil {
+		events, _ = n.actorEvents()
+	}
 	for _, e := range events {
 		if w, ok := e.(*WebhookEvent); ok && w.Hook != nil && slices.Contains(pullRequestEvents, w.Hook.Value) && !slices.Contains(rule.pullRequests, w.Hook.Value) {
 			rule.pullRequests = append(rule.pullRequests, w.Hook.Value)
@@ -47,6 +70,9 @@ func (rule *RuleSelfHostedRunner) VisitWorkflowPre(n *Workflow) error {
 
 // matchesLabel reports whether the label (names of runners are case-insensitive) matches one of the glob patterns.
 func matchesLabel(patterns []string, label string) bool {
+	if strings.Contains(label, "${{") {
+		return false // an expression which is not resolved can be any label, a glob cannot say that it is an allowed one
+	}
 	for _, p := range patterns {
 		if m, err := path.Match(strings.ToLower(p), strings.ToLower(label)); err == nil && m {
 			return true
@@ -72,13 +98,23 @@ func (rule *RuleSelfHostedRunner) VisitJobPre(n *Job) error {
 		m = n.Strategy.Matrix
 	}
 
+	// The labels written in the file are all labels of the runner. The values which a matrix gives to an expression are
+	// alternatives: each is a run of its own, so an allowed one leaves the others to be judged.
 	var labels []*String
+	fixedAllowed := false
 	collect := func(l *String) {
 		if l.ContainsExpression() {
-			labels = append(labels, rule.labels.tryToGetLabelsInMatrix(l, m)...)
-		} else {
-			labels = append(labels, l)
+			for _, alt := range rule.labels.tryToGetLabelsInMatrix(l, m) {
+				if !matchesLabel(allow, alt.Value) {
+					labels = append(labels, alt)
+				}
+			}
+			return
 		}
+		if matchesLabel(allow, l.Value) {
+			fixedAllowed = true
+		}
+		labels = append(labels, l)
 	}
 	if r.LabelsExpr != nil {
 		collect(r.LabelsExpr)
@@ -88,12 +124,7 @@ func (rule *RuleSelfHostedRunner) VisitJobPre(n *Job) error {
 	}
 
 	// A runner which the configuration calls ephemeral or trusted is not reported
-	for _, l := range labels {
-		if matchesLabel(allow, l.Value) {
-			return nil
-		}
-	}
-	if r.Group != nil && matchesLabel(allow, r.Group.Value) {
+	if fixedAllowed || (r.Group != nil && matchesLabel(allow, r.Group.Value)) {
 		return nil
 	}
 
@@ -119,7 +150,7 @@ func (rule *RuleSelfHostedRunner) VisitJobPre(n *Job) error {
 	if pos == nil {
 		return nil
 	}
-	if only, _ := cfg.ruleOptionBool("self-hosted-runner", "pull-request-only"); only && len(rule.pullRequests) == 0 {
+	if only, _ := cfg.ruleOptionBool("self-hosted-runner", "pull-request-only"); only && len(rule.pullRequests) == 0 && !rule.callersUnknown {
 		return nil
 	}
 	msg := fmt.Sprintf("job runs on a self-hosted runner (%s). self-hosted runners are hard to secure and should not run workflows of untrusted pull requests of a public repository", why)
