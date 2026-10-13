@@ -49,6 +49,7 @@ gate-job-skipped-on-failure default correctness error
 gh-without-token correctness correctness error
 github-app default security error
 github-env default security error
+github-script-syntax correctness correctness error
 hardcoded-container-credentials correctness security error
 if-always-true correctness correctness error
 impostor-commit online security error

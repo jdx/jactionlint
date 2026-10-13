@@ -153,6 +153,7 @@
               "gh-without-token",
               "github-app",
               "github-env",
+              "github-script-syntax",
               "hardcoded-container-credentials",
               "if-always-true",
               "impostor-commit",
@@ -380,6 +381,7 @@
                   "gh-without-token",
                   "github-app",
                   "github-env",
+                  "github-script-syntax",
                   "hardcoded-container-credentials",
                   "if-always-true",
                   "impostor-commit",
@@ -538,6 +540,7 @@
                     "gh-without-token",
                     "github-app",
                     "github-env",
+                    "github-script-syntax",
                     "hardcoded-container-credentials",
                     "if-always-true",
                     "impostor-commit",
@@ -2048,6 +2051,28 @@
         },
         "github-env": {
           "description": "Input that an outsider controls, or a value that is not a literal in a workflow triggered by pull_request_target or workflow_run, is written to GITHUB_ENV or GITHUB_PATH. Group: security. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#github-env",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "github-script-syntax": {
+          "description": "The script of actions/github-script has a JavaScript syntax error. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#github-script-syntax",
           "oneOf": [
             {
               "$ref": "#/definitions/level"
