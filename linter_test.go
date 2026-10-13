@@ -247,6 +247,8 @@ func TestLinterLintError(t *testing.T) {
 				l.defaultConfig = fixtureConfig()
 				if strings.HasSuffix(testName, "_online") {
 					l.online = onlineSettings{enabled: true, client: onlineFixtureClient(t)}
+					// The repository whose environments the rules look at, see environmentGates
+					t.Setenv("GITHUB_REPOSITORY", "example/environments")
 				}
 				if strings.HasSuffix(testName, "_security") {
 					l.defaultConfig = fixtureConfig("unpinned-uses")

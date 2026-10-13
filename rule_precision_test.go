@@ -220,6 +220,11 @@ func TestCachePoisoningMorePublishersAndCaches(t *testing.T) {
 		{"no publisher", "      - uses: Swatinem/rust-cache@v2\n      - run: cargo test\n", 0},
 		{"setup-bun in a publishing job", "      - uses: oven-sh/setup-bun@v2\n      - run: npm publish\n", 1},
 		{"setup-bun without its cache", "      - uses: oven-sh/setup-bun@v2\n        with:\n          no-cache: true\n      - run: npm publish\n", 0},
+		{"aube-action with its cache in a publishing job", "      - uses: jdx/aube-action@v1\n        with:\n          run-install: true\n          cache: true\n      - run: aube publish\n", 1},
+		{"aube-action with an expression for its cache", "      - uses: jdx/aube-action@v1\n        with:\n          run-install: true\n          cache: ${{ github.event_name == 'push' }}\n      - run: aube publish\n", 1},
+		{"aube-action without a cache (the default)", "      - uses: jdx/aube-action@v1\n        with:\n          run-install: true\n      - run: aube publish\n", 0},
+		{"aube-action with the cache off", "      - uses: jdx/aube-action@v1\n        with:\n          cache: false\n      - run: aube publish\n", 0},
+		{"a cache in a job that runs aube publish", "      - uses: actions/cache@v5\n        with:\n          path: p\n          key: k\n      - run: aube publish\n", 1},
 		{"setup-rust-toolchain in a publishing job", "      - uses: actions-rust-lang/setup-rust-toolchain@v1\n      - run: cargo publish\n", 1},
 		{"setup-rust-toolchain without its cache", "      - uses: actions-rust-lang/setup-rust-toolchain@v1\n        with:\n          cache: false\n      - run: cargo publish\n", 0},
 	}

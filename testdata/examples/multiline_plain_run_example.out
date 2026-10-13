@@ -1,0 +1,1 @@
+test.yaml:9:11: this "run:" is not a block scalar, so YAML folds its 3 lines into one line and the shell runs the single command `echo "building" npm ci npm test`. write `run: |` to keep the lines [multiline-plain-run]

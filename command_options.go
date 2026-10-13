@@ -50,7 +50,7 @@ var cliOptions = []cliOption{
 	{"Output", "rule-ids", "", "", false, "-rule-ids", "Accepted for compatibility. The text output always shows the rule ID at the end of each finding"},
 	{"Output", "color", "", "WHEN", true, "-color", "Colorize the output: always, never or auto (default). Bare --color means always"},
 	{"Output", "no-color", "", "", false, "-no-color", "Same as --color=never"},
-	{"Output", "no-hints", "", "", false, "-no-hints", "Do not print the hint line after a text run with many findings"},
+	{"Output", "no-hints", "", "", false, "-no-hints", "Do not print the hint line after a text run with many findings, nor the note that shellcheck or pyflakes was not found"},
 	{"Output", "min-severity", "", "LEVEL", false, "-min-severity", "Hide findings less severe than LEVEL: info (default), warn or error"},
 	{"Output", "strict-exit", "", "", false, "-strict-exit", "Exit with status 1 also for findings of level warn and info"},
 
@@ -83,8 +83,8 @@ var cliOptions = []cliOption{
 	{"GitHub API (online checks)", "online-report", "", "FILE", false, "", "Write how complete the online checks were (checked, excluded, skipped lookups, cache age) to FILE as JSON, whatever the --format. The file always says whether they ran"},
 	{"GitHub API (online checks)", "online-max-wait", "", "DURATION", false, "-online-max-wait", "The longest to wait for a GitHub rate limit to reset (default 30s; 0 never waits)"},
 
-	{"External tools", "shellcheck", "", "CMD", false, "-shellcheck", "Command or path of shellcheck (default shellcheck). Empty disables the integration"},
-	{"External tools", "pyflakes", "", "CMD", false, "-pyflakes", "Command or path of pyflakes (default pyflakes). Empty disables the integration"},
+	{"External tools", "shellcheck", "", "CMD", false, "-shellcheck", "Command or path of shellcheck (default shellcheck). Empty disables the integration. A command given here must exist (exit status 3 otherwise)"},
+	{"External tools", "pyflakes", "", "CMD", false, "-pyflakes", "Command or path of pyflakes (default pyflakes). Empty disables the integration. A command given here must exist (exit status 3 otherwise)"},
 	{"External tools", "shellcheck-rcfile", "", "FILE", false, "", "Let shellcheck read this shellcheckrc instead of passing --norc. Overrides \"shellcheck.rcfile\" of the config file"},
 }
 
