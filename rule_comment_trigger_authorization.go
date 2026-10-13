@@ -77,7 +77,9 @@ func readsEarlierDecision(cond *String) bool {
 	}
 	for _, r := range refs {
 		for _, t := range [][]string{{"needs"}, {"steps"}, {"github", "event", "issue", "labels"}, {"github", "event", "pull_request", "labels"}, {"github", "event", "label"}} {
-			if refCovers(r.chain, t) {
+			// the reference has to reach the path: `github.event.issue` or `toJSON(github.event)` read the labels too, but
+			// they say nothing about them
+			if len(r.chain) >= len(t) && refCovers(r.chain, t) {
 				return true
 			}
 		}
@@ -129,7 +131,11 @@ func (rule *RuleCommentTriggerAuthorization) VisitJobPre(n *Job) error {
 			}
 		}
 	}
-	if site == nil || readsEarlierDecision(site) || runsGatedAgent(steps) || jobChecksWhoStarted(rule.wf, n, prev, step) {
+	if site == nil || readsEarlierDecision(site) || runsGatedAgent(steps) {
+		return nil
+	}
+	// without the online checks an environment counts as a guard
+	if guarded, _ := jobChecksWhoStarted(rule.wf, nil, n, prev, step); guarded {
 		return nil
 	}
 	rule.ReportIDf("comment-trigger-authorization", site.Pos,

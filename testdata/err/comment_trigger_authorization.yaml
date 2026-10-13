@@ -117,3 +117,24 @@ jobs:
       - run: echo "$BODY"
         env:
           BODY: ${{ github.event.comment.body }}
+
+  # The whole issue is read, which says nothing about its labels
+  whole-issue:
+    runs-on: ubuntu-latest
+    if: contains(github.event.comment.body, '/deploy') && toJSON(github.event.issue) != ''
+    steps:
+      - run: ./deploy.sh
+
+  # An action whose name only starts like a command action
+  similar-name:
+    runs-on: ubuntu-latest
+    if: startsWith(github.event.comment.body, '/')
+    steps:
+      - uses: github/commands@v1
+
+  # The command action itself
+  command-action:
+    runs-on: ubuntu-latest
+    if: startsWith(github.event.comment.body, '/')
+    steps:
+      - uses: github/command@v1

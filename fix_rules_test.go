@@ -80,6 +80,10 @@ func docWithoutAdditions(t *testing.T, fixed, orig []byte) (any, any) {
 		if _, ok := ojm["timeout-minutes"]; !ok {
 			delete(fjm, "timeout-minutes")
 		}
+		// The permissions which the table of action_permissions.go gives to a job
+		if _, ok := ojm["permissions"]; !ok {
+			delete(fjm, "permissions")
+		}
 	}
 	return o, f
 }

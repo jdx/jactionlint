@@ -11,7 +11,7 @@ var AllWebhookTypes = map[string][]string{
 	"check_run":           {"created", "rerequested", "completed", "requested_action"},
 	"fork":                {},
 	"image_version":       {"created", "ready", "deleted"},
-	"merge_group":         {"checks_requested", "destroyed"},
+	"merge_group":         {"checks_requested"},
 	"pull_request":        {"opened", "closed", "stacked"},
 	"pull_request_target": {"opened", "closed", "stacked"},
 	"repository_dispatch": nil,

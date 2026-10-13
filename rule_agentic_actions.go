@@ -45,6 +45,8 @@ type RuleAgenticActions struct {
 	// checkoutTrigger is the first event of the workflow that runs with a fork's pull request at hand.
 	checkoutTrigger string
 	anyTrigger      bool
+	// gates tells with the online checks whether the environment of a job holds it back, see environmentGates.
+	gates *environmentGates
 }
 
 // NewRuleAgenticActions creates a new RuleAgenticActions instance. With anyTrigger the unsafe settings of
@@ -122,12 +124,14 @@ func (rule *RuleAgenticActions) checkAgent(job *Job, prev []*Step, step *Step, a
 			}
 		}
 	}
-	if !agent.Gated && rule.trigger != "" && !rule.agentGuarded(job, prev, step) {
-		exposed = true
-		if !limited {
-			rule.ReportIDf("agentic-actions", a.Uses.Pos,
-				"%s does not check who started it, and this workflow runs on %q, which anyone can cause on a public repository. the text they write steers the agent, which has the secrets of the job%s. restrict the job with an if: on github.event.comment.author_association (OWNER, MEMBER or COLLABORATOR) or on a label that only maintainers add, run it in an environment with required reviewers, or limit the agent to the few tools it needs",
-				agent.Title, rule.trigger, token)
+	if !agent.Gated && rule.trigger != "" {
+		if guarded, gate := rule.agentGuarded(job, prev, step); !guarded {
+			exposed = true
+			if !limited {
+				rule.ReportIDf("agentic-actions", a.Uses.Pos,
+					"%s does not check who started it, and this workflow runs on %q, which anyone can cause on a public repository. the text they write steers the agent, which has the secrets of the job%s%s. restrict the job with an if: on github.event.comment.author_association (OWNER, MEMBER or COLLABORATOR) or on a label that only maintainers add, run it in an environment with required reviewers, or limit the agent to the few tools it needs",
+					agent.Title, rule.trigger, token, gate)
+			}
 		}
 	}
 
@@ -295,33 +299,50 @@ func checksOutPullRequest(s *Step) bool {
 // agent: a condition on the actor, the association with the repository or a label, an environment, or a
 // step that checks the permission of the actor. It is a heuristic: it cannot tell a condition that is
 // correct from one that merely mentions the actor.
-func (rule *RuleAgenticActions) agentGuarded(job *Job, prev []*Step, step *Step) bool {
-	return jobChecksWhoStarted(rule.wf, job, prev, step)
+//
+// An environment counts as a guard because its reviewers decide, unless the online checks find that it has no required
+// reviewers (or does not exist). Then it guards nothing, and the second result says so for the message, as ". text"
+// (empty when an environment was not the reason).
+func (rule *RuleAgenticActions) agentGuarded(job *Job, prev []*Step, step *Step) (bool, string) {
+	return jobChecksWhoStarted(rule.wf, rule.gates, job, prev, step)
 }
 
-// jobChecksWhoStarted is the check of the user that agentic-actions and comment-trigger-authorization share. The
-// step is the one that is judged (nil when the job as a whole is), and prev are the steps of the job before it.
-func jobChecksWhoStarted(wf *Workflow, job *Job, prev []*Step, step *Step) bool {
-	if job.Environment != nil {
-		return true
+// jobChecksWhoStarted is the check of the user that agentic-actions and comment-trigger-authorization share. The step
+// is the one that is judged (nil when the job as a whole is), prev are the steps of the job before it, and gates (nil
+// without the online checks) tells whether the environment of a job holds it back.
+func jobChecksWhoStarted(wf *Workflow, gates *environmentGates, job *Job, prev []*Step, step *Step) (bool, string) {
+	// What needs no lookup comes first: a condition or a step that guards the job decides without asking GitHub
+	if guardInCond(job.If) || step != nil && guardInCond(step.If) || stepsGuard(prev) {
+		return true, ""
 	}
-	if guardInCond(job.If) || step != nil && guardInCond(step.If) {
-		return true
-	}
-	if stepsGuard(prev) {
-		return true
-	}
+	var needed []*Job
 	for _, id := range job.Needs {
 		if id == nil {
 			continue
 		}
 		if j := wf.Jobs[strings.ToLower(id.Value)]; j != nil {
-			if j.Environment != nil || guardInCond(j.If) || stepsGuard(flattenSteps(j.Steps)) {
-				return true
+			if guardInCond(j.If) || stepsGuard(flattenSteps(j.Steps)) {
+				return true, ""
 			}
+			needed = append(needed, j)
 		}
 	}
-	return false
+	// The reviewers of an environment guard the job, unless the online checks find that it has none. The first
+	// environment which is no gate is told in the message.
+	gate := ""
+	for _, j := range append([]*Job{job}, needed...) {
+		if j.Environment == nil {
+			continue
+		}
+		note, noGate := gates.noGate(j)
+		if !noGate {
+			return true, ""
+		}
+		if gate == "" {
+			gate = ". " + note
+		}
+	}
+	return false, gate
 }
 
 func guardInCond(c *String) bool {
@@ -340,6 +361,16 @@ func guardInCond(c *String) bool {
 // commandActionsCheckingUser are the actions that read a command from a comment and check that the commenter has
 // write access (their input "permission" or "permission-level" says how much, "none" turns it off).
 var commandActionsCheckingUser = []string{"peter-evans/slash-command-dispatch", "xt0rted/slash-command-action", "github/command", "github/branch-deploy"}
+
+// usesAction reports whether the lower case `uses:` value names the action: the name is followed by `@` (the ref), `/`
+// (a path in the repository) or the end, so `github/command` is not `github/commands@v1`.
+func usesAction(uses, name string) bool {
+	if !strings.HasPrefix(uses, name) {
+		return false
+	}
+	rest := uses[len(name):]
+	return rest == "" || rest[0] == '@' || rest[0] == '/'
+}
 
 func stepsGuard(steps []*Step) bool {
 	for _, s := range steps {
@@ -362,7 +393,7 @@ func stepsGuard(steps []*Step) bool {
 				}
 				// the command actions that look up the permission of the commenter themselves (unless told not to)
 				for _, c := range commandActionsCheckingUser {
-					if strings.HasPrefix(lower, c) {
+					if usesAction(lower, c) {
 						if v, ok := inputValue(e, "permission"); ok && strings.EqualFold(v, "none") {
 							break
 						}
@@ -373,7 +404,7 @@ func stepsGuard(steps []*Step) bool {
 					}
 				}
 				// a script that asks the API who the user is: actions/github-script
-				if in := e.Inputs["script"]; in != nil && in.Value != nil && strings.HasPrefix(lower, "actions/github-script") {
+				if in := e.Inputs["script"]; in != nil && in.Value != nil && usesAction(lower, "actions/github-script") {
 					script := strings.ToLower(in.Value.Value)
 					if strings.Contains(script, "collaborator") || strings.Contains(script, "membership") || strings.Contains(script, "permission") || strings.Contains(script, "author_association") || strings.Contains(script, "user.login") || strings.Contains(script, "sender.login") || strings.Contains(script, "context.actor") {
 						return true
@@ -467,6 +498,8 @@ func init() {
 		}
 		v, _ := env.config.RuleOption("agentic-actions", "any-trigger")
 		b, _ := v.(bool)
-		return []Rule{NewRuleAgenticActions(b)}
+		r := NewRuleAgenticActions(b)
+		r.gates = newEnvironmentGates(env, r.Debug)
+		return []Rule{r}
 	})
 }
