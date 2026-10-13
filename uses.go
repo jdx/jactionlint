@@ -90,7 +90,8 @@ const (
 	// RefNone means the value has no ref at all (local paths, a missing '@', or a Docker image
 	// without a digest).
 	RefNone RefKind = iota
-	// RefFullSHA is a full-length (40 hex digits) commit SHA.
+	// RefFullSHA is a full-length commit SHA: 40 hex digits, or 64 for a repository with the SHA-256 object format
+	// (https://github.com/actions/runner/pull/4347).
 	RefFullSHA
 	// RefShortSHA is an abbreviated commit SHA (7 to 39 hex digits). It is a heuristic: GitHub
 	// cannot tell it from a branch or tag that happens to be spelled in hex.
@@ -265,7 +266,7 @@ func classifyRef(ref string, has, dynamic bool) RefKind {
 		return RefNone
 	case dynamic:
 		return RefOther
-	case len(ref) == 40 && isHex(ref):
+	case (len(ref) == 40 || len(ref) == 64) && isHex(ref):
 		return RefFullSHA
 	case len(ref) >= 7 && len(ref) < 40 && isHex(ref):
 		return RefShortSHA

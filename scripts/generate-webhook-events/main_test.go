@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -98,6 +99,22 @@ func TestParseError(t *testing.T) {
 				t.Fatalf("wanted %q in error %q", tc.want, err)
 			}
 		})
+	}
+}
+
+// The production table makes a types table generated from documentation which does not list the types accept them.
+func TestProductionExtraTypes(t *testing.T) {
+	parsed := map[string][]string{"merge_group": {"checks_requested"}, "pull_request": {"opened"}, "pull_request_target": {"opened"}, "image_version": {}}
+	if err := applyExtraTypes(parsed); err != nil {
+		t.Fatal(err)
+	}
+	for _, ev := range []string{"pull_request", "pull_request_target"} {
+		if !slices.Contains(parsed[ev], "stacked") {
+			t.Errorf("%s does not have the stacked type: %v", ev, parsed[ev])
+		}
+	}
+	if diff := cmp.Diff([]string{"created", "ready", "deleted"}, parsed["image_version"]); diff != "" {
+		t.Error(diff)
 	}
 }
 

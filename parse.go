@@ -542,7 +542,7 @@ func (p *parser) parseWorkflowDispatchEventInput(name *String, n *yaml.Node) *Di
 				p.errorf(e.val, `input type of workflow_dispatch event must be one of "string", "number", "boolean", "choice", "environment" but got %q`, e.val.Value)
 			}
 		case "options":
-			ret.Options = p.parseStringSequence("options", e.val, false, false)
+			ret.Options = p.parseStringSequence("options", e.val, false, true)
 		default:
 			p.unexpectedKey(e.key, "inputs", []string{"description", "required", "default"})
 		}
@@ -761,12 +761,14 @@ func (p *parser) parseImageVersionEvent(pos *Pos, n *yaml.Node) *ImageVersionEve
 
 	for e := range p.parseSectionMapping("image_version", n, true, true) {
 		switch e.id {
+		case "types":
+			ret.Types = p.parseStringOrStringSequence(e.key.Value, e.val, false, false)
 		case "names":
 			ret.Names = p.parseStringSequence("names", e.val, false, false)
 		case "versions":
 			ret.Versions = p.parseStringSequence("versions", e.val, false, false)
 		default:
-			p.unexpectedKey(e.key, "image_version", []string{"names", "versions"})
+			p.unexpectedKey(e.key, "image_version", []string{"types", "names", "versions"})
 		}
 	}
 
@@ -1723,6 +1725,10 @@ func (p *parser) parseJob(id *String, n *yaml.Node) *Job {
 		case "timeout-minutes":
 			ret.TimeoutMinutes = p.parseTimeoutMinutes(v)
 			stepsOnlyKey = k
+		case "cancel-timeout-minutes":
+			// Accepted by the schema of the runner (job-factory) but not documented
+			ret.CancelTimeoutMinutes = p.parseFloat(v)
+			stepsOnlyKey = k
 		case "strategy":
 			ret.Strategy = p.parseStrategy(k.Pos, v)
 		case "continue-on-error":
@@ -1783,6 +1789,7 @@ func (p *parser) parseJob(id *String, n *yaml.Node) *Job {
 				"if",
 				"steps",
 				"timeout-minutes",
+				"cancel-timeout-minutes",
 				"strategy",
 				"continue-on-error",
 				"container",
@@ -1859,6 +1866,8 @@ func (p *parser) parse(n *yaml.Node) *Workflow {
 		switch e.id {
 		case "name":
 			w.Name = p.parseString(v, true)
+		case "description":
+			w.Description = p.parseString(v, true)
 		case "on":
 			w.On = p.parseEvents(v)
 		case "permissions":
@@ -1878,6 +1887,7 @@ func (p *parser) parse(n *yaml.Node) *Workflow {
 		default:
 			p.unexpectedKey(k, "workflow", []string{
 				"name",
+				"description",
 				"run-name",
 				"on",
 				"permissions",

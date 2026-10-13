@@ -29,10 +29,21 @@ const theURL = "https://docs.github.com/en/actions/reference/workflows-and-actio
 // added to the types scraped from the documentation, so that regenerating the table does not drop them.
 // An event of this table which is missing in the documentation is an error because it means the entry is stale.
 //
-// There is none for merge_group: GitHub documents "destroyed" for the webhook event, but the page of the workflow
-// triggers and the workflow schemas of the runner and of the language service list only "checks_requested" for
-// on.merge_group.types (23f9662c added it from the webhook documentation).
-var extraTypes = map[string][]string{}
+// Add an entry only with a source that shows that GitHub accepts the type. The sources are the schema of the language
+// service, https://github.com/actions/languageservices (workflow-parser/src/workflow-v1.0.json), and the one of the
+// runner, https://github.com/actions/runner (src/Sdk/WorkflowParser/workflow-v1.0.json).
+var extraTypes = map[string][]string{
+	// There is no entry for merge_group: GitHub documents "destroyed" for the webhook event, but the page of the
+	// workflow triggers and the workflow schemas of the runner and of the language service list only
+	// "checks_requested" for on.merge_group.types (23f9662c had added it from the webhook documentation).
+	// https://github.com/actions/languageservices/pull/384 ("The `stacked` activity type is now available on
+	// `pull_request` and `pull_request_target` events for Actions.")
+	"pull_request":        {"stacked"},
+	"pull_request_target": {"stacked"},
+	// `image-version-activity-type` of the schema allows created, ready and deleted. The documentation says
+	// "Not applicable" for the activity types of the event.
+	"image_version": {"created", "ready", "deleted"},
+}
 
 // applyExtraTypes adds the activity types of extraTypes which are not in parsed yet.
 func applyExtraTypes(parsed map[string][]string) error {
