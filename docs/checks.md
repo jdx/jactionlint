@@ -1014,7 +1014,9 @@ false positives can be avoided by showing the shell name explicitly. It is also 
   shell: pwsh
 ```
 
-When you want to control shellcheck behavior, [`SHELLCHECK_OPTS` environment variable][shellcheck-env-var] is useful.
+When you want to control shellcheck behavior, the [`shellcheck` section of the config file](config.md#shellcheck) (a `rcfile`, more
+`args`, optional checks to `enable`) or the `--shellcheck-rcfile` option keep the settings with the repository. jactionlint runs
+shellcheck with `--norc` unless a rc file is given. The [`SHELLCHECK_OPTS` environment variable][shellcheck-env-var] is useful too.
 
 From command line:
 
