@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // RuleGroup classifies a rule by what it protects against.
@@ -257,11 +258,21 @@ type RuleEnv struct {
 	// missing). Such a rule did not run, so an ignore for it is not unused.
 	skipped map[string]bool
 	proc    *concurrentProcess
-	online  *onlineSession // nil unless the online checks are on
-	action  bool           // the file is the metadata of an action (action.yml), see actionRuleScope
+	online  *onlineSession   // nil unless the online checks are on
+	action  bool             // the file is the metadata of an action (action.yml), see actionRuleScope
+	now     func() time.Time // LinterOptions.Now; nil means time.Now
 
 	log  func(args ...interface{})
 	name string // the factory being run
+}
+
+// Now returns the current time, which a rule that depends on a date (the retirement of a runner label) reads.
+// It is time.Now unless LinterOptions.Now is set.
+func (e *RuleEnv) Now() time.Time {
+	if e != nil && e.now != nil {
+		return e.now()
+	}
+	return time.Now()
 }
 
 // Source returns the content of the file being linted. A rule which attaches a Fix needs it to turn

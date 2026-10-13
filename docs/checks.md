@@ -101,6 +101,7 @@ List of checks:
 - [Duplicate triggers](#check-duplicate-triggers)
 - [Failures hidden by continue-on-error (pedantic)](#check-continue-on-error)
 - [Mutable runner labels (pedantic)](#check-mutable-runner-label)
+- [Deprecated runner labels (pedantic)](#check-deprecated-runner-label)
 - [Invisible characters](#check-invisible-characters)
 - [Unsound prefix matches on names](#check-unsound-prefix-match)
 - [Composite actions](#check-composite-actions)
@@ -2098,6 +2099,12 @@ runs on a runner of its owner, who chooses the other labels, so a label next to 
 `self-hosted-runner.strict-labels` is on). A label made of a known GitHub-hosted label and the size of a larger runner
 (`ubuntu-latest-16-cores`, `ubuntu-24.04-xl`, `macos-14-xlarge`, `windows-2022-32cpu`) is accepted too; the names that an
 organization gives to its larger runners are custom labels, set them in the configuration file.
+
+A label of an image that GitHub has retired (`macos-13`, `macos-12`, `ubuntu-20.04`, `windows-2019` and older) is unknown, and the message says when it was
+retired and which labels to use instead, with the announcement. A job on such a label never gets a runner. The dates are in one table in
+`runner_label_retirement.go`. A label that is still available but has a date for its retirement is reported by the pedantic rule
+[`deprecated-runner-label`](#check-deprecated-runner-label) until that day; on the day of the retirement `unknown-runner-label` reports it, with the
+same message as for the labels that went before it, whatever the version of jactionlint.
 
 In addition to checking label values, jactionlint checks combinations of labels. `runs-on:` section can be an array that contains
 multiple labels. In this case, a runner which has all the labels will be selected. However, those labels combinations can have
@@ -7702,6 +7709,48 @@ rules:
 
 A label in a matrix is reported but never fixed, because the same value may be compared in an expression of the job.
 
+<a id="check-deprecated-runner-label"></a>
+## Deprecated runner labels (pedantic)
+
+Example input:
+
+```yaml
+on: push
+jobs:
+  test:
+    runs-on: macos-14
+    steps:
+      - run: echo test
+```
+
+Output:
+<!-- Skip update output -->
+```
+test.yaml:4:14: warning: runner label "macos-14" is deprecated: GitHub retires it on 2026-11-02 and fails jobs on it on scheduled brownout days in October 2026. use "macos-15" or "macos-26" instead (https://github.com/actions/runner-images/issues/13518) [deprecated-runner-label]
+  |
+4 |     runs-on: macos-14
+  |              ^~~~~~~~
+```
+
+<!-- Skip playground link -->
+
+The output above is from the following `rules` section of the [configuration file](config.md):
+
+```yaml
+rules:
+  deprecated-runner-label: warn
+```
+
+The rule `deprecated-runner-label` (in the `pedantic` profile, as a warning) reports a label of a GitHub-hosted runner that GitHub has announced to
+retire but that still works: `macos-14`, `macos-14-large`, `macos-14-xlarge` (retired on 2026-11-02, with brownouts in October 2026), `ubuntu-22.04` and
+`ubuntu-22.04-arm` (deprecated since 2026-09-17, retired on 2027-04-17). The message has the date, the labels to move to and the announcement. The
+rule reads `runs-on` and the values of `matrix.<key>` that `runs-on: ${{ matrix.<key> }}` selects. Jobs with `self-hosted` among the labels are not reported.
+
+It is not in the `default` profile, and it does not fail a build, because the label works until its day. From the day of the retirement the label is
+unknown, and [`unknown-runner-label`](#check-runner-labels) reports it as an error in every profile. The rule has no automatic fix:
+jactionlint does not know which image your jobs can move to. Every date is in one table, `runnerLabelRetirements` in `runner_label_retirement.go`, which
+is checked against the announcements: a deprecation that GitHub announces later is one more row.
+
 [yamllint]: https://github.com/adrienverge/yamllint
 [issue-form]: https://github.com/jdx/jactionlint/issues/new
 [syntax-doc]: https://docs.github.com/en/actions/learn-github-actions/workflow-syntax-for-github-actions
@@ -7777,7 +7826,7 @@ How the rules treat actions:
 
 - **Applies** to the steps (and the metadata) of an action: `action-syntax`, `adhoc-packages`, `archived-uses`, `artipacked`, `background-step-not-waited`, `checkout-static-credentials`, `constant-condition`, `context-availability`, `continue-on-error`, `deprecated-action-input`, `deprecated-commands`, `duplicate-key`, `duplicate-step-id`, `expired-ignore`, `expression-syntax`, `expression-type`, `forbidden-uses`, `github-app`, `if-always-true`, `impostor-commit`, `insecure-commands`, `insecure-ssh-keyscan`, `insecure-url-scheme`, `invalid-env-var-name`, `invalid-function-call`, `invalid-id`, `invalid-ignore-comment`, `invalid-local-action`, `invalid-parallel-step`, `invalid-shell-name`, `invalid-uses`, `invisible-characters`, `known-vulnerable-actions`, `max-run-lines`, `merge-key`, `misfeature`, `missing-action-input`, `obfuscation`, `outdated-action-runner`, `pipeline-without-pipefail`, `pyflakes`, `recursive-alias`, `ref-confusion`, `ref-version-mismatch`, `require-expression-wrapping`, `self-repository`, `shellcheck`, `stale-action-refs`, `superfluous-actions`, `template-injection`, `typosquat-uses`, `undefined-function`, `undefined-property`, `unknown-action-input`, `unlocked-install`, `unpinned-images`, `unpinned-tools`, `unpinned-uses`, `unsound-contains`, `unsound-prefix-match`, `unsound-ternary`, `unused-anchor`, `unused-ignore`, `unverified-download`, `use-trusted-publishing`, `yaml-syntax`.
 - **Caller-dependent**: `agentic-actions`, `bot-conditions`, `cache-poisoning`, `github-env` (its findings about untrusted input do not depend on the caller), `untrusted-artifact` and `untrusted-checkout`.
-- **Not applicable** because an action does not have what the rule checks, or because only the calling job can decide (`unused-baseline-entry` is about the baseline file, not about a workflow or an action): `anonymous-definition`, `concurrency-cancels-prs`, `concurrency-cancels-release`, `concurrency-limits`, `conflicting-runner-labels`, `cron-too-frequent`, `cyclic-job-needs`, `dangerous-triggers`, `dependabot-cooldown`, `dependabot-execution`, `dependabot-missing-actions-update`, `dependabot-syntax`, `duplicate-job-id`, `duplicate-job-needs`, `duplicate-triggers`, `excessive-permissions`, `gate-job-skipped-on-failure`, `hardcoded-container-credentials`, `invalid-activity-type`, `invalid-cron`, `invalid-event-config`, `invalid-event-filter`, `invalid-glob`, `invalid-label-pattern`, `invalid-local-workflow`, `invalid-permissions`, `invalid-timezone`, `invalid-workflow-call`, `invalid-workflow-call-input`, `invalid-workflow-dispatch-input`, `local-action-checkout`, `matrix-duplicate-value`, `matrix-invalid-exclude`, `missing-permissions`, `missing-timeout`, `missing-workflow-input`, `missing-workflow-secret`, `mutable-runner-label`, `overprovisioned-secrets`, `require-shell`, `required-actions`, `secrets-inherit`, `secrets-outside-env`, `self-hosted-runner`, `timeout-too-long`, `undefined-job-needs`, `undocumented-permissions`, `unknown-event`, `unknown-runner-label`, `unknown-workflow-input`, `unknown-workflow-secret`, `unredacted-secrets`, `unused-baseline-entry`, `unused-job-output`, `unused-needs`, `unused-workflow-input`, `workflow-call-permissions`, `workflow-input-type`, `workflow-run-names`, `workflow-secret-scope`, `workflow-syntax`.
+- **Not applicable** because an action does not have what the rule checks, or because only the calling job can decide (`unused-baseline-entry` is about the baseline file, not about a workflow or an action): `anonymous-definition`, `concurrency-cancels-prs`, `concurrency-cancels-release`, `concurrency-limits`, `conflicting-runner-labels`, `cron-too-frequent`, `cyclic-job-needs`, `dangerous-triggers`, `dependabot-cooldown`, `dependabot-execution`, `dependabot-missing-actions-update`, `dependabot-syntax`, `deprecated-runner-label`, `duplicate-job-id`, `duplicate-job-needs`, `duplicate-triggers`, `excessive-permissions`, `gate-job-skipped-on-failure`, `hardcoded-container-credentials`, `invalid-activity-type`, `invalid-cron`, `invalid-event-config`, `invalid-event-filter`, `invalid-glob`, `invalid-label-pattern`, `invalid-local-workflow`, `invalid-permissions`, `invalid-timezone`, `invalid-workflow-call`, `invalid-workflow-call-input`, `invalid-workflow-dispatch-input`, `local-action-checkout`, `matrix-duplicate-value`, `matrix-invalid-exclude`, `missing-permissions`, `missing-timeout`, `missing-workflow-input`, `missing-workflow-secret`, `mutable-runner-label`, `overprovisioned-secrets`, `require-shell`, `required-actions`, `secrets-inherit`, `secrets-outside-env`, `self-hosted-runner`, `timeout-too-long`, `undefined-job-needs`, `undocumented-permissions`, `unknown-event`, `unknown-runner-label`, `unknown-workflow-input`, `unknown-workflow-secret`, `unredacted-secrets`, `unused-baseline-entry`, `unused-job-output`, `unused-needs`, `unused-workflow-input`, `workflow-call-permissions`, `workflow-input-type`, `workflow-run-names`, `workflow-secret-scope`, `workflow-syntax`.
 
 Example input:
 

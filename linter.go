@@ -860,6 +860,7 @@ func (l *Linter) check(
 			shellcheck:             l.shellcheck,
 			pyflakes:               l.pyflakes,
 			proc:                   proc,
+			now:                    l.now,
 		}
 		rules := newBuiltinRules(env, l.log)
 		skippedRules = env.skipped

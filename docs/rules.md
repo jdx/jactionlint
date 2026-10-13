@@ -59,6 +59,7 @@ rules:
 | [dependabot-syntax](#dependabot-syntax) | correctness | error | correctness |
 | [deprecated-action-input](#deprecated-action-input) | correctness | error | correctness |
 | [deprecated-commands](#deprecated-commands) | correctness | error | correctness |
+| [deprecated-runner-label](#deprecated-runner-label) | policy | warn | pedantic |
 | [duplicate-job-id](#duplicate-job-id) | correctness | error | correctness |
 | [duplicate-job-needs](#duplicate-job-needs) | correctness | error | correctness |
 | [duplicate-key](#duplicate-key) | correctness | error | correctness |
@@ -415,6 +416,15 @@ A deprecated workflow command such as ::set-output is used.
 - Default level: error
 - Profile: correctness
 - Details and examples: [checks](./checks.md#check-deprecated-workflow-commands)
+
+## deprecated-runner-label
+
+A runner label is deprecated and GitHub is going to retire it on a known date, such as macos-14.
+
+- Group: policy
+- Default level: warn
+- Profile: pedantic
+- Details and examples: [checks](./checks.md#check-deprecated-runner-label)
 
 ## duplicate-job-id
 
@@ -1166,7 +1176,7 @@ An unknown Webhook event is used.
 
 ## unknown-runner-label
 
-A runner label is unknown.
+A runner label is unknown, or is one that GitHub has retired.
 
 - Group: correctness
 - Default level: error
