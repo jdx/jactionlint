@@ -170,7 +170,7 @@ func FuzzPinFix(f *testing.F) {
 			return
 		}
 		sess := newOnlineSession(context.Background(), client(), nil)
-		fix, err := pinFix(sess, src, starts[line-1], col)
+		fix, err := pinFix(sess, src, starts[line-1], col, false)
 		if err != nil {
 			return
 		}

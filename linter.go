@@ -996,7 +996,7 @@ func (l *Linter) finishCheck(path string, content []byte, all []*Error, cfg *Con
 	}
 	if isWorkflow {
 		sess, _ := l.onlineSession(cfg)
-		l.attachPinFixes(sess, content, all)
+		l.attachPinFixes(sess, content, all, ic != nil && l.lockListsWorkflow(ic.project, path))
 	}
 
 	for _, err := range all {

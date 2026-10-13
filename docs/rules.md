@@ -1253,6 +1253,7 @@ An action, reusable workflow or Docker image is not pinned to a commit SHA or di
 - Profile: default
 - Fixable: yes
 - Option `policies` (string-map, default empty): How strongly to pin the actions matching a pattern: hash-pin (full commit SHA, the default for everything), ref-pin (any tag, branch or SHA) or any. The most specific pattern wins. Patterns are "*", "owner/*", "owner/repo" and "owner/repo/path". Docker images follow the "*" policy.
+- Option `actions-lock` (bool, default true): Accept an action which is not pinned to a commit in a workflow when the Actions lock file of the repository (.github/workflows/actions.lock) pins it to a full commit for that workflow. The lock file is a technical preview of GitHub whose format may change. Set it to false to ignore the lock file.
 - Details and examples: [checks](./checks.md#check-action-format)
 
 ## unredacted-secrets

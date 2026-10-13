@@ -20,7 +20,7 @@ import (
 // which would make it ambiguous. A ref which is a branch, an abbreviated SHA or unknown to GitHub
 // gets no fix, and neither does a line this cannot edit without guessing (a comment which does
 // not mention the ref, or other content after the value).
-func (l *Linter) attachPinFixes(sess *onlineSession, src []byte, errs []*Error) {
+func (l *Linter) attachPinFixes(sess *onlineSession, src []byte, errs []*Error, locked bool) {
 	// With sess == nil (the online checks are off) the errors only get the reason why they have no fix.
 	var starts []int // Byte offset of each line
 	for _, e := range errs {
@@ -33,7 +33,7 @@ func (l *Linter) attachPinFixes(sess *onlineSession, src []byte, errs []*Error) 
 		if e.Line > len(starts) {
 			continue
 		}
-		fix, err := pinFix(sess, src, starts[e.Line-1], e.Column)
+		fix, err := pinFix(sess, src, starts[e.Line-1], e.Column, locked)
 		if err != nil {
 			l.debug("No fix for the error at line %d: %v", e.Line, err)
 			e.NoFix = noFixOf(err)
@@ -84,7 +84,7 @@ func lineStarts(src []byte) []int {
 
 // pinFix builds the fix for the `uses:` value which starts at the column (1-based, in characters) of
 // the line that starts at lineStart.
-func pinFix(sess *onlineSession, src []byte, lineStart, col int) (*Fix, error) {
+func pinFix(sess *onlineSession, src []byte, lineStart, col int, locked bool) (*Fix, error) {
 	lineEnd := len(src)
 	if i := bytes.IndexByte(src[lineStart:], '\n'); i >= 0 {
 		lineEnd = lineStart + i
@@ -133,6 +133,13 @@ func pinFix(sess *onlineSession, src []byte, lineStart, col int) (*Fix, error) {
 	}
 	if !validGitHubOwner(ref.Owner) || !validGitHubRepo(ref.Repo) || !validGitRefName(ref.Ref) {
 		return nil, shapeErr("%q is not a GitHub repository", spec)
+	}
+
+	if locked && ref.Kind == UsesAction {
+		// The lock file pins the version, which the runner checks against the entry of this ref. A commit
+		// SHA in `uses:` is a different ref which has no entry (or one that was never checked), so the
+		// workflow would stop matching the lock file. See "GitHub Actions lock file" in docs/checks.md.
+		return nil, judgmentErr("the workflow is listed in %s, which pins the version: a commit SHA written in uses: can fail the lock check, so add the entry with `gh actions-lock` instead", actionsLockPath)
 	}
 
 	if sess == nil {

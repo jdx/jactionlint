@@ -304,6 +304,8 @@ type RuleAction struct {
 	shared []*Error
 	// wf is the file being checked, for the version comments of the steps.
 	wf *Workflow
+	// lock is the Actions lock file as it applies to the workflow, nil when it does not (see RuleEnv.workflowLock).
+	lock *workflowLock
 }
 
 // NewRuleAction creates new RuleAction instance.
@@ -362,7 +364,7 @@ func (rule *RuleAction) checkRepoAction(ref *UsesRef, exec *ExecAction) {
 		}
 	}
 
-	if msg := unpinnedUsesMessage(rule.config, ref, false); msg != "" {
+	if msg := unpinnedUsesMessage(rule.config, ref, false); msg != "" && !rule.lockPins(ref) {
 		rule.ReportID("unpinned-uses", exec.Uses.Pos, msg)
 	}
 
@@ -699,6 +701,8 @@ func init() {
 		RuleInfo{ID: "unpinned-uses", Group: RuleGroupPolicy, Summary: "An action, reusable workflow or Docker image is not pinned to a commit SHA or digest.", DefaultLevel: SeverityError, Profile: ProfileDefault, Fixable: true, DocsAnchor: "check-action-format", Options: unpinnedUsesOptions},
 	)
 	registerRuleFactory("action", func(env *RuleEnv) []Rule {
-		return []Rule{NewRuleAction(env.localActions)}
+		r := NewRuleAction(env.localActions)
+		r.lock = env.workflowLock()
+		return []Rule{r}
 	})
 }
