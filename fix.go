@@ -387,6 +387,7 @@ func (l *Linter) FixFilesWithOptions(filepaths []string, project *Project, opts 
 	}
 	l.printFixSummary(res, opts.DryRun)
 	l.reportBaselineNote(results)
+	l.reportToolNotes()
 	return res, nil
 }
 

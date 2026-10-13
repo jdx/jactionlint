@@ -33,9 +33,9 @@ const theURL = "https://docs.github.com/en/actions/reference/workflows-and-actio
 // service, https://github.com/actions/languageservices (workflow-parser/src/workflow-v1.0.json), and the one of the
 // runner, https://github.com/actions/runner (src/Sdk/WorkflowParser/workflow-v1.0.json).
 var extraTypes = map[string][]string{
-	// GitHub documents "destroyed" for the merge_group webhook event, while the page of workflow triggers only
-	// lists "checks_requested". Workflows using both types must lint clean. (23f9662c)
-	"merge_group": {"destroyed"},
+	// There is no entry for merge_group: GitHub documents "destroyed" for the webhook event, but the page of the
+	// workflow triggers and the workflow schemas of the runner and of the language service list only
+	// "checks_requested" for on.merge_group.types (23f9662c had added it from the webhook documentation).
 	// https://github.com/actions/languageservices/pull/384 ("The `stacked` activity type is now available on
 	// `pull_request` and `pull_request_target` events for Actions.")
 	"pull_request":        {"stacked"},
