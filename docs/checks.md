@@ -3915,6 +3915,9 @@ is true), and the default is false. In a release job the rule reports the steps 
 | `oven-sh/setup-bun` | `no-cache: true` (it caches the bun executable) |
 | `actions-rust-lang/setup-rust-toolchain` | `cache: false` |
 | `mlugg/setup-zig` | `use-cache: false` |
+| `pnpm/setup` | `cache` is missing or `false` (`save-cache: false` only stops the saving, the store is still restored) |
+| `graalvm/setup-graalvm` | `cache` is missing or `false` (it names the build tool, `maven`, `gradle` or `sbt`) |
+| `ramsey/composer-install` | `ignore-cache` is `1`, `yes`, `Yes`, `y`, `Y`, `true` or `True`, the values that the action reads (`bin/should_cache.sh`); any other value or an expression restores it |
 | `PyO3/maturin-action` | `sccache` is missing or `false` and `cache` is not `sccache` (it sets `SCCACHE_GHA_ENABLED`) |
 | `Mozilla-Actions/sccache-action` | `SCCACHE_GHA_ENABLED` is not set to a value other than `false` or `0`: the action only installs sccache, which uses the cache of GitHub when that variable says so. The `env` of the step, then of the job, then of the workflow decides (the most specific one that sets it), and a script of the job that mentions the variable counts as setting it unless the step does. In a composite action the variable may come from the workflow that calls it, which is not known, so the finding stays unless the step switches it off |
 | `hendrikmuhs/ccache-action`, `DeterminateSystems/magic-nix-cache-action`, `awalsh128/cache-apt-pkgs-action`, `nix-community/cache-nix-action` | never: remove the step |
@@ -3960,6 +3963,17 @@ heuristics of zizmor for what a release is, which report mostly checks (34 of 36
 [the parity page](zizmor-parity.md#cache-poisoning-against-zizmor) were jobs that publish nothing): a workflow that runs on pushed tags is a release whatever its permissions, and so is one whose
 `branches:` filter names a release branch next to others (`branches: [main, 'release/**']`, any pattern with `release` in it). It also reports
 `docker/setup-buildx-action` without `version`.
+
+With the same option, the rule also reports a cache whose `path` saves a file with credentials ([zizmor#723](https://github.com/zizmorcore/zizmor/issues/723)):
+a step of `actions/cache` or `actions/cache/save` that caches `~/.npmrc`, `~/.docker/config.json` (or `~/.docker`), `~/.ssh` or a private key
+of it, `~/.config/gh`, `~/.aws`, `~/.kube`, `~/.netrc`, `~/.pypirc`, `~/.m2/settings.xml` and a few like them (the home directory is
+written `~`, `$HOME` or `${HOME}`; a directory of the workspace with the same name is the project's own), or, in the workspace, `.npmrc`, `.env`
+and `.git`. The config of `.git` keeps the token of `actions/checkout`, so it is reported only when the job has a checkout without
+`persist-credentials: false` (a job which restores `.git` before a checkout that does not persist the token has nothing to leak). A cache is not private: a workflow of the repository that
+knows the key restores it, so the files are readable by whatever runs there, which includes the workflows of pull requests of the same
+repository. It is reported whatever the trigger is, and not for a path below a credential directory (`~/.ssh/known_hosts`,
+`~/.docker/cli-plugins`), a glob, a path with an expression, or the whole home directory or workspace. It is in the pedantic tier because only the
+files that exist when the step runs hold credentials, which the rule cannot see.
 
 Differences from [zizmor](https://docs.zizmor.sh/audits/#cache-poisoning): zizmor reports a release workflow once for the trigger and once
 for each step. jactionlint reports the steps (and the job-level publishing detection is jactionlint only). Deliberately different:

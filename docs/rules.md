@@ -248,7 +248,7 @@ A condition trusts a bot by github.actor, which can be spoofed.
 
 ## cache-poisoning
 
-A cache is restored in a release job or written by a privileged trigger. With the option pedantic, a tag that only starts checks and a branch filter that names a release branch among others count as releases too.
+A cache is restored in a release job or written by a privileged trigger. With the option pedantic, a tag that only starts checks and a branch filter that names a release branch among others count as releases too, and a cache that saves a file with credentials is reported.
 
 - Group: security
 - Default level: error

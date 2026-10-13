@@ -191,6 +191,23 @@ var cacheActions = []cacheAction{
 		}
 		return true, "set \"cache: false\""
 	}},
+	{"pnpm/setup", func(a *ExecAction, u *UsesRef) (bool, string) {
+		// "cache: true" restores the pnpm store, keyed on the lock file. "save-cache: false" only stops the saving.
+		_, ok := inputEnabled(a, "cache")
+		return ok, "remove the \"cache\" input"
+	}},
+	{"graalvm/setup-graalvm", func(a *ExecAction, u *UsesRef) (bool, string) {
+		// "cache" names the build tool ("maven", "gradle" or "sbt") whose dependencies are cached
+		_, ok := inputEnabled(a, "cache")
+		return ok, "remove the \"cache\" input"
+	}},
+	{"ramsey/composer-install", func(a *ExecAction, u *UsesRef) (bool, string) {
+		// the Composer cache is restored unless "ignore-cache" says so (see ramsey/composer-install bin/should_cache.sh)
+		if v, ok := a.input("ignore-cache"); ok && composerIgnoresCache(v) {
+			return false, ""
+		}
+		return true, "set \"ignore-cache: true\""
+	}},
 	{"mlugg/setup-zig", func(a *ExecAction, u *UsesRef) (bool, string) {
 		if v, ok := a.input("use-cache"); ok && isFalseLiteral(v) {
 			return false, ""
@@ -224,6 +241,17 @@ var cacheActions = []cacheAction{
 	{"determinatesystems/magic-nix-cache-action", func(a *ExecAction, u *UsesRef) (bool, string) {
 		return true, "remove this step"
 	}},
+}
+
+// composerIgnoresCache reports whether the value of the "ignore-cache" input of ramsey/composer-install turns its cache
+// off. The action compares the text with 1, yes, Yes, y, Y, true and True; any other value (an expression included, which
+// is not known) leaves the cache on.
+func composerIgnoresCache(v string) bool {
+	switch strings.TrimSpace(v) {
+	case "1", "yes", "Yes", "y", "Y", "true", "True":
+		return true
+	}
+	return false
 }
 
 // buildxMayDownload is the pedantic reading of docker/setup-buildx-action: without "version" the action downloads
@@ -1009,6 +1037,9 @@ func (rule *RuleCachePoisoning) VisitJobPre(n *Job) error {
 	if rule.privileged != "" {
 		rule.checkWrite(n.CacheMode)
 	}
+	if rule.loose {
+		rule.checkCredentialCaches(n)
+	}
 
 	mode := n.CacheMode
 	if mode == nil {
@@ -1217,6 +1248,9 @@ var cacheGateInputs = map[string][]cacheGate{
 	"oven-sh/setup-bun":                         {{input: "no-cache", offWhenTrue: true}},
 	"actions-rust-lang/setup-rust-toolchain":    {{input: "cache"}},
 	"mlugg/setup-zig":                           {{input: "use-cache"}},
+	"pnpm/setup":                                {{input: "cache"}},
+	"graalvm/setup-graalvm":                     {{input: "cache"}},
+	"ramsey/composer-install":                   {{input: "ignore-cache", offWhenTrue: true}},
 	"determinatesystems/magic-nix-cache-action": nil,
 }
 
@@ -1293,7 +1327,7 @@ var buildOutputPushRe = regexp.MustCompile(`(?i)(?:^|[\s,"'])(?:type=registry|pu
 
 func init() {
 	registerRules(
-		RuleInfo{ID: "cache-poisoning", Group: RuleGroupSecurity, Summary: "A cache is restored in a release job or written by a privileged trigger. With the option pedantic, a tag that only starts checks and a branch filter that names a release branch among others count as releases too.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-cache-poisoning", Options: []RuleOption{pedanticOption}},
+		RuleInfo{ID: "cache-poisoning", Group: RuleGroupSecurity, Summary: "A cache is restored in a release job or written by a privileged trigger. With the option pedantic, a tag that only starts checks and a branch filter that names a release branch among others count as releases too, and a cache that saves a file with credentials is reported.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-cache-poisoning", Options: []RuleOption{pedanticOption}},
 	)
 	registerRuleFactory("cache-poisoning", func(env *RuleEnv) []Rule {
 		r := NewRuleCachePoisoning()
