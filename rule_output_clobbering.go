@@ -113,7 +113,9 @@ func (rule *RuleOutputClobbering) VisitStep(n *Step) error {
 			}
 			if c.d.kind == dataUntrusted && exprMayHaveNewline(c.d.input) {
 				name := ""
-				if m := reRecordName.FindStringSubmatch(t); m != nil {
+				if len(c.names) > 0 {
+					name = c.names[0] // the record whose value is untrusted, not the first of the command
+				} else if m := reRecordName.FindStringSubmatch(t); m != nil {
 					name = m[1]
 				}
 				rule.report(s, origin, n, w, c, name, "", "record")
@@ -187,7 +189,7 @@ func (rule *RuleOutputClobbering) chunksOf(s *runscript.Script, w *runscript.Wri
 				}
 			}
 		}
-		out = append(out, outputChunk{text: text, d: f.judgeCommand(s, p), cmd: p, names: valueRecordNames(printedLines(p))})
+		out = append(out, outputChunk{text: text, d: f.judgeCommand(s, p), cmd: p, names: rule.untrustedRecordNames(s, p)})
 	}
 	if h := w.Heredoc; h != nil {
 		f.at = w.Redirect.Offset
@@ -296,18 +298,64 @@ func printedLines(c *runscript.Command) []string {
 	return nil
 }
 
-// valueRecordNames returns the names of the records among the lines that hold a value: a line with a variable, an expression
-// or a conversion of printf. The record of a line without a name is not in the list.
-func valueRecordNames(lines []string) []string {
-	var names []string
-	for _, l := range lines {
-		if !strings.ContainsAny(l, "$%") {
+var (
+	// reConversion matches a conversion of the format of printf; %% is none.
+	reConversion = regexp.MustCompile(`%[-+ #0-9.*]*[a-zA-Z]|%%`)
+)
+
+// untrustedRecordNames returns the names of the records, among the lines that an echo or a printf prints, whose value is
+// untrusted text that can hold a line break: a variable or an expression of the line, or the argument that a conversion of
+// printf takes. A record whose value is a trusted variable or a literal is not in the list.
+func (rule *RuleOutputClobbering) untrustedRecordNames(s *runscript.Script, p *runscript.Command) []string {
+	if p.Name != "echo" && p.Name != "printf" {
+		return nil
+	}
+	var words []*runscript.Word
+	for _, a := range p.Args {
+		if p.Name == "echo" && strings.HasPrefix(a.Value, "-") && !a.Dynamic() {
 			continue
 		}
-		l = strings.TrimSpace(l)
-		if m := reRecordStart.FindStringSubmatch(l); m != nil {
+		words = append(words, a)
+	}
+	if len(words) == 0 {
+		return nil
+	}
+	first, rest := words[0], words[1:]
+	f := rule.flow
+	f.at = p.Offset
+	f.loop = p.LoopBody || p.InFunc
+	hostile := func(d data) bool { return d.kind == dataUntrusted && exprMayHaveNewline(d.input) }
+	conv := 0
+	var names []string
+	for _, l := range printedLines(p) {
+		tainted := false
+		for _, m := range reVarRef.FindAllStringSubmatch(l, -1) {
+			for _, v := range first.Vars {
+				if v == m[1] && hostile(f.judgeVar(s, v, 0)) {
+					tainted = true
+				}
+			}
+		}
+		if len(first.Exprs) > 0 && strings.Contains(l, "${{") && hostile(f.judgeExprList(exprsIn(l), 0)) {
+			tainted = true
+		}
+		if p.Name == "printf" {
+			for _, cv := range reConversion.FindAllString(l, -1) {
+				if cv == "%%" {
+					continue
+				}
+				if conv < len(rest) && hostile(f.judgeWord(s, rest[conv], 0)) {
+					tainted = true
+				}
+				conv++
+			}
+		}
+		if !tainted {
+			continue
+		}
+		if m := reRecordStart.FindStringSubmatch(strings.TrimSpace(l)); m != nil {
 			names = append(names, m[1])
-		} else if m := reRecordName.FindStringSubmatch(l); m != nil {
+		} else if m := reRecordName.FindStringSubmatch(strings.TrimSpace(l)); m != nil {
 			names = append(names, m[1])
 		}
 	}
