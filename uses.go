@@ -1,6 +1,8 @@
 package jactionlint
 
 import (
+	"fmt"
+	"path"
 	"regexp"
 	"strings"
 )
@@ -27,6 +29,26 @@ func canonLocalUsesSpec(spec string) (string, bool) {
 		return "./" + p, true
 	}
 	return "", false
+}
+
+// selfRepositoryProblem says what is wrong with a self-repository reference ("$/path") in a way that does not
+// depend on the files of the repository, or returns "" when the value is not such a reference or nothing is
+// wrong. "$/" always refers to the commit that runs the workflow, so a ref cannot be given, and the path must stay
+// in the repository.
+// https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#jobsjob_idstepsuses
+// https://github.com/actions/languageservices/pull/381
+func selfRepositoryProblem(spec string) string {
+	rest, ok := strings.CutPrefix(spec, selfRepositoryUsesPrefix)
+	if !ok {
+		return ""
+	}
+	if strings.Contains(rest, "@") {
+		return fmt.Sprintf("%q has an \"@ref\" suffix, which a self-repository reference cannot have because \"$/\" always refers to the commit that runs the workflow. remove the suffix", spec)
+	}
+	if c := path.Clean(rest); c == ".." || strings.HasPrefix(c, "../") {
+		return fmt.Sprintf("%q leaves the repository, but a self-repository reference names a path in the repository that runs the workflow", spec)
+	}
+	return ""
 }
 
 // UsesKind classifies the value of a `uses:` key.
@@ -68,7 +90,8 @@ const (
 	// RefNone means the value has no ref at all (local paths, a missing '@', or a Docker image
 	// without a digest).
 	RefNone RefKind = iota
-	// RefFullSHA is a full-length (40 hex digits) commit SHA.
+	// RefFullSHA is a full-length commit SHA: 40 hex digits, or 64 for a repository with the SHA-256 object format
+	// (https://github.com/actions/runner/pull/4347).
 	RefFullSHA
 	// RefShortSHA is an abbreviated commit SHA (7 to 39 hex digits). It is a heuristic: GitHub
 	// cannot tell it from a branch or tag that happens to be spelled in hex.
@@ -243,7 +266,7 @@ func classifyRef(ref string, has, dynamic bool) RefKind {
 		return RefNone
 	case dynamic:
 		return RefOther
-	case len(ref) == 40 && isHex(ref):
+	case (len(ref) == 40 || len(ref) == 64) && isHex(ref):
 		return RefFullSHA
 	case len(ref) >= 7 && len(ref) < 40 && isHex(ref):
 		return RefShortSHA

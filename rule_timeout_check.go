@@ -32,8 +32,8 @@ func (rule *RuleTimeoutCheck) VisitWorkflowPre(n *Workflow) error {
 // fixMinutes is the timeout-minutes to add to a job. There is deliberately no built-in number: the
 // fix is only offered when "default-minutes" of the missing-timeout rule is configured. The value is
 // lowered to the maximum of timeout-too-long, when that is set, so that the fix does not cause a
-// timeout-too-long finding.
-func (rule *RuleTimeoutCheck) fixMinutes() (int, bool) {
+// timeout-too-long finding, and to 15 on a job that runs only on ubuntu-slim, which ends a job after 15 minutes.
+func (rule *RuleTimeoutCheck) fixMinutes(n *Job) (int, bool) {
 	cfg := rule.Config()
 	v, ok := cfg.ruleOptionNumber("missing-timeout", "default-minutes")
 	if !ok || v < 1 {
@@ -45,13 +45,17 @@ func (rule *RuleTimeoutCheck) fixMinutes() (int, bool) {
 			minutes = int(max)
 		}
 	}
+	// GitHub ends a job on a single-CPU runner after 15 minutes: a longer timeout would be reported by ubuntu-slim-limits
+	if minutes > ubuntuSlimMaxTimeoutMinutes && runsOnlyOnUbuntuSlim(n) {
+		minutes = ubuntuSlimMaxTimeoutMinutes
+	}
 	return minutes, true
 }
 
 // fixMissing makes the fix adding "timeout-minutes" to the job. It returns the reason instead when
 // "default-minutes" is not usable or the job is not written in the block style.
 func (rule *RuleTimeoutCheck) fixMissing(n *Job) (*Fix, *NoFix) {
-	minutes, ok := rule.fixMinutes()
+	minutes, ok := rule.fixMinutes(n)
 	if !ok {
 		if _, set := rule.Config().ruleOptionNumber("missing-timeout", "default-minutes"); set {
 			return nil, &NoFix{Code: NoFixOptionInvalid, Option: "missing-timeout.default-minutes", Reason: "the missing-timeout option default-minutes must be at least 1 for the fix to add timeout-minutes"}
@@ -110,7 +114,7 @@ func (rule *RuleTimeoutCheck) VisitJobPre(n *Job) error {
 
 func init() {
 	registerRules(
-		RuleInfo{ID: "missing-timeout", Group: RuleGroupPolicy, Summary: "A job does not set timeout-minutes.", DefaultLevel: SeverityError, Profile: ProfileDefault, Fixable: true, DocsAnchor: "check-timeout-minutes", Options: []RuleOption{{Name: "default-minutes", Kind: RuleOptionInt, Summary: "The timeout-minutes which --fix adds to a job. There is no default: the rule has no fix unless this is set. It is lowered to the max of timeout-too-long when that is smaller."}}},
+		RuleInfo{ID: "missing-timeout", Group: RuleGroupPolicy, Summary: "A job does not set timeout-minutes.", DefaultLevel: SeverityError, Profile: ProfileDefault, Fixable: true, DocsAnchor: "check-timeout-minutes", Options: []RuleOption{{Name: "default-minutes", Kind: RuleOptionInt, Summary: "The timeout-minutes which --fix adds to a job. There is no default: the rule has no fix unless this is set. It is lowered to the max of timeout-too-long when that is smaller, and to 15 on a job that runs only on ubuntu-slim."}}},
 		RuleInfo{ID: "timeout-too-long", Group: RuleGroupPolicy, Summary: "timeout-minutes of a job exceeds the configured maximum.", DefaultLevel: SeverityError, DocsAnchor: "check-timeout-minutes", Options: []RuleOption{{Name: "max", Kind: RuleOptionNumber, Summary: "The maximum allowed timeout-minutes. The rule does nothing without it."}}},
 	)
 	registerRuleFactory("timeout-check", func(env *RuleEnv) []Rule {

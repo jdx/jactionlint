@@ -260,6 +260,12 @@ Automated tests are as follows.
     Corresponding `*.out` files are expected error messages. Empty `*.out` file means the test case should cause no errors.
     'Project' test is used for use cases where multiple files are related (reusable workflows, local actions, config files, ...).
 
+- `schema_conformance_test.go` compares the tables of the parser and the rules (the keys of each mapping, the events and their activity
+  types, the permission scopes and levels, and the contexts and functions available at each key) with `workflow-v1.0.json` and
+  `action_yaml.json` of actions/runner, which are vendored in `testdata/schema/runner` at the commit in `COMMIT`, so it runs offline.
+  A difference fails the test unless `schemaConformanceAllowed` has it with the reason. When GitHub adds syntax, the workflow
+  `schema-pin.yaml` (weekly, or `mise run schema-pin`) moves the pin and opens a pull request whose test run shows what to follow.
+  Fix the parser, or add the entry with the reason; an entry which is not needed any more fails the test too.
 - `positions_test.go` checks that every region of every fixture is valid in the SARIF log and in the JSON output, and that a finding in a
   multi-line scalar is on the line and the column of the text. `perf_test.go` has the time budgets and the benchmarks, and
   `robustness_test.go` lints the pathological inputs (huge, deeply nested, odd encodings and line breaks, aliases that expand) and fails on a panic or a hang.
