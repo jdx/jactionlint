@@ -132,9 +132,9 @@ var workspaceActions = func() map[string]workspaceAction {
 	// input, so a workflow that sets it runs an older release
 	gated("gradle/actions/setup-gradle", runsGradle)
 	gated("azure/powershell", func(e *ExecAction) bool {
-		// the script is in the workflow; it runs the workspace when it calls a script of it
+		// the script is in the workflow; it runs the workspace when it invokes a file of it (the commands are read, not the text)
 		v, _ := e.input("inlineScript")
-		return strings.Contains(v, ".ps1") || strings.Contains(v, "./") || strings.Contains(v, `.\`)
+		return powerShellRunsWorkspace(v)
 	})
 	gated("cypress-io/github-action", func(e *ExecAction) bool {
 		// it installs the dependencies (npm ci, with their scripts) and runs cypress, which executes cypress.config.js

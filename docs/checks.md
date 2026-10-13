@@ -8939,8 +8939,9 @@ with a `context` that is a path of the workspace (a relative path, `${{ github.w
 `goreleaser/goreleaser-action` with `args` that has `release` or `build` and no `install-only` (it fails without `args`),
 `magefile/mage-action` unless `install-only` is true (it runs `mage` with the default target when `args` is empty),
 `gradle/gradle-build-action` and `gradle/actions/setup-gradle` with `arguments` (setup-gradle up to v3 runs Gradle with it; v4
-and later refuse the input), `azure/powershell` with an `inlineScript` that calls a script of the
-workspace, and `cypress-io/github-action` unless `install` and `runTests` are both false and it has no `build`, `start`, `start-windows` or `command`. Not listed although poutine or CodeQL
+and later refuse the input), `azure/powershell` with an `inlineScript` that invokes a file of the
+workspace (a command that is a relative path, `& ./x.ps1`, `. ./x.ps1`, `pwsh -File ./x.ps1` or `Import-Module ./x.psm1`; comments, strings, URLs and
+arguments are not read as calls), and `cypress-io/github-action` unless `install` and `runTests` are both false and it has no `build`, `start`, `start-windows` or `command`. Not listed although poutine or CodeQL
 has them: `docker/setup-buildx-action`, `pre-commit-ci/lite-action` and `browniebroke/pre-commit-autoupdate-action` (they
 run nothing of the workspace) and `actions/jekyll-build-pages` (not verified). `gradle/actions/setup-gradle` without `arguments` only prepares a later
 step.
