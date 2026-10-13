@@ -7181,7 +7181,9 @@ What is **not** reported: a repository that GitHub does not show (a private repo
 missing *owner* counts), a repository that was transferred while its old owner still exists (only that owner can create the
 repository again), and a repository renamed within its owner. GitHub retires the names of popular repositories, so an owner that
 no longer exists may not be exploitable for a repository that many people cloned; the API does not tell, and the rule reports what
-the API shows. There is no automatic fix: the new owner may be the right one, or the action may have to go.
+the API shows. The rule works with the API of `api.github.com` only: an Enterprise Server runs the actions of github.com through
+GitHub Connect, so its API does not know their owners and an answer "not found" would mean nothing there (nothing is asked and nothing
+is reported). There is no automatic fix: the new owner may be the right one, or the action may have to go.
 
 Requests: the repository (shared with the other online checks, so none more when `archived-uses` or another one runs) and, only when
 that is a 404 or a redirect to another owner, one `GET /users/{owner}` for each owner of the run. The answers are cached like the

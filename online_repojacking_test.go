@@ -26,6 +26,14 @@ func movedRepository(f *fakeGitHub, from, to string) {
 	f.json("/repositories/42", fmt.Sprintf(`{"id":42,"full_name":%q,"private":false,"archived":false,"default_branch":"main"}`, to))
 }
 
+// ownerLookupHost makes the fake the host whose answers about owners count, as api.github.com does.
+func ownerLookupHost(t *testing.T, f *fakeGitHub) {
+	t.Helper()
+	old := ownerLookupAPIHost
+	ownerLookupAPIHost = strings.TrimPrefix(f.srv.URL, "http://")
+	t.Cleanup(func() { ownerLookupAPIHost = old })
+}
+
 func ownerAnswer(f *fakeGitHub, login string, exists bool) {
 	if exists {
 		f.json("/users/"+login, fmt.Sprintf(`{"login":%q,"type":"User"}`, login))
@@ -108,6 +116,7 @@ func TestRepojackingRequests(t *testing.T) {
 			f := newFakeGitHub(t)
 			tc.answer(f)
 			setOnlineEnv(t, f, "tok")
+			ownerLookupHost(t, f)
 			run := func() (string, float64) {
 				_, wf := onlineProject(t, workflowWith(tc.uses), repojackingConfig)
 				stdout, skipped := runWithSkipped(t, wf)
@@ -162,6 +171,7 @@ func runWithSkipped(t *testing.T, wf string) (string, float64) {
 func TestRepojackingAsksOnceForAnOwner(t *testing.T) {
 	f := newFakeGitHub(t)
 	setOnlineEnv(t, f, "tok")
+	ownerLookupHost(t, f)
 	_, wf := onlineProject(t, workflowWith("uses: gone/a@v1", "uses: gone/b@v1", "uses: gone/a@v2"), repojackingConfig)
 	_, stdout, _ := runOnlineCommand(t, "--online", wf)
 	if n := strings.Count(stdout, "[repojacking]"); n != 3 {
@@ -178,6 +188,7 @@ func TestRepojackingAsksOnceForAnOwner(t *testing.T) {
 func TestHTTPClientOwner(t *testing.T) {
 	f := newFakeGitHub(t)
 	f.json("/users/octo-org", `{"login":"Octo-Org","type":"Organization"}`)
+	ownerLookupHost(t, f)
 	c := f.client(httpGitHubOptions{})
 	ctx := context.Background()
 	o, err := c.Owner(ctx, "octo-org")
@@ -243,6 +254,7 @@ func TestOwnerFixtureRoundTrip(t *testing.T) {
 	f := newFakeGitHub(t)
 	movedRepository(f, "old/act", "new/act")
 	ownerAnswer(f, "new", true)
+	ownerLookupHost(t, f)
 	rec := NewRecordingGitHubClient(f.client(httpGitHubOptions{}))
 	ctx := context.Background()
 	if _, err := rec.Repository(ctx, "old", "act"); err != nil {
@@ -273,5 +285,22 @@ func TestOwnerFixtureRoundTrip(t *testing.T) {
 	}
 	if _, err := fx.Owner(ctx, "unknown"); err == nil || errors.Is(err, ErrGitHubNotFound) {
 		t.Errorf("a lookup which is not recorded must fail: %v", err)
+	}
+}
+
+// An Enterprise Server runs the actions of github.com through GitHub Connect: its API has no such owner, and that is no
+// finding. Only api.github.com answers.
+func TestRepojackingIsForGitHubComOnly(t *testing.T) {
+	f := newFakeGitHub(t) // the Server: it answers 404 to everything
+	setOnlineEnv(t, f, "tok")
+	_, wf := onlineProject(t, workflowWith("uses: actions/checkout@v4", "uses: former/deploy@v1"), repojackingConfig)
+	movedRepository(f, "former/deploy", "new/deploy")
+	status, stdout, stderr := runOnlineCommand(t, "--online", wf)
+	_ = status
+	if strings.Contains(stdout, "[repojacking]") {
+		t.Errorf("a Server cannot tell:\n%s%s", stdout, stderr)
+	}
+	if f.count("/users/actions") != 0 || f.count("/users/former") != 0 {
+		t.Errorf("owners were asked for on a Server: %v", f.hits)
 	}
 }
