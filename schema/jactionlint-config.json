@@ -1477,7 +1477,7 @@
           ]
         },
         "dependabot-missing-actions-update": {
-          "description": "dependabot.yml has no github-actions update although the repository has workflows using actions. Group: policy. Profile: pedantic. Default level: warn. https://jactionlint.jdx.dev/rules#dependabot-missing-actions-update",
+          "description": "dependabot.yml has no github-actions update although the repository has workflows using actions, or its github-actions updates do not cover the local composite actions that use actions. Group: policy. Profile: pedantic. Default level: warn. https://jactionlint.jdx.dev/rules#dependabot-missing-actions-update",
           "oneOf": [
             {
               "$ref": "#/definitions/level"
@@ -1971,7 +1971,7 @@
           ]
         },
         "github-app": {
-          "description": "A GitHub App token is issued with more access or a longer life than needed. Group: security. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#github-app",
+          "description": "A GitHub App token (actions/create-github-app-token, tibdex/github-app-token, peter-murray/workflow-application-token-action) is issued with more access or a longer life than needed. Group: security. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#github-app",
           "oneOf": [
             {
               "$ref": "#/definitions/level"
