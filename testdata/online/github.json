@@ -1,6 +1,36 @@
 {
   "_note": "Trimmed answers of the GitHub API recorded in 2026-10 (see github_fixture.go). Tag and branch lists keep only the entries the tests use. example/* repositories are made up.",
   "repos": {
+    "example/environments": {
+      "repo": {
+        "archived": false,
+        "default_branch": "main"
+      },
+      "environments": {
+        "release": {
+          "found": true,
+          "required_reviewers": true
+        },
+        "staging": {
+          "found": true
+        },
+        "prodution": {
+          "found": false
+        }
+      }
+    },
+    "example/private-environments": {
+      "repo": {
+        "archived": false,
+        "default_branch": "main",
+        "private": true
+      },
+      "environments": {
+        "production": {
+          "found": false
+        }
+      }
+    },
     "actions/checkout": {
       "repo": {
         "archived": false,

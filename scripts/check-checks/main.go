@@ -66,6 +66,8 @@ func Actionlint(src []byte, heading string) ([]byte, error) {
 		}
 		opts.Online = true
 		opts.GitHubClient = c
+		// The repository whose environments the checks look at, which testdata/online/github.json has
+		os.Setenv("GITHUB_REPOSITORY", "example/environments")
 	}
 
 	l, err := jactionlint.NewLinter(&out, opts)

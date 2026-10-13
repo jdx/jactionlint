@@ -45,6 +45,8 @@ type RuleAgenticActions struct {
 	// checkoutTrigger is the first event of the workflow that runs with a fork's pull request at hand.
 	checkoutTrigger string
 	anyTrigger      bool
+	// gates tells with the online checks whether the environment of a job holds it back, see environmentGates.
+	gates *environmentGates
 }
 
 // NewRuleAgenticActions creates a new RuleAgenticActions instance. With anyTrigger the unsafe settings of
@@ -122,12 +124,12 @@ func (rule *RuleAgenticActions) checkAgent(job *Job, prev []*Step, step *Step, a
 			}
 		}
 	}
-	if !agent.Gated && rule.trigger != "" && !rule.agentGuarded(job, prev, step) {
+	if guarded, gate := rule.agentGuarded(job, prev, step); !agent.Gated && rule.trigger != "" && !guarded {
 		exposed = true
 		if !limited {
 			rule.ReportIDf("agentic-actions", a.Uses.Pos,
-				"%s does not check who started it, and this workflow runs on %q, which anyone can cause on a public repository. the text they write steers the agent, which has the secrets of the job%s. restrict the job with an if: on github.event.comment.author_association (OWNER, MEMBER or COLLABORATOR) or on a label that only maintainers add, run it in an environment with required reviewers, or limit the agent to the few tools it needs",
-				agent.Title, rule.trigger, token)
+				"%s does not check who started it, and this workflow runs on %q, which anyone can cause on a public repository. the text they write steers the agent, which has the secrets of the job%s%s. restrict the job with an if: on github.event.comment.author_association (OWNER, MEMBER or COLLABORATOR) or on a label that only maintainers add, run it in an environment with required reviewers, or limit the agent to the few tools it needs",
+				agent.Title, rule.trigger, token, gate)
 		}
 	}
 
@@ -295,27 +297,45 @@ func checksOutPullRequest(s *Step) bool {
 // agent: a condition on the actor, the association with the repository or a label, an environment, or a
 // step that checks the permission of the actor. It is a heuristic: it cannot tell a condition that is
 // correct from one that merely mentions the actor.
-func (rule *RuleAgenticActions) agentGuarded(job *Job, prev []*Step, step *Step) bool {
-	if job.Environment != nil {
+//
+// An environment counts as a guard because its reviewers decide, unless the online checks find that it has no required
+// reviewers (or does not exist). Then it guards nothing, and the second result says so for the message, as ". text"
+// (empty when an environment was not the reason).
+func (rule *RuleAgenticActions) agentGuarded(job *Job, prev []*Step, step *Step) (bool, string) {
+	gate := ""
+	// environmentGuards is whether the environment of the job guards it. Environments without a gate are noted once.
+	environmentGuards := func(j *Job) bool {
+		if j.Environment == nil {
+			return false
+		}
+		if note, ok := rule.gates.noGate(j); ok {
+			if gate == "" {
+				gate = ". " + note
+			}
+			return false
+		}
 		return true
+	}
+	if environmentGuards(job) {
+		return true, ""
 	}
 	if guardInCond(job.If) || guardInCond(step.If) {
-		return true
+		return true, ""
 	}
 	if stepsGuard(prev) {
-		return true
+		return true, ""
 	}
 	for _, id := range job.Needs {
 		if id == nil {
 			continue
 		}
 		if j := rule.wf.Jobs[strings.ToLower(id.Value)]; j != nil {
-			if j.Environment != nil || guardInCond(j.If) || stepsGuard(flattenSteps(j.Steps)) {
-				return true
+			if environmentGuards(j) || guardInCond(j.If) || stepsGuard(flattenSteps(j.Steps)) {
+				return true, ""
 			}
 		}
 	}
-	return false
+	return false, gate
 }
 
 func guardInCond(c *String) bool {
@@ -435,6 +455,8 @@ func init() {
 		}
 		v, _ := env.config.RuleOption("agentic-actions", "any-trigger")
 		b, _ := v.(bool)
-		return []Rule{NewRuleAgenticActions(b)}
+		r := NewRuleAgenticActions(b)
+		r.gates = newEnvironmentGates(env, r.Debug)
+		return []Rule{r}
 	})
 }

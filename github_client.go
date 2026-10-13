@@ -44,6 +44,9 @@ type GitHubRepo struct {
 	Archived bool `json:"archived"`
 	// DefaultBranch is the name of the default branch.
 	DefaultBranch string `json:"default_branch"`
+	// Private is true when the repository is private or internal: what GitHub does not show to a token which
+	// cannot read it is then not proof that it does not exist.
+	Private bool `json:"private,omitempty"`
 }
 
 // GitHubTag is a tag and the commit it points to.

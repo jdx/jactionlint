@@ -6573,7 +6573,8 @@ The rule reports:
   `allowed_non_write_users: '*'`, `allowed_bots: '*'` or `allow-users: '*'`. A list of named users is accepted.
 - **No check of the user.** The agent actions that do not check who started them (Gemini CLI, AI inference, OpenHands, Oz, PR-Agent
   and others) run for everybody who can cause the trigger. The rule accepts a job that is restricted by an `if:` on
-  `author_association`, the actor, the sender or a label (also in a job it `needs`), by an `environment:` (reviewers can be required), or
+  `author_association`, the actor, the sender or a label (also in a job it `needs`), by an `environment:` (reviewers can be required; an environment without them does not count with `--online`, see
+  [environments without reviewers](#check-untrusted-checkout-environment)), or
   by an earlier step that checks the permission of the actor. This is a heuristic: it cannot tell a correct condition from a
   condition that mentions the actor.
 - **Settings that turn the safeguards off.** `--dangerously-skip-permissions`, `--permission-mode bypassPermissions` and allowed
@@ -7579,7 +7580,8 @@ A step is reported at its checkout when it puts untrusted code in the workspace 
 In a job that sets `permissions: {}` the message does not claim a token, because the job has none.
 
 What is **not** reported: a checkout of the base (no `ref`, or `github.event.pull_request.base.*`), a checkout that nothing runs,
-a job with an `environment:` (its reviewers decide), and a job or step whose `if:` reads who or what started the workflow:
+a job with an `environment:` (its reviewers decide, unless `--online` finds that it has none, see
+[below](#check-untrusted-checkout-environment)), and a job or step whose `if:` reads who or what started the workflow:
 `github.actor`, the author or labels of the pull request, `github.event.pull_request.head.repo`, `github.event.workflow_run.event`,
 `needs` or `steps`. A job or step that only runs for a pull request that was merged (`if: github.event.pull_request.merged == true`,
 alone or in a conjunction) is not reported for a checkout of `github.event.pull_request.merge_commit_sha` or `head.sha`: that is
@@ -7588,6 +7590,55 @@ stays reported, because the author can still push to it. A `workflow_run` workfl
 runs for `push`, `schedule`, `workflow_dispatch`, `release`, `merge_group` or `repository_dispatch`. The rule cannot tell that
 a `labeled` pull request was reviewed or that an earlier step vouched for the code in a way other than a condition on `needs` or
 `steps`. Code that other steps fetch from an output (`ref: ${{ steps.x.outputs.sha }}`) is not followed.
+
+<a id="check-untrusted-checkout-environment"></a>
+### Environments without reviewers (online)
+
+`environment:` is no protection by itself: the job waits for a person only when the environment has the protection rule "required
+reviewers". An environment which has none (a wait timer or a branch policy alone makes nobody look at the code), or which does not exist
+(a typo: GitHub creates an empty one when the job runs), holds nothing back. With `--online`, `untrusted-checkout`,
+`untrusted-artifact` and `agentic-actions` ask GitHub (`GET /repos/{owner}/{repo}/environments/{name}`) about the environment of a
+job they would otherwise skip, and report the job when the environment has no required reviewers, or does not exist in a public
+repository. The message says so. Without `--online`, or when the lookup does not work, the environment is trusted as before.
+
+- **Which repository.** The one named by `GITHUB_REPOSITORY` (GitHub Actions sets it) or else by the `origin` remote of the clone
+  (`github.com` only). Without either nothing is asked.
+- **Token.** The endpoint needs the permission "Actions: read" of a token, or the scope `repo` of a classic one for a private
+  repository. A public repository shows its environments to everybody, so an anonymous run works.
+- **What is not known.** A 403, and a 404 for a private repository (the token may not see the environment, or it does not exist), leave
+  the environment trusted and count as a skipped lookup (see [online checks](usage.md#online-checks)). A name that is
+  computed (`environment: ${{ matrix.env }}`) is not looked up.
+- **Requests.** One for each environment name of the run (a 404 for a public repository adds the request for the repository, which the
+  other online checks share), and only for a workflow and a job the rule would otherwise report on. The answers are cached like the
+  others.
+
+Example input:
+
+```yaml
+# requires --online
+on: pull_request_target
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    # This environment of the repository has a wait timer, but no required reviewers
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - run: npm ci && npm test
+```
+
+Output:
+
+```
+test.yaml:11:16: this step checks out code from a pull request (github.event.pull_request.head.sha) in a "pull_request_target" workflow and "npm" runs it afterwards. the workflow has a write token and secrets, so whoever controls that code can use them. the environment "staging" of job "deploy" has no required reviewers, so no one has to approve the run. run untrusted code in a "pull_request" workflow without secrets, or check out the base branch and only read the pull request as data [untrusted-checkout]
+   |
+11 |           ref: ${{ github.event.pull_request.head.sha }}
+   |                ^~~
+```
+
+<!-- Skip playground link -->
 
 There is no automatic fix.
 
@@ -7663,9 +7714,11 @@ A step that validates the data stops the check from there on: a regular expressi
 deliberately generous.
 
 What is **not** reported: artifacts of the current run, a download whose files cannot be linked to a later command (an artifact
-without `path` and `name` lands in the root of the workspace under names the rule does not know), jobs with an `environment:`,
-jobs and steps with the same guards as `untrusted-checkout`, and workflows that wait only for workflows that run for `push`,
-`schedule` and other events that only people with write access cause.
+without `path` and `name` lands in the root of the workspace under names the rule does not know), jobs with an `environment:`
+(with `--online`, one without required reviewers is reported, see
+[environments without reviewers](#check-untrusted-checkout-environment)), jobs and steps with the same guards as
+`untrusted-checkout`, and workflows that wait only for workflows that run for `push`, `schedule` and other events that only people
+with write access cause.
 
 There is no automatic fix.
 

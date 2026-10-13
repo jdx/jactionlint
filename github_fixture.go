@@ -32,6 +32,8 @@ type fixtureRepo struct {
 	Refs       map[string]*fixtureRef         `json:"refs,omitempty"`    // "heads/main", "tags/v1"
 	Compare    map[string]GitHubCompareStatus `json:"compare,omitempty"` // "base...head"; "not-found" for unknown commits
 	Advisories *fixtureAdvisories             `json:"advisories,omitempty"`
+	// Environments are the answers about the environments by their lower case name, see GitHubEnvironmentClient.
+	Environments map[string]*fixtureEnvironment `json:"environments,omitempty"`
 }
 
 type fixtureRef struct {

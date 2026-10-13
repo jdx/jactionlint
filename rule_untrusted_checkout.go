@@ -26,6 +26,10 @@ type RuleUntrustedCheckout struct {
 	carried map[string]string
 	// scripts are the script files that were read, by path, nil for one that cannot be followed.
 	scripts map[string]*runscript.Script
+	// gates tells with the online checks whether the environment of a job holds it back, see environmentGates.
+	gates *environmentGates
+	// envJob is whether the job being checked has an environment, which is trusted unless the gates say it is no gate.
+	envJob bool
 }
 
 // pendingFetch is a `git fetch` of a revision of a pull request whose script does not put it in the working tree.
@@ -126,7 +130,12 @@ func (rule *RuleUntrustedCheckout) VisitWorkflowPre(n *Workflow) error {
 
 // VisitJobPre is callback when visiting Job node before visiting its children.
 func (rule *RuleUntrustedCheckout) VisitJobPre(n *Job) error {
-	if len(rule.privileged) == 0 || (n.Environment != nil && n.Environment.Name != nil) || conditionIsGuard(n.If) {
+	if len(rule.privileged) == 0 || conditionIsGuard(n.If) {
+		return nil
+	}
+	// The reviewers of an environment decide, unless the online checks find that there are none
+	rule.envJob = n.Environment != nil && n.Environment.Name != nil
+	if rule.envJob && rule.gates == nil {
 		return nil
 	}
 	// The checkouts which no step has run the code of yet, by the directory they put it in. Whether a
@@ -187,6 +196,14 @@ func (rule *RuleUntrustedCheckout) VisitJobPre(n *Job) error {
 
 func (rule *RuleUntrustedCheckout) report(c *untrustedCheckout, how string) {
 	event := rule.privileged[0]
+	gate := ""
+	if rule.envJob {
+		note, ok := rule.gates.noGate(rule.job)
+		if !ok {
+			return // the reviewers of the environment decide
+		}
+		gate = note
+	}
 	source := "a pull request"
 	if event == "workflow_run" {
 		source = "the run that triggered this workflow"
@@ -194,6 +211,9 @@ func (rule *RuleUntrustedCheckout) report(c *untrustedCheckout, how string) {
 	privileges := "the workflow has a write token and secrets, so whoever controls that code can use them"
 	if rule.job != nil && rule.wf != nil && tokenIsAbsent(rule.wf, rule.job) {
 		privileges = "the job's GITHUB_TOKEN has no permissions (\"permissions: {}\"), but the code still runs on the runner with everything else the job gives it, such as secrets passed to a step and the cache"
+	}
+	if gate != "" {
+		privileges += ". " + gate
 	}
 	rule.ReportIDf(
 		"untrusted-checkout",
@@ -453,6 +473,7 @@ func init() {
 	registerRuleFactory("untrusted-checkout", func(env *RuleEnv) []Rule {
 		r := NewRuleUntrustedCheckout(env.project)
 		r.siblings = env.localActions.siblings()
+		r.gates = newEnvironmentGates(env, r.Debug)
 		return []Rule{r}
 	})
 }

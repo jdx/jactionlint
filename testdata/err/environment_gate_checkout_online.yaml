@@ -1,0 +1,39 @@
+on: pull_request_target
+jobs:
+  # ERROR: the environment has no required reviewers, so nobody approves the run
+  staging:
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - run: npm ci && npm test
+  # ERROR: a typo creates an empty environment when the job runs
+  typo:
+    runs-on: ubuntu-latest
+    environment:
+      name: prodution
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - run: npm ci && npm test
+  # OK: the reviewers of the environment decide
+  release:
+    runs-on: ubuntu-latest
+    environment: release
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - run: npm ci && npm test
+  # OK: the name is computed, so it is not known
+  computed:
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.pull_request.base.ref }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - run: npm ci && npm test

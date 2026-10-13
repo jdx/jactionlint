@@ -149,6 +149,8 @@ type onlineSession struct {
 	compares   memo[compareKey, GitHubCompareStatus]
 	advisories memo[string, []GitHubAdvisory]
 	origins    memo[originKey, originResult]
+
+	environments memo[environmentKey, environmentResult]
 }
 
 type originKey struct {
