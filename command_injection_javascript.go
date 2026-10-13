@@ -413,42 +413,101 @@ func (sc *jsScan) collectAliases() {
 	}
 }
 
-var reJSAlternative = regexp.MustCompile(`\|\||\?\?`)
-
 // destructuredSource returns the source that the property `prop` of the right side of a destructuring comes from. The right
-// side can be a fallback (`process.env || {}`, `(await context.payload.comment) ?? {}`): each alternative is read, and the
-// first one that is a source decides.
+// side is normalized first (`await` and optional chaining `?.` are dropped, outer parentheses are peeled), then split at the
+// `||` and `??` outside of brackets and strings; the first alternative that is a source decides (`process.env || {}`,
+// `(context.payload?.comment ?? {})`, `{} || (process.env)`).
 func (sc *jsScan) destructuredSource(rhs, prop string) *jsSource {
-	for _, alt := range reJSAlternative.Split(rhs, -1) {
-		alt = strings.TrimSpace(alt)
-		for {
-			trimmed := strings.TrimSpace(strings.TrimSuffix(alt, ";"))
-			trimmed = strings.TrimSpace(strings.TrimPrefix(trimmed, "await "))
-			if strings.HasPrefix(trimmed, "(") && strings.HasSuffix(trimmed, ")") {
-				trimmed = trimmed[1 : len(trimmed)-1]
-			}
-			if trimmed == alt {
-				break
-			}
-			alt = trimmed
-		}
-		switch {
-		case alt == "process.env":
-			if src := sc.envSource(prop); src != nil {
-				return src
-			}
-		case strings.HasPrefix(alt, "context.payload") || strings.HasPrefix(alt, "github.context.payload"):
-			path := strings.TrimPrefix(strings.TrimPrefix(strings.TrimPrefix(alt, "github."), "context.payload"), ".")
-			path = strings.NewReplacer("?.", ".", " ", "", "\t", "", "\n", "").Replace(path)
-			if path != "" {
-				path += "."
-			}
-			if src := sc.payloadSource(path + prop); src != nil {
+	rhs = strings.TrimSpace(strings.TrimSuffix(strings.TrimSpace(rhs), ";"))
+	rhs = strings.ReplaceAll(rhs, "?.", ".")
+	rhs = strings.TrimSpace(strings.TrimPrefix(rhs, "await "))
+	for len(rhs) > 1 && rhs[0] == '(' && jsWrapped(rhs) {
+		rhs = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(rhs[1:len(rhs)-1]), "await "))
+	}
+	if alts := splitJSAlternatives(rhs); len(alts) > 1 {
+		for _, alt := range alts {
+			if src := sc.destructuredSource(alt, prop); src != nil {
 				return src
 			}
 		}
+		return nil
+	}
+	rhs = strings.TrimLeft(rhs, ". ")
+	switch {
+	case rhs == "process.env":
+		return sc.envSource(prop)
+	case strings.HasPrefix(rhs, "context.payload") || strings.HasPrefix(rhs, "github.context.payload"):
+		path := strings.TrimPrefix(strings.TrimPrefix(strings.TrimPrefix(rhs, "github."), "context.payload"), ".")
+		path = strings.NewReplacer(" ", "", "\t", "", "\n", "").Replace(path)
+		if path != "" {
+			path += "."
+		}
+		return sc.payloadSource(path + prop)
 	}
 	return nil
+}
+
+// jsScanDepth walks a piece of an expression and calls f for each byte that is outside of strings, with the depth of the
+// brackets in front of it. f returns false to stop.
+func jsScanDepth(s string, f func(i, depth int) bool) {
+	depth, quote := 0, byte(0)
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if quote != 0 {
+			if c == '\\' {
+				i++
+			} else if c == quote {
+				quote = 0
+			}
+			continue
+		}
+		switch c {
+		case '\'', '"', '`':
+			quote = c
+			continue
+		case '(', '[', '{':
+			if !f(i, depth) {
+				return
+			}
+			depth++
+			continue
+		case ')', ']', '}':
+			depth--
+		}
+		if !f(i, depth) {
+			return
+		}
+	}
+}
+
+// jsWrapped reports whether the parenthesis at the start of s is closed by the last byte of s.
+func jsWrapped(s string) bool {
+	if s == "" || s[0] != '(' || s[len(s)-1] != ')' {
+		return false
+	}
+	wrapped := true
+	jsScanDepth(s, func(i, depth int) bool {
+		if depth == 0 && i < len(s)-1 && i > 0 {
+			wrapped = false // the first parenthesis was closed before the end
+			return false
+		}
+		return true
+	})
+	return wrapped
+}
+
+// splitJSAlternatives splits s at the `||` and `??` that are outside of brackets and strings.
+func splitJSAlternatives(s string) []string {
+	var out []string
+	last := 0
+	jsScanDepth(s, func(i, depth int) bool {
+		if depth == 0 && i+1 < len(s) && (s[i:i+2] == "||" || s[i:i+2] == "??") && (i == 0 || s[i-1] != s[i]) {
+			out = append(out, s[last:i])
+			last = i + 2
+		}
+		return true
+	})
+	return append(out, s[last:])
 }
 
 // statementEnd returns the end of the statement that starts at i: the first `;` outside of brackets, or the
