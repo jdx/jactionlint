@@ -20,7 +20,7 @@ func TestCredentialPath(t *testing.T) {
 	}
 	no := []string{
 		"", "~/.cache", "~/.npm", "node_modules", "~/.cargo/registry", "~/.cargo", "~/.m2/repository", "~/.ssh/known_hosts", "~/.docker/cli-plugins",
-		".docker", ".docker/config.json", ".ssh", ".aws", ".kube/config", ".netrc", "~/.aws/config", "~/.config/gh/config.yml", "~/.config/gcloud/logs", "~/.azure/commands", ".aws/credentials", "~/.config/gh-cache", ".github", ".github/workflows", ".gitignore", ".git/modules", "!~/.npmrc", "**/*.env", "~/.env.d/x", ".",
+		".docker", ".docker/config.json", ".ssh", ".aws", ".kube/config", ".netrc", "~/.aws/config", "~/.config/gh/config.yml", "~/.config/gcloud/logs", "~/.azure/commands", ".aws/credentials", ".env.example", ".env.sample", ".env.template", ".env.dist", ".env.EXAMPLE", ".env.defaults", "~/.config/gh-cache", ".github", ".github/workflows", ".gitignore", ".git/modules", "!~/.npmrc", "**/*.env", "~/.env.d/x", ".",
 		"${{ github.workspace }}/.npmrc", "~", "vendor/.env/x", "~/.config", "dist",
 	}
 	for _, p := range no {
@@ -104,6 +104,26 @@ func TestCachePoisoningCredentialCaches(t *testing.T) {
 
 // The actions that restore a cache and had no entry.
 func TestCachePoisoningMoreCacheActions(t *testing.T) {
+	t.Run("pnpm/action-setup", func(t *testing.T) {
+		const on = "on:\n  push:\n    tags: ['v*']\n"
+		step := func(with string) string {
+			s := on + "jobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: pnpm/action-setup@v4\n"
+			if with != "" {
+				s += "        with:\n" + with
+			}
+			return s
+		}
+		for with, want := range map[string]int{
+			"          cache: true\n":  1,
+			"          cache: false\n": 0,
+			"":                         0,
+			"          cache: ${{ !startsWith(github.ref, 'refs/tags/') }}\n": 0,
+		} {
+			if got := cacheCount(t, false, step(with)); got != want {
+				t.Errorf("with %q: want %d findings, got %d", with, want, got)
+			}
+		}
+	})
 	const on = "on:\n  push:\n    tags: ['v*']\n"
 	step := func(uses, with string) string {
 		s := on + "jobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: " + uses + "\n"

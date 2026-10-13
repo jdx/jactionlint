@@ -21,6 +21,9 @@ var credentialFiles = []string{
 	".config/gcloud/application_default_credentials.json", ".azure/accessTokens.json", ".azure/msal_token_cache.json", ".config/doctl/config.yaml",
 }
 
+// envTemplateSuffixes are the suffixes of the environment files that are templates or defaults for the people who set up a project.
+var envTemplateSuffixes = []string{"example", "sample", "template", "tpl", "dist", "defaults", "default", "schema", "tmpl", "skel"}
+
 // privateKeyNames are the default names of the private keys of ssh.
 var privateKeyNames = []string{"id_rsa", "id_dsa", "id_ecdsa", "id_ed25519"}
 
@@ -60,7 +63,11 @@ func credentialPath(entry string) (string, bool) {
 	case p == ".git", p == ".npmrc", p == ".yarnrc.yml", p == ".env":
 		return p, true
 	case strings.HasPrefix(p, ".env.") && !strings.Contains(p, "/"):
-		return ".env", true // .env.local, .env.production
+		// .env.local, .env.production hold values; .env.example and the like are templates without secrets
+		if slices.Contains(envTemplateSuffixes, strings.ToLower(strings.TrimPrefix(p, ".env."))) {
+			return "", false
+		}
+		return ".env", true
 	case !home:
 		return "", false
 	}

@@ -196,6 +196,11 @@ var cacheActions = []cacheAction{
 		}
 		return true, "set \"cache: false\""
 	}},
+	{"pnpm/action-setup", func(a *ExecAction, u *UsesRef) (bool, string) {
+		// "cache: true" caches the pnpm store (the input is "false" by default)
+		_, ok := inputEnabled(a, "cache")
+		return ok, "remove the \"cache\" input"
+	}},
 	{"pnpm/setup", func(a *ExecAction, u *UsesRef) (bool, string) {
 		// "cache: true" restores the pnpm store, keyed on the lock file. "save-cache: false" only stops the saving.
 		_, ok := inputEnabled(a, "cache")
@@ -1256,6 +1261,7 @@ var cacheGateInputs = map[string][]cacheGate{
 	"actions-rust-lang/setup-rust-toolchain":    {{input: "cache"}},
 	"mlugg/setup-zig":                           {{input: "use-cache"}},
 	"pnpm/setup":                                {{input: "cache"}},
+	"pnpm/action-setup":                         {{input: "cache"}},
 	"graalvm/setup-graalvm":                     {{input: "cache"}},
 	"ramsey/composer-install":                   {{input: "ignore-cache", offWhenTrue: true}},
 	"determinatesystems/magic-nix-cache-action": nil,
