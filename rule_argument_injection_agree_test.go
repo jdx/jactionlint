@@ -13,7 +13,7 @@ func TestArgumentInjectionNamesAgree(t *testing.T) {
 		return "      - env:\n          V: ${{ " + expr + " }}\n        run: |\n" + sed
 	}
 	scriptStep := func(cmd string) string {
-		return checkout + "      - env:\n          N: ${{ github.event.issue.number }}\n          GH_TOKEN: ${{ github.token }}\n        run: |\n          V=$(" + cmd + ")\n" + sed
+		return checkout + "      - env:\n          N: ${{ github.event.issue.number }}\n          R: ${{ github.repository }}\n          GH_TOKEN: ${{ github.token }}\n        run: |\n          V=$(" + cmd + ")\n" + sed
 	}
 	tests := []struct {
 		what, steps string
@@ -35,6 +35,13 @@ func TestArgumentInjectionNamesAgree(t *testing.T) {
 		{"script: the name of the committer of a commit", scriptStep("git log -1 --pretty=format:%cn"), 1},
 		{"script: the name of the author of a pull request", scriptStep("gh pr view \"$N\" --json author --jq .author.name"), 1},
 		{"script: the author of a pull request without a filter", scriptStep("gh pr view \"$N\" --json author"), 1},
+		{"script: the login of the user of a pull request", scriptStep("gh api \"repos/$R/pulls/$N\" --jq .user.login"), 0},
+		{"script: the login of an assignee", scriptStep("gh api \"repos/$R/issues/$N\" --jq .assignee.login"), 0},
+		{"script: the name of the user of a pull request", scriptStep("gh api \"repos/$R/pulls/$N\" --jq .user.name"), 1},
+		{"script: the user object of a pull request", scriptStep("gh api \"repos/$R/pulls/$N\" --jq .user"), 1},
+		{"script: the email of the user of a pull request", scriptStep("gh api \"repos/$R/pulls/$N\" --jq .user.email"), 1},
+		{"script: the name of an assignee", scriptStep("gh api \"repos/$R/issues/$N\" --jq .assignee.name"), 1},
+		{"script: the bio of the merger", scriptStep("gh api \"repos/$R/pulls/$N\" --jq .merged_by.bio"), 1},
 		{"script: the title of a pull request", scriptStep("gh pr view \"$N\" --json title --jq .title"), 1},
 		{"script: the subject of a commit", scriptStep("git log -1 --format=%s"), 1},
 	}

@@ -42,9 +42,15 @@ jobs:
         env:
           NUM: ${{ github.event.issue.number }}
           GH_TOKEN: ${{ github.token }}
-      - run: |
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
           AUTHOR=$(git log -1 --format=%an)
           sed "s/PLACEHOLDER/$AUTHOR/g" template.txt
+          OWNER=$(gh api "repos/$GITHUB_REPOSITORY/pulls/1" --jq .user.name)
+          sed "s/PLACEHOLDER/$OWNER/g" template.txt
           # Not reported: the name of the branch and the login of an account
+          LOGIN=$(gh api "repos/$GITHUB_REPOSITORY/pulls/1" --jq .user.login)
+          sed "s/PLACEHOLDER/$LOGIN/g" template.txt
           BRANCH=$(git branch --show-current)
           sed "s/PLACEHOLDER/$BRANCH/g" template.txt
