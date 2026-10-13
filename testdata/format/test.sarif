@@ -580,6 +580,21 @@
               "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
             },
             {
+              "id": "ubuntu-slim-limits",
+              "name": "UbuntuSlimLimits",
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "description": "Checks for jobs on ubuntu-slim runners that use what the single-CPU runner does not support",
+                "queryURI": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+              },
+              "fullDescription": {
+                "text": "Checks for jobs on ubuntu-slim runners that use what the single-CPU runner does not support"
+              },
+              "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+            },
+            {
               "id": "undocumented-permissions",
               "name": "UndocumentedPermissions",
               "defaultConfiguration": {
