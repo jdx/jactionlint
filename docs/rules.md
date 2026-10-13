@@ -351,11 +351,12 @@ Jobs depend on each other in a cycle.
 
 ## dangerous-triggers
 
-A workflow uses pull_request_target, workflow_run or issue_comment.
+A workflow uses pull_request_target, workflow_run or issue_comment. With the option pedantic, also one that cannot write and uses no secret.
 
 - Group: security
 - Default level: error
 - Profile: default
+- Option `pedantic` (bool, no default): Also report the pedantic checks, which are noisier. Unset, they run under the pedantic profile.
 - Details and examples: [checks](./checks.md#check-dangerous-triggers)
 
 ## dependabot-cooldown

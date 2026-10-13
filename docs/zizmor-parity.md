@@ -28,7 +28,7 @@ How to read the table:
 | `bot-conditions` | `bot-conditions` | default | partial: `github.actor`, `github.triggering_actor`, `github.actor_id` and `github.event.sender.*` compared with a bot (`==`, `contains()`, `startsWith()`, `endsWith()`) in job and step `if:`. `!=` and negated tests are not reported, as in zizmor. `--fix=unsafe` only for workflows with `pull_request`/`pull_request_target` events. Bot names without `[bot]` are known by ID and prefix only. Judged by the events that reach the job, also through local reusable workflows: not reported when only `push`-like events (`push`, `schedule`, `workflow_dispatch`, ...) can run it, and the suggestion says that the author field is missing on the other events of a mixed workflow. Composite actions: the fix needs every local caller to run on a pull request event |
 | `cache-poisoning` | `cache-poisoning` | default, with the option `pedantic` | partial: a fixed table of cache actions and publishing actions. 43% of the findings of zizmor on the corpus are reported by default and 72% with the option `pedantic`, which adds zizmor's two heuristics (a tag with read-only permissions, a `branches:` filter that names a release branch among others) and has a measured false-positive rate of about 90%; most of the rest is zizmor reporting a cache that the action does not restore. See [cache-poisoning against zizmor](#cache-poisoning-against-zizmor). `tags-ignore` is not a release trigger, neither is a `tags:` filter that lets no tag through. `setup-node` v5 and later and `docker/setup-buildx-action` are covered, judged by the `package.json` of the repository and by `version`. A step guarded by `if: !startsWith(github.ref, 'refs/tags/')` is evaluated for the release scenarios, where zizmor reports it |
 | `concurrency-limits` | `concurrency-limits` | default | full: only a missing `concurrency:` and the bare group form are reported, not `cancel-in-progress: false` |
-| `dangerous-triggers` | `dangerous-triggers` | default | full; adds `issue_comment`, which zizmor flags from 1.31; reported at the trigger, zizmor reports at `on:`. `pull_request_target` with only `actions/labeler` is exempt in both |
+| `dangerous-triggers` | `dangerous-triggers` | default, with the option `pedantic` | full, except that a workflow which cannot write (`permissions: {}`, read-only everywhere) and reads no secret is reported only with the option `pedantic`, as [zizmor#398](https://github.com/zizmorcore/zizmor/issues/398) proposes (zizmor reports it always; the effect on the comparison below was not measured). The message names the scopes the token can write and the secrets. Adds `issue_comment`, which zizmor flags from 1.31; reported at the trigger, zizmor reports at `on:`. `pull_request_target` with only `actions/labeler` is exempt in both |
 | `dependabot-cooldown` | `dependabot-cooldown` | default | full on the corpus, plus true positives that zizmor 1.30.1 misses (it stops at the first update which satisfies the minimum). `--fix` needs the `default-days` option; zizmor has a built-in 7. The `semver-*-days` keys are checked by neither |
 | `dependabot-execution` | `dependabot-execution` | default | not measured: no `allow` on the corpus, so both tools report nothing. Covered by unit tests only. The fix is unsafe (zizmor offers it too) |
 | `excessive-permissions` | `excessive-permissions` | default | partial: write scopes, `write-all`, `read-all`, workflow-level default permissions (option) and, with `missing-permissions`, job-level default permissions. zizmor grades findings by persona and confidence, jactionlint has one level per rule |
@@ -169,7 +169,7 @@ Known causes of differences between the tools:
   jactionlint does not. jactionlint also reports a job that runs `gh release upload` or pushes an image and restores a cache
   (`jdx/mise-action` with `cache_save: false`, which only stops saving, and `docker/build-push-action` with `cache-from: type=gha`),
   where zizmor looks at triggers and not at jobs.
-- `dangerous-triggers`: jactionlint also reports `issue_comment`, and reports at the trigger where zizmor reports at `on:`.
+- `dangerous-triggers`: jactionlint also reports `issue_comment`, and reports at the trigger where zizmor reports at `on:`. A workflow that cannot write and uses no secret is not reported by default (the counts above were measured before that).
 
 ## Intentional differences: where jactionlint goes beyond zizmor
 
@@ -243,7 +243,7 @@ actions.
 ### Where a rule differs on purpose
 
 - `dangerous-triggers` also reports `issue_comment` (zizmor flags it from the version after 1.30.1) and reports at the trigger, where
-  zizmor reports at `on:`.
+  zizmor reports at `on:`. It reports a workflow that cannot write and reads no secret only with the option `pedantic`.
 - `undocumented-permissions` accepts a comment above a scope as well as at its end of line (zizmor: end of line only).
 - `cache-poisoning` does not treat `push: {tags-ignore: ["*"]}` as a release workflow, and does not take a tag with read-only permissions, or a
   `branches:` filter with a release branch next to others, for a release unless the option `pedantic` is on (see

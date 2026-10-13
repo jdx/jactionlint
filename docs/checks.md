@@ -5726,7 +5726,7 @@ jobs:
 Output:
 <!-- Skip update output -->
 ```
-test.yaml:2:3: warning: trigger "pull_request_target" is dangerous: it runs in the context of the base repository with a write token and secrets even when the pull request comes from a fork. use "pull_request" unless write access is required, and never check out or run code of the pull request [dangerous-triggers]
+test.yaml:2:3: warning: trigger "pull_request_target" is dangerous: it runs in the context of the base repository with the default token of the repository (it can write unless the settings of the repository restrict it) and no secrets, even when the pull request comes from a fork. use "pull_request" unless write access is required, and never check out or run code of the pull request [dangerous-triggers]
   |
 2 |   pull_request_target:
   |   ^~~~~~~~~~~~~~~~~~~~
@@ -5742,7 +5742,7 @@ rules:
 ```
 
 The rule `dangerous-triggers` (in the `default` profile) reports the triggers `pull_request_target`, `workflow_run` and
-`issue_comment`. They run with the secrets and the write token of the repository (in the context of the default branch) while
+`issue_comment`. They run with the secrets and the token of the repository (in the context of the default branch) while
 a fork, or any commenter, controls part of the event. Making them safe is hard: it is not enough to avoid checking out the
 pull request, because arguments, environment variables and files that come from the event can still lead to code execution. See
 [Keeping your GitHub Actions and workflows secure: preventing pwn requests](https://securitylab.github.com/resources/github-actions-preventing-pwn-requests/).
@@ -5751,7 +5751,37 @@ Prefer `pull_request` unless the workflow really needs write access (to leave a 
 of `workflow_run`, and a label added by a maintainer instead of a comment as the trigger. A workflow whose steps are only
 `actions/labeler` is accepted for `pull_request_target`, since it never runs code from the pull request.
 
-The rule only looks at the trigger, so a workflow that uses one of them safely is reported as well. Ignore it with
+The message says what the workflow can do with the token and the secrets, so that you see what is at stake:
+
+- the scopes that the token of a job can write (`permissions:` of the job, else of the workflow; `write-all` is every scope). A job
+  that sets no permissions, in a workflow that sets none, gets the default of the repository, which can write unless the settings
+  of the repository restrict it;
+- the names of the secrets that an expression reads (not `GITHUB_TOKEN`), or that the workflow passes on without naming them
+  (`secrets: inherit`, `toJSON(secrets)`, `secrets[matrix.name]`).
+
+A workflow that cannot write (`permissions: {}`, `read-all` or only `read` scopes in every job) and reads no secret has little to
+lose: an attacker gets the cache, the artifacts and the compute of the runs, not the repository or its secrets. It is the
+pedantic finding of the rule, as [zizmor#398](https://github.com/zizmorcore/zizmor/issues/398) asks. The option `pedantic` (true
+under the `pedantic` profile) reports it, with a message that says so:
+
+```yaml
+rules:
+  dangerous-triggers:
+    pedantic: true
+```
+
+Since a workflow like that is not the pwn request which the trigger is known for, `untrusted-checkout`, `untrusted-artifact` and
+`template-injection` are the rules which report what it does with the event.
+
+GitHub is also removing the most common way to be bitten: for public repositories which have no Actions event policy,
+[workflow execution protections](https://github.blog/changelog/2026-09-17-workflow-execution-protections-in-github-actions-generally-available)
+add a default rule that disables `pull_request_target`. It is enforced from 2026-11-02 for the repositories that used the default
+policy before (it runs in evaluate mode until then) and does not apply to private or internal repositories. A workflow that needs
+the trigger has to be allowed by an event policy (they can name a workflow file), so a finding of this rule on a public
+repository is also a workflow that GitHub is about to stop. The rule does not know the policy of your repository, so it reports
+the trigger either way.
+
+The rule otherwise only looks at the trigger, so a workflow that uses one of them safely is reported as well. Ignore it with
 `# jactionlint ignore=dangerous-triggers` and a reason, as in `zizmor: ignore[dangerous-triggers]`. zizmor 1.30.1 does not report
 `issue_comment` yet.
 
