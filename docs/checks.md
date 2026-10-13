@@ -2951,7 +2951,8 @@ shell of the Windows runners) and `powershell` are searched for the publish comm
 An npm publish to another registry than the public one is not reported even when the command does not say so: the script set it
 before (`npm config set registry URL`, `yarn config set npmRegistryServer URL`), the environment sets `npm_config_registry` or
 `YARN_NPM_REGISTRY_SERVER`, or an earlier `actions/setup-node` step has a `registry-url` of another registry (GitHub Packages,
-`npm.pkg.github.com`, has no trusted publishing).
+`npm.pkg.github.com`, has no trusted publishing). A registry that is written as a variable of the workflow (`registry-url: ${{ env.NPM_REGISTRY_URL }}`,
+`--registry ${{ env.REGISTRY }}`) is read from the `env:` of the step, the job or the workflow, when the value is written out there; any other expression is taken for a registry of your own.
 A registry that is set for one scope (`npm config set @acme:registry URL`) hides the publish only when the package is of that scope:
 the name is read from the `package.json` of the repository (in the `working-directory` of the step, or the folder that
 `npm publish` is given) and a package that is unscoped or of another scope is reported. When the name cannot be known with

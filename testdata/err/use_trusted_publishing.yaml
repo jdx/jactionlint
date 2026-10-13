@@ -71,3 +71,31 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - run: cargo publish
+  registry-from-env:
+    runs-on: ubuntu-latest
+    env:
+      NPM_REGISTRY_URL: https://registry.npmjs.org
+      GITHUB_PACKAGES_REGISTRY_URL: https://npm.pkg.github.com
+    steps:
+      # The registry is a variable that the workflow sets to a value: the public one is judged, GitHub Packages is not
+      - uses: actions/setup-node@v4
+        with:
+          registry-url: ${{ env.NPM_REGISTRY_URL }}
+      - run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - run: npm publish --access public --registry ${{ env.GITHUB_PACKAGES_REGISTRY_URL }}
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - run: npm publish --access public --registry ${{ env.NPM_REGISTRY_URL }}
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+  registry-from-unknown-env:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          registry-url: ${{ vars.REGISTRY }}
+      - run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
