@@ -127,16 +127,17 @@ func (ts *externalTools) tool(name string) *externalTool {
 	return nil
 }
 
-// statuses returns the status of the tools which some rule looked for, or nil when none did (no workflow was
-// checked). A tool that was turned off on purpose with an empty command is left out: the user chose that, and it
-// would add a property to every log of a run that never meant to use the tool.
+// statuses returns the status of the tools which some script needed, or nil when none did: a tool with nothing to
+// check (a workflow of "uses:" steps needs no pyflakes) is left out, like the note leaves it out, since the log would
+// say "not found" about a tool the run never wanted. A tool that was turned off on purpose with an empty command is
+// left out too: the user chose that, and it would add a property to every log of a run that never meant to use it.
 func (ts *externalTools) statuses() map[string]ExternalToolStatus {
 	if ts == nil {
 		return nil
 	}
 	var ret map[string]ExternalToolStatus
 	for _, t := range []*externalTool{ts.shellcheck, ts.pyflakes} {
-		if s, ok := t.snapshot(); ok && s.Status != ExternalToolDisabled {
+		if s, ok := t.snapshot(); ok && s.Status != ExternalToolDisabled && s.Scripts+s.SkippedScripts > 0 {
 			if ret == nil {
 				ret = map[string]ExternalToolStatus{}
 			}

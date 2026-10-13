@@ -300,3 +300,54 @@ func TestExternalToolsOfTheLibrary(t *testing.T) {
 		t.Errorf("an empty command is off: %v", err)
 	}
 }
+
+// TestToolsNobodyNeededAreNotListed: the status of a tool is about the scripts which needed it, like the note is.
+func TestToolsNobodyNeededAreNotListed(t *testing.T) {
+	emptyPath(t)
+	root := t.TempDir()
+	for _, d := range []string{filepath.Join(root, ".git"), filepath.Join(root, ".github", "workflows")} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	usesOnly := "on: push\npermissions: {}\njobs:\n  j:\n    runs-on: ubuntu-latest\n    timeout-minutes: 5\n    steps:\n      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8\n"
+	pythonOnly := "on: push\npermissions: {}\njobs:\n  j:\n    runs-on: ubuntu-latest\n    timeout-minutes: 5\n    steps:\n      - run: print(1)\n        shell: python\n"
+	files := map[string]string{"uses.yaml": usesOnly, "python.yaml": pythonOnly}
+	for name, src := range files {
+		if err := os.WriteFile(filepath.Join(root, ".github", "workflows", name), []byte(src), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	lint := func(file string) map[string]ExternalToolStatus {
+		l, err := NewLinter(&bytes.Buffer{}, &LinterOptions{Shellcheck: "shellcheck", Pyflakes: "pyflakes"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := l.LintFile(filepath.Join(root, ".github", "workflows", file), nil); err != nil {
+			t.Fatal(err)
+		}
+		return l.ExternalTools()
+	}
+	if got := lint("uses.yaml"); got != nil {
+		t.Errorf("a workflow of uses: steps needs no tool, got %+v", got)
+	}
+	got := lint("python.yaml")
+	if _, ok := got["shellcheck"]; ok || got["pyflakes"].Status != ExternalToolNotFound || got["pyflakes"].SkippedScripts != 1 {
+		t.Errorf("only pyflakes was needed: %+v", got)
+	}
+
+	// The SARIF log has no property for the first and the second only has pyflakes
+	for file, wantProp := range map[string]bool{"uses.yaml": false, "python.yaml": true} {
+		var out, errOut bytes.Buffer
+		cmd := Command{Stdin: strings.NewReader(""), Stdout: &out, Stderr: &errOut}
+		cmd.Main([]string{"jactionlint", "--format", "sarif", filepath.Join(root, ".github", "workflows", file)})
+		has := strings.Contains(out.String(), `"externalTools"`)
+		if has != wantProp {
+			t.Errorf("%s: externalTools in the SARIF log = %v, want %v\n%s", file, has, wantProp, out.String())
+		}
+		if wantProp && strings.Contains(out.String(), `"shellcheck": {`) {
+			t.Errorf("%s: shellcheck was not needed: %s", file, out.String())
+		}
+	}
+}

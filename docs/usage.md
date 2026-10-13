@@ -303,8 +303,9 @@ note: shellcheck was not found, so it did not check 12 shell scripts. install it
   found or is not executable, instead of running without the tool. `--shellcheck=shellcheck` counts as named too.
 - `--format sarif` prints no line. The same information is in the log: a notification in `invocations` and, for each tool that a
   script needed, the property `externalTools` of the run, next to `onlineCoverage`. `status` is `ran` or `not found`, `scripts` is the
-  number of scripts the tool checked and `skippedScripts` the number that it would have checked. A tool turned off with an empty command
-  is not listed.
+  number of scripts the tool checked and `skippedScripts` the number that it would have checked. A tool which no script needed (pyflakes in a
+  repository without `shell: python`) and a tool turned off with an empty command are not listed, so a `ran` has `scripts` of at least 1 and a
+  `not found` has `skippedScripts` of at least 1, and the log says the same as the note.
 
   ```json
   "properties": {
