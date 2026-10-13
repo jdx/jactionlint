@@ -109,7 +109,7 @@ func (r *RuleActionReleaseCooldown) versionOf(s usesSite) (sha, tag string, ok b
 	} else if t, ok := specificVersionTag(tagged, s.ref.Ref); ok {
 		tag = t
 	}
-	if idx.truncated && !isFullVersion(tag) {
+	if idx.truncated && !isReleaseVersionTag(tag) {
 		// The repository has more tags than were read, so the version tag of the commit may be missing, and the date of the
 		// commit would stand for the date of the release, which is older. Only a version which is known to be the one of
 		// the commit is judged: a tag written out in full, or the tag which the comment of a pin names when the repository
@@ -130,7 +130,7 @@ func (r *RuleActionReleaseCooldown) commentTag(s usesSite, sha string) string {
 		return ""
 	}
 	v, _, _, ok := commentVersionAt(s.comment.Text, s.ref)
-	if !ok || !isFullVersion(v) {
+	if !ok || !isReleaseVersionTag(v) {
 		return ""
 	}
 	for _, name := range versionSpellings(v) {
@@ -141,8 +141,8 @@ func (r *RuleActionReleaseCooldown) commentTag(s usesSite, sha string) string {
 	return ""
 }
 
-// isFullVersion reports whether the tag is a version with three numbers ("v4.2.2"), the one of a release.
-func isFullVersion(tag string) bool {
+// isReleaseVersionTag reports whether the tag is a version with three numbers ("v4.2.2"), the one of a release.
+func isReleaseVersionTag(tag string) bool {
 	v, ok := parseAdvisoryVersion(tag)
 	return ok && len(v.nums) >= 3
 }
