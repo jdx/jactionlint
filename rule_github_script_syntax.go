@@ -298,6 +298,9 @@ func init() {
 		RuleInfo{ID: "github-script-syntax", Group: RuleGroupCorrectness, Summary: "The script of actions/github-script has a JavaScript syntax error.", DefaultLevel: SeverityError, Profile: ProfileCorrectness, DocsAnchor: "check-github-script-syntax"},
 	)
 	registerRuleFactory("github-script-syntax", func(env *RuleEnv) []Rule {
+		if !env.config.RuleEnabled("github-script-syntax") {
+			return nil // turned off: node is not needed, and a missing node is not worth a note
+		}
 		t := env.tools.tool("node")
 		r, err := NewRuleGithubScriptSyntax("node", env.proc)
 		if err != nil {
