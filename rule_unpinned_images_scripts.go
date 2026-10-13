@@ -84,8 +84,12 @@ func (rule *RuleUnpinnedImages) collectLocalImages() {
 			}
 		})
 	}
+	// The shell of a script is the one of its own job (defaults.run.shell), so the job is entered for each one
+	prev := rule.job
+	defer func() { rule.job = prev }()
 	for _, j := range w.Jobs {
 		if j != nil {
+			rule.enterJob(j)
 			visit(j.Steps)
 		}
 	}

@@ -49,10 +49,33 @@ func normalizedImageName(name string) string {
 // out ("node" and "docker.io/library/node" are the same). A pattern with a tag ("node:20", "ghcr.io/o/*:v1")
 // matches the name and the tag, and a tag of "*" matches any (also none).
 type imagePattern struct {
-	raw     string
-	re      *regexp.Regexp
+	raw string
+	// res are the expressions of the name as written and, when it differs, of the name with the registry written out
+	// ("node" and "docker.io/library/node"): a pattern matches an image which either form of it matches.
+	res     []*regexp.Regexp
 	hasTag  bool
 	literal int // the number of characters that are not "*": the more specific pattern wins
+}
+
+// globRegexp turns a name with "*" (which matches any characters) into an anchored expression, with the tag when it has one.
+func globRegexp(name, tag string, hasTag bool) (*regexp.Regexp, error) {
+	var b strings.Builder
+	b.WriteString("^")
+	write := func(s string) {
+		for i, seg := range strings.Split(regexp.QuoteMeta(s), `\*`) {
+			if i > 0 {
+				b.WriteString(".*")
+			}
+			b.WriteString(seg)
+		}
+	}
+	write(name)
+	if hasTag {
+		b.WriteString(":")
+		write(tag)
+	}
+	b.WriteString("$")
+	return regexp.Compile(b.String())
 }
 
 func parseImagePattern(s string) (imagePattern, error) {
@@ -62,37 +85,25 @@ func parseImagePattern(s string) (imagePattern, error) {
 	}
 	name, tag, _ := imageRefParts(strings.ToLower(s))
 	p.hasTag = tag != ""
-	var b strings.Builder
-	b.WriteString("^")
-	if name != "" {
-		// the registry of a pattern is written out the same way as the one of an image, unless it has a glob
-		for i, seg := range strings.Split(regexp.QuoteMeta(name), `\*`) {
-			if i > 0 {
-				b.WriteString(".*")
-			}
-			b.WriteString(seg)
+	forms := []string{name}
+	if name != "" && name != "*" {
+		if n := normalizedImageName(name); n != name {
+			forms = append(forms, n)
 		}
 	}
-	if p.hasTag {
-		b.WriteString(":")
-		for i, seg := range strings.Split(regexp.QuoteMeta(tag), `\*`) {
-			if i > 0 {
-				b.WriteString(".*")
-			}
-			b.WriteString(seg)
+	for _, f := range forms {
+		re, err := globRegexp(f, tag, p.hasTag)
+		if err != nil {
+			return p, fmt.Errorf("pattern %q is invalid: %v", s, err)
 		}
+		p.res = append(p.res, re)
 	}
-	b.WriteString("$")
-	re, err := regexp.Compile(b.String())
-	if err != nil {
-		return p, fmt.Errorf("pattern %q is invalid: %v", s, err)
-	}
-	p.re = re
 	p.literal = len(s) - strings.Count(s, "*")
 	return p, nil
 }
 
-// matches reports whether the image reference (a name with an optional tag and digest) matches.
+// matches reports whether the image reference (a name with an optional tag and digest) matches: some form of the pattern
+// matches some form of the image.
 func (p imagePattern) matches(ref string) bool {
 	name, tag, _ := imageRefParts(ref)
 	for _, n := range []string{strings.ToLower(name), normalizedImageName(name)} {
@@ -100,8 +111,10 @@ func (p imagePattern) matches(ref string) bool {
 		if p.hasTag {
 			cand = n + ":" + tag
 		}
-		if p.re.MatchString(strings.ToLower(cand)) {
-			return true
+		for _, re := range p.res {
+			if re.MatchString(strings.ToLower(cand)) {
+				return true
+			}
 		}
 	}
 	return false
