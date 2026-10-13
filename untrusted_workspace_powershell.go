@@ -164,7 +164,8 @@ func powerShellCommandRunsWorkspace(words []psWord) bool {
 	}
 	rest := words[i+1:]
 	name := strings.ToLower(strings.TrimSuffix(head.text, ".exe"))
-	if workspaceRunners[name] {
+	// a name in quotes is a value, unless the call operator is in front of it
+	if workspaceRunners[name] && (!head.quoted || i > 0) {
 		return true
 	}
 	switch name {
@@ -190,7 +191,7 @@ func powerShellCommandRunsWorkspace(words []psWord) bool {
 			}
 		}
 	}
-	if workspaceInterpreters[name] {
+	if workspaceInterpreters[name] && (!head.quoted || i > 0) {
 		for _, w := range rest {
 			if isWorkspacePath(w.text) {
 				return true
@@ -199,6 +200,9 @@ func powerShellCommandRunsWorkspace(words []psWord) bool {
 	}
 	return false
 }
+
+// reQualifiedCmdlet matches a cmdlet that is named with its module: `Microsoft.PowerShell.Management\Get-Item`.
+var reQualifiedCmdlet = regexp.MustCompile(`(?i)^[a-z][\w.]*\\[a-z]+-[a-z]+$`)
 
 var reWorkspaceExpr = regexp.MustCompile(`(?i)^\$\{\{\s*github\.workspace\s*\}\}`)
 
@@ -213,6 +217,8 @@ func isWorkspacePath(w string) bool {
 		return false
 	case strings.HasPrefix(l, "$env:github_workspace"), strings.HasPrefix(l, "${env:github_workspace}"), reWorkspaceExpr.MatchString(l):
 		return true
+	case reQualifiedCmdlet.MatchString(l), l[0] >= '0' && l[0] <= '9':
+		return false // Module\Cmdlet-Name, and a number that is divided
 	case strings.HasPrefix(l, "-"), strings.HasPrefix(l, "$"), strings.HasPrefix(l, "~"), strings.HasPrefix(l, "/"), strings.HasPrefix(l, `\`):
 		return false // an option, a variable, a path of the home or the root
 	case len(l) >= 2 && l[1] == ':':

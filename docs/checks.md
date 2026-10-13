@@ -8954,7 +8954,10 @@ a bare `build.ps1` is not run from the current directory in PowerShell, and neit
 `Import-Module`, `Invoke-Expression`, ...) is given a path; or when it is a build or test tool (`npm`, `yarn`, `pnpm`, `make`, `dotnet`,
 `cargo`, `go`, `gradle`, `mvn`, `pip`, `pytest`, `terraform`, ...), which runs the files of the project. Comments (`#` and `<# #>`),
 strings that are only text and arguments that are not a path in command position (`Get-Content ./x.ps1`, `-OutFile install.ps1`) do not
-count. A statement that is not understood is not reported; the subset above is what is read.
+count, and neither does a name in quotes in the place of a command (`$x = 'npm'`, `'npm' ci`) unless `&` is in front of it, a number
+that is divided (`10/2`), a variable (`$a / $b`) or a cmdlet named with its module (`Microsoft.PowerShell.Management\Get-Item`). A
+statement that is not understood is not reported; the subset above is what is read, and the regression suite of it is
+`rule_untrusted_checkout_powershell_test.go`. It is a reader of a subset, not a parser of PowerShell.
 
 In a job that sets `permissions: {}` the message does not claim a token, because the job has none, and in a job whose
 permissions are all `read` it says that the token can only read.
