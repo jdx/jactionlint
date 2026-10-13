@@ -1,0 +1,13 @@
+on:
+  schedule:
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+    inputs:
+      environment:
+        type: string
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo report

@@ -7506,8 +7506,31 @@ queues runs and cancels none, is accepted. The two rules never contradict each o
 by the other.
 
 Whether to cancel is a choice, so a `concurrency:` mapping that does not cancel (to serialize releases, for example) is
-accepted, and so is a `queue:`. The rule skips workflows that only run through `workflow_call` (the caller decides), workflows that only run on a `schedule` or
-by `workflow_dispatch` (no new commit supersedes such a run), and workflows where every job sets its own `concurrency:`.
+accepted, and so is a `queue:`. The rule skips workflows that only run through `workflow_call` (the caller decides), workflows that
+only run on a `schedule` or by `workflow_dispatch` (no new commit supersedes such a run, but see the option `pedantic` below), and
+workflows where every job sets its own `concurrency:`.
+
+With the option `pedantic` (on under the `pedantic` profile, off otherwise, so the `default` profile reports what it always did) the
+rule also reports a workflow that only a `schedule` or a `workflow_dispatch` starts, as zizmor does. A run of such a workflow is not
+superseded by a commit, but it can overlap with the next scheduled run, with a manual one, or with itself when it takes longer than
+the interval. The advice differs from the one above on purpose:
+
+- It asks for a top-level `concurrency:` with a `group:` such as `${{ github.workflow }}` and does **not** suggest
+  `cancel-in-progress: true`: a scheduled run that is cancelled is not started again, so the work of the run (a release, a
+  synchronization, a report) is lost or left half done. A group without `cancel-in-progress` makes a new run wait for the running one.
+  Set `cancel-in-progress: true` only when a run can be thrown away without loss.
+- For a manual run that takes inputs the message adds that a run that waits is replaced by a newer one that waits: put the inputs in
+  the group, or add `queue: max` when no run may be skipped.
+- A `concurrency:` that is only a group name (`concurrency: nightly`) is reported too, because zizmor reports it. It already behaves
+  like `cancel-in-progress: false`, so the advice is to write the mapping form with an explicit `cancel-in-progress: false`. It is not
+  reported for a workflow that releases or deploys, where the plain group is what is wanted.
+- There is no fix. The group is the choice of the author, and the fix of this rule only ever adds a group per pull request.
+
+The mapping form without `cancel-in-progress`, or with `cancel-in-progress: false`, is accepted for every kind of workflow, also with
+the option: zizmor 1.30.1 does not report it either (probed with a file of each shape), so the rule does not either. A `concurrency:`
+that is an expression (`concurrency: ${{ github.workflow }}`) can be a whole configuration, so it is not taken for a group name. A
+workflow in which every job has a `concurrency:` of its own is not reported, although zizmor reports a job whose `concurrency:` is only
+a group name. That is a documented difference, not measured: the corpus that could be run has no such workflow.
 
 `jactionlint --fix` adds the block above after `on:` when it is safe to do so, that is, only for a workflow whose triggers are all
 events of a pull request (`pull_request`, `pull_request_target`, `pull_request_review` and `pull_request_review_comment`), in which

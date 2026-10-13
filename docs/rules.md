@@ -385,6 +385,7 @@ A workflow does not cancel superseded runs with concurrency:.
 - Default level: error
 - Profile: default
 - Fixable: yes
+- Option `pedantic` (bool, no default): Also report the pedantic checks, which are noisier. Unset, they run under the pedantic profile.
 - Details and examples: [checks](./checks.md#check-concurrency-limits)
 
 ## conflicting-action-inputs
