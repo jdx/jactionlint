@@ -98,9 +98,9 @@ func (rule *RuleArtipacked) VisitJobPre(n *Job) error {
 		if a == nil || !ref.isRepoAction("actions/checkout") {
 			continue
 		}
-		if _, set := a.input("persist-credentials"); set {
+		if _, set := a.input("persist-credentials"); set || a.InputsUnknown() {
 			// false is the fix, true is a decision that the credential is needed, and an expression
-			// cannot be judged
+			// cannot be judged: neither can a "with:" which is an expression
 			continue
 		}
 		if checkoutV1Re.MatchString(ref.Ref) || rule.pinnedToV1(a, ref) {

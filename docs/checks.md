@@ -9,6 +9,7 @@ List of checks:
 - [Missing required keys or key duplicates](#check-missing-required-duplicate-keys)
 - [Unexpected empty mappings](#check-empty-mapping)
 - [Unexpected mapping values](#check-mapping-values)
+- [Expressions for a whole mapping or list](#check-whole-value-expressions)
 - [Syntax check for expression `${{ }}`](#check-syntax-expression)
 - [Type checks for expression syntax in `${{ }}`](#check-type-check-expression)
 - [Contexts and built-in functions](#check-contexts-and-builtin-func)
@@ -265,6 +266,78 @@ Some mapping values are restricted to some constant strings. Several mapping val
 
 jactionlint checks such constant strings are used properly while parsing and reports an error when an unexpected value is
 specified.
+
+<a id="check-whole-value-expressions"></a>
+## Expressions for a whole mapping or list
+
+Example input:
+
+```yaml
+on: push
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    # OK: the strategy and its matrix are whatever the expression evaluates to
+    strategy: ${{ fromJSON(vars.STRATEGY) }}
+    # OK: the "run" defaults of a job, the ports and volumes of a container, and "with" can be one expression
+    defaults:
+      run: ${{ fromJSON(vars.RUN_DEFAULTS) }}
+    container:
+      image: node:20
+      ports: ${{ fromJSON(vars.PORTS) }}
+    env:
+      # OK: "${{ insert }}" adds the entries of a mapping
+      ${{ insert }}: ${{ matrix.env || fromJSON('{}') }}
+    steps:
+      # OK: the inputs are not known, so no input is reported as missing
+      - uses: actions/cache@v4
+        with: ${{ fromJSON(vars.CACHE_INPUTS) }}
+  wrong:
+    runs-on: ubuntu-latest
+    # ERROR: The steps context is not available in "strategy"
+    strategy: ${{ fromJSON(steps.setup.outputs.strategy) }}
+    steps:
+      # ERROR: A string is not a mapping
+      - uses: actions/checkout@v4
+        with: ${{ github.sha }}
+```
+
+Output:
+
+```
+test.yaml:23:28: context "steps" is not allowed here. available contexts are "github", "inputs", "needs", "vars". see https://docs.github.com/en/actions/learn-github-actions/contexts#context-availability for more details [context-availability]
+   |
+23 |     strategy: ${{ fromJSON(steps.setup.outputs.strategy) }}
+   |                            ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+test.yaml:27:15: type of expression at "with" must be object but found type string [expression-type]
+   |
+27 |         with: ${{ github.sha }}
+   |               ^~~
+```
+
+[Playground](https://jactionlint.jdx.dev/#eNqMkU1PMkEQhO/8ij68CS8HRmM87UmC+BUDhI+DJzIszc4ozGymuxcNzH83Cyyo2RhPm2xVPanq8S6BXMg0Xv2ckgYAI3H5BQjiqF3q/7ZbWGsO9l15ghj3KnHQjNnHQV4Gv34aD/r/Cx1IjSejzqR3/9KqzAtcalkxHcB7dF1uNO3Pbnt3nenzZHzKpt6xtg5DFbZrnWECzi8wubo8/sx9YKpjDgejLzB0RYUprdYRBoYYv41EV8Bud+Y0t7HZOu/G/LSjDUJICeiUrXd0kerU4E1xfZQBNpZNXatup/vQmz32h9NTuU3wLvtxeZmLY2mvdPkqv51930oRsuTKC+fCpCrrH6sbTN+8cH37zLKRuSKjIcbPAQCqSa3j)
+
+The schema of GitHub Actions gives some keys a list of contexts, and a value that is one expression `${{ }}` is valid there
+instead of the mapping or the list. These are `strategy` and its `matrix`, `include` and `exclude`, `env`, the `run` section of
+`defaults` of a job, `container` and `services` (the whole value, `env`, `credentials`, `ports` and `volumes`),
+`concurrency`, `environment`, `runs-on` and `with` of a step. An expression is not valid for `defaults` of a workflow,
+`with` and `secrets` of a job that calls a reusable workflow, `needs`, `steps` and `permissions`, which have no contexts.
+
+jactionlint checks such an expression with the contexts that are available at its key (see
+[the context availability](#check-contexts-and-builtin-func)) and checks its type: a mapping is expected where `with`, `strategy`
+or `env` are, and a list where `ports` or `volumes` are. Rules which depend on what the expression evaluates to treat it as
+unknown instead of guessing:
+
+- `matrix` is any object when `strategy` is an expression, so no property of it is reported as undefined.
+- The inputs of a step are unknown when its `with` is an expression or has a `${{ insert }}` key, so `missing-action-input` and
+  the rules which look for an input that is not set (`artipacked`, `cache-poisoning`, `github-app`, `unpinned-tools` and
+  `agentic-actions`) do not report the step. The inputs written next to the expression are still checked
+  (`unknown-action-input`).
+- The shell of a job is unknown when its `defaults.run` is an expression, so the rules which judge a script by its shell skip it.
+- `concurrency: ${{ ... }}` can be a group name or a whole configuration, so `concurrency-limits` does not take it for a
+  group name that cannot cancel runs.
+- A constant is evaluated where a check needs its value: `queue: ${{ 'max' }}` together with `cancel-in-progress: true` is
+  reported like `queue: max`.
 
 <a id="check-syntax-expression"></a>
 ## Syntax check for expression `${{ }}`
@@ -3375,7 +3448,8 @@ the workflow level and the scopes a job needs on that job. Read scopes and `none
 
 A job which has no `permissions:` in a workflow which has none is the business of the [`missing-permissions`](#permissions)
 rule, which reports the jobs the default permissions of the repository apply to. To also have a workflow without a top-level
-`permissions:` reported when its jobs set their own, turn on `require-workflow-permissions`:
+`permissions:` reported when its jobs set their own, turn on `require-workflow-permissions`. Unset, it is on under the `pedantic`
+profile and off under the others. The finding is at the first key of the workflow, where zizmor reports it:
 
 ```yaml
 rules:
@@ -3444,7 +3518,8 @@ it. Comments which only configure a tool, such as `# jactionlint ignore=...`, do
 `permissions:` are checked; `write-all` and `read-all` are the business of `excessive-permissions`.
 
 With the `include-read` option the scopes granted with `read` need a comment too, except `contents: read`, which every job needs
-to check out the repository:
+to check out the repository. Unset, the option is on under the `pedantic` profile (where this rule runs by default) and off when
+you enable the rule in another profile:
 
 ```yaml
 rules:
@@ -3454,6 +3529,8 @@ rules:
 ```
 
 [zizmor](https://docs.zizmor.sh/audits/#undocumented-permissions) behaves like `include-read: true`, and counts only a comment at the end of the line.
+It reports one finding for a whole `permissions:` block, jactionlint one for each scope without a comment. A scope granted with
+`none` is not reported, because it grants nothing.
 
 <a id="check-unpinned-images"></a>
 ## Unpinned container images
@@ -6251,7 +6328,23 @@ workflow either, and GitHub does not validate them. `template-injection` reports
 - `github.event.client_payload.*`, which the sender of a `repository_dispatch` event chooses;
 - `github.event.release.tag_name`, `name`, `body` and `target_commitish`, and the names of the release assets;
 - `github.ref_name`, `github.base_ref` and `github.event.pull_request.base.ref`: a branch or tag name can hold shell syntax such
-  as `a$(cmd)`. Creating a branch takes write access, which is why zizmor reports them as well.
+  as `a$(cmd)`. Creating a branch takes write access, which is why zizmor reports them as well;
+- text that the table of actionlint lacks and an outsider types: the previous title and text of an edited issue or pull request
+  (`github.event.changes.title.from`, `changes.body.from`, and `changes.base.ref.from`, the branch the pull request had),
+  `github.event.pull_request.head.repo.homepage` (the website of the fork, which its owner types), the title of the pages of a
+  `gollum` event (`github.event.pages[*].title`, like `page_name`), and the message and the author's name of the commit of a
+  merge queue (`github.event.merge_group.head_commit.message`, `.author.name`), which holds the title and the text of the pull
+  requests;
+- in a workflow started by `workflow_run`, the path of the workflow file that started it: `github.event.workflow_run.path`,
+  `github.event.workflow.path` and `github.event.workflow_run.referenced_workflows[*].path`. A pull request from a fork can add a
+  workflow file with any name (`$(cmd).yaml` is a valid file name), and GitHub fills the path from it. In other workflows
+  (`github.event.workflow` of a `workflow_dispatch` is the file that someone with write access chose) the path is not reported.
+
+Not reported: `github.event.changes.head.ref.from` (listed by CodeQL and gato-x, but no payload has the field),
+`github.event.merge_group.head_commit.author.email` and `.committer.*` (the commit is made by GitHub's queue and an email is one that
+an account verified, so there is no evidence that an outsider chooses them) and `github.event.merge_group.head_ref` (a name which
+the queue makes). The pedantic option of the
+[expansions](#check-template-injection-expansion) still reports them as every other `${{ }}` in a script.
 
 `github.actor`, SHAs, numbers and the IDs of events are not reported: GitHub restricts their characters. `steps.*.outputs.*`,
 `needs.*.outputs.*`, `matrix.*` and `env.*` are values of the workflow itself, which the pedantic option of the
