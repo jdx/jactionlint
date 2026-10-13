@@ -27,6 +27,16 @@ jobs:
     runs-on: ${{ matrix.os }}-latest
     steps:
       - run: echo ...
+  # An exclude with an expression can remove any value
+  excluded-by-expression:
+    strategy:
+      matrix:
+        os: [ubuntu, linux]
+        exclude:
+          - os: ${{ inputs.os }}
+    runs-on: ${{ matrix.os }}-latest
+    steps:
+      - run: echo ...
   # A number which GitHub prints as it is written makes a label, another one is not resolved
   numbers:
     strategy:

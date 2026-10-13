@@ -13,7 +13,8 @@ import (
 // made of several matrix values (`${{ matrix.os }}-${{ matrix.arch }}`) is not resolved because `exclude` and `include`
 // decide which pairs run and the product of the values has pairs that do not. A value that is not a string without an
 // expression, or a number that GitHub prints differently from the text of the file (`20.10` is `20.1`), is skipped, and
-// so is a value that every `exclude` entry which has only that name removes.
+// so is a value of the matrix that an `exclude` entry which has only that name removes (a value that `include` adds
+// is a new job and stays). An `exclude` with an expression for the name is not looked through at all.
 func concatenatedRunnerLabels(label *String, m *Matrix) []*String {
 	if m == nil || m.Expression != nil || !strings.Contains(label.Value, "${{") {
 		return nil
@@ -53,14 +54,20 @@ func concatenatedRunnerLabels(label *String, m *Matrix) []*String {
 		return nil
 	}
 
-	var values []*RawYAMLString
+	// A value of the row can be removed by `exclude`, which is applied before `include`: a value which `include` adds
+	// is a new job, so it stays.
+	type candidate struct {
+		v       *RawYAMLString
+		fromRow bool
+	}
+	var values []candidate
 	if row, ok := m.Rows[name]; ok {
 		if row.Expression != nil {
 			return nil
 		}
 		for _, v := range row.Values {
 			if s, ok := v.(*RawYAMLString); ok {
-				values = append(values, s)
+				values = append(values, candidate{s, true})
 			}
 		}
 	}
@@ -68,7 +75,7 @@ func concatenatedRunnerLabels(label *String, m *Matrix) []*String {
 		for _, c := range m.Include.Combinations {
 			if a, ok := c.Assigns[name]; ok {
 				if s, ok := a.Value.(*RawYAMLString); ok {
-					values = append(values, s)
+					values = append(values, candidate{s, false})
 				}
 			}
 		}
@@ -76,22 +83,35 @@ func concatenatedRunnerLabels(label *String, m *Matrix) []*String {
 
 	removed := map[string]bool{}
 	if m.Exclude != nil {
+		if m.Exclude.Expression != nil {
+			return nil // which jobs are removed is not known
+		}
 		for _, c := range m.Exclude.Combinations {
 			if c.Expression != nil {
 				return nil
 			}
-			if a, ok := c.Assigns[name]; ok && len(c.Assigns) == 1 {
-				if s, ok := a.Value.(*RawYAMLString); ok {
-					removed[s.Value] = true
-				}
+			a, ok := c.Assigns[name]
+			if !ok {
+				continue
+			}
+			s, ok := a.Value.(*RawYAMLString)
+			if !ok {
+				continue // an object or an array never equals a string of the row
+			}
+			if ContainsExpression(s.Value) {
+				return nil // an expression can match any value
+			}
+			if len(c.Assigns) == 1 {
+				removed[s.Value] = true
 			}
 		}
 	}
 
 	var labels []*String
 	seen := map[string]bool{}
-	for _, v := range values {
-		if !isStableMatrixString(v) || removed[v.Value] {
+	for _, cand := range values {
+		v := cand.v
+		if !isStableMatrixString(v) || (cand.fromRow && removed[v.Value]) {
 			continue
 		}
 		var b strings.Builder

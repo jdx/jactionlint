@@ -41,3 +41,16 @@ jobs:
     runs-on: ['${{ matrix.os }}-latest', arm64]
     steps:
       - run: echo ...
+  # exclude removes a value of the matrix, and include adds it again as a new job
+  excluded-and-included:
+    strategy:
+      matrix:
+        os: [ubuntu, linux]
+        exclude:
+          - os: linux
+        include:
+          - os: linux
+            extra: yes
+    runs-on: ${{ matrix.os }}-latest
+    steps:
+      - run: echo ...
