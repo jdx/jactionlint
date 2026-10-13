@@ -43,6 +43,16 @@ func TestSurvivingRowValues(t *testing.T) {
 		{"the row itself is an expression", "        os: ${{ fromJSON(inputs.x) }}\n", ""},
 		{"an array never equals a string", "        os: [a, b]\n        exclude:\n          - os: [a]\n", "a,b"},
 		{"an entry with a key that is not in the base cannot match", "        os: [a, b]\n        include:\n          - extra: 1\n        exclude:\n          - os: a\n            extra: 1\n", "a,b"},
+		{"a string filter never equals an object value", "        os: [a]\n        cfg:\n          - {x: 1}\n        exclude:\n          - os: a\n            cfg: x\n", "a"},
+		{"an object filter may equal an object value", "        os: [a]\n        cfg:\n          - {x: 1, y: 2}\n        exclude:\n          - os: a\n            cfg: {x: 1}\n", ""},
+		{"an object filter never equals a string value", "        os: [a]\n        cfg: [x]\n        exclude:\n          - os: a\n            cfg: {x: 1}\n", "a"},
+		{"an array filter never equals a string value", "        os: [a]\n        cfg: [x]\n        exclude:\n          - os: a\n            cfg: [x]\n", "a"},
+		{"an array filter may equal an array value", "        os: [a]\n        cfg:\n          - [x]\n        exclude:\n          - os: a\n            cfg: [x]\n", ""},
+		{"an object value and a string value in one row", "        os: [a]\n        cfg:\n          - {x: 1}\n          - y\n        exclude:\n          - os: a\n            cfg: y\n", "a"},
+		{"1 and 1.0 are the same number", "        os: [a]\n        n: [1]\n        exclude:\n          - os: a\n            n: 1.0\n", ""},
+		{"1 and the string 1 may be the same", "        os: [a]\n        n: [1]\n        exclude:\n          - os: a\n            n: '1'\n", ""},
+		{"1 and 2 are not", "        os: [a]\n        n: [1]\n        exclude:\n          - os: a\n            n: 2\n", "a"},
+		{"null is a value like the others", "        os: [a]\n        n: [null, 1]\n        exclude:\n          - os: a\n            n: null\n", "a"},
 		{"include does not bring a value back to the row", "        os: [a, b]\n        exclude:\n          - os: a\n        include:\n          - os: a\n", "b"},
 	}
 	for _, tc := range tests {

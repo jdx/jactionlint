@@ -22,11 +22,12 @@ import (
 // callers stay silent otherwise:
 //
 //   - a value written with an expression in an entry matches any value of that key;
-//   - a row that is an expression, or a value of a row which is not a plain string, stands for any value of that row;
+//   - a row that is an expression, or a value of a row with an expression, stands for any value of that row; an object or
+//     an array value is equal only to an object or an array filter;
 //   - an entry that is itself an expression, or `exclude` as a whole written as an expression, may match any
 //     combination, so no value of a row is certain (the values that `include` adds still are);
-//   - an entry never matches a string with an object or an array (`[macos]` is not `macos`), and an entry with a key
-//     that is not a row cannot match a combination of the base.
+//   - a string filter never equals an object or an array value and the other way round (`[macos]` is not `macos`), and
+//     an entry with a key that is not a row cannot match a combination of the base.
 //
 // A matrix with more combinations than matrixSurvivalMaxCombinations is not enumerated, and nothing is certain when
 // it has an `exclude`.
@@ -34,9 +35,11 @@ import (
 // matrixSurvivalMaxCombinations bounds the cross product that survivingRowValues enumerates.
 const matrixSurvivalMaxCombinations = 4096
 
-// rowSlot is one value of a row for the enumeration: a known string, or "any" (unknown).
+// rowSlot is one value of a row for the enumeration: a known string, an object or an array (which only an object or an
+// array filter can equal), or "any" (unknown).
 type rowSlot struct {
 	s   string
+	obj bool
 	any bool
 }
 
@@ -82,10 +85,15 @@ func survivingRowValues(m *Matrix, name string) map[*RawYAMLString]bool {
 			ss = []rowSlot{{any: true}}
 		} else {
 			for _, v := range r.Values {
-				if s, ok := v.(*RawYAMLString); ok && !ContainsExpression(s.Value) {
-					ss = append(ss, rowSlot{s: s.Value})
-				} else {
-					ss = append(ss, rowSlot{any: true})
+				switch x := v.(type) {
+				case *RawYAMLString:
+					if ContainsExpression(x.Value) {
+						ss = append(ss, rowSlot{any: true})
+					} else {
+						ss = append(ss, rowSlot{s: x.Value})
+					}
+				default:
+					ss = append(ss, rowSlot{obj: true})
 				}
 			}
 		}
@@ -160,15 +168,22 @@ func entryMayMatch(entries []*MatrixCombination, name string, cand rowSlot, keys
 	return false
 }
 
-// filterMayEqual reports whether the value of an `exclude` entry may equal the value of a combination.
+// filterMayEqual reports whether the value of an `exclude` entry may equal the value of a combination. A string
+// equals only a string (a scalar, by value), and an object or an array only an object or an array (an object filter
+// matches when all of its keys match, which is not looked at: it may match). An expression may be anything.
 func filterMayEqual(filter RawYAMLValue, slot rowSlot) bool {
+	if slot.any {
+		return true
+	}
 	s, ok := filter.(*RawYAMLString)
 	if !ok {
-		// An object or an array equals only an object or an array, which a slot that is not a string may be
-		return slot.any
+		return slot.obj
 	}
-	if ContainsExpression(s.Value) || slot.any {
+	if ContainsExpression(s.Value) {
 		return true
+	}
+	if slot.obj {
+		return false
 	}
 	return scalarsMayBeEqual(s.Value, slot.s)
 }
