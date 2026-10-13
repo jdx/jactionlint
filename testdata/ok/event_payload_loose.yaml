@@ -1,0 +1,10 @@
+# The payload of github.event is not known when the events cannot say it, so nothing of it is checked
+on:
+  workflow_dispatch:
+  push:
+
+jobs:
+  not-checked:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo '${{ github.event.worflow_run.conclusion }}'
