@@ -1,0 +1,34 @@
+on: push
+jobs:
+  blacksmith:
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    steps:
+      - run: echo ...
+  depot:
+    runs-on: depot-ubuntu-24.04-8
+    steps:
+      - run: echo ...
+  ubicloud:
+    runs-on: ubicloud-standard-4-arm
+    steps:
+      - run: echo ...
+  warpbuild:
+    runs-on: warp-ubuntu-latest-x64-4x
+    steps:
+      - run: echo ...
+  namespace:
+    runs-on: namespace-profile-big-apple
+    steps:
+      - run: echo ...
+  runson-one-label:
+    runs-on: runs-on=${{ github.run_id }}/runner=2cpu-linux-x64
+    steps:
+      - run: echo ...
+  runson-labels:
+    runs-on:
+      - runs-on=${{ github.run_id }}
+      - runner=64cpu-linux-x64
+      - family=m8+c8
+      - image=ubuntu24-full-x64
+    steps:
+      - run: echo ...

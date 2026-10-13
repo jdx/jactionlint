@@ -17,18 +17,22 @@ import (
 //   - `cargo install` without --locked. The flag is the documented way to use the Cargo.lock that the crate was
 //     published with. This is the one finding that has a fix.
 //   - installs from a manifest that are not bound to the lock file of the repository: `npm install` instead of
-//     `npm ci`, `yarn install` without --immutable and `pnpm install --no-frozen-lockfile`. They are reported
+//     `npm ci`, `yarn install` without --immutable, `pnpm install --no-frozen-lockfile` and the same flag of `aube install`
+//     (pnpm and aube freeze the lock file by default in CI, so they are only reported with the flag). They are reported
 //     when the repository has the lock file (the project root, or the working-directory of the step, has
-//     package-lock.json, yarn.lock or pnpm-lock.yaml), because only then the lock file is being ignored. Without
+//     package-lock.json, yarn.lock, pnpm-lock.yaml, or for aube any of those or aube-lock.yaml or bun.lock), because only then the lock file is being ignored. Without
 //     the lock file there is nothing to bind to.
 //   - with the option "pedantic", the same installs without a lock file in the repository, `bun install` without a
-//     frozen lock file, and `pip install -r` without hashes or constraints.
+//     frozen lock file, `pip install -r` without hashes or constraints, and npm, Yarn and bun installs that run the
+//     lifecycle scripts of the dependencies (see checkLifecycleScripts; for aube only the installs that allow every build), and installs of packages without a release-age
+//     cooldown (see checkReleaseAge).
 type RuleUnlockedInstall struct {
 	RuleBase
 	runContext
-	src  *fileOffsets
-	root string // the root directory of the project, empty when the file is not in one
-	step *Step
+	src   *fileOffsets
+	root  string // the root directory of the project, empty when the file is not in one
+	step  *Step
+	files repoFiles
 }
 
 // NewRuleUnlockedInstall creates a new RuleUnlockedInstall instance. The source is the content of the file; it is
@@ -81,6 +85,8 @@ func (rule *RuleUnlockedInstall) VisitStep(n *Step) error {
 		}
 		rule.checkCargo(s, origin, c, in)
 		rule.checkManifest(s, origin, c, in)
+		rule.checkLifecycleScripts(n, s, origin, c, in)
+		rule.checkReleaseAge(n, s, origin, c, in)
 	}
 	return nil
 }
@@ -144,6 +150,23 @@ func (rule *RuleUnlockedInstall) reportsInstall(lockFiles ...string) bool {
 	return false
 }
 
+// aubeLockFiles are the lock files aube reads and writes (https://aube.sh/package-manager/lockfiles). It keeps the format of
+// the one the project has, so the repository is bound to a lock file when it has any of them.
+var aubeLockFiles = []string{"aube-lock.yaml", "pnpm-lock.yaml", "bun.lock", "yarn.lock", "npm-shrinkwrap.json", "package-lock.json"}
+
+// aubeUnfreeze returns the flag that makes `aube install` resolve again and update the lock file although CI is set, "" if
+// the command has none. `--no-frozen-lockfile` re-resolves everything, `--prefer-frozen-lockfile` re-resolves when the lock file is
+// stale and `--fix-lockfile` re-resolves the entries that drifted. The last of them that is given is not decided here: aube
+// rejects `--frozen-lockfile` together with them, so any of them means the install may write the lock file.
+func aubeUnfreeze(c *runscript.Command) string {
+	for _, name := range []string{"--no-frozen-lockfile", "--prefer-frozen-lockfile", "--fix-lockfile"} {
+		if c.HasFlag(name) {
+			return name
+		}
+	}
+	return ""
+}
+
 func (rule *RuleUnlockedInstall) checkManifest(s *runscript.Script, origin runscript.Origin, c *runscript.Command, in *runscript.Install) {
 	switch in.Ecosystem {
 	case "npm":
@@ -165,6 +188,17 @@ func (rule *RuleUnlockedInstall) checkManifest(s *runscript.Script, origin runsc
 				if rule.reportsInstall("pnpm-lock.yaml") {
 					rule.errorIDAt("unlocked-install", start, `"pnpm install" is told not to freeze the lock file, so it may update pnpm-lock.yaml instead of failing when it is out of date. pass --frozen-lockfile`).endAt(end)
 				}
+			}
+			return
+		}
+		if c.Tool == "aube" {
+			// aube freezes the lock file by default when CI is set, which GitHub does on every runner, so only an
+			// explicit opt-out is reported. `aube ci` is always frozen.
+			if in.Verb != "install" {
+				return
+			}
+			if opt := aubeUnfreeze(c); opt != "" && rule.reportsInstall(aubeLockFiles...) {
+				rule.errorIDAt("unlocked-install", start, quote(name)+" is told not to freeze the lock file ("+opt+"), so it may update the lock file instead of failing when it is out of date. pass --frozen-lockfile or use `aube ci`").endAt(end)
 			}
 			return
 		}
@@ -215,7 +249,7 @@ func (rule *RuleUnlockedInstall) checkManifest(s *runscript.Script, origin runsc
 
 func init() {
 	registerRules(
-		RuleInfo{ID: "unlocked-install", Group: RuleGroupSecurity, Summary: "cargo install runs without --locked, or npm, yarn or pnpm install without freezing a lock file that the repository has.", DefaultLevel: SeverityError, Profile: ProfileDefault, Fixable: true, DocsAnchor: "check-unlocked-install", Options: []RuleOption{pedanticOption}},
+		RuleInfo{ID: "unlocked-install", Group: RuleGroupSecurity, Summary: "cargo install runs without --locked, or npm, yarn or pnpm install without freezing a lock file that the repository has. With the option pedantic, also installs without a lock file, npm, Yarn and bun installs that run the lifecycle scripts of the dependencies (and aube installs that allow every build), and installs without a release-age cooldown.", DefaultLevel: SeverityError, Profile: ProfileDefault, Fixable: true, DocsAnchor: "check-unlocked-install", Options: []RuleOption{pedanticOption}},
 	)
 	registerRuleFactory("unlocked-install", func(env *RuleEnv) []Rule {
 		if !env.config.RuleEnabled("unlocked-install") {

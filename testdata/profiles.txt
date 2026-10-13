@@ -25,6 +25,7 @@ dependabot-syntax correctness correctness error
 deprecated-action-input correctness correctness error
 deprecated-commands correctness correctness error
 deprecated-node-runtime pedantic policy warn
+deprecated-runner-label pedantic policy warn
 duplicate-job-id correctness correctness error
 duplicate-job-needs correctness correctness error
 duplicate-key correctness correctness error
@@ -46,6 +47,7 @@ impostor-commit online security error
 insecure-commands default security error
 insecure-ssh-keyscan default security error
 insecure-url-scheme default security error
+insufficient-permissions default correctness error
 invalid-activity-type correctness correctness error
 invalid-cron correctness correctness error
 invalid-env-var-name correctness correctness error
@@ -80,6 +82,7 @@ missing-permissions default policy error
 missing-timeout default policy error
 missing-workflow-input correctness correctness error
 missing-workflow-secret correctness correctness error
+multiline-plain-run correctness correctness error
 mutable-runner-label pedantic policy warn
 obfuscation default security error
 outdated-action-runner correctness correctness error
@@ -89,6 +92,7 @@ pyflakes correctness correctness error
 recursive-alias correctness correctness error
 ref-confusion online security warn
 ref-version-mismatch online security warn
+repojacking online security warn
 require-expression-wrapping pedantic style error
 require-shell pedantic style error
 required-actions configured policy error
@@ -102,6 +106,7 @@ superfluous-actions default security error
 template-injection correctness security error
 timeout-too-long configured policy error
 typosquat-uses default security error
+ubuntu-slim-limits default correctness error
 undefined-function correctness correctness error
 undefined-job-needs correctness correctness error
 undefined-property correctness correctness error

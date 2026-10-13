@@ -4752,6 +4752,26 @@ var PopularActions = map[string]*ActionMetadata{
 			"failed-wrapper": {"failed-wrapper"},
 		},
 	},
+	"jdx/aube-action@v1": {
+		Name: "Setup aube package manager",
+		Inputs: ActionMetadataInputs{
+			"cache":             {"cache", false, false, ""},
+			"cache-path":        {"cache-path", false, false, ""},
+			"install-args":      {"install-args", false, false, ""},
+			"node-version":      {"node-version", false, false, ""},
+			"run-install":       {"run-install", false, false, ""},
+			"token":             {"token", false, false, ""},
+			"version":           {"version", false, false, ""},
+			"working-directory": {"working-directory", false, false, ""},
+		},
+		Outputs: ActionMetadataOutputs{
+			"bin-path":      {"bin-path"},
+			"cache-hit":     {"cache-hit"},
+			"node-bin-path": {"node-bin-path"},
+			"node-version":  {"node-version"},
+			"version":       {"version"},
+		},
+	},
 	"microsoft/playwright-github-action@v1": {
 		Name: "Run Playwright tests",
 	},
