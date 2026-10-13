@@ -131,12 +131,12 @@ func macosLabelOf(j *Job) string {
 		if !l.ContainsExpression() {
 			labels = append(labels, l.Value)
 		} else if vs, ok := matrixLabelValues(l, m); ok {
-			labels = append(labels, vs...)
+			labels = append(labels, runnersAfterExclude(vs, l, m)...)
 		}
 	}
 	if j.RunsOn.LabelsExpr != nil {
 		if vs, ok := matrixLabelValues(j.RunsOn.LabelsExpr, m); ok {
-			labels = append(labels, vs...)
+			labels = append(labels, runnersAfterExclude(vs, j.RunsOn.LabelsExpr, m)...)
 		}
 	}
 	for _, l := range labels {
@@ -150,6 +150,53 @@ func macosLabelOf(j *Job) string {
 		}
 	}
 	return ""
+}
+
+// runnersAfterExclude drops the values of `runs-on: ${{ matrix.key }}` that no job gets: a value of the row which an
+// `exclude` entry with only that key removes. A value that `include` adds is a new job and stays, and when an
+// `exclude` has an expression the values of the row are not known, so only the ones of `include` are kept.
+func runnersAfterExclude(vs []string, label *String, m *Matrix) []string {
+	r := matrixRefRe.FindStringSubmatch(strings.TrimSpace(label.Value))
+	if r == nil || m == nil || m.Exclude == nil {
+		return vs
+	}
+	key := strings.ToLower(r[1])
+	removed, included := map[string]bool{}, map[string]bool{}
+	unknown := m.Exclude.Expression != nil
+	for _, c := range m.Exclude.Combinations {
+		if c.Expression != nil {
+			unknown = true
+			continue
+		}
+		for k, a := range c.Assigns {
+			if strings.ToLower(k) != key {
+				continue
+			}
+			if str, ok := a.Value.(*RawYAMLString); ok {
+				if ContainsExpression(str.Value) {
+					unknown = true
+				} else if len(c.Assigns) == 1 {
+					removed[str.Value] = true
+				}
+			}
+		}
+	}
+	if m.Include != nil {
+		for _, c := range m.Include.Combinations {
+			for k, a := range c.Assigns {
+				if str, ok := a.Value.(*RawYAMLString); ok && strings.ToLower(k) == key {
+					included[str.Value] = true
+				}
+			}
+		}
+	}
+	var out []string
+	for _, v := range vs {
+		if included[v] || !(unknown || removed[v]) {
+			out = append(out, v)
+		}
+	}
+	return out
 }
 
 // isMacOSRunnerLabel reports whether the label is a GitHub-hosted macOS runner: macos-latest, macos-14, macos-15-intel,
@@ -171,7 +218,7 @@ func portableTools(s *runscript.Script) map[string]bool {
 			}
 			switch c.Name {
 			case "date":
-				if w.Raw == "-j" || w.Raw == "-v" || strings.HasPrefix(w.Raw, "-v") && len(w.Raw) > 2 && (w.Raw[2] == '+' || w.Raw[2] == '-') {
+				if dateBSDOptionRe.MatchString(w.Raw) {
 					out["date"] = true
 				}
 			case "stat":
@@ -208,6 +255,9 @@ type macosGnuForm struct {
 var (
 	// sedInPlaceRe is a word that is the in-place option of sed, alone or last of a cluster (-i, -Ei, -ni).
 	sedInPlaceRe = regexp.MustCompile(`^-[A-Za-z]*i$`)
+	// dateBSDOptionRe is an option that only the date of macOS has: -j (also in a cluster, -jf or -uj) and -v with or
+	// without its adjustment (-v, -v-1d, -v+1H).
+	dateBSDOptionRe = regexp.MustCompile(`^-(?:[A-Za-z]*j[A-Za-z]*|[A-Za-z]*v(?:[-+].*)?)$`)
 	// dateOptionRe is the -d option of GNU date, alone or with its value attached (-d@1700000000, -ud).
 	dateOptionRe = regexp.MustCompile(`^-u?d`)
 	// statFormatRe is the -c option of GNU stat, alone or with its value attached (-c%s, -Lc).

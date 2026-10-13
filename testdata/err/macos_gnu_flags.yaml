@@ -33,3 +33,21 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - run: date -d yesterday
+  macos-excluded-and-included:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        exclude:
+          - os: macos-latest
+        include:
+          - os: macos-latest
+            extra: yes
+    runs-on: ${{ matrix.os }}
+    steps:
+      - run: date -d yesterday
+  job-with-condition:
+    # the condition cannot read the runner or the matrix, so the job runs on macOS whenever it runs
+    if: github.event_name == 'push'
+    runs-on: macos-15
+    steps:
+      - run: date -d yesterday

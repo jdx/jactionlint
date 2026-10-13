@@ -70,6 +70,10 @@ jobs:
           PAST=$(date -d '1 hour ago' '+%Y%m%d%H%M.%S' 2>/dev/null || date -v-1H '+%Y%m%d%H%M.%S')
           echo "$PAST"
           if grep -qP 'x' file; then echo found; fi
+      # The script has the form of macOS too (-jf is a cluster of options of macOS), so it handles both systems
+      - run: |
+          end=$(date -jf "%b %d %T %Y %Z" "$not_after" +%s 2>/dev/null || date -d "$not_after" +%s)
+          echo "$end"
       # The script has the form of macOS too, so it handles both systems
       - run: |
           end=$(date -j -f "%b %d %T %Y %Z" "$not_after" +%s 2>/dev/null)
@@ -88,6 +92,15 @@ jobs:
       # Not bash or sh
       - run: print('sed -i x y')
         shell: python
+  macos-excluded:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        exclude:
+          - os: macos-latest
+    runs-on: ${{ matrix.os }}
+    steps:
+      - run: sed -i 's/a/b/' file.txt
   matrix-without-mac:
     strategy:
       matrix:
