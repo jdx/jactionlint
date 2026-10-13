@@ -105,3 +105,11 @@ jobs:
           stat -cf file.txt
           stat -Lc%s file.txt
           date -ud yesterday
+  scripts-that-only-look-portable:
+    runs-on: macos-latest
+    steps:
+      # GCP and gcloud are not gcp and the GNU tools
+      - run: |
+          gcloud auth login
+          echo "$GCP_PROJECT"
+          sed -i 's/a/b/' file.txt

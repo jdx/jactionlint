@@ -94,8 +94,16 @@ func (rule *RuleMacosGnuFlags) VisitStep(n *Step) error {
 	return nil
 }
 
-// macosSystemRe matches what a script says when it picks the system or installs the GNU tools.
-var macosSystemRe = regexp.MustCompile(`(?i)\brunner[._]os\b|\buname\b|\bostype\b|\bdarwin\b|\bmacos\b|\bsw_vers\b|\bgnu\b|\bgnu-|\bcoreutils\b|\bfindutils\b|\bg(?:sed|grep|date|stat|find|tee|cp|xargs)\b|\bbrew\b|\bnix\b`)
+// macosSystemRe matches what a script says when it is written for more than one system: it tests the operating
+// system (`uname`, `$OSTYPE`, `RUNNER_OS`, `runner.os`, `matrix.os`, `Darwin`, `macOS`, `sw_vers`) or it uses the GNU
+// tools: by their names with a g in front (`gsed`, `gdate`, ... as command words, in lower case, so GCP and gcloud are not
+// matched), by the directory of the GNU names of Homebrew (`gnubin`, `gnu-sed`), or by installing them
+// (`brew install coreutils`). It is case-sensitive on purpose.
+var macosSystemRe = regexp.MustCompile(
+	`\buname\b|\bOSTYPE\b|\bRUNNER_OS\b|(?i:\brunner\.os\b|\bmatrix\.os\b|\bdarwin\b|\bmacos\b)|\bsw_vers\b` +
+		`|\bg(?:sed|date|stat|tar|grep|awk|cp|mv|ls|readlink|xargs|find|tee|sort|head|tail|wc|cut|tr|mktemp|base64|timeout|du|install)\b` +
+		`|\bgnubin\b|\bgnu-(?:sed|tar|which|getopt|indent|time)\b|\bGNU\b` +
+		`|\bbrew\s+(?:re)?install\b[^\n]*\b(?:coreutils|findutils|diffutils|grep|gawk|gnu-[a-z]+)\b`)
 
 // mayBeForAnotherSystem reports whether the step may not run on macOS, or may run with GNU tools.
 func (rule *RuleMacosGnuFlags) mayBeForAnotherSystem(n *Step, run *ExecRun) bool {
@@ -254,11 +262,13 @@ func portableTools(s *runscript.Script) map[string]bool {
 			}
 			switch c.Name {
 			case "date":
-				if dateBSDOptionRe.MatchString(w.Value) {
+				// The options of BSD date: -j, -v (with its adjustment), -f and -z
+				if optionClusterHasAny(w.Value, "jnRu", "frvzI", "jfvz") {
 					out["date"] = true
 				}
 			case "stat":
-				if w.Value == "-f" || strings.HasPrefix(w.Value, "-f") && len(w.Value) > 2 && w.Value[2] == '%' {
+				// The options of BSD stat: -f (its format), -x, -s, -r and the ones GNU stat has no letter for
+				if optionClusterHasAny(w.Value, "FlLnqrsx", "ft", "fxsrFlnq") {
 					out["stat"] = true
 				}
 			case "sed":
@@ -291,9 +301,6 @@ type macosGnuForm struct {
 var (
 	// sedInPlaceRe is a word that is the in-place option of sed, alone or last of a cluster (-i, -Ei, -ni).
 	sedInPlaceRe = regexp.MustCompile(`^-[A-Za-z]*i$`)
-	// dateBSDOptionRe is an option that only the date of macOS has: -j (also in a cluster, -jf or -uj) and -v with or
-	// without its adjustment, signed or not (-v, -v-1d, -v+1H, -v1d, -vmon).
-	dateBSDOptionRe = regexp.MustCompile(`^-(?:[uInR]*j[uInRjfr]*|[uInRj]*v[-+0-9A-Za-z]*)$`)
 	// sedSuffixRe is a word that BSD sed takes as the suffix of the backup: ".bak", ".orig", "~", "bak".
 	sedSuffixRe = regexp.MustCompile(`^(?:\.[A-Za-z0-9_~.-]*|~|[A-Za-z]{3,})$`)
 )
@@ -417,6 +424,24 @@ func hasDateOption(w string) bool {
 			return true
 		default:
 			return false
+		}
+	}
+	return false
+}
+
+// optionClusterHasAny reports whether the word is a cluster of single letter options that has one of the wanted letters,
+// read left to right like getopt: the letters of withoutValue may follow each other, a letter of withValue takes the
+// rest of the word as its value (so it ends the cluster, after it is looked at), and another letter is not an option.
+func optionClusterHasAny(word, withoutValue, withValue, wanted string) bool {
+	if len(word) < 2 || word[0] != '-' || word[1] == '-' {
+		return false
+	}
+	for _, c := range word[1:] {
+		if strings.ContainsRune(wanted, c) {
+			return true
+		}
+		if !strings.ContainsRune(withoutValue, c) {
+			return false // a letter with a value ends the cluster, and the others are not options
 		}
 	}
 	return false

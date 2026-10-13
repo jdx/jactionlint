@@ -97,6 +97,9 @@ jobs:
       - run: |
           stat -fc file.txt
           date -rd file.txt
+      # Clustered options of stat of macOS: the script handles both systems
+      - run: |
+          stat -Lf %m file.txt || stat -c %Y file.txt
       # After -- come the patterns and the file names
       - run: |
           grep -- -P file.txt
