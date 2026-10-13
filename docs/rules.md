@@ -88,6 +88,7 @@ rules:
 | [github-env](#github-env) | security | error | default |
 | [github-script-syntax](#github-script-syntax) | correctness | error | correctness |
 | [hardcoded-container-credentials](#hardcoded-container-credentials) | security | error | correctness |
+| [hardcoded-registry-credentials](#hardcoded-registry-credentials) | security | error | default |
 | [if-always-true](#if-always-true) | correctness | error | correctness |
 | [impostor-commit](#impostor-commit) | security | error | only with `--online` |
 | [insecure-commands](#insecure-commands) | security | error | default |
@@ -715,6 +716,15 @@ A password for a container registry is written directly in the workflow.
 - Default level: error
 - Profile: correctness
 - Details and examples: [checks](./checks.md#check-hardcoded-credentials)
+
+## hardcoded-registry-credentials
+
+A registry in dependabot.yml has a password, token or key written in plain text.
+
+- Group: security
+- Default level: error
+- Profile: default
+- Details and examples: [checks](./checks.md#check-hardcoded-registry-credentials)
 
 ## if-always-true
 

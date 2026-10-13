@@ -75,6 +75,7 @@ List of checks:
 - [Dependabot configuration syntax](#check-dependabot-syntax)
 - [Dependabot cooldown](#check-dependabot-cooldown)
 - [Dependabot insecure code execution](#check-dependabot-execution)
+- [Dependabot registry credentials in plain text](#check-hardcoded-registry-credentials)
 - [Dependabot updates of actions (pedantic)](#check-dependabot-missing-actions-update)
 - [Pipelines that hide failures](#check-pipeline-without-pipefail)
 - [GNU-only options on macOS runners (pedantic)](#check-macos-gnu-flags)
@@ -7128,6 +7129,69 @@ The rule is `dependabot-execution`. It is enabled by default as an error. Remove
 working. If you need `allow` for a registry, ignore the finding for that file with `paths:` in [the configuration](config.md)
 or with an [ignore comment](usage.md).
 
+<a id="check-hardcoded-registry-credentials"></a>
+## Dependabot registry credentials in plain text
+
+The `registries` of `dependabot.yml` tell Dependabot how to sign in to a private package registry. Dependabot reads a
+secret from the Dependabot secrets of the repository when a value is written as `${{secrets.NAME}}`, so a `password`,
+`token`, `key` or `auth-key` that is a literal puts the credential in the repository and its history, where everybody who
+can read the code (and every fork) has it. A `password` in the user information of the `url` (`https://user:password@host/`)
+is the same. This check reports them. It is the counterpart of [`hardcoded-container-credentials`](#check-hardcoded-credentials)
+for `dependabot.yml`; zizmor has no audit for it yet ([zizmor#1222](https://github.com/zizmorcore/zizmor/issues/1222) is open).
+
+Example input:
+
+```yaml
+version: 2
+registries:
+  dockerhub:
+    type: docker-registry
+    url: https://registry.hub.docker.com
+    username: octocat
+    # ERROR: the password is written in the repository
+    password: not-a-real-password
+  npm-github:
+    type: npm-registry
+    url: https://npm.pkg.github.com
+    # OK: a Dependabot secret
+    token: ${{secrets.NPM_TOKEN}}
+updates:
+  - package-ecosystem: docker
+    directory: "/"
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    registries:
+      - dockerhub
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    registries:
+      - npm-github
+```
+
+Output:
+
+```
+.github/dependabot.yml:8:15: "password" of registry "dockerhub" is written in plain text. store it as a Dependabot secret and write ${{secrets.NAME}} instead, and rotate the credential because it is in the history of the repository [hardcoded-registry-credentials]
+  |
+8 |     password: not-a-real-password
+  |               ^~~~~~~~~~~~~~~~~~~
+```
+
+<!-- Skip playground link -->
+
+The rule is `hardcoded-registry-credentials`. It is enabled by default as an error. It reads a value as a reference when it has
+an expression (`${{ ... }}`), so `${{secrets.NAME}}` is not reported, and neither are a username, the settings of OIDC
+(`tenant-id`, `client-id`, ...). There is no automatic
+fix because jactionlint cannot know the name of the secret, and a credential that was committed has to be rotated anyway.
+Only `password`, `token`, `key`, `auth-key` and a password in the `url` are checked: a user name in the user information of the
+`url` (`https://token@host/`) is not.
+
 <a id="check-dependabot-missing-actions-update"></a>
 ## Dependabot updates of actions (pedantic)
 
@@ -10855,7 +10919,7 @@ How the rules treat actions:
 
 - **Applies** to the steps (and the metadata) of an action: `action-release-cooldown`, `action-syntax`, `actions-lock`, `actions-lock-drift`, `adhoc-packages`, `archived-uses`, `argument-injection`, `artipacked`, `background-step-not-waited`, `checkout-static-credentials`, `command-injection`, `conflicting-action-inputs`, `constant-condition`, `context-availability`, `continue-on-error`, `deprecated-action-input`, `deprecated-commands`, `deprecated-node-runtime`, `duplicate-key`, `duplicate-step-id`, `environment-file-redirect`, `expired-ignore`, `expression-syntax`, `expression-type`, `fail-fast-action-inputs`, `forbidden-uses`, `github-app`, `github-script-syntax`, `if-always-true`, `impostor-commit`, `insecure-commands`, `insecure-ssh-keyscan`, `insecure-url-scheme`, `invalid-env-var-name`, `invalid-function-call`, `invalid-id`, `invalid-ignore-comment`, `invalid-local-action`, `invalid-parallel-step`, `invalid-shell-name`, `invalid-uses`, `invisible-characters`, `known-vulnerable-actions`, `malformed-expression-delimiters`, `max-run-lines`, `merge-key`, `misfeature`, `missing-action-input`, `missing-version-comment`, `multiline-plain-run`, `obfuscation`, `outdated-action-runner`, `output-clobbering`, `pipeline-without-pipefail`, `pyflakes`, `recursive-alias`, `ref-confusion`, `ref-version-mismatch`, `repojacking`, `require-expression-wrapping`, `self-repository`, `shellcheck`, `stale-action-refs`, `superfluous-actions`, `template-injection`, `typosquat-uses`, `undefined-function`, `undefined-property`, `unknown-action-input`, `unlocked-install`, `unpinnable-action`, `unpinned-images`, `unpinned-tools`, `unpinned-uses`, `unsound-contains`, `unsound-prefix-match`, `unsound-ternary`, `unused-anchor`, `unused-ignore`, `unverified-download`, `use-trusted-publishing`, `yaml-syntax`.
 - **Caller-dependent**: `agentic-actions`, `bot-conditions`, `cache-poisoning`, `github-env` (its findings about untrusted input do not depend on the caller), `untrusted-artifact` and `untrusted-checkout`.
-- **Not applicable** because an action does not have what the rule checks, or because only the calling job can decide (`unused-baseline-entry` is about the baseline file, not about a workflow or an action): `anonymous-definition`, `comment-trigger-authorization`, `concurrency-cancels-prs`, `concurrency-cancels-release`, `concurrency-deadlock`, `concurrency-limits`, `conflicting-runner-labels`, `cron-too-frequent`, `cyclic-job-needs`, `dangerous-triggers`, `dependabot-cooldown`, `dependabot-execution`, `dependabot-missing-actions-update`, `dependabot-syntax`, `deprecated-runner-label`, `duplicate-job-id`, `duplicate-job-needs`, `duplicate-triggers`, `event-name-never-received`, `excessive-permissions`, `gate-job-skipped-on-failure`, `gh-without-token`, `hardcoded-container-credentials`, `insufficient-permissions`, `invalid-activity-type`, `invalid-cron`, `invalid-event-config`, `invalid-event-filter`, `invalid-glob`, `invalid-label-pattern`, `invalid-local-workflow`, `invalid-permissions`, `invalid-timezone`, `invalid-workflow-call`, `invalid-workflow-call-input`, `invalid-workflow-dispatch-input`, `local-action-checkout`, `macos-gnu-flags`, `matrix-duplicate-value`, `matrix-invalid-exclude`, `missing-permissions`, `missing-timeout`, `missing-workflow-input`, `missing-workflow-secret`, `mutable-runner-label`, `overprovisioned-secrets`, `require-shell`, `required-actions`, `secrets-inherit`, `secrets-outside-env`, `self-hosted-runner`, `timeout-too-long`, `ubuntu-slim-limits`, `undefined-job-needs`, `undocumented-permissions`, `unknown-event`, `unknown-runner-label`, `unknown-workflow-input`, `unknown-workflow-secret`, `unmatched-paths-filter`, `unredacted-secrets`, `unused-baseline-entry`, `unused-job-output`, `unused-needs`, `unused-workflow-input`, `unused-workflow-secret`, `workflow-call-permissions`, `workflow-input-type`, `workflow-run-names`, `workflow-secret-scope`, `workflow-syntax`.
+- **Not applicable** because an action does not have what the rule checks, or because only the calling job can decide (`unused-baseline-entry` is about the baseline file, not about a workflow or an action): `anonymous-definition`, `comment-trigger-authorization`, `concurrency-cancels-prs`, `concurrency-cancels-release`, `concurrency-deadlock`, `concurrency-limits`, `conflicting-runner-labels`, `cron-too-frequent`, `cyclic-job-needs`, `dangerous-triggers`, `dependabot-cooldown`, `dependabot-execution`, `dependabot-missing-actions-update`, `dependabot-syntax`, `deprecated-runner-label`, `duplicate-job-id`, `duplicate-job-needs`, `duplicate-triggers`, `event-name-never-received`, `excessive-permissions`, `gate-job-skipped-on-failure`, `gh-without-token`, `hardcoded-container-credentials`, `hardcoded-registry-credentials`, `insufficient-permissions`, `invalid-activity-type`, `invalid-cron`, `invalid-event-config`, `invalid-event-filter`, `invalid-glob`, `invalid-label-pattern`, `invalid-local-workflow`, `invalid-permissions`, `invalid-timezone`, `invalid-workflow-call`, `invalid-workflow-call-input`, `invalid-workflow-dispatch-input`, `local-action-checkout`, `macos-gnu-flags`, `matrix-duplicate-value`, `matrix-invalid-exclude`, `missing-permissions`, `missing-timeout`, `missing-workflow-input`, `missing-workflow-secret`, `mutable-runner-label`, `overprovisioned-secrets`, `require-shell`, `required-actions`, `secrets-inherit`, `secrets-outside-env`, `self-hosted-runner`, `timeout-too-long`, `ubuntu-slim-limits`, `undefined-job-needs`, `undocumented-permissions`, `unknown-event`, `unknown-runner-label`, `unknown-workflow-input`, `unknown-workflow-secret`, `unmatched-paths-filter`, `unredacted-secrets`, `unused-baseline-entry`, `unused-job-output`, `unused-needs`, `unused-workflow-input`, `unused-workflow-secret`, `workflow-call-permissions`, `workflow-input-type`, `workflow-run-names`, `workflow-secret-scope`, `workflow-syntax`.
 
 Example input:
 
