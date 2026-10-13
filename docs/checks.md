@@ -11,6 +11,7 @@ List of checks:
 - [Unexpected mapping values](#check-mapping-values)
 - [Expressions for a whole mapping or list](#check-whole-value-expressions)
 - [Syntax check for expression `${{ }}`](#check-syntax-expression)
+- [Expressions written with the wrong delimiters](#check-malformed-expression-delimiters)
 - [Type checks for expression syntax in `${{ }}`](#check-type-check-expression)
 - [Contexts and built-in functions](#check-contexts-and-builtin-func)
 - [Contextual typing for `steps.<step_id>` objects](#check-contextual-step-object)
@@ -104,6 +105,7 @@ List of checks:
 - [Duplicate triggers](#check-duplicate-triggers)
 - [Failures hidden by continue-on-error (pedantic)](#check-continue-on-error)
 - [Mutable runner labels (pedantic)](#check-mutable-runner-label)
+- [Deprecated runner labels (pedantic)](#check-deprecated-runner-label)
 - [Invisible characters](#check-invisible-characters)
 - [Unsound prefix matches on names](#check-unsound-prefix-match)
 - [Composite actions](#check-composite-actions)
@@ -135,7 +137,7 @@ jobs:
 Output:
 
 ```
-test.yaml:6:5: unexpected key "default" for "job" section. expected one of "cache-mode", "concurrency", "container", "continue-on-error", "defaults", "env", "environment", "if", "name", "needs", "outputs", "permissions", "runs-on", "secrets", "services", "snapshot", "steps", "strategy", "timeout-minutes", "uses", "with" [workflow-syntax]
+test.yaml:6:5: unexpected key "default" for "job" section. expected one of "cache-mode", "cancel-timeout-minutes", "concurrency", "container", "continue-on-error", "defaults", "env", "environment", "if", "name", "needs", "outputs", "permissions", "runs-on", "secrets", "services", "snapshot", "steps", "strategy", "timeout-minutes", "uses", "with" [workflow-syntax]
   |
 6 |     default:
   |     ^~~~~~~~
@@ -387,6 +389,68 @@ test.yaml:13:38: unexpected end of input while parsing object property dereferen
 jactionlint lexes and parses expression in `${{ }}` following [the expression syntax document][expr-doc]. It can detect
 many syntax errors like invalid characters, missing parentheses, unexpected end of input, ...
 
+<a id="check-malformed-expression-delimiters"></a>
+## Expressions written with the wrong delimiters
+
+Example input:
+
+```yaml
+on: push
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      # ERROR: one brace, GitHub does not expand it
+      REF: ${ github.ref }
+      # ERROR: a space after the dollar
+      SHA: $ {{ github.sha }}
+      # ERROR: no dollar
+      TAG: v-{{ github.run_number }}
+      # OK: these are not expressions
+      TEMPLATE: "{{ .Values.image }}"
+      HOME_BIN: ${HOME}/bin
+    steps:
+      - run: echo "${GITHUB_REF} {{ github.sha }}"
+```
+
+Output:
+
+```
+test.yaml:8:12: "${ github.ref }" is not an expression: GitHub expands only `${{ }}` with two braces, so this text reaches the workflow as it is. write `${{ github.ref }}` [malformed-expression-delimiters]
+  |
+8 |       REF: ${ github.ref }
+  |            ^~~~~~~~~~~~~~~
+test.yaml:10:12: "$ {{ github.sha }}" is not an expression: the opening delimiter must be written `${{` without a space. write "${{ github.sha }}" [malformed-expression-delimiters]
+   |
+10 |       SHA: $ {{ github.sha }}
+   |            ^~~~~~~~~~~~~~~~~~
+test.yaml:12:14: "{{ github.run_number }}" is not an expression: it has no `$`, and GitHub expands only `${{ }}`, so this text reaches the workflow as it is. write "${{ github.run_number }}" [malformed-expression-delimiters]
+   |
+12 |       TAG: v-{{ github.run_number }}
+   |              ^~~~~~~~~~~~~~~~~~~~~~~
+```
+
+[Playground](https://jactionlint.jdx.dev/#eNpkz7FqwzAQxvHdT/FhvNrdtTmgxIGmLanb1VjlGrkkctDpsgi9e1Eat4VMEvz+w3ezUzgL26L4mg2rAgjEIb+AF8d1DsSIC1Ifx2xXInf5aYC9XitUEYcpWDGNp0+kG712rUKF+ItsR6RF+3ajcKn/1IsbnJwM+X+R3r08tr1WKGNE8z4ehbiZTuOBkFJ5q7rnnR5W26c8JP/Tg5nc1TjQmZepdT5JgT7sjLKKm23fva2GvV6nu43l9wDlrVHO)
+
+GitHub expands `${{ }}` and nothing else. The text `${ github.ref }`, `$ {{ github.sha }}` and `{{ github.sha }}` is passed on as
+it is: the environment variable, the input of the action or the condition then holds the text of the typo, and nothing says
+so. The rule `malformed-expression-delimiters` (in the `correctness` profile; [actionlint#417](https://github.com/rhysd/actionlint/issues/417),
+[actionlint#169](https://github.com/rhysd/actionlint/issues/169), [ghlint#144](https://github.com/TWiStErRob/net.twisterrob.ghlint/issues/144))
+reports them when the text inside starts with the name of a context (`github`, `env`, `vars`, `secrets`, `matrix`, `needs`, `steps`,
+`job`, `jobs`, `runner`, `inputs`, `strategy`) followed by a property, or with a function of expressions (`format(`, `contains(`,
+`fromJSON(`, ...). So the templates of Go, Jinja and Helm (`{{ .Values.image }}`), shell variables (`${HOME}`) and text in a `run:`
+script are never reported, and neither are the inputs that hold code (`script`, `command`, `args`, ...: `${...}` has a meaning of
+its own in JavaScript). `--fix` writes the intended expression (`${{ github.ref }}`) when the text is written so that the edit is
+exact and the text in the braces is a valid expression, and says why otherwise.
+
+With the option `pedantic` (on under `profile: pedantic`, or `rules: {malformed-expression-delimiters: {pedantic: true}}`) the rule
+also reports a shell variable (`$HOME`, `${GITHUB_WORKSPACE}`) in the value of an input of an action, which no shell expands, and
+suggests the expression that has its value (`${{ github.workspace }}`, `${{ runner.temp }}`, `${{ env.NAME }}` for a variable that
+the workflow sets). It looks only at one-line values of `with:` with an upper case name, and not at inputs that hold code. Some
+actions expand variables of their own (`${pull_title}` placeholders and the like): the findings of this tier can be wrong for them,
+which is why it is pedantic. A stray `}}` is not reported.
+
 <a id="check-type-check-expression"></a>
 ## Type checks for expression syntax in `${{ }}`
 
@@ -543,7 +607,7 @@ test.yaml:7:24: undefined variable "unknown_context". available variables are "e
   |
 7 |       - run: echo '${{ unknown_context }}'
   |                        ^~~~~~~~~~~~~~~
-test.yaml:9:24: property "events" is not defined in object type {action: string; action_path: string; action_ref: string; action_repository: string; action_status: string; actor: string; actor_id: string; api_url: string; artifact_cache_size_limit: number; base_ref: string; env: string; event: object; event_name: string; event_path: string; graphql_url: string; head_ref: string; job: string; job_workflow_sha: string; output: string; path: string; ref: string; ref_name: string; ref_protected: bool; ref_type: string; repository: string; repository_id: string; repository_owner: string; repository_owner_id: string; repository_visibility: string; repositoryurl: string; retention_days: number; run_attempt: string; run_id: string; run_number: string; secret_source: string; server_url: string; sha: string; state: string; step_summary: string; token: string; triggering_actor: string; workflow: string; workflow_ref: string; workflow_sha: string; workspace: string} [undefined-property]
+test.yaml:9:24: property "events" is not defined in object type {action: string; action_path: string; action_ref: string; action_repository: string; action_status: string; actor: string; actor_id: string; api_url: string; artifact_cache_size_limit: number; artifacts: string; artifacts_list: string; base_ref: string; env: string; event: object; event_name: string; event_path: string; graphql_url: string; head_ref: string; job: string; job_workflow_sha: string; output: string; path: string; ref: string; ref_name: string; ref_protected: bool; ref_type: string; repository: string; repository_id: string; repository_owner: string; repository_owner_id: string; repository_visibility: string; repositoryurl: string; retention_days: number; run_attempt: string; run_id: string; run_number: string; secret_source: string; server_url: string; sha: string; state: string; step_summary: string; token: string; triggering_actor: string; workflow: string; workflow_ref: string; workflow_sha: string; workspace: string} [undefined-property]
   |
 9 |       - run: echo '${{ github.events }}'
   |                        ^~~~~~~~~~~~~
@@ -1838,6 +1902,10 @@ jactionlint validates the Webhook configurations:
 The table of available Webhooks and their types are defined in [`all_webhooks.go`](https://github.com/jdx/jactionlint/blob/main/all_webhooks.go). It is generated
 by [a script][generate-webhook-events] and kept to the latest by CI workflow triggered weekly.
 
+`merge_group` runs a workflow only for the `checks_requested` activity type (the documentation and the workflow schema of GitHub list only that type, not the `destroyed` type of the webhook), so
+`types: [destroyed]` is reported. The events of classic Projects (`project`, `project_card` and `project_column`) and `pull_request_comment`
+are reported as unknown events, with a message that says why and what to use instead (`issue_comment` for a comment on a pull request).
+
 <a id="check-workflow-dispatch-events"></a>
 ## Workflow dispatch event validation
 
@@ -2108,7 +2176,8 @@ jactionlint checks the CRON syntax and frequency of running a job. [The official
 
 When the job is run more frequently than once every 5 minutes, jactionlint reports it as an error.
 
-jactionlint also checks the `timezone` configuration [is a valid IANA timezone string][schedule-item-doc].
+jactionlint also checks the `timezone` configuration [is a valid IANA timezone string][schedule-item-doc], and that every entry of `schedule`
+has a `cron`: an entry with only a `timezone` does not schedule anything.
 
 <a id="check-runner-labels"></a>
 ## Runner labels
@@ -2162,6 +2231,9 @@ test.yaml:23:14: label "macos-10.13" is unknown. available labels are "windows-l
 
 [Playground](https://jactionlint.jdx.dev/#eNqEj8GqwyAQRfd+xV28ZZSXNmThr5QubGqTlESDo5AS8u9FNBSh0JVcZ+ZyjjUSS6CBPe2NJAO8Jh9fgLxTXvevlIBZeTeuRwJcMEa7TwY4ZtVZ4pOKLcVgGk1Yvw0upKcHHyx5fa/SWoW1ba7FlnJz2xQ//RJYpiAeLf62LSOKRIZ9zx56oQOTxwMJ3Q0WQgiWjU+yLEse9b+ozz873gMASPlVEA==)
 
+The lists of the available labels in the output above are as of 2026-10-13: a label that GitHub has retired is dropped from the list on its day (`macos-14` on 2026-11-02),
+and the examples of this document are made as of that day so that they do not change.
+
 GitHub Actions provides two kinds of job runners, [GitHub-hosted runner][gh-hosted-runner] and [self-hosted runner][self-hosted-runner].
 Each runner has one or more labels. GitHub Actions runtime finds a proper runner based on label(s) specified at `runs-on:`
 to run the job. So specifying proper labels at `runs-on:` is important.
@@ -2175,6 +2247,12 @@ runs on a runner of its owner, who chooses the other labels, so a label next to 
 `self-hosted-runner.strict-labels` is on). A label made of a known GitHub-hosted label and the size of a larger runner
 (`ubuntu-latest-16-cores`, `ubuntu-24.04-xl`, `macos-14-xlarge`, `windows-2022-32cpu`) is accepted too; the names that an
 organization gives to its larger runners are custom labels, set them in the configuration file.
+
+A label of an image that GitHub has retired (`macos-13`, `macos-12`, `ubuntu-20.04`, `windows-2019` and older) is unknown, and the message says when it was
+retired and which labels to use instead, with the announcement. A job on such a label never gets a runner. The dates are in one table in
+`runner_label_retirement.go`. A label that is still available but has a date for its retirement is reported by the pedantic rule
+[`deprecated-runner-label`](#check-deprecated-runner-label) until that day; on the day of the retirement `unknown-runner-label` reports it, with the
+same message as for the labels that went before it, whatever the version of jactionlint.
 
 The labels of the services that host runners for GitHub Actions are accepted without configuration, so that a workflow that runs fine
 is not an error: Blacksmith (`blacksmith-*`), Depot (`depot-ubuntu-*`, `depot-windows-*`, `depot-macos-*`), Namespace (`namespace-profile-*`,
@@ -2278,7 +2356,15 @@ The self-repository form resolves against the repository running the workflow at
 needs no checkout and takes no `@ref`. It is accepted everywhere the workspace-relative `./` form is, and jactionlint
 resolves both to the same path in the repository.
 
-Note that jactionlint does not report any error when a directory for a local action does not exist in the repository because it is
+For that reason `$/` is checked more strictly than `./`: a `$/path@ref` is reported (a self-repository reference cannot have a ref), so is a path
+which leaves the repository (`$/../x`), and so is a `$/path` without an `action.yml` or `action.yaml` in the repository, which is a certain
+failure at run time. The last one is not reported when the path is in a submodule or when the repository is not known (standard input). The same
+checks apply to the steps of a composite action and, for the ref and the path, to a reusable workflow called with `$/`.
+
+An expression (`${{ }}`) is not allowed in `uses:` of a step or of a job which calls a reusable workflow: GitHub resolves the action when it reads the
+workflow file, before any expression is evaluated, so the reference must be written out.
+
+Note that jactionlint does not report any error when a directory for a local action (`./path`) does not exist in the repository because it is
 a common case where the action is managed in a separate repository and the action directory is cloned at running the workflow.
 (See [#25][issue-25] and [#40][issue-40] for more details).
 
@@ -3224,6 +3310,61 @@ as well (a lock file may be created in the job, or not exist yet), and two more 
 `--frozen-lockfile` (or use `bun ci`), and `pip install -r` (also `uv pip install -r`) without `--require-hashes` or a constraints
 file `-c`.
 
+The option reports a third kind of finding, about the lifecycle scripts of the dependencies
+([zizmor#1405](https://github.com/zizmorcore/zizmor/issues/1405)): `npm ci`, `npm install`, `yarn install`, `yarn add` and `bun install`
+without `--ignore-scripts` run the `preinstall`, `install` and `postinstall` scripts of every package of the dependency tree. That is how
+npm worms spread: a compromised release is installed, and its script runs on the runner with its tokens. Most workflows do not
+need the scripts of all their dependencies, and the few that do (`esbuild`, `sharp`, `node-gyp` builds) can run them with
+`npm rebuild <package>` after the install. The finding is not reported when the choice has been made:
+
+- the command has `--ignore-scripts` (Yarn 2 and later: `--mode=skip-build`), or only writes the lock file (`npm install --package-lock-only`);
+- the repository has `ignore-scripts=true` in its `.npmrc` (npm, Yarn 1 and bun read it), `ignoreScripts = true` in `bunfig.toml` or
+  `enableScripts: false` in `.yarnrc.yml`. The files are looked up in the root of the repository and in the `working-directory` of the step;
+- the environment of the step sets `npm_config_ignore_scripts` (`YARN_ENABLE_SCRIPTS=false` for Yarn), or an earlier step of the job
+  runs `npm config set ignore-scripts true` or writes `ignore-scripts=true` to a `.npmrc` (`>> ~/.npmrc`, `tee -a .npmrc`) before the
+  install. Text that only prints the setting (`echo "ignore-scripts=true"`) does not count, and neither does a setting after the install;
+- the package.json has an allow list: `trustedDependencies` for bun (bun runs the scripts of a default list of popular packages, and
+  an explicit list replaces it) and `allowScripts` for npm 12, which does not run the scripts of dependencies by default;
+- Yarn is 4.14 or later (`packageManager` in package.json), which does not run them by default either. Yarn 2 to 4.13 do, so a `.yarnrc.yml` of a Yarn whose version is not known is not assumed to be one that does not.
+
+pnpm is not reported: pnpm 10 and later run no script of a dependency unless the project allows it. Global installs (`npm install -g`)
+and `npx` are not reported, and neither is a command which follows a `cd`, because the configuration in force is not known.
+Whether the project's own scripts (`prepare`, `postinstall`) are needed is not known either: they run unless `--ignore-scripts` is given.
+
+The option reports a fourth kind, an install **without a release-age cooldown**
+([zizmor#2044](https://github.com/zizmorcore/zizmor/issues/2044)), the counterpart of [`dependabot-cooldown`](#check-dependabot-cooldown) for
+the installs of a `run:` script. An install that resolves versions takes the newest release of every dependency, however new, and most
+compromised releases are found and pulled within days. A cooldown keeps only versions that are some days old. The setting of each tool:
+
+| Tool | Setting | From |
+| ---- | ------- | ---- |
+| uv (`uv pip install`, `uv add`, `uv tool install`, `uvx`) | `--exclude-newer` (a date or a duration), `UV_EXCLUDE_NEWER`, `exclude-newer` in `uv.toml` or `[tool.uv]` of `pyproject.toml` | all |
+| pip, pipx | `--uploaded-prior-to` (a date, or a duration in days such as `P7D`), `PIP_UPLOADED_PRIOR_TO`; only for indexes that tell the upload time | pip 26.0 |
+| npm | `--min-release-age=DAYS` or `min-release-age` in `.npmrc`; `--before=DATE` | npm 11.10 |
+| pnpm | `minimumReleaseAge` (minutes) in `pnpm-workspace.yaml` (pnpm 10.16 to 10.x also read `minimum-release-age` from `.npmrc`; pnpm 11 does not, and a `.npmrc` entry does not change its default; the `min-release-age` and `before` of npm are not read); pnpm 11 waits one day by default | pnpm 10.16 |
+| Yarn | `npmMinimalAgeGate` in `.yarnrc.yml`; Yarn 4.15 waits one day by default; Yarn 1 has none | Yarn 4.10 |
+| bun | `--minimum-release-age` (seconds) or `minimumReleaseAge` under `[install]` in `bunfig.toml`; bun reads nothing of the kind from `.npmrc` | bun 1.3 |
+
+Check the version of the tool on the runner before you add the setting: an option that the installed pip or npm does not know fails the
+install. The check reads the same places as the lifecycle scripts do (the repository's files, the environment of the step, an earlier
+script of the job), and so reads `uv.toml`, `pyproject.toml`, `.npmrc`, `pnpm-workspace.yaml`, `.yarnrc.yml` and `bunfig.toml`. It reports
+installs that resolve something. The environment variable, the option and the file are those of the tool that installs (`UV_EXCLUDE_NEWER`
+does nothing for npm), and `minimumReleaseAgeExclude` and `minimumReleaseAgeStrict` are not the age. One rule decides every place: the
+state is taken from the default of the version of the tool (pnpm 11, Yarn 4.15), then the files of the repository, the environment of the
+workflow, of the job and of the step, the scripts of the job that run before the install, and the options of the install itself, and the
+**last** assignment wins (inside a place too, so `--min-release-age=7 --min-release-age=0` is off). Only npm differs: inside one place
+`before` wins over `min-release-age`. A value switches the age off when it is empty, `false`, `none`, `off` or a zero with or without a unit
+(`0`, `0d`, `0 days`, `P0D`, `PT0S`); a variable or an expression counts as on. It is silent about these:
+
+- installs that are bound to a lock file or to hashes (`npm ci`, `uv sync`, `--frozen-lockfile`, `--immutable`, `--require-hashes`,
+  a constraints file `-c`), and `npm install`, `pnpm install` and `yarn` without a package in a repository that has the lock file;
+- `npx`, `bunx` and `pnpm dlx`, which usually run a binary of the project, and ecosystems whose tool has no such setting (cargo, go, gem,
+  apt, Homebrew);
+- a command that follows a `cd`, or has `--project`, `--directory` or `--config-file` for uv: the configuration in force is not known (`--no-config` is the opposite: uv reads no file, so only an option or `UV_EXCLUDE_NEWER` counts);
+- Yarn 2+ of an unknown version, because the default depends on it.
+
+An install of an exact version (`pip install requests==2.32.3`) is reported too: the dependencies of the package are still resolved anew.
+
 Example input:
 
 ```yaml
@@ -3242,16 +3383,29 @@ Output:
 test.yaml:6:14: "npm install" resolves the dependencies again and may update the package-lock.json instead of failing when it is out of date. use `npm ci` [unlocked-install]
   |
 6 |       - run: npm install
-  |              ^~~
+  |              ^~~~~~~~~~~
+test.yaml:6:14: "npm install" runs the lifecycle scripts (preinstall, install, postinstall) of every dependency, and a compromised release uses them to run code on the runner. pass `--ignore-scripts` or set `ignore-scripts=true` in .npmrc, and run what a package needs with `npm rebuild` [unlocked-install]
+  |
+6 |       - run: npm install
+  |              ^~~~~~~~~~~
+test.yaml:6:14: "npm install" takes the newest release of every dependency, however new, so a compromised release reaches the workflow before it is found and pulled. pass `--min-release-age=7` or set `min-release-age=7` in .npmrc (npm 11.10 and later) [unlocked-install]
+  |
+6 |       - run: npm install
+  |              ^~~~~~~~~~~
 test.yaml:7:14: "pip install -r requirements.txt" installs a requirements file without hashes or constraints, so the transitive dependencies are resolved anew on every run. use a lock file with hashes (`pip-compile --generate-hashes`) and pass --require-hashes, or pin them with -c [unlocked-install]
   |
 7 |       - run: pip install -r requirements.txt
-  |              ^~~
+  |              ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+test.yaml:7:14: "pip install" takes the newest release of every dependency, however new, so a compromised release reaches the workflow before it is found and pulled. pass `--uploaded-prior-to` (pip 26.0 and later; a date, or a duration such as `P7D`), or install with uv and `--exclude-newer` [unlocked-install]
+  |
+7 |       - run: pip install -r requirements.txt
+  |              ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 ```
 
 <!-- Skip playground link -->
 
-This is the output with the option `pedantic`, or with a `package-lock.json` in the repository for the first finding.
+This is the output with the option `pedantic`, or with a `package-lock.json` in the repository for the first finding. `npm ci --ignore-scripts`
+(and `ignore-scripts=true` in `.npmrc`) silences the second, `--min-release-age=7` the third.
 
 Installing named packages is covered by [adhoc packages](#check-adhoc-packages) and [unpinned tools](#check-unpinned-tools).
 These rules have no equivalent in zizmor.
@@ -3372,7 +3526,7 @@ test.yaml:4:14: "write" is invalid for permission for all the scopes. available 
   |
 4 | permissions: write
   |              ^~~~~
-test.yaml:11:7: unknown permission scope "check". all available permission scopes are "actions", "artifact-metadata", "attestations", "checks", "code-quality", "contents", "copilot-requests", "deployments", "discussions", "id-token", "issues", "models", "packages", "pages", "pull-requests", "repository-projects", "security-events", "statuses", "vulnerability-alerts" [invalid-permissions]
+test.yaml:11:7: unknown permission scope "check". all available permission scopes are "actions", "artifact-metadata", "attestations", "checks", "code-quality", "contents", "copilot-requests", "deployments", "discussions", "drives", "id-token", "issues", "models", "packages", "pages", "pull-requests", "repository-projects", "security-events", "statuses", "vulnerability-alerts" [invalid-permissions]
    |
 11 |       check: write
    |       ^~~~~~
@@ -4655,7 +4809,7 @@ test.yaml:30:20: context "env" is not allowed here. no context is available here
    |
 30 |         shell: ${{ env.SHELL}}
    |                    ^~~~~~~~~
-test.yaml:32:33: calling function "success" is not allowed here. "success" is only available in "jobs.<job_id>.if", "jobs.<job_id>.steps.if". see https://docs.github.com/en/actions/learn-github-actions/contexts#context-availability for more details [context-availability]
+test.yaml:32:33: calling function "success" is not allowed here. "success" is only available in "jobs.<job_id>.if", "jobs.<job_id>.steps.if", "jobs.<job_id>.snapshot.if". see https://docs.github.com/en/actions/learn-github-actions/contexts#context-availability for more details [context-availability]
    |
 32 |         run: echo 'Success? ${{ success() }}'
    |                                 ^~~~~~~~~
@@ -5976,7 +6130,7 @@ jobs:
 Output:
 <!-- Skip update output -->
 ```
-test.yaml:2:3: warning: trigger "pull_request_target" is dangerous: it runs in the context of the base repository with a write token and secrets even when the pull request comes from a fork. use "pull_request" unless write access is required, and never check out or run code of the pull request [dangerous-triggers]
+test.yaml:2:3: warning: trigger "pull_request_target" is dangerous: it runs in the context of the base repository with the default token of the repository (it can write unless the settings of the repository restrict it) and no secrets, even when the pull request comes from a fork. use "pull_request" unless write access is required, and never check out or run code of the pull request [dangerous-triggers]
   |
 2 |   pull_request_target:
   |   ^~~~~~~~~~~~~~~~~~~~
@@ -5992,7 +6146,7 @@ rules:
 ```
 
 The rule `dangerous-triggers` (in the `default` profile) reports the triggers `pull_request_target`, `workflow_run` and
-`issue_comment`. They run with the secrets and the write token of the repository (in the context of the default branch) while
+`issue_comment`. They run with the secrets and the token of the repository (in the context of the default branch) while
 a fork, or any commenter, controls part of the event. Making them safe is hard: it is not enough to avoid checking out the
 pull request, because arguments, environment variables and files that come from the event can still lead to code execution. See
 [Keeping your GitHub Actions and workflows secure: preventing pwn requests](https://securitylab.github.com/resources/github-actions-preventing-pwn-requests/).
@@ -6001,7 +6155,38 @@ Prefer `pull_request` unless the workflow really needs write access (to leave a 
 of `workflow_run`, and a label added by a maintainer instead of a comment as the trigger. A workflow whose steps are only
 `actions/labeler` is accepted for `pull_request_target`, since it never runs code from the pull request.
 
-The rule only looks at the trigger, so a workflow that uses one of them safely is reported as well. Ignore it with
+The message says what the workflow can do with the token and the secrets, so that you see what is at stake:
+
+- the scopes that the token of a job can write (`permissions:` of the job, else of the workflow; `write-all` is every scope). A job
+  that sets no permissions, in a workflow that sets none, gets the default of the repository, which can write unless the settings
+  of the repository restrict it. When some jobs set permissions and others do not, the message names both tokens. Permissions
+  (or a scope) written as an expression are not known, so the token may write;
+- the names of the secrets that an expression reads (not `GITHUB_TOKEN`), or that the workflow passes on without naming them
+  (`secrets: inherit`, `toJSON(secrets)`, `secrets[matrix.name]`).
+
+A workflow that cannot write (`permissions: {}`, `read-all` or only `read` scopes in every job) and reads no secret has little to
+lose: an attacker gets the cache, the artifacts and the compute of the runs, not the repository or its secrets. It is the
+pedantic finding of the rule, as [zizmor#398](https://github.com/zizmorcore/zizmor/issues/398) asks. The option `pedantic` (true
+under the `pedantic` profile) reports it, with a message that says so:
+
+```yaml
+rules:
+  dangerous-triggers:
+    pedantic: true
+```
+
+Since a workflow like that is not the pwn request which the trigger is known for, `untrusted-checkout`, `untrusted-artifact` and
+`template-injection` are the rules which report what it does with the event.
+
+GitHub is also removing the most common way to be bitten: for public repositories which have no Actions event policy,
+[workflow execution protections](https://github.blog/changelog/2026-09-17-workflow-execution-protections-in-github-actions-generally-available)
+add a default rule that disables `pull_request_target`. It is enforced from 2026-11-02 for the repositories that used the default
+policy before (it runs in evaluate mode until then) and does not apply to private or internal repositories. A workflow that needs
+the trigger has to be allowed by an event policy (they can name a workflow file), so a finding of this rule on a public
+repository is also a workflow that GitHub is about to stop. The rule does not know the policy of your repository, so it reports
+the trigger either way.
+
+The rule otherwise only looks at the trigger, so a workflow that uses one of them safely is reported as well. Ignore it with
 `# jactionlint ignore=dangerous-triggers` and a reason, as in `zizmor: ignore[dangerous-triggers]`. zizmor 1.30.1 does not report
 `issue_comment` yet.
 
@@ -6045,12 +6230,37 @@ rules:
   self-hosted-runner: info
 ```
 
-The rule `self-hosted-runner` (in the `pedantic` profile, at the `info` level) points out jobs that have the `self-hosted` label in
-`runs-on:`, also when it comes from a literal value of the matrix. [Self-hosted runners][self-hosted-runner-security] are hard
-to secure: unless they are ephemeral, a job can leave something behind for the next one, and GitHub does not recommend them for
-public repositories, where any pull request can run code on them. The rule is informational because it cannot see how a runner
-is set up. Runner labels of third party providers (without the `self-hosted` label) are not reported, and neither are labels
-that come from an expression it cannot resolve.
+The rule `self-hosted-runner` (in the `pedantic` profile, at the `info` level) points out jobs that run on a self-hosted runner:
+
+- a job with the `self-hosted` label in `runs-on:`, also when it comes from a literal value of the matrix;
+- a job with a label that `self-hosted-runner.labels` of the [configuration file](config.md) lists (it can be a glob such as
+  `arc-*`). The runners of an ARC runner set have no `self-hosted` label, only the name of the set. The list is also where larger
+  runners of GitHub with a name of your choice are listed to be accepted by `runner-label`, and the rule reports them too: use
+  the option `allow` for them;
+- a job in a runner group, `runs-on: {group: ...}`, which holds self-hosted runners or larger runners.
+
+[Self-hosted runners][self-hosted-runner-security] are hard to secure: unless they are ephemeral, a job can leave something behind
+for the next one, and GitHub does not recommend them for public repositories, where any pull request can run code on them. When a
+pull request event (`pull_request`, `pull_request_target`, `pull_request_review`, `pull_request_review_comment`, also of a workflow
+that calls a reusable workflow) starts the workflow, the message says so: that is the case which poutine reports as
+`pr_runs_on_self_hosted`. The rule is informational because it cannot see how a runner is set up, nor whether the repository is
+public. It is not a default finding for that reason: in a private repository, or with approval and ephemeral runners, a pull
+request on a self-hosted runner is normal. Runner labels of third party providers (without the `self-hosted` label) are not
+reported, and neither are labels that come from an expression it cannot resolve.
+
+Two options narrow it down:
+
+```yaml
+rules:
+  self-hosted-runner:
+    allow: ["arc-ephemeral-*", "ci-runners"]  # glob patterns of labels and runner groups which are ephemeral or trusted
+    pull-request-only: true                    # only workflows that a pull request event can start
+```
+
+The labels written in `runs-on` all apply to the runner, so one allowed label (or an allowed group) leaves the job alone. The values that a matrix gives to an expression are alternatives, one run each, so an allowed value leaves only its own run out and the others are judged. A group written with an expression is not matched against `allow`. A reusable workflow is judged by its own events and by those of the workflows that call it; when its callers are not all known, `pull-request-only` reports it.
+
+For the check that matters, set the level you want for the pull request case, for example `self-hosted-runner: {level: warn,
+pull-request-only: true}`.
 
 If you must use self-hosted runners in a public repository, require approval for the workflows of outside contributors and use
 ephemeral (just-in-time) runners.
@@ -7994,6 +8204,48 @@ rules:
 
 A label in a matrix is reported but never fixed, because the same value may be compared in an expression of the job.
 
+<a id="check-deprecated-runner-label"></a>
+## Deprecated runner labels (pedantic)
+
+Example input:
+
+```yaml
+on: push
+jobs:
+  test:
+    runs-on: macos-14
+    steps:
+      - run: echo test
+```
+
+Output:
+<!-- Skip update output -->
+```
+test.yaml:4:14: warning: runner label "macos-14" is deprecated: GitHub retires it on 2026-11-02 and fails jobs on it on scheduled brownout days in October 2026. use "macos-15" or "macos-26" instead (https://github.com/actions/runner-images/issues/13518) [deprecated-runner-label]
+  |
+4 |     runs-on: macos-14
+  |              ^~~~~~~~
+```
+
+<!-- Skip playground link -->
+
+The output above is from the following `rules` section of the [configuration file](config.md):
+
+```yaml
+rules:
+  deprecated-runner-label: warn
+```
+
+The rule `deprecated-runner-label` (in the `pedantic` profile, as a warning) reports a label of a GitHub-hosted runner that GitHub has announced to
+retire but that still works: `macos-14`, `macos-14-large`, `macos-14-xlarge` (retired on 2026-11-02, with brownouts in October 2026), `ubuntu-22.04` and
+`ubuntu-22.04-arm` (deprecated since 2026-09-17, retired on 2027-04-17). The message has the date, the labels to move to and the announcement. The
+rule reads `runs-on` and the values of `matrix.<key>` that `runs-on: ${{ matrix.<key> }}` selects. Jobs with `self-hosted` among the labels are not reported.
+
+It is not in the `default` profile, and it does not fail a build (unless `--strict-exit` makes warnings fail it), because the label works until its day. From the day of the retirement the label is
+unknown, and [`unknown-runner-label`](#check-runner-labels) reports it as an error in every profile. The rule has no automatic fix:
+jactionlint does not know which image your jobs can move to. Every date is in one table, `runnerLabelRetirements` in `runner_label_retirement.go`, which
+is checked against the announcements: a deprecation that GitHub announces later is one more row.
+
 [yamllint]: https://github.com/adrienverge/yamllint
 [issue-form]: https://github.com/jdx/jactionlint/issues/new
 [syntax-doc]: https://docs.github.com/en/actions/learn-github-actions/workflow-syntax-for-github-actions
@@ -8067,9 +8319,9 @@ way because any caller can pass attacker-controlled text. jactionlint does not l
 
 How the rules treat actions:
 
-- **Applies** to the steps (and the metadata) of an action: `action-syntax`, `adhoc-packages`, `archived-uses`, `artipacked`, `background-step-not-waited`, `checkout-static-credentials`, `constant-condition`, `context-availability`, `continue-on-error`, `deprecated-action-input`, `deprecated-commands`, `duplicate-key`, `duplicate-step-id`, `environment-file-redirect`, `expired-ignore`, `expression-syntax`, `expression-type`, `forbidden-uses`, `github-app`, `if-always-true`, `impostor-commit`, `insecure-commands`, `insecure-ssh-keyscan`, `insecure-url-scheme`, `invalid-env-var-name`, `invalid-function-call`, `invalid-id`, `invalid-ignore-comment`, `invalid-local-action`, `invalid-parallel-step`, `invalid-shell-name`, `invalid-uses`, `invisible-characters`, `known-vulnerable-actions`, `max-run-lines`, `merge-key`, `misfeature`, `missing-action-input`, `obfuscation`, `outdated-action-runner`, `pipeline-without-pipefail`, `pyflakes`, `recursive-alias`, `ref-confusion`, `ref-version-mismatch`, `require-expression-wrapping`, `self-repository`, `shellcheck`, `stale-action-refs`, `superfluous-actions`, `template-injection`, `typosquat-uses`, `undefined-function`, `undefined-property`, `unknown-action-input`, `unlocked-install`, `unpinned-images`, `unpinned-tools`, `unpinned-uses`, `unsound-contains`, `unsound-prefix-match`, `unsound-ternary`, `unused-anchor`, `unused-ignore`, `unverified-download`, `use-trusted-publishing`, `yaml-syntax`.
+- **Applies** to the steps (and the metadata) of an action: `action-syntax`, `adhoc-packages`, `archived-uses`, `artipacked`, `background-step-not-waited`, `checkout-static-credentials`, `constant-condition`, `context-availability`, `continue-on-error`, `deprecated-action-input`, `deprecated-commands`, `duplicate-key`, `duplicate-step-id`, `environment-file-redirect`, `expired-ignore`, `expression-syntax`, `expression-type`, `forbidden-uses`, `github-app`, `if-always-true`, `impostor-commit`, `insecure-commands`, `insecure-ssh-keyscan`, `insecure-url-scheme`, `invalid-env-var-name`, `invalid-function-call`, `invalid-id`, `invalid-ignore-comment`, `invalid-local-action`, `invalid-parallel-step`, `invalid-shell-name`, `invalid-uses`, `invisible-characters`, `known-vulnerable-actions`, `malformed-expression-delimiters`, `max-run-lines`, `merge-key`, `misfeature`, `missing-action-input`, `obfuscation`, `outdated-action-runner`, `pipeline-without-pipefail`, `pyflakes`, `recursive-alias`, `ref-confusion`, `ref-version-mismatch`, `require-expression-wrapping`, `self-repository`, `shellcheck`, `stale-action-refs`, `superfluous-actions`, `template-injection`, `typosquat-uses`, `undefined-function`, `undefined-property`, `unknown-action-input`, `unlocked-install`, `unpinned-images`, `unpinned-tools`, `unpinned-uses`, `unsound-contains`, `unsound-prefix-match`, `unsound-ternary`, `unused-anchor`, `unused-ignore`, `unverified-download`, `use-trusted-publishing`, `yaml-syntax`.
 - **Caller-dependent**: `agentic-actions`, `bot-conditions`, `cache-poisoning`, `github-env` (its findings about untrusted input do not depend on the caller), `untrusted-artifact` and `untrusted-checkout`.
-- **Not applicable** because an action does not have what the rule checks, or because only the calling job can decide (`unused-baseline-entry` is about the baseline file, not about a workflow or an action): `anonymous-definition`, `concurrency-cancels-prs`, `concurrency-cancels-release`, `concurrency-limits`, `conflicting-runner-labels`, `cron-too-frequent`, `cyclic-job-needs`, `dangerous-triggers`, `dependabot-cooldown`, `dependabot-execution`, `dependabot-missing-actions-update`, `dependabot-syntax`, `duplicate-job-id`, `duplicate-job-needs`, `duplicate-triggers`, `excessive-permissions`, `gate-job-skipped-on-failure`, `gh-without-token`, `hardcoded-container-credentials`, `invalid-activity-type`, `invalid-cron`, `invalid-event-config`, `invalid-event-filter`, `invalid-glob`, `invalid-label-pattern`, `invalid-local-workflow`, `invalid-permissions`, `invalid-timezone`, `invalid-workflow-call`, `invalid-workflow-call-input`, `invalid-workflow-dispatch-input`, `local-action-checkout`, `matrix-duplicate-value`, `matrix-invalid-exclude`, `missing-permissions`, `missing-timeout`, `missing-workflow-input`, `missing-workflow-secret`, `mutable-runner-label`, `overprovisioned-secrets`, `require-shell`, `required-actions`, `secrets-inherit`, `secrets-outside-env`, `self-hosted-runner`, `timeout-too-long`, `undefined-job-needs`, `undocumented-permissions`, `unknown-event`, `unknown-runner-label`, `unknown-workflow-input`, `unknown-workflow-secret`, `unredacted-secrets`, `unused-baseline-entry`, `unused-job-output`, `unused-needs`, `unused-workflow-input`, `workflow-call-permissions`, `workflow-input-type`, `workflow-run-names`, `workflow-secret-scope`, `workflow-syntax`.
+- **Not applicable** because an action does not have what the rule checks, or because only the calling job can decide (`unused-baseline-entry` is about the baseline file, not about a workflow or an action): `anonymous-definition`, `concurrency-cancels-prs`, `concurrency-cancels-release`, `concurrency-limits`, `conflicting-runner-labels`, `cron-too-frequent`, `cyclic-job-needs`, `dangerous-triggers`, `dependabot-cooldown`, `dependabot-execution`, `dependabot-missing-actions-update`, `dependabot-syntax`, `deprecated-runner-label`, `duplicate-job-id`, `duplicate-job-needs`, `duplicate-triggers`, `excessive-permissions`, `gate-job-skipped-on-failure`, `gh-without-token`, `hardcoded-container-credentials`, `invalid-activity-type`, `invalid-cron`, `invalid-event-config`, `invalid-event-filter`, `invalid-glob`, `invalid-label-pattern`, `invalid-local-workflow`, `invalid-permissions`, `invalid-timezone`, `invalid-workflow-call`, `invalid-workflow-call-input`, `invalid-workflow-dispatch-input`, `local-action-checkout`, `matrix-duplicate-value`, `matrix-invalid-exclude`, `missing-permissions`, `missing-timeout`, `missing-workflow-input`, `missing-workflow-secret`, `mutable-runner-label`, `overprovisioned-secrets`, `require-shell`, `required-actions`, `secrets-inherit`, `secrets-outside-env`, `self-hosted-runner`, `timeout-too-long`, `undefined-job-needs`, `undocumented-permissions`, `unknown-event`, `unknown-runner-label`, `unknown-workflow-input`, `unknown-workflow-secret`, `unredacted-secrets`, `unused-baseline-entry`, `unused-job-output`, `unused-needs`, `unused-workflow-input`, `workflow-call-permissions`, `workflow-input-type`, `workflow-run-names`, `workflow-secret-scope`, `workflow-syntax`.
 
 Example input:
 
@@ -8118,6 +8370,11 @@ The syntax of the metadata file is checked like the syntax of workflows: unknown
 belong to another kind of action (`steps` in a `node24` action), values of the wrong type, and `run:` steps of a composite action
 without `shell:`. They are reported with the rule ID `action-syntax`. `runs.using` accepts `composite`, `docker` and `node` followed by
 a version number.
+
+The keys and the contexts which the runner rejects in an `action.yml` are reported too, with the rule ID `action-syntax` or the ID of the
+expression check: `timeout-minutes` in a step of a composite action (the steps of an action have no such key, set it on the step that uses the
+action), a context other than `github`, `strategy`, `matrix`, `job` and `runner` (and `hashFiles()`) in the `default` of an input, and an
+unknown context or function in `runs.pre-if` and `runs.post-if`.
 
 Example input:
 

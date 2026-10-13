@@ -4,6 +4,7 @@ import (
 	"path"
 	"regexp"
 	"strings"
+	"time"
 )
 
 type runnerOSCompat uint
@@ -177,6 +178,35 @@ type RuleRunnerLabel struct {
 	// selfHosted is whether the labels of the job being checked have "self-hosted". Its other labels are chosen by
 	// whoever runs the runner, so an unknown one is not a mistake.
 	selfHosted bool
+	// now returns the current time, which decides whether the retirement of a label (runnerLabelRetirements) has
+	// happened. Nil means time.Now.
+	now func() time.Time
+}
+
+func (rule *RuleRunnerLabel) currentTime() time.Time {
+	if rule.now != nil {
+		return rule.now()
+	}
+	return time.Now()
+}
+
+// retiredLabel returns the retirement of the label when GitHub has removed it by now, or nil.
+func (rule *RuleRunnerLabel) retiredLabel(label string) *runnerLabelRetirement {
+	if r := runnerLabelRetirementOf(label); r != nil && r.isRetired(rule.currentTime()) {
+		return r
+	}
+	return nil
+}
+
+// availableRunnerLabels returns the default labels of GitHub-hosted runners which exist now.
+func (rule *RuleRunnerLabel) availableRunnerLabels() []string {
+	ret := make([]string, 0, len(allGitHubHostedRunnerLabels))
+	for _, l := range allGitHubHostedRunnerLabels {
+		if rule.retiredLabel(l) == nil {
+			ret = append(ret, l)
+		}
+	}
+	return ret
 }
 
 // largerRunnerSizeRe matches the size suffix that larger runners of GitHub get in their default label:
@@ -309,7 +339,8 @@ func (rule *RuleRunnerLabel) verifyRunnerLabel(label *String) runnerOSCompat {
 		return compatInvalid
 	}
 
-	if c, ok := defaultRunnerOSCompats[strings.ToLower(l)]; ok {
+	retired := rule.retiredLabel(l)
+	if c, ok := defaultRunnerOSCompats[strings.ToLower(l)]; ok && retired == nil {
 		return c
 	}
 
@@ -319,7 +350,7 @@ func (rule *RuleRunnerLabel) verifyRunnerLabel(label *String) runnerOSCompat {
 		}
 	}
 
-	if c, ok := largerRunnerCompat(l); ok {
+	if c, ok := largerRunnerCompat(l); ok && retired == nil {
 		return c
 	}
 
@@ -342,13 +373,26 @@ func (rule *RuleRunnerLabel) verifyRunnerLabel(label *String) runnerOSCompat {
 		return compatInvalid // a label of the runner of its owner
 	}
 
+	if retired != nil {
+		rule.ReportIDf(
+			"unknown-runner-label",
+			label.Pos,
+			"label %q is unknown. GitHub retired it on %s, so a job on it never gets a runner. use %s instead (%s). if it is a custom label for self-hosted runner, set list of labels in jactionlint.yaml config file",
+			label.Value,
+			retired.retired,
+			retired.useText(),
+			retired.source,
+		)
+		return compatInvalid
+	}
+
 	rule.ReportIDf(
 		"unknown-runner-label",
 		label.Pos,
 		"label %q is unknown. available labels are %s. if it is a custom label for self-hosted runner, set list of labels in jactionlint.yaml config file",
 		label.Value,
 		quotesAll(
-			allGitHubHostedRunnerLabels,
+			rule.availableRunnerLabels(),
 			selfHostedRunnerPresetOtherLabels,
 			selfHostedRunnerPresetOSLabels,
 			known,
@@ -474,9 +518,11 @@ func init() {
 	registerRules(
 		RuleInfo{ID: "conflicting-runner-labels", Group: RuleGroupCorrectness, Summary: "The runner labels of a job conflict with each other.", DefaultLevel: SeverityError, Profile: ProfileCorrectness, DocsAnchor: "check-runner-labels"},
 		RuleInfo{ID: "invalid-label-pattern", Group: RuleGroupCorrectness, Summary: "A runner label pattern in the configuration is not a valid glob.", DefaultLevel: SeverityError, Profile: ProfileCorrectness, DocsAnchor: "check-runner-labels"},
-		RuleInfo{ID: "unknown-runner-label", Group: RuleGroupCorrectness, Summary: "A runner label is unknown.", DefaultLevel: SeverityError, Profile: ProfileCorrectness, DocsAnchor: "check-runner-labels"},
+		RuleInfo{ID: "unknown-runner-label", Group: RuleGroupCorrectness, Summary: "A runner label is unknown, or is one that GitHub has retired.", DefaultLevel: SeverityError, Profile: ProfileCorrectness, DocsAnchor: "check-runner-labels"},
 	)
 	registerRuleFactory("runner-label", func(env *RuleEnv) []Rule {
-		return []Rule{NewRuleRunnerLabel()}
+		r := NewRuleRunnerLabel()
+		r.now = env.Now
+		return []Rule{r}
 	})
 }
