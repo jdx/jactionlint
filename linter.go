@@ -873,6 +873,7 @@ func (l *Linter) check(
 			shellcheckRCFile:       l.shellcheckRC,
 			cwd:                    l.cwd,
 			proc:                   proc,
+			now:                    l.now,
 		}
 		rules := newBuiltinRules(env, l.log)
 		if env.err != nil {
