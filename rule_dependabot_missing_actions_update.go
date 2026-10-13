@@ -86,13 +86,6 @@ func hasExternalActions(dir string) bool {
 	if err != nil {
 		return false
 	}
-	external := func(uses *String) bool {
-		if uses == nil {
-			return false
-		}
-		u := ParseUses(uses.Value)
-		return !u.Dynamic && (u.Kind == UsesAction || u.Kind == UsesReusableWorkflow)
-	}
 	for _, e := range entries {
 		n := e.Name()
 		if e.IsDir() || !(strings.HasSuffix(n, ".yml") || strings.HasSuffix(n, ".yaml")) {
@@ -106,18 +99,8 @@ func hasExternalActions(dir string) bool {
 		if w == nil {
 			continue
 		}
-		for _, j := range w.Jobs {
-			if j == nil {
-				continue
-			}
-			if j.WorkflowCall != nil && external(j.WorkflowCall.Uses) {
-				return true
-			}
-			for _, s := range flattenSteps(j.Steps) {
-				if a, ok := s.Exec.(*ExecAction); ok && external(a.Uses) {
-					return true
-				}
-			}
+		if workflowHasExternalActions(w) {
+			return true
 		}
 	}
 	return false

@@ -46,25 +46,30 @@ func localActionsWithExternalUses(p *Project) []string {
 	return dirs
 }
 
-// workflowHasExternalActions reports whether a step or a job of the workflow uses an action or a reusable workflow which
-// Dependabot can update: not a local path, not a docker:// image and not a value that has an expression.
-func workflowHasExternalActions(w *Workflow) bool {
-	external := func(uses *String) bool {
-		if uses == nil {
-			return false
-		}
-		u := ParseUses(uses.Value)
-		return !u.Dynamic && (u.Kind == UsesAction || u.Kind == UsesReusableWorkflow)
+// isUpdatableUses reports whether a `uses:` value is an action or a reusable workflow which Dependabot can update: not a
+// local path, not a docker:// image and not a value that has an expression. It is the one predicate of both checks of
+// dependabot-missing-actions-update, for the workflows and for the local actions.
+func isUpdatableUses(uses *String) bool {
+	if uses == nil {
+		return false
 	}
+	u := ParseUses(uses.Value)
+	return !u.Dynamic && (u.Kind == UsesAction || u.Kind == UsesReusableWorkflow)
+}
+
+// workflowHasExternalActions reports whether a job of the workflow calls a reusable workflow, or a step of it (a step of the
+// synthetic job of a composite action too) uses an action, that Dependabot can update (isUpdatableUses). It is the one walk
+// of the jobs and the steps for both checks.
+func workflowHasExternalActions(w *Workflow) bool {
 	for _, j := range w.Jobs {
 		if j == nil {
 			continue
 		}
-		if j.WorkflowCall != nil && external(j.WorkflowCall.Uses) {
+		if j.WorkflowCall != nil && isUpdatableUses(j.WorkflowCall.Uses) {
 			return true
 		}
 		for _, s := range flattenSteps(j.Steps) {
-			if a, ok := s.Exec.(*ExecAction); ok && external(a.Uses) {
+			if a, ok := s.Exec.(*ExecAction); ok && isUpdatableUses(a.Uses) {
 				return true
 			}
 		}
