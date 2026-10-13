@@ -79,6 +79,14 @@ func credentialPath(entry string) (string, bool) {
 // workflows of pull requests of the same repository. It is not about the trigger of the workflow, so it is reported for
 // every workflow.
 func (rule *RuleCachePoisoning) checkCredentialCaches(j *Job) {
+	// "cache-mode: none" gives no access to the cache and "read" forbids saving to it: nothing is written then
+	mode := j.CacheMode
+	if mode == nil && rule.wf != nil {
+		mode = rule.wf.CacheMode
+	}
+	if mode != nil && (mode.Value == "none" || mode.Value == "read") {
+		return
+	}
 	for _, s := range flattenSteps(j.Steps) {
 		a, ref := stepAction(s)
 		if a == nil || ref.Kind != UsesAction {
@@ -91,6 +99,9 @@ func (rule *RuleCachePoisoning) checkCredentialCaches(j *Job) {
 		path, ok := a.input("path")
 		if !ok {
 			continue
+		}
+		if v, _ := a.input("lookup-only"); isTrueLiteral(v) {
+			continue // it only checks that the entry exists: nothing is restored or saved
 		}
 		pos := a.Uses.Pos
 		if in := a.Inputs["path"]; in != nil && in.Value != nil && in.Value.Pos != nil {

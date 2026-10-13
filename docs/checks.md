@@ -4507,7 +4507,7 @@ written `~`, `$HOME` or `${HOME}`; a directory of the workspace with the same na
 and `.git`. The config of `.git` keeps the token of `actions/checkout`, so it is reported only when the job has a checkout without
 `persist-credentials: false` (a job which restores `.git` before a checkout that does not persist the token has nothing to leak). A cache is not private: a workflow of the repository that
 knows the key restores it, so the files are readable by whatever runs there, which includes the workflows of pull requests of the same
-repository. It is reported whatever the trigger is, and not for a path below a credential directory (`~/.ssh/known_hosts`,
+repository. It is reported whatever the trigger is, and not when the step has `lookup-only: true` or the job or workflow has `cache-mode: none` or `read` (nothing is saved), and not for a path below a credential directory (`~/.ssh/known_hosts`,
 `~/.docker/cli-plugins`), a glob, a path with an expression, or the whole home directory or workspace. It is in the pedantic tier because only the
 files that exist when the step runs hold credentials, which the rule cannot see.
 

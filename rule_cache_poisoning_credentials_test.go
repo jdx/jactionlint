@@ -64,6 +64,34 @@ func TestCachePoisoningCredentialCaches(t *testing.T) {
 			}
 		})
 	}
+	// lookup-only restores and saves nothing, and the cache mode of the job or the workflow can forbid the access
+	t.Run("lookup-only and the cache mode", func(t *testing.T) {
+		const step = "      - uses: actions/cache@v4\n        with:\n          path: ~/.npmrc\n          key: k\n"
+		const lookup = "      - uses: actions/cache@v4\n        with:\n          path: ~/.npmrc\n          key: k\n          lookup-only: true\n"
+		job := func(extra, steps string) string {
+			return "on: push\njobs:\n  j:\n" + extra + "    runs-on: ubuntu-latest\n    steps:\n" + steps
+		}
+		tests := []struct {
+			name string
+			src  string
+			want int
+		}{
+			{"a save", job("", step), 1},
+			{"lookup-only", job("", lookup), 0},
+			{"lookup-only false", job("", strings.Replace(lookup, "lookup-only: true", "lookup-only: false", 1)), 1},
+			{"cache mode none at the job", job("    cache-mode: none\n", step), 0},
+			{"cache mode read at the job", job("    cache-mode: read\n", step), 0},
+			{"cache mode write at the job", job("    cache-mode: write\n", step), 1},
+			{"cache mode none at the workflow", "cache-mode: none\n" + job("", step), 0},
+			{"cache mode read at the workflow", "cache-mode: read\n" + job("", step), 0},
+			{"the job overrides the workflow", "cache-mode: none\n" + job("    cache-mode: write\n", step), 1},
+		}
+		for _, tc := range tests {
+			if got := cacheCount(t, true, tc.src); got != tc.want {
+				t.Errorf("%s: want %d findings, got %d", tc.name, tc.want, got)
+			}
+		}
+	})
 	t.Run("the position is the path", func(t *testing.T) {
 		cfg := mustParseConfig(t, "profile: correctness\nrules:\n  cache-poisoning:\n    level: error\n    pedantic: true\n")
 		errs := policyErrorsOf(lintWithConfig(t, cfg, cache("~/.npmrc")), "cache-poisoning")
