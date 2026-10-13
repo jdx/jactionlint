@@ -18,7 +18,7 @@ jobs:
       - uses: actions/jekyll-build-pages@44a6e6beabd48582f863aeeb6cb2151cc1716697 # v1.0.13
       # OK: everything is pinned to a digest or to a commit
       - uses: example/docker-digest@4444444444444444444444444444444444444444
-      - uses: example/tidy@3333333333333333333333333333333333333333
+      - uses: example/tidy@3333333333333333333333333333333333333334
       - uses: reviewdog/action-actionlint@a8ac3eea598697a830f7d8e701fc9fcbfde88974 # v1.80.0
       - uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # v0.35.0
       # OK: the image is built from a Dockerfile, which is not read
