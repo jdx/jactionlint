@@ -88,6 +88,9 @@ type untrustedCheckout struct {
 	// guarded is whether actions/checkout refuses this checkout for a pull request from a fork, so only a pull request
 	// from a branch of the repository gets through. Only an `actions/checkout` step can be guarded.
 	guarded bool
+	// afterFailure is whether the checkout is behind a failed permission check of an action: only a step that runs after a
+	// failure runs it.
+	afterFailure bool
 	// note says why a checkout that the protection could cover is not guarded: the version of actions/checkout predates it.
 	note string
 }
@@ -245,6 +248,10 @@ func (rule *RuleUntrustedCheckout) VisitJobPre(n *Job) error {
 				for _, c := range cs {
 					if merged && c.immutable() {
 						kept = append(kept, c) // a later step that does not need the merge runs it
+						continue
+					}
+					if c.afterFailure && !stepRunsAfterFailure(s) {
+						kept = append(kept, c) // the step does not run after the check of the action failed
 						continue
 					}
 					rule.report(c, how)

@@ -412,7 +412,9 @@ func (rule *RuleUntrustedCheckout) localActionCheckouts(s *Step, e *ExecAction) 
 	for _, j := range action.Jobs {
 		for _, cs := range flattenSteps(j.Steps) {
 			if isPermissionGate(cs) {
-				gated = true
+				// the action fails here for a user who may not write, and so does the step that calls it: what it checked
+				// out before is not run by the steps after the call
+				gated, ret = true, nil
 				continue
 			}
 			if gated && !stepRunsAfterFailure(cs) {
@@ -425,6 +427,7 @@ func (rule *RuleUntrustedCheckout) localActionCheckouts(s *Step, e *ExecAction) 
 			if _, cu := stepAction(cs); cu != nil && cu.isRepoAction("actions/checkout") {
 				if c := rule.actionCheckout(cs, ce, cu, action.Comments, subst, e.Uses.Pos); c != nil {
 					c.step = s
+					c.afterFailure = gated // only a step of the caller that also runs after a failure runs it
 					c.what += " in " + t.path
 					ret = append(ret, c)
 				}
