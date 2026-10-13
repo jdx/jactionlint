@@ -581,3 +581,136 @@ type roundTripFunc func(*http.Request) (*http.Response, error)
 func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
 	return f(req)
 }
+
+// Registering detected releases
+
+const writeRegistryInput = `[
+    {
+        "slug": "a/one",
+        "tags": ["v1", "v2"],
+        "next": "v3"
+    },
+    {
+        "slug": "a/one",
+        "path": "/sub",
+        "tags": ["v2"],
+        "next": "v3"
+    },
+    {
+      "slug": "b/two",
+      "tags": ["v1"],
+      "next": "v2"
+    },
+    {
+        "slug": "c/three",
+        "tags": ["v1"],
+        "next": "v1.2.3"
+    },
+    {
+        "slug": "d/four",
+        "tags": ["v1"],
+        "next": "v2"
+    }
+]
+`
+
+// Only a/one@v3, b/two@v2 and c/three@v1.2.3 exist. a/one/sub@v3 and d/four@v2 do not.
+func releaseExists(req *http.Request) (*http.Response, error) {
+	status := http.StatusNotFound
+	for _, ok := range []string{"/a/one/v3/action.yml", "/b/two/v2/action.yml", "/c/three/v1.2.3/action.yml"} {
+		if req.URL.Path == ok {
+			status = http.StatusOK
+		}
+	}
+	return &http.Response{StatusCode: status, Status: http.StatusText(status), Body: http.NoBody, Request: req}, nil
+}
+
+func TestDetectWriteRegistry(t *testing.T) {
+	f := filepath.Join(t.TempDir(), "registry.json")
+	if err := os.WriteFile(f, []byte(writeRegistryInput), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	stdout := &bytes.Buffer{}
+	g := newGen(stdout, io.Discard, io.Discard)
+	g.transport = roundTripFunc(releaseExists)
+	if status := g.run([]string{"test", "-d", "-w", "-r", f}); status != 0 {
+		t.Fatal("exit status is non-zero:", status)
+	}
+
+	b, err := os.ReadFile(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Formatting is kept. The entry without a path is not confused with the entry of the same slug with a path.
+	want := strings.NewReplacer(
+		`"tags": ["v1", "v2"],
+        "next": "v3"`, `"tags": ["v1", "v2", "v3"],
+        "next": "v4"`,
+		`"tags": ["v1"],
+      "next": "v2"`, `"tags": ["v1", "v2"],
+      "next": "v3"`,
+	).Replace(writeRegistryInput)
+	if diff := cmp.Diff(want, string(b)); diff != "" {
+		t.Fatalf("registry file was not updated as expected: %s", diff)
+	}
+
+	out := stdout.String()
+	for _, w := range []string{
+		"https://github.com/a/one/tree/v3",
+		"Added to " + f + ": a/one@v3",
+		"Added to " + f + ": b/two@v2",
+		"Not added automatically, update " + f + " by hand: c/three@v1.2.3",
+	} {
+		if !strings.Contains(out, w) {
+			t.Errorf("%q is not included in stdout: %q", w, out)
+		}
+	}
+	if strings.Contains(out, "d/four") || strings.Contains(out, "a/one/sub") {
+		t.Errorf("a release which does not exist is reported: %q", out)
+	}
+
+	// The updated registry is the new base: running again finds nothing new except the one which needs a human
+	stdout.Reset()
+	g = newGen(stdout, io.Discard, io.Discard)
+	g.transport = roundTripFunc(releaseExists)
+	if status := g.run([]string{"test", "-d", "-w", "-r", f}); status != 0 {
+		t.Fatal("exit status is non-zero:", status)
+	}
+	if strings.Contains(stdout.String(), "Added to") {
+		t.Fatalf("a release was added twice: %q", stdout.String())
+	}
+}
+
+func TestDetectWithoutWriteExitsWithStatus2(t *testing.T) {
+	f := filepath.Join(t.TempDir(), "registry.json")
+	if err := os.WriteFile(f, []byte(writeRegistryInput), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	g := newGen(io.Discard, io.Discard, io.Discard)
+	g.transport = roundTripFunc(releaseExists)
+	if status := g.run([]string{"test", "-d", "-r", f}); status != 2 {
+		t.Fatal("exit status is not 2:", status)
+	}
+	b, err := os.ReadFile(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(b) != writeRegistryInput {
+		t.Fatalf("registry file was modified without -w: %s", b)
+	}
+}
+
+func TestWriteRegistryNeedsDetectAndRegistry(t *testing.T) {
+	for _, args := range [][]string{
+		{"test", "-w", "-r", "registry.json"},
+		{"test", "-d", "-w"},
+	} {
+		stderr := &bytes.Buffer{}
+		if status := newGen(io.Discard, stderr, io.Discard).run(args); status != 1 {
+			t.Fatalf("%v: exit status is not 1: %d", args, status)
+		}
+		if !strings.Contains(stderr.String(), "-w flag requires both -d and -r flags") {
+			t.Fatalf("%v: stderr was unexpected: %q", args, stderr.String())
+		}
+	}
+}
