@@ -1,0 +1,33 @@
+on:
+  pull_request:
+  push:
+
+jobs:
+  # the runners of an ARC runner set have no self-hosted label, the name of the set is the label
+  arc:
+    runs-on: arc-runner-set
+    steps:
+      - run: echo
+  gpu:
+    runs-on: [gpu-a100, linux]
+    steps:
+      - run: echo
+  group:
+    runs-on:
+      group: ci-runners
+    steps:
+      - run: echo
+  # not reported: the allow option lists ephemeral runners
+  ephemeral:
+    runs-on: arc-ephemeral-1
+    steps:
+      - run: echo
+  # not reported: the preset label of an operating system alone does not say that the runner is self-hosted
+  preset:
+    runs-on: linux
+    steps:
+      - run: echo
+  hosted:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo

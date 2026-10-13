@@ -36,6 +36,7 @@ var actionRuleScope = map[string]struct {
 	"concurrency-cancels-prs":         {scope: actionNotApplicable},   // concurrency: belongs to the workflow
 	"concurrency-cancels-release":     {scope: actionNotApplicable},   // concurrency: belongs to the workflow
 	"continue-on-error":               {scope: actionApplies},         // the steps option; an action has no jobs
+	"deprecated-runner-label":         {scope: actionNotApplicable},   // runs-on: belongs to the calling job
 	"duplicate-triggers":              {scope: actionNotApplicable},   // on: belongs to the workflow
 	"gate-job-skipped-on-failure":     {scope: actionNotApplicable},   // needs: between the jobs of a workflow
 	"gh-without-token":                {scope: actionNotApplicable},   // the token comes from the env of the calling job, which a composite action cannot see
@@ -43,9 +44,11 @@ var actionRuleScope = map[string]struct {
 	"insecure-ssh-keyscan":            {scope: actionApplies},         // the scripts of the steps
 	"insecure-url-scheme":             {scope: actionApplies},         // the scripts and inputs of the steps
 	"malformed-expression-delimiters": {scope: actionApplies},         // the strings of the steps
+	"multiline-plain-run":             {scope: actionApplies},         // the scripts of the steps
 	"mutable-runner-label":            {scope: actionNotApplicable},   // runs-on: belongs to the calling job
 	"pipeline-without-pipefail":       {scope: actionApplies},         // the scripts of the steps, with the shell of each step
 	"superfluous-actions":             {scope: actionApplies},         // the actions the steps use
+	"ubuntu-slim-limits":              {scope: actionNotApplicable},   // runs-on: belongs to the calling job
 	"unlocked-install":                {scope: actionApplies},         // the scripts of the steps
 	"unpinned-tools":                  {scope: actionApplies},         // the inputs of the actions the steps use
 	"unsound-prefix-match":            {scope: actionApplies},         // the if: conditions and expressions of the steps
@@ -58,6 +61,7 @@ var actionRuleScope = map[string]struct {
 	"use-trusted-publishing":          {scope: actionApplies},         // the publishing steps; the id-token permission is the caller's
 	"anonymous-definition":            {scope: actionNotApplicable},
 	"archived-uses":                   {scope: actionApplies},
+	"repojacking":                     {scope: actionApplies},
 	"artipacked":                      {scope: actionApplies},
 	"bot-conditions":                  {scope: actionCallerDependent},
 	"cache-poisoning":                 {scope: actionCallerDependent},
@@ -69,6 +73,8 @@ var actionRuleScope = map[string]struct {
 	"events":                          {scope: actionNotApplicable},
 	"environment-file-redirect":       {scope: actionApplies},
 	"excessive-permissions":           {scope: actionNotApplicable},
+	"fail-fast-action-inputs":         {scope: actionApplies},
+	"insufficient-permissions":        {scope: actionNotApplicable},
 	"expression":                      {scope: actionApplies},
 	"forbidden-uses":                  {scope: actionApplies},
 	"github-app":                      {scope: actionApplies},
