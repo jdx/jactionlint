@@ -22,6 +22,21 @@ func TestScriptIsForMoreSystems(t *testing.T) {
 		`brew install --quiet gnu-tar grep`:                        true,
 		`brew install jq && brew install grep`:                     true,
 		`sed --version | grep GNU`:                                 true,
+		// The options of a wrapper and their values are not the command
+		`sudo -u deploy gsed -i x f`:          true,
+		`sudo -E -u deploy -g ci uname`:       true,
+		`env -u FOO gsed -i x f`:              true,
+		`env -i FOO=1 gdate -d x`:             true,
+		`timeout 5 uname -s`:                  true,
+		`timeout -k 1 5 brew install gnu-tar`: true,
+		`nice -n 10 gsed -i x f`:              true,
+		`stdbuf -oL gsed -i x f`:              true,
+		`ionice -c 2 -n 7 gsed -i x f`:        true,
+		`xargs -n 1 gsed -i x`:                true,
+		`sudo -u gsed sed -i x f`:             false,
+		`env -u uname sed -i x f`:             false,
+		`sudo -u deploy sed -i x f`:           false,
+		`timeout 5 sed -i x f`:                false,
 		// A script that cannot be read is not known
 		`if [ -z "$X" ]; then`: true,
 		// Words that only look like them

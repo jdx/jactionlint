@@ -127,3 +127,8 @@ jobs:
     steps:
       - run: grep -nP x file.txt
       - run: grep -nA3 -P x file.txt
+  wrappers:
+    runs-on: macos-latest
+    steps:
+      # gsed is the value of the user here, not the command
+      - run: sudo -u gsed sed -i 's/a/b/' file.txt

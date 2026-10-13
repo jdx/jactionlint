@@ -26,8 +26,98 @@ var gnuBrewPackages = map[string]bool{
 	"coreutils": true, "findutils": true, "diffutils": true, "grep": true, "gawk": true, "gsed": true,
 }
 
-// wrapperCommands run the command that follows them.
-var wrapperCommands = map[string]bool{"sudo": true, "doas": true, "env": true, "command": true, "exec": true, "time": true, "nohup": true}
+// wrapperSpec describes a command that runs the command after it: the options of the wrapper which take a value (the
+// option and its value are skipped) and the number of positional words that come before the command (`timeout 5 cmd`).
+type wrapperSpec struct {
+	withValue  map[string]bool
+	positional int
+}
+
+func options(names ...string) map[string]bool {
+	m := map[string]bool{}
+	for _, n := range names {
+		m[n] = true
+	}
+	return m
+}
+
+// wrapperCommands are the commands that run the command that follows them, with the options that take a value.
+var wrapperCommands = map[string]wrapperSpec{
+	"sudo":    {withValue: options("-u", "-g", "-h", "-p", "-C", "-D", "-r", "-t", "-U", "-T", "--user", "--group", "--host", "--prompt", "--chdir")},
+	"doas":    {withValue: options("-u", "-C")},
+	"env":     {withValue: options("-u", "-C", "-S", "--unset", "--chdir", "--split-string")},
+	"command": {},
+	"exec":    {withValue: options("-a")},
+	"time":    {withValue: options("-f", "-o", "--format", "--output")},
+	"nohup":   {},
+	"nice":    {withValue: options("-n", "--adjustment")},
+	"timeout": {withValue: options("-s", "-k", "--signal", "--kill-after"), positional: 1},
+	"stdbuf":  {withValue: options("-i", "-o", "-e")},
+	"ionice":  {withValue: options("-c", "-n", "-p", "-P", "-u")},
+	"setsid":  {},
+	"chronic": {},
+	"xargs":   {withValue: options("-I", "-n", "-P", "-L", "-s", "-E", "-d", "-a", "-J", "-R", "-S")},
+}
+
+// isAssignmentWord reports whether the word is a variable assignment (`VAR=value`), as `env VAR=value cmd` has.
+func isAssignmentWord(w string) bool {
+	name, _, ok := strings.Cut(w, "=")
+	if !ok || name == "" {
+		return false
+	}
+	for i, c := range name {
+		if c != '_' && !(c >= 'a' && c <= 'z') && !(c >= 'A' && c <= 'Z') && !(i > 0 && c >= '0' && c <= '9') {
+			return false
+		}
+	}
+	return true
+}
+
+// commandWordOf returns the index of the real command in the words of a simple command, after the wrappers, their
+// options with the values of these, and the assignments; and -1 when it is not a literal word.
+func commandWordOf(words []string) int {
+	i := 0
+	for i < len(words) {
+		w := words[i]
+		if w == "" {
+			return -1
+		}
+		if isAssignmentWord(w) {
+			i++
+			continue
+		}
+		spec, ok := wrapperCommands[path.Base(w)]
+		if !ok {
+			return i
+		}
+		i++
+		for i < len(words) {
+			o := words[i]
+			if o == "" {
+				return -1
+			}
+			if o == "--" {
+				i++
+				break
+			}
+			if len(o) > 1 && strings.HasPrefix(o, "-") {
+				if spec.withValue[o] {
+					i += 2
+				} else {
+					i++
+				}
+				continue
+			}
+			if isAssignmentWord(o) {
+				i++
+				continue
+			}
+			break
+		}
+		i += spec.positional
+	}
+	return -1
+}
 
 // stepConditionReadsTheSystem reports whether the `if:` of a step reads the context runner or matrix, which can keep the
 // step from running on macOS.
@@ -95,19 +185,8 @@ func callIsForMoreSystems(c *syntax.CallExpr) bool {
 	for _, a := range c.Args {
 		words = append(words, literalWord(a))
 	}
-	// The command word is the first one that is not a wrapper, an option of it or an assignment
-	i := 0
-	for ; i < len(words); i++ {
-		w := words[i]
-		if w == "" {
-			return false // a command word which is not known
-		}
-		if wrapperCommands[path.Base(w)] || strings.HasPrefix(w, "-") || strings.Contains(w, "=") {
-			continue
-		}
-		break
-	}
-	if i >= len(words) {
+	i := commandWordOf(words)
+	if i < 0 || i >= len(words) {
 		return false
 	}
 	name := path.Base(words[i])

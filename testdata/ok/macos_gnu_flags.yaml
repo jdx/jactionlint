@@ -108,6 +108,10 @@ jobs:
       - run: |
           grep -ne -P file.txt
           grep -n -e -P file.txt
+      # The command after the options of a wrapper is the GNU one
+      - run: |
+          sudo -u deploy gsed -i 's/a/b/' file.txt
+          env -u FOO gdate -d yesterday
       # After -- come the patterns and the file names
       - run: |
           grep -- -P file.txt
@@ -123,6 +127,18 @@ jobs:
       # Not bash or sh
       - run: print('sed -i x y')
         shell: python
+  # An expression on another key of the entry may remove the macOS jobs: it is not known that one runs
+  expression-on-another-key-of-the-exclude:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        node: [18, 20]
+        exclude:
+          - os: macos-latest
+            node: ${{ fromJSON(vars.NODES) }}
+    runs-on: ${{ matrix.os }}
+    steps:
+      - run: date -d yesterday
   macos-excluded-by-index:
     strategy:
       matrix:

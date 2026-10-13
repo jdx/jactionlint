@@ -126,13 +126,13 @@ func macosLabelOf(j *Job) string {
 		}
 		if !l.ContainsExpression() {
 			labels = append(labels, l.Value)
-		} else if vs, ok := matrixLabelValues(l, m); ok {
-			labels = append(labels, runnersAfterExclude(vs, l, m)...)
+		} else if vs, ok := matrixRunnerValues(l, m); ok {
+			labels = append(labels, vs...)
 		}
 	}
 	if j.RunsOn.LabelsExpr != nil {
-		if vs, ok := matrixLabelValues(j.RunsOn.LabelsExpr, m); ok {
-			labels = append(labels, runnersAfterExclude(vs, j.RunsOn.LabelsExpr, m)...)
+		if vs, ok := matrixRunnerValues(j.RunsOn.LabelsExpr, m); ok {
+			labels = append(labels, vs...)
 		}
 	}
 	// A runs-on of one label that the matrix chooses makes one job for each value, so a value self-hosted is a job of
@@ -177,53 +177,36 @@ func matrixKeyOfLabel(label *String) (string, bool) {
 	return strings.ToLower(chain[1]), true
 }
 
-// runnersAfterExclude drops the values of `runs-on: ${{ matrix.key }}` that no job gets: a value of the row which an
-// `exclude` entry with only that key removes. A value that `include` adds is a new job and stays, and when an
-// `exclude` has an expression the values of the row are not known, so only the ones of `include` are kept.
-func runnersAfterExclude(vs []string, label *String, m *Matrix) []string {
-	if m == nil || m.Exclude == nil {
-		return vs
+// matrixRunnerValues returns the values of `runs-on: ${{ matrix.key }}` that some job certainly gets: the values of the
+// row that survive `exclude` (survivingRowValues, which treats an expression as "may match") and the values that
+// `include` adds, which are a job of their own.
+func matrixRunnerValues(label *String, m *Matrix) ([]string, bool) {
+	if m == nil || m.Expression != nil {
+		return nil, false
 	}
 	key, ok := matrixKeyOfLabel(label)
 	if !ok {
-		return vs
+		return nil, false
 	}
-	removed, included := map[string]bool{}, map[string]bool{}
-	unknown := m.Exclude.Expression != nil
-	for _, c := range m.Exclude.Combinations {
-		if c.Expression != nil {
-			unknown = true
-			continue
-		}
-		for k, a := range c.Assigns {
-			if strings.ToLower(k) != key {
-				continue
-			}
-			if str, ok := a.Value.(*RawYAMLString); ok {
-				if ContainsExpression(str.Value) {
-					unknown = true
-				} else if len(c.Assigns) == 1 {
-					removed[str.Value] = true
-				}
+	var out []string
+	if row, ok := m.Rows[key]; ok && row.Expression == nil {
+		survive := survivingRowValues(m, key)
+		for _, v := range row.Values {
+			if str, ok := v.(*RawYAMLString); ok && survive[str] {
+				out = append(out, str.Value)
 			}
 		}
 	}
 	if m.Include != nil {
 		for _, c := range m.Include.Combinations {
 			for k, a := range c.Assigns {
-				if str, ok := a.Value.(*RawYAMLString); ok && strings.ToLower(k) == key {
-					included[str.Value] = true
+				if str, ok := a.Value.(*RawYAMLString); ok && strings.ToLower(k) == key && !ContainsExpression(str.Value) {
+					out = append(out, str.Value)
 				}
 			}
 		}
 	}
-	var out []string
-	for _, v := range vs {
-		if included[v] || !(unknown || removed[v]) {
-			out = append(out, v)
-		}
-	}
-	return out
+	return out, len(out) > 0
 }
 
 // isMacOSRunnerLabel reports whether the label is a GitHub-hosted macOS runner: macos-latest, macos-14, macos-15-intel,
