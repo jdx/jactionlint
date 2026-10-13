@@ -161,6 +161,10 @@ func isStableMatrixString(v *RawYAMLString) bool {
 	switch strings.ToLower(v.Value) {
 	case "null", "~":
 		return false // an empty string when it is put into a string
+	case "true", "false":
+		// A boolean (YAML 1.2 core: true, True and TRUE) is printed in lower case. yes, no, on and off are strings
+		// for GitHub, which does not read YAML 1.1.
+		return v.Value == strings.ToLower(v.Value)
 	}
 	if f, err := strconv.ParseFloat(v.Value, 64); err == nil {
 		return strconv.FormatFloat(f, 'g', -1, 64) == v.Value

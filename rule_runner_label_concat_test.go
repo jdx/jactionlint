@@ -17,6 +17,15 @@ func TestIsStableMatrixString(t *testing.T) {
 		{RawYAMLString{Value: "1_000"}, false},
 		{RawYAMLString{Value: ".inf"}, false},
 		{RawYAMLString{Value: "null"}, false},
+		{RawYAMLString{Value: "NULL"}, false},
+		// GitHub reads the YAML 1.2 core schema (YamlObjectReader.MatchBoolean of the runner): only true and false in
+		// three spellings are booleans, and a boolean is printed in lower case. yes, no, on and off are strings.
+		{RawYAMLString{Value: "yes"}, true},
+		{RawYAMLString{Value: "off"}, true},
+		{RawYAMLString{Value: "true"}, true},
+		{RawYAMLString{Value: "True"}, false},
+		{RawYAMLString{Value: "FALSE"}, false},
+		{RawYAMLString{Value: "True", StringTag: true}, true},
 		{RawYAMLString{Value: "~"}, false},
 		{RawYAMLString{Value: ""}, false},
 		{RawYAMLString{Value: "${{ inputs.os }}", StringTag: true}, false},
