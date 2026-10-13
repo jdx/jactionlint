@@ -100,7 +100,15 @@ func (rule *RuleOutputClobbering) VisitStep(n *Step) error {
 				continue
 			}
 			if m := reRecordStart.FindStringSubmatch(t); m != nil {
-				open = &outputDelimiter{name: m[1], text: m[2], random: rule.randomDelimiter(s, n, m[2])}
+				at := w.Redirect.Offset
+				if c.cmd != nil {
+					at = c.cmd.Offset
+				}
+				open = &outputDelimiter{name: m[1], text: m[2], random: rule.randomDelimiter(s, n, m[2], at)}
+				// a printf or an echo that writes the delimiter and the value in one command
+				if c.d.kind == dataUntrusted && exprMayHaveNewline(c.d.input) && !open.random {
+					rule.report(s, origin, n, w, c, open.name, open.text, "delimiter")
+				}
 				continue
 			}
 			if c.d.kind == dataUntrusted && c.d.mayHaveNewline() {
@@ -119,9 +127,6 @@ func (rule *RuleOutputClobbering) VisitStep(n *Step) error {
 // job reads who the user is (the association of the author, the actor, a label), or the script checks the permission
 // of the user. The rules cannot judge whether the check is enough, so they do not report.
 func (rule *RuleOutputClobbering) gated(n *Step, run *ExecRun) bool {
-	if conditionIsGuard(n.If) || (rule.job != nil && conditionIsGuard(rule.job.If)) {
-		return true
-	}
 	if (n.If != nil && reUserCond.MatchString(n.If.Value)) || (rule.job != nil && rule.job.If != nil && reUserCond.MatchString(rule.job.If.Value)) {
 		return true
 	}
@@ -130,14 +135,14 @@ func (rule *RuleOutputClobbering) gated(n *Step, run *ExecRun) bool {
 
 var (
 	// reUserCheck matches the check of the permission or of the association of a user in a script.
-	reUserCond  = regexp.MustCompile(`author_association|\.user\.(login|type)\b|github\.(triggering_)?actor\b`)
+	reUserCond  = regexp.MustCompile(`author_association|\.user\.(login|type)\b|github\.(triggering_)?actor\b|github\.event\.label\b|\.labels\b|\.head\.repo\b`)
 	reUserCheck = regexp.MustCompile(`collaborators/[^\s"]*/permission|author_association|get_?[cC]ollaborator_?[pP]ermission|getCollaboratorPermissionLevel`)
 	// reRecordStart matches the first line of a multi-line record: `name<<DELIMITER`.
 	reRecordStart = regexp.MustCompile(`^([A-Za-z_][A-Za-z0-9_.-]*)<<(.+)$`)
 	// reRecordName matches the name of a `name=value` record.
 	reRecordName = regexp.MustCompile(`^([A-Za-z_][A-Za-z0-9_.-]*)=`)
 	// reRandomSource matches what makes the delimiter a value that nobody can guess.
-	reRandomSource = regexp.MustCompile(`RANDOM|uuidgen|/dev/u?random|openssl\s+rand|\bshuf\b|\bmktemp\b|\bsecrets\b|\buuid\b|\bdate\s[^)]*%N`)
+	reRandomSource = regexp.MustCompile(`\bS?RANDOM\b|uuidgen|/dev/u?random|openssl\s+rand|\bshuf\b|\bmktemp\b|\bsecrets\b|\buuid\b|\bdate\s[^)]*%N`)
 	reVarRef       = regexp.MustCompile(`\$\{?([A-Za-z_][A-Za-z0-9_]*)`)
 )
 
@@ -216,7 +221,7 @@ func reachesFile(c *runscript.Command, file *runscript.Redirect) bool {
 	}
 	for _, st := range c.Pipeline.Stages[c.Stage+1:] {
 		for _, sc := range st.Commands {
-			if !transparentCommands[sc.Name] || cannotAddRecords(sc) || discardsOutput(sc) {
+			if !transparentCommands[sc.Name] || commandSanitizes(sc, destOutput).satisfies(destOutput) || discardsOutput(sc) {
 				return false
 			}
 		}
@@ -239,12 +244,14 @@ func printedText(c *runscript.Command) string {
 	if c.Name != "echo" && c.Name != "printf" {
 		return ""
 	}
+	escapes := c.Name == "printf"
 	for _, a := range c.Args {
-		if strings.HasPrefix(a.Value, "-") && !a.Dynamic() && c.Name == "echo" {
+		if c.Name == "echo" && strings.HasPrefix(a.Value, "-") && !a.Dynamic() {
+			escapes = escapes || strings.Contains(a.Value, "e") // `echo -e` reads \n as a line break
 			continue
 		}
 		v := a.Value
-		if c.Name == "printf" {
+		if escapes {
 			v = strings.TrimSuffix(strings.ReplaceAll(v, `\n`, "\n"), "\n")
 			if i := strings.IndexByte(v, '\n'); i >= 0 {
 				v = v[:i]
@@ -257,8 +264,11 @@ func printedText(c *runscript.Command) string {
 
 // randomDelimiter reports whether the delimiter of a record is a value that nobody can guess. A delimiter that the
 // rule cannot resolve is taken as random: the rule reports only what it knows.
-func (rule *RuleOutputClobbering) randomDelimiter(s *runscript.Script, step *Step, text string) bool {
+func (rule *RuleOutputClobbering) randomDelimiter(s *runscript.Script, step *Step, text string, at int) bool {
 	text = strings.Trim(text, `"'`)
+	if strings.Contains(text, "%") {
+		return true // a printf format: the delimiter is one of its arguments, which the rule does not follow
+	}
 	if !strings.ContainsAny(text, "$`") {
 		return false // EOF, END_OF_OUTPUT, ghadelimiter: a constant
 	}
@@ -267,24 +277,29 @@ func (rule *RuleOutputClobbering) randomDelimiter(s *runscript.Script, step *Ste
 	}
 	for _, m := range reVarRef.FindAllStringSubmatch(text, -1) {
 		name := m[1]
-		found := false
+		// the assignment in effect for the command: the last plain one before it (`VAR=x cmd` only sets the
+		// environment of cmd, and a later assignment has not happened yet)
+		var last *runscript.Assignment
 		for _, a := range s.Assignments {
-			if a.Name != name || a.Value == nil {
+			if a.Name != name || a.Value == nil || a.Offset >= at || (a.Cmd != nil && !a.Cmd.Decl) {
 				continue
 			}
-			found = true
-			if reRandomSource.MatchString(a.Value.Raw) {
+			if last == nil || a.Offset > last.Offset {
+				last = a
+			}
+		}
+		if last != nil {
+			if reRandomSource.MatchString(last.Value.Raw) {
 				return true
 			}
+			continue
 		}
-		if !found {
-			if v, ok := rule.flow.envValue(step, name); ok {
-				if !strings.Contains(v.Value, "${{") && !reRandomSource.MatchString(v.Value) {
-					continue // set to a constant by the workflow
-				}
+		if v, ok := rule.flow.envValue(step, name); ok {
+			if !strings.Contains(v.Value, "${{") && !reRandomSource.MatchString(v.Value) {
+				continue // set to a constant by the workflow
 			}
-			return true // not known: do not report
 		}
+		return true // not known: do not report
 	}
 	return false
 }

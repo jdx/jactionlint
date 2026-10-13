@@ -60,6 +60,17 @@ func TestOutputClobbering(t *testing.T) {
 		{"a delimiter from the date", "d=$(date +%s)\n{ echo \"body<<$d\"; echo \"$BODY\"; echo \"$d\"; } " + out, 1},
 		{"a delimiter from the environment", "d=$LIT\n{ echo \"body<<$d\"; echo \"$BODY\"; echo \"$d\"; } " + out, 1},
 
+		{"a printf with the delimiter and the value", `printf 'body<<EOF\n%s\nEOF\n' "$BODY" ` + out, 1},
+		{"a printf with a random delimiter", "d=$(uuidgen)\nprintf 'body<<%s\\n%s\\n%s\\n' \"$d\" \"$BODY\" \"$d\" " + out, 0},
+		{"an echo with the delimiter and the value", `echo -e "body<<EOF\n$BODY\nEOF" ` + out, 1},
+		{"the last assignment of the delimiter is a constant", "d=$(uuidgen)\nd=EOF\n{ echo \"body<<$d\"; echo \"$BODY\"; echo \"$d\"; } " + out, 1},
+		{"the last assignment of the delimiter is random", "d=EOF\nd=$(uuidgen)\n{ echo \"body<<$d\"; echo \"$BODY\"; echo \"$d\"; } " + out, 0},
+		{"a prefix assignment is not the delimiter", "d=EOF\nd=$(uuidgen) true\n{ echo \"body<<$d\"; echo \"$BODY\"; echo \"$d\"; } " + out, 1},
+		{"a random assignment after the write", "d=EOF\n{ echo \"body<<$d\"; echo \"$BODY\"; echo \"$d\"; } " + out + "\nd=$(uuidgen)", 1},
+		{"a variable whose name ends with RANDOM", "d=$NONRANDOM\n{ echo \"body<<$d\"; echo \"$BODY\"; echo \"$d\"; } " + out, 1},
+		{"newlines removed after the record", `echo "body=$BODY" | tr -d '\n' ` + out, 0},
+		{"the first line after the record", `echo "body=$BODY" | head -n 1 ` + out, 0},
+		{"a filter after the record that keeps lines", `echo "body=$BODY" | sed 's/a/b/' ` + out, 1},
 		// --- a random delimiter ---
 		{"uuidgen", "delimiter=$(uuidgen)\n{ echo \"body<<$delimiter\"; echo \"$BODY\"; echo \"$delimiter\"; } " + out, 0},
 		{"openssl", "EOF=$(openssl rand -hex 8)\n{ echo \"body<<$EOF\"; echo \"$BODY\"; echo \"$EOF\"; } " + out, 0},
@@ -129,6 +140,8 @@ func TestOutputClobberingGates(t *testing.T) {
 	}{
 		{"no gate", "github.event_name == 'issue_comment'", "", write, 1},
 		{"the association in the job", "contains(fromJSON('[\"OWNER\",\"MEMBER\"]'), github.event.comment.author_association)", "", write, 0},
+		{"the result of a needed job is no check of the user", "needs.build.result == 'success'", "", write, 1},
+		{"an output of an earlier step is no check of the user", "", "steps.build.outputs.ok == 'true'", write, 1},
 		{"the actor in the step", "", "github.actor == 'maintainer'", write, 0},
 		{"the permission in the script", "", "", "gh api \"repos/$R/collaborators/$USER/permission\" --jq .permission\n" + write, 0},
 	}
