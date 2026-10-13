@@ -33,6 +33,7 @@ List of checks:
 - [Webhook events validation](#check-webhook-events)
 - [Workflow dispatch event validation](#check-workflow-dispatch-events)
 - [Glob filter pattern syntax validation](#check-glob-pattern)
+- [Path filters that match no file (pedantic)](#check-unmatched-paths-filter)
 - [CRON syntax and IANA timezone string at `on.schedule`](#check-cron-syntax-and-timezone)
 - [Runner labels](#check-runner-labels)
 - [Action format in `uses:`](#check-action-format)
@@ -2373,6 +2374,74 @@ workflow. It checks:
 
 Most common mistake I have ever seen here is a misunderstanding that regular expression is available for filtering.
 This rule can catch the mistake so that users can notice their mistakes.
+
+<a id="check-unmatched-paths-filter"></a>
+## Path filters that match no file (pedantic)
+
+Example input:
+
+```yaml
+on:
+  push:
+    paths:
+      - 'src/**'
+      - 'source/**'
+  pull_request:
+    paths-ignore:
+      - 'docs/**'
+      - 'doc/**'
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - run: echo test
+```
+
+Output:
+<!-- Skip update output -->
+```
+test.yaml:5:9: warning: the entry "source/**" of "paths" matches no file or directory of the repository, so it never triggers the workflow. a path may have been renamed or moved, or have a typo [unmatched-paths-filter]
+  |
+5 |       - 'source/**'
+  |         ^~~~~~~~~~~
+test.yaml:9:9: warning: the entry "doc/**" of "paths-ignore" matches no file or directory of the repository, so it ignores nothing. a path may have been renamed or moved, or have a typo [unmatched-paths-filter]
+  |
+9 |       - 'doc/**'
+  |         ^~~~~~~~
+```
+
+<!-- Skip playground link -->
+
+The output above is for a repository that has the directories `src` and `docs`, and not `source` and `doc`. It is from the
+following `rules` section of the [configuration file](config.md):
+
+```yaml
+rules:
+  unmatched-paths-filter: warn
+```
+
+GitHub starts a workflow for a push or a pull request only when a changed file matches an entry of `paths`. When a directory is
+renamed or moved, or an entry has a typo (`.yml` for `.yaml`), the entry matches nothing, the workflow does not start for the files
+it was written for and nothing says so. The rule `unmatched-paths-filter` (in the `pedantic` profile, as a warning) matches every entry of
+`paths` and `paths-ignore` of `push`, `pull_request` and `pull_request_target` against the files of the repository, and reports the
+entries that match none. It matches the files that `git ls-files` lists in the project (the tracked ones and the untracked ones that are not
+ignored, so `node_modules` is not a file of the repository), or, when git cannot say, the files of the working tree without `.git`,
+`node_modules`, `.venv` and `venv`. It reports nothing for `-` (stdin) or a workflow which is not in a repository.
+
+It is careful about what it calls a mismatch, because the rule cannot know what GitHub would do in a few cases:
+
+- An entry matches when it matches a file or a directory (GitHub does not document whether `docs` alone matches the files in it),
+  a `/` at the end is ignored, and the case of letters is not compared.
+- An entry starting with `!` is skipped, as is one with `${{ }}`, one starting with `/` or `./`, an invalid pattern (see
+  [the glob syntax](#check-glob-pattern)), and a character class that is negated.
+- A submodule without files in the list (git lists a submodule as one path) hides the entries that could match inside it: one that
+  names a path in it, or whose wildcard can reach into it (`**/*.js`, `vendor/**`). An entry that cannot go below the top
+  directory (`*.md`) is decided by the files of the repository itself.
+- When git lists no file, or more than 300000, the rule says nothing, and it does not walk the tree then.
+- A generated file is skipped, because its entries come from another file, unless `generated-files: report` is set. A repository
+  with more than 300000 files (of git, or of the walk) is not looked at.
+
+There is no automatic fix: the right path is not known.
 
 <a id="check-cron-syntax-and-timezone"></a>
 ## CRON syntax and IANA timezone string at `on.schedule`
@@ -10620,7 +10689,7 @@ How the rules treat actions:
 
 - **Applies** to the steps (and the metadata) of an action: `action-syntax`, `actions-lock`, `actions-lock-drift`, `adhoc-packages`, `archived-uses`, `argument-injection`, `artipacked`, `background-step-not-waited`, `checkout-static-credentials`, `command-injection`, `conflicting-action-inputs`, `constant-condition`, `context-availability`, `continue-on-error`, `deprecated-action-input`, `deprecated-commands`, `deprecated-node-runtime`, `duplicate-key`, `duplicate-step-id`, `environment-file-redirect`, `expired-ignore`, `expression-syntax`, `expression-type`, `fail-fast-action-inputs`, `forbidden-uses`, `github-app`, `github-script-syntax`, `if-always-true`, `impostor-commit`, `insecure-commands`, `insecure-ssh-keyscan`, `insecure-url-scheme`, `invalid-env-var-name`, `invalid-function-call`, `invalid-id`, `invalid-ignore-comment`, `invalid-local-action`, `invalid-parallel-step`, `invalid-shell-name`, `invalid-uses`, `invisible-characters`, `known-vulnerable-actions`, `malformed-expression-delimiters`, `max-run-lines`, `merge-key`, `misfeature`, `missing-action-input`, `multiline-plain-run`, `obfuscation`, `outdated-action-runner`, `output-clobbering`, `pipeline-without-pipefail`, `pyflakes`, `recursive-alias`, `ref-confusion`, `ref-version-mismatch`, `repojacking`, `require-expression-wrapping`, `self-repository`, `shellcheck`, `stale-action-refs`, `superfluous-actions`, `template-injection`, `typosquat-uses`, `undefined-function`, `undefined-property`, `unknown-action-input`, `unlocked-install`, `unpinnable-action`, `unpinned-images`, `unpinned-tools`, `unpinned-uses`, `unsound-contains`, `unsound-prefix-match`, `unsound-ternary`, `unused-anchor`, `unused-ignore`, `unverified-download`, `use-trusted-publishing`, `yaml-syntax`.
 - **Caller-dependent**: `agentic-actions`, `bot-conditions`, `cache-poisoning`, `github-env` (its findings about untrusted input do not depend on the caller), `untrusted-artifact` and `untrusted-checkout`.
-- **Not applicable** because an action does not have what the rule checks, or because only the calling job can decide (`unused-baseline-entry` is about the baseline file, not about a workflow or an action): `anonymous-definition`, `comment-trigger-authorization`, `concurrency-cancels-prs`, `concurrency-cancels-release`, `concurrency-deadlock`, `concurrency-limits`, `conflicting-runner-labels`, `cron-too-frequent`, `cyclic-job-needs`, `dangerous-triggers`, `dependabot-cooldown`, `dependabot-execution`, `dependabot-missing-actions-update`, `dependabot-syntax`, `deprecated-runner-label`, `duplicate-job-id`, `duplicate-job-needs`, `duplicate-triggers`, `event-name-never-received`, `excessive-permissions`, `gate-job-skipped-on-failure`, `gh-without-token`, `hardcoded-container-credentials`, `insufficient-permissions`, `invalid-activity-type`, `invalid-cron`, `invalid-event-config`, `invalid-event-filter`, `invalid-glob`, `invalid-label-pattern`, `invalid-local-workflow`, `invalid-permissions`, `invalid-timezone`, `invalid-workflow-call`, `invalid-workflow-call-input`, `invalid-workflow-dispatch-input`, `local-action-checkout`, `macos-gnu-flags`, `matrix-duplicate-value`, `matrix-invalid-exclude`, `missing-permissions`, `missing-timeout`, `missing-workflow-input`, `missing-workflow-secret`, `mutable-runner-label`, `overprovisioned-secrets`, `require-shell`, `required-actions`, `secrets-inherit`, `secrets-outside-env`, `self-hosted-runner`, `timeout-too-long`, `ubuntu-slim-limits`, `undefined-job-needs`, `undocumented-permissions`, `unknown-event`, `unknown-runner-label`, `unknown-workflow-input`, `unknown-workflow-secret`, `unredacted-secrets`, `unused-baseline-entry`, `unused-job-output`, `unused-needs`, `unused-workflow-input`, `unused-workflow-secret`, `workflow-call-permissions`, `workflow-input-type`, `workflow-run-names`, `workflow-secret-scope`, `workflow-syntax`.
+- **Not applicable** because an action does not have what the rule checks, or because only the calling job can decide (`unused-baseline-entry` is about the baseline file, not about a workflow or an action): `anonymous-definition`, `comment-trigger-authorization`, `concurrency-cancels-prs`, `concurrency-cancels-release`, `concurrency-deadlock`, `concurrency-limits`, `conflicting-runner-labels`, `cron-too-frequent`, `cyclic-job-needs`, `dangerous-triggers`, `dependabot-cooldown`, `dependabot-execution`, `dependabot-missing-actions-update`, `dependabot-syntax`, `deprecated-runner-label`, `duplicate-job-id`, `duplicate-job-needs`, `duplicate-triggers`, `event-name-never-received`, `excessive-permissions`, `gate-job-skipped-on-failure`, `gh-without-token`, `hardcoded-container-credentials`, `insufficient-permissions`, `invalid-activity-type`, `invalid-cron`, `invalid-event-config`, `invalid-event-filter`, `invalid-glob`, `invalid-label-pattern`, `invalid-local-workflow`, `invalid-permissions`, `invalid-timezone`, `invalid-workflow-call`, `invalid-workflow-call-input`, `invalid-workflow-dispatch-input`, `local-action-checkout`, `macos-gnu-flags`, `matrix-duplicate-value`, `matrix-invalid-exclude`, `missing-permissions`, `missing-timeout`, `missing-workflow-input`, `missing-workflow-secret`, `mutable-runner-label`, `overprovisioned-secrets`, `require-shell`, `required-actions`, `secrets-inherit`, `secrets-outside-env`, `self-hosted-runner`, `timeout-too-long`, `ubuntu-slim-limits`, `undefined-job-needs`, `undocumented-permissions`, `unknown-event`, `unknown-runner-label`, `unknown-workflow-input`, `unknown-workflow-secret`, `unmatched-paths-filter`, `unredacted-secrets`, `unused-baseline-entry`, `unused-job-output`, `unused-needs`, `unused-workflow-input`, `unused-workflow-secret`, `workflow-call-permissions`, `workflow-input-type`, `workflow-run-names`, `workflow-secret-scope`, `workflow-syntax`.
 
 Example input:
 
