@@ -2363,8 +2363,9 @@ The rule is unchanged when:
 - the workflow is not listed in the file: workflows are onboarded to the lock file one by one, and only a listed workflow is held
   to it (`gh actions-lock --verify` reports the others);
 - the entry of the action is missing or malformed (a ref which differs from the one of the pin, a `commit` which is not a digest);
-- the `uses:` is a reusable workflow call (`owner/repo/.github/workflows/x.yml@ref`) or a Docker image, which the lock file does
-  not cover.
+- the `uses:` is a reusable workflow call (`owner/repo/.github/workflows/x.yml@ref`) or a Docker image. The current
+  `gh actions-lock` does not record them (and CodeQL leaves reusable workflows alone), so they are judged as before. Some lock files
+  in the wild do list the pins of reusable workflows, which is not relied on.
 
 A step of a local action (`action.yml`) is read the way the lock file records it: the actions which a local action uses are
 listed under the workflows that run it with `uses: $/path` or `./path` (directly or through other local actions; a reusable
