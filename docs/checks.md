@@ -6598,7 +6598,8 @@ that of [`agentic-actions`](#check-agentic-actions). It looks for:
 - a step of the job that asks for the permission of the commenter: an action whose name has `permission` or `membership`, a `run:` that looks
   at `collaborators/` or `/permission`, an `actions/github-script` with a script that does, and the command actions
   `peter-evans/slash-command-dispatch`, `xt0rted/slash-command-action`, `github/command` and `github/branch-deploy` (they check the permission
-  `write` by default; `permission: none` turns it off);
+  `write` by default). Each has its own input for the level: `permission` (dispatch), `permission-level` (slash-command-action) and the list
+  `permissions` (command and branch-deploy). A level that every commenter has (`none` or `read`, also inside the list) is no check;
 - a job that the job `needs` and that has one of these, or a condition that reads `needs` or `steps` (an earlier job or step decided);
 - an AI agent action that checks the write access of the user itself (`anthropics/claude-code-action` unless `allowed_non_write_users` is `*`).
 

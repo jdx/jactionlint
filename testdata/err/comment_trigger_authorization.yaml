@@ -161,6 +161,70 @@ jobs:
         with:
           permission: write
 
+  # Each command action has its own input for the level, and a level that everybody has is no check
+  github-command-open:
+    runs-on: ubuntu-latest
+    if: startsWith(github.event.comment.body, '/')
+    steps:
+      - uses: github/command@v1
+        with:
+          permissions: read,write,admin
+  branch-deploy-open:
+    runs-on: ubuntu-latest
+    if: startsWith(github.event.comment.body, '/')
+    steps:
+      - uses: github/branch-deploy@v9
+        with:
+          permissions: "read"
+  github-command-write:
+    runs-on: ubuntu-latest
+    if: startsWith(github.event.comment.body, '/')
+    steps:
+      - uses: github/command@v1
+        with:
+          permissions: write,admin
+  dispatch-read:
+    runs-on: ubuntu-latest
+    if: startsWith(github.event.comment.body, '/')
+    steps:
+      - uses: peter-evans/slash-command-dispatch@9bdcd7914ec1b75590b790b844aa3b8eee7970f4 # v3.0.2
+        with:
+          token: ${{ secrets.PAT }}
+          commands: deploy
+          permission: read
+  dispatch-admin:
+    runs-on: ubuntu-latest
+    if: startsWith(github.event.comment.body, '/')
+    steps:
+      - uses: peter-evans/slash-command-dispatch@9bdcd7914ec1b75590b790b844aa3b8eee7970f4 # v3.0.2
+        with:
+          token: ${{ secrets.PAT }}
+          commands: deploy
+          permission: admin
+  slash-command-action-none:
+    runs-on: ubuntu-latest
+    if: startsWith(github.event.comment.body, '/')
+    steps:
+      - uses: xt0rted/slash-command-action@bf51f8f5f4ea3d58abc7eca58f77104182b23e88 # v2
+        with:
+          command: test
+          permission-level: none
+  slash-command-action-default:
+    runs-on: ubuntu-latest
+    if: startsWith(github.event.comment.body, '/')
+    steps:
+      - uses: xt0rted/slash-command-action@bf51f8f5f4ea3d58abc7eca58f77104182b23e88 # v2
+        with:
+          command: test
+  # A level of the wrong input does nothing: github/command reads "permissions"
+  github-command-wrong-input:
+    runs-on: ubuntu-latest
+    if: startsWith(github.event.comment.body, '/')
+    steps:
+      - uses: github/command@v1
+        with:
+          permission: none
+
   # The command action itself
   command-action:
     runs-on: ubuntu-latest

@@ -358,9 +358,35 @@ func guardInCond(c *String) bool {
 	return false
 }
 
-// commandActionsCheckingUser are the actions that read a command from a comment and check that the commenter has
-// write access (their input "permission" or "permission-level" says how much, "none" turns it off).
-var commandActionsCheckingUser = []string{"peter-evans/slash-command-dispatch", "xt0rted/slash-command-action", "github/command", "github/branch-deploy"}
+// commandActionsCheckingUser are the actions that read a command from a comment and check the permission of the
+// commenter, each with an input of its own for the level (from the action.yml of each; the default is write, or
+// "write,admin" for the two that take a list):
+//
+//   - peter-evans/slash-command-dispatch: `permission` (none, read, triage, write, maintain, admin);
+//   - xt0rted/slash-command-action: `permission-level`;
+//   - github/command and github/branch-deploy: `permissions`, the list of permissions an actor may have to invoke
+//     the command.
+var commandActionsCheckingUser = []struct{ name, input string }{
+	{"peter-evans/slash-command-dispatch", "permission"},
+	{"xt0rted/slash-command-action", "permission-level"},
+	{"github/command", "permissions"},
+	{"github/branch-deploy", "permissions"},
+}
+
+// admitsEveryone reports whether the level (or list of levels) of a command action lets every commenter in: `none`, or
+// `read`, which everybody who can comment on a public repository has. A value that is an expression is not known and
+// counts as a check.
+func admitsEveryone(v string) bool {
+	if strings.Contains(v, "${{") {
+		return false
+	}
+	for _, p := range strings.FieldsFunc(strings.ToLower(v), func(r rune) bool { return r == ',' || r == ' ' || r == '|' }) {
+		if p == "none" || p == "read" {
+			return true
+		}
+	}
+	return false
+}
 
 // usesAction reports whether the lower case `uses:` value names the action: the name is followed by `@` (the ref), `/`
 // (a path in the repository) or the end, so `github/command` is not `github/commands@v1`.
@@ -393,11 +419,8 @@ func stepsGuard(steps []*Step) bool {
 				}
 				// the command actions that look up the permission of the commenter themselves (unless told not to)
 				for _, c := range commandActionsCheckingUser {
-					if usesAction(lower, c) {
-						if v, ok := inputValue(e, "permission"); ok && strings.EqualFold(v, "none") {
-							break
-						}
-						if v, ok := inputValue(e, "permission-level"); ok && strings.EqualFold(v, "none") {
+					if usesAction(lower, c.name) {
+						if v, ok := inputValue(e, c.input); ok && admitsEveryone(v) {
 							break
 						}
 						return true
