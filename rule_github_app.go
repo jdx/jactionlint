@@ -125,9 +125,10 @@ func (rule *RuleGitHubApp) VisitStep(n *Step) error {
 	return nil
 }
 
-// checkTibdex checks a use of tibdex/github-app-token. The version 1 has no "repositories" to check.
+// checkTibdex checks a use of tibdex/github-app-token. The version 1 has no "repositories" and no "revoke" to check (its 1.x of today has "permissions").
 func (rule *RuleGitHubApp) checkTibdex(a *ExecAction, v1 bool) {
-	if v, ok := a.input("revoke"); ok && isFalseLiteral(v) {
+	// the version 1 has no "revoke" (it does not revoke the token) and no "repositories"
+	if v, ok := a.input("revoke"); !v1 && ok && isFalseLiteral(v) {
 		rule.ReportID("github-app", a.Inputs["revoke"].Value.Pos, "\"revoke: false\" keeps the GitHub App token valid after the job ends. remove it so that the token is revoked in the post step")
 	}
 	if a.InputsUnknown() {

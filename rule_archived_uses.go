@@ -23,16 +23,17 @@ var archivedReplacements = map[string]string{
 	"nick-invision/retry":                   "`nick-fields/retry`",
 }
 
-// archivedReplacement returns the successor of the archived action, or "" when it is not known: from the table above or,
-// for the actions that do what the runner can do, the advice of superfluous-actions.
+// archivedReplacement returns the advice for the archived action, or "" when it is not known: the successor from the table
+// above or, for the actions that do what the runner can do, the advice of superfluous-actions ("use `gh release create` in a
+// script step"). The text is the whole sentence after "replace it with" for a successor and a sentence of its own otherwise.
 func archivedReplacement(u *UsesRef) string {
 	name := strings.ToLower(u.CanonicalName())
 	if r, ok := archivedReplacements[name]; ok {
-		return r
+		return "replace it with " + r
 	}
 	for _, s := range superfluousActions {
 		if s.action == name && s.source == sourceArchivedGH {
-			return "a script step: " + s.instead
+			return s.instead
 		}
 	}
 	return ""
@@ -61,7 +62,7 @@ func (r *RuleArchivedUses) VisitWorkflowPost(*Workflow) error {
 		if repo.Archived {
 			instead := "replace it with a maintained alternative, or run the commands yourself in a \"run:\" step"
 			if r := archivedReplacement(s.ref); r != "" {
-				instead = "replace it with " + r
+				instead = r
 			}
 			r.ReportIDf("archived-uses", s.pos,
 				"%s %q is in the archived repository %s, which is read-only and no longer maintained, so problems in it will not be fixed. %s",

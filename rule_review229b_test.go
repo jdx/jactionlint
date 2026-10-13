@@ -75,3 +75,32 @@ func TestDependabotLocalActionsMessageAndRoot(t *testing.T) {
 		}
 	})
 }
+
+// The version 1 has "permissions" (a missing one is reported), but no "revoke" and no "repositories".
+func TestGitHubAppTibdexVersion1Inputs(t *testing.T) {
+	cfg := mustParseConfig(t, "rules:\n  github-app: error\n")
+	src := func(uses, with string) string {
+		return "on: push\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: " + uses + "\n        with:\n          app_id: 1\n          private_key: x\n" + with
+	}
+	count := func(s, text string) int {
+		n := 0
+		for _, e := range lintFileWithConfig(t, cfg, "ci.yaml", s) {
+			if e.ID == "github-app" && strings.Contains(e.Message, text) {
+				n++
+			}
+		}
+		return n
+	}
+	if got := count(src("tibdex/github-app-token@v1", ""), `no "permissions" input`); got != 1 {
+		t.Errorf("v1 without permissions: want 1 finding, got %d", got)
+	}
+	if got := count(src("tibdex/github-app-token@v1", "          permissions: '{}'\n"), `no "permissions" input`); got != 0 {
+		t.Errorf("v1 with permissions: want none, got %d", got)
+	}
+	if got := count(src("tibdex/github-app-token@v1", "          permissions: '{}'\n          revoke: false\n"), "revoke: false"); got != 0 {
+		t.Errorf("v1 has no revoke input: want none, got %d", got)
+	}
+	if got := count(src("tibdex/github-app-token@v2", "          permissions: '{}'\n          revoke: false\n"), "revoke: false"); got != 1 {
+		t.Errorf("v2 revoke false: want 1, got %d", got)
+	}
+}
