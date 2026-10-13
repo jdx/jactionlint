@@ -443,9 +443,6 @@ func (rule *RuleUntrustedCheckout) inputForksPR(name, value string) bool {
 	return found
 }
 
-// descAlternative joins the descriptions of the values that several callers pass for an input.
-const descAlternative = ", or "
-
 // uncoveredUntrusted reports whether the value reads something untrusted that the protection of actions/checkout does not look
 // at: a ref is only refused when every untrusted value in it is one that the protection knows (`github.head_ref` beside
 // `github.event.pull_request.head.sha` is a branch that it lets through). The inputs are judged through their callers.
@@ -504,9 +501,6 @@ func mergeInputs(into map[string]callInput, from map[string]callInput) {
 	for n, in := range from {
 		if cur, ok := into[n]; ok {
 			cur.sources = append(cur.sources, in.sources...)
-			if !refIsMutable(cur.desc) && refIsMutable(in.desc) {
-				cur.desc += descAlternative + in.desc // a branch from one caller is judged as a branch, whatever the others pass
-			}
 			into[n] = cur
 			continue
 		}

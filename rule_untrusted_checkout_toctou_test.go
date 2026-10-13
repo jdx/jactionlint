@@ -77,6 +77,11 @@ func TestRuleUntrustedCheckoutToctou(t *testing.T) {
 
 		// an expression with alternatives is a branch when one of them is
 		{"environment and a commit with the branch as a fallback", prtJob(prt, env) + "      - uses: " + co + "\n        with:\n          ref: ${{ github.event.pull_request.head.sha || github.head_ref }} # want\n      - run: make\n", false, ""},
+		{"environment and a commit with a pull ref built by format() as a fallback", prtJob(prt, env) + "      - uses: " + co + "\n        with:\n          ref: ${{ github.event.pull_request.head.sha || format('refs/pull/{0}/head', github.event.number) }} # want\n      - run: make\n", false, ""},
+		{"environment and a commit with a literal pull ref as a fallback", prtJob(prt, env) + "      - uses: " + co + "\n        with:\n          ref: ${{ github.event.pull_request.head.sha || 'refs/pull/1/head' }} # want\n      - run: make\n", false, ""},
+		{"environment and a ternary of a commit and a branch", prtJob(prt, env) + "      - uses: " + co + "\n        with:\n          ref: ${{ github.event.number > 1 && github.event.pull_request.head.sha || github.event.pull_request.head.ref }} # want\n      - run: make\n", false, ""},
+		{"environment and a branch checked out by a command", prtJob(prt, env) + "      - uses: " + co + "\n      - run: git checkout ${{ github.event.pull_request.head.ref }} # want\n      - run: make\n", false, ""},
+		{"environment and a commit checked out by a command", prtJob(prt, env) + "      - uses: " + co + "\n      - run: git checkout ${{ github.event.pull_request.head.sha }}\n      - run: make\n", false, ""},
 		{"environment and two commits", prtJob(prt, env) + "      - uses: " + co + "\n        with:\n          ref: ${{ github.event.pull_request.head.sha || github.event.pull_request.merge_commit_sha }}\n      - run: make\n", false, ""},
 
 		// a dispatch: who started the run is not what the pull request contains at the checkout
@@ -155,25 +160,36 @@ func TestRuleUntrustedCheckoutAnyCheckout(t *testing.T) {
 	}
 }
 
-// The kind of a ref is judged from the value that the caller passes, not from the name of the input or the file of the caller.
-func TestRefIsMutableOfDescriptions(t *testing.T) {
+// The kind of a ref is judged from the list of the values that make it up, not from a description.
+func TestSourcesOfText(t *testing.T) {
 	tests := []struct {
-		what string
-		want bool
+		text string
+		want bool // mutable
 	}{
-		{"inputs.ref, given github.event.pull_request.head.ref by .github/workflows/pr.yaml", true},
-		{"inputs.head_sha, given github.event.pull_request.head.ref by .github/workflows/pr.yaml", true},
-		{"inputs.ref, given github.event.pull_request.head.ref by .github/workflows/pr_sha.yaml", true},
-		{"inputs.head_sha, given github.event.pull_request.head.sha by .github/workflows/pr.yaml", false},
-		{"inputs.ref, given github.event.pull_request.head.sha by .github/workflows/pr_head.yaml", false},
-		{"inputs.ref, given github.event.pull_request.head.sha by a.yml, or github.event.pull_request.head.ref by b_sha.yml", true},
-		{"inputs.ref, given github.event.pull_request.head.ref by a.yml, passed on by .github/workflows/c_sha.yml", true},
-		{"github.event.pull_request.head.ref", true},
+		{"${{ github.event.pull_request.head.ref }}", true},
+		{"${{ github.event.pull_request.head.sha }}", false},
+		{"${{ github.head_ref }}", true},
+		{"${{ github.event.pull_request.head.sha || github.head_ref }}", true},
+		{"${{ github.event.pull_request.head.sha || github.event.pull_request.merge_commit_sha }}", false},
+		{"${{ github.event.pull_request.head.sha || format('refs/pull/{0}/head', github.event.number) }}", true},
+		{"${{ github.event.pull_request.head.sha || 'refs/heads/main' }}", true},
+		{"${{ github.event.number > 1 && github.event.pull_request.head.sha || github.event.pull_request.head.ref }}", true},
+		{"refs/pull/${{ github.event.number }}/head", true},
+		{"${{ steps.pr.outputs.head_sha }}", false},
+		{"${{ steps.o.outputs.sourceHeadBranch }}", true},
+		{"${{ steps.o.outputs.sourceHeadSha }}", false},
+		{"${{ github.event.workflow_run.head_commit.id }}", false},
+		{"${{ github.event.workflow_run.head_branch }}", true},
+		{"${{ github.ref }}", false},
+		{"gh pr checkout 5", true},
 		{"github.event.pull_request.head.sha", false},
+		{"github.event.pull_request.head.ref", true},
+		{"git fetch origin pull/5/head", true},
+		{"${{ inputs.head_sha }}", false},
 	}
 	for _, tc := range tests {
-		if got := refIsMutable(tc.what); got != tc.want {
-			t.Errorf("refIsMutable(%q) = %v, want %v", tc.what, got, tc.want)
+		if got := sourcesMutable(sourcesOfText(tc.text)); got != tc.want {
+			t.Errorf("sourcesMutable(%q) = %v, want %v", tc.text, got, tc.want)
 		}
 	}
 }

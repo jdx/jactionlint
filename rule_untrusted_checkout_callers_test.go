@@ -369,6 +369,9 @@ func TestUntrustedCheckoutCallersToctou(t *testing.T) {
 			"a.yml": ucActionCaller("pull_request_target", "    environment: ci\n", headSHA),
 			"b.yml": ucActionCaller("pull_request_target", "    environment: ci\n    if: contains(github.event.pull_request.labels.*.name, 'safe to test')\n", headSHA),
 		}, 0, ""},
+		{"an environment on the call and a commit with a branch as a fallback", map[string]string{"pr.yml": ucActionCaller("pull_request_target", "    environment: ci\n", "${{ github.event.pull_request.head.sha || github.head_ref }}")}, 1, "an environment lets the job start"},
+		{"an environment on the call and a commit with a pull ref as a fallback", map[string]string{"pr.yml": ucActionCaller("pull_request_target", "    environment: ci\n", "${{ github.event.pull_request.head.sha || format('refs/pull/{0}/head', github.event.number) }}")}, 1, "an environment lets the job start"},
+		{"an environment on the call and two commits", map[string]string{"pr.yml": ucActionCaller("pull_request_target", "    environment: ci\n", "${{ github.event.pull_request.head.sha || github.event.pull_request.merge_commit_sha }}")}, 0, ""},
 		{"a gated call and a call that nothing holds back", map[string]string{
 			"a.yml": ucActionCaller("pull_request_target", "    environment: ci\n", head),
 			"b.yml": ucActionCaller("pull_request_target", "", headSHA),

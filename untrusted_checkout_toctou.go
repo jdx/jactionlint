@@ -187,39 +187,6 @@ func permissionGate(commentOnly bool) gateInfo {
 	return gateInfo{safe: true}
 }
 
-// refIsMutable reports whether the ref that a checkout names can change after the gate: a branch (`head.ref`,
-// `github.head_ref`, `workflow_run.head_branch`, `head_ref` of the actions that look it up), `refs/pull/N/head` and
-// `gh pr checkout`. A commit, and what cannot be told, is not. An input that several callers fill is described by all of them
-// (mergeInputs, joined by ", or "): it is mutable when any of them is.
-func refIsMutable(what string) bool {
-	if parts := strings.Split(what, descAlternative); len(parts) > 1 {
-		return slices.ContainsFunc(parts, refIsMutable)
-	}
-	what = sourceOfDescription(what)
-	l := strings.ToLower(what)
-	switch {
-	case strings.Contains(l, ".sha") || strings.Contains(l, "_sha") || strings.Contains(l, "head_commit.id"):
-		return false
-	case strings.Contains(l, "head.ref"), strings.Contains(l, "head_ref"), strings.Contains(l, "head_branch"), strings.Contains(l, "headbranch"),
-		strings.Contains(l, "refs/pull/"), strings.Contains(l, "gh pr checkout"), namesPullRef(what),
-		strings.Contains(l, "fork_ref"), strings.Contains(l, "outputs.ref"):
-		return true
-	}
-	return false
-}
-
-// sourceOfDescription cuts the metadata from the description of an input that a caller fills (`inputs.head_sha, given
-// <value> by <file>, passed on by <file>`): the name of the input and the path of the caller say nothing about the value.
-func sourceOfDescription(what string) string {
-	if _, v, ok := strings.Cut(what, ", given "); ok && strings.HasPrefix(what, "inputs.") {
-		what = v
-	}
-	if v, _, ok := strings.Cut(what, " by "); ok && !strings.Contains(what, "gh pr checkout") {
-		what = v
-	}
-	return what
-}
-
 // stepVerifiesRevision reports whether the step reads the commit that is checked out and can stop the job: taken for a check
 // that it is the commit that was reviewed.
 func stepVerifiesRevision(s *Step) bool {
@@ -320,7 +287,7 @@ func (rule *RuleUntrustedCheckout) reportToctou(c *untrustedCheckout, how string
 	source, privileges := rule.sourceOf(event), rule.privilegeText()
 	if len(g.stale) == 0 {
 		// workflow_dispatch: the dispatch is the gate, and it names the pull request, not a commit
-		if c.verified || !refIsDispatchMutable(c.what) {
+		if c.verified || !sourcesMutable(c.sources) {
 			return false
 		}
 		rule.ReportIDf(
@@ -331,7 +298,7 @@ func (rule *RuleUntrustedCheckout) reportToctou(c *untrustedCheckout, how string
 		)
 		return true
 	}
-	mutable := !c.verified && (c.mutable || refIsMutable(c.what) || (event == "workflow_dispatch" && refIsDispatchMutable(c.what)))
+	mutable := !c.verified && sourcesMutable(c.sources)
 	// an environment with reviewers pauses every run, the one of a new push too: the label is not the only gate then
 	lasts := g.label && rule.labelRerun && !slices.Contains(g.stale, "an environment")
 	gates := strings.Join(g.stale, " and ")
@@ -358,10 +325,4 @@ func (rule *RuleUntrustedCheckout) reportToctou(c *untrustedCheckout, how string
 		return true
 	}
 	return false
-}
-
-// refIsDispatchMutable reports whether the ref that a dispatch names is the number of a pull request: `refs/pull/<number>/...`
-// or `gh pr checkout <number>`.
-func refIsDispatchMutable(what string) bool {
-	return refIsMutable(what) || strings.Contains(what, "inputs.")
 }
