@@ -324,7 +324,7 @@ func (rule *RuleOutputClobbering) untrustedRecordNames(s *runscript.Script, p *r
 	f := rule.flow
 	f.at = p.Offset
 	f.loop = p.LoopBody || p.InFunc
-	hostile := func(d data) bool { return d.kind == dataUntrusted && exprMayHaveNewline(d.input) }
+	hostile := func(d data) bool { return d.kind == dataUntrusted && d.mayHaveNewline() }
 	conv := 0
 	var names []string
 	for _, l := range printedLines(p) {
