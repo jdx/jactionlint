@@ -52,6 +52,16 @@ type GitHubRepo struct {
 	// repository was renamed or transferred and GitHub redirected the request. It can be empty (a client which
 	// does not know it).
 	FullName string `json:"full_name,omitempty"`
+	// ID is the numeric ID of the repository, which stays when it is renamed or transferred. It is 0 when unknown.
+	ID int64 `json:"id,omitempty"`
+	// Owner is the owner of the repository, nil when unknown.
+	Owner *GitHubRepoOwner `json:"owner,omitempty"`
+}
+
+// GitHubRepoOwner is the owner of a repository.
+type GitHubRepoOwner struct {
+	// ID is the numeric ID of the user or organization.
+	ID int64 `json:"id,omitempty"`
 }
 
 // GitHubTag is a tag and the commit it points to.

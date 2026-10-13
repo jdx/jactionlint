@@ -1,0 +1,2 @@
+.github/workflows/actions.lock:5:5: the workflow ".github/workflows/ci.yml" is listed twice, which the lock file does not allow: the file is not read [actions-lock]
+.github/workflows/ci.yml:6:15: action "actions/checkout@v6.0.2" must be pinned to a full-length commit SHA like "{owner}/{repo}@{sha}" because the "unpinned-uses" rule is enabled [action]
