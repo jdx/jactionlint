@@ -421,12 +421,14 @@ func (c *tiContext) outsiderEventText(path []string) string {
 	return ""
 }
 
-// hasTrigger reports whether the workflow (for an action, one of the workflows which call it) is started by one of the events.
+// hasTrigger reports whether the workflow, or for a reusable workflow or an action one of the workflows which call it, is started by one of the events.
 func (c *tiContext) hasTrigger(events ...string) bool {
 	if c.wf == nil {
 		return false
 	}
-	for _, e := range c.wf.TriggerEvents() {
+	// The events of the workflows which call a reusable workflow count (github.event is the one of the caller)
+	evs, _ := c.wf.actorEvents()
+	for _, e := range evs {
 		if w, ok := e.(*WebhookEvent); ok && w.Hook != nil && slices.Contains(events, w.Hook.Value) {
 			return true
 		}
@@ -565,6 +567,9 @@ type tiContext struct {
 	wf   *Workflow
 	job  *Job
 	step *Step
+	// outsiderText is true when the free text of outsiders which the table of attacker controlled properties lacks counts
+	// in the sinks, which is when the configuration reports it in scripts (tiEnabled of tiInput).
+	outsiderText bool
 	// matrix remembers matrixIsLiteral for the job, which looks at every combination of the matrix. It can
 	// be nil, then the answer is worked out each time.
 	matrix map[string]bool
@@ -640,6 +645,32 @@ func (c *tiContext) envTaint(name string, depth int) string {
 			if r.Path[0] == "env" && len(r.Path) == 2 {
 				if t := c.envTaint(r.Path[1], depth+1); t != "" {
 					return t
+				}
+			}
+		}
+	}
+	return ""
+}
+
+// envOutsiderText returns what kind of text of an outsider (see outsiderEventText) the environment variable is set from, or
+// an empty string. Unlike envTaint it does not read the table of attacker controlled properties, so the correctness profile
+// does not change.
+func (c *tiContext) envOutsiderText(name string, depth int) string {
+	if depth > 4 {
+		return ""
+	}
+	v := c.lookupEnv(name)
+	if v == nil || v.Value == nil {
+		return ""
+	}
+	for _, sp := range scanExprs(v.Value) {
+		for _, r := range exprContextRefs(sp.Node) {
+			if k := c.outsiderEventText(r.Path); k != "" {
+				return r.String()
+			}
+			if r.Path[0] == "env" && len(r.Path) == 2 {
+				if k := c.envOutsiderText(r.Path[1], depth+1); k != "" {
+					return k
 				}
 			}
 		}

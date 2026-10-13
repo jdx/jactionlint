@@ -169,7 +169,7 @@ func (c *tiContext) sinkHitOf(sp *exprSpan) *sinkHit {
 			return &sinkHit{Tier: tiSubtree, Ref: r, Source: leaf}
 		}
 		// Free text of an outsider which the table does not list (the previous title of an issue, the title of a wiki page)
-		if c.outsiderEventText(r.Path) != "" {
+		if c.outsiderText && c.outsiderEventText(r.Path) != "" {
 			return &sinkHit{Tier: tiDirect, Ref: r, Source: r.String()}
 		}
 	}
@@ -181,6 +181,11 @@ func (c *tiContext) sinkHitOf(sp *exprSpan) *sinkHit {
 		if r.Path[0] == "env" && len(r.Path) == 2 {
 			if t := c.envTaint(r.Path[1], 0); t != "" {
 				return &sinkHit{Tier: tiEnv, Ref: r, Source: t}
+			}
+			if c.outsiderText {
+				if t := c.envOutsiderText(r.Path[1], 0); t != "" {
+					return &sinkHit{Tier: tiEnv, Ref: r, Source: t}
+				}
 			}
 		}
 	}

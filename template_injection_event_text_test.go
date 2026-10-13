@@ -61,6 +61,30 @@ func TestTemplateInjectionEventText(t *testing.T) {
 		})
 	}
 
+	// The correctness profile is what actionlint reports: the sinks do not know the new properties either
+	t.Run("sinks under the correctness profile", func(t *testing.T) {
+		src := "on: pull_request_target\njobs:\n  j:\n    runs-on: ubuntu-latest\n    container:\n      image: node:20\n      options: --label ${{ github.event.changes.title.from }}\n    steps:\n      - run: echo\n      - uses: docker://alpine:3\n        env:\n          OLD: ${{ github.event.changes.title.from }}\n        with:\n          args: ${{ env.OLD }}\n"
+		for _, e := range lintWithConfig(t, cfg("correctness"), src) {
+			if e.ID == "template-injection" {
+				t.Errorf("want no finding under the correctness profile, got %q", e.Message)
+			}
+		}
+	})
+
+	// An environment variable set from such a property is followed into a sink, and an input is not an attacker's text there
+	t.Run("sinks through an environment variable", func(t *testing.T) {
+		src := "on:\n  pull_request_target:\n  workflow_dispatch:\n    inputs:\n      x:\n        type: string\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: docker://alpine:3\n        env:\n          OLD: ${{ github.event.changes.title.from }}\n          IN: ${{ inputs.x }}\n        with:\n          args: ${{ env.OLD }}\n      - uses: docker://alpine:3\n        env:\n          IN: ${{ inputs.x }}\n        with:\n          args: ${{ env.IN }}\n"
+		var got []*Error
+		for _, e := range lintWithConfig(t, cfg("default"), src) {
+			if e.ID == "template-injection" {
+				got = append(got, e)
+			}
+		}
+		if len(got) != 1 || got[0].Line != 16 || !strings.Contains(got[0].Message, `holds the potentially untrusted input "github.event.changes.title.from"`) {
+			t.Errorf("want one finding for env.OLD at line 16, got %v", got)
+		}
+	})
+
 	t.Run("sinks", func(t *testing.T) {
 		src := "on: pull_request_target\njobs:\n  j:\n    runs-on: ubuntu-latest\n    container:\n      image: node:20\n      options: --label ${{ github.event.changes.title.from }}\n    steps:\n      - run: echo\n"
 		errs := lintWithConfig(t, cfg("default"), src)
