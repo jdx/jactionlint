@@ -34,7 +34,7 @@ func NewRuleDeprecatedNodeRuntime() *RuleDeprecatedNodeRuntime {
 	return &RuleDeprecatedNodeRuntime{
 		RuleBase: RuleBase{
 			name: "deprecated-node-runtime",
-			desc: "Checks for Node.js runtimes which GitHub Actions removed: runs.using of an action and the popular actions at majors that declare one",
+			desc: "Checks for Node.js runtimes which GitHub Actions removed: runs.using of an action, the popular actions at majors that declare one and the variables that chose the runtime",
 		},
 	}
 }
@@ -45,6 +45,7 @@ func (rule *RuleDeprecatedNodeRuntime) VisitWorkflowPre(n *Workflow) error {
 		return nil
 	}
 	rule.comments = n.Comments
+	rule.checkEnv(n.Env)
 	if n.Action != nil {
 		rule.checkRunsUsing(n.Action.Runs)
 	}
@@ -72,10 +73,51 @@ func (rule *RuleDeprecatedNodeRuntime) VisitStep(n *Step) error {
 	if !rule.Config().RuleEnabled("deprecated-node-runtime") {
 		return nil
 	}
+	rule.checkEnv(n.Env)
 	if a, ok := n.Exec.(*ExecAction); ok {
 		rule.checkUses(a)
 	}
 	return nil
+}
+
+// VisitJobPre is callback when visiting Job node before visiting its children.
+func (rule *RuleDeprecatedNodeRuntime) VisitJobPre(n *Job) error {
+	if !rule.Config().RuleEnabled("deprecated-node-runtime") {
+		return nil
+	}
+	rule.checkEnv(n.Env)
+	return nil
+}
+
+// nodeRuntimeEnvVars are the environment variables that chose the Node.js runtime of JavaScript actions while GitHub
+// moved from Node.js 20 to Node.js 24, with what each did. The runner reads them in NodeUtil.DetermineActionsNodeVersion
+// and ignores both once its server side flag "requirenode24" is on, which is the case since the removal of Node.js 20 on
+// 2026-09-23 (see nodeRuntimeRemoved).
+var nodeRuntimeEnvVars = map[string]string{
+	"ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION": "kept the JavaScript actions on Node.js 20 after Node.js 24 became the default on 2026-06-16",
+	"FORCE_JAVASCRIPT_ACTIONS_TO_NODE24":      "ran the JavaScript actions on Node.js 24 before it became the default on 2026-06-16",
+}
+
+// checkEnv reports the variables of an env: section (of the workflow, a job or a step) that no longer do anything.
+func (rule *RuleDeprecatedNodeRuntime) checkEnv(env *Env) {
+	if env == nil || env.Expression != nil {
+		return
+	}
+	for _, v := range env.Vars {
+		if v.Name == nil || v.Name.ContainsExpression() {
+			continue
+		}
+		did, ok := nodeRuntimeEnvVars[v.Name.Value]
+		if !ok {
+			continue
+		}
+		rule.ReportIDf(
+			"deprecated-node-runtime",
+			v.Name.Pos,
+			"environment variable %q no longer does anything: it %s, and GitHub removed Node.js 20 from GitHub Actions on 2026-09-23, so the runner runs every JavaScript action on Node.js 24. remove it (GitHub Enterprise Server and old self-hosted runners may still read it)",
+			v.Name.Value, did,
+		)
+	}
 }
 
 // checkUses reports an action of the popular actions data set whose major version declares a runtime that GitHub
@@ -171,7 +213,7 @@ func findNewerPopularMajor(key string) newerMajor {
 
 func init() {
 	registerRules(
-		RuleInfo{ID: "deprecated-node-runtime", Group: RuleGroupPolicy, Summary: "A Node.js runtime that GitHub Actions removed is declared by an action or by an action that is used.", DefaultLevel: SeverityWarning, Profile: ProfilePedantic, DocsAnchor: "check-deprecated-node-runtime"},
+		RuleInfo{ID: "deprecated-node-runtime", Group: RuleGroupPolicy, Summary: "A Node.js runtime that GitHub Actions removed is declared, used or selected by an environment variable.", DefaultLevel: SeverityWarning, Profile: ProfilePedantic, DocsAnchor: "check-deprecated-node-runtime"},
 	)
 	registerRuleFactory("deprecated-node-runtime", func(env *RuleEnv) []Rule {
 		return []Rule{NewRuleDeprecatedNodeRuntime()}
