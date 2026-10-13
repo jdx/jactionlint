@@ -88,6 +88,11 @@ jobs:
       - run: |
           date "-j" -f '%F' 2024-01-01 +%s || date -d 2024-01-01 +%s
           grep "-e" -P file || true
+      # The adjustments of date of macOS, with and without a sign
+      - run: |
+          date -v1d +%F || date -d 'first day' +%F
+          date -v-1H +%s || date -d '1 hour ago' +%s
+          date -vmon +%F || date -d monday +%F
       # After -- come the patterns and the file names
       - run: |
           grep -- -P file.txt

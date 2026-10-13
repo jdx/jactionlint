@@ -88,3 +88,13 @@ jobs:
       # The option comes before --
       - run: grep -P -- x file.txt
       - run: find -- . -name '*.go' -printf '%p\n'
+  portable-looking-file-names:
+    runs-on: macos-latest
+    steps:
+      # What follows -- is a file name that looks like an option of macOS: it does not make the GNU option portable
+      - run: |
+          date -- -j
+          date -d yesterday
+      - run: |
+          tee -- -a
+          echo x | tee --append out.txt

@@ -249,6 +249,9 @@ func portableTools(s *runscript.Script) map[string]bool {
 			if w == nil {
 				continue
 			}
+			if w.Value == "--" && c.Name != "find" {
+				break // the words after -- are not options
+			}
 			switch c.Name {
 			case "date":
 				if dateBSDOptionRe.MatchString(w.Value) {
@@ -289,8 +292,8 @@ var (
 	// sedInPlaceRe is a word that is the in-place option of sed, alone or last of a cluster (-i, -Ei, -ni).
 	sedInPlaceRe = regexp.MustCompile(`^-[A-Za-z]*i$`)
 	// dateBSDOptionRe is an option that only the date of macOS has: -j (also in a cluster, -jf or -uj) and -v with or
-	// without its adjustment (-v, -v-1d, -v+1H).
-	dateBSDOptionRe = regexp.MustCompile(`^-(?:[A-Za-z]*j[A-Za-z]*|[A-Za-z]*v(?:[-+].*)?)$`)
+	// without its adjustment, signed or not (-v, -v-1d, -v+1H, -v1d, -vmon).
+	dateBSDOptionRe = regexp.MustCompile(`^-(?:[uInR]*j[uInRjfr]*|[uInRj]*v[-+0-9A-Za-z]*)$`)
 	// dateOptionRe is the -d option of GNU date, alone or with its value attached (-d@1700000000, -ud).
 	dateOptionRe = regexp.MustCompile(`^-u?d`)
 	// statFormatRe is the -c option of GNU stat, alone or with its value attached (-c%s, -Lc).
