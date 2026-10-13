@@ -87,7 +87,9 @@ type lockWorkflow struct {
 
 // lockDependency is an item of "dependencies".
 type lockDependency struct {
-	Pin       lockPin
+	Pin lockPin
+	// raw is the YAML of the entry, compared when a key is written twice.
+	raw       *yaml.Node
 	Ref       string // "ref:", the ref the commit was resolved from
 	Commit    string // "commit:", "sha1-<hex>" or "sha256-<hex>"
 	OwnerID   int64  // 0 when missing or not a positive integer
@@ -407,7 +409,7 @@ func (l *actionsLock) parseDependencies(n *yaml.Node) bool {
 			return false
 		}
 		seenDeps[pin.Raw] = true
-		d := &lockDependency{Pin: pin, Line: k.Line, Col: k.Column}
+		d := &lockDependency{Pin: pin, Line: k.Line, Col: k.Column, raw: v}
 		if v.Kind != yaml.MappingNode {
 			l.problem(v, "the dependency "+strconv.Quote(pin.Raw)+" must be a mapping with \"ref\", \"commit\", \"owner_id\" and \"repo_id\"")
 			l.addDependency(d)
@@ -474,12 +476,22 @@ func (l *actionsLock) addDependency(d *lockDependency) bool {
 	return true
 }
 
+// sameLockDependency compares what was written, not what was understood: a missing, a negative and a non-integer ID are all
+// "no ID" to the reader, and an invalid pin is dropped from uses, but they are not the same entry. The entries are the same
+// only when their YAML is equal (the order of the keys and the lists included, and the quoting of a scalar ignored).
 func sameLockDependency(a, b *lockDependency) bool {
-	if a.Ref != b.Ref || a.Commit != b.Commit || a.OwnerID != b.OwnerID || a.RepoID != b.RepoID || a.Hostname != b.Hostname || len(a.Uses) != len(b.Uses) {
+	return sameYAML(a.raw, b.raw)
+}
+
+func sameYAML(a, b *yaml.Node) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	if a.Kind != b.Kind || a.Tag != b.Tag || a.Value != b.Value || len(a.Content) != len(b.Content) {
 		return false
 	}
-	for i := range a.Uses {
-		if a.Uses[i].Key != b.Uses[i].Key {
+	for i := range a.Content {
+		if !sameYAML(a.Content[i], b.Content[i]) {
 			return false
 		}
 	}

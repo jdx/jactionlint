@@ -123,6 +123,7 @@ var unfixable = map[string]map[string]int{
 // workflows and to crafted ones in testdata/fix. The expected files are NAME.fixed.yaml for the safe fixes, and
 // NAME.unsafe.yaml when applying the unsafe fixes too gives another result.
 func TestFixers(t *testing.T) {
+	t.Parallel()
 	files, err := filepath.Glob(filepath.Join("testdata", "fix", "*.yaml"))
 	if err != nil {
 		t.Fatal(err)
