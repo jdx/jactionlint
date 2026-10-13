@@ -375,6 +375,8 @@ func run(args []string, stdout, dbgout io.Writer, srcURL string) error {
 		return err
 	}
 
+	applyOverrides(p, typeOverrides)
+
 	if err := write(p, out); err != nil {
 		return err
 	}

@@ -309,6 +309,7 @@ func workflowExprSites(w *Workflow, f func(site exprSite)) {
 			}
 		}
 		emitFloat(j, j.TimeoutMinutes)
+		emitFloat(j, j.CancelTimeoutMinutes)
 		emitBool(j, j.ContinueOnError)
 		container(j, j.Container)
 		if j.Services != nil {

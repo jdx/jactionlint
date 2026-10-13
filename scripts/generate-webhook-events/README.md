@@ -33,6 +33,12 @@ For debugging, specifying `-` to `dstfile` outputs the generated source to stdou
 go run ./scripts/generate-webhook-events ./input.html -
 ```
 
+## Overrides
+
+The documentation lags behind the workflow schema of GitHub. Activity types that GitHub accepts but the documentation
+does not list yet are in [`overrides.go`](./overrides.go) with their sources. They are added to the parsed tables each
+time the file is generated, so do not edit `all_webhooks.go` by hand.
+
 ## Notes
 
 - `Not applicable` activity types are generated as an empty slice: `[]string{}`

@@ -276,6 +276,7 @@ func (rule *RuleExpression) VisitJobPre(n *Job) error {
 
 	rule.checkBool(n.ContinueOnError, "jobs.<job_id>.continue-on-error")
 	rule.checkFloat(n.TimeoutMinutes, "jobs.<job_id>.timeout-minutes")
+	rule.checkFloat(n.CancelTimeoutMinutes, "jobs.<job_id>.timeout-minutes")
 	rule.checkContainer(n.Container, "jobs.<job_id>.container", "")
 
 	if n.Services != nil {
@@ -286,7 +287,6 @@ func (rule *RuleExpression) VisitJobPre(n *Job) error {
 	}
 
 	rule.checkWorkflowCall(n.WorkflowCall)
-	rule.checkSnapshot(n.Snapshot)
 
 	rule.stepsTy = NewEmptyStrictObjectType()
 
@@ -301,6 +301,8 @@ func (rule *RuleExpression) VisitJobPre(n *Job) error {
 
 // VisitJobPost is callback when visiting Job node after visiting its children
 func (rule *RuleExpression) VisitJobPost(n *Job) error {
+	// The condition of 'snapshot' is evaluated after all steps are run, so it can use the 'steps' context
+	rule.checkSnapshot(n.Snapshot)
 	rule.curJob, rule.tiMatrix = nil, nil
 	// 'environment' and 'outputs' sections are evaluated after all steps are run
 	if n.Environment != nil {

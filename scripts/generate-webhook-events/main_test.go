@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -98,6 +99,45 @@ func TestParseError(t *testing.T) {
 				t.Fatalf("wanted %q in error %q", tc.want, err)
 			}
 		})
+	}
+}
+
+func TestApplyOverrides(t *testing.T) {
+	parsed := map[string][]string{
+		"pull_request":  {"opened", "stacked"},
+		"image_version": {},
+		"custom":        nil,
+		"fork":          {},
+	}
+	applyOverrides(parsed, map[string][]string{
+		"pull_request":  {"stacked", "closed"},
+		"image_version": {"created"},
+		"custom":        {"x"},
+		"missing":       {"y"},
+	})
+	want := map[string][]string{
+		"pull_request":  {"opened", "stacked", "closed"},
+		"image_version": {"created"},
+		"custom":        nil,
+		"fork":          {},
+	}
+	if diff := cmp.Diff(want, parsed); diff != "" {
+		t.Fatal(diff)
+	}
+}
+
+// run() applies the production overrides, so a table generated from a documentation page which does not list the
+// types still has them.
+func TestProductionOverrides(t *testing.T) {
+	parsed := map[string][]string{"pull_request": {"opened"}, "pull_request_target": {"opened"}, "image_version": {}}
+	applyOverrides(parsed, typeOverrides)
+	for _, ev := range []string{"pull_request", "pull_request_target"} {
+		if !slices.Contains(parsed[ev], "stacked") {
+			t.Errorf("%s does not have the stacked type: %v", ev, parsed[ev])
+		}
+	}
+	if diff := cmp.Diff([]string{"created", "ready", "deleted"}, parsed["image_version"]); diff != "" {
+		t.Error(diff)
 	}
 }
 

@@ -17,6 +17,7 @@ var scopeWriteImpact = map[string]string{
 	"copilot-requests":     "make Copilot requests",
 	"deployments":          "create and modify deployments",
 	"discussions":          "create and modify discussions",
+	"drives":               "commit changes to the persistent workspace storage of GitHub Drives",
 	"id-token":             "request OIDC tokens to authenticate to cloud providers and package registries",
 	"issues":               "create and modify issues and comments",
 	"packages":             "publish and delete packages",
@@ -133,8 +134,8 @@ func (rule *RuleExcessivePermissions) check(p *Permissions, job bool) {
 		if s == nil || s.Name == nil || s.Value == nil || s.Value.Value != "write" {
 			continue
 		}
-		if _, ok := allPermissionScopes[name]; !ok {
-			continue // reported by the permissions rule
+		if levels, ok := allPermissionScopes[name]; !ok || !slices.Contains(levels, "write") {
+			continue // an unknown scope, or a level the scope does not have (models: write): reported by the permissions rule
 		}
 		impact := scopeWriteImpact[name]
 		if job {
