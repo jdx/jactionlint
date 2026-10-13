@@ -75,6 +75,31 @@ func (s actionStep) literal(name string) (string, bool) {
 	return strings.TrimSpace(i.Value.Value), true
 }
 
+// flagMayBeOn reports whether a boolean input may be true: it is a literal true, or a value which cannot be told (an
+// expression, a spelling that is not a boolean). A literal false and an input which is not given or is empty are off.
+// An entry which drops a need because of such an input drops it only when the input may be on.
+func (s actionStep) flagMayBeOn(name string) bool {
+	i, ok := s.act.Inputs[strings.ToLower(name)]
+	if !ok || i == nil || i.Value == nil {
+		return false
+	}
+	v := strings.TrimSpace(i.Value.Value)
+	if v == "" || (!i.Value.ContainsExpression() && isFalseLiteral(v)) {
+		return false
+	}
+	return true
+}
+
+// anyFlagMayBeOn is flagMayBeOn for several inputs.
+func (s actionStep) anyFlagMayBeOn(names ...string) bool {
+	for _, n := range names {
+		if s.flagMayBeOn(n) {
+			return true
+		}
+	}
+	return false
+}
+
 // tokenIsGitHubToken reports whether the token of the action is the GITHUB_TOKEN of the job: the input is not
 // given (the default of such an input is github.token), or it is `${{ secrets.GITHUB_TOKEN }}` or
 // `${{ github.token }}`. Anything else (a secret, an expression, an empty value) is another credential, or one
@@ -199,7 +224,7 @@ var actionPermissionTable = map[string]actionPermission{
 	"actions/stale": {
 		Source: "https://github.com/actions/stale#recommended-permissions",
 		Needs: func(s actionStep) permNeeds {
-			if !s.tokenIsGitHubToken("repo-token") || s.set("debug-only") {
+			if !s.tokenIsGitHubToken("repo-token") || s.flagMayBeOn("debug-only") {
 				return permNeeds{}
 			}
 			return permNeeds{Any: writes("issues", "pull-requests")}
@@ -226,14 +251,19 @@ var actionPermissionTable = map[string]actionPermission{
 	},
 
 	// peter-evans/create-pull-request: "If using the repository's GITHUB_TOKEN ... Elevate the permissions in your
-	// workflow: contents: write, pull-requests: write". Another `token`, a `branch-token` or `push-to-fork` mean
-	// that the GITHUB_TOKEN is not what pushes.
+	// workflow: contents: write, pull-requests: write". The input `token` opens the pull request, so it needs
+	// "pull-requests: write" while it is the GITHUB_TOKEN. `branch-token` "The token that the action will use to create
+	// and update the branch" (default: `token`) carries the push: with another one the GITHUB_TOKEN needs no
+	// "contents: write". `push-to-fork` needs a token of its own.
 	// https://github.com/peter-evans/create-pull-request#token
 	"peter-evans/create-pull-request": {
 		Source: "https://github.com/peter-evans/create-pull-request#token",
 		Needs: func(s actionStep) permNeeds {
-			if !s.tokenIsGitHubToken("token") || s.set("branch-token") || s.set("push-to-fork") {
+			if !s.tokenIsGitHubToken("token") || s.set("push-to-fork") {
 				return permNeeds{}
+			}
+			if !s.tokenIsGitHubToken("branch-token") {
+				return permNeeds{All: writes("pull-requests")}
 			}
 			return permNeeds{All: writes("contents", "pull-requests"), Exact: true}
 		},
@@ -295,7 +325,7 @@ var actionPermissionTable = map[string]actionPermission{
 	"googleapis/release-please-action": {
 		Source: "https://github.com/googleapis/release-please-action#basic-configuration",
 		Needs: func(s actionStep) permNeeds {
-			if !s.tokenIsGitHubToken("token") || s.set("skip-github-release") || s.set("skip-github-pull-request") || s.set("fork") {
+			if !s.tokenIsGitHubToken("token") || s.anyFlagMayBeOn("skip-github-release", "skip-github-pull-request", "fork") {
 				return permNeeds{}
 			}
 			return permNeeds{All: writes("contents", "pull-requests")}
@@ -308,7 +338,7 @@ var actionPermissionTable = map[string]actionPermission{
 	"release-drafter/release-drafter": {
 		Source: "https://github.com/release-drafter/release-drafter#usage",
 		Needs: func(s actionStep) permNeeds {
-			if !s.tokenIsGitHubToken("token") || s.set("disable-releaser") || s.set("dry-run") {
+			if !s.tokenIsGitHubToken("token") || s.anyFlagMayBeOn("disable-releaser", "dry-run") {
 				return permNeeds{}
 			}
 			return permNeeds{All: writes("contents")}
@@ -353,8 +383,8 @@ var actionPermissionTable = map[string]actionPermission{
 	"aws-actions/configure-aws-credentials": {
 		Source: "https://github.com/aws-actions/configure-aws-credentials#oidc",
 		Needs: func(s actionStep) permNeeds {
-			if !s.set("role-to-assume") || s.set("aws-access-key-id") || s.set("web-identity-token-file") || s.set("force-skip-oidc") ||
-				s.set("role-chaining") || s.ctx.jobMentions("aws_access_key_id", "aws-access-key-id", "role-chaining", "web-identity-token", "aws_web_identity_token_file") {
+			if !s.set("role-to-assume") || s.set("aws-access-key-id") || s.set("web-identity-token-file") || s.anyFlagMayBeOn("force-skip-oidc", "role-chaining") ||
+				s.ctx.jobMentions("aws_access_key_id", "aws-access-key-id", "web-identity-token", "aws_web_identity_token_file") {
 				return permNeeds{}
 			}
 			return permNeeds{All: writes("id-token"), Exact: true}

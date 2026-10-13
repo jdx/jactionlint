@@ -69,6 +69,12 @@ func TestRuleInsufficientPermissions(t *testing.T) {
 		{"attest with a token of its own still needs the OIDC token", head + job + "    permissions:\n      attestations: write\n    steps:\n      - uses: actions/attest-build-provenance@v2 # want\n        with:\n          github-token: ${{ secrets.PAT }}\n          subject-path: a\n"},
 		{"attest without a token of its own", head + job + "    permissions:\n      contents: read\n    steps:\n      - uses: actions/attest@v2 # want\n"},
 
+		{"create-pull-request with a branch token still opens the pull request with the GITHUB_TOKEN", head + job + "    permissions:\n      contents: read\n    steps:\n      - uses: peter-evans/create-pull-request@v7 # want\n        with:\n          branch-token: ${{ secrets.PAT }}\n"},
+		{"stale which is not a debug run", head + job + "    permissions: {}\n    steps:\n      - uses: actions/stale@v9 # want\n        with:\n          debug-only: false\n"},
+		{"release-please with the skip options off", head + job + "    permissions:\n      contents: write\n    steps:\n      - uses: googleapis/release-please-action@v4 # want\n        with:\n          skip-github-release: false\n          skip-github-pull-request: false\n          fork: false\n"},
+		{"release-drafter with the options off", head + job + "    permissions:\n      pull-requests: read\n    steps:\n      - uses: release-drafter/release-drafter@v6 # want\n        with:\n          disable-releaser: false\n          dry-run: false\n"},
+		{"aws with the options off", head + job + "    permissions: {}\n    steps:\n      - uses: aws-actions/configure-aws-credentials@v4 # want\n        with:\n          role-to-assume: arn:aws:iam::1:role/x\n          role-chaining: false\n          force-skip-oidc: false\n"},
+
 		// What is not reported: the permissions are not explicit or are enough
 		{"attest with a token of its own and the OIDC token", head + job + "    permissions:\n      id-token: write\n    steps:\n      - uses: actions/attest-build-provenance@v2\n        with:\n          github-token: ${{ secrets.PAT }}\n          subject-path: a\n"},
 		{"test results with check_run: false quoted", head + job + "    permissions: {}\n    steps:\n      - uses: EnricoMi/publish-unit-test-result-action@v2\n        with:\n          check_run: 'false'\n"},
@@ -102,8 +108,16 @@ func TestRuleInsufficientPermissions(t *testing.T) {
 		// Another credential than the GITHUB_TOKEN
 		{"upload-sarif with another token", head + job + "    permissions: {}\n    steps:\n      - uses: github/codeql-action/upload-sarif@v3\n        with:\n          token: ${{ secrets.PAT }}\n"},
 		{"create-pull-request with a token", head + job + "    permissions:\n      contents: read\n    steps:\n      - uses: peter-evans/create-pull-request@v7\n        with:\n          token: ${{ secrets.PAT }}\n"},
+		{"create-pull-request with a branch token and the permission of the pull request", head + job + "    permissions:\n      pull-requests: write\n    steps:\n      - uses: peter-evans/create-pull-request@v7\n        with:\n          branch-token: ${{ secrets.PAT }}\n"},
+		{"stale which only logs, as a flag", head + job + "    permissions: {}\n    steps:\n      - uses: actions/stale@v9\n        with:\n          debug-only: true\n"},
+		{"stale whose debug flag is an expression", head + job + "    permissions: {}\n    steps:\n      - uses: actions/stale@v9\n        with:\n          debug-only: ${{ inputs.debug }}\n"},
+		{"release-please which skips the release", head + job + "    permissions: {}\n    steps:\n      - uses: googleapis/release-please-action@v4\n        with:\n          skip-github-release: true\n"},
+		{"release-please from a fork", head + job + "    permissions: {}\n    steps:\n      - uses: googleapis/release-please-action@v4\n        with:\n          fork: true\n"},
+		{"release-please with a skip from an expression", head + job + "    permissions: {}\n    steps:\n      - uses: googleapis/release-please-action@v4\n        with:\n          skip-github-pull-request: ${{ inputs.skip }}\n"},
+		{"release-drafter in a dry run", head + job + "    permissions:\n      pull-requests: read\n    steps:\n      - uses: release-drafter/release-drafter@v6\n        with:\n          dry-run: true\n"},
+		{"aws which skips the OIDC login", head + job + "    permissions: {}\n    steps:\n      - uses: aws-actions/configure-aws-credentials@v4\n        with:\n          role-to-assume: arn:aws:iam::1:role/x\n          force-skip-oidc: true\n"},
+		{"aws with a role chaining from an expression", head + job + "    permissions: {}\n    steps:\n      - uses: aws-actions/configure-aws-credentials@v4\n        with:\n          role-to-assume: arn:aws:iam::1:role/x\n          role-chaining: ${{ inputs.chain }}\n"},
 		{"create-pull-request with a token from an expression", head + job + "    permissions:\n      contents: read\n    steps:\n      - uses: peter-evans/create-pull-request@v7\n        with:\n          token: ${{ steps.app.outputs.token }}\n"},
-		{"create-pull-request with a branch token", head + job + "    permissions:\n      contents: read\n    steps:\n      - uses: peter-evans/create-pull-request@v7\n        with:\n          branch-token: ${{ secrets.PAT }}\n"},
 		{"gh-release with a token", head + job + "    permissions: {}\n    steps:\n      - uses: softprops/action-gh-release@v2\n        with:\n          token: ${{ secrets.RELEASE_TOKEN }}\n"},
 		{"gh-release with a token in the environment", head + job + "    permissions: {}\n    steps:\n      - uses: softprops/action-gh-release@v2\n        env:\n          GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}\n"},
 		{"stale with a token", head + job + "    permissions: {}\n    steps:\n      - uses: actions/stale@v9\n        with:\n          repo-token: ${{ secrets.BOT_TOKEN }}\n"},
