@@ -295,6 +295,9 @@ func (rule *RuleCommandInjection) commandPositionSink(s *runscript.Script, c *ru
 
 // describeUntrusted says where the untrusted input comes from, for the messages of github-env and this rule.
 func describeUntrusted(d data) string {
+	if d.cmd {
+		return "from the output of " + quote(d.input)
+	}
 	if d.via != "" {
 		return "from the variable " + d.via + " (" + d.input + ")"
 	}

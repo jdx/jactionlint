@@ -94,7 +94,7 @@ func (rule *RuleOutputClobbering) VisitStep(n *Step) error {
 					open = nil
 					continue
 				}
-				if c.d.kind == dataUntrusted && exprMayHaveNewline(c.d.input) && !open.random {
+				if c.d.kind == dataUntrusted && c.d.mayHaveNewline() && !open.random {
 					rule.report(s, origin, n, w, c, open.name, open.text, "delimiter")
 				}
 				continue
@@ -103,7 +103,7 @@ func (rule *RuleOutputClobbering) VisitStep(n *Step) error {
 				open = &outputDelimiter{name: m[1], text: m[2], random: rule.randomDelimiter(s, n, m[2])}
 				continue
 			}
-			if c.d.kind == dataUntrusted && exprMayHaveNewline(c.d.input) {
+			if c.d.kind == dataUntrusted && c.d.mayHaveNewline() {
 				name := ""
 				if m := reRecordName.FindStringSubmatch(t); m != nil {
 					name = m[1]

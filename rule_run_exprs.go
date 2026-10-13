@@ -194,6 +194,17 @@ type data struct {
 	input string
 	// via is the environment variable the untrusted input went through, "" when it is used directly.
 	via string
+	// cmd is true when input is not an expression but the command of the script that printed the text (see
+	// script_taint.go), multiline whether that text can hold a line break.
+	cmd, multiline bool
+}
+
+// mayHaveNewline reports whether the untrusted text can hold a line break.
+func (d data) mayHaveNewline() bool {
+	if d.cmd {
+		return d.multiline
+	}
+	return exprMayHaveNewline(d.input)
 }
 
 func (d data) worse(o data) data {

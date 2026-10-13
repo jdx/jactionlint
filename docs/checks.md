@@ -2846,6 +2846,24 @@ The rule `github-env` (in the `default` profile) reports two kinds of writes:
   In the metadata of a composite action, `inputs.*` counts as such an input (also through `env:`): the caller chooses it, and a
   workflow can pass it the title of an issue. This holds without a calling workflow, the action may be used by other repositories.
 
+A script can also read the text of an outsider itself, and the rule follows it from there (this holds for
+[command-injection](#check-command-injection) and [output-clobbering](#check-output-clobbering) as well):
+
+- `gh pr view` and `gh issue view` with a `--json` field that holds free text (`title`, `body`, `comments`, `headRefName`, `files`,
+  `author`, `reviews`, `commits`), `TITLE=$(gh pr view "$N" --json title --jq .title)`; a filter that reads none of them
+  (`--json title,number --jq .number`) clears it. Also `gh api repos/.../pulls` and `.../issues` (and their `comments`, `reviews`, `files`
+  and `commits`), with no filter or with a `--jq` filter that selects `.title`, `.body`, `.head.ref`, `.user.login`, `.filename` and the like.
+- `git log` and `git show` with a format that prints the subject, the body or the author (`%s`, `%b`, `%B`, `%an`, `%ae`, `--oneline`),
+  `git diff` and `git diff-tree`, `git branch --show-current`, `git rev-parse --abbrev-ref` and `git symbolic-ref --short`, **once the
+  pull request is checked out**: an earlier step of the job runs `actions/checkout` with a `ref` that names its head, or `gh pr checkout`, or a
+  fetch of `refs/pull/N/head`, or the script did one of these before the command. Without that, the history is the one of the repository and
+  the rule leaves it alone.
+
+These are the models of [CodeQL](https://github.com/github/codeql/blob/main/actions/ql/lib/ext/config/untrusted_gh_command.yml)
+([git](https://github.com/github/codeql/blob/main/actions/ql/lib/ext/config/untrusted_git_command.yml)). Only the output of a command
+substitution counts (`$(...)`), a value that was cut down or checked is accepted as for any other input, and a number or a state is not free
+text. The message names the command: `untrusted input from the output of "gh pr view --json title" is written to $GITHUB_ENV`.
+
 A value that cannot carry what makes the write dangerous is accepted: for `$GITHUB_ENV` a value without newlines
 (`tr -d '\n'`, `tr '\n' ' '`, `head -n 1`, `sed ':a;N;$!ba;s/\n/ /g'`, `${v//$'\n'/}`), and for both files a value cut down to
 letters, digits and a few harmless characters (`sed 's/[^a-zA-Z0-9-]/-/g'`, `tr -cd 'a-z0-9'`, `${v//[^a-zA-Z0-9]/}`) or checked
@@ -2928,7 +2946,9 @@ also accepts a value that the script made safe first: checked with an anchored p
 is wrapped in a call (`Number(x)`, `shellQuote(x)`), cleaned with `.replace(...)` or tested with an anchored regular expression
 (`/^[a-z0-9-]+$/.test(x)`) anywhere in the script.
 
-The rule judges variables like `github-env` does (the last assignment decides, a branch counts together with what was before it).
+The rule judges variables like `github-env` does (the last assignment decides, a branch counts together with what was before it), and
+it starts from the same sources, which include the text that the script reads with `gh pr view` and `git log` (see
+[`github-env`](#check-github-env)): `BR=$(gh pr view "$N" --json headRefName --jq .headRefName); eval "git checkout $BR"` is reported.
 Three things are left to other rules: an expression written in the script (`eval "${{ github.event.comment.body }}"` is a finding of
 [template-injection](#untrusted-inputs)), `inputs.*` of a composite action (an action can take a command on purpose), and a
 value that only the output of a command makes untrusted. It does not follow a value through a function of the script
@@ -2992,7 +3012,8 @@ written to `$GITHUB_OUTPUT` in a record (`echo "body=$BODY" >> "$GITHUB_OUTPUT"`
 (`echo "$BODY" >> "$GITHUB_OUTPUT"`), or between a constant delimiter. It reports only when the output can be misused: the step has an `id` and the job (or
 the outputs of the action) reads an output of that step other than the one that is written, `steps.gate.outputs.approved` in the example. A
 step with one output that nothing else reads gives the attacker nothing to change. A title, the name of a branch and the name of an
-account are one line and are not reported, and neither is `inputs.*` of a composite action. A step that only trusted people reach is
+account are one line and are not reported, and neither is `inputs.*` of a composite action. The text that the script reads with `gh` and `git`
+(see [`github-env`](#check-github-env)) counts when it can hold several lines, such as the body, the comments or the files of a pull request. A step that only trusted people reach is
 not reported either, because the rule cannot judge whether the check is enough: its `if:` or the `if:` of the job reads
 `author_association`, the actor or the user of the event, or the script asks for the permission of the user
 (`gh api repos/$REPO/collaborators/$USER/permission`). A pipeline whose later stage is a program that parses the text

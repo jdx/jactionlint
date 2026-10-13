@@ -319,6 +319,12 @@ func (rule *RuleGitHubEnv) judgeWord(s *runscript.Script, w *runscript.Word, dep
 	if d.kind == dataUntrusted {
 		return d
 	}
+	// the output of `gh pr view --json title` and of `git log --format=%s` is text of outsiders
+	for _, c := range subs {
+		if src, ok := rule.scriptTaint(s, c); ok && (!rule.multilineOnly || src.multiline) {
+			return data{kind: dataUntrusted, input: src.desc, cmd: true, multiline: src.multiline}
+		}
+	}
 	if w.Subst && (len(w.Subs) == 0 || (len(subs) > 0 && !benignSubs(subs))) {
 		d = d.worse(data{kind: dataUnknown})
 	}
