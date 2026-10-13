@@ -1,0 +1,30 @@
+on: push
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      # ERROR: no tag
+      - run: docker pull alpine
+      # ERROR: latest
+      - run: docker run --rm -v "$PWD:/w" ghcr.io/other/tool:latest --check
+      # ERROR: a tag can be moved
+      - run: |
+          docker run --rm \
+            --name build \
+            -e CI=1 \
+            node:20 npm test
+      # OK: the policies accept the tag of the images of my-org, and any image of the mirror
+      - run: docker run ghcr.io/my-org/tool:1 && podman run mirror.example.com/x/y
+      # OK: pinned by a digest
+      - run: docker run alpine:3@sha256:0000000000000000000000000000000000000000000000000000000000000000
+      # OK: the image is built by the workflow
+      - run: |
+          docker build -t app:ci .
+          docker run --rm app:ci
+      # OK: the image is a value that is only known when the script runs
+      - run: docker run --rm "$IMAGE" && docker run ${{ env.IMAGE }}
+        env:
+          IMAGE: node:20
+      # OK: an option which is not known could take the image as its value
+      - run: docker run --new-option alpine:3

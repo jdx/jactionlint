@@ -519,6 +519,8 @@ An action or reusable workflow is not allowed or is denied by the configuration.
 - Profile: only when configured
 - Option `allow` (strings, empty by default): Patterns of the only actions and reusable workflows which may be used, e.g. "actions/*". The rule does nothing without allow or deny.
 - Option `deny` (strings, empty by default): Patterns of actions and reusable workflows which must not be used.
+- Option `images-allow` (strings, empty by default): Glob patterns of the only container images which may be used (container:, services:, docker:// and docker run in a script), e.g. "ghcr.io/my-org/*" or "node:20". Docker Hub names can leave out the registry ("node" is "docker.io/library/node").
+- Option `images-deny` (strings, empty by default): Glob patterns of container images which must not be used.
 - Details and examples: [checks](./checks.md#check-forbidden-uses)
 
 ## gate-job-skipped-on-failure
@@ -1231,6 +1233,7 @@ A container or service image is not pinned by a digest.
 - Default level: error
 - Profile: default
 - Option `require-digest` (bool, default true): Report images pinned by a tag other than latest too. Turn it off to report only images without a tag or with the latest tag.
+- Option `policies` (string-map, default empty): How strongly to pin the images matching a pattern: hash-pin (a digest, the default of require-digest), tag-pin (a tag other than latest, or a digest) or any. The most specific pattern that matches (one with a tag, then the most literal characters) wins over require-digest. Patterns are globs of the image name, where * matches any characters: "*", "ghcr.io/my-org/*", "registry.example.com/team/tool" or "node:20". The registry of Docker Hub can be left out ("node" is "docker.io/library/node").
 - Details and examples: [checks](./checks.md#check-unpinned-images)
 
 ## unpinned-tools
