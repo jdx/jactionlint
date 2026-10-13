@@ -61,16 +61,16 @@ func (r *RuleDependabotMissingActionsUpdate) VisitDependabotPost(d *Dependabot) 
 		switch {
 		case len(active) > 0:
 			r.checkLocalActions(active)
-		case hasExternalActions(r.project.WorkflowsDir()):
+		case projectUsesExternalActions(r.project):
 			pos := updates[0].Pos
 			if pos == nil {
 				pos = d.Pos
 			}
-			r.ReportID("dependabot-missing-actions-update", pos, "this repository uses actions in its workflows but every update with the \"github-actions\" package ecosystem is disabled (\"open-pull-requests-limit: 0\", or an \"ignore\" of every dependency), so Dependabot never updates them. enable one of them")
+			r.ReportID("dependabot-missing-actions-update", pos, "this repository uses actions in its workflows or local actions but every update with the \"github-actions\" package ecosystem is disabled (\"open-pull-requests-limit: 0\", or an \"ignore\" of every dependency), so Dependabot never updates them. enable one of them")
 		}
 		return nil
 	}
-	if usesRenovate(r.project.RootDir()) || !hasExternalActions(r.project.WorkflowsDir()) {
+	if usesRenovate(r.project.RootDir()) || !projectUsesExternalActions(r.project) {
 		return nil
 	}
 	r.ReportID("dependabot-missing-actions-update", d.Pos, "this repository uses actions in its workflows but no update has the \"github-actions\" package ecosystem, so Dependabot never updates them. add an update with \"package-ecosystem: github-actions\" and \"directory: /\"")

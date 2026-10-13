@@ -6841,7 +6841,8 @@ updates:
 ```
 
 An update which is disabled, with `open-pull-requests-limit: 0` or an `ignore` of every dependency, opens no pull request and does not
-count for either check: with only disabled `github-actions` updates, the repository is reported as one whose actions are not updated.
+count for either check: with only disabled `github-actions` updates, the repository is reported as one whose actions are not updated. Whether the repository uses actions that Dependabot can update is asked of both the workflows and the local composite actions, for
+the missing update as well as for the disabled ones.
 
 The fix replaces `directory: /` of an update that is the only `github-actions` one by `directories: ["/", "/.github/actions/**/*"]` (the
 actions that are not below `.github/actions` are listed by their directory). It makes Dependabot propose pull requests it did not, so it is
