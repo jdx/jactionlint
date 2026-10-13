@@ -339,6 +339,11 @@
         "next": "v3"
     },
     {
+        "slug": "jdx/aube-action",
+        "tags": ["v1"],
+        "next": "v2"
+    },
+    {
         "slug": "marvinpinto/action-automatic-releases",
         "tags": ["latest"]
     },
