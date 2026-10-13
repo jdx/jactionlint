@@ -11,7 +11,7 @@ func TestCredentialPath(t *testing.T) {
 		"~/.docker/config.json", "~/.docker", "$HOME/.docker/config.json", "${HOME}/.docker/", "~/.npmrc", ".npmrc", "./.npmrc",
 		"**/.npmrc", "~/.ssh", "~/.ssh/", "~/.ssh/id_ed25519", ".git", "./.git", ".git/", "~/.config/gh", "~/.config/gh/", ".env",
 		"**/.env", ".env.local", "~/.aws", "~/.aws/", "~/.kube/config", "~/.netrc", "~/.pypirc", "~/.cargo/credentials.toml",
-		"~/.m2/settings.xml", "'~/.npmrc'", `"~/.ssh"`, "  ~/.npmrc  ", "~/.gnupg", "~/.config/gcloud",
+		"~/.m2/settings.xml", "~/.aws/credentials", "$HOME/.aws/sso/cache", "~/.config/gh/hosts.yml", "~/.config/gcloud/application_default_credentials.json", "~/.azure/accessTokens.json", "~/.pgpass", "'~/.npmrc'", `"~/.ssh"`, "  ~/.npmrc  ", "~/.gnupg", "~/.config/gcloud",
 	}
 	for _, p := range yes {
 		if _, ok := credentialPath(p); !ok {
@@ -20,7 +20,7 @@ func TestCredentialPath(t *testing.T) {
 	}
 	no := []string{
 		"", "~/.cache", "~/.npm", "node_modules", "~/.cargo/registry", "~/.cargo", "~/.m2/repository", "~/.ssh/known_hosts", "~/.docker/cli-plugins",
-		".docker", ".docker/config.json", ".ssh", ".aws", ".kube/config", ".netrc", "~/.config/gh-cache", ".github", ".github/workflows", ".gitignore", ".git/modules", "!~/.npmrc", "**/*.env", "~/.env.d/x", ".",
+		".docker", ".docker/config.json", ".ssh", ".aws", ".kube/config", ".netrc", "~/.aws/config", "~/.config/gh/config.yml", "~/.config/gcloud/logs", "~/.azure/commands", ".aws/credentials", "~/.config/gh-cache", ".github", ".github/workflows", ".gitignore", ".git/modules", "!~/.npmrc", "**/*.env", "~/.env.d/x", ".",
 		"${{ github.workspace }}/.npmrc", "~", "vendor/.env/x", "~/.config", "dist",
 	}
 	for _, p := range no {

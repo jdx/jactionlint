@@ -14,7 +14,11 @@ var credentialDirs = []string{
 // credentialFiles are files that hold credentials, or the token of a registry, when they exist.
 var credentialFiles = []string{
 	".npmrc", ".yarnrc.yml", ".pypirc", ".netrc", ".git-credentials", ".docker/config.json", ".kube/config", ".m2/settings.xml",
-	".cargo/credentials", ".cargo/credentials.toml", ".gem/credentials", ".terraform.d/credentials.tfrc.json", ".env",
+	".cargo/credentials", ".cargo/credentials.toml", ".gem/credentials", ".terraform.d/credentials.tfrc.json", ".env", ".pgpass",
+	// files below the credential directories above: caching "~/.aws" is reported as a directory, and so are these files
+	// (".aws/config" is not a secret and ".config/gh/config.yml" holds settings only)
+	".aws/credentials", ".aws/sso/cache", ".config/gh/hosts.yml", ".config/gcloud/credentials.db", ".config/gcloud/access_tokens.db",
+	".config/gcloud/application_default_credentials.json", ".azure/accessTokens.json", ".azure/msal_token_cache.json", ".config/doctl/config.yaml",
 }
 
 // privateKeyNames are the default names of the private keys of ssh.
