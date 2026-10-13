@@ -5925,6 +5925,14 @@ The rule only looks at the trigger, so a workflow that uses one of them safely i
 `# jactionlint ignore=dangerous-triggers` and a reason, as in `zizmor: ignore[dangerous-triggers]`. zizmor 1.30.1 does not report
 `issue_comment` yet.
 
+What GitHub does by default does not make the finding moot. GitHub is introducing a [default rule](https://github.blog/changelog/2026-09-17-workflow-execution-protections-in-github-actions-generally-available)
+that disables `pull_request_target` in public repositories which have no applicable Actions event policy: it starts in evaluate mode and is
+enforced on 2026-11-02 for the repositories that used the default policy before the general availability. A workflow can be allow-listed by its file, and an
+Actions event policy can allow the trigger. So a `pull_request_target` workflow of a public repository may stop running unless an
+event policy allows it, and one that is allowed is exactly as dangerous as described above. The rule does not know the event policies of your
+repository, so it reports the trigger either way. Another platform default reduces the risk without removing it: a run of an untrusted trigger (`pull_request_target`, `issue_comment`)
+gets a [read-only Actions cache](https://github.blog/changelog/2026-06-26-read-only-actions-cache-for-untrusted-triggers), which blocks writing to the cache.
+
 <a id="check-self-hosted-runner"></a>
 ## Self-hosted runners (pedantic)
 
