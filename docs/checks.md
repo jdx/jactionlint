@@ -9,6 +9,7 @@ List of checks:
 - [Missing required keys or key duplicates](#check-missing-required-duplicate-keys)
 - [Unexpected empty mappings](#check-empty-mapping)
 - [Unexpected mapping values](#check-mapping-values)
+- [Expressions for a whole mapping or list](#check-whole-value-expressions)
 - [Syntax check for expression `${{ }}`](#check-syntax-expression)
 - [Type checks for expression syntax in `${{ }}`](#check-type-check-expression)
 - [Contexts and built-in functions](#check-contexts-and-builtin-func)
@@ -264,6 +265,78 @@ Some mapping values are restricted to some constant strings. Several mapping val
 
 jactionlint checks such constant strings are used properly while parsing and reports an error when an unexpected value is
 specified.
+
+<a id="check-whole-value-expressions"></a>
+## Expressions for a whole mapping or list
+
+Example input:
+
+```yaml
+on: push
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    # OK: the strategy and its matrix are whatever the expression evaluates to
+    strategy: ${{ fromJSON(vars.STRATEGY) }}
+    # OK: the "run" defaults of a job, the ports and volumes of a container, and "with" can be one expression
+    defaults:
+      run: ${{ fromJSON(vars.RUN_DEFAULTS) }}
+    container:
+      image: node:20
+      ports: ${{ fromJSON(vars.PORTS) }}
+    env:
+      # OK: "${{ insert }}" adds the entries of a mapping
+      ${{ insert }}: ${{ matrix.env || fromJSON('{}') }}
+    steps:
+      # OK: the inputs are not known, so no input is reported as missing
+      - uses: actions/cache@v4
+        with: ${{ fromJSON(vars.CACHE_INPUTS) }}
+  wrong:
+    runs-on: ubuntu-latest
+    # ERROR: The steps context is not available in "strategy"
+    strategy: ${{ fromJSON(steps.setup.outputs.strategy) }}
+    steps:
+      # ERROR: A string is not a mapping
+      - uses: actions/checkout@v4
+        with: ${{ github.sha }}
+```
+
+Output:
+
+```
+test.yaml:23:28: context "steps" is not allowed here. available contexts are "github", "inputs", "needs", "vars". see https://docs.github.com/en/actions/learn-github-actions/contexts#context-availability for more details [context-availability]
+   |
+23 |     strategy: ${{ fromJSON(steps.setup.outputs.strategy) }}
+   |                            ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+test.yaml:27:15: type of expression at "with" must be object but found type string [expression-type]
+   |
+27 |         with: ${{ github.sha }}
+   |               ^~~
+```
+
+[Playground](https://jactionlint.jdx.dev/#eNqMkU1PMkEQhO/8ij68CS8HRmM87UmC+BUDhI+DJzIszc4ozGymuxcNzH83Cyyo2RhPm2xVPanq8S6BXMg0Xv2ckgYAI3H5BQjiqF3q/7ZbWGsO9l15ghj3KnHQjNnHQV4Gv34aD/r/Cx1IjSejzqR3/9KqzAtcalkxHcB7dF1uNO3Pbnt3nenzZHzKpt6xtg5DFbZrnWECzi8wubo8/sx9YKpjDgejLzB0RYUprdYRBoYYv41EV8Bud+Y0t7HZOu/G/LSjDUJICeiUrXd0kerU4E1xfZQBNpZNXatup/vQmz32h9NTuU3wLvtxeZmLY2mvdPkqv51930oRsuTKC+fCpCrrH6sbTN+8cH37zLKRuSKjIcbPAQCqSa3j)
+
+The schema of GitHub Actions gives some keys a list of contexts, and a value that is one expression `${{ }}` is valid there
+instead of the mapping or the list. These are `strategy` and its `matrix`, `include` and `exclude`, `env`, the `run` section of
+`defaults` of a job, `container` and `services` (the whole value, `env`, `credentials`, `ports` and `volumes`),
+`concurrency`, `environment`, `runs-on` and `with` of a step. An expression is not valid for `defaults` of a workflow,
+`with` and `secrets` of a job that calls a reusable workflow, `needs`, `steps` and `permissions`, which have no contexts.
+
+jactionlint checks such an expression with the contexts that are available at its key (see
+[the context availability](#check-contexts-and-builtin-func)) and checks its type: a mapping is expected where `with`, `strategy`
+or `env` are, and a list where `ports` or `volumes` are. Rules which depend on what the expression evaluates to treat it as
+unknown instead of guessing:
+
+- `matrix` is any object when `strategy` is an expression, so no property of it is reported as undefined.
+- The inputs of a step are unknown when its `with` is an expression or has a `${{ insert }}` key, so `missing-action-input` and
+  the rules which look for an input that is not set (`artipacked`, `cache-poisoning`, `github-app`, `unpinned-tools` and
+  `agentic-actions`) do not report the step. The inputs written next to the expression are still checked
+  (`unknown-action-input`).
+- The shell of a job is unknown when its `defaults.run` is an expression, so the rules which judge a script by its shell skip it.
+- `concurrency: ${{ ... }}` can be a group name or a whole configuration, so `concurrency-limits` does not take it for a
+  group name that cannot cancel runs.
+- A constant is evaluated where a check needs its value: `queue: ${{ 'max' }}` together with `cancel-in-progress: true` is
+  reported like `queue: max`.
 
 <a id="check-syntax-expression"></a>
 ## Syntax check for expression `${{ }}`

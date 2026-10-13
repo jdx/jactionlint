@@ -1189,8 +1189,8 @@ func envInsertion(in tiFixInput, vars []string) (TextEdit, bool) {
 	}
 	step := in.ctx.step
 	if env := step.Env; env != nil {
-		if env.Expression != nil || len(env.Vars) == 0 {
-			return TextEdit{}, false
+		if env.Dynamic() || len(env.Vars) == 0 {
+			return TextEdit{}, false // variables which come from an expression may be the ones the fix adds
 		}
 		var first *EnvVar
 		for _, v := range env.Vars {

@@ -645,7 +645,10 @@ func (rule *RuleAction) checkAction(meta *ActionMetadata, exec *ExecAction, desc
 		}
 	}
 
-	// Check mandatory inputs are specified
+	// Check mandatory inputs are specified. They may be in a "with:" which is an expression (or a ${{ insert }} key)
+	if exec.InputsUnknown() {
+		return
+	}
 	for id, i := range meta.Inputs {
 		if i.Required {
 			if _, ok := exec.Inputs[id]; !ok {

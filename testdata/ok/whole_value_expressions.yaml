@@ -1,0 +1,121 @@
+on:
+  workflow_dispatch:
+    inputs:
+      extra:
+        type: string
+      envs:
+        type: string
+
+env:
+  ${{ insert }}: ${{ fromJSON(vars.WORKFLOW_ENV) }}
+
+concurrency: ${{ fromJSON(vars.CONCURRENCY) }}
+
+jobs:
+  # a whole mapping from an expression where the schema of GitHub allows it
+  generated:
+    runs-on: ${{ fromJSON(vars.RUNNER) }}
+    strategy: ${{ fromJSON('{"matrix":{"os":["ubuntu-latest","macos-latest"],"include":[{"os":"ubuntu-latest","node":20}]}}') }}
+    env:
+      ${{ insert }}: ${{ matrix.env || fromJSON('{}') }}
+      PLAIN: value
+    defaults:
+      run: ${{ fromJSON(vars.RUN_DEFAULTS) }}
+    container: ${{ fromJSON(vars.CONTAINER) }}
+    services: ${{ fromJSON(vars.SERVICES) }}
+    environment: ${{ fromJSON(vars.ENVIRONMENT) }}
+    concurrency: ${{ fromJSON(vars.JOB_CONCURRENCY) }}
+    steps:
+      # the matrix is whatever the strategy says, so no property is unknown
+      - run: echo ${{ matrix.os }} ${{ matrix.node }} ${{ matrix.anything.at.all }} ${{ strategy.job-index }}
+        shell: bash
+      # missing required inputs (key and path) are not reported when the inputs come from an expression
+      - uses: actions/cache@v4
+        with: ${{ fromJSON(vars.CACHE_INPUTS) }}
+      - uses: actions/checkout@v4
+        with: ${{ matrix.checkout || fromJSON('{}') }}
+      - uses: actions/checkout@v4
+        with:
+          ${{ insert }}: ${{ fromJSON(vars.MORE_INPUTS) }}
+          fetch-depth: 0
+      - uses: actions/cache@v4
+        with:
+          ${{ insert }}: ${{ fromJSON(vars.CACHE_INPUTS) }}
+          path: ~/.cache
+      - uses: docker://alpine:3.20
+        with: ${{ fromJSON(vars.DOCKER_INPUTS) }}
+      - uses: actions/setup-node@v4
+        with: ${{ secrets.NODE_INPUTS && fromJSON(secrets.NODE_INPUTS) }}
+        env: ${{ fromJSON(vars.STEP_ENV) }}
+
+  # the parts of a container and of a service which are lists
+  containers:
+    runs-on: ubuntu-latest
+    container:
+      image: node:20
+      env: ${{ fromJSON(vars.CONTAINER_ENV) }}
+      ports: ${{ fromJSON(vars.PORTS) }}
+      volumes: ${{ fromJSON(vars.VOLUMES) }}
+      credentials: ${{ fromJSON(vars.CREDENTIALS) }}
+    services:
+      one: ${{ fromJSON(vars.SERVICE) }}
+      two:
+        image: redis
+        ports: ${{ fromJSON(vars.PORTS) }}
+        volumes: ${{ fromJSON(vars.VOLUMES) }}
+        env:
+          ${{ insert }}: ${{ fromJSON(vars.SERVICE_ENV) }}
+    steps:
+      - run: echo hi
+
+  # an object where a name is expected
+  names:
+    strategy:
+      matrix:
+        target:
+          - runner: ubuntu-latest
+            container: {image: node:20}
+            concurrency: {group: a, cancel-in-progress: true}
+            environment: {name: staging}
+    runs-on: ${{ matrix.target.runner }}
+    container: ${{ matrix.target.container }}
+    concurrency: ${{ matrix.target.concurrency }}
+    environment: ${{ matrix.target.environment }}
+    steps:
+      - run: echo hi
+
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+      strategy: ${{ steps.matrix.outputs.strategy }}
+    steps:
+      - id: matrix
+        run: echo "matrix={}" >> "$GITHUB_OUTPUT"
+
+  # a whole matrix, and a whole strategy from the output of another job
+  matrices:
+    strategy:
+      matrix: ${{ fromJSON(needs.setup.outputs.matrix) }}
+    needs: setup
+    runs-on: ${{ matrix.os }}
+    steps:
+      - run: echo ${{ matrix.os }}
+
+  whole-strategy:
+    strategy: ${{ fromJSON(needs.setup.outputs.strategy) }}
+    needs: setup
+    runs-on: ${{ matrix.os }}
+    steps:
+      - run: echo ${{ matrix.os }} ${{ strategy.fail-fast }}
+
+  # defaults of a job use the contexts a job has there
+  defaults-contexts:
+    needs: setup
+    runs-on: ubuntu-latest
+    env:
+      SHELL_DEFAULTS: '{"shell":"bash"}'
+    defaults:
+      run: ${{ fromJSON(env.SHELL_DEFAULTS) }}
+    steps:
+      - run: echo ${{ needs.setup.result }}
