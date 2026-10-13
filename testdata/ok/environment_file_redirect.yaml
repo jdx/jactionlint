@@ -1,0 +1,40 @@
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - id: a
+        run: echo "version=1.2.3" >> "$GITHUB_OUTPUT"
+      - run: echo "FOO=bar" >> "${GITHUB_ENV}"
+      - run: echo "/opt/bin" >> "$GITHUB_PATH"
+      - run: echo "# summary" | tee -a "$GITHUB_STEP_SUMMARY"
+      - run: echo "token=x" >> "$GITHUB_STATE"
+      # a lone > is harmless: each step has a file of its own
+      - run: echo "a=1" > "$GITHUB_OUTPUT"
+      - run: |
+          echo "a=1" >> "$GITHUB_OUTPUT"
+          echo "b=2" >> "$GITHUB_OUTPUT"
+          echo "c=3" | tee -a "$GITHUB_OUTPUT"
+      - run: |
+          echo "a=1" > "$GITHUB_OUTPUT"
+          echo "b=2" >> "$GITHUB_OUTPUT"
+      - run: |
+          echo "a=1" >> "$GITHUB_OUTPUT"
+          echo "A=1" > "$GITHUB_ENV"
+      - run: |
+          if [ -n "$X" ]; then
+            echo "a=1" >> "$GITHUB_OUTPUT"
+          else
+            echo "b=2" > "$GITHUB_OUTPUT"
+          fi
+      - run: echo "a >> GITHUB_OUTPUT"
+      - run: |
+          # echo "a=1" >> GITHUB_OUTPUT
+          echo "a=1" >> out.txt
+          cat GITHUB_OUTPUT.txt >> out.txt
+  windows:
+    runs-on: windows-latest
+    steps:
+      - run: echo "a=1" >> $env:GITHUB_OUTPUT
+      - shell: cmd
+        run: echo a=1 >> %GITHUB_OUTPUT%
