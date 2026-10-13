@@ -568,7 +568,7 @@ func (sc *jsScan) collectValidated() {
 var (
 	reJSCall      = regexp.MustCompile(`(?:([A-Za-z_$][A-Za-z0-9_$]*)\s*\.\s*)?([A-Za-z_$][A-Za-z0-9_$]*)\s*\(`)
 	reJSRequireCP = regexp.MustCompile(`require\(\s*['"](?:node:)?child_process['"]\s*\)\s*\.\s*$`)
-	reJSRequire   = regexp.MustCompile(`(?:(?:const|let|var)\s+(\{[^}]*\}|[A-Za-z_$][A-Za-z0-9_$]*)\s*=\s*(?:await\s+)?require\(\s*['"](?:node:)?child_process['"]\s*\)|import\s+(?:\*\s+as\s+([A-Za-z_$][A-Za-z0-9_$]*)|([A-Za-z_$][A-Za-z0-9_$]*)|(\{[^}]*\}))\s+from\s+['"](?:node:)?child_process['"])`)
+	reJSRequire   = regexp.MustCompile(`(?:(?:const|let|var)\s+(\{[^}]*\}|[A-Za-z_$][A-Za-z0-9_$]*)\s*=\s*(?:await\s+)?require\(\s*['"](?:node:)?child_process['"]\s*\)(?:\s*\.\s*([A-Za-z_$][A-Za-z0-9_$]*))?|import\s+(?:\*\s+as\s+([A-Za-z_$][A-Za-z0-9_$]*)|([A-Za-z_$][A-Za-z0-9_$]*)|(\{[^}]*\}))\s+from\s+['"](?:node:)?child_process['"])`)
 	reJSPromisfy  = regexp.MustCompile(`(?:const|let|var)\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*=\s*(?:util\.)?promisify\(\s*(?:[A-Za-z_$][A-Za-z0-9_$]*\.)?(exec|execFile)\s*\)`)
 	reJSShellOpt  = regexp.MustCompile(`\bshell\s*:\s*(?:true|['"` + "`" + `])`)
 	// a shell as a string of any quote ("sh", '/bin/bash', `zsh`): the name or a path that ends with it
@@ -602,12 +602,17 @@ func (sc *jsScan) cpImports() (spaces map[string]bool, funcs map[string]string) 
 		}
 	}
 	for _, m := range reJSRequire.FindAllStringSubmatch(sc.clean, -1) {
-		for _, g := range []string{m[1], m[4]} {
+		// m[1] is what the require is bound to, m[2] the member that is taken from it (`require('child_process').execSync`)
+		if m[2] != "" && m[1] != "" && !strings.HasPrefix(m[1], "{") {
+			funcs[m[1]] = m[2]
+			continue
+		}
+		for _, g := range []string{m[1], m[5]} {
 			if strings.HasPrefix(g, "{") {
 				addNames(g)
 			}
 		}
-		for _, g := range []string{m[1], m[2], m[3]} {
+		for _, g := range []string{m[1], m[3], m[4]} {
 			if g != "" && !strings.HasPrefix(g, "{") {
 				spaces[g] = true
 			}
@@ -640,10 +645,11 @@ func (sc *jsScan) findSinks() []jsHit {
 		}
 		var api string // "cp" or "actions"
 		switch {
+		case recv != "" && spaces[recv] && jsCPCalls[name]:
+			// `const exec = require('child_process'); exec.exec(cmd)` is child_process, which runs a shell
+			api = "cp"
 		case recv == "exec" && (name == "exec" || name == "getExecOutput"):
 			api = "actions"
-		case recv != "" && spaces[recv] && jsCPCalls[name]:
-			api = "cp"
 		case recv == "" && sc.prevByte(m[0]) == '.' && jsCPCalls[name] && reJSRequireCP.MatchString(sc.clean[:m[0]]):
 			api = "cp"
 		case recv == "" && sc.prevByte(m[0]) != '.':
