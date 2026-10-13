@@ -1065,7 +1065,7 @@
           ]
         },
         "cache-poisoning": {
-          "description": "A cache is restored in a release job or written by a privileged trigger. With the option pedantic, a tag that only starts checks and a branch filter that names a release branch among others count as releases too. Group: security. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#cache-poisoning",
+          "description": "A cache is restored in a release job or written by a privileged trigger. With the option pedantic, a tag that only starts checks and a branch filter that names a release branch among others count as releases too, and a cache that saves a file with credentials is reported. Group: security. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#cache-poisoning",
           "oneOf": [
             {
               "$ref": "#/definitions/level"
@@ -3988,7 +3988,7 @@
           ]
         },
         "untrusted-artifact": {
-          "description": "A workflow_run workflow uses an artifact of the triggering run without validating it. Group: security. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#untrusted-artifact",
+          "description": "A workflow_run workflow uses an artifact of the triggering run without validating it. With the option pedantic, also one that downloads every artifact of the run. Group: security. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#untrusted-artifact",
           "oneOf": [
             {
               "$ref": "#/definitions/level"
@@ -4003,6 +4003,10 @@
                     }
                   ],
                   "description": "The level of the rule: error, warn, info or off."
+                },
+                "pedantic": {
+                  "description": "Also report the pedantic checks, which are noisier. Unset, they run under the pedantic profile.",
+                  "type": "boolean"
                 }
               },
               "type": "object"

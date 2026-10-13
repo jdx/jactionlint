@@ -234,6 +234,33 @@ jobs:
       - run: ./deploy.sh
         if: startsWith(github.event.comment.body, '/deploy')
 
+  # Letting bots in does not let people without write access in: the agent still checks the commenter
+  agent-allows-bots:
+    runs-on: ubuntu-latest
+    if: contains(github.event.comment.body, '@claude')
+    steps:
+      - uses: anthropics/claude-code-action@64c7a0ef71df67b14cb4d6fdbf1b77a1c6fc1d3c # v1.0.9
+        with:
+          allowed_bots: '*'
+
+  # ... but letting everybody in does
+  agent-allows-everybody:
+    runs-on: ubuntu-latest
+    if: contains(github.event.comment.body, '@claude')
+    steps:
+      - uses: anthropics/claude-code-action@64c7a0ef71df67b14cb4d6fdbf1b77a1c6fc1d3c # v1.0.9
+        with:
+          allowed_non_write_users: '*'
+
+  # ... and so does the open input of the Codex action
+  codex-allows-everybody:
+    runs-on: ubuntu-latest
+    if: contains(github.event.comment.body, '@codex')
+    steps:
+      - uses: openai/codex-action@c25d10f3f498316d4b2496cc4c6dd58057a7b031 # v1.1
+        with:
+          allow-users: '*'
+
   # ... but the step that is the agent is guarded by it
   agent-step:
     runs-on: ubuntu-latest

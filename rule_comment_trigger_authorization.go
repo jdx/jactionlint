@@ -101,7 +101,8 @@ func runsGatedAgent(steps []*Step) bool {
 		}
 		open := false
 		for _, g := range agent.OpenGate {
-			if v, ok := a.input(g.Input); ok && v == g.Wildcard {
+			// an input that only lets bots in does not open the gate to a person: the commenter is still checked
+			if v, ok := a.input(g.Input); ok && v == g.Wildcard && !g.Bots {
 				open = true
 			}
 		}

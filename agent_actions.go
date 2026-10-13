@@ -20,6 +20,8 @@ type agentOpenGate struct {
 	Wildcard string
 	// Who describes whom the value lets in.
 	Who string
+	// Bots is whether the input only lets bots in: people without write access are still checked.
+	Bots bool
 }
 
 // agentIssue is a problem with a setting of the agent.
@@ -58,8 +60,8 @@ type agentAction struct {
 }
 
 var claudeOpenGate = []agentOpenGate{
-	{"allowed_non_write_users", "*", "everybody, including users without write access,"},
-	{"allowed_bots", "*", "every bot and GitHub App, whether or not it has write access,"},
+	{Input: "allowed_non_write_users", Wildcard: "*", Who: "everybody, including users without write access,"},
+	{Input: "allowed_bots", Wildcard: "*", Who: "every bot and GitHub App, whether or not it has write access,", Bots: true},
 }
 
 var agentActions = []*agentAction{
@@ -97,7 +99,7 @@ var agentActions = []*agentAction{
 	{
 		Name: "openai/codex-action", Title: "Codex Action",
 		Prompts: []string{"prompt"}, Config: []string{"codex-args"}, Gated: true,
-		OpenGate: []agentOpenGate{{"allow-users", "*", "everybody, including users without write access,"}},
+		OpenGate: []agentOpenGate{{Input: "allow-users", Wildcard: "*", Who: "everybody, including users without write access,"}},
 		unsafe:   unsafeCodex, restricted: restrictedCodex,
 		Source: "https://github.com/openai/codex-action/blob/main/action.yml and README.md",
 	},
