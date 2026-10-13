@@ -114,6 +114,9 @@ type secretFlowEvent struct {
 	offset int
 	a      *runscript.Assignment
 	c      *runscript.Command
+	// nested is a command inside a substitution: a subshell, so it prints nothing to the log and sets nothing, but
+	// `set -x` traces it
+	nested bool
 }
 
 func (f *shellSecretFlow) run() {
@@ -187,15 +190,16 @@ func (f *shellSecretFlow) run() {
 		}
 	}
 	for _, c := range s.Commands {
-		if !f.inSub[c] {
-			events = append(events, secretFlowEvent{offset: c.Offset, c: c})
-		}
+		events = append(events, secretFlowEvent{offset: c.Offset, c: c, nested: f.inSub[c]})
 	}
 	sort.SliceStable(events, func(i, j int) bool { return events[i].offset < events[j].offset })
 	for _, e := range events {
-		if e.a != nil {
+		switch {
+		case e.a != nil:
 			f.assign(e.a)
-		} else {
+		case e.nested:
+			f.traceNested(e.c)
+		default:
 			f.command(e.c)
 		}
 	}
@@ -528,6 +532,19 @@ func (f *shellSecretFlow) command(c *runscript.Command) {
 					d.masked = true
 				}
 			}
+		}
+	}
+}
+
+// traceNested is the part of command() that a command inside a substitution takes: `set -x` shows it (with a `++`) and
+// the values that it expands, wherever the substitution is (a word, an assignment, a here-string).
+func (f *shellSecretFlow) traceNested(c *runscript.Command) {
+	if !f.xtrace || c.Name == "set" {
+		return
+	}
+	for _, name := range f.allVars(c) {
+		if d := f.derived[name]; d != nil && !d.masked && !d.reported {
+			f.report(c.Loc, name, d, "xtrace")
 		}
 	}
 }
