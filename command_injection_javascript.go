@@ -570,7 +570,6 @@ var (
 	reJSRequireCP = regexp.MustCompile(`require\(\s*['"](?:node:)?child_process['"]\s*\)\s*\.\s*$`)
 	reJSRequire   = regexp.MustCompile(`(?:(?:const|let|var)\s+(\{[^}]*\}|[A-Za-z_$][A-Za-z0-9_$]*)\s*=\s*(?:await\s+)?require\(\s*['"](?:node:)?child_process['"]\s*\)(?:\s*\.\s*([A-Za-z_$][A-Za-z0-9_$]*))?|import\s+(?:\*\s+as\s+([A-Za-z_$][A-Za-z0-9_$]*)|([A-Za-z_$][A-Za-z0-9_$]*)|(\{[^}]*\}))\s+from\s+['"](?:node:)?child_process['"])`)
 	reJSPromisfy  = regexp.MustCompile(`(?:const|let|var)\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*=\s*(?:util\.)?promisify\(\s*(?:[A-Za-z_$][A-Za-z0-9_$]*\.)?(exec|execFile)\s*\)`)
-	reJSShellOpt  = regexp.MustCompile(`\bshell\s*:\s*(?:true|['"` + "`" + `])`)
 	// a shell as a string of any quote ("sh", '/bin/bash', `zsh`): the name or a path that ends with it
 	reJSShellArg = regexp.MustCompile(quotedJS(`(?:[^'"` + "`" + `\s]*/)?(?:ba|z|da|k|a)?sh`))
 	// the option of a shell that takes the script, in any quote: -c, -lc, -ec
@@ -768,7 +767,7 @@ func (sc *jsScan) judgeCall(api, name, callee string, args []jsSpan, start, open
 			return hit(r, "shell")
 		}
 	case "spawn", "spawnSync", "execFile", "execFileSync":
-		if !reJSShellOpt.MatchString(sc.clean[open+1 : closeP]) {
+		if !sc.hasShellOption(args) {
 			return jsHit{}, false
 		}
 		spans := []jsSpan{args[0]}
@@ -782,6 +781,46 @@ func (sc *jsScan) judgeCall(api, name, callee string, args []jsSpan, start, open
 		}
 	}
 	return jsHit{}, false
+}
+
+// hasShellOption reports whether an options argument of the call has a property `shell` of its own set to true or to a
+// string (the path of a shell). A property of a nested object (`env: { shell: 'bash' }`), a comment, a string and a
+// template literal do not count: only the code of the object at depth one is read.
+func (sc *jsScan) hasShellOption(args []jsSpan) bool {
+	for _, a := range args {
+		if !strings.HasPrefix(strings.TrimSpace(sc.clean[a.from:a.to]), "{") {
+			continue
+		}
+		depth := 0
+		for j := a.from; j < a.to; j++ {
+			if !sc.code(j) {
+				continue
+			}
+			switch c := sc.clean[j]; c {
+			case '{', '[', '(':
+				depth++
+			case '}', ']', ')':
+				depth--
+			default:
+				if depth != 1 || !strings.HasPrefix(sc.clean[j:a.to], "shell") || (j > a.from && isJSIdent(sc.clean[j-1])) {
+					continue
+				}
+				rest := strings.TrimLeft(sc.clean[j+len("shell"):a.to], " \t\r\n")
+				if !strings.HasPrefix(rest, ":") {
+					continue
+				}
+				v := strings.TrimLeft(rest[1:], " \t\r\n")
+				if strings.HasPrefix(v, "true") || (v != "" && strings.ContainsRune("'\"`", rune(v[0]))) {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
+func isJSIdent(c byte) bool {
+	return c == '_' || c == '$' || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')
 }
 
 // matchClose returns the offset of the bracket that closes the one at i, or -1.
