@@ -4183,5 +4183,8 @@
     }
   },
   "title": "jactionlint configuration",
-  "type": "object"
+  "type": [
+    "object",
+    "null"
+  ]
 }

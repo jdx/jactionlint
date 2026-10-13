@@ -193,7 +193,7 @@ func ConfigSchema() []byte {
 		"$id":                  ConfigSchemaURL,
 		"title":                "jactionlint configuration",
 		"description":          "The configuration file of jactionlint, .github/jactionlint.yaml. Generated from the rule registry by `jactionlint --print-config-schema`. See https://jactionlint.jdx.dev/config",
-		"type":                 "object",
+		"type":                 []string{"object", "null"}, // an empty file, or one with only comments, is null: no settings
 		"additionalProperties": false,
 		"properties":           props,
 		"definitions": jsonObject{

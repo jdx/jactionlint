@@ -208,9 +208,6 @@ func validateConfigYAML(t *testing.T, v schemaValidator, src string) []string {
 	if err := yaml.Unmarshal([]byte(src), &doc); err != nil {
 		t.Fatalf("not YAML: %v", err)
 	}
-	if doc == nil {
-		return nil // an empty file is a valid config
-	}
 	// YAML 1.1 reads 2027-06-30 as a timestamp; the parser of jactionlint and YAML 1.2 read a string
 	doc = timestampsToStrings(doc)
 	return v.validate(v.root, doc, "$")
