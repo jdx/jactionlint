@@ -38,7 +38,6 @@ var derivationTools = []string{"jq", "yq", "cut", "awk", "sed", "tr", "base64", 
 var (
 	secretExprRe     = regexp.MustCompile(`secrets(?:\.([A-Za-z0-9_-]+)|\[\s*['"]([^'"]+)['"]\s*\])`)
 	paramCutRe       = `(?:#{1,2}|%{1,2}|/|\^{1,2}|,{1,2}|:[0-9]|: +-?[0-9])`
-	setCommandRe     = regexp.MustCompile(`^set$`)
 	xtraceOptionRe   = regexp.MustCompile(`^[-+][a-zA-Z]*x[a-zA-Z]*$`)
 	pythonToolNameRe = regexp.MustCompile(`^python[0-9.]*$`)
 )
