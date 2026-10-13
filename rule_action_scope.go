@@ -29,6 +29,7 @@ var actionRuleScope = map[string]struct {
 	scope  actionScope
 	except []string
 }{
+	"action-input-dependencies":       {scope: actionApplies},
 	"action":                          {scope: actionApplies},
 	"adhoc-packages":                  {scope: actionApplies},         // package installs in the scripts of the steps
 	"agentic-actions":                 {scope: actionCallerDependent}, // an agent is steerable depending on the events of the callers

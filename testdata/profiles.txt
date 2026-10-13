@@ -12,6 +12,7 @@ command-injection pedantic security warn
 concurrency-cancels-prs default correctness error
 concurrency-cancels-release default correctness error
 concurrency-limits default policy error
+conflicting-action-inputs correctness correctness error
 conflicting-runner-labels correctness correctness error
 constant-condition correctness correctness error
 context-availability correctness correctness error
