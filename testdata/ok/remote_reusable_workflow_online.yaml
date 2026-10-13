@@ -13,11 +13,23 @@ jobs:
     with:
       name: me
     secrets: inherit
+  osv:
+    uses: google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml@v2.7.0
+    with:
+      scan-args: |-
+        -r
+        ./
+      fail-on-vuln: false
+      export-results: ${{ vars.EXPORT == 'true' }}
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
   use-outputs:
-    needs: [call, inherit]
+    needs: [call, inherit, osv]
     runs-on: ubuntu-latest
     steps:
-      - run: echo ${{ needs.call.outputs.result }} ${{ needs.inherit.outputs.RESULT }}
+      - run: echo ${{ needs.call.outputs.result }} ${{ needs.inherit.outputs.RESULT }} ${{ needs.osv.outputs.results }}
   # Nothing is known about a workflow which is not reusable, does not exist or is not visible
   not-reusable:
     uses: example/workflows/.github/workflows/not-reusable.yml@v1

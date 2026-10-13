@@ -1,5 +1,5 @@
 {
-  "_note": "Trimmed answers of the GitHub API recorded in 2026-10 (see github_fixture.go). Tag and branch lists keep only the entries the tests use, and the action.yml files of taiki-e/install-action, jdx/mise-action and gradle/actions are shortened (inputs and outputs as recorded, steps cut). example/* repositories are made up. A file which is not listed under files does not exist.",
+  "_note": "Trimmed answers of the GitHub API recorded in 2026-10 (see github_fixture.go). Tag and branch lists keep only the entries the tests use, and the action.yml files of taiki-e/install-action, jdx/mise-action and gradle/actions are shortened (inputs and outputs as recorded, steps cut), and so is the workflow of google/osv-scanner-action (the declaration of the call as recorded, the jobs replaced by one). example/* repositories are made up. A file which is not listed under files does not exist.",
   "repos": {
     "actions/checkout": {
       "repo": {
@@ -611,6 +611,42 @@
         },
         "v1:.github/workflows/gone.yml": {
           "found": false
+        }
+      },
+      "advisories": {
+        "list": []
+      }
+    },
+    "google/osv-scanner-action": {
+      "repo": {
+        "archived": false,
+        "default_branch": "main"
+      },
+      "tags": {
+        "tags": [
+          {
+            "name": "v2.7.0",
+            "sha": "b1d267aea5211fa648d9d442fa64b90dbdcbdd36"
+          }
+        ]
+      },
+      "refs": {
+        "heads/v2.7.0": {
+          "found": false
+        },
+        "tags/v2.7.0": {
+          "sha": "b1d267aea5211fa648d9d442fa64b90dbdcbdd36",
+          "found": true
+        }
+      },
+      "files": {
+        "v2.7.0:.github/workflows/osv-scanner-reusable.yml": {
+          "found": true,
+          "content": "# Copyright 2023 Google LLC\n#\n# Licensed under the Apache License, Version 2.0 (the \"License\");\n# you may not use this file except in compliance with the License.\n# You may obtain a copy of the License at\n#\n#     http://www.apache.org/licenses/LICENSE-2.0\n#\n# Unless required by applicable law or agreed to in writing, software\n# distributed under the License is distributed on an \"AS IS\" BASIS,\n# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.\n# See the License for the specific language governing permissions and\n# limitations under the License.\n\n# Performs a vulnerability scan with OSV-Scanner and reports the result.\nname: OSV-Scanner single vulnerability scan\n\n\n\non:\n  workflow_call:\n    inputs:\n      scan-args:\n        description: \"Custom osv-scanner arguments (See https://google.github.io/osv-scanner/usage/ for options, you cannot set --format or --output)\"\n        type: string\n        default: |-\n          -r\n          ./\n      results-file-name:\n        description: \"File name of the result SARIF file\"\n        type: string\n        default: results.sarif\n      download-artifact:\n        description: \"Optional artifact to download for scanning\"\n        required: false\n        default: \"\"\n        type: string\n      upload-sarif:\n        description: \"Whether to upload to Security > Code Scanning\"\n        type: boolean\n        required: false\n        default: true\n      fail-on-vuln:\n        description: \"Whether to fail the action on vulnerability found\"\n        type: boolean\n        default: true\n      matrix-property:\n        description: \"Optional string for matrix strategies (E.g. 'amd64-')\"\n        type: string\n        default: \"\"\n      checkout-submodules:\n        description: \"Whether to check out submodules or not. Passed on to `submodules` argument of `actions/checkout`\"\n        type: boolean\n        default: false\n      ref:\n        description: \"Whether to checkout a custom branch/tag/commit for scanning other than the default branch\"\n        type: string\n        default: \"\"\n      export-results:\n        description: \"Whether to export the scan results as job outputs (can fail for large repositories due to size limits)\"\n        type: boolean\n        default: false\n      runs-on:\n        description: \"The runner to use for the scan job (E.g. 'ubuntu-latest', 'ubuntu-24.04', or a self-hosted runner label)\"\n        type: string\n        default: \"ubuntu-latest\"\n    outputs:\n      results:\n        description: \"Results of the scan in JSON format\"\n        value: ${{ jobs.osv-scan.outputs.results }}\n\njobs:\n  osv-scan:\n    runs-on: ${{ inputs.runs-on }}\n    permissions:\n      actions: read\n      contents: read\n      security-events: write\n    outputs:\n      results: ${{ steps.scan.outputs.results }}\n    steps:\n      - id: scan\n        run: echo scan\n"
+        },
+        "b1d267aea5211fa648d9d442fa64b90dbdcbdd36:.github/workflows/osv-scanner-reusable.yml": {
+          "found": true,
+          "content": "# Copyright 2023 Google LLC\n#\n# Licensed under the Apache License, Version 2.0 (the \"License\");\n# you may not use this file except in compliance with the License.\n# You may obtain a copy of the License at\n#\n#     http://www.apache.org/licenses/LICENSE-2.0\n#\n# Unless required by applicable law or agreed to in writing, software\n# distributed under the License is distributed on an \"AS IS\" BASIS,\n# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.\n# See the License for the specific language governing permissions and\n# limitations under the License.\n\n# Performs a vulnerability scan with OSV-Scanner and reports the result.\nname: OSV-Scanner single vulnerability scan\n\n\n\non:\n  workflow_call:\n    inputs:\n      scan-args:\n        description: \"Custom osv-scanner arguments (See https://google.github.io/osv-scanner/usage/ for options, you cannot set --format or --output)\"\n        type: string\n        default: |-\n          -r\n          ./\n      results-file-name:\n        description: \"File name of the result SARIF file\"\n        type: string\n        default: results.sarif\n      download-artifact:\n        description: \"Optional artifact to download for scanning\"\n        required: false\n        default: \"\"\n        type: string\n      upload-sarif:\n        description: \"Whether to upload to Security > Code Scanning\"\n        type: boolean\n        required: false\n        default: true\n      fail-on-vuln:\n        description: \"Whether to fail the action on vulnerability found\"\n        type: boolean\n        default: true\n      matrix-property:\n        description: \"Optional string for matrix strategies (E.g. 'amd64-')\"\n        type: string\n        default: \"\"\n      checkout-submodules:\n        description: \"Whether to check out submodules or not. Passed on to `submodules` argument of `actions/checkout`\"\n        type: boolean\n        default: false\n      ref:\n        description: \"Whether to checkout a custom branch/tag/commit for scanning other than the default branch\"\n        type: string\n        default: \"\"\n      export-results:\n        description: \"Whether to export the scan results as job outputs (can fail for large repositories due to size limits)\"\n        type: boolean\n        default: false\n      runs-on:\n        description: \"The runner to use for the scan job (E.g. 'ubuntu-latest', 'ubuntu-24.04', or a self-hosted runner label)\"\n        type: string\n        default: \"ubuntu-latest\"\n    outputs:\n      results:\n        description: \"Results of the scan in JSON format\"\n        value: ${{ jobs.osv-scan.outputs.results }}\n\njobs:\n  osv-scan:\n    runs-on: ${{ inputs.runs-on }}\n    permissions:\n      actions: read\n      contents: read\n      security-events: write\n    outputs:\n      results: ${{ steps.scan.outputs.results }}\n    steps:\n      - id: scan\n        run: echo scan\n"
         }
       },
       "advisories": {
