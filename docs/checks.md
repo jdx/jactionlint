@@ -3036,13 +3036,13 @@ test.yaml:7:14: command "gem install" installs a package outside of a lock file:
 [Playground](https://jactionlint.jdx.dev/#eNpUyjEOAjEMRNF+TzEXyGpbUnGVrGRBwDhRxr4/MhSI6hf/DauYwfv2GCfrBrjQs8AKY8kfZ5hH0Zbvs+gy+VVASVlh84Vu9KYKoXbz62U/9uNf3eSnVnvKewDexCcZ)
 
 The rule `adhoc-packages` (in the `default` profile) reports a `run:` script that installs a package by name with `npm`, `yarn`,
-`pnpm`, `bun`, `gem` or `bundle add`. Such a package is usually not pinned, so the newest release (and so a compromised one)
+`pnpm`, `bun`, [`aube`](https://aube.sh) (`aube add`), `gem` or `bundle add`. Such a package is usually not pinned, so the newest release (and so a compromised one)
 is picked up. Even with `eslint@9.0.0` the dependencies of the package are resolved anew on every run. Commands like
 `yarn add`, `bundle add` and `lerna add` change the lock file of the run instead of using it. A list of arguments that the script
 builds (`pnpm install --frozen-lockfile "${filters[@]}"`) is not taken for package names.
 
 Add the package to a manifest that produces a lock file (`package.json`, a `Gemfile`), commit the lock file and install with
-a command that follows it: `npm ci`, `yarn install --immutable`, `pnpm install --frozen-lockfile`, `bun ci` or
+a command that follows it: `npm ci`, `yarn install --immutable`, `pnpm install --frozen-lockfile`, `bun ci`, `aube ci` or
 `bundle install`. Installing from a manifest (`npm install`, `npm ci`), from the checkout (`npm install .`) and from a gem file
 (`gem install ./pkg.gem`) is not reported. See [unlocked installs](#check-unlocked-install) for the lock file.
 
@@ -3123,9 +3123,11 @@ test.yaml:8:14: warning: tool "golang.org/x/tools/cmd/stringer@latest" is instal
   and `azure/setup-helm` (the table is `floatingToolActions` in `rule_unpinned_tools.go`, with the source of each entry);
 - `run:` scripts that install or run a tool without an exact version: `pip install`, `pipx install` and `pipx run`,
   `uv tool install`, `uv pip install` and `uvx`, `cargo install` and `cargo binstall`, `go install`, `npm install -g`,
-  `npx --yes`, `pnpm dlx` and `yarn dlx`. One finding names all the tools of a command. Pin them with `==`, `--version`,
+  `npx --yes`, `pnpm dlx`, `yarn dlx` and `aube dlx` (`aubx`). One finding names all the tools of a command. Pin them with `==`, `--version`,
   `@v1.2.3` or `@1.2.3` according to the tool. Packages from a path, requirements files (`pip install -r`) and `npx tsc`
-  (and `npm exec tsc`, `npm x tsc`, `bun x tsc`), which runs the program of the project, are not reported. There is no fix since the version to use is the decision of the
+  (and `npm exec tsc`, `npm x tsc`, `bun x tsc`), which runs the program of the project, are not reported. `aube exec` only runs an
+  installed binary and never downloads, and `aubx tsc` or `aube dlx tsc` with a bare name runs the binary of the project when there is one, so they are not
+  reported either, unlike `aubx tsc@latest` or `aubx -p typescript tsc`, which install a package. There is no fix since the version to use is the decision of the
   author.
 
 Installs of the packages of a project are the business of the lock file, see [unlocked installs](#check-unlocked-install).
@@ -3172,7 +3174,7 @@ trusts the OIDC token that GitHub issues for the workflow run, so no API token h
 token cannot publish. The rule `use-trusted-publishing` (in the `default` profile) reports
 
 - a `run:` script that publishes to the public registry: `twine upload`, `uv publish`, `poetry|flit|hatch|pdm publish`,
-  `cargo publish`, `cargo mono publish`, `cargo workspaces publish`, `npm|pnpm|yarn|bun publish`, `gem push`,
+  `cargo publish`, `cargo mono publish`, `cargo workspaces publish`, `npm|pnpm|yarn|bun|aube publish`, `gem push`,
   `dotnet nuget push` and `nuget push`, also behind `sudo`, `uvx`, `uv tool run`, `pipx run`, `uv run`, `bundle exec` and
   `python -m`. The message names the long-lived credential when the step,
   its job or the workflow sets one of the usual environment variables (`TWINE_PASSWORD`, `NODE_AUTH_TOKEN`,
@@ -3289,12 +3291,16 @@ file is known for sure.
 
 The rule also reports installs from a manifest that ignore the lock file of the repository. They are reported when the lock file
 exists, because only then it is being ignored: the root of the repository (or the `working-directory` of the step) has the file of
-the tool, `package-lock.json` (or `npm-shrinkwrap.json`) for npm, `yarn.lock` for Yarn or `pnpm-lock.yaml` for pnpm.
+the tool, `package-lock.json` (or `npm-shrinkwrap.json`) for npm, `yarn.lock` for Yarn, `pnpm-lock.yaml` for pnpm, and for aube any of
+`aube-lock.yaml`, `pnpm-lock.yaml`, `bun.lock`, `yarn.lock`, `npm-shrinkwrap.json` or `package-lock.json` (aube reads and writes the lock file the project has).
 
 - `npm install` without a package: use `npm ci`, which fails when `package-lock.json` is out of date;
 - `yarn` and `yarn install` without `--immutable` (`--frozen-lockfile` in Yarn 1) and `pnpm install --no-frozen-lockfile`. pnpm freezes
   the lock file in CI by default, so plain `pnpm install` is not reported. Yarn 2+ does so too, so for Yarn the flag makes it
   explicit.
+- `aube install` with `--no-frozen-lockfile`, `--prefer-frozen-lockfile` or `--fix-lockfile`. Like pnpm, aube freezes the lock file by default
+  when the environment variable `CI` is set, which GitHub does on its runners, so plain `aube install` is not reported, and `aube ci` always freezes.
+  A `preferFrozenLockfile: false` in `aube-workspace.yaml` or `.npmrc`, or `AUBE_PREFER_FROZEN_LOCKFILE=false`, also turns the default off and is not read.
 
 With the option `pedantic` (on under the `pedantic` profile) the rule reports these installs without a lock file in the repository
 as well (a lock file may be created in the job, or not exist yet), and two more kinds of installs: `bun install` without
@@ -4089,6 +4095,7 @@ is true), and the default is false. In a release job the rule reports the steps 
 | `astral-sh/setup-uv` | `enable-cache: false` |
 | `Swatinem/rust-cache` | `lookup-only: true` |
 | `jdx/mise-action` | `cache: false` |
+| `jdx/aube-action` | the `cache` input is missing or `false` (it restores `node_modules` with `actions/cache`) |
 | `gradle/actions/setup-gradle` | `cache-disabled: true` |
 | `docker/build-push-action` | there is no `cache-from` with `type=gha` |
 | `oven-sh/setup-bun` | `no-cache: true` (it caches the bun executable) |
@@ -6087,7 +6094,7 @@ These schemes send the request and the answer in the clear and do not prove who 
 replace what the job downloads. The rule looks at
 
 - the URLs given to `curl`, `wget`, `git` (`clone`, `fetch`, `pull`, `push`, `remote`, `submodule`, `ls-remote`), `pip`, `uv`, `npm`,
-  `pnpm`, `yarn`, `bun`, `cargo`, `gem`, `go` and a few other download commands in `run:` scripts, including the values of options
+  `pnpm`, `yarn`, `bun`, `aube` (and `aubx`), `cargo`, `gem`, `go` and a few other download commands in `run:` scripts, including the values of options
   such as `--index-url` and `--registry`;
 - inputs of actions in `with:` whose whole value is such a URL.
 

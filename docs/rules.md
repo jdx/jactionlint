@@ -183,7 +183,7 @@ The action metadata does not follow the syntax of action.yml.
 
 ## adhoc-packages
 
-A package is installed by name with npm, yarn, pnpm, bun, gem or bundle add outside of a lock file.
+A package is installed by name with npm, yarn, pnpm, bun, aube, gem or bundle add outside of a lock file.
 
 - Group: security
 - Default level: error

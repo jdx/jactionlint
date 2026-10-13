@@ -1,0 +1,4 @@
+test.yaml:9:14: "aube publish" publishes to npm. prefer trusted publishing: configure the trusted publisher of the package on npmjs.com and grant the permission "id-token: write", then no token is needed [use-trusted-publishing]
+test.yaml:10:14: "aube publish" publishes to npm with the long-lived credential NODE_AUTH_TOKEN. prefer trusted publishing: configure the trusted publisher of the package on npmjs.com and grant the permission "id-token: write", then no token is needed [use-trusted-publishing]
+test.yaml:13:14: "aube publish" publishes to npm. prefer trusted publishing: configure the trusted publisher of the package on npmjs.com and grant the permission "id-token: write", then no token is needed [use-trusted-publishing]
+test.yaml:14:14: "aube publish" publishes to npm. prefer trusted publishing: configure the trusted publisher of the package on npmjs.com and grant the permission "id-token: write", then no token is needed [use-trusted-publishing]

@@ -34,7 +34,7 @@ func publishOf(c *Command) *Publish {
 		}
 		p.Verb = "publish"
 		p.setRegistry("--registry", "--index")
-	case "npm", "pnpm", "bun":
+	case "npm", "pnpm", "bun", "aube":
 		if c.Verb() != "publish" {
 			return nil
 		}

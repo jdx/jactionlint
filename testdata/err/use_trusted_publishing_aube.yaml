@@ -1,0 +1,32 @@
+on:
+  release:
+    types: [published]
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      # aube publish trades the OIDC token of the job for a short-lived npm token when the package has a trusted publisher
+      - run: aube publish
+      - run: aube publish --access public --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - run: aube -r publish
+      - run: aube --filter '@acme/*' publish --tag next
+      # A registry of your own, a dry run, or not a publish
+      - run: aube publish --registry https://npm.example.com
+      - run: aube publish --dry-run
+      - run: aube pack
+      - run: aube dist-tag add pkg@1.0.0 stable
+  trusted:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - run: aube publish --provenance
+  private-registry:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          aube config set registry https://npm.example.com/
+          aube publish

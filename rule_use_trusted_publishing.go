@@ -129,7 +129,7 @@ func (rule *RuleUseTrustedPublishing) checkRun(step *Step, run *ExecRun) {
 	}
 }
 
-// npmRegistrySettings are the keys of the configuration of npm, pnpm and yarn that choose the registry.
+// npmRegistrySettings are the keys of the configuration of npm, pnpm, aube and yarn that choose the registry.
 var npmRegistrySettings = []string{"registry", "npmregistryserver", "npmpublishregistry"}
 
 // npmRegistryIsPrivate reports whether the publish goes to a registry other than the public one although the command
@@ -197,7 +197,7 @@ func (rule *RuleUseTrustedPublishing) npmRegistryIsPrivate(step *Step, s *runscr
 		if c.Offset >= publish.Offset {
 			break
 		}
-		if (c.Tool != "npm" && c.Tool != "yarn" && c.Tool != "pnpm") || len(c.Positional) < 3 {
+		if (c.Tool != "npm" && c.Tool != "yarn" && c.Tool != "pnpm" && c.Tool != "aube") || len(c.Positional) < 3 {
 			continue
 		}
 		verb := 0
@@ -352,12 +352,12 @@ func (rule *RuleUseTrustedPublishing) publishedPackageName(step *Step, s *runscr
 }
 
 // registryEnvAppliesTo reports whether the environment variable chooses the registry of the tool: `npm_config_*` is
-// read by npm, pnpm and yarn 1, `YARN_*` by yarn.
+// read by npm, pnpm, aube and yarn 1, `YARN_*` by yarn.
 func (rule *RuleUseTrustedPublishing) registryEnvAppliesTo(name, tool string) bool {
 	if strings.HasPrefix(name, "YARN_") {
 		return tool == "yarn"
 	}
-	return tool == "npm" || tool == "pnpm" || tool == "yarn"
+	return tool == "npm" || tool == "pnpm" || tool == "yarn" || tool == "aube"
 }
 
 // envRegistryRegex matches a registry that is the whole value of a variable of the `env` context.
@@ -478,7 +478,7 @@ var powerShellPublishes = []struct {
 	re       *regexp.Regexp
 }{
 	{"crates", "cargo publish", regexp.MustCompile(`(?i)\bcargo\s+publish\b`)},
-	{"npm", "npm publish", regexp.MustCompile(`(?i)\b(?:npm|pnpm|bun)\s+publish\b`)},
+	{"npm", "npm publish", regexp.MustCompile(`(?i)\b(?:npm|pnpm|bun|aube)\s+publish\b`)},
 	{"npm", "yarn npm publish", regexp.MustCompile(`(?i)\byarn\s+npm\s+publish\b`)},
 	{"pypi", "twine upload", regexp.MustCompile(`(?i)\btwine\s+upload\b`)},
 	{"pypi", "uv publish", regexp.MustCompile(`(?i)\buv\s+publish\b`)},
@@ -537,7 +537,7 @@ func publishCommand(c *runscript.Command, resolve func(string) string) (eco, cmd
 			eco = "pypi"
 		case "cargo":
 			eco = "crates"
-		case "npm", "pnpm", "bun", "yarn":
+		case "npm", "pnpm", "bun", "yarn", "aube":
 			eco = "npm"
 		case "gem":
 			eco = "rubygems"

@@ -1,0 +1,5 @@
+test.yaml:7:14: tool "typescript" is installed without an exact version, so every run may fetch a different release. pin it with a version, for example `tool@1.2.3` [unpinned-tools]
+test.yaml:8:14: tool "cowsay@latest" is installed without an exact version, so every run may fetch a different release. pin it with a version, for example `tool@1.2.3` [unpinned-tools]
+test.yaml:9:14: tool "create-vite" is installed without an exact version, so every run may fetch a different release. pin it with a version, for example `tool@1.2.3` [unpinned-tools]
+test.yaml:10:14: tool "@tanstack/cli@next" is installed without an exact version, so every run may fetch a different release. pin it with a version, for example `tool@1.2.3` [unpinned-tools]
+test.yaml:11:14: tool "cowsay" is installed without an exact version, so every run may fetch a different release. pin it with a version, for example `tool@1.2.3` [unpinned-tools]
