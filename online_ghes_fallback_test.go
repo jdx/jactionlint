@@ -343,3 +343,26 @@ func TestWithoutTokenVariables(t *testing.T) {
 		t.Errorf("%s", got)
 	}
 }
+
+// The environments of the workflow are the ones of the Server: github.com is never asked, and the wrapper has no owner lookup.
+func TestFallbackClientEnvironmentsAreTheServers(t *testing.T) {
+	primary, err := NewFixtureGitHubClient([]byte(`{"repos":{"corp/ci":{"repo":{},"environments":{"release":{"found":true,"required_reviewers":true}}}}}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	secondary, err := NewFixtureGitHubClient([]byte(`{}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := newFallbackGitHubClient(primary, secondary)
+	env, err := c.Environment(context.Background(), "corp", "ci", "release")
+	if err != nil || !env.RequiredReviewers {
+		t.Errorf("%+v, %v", env, err)
+	}
+	if secondary.Calls() != 0 {
+		t.Error("github.com was asked about an environment")
+	}
+	if _, ok := any(c).(GitHubOwnerClient); ok {
+		t.Error("the owner lookup of github.com says nothing about the owners of a Server")
+	}
+}
