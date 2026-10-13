@@ -134,6 +134,7 @@
               "dependabot-syntax",
               "deprecated-action-input",
               "deprecated-commands",
+              "deprecated-node-runtime",
               "deprecated-runner-label",
               "duplicate-job-id",
               "duplicate-job-needs",
@@ -359,6 +360,7 @@
                   "dependabot-syntax",
                   "deprecated-action-input",
                   "deprecated-commands",
+                  "deprecated-node-runtime",
                   "deprecated-runner-label",
                   "duplicate-job-id",
                   "duplicate-job-needs",
@@ -515,6 +517,7 @@
                     "dependabot-syntax",
                     "deprecated-action-input",
                     "deprecated-commands",
+                    "deprecated-node-runtime",
                     "deprecated-runner-label",
                     "duplicate-job-id",
                     "duplicate-job-needs",
@@ -1592,6 +1595,28 @@
         },
         "deprecated-commands": {
           "description": "A deprecated workflow command such as ::set-output is used. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#deprecated-commands",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "deprecated-node-runtime": {
+          "description": "A Node.js runtime that GitHub Actions removed is declared by an action or by an action that is used. Group: policy. Profile: pedantic. Default level: warn. https://jactionlint.jdx.dev/rules#deprecated-node-runtime",
           "oneOf": [
             {
               "$ref": "#/definitions/level"

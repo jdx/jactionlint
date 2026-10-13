@@ -87,6 +87,13 @@ func isOutdated(spec, runs string) bool {
 	return err == nil && v < minNodeRunnerVersion
 }
 
+// isNodeRuntime reports whether the "runs.using" of an action is a Node.js runtime ("node20", "node24").
+func isNodeRuntime(runs string) bool {
+	return nodeRuntimeRe.MatchString(strings.ToLower(runs))
+}
+
+var nodeRuntimeRe = regexp.MustCompile(`^node[0-9]+$`)
+
 type gen struct {
 	stdout      io.Writer
 	stderr      io.Writer
@@ -259,11 +266,15 @@ var PopularActions = map[string]*ActionMetadata{
 	sort.Strings(specs)
 
 	outdated := []string{}
+	runtimes := []string{}
 	for _, spec := range specs {
 		meta := actions[spec]
 		if isOutdated(spec, meta.Runs.Using) {
 			outdated = append(outdated, spec)
 			continue
+		}
+		if isNodeRuntime(meta.Runs.Using) {
+			runtimes = append(runtimes, spec)
 		}
 
 		fmt.Fprintf(b, "%q: {\n", spec)
@@ -320,6 +331,17 @@ var OutdatedPopularActionSpecs = map[string]struct{}{`)
 	}
 	fmt.Fprintln(b, "}")
 
+	fmt.Fprintln(b, `
+// PopularActionRuntimes is the Node.js runtime ("runs.using") of the popular actions that run JavaScript, by
+// spec. An action of another kind ("composite", "docker") is not in it, and neither is an outdated action (see
+// OutdatedPopularActionSpecs). A runtime older than the one the runners have, such as "node20", means that the
+// action declares a runtime which GitHub Actions removed.
+var PopularActionRuntimes = map[string]string{`)
+	for _, s := range runtimes {
+		fmt.Fprintf(b, "%q: %q,\n", s, strings.ToLower(actions[s].Runs.Using))
+	}
+	fmt.Fprintln(b, "}")
+
 	// Format the generated source with checking Go syntax
 	gen := b.Bytes()
 	src, err := format.Source(gen)
@@ -331,7 +353,7 @@ var OutdatedPopularActionSpecs = map[string]struct{}{`)
 		return fmt.Errorf("could not output generated Go source to stdout: %w", err)
 	}
 
-	g.log.Printf("Wrote %d action metadata and %d outdated action specs as Go", len(actions)-len(outdated), len(outdated))
+	g.log.Printf("Wrote %d action metadata, %d outdated action specs and %d runtimes as Go", len(actions)-len(outdated), len(outdated), len(runtimes))
 	return nil
 }
 
