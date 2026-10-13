@@ -182,6 +182,20 @@ type GitHubPackageAdvisoryClient interface {
 	AdvisoriesForPackages(ctx context.Context, packages []string) ([]GitHubAdvisory, error)
 }
 
+// GitHubContentClient is an optional interface of a GitHubClient. A client which implements it can read a
+// file of a repository at a ref, which lets the online checks read the metadata (action.yml) of an action
+// or the declaration of a reusable workflow that is not in the data set built into jactionlint. A client
+// without it makes those checks report nothing for such actions, which is what happens when the lookup
+// fails.
+type GitHubContentClient interface {
+	// FileContent returns the content of the file at path (slash separated, relative to the root of the
+	// repository) at ref: a commit SHA, a tag or a branch. It returns ErrGitHubNotFound (possibly wrapped)
+	// when the repository, the ref or the file does not exist, is not visible, or is not a regular file
+	// small enough to be read. A ref which is a full commit SHA names an immutable file, so the built-in
+	// client keeps the answer without an age limit.
+	FileContent(ctx context.Context, owner, repo, ref, path string) ([]byte, error)
+}
+
 // GitHubBranchScan is the result of GitHubBranchScanner.CommitOnAnyBranch.
 type GitHubBranchScan struct {
 	// Found is true when the commit is the head of a branch or an ancestor of one.

@@ -32,7 +32,18 @@ type fixtureRepo struct {
 	Refs       map[string]*fixtureRef         `json:"refs,omitempty"`    // "heads/main", "tags/v1"
 	Compare    map[string]GitHubCompareStatus `json:"compare,omitempty"` // "base...head"; "not-found" for unknown commits
 	Advisories *fixtureAdvisories             `json:"advisories,omitempty"`
+	// Files maps "ref:path" ("v1:action.yml", "<sha>:.github/workflows/ci.yml") to a file. A file which is not
+	// listed does not exist: the lookup is optional for the checks which use it, and answering "not found" keeps
+	// the other recorded lookups of a test from failing because of one nobody recorded.
+	Files map[string]*fixtureFile `json:"files,omitempty"`
 }
+
+type fixtureFile struct {
+	Found   bool   `json:"found"`
+	Content string `json:"content,omitempty"`
+}
+
+func fixtureFileKey(ref, path string) string { return ref + ":" + path }
 
 type fixtureRef struct {
 	SHA   string `json:"sha,omitempty"`
@@ -163,6 +174,23 @@ func (c *FixtureGitHubClient) Compare(_ context.Context, owner, repo, base, head
 		return "", fmt.Errorf("%s...%s: %w", base, head, ErrGitHubNotFound)
 	}
 	return s, nil
+}
+
+// FileContent implements GitHubContentClient.
+func (c *FixtureGitHubClient) FileContent(_ context.Context, owner, repo, ref, path string) ([]byte, error) {
+	c.mu.Lock()
+	c.calls++
+	c.mu.Unlock()
+	notFound := fmt.Errorf("%s/%s: %s at %s: %w", owner, repo, path, ref, ErrGitHubNotFound)
+	r, ok := c.data.Repos[fixtureKey(owner, repo)]
+	if !ok || r.Missing {
+		return nil, notFound
+	}
+	f, ok := r.Files[fixtureFileKey(ref, path)]
+	if !ok || !f.Found {
+		return nil, notFound
+	}
+	return []byte(f.Content), nil
 }
 
 // Advisories implements GitHubClient.
@@ -321,6 +349,30 @@ func (c *RecordingGitHubClient) Compare(ctx context.Context, owner, repo, base, 
 		record(fixtureCompareNotFound)
 	}
 	return s, err
+}
+
+// FileContent implements GitHubContentClient.
+func (c *RecordingGitHubClient) FileContent(ctx context.Context, owner, repo, ref, path string) ([]byte, error) {
+	cc, ok := c.inner.(GitHubContentClient)
+	if !ok {
+		return nil, errors.New("the wrapped GitHub client cannot read files")
+	}
+	b, err := cc.FileContent(ctx, owner, repo, ref, path)
+	record := func(f *fixtureFile) {
+		c.rec(owner, repo, func(r *fixtureRepo) {
+			if r.Files == nil {
+				r.Files = map[string]*fixtureFile{}
+			}
+			r.Files[fixtureFileKey(ref, path)] = f
+		})
+	}
+	switch {
+	case err == nil:
+		record(&fixtureFile{Found: true, Content: string(b)})
+	case isNotFound(err):
+		record(&fixtureFile{})
+	}
+	return b, err
 }
 
 // Advisories implements GitHubClient.

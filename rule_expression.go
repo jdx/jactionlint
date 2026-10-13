@@ -32,6 +32,8 @@ type RuleExpression struct {
 	workflow         *Workflow
 	localActions     *LocalActionsCache
 	localWorkflows   *LocalReusableWorkflowCache
+	// online reads the outputs of actions which are not in the data set; nil when the online checks are off.
+	online *onlineSession
 
 	// The following fields let a template-injection finding carry a fix (see template_injection.go).
 	src       *sourceIndex
@@ -436,6 +438,10 @@ func (rule *RuleExpression) getActionOutputsType(spec *String) *ObjectType {
 	known := func(s string) bool { _, ok := PopularActions[s]; return ok }
 	if ps, ok := resolvePopularSpec(ParseUses(spec.Value), spec, nil, known); ok {
 		return typeOfActionOutputs(PopularActions[ps.Key])
+	}
+
+	if t := rule.remoteActionOutputsType(spec); t != nil {
+		return t
 	}
 
 	return NewMapObjectType(StringType{})
@@ -1355,6 +1361,31 @@ func convertExprLineColToPos(line, col, lineBase, colBase int) *Pos {
 	}
 }
 
+// remoteActionOutputsType is the type of `steps.<id>.outputs` of an action which is not in the data set, from its
+// action.yml read from GitHub with --online. It is nil when the outputs cannot be told: the checks are off, the
+// metadata cannot be read, or the action may set outputs which it does not declare. Only a composite action
+// has no other outputs than the ones it declares. A JavaScript or Docker action can set any output with
+// `core.setOutput` or `$GITHUB_OUTPUT`, declared or not (tj-actions/changed-files sets one per key of its
+// `files_yaml`, dorny/paths-filter one per filter), so nothing is known about its outputs.
+func (rule *RuleExpression) remoteActionOutputsType(spec *String) *ObjectType {
+	if rule.online == nil || spec == nil {
+		return nil
+	}
+	ref := ParseUses(spec.Value)
+	if !remoteActionLookup(ref) {
+		return nil
+	}
+	meta, err := rule.online.RemoteAction(ref.Owner, ref.Repo, ref.Subpath, ref.Ref)
+	if err != nil || meta == nil {
+		rule.Debug("%s: no action metadata to type the outputs with: %v", ref.Raw, err)
+		return nil
+	}
+	if meta.Runs.Using != "composite" {
+		return nil
+	}
+	return typeOfActionOutputs(meta)
+}
+
 func typeOfActionOutputs(meta *ActionMetadata) *ObjectType {
 	// Some action sets outputs dynamically. Such outputs are not defined in action.yml. jactionlint
 	// cannot check such outputs statically so it allows any props (#18)
@@ -1376,6 +1407,7 @@ func init() {
 	)
 	registerRuleFactory("expression", func(env *RuleEnv) []Rule {
 		r := NewRuleExpression(env.localActions, env.localReusableWorkflows)
+		r.online = env.online
 		if env.src != nil {
 			r.src = newSourceIndex(env.src)
 		}

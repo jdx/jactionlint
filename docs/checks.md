@@ -35,6 +35,7 @@ List of checks:
 - [Local action inputs validation at `with:`](#check-local-action-inputs)
 - [Local action used before checkout](#check-local-action-checkout)
 - [Popular action inputs validation at `with:`](#check-popular-action-inputs)
+- [Inputs and outputs of any action (online)](#check-remote-action-metadata)
 - [Outdated popular actions detection at `uses:`](#detect-outdated-popular-actions)
 - [Shell name validation at `shell:`](#check-shell-names)
 - [Run script policy (pedantic)](#check-run-policy)
@@ -2508,7 +2509,8 @@ jactionlint checks inputs of many popular actions such as `actions/checkout@v4`.
 - input set at `with:` is not defined in the action (this commonly occurs by a typo)
 
 this is done by checking `with:` section items with a small database collected at building `jactionlint` binary. jactionlint
-can check popular actions without fetching any `action.yml` of the actions from the remote so that it can run efficiently.
+can check popular actions without fetching any `action.yml` of the actions from the remote so that it can run efficiently. With
+`--online` the other actions are read from GitHub, see [inputs and outputs of any action](#check-remote-action-metadata).
 
 The data set has one entry per major version of an action. jactionlint looks it up with the major version of
 
@@ -2532,6 +2534,85 @@ comment.
 So far, jactionlint supports more than 100 popular actions The data set is embedded at [`popular_actions.go`](https://github.com/jdx/jactionlint/blob/main/popular_actions.go)
 and were automatically collected by [a script][generate-popular-actions]. If you want more checks for other actions, please
 make a request [as an issue][issue-form].
+
+<a id="check-remote-action-metadata"></a>
+## Inputs and outputs of any action (online)
+
+The data set behind [the popular action inputs check](#check-popular-action-inputs) covers a little over a hundred actions. With
+`--online` jactionlint reads the `action.yml` (or `action.yaml`) of every other action at the ref the workflow pins, from GitHub, and
+checks it the way it checks [a local action](#check-local-action-inputs):
+
+- `missing-action-input`: an input the action requires (`required: true` and no `default`) is not set at `with:`
+- `unknown-action-input`: an input is set which the action does not declare (often a typo)
+- `deprecated-action-input`: an input is set which the action marks with `deprecationMessage`
+- `undefined-property`: `steps.<id>.outputs.<name>` names an output which a *composite* action does not declare
+
+Example input:
+
+```yaml
+# requires --online
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      # ERROR: "tool" is required, and "tools" is a typo
+      - uses: taiki-e/install-action@v2
+        with:
+          tools: just
+      - id: greet
+        uses: example/composite-tool@v1
+        with:
+          name: me
+          # ERROR: deprecated, the action's own message says what to use instead
+          old: x
+      # ERROR: the composite action declares only "result"
+      - run: echo ${{ steps.greet.outputs.reslt }}
+```
+
+Output:
+
+```
+test.yaml:8:15: missing input "tool" which is required by action "taiki-e/install-action@v2" (action.yml read from GitHub with --online). all required inputs are "tool" [missing-action-input]
+  |
+8 |       - uses: taiki-e/install-action@v2
+  |               ^~~~~~~~~~~~~~~~~~~~~~~~~
+test.yaml:10:11: input "tools" is not defined in action "taiki-e/install-action@v2" (action.yml read from GitHub with --online). available inputs are "checksum", "fallback", "tool" [unknown-action-input]
+   |
+10 |           tools: just
+   |           ^~~~~~
+test.yaml:16:11: avoid using deprecated input "old" in action "example/composite-tool@v1" (action.yml read from GitHub with --online): Use level instead [deprecated-action-input]
+   |
+16 |           old: x
+   |           ^~~~
+test.yaml:18:23: property "reslt" is not defined in object type {result: string} [undefined-property]
+   |
+18 |       - run: echo ${{ steps.greet.outputs.reslt }}
+   |                       ^~~~~~~~~~~~~~~~~~~~~~~~~
+```
+
+<!-- Skip playground link -->
+
+What is read, and what is not:
+
+- **Only actions which are not in the data set.** `actions/checkout@v4` and the other popular actions are checked with the
+  built-in data, which costs no request. A commit pinned with a version comment is checked as the popular action it names, see
+  [the popular action inputs check](#check-popular-action-inputs).
+- **The metadata at the pinned ref.** `owner/repo@ref` reads `action.yml` of the root of the repository, `owner/repo/path@ref` reads
+  `path/action.yml`, and each tries `action.yaml` when there is no `action.yml`. The ref is a tag, a branch or a commit. It costs one request
+  for each action and ref (two when the file is `action.yaml`), made once for the whole run however many steps use the
+  action. A `@main` or `@v1` is read as it is now, not as it was when the workflow was written.
+- **Nothing is reported when the metadata is not known.** A private action, a repository on the deny list or outside the allow list
+  of `--online-allow`, a rate limit, a timeout, a repository without `action.yml` (an action which is only a `Dockerfile`) or a file which
+  is not valid metadata gives no finding, exactly as without `--online`. The lookup is counted as skipped (`--online=strict` fails on it,
+  and the coverage of the run says so, see [the online checks](usage.md#online-checks)), except for the repositories which are left out on purpose.
+- **Outputs only for composite actions.** A composite action has the outputs it declares and no others. A JavaScript or Docker action may set an
+  output with `core.setOutput` or `$GITHUB_OUTPUT` which its `action.yml` does not declare (`tj-actions/changed-files` sets one for each key of
+  `files_yaml`, `dorny/paths-filter` one for each filter), so its outputs are not checked.
+- **Required inputs are the ones the action declares.** An action may default a required input in its code, which jactionlint cannot
+  see. It is the same limit as for local and popular actions.
+- **The file of another repository is read leniently.** `type: string` in an input is not documented by GitHub but many actions write
+  it; it is read and not reported. A file which does not parse at all is skipped.
 
 <a id="detect-outdated-popular-actions"></a>
 ## Outdated popular actions detection at `uses:`

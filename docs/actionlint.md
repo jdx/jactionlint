@@ -74,7 +74,7 @@ a key it does not know, so a file shared by both tools can keep `profile: correc
 | `cron` and time zones | `invalid-cron`, `cron-too-frequent`, `invalid-timezone` |
 | Runner labels | `unknown-runner-label`, `conflicting-runner-labels`, `invalid-label-pattern` |
 | Format of `uses:` | `invalid-uses` |
-| Inputs of local and popular actions | `missing-action-input`, `unknown-action-input`, `invalid-local-action`, `deprecated-action-input` |
+| Inputs of local and popular actions (and of any action with `--online`) | `missing-action-input`, `unknown-action-input`, `invalid-local-action`, `deprecated-action-input` |
 | Outdated popular actions | `outdated-action-runner` |
 | Reusable workflows (`workflow_call`) | `invalid-workflow-call`, `invalid-workflow-call-input`, `missing-workflow-input`, `unknown-workflow-input`, `missing-workflow-secret`, `unknown-workflow-secret`, `workflow-input-type`, `workflow-call-permissions`, `invalid-local-workflow` |
 | Shell names | `invalid-shell-name` |

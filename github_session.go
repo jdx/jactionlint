@@ -141,6 +141,8 @@ type onlineSession struct {
 	skippedBy  map[failureKind]int // skipped by the kind of failure
 	excluded   map[string]bool     // repositories left out by the allow and deny lists
 	seen       map[failureKind]bool
+	// fileFailures is the failure of the first file lookup of a repository which failed, see file.
+	fileFailures map[repoKey]error
 
 	repos      memo[repoKey, *GitHubRepo]
 	tags       memo[repoKey, *tagIndex]
@@ -149,6 +151,8 @@ type onlineSession struct {
 	compares   memo[compareKey, GitHubCompareStatus]
 	advisories memo[string, []GitHubAdvisory]
 	origins    memo[originKey, originResult]
+	files      memo[fileKey, repoFile]
+	actions    memo[remoteActionKey, *ActionMetadata]
 }
 
 type originKey struct {
@@ -399,7 +403,7 @@ func (s *onlineSession) record(err error, what string) {
 	case err == nil, errors.Is(err, ErrGitHubNotFound):
 		s.transient = 0
 		return
-	case errors.Is(err, ErrGitHubBranchScanUnavailable), errors.Is(err, errOnlineExcluded):
+	case errors.Is(err, ErrGitHubBranchScanUnavailable), errors.Is(err, errOnlineExcluded), errors.Is(err, errOnlineNoFiles):
 		return // Not a failure: the caller does it another way, or was asked not to
 	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded) && s.ctx.Err() != nil:
 		s.stopLocked(err)
