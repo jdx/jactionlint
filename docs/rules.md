@@ -1437,11 +1437,12 @@ The a && b || c idiom has a falsy b so it always evaluates to c.
 
 ## untrusted-artifact
 
-A workflow_run workflow uses an artifact of the triggering run without validating it.
+A workflow_run workflow uses an artifact of the triggering run without validating it. With the option pedantic, also one that downloads every artifact of the run.
 
 - Group: security
 - Default level: error
 - Profile: default
+- Option `pedantic` (bool, no default): Also report the pedantic checks, which are noisier. Unset, they run under the pedantic profile.
 - Details and examples: [checks](./checks.md#check-untrusted-artifact)
 
 ## untrusted-checkout
