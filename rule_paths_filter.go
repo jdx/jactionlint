@@ -8,6 +8,7 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -293,7 +294,7 @@ func gitListedPaths(root string) (map[string]struct{}, gitListing) {
 	}
 	seen := map[string]struct{}{}
 	for _, f := range strings.Split(string(out), "\x00") {
-		if f == "" {
+		if f == "" || isRepositoryInternal(f) {
 			continue
 		}
 		// The directories of the file are paths of the repository too
@@ -311,6 +312,17 @@ func gitListedPaths(root string) (map[string]struct{}, gitListing) {
 		return nil, gitUnusable
 	}
 	return seen, gitListed
+}
+
+// isRepositoryInternal reports whether the path is inside the directory of the version control system (.git, .jj), which
+// is not a file of the repository.
+func isRepositoryInternal(p string) bool {
+	for _, m := range repositoryMarkers {
+		if p == m || strings.HasPrefix(p, m+"/") {
+			return true
+		}
+	}
+	return false
 }
 
 // skippedInstallDirs are the trees of installed packages, which are not part of the repository. The walk, used when
@@ -338,7 +350,7 @@ func walkRepoPaths(root string) *repoPaths {
 		if err != nil || rel == "." {
 			return nil
 		}
-		if d.Name() == ".git" || (d.IsDir() && skippedInstallDirs[d.Name()]) {
+		if slices.Contains(repositoryMarkers, d.Name()) || (d.IsDir() && skippedInstallDirs[d.Name()]) {
 			if d.IsDir() {
 				return filepath.SkipDir
 			}
