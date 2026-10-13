@@ -1,0 +1,21 @@
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      # OK: the tag of an immutable release cannot be moved
+      - uses: astral-sh/setup-uv@v10.3.0
+      - uses: pypa/gh-action-pypi-publish@v1.14.1
+      # ERROR: the release was published before the repository made them immutable
+      - uses: pypa/gh-action-pypi-publish@v1.14.0
+      # ERROR: v10 is not a release, it moves with every v10.x.y
+      - uses: astral-sh/setup-uv@v10
+      # ERROR: a branch has the name of the tag too
+      - uses: example/immutable-and-branch@v1.0.0
+      # ERROR: a branch
+      - uses: astral-sh/setup-uv@main
+      # OK: a commit
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
+  call:
+    # ERROR: the same for reusable workflows
+    uses: pypa/gh-action-pypi-publish/.github/workflows/ci.yml@v1.14.0
