@@ -15,7 +15,7 @@ jobs:
         if: |
           github.event_name == 'push'
       - run: echo 'Commit is pushed'
-        # ERROR: It is always evaluated to true
+        # OK: GitHub trims the newline at the end of the block scalar
         if: |
           ${{ github.event_name == 'push' }}
       - run: echo 'Commit is pushed'
