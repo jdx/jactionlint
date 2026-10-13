@@ -1088,7 +1088,9 @@ false positives can be avoided by showing the shell name explicitly. It is also 
   shell: pwsh
 ```
 
-When you want to control shellcheck behavior, [`SHELLCHECK_OPTS` environment variable][shellcheck-env-var] is useful.
+When you want to control shellcheck behavior, the [`shellcheck` section of the config file](config.md#shellcheck) (a `rcfile`, more
+`args`, optional checks to `enable`) or the `--shellcheck-rcfile` option keep the settings with the repository. jactionlint runs
+shellcheck with `--norc` unless a rc file is given. The [`SHELLCHECK_OPTS` environment variable][shellcheck-env-var] is useful too.
 
 From command line:
 
@@ -2957,6 +2959,10 @@ a command that follows it: `npm ci`, `yarn install --immutable`, `pnpm install -
 `bundle install`. Installing from a manifest (`npm install`, `npm ci`), from the checkout (`npm install .`) and from a gem file
 (`gem install ./pkg.gem`) is not reported. See [unlocked installs](#check-unlocked-install) for the lock file.
 
+A script of `shell: pwsh`, `powershell` or `cmd` (also the default shell of a Windows runner) is not parsed, so only a line
+that is a plain command is read, like `npm install typescript`. A line with the syntax of the shell (a variable, a pipe, a
+`;`, a block) is left alone, and so is a command that goes on over several lines.
+
 Installing a tool for the workflow itself, such as `pip install` and `cargo install`, is covered by
 [unpinned tools](#check-unpinned-tools). The rule is the audit `adhoc-packages` of zizmor, which does not look at `pip`.
 
@@ -3101,7 +3107,8 @@ shell of the Windows runners) and `powershell` are searched for the publish comm
 An npm publish to another registry than the public one is not reported even when the command does not say so: the script set it
 before (`npm config set registry URL`, `yarn config set npmRegistryServer URL`), the environment sets `npm_config_registry` or
 `YARN_NPM_REGISTRY_SERVER`, or an earlier `actions/setup-node` step has a `registry-url` of another registry (GitHub Packages,
-`npm.pkg.github.com`, has no trusted publishing).
+`npm.pkg.github.com`, has no trusted publishing). A registry that is written as a variable of the workflow (`registry-url: ${{ env.NPM_REGISTRY_URL }}`,
+`--registry ${{ env.REGISTRY }}`) is read from the `env:` of the step, the job or the workflow, when the value is written out there; any other expression is taken for a registry of your own.
 A registry that is set for one scope (`npm config set @acme:registry URL`) hides the publish only when the package is of that scope:
 the name is read from the `package.json` of the repository (in the `working-directory` of the step, or the folder that
 `npm publish` is given) and a package that is unscoped or of another scope is reported. When the name cannot be known with
@@ -3155,7 +3162,10 @@ misses a feature: `peter-evans/create-pull-request`, `peter-evans/create-or-upda
 `rule_superfluous_actions.go` names its source (the audit of zizmor, or the README of the archived action).
 
 Nothing is reported for a job that runs on a `self-hosted` runner, because the tools of the GitHub-hosted images are not there and the
-action is what installs them.
+action is what installs them. A runner that cannot be shown to be hosted counts as self-hosted, so nothing is reported for a
+`runs-on:` that is an expression of anything but the matrix (`${{ inputs.runner }}`, a runner group, a label of a provider such
+as `runs-on=...`), or a matrix that is computed or has a value that is not known. A label that is text and matrix values
+(`${{ matrix.os }}-latest`, `${{ matrix.target.os }}`) is resolved for each value of the matrix.
 
 <a id="check-unlocked-install"></a>
 ## Installs without a lock file
@@ -3649,8 +3659,19 @@ rules:
     require-digest: false
 ```
 
-Images written with an expression (`image: ${{ vars.IMAGE }}`) are skipped since they cannot be checked statically. Docker
-images used as actions (`uses: docker://alpine:3.20`) are checked by the [`unpinned-uses`](#check-action-format) rule.
+An image written with an expression is checked as far as it can be known:
+
+- an image from the matrix (`image: ${{ matrix.image }}`, `${{ matrix.config.image }}`) is checked at the values the matrix
+  writes, and an image made of text and matrix values (`postgres:${{ matrix.postgres }}`) for each combination of the values.
+  A matrix that is computed (`fromJSON()`) or has a value that is an expression is not known;
+- an image whose text after the last expression is written out and has no digest (`${{ needs.build.outputs.image }}-bookworm`,
+  `${{ vars.REGISTRY }}/tool:1.2`) is reported: a digest is the end of an image, so no value of the expression can make it
+  pinned;
+- any other image from an expression (`image: ${{ vars.IMAGE }}`, `ghcr.io/org/tool:${{ inputs.tag }}`) may or may not end in a
+  digest, which is only known when the workflow runs. It is reported with the option `pedantic` (on under `profile: pedantic`, or
+  `rules: {unpinned-images: {level: warn, pedantic: true}}`), like zizmor does for its pedantic persona.
+
+Docker images used as actions (`uses: docker://alpine:3.20`) are checked by the [`unpinned-uses`](#check-action-format) rule.
 
 The images that a script pulls are checked too: the image of `docker run`, `docker create` and `docker pull` (and `docker container
 run`, `docker image pull`, and the same commands of `podman` and `nerdctl`), with the same messages:
@@ -3859,6 +3880,11 @@ rules:
 
 Set `persist-credentials: false` unless a later step needs to push. An explicit `persist-credentials: true` says that the
 credential is needed, so it is not reported, and neither is a value given by an expression.
+
+A checkout that a later step pushes with (a `git push` command, or an action known to push) is not reported either, unless a
+step uploads the workspace. A command is found in the script as a command: `git push` in a comment, in the text of `echo` or
+`printf`, or in a heredoc is not a push. A command that runs another (`bash -c "git push"`, `xargs git push`, `retry git push`) is
+matched on its words, and so is a script of a shell that is not bash or sh.
 
 The rule has a fix: `jactionlint --fix` adds `persist-credentials: false` under `with:` of the step, and creates `with:` when
 the step has none. The fix is applied by `--fix` only when no later step of the job looks like it needs the credential. When a
@@ -6782,6 +6808,10 @@ in the `default` profile and reports:
   `../` of a local path is not reported because it refers to a repository checked out next to the workspace;
 - `format()` with literal arguments only, and any other expression which is a constant, outside of `if:` (constant conditions are
   reported by `constant-condition`);
+- a part of an expression that has a constant result although the expression as a whole does not, such as
+  `fromJSON(format('{{"group":{0},"labels":{1}}}', toJSON(vars.GROUP), toJSON('ubuntu-24.04')))` (`toJSON('ubuntu-24.04')` is
+  the string `"ubuntu-24.04"`) or `inputs.deploy || 'true' && 'false'`. A call of `fromJSON()` is not one of these, it is how a
+  workflow writes a list or an object. In an `if:` the same holds for a part of the condition, while a condition that is constant as a whole is [`constant-condition`](#check-constant-condition);
 - `fromJSON(toJSON(x))`, unless `x` is a property of a context (`fromJSON(toJSON(matrix.container))` is a known way to turn the
   value into an object);
 - an index which is computed, like `vars[format('NAME_{0}', github.job)]`. It hides which property is read. An index that is a
