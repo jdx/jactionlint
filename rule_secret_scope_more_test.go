@@ -26,6 +26,7 @@ func TestWorkflowSecretScopeJobLevel(t *testing.T) {
 		{"steps of a parallel group", "on: push\njobs:\n  a:\n    runs-on: ubuntu-latest\n    env:\n      T: ${{ secrets.T }}\n    steps:\n      - parallel:\n          - run: echo a\n          - run: echo b\n", []int{6}},
 		{"one step of a parallel group", "on: push\njobs:\n  a:\n    runs-on: ubuntu-latest\n    env:\n      T: ${{ secrets.T }}\n    steps:\n      - parallel:\n          - run: echo a\n", nil},
 		{"parallel steps which override it", "on: push\njobs:\n  a:\n    runs-on: ubuntu-latest\n    env:\n      T: ${{ secrets.T }}\n    steps:\n      - parallel:\n          - run: echo a\n            env:\n              T: x\n          - run: echo b\n            env:\n              T: y\n", nil},
+		{"an env with an insert next to named secrets", "on: push\njobs:\n  a:\n    runs-on: ubuntu-latest\n    env:\n      T: ${{ secrets.T }}\n      ${{ insert }}: ${{ fromJSON(vars.E) }}\n" + steps, []int{6}},
 		{"an env which is an expression", "on: push\njobs:\n  a:\n    runs-on: ubuntu-latest\n    env: ${{ fromJSON(vars.E) }}\n" + steps, nil},
 		{"a job which calls a workflow has no env", "on: push\njobs:\n  a:\n    uses: octo/repo/.github/workflows/w.yaml@v1\n", nil},
 	}
