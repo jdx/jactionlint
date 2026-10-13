@@ -1,10 +1,22 @@
 ---
+# Every hook runs for the files jactionlint lints: workflows, the metadata files of actions
+# (action.yml and action.yaml in any directory) and .github/dependabot.yml. TestPreCommitHooks
+# in command_options_test.go keeps the patterns in sync.
 - id: jactionlint
   name: Lint GitHub Actions workflow files
   description: Runs jactionlint to lint GitHub Actions workflow files
   language: golang
   types: ["yaml"]
-  files: ^\.github/workflows/
+  files: ^(\.github/workflows/|\.github/dependabot\.ya?ml$|(.*/)?action\.ya?ml$)
+  entry: jactionlint
+  minimum_pre_commit_version: 3.0.0
+- id: jactionlint-shellcheck
+  name: Lint GitHub Actions workflow files (with a bundled shellcheck)
+  description: Runs jactionlint with a shellcheck built from Go (no system shellcheck needed), so that the results match CI
+  language: golang
+  additional_dependencies: ["github.com/wasilibs/go-shellcheck/cmd/shellcheck@v0.11.1"]
+  types: ["yaml"]
+  files: ^(\.github/workflows/|\.github/dependabot\.ya?ml$|(.*/)?action\.ya?ml$)
   entry: jactionlint
   minimum_pre_commit_version: 3.0.0
 - id: jactionlint-docker
@@ -12,12 +24,12 @@
   description: Runs jactionlint Docker image to lint GitHub Actions workflow files
   language: docker_image
   types: ["yaml"]
-  files: ^\.github/workflows/
+  files: ^(\.github/workflows/|\.github/dependabot\.ya?ml$|(.*/)?action\.ya?ml$)
   entry: ghcr.io/jdx/jactionlint:2.1.0  # x-release-please-version
 - id: jactionlint-system
   name: Lint GitHub Actions workflow files
   description: Runs system-installed jactionlint to lint GitHub Actions workflow files
   language: system
   types: ["yaml"]
-  files: ^\.github/workflows/
+  files: ^(\.github/workflows/|\.github/dependabot\.ya?ml$|(.*/)?action\.ya?ml$)
   entry: jactionlint
