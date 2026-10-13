@@ -119,7 +119,7 @@ other at its `uses:`. The online audits (`--online`) are measured separately, se
 are compared. Rules with no entry in the mapping of the harness are always "only jactionlint" in its report.
 
 The comparison below uses jactionlint from `main` over 1,109 local clones of public repositories, with `--line-tolerance 3`. zizmor reports 112,559 findings and
-jactionlint also reports 99,203 of them (88.1%); 13,356 are missed. Without the line tolerance 91,902 match (81.6%); the difference is
+jactionlint also reports 104,421 of them (92.8%); 8,138 are missed. Without the line tolerance 97,717 match (86.8%); the difference is
 mostly `artipacked`, `template-injection` and `dangerous-triggers`, where the tools point at different lines of the same finding. The
 numbers are measured again with the harness before each release. Audits with misses, at a tolerance of 3 lines:
 
@@ -144,9 +144,6 @@ numbers are measured again with the harness before each release. Audits with mis
 | `github-env` | 63 | 31 | 32 |
 | `bot-conditions` | 38 | 34 | 4 |
 | `self-repository` | 10,729 | 10,728 | 1 |
-
-The rows of `excessive-permissions` and `undocumented-permissions` were measured again with jactionlint from `main` after the
-changes described in [permissions against zizmor](#permissions-against-zizmor); the other rows are those of v2.1.0.
 
 These audits have findings and no misses: `github-app`, `misfeature`, `overprovisioned-secrets`, `secrets-inherit`, `unpinned-tools`,
 `unsound-condition`, `unsound-contains` and `unsound-ternary`. Every audit not listed has no finding on either side. `archived-uses` is
