@@ -1,0 +1,19 @@
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: octo/custom@v1
+        with:
+          path: $HOME/.cache/é
+          key: ${HOME}-$RUNNER_OS-${GITHUB_SHA}
+          restore-keys: $UNKNOWN_VARIABLE
+      # not reported: an expression, a value of several lines, an input that holds a command, a name in lower case
+      - uses: octo/custom@v1
+        with:
+          path: ${{ env.HOME }}/x
+          key: |
+            $HOME
+          other-command: $HOME
+          template: ${placeholder}
+          price: $$HOME \$HOME $1

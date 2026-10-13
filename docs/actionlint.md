@@ -121,6 +121,10 @@ A call of an overloaded function (`contains`) that fits no signature is one find
 A context that is not available at a place (`runner` in a job-level `env` key, `inputs` in the `shell` of a composite step) is one finding; actionlint also reports the properties read from it.
 `workflow-syntax` accepts `needs: []` and a filter without a value (`tags:`), which GitHub runs and actionlint 1.7 reports as an empty section.
 `if-always-true` does not report the newline at the end of a block scalar (`if: |` and `${{ }}` alone), which GitHub trims and actionlint 1.7 reports.
+The checks follow the workflow schema of GitHub where it is newer than actionlint 1.7, so these are not reported: a top-level `description:`,
+`cancel-timeout-minutes` on a job, `types` of the `image_version` event, the `stacked` type of `pull_request` and `pull_request_target`, the
+`drives` permission, `github.artifacts` and `github.artifacts_list`, an empty string in the `options` of a `choice` input of `workflow_dispatch`,
+and the `steps`, `job`, `runner` and `env` contexts, the status functions and `hashFiles` in `snapshot.if`.
 
 The `default` profile adds the security and policy rules, such as `unpinned-uses`, `missing-permissions`, `missing-timeout`,
 `excessive-permissions`, `concurrency-limits`, `artipacked`, `cache-poisoning`, `dangerous-triggers` and `use-trusted-publishing`. The `pedantic` profile adds the noisy and opinionated

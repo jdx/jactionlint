@@ -28,10 +28,21 @@ const theURL = "https://docs.github.com/en/actions/reference/workflows-and-actio
 // extraTypes are activity types which the documentation does not list but jactionlint must accept. They are
 // added to the types scraped from the documentation, so that regenerating the table does not drop them.
 // An event of this table which is missing in the documentation is an error because it means the entry is stale.
+//
+// Add an entry only with a source that shows that GitHub accepts the type. The sources are the schema of the language
+// service, https://github.com/actions/languageservices (workflow-parser/src/workflow-v1.0.json), and the one of the
+// runner, https://github.com/actions/runner (src/Sdk/WorkflowParser/workflow-v1.0.json).
 var extraTypes = map[string][]string{
 	// GitHub documents "destroyed" for the merge_group webhook event, while the page of workflow triggers only
 	// lists "checks_requested". Workflows using both types must lint clean. (23f9662c)
 	"merge_group": {"destroyed"},
+	// https://github.com/actions/languageservices/pull/384 ("The `stacked` activity type is now available on
+	// `pull_request` and `pull_request_target` events for Actions.")
+	"pull_request":        {"stacked"},
+	"pull_request_target": {"stacked"},
+	// `image-version-activity-type` of the schema allows created, ready and deleted. The documentation says
+	// "Not applicable" for the activity types of the event.
+	"image_version": {"created", "ready", "deleted"},
 }
 
 // applyExtraTypes adds the activity types of extraTypes which are not in parsed yet.
