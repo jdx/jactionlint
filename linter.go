@@ -1087,6 +1087,7 @@ func (l *Linter) finishCheck(path string, content []byte, all []*Error, cfg *Con
 		}
 		all = dropForGeneratedFile(all, mode)
 	}
+	l.attachImageFixes(l.onlineSessionOrNil(cfg), content, all)
 	if isWorkflow {
 		sess, _ := l.onlineSession(cfg)
 		l.attachPinFixes(sess, cfg, content, all, ic != nil && cfg.readsActionsLock() && l.lockListsWorkflow(ic.project, path))

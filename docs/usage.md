@@ -1025,6 +1025,26 @@ image or a line with a comment that does not name the ref is left to you.
 jactionlint --online --fix
 ```
 
+#### Pin container images to digests with `--online --fix=unsafe`
+
+The images of `container:`, `services:`, `uses: docker://` and `runs.image: docker://` (the findings of `unpinned-images` and of `unpinned-uses`) get the
+digest which their tag has in the registry, in the format of Renovate:
+
+```yaml
+container: postgres:16
+# becomes
+container: postgres:16@sha256:ca0bd484cb98bf4b24eb1010e73fb3fcbd6714d240fbc1a10eea5b7dbecb641d
+```
+
+The fix is unsafe, so it needs `--fix=unsafe`: a tag moves, and the digest pins the image of today. Docker Hub and ghcr.io are asked
+(anonymously, and with the GitHub token for a private image of ghcr.io); another registry is not, and the finding says so. The registries
+are asked once for each image and tag, with a timeout, and `--online-allow` and `--online-deny` apply (an image is matched as `owner/image`). See
+[the check](checks.md#check-unpinned-images).
+
+```sh
+jactionlint --online --fix=unsafe
+```
+
 <a id="hk"></a>
 ### hk
 

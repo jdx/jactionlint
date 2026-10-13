@@ -1565,7 +1565,7 @@
           ]
         },
         "deprecated-node-runtime": {
-          "description": "A Node.js runtime that GitHub Actions removed is declared by an action or by an action that is used. Group: policy. Profile: pedantic. Default level: warn. https://jactionlint.jdx.dev/rules#deprecated-node-runtime",
+          "description": "A Node.js runtime that GitHub Actions removed is declared, used or selected by an environment variable. Group: policy. Profile: pedantic. Default level: warn. https://jactionlint.jdx.dev/rules#deprecated-node-runtime",
           "oneOf": [
             {
               "$ref": "#/definitions/level"
