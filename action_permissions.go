@@ -204,9 +204,12 @@ var actionPermissionTable = map[string]actionPermission{
 			if !s.tokenIsGitHubToken("token") {
 				return permNeeds{}
 			}
+			// The values of `upload` are always, failure-only and never; the action also reads "true" as always and
+			// "false" as failure-only (src/actions-util.ts getUploadValue), which still uploads when the run fails, and
+			// takes any other value as always. Only "never" uploads nothing.
 			if s.set("upload") {
 				v, ok := s.literal("upload")
-				if !ok || strings.EqualFold(v, "never") || isFalseLiteral(v) {
+				if !ok || v == "never" {
 					return permNeeds{}
 				}
 			}
@@ -240,13 +243,13 @@ var actionPermissionTable = map[string]actionPermission{
 	"actions/labeler": anyTokenNeeds("https://github.com/actions/labeler#recommended-permissions", "repo-token", "pull-requests", "issues"),
 
 	// actions/dependency-review-action: `comment-summary-in-pr` "If enabled, you must give the workflow or job the
-	// `pull-requests: write` permission".
+	// `pull-requests: write` permission" (the action reads `true` as `always`, schemas.ts).
 	// https://github.com/actions/dependency-review-action#configuration-options
 	"actions/dependency-review-action": {
 		Source: "https://github.com/actions/dependency-review-action#configuration-options",
 		Needs: func(s actionStep) permNeeds {
 			v, ok := s.literal("comment-summary-in-pr")
-			if !ok || !s.tokenIsGitHubToken("repo-token") || (!strings.EqualFold(v, "always") && !strings.EqualFold(v, "on-failure")) {
+			if !ok || !s.tokenIsGitHubToken("repo-token") || (!strings.EqualFold(v, "always") && !strings.EqualFold(v, "on-failure") && !isTrueLiteral(v)) {
 				return permNeeds{}
 			}
 			return permNeeds{All: writes("pull-requests")}
@@ -341,7 +344,10 @@ var actionPermissionTable = map[string]actionPermission{
 	"release-drafter/release-drafter": {
 		Source: "https://github.com/release-drafter/release-drafter#usage",
 		Needs: func(s actionStep) permNeeds {
-			if !s.tokenIsGitHubToken("token") || s.anyFlagMayBeOn("disable-releaser", "dry-run") {
+			// "A pull request merge ref forces dry-run mode because its merge commit is temporary", and the default
+			// target is the ref of the workflow, so a run for a pull request writes nothing unless `commitish` says so
+			if !s.tokenIsGitHubToken("token") || s.anyFlagMayBeOn("disable-releaser", "dry-run") || s.set("commitish") ||
+				s.ctx.hasTrigger("pull_request", "pull_request_target") {
 				return permNeeds{}
 			}
 			return permNeeds{All: writes("contents")}

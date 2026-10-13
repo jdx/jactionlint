@@ -38,6 +38,8 @@ func TestRuleInsufficientPermissions(t *testing.T) {
 		{"gh-pages with github_token", head + job + "    permissions:\n      contents: read\n    steps:\n      - uses: peaceiris/actions-gh-pages@v4 # want\n        with:\n          github_token: ${{ secrets.GITHUB_TOKEN }}\n"},
 		{"release-please", head + job + "    permissions:\n      contents: write\n    steps:\n      - uses: googleapis/release-please-action@v4 # want\n"},
 		{"release-drafter", head + job + "    permissions:\n      pull-requests: read\n    steps:\n      - uses: release-drafter/release-drafter@v6 # want\n"},
+		{"release-drafter on pull requests runs in dry-run mode", "on: pull_request\n" + job + "    permissions:\n      pull-requests: read\n    steps:\n      - uses: release-drafter/release-drafter@v7\n"},
+		{"release-drafter with a target of its own", head + job + "    permissions:\n      pull-requests: read\n    steps:\n      - uses: release-drafter/release-drafter@v7\n        with:\n          commitish: main\n"},
 		{"autolabeler", head + job + "    permissions:\n      contents: read\n    steps:\n      - uses: release-drafter/release-drafter/autolabeler@v6 # want\n"},
 		{"test-reporter", head + job + "    permissions:\n      contents: read\n    steps:\n      - uses: dorny/test-reporter@v1 # want\n"},
 		{"publish-unit-test-result", head + job + "    permissions:\n      contents: read\n    steps:\n      - uses: EnricoMi/publish-unit-test-result-action@v2 # want\n"},
@@ -74,6 +76,10 @@ func TestRuleInsufficientPermissions(t *testing.T) {
 		{"release-please with the skip options off", head + job + "    permissions:\n      contents: write\n    steps:\n      - uses: googleapis/release-please-action@v4 # want\n        with:\n          skip-github-release: false\n          skip-github-pull-request: false\n          fork: false\n"},
 		{"release-drafter with the options off", head + job + "    permissions:\n      pull-requests: read\n    steps:\n      - uses: release-drafter/release-drafter@v6 # want\n        with:\n          disable-releaser: false\n          dry-run: false\n"},
 		{"aws with the options off", head + job + "    permissions: {}\n    steps:\n      - uses: aws-actions/configure-aws-credentials@v4 # want\n        with:\n          role-to-assume: arn:aws:iam::1:role/x\n          role-chaining: false\n          force-skip-oidc: false\n"},
+
+		{"analyze with upload: false still uploads after a failure", head + job + "    permissions:\n      contents: read\n    steps:\n      - uses: github/codeql-action/analyze@v3 # want\n        with:\n          upload: false\n"},
+		{"analyze with upload: failure-only", head + job + "    permissions:\n      contents: read\n    steps:\n      - uses: github/codeql-action/analyze@v3 # want\n        with:\n          upload: failure-only\n"},
+		{"dependency-review with comment-summary-in-pr: true", head + job + "    permissions:\n      contents: read\n    steps:\n      - uses: actions/dependency-review-action@v4 # want\n        with:\n          comment-summary-in-pr: true\n"},
 
 		// What is not reported: the permissions are not explicit or are enough
 		{"attest with a token of its own and the OIDC token", head + job + "    permissions:\n      id-token: write\n    steps:\n      - uses: actions/attest-build-provenance@v2\n        with:\n          github-token: ${{ secrets.PAT }}\n          subject-path: a\n"},
