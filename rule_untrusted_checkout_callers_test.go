@@ -135,6 +135,15 @@ func TestUntrustedCheckoutCallers(t *testing.T) {
 			"a.yml": ucActionCaller("pull_request_target", "    environment: ci\n", headSHA),
 			"b.yml": ucActionCaller("pull_request_target", "", headSHA),
 		}, ".github/actions/build/action.yml", 1, ".github/workflows/b.yml"},
+		{"composite action, the call step runs after the permission check failed", map[string]string{
+			"pr.yml": "on: pull_request_target\njobs:\n  call:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: sushichop/action-repository-permission@v3\n        with:\n          required-permission: write\n      - uses: ./.github/actions/build\n        if: always()\n        with:\n          ref: " + headSHA + "\n",
+		}, ".github/actions/build/action.yml", 1, ".github/workflows/pr.yml"},
+		{"composite action, the call step after a permission check", map[string]string{
+			"pr.yml": "on: pull_request_target\njobs:\n  call:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: sushichop/action-repository-permission@v3\n        with:\n          required-permission: write\n      - uses: ./.github/actions/build\n        with:\n          ref: " + headSHA + "\n",
+		}, ".github/actions/build/action.yml", 0, ""},
+		{"composite action, an input and a call in another case", map[string]string{
+			"pr.yml": "on: pull_request_target\njobs:\n  call:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: ./.github/actions/build\n        with:\n          REF: " + headSHA + "\n",
+		}, ".github/actions/build/action.yml", 1, "inputs.ref"},
 		{"composite action, the call step is for another event", map[string]string{
 			"pr.yml": "on: [pull_request_target, push]\njobs:\n  call:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: ./.github/actions/build\n        if: github.event_name == 'push'\n        with:\n          ref: " + headSHA + "\n",
 		}, ".github/actions/build/action.yml", 0, ""},
@@ -209,6 +218,7 @@ func TestUntrustedCheckoutLocalActionCheckout(t *testing.T) {
 		{"the action is not composite", "name: x\ndescription: d\nruns:\n  using: node20\n  main: index.js\n", prt + "      - uses: ./.github/actions/checkout-pr\n        with:\n          ref: " + headSHA + "\n      - run: make\n"},
 		{"a permission check before the checkout in the action", "name: x\ndescription: d\nruns:\n  using: composite\n  steps:\n    - uses: sushichop/action-repository-permission@v3\n      with:\n        required-permission: write\n    - uses: actions/checkout@v1\n      with:\n        ref: ${{ inputs.ref }}\n", prt + "      - uses: ./.github/actions/checkout-pr\n        with:\n          ref: " + headSHA + "\n      - run: make\n"},
 		{"the checkout in the action is for another event", action("actions/checkout@v1", "${{ inputs.ref }}") + "      if: github.event_name == 'push'\n", "on: [pull_request_target, push]\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: ./.github/actions/checkout-pr\n        with:\n          ref: " + headSHA + "\n      - run: make\n"},
+		{"a permission check in the action, and a checkout that runs after a failure", "name: x\ndescription: d\nruns:\n  using: composite\n  steps:\n    - uses: sushichop/action-repository-permission@v3\n      with:\n        required-permission: write\n    - uses: actions/checkout@v1\n      if: always()\n      with:\n        ref: ${{ inputs.ref }}\n", prt + "      - uses: ./.github/actions/checkout-pr # want\n        with:\n          ref: " + headSHA + "\n      - run: make\n"},
 		{"the step is for maintainers", action("actions/checkout@v1", "${{ inputs.ref }}"), prt + "      - uses: ./.github/actions/checkout-pr\n        if: github.event.pull_request.author_association == 'MEMBER'\n        with:\n          ref: " + headSHA + "\n      - run: make\n"},
 	}
 	for _, tc := range tests {

@@ -121,6 +121,16 @@ func associationIsGuard(exprs []ExprNode) bool {
 	return guard
 }
 
+// associationIsNegated reports whether the condition turns the check of the association around: `!contains(..., association)`,
+// `!(association == 'OWNER')` or `association != 'OWNER'` let everyone but the named associations through.
+func associationIsNegated(r exprRef) bool {
+	if r.negated {
+		return true
+	}
+	c, ok := r.parent.(*CompareOpNode)
+	return ok && c.Kind == CompareOpNodeKindNotEq
+}
+
 var reAssociation = regexp.MustCompile(`[A-Z_]+`)
 
 // isPermissionGate reports whether the step stops the job unless the user who started it, the author of the comment, has

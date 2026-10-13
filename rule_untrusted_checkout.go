@@ -217,12 +217,12 @@ func (rule *RuleUntrustedCheckout) VisitJobPre(n *Job) error {
 	var dirs []string // the keys of pending in the order they were added
 	jobMerged := conditionRequiresMerged(n.If)
 	for _, s := range flattenSteps(n.Steps) {
-		if gated {
-			break // the steps after a permission check only run for a user who may write
-		}
 		if isPermissionGate(s) {
 			gated = true
 			continue
+		}
+		if gated && !stepRunsAfterFailure(s) {
+			continue // the steps after a permission check only run for a user who may write
 		}
 		stepEvents := eventsAfterCondition(jobEvents, s.If)
 		if len(stepEvents) == 0 {

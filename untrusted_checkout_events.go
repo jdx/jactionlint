@@ -24,6 +24,12 @@ func eventsAfterCondition(events []string, cond *String) []string {
 	return ret
 }
 
+// stepRunsAfterFailure reports whether the condition of the step lets it run after a step failed (`always()`, `failure()`,
+// `cancelled()`): a permission check that failed does not hold it back.
+func stepRunsAfterFailure(s *Step) bool {
+	return s.If != nil && runsAfterSkippedNeeds(s.If)
+}
+
 // runsAfterSkippedNeeds reports whether the condition lets the job run although a job that it needs was skipped: it
 // calls `always()`, `cancelled()` or `failure()`.
 func runsAfterSkippedNeeds(cond *String) bool {
