@@ -148,7 +148,7 @@ func isStableMatrixString(v *RawYAMLString) bool {
 	}
 	// A number in another form (0x1F, 1_000, 010, .5, .inf) is not looked at; a text such as 22.04-arm is a string
 	if c := v.Value[0]; c >= '0' && c <= '9' || c == '-' || c == '+' || c == '.' {
-		return strings.Trim(strings.ToLower(v.Value), "0123456789+-._abcdefxoinf") != ""
+		return strings.Trim(strings.ToLower(v.Value), "0123456789+-._abcdefxoin") != ""
 	}
 	return true
 }
