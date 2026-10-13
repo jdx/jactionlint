@@ -37,6 +37,9 @@ type RuleUntrustedCheckout struct {
 	path       string
 	calls      []callContext
 	inputTaint map[string]callInput
+	// inputNumber are the inputs that the calls fill with the number of the pull request that a comment is on, with where it
+	// comes from.
+	inputNumber map[string]string
 	// actions are the local composite actions that were read, by directory
 	actions map[string]*Workflow
 	// allPrivileged are the privileged events of the workflow, privileged those that the job being judged runs for.
@@ -143,7 +146,7 @@ func isMergedContext(e ExprNode) bool {
 
 // VisitWorkflowPre is callback when visiting Workflow node before visiting its children.
 func (rule *RuleUntrustedCheckout) VisitWorkflowPre(n *Workflow) error {
-	rule.privileged, rule.wf, rule.calls, rule.inputTaint = nil, n, nil, nil
+	rule.privileged, rule.wf, rule.calls, rule.inputTaint, rule.inputNumber = nil, n, nil, nil, nil
 	if !rule.Config().RuleEnabled("untrusted-checkout") {
 		return nil
 	}
@@ -153,11 +156,16 @@ func (rule *RuleUntrustedCheckout) VisitWorkflowPre(n *Workflow) error {
 		// a reusable workflow and a composite action run for the events of the workflows that call them
 		if key := calleeKey(rule.project, rule.path); key != "" {
 			rule.calls = rule.callContexts(key, 0, map[string]bool{})
-			rule.inputTaint = map[string]callInput{}
+			rule.inputTaint, rule.inputNumber = map[string]callInput{}, map[string]string{}
 			events := slices.Clone(rule.privileged)
 			for _, c := range rule.calls {
 				events = append(events, c.events...)
 				mergeInputs(rule.inputTaint, c.inputs)
+				for name, d := range c.numbers {
+					if _, ok := rule.inputNumber[name]; !ok {
+						rule.inputNumber[name] = d
+					}
+				}
 			}
 			rule.privileged = sortedEvents(events)
 			calleeKnown = len(rule.calls) > 0 && ((n.Action != nil && n.Action.Callers.Known()) || (n.callerEvents != nil && n.callerEvents.Known))
@@ -203,6 +211,8 @@ func (rule *RuleUntrustedCheckout) VisitJobPre(n *Job) error {
 		}
 	}
 	gated := false
+	jobEvents := rule.privileged
+	defer rule.setEvents(jobEvents)
 	pending := map[string][]*untrustedCheckout{}
 	var dirs []string // the keys of pending in the order they were added
 	jobMerged := conditionRequiresMerged(n.If)
@@ -214,9 +224,11 @@ func (rule *RuleUntrustedCheckout) VisitJobPre(n *Job) error {
 			gated = true
 			continue
 		}
-		if len(eventsAfterCondition(rule.privileged, s.If)) == 0 {
+		stepEvents := eventsAfterCondition(jobEvents, s.If)
+		if len(stepEvents) == 0 {
 			continue // the step does not run for the events that this rule judges
 		}
+		rule.setEvents(stepEvents) // what ghAny, comment and the event of the message say is about this step
 		if conditionIsGuard(s.If) {
 			continue // a step a maintainer has to allow neither runs the code nor fetches it
 		}
@@ -512,11 +524,12 @@ func (rule *RuleUntrustedCheckout) checkoutsOf(j *Job, s *Step) []*untrustedChec
 		if rule.comment && !rule.ghAny {
 			numEnv := map[string]string{}
 			if rule.wf != nil {
-				envDescs(rule.wf.Env, numEnv, issueNumberString)
+				envDescs(rule.wf.Env, numEnv, rule.numberStr)
 			}
-			envDescs(j.Env, numEnv, issueNumberString)
-			envDescs(s.Env, numEnv, issueNumberString)
-			number = newNumberTaint(script, numEnv)
+			envDescs(j.Env, numEnv, rule.numberStr)
+			envDescs(s.Env, numEnv, rule.numberStr)
+			number = newNumberTaint(script, numEnv, rule.numberValue)
+			taint.num = number
 		}
 		var ret []*untrustedCheckout
 		earlier := rule.fetches

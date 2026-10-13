@@ -58,6 +58,9 @@ type revTaint struct {
 	// comment is on only has the contexts of that number and no refs.
 	pred func(string) (string, bool)
 	refs bool
+	// num follows the number of the pull request that a comment is on (or that a caller passes), for gh pr checkout; nil when
+	// there is none.
+	num *revTaint
 	// base is the environment the script starts with: for each name where an untrusted value comes from, "" for a
 	// variable that is exported but clean.
 	base map[string]string
@@ -83,9 +86,9 @@ func (rule *RuleUntrustedCheckout) newTaint(s *runscript.Script, base map[string
 
 // newNumberTaint follows the number of the pull request that a comment is on, which `gh pr checkout` takes as a
 // revision.
-func newNumberTaint(s *runscript.Script, base map[string]string) *revTaint {
+func newNumberTaint(s *runscript.Script, base map[string]string, pred func(string) (string, bool)) *revTaint {
 	t := newRevTaint(s, base)
-	t.pred, t.refs = issueNumberValue, false
+	t.pred, t.refs = pred, false
 	return t
 }
 
@@ -335,15 +338,18 @@ func firstWorkTree(cmds []*runscript.Command) int {
 // scriptChecksOut reports whether running the script puts untrusted code in the working tree: it describes the
 // revision, and says what the script runs after that ("" when it runs nothing, so a later step has to). dir is the
 // directory the script runs in.
-func (rule *RuleUntrustedCheckout) scriptChecksOut(sc *runscript.Script, base map[string]string, dir string, depth int) (what, how string, ok bool) {
+func (rule *RuleUntrustedCheckout) scriptChecksOut(sc *runscript.Script, base, numBase map[string]string, dir string, depth int) (what, how string, ok bool) {
 	t := rule.newTaint(sc, base)
+	if numBase != nil {
+		t.num = newNumberTaint(sc, numBase, rule.numberValue)
+	}
 	for i, c := range sc.Commands {
 		var env map[string]bool
 		if c.Name == "git" || c.Name == "gh" {
 			env = t.names(c.Offset)
 		}
 		at := i // the command after which the code is in the working tree
-		what, ok = rule.commandChecksOutUntrusted(c, env, nil)
+		what, ok = rule.commandChecksOutUntrusted(c, env, t.num)
 		if !ok && c.Name == "git" && c.Verb() == "fetch" {
 			if k := firstWorkTree(sc.Commands[i+1:]); k >= 0 {
 				if what, ok = rule.commandNamesUntrusted(c, env); ok {
@@ -406,7 +412,11 @@ func (rule *RuleUntrustedCheckout) followScript(t *revTaint, c *runscript.Comman
 	if child == nil {
 		return "", "", false
 	}
-	return rule.scriptChecksOut(child, childBase(t, c, sw, inherited), cwd, depth)
+	var numBase map[string]string
+	if t.num != nil {
+		numBase = childBase(t.num, c, sw, t.num.base)
+	}
+	return rule.scriptChecksOut(child, childBase(t, c, sw, inherited), numBase, cwd, depth)
 }
 
 // envNameOf returns the variable that an entry of an environment file ("NAME=value") sets, "" if it is not one.
