@@ -92,6 +92,13 @@ func TestRuleInsufficientPermissions(t *testing.T) {
 		{"a job that never runs", head + "jobs:\n  t:\n    if: false\n    runs-on: ubuntu-latest\n    permissions: {}\n    steps:\n      - uses: actions/deploy-pages@v4\n"},
 		{"a step that may fail", head + job + "    permissions: {}\n    steps:\n      - uses: github/codeql-action/upload-sarif@v3\n        continue-on-error: true\n"},
 
+		// The inputs may come from an expression: they may give another token
+		{"a with that is one expression", head + job + "    permissions: {}\n    steps:\n      - uses: github/codeql-action/upload-sarif@v3\n        with: ${{ fromJSON(inputs.with) }}\n"},
+		{"a with with an insert key", head + job + "    permissions: {}\n    steps:\n      - uses: softprops/action-gh-release@v2\n        with:\n          files: a\n          ${{ insert }}: ${{ matrix.inputs }}\n"},
+		{"aws with an insert key", head + job + "    permissions: {}\n    steps:\n      - uses: aws-actions/configure-aws-credentials@v4\n        with:\n          role-to-assume: arn:aws:iam::1:role/x\n          ${{ insert }}: ${{ matrix.inputs }}\n"},
+		{"a push after a checkout whose inputs are an expression", head + job + "    permissions: {}\n    steps:\n      - uses: actions/checkout@v4\n        with: ${{ fromJSON(inputs.checkout) }}\n      - run: git push\n"},
+		{"auto commit after a checkout with an insert key", head + job + "    permissions: {}\n    steps:\n      - uses: actions/checkout@v4\n        with:\n          ${{ insert }}: ${{ matrix.inputs }}\n      - uses: stefanzweifel/git-auto-commit-action@v5\n"},
+
 		// Another credential than the GITHUB_TOKEN
 		{"upload-sarif with another token", head + job + "    permissions: {}\n    steps:\n      - uses: github/codeql-action/upload-sarif@v3\n        with:\n          token: ${{ secrets.PAT }}\n"},
 		{"create-pull-request with a token", head + job + "    permissions:\n      contents: read\n    steps:\n      - uses: peter-evans/create-pull-request@v7\n        with:\n          token: ${{ secrets.PAT }}\n"},

@@ -32,6 +32,11 @@ func tableScopes(w *Workflow, j *Job) (scopes map[string]int, inexact []string) 
 		if needs.Pedantic || len(needs.All)+len(needs.Any) == 0 {
 			continue
 		}
+		if a.InputsUnknown() {
+			// the inputs may give another token, so what the action needs is not told
+			inexact = append(inexact, ref.CanonicalName())
+			continue
+		}
 		if !needs.Exact {
 			inexact = append(inexact, ref.CanonicalName())
 			continue

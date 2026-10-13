@@ -203,3 +203,18 @@ func TestFixMissingPermissionsWithAnActionTheTableDoesNotDetermine(t *testing.T)
 		}
 	}
 }
+
+// A step whose inputs are an expression may give another token, so what its action needs is not told and there is no fix.
+func TestFixMissingPermissionsWithUnknownInputs(t *testing.T) {
+	for _, with := range []string{"        with: ${{ fromJSON(inputs.with) }}\n", "        with:\n          files: a\n          ${{ insert }}: ${{ matrix.inputs }}\n"} {
+		src := "on: push\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: softprops/action-gh-release@v2\n" + with
+		w, err := Parse([]byte(src))
+		if err != nil {
+			t.Fatal(err)
+		}
+		f, why := fixMissingPermissionsWhy(w)
+		if f != nil || why == nil || why.Code != NoFixNeedsJudgment {
+			t.Errorf("%q: want no fix and a reason: %+v %+v", with, f, why)
+		}
+	}
+}

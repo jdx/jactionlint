@@ -157,7 +157,7 @@ func (rule *RuleInsufficientPermissions) checkStep(g *grantedPermissions, s *Ste
 	switch e := s.Exec.(type) {
 	case *ExecAction:
 		a, ref := stepAction(s)
-		if a == nil || ref.Kind != UsesAction {
+		if a == nil || ref.Kind != UsesAction || a.InputsUnknown() {
 			return
 		}
 		name := ref.CanonicalName()
@@ -246,6 +246,10 @@ func (t *checkoutTrail) observe(s *Step) {
 		return
 	}
 	t.seen++
+	if a.InputsUnknown() {
+		t.custom = true // the inputs may give a token or an SSH key
+		return
+	}
 	st := actionStep{step: s, act: a}
 	if !st.tokenIsGitHubToken("token") || st.set("ssh-key") || st.set("repository") || st.set("path") {
 		t.custom = true
