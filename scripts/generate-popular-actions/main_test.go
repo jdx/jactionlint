@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
@@ -712,5 +713,98 @@ func TestWriteRegistryNeedsDetectAndRegistry(t *testing.T) {
 		if !strings.Contains(stderr.String(), "-w flag requires both -d and -r flags") {
 			t.Fatalf("%v: stderr was unexpected: %q", args, stderr.String())
 		}
+	}
+}
+
+func TestDetectWriteRegistryEmptyTags(t *testing.T) {
+	const input = `[
+    {
+        "slug": "a/one",
+        "tags": [],
+        "next": "v3"
+    },
+    {
+        "slug": "b/two",
+        "tags": [ ],
+        "next": "v2"
+    }
+]
+`
+	f := filepath.Join(t.TempDir(), "registry.json")
+	if err := os.WriteFile(f, []byte(input), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	g := newGen(io.Discard, io.Discard, io.Discard)
+	g.transport = roundTripFunc(releaseExists)
+	if status := g.run([]string{"test", "-d", "-w", "-r", f}); status != 0 {
+		t.Fatal("exit status is non-zero:", status)
+	}
+	b, err := os.ReadFile(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := strings.NewReplacer(
+		`"tags": [],
+        "next": "v3"`, `"tags": ["v3"],
+        "next": "v4"`,
+		`"tags": [ ],
+        "next": "v2"`, `"tags": ["v2"],
+        "next": "v3"`,
+	).Replace(input)
+	if diff := cmp.Diff(want, string(b)); diff != "" {
+		t.Fatalf("registry file was not updated as expected: %s", diff)
+	}
+	var parsed []*registry
+	if err := json.Unmarshal(b, &parsed); err != nil {
+		t.Fatalf("updated registry is not valid JSON: %s: %s", err, b)
+	}
+}
+
+func TestDetectWriteRegistryInvalidResultIsNotWritten(t *testing.T) {
+	// Each entry is valid on its own but the array lacks a comma, so the result cannot be read back
+	const input = `[
+    {
+        "slug": "a/one",
+        "tags": ["v1", "v2"],
+        "next": "v3"
+    }
+    {
+        "slug": "d/four",
+        "tags": ["v1"]
+    }
+]
+`
+	f := filepath.Join(t.TempDir(), "registry.json")
+	if err := os.WriteFile(f, []byte(input), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	stderr := &bytes.Buffer{}
+	g := newGen(io.Discard, stderr, io.Discard)
+	g.transport = roundTripFunc(releaseExists)
+	// The registry itself is invalid, so it is rejected before anything is written
+	if status := g.run([]string{"test", "-d", "-w", "-r", f}); status != 1 {
+		t.Fatal("exit status is not 1:", status)
+	}
+	b, err := os.ReadFile(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(b) != input {
+		t.Fatalf("registry file was modified: %s", b)
+	}
+}
+
+func TestRegisterNewReleasesRejectsInvalidResult(t *testing.T) {
+	const input = `[
+    {
+        "slug": "a/one",
+        "tags": ["v1", "v2"],
+        "next": "v3"
+    } trailing
+]`
+	found := []*registry{{Slug: "a/one", Tags: []string{"v1", "v2"}, Next: "v3"}}
+	updated, _, _, err := registerNewReleases([]byte(input), found)
+	if err == nil || !strings.Contains(err.Error(), "not valid JSON") {
+		t.Fatalf("unexpected result: %q, %v", updated, err)
 	}
 }

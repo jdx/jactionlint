@@ -492,7 +492,14 @@ func registerNewReleases(raw []byte, found []*registry) (updated []byte, added, 
 			err = fmt.Errorf("could not find \"tags\" and \"next\" in the registry entry of %s", key)
 			return block
 		}
-		block = registryTagsRe.ReplaceAll(block, []byte(fmt.Sprintf(`${1}${2}, %q${3}`, r.Next)))
+		block = registryTagsRe.ReplaceAllFunc(block, func(tags []byte) []byte {
+			m := registryTagsRe.FindSubmatch(tags)
+			sep := ", "
+			if len(bytes.TrimSpace(m[2])) == 0 {
+				sep = "" // empty array: no tag to separate from
+			}
+			return []byte(fmt.Sprintf(`%s%s%s%q%s`, m[1], bytes.TrimRight(m[2], " \t\r\n"), sep, r.Next, m[3]))
+		})
 		block = registryNextRe.ReplaceAll(block, []byte(fmt.Sprintf(`${1}"v%d"`, n+1)))
 		added = append(added, r.spec(r.Next))
 		return block
@@ -504,6 +511,11 @@ func registerNewReleases(raw []byte, found []*registry) (updated []byte, added, 
 		if !done[k] {
 			return nil, nil, nil, fmt.Errorf("could not find the registry entry of %s in the registry file", k)
 		}
+	}
+	// Never hand back a registry which cannot be read again
+	var check []*registry
+	if err := json.Unmarshal(updated, &check); err != nil {
+		return nil, nil, nil, fmt.Errorf("the updated registry is not valid JSON, the registry file was not modified: %w", err)
 	}
 	sort.Strings(added)
 	sort.Strings(manual)
