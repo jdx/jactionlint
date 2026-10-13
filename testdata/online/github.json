@@ -9,6 +9,70 @@
     "new-owner": true
   },
   "repos": {
+    "astral-sh/setup-uv": {
+      "repo": {
+        "archived": false,
+        "default_branch": "main"
+      },
+      "refs": {
+        "heads/v10.3.0": {
+          "found": false
+        }
+      },
+      "releases": {
+        "v10.3.0": {
+          "found": true,
+          "immutable": true
+        },
+        "v10": {
+          "found": false
+        },
+        "main": {
+          "found": false
+        }
+      }
+    },
+    "pypa/gh-action-pypi-publish": {
+      "repo": {
+        "archived": false,
+        "default_branch": "release/v1"
+      },
+      "refs": {
+        "heads/v1.14.0": {
+          "found": false
+        },
+        "heads/v1.14.1": {
+          "found": false
+        }
+      },
+      "releases": {
+        "v1.14.1": {
+          "found": true,
+          "immutable": true
+        },
+        "v1.14.0": {
+          "found": true
+        }
+      }
+    },
+    "example/immutable-and-branch": {
+      "repo": {
+        "archived": false,
+        "default_branch": "main"
+      },
+      "refs": {
+        "heads/v1.0.0": {
+          "sha": "8888888888888888888888888888888888888888",
+          "found": true
+        }
+      },
+      "releases": {
+        "v1.0.0": {
+          "found": true,
+          "immutable": true
+        }
+      }
+    },
     "example/environments": {
       "repo": {
         "archived": false,

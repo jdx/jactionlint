@@ -1,0 +1,10 @@
+on:
+  issue_comment:
+    types: [created]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - run: bash -c "echo $BODY"
+        env:
+          BODY: ${{ github.event.comment.body }}

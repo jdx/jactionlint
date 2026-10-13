@@ -157,6 +157,7 @@ type onlineSession struct {
 	workflows  memo[remoteWorkflowKey, *ReusableWorkflowMetadata]
 	pins       memo[pinProblemsKey, []pinProblem]
 	owners     memo[string, *GitHubOwner]
+	releases   memo[releaseKey, *GitHubRelease]
 
 	environments memo[environmentKey, environmentResult]
 }
