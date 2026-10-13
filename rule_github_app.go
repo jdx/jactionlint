@@ -6,6 +6,18 @@ import "strings"
 // short-lived installation token.
 const createGitHubAppTokenAction = "actions/create-github-app-token"
 
+// The other actions which exchange the credentials of a GitHub App for a token. Their inputs are not the ones of
+// actions/create-github-app-token:
+//
+//   - tibdex/github-app-token (archived): "permissions" and "repositories" are JSON, both default to everything the
+//     installation has, and "revoke" is true unless set to false
+//   - peter-murray/workflow-application-token-action: "permissions" ("issues:read,packages:read") defaults to everything,
+//     "organization" picks the installation, there is no list of repositories, and "revoke_token" is false unless set to true
+const (
+	tibdexGitHubAppAction      = "tibdex/github-app-token"
+	peterMurrayGitHubAppAction = "peter-murray/workflow-application-token-action"
+)
+
 // RuleGitHubApp is a rule checker which reports the ways of using actions/create-github-app-token
 // that issue a token which is more powerful or lives longer than the job needs:
 //
@@ -13,6 +25,9 @@ const createGitHubAppTokenAction = "actions/create-github-app-token"
 //   - owner without repositories gives the token access to every repository of the owner that has the
 //     app installed
 //   - no permission-* input gives the token every permission the app was granted
+//
+// The same is checked, with their own inputs, for tibdex/github-app-token and
+// peter-murray/workflow-application-token-action.
 type RuleGitHubApp struct {
 	RuleBase
 }
@@ -58,7 +73,17 @@ func (rule *RuleGitHubApp) VisitStep(n *Step) error {
 		return nil
 	}
 	a, ref := stepAction(n)
-	if a == nil || !ref.isRepoAction(createGitHubAppTokenAction) {
+	if a == nil {
+		return nil
+	}
+	switch {
+	case ref.isRepoAction(tibdexGitHubAppAction):
+		rule.checkTibdex(a)
+		return nil
+	case ref.isRepoAction(peterMurrayGitHubAppAction):
+		rule.checkPeterMurray(a)
+		return nil
+	case !ref.isRepoAction(createGitHubAppTokenAction):
 		return nil
 	}
 
@@ -88,6 +113,39 @@ func (rule *RuleGitHubApp) VisitStep(n *Step) error {
 	return nil
 }
 
+// checkTibdex checks a use of tibdex/github-app-token.
+func (rule *RuleGitHubApp) checkTibdex(a *ExecAction) {
+	if v, ok := a.input("revoke"); ok && isFalseLiteral(v) {
+		rule.ReportID("github-app", a.Inputs["revoke"].Value.Pos, "\"revoke: false\" keeps the GitHub App token valid after the job ends. remove it so that the token is revoked in the post step")
+	}
+	if a.InputsUnknown() {
+		return // the inputs may have what is missing
+	}
+	if v, ok := a.input("repositories"); !ok || strings.TrimSpace(v) == "" {
+		rule.ReportID("github-app", a.Uses.Pos, "no \"repositories\" input is set, so the token has access to every repository that the installation of the GitHub App can access. list the repositories the token is for, as a JSON array like '[\"owner/repo\"]'")
+	}
+	if v, ok := a.input("permissions"); !ok || strings.TrimSpace(v) == "" {
+		rule.ReportID("github-app", a.Uses.Pos, "no \"permissions\" input is set, so the token gets every permission granted to the GitHub App. request only what the job needs, as JSON like '{\"contents\": \"read\"}'")
+	}
+}
+
+// checkPeterMurray checks a use of peter-murray/workflow-application-token-action.
+func (rule *RuleGitHubApp) checkPeterMurray(a *ExecAction) {
+	if a.InputsUnknown() {
+		return // the inputs may have what is missing
+	}
+	if v, ok := a.input("revoke_token"); !ok || strings.TrimSpace(v) == "" || isFalseLiteral(v) {
+		pos := a.Uses.Pos
+		if in := a.Inputs["revoke_token"]; ok && in != nil && in.Value != nil && in.Value.Pos != nil {
+			pos = in.Value.Pos
+		}
+		rule.ReportID("github-app", pos, "the GitHub App token is not revoked at the end of the job: \"revoke_token\" is false unless it is set to true. set \"revoke_token: true\" so that the token is revoked in the post step")
+	}
+	if v, ok := a.input("permissions"); !ok || strings.TrimSpace(v) == "" {
+		rule.ReportID("github-app", a.Uses.Pos, "no \"permissions\" input is set, so the token gets every permission granted to the GitHub App. request only what the job needs, for instance \"permissions: contents:read\"")
+	}
+}
+
 // orgOnly reports whether the step asks for permissions and all of them are organization permissions.
 func orgOnly(a *ExecAction) bool {
 	n := 0
@@ -105,7 +163,7 @@ func orgOnly(a *ExecAction) bool {
 
 func init() {
 	registerRules(
-		RuleInfo{ID: "github-app", Group: RuleGroupSecurity, Summary: "A GitHub App token is issued with more access or a longer life than needed.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-github-app"},
+		RuleInfo{ID: "github-app", Group: RuleGroupSecurity, Summary: "A GitHub App token (actions/create-github-app-token, tibdex/github-app-token, peter-murray/workflow-application-token-action) is issued with more access or a longer life than needed.", DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-github-app"},
 	)
 	registerRuleFactory("github-app", func(env *RuleEnv) []Rule {
 		return []Rule{NewRuleGitHubApp()}

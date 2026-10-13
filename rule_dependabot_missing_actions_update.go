@@ -16,9 +16,13 @@ var renovateConfigFiles = []string{
 
 // RuleDependabotMissingActionsUpdate is a rule to check that a repository which has workflows and
 // uses Dependabot also keeps its actions up to date with Dependabot.
+//
+// It also reports the local composite actions with `uses:` which none of the github-actions updates covers.
 type RuleDependabotMissingActionsUpdate struct {
 	DependabotRuleBase
 	project *Project
+	// src is the content of the file for the fix of the second check. It can be nil.
+	src *dependabotSource
 }
 
 // NewRuleDependabotMissingActionsUpdate creates a new RuleDependabotMissingActionsUpdate instance.
@@ -36,10 +40,17 @@ func (r *RuleDependabotMissingActionsUpdate) VisitDependabotPost(d *Dependabot) 
 	if r.project == nil || d.Pos == nil {
 		return nil
 	}
+	var updates []*DependabotUpdate
 	for _, u := range d.Updates {
 		if u.PackageEcosystem != nil && u.PackageEcosystem.Value == "github-actions" {
-			return nil
+			updates = append(updates, u)
 		}
+	}
+	if len(updates) > 0 {
+		if !usesRenovate(r.project.RootDir()) {
+			r.checkLocalActions(updates)
+		}
+		return nil
 	}
 	if usesRenovate(r.project.RootDir()) || !hasExternalActions(r.project.WorkflowsDir()) {
 		return nil
@@ -115,8 +126,8 @@ func hasExternalActions(dir string) bool {
 func init() {
 	registerRules(RuleInfo{
 		ID: "dependabot-missing-actions-update", Group: RuleGroupPolicy,
-		Summary:      "dependabot.yml has no github-actions update although the repository has workflows using actions.",
-		DefaultLevel: SeverityWarning, Profile: ProfilePedantic, DocsAnchor: "check-dependabot-missing-actions-update",
+		Summary:      "dependabot.yml has no github-actions update although the repository has workflows using actions, or its github-actions updates do not cover the local composite actions that use actions.",
+		DefaultLevel: SeverityWarning, Profile: ProfilePedantic, Fixable: true, DocsAnchor: "check-dependabot-missing-actions-update",
 	})
 	dependabotRuleFactories = append(dependabotRuleFactories, dependabotRuleFactory{
 		kind: "dependabot-missing-actions-update",
@@ -124,7 +135,11 @@ func init() {
 			if !ctx.config.RuleEnabled("dependabot-missing-actions-update") || ctx.project == nil {
 				return nil, nil
 			}
-			return NewRuleDependabotMissingActionsUpdate(ctx.project), nil
+			r := NewRuleDependabotMissingActionsUpdate(ctx.project)
+			if ctx.src != nil {
+				r.src = newDependabotSource(ctx.src)
+			}
+			return r, nil
 		},
 	})
 }

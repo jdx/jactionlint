@@ -3154,7 +3154,8 @@ nothing gained. The rule `superfluous-actions` (in the `default` profile) report
 actions (`softprops/action-gh-release`, `ncipollo/release-action`, `elgohr/Github-Release-Action`,
 `svenstaro/upload-release-action` and the archived `actions/create-release` and `actions/upload-release-asset`), which
 `gh release` replaces, `dacbd/create-issue-action`, `actions-ecosystem/action-add-labels` and `action-remove-labels` (`gh issue`,
-`gh pr`), `addnab/docker-run-action` (`docker run`) and `sergeysova/jq-action` (`jq`).
+`gh pr`), `addnab/docker-run-action` (`docker run`), `benc-uk/workflow-dispatch` (`gh workflow run`,
+[zizmor#2181](https://github.com/zizmorcore/zizmor/issues/2181)) and `sergeysova/jq-action` (`jq`).
 
 With the option `pedantic` (on under the `pedantic` profile) the rule reports the ones whose replacement takes several commands or
 misses a feature: `peter-evans/create-pull-request`, `peter-evans/create-or-update-comment`, `dtolnay/rust-toolchain`,
@@ -3792,7 +3793,14 @@ It reports:
 - `owner:` without `repositories:`, which gives the token access to every repository of the owner where the app is installed
 - `skip-token-revoke: true`, which keeps the token valid after the job instead of revoking it in the post step
 
-Only `actions/create-github-app-token` is checked. Other actions which issue app tokens are not known to the rule.
+Two other actions which issue app tokens are checked with their own inputs:
+
+| Action | Reported |
+| --- | --- |
+| `tibdex/github-app-token` (archived) | no `permissions` (a JSON object like `'{"contents": "read"}'`): every permission of the app; no `repositories` (a JSON array): every repository of the installation; `revoke: false` |
+| `peter-murray/workflow-application-token-action` | no `permissions` (`contents:read,issues:write`): every permission of the app; `revoke_token` missing or false, since the token is revoked only when it is `true`. The action has no list of repositories, `organization` only picks the installation |
+
+Other actions which issue app tokens are not known to the rule.
 
 [create-github-app-token]: https://github.com/actions/create-github-app-token
 
@@ -5404,6 +5412,30 @@ Output:
 
 The rule is `dependabot-missing-actions-update`. It is in the `pedantic` profile as a warning, or enabled explicitly with
 `rules: {dependabot-missing-actions-update: warn}`.
+
+A `github-actions` update reads the workflows of `.github/workflows` and the `action.yml` of the directory it is given. With
+`directory: /` the local composite actions (`.github/actions/*/action.yml`, or any other action of the repository that a workflow
+calls with `./path`) are never updated, which is the same mistake one level down (zizmor
+[#1806](https://github.com/zizmorcore/zizmor/issues/1806), dependabot-core
+[#6345](https://github.com/dependabot/dependabot-core/issues/6345)). When the file has a `github-actions` update, the check also reports the
+local composite actions that use an action or a reusable workflow and that no `github-actions` update names, either as `directory`
+or as an entry of `directories` (a glob counts: `*` is one name, `**` any number of directories, so `/.github/actions/**/*`
+covers every directory below `.github/actions`):
+
+```yaml
+updates:
+  - package-ecosystem: github-actions
+    directories:
+      - /
+      - /.github/actions/**/*
+    schedule:
+      interval: weekly
+```
+
+The fix replaces `directory: /` of an update that is the only `github-actions` one by `directories: ["/", "/.github/actions/**/*"]` (the
+actions that are not below `.github/actions` are listed by their directory). It makes Dependabot propose pull requests it did not, so it is
+unsafe and only applied by `--fix=unsafe`. It is not offered when the file has several `github-actions` updates or writes the key in a way
+it cannot edit. The check is silent when the repository has a Renovate configuration.
 
 <a id="check-pipeline-without-pipefail"></a>
 ## Pipelines that hide failures
@@ -7039,7 +7071,14 @@ When the repository has more tags than jactionlint reads (1000), the rule report
 An archived repository is read-only: nobody fixes the vulnerabilities of the action, or of the dependencies bundled with it. The
 rule `archived-uses` reports actions and reusable workflows which live in an archived repository. It is the same as the
 [zizmor audit][zizmor-archived-uses]. Replace the action with a maintained one, or with the commands it wraps in a `run:` step (many
-actions are thin wrappers around the `gh` CLI, which is on the GitHub-hosted runners).
+actions are thin wrappers around the `gh` CLI, which is on the GitHub-hosted runners). For the well-known archived actions the
+message names the successor ([zizmor#2028](https://github.com/zizmorcore/zizmor/issues/2028)): `actions-rs/*` (`dtolnay/rust-toolchain`
+or `cargo ...` in a script step), `crazy-max/ghaction-docker-meta` (`docker/metadata-action`), `nick-invision/retry`
+(`nick-fields/retry`), `actions/setup-ruby` (`ruby/setup-ruby`), `actions/setup-elixir` (`erlef/setup-beam`),
+`actions/setup-haskell` (`haskell-actions/setup`), `8398a7/action-slack` (`slackapi/slack-github-action`),
+`marvinpinto/action-automatic-releases` (`gh release create`), and for `actions/create-release` and `actions/upload-release-asset` the `gh release`
+command that [`superfluous-actions`](#check-superfluous-actions) names. The table only matters for a repository that the check found
+archived, and any other gets the general advice.
 
 Example input:
 

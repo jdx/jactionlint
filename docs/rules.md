@@ -384,11 +384,12 @@ An update in dependabot.yml allows insecure external code execution.
 
 ## dependabot-missing-actions-update
 
-dependabot.yml has no github-actions update although the repository has workflows using actions.
+dependabot.yml has no github-actions update although the repository has workflows using actions, or its github-actions updates do not cover the local composite actions that use actions.
 
 - Group: policy
 - Default level: warn
 - Profile: pedantic
+- Fixable: yes
 - Details and examples: [checks](./checks.md#check-dependabot-missing-actions-update)
 
 ## dependabot-syntax
@@ -541,7 +542,7 @@ A script runs the gh command although no GH_TOKEN or GITHUB_TOKEN reaches the st
 
 ## github-app
 
-A GitHub App token is issued with more access or a longer life than needed.
+A GitHub App token (actions/create-github-app-token, tibdex/github-app-token, peter-murray/workflow-application-token-action) is issued with more access or a longer life than needed.
 
 - Group: security
 - Default level: error
