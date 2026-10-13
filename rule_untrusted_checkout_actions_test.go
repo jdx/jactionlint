@@ -56,6 +56,8 @@ func TestRuleUntrustedCheckoutWorkspaceActions(t *testing.T) {
 		{"gradle build action with arguments", "gradle/gradle-build-action@v3\n        with:\n          arguments: build", true},
 		{"gradle build action without arguments", "gradle/gradle-build-action@v3", false},
 		{"setup-gradle prepares a later step", "gradle/actions/setup-gradle@v4", false},
+		{"setup-gradle v3 with arguments runs gradle", "gradle/actions/setup-gradle@v3\n        with:\n          arguments: build", true},
+		{"setup-gradle with arguments that are not known", "gradle/actions/setup-gradle@v3\n        with:\n          arguments: ${{ inputs.args }}", false},
 		{"powershell that runs a script of the workspace", "azure/powershell@v2\n        with:\n          azPSVersion: latest\n          inlineScript: ./scripts/deploy.ps1", true},
 		{"powershell that runs an inline script", "azure/powershell@v2\n        with:\n          azPSVersion: latest\n          inlineScript: Get-AzResourceGroup", false},
 		{"cypress", "cypress-io/github-action@v6", true},

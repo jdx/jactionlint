@@ -8384,10 +8384,11 @@ input, which is checked: `ruby/setup-ruby` with `bundler-cache: true`, `actions/
 with a `context` that is a path (the default is the git context of the repository, not the workspace),
 `goreleaser/goreleaser-action` with `args` that has `release` or `build` and no `install-only` (it fails without `args`),
 `magefile/mage-action` unless `install-only` is true (it runs `mage` with the default target when `args` is empty),
-`gradle/gradle-build-action` with `arguments`, `azure/powershell` with an `inlineScript` that calls a script of the
+`gradle/gradle-build-action` and `gradle/actions/setup-gradle` with `arguments` (setup-gradle up to v3 runs Gradle with it; v4
+and later refuse the input), `azure/powershell` with an `inlineScript` that calls a script of the
 workspace, and `cypress-io/github-action` unless both `install` and `runTests` are false. Not listed although poutine or CodeQL
 has them: `docker/setup-buildx-action`, `pre-commit-ci/lite-action` and `browniebroke/pre-commit-autoupdate-action` (they
-run nothing of the workspace) and `actions/jekyll-build-pages` (not verified). `gradle/actions/setup-gradle` only prepares a later
+run nothing of the workspace) and `actions/jekyll-build-pages` (not verified). `gradle/actions/setup-gradle` without `arguments` only prepares a later
 step.
 
 In a job that sets `permissions: {}` the message does not claim a token, because the job has none.

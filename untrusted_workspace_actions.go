@@ -15,8 +15,8 @@ import "strings"
 //
 // Not listed, although poutine or CodeQL has them: `docker/setup-buildx-action` (it installs buildx), `pre-commit-ci/lite-action`
 // (it commits the changes of an earlier step), `browniebroke/pre-commit-autoupdate-action` (it updates the pins and runs no
-// hook), `actions/jekyll-build-pages` (the plugins of a site are not run by the action in safe mode, which was not verified) and
-// `gradle/actions/setup-gradle` (it prepares a later step).
+// hook) and `actions/jekyll-build-pages` (the plugins of a site are not run by the action in safe mode, which was not
+// verified). `gradle/actions/setup-gradle` prepares a later step, and only runs Gradle through its deprecated `arguments`.
 
 // workspaceAction is an action that runs the workspace, and when.
 type workspaceAction struct {
@@ -118,11 +118,15 @@ var workspaceActions = func() map[string]workspaceAction {
 	})
 	// mage runs `mage ${args}` unless install-only is true: without arguments it runs the default target of magefile.go
 	gated("magefile/mage-action", func(e *ExecAction) bool { return !inputIsTrue(e, "install-only") })
-	gated("gradle/gradle-build-action", func(e *ExecAction) bool {
+	runsGradle := func(e *ExecAction) bool {
 		// only with `arguments` does the action run gradle (the build script is code); without it, it prepares a later step
 		v, ok := e.input("arguments")
 		return ok && v != "" && !(strings.HasPrefix(v, "${{") && strings.HasSuffix(v, "}}") && strings.Count(v, "${{") == 1)
-	})
+	}
+	gated("gradle/gradle-build-action", runsGradle)
+	// setup-gradle up to v3 is the same entrypoint and runs gradle with `arguments` (deprecated); v4 and later refuse the
+	// input, so a workflow that sets it runs an older release
+	gated("gradle/actions/setup-gradle", runsGradle)
 	gated("azure/powershell", func(e *ExecAction) bool {
 		// the script is in the workflow; it runs the workspace when it calls a script of it
 		v, _ := e.input("inlineScript")
