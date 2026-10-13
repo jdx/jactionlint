@@ -44,6 +44,8 @@ func TestActionsLockCheck(t *testing.T) {
 		{"check_err", "check_err", fixtureConfig("actions-lock")},
 		{"check_err_pedantic", "check_err", mustParseConfigFixture(t, pedantic)},
 		{"check_gone", "check_gone", fixtureConfig("actions-lock")},
+		// A repeated key: the file is reported and not trusted, so the tag is reported by unpinned-uses as well
+		{"check_dup", "check_dup", fixtureConfig("actions-lock", "unpinned-uses")},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
