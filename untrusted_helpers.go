@@ -169,6 +169,17 @@ var trustedUpstreamEvents = map[string]bool{
 // in the project and is started only by events that people with write access cause. It is false when
 // it cannot tell: no project, a pattern or an expression as a name, or a workflow that is missing.
 func upstreamWorkflowsTrusted(project *Project, sib *siblingWorkflows, we *WebhookEvent) bool {
+	return upstreamWorkflowsAre(project, sib, we, upstreamTrusted)
+}
+
+// upstreamWorkflowsPROnly reports whether every workflow that the workflow_run event waits for is in the project and is
+// started only by pull request events (`pull_request`, `pull_request_review`, ...), so the run that triggers this
+// workflow is always one of a pull request. It is false when it cannot tell, like upstreamWorkflowsTrusted.
+func upstreamWorkflowsPROnly(project *Project, sib *siblingWorkflows, we *WebhookEvent) bool {
+	return upstreamWorkflowsAre(project, sib, we, upstreamPROnly)
+}
+
+func upstreamWorkflowsAre(project *Project, sib *siblingWorkflows, we *WebhookEvent, want upstreamFacts) bool {
 	if project == nil || len(we.Workflows) == 0 {
 		return false
 	}
@@ -180,12 +191,22 @@ func upstreamWorkflowsTrusted(project *Project, sib *siblingWorkflows, we *Webho
 		if n == nil || n.ContainsExpression() || strings.ContainsAny(n.Value, "*?[]!+") {
 			return false
 		}
-		if !byName[strings.ToLower(n.Value)] {
+		if byName[strings.ToLower(n.Value)]&want == 0 {
 			return false
 		}
 	}
 	return true
 }
+
+// upstreamFacts are what is known of the events of a workflow that a workflow_run event can wait for.
+type upstreamFacts uint8
+
+const (
+	// upstreamTrusted: only events that people with write access cause.
+	upstreamTrusted upstreamFacts = 1 << iota
+	// upstreamPROnly: only pull request events.
+	upstreamPROnly
+)
 
 // nonExecutingCommands are commands that read, move, print or fetch files without running them.
 var nonExecutingCommands = map[string]bool{
@@ -564,7 +585,7 @@ func scriptValidates(s *Step) bool {
 // the files are read when the first rule asks and not again.
 type siblingWorkflows struct {
 	parseOnce sync.Once
-	byName    map[string]bool
+	byName    map[string]upstreamFacts
 	parseOK   bool
 
 	namesOnce sync.Once
@@ -575,7 +596,7 @@ type siblingWorkflows struct {
 // them are trusted ones. It returns false as the second value when they could not be determined: a file that cannot be
 // read or parsed, or a name with an expression. A nil value reads the files on every call. Only that is kept of a
 // workflow, not the workflow: a project with hundreds of large workflows would keep them all in memory for the run.
-func (s *siblingWorkflows) parsed(project *Project) (map[string]bool, bool) {
+func (s *siblingWorkflows) parsed(project *Project) (map[string]upstreamFacts, bool) {
 	if s == nil {
 		return readParsedWorkflows(project)
 	}
@@ -592,13 +613,13 @@ func (s *siblingWorkflows) names(project *Project) workflowNames {
 	return s.nameSet
 }
 
-func readParsedWorkflows(project *Project) (map[string]bool, bool) {
+func readParsedWorkflows(project *Project) (map[string]upstreamFacts, bool) {
 	dir := project.WorkflowsDir()
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return nil, false
 	}
-	byName := map[string]bool{}
+	byName := map[string]upstreamFacts{}
 	for _, e := range entries {
 		ext := filepath.Ext(e.Name())
 		if e.IsDir() || (ext != ".yml" && ext != ".yaml") {
@@ -622,13 +643,19 @@ func readParsedWorkflows(project *Project) (map[string]bool, bool) {
 		if strings.Contains(name, "${{") {
 			return nil, false
 		}
-		trusted := len(w.On) > 0
+		var facts upstreamFacts
+		if len(w.On) > 0 {
+			facts = upstreamTrusted | upstreamPROnly
+		}
 		for _, e := range w.On {
 			if !trustedUpstreamEvents[e.EventName()] {
-				trusted = false
+				facts &^= upstreamTrusted
+			}
+			if !strings.HasPrefix(e.EventName(), "pull_request") {
+				facts &^= upstreamPROnly
 			}
 		}
-		byName[strings.ToLower(name)] = trusted
+		byName[strings.ToLower(name)] = facts
 	}
 	return byName, true
 }

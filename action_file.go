@@ -79,6 +79,9 @@ type ActionFileRuns struct {
 	Main *String
 	// Image is the "image" of a Docker action: "Dockerfile" or "docker://image:tag".
 	Image *String
+	// PreIf and PostIf are the "pre-if" and "post-if" conditions of a JavaScript or Docker action. They are
+	// nil when the key is missing.
+	PreIf, PostIf *String
 }
 
 // IsComposite reports whether the action runs steps like a job: "runs.using" is "composite".
@@ -227,7 +230,13 @@ func (p *parser) parseActionRuns(pos *Pos, n *yaml.Node) *ActionFileRuns {
 		case "image":
 			otherKeys = append(otherKeys, k)
 			r.Image = p.parseString(v, false)
-		case "pre", "post", "pre-if", "post-if", "args", "entrypoint", "pre-entrypoint", "post-entrypoint", "env":
+		case "pre-if":
+			otherKeys = append(otherKeys, k)
+			r.PreIf = p.parseString(v, false)
+		case "post-if":
+			otherKeys = append(otherKeys, k)
+			r.PostIf = p.parseString(v, false)
+		case "pre", "post", "args", "entrypoint", "pre-entrypoint", "post-entrypoint", "env":
 			otherKeys = append(otherKeys, k)
 		default:
 			p.unexpectedKey(k, "runs", []string{
@@ -254,6 +263,7 @@ func (p *parser) parseActionRuns(pos *Pos, n *yaml.Node) *ActionFileRuns {
 			p.errorfAt(k.Pos, "%q is not available in \"runs\" section of the composite action. it is for JavaScript and Docker actions", k.Value)
 		}
 		p.checkCompositeShells(r.Steps)
+		p.checkCompositeStepKeys(r.Steps)
 	case using == "docker":
 		if r.Image == nil {
 			p.errorAt(r.Using.Pos, "\"image\" is missing in \"runs\" section of the Docker action")
@@ -287,6 +297,19 @@ func (p *parser) checkCompositeShells(steps []*Step) {
 			pos = s.Pos
 		}
 		p.errorAt(pos, "\"shell\" is required for a \"run\" step of a composite action, which has no default shell. for example, add \"shell: bash\"")
+	})
+}
+
+// checkCompositeStepKeys reports the keys of a step of a workflow which the steps of a composite action do not have.
+// The runner reads the steps with the definitions "run-step" and "uses-step" of its action_yaml.json, which have
+// no "timeout-minutes", so GitHub rejects the action.
+// https://github.com/actions/runner/blob/main/src/Runner.Worker/action_yaml.json
+// https://docs.github.com/en/actions/reference/workflows-and-actions/metadata-syntax#runssteps
+func (p *parser) checkCompositeStepKeys(steps []*Step) {
+	walkSteps(steps, func(s *Step) {
+		if s.TimeoutMinutes != nil && s.timeoutKey != nil {
+			p.errorAt(s.timeoutKey, "\"timeout-minutes\" is not allowed in a step of a composite action. set it on the step that uses the action, or on the job, in the workflow")
+		}
 	})
 }
 

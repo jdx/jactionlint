@@ -1,8 +1,6 @@
-on:
-  workflow_call:
-
+on: workflow_call
 jobs:
-  callee:
+  hello:
     runs-on: ubuntu-latest
     steps:
-      - run: hello
+      - run: echo hello

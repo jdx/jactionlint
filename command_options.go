@@ -42,6 +42,7 @@ var cliOptions = []cliOption{
 	{"General", "version", "V", "", false, "-version", "Show the version and how this binary was installed, then exit"},
 	{"General", "verbose", "v", "", false, "-verbose", "Print verbose logs to stderr"},
 	{"General", "debug", "", "", false, "-debug", "Print debug logs to stderr (for development)"},
+	{"General", "completion", "", "SHELL", false, "", "Print the completion script of a shell (bash, zsh, fish or powershell) and exit. It completes the options, their values and the rule IDs"},
 	{"General", "stdin-filename", "", "NAME", false, "-stdin-filename", "File name used in the output when reading stdin (default <stdin>)"},
 
 	{"Output", "format", "f", "FORMAT", false, "-format", "Output format: text (default), oneline, json, jsonl, sarif, gcc, github, summary, or a Go template containing {{ }}"},
@@ -62,6 +63,7 @@ var cliOptions = []cliOption{
 	{"Rules and configuration", "select", "", "RULES", false, "", "Report only these comma separated rule IDs, also those the profile does not enable. Repeatable"},
 	{"Rules and configuration", "no-ignores", "", "", false, "", "Apply no ignore comment, no \"ignores\" or \"paths\" ignore of the config file and no baseline (--ignore still applies)"},
 	{"Rules and configuration", "list-rules", "", "", false, "", "List every rule ID with its group, profile, level and summary, and exit. --format json prints it as JSON"},
+	{"Rules and configuration", "explain", "", "RULE", false, "", "Print the documentation of a rule ID (summary, group, profile, level, options, fixes and its section of the checks document) and exit"},
 
 	{"Fixing", "fix", "", "unsafe", true, "-fix", "Apply the safe automatic fixes in place. --fix=unsafe also applies the fixes that may change behavior"},
 	{"Fixing", "diff", "", "", false, "-diff", "Print what --fix would change as a unified diff and write nothing (implies --fix)"},
@@ -264,6 +266,8 @@ type commandFlags struct {
 	selectRules              []string
 	noIgnores                bool
 	listRules                bool
+	completion               string
+	explain                  string
 	fix                      fixFlag
 	diff                     bool
 	fixRules                 string
@@ -328,6 +332,8 @@ func newCommandFlags() *commandFlags {
 	fs.StringArrayVar(&f.selectRules, "select", nil, "")
 	fs.BoolVar(&f.noIgnores, "no-ignores", false, "")
 	fs.BoolVar(&f.listRules, "list-rules", false, "")
+	fs.StringVar(&f.completion, "completion", "", "")
+	fs.StringVar(&f.explain, "explain", "", "")
 
 	fs.Var(&f.fix, "fix", "")
 	opt("fix", "safe")

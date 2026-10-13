@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -101,6 +102,22 @@ func TestParseError(t *testing.T) {
 	}
 }
 
+// The production table makes a types table generated from documentation which does not list the types accept them.
+func TestProductionExtraTypes(t *testing.T) {
+	parsed := map[string][]string{"merge_group": {"checks_requested"}, "pull_request": {"opened"}, "pull_request_target": {"opened"}, "image_version": {}}
+	if err := applyExtraTypes(parsed); err != nil {
+		t.Fatal(err)
+	}
+	for _, ev := range []string{"pull_request", "pull_request_target"} {
+		if !slices.Contains(parsed[ev], "stacked") {
+			t.Errorf("%s does not have the stacked type: %v", ev, parsed[ev])
+		}
+	}
+	if diff := cmp.Diff([]string{"created", "ready", "deleted"}, parsed["image_version"]); diff != "" {
+		t.Error(diff)
+	}
+}
+
 func TestFetchURL(t *testing.T) {
 	b, err := fetch("https://github.com")
 	if err != nil {
@@ -112,6 +129,11 @@ func TestFetchURL(t *testing.T) {
 }
 
 func TestExtraTypes(t *testing.T) {
+	// The mechanism is tested with a table of its own, not the production one
+	prev := extraTypes
+	extraTypes = map[string][]string{"merge_group": {"destroyed"}}
+	t.Cleanup(func() { extraTypes = prev })
+
 	t.Run("added once", func(t *testing.T) {
 		p := map[string][]string{"merge_group": {"checks_requested"}}
 		for i := 0; i < 2; i++ {
@@ -143,6 +165,10 @@ func TestExtraTypes(t *testing.T) {
 }
 
 func TestExistingOutputSurvivesError(t *testing.T) {
+	prev := extraTypes
+	extraTypes = map[string][]string{"merge_group": {"destroyed"}}
+	t.Cleanup(func() { extraTypes = prev })
+
 	ok, err := os.ReadFile(filepath.Join("testdata", "ok.html"))
 	if err != nil {
 		t.Fatal(err)
