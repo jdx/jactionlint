@@ -254,15 +254,19 @@ type RuleEnv struct {
 	config                 *Config
 	shellcheck             string
 	pyflakes               string
-	shellcheckRCFile       string // --shellcheck-rcfile, relative to cwd
+	tools                  *externalTools // nil when the run does not track the external linters
+	shellcheckRCFile       string         // --shellcheck-rcfile, relative to cwd
 	cwd                    string
 	// skipped holds the names of the rules whose factory could not create them (the external command is
 	// missing). Such a rule did not run, so an ignore for it is not unused.
 	skipped map[string]bool
-	proc    *concurrentProcess
-	online  *onlineSession   // nil unless the online checks are on
-	action  bool             // the file is the metadata of an action (action.yml), see actionRuleScope
-	now     func() time.Time // LinterOptions.Now; nil means time.Now
+	// observers are passes which watch the syntax tree but are no rules: they report nothing and are not
+	// listed (e.g. the counters of the scripts which an unavailable shellcheck could not check).
+	observers []Pass
+	proc      *concurrentProcess
+	online    *onlineSession   // nil unless the online checks are on
+	action    bool             // the file is the metadata of an action (action.yml), see actionRuleScope
+	now       func() time.Time // LinterOptions.Now; nil means time.Now
 
 	log  func(args ...interface{})
 	name string // the factory being run
@@ -296,6 +300,11 @@ func (e *RuleEnv) Skip(reason string) {
 	if e.log != nil {
 		e.log("Rule \"" + e.name + "\" was disabled: " + reason)
 	}
+}
+
+// observe adds a pass which visits the syntax tree of the file along with the rules, without being one of them.
+func (e *RuleEnv) observe(p Pass) {
+	e.observers = append(e.observers, p)
 }
 
 type ruleFactory struct {
