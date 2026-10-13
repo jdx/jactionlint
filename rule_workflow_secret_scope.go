@@ -94,9 +94,59 @@ func (rule *RuleWorkflowSecretScope) VisitWorkflowPre(n *Workflow) error {
 	return nil
 }
 
+// VisitJobPre is callback when visiting Job node before visiting its children. With the option "job-level" it
+// reports a secret in the "env:" of a job, which every step of the job gets, third-party actions included
+// (ghalint job_secrets, zizmor#1816).
+func (rule *RuleWorkflowSecretScope) VisitJobPre(n *Job) error {
+	if on, _ := rule.Config().ruleOptionBool("workflow-secret-scope", "job-level"); !on {
+		return nil
+	}
+	if n == nil || n.Composite || n.Env == nil || n.Env.Expression != nil {
+		return nil
+	}
+	steps := flattenSteps(n.Steps) // the steps of a parallel group get the env of the job too
+	if len(steps) < 2 {
+		return nil
+	}
+	names := make([]string, 0, len(n.Env.Vars))
+	for k := range n.Env.Vars {
+		names = append(names, k)
+	}
+	sort.Strings(names)
+	for _, k := range names {
+		v := n.Env.Vars[k]
+		if v == nil || v.Name == nil || v.Value == nil {
+			continue
+		}
+		reach := 0
+		for _, st := range steps {
+			if st != nil && !envOverrides(st.Env, v.Name.Value) {
+				reach++
+			}
+		}
+		if reach < 2 {
+			continue
+		}
+		scanExpressions(v.Value, false, func(o *exprOccurrence) {
+			VisitExprNode(o.Root, func(node, _ ExprNode, entering bool) {
+				if !entering {
+					return
+				}
+				secret, ok := secretNameOf(node)
+				if !ok || strings.EqualFold(secret, "github_token") {
+					return // Its permissions are decided by the workflow
+				}
+				rule.ReportIDf("workflow-secret-scope", o.PosOf(node), "secret %q is assigned to the env %q of the job, so it reaches %d steps of the job, third-party actions included. set it at the step that needs it instead", strings.ToUpper(secret), v.Name.Value, reach)
+			})
+		})
+	}
+	return nil
+}
+
 func init() {
 	registerRules(
-		RuleInfo{ID: "workflow-secret-scope", Group: RuleGroupSecurity, Summary: "A secret is assigned to the workflow-level env and reaches multiple jobs.", DefaultLevel: SeverityWarning, Profile: ProfilePedantic, DocsAnchor: "check-workflow-secret-scope"},
+		RuleInfo{ID: "workflow-secret-scope", Group: RuleGroupSecurity, Summary: "A secret is assigned to the workflow-level env and reaches multiple jobs. With the option job-level, also one of the env of a job that reaches its steps.", DefaultLevel: SeverityWarning, Profile: ProfilePedantic, DocsAnchor: "check-workflow-secret-scope",
+			Options: []RuleOption{{Name: "job-level", Kind: RuleOptionBool, Default: false, Summary: "Also report a secret assigned to the env of a job with two or more steps, which reaches those that do not set the variable themselves."}}},
 	)
 	registerRuleFactory("workflow-secret-scope", func(env *RuleEnv) []Rule {
 		if !env.config.RuleEnabled("workflow-secret-scope") {

@@ -1,0 +1,30 @@
+# Gates in front of the commit that was reviewed, or that also hold after a push
+on:
+  pull_request_target:
+    types: [labeled]
+
+jobs:
+  environment-and-commit:
+    environment: untrusted-pull-requests
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - run: make test
+  label-for-the-event-and-commit:
+    if: github.event.label.name == 'safe to test'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - run: make test
+  members-and-branch:
+    if: github.event.pull_request.author_association == 'MEMBER'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+      - run: make test

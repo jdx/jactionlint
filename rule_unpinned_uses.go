@@ -203,7 +203,7 @@ var unpinnedUsesOptions = []RuleOption{{
 }, {
 	Name: "actions-lock", Kind: RuleOptionBool, Default: true,
 	Summary: "Accept an action which is not pinned to a commit in a workflow when the Actions lock file of the repository (.github/workflows/actions.lock) pins it to a full commit for that workflow. The lock file is a technical preview of GitHub whose format may change. Set it to false to ignore the lock file.",
-}}
+}, shortPinCommentOption}
 
 // lockPins reports whether the Actions lock file of the repository pins the action to a commit for the
 // workflow being checked, so that a tag or a branch in `uses:` is as good as a commit SHA. The option

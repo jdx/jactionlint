@@ -1,0 +1,92 @@
+package jactionlint
+
+import "testing"
+
+func TestIsStableMatrixString(t *testing.T) {
+	tests := []struct {
+		v      RawYAMLString
+		stable bool
+	}{
+		{RawYAMLString{Value: "linux"}, true},
+		{RawYAMLString{Value: "x64"}, true},
+		{RawYAMLString{Value: "22.04"}, true},
+		{RawYAMLString{Value: "22.04-arm"}, true},
+		{RawYAMLString{Value: "20.10"}, false}, // GitHub prints 20.1
+		// What is not a number in the YAML 1.2 core schema is a string, whatever it looks like
+		{RawYAMLString{Value: "1.2.3"}, true},
+		{RawYAMLString{Value: "10.15.7"}, true},
+		{RawYAMLString{Value: "1_000"}, true},
+		{RawYAMLString{Value: "22.04-arm"}, true},
+		{RawYAMLString{Value: "22"}, true},
+		{RawYAMLString{Value: "-1"}, true},
+		{RawYAMLString{Value: "1.10"}, false},
+		{RawYAMLString{Value: "1e3"}, false},
+		{RawYAMLString{Value: "0x10"}, false},
+		{RawYAMLString{Value: "0o17"}, false},
+		{RawYAMLString{Value: ".5"}, false},
+		{RawYAMLString{Value: "+1"}, false},
+		{RawYAMLString{Value: "010"}, false},
+		{RawYAMLString{Value: ".inf"}, false},
+		{RawYAMLString{Value: ".NaN"}, false},
+		{RawYAMLString{Value: "20.10", StringTag: true}, true},
+		{RawYAMLString{Value: "0x18"}, false},
+		{RawYAMLString{Value: ".inf"}, false},
+		{RawYAMLString{Value: "null"}, false},
+		{RawYAMLString{Value: "NULL"}, false},
+		// GitHub reads the YAML 1.2 core schema (YamlObjectReader.MatchBoolean of the runner): only true and false in
+		// three spellings are booleans, and a boolean is printed in lower case. yes, no, on and off are strings.
+		{RawYAMLString{Value: "yes"}, true},
+		{RawYAMLString{Value: "off"}, true},
+		{RawYAMLString{Value: "true"}, true},
+		{RawYAMLString{Value: "True"}, false},
+		{RawYAMLString{Value: "FALSE"}, false},
+		{RawYAMLString{Value: "True", StringTag: true}, true},
+		{RawYAMLString{Value: "~"}, false},
+		{RawYAMLString{Value: ""}, false},
+		{RawYAMLString{Value: "${{ inputs.os }}", StringTag: true}, false},
+	}
+	for _, tc := range tests {
+		if have := isStableMatrixString(&tc.v); have != tc.stable {
+			t.Errorf("isStableMatrixString(%q, tag=%v) = %v, want %v", tc.v.Value, tc.v.StringTag, have, tc.stable)
+		}
+	}
+}
+
+func TestConcatenatedRunnerLabelsNeedsOneMatrixName(t *testing.T) {
+	row := func(vs ...string) *MatrixRow {
+		r := &MatrixRow{}
+		for _, v := range vs {
+			r.Values = append(r.Values, &RawYAMLString{Value: v})
+		}
+		return r
+	}
+	m := &Matrix{Rows: map[string]*MatrixRow{"os": row("a", "b"), "arch": row("x")}}
+	for _, tc := range []struct {
+		label string
+		want  []string
+	}{
+		{"${{ matrix.os }}-latest", []string{"a-latest", "b-latest"}},
+		{"${{matrix.OS}}-${{ matrix.os }}", []string{"a-a", "b-b"}},
+		{"${{ matrix.os }}-${{ matrix.arch }}", nil},
+		{"${{ matrix.os }}-${{ github.ref }}", nil},
+		{"${{ matrix['os'] }}-latest", nil},
+		{"${{ matrix.os }-latest", nil},
+		{"${{ matrix.nothing }}-latest", nil},
+		{"-latest", nil},
+	} {
+		var have []string
+		for _, l := range concatenatedRunnerLabels(&String{Value: tc.label}, m) {
+			have = append(have, l.Value)
+		}
+		if len(have) != len(tc.want) {
+			t.Errorf("%q: have %v, want %v", tc.label, have, tc.want)
+			continue
+		}
+		for i := range have {
+			if have[i] != tc.want[i] {
+				t.Errorf("%q: have %v, want %v", tc.label, have, tc.want)
+				break
+			}
+		}
+	}
+}
