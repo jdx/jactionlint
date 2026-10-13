@@ -57,7 +57,7 @@ jobs:
           } > "$RUNNER_TEMP/pr-body.md"
           echo "pr=true" >> "$GITHUB_OUTPUT"
       # A PAT is required: pull requests opened with GITHUB_TOKEN do not trigger the CI workflows, so their
-      # required checks would never run. The same token is used by generate.yaml and release-please.yaml.
+      # required checks would never run. The same token is used by release-please.yaml.
       - uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
         with:
           token: ${{ secrets.RELEASE_PLZ_TOKEN }}
