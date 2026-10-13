@@ -4342,10 +4342,27 @@ misses a feature: `peter-evans/create-pull-request`, `peter-evans/create-or-upda
 `rule_superfluous_actions.go` names its source (the audit of zizmor, or the README of the archived action).
 
 Nothing is reported for a job that runs on a `self-hosted` runner, because the tools of the GitHub-hosted images are not there and the
-action is what installs them. A runner that cannot be shown to be hosted counts as self-hosted, so nothing is reported for a
-`runs-on:` that is an expression of anything but the matrix (`${{ inputs.runner }}`, a runner group, a label of a provider such
-as `runs-on=...`), or a matrix that is computed or has a value that is not known. A label that is text and matrix values
-(`${{ matrix.os }}-latest`, `${{ matrix.target.os }}`) is resolved for each value of the matrix.
+action is what installs them. A runner that cannot be shown to be hosted counts as self-hosted. A `runs-on:` that is an expression is
+resolved to the labels it can have, and the job is reported when the repository tells all of them and none is `self-hosted`:
+
+- A label that is text and matrix values (`${{ matrix.os }}-latest`, `${{ matrix.target.os }}`) is resolved for each value of the
+  matrix, and so is `${{ matrix.os }}` with a list of labels as a value.
+- A condition between labels, `${{ github.event_name == 'push' && 'ubuntu-24.04' || 'macos-14' }}`. The condition is not evaluated:
+  every label of the result counts, so one `self-hosted` branch, or one branch that is not known (`vars.RUNNER`, `inputs.runner`
+  without a caller), keeps the job unreported. `${{ vars.RUNNER || 'ubuntu-24.04' }}` is not resolved either, because the variable
+  may be the runner.
+- `fromJSON()` of a text that is known: `${{ fromJSON('["ubuntu-24.04", "x64"]') }}`, or `${{ fromJSON(inputs.runner) }}` when the
+  callers pass a JSON text.
+- `${{ inputs.<name> }}` in a reusable workflow that only `workflow_call` starts and that workflows of the same repository call
+  (`uses: ./.github/workflows/x.yml`), when every caller passes a value that is resolved the same way, or leaves the input out and
+  the `default:` of the input is a text. A workflow that nothing in the repository calls, that a person can also start, or that has a
+  caller which is only called itself, is not resolved, and neither is a caller that passes its own input down (`inputs.runner` of the
+  caller): the callers are followed one level.
+
+Nothing else is resolved, so nothing is reported for `${{ vars.RUNNER }}`, `${{ env.RUNNER }}`, `${{ secrets.RUNNER }}`, an output of
+another job, a runner group, a label of a provider such as `runs-on=${{ github.run_id }}/runner=...`, or a matrix that is computed
+(`fromJSON(needs.setup.outputs.matrix)`). A resolved label is judged like one written in the file: a label other than `self-hosted`,
+such as the name of a larger runner, counts as GitHub-hosted. Calls of the reusable workflow from other repositories are not known.
 
 <a id="check-unlocked-install"></a>
 ## Installs without a lock file
