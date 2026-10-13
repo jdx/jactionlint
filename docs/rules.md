@@ -38,14 +38,18 @@ rules:
 | [agentic-actions](#agentic-actions) | security | error | default |
 | [anonymous-definition](#anonymous-definition) | policy | warn | pedantic |
 | [archived-uses](#archived-uses) | security | warn | only with `--online` |
+| [argument-injection](#argument-injection) | security | warn | pedantic |
 | [artipacked](#artipacked) | security | error | default |
 | [background-step-not-waited](#background-step-not-waited) | correctness | error | correctness |
 | [bot-conditions](#bot-conditions) | security | error | default |
 | [cache-poisoning](#cache-poisoning) | security | error | default |
 | [checkout-static-credentials](#checkout-static-credentials) | security | error | default |
+| [command-injection](#command-injection) | security | warn | pedantic |
 | [concurrency-cancels-prs](#concurrency-cancels-prs) | correctness | error | default |
 | [concurrency-cancels-release](#concurrency-cancels-release) | correctness | error | default |
+| [concurrency-deadlock](#concurrency-deadlock) | correctness | error | correctness |
 | [concurrency-limits](#concurrency-limits) | policy | error | default |
+| [conflicting-action-inputs](#conflicting-action-inputs) | correctness | error | correctness |
 | [conflicting-runner-labels](#conflicting-runner-labels) | correctness | error | correctness |
 | [constant-condition](#constant-condition) | correctness | error | correctness |
 | [context-availability](#context-availability) | correctness | error | correctness |
@@ -66,6 +70,7 @@ rules:
 | [duplicate-step-id](#duplicate-step-id) | correctness | error | correctness |
 | [duplicate-triggers](#duplicate-triggers) | policy | error | default |
 | [environment-file-redirect](#environment-file-redirect) | correctness | error | correctness |
+| [event-name-never-received](#event-name-never-received) | correctness | warn | pedantic |
 | [excessive-permissions](#excessive-permissions) | security | error | default |
 | [expired-ignore](#expired-ignore) | policy | error | correctness |
 | [expression-syntax](#expression-syntax) | correctness | error | correctness |
@@ -121,6 +126,7 @@ rules:
 | [mutable-runner-label](#mutable-runner-label) | policy | warn | pedantic |
 | [obfuscation](#obfuscation) | security | error | default |
 | [outdated-action-runner](#outdated-action-runner) | correctness | error | correctness |
+| [output-clobbering](#output-clobbering) | security | warn | pedantic |
 | [overprovisioned-secrets](#overprovisioned-secrets) | security | error | default |
 | [pipeline-without-pipefail](#pipeline-without-pipefail) | correctness | error | default |
 | [pyflakes](#pyflakes) | correctness | error | correctness |
@@ -224,6 +230,15 @@ An action or reusable workflow is in an archived repository.
 - Needs network access: yes (only with `--online`)
 - Details and examples: [checks](./checks.md#check-archived-uses)
 
+## argument-injection
+
+Free text that an outsider writes is expanded into the program text or the options of sed, awk, find, curl, wget and git clone.
+
+- Group: security
+- Default level: warn
+- Profile: pedantic
+- Details and examples: [checks](./checks.md#check-argument-injection)
+
 ## artipacked
 
 actions/checkout persists the GITHUB_TOKEN credential in the git config.
@@ -255,7 +270,7 @@ A condition trusts a bot by github.actor, which can be spoofed.
 
 ## cache-poisoning
 
-A cache is restored in a release job or written by a privileged trigger. With the option pedantic, a tag that only starts checks and a branch filter that names a release branch among others count as releases too.
+A cache is restored in a release job or written by a privileged trigger. With the option pedantic, a tag that only starts checks and a branch filter that names a release branch among others count as releases too, and a cache that saves a file with credentials is reported.
 
 - Group: security
 - Default level: error
@@ -273,6 +288,15 @@ actions/checkout is given an SSH key or a token that does not expire.
 - Option `secret-tokens` (bool, no default): Also report a token input taken from a secret other than GITHUB_TOKEN (a personal access token). The ssh-key input is always reported. Unset, it is on under the pedantic profile and off otherwise.
 - Option `allow` (strings, empty by default): Names of secrets which may be given to actions/checkout (for example a deploy key).
 - Details and examples: [checks](./checks.md#check-checkout-static-credentials)
+
+## command-injection
+
+Input that an outsider controls is run as code by a script after it was moved to an environment variable: eval, sh -c, a variable as a command, a pipe into a shell, an inline program, child_process in github-script.
+
+- Group: security
+- Default level: warn
+- Profile: pedantic
+- Details and examples: [checks](./checks.md#check-command-injection)
 
 ## concurrency-cancels-prs
 
@@ -293,6 +317,15 @@ cancel-in-progress can cancel a release or a deployment which is still running.
 - Fixable: yes
 - Details and examples: [checks](./checks.md#check-concurrency-cancels-release)
 
+## concurrency-deadlock
+
+The concurrency group of a workflow is the same as the group of a local reusable workflow it calls, so GitHub detects a deadlock and cancels the run.
+
+- Group: correctness
+- Default level: error
+- Profile: correctness
+- Details and examples: [checks](./checks.md#check-concurrency-deadlock)
+
 ## concurrency-limits
 
 A workflow does not cancel superseded runs with concurrency:.
@@ -302,6 +335,15 @@ A workflow does not cancel superseded runs with concurrency:.
 - Profile: default
 - Fixable: yes
 - Details and examples: [checks](./checks.md#check-concurrency-limits)
+
+## conflicting-action-inputs
+
+Two inputs of a well-known action exclude each other.
+
+- Group: correctness
+- Default level: error
+- Profile: correctness
+- Details and examples: [checks](./checks.md#check-action-input-dependencies)
 
 ## conflicting-runner-labels
 
@@ -490,6 +532,15 @@ A script writes to GITHUB_OUTPUT or another environment file of the runner witho
 - Fixable: yes
 - Details and examples: [checks](./checks.md#check-environment-file-redirect)
 
+## event-name-never-received
+
+github.event_name is compared with an event that the workflow never receives, so the comparison is always false.
+
+- Group: correctness
+- Default level: warn
+- Profile: pedantic
+- Details and examples: [checks](./checks.md#check-event-name-never-received)
+
 ## excessive-permissions
 
 The GITHUB_TOKEN gets write access that is broader than needed.
@@ -546,6 +597,8 @@ An action or reusable workflow is not allowed or is denied by the configuration.
 - Profile: only when configured
 - Option `allow` (strings, empty by default): Patterns of the only actions and reusable workflows which may be used, e.g. "actions/*". The rule does nothing without allow or deny.
 - Option `deny` (strings, empty by default): Patterns of actions and reusable workflows which must not be used.
+- Option `images-allow` (strings, empty by default): Glob patterns of the only container images which may be used (container:, services:, docker:// and docker run in a script), e.g. "ghcr.io/my-org/*" or "node:20". Docker Hub names can leave out the registry ("node" is "docker.io/library/node").
+- Option `images-deny` (strings, empty by default): Glob patterns of container images which must not be used.
 - Details and examples: [checks](./checks.md#check-forbidden-uses)
 
 ## gate-job-skipped-on-failure
@@ -1007,6 +1060,15 @@ An action runs on a runtime which GitHub Actions no longer supports.
 - Profile: correctness
 - Details and examples: [checks](./checks.md#detect-outdated-popular-actions)
 
+## output-clobbering
+
+Input that an outsider controls is written to GITHUB_OUTPUT as a record, so a line break in it sets the other outputs of the step.
+
+- Group: security
+- Default level: warn
+- Profile: pedantic
+- Details and examples: [checks](./checks.md#check-output-clobbering)
+
 ## overprovisioned-secrets
 
 An expression uses the whole secrets context.
@@ -1312,6 +1374,7 @@ A container or service image is not pinned by a digest.
 - Default level: error
 - Profile: default
 - Option `require-digest` (bool, default true): Report images pinned by a tag other than latest too. Turn it off to report only images without a tag or with the latest tag.
+- Option `policies` (string-map, default empty): How strongly to pin the images matching a pattern: hash-pin (a digest, the default of require-digest), tag-pin (a tag other than latest, or a digest) or any. The most specific pattern that matches wins over require-digest: more literal characters before the first *, in the pattern with the registry written out, then fewer *, then a tag, then the longer pattern. Patterns are globs of the image name, where * matches any characters: "*", "ghcr.io/my-org/*", "registry.example.com/team/tool" or "node:20". The registry of Docker Hub can be left out ("node" is "docker.io/library/node").
 - Option `pedantic` (bool, no default): Also report the pedantic checks, which are noisier. Unset, they run under the pedantic profile.
 - Details and examples: [checks](./checks.md#check-unpinned-images)
 
@@ -1333,7 +1396,7 @@ An action, reusable workflow or Docker image is not pinned to a commit SHA or di
 - Default level: error
 - Profile: default
 - Fixable: yes
-- Option `policies` (string-map, default empty): How strongly to pin the actions matching a pattern: hash-pin (full commit SHA, the default for everything), ref-pin (any tag, branch or SHA) or any. The most specific pattern wins. Patterns are "*", "owner/*", "owner/repo" and "owner/repo/path". Docker images follow the "*" policy.
+- Option `policies` (string-map, default empty): How strongly to pin the actions matching a pattern: hash-pin (full commit SHA, the default for everything), ref-pin (any tag, branch or SHA), immutable-release (a full commit SHA, or with --online the tag of an immutable GitHub release) or any. The most specific pattern wins. Patterns are "*", "owner/*", "owner/repo" and "owner/repo/path". Docker images follow the "*" policy.
 - Option `short-pin-comment` (bool, default false): Make `--online --fix` name the tag as written in the comment of a pin (`# v4`), not the most specific version tag of the commit (`# v4.2.4`).
 - Details and examples: [checks](./checks.md#check-action-format)
 
@@ -1376,16 +1439,17 @@ The a && b || c idiom has a falsy b so it always evaluates to c.
 
 ## untrusted-artifact
 
-A workflow_run workflow uses an artifact of the triggering run without validating it.
+A workflow_run workflow uses an artifact of the triggering run without validating it. With the option pedantic, also one that downloads every artifact of the run.
 
 - Group: security
 - Default level: error
 - Profile: default
+- Option `pedantic` (bool, no default): Also report the pedantic checks, which are noisier. Unset, they run under the pedantic profile.
 - Details and examples: [checks](./checks.md#check-untrusted-artifact)
 
 ## untrusted-checkout
 
-A pull_request_target or workflow_run workflow checks out the code of a pull request and runs it, or turns off the protection of actions/checkout against the code of fork pull requests. With the option pedantic, a checkout that actions/checkout refuses for a fork is reported too.
+A pull_request_target, workflow_run or issue_comment workflow checks out the code of a pull request and runs it, or turns off the protection of actions/checkout against the code of fork pull requests. With the option pedantic, a checkout that actions/checkout refuses for a fork is reported too.
 
 - Group: security
 - Default level: error
@@ -1460,11 +1524,12 @@ A script runs what it downloads without verifying it.
 
 ## use-trusted-publishing
 
-A package is published with a long-lived credential although the registry supports trusted publishing.
+A package is published with a long-lived credential although the registry supports trusted publishing. With the option pedantic, also trusted publishing in a job that builds the package or has no environment, and attestations that are switched off.
 
 - Group: security
 - Default level: error
 - Profile: default
+- Option `pedantic` (bool, no default): Also report the pedantic checks, which are noisier. Unset, they run under the pedantic profile.
 - Details and examples: [checks](./checks.md#check-use-trusted-publishing)
 
 ## workflow-call-permissions

@@ -151,8 +151,16 @@ func (ts *externalTools) record(path string, check *externalTools) {
 func newExternalTools(opts *LinterOptions) *externalTools {
 	return &externalTools{
 		shellcheck: &externalTool{name: "shellcheck", command: opts.Shellcheck, required: opts.ShellcheckRequired, kind: "shell script"},
-		pyflakes:   &externalTool{name: "pyflakes", command: opts.Pyflakes, required: opts.PyflakesRequired, kind: "Python script"},
+		pyflakes:   &externalTool{name: "pyflakes", command: pyflakesCommand(opts), required: opts.PyflakesRequired && opts.Ruff == "", kind: "Python script"},
 	}
+}
+
+// pyflakesCommand is the command which checks the Python scripts: ruff when it is given, instead of pyflakes.
+func pyflakesCommand(opts *LinterOptions) string {
+	if opts.Ruff != "" {
+		return opts.Ruff
+	}
+	return opts.Pyflakes
 }
 
 // tool returns the tracking of the external linter, or nil.

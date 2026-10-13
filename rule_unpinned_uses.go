@@ -19,6 +19,9 @@ const (
 	usesPolicyRefPin
 	// usesPolicyAny requires nothing.
 	usesPolicyAny
+	// usesPolicyImmutableRelease is hash-pin, except that with the online checks a tag of an immutable GitHub release is
+	// accepted as well, because GitHub does not let its tag move or go away. Without them it is hash-pin.
+	usesPolicyImmutableRelease
 )
 
 func parseUsesPolicy(s string) (usesPolicy, bool) {
@@ -29,6 +32,8 @@ func parseUsesPolicy(s string) (usesPolicy, bool) {
 		return usesPolicyRefPin, true
 	case "any":
 		return usesPolicyAny, true
+	case "immutable-release":
+		return usesPolicyImmutableRelease, true
 	}
 	return 0, false
 }
@@ -101,7 +106,7 @@ func validateUsesPolicies(v any) error {
 			return err
 		}
 		if _, ok := parseUsesPolicy(pol); !ok {
-			return fmt.Errorf("policy %q of %q is invalid. available policies are \"hash-pin\", \"ref-pin\" and \"any\"", pol, pat)
+			return fmt.Errorf("policy %q of %q is invalid. available policies are \"hash-pin\", \"ref-pin\", \"immutable-release\" and \"any\"", pol, pat)
 		}
 	}
 	return nil
@@ -157,13 +162,20 @@ func unpinnedUsesMessage(cfg *Config, u *UsesRef, workflowCall bool) string {
 		if u.Kind == UsesInvalid && u.Problem != usesProblemEmptyPart {
 			return ""
 		}
-		if usesPolicyFor(policies, u) != usesPolicyHashPin || u.RefKind == RefFullSHA {
+		// immutable-release is hash-pin here: the tag of an immutable release is accepted by acceptImmutableReleases,
+		// which needs GitHub
+		pol := usesPolicyFor(policies, u)
+		if (pol != usesPolicyHashPin && pol != usesPolicyImmutableRelease) || u.RefKind == RefFullSHA {
 			return ""
 		}
-		if workflowCall {
-			return fmt.Sprintf("reusable workflow call %q must be pinned to a full-length commit SHA like \"owner/repo/path/to/workflow.yml@{sha}\" because the \"unpinned-uses\" rule is enabled", u.Raw)
+		immutable := ""
+		if pol == usesPolicyImmutableRelease {
+			immutable = " (or, with --online, to the tag of an immutable release)"
 		}
-		return fmt.Sprintf("action %q must be pinned to a full-length commit SHA like \"{owner}/{repo}@{sha}\" because the \"unpinned-uses\" rule is enabled", u.Raw)
+		if workflowCall {
+			return fmt.Sprintf("reusable workflow call %q must be pinned to a full-length commit SHA like \"owner/repo/path/to/workflow.yml@{sha}\"%s because the \"unpinned-uses\" rule is enabled", u.Raw, immutable)
+		}
+		return fmt.Sprintf("action %q must be pinned to a full-length commit SHA like \"{owner}/{repo}@{sha}\"%s because the \"unpinned-uses\" rule is enabled", u.Raw, immutable)
 	case UsesDocker:
 		switch dockerPolicy(policies) {
 		case usesPolicyAny:
@@ -186,6 +198,6 @@ func unpinnedUsesMessage(cfg *Config, u *UsesRef, workflowCall bool) string {
 // unpinnedUsesOptions are the "policies" option of the unpinned-uses rule.
 var unpinnedUsesOptions = []RuleOption{{
 	Name: "policies", Kind: RuleOptionStringMap, Default: map[string]string{},
-	Summary:  "How strongly to pin the actions matching a pattern: hash-pin (full commit SHA, the default for everything), ref-pin (any tag, branch or SHA) or any. The most specific pattern wins. Patterns are \"*\", \"owner/*\", \"owner/repo\" and \"owner/repo/path\". Docker images follow the \"*\" policy.",
+	Summary:  "How strongly to pin the actions matching a pattern: hash-pin (full commit SHA, the default for everything), ref-pin (any tag, branch or SHA), immutable-release (a full commit SHA, or with --online the tag of an immutable GitHub release) or any. The most specific pattern wins. Patterns are \"*\", \"owner/*\", \"owner/repo\" and \"owner/repo/path\". Docker images follow the \"*\" policy.",
 	Validate: validateUsesPolicies,
 }, shortPinCommentOption}
