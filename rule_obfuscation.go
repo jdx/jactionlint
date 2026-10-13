@@ -224,11 +224,22 @@ func (rule *RuleExpression) checkObfuscation(expr ExprNode, line, col int, workf
 func reducibleOperation(sema *ExprSemanticsChecker, n ExprNode) bool {
 	switch e := n.(type) {
 	case *NotOpNode, *CompareOpNode, *LogicalOpNode:
-		return sema.IsConstant(n)
+		return sema.IsConstant(n) && !callsFormat(n)
 	case *FuncCallNode:
-		return !strings.EqualFold(e.Callee, "format") && sema.IsConstant(n)
+		return !strings.EqualFold(e.Callee, "format") && sema.IsConstant(n) && !callsFormat(n)
 	}
 	return false
+}
+
+// callsFormat reports whether the expression has a call of format(), whose literal result has a message of its own.
+func callsFormat(n ExprNode) bool {
+	found := false
+	VisitExprNode(n, func(c, _ ExprNode, entering bool) {
+		if call, ok := c.(*FuncCallNode); ok && entering && strings.EqualFold(call.Callee, "format") {
+			found = true
+		}
+	})
+	return found
 }
 
 // formatOfLiterals computes format() for arguments which are all literals.
