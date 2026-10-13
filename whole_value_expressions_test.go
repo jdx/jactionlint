@@ -383,6 +383,7 @@ func TestLiteralOfAnExpression(t *testing.T) {
 // the fixers run through. The source is fuzzed in a loop by dropping the value of each key, so that a
 // section is also a number, a list, an empty value or text.
 func TestWholeValueExpressionsDoNotCrashRules(t *testing.T) {
+	t.Parallel()
 	const base = `on:
   pull_request_target:
 env:
