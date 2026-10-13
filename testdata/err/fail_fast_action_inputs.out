@@ -1,0 +1,2 @@
+test.yaml:12:15: actions/upload-artifact does not fail by default: the step only warns when "path" matches no file, so a build which produced nothing stays green and the artifact is missing. set "if-no-files-found: error" (the default is "warn") [fail-fast-action-inputs]
+test.yaml:17:15: softprops/action-gh-release does not fail by default: the release is created without the files when a "files" pattern matches nothing. set "fail_on_unmatched_files: true" (the default is "false") [fail-fast-action-inputs]
