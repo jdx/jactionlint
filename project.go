@@ -21,14 +21,16 @@ func absPath(path string) string {
 }
 
 // findProject creates new Project instance by finding a project which the given path belongs to.
-// A project must be a Git repository and have a ".github/workflows" directory, an "action.yml" at its root
+// A project must be a repository (a ".git" directory or file, or a ".jj" directory of a Jujutsu workspace) and have a ".github/workflows" directory, an "action.yml" at its root
 // or a ".github/actions" directory.
 func findProject(path string) (*Project, error) {
 	d := absPath(path)
 	for {
 		if hasProjectContent(d) {
-			if _, err := os.Stat(filepath.Join(d, ".git")); err == nil { // Note: .git may be a file
-				return NewProject(d)
+			for _, marker := range repositoryMarkers {
+				if _, err := os.Stat(filepath.Join(d, marker)); err == nil { // Note: .git may be a file
+					return NewProject(d)
+				}
 			}
 		}
 
@@ -39,6 +41,10 @@ func findProject(path string) (*Project, error) {
 		d = p
 	}
 }
+
+// repositoryMarkers are the names which mark the root of a repository: ".git", and ".jj" for the workspaces of
+// Jujutsu, a secondary one of which has no ".git" (actionlint#752).
+var repositoryMarkers = []string{".git", ".jj"}
 
 // hasProjectContent reports whether the directory has workflows or actions to check.
 func hasProjectContent(d string) bool {
