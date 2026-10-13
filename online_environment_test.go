@@ -335,3 +335,76 @@ jobs:
 		t.Errorf("%v\n%s%s", f.hits, stdout, stderr)
 	}
 }
+
+const optOutWorkflow = `on: pull_request_target
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: release
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          allow-unsafe-pr-checkout: true
+`
+
+// The step which turns off the protection of actions/checkout goes through the same decision about the environment as
+// the checkout which runs the code: the reviewers decide, and only an environment which is no gate brings the finding back.
+func TestEnvironmentGateForTheOptOutOfTheCheckoutProtection(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		answer  func(f *fakeGitHub)
+		offline bool
+		finding bool
+		skipped float64
+	}{
+		{"required reviewers", func(f *fakeGitHub) {
+			f.json("/repos/o/r/environments/release", environmentJSON(`{"id":1,"type":"required_reviewers"}`))
+		}, false, false, 0},
+		{"no required reviewers", func(f *fakeGitHub) { f.json("/repos/o/r/environments/release", environmentJSON("")) }, false, true, 0},
+		{"the lookup fails", func(f *fakeGitHub) {
+			f.handle("/repos/o/r/environments/release", func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusForbidden)
+				fmt.Fprint(w, `{"message":"no"}`)
+			})
+		}, false, false, 1},
+		{"without --online", func(f *fakeGitHub) {}, true, false, 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newFakeGitHub(t)
+			tc.answer(f)
+			setOnlineEnv(t, f, "tok")
+			t.Setenv("GITHUB_REPOSITORY", "o/r")
+			_, wf := onlineProject(t, optOutWorkflow, environmentConfig)
+			report := filepath.Join(t.TempDir(), "report.json")
+			args := []string{"--online", "--online-report", report, wf}
+			if tc.offline {
+				args = []string{wf}
+			}
+			_, stdout, stderr := runOnlineCommand(t, args...)
+			if got := strings.Contains(stdout, `"allow-unsafe-pr-checkout"`); got != tc.finding {
+				t.Errorf("opt-out reported: %v, want %v\n%s%s", got, tc.finding, stdout, stderr)
+			}
+			if tc.finding && !strings.Contains(stdout, "no required reviewers") {
+				t.Errorf("the message does not say that the environment is no gate:\n%s", stdout)
+			}
+			if tc.offline {
+				if f.total() != 0 {
+					t.Errorf("%d requests without --online", f.total())
+				}
+				return
+			}
+			b, err := os.ReadFile(report)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var rep map[string]any
+			if err := json.Unmarshal(b, &rep); err != nil {
+				t.Fatal(err)
+			}
+			if rep["skippedLookups"] != tc.skipped {
+				t.Errorf("skipped lookups %v, want %v", rep["skippedLookups"], tc.skipped)
+			}
+		})
+	}
+}

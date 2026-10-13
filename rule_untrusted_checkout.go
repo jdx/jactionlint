@@ -211,15 +211,21 @@ func (rule *RuleUntrustedCheckout) VisitJobPre(n *Job) error {
 	return nil
 }
 
+// environmentNote tells whether a finding of the job is reported. A job with an environment is trusted, as it always was,
+// unless the online checks prove that the environment is no gate (see environmentGates): then it is reported and the
+// text says why. It is the one decision for every finding of the job, and it asks GitHub only when a finding is about to be made.
+func (rule *RuleUntrustedCheckout) environmentNote() (note string, report bool) {
+	if !rule.envJob {
+		return "", true
+	}
+	return rule.gates.noGate(rule.job)
+}
+
 func (rule *RuleUntrustedCheckout) report(c *untrustedCheckout, how string) {
 	event := rule.privileged[0]
-	gate := ""
-	if rule.envJob {
-		note, ok := rule.gates.noGate(rule.job)
-		if !ok {
-			return // the reviewers of the environment decide
-		}
-		gate = note
+	gate, ok := rule.environmentNote()
+	if !ok {
+		return // the reviewers of the environment decide
 	}
 	source := "a pull request"
 	if event == "workflow_run" {
@@ -280,11 +286,18 @@ func (rule *RuleUntrustedCheckout) reportOptOut(s *Step) {
 	if !named {
 		return
 	}
+	gate, ok := rule.environmentNote()
+	if !ok {
+		return // the reviewers of the environment decide
+	}
+	if gate != "" {
+		gate = ". " + gate
+	}
 	rule.ReportIDf(
 		"untrusted-checkout",
 		opt.Value.Pos,
-		"this step sets \"allow-unsafe-pr-checkout\", which turns off the protection of actions/checkout that refuses to check out the code of a pull request from a fork in a %q workflow. the step then checks out whatever \"ref\" and \"repository\" name, so nothing stops the code of the pull request from reaching a workflow that has a write token and secrets. remove the input and check out the base branch, or document why the code is safe to run",
-		rule.privileged[0],
+		"this step sets \"allow-unsafe-pr-checkout\", which turns off the protection of actions/checkout that refuses to check out the code of a pull request from a fork in a %q workflow. the step then checks out whatever \"ref\" and \"repository\" name, so nothing stops the code of the pull request from reaching a workflow that has a write token and secrets%s. remove the input and check out the base branch, or document why the code is safe to run",
+		rule.privileged[0], gate,
 	)
 }
 
