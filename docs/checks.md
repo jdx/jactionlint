@@ -93,6 +93,7 @@ List of checks:
 - [Ref confusion (online)](#check-ref-confusion)
 - [Stale action refs (online)](#check-stale-action-refs)
 - [Archived repositories (online)](#check-archived-uses)
+- [Repojacking (online)](#check-repojacking)
 - [Version comments of pinned actions (online)](#check-ref-version-mismatch)
 - [Concurrency that cancels unrelated pull requests](#check-concurrency-cancels-prs)
 - [Concurrency that cancels a release](#check-concurrency-cancels-release)
@@ -7130,6 +7131,62 @@ test.yaml:8:15: warning: action "example/archived-action@v1" is in the archived 
 
 <!-- Skip playground link -->
 
+<a id="check-repojacking"></a>
+## Repojacking (online)
+
+`uses: owner/repo@v1` names the owner of the repository, and a user name or an organization name that nobody holds can be registered
+by anyone. When the owner of an action has deleted the account, or renamed it and let GitHub redirect the old repository name, the
+name is free: whoever registers it and creates the repository publishes what this workflow runs, with its token and secrets, the next
+time it starts. The rule `repojacking` reports an action or a reusable workflow when
+
+- the repository does not exist and neither does its owner: `GET /users/{owner}` answers 404, or
+- GitHub redirects the repository to another owner (the answer of `GET /repos/{owner}/{repo}` names another `full_name`), and the owner
+  of the old name does not exist any more.
+
+Example input:
+
+```yaml
+# requires --online
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      # ERROR: the owner does not exist, so anyone can register it
+      - uses: ghost-owner/deploy@v1
+      # ERROR: the repository moved and the old owner is gone
+      - uses: former-owner/deploy@v1
+      # OK: transferred, and the old owner still exists
+      - uses: moved-org/deploy@v1
+      # OK
+      - uses: actions/checkout@v4
+```
+
+Output:
+
+```
+test.yaml:8:15: warning: action "ghost-owner/deploy@v1" has the owner "ghost-owner", which does not exist on GitHub, so anyone can register that name and publish ghost-owner/deploy under it, and this workflow runs their code. replace it with one of an owner you trust [repojacking]
+  |
+8 |       - uses: ghost-owner/deploy@v1
+  |               ^~~~~~~~~~~~~~~~~~~~~
+test.yaml:10:15: warning: action "former-owner/deploy@v1" has moved to new-owner/deploy and the owner "former-owner" no longer exists on GitHub, so anyone can register that name and create the repository former-owner/deploy, which GitHub then serves instead of the redirect, and this workflow runs their code. use the owner "new-owner" instead [repojacking]
+   |
+10 |       - uses: former-owner/deploy@v1
+   |               ^~~~~~~~~~~~~~~~~~~~~~
+```
+
+<!-- Skip playground link -->
+
+What is **not** reported: a repository that GitHub does not show (a private repository answers 404 like a missing one, so only a
+missing *owner* counts), a repository that was transferred while its old owner still exists (only that owner can create the
+repository again), and a repository renamed within its owner. GitHub retires the names of popular repositories, so an owner that
+no longer exists may not be exploitable for a repository that many people cloned; the API does not tell, and the rule reports what
+the API shows. There is no automatic fix: the new owner may be the right one, or the action may have to go.
+
+Requests: the repository (shared with the other online checks, so none more when `archived-uses` or another one runs) and, only when
+that is a 404 or a redirect to another owner, one `GET /users/{owner}` for each owner of the run. The answers are cached like the
+others. A failed lookup is skipped and counted.
+
 <a id="check-ref-version-mismatch"></a>
 ## Version comments of pinned actions (online)
 
@@ -8112,7 +8169,7 @@ way because any caller can pass attacker-controlled text. jactionlint does not l
 
 How the rules treat actions:
 
-- **Applies** to the steps (and the metadata) of an action: `action-syntax`, `adhoc-packages`, `archived-uses`, `artipacked`, `background-step-not-waited`, `checkout-static-credentials`, `constant-condition`, `context-availability`, `continue-on-error`, `deprecated-action-input`, `deprecated-commands`, `duplicate-key`, `duplicate-step-id`, `environment-file-redirect`, `expired-ignore`, `expression-syntax`, `expression-type`, `forbidden-uses`, `github-app`, `if-always-true`, `impostor-commit`, `insecure-commands`, `insecure-ssh-keyscan`, `insecure-url-scheme`, `invalid-env-var-name`, `invalid-function-call`, `invalid-id`, `invalid-ignore-comment`, `invalid-local-action`, `invalid-parallel-step`, `invalid-shell-name`, `invalid-uses`, `invisible-characters`, `known-vulnerable-actions`, `malformed-expression-delimiters`, `max-run-lines`, `merge-key`, `misfeature`, `missing-action-input`, `obfuscation`, `outdated-action-runner`, `pipeline-without-pipefail`, `pyflakes`, `recursive-alias`, `ref-confusion`, `ref-version-mismatch`, `require-expression-wrapping`, `self-repository`, `shellcheck`, `stale-action-refs`, `superfluous-actions`, `template-injection`, `typosquat-uses`, `undefined-function`, `undefined-property`, `unknown-action-input`, `unlocked-install`, `unpinned-images`, `unpinned-tools`, `unpinned-uses`, `unsound-contains`, `unsound-prefix-match`, `unsound-ternary`, `unused-anchor`, `unused-ignore`, `unverified-download`, `use-trusted-publishing`, `yaml-syntax`.
+- **Applies** to the steps (and the metadata) of an action: `action-syntax`, `adhoc-packages`, `archived-uses`, `artipacked`, `background-step-not-waited`, `checkout-static-credentials`, `constant-condition`, `context-availability`, `continue-on-error`, `deprecated-action-input`, `deprecated-commands`, `duplicate-key`, `duplicate-step-id`, `environment-file-redirect`, `expired-ignore`, `expression-syntax`, `expression-type`, `forbidden-uses`, `github-app`, `if-always-true`, `impostor-commit`, `insecure-commands`, `insecure-ssh-keyscan`, `insecure-url-scheme`, `invalid-env-var-name`, `invalid-function-call`, `invalid-id`, `invalid-ignore-comment`, `invalid-local-action`, `invalid-parallel-step`, `invalid-shell-name`, `invalid-uses`, `invisible-characters`, `known-vulnerable-actions`, `malformed-expression-delimiters`, `max-run-lines`, `merge-key`, `misfeature`, `missing-action-input`, `obfuscation`, `outdated-action-runner`, `pipeline-without-pipefail`, `pyflakes`, `recursive-alias`, `ref-confusion`, `ref-version-mismatch`, `repojacking`, `require-expression-wrapping`, `self-repository`, `shellcheck`, `stale-action-refs`, `superfluous-actions`, `template-injection`, `typosquat-uses`, `undefined-function`, `undefined-property`, `unknown-action-input`, `unlocked-install`, `unpinned-images`, `unpinned-tools`, `unpinned-uses`, `unsound-contains`, `unsound-prefix-match`, `unsound-ternary`, `unused-anchor`, `unused-ignore`, `unverified-download`, `use-trusted-publishing`, `yaml-syntax`.
 - **Caller-dependent**: `agentic-actions`, `bot-conditions`, `cache-poisoning`, `github-env` (its findings about untrusted input do not depend on the caller), `untrusted-artifact` and `untrusted-checkout`.
 - **Not applicable** because an action does not have what the rule checks, or because only the calling job can decide (`unused-baseline-entry` is about the baseline file, not about a workflow or an action): `anonymous-definition`, `concurrency-cancels-prs`, `concurrency-cancels-release`, `concurrency-limits`, `conflicting-runner-labels`, `cron-too-frequent`, `cyclic-job-needs`, `dangerous-triggers`, `dependabot-cooldown`, `dependabot-execution`, `dependabot-missing-actions-update`, `dependabot-syntax`, `duplicate-job-id`, `duplicate-job-needs`, `duplicate-triggers`, `excessive-permissions`, `gate-job-skipped-on-failure`, `gh-without-token`, `hardcoded-container-credentials`, `invalid-activity-type`, `invalid-cron`, `invalid-event-config`, `invalid-event-filter`, `invalid-glob`, `invalid-label-pattern`, `invalid-local-workflow`, `invalid-permissions`, `invalid-timezone`, `invalid-workflow-call`, `invalid-workflow-call-input`, `invalid-workflow-dispatch-input`, `local-action-checkout`, `matrix-duplicate-value`, `matrix-invalid-exclude`, `missing-permissions`, `missing-timeout`, `missing-workflow-input`, `missing-workflow-secret`, `mutable-runner-label`, `overprovisioned-secrets`, `require-shell`, `required-actions`, `secrets-inherit`, `secrets-outside-env`, `self-hosted-runner`, `timeout-too-long`, `undefined-job-needs`, `undocumented-permissions`, `unknown-event`, `unknown-runner-label`, `unknown-workflow-input`, `unknown-workflow-secret`, `unredacted-secrets`, `unused-baseline-entry`, `unused-job-output`, `unused-needs`, `unused-workflow-input`, `workflow-call-permissions`, `workflow-input-type`, `workflow-run-names`, `workflow-secret-scope`, `workflow-syntax`.
 

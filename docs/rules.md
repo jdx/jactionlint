@@ -123,6 +123,7 @@ rules:
 | [recursive-alias](#recursive-alias) | correctness | error | correctness |
 | [ref-confusion](#ref-confusion) | security | warn | only with `--online` |
 | [ref-version-mismatch](#ref-version-mismatch) | security | warn | only with `--online` |
+| [repojacking](#repojacking) | security | warn | only with `--online` |
 | [require-expression-wrapping](#require-expression-wrapping) | style | error | pedantic |
 | [require-shell](#require-shell) | style | error | pedantic |
 | [required-actions](#required-actions) | policy | error | only when configured |
@@ -1017,6 +1018,16 @@ The version comment of a hash-pinned action does not match the pinned commit.
 - Profile: only with `--online`
 - Needs network access: yes (only with `--online`)
 - Details and examples: [checks](./checks.md#check-ref-version-mismatch)
+
+## repojacking
+
+An action or reusable workflow has an owner whose name anyone can register.
+
+- Group: security
+- Default level: warn
+- Profile: only with `--online`
+- Needs network access: yes (only with `--online`)
+- Details and examples: [checks](./checks.md#check-repojacking)
 
 ## require-expression-wrapping
 

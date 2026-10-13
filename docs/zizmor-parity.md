@@ -370,8 +370,7 @@ pull request controls (zizmor [#2134](https://github.com/zizmorcore/zizmor/issue
 ([#2322](https://github.com/zizmorcore/zizmor/issues/2322)), a rule for a SHA without a version comment
 ([#2316](https://github.com/zizmorcore/zizmor/issues/2316)), immutable releases under `--online`
 ([#766](https://github.com/zizmorcore/zizmor/issues/766)), credentials in the `registries` of `dependabot.yml`
-([#1222](https://github.com/zizmorcore/zizmor/issues/1222)), a repojacking check by owner lookup
-([#479](https://github.com/zizmorcore/zizmor/issues/479)), and zizmor's precomputed snapshot of tags and advisories, which would cut the
+([#1222](https://github.com/zizmorcore/zizmor/issues/1222)), and zizmor's precomputed snapshot of tags and advisories, which would cut the
 first-run cost of `--online`. The registry of rules, [rules.md](rules.md), is the list of what exists.
 
 ## Permissions against zizmor
