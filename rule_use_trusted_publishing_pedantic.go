@@ -1,7 +1,6 @@
 package jactionlint
 
 import (
-	"regexp"
 	"slices"
 	"strings"
 	"unicode/utf8"
@@ -59,9 +58,6 @@ var oidcBuildActions = map[string]string{
 
 // publisherTools are the packages that a publishing job installs to publish, which is not a build.
 var publisherTools = []string{"twine", "npm", "pnpm", "yarn", "bun", "corepack", "uv", "pip", "pipx", "poetry", "hatch", "flit", "pdm", "pkginfo", "packaging", "keyring", "id"}
-
-// psBuildRe finds the build and install commands of a PowerShell script (the analyzer reads bash and sh only).
-var psBuildRe = regexp.MustCompile(`(?i)\b(?:(?:npm|pnpm|yarn|bun)\s+(?:ci|install|i|add|run|run-script|test|build|pack|rebuild)|yarn\s*$|pip3?\s+install|python3?\s+-m\s+build|python3?\s+setup\.py|uv\s+(?:build|sync)|poetry\s+(?:build|install)|cargo\s+(?:build|test|check|package)|dotnet\s+(?:build|pack|restore|test)|msbuild|nuget\s+restore|gem\s+build|bundle\s+install)\b`)
 
 func (rule *RuleUseTrustedPublishing) checkJobPedantic(job *Job) {
 	if !rule.pedantic("use-trusted-publishing") || job == nil || !rule.grantsIDToken() || rule.permissionsComeFromCaller() {
@@ -166,8 +162,16 @@ func (rule *RuleUseTrustedPublishing) pedanticPowerShell(step *Step, run *ExecRu
 			}
 		}
 		if !published && wantBuild() {
-			if m := psBuildRe.FindString(code); m != "" {
-				setBuild(strings.Join(strings.Fields(m), " "))
+			// A simple command reads the same in PowerShell and in bash, so the line goes through the analyzer of
+			// bash and the decision of the bash path (isBuildCommand: the same exemptions for global installs and
+			// the tools of publishing). A line that does not parse as a command (`$env:X = 1`) is no build.
+			if s, err := runscript.Analyze(code, "bash"); err == nil {
+				for _, c := range s.Commands {
+					if isBuildCommand(c) {
+						setBuild(commandLabel(c))
+						break
+					}
+				}
 			}
 		}
 	}
