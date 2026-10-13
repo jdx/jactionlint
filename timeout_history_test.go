@@ -301,6 +301,55 @@ func TestSuggestTimeoutsFailures(t *testing.T) {
 	}
 }
 
+// A name that is only an expression fits every name of a run, so it must fit none: it would take the durations of the
+// other jobs, and the names that nothing else matches would count as its samples.
+func TestSuggestTimeoutsNameThatIsOnlyAnExpression(t *testing.T) {
+	w, _ := Parse([]byte("on: push\njobs:\n  os:\n    name: ${{ matrix.os }}\n    runs-on: x\n    strategy: {matrix: {os: [a]}}\n    steps: [{run: x}]\n  both:\n    name: \"${{ matrix.a }}${{ matrix.b }}\"\n    runs-on: x\n    steps: [{run: x}]\n"))
+	for id, j := range w.Jobs {
+		sp := newTimeoutJobSpec(id, j)
+		for _, name := range []string{"ubuntu-latest", "build", id, "os (a)"} {
+			if sp.matches(name) {
+				t.Errorf("job %s matches %q by an expression alone", id, name)
+			}
+		}
+	}
+
+	const fixtures = `{"repos":{"o/r":{"workflow_runs":{"ci.yaml":{
+		"runs":[{"id":1,"created_at":"2026-10-01T00:00:00Z"},{"id":2,"created_at":"2026-10-02T00:00:00Z"},{"id":3,"created_at":"2026-10-03T00:00:00Z"}],
+		"jobs":{
+			"1":{"jobs":[{"name":"build","conclusion":"success","started_at":"2026-10-01T10:00:00Z","completed_at":"2026-10-01T10:01:00Z"},{"name":"ubuntu-latest","conclusion":"success","started_at":"2026-10-01T10:00:00Z","completed_at":"2026-10-01T10:50:00Z"}]},
+			"2":{"jobs":[{"name":"build","conclusion":"success","started_at":"2026-10-01T10:00:00Z","completed_at":"2026-10-01T10:02:00Z"},{"name":"ubuntu-latest","conclusion":"success","started_at":"2026-10-01T10:00:00Z","completed_at":"2026-10-01T10:50:00Z"}]},
+			"3":{"jobs":[{"name":"build","conclusion":"success","started_at":"2026-10-01T10:00:00Z","completed_at":"2026-10-01T10:03:00Z"},{"name":"ubuntu-latest","conclusion":"success","started_at":"2026-10-01T10:00:00Z","completed_at":"2026-10-01T10:50:00Z"}]}}}}}}}`
+	client, err := NewFixtureGitHubClient([]byte(fixtures))
+	if err != nil {
+		t.Fatal(err)
+	}
+	root, _ := onlineProject(t, "on: push\njobs:\n  build:\n    runs-on: ubuntu-latest\n    steps:\n      - run: make\n  matrix:\n    name: ${{ matrix.os }}\n    runs-on: ${{ matrix.os }}\n    strategy:\n      matrix:\n        os: [ubuntu-latest]\n    steps:\n      - run: make\n", "")
+	t.Setenv("GITHUB_REPOSITORY", "o/r")
+	l, err := NewLinter(io.Discard, &LinterOptions{WorkingDir: root, Online: true, GitHubClient: client})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rep, err := l.SuggestTimeouts(nil, nil, TimeoutOptions{Runs: 3})
+	if err != nil {
+		t.Fatal(err)
+	}
+	wf := rep.Workflows[0]
+	byID := map[string]*TimeoutJob{}
+	for _, j := range wf.Jobs {
+		byID[j.ID] = j
+	}
+	if b := byID["build"]; b.Samples != 3 || *b.MaxMinutes != 3 || b.SuggestedMinutes != 6 {
+		t.Errorf("build has only its own runs: %+v", b)
+	}
+	if m := byID["matrix"]; m.Samples != 0 || m.SuggestedMinutes != 0 || !strings.Contains(m.Note, "only an expression") {
+		t.Errorf("the job named by an expression has no numbers and says why: %+v", m)
+	}
+	if d := cmp.Diff([]TimeoutUnmatched{{Name: "ubuntu-latest", Samples: 3}}, wf.Unmatched); d != "" {
+		t.Errorf("unmatched (-want +got): %s", d)
+	}
+}
+
 func TestSuggestTimeoutsFixtureClient(t *testing.T) {
 	fixtures := `{"repos":{"o/r":{"workflow_runs":{"ci.yaml":{
 		"runs":[{"id":1,"created_at":"2026-10-01T00:00:00Z"},{"id":2,"created_at":"2026-10-02T00:00:00Z"},{"id":3,"created_at":"2026-10-03T00:00:00Z"}],

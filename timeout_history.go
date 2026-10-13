@@ -128,6 +128,8 @@ type timeoutJobSpec struct {
 	patternMatrix *regexp.Regexp
 	matrix        bool
 	reusable      bool
+	// opaque is true when the name of the job is only an expression, so no run can be matched to the job by name
+	opaque bool
 	// durations of the matched executions in seconds, and the names of the runs that matched
 	durations []float64
 	legs      map[string]bool
@@ -142,12 +144,20 @@ func newTimeoutJobSpec(id string, j *Job) *timeoutJobSpec {
 	if j.Name != nil && j.Name.Value != "" {
 		if j.Name.ContainsExpression() {
 			parts := reExpression.Split(j.Name.Value, -1)
+			literal := false
 			for i := range parts {
+				literal = literal || strings.TrimSpace(parts[i]) != ""
 				parts[i] = regexp.QuoteMeta(parts[i])
 			}
-			expr := strings.Join(parts, ".+")
-			sp.pattern = regexp.MustCompile("^" + expr + "$")
-			sp.patternMatrix = regexp.MustCompile("^" + expr + `\s\(.+\)$`)
+			if !literal {
+				// A name that is only an expression fits any name of a run, so it fits none by its name: ${{ matrix.os }}
+				// would take the durations of every other job
+				sp.opaque = true
+			} else {
+				expr := strings.Join(parts, ".+")
+				sp.pattern = regexp.MustCompile("^" + expr + "$")
+				sp.patternMatrix = regexp.MustCompile("^" + expr + `\s\(.+\)$`)
+			}
 		} else {
 			sp.name = j.Name.Value
 		}
@@ -159,6 +169,9 @@ func newTimeoutJobSpec(id string, j *Job) *timeoutJobSpec {
 // expression in the name standing for any text, and for a matrix the values in parentheses that GitHub adds to the
 // name; for a call of a workflow the name of the job of the callee after " / ".
 func (sp *timeoutJobSpec) matches(name string) bool {
+	if sp.opaque {
+		return false
+	}
 	if sp.reusable {
 		base := sp.id
 		if sp.name != "" {
@@ -397,6 +410,10 @@ func (sp *timeoutJobSpec) finish(opts TimeoutOptions) {
 	j.Legs = len(sp.legs)
 	j.Samples = len(sp.durations)
 	switch {
+	case sp.opaque:
+		j.Note = "the name of the job is only an expression, so its runs cannot be told from the other jobs by name and are listed as not matched"
+		j.Samples, j.Legs = 0, 0
+		return
 	case sp.reusable:
 		j.Note = "a call of a reusable workflow: the timeouts belong to the jobs of the called workflow, which this report does not follow"
 		j.Samples, j.Legs = 0, 0
