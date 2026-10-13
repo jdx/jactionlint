@@ -1042,11 +1042,13 @@ A job uses a secret but has no environment.
 
 ## self-hosted-runner
 
-A job runs on a self-hosted runner.
+A job runs on a self-hosted runner: the label self-hosted, a label of self-hosted-runner.labels or a runner group.
 
 - Group: security
 - Default level: info
 - Profile: pedantic
+- Option `allow` (strings, empty by default): Glob patterns of the labels and the runner groups of runners which are ephemeral or trusted. A job with one of them is not reported.
+- Option `pull-request-only` (bool, default false): Report only the jobs of workflows that a pull request event can start, which is the case that poutine reports.
 - Details and examples: [checks](./checks.md#check-self-hosted-runner)
 
 ## self-repository

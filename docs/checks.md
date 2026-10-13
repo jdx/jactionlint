@@ -5870,12 +5870,35 @@ rules:
   self-hosted-runner: info
 ```
 
-The rule `self-hosted-runner` (in the `pedantic` profile, at the `info` level) points out jobs that have the `self-hosted` label in
-`runs-on:`, also when it comes from a literal value of the matrix. [Self-hosted runners][self-hosted-runner-security] are hard
-to secure: unless they are ephemeral, a job can leave something behind for the next one, and GitHub does not recommend them for
-public repositories, where any pull request can run code on them. The rule is informational because it cannot see how a runner
-is set up. Runner labels of third party providers (without the `self-hosted` label) are not reported, and neither are labels
-that come from an expression it cannot resolve.
+The rule `self-hosted-runner` (in the `pedantic` profile, at the `info` level) points out jobs that run on a self-hosted runner:
+
+- a job with the `self-hosted` label in `runs-on:`, also when it comes from a literal value of the matrix;
+- a job with a label that `self-hosted-runner.labels` of the [configuration file](config.md) lists (it can be a glob such as
+  `arc-*`). The runners of an ARC runner set have no `self-hosted` label, only the name of the set. The list is also where larger
+  runners of GitHub with a name of your choice are listed to be accepted by `runner-label`, and the rule reports them too: use
+  the option `allow` for them;
+- a job in a runner group, `runs-on: {group: ...}`, which holds self-hosted runners or larger runners.
+
+[Self-hosted runners][self-hosted-runner-security] are hard to secure: unless they are ephemeral, a job can leave something behind
+for the next one, and GitHub does not recommend them for public repositories, where any pull request can run code on them. When a
+pull request event (`pull_request`, `pull_request_target`, `pull_request_review`, `pull_request_review_comment`, also of a workflow
+that calls a reusable workflow) starts the workflow, the message says so: that is the case which poutine reports as
+`pr_runs_on_self_hosted`. The rule is informational because it cannot see how a runner is set up, nor whether the repository is
+public. It is not a default finding for that reason: in a private repository, or with approval and ephemeral runners, a pull
+request on a self-hosted runner is normal. Runner labels of third party providers (without the `self-hosted` label) are not
+reported, and neither are labels that come from an expression it cannot resolve.
+
+Two options narrow it down:
+
+```yaml
+rules:
+  self-hosted-runner:
+    allow: ["arc-ephemeral-*", "ci-runners"]  # glob patterns of labels and runner groups which are ephemeral or trusted
+    pull-request-only: true                    # only workflows that a pull request event can start
+```
+
+For the check that matters, set the level you want for the pull request case, for example `self-hosted-runner: {level: warn,
+pull-request-only: true}`.
 
 If you must use self-hosted runners in a public repository, require approval for the workflows of outside contributors and use
 ephemeral (just-in-time) runners.
