@@ -142,11 +142,14 @@ func (rule *RuleUntrustedArtifact) downloadOf(s *Step) *artifactDownload {
 			// so the one of a pull request too)
 		case "bettermarks/action-artifact-download":
 			// no "path": the artifact is put in the workspace under "rename" or, without it, "artifact_name"
-			for _, name := range []string{"rename", "artifact_name"} {
-				if v, ok := e.input(name); ok && v != "" && !ContainsExpression(v) && normalizeDir(v) != "" {
-					dl.prefixes = append(dl.prefixes, normalizeDir(v))
-					break
-				}
+			// A "rename" which is set decides where the files land; one that cannot be read (an expression, the root) leaves
+			// the place unknown, and "artifact_name" is not it.
+			name := "artifact_name"
+			if v, ok := e.input("rename"); ok && v != "" {
+				name = "rename"
+			}
+			if v, ok := e.input(name); ok && v != "" && !ContainsExpression(v) && normalizeDir(v) != "" {
+				dl.prefixes = append(dl.prefixes, normalizeDir(v))
 			}
 			return dl
 		case "actions/github-script":

@@ -48,6 +48,24 @@ func TestRuleUntrustedArtifactMoreDownloaders(t *testing.T) {
           rename: out
       - run: ./out/tool
 `},
+		{"bettermarks with a rename that is an expression", head + `      - uses: bettermarks/action-artifact-download@v1
+        with:
+          artifact_name: build
+          rename: ${{ inputs.dir }}
+      - run: ./build/tool
+`},
+		{"bettermarks with a rename which is the root", head + `      - uses: bettermarks/action-artifact-download@v1
+        with:
+          artifact_name: build
+          rename: ./
+      - run: ./build/tool
+`},
+		{"bettermarks with an empty rename", head + `      - uses: bettermarks/action-artifact-download@v1 # want
+        with:
+          artifact_name: build
+          rename: ""
+      - run: ./build/tool
+`},
 		{"bettermarks and a command of something else", head + `      - uses: bettermarks/action-artifact-download@v1
         with:
           artifact_name: build
