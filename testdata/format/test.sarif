@@ -655,21 +655,6 @@
               "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
             },
             {
-              "id": "unmatched-paths-filter",
-              "name": "UnmatchedPathsFilter",
-              "defaultConfiguration": {
-                "level": "error"
-              },
-              "properties": {
-                "description": "Checks that the entries of \"paths:\" and \"paths-ignore:\" match a file of the repository",
-                "queryURI": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
-              },
-              "fullDescription": {
-                "text": "Checks that the entries of \"paths:\" and \"paths-ignore:\" match a file of the repository"
-              },
-              "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
-            },
-            {
               "id": "unpinned-images",
               "name": "UnpinnedImages",
               "defaultConfiguration": {
