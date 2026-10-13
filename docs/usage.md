@@ -286,7 +286,7 @@ note: shellcheck was not found, so it did not check 12 shell scripts. install it
 - The note is printed once per run, and only when a script needed the tool: a repository whose steps are all `uses:` gets none.
 - Silence it with `--shellcheck=` (or `--pyflakes=`), which says that you do not want the tool, or with `--no-hints` or
   `JACTIONLINT_NO_HINTS=1`, which silence the other notes too. A tool turned off with an empty command is never noted.
-- A command you name yourself must exist. `--shellcheck=/bad/path` (or `--pyflakes=`) exits with status 3 and says that the path was not
+- A command you name yourself must exist. `--shellcheck=/bad/path` (or `--pyflakes=/bad/path`) exits with status 3 and says that the path was not
   found or is not executable, instead of running without the tool. `--shellcheck=shellcheck` counts as named too.
 - `--format sarif` prints no line. The same information is in the log: a notification in `invocations` and, for each tool that a
   script needed, the property `externalTools` of the run, next to `onlineCoverage`. `status` is `ran` or `not found`, `scripts` is the
