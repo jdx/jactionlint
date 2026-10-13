@@ -39,6 +39,7 @@ List of checks:
 - [Popular action inputs validation at `with:`](#check-popular-action-inputs)
 - [Outdated popular actions detection at `uses:`](#detect-outdated-popular-actions)
 - [Shell name validation at `shell:`](#check-shell-names)
+- [Scripts folded into one line](#check-multiline-plain-run)
 - [Run script policy (pedantic)](#check-run-policy)
 - [Job ID and step ID uniqueness](#check-job-step-ids)
 - [Hardcoded credentials](#check-hardcoded-credentials)
@@ -2861,6 +2862,61 @@ need `shell:` so they are not affected.
 
 `max-run-lines` counts non-blank lines in a `run:` script. Comment lines are counted. Its default `max` is 100 lines when the rule
 is enabled by a profile.
+
+<a id="check-multiline-plain-run"></a>
+## Scripts folded into one line
+
+Example input:
+
+```yaml
+on: push
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      # ERROR: without | YAML folds the lines into one, so this is one echo command
+      - run: echo "building"
+          npm ci
+          npm test
+      # OK: a block scalar keeps the lines
+      - run: |
+          echo "building"
+          npm ci
+          npm test
+      # OK: one command wrapped over several lines
+      - run: docker build
+          --tag app
+          .
+```
+
+Output:
+
+```
+test.yaml:9:11: this "run:" is not a block scalar, so YAML folds its 3 lines into one line and the shell runs the single command `echo "building" npm ci npm test`. write `run: |` to keep the lines [multiline-plain-run]
+  |
+9 |           npm ci
+  |           ^~~~~~
+```
+
+[Playground](https://jactionlint.jdx.dev/#eNqkzDEOwyAMheGdUzxldw+Q2wBBCW1qrNjeeviKVkKoa1mQnj/9jVeI6xHCvSVdA2BFrf/A5azUgSdnczpjvwUAUCuiXwVQlytKPhqW5PXcKu9LwHgsT+T6M4zWCLwm8Xdsa/lRLnwKEyayuCOKTNvtPQD6TkJF)
+
+A `run:` that is not written with `|` (or `>`) but over several lines is a plain or quoted YAML scalar, and YAML folds its line breaks into
+spaces. The shell then runs one line: `echo "building" npm ci npm test` prints its arguments and nothing else happens
+([actionlint#441](https://github.com/rhysd/actionlint/issues/441)). The rule `multiline-plain-run` (in the `correctness` profile) reports
+the first line which looks like a command of its own. Wrapping one long command over several lines is common and right, so the rule is
+conservative: a line counts only when it starts with the name of a well-known command (`echo`, `cd`, `npm`, `make`, ...), or with an
+assignment (`x=1`) after a command that takes none (`echo a`), and the line before it is not unfinished: it does not end with `&&`, `|`,
+`\` and the like, does not leave a quote, a bracket or a `${{ }}` open, and does not start with a command that takes another command as
+an argument (`docker`, `ssh`, `sudo`, `xargs`, `find`, ...). Lines separated by a blank line are not compared (the blank line is kept as
+a line break). A script in a block, a script of `shell: python` and a script on one line are never reported.
+
+`--fix` writes the scalar as a block (`run: |`) with one line of the scalar on each line, but only in the narrowest shape, because it
+rewrites a script: the value starts on the line of the `run:` key, and every line is a complete command that starts with a well-known
+command (`echo`, `cd`, `npm`, `git`, `make`, ...). A script with an assignment, a keyword, an operator, a backslash or a heredoc, a
+line that continues the command before it (`make test` then `CC=gcc`), a quote, bracket, backtick or `$(` that stays open at the end of
+a line, a blank line, a `#` or an escape in a double quoted scalar, or text after the scalar gets the finding without a fix, and the
+finding says why. A line that only holds the quote of a quoted scalar is folded into a space like any other line break.
 
 <a id="check-job-step-ids"></a>
 ## Job ID and step ID uniqueness
@@ -7006,7 +7062,8 @@ The rule reports:
   `allowed_non_write_users: '*'`, `allowed_bots: '*'` or `allow-users: '*'`. A list of named users is accepted.
 - **No check of the user.** The agent actions that do not check who started them (Gemini CLI, AI inference, OpenHands, Oz, PR-Agent
   and others) run for everybody who can cause the trigger. The rule accepts a job that is restricted by an `if:` on
-  `author_association`, the actor, the sender or a label (also in a job it `needs`), by an `environment:` (reviewers can be required), or
+  `author_association`, the actor, the sender or a label (also in a job it `needs`), by an `environment:` (reviewers can be required; an environment without them does not count with `--online`, see
+  [environments without reviewers](#check-untrusted-checkout-environment)), or
   by an earlier step that checks the permission of the actor. This is a heuristic: it cannot tell a correct condition from a
   condition that mentions the actor.
 - **Settings that turn the safeguards off.** `--dangerously-skip-permissions`, `--permission-mode bypassPermissions` and allowed
@@ -8094,7 +8151,8 @@ A step is reported at its checkout when it puts untrusted code in the workspace 
 In a job that sets `permissions: {}` the message does not claim a token, because the job has none.
 
 What is **not** reported: a checkout of the base (no `ref`, or `github.event.pull_request.base.*`), a checkout that nothing runs,
-a job with an `environment:` (its reviewers decide), and a job or step whose `if:` reads who or what started the workflow:
+a job with an `environment:` (its reviewers decide, unless `--online` finds that it has none, see
+[below](#check-untrusted-checkout-environment)), and a job or step whose `if:` reads who or what started the workflow:
 `github.actor`, the author or labels of the pull request, `github.event.pull_request.head.repo`, `github.event.workflow_run.event`,
 `needs` or `steps`. A job or step that only runs for a pull request that was merged (`if: github.event.pull_request.merged == true`,
 alone or in a conjunction) is not reported for a checkout of `github.event.pull_request.merge_commit_sha` or `head.sha`: that is
@@ -8103,6 +8161,55 @@ stays reported, because the author can still push to it. A `workflow_run` workfl
 runs for `push`, `schedule`, `workflow_dispatch`, `release`, `merge_group` or `repository_dispatch`. The rule cannot tell that
 a `labeled` pull request was reviewed or that an earlier step vouched for the code in a way other than a condition on `needs` or
 `steps`. Code that other steps fetch from an output (`ref: ${{ steps.x.outputs.sha }}`) is not followed.
+
+<a id="check-untrusted-checkout-environment"></a>
+### Environments without reviewers (online)
+
+`environment:` is no protection by itself: the job waits for a person only when the environment has the protection rule "required
+reviewers". An environment which has none (a wait timer or a branch policy alone makes nobody look at the code), or which does not exist
+(a typo: GitHub creates an empty one when the job runs), holds nothing back. With `--online`, `untrusted-checkout`,
+`untrusted-artifact` and `agentic-actions` ask GitHub (`GET /repos/{owner}/{repo}/environments/{name}`) about the environment of a
+job they would otherwise skip, and report the job when the environment has no required reviewers, or does not exist in a public
+repository. The message says so. Without `--online`, or when the lookup does not work, the environment is trusted as before.
+
+- **Which repository.** The one named by `GITHUB_REPOSITORY` (GitHub Actions sets it) or else by the `origin` remote of the clone
+  (`github.com` only). Without either nothing is asked.
+- **Token.** The endpoint needs the permission "Actions: read" of a token, or the scope `repo` of a classic one for a private
+  repository. A public repository shows its environments to everybody, so an anonymous run works.
+- **What is not known.** A 403, and a 404 for a private repository (the token may not see the environment, or it does not exist), leave
+  the environment trusted and count as a skipped lookup (see [online checks](usage.md#online-checks)). A name that is
+  computed (`environment: ${{ matrix.env }}`) is not looked up.
+- **Requests.** One for each environment name of the run (a 404 for a public repository adds the request for the repository, which the
+  other online checks share), and only for a workflow and a job the rule would otherwise report on. The answers are cached like the
+  others.
+
+Example input:
+
+```yaml
+# requires --online
+on: pull_request_target
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    # This environment of the repository has a wait timer, but no required reviewers
+    environment: staging
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - run: npm ci && npm test
+```
+
+Output:
+
+```
+test.yaml:11:16: this step checks out code from a pull request (github.event.pull_request.head.sha) in a "pull_request_target" workflow and "npm" runs it afterwards. the workflow has a write token and secrets, so whoever controls that code can use them. the environment "staging" of job "deploy" has no required reviewers, so no one has to approve the run. run untrusted code in a "pull_request" workflow without secrets, or check out the base branch and only read the pull request as data. the pinned actions/checkout (v4.2.2) predates the protection that refuses the code of a fork pull request here, upgrade to v4.4.0 or later [untrusted-checkout]
+   |
+11 |           ref: ${{ github.event.pull_request.head.sha }}
+   |                ^~~
+```
+
+<!-- Skip playground link -->
 
 There is no automatic fix.
 
@@ -8178,9 +8285,11 @@ A step that validates the data stops the check from there on: a regular expressi
 deliberately generous.
 
 What is **not** reported: artifacts of the current run, a download whose files cannot be linked to a later command (an artifact
-without `path` and `name` lands in the root of the workspace under names the rule does not know), jobs with an `environment:`,
-jobs and steps with the same guards as `untrusted-checkout`, and workflows that wait only for workflows that run for `push`,
-`schedule` and other events that only people with write access cause.
+without `path` and `name` lands in the root of the workspace under names the rule does not know), jobs with an `environment:`
+(with `--online`, one without required reviewers is reported, see
+[environments without reviewers](#check-untrusted-checkout-environment)), jobs and steps with the same guards as
+`untrusted-checkout`, and workflows that wait only for workflows that run for `push`, `schedule` and other events that only people
+with write access cause.
 
 There is no automatic fix.
 
@@ -8606,7 +8715,7 @@ way because any caller can pass attacker-controlled text. jactionlint does not l
 
 How the rules treat actions:
 
-- **Applies** to the steps (and the metadata) of an action: `action-syntax`, `adhoc-packages`, `archived-uses`, `artipacked`, `background-step-not-waited`, `checkout-static-credentials`, `constant-condition`, `context-availability`, `continue-on-error`, `deprecated-action-input`, `deprecated-commands`, `duplicate-key`, `duplicate-step-id`, `environment-file-redirect`, `expired-ignore`, `expression-syntax`, `expression-type`, `forbidden-uses`, `github-app`, `if-always-true`, `impostor-commit`, `insecure-commands`, `insecure-ssh-keyscan`, `insecure-url-scheme`, `invalid-env-var-name`, `invalid-function-call`, `invalid-id`, `invalid-ignore-comment`, `invalid-local-action`, `invalid-parallel-step`, `invalid-shell-name`, `invalid-uses`, `invisible-characters`, `known-vulnerable-actions`, `malformed-expression-delimiters`, `max-run-lines`, `merge-key`, `misfeature`, `missing-action-input`, `obfuscation`, `outdated-action-runner`, `pipeline-without-pipefail`, `pyflakes`, `recursive-alias`, `ref-confusion`, `ref-version-mismatch`, `repojacking`, `require-expression-wrapping`, `self-repository`, `shellcheck`, `stale-action-refs`, `superfluous-actions`, `template-injection`, `typosquat-uses`, `undefined-function`, `undefined-property`, `unknown-action-input`, `unlocked-install`, `unpinned-images`, `unpinned-tools`, `unpinned-uses`, `unsound-contains`, `unsound-prefix-match`, `unsound-ternary`, `unused-anchor`, `unused-ignore`, `unverified-download`, `use-trusted-publishing`, `yaml-syntax`.
+- **Applies** to the steps (and the metadata) of an action: `action-syntax`, `adhoc-packages`, `archived-uses`, `artipacked`, `background-step-not-waited`, `checkout-static-credentials`, `constant-condition`, `context-availability`, `continue-on-error`, `deprecated-action-input`, `deprecated-commands`, `duplicate-key`, `duplicate-step-id`, `environment-file-redirect`, `expired-ignore`, `expression-syntax`, `expression-type`, `forbidden-uses`, `github-app`, `if-always-true`, `impostor-commit`, `insecure-commands`, `insecure-ssh-keyscan`, `insecure-url-scheme`, `invalid-env-var-name`, `invalid-function-call`, `invalid-id`, `invalid-ignore-comment`, `invalid-local-action`, `invalid-parallel-step`, `invalid-shell-name`, `invalid-uses`, `invisible-characters`, `known-vulnerable-actions`, `malformed-expression-delimiters`, `max-run-lines`, `merge-key`, `misfeature`, `missing-action-input`, `multiline-plain-run`, `obfuscation`, `outdated-action-runner`, `pipeline-without-pipefail`, `pyflakes`, `recursive-alias`, `ref-confusion`, `ref-version-mismatch`, `repojacking`, `require-expression-wrapping`, `self-repository`, `shellcheck`, `stale-action-refs`, `superfluous-actions`, `template-injection`, `typosquat-uses`, `undefined-function`, `undefined-property`, `unknown-action-input`, `unlocked-install`, `unpinned-images`, `unpinned-tools`, `unpinned-uses`, `unsound-contains`, `unsound-prefix-match`, `unsound-ternary`, `unused-anchor`, `unused-ignore`, `unverified-download`, `use-trusted-publishing`, `yaml-syntax`.
 - **Caller-dependent**: `agentic-actions`, `bot-conditions`, `cache-poisoning`, `github-env` (its findings about untrusted input do not depend on the caller), `untrusted-artifact` and `untrusted-checkout`.
 - **Not applicable** because an action does not have what the rule checks, or because only the calling job can decide (`unused-baseline-entry` is about the baseline file, not about a workflow or an action): `anonymous-definition`, `concurrency-cancels-prs`, `concurrency-cancels-release`, `concurrency-limits`, `conflicting-runner-labels`, `cron-too-frequent`, `cyclic-job-needs`, `dangerous-triggers`, `dependabot-cooldown`, `dependabot-execution`, `dependabot-missing-actions-update`, `dependabot-syntax`, `deprecated-runner-label`, `duplicate-job-id`, `duplicate-job-needs`, `duplicate-triggers`, `excessive-permissions`, `gate-job-skipped-on-failure`, `gh-without-token`, `hardcoded-container-credentials`, `insufficient-permissions`, `invalid-activity-type`, `invalid-cron`, `invalid-event-config`, `invalid-event-filter`, `invalid-glob`, `invalid-label-pattern`, `invalid-local-workflow`, `invalid-permissions`, `invalid-timezone`, `invalid-workflow-call`, `invalid-workflow-call-input`, `invalid-workflow-dispatch-input`, `local-action-checkout`, `matrix-duplicate-value`, `matrix-invalid-exclude`, `missing-permissions`, `missing-timeout`, `missing-workflow-input`, `missing-workflow-secret`, `mutable-runner-label`, `overprovisioned-secrets`, `require-shell`, `required-actions`, `secrets-inherit`, `secrets-outside-env`, `self-hosted-runner`, `timeout-too-long`, `ubuntu-slim-limits`, `undefined-job-needs`, `undocumented-permissions`, `unknown-event`, `unknown-runner-label`, `unknown-workflow-input`, `unknown-workflow-secret`, `unredacted-secrets`, `unused-baseline-entry`, `unused-job-output`, `unused-needs`, `unused-workflow-input`, `workflow-call-permissions`, `workflow-input-type`, `workflow-run-names`, `workflow-secret-scope`, `workflow-syntax`.
 

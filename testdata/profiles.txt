@@ -81,6 +81,7 @@ missing-permissions default policy error
 missing-timeout default policy error
 missing-workflow-input correctness correctness error
 missing-workflow-secret correctness correctness error
+multiline-plain-run correctness correctness error
 mutable-runner-label pedantic policy warn
 obfuscation default security error
 outdated-action-runner correctness correctness error
