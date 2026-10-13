@@ -1,6 +1,7 @@
 package jactionlint
 
 import (
+	"math"
 	"strconv"
 	"strings"
 )
@@ -188,13 +189,70 @@ func filterMayEqual(filter RawYAMLValue, slot rowSlot) bool {
 	return scalarsMayBeEqual(s.Value, slot.s)
 }
 
-// scalarsMayBeEqual is true for texts that GitHub may take as the same value: the same text, the same text in another
-// case, or the same number.
+// scalarsMayBeEqual is true for texts that GitHub may take as the same value. The scalars are read like its parser does
+// (YAML 1.2 core schema): null (null, Null, NULL, ~), booleans (true, True, TRUE and the false ones), numbers (decimal,
+// 0o octal, 0x hexadecimal, floats with an exponent, .inf and .nan) and strings. Two texts may be equal when they are the
+// same text in any case, or are the same kind of scalar with the same value (0x10 and 16, 1.0 and 1, .inf and +.inf,
+// True and true, null and ~). A number that cannot be read, or a NaN, may equal any number: the answer is only "no" when
+// the two values are known to differ, since the callers stay silent on "may".
 func scalarsMayBeEqual(a, b string) bool {
 	if strings.EqualFold(a, b) {
 		return true
 	}
-	fa, errA := strconv.ParseFloat(a, 64)
-	fb, errB := strconv.ParseFloat(b, 64)
-	return errA == nil && errB == nil && fa == fb
+	ka, va, oka := yamlCoreScalar(a)
+	kb, vb, okb := yamlCoreScalar(b)
+	switch {
+	case ka != kb:
+		return false
+	case ka == scalarString:
+		return false
+	case ka == scalarNumber:
+		return !oka || !okb || va == vb
+	case ka == scalarBool:
+		return va == vb
+	}
+	return true // null and null
+}
+
+type scalarKind int
+
+const (
+	scalarString scalarKind = iota
+	scalarNull
+	scalarBool
+	scalarNumber
+)
+
+// yamlCoreScalar returns the kind of the scalar and, for a number, its value. ok is false for a number that could not be
+// read, or that is NaN.
+func yamlCoreScalar(s string) (scalarKind, float64, bool) {
+	switch s {
+	case "null", "Null", "NULL", "~":
+		return scalarNull, 0, true
+	case "true", "True", "TRUE":
+		return scalarBool, 1, true
+	case "false", "False", "FALSE":
+		return scalarBool, 0, true
+	}
+	switch {
+	case yamlCoreSpecialNumberRe.MatchString(s):
+		if strings.Contains(strings.ToLower(s), "nan") {
+			return scalarNumber, 0, false
+		}
+		if strings.HasPrefix(s, "-") {
+			return scalarNumber, math.Inf(-1), true
+		}
+		return scalarNumber, math.Inf(1), true
+	case strings.HasPrefix(s, "0x"), strings.HasPrefix(s, "0o"):
+		if yamlCoreNumberRe.MatchString(s) {
+			if n, err := strconv.ParseInt(s[2:], map[string]int{"0x": 16, "0o": 8}[s[:2]], 64); err == nil {
+				return scalarNumber, float64(n), true
+			}
+			return scalarNumber, 0, false
+		}
+	case yamlCoreNumberRe.MatchString(s):
+		f, err := strconv.ParseFloat(s, 64)
+		return scalarNumber, f, err == nil
+	}
+	return scalarString, 0, true
 }
