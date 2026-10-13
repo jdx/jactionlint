@@ -87,3 +87,4 @@ jobs:
     steps:
       # The option comes before --
       - run: grep -P -- x file.txt
+      - run: find -- . -name '*.go' -printf '%p\n'

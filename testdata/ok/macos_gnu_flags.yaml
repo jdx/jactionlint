@@ -93,6 +93,9 @@ jobs:
           grep -- -P file.txt
           cp -- --parents a b
           sed -n -- -i file.txt
+          tee -- --append
+          date -- -d
+          stat -- -c file
       # A tool that is not the BSD one
       - run: gdate -d yesterday
       - run: echo 'tee --append and sed -i x y are text'

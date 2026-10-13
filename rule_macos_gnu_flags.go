@@ -309,8 +309,10 @@ func macosGnuForms(c *runscript.Command) []macosGnuForm {
 		if w == nil {
 			continue
 		}
-		if w.Value == "--" {
-			break // what follows is a pattern or a file name, not an option: grep -- -P file
+		if w.Value == "--" && c.Name != "find" {
+			// What follows is a pattern or a file name, not an option: grep -- -P file. For find it only ends the
+			// leading options (the paths may follow) and the primaries are still read: find -- . -printf '%p'.
+			break
 		}
 		v := w.Value // without the quotes: sed "-i" is sed -i
 		if c.Name == "grep" && i > 0 && c.Args[i-1] != nil && grepValueFlags[c.Args[i-1].Value] {
