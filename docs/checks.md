@@ -6826,8 +6826,9 @@ calls with `./path`) are never updated, which is the same mistake one level down
 [#1806](https://github.com/zizmorcore/zizmor/issues/1806), dependabot-core
 [#6345](https://github.com/dependabot/dependabot-core/issues/6345)). When the file has a `github-actions` update, the check also reports the
 local composite actions that use an action or a reusable workflow and that no `github-actions` update names, either as `directory`
-or as an entry of `directories` (a glob counts: `*` is one name, `**` any number of directories, so `/.github/actions/**/*`
-covers every directory below `.github/actions`):
+or as an entry of `directories`. Only `directories` takes globs (Dependabot documents globbing and the wildcard for `directories`, not
+for `directory`): `*` is one name and `**` any number of directories, so `/.github/actions/**/*` covers every directory below
+`.github/actions`, and `directory: /.github/actions/*` covers nothing:
 
 ```yaml
 updates:

@@ -126,12 +126,14 @@ func dependabotGlob(pattern string) (*regexp.Regexp, error) {
 	return regexp.Compile(b.String())
 }
 
-// dependabotDirectoryCovers reports whether the directory entry of an update (a literal or a glob) names the directory.
-func dependabotDirectoryCovers(entry, dir string) bool {
+// dependabotDirectoryCovers reports whether the directory entry of an update names the directory. Only the entries of
+// "directories" are globs ("*", "?" and "**"): the documentation of Dependabot says that "directories" supports globbing and the
+// wildcard character, and that "directory" does not, so the entry of "directory" is a path, with its slashes normalized.
+func dependabotDirectoryCovers(entry, dir string, glob bool) bool {
 	if normalizeDependabotDirectory(entry) == dir {
 		return true
 	}
-	if !strings.ContainsAny(entry, "*?") {
+	if !glob || !strings.ContainsAny(entry, "*?") {
 		return false
 	}
 	re, err := dependabotGlob(entry)
@@ -145,11 +147,11 @@ func (r *RuleDependabotMissingActionsUpdate) checkLocalActions(updates []*Depend
 	for _, dir := range dirs {
 		covered := false
 		for _, u := range updates {
-			if u.Directory != nil && dependabotDirectoryCovers(u.Directory.Value, dir) {
+			if u.Directory != nil && dependabotDirectoryCovers(u.Directory.Value, dir, false) {
 				covered = true
 			}
 			for _, d := range u.Directories {
-				if d != nil && dependabotDirectoryCovers(d.Value, dir) {
+				if d != nil && dependabotDirectoryCovers(d.Value, dir, true) {
 					covered = true
 				}
 			}

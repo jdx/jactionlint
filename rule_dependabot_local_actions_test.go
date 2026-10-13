@@ -29,9 +29,26 @@ func TestDependabotDirectoryGlobs(t *testing.T) {
 		{"/.github/**/setup", "/.github/setup", true},
 		{"/.github/*", "/.github/actions/setup", false},
 	}
+	// the entry of "directory" is a path: a wildcard in it is not expanded
+	for _, tc := range []struct {
+		entry, dir string
+		want       bool
+	}{
+		{"/.github/actions/*", "/.github/actions/setup", false},
+		{"/.github/actions/**/*", "/.github/actions/setup", false},
+		{"/.github/actions/setup", "/.github/actions/setup", true},
+		{"/.github/actions/setup/", "/.github/actions/setup", true},
+		{".github/actions/setup", "/.github/actions/setup", true},
+		{"/", "/", true},
+		{"/.github/actions/*", "/.github/actions/*", true},
+	} {
+		if got := dependabotDirectoryCovers(tc.entry, tc.dir, false); got != tc.want {
+			t.Errorf("%q (directory) covers %q: want %v, got %v", tc.entry, tc.dir, tc.want, got)
+		}
+	}
 	for _, tc := range tests {
-		if got := dependabotDirectoryCovers(tc.entry, tc.dir); got != tc.want {
-			t.Errorf("%q covers %q: want %v, got %v", tc.entry, tc.dir, tc.want, got)
+		if got := dependabotDirectoryCovers(tc.entry, tc.dir, true); got != tc.want {
+			t.Errorf("%q (directories) covers %q: want %v, got %v", tc.entry, tc.dir, tc.want, got)
 		}
 	}
 }
@@ -65,7 +82,9 @@ func TestDependabotMissingActionsUpdateLocalActions(t *testing.T) {
 		{"directories with the names", ghUpdate("    directories: [\"/\", \"/.github/actions/setup\", \"/.github/actions/other\"]\n"), false, ""},
 		{"directories with one name", ghUpdate("    directories: [\"/\", \"/.github/actions/setup\"]\n"), true, ""},
 		{"a second update for the actions", ghUpdate("    directory: /\n") + "  - package-ecosystem: github-actions\n    directory: /.github/actions/setup\n    schedule:\n      interval: weekly\n", true, ""},
-		{"only the actions", ghUpdate("    directory: /.github/actions/*\n"), false, ""},
+		{"a glob in directory is not expanded", ghUpdate("    directory: /.github/actions/*\n"), true, ""},
+		{"only the actions with directories", ghUpdate("    directories: [\"/.github/actions/*\"]\n"), false, ""},
+		{"a glob in directory next to the names", ghUpdate("    directory: /.github/actions/*\n") + "  - package-ecosystem: github-actions\n    directories: [\"/.github/actions/setup\", \"/.github/actions/other\"]\n    schedule:\n      interval: weekly\n", false, ""},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
