@@ -1,0 +1,325 @@
+package jactionlint
+
+import (
+	"io/fs"
+	"os"
+	"path"
+	"path/filepath"
+	"regexp"
+	"sort"
+	"strings"
+	"sync"
+	"time"
+	"unicode/utf8"
+)
+
+// RuleUnmatchedPathsFilter reports an entry of `paths` or `paths-ignore` which matches no file of the repository.
+//
+// GitHub starts a workflow for a push or a pull request only when a changed file matches an entry of `paths`. An entry
+// whose path was renamed, moved or misspelled matches nothing, so the workflow does not start for the files that it
+// was written for, and nothing says so. In `paths-ignore` such an entry ignores nothing.
+//
+// The entries are matched against the files of the repository on disk (a walk of the project root, `.git` excluded).
+// The rule is conservative in what it calls a mismatch, because a false report would hide a real one:
+//
+//   - it runs only when the file belongs to a project (not for stdin or a file outside a repository), and not for a
+//     generated file (unless the configuration reports them), whose entries come from another file;
+//   - an entry matches when it matches a file or a directory of the repository, in either case: GitHub does not say
+//     whether `docs` alone matches the files in it, so it is not called dead;
+//   - an entry starting with `!` is skipped (a negation that matches nothing changes nothing), and so is an entry that is
+//     invalid, contains `${{`, starts with `/` or `./`, or uses a form this rule cannot evaluate;
+//   - an entry in a git submodule that is not checked out is skipped, as is any entry that could match inside it;
+//   - a repository with more than pathsFilterMaxEntries files is not looked at.
+type RuleUnmatchedPathsFilter struct {
+	RuleBase
+	root string
+}
+
+// pathsFilterMaxEntries bounds the number of files and directories that the rule reads.
+const pathsFilterMaxEntries = 300000
+
+// NewRuleUnmatchedPathsFilter creates a new RuleUnmatchedPathsFilter instance for the project at root.
+func NewRuleUnmatchedPathsFilter(root string) *RuleUnmatchedPathsFilter {
+	return &RuleUnmatchedPathsFilter{
+		RuleBase: RuleBase{
+			name: "unmatched-paths-filter",
+			desc: "Checks that the entries of \"paths:\" and \"paths-ignore:\" match a file of the repository",
+		},
+		root: root,
+	}
+}
+
+// VisitWorkflowPre is callback when visiting Workflow node before visiting its children.
+func (rule *RuleUnmatchedPathsFilter) VisitWorkflowPre(n *Workflow) error {
+	var files *repoPaths
+	for _, e := range n.On {
+		hook, ok := e.(*WebhookEvent)
+		if !ok {
+			continue
+		}
+		for _, f := range []struct {
+			filter *WebhookEventFilter
+			where  string
+			effect string
+		}{
+			{hook.Paths, "paths", "it never triggers the workflow"},
+			{hook.PathsIgnore, "paths-ignore", "it ignores nothing"},
+		} {
+			if f.filter == nil {
+				continue
+			}
+			for _, v := range f.filter.Values {
+				m := compilePathFilter(v.Value)
+				if m == nil {
+					continue
+				}
+				if files == nil {
+					files = readRepoPaths(rule.root)
+				}
+				if files == nil || files.cannotDecide(m) {
+					return nil
+				}
+				if !files.matches(m) {
+					rule.ReportIDf("unmatched-paths-filter", v.Pos, "the entry %q of %q matches no file or directory of the repository, so %s. a path may have been renamed or moved, or have a typo", v.Value, f.where, f.effect)
+				}
+			}
+		}
+	}
+	return nil
+}
+
+// pathFilter is an entry of `paths` compiled to match the lower case paths of the repository.
+type pathFilter struct {
+	re *regexp.Regexp
+	// prefix is the text that every path which matches starts with, in lower case.
+	prefix string
+}
+
+// compilePathFilter compiles an entry of `paths`. It returns nil for an entry that is not looked at.
+func compilePathFilter(pat string) *pathFilter {
+	if pat == "" || strings.HasPrefix(pat, "!") || strings.HasPrefix(pat, "/") || strings.HasPrefix(pat, "./") ||
+		strings.Contains(pat, "${{") || len(ValidatePathGlob(pat)) > 0 {
+		return nil
+	}
+	pat = strings.ToLower(pat)
+	var b strings.Builder
+	b.WriteString("^")
+	rs := []rune(pat)
+	atom := false // the last thing written can be repeated by `?` and `+`
+	prefix, inPrefix := "", true
+	for i := 0; i < len(rs); i++ {
+		c := rs[i]
+		switch c {
+		case '*':
+			j := i
+			for j+1 < len(rs) && rs[j+1] == '*' {
+				j++
+			}
+			if j > i {
+				// `**/` also matches nothing at all in front of the next name: `**/README.md` is README.md
+				if j+1 < len(rs) && rs[j+1] == '/' {
+					b.WriteString("(?:.*/)?")
+					j++
+				} else {
+					b.WriteString(".*")
+				}
+			} else {
+				b.WriteString("[^/]*")
+			}
+			i = j
+			atom = false
+			inPrefix = false
+		case '?', '+':
+			if !atom {
+				return nil
+			}
+			b.WriteRune(c)
+			atom = false
+			if inPrefix && prefix != "" {
+				_, size := utf8.DecodeLastRuneInString(prefix)
+				prefix = prefix[:len(prefix)-size] // the character in front of it is optional or repeated
+			}
+			inPrefix = false
+		case '[':
+			end := -1
+			for k := i + 1; k < len(rs); k++ {
+				if rs[k] == ']' {
+					end = k
+					break
+				}
+			}
+			if end < 0 || end == i+1 || rs[i+1] == '!' || rs[i+1] == '^' {
+				return nil
+			}
+			class := string(rs[i+1 : end])
+			if strings.ContainsAny(class, `\[`) {
+				return nil
+			}
+			b.WriteString("[" + class + "]")
+			i = end
+			atom = true
+			inPrefix = false
+		case '\\':
+			if i+1 >= len(rs) {
+				return nil
+			}
+			i++
+			b.WriteString(regexp.QuoteMeta(string(rs[i])))
+			atom = true
+			if inPrefix {
+				prefix += string(rs[i])
+			}
+		default:
+			b.WriteString(regexp.QuoteMeta(string(c)))
+			atom = true
+			if inPrefix {
+				prefix += string(c)
+			}
+		}
+	}
+	b.WriteString("$")
+	re, err := regexp.Compile(b.String())
+	if err != nil {
+		return nil
+	}
+	return &pathFilter{re: re, prefix: prefix}
+}
+
+// repoPaths are the files and directories of a repository, in lower case and sorted.
+type repoPaths struct {
+	paths []string
+	// opaque are the directories of the submodules that are not checked out, in lower case.
+	opaque []string
+}
+
+// matches reports whether a path of the repository matches the filter.
+func (r *repoPaths) matches(m *pathFilter) bool {
+	i := sort.SearchStrings(r.paths, m.prefix)
+	for ; i < len(r.paths) && strings.HasPrefix(r.paths[i], m.prefix); i++ {
+		if m.re.MatchString(r.paths[i]) {
+			return true
+		}
+	}
+	return false
+}
+
+// cannotDecide reports whether the filter could match something in a directory that is not available.
+func (r *repoPaths) cannotDecide(m *pathFilter) bool {
+	for _, o := range r.opaque {
+		if m.prefix == "" || strings.HasPrefix(m.prefix, o+"/") || m.prefix == o || strings.HasPrefix(o+"/", m.prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+type repoPathsEntry struct {
+	at    time.Time
+	paths *repoPaths
+}
+
+var (
+	repoPathsMu    sync.Mutex
+	repoPathsCache = map[string]repoPathsEntry{}
+)
+
+// repoPathsTTL is how long the files of a repository are kept: the workflows of a run are linted one after another.
+const repoPathsTTL = 20 * time.Second
+
+// readRepoPaths lists the files and directories under root, or returns nil when it cannot be done or the repository
+// has too many.
+func readRepoPaths(root string) *repoPaths {
+	repoPathsMu.Lock()
+	defer repoPathsMu.Unlock()
+	if e, ok := repoPathsCache[root]; ok && time.Since(e.at) < repoPathsTTL {
+		return e.paths
+	}
+	p := walkRepoPaths(root)
+	repoPathsCache[root] = repoPathsEntry{time.Now(), p}
+	return p
+}
+
+func walkRepoPaths(root string) *repoPaths {
+	seen := map[string]struct{}{}
+	n := 0
+	tooMany := false
+	err := filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			if d != nil && d.IsDir() {
+				return filepath.SkipDir // a directory which cannot be read has no files to see
+			}
+			return nil
+		}
+		rel, err := filepath.Rel(root, p)
+		if err != nil || rel == "." {
+			return nil
+		}
+		if d.Name() == ".git" {
+			if d.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		rel = filepath.ToSlash(rel)
+		if n++; n > pathsFilterMaxEntries {
+			tooMany = true
+			return filepath.SkipAll
+		}
+		seen[strings.ToLower(rel)] = struct{}{}
+		return nil
+	})
+	if err != nil || tooMany {
+		return nil
+	}
+	ps := make([]string, 0, len(seen))
+	for s := range seen {
+		ps = append(ps, s)
+	}
+	sort.Strings(ps)
+	return &repoPaths{paths: ps, opaque: opaqueSubmodules(root, seen)}
+}
+
+// opaqueSubmodules returns the paths of the submodules in .gitmodules which have no file in the working tree.
+func opaqueSubmodules(root string, seen map[string]struct{}) []string {
+	b, err := os.ReadFile(filepath.Join(root, ".gitmodules"))
+	if err != nil {
+		return nil
+	}
+	var ret []string
+	for _, l := range strings.Split(string(b), "\n") {
+		k, v, ok := strings.Cut(strings.TrimSpace(l), "=")
+		if !ok || strings.TrimSpace(k) != "path" {
+			continue
+		}
+		p := strings.ToLower(path.Clean(strings.Trim(strings.TrimSpace(v), `"`)))
+		empty := true
+		for s := range seen {
+			if strings.HasPrefix(s, p+"/") {
+				empty = false
+				break
+			}
+		}
+		if empty {
+			ret = append(ret, p)
+		}
+	}
+	return ret
+}
+
+func init() {
+	registerRules(
+		RuleInfo{ID: "unmatched-paths-filter", Group: RuleGroupCorrectness, Summary: "An entry of paths or paths-ignore matches no file of the repository.", DefaultLevel: SeverityWarning, Profile: ProfilePedantic, DocsAnchor: "check-unmatched-paths-filter"},
+	)
+	registerRuleFactory("unmatched-paths-filter", func(env *RuleEnv) []Rule {
+		if env.project == nil {
+			env.Skip("the workflow does not belong to a project, so there are no files to match")
+			return nil
+		}
+		generated := isGeneratedSource(env.src)
+		if generated && (env.config == nil || env.config.GeneratedFiles == nil || *env.config.GeneratedFiles != GeneratedFilesReport) {
+			env.Skip("the file is generated, its filters come from another file")
+			return nil
+		}
+		return []Rule{NewRuleUnmatchedPathsFilter(env.project.RootDir())}
+	})
+}

@@ -47,6 +47,7 @@ var actionRuleScope = map[string]struct {
 	"superfluous-actions":         {scope: actionApplies},         // the actions the steps use
 	"unlocked-install":            {scope: actionApplies},         // the scripts of the steps
 	"unpinned-tools":              {scope: actionApplies},         // the inputs of the actions the steps use
+	"unmatched-paths-filter":      {scope: actionNotApplicable},   // on.<event>.paths: belongs to the workflow
 	"unsound-prefix-match":        {scope: actionApplies},         // the if: conditions and expressions of the steps
 	"untrusted-artifact":          {scope: actionCallerDependent}, // privileged only when a caller runs on workflow_run
 	"untrusted-checkout":          {scope: actionCallerDependent}, // privileged only when a caller runs on pull_request_target or workflow_run
