@@ -65,6 +65,11 @@ func jobPermissionEdits(w *Workflow, d *srcDoc, unit string) (edits []TextEdit, 
 			continue
 		}
 		scopes, inexact := tableScopes(w, j)
+		// A command or an action which pushes needs a scope the table does not know exactly: a push needs
+		// "contents: write", but a script may do more (gh calls, API calls), so the job is not determined
+		if cmds := jobCommandNeeds(w, j); len(cmds) > 0 {
+			inexact = append(inexact, cmds[0])
+		}
 		if len(inexact) > 0 {
 			return nil, &NoFix{Code: NoFixNeedsJudgment, Reason: fmt.Sprintf("the job %q runs %s, which needs permissions that jactionlint cannot determine exactly (see the documentation of the action), so \"contents: read\" would break it. set the permissions of the job by hand", j.ID.Value, inexact[0])}
 		}

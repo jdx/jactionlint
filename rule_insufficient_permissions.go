@@ -26,6 +26,9 @@ import (
 type RuleInsufficientPermissions struct {
 	RuleBase
 	runContext
+	// emit receives what a step needs: the rule reports it against the permissions of the job, the fix of
+	// missing-permissions only collects the commands which need something (see jobCommandNeeds).
+	emit func(pos *Pos, what string, needs permNeeds, end *Pos)
 }
 
 // NewRuleInsufficientPermissions creates a new RuleInsufficientPermissions instance.
@@ -139,11 +142,12 @@ func (rule *RuleInsufficientPermissions) VisitJobPre(n *Job) error {
 		return nil
 	}
 	pedantic := rule.pedantic("insufficient-permissions")
+	rule.emit = func(pos *Pos, what string, needs permNeeds, end *Pos) { rule.report(g, pos, what, needs, end) }
 	steps := flattenSteps(n.Steps)
 	trusted := newCheckoutTrail()
 	for _, s := range steps {
 		if stepRuns(s) {
-			rule.checkStep(g, s, trusted, pedantic)
+			rule.checkStep(s, trusted, pedantic)
 		}
 		if !isStaticallyFalse(s.If) {
 			trusted.observe(s)
@@ -153,7 +157,7 @@ func (rule *RuleInsufficientPermissions) VisitJobPre(n *Job) error {
 }
 
 // checkStep judges one step.
-func (rule *RuleInsufficientPermissions) checkStep(g *grantedPermissions, s *Step, trusted *checkoutTrail, pedantic bool) {
+func (rule *RuleInsufficientPermissions) checkStep(s *Step, trusted *checkoutTrail, pedantic bool) {
 	switch e := s.Exec.(type) {
 	case *ExecAction:
 		a, ref := stepAction(s)
@@ -164,13 +168,13 @@ func (rule *RuleInsufficientPermissions) checkStep(g *grantedPermissions, s *Ste
 		if entry, ok := actionPermissionTable[name]; ok {
 			needs := entry.Needs(actionStep{step: s, act: a, ctx: &rule.runContext})
 			if !needs.Pedantic || pedantic {
-				rule.report(g, a.Uses.Pos, name, needs, nil)
+				rule.emit(a.Uses.Pos, name, needs, nil)
 			}
 		} else if gitPushingFromCheckout[name] && trusted.persists(rule) {
-			rule.report(g, a.Uses.Pos, name, permNeeds{All: writes("contents")}, nil)
+			rule.emit(a.Uses.Pos, name, permNeeds{All: writes("contents")}, nil)
 		}
 	case *ExecRun:
-		rule.checkScript(g, s, e, trusted)
+		rule.checkScript(s, e, trusted)
 	}
 }
 
@@ -298,7 +302,7 @@ var ghNeeds = map[string]map[string]permNeeds{
 }
 
 // checkScript judges the commands of a script.
-func (rule *RuleInsufficientPermissions) checkScript(g *grantedPermissions, step *Step, run *ExecRun, trail *checkoutTrail) {
+func (rule *RuleInsufficientPermissions) checkScript(step *Step, run *ExecRun, trail *checkoutTrail) {
 	sc, origin := rule.script(run)
 	if sc == nil || run.Run == nil {
 		return
@@ -312,12 +316,12 @@ func (rule *RuleInsufficientPermissions) checkScript(g *grantedPermissions, step
 		start, end := commandRange(sc, origin, c)
 		if c.Tool == "gh" && gh {
 			if needs, ok := ghCommandNeeds(c); ok {
-				rule.report(g, start, "gh "+strings.Join(commandWords(c, 2), " "), needs, end)
+				rule.emit(start, "gh "+strings.Join(commandWords(c, 2), " "), needs, end)
 			}
 			continue
 		}
 		if sub, args := gitCommand(c); sub == "push" && push && trail.persists(rule) && pushesOrigin(c, args) {
-			rule.report(g, start, "git push", permNeeds{All: writes("contents")}, end)
+			rule.emit(start, "git push", permNeeds{All: writes("contents")}, end)
 		}
 	}
 }
@@ -336,6 +340,10 @@ func assignsToken(c *runscript.Command) bool {
 // ghTokenIsGitHubToken reports whether the gh CLI of the step authenticates with the GITHUB_TOKEN of the job: the
 // variable GH_TOKEN (which comes first) or GITHUB_TOKEN is set to it. Without one the CLI has no credential.
 func (rule *RuleInsufficientPermissions) ghTokenIsGitHubToken(step *Step) bool {
+	if rule.envIsDynamic(step) {
+		// an env: which is an expression or has an insert key may set the variable, so the token is not told
+		return false
+	}
 	if v, ok := rule.envValue(step, "GH_TOKEN"); ok {
 		return v != nil && isGitHubTokenValue(v.Value)
 	}
@@ -419,4 +427,32 @@ func init() {
 	registerRuleFactory("insufficient-permissions", func(env *RuleEnv) []Rule {
 		return []Rule{NewRuleInsufficientPermissions()}
 	})
+}
+
+// jobCommandNeeds returns the commands and actions of the job which need a scope of the GITHUB_TOKEN that the table of
+// the actions does not know: the gh commands, git push and the actions which push with the credentials of the checkout.
+// The fix of missing-permissions uses it to tell that it cannot say what such a job needs.
+func jobCommandNeeds(w *Workflow, j *Job) []string {
+	rule := &RuleInsufficientPermissions{}
+	rule.enterWorkflow(w)
+	rule.enterJob(j)
+	var found []string
+	rule.emit = func(_ *Pos, what string, _ permNeeds, _ *Pos) { found = append(found, what) }
+	trusted := newCheckoutTrail()
+	for _, s := range flattenSteps(j.Steps) {
+		if stepRuns(s) {
+			switch e := s.Exec.(type) {
+			case *ExecAction:
+				if a, ref := stepAction(s); a != nil && ref.Kind == UsesAction && !a.InputsUnknown() && gitPushingFromCheckout[ref.CanonicalName()] && trusted.persists(rule) {
+					found = append(found, ref.CanonicalName())
+				}
+			case *ExecRun:
+				rule.checkScript(s, e, trusted)
+			}
+		}
+		if !isStaticallyFalse(s.If) {
+			trusted.observe(s)
+		}
+	}
+	return found
 }

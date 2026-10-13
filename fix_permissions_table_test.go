@@ -218,3 +218,36 @@ func TestFixMissingPermissionsWithUnknownInputs(t *testing.T) {
 		}
 	}
 }
+
+// A job with a command or an action which pushes needs "contents: write", which the table of the actions does not know
+// for the job, so "contents: read" would break it: there is no fix, with the reason.
+func TestFixMissingPermissionsWithCommands(t *testing.T) {
+	steps := map[string]string{
+		"a push":        "      - uses: actions/checkout@v4\n      - uses: softprops/action-gh-release@v2\n      - run: git push\n",
+		"auto commit":   "      - uses: actions/checkout@v4\n      - uses: peter-evans/create-pull-request@v7\n      - uses: stefanzweifel/git-auto-commit-action@v5\n",
+		"a gh command":  "      - uses: softprops/action-gh-release@v2\n      - run: gh release create v1\n        env:\n          GH_TOKEN: ${{ github.token }}\n",
+		"gh pr create":  "      - uses: actions/checkout@v4\n      - run: gh pr create --fill\n        env:\n          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}\n",
+		"a push alone":  "      - uses: actions/checkout@v4\n      - run: git push\n",
+		"gh in a group": "      - run: gh release upload v1 a\n        env:\n          GH_TOKEN: ${{ github.token }}\n",
+	}
+	for what, body := range steps {
+		src := "on: push\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n" + body
+		w, err := Parse([]byte(src))
+		if err != nil {
+			t.Fatal(err)
+		}
+		f, why := fixMissingPermissionsWhy(w)
+		if f != nil || why == nil || why.Code != NoFixNeedsJudgment {
+			t.Errorf("%s: want no fix and a reason: %+v %+v", what, f, why)
+		}
+	}
+	// A command which the rule does not judge (another token) does not take the fix away
+	const other = "on: push\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n        with:\n          token: ${{ secrets.PAT }}\n      - run: git push\n"
+	w, err := Parse([]byte(other))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if f, _ := fixMissingPermissionsWhy(w); f == nil {
+		t.Errorf("a push with a token of its own needs nothing from the GITHUB_TOKEN")
+	}
+}

@@ -98,6 +98,14 @@ func TestRuleInsufficientPermissions(t *testing.T) {
 		{"a job that never runs", head + "jobs:\n  t:\n    if: false\n    runs-on: ubuntu-latest\n    permissions: {}\n    steps:\n      - uses: actions/deploy-pages@v4\n"},
 		{"a step that may fail", head + job + "    permissions: {}\n    steps:\n      - uses: github/codeql-action/upload-sarif@v3\n        continue-on-error: true\n"},
 
+		// The environment may come from an expression: it may set the token
+		{"gh-release with an env that is an expression", head + job + "    permissions: {}\n    steps:\n      - uses: softprops/action-gh-release@v2\n        env: ${{ fromJSON(inputs.env) }}\n"},
+		{"gh-release with an insert key in the env of the job", head + job + "    permissions: {}\n    env:\n      ${{ insert }}: ${{ fromJSON(vars.ENV) }}\n    steps:\n      - uses: softprops/action-gh-release@v2\n"},
+		{"gh with an insert key in the env of the step", head + job + "    permissions: {}\n    env:\n      GH_TOKEN: ${{ github.token }}\n    steps:\n      - run: gh release create v1\n        env:\n          ${{ insert }}: ${{ fromJSON(vars.ENV) }}\n"},
+		{"gh with an env of the workflow that is an expression", "on: push\nenv: ${{ fromJSON(vars.ENV) }}\njobs:\n  t:\n    runs-on: ubuntu-latest\n    permissions: {}\n    steps:\n      - run: gh release create v1\n"},
+		{"analyze with a token of its own", head + job + "    permissions:\n      contents: read\n    steps:\n      - uses: github/codeql-action/analyze@v3\n        with:\n          token: ${{ secrets.PAT }}\n"},
+		{"analyze with the token written out", head + job + "    permissions:\n      contents: read\n    steps:\n      - uses: github/codeql-action/analyze@v3 # want\n        with:\n          token: ${{ secrets.GITHUB_TOKEN }}\n"},
+
 		// The inputs may come from an expression: they may give another token
 		{"a with that is one expression", head + job + "    permissions: {}\n    steps:\n      - uses: github/codeql-action/upload-sarif@v3\n        with: ${{ fromJSON(inputs.with) }}\n"},
 		{"a with with an insert key", head + job + "    permissions: {}\n    steps:\n      - uses: softprops/action-gh-release@v2\n        with:\n          files: a\n          ${{ insert }}: ${{ matrix.inputs }}\n"},

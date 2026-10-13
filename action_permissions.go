@@ -201,6 +201,9 @@ var actionPermissionTable = map[string]actionPermission{
 	"github/codeql-action/analyze": {
 		Source: "https://github.com/github/codeql-action#workflow-permissions",
 		Needs: func(s actionStep) permNeeds {
+			if !s.tokenIsGitHubToken("token") {
+				return permNeeds{}
+			}
 			if s.set("upload") {
 				v, ok := s.literal("upload")
 				if !ok || strings.EqualFold(v, "never") || isFalseLiteral(v) {
@@ -460,6 +463,9 @@ var actionPermissionTable = map[string]actionPermission{
 // envTokenIsGitHubToken reports whether the environment variable of the step is not set to another credential:
 // it is not set, or it is the GITHUB_TOKEN of the job.
 func (s actionStep) envTokenIsGitHubToken(name string) bool {
+	if s.ctx.envIsDynamic(s.step) {
+		return false // an env: which is an expression or has an insert key may set it to another credential
+	}
 	v, ok := s.ctx.envValue(s.step, name)
 	if !ok {
 		return true
@@ -517,6 +523,17 @@ func (c *runContext) jobMentions(words ...string) bool {
 					return true
 				}
 			}
+		}
+	}
+	return false
+}
+
+// envIsDynamic reports whether a variable may be set by an env: the file does not show: the environment of the step,
+// the job or the workflow is an expression or has an `${{ insert }}` key.
+func (c *runContext) envIsDynamic(step *Step) bool {
+	for _, env := range []*Env{step.Env, c.jobEnv(), c.workflowEnv()} {
+		if env != nil && env.Dynamic() {
+			return true
 		}
 	}
 	return false

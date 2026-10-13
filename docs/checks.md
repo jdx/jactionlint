@@ -3577,7 +3577,8 @@ table of [`insufficient-permissions`](#check-insufficient-permissions): for an a
 needs (`actions/deploy-pages`, `peter-evans/create-pull-request`, `softprops/action-gh-release`, an OIDC login, ...) the job gets
 `contents: read` and those scopes, because the permissions of a job replace the ones of the workflow. Such a fix grants write access,
 so it is **unsafe**. An action whose entry is not exact (it has more needs in private repositories, or one of several scopes
-would do) adds nothing: the fix never invents a scope.
+would do) leaves no fix, and so does a job with a `gh` command or a `git push` (or an action which pushes with the credentials of the
+checkout) that the rule judges: a script may need more than the scope it is known to need. The finding then says why. The fix never invents a scope.
 
 A reusable workflow gets different treatment, because the workflow that calls it decides what the token can do, and a callee that
 asks for more than its caller grants makes GitHub reject the run:
