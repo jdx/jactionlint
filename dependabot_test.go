@@ -649,6 +649,7 @@ func TestDependabotOutputFormats(t *testing.T) {
 
 // Truncated and broken inputs must not make the parser panic.
 func TestParseDependabotDoesNotPanic(t *testing.T) {
+	t.Parallel()
 	files, err := filepath.Glob(filepath.Join("testdata", "*", dependabotFixturePrefix+"*.yaml"))
 	if err != nil {
 		t.Fatal(err)

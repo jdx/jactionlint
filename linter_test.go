@@ -43,6 +43,7 @@ func (r testErrorReader) Read(p []byte) (int, error) {
 }
 
 func TestLinterLintOK(t *testing.T) {
+	t.Parallel()
 	dir := filepath.Join("testdata", "ok")
 
 	es, err := os.ReadDir(dir)
@@ -283,6 +284,7 @@ func TestLinterLintError(t *testing.T) {
 }
 
 func TestLinterLintAllErrorWorkflowsAtOnce(t *testing.T) {
+	t.Parallel()
 	shellcheck, err := execabs.LookPath("shellcheck")
 	if err != nil {
 		t.Skipf("shellcheck is not found: %s", err)
