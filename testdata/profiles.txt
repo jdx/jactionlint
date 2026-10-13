@@ -110,6 +110,7 @@ unknown-runner-label correctness correctness error
 unknown-workflow-input correctness correctness error
 unknown-workflow-secret correctness correctness error
 unlocked-install default security error
+unpinnable-action online security warn
 unpinned-images default security error
 unpinned-tools default security error
 unpinned-uses default policy error

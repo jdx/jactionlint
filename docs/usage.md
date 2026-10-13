@@ -713,7 +713,7 @@ and why an unsafe one is unsafe.
 <a id="online-checks"></a>
 ### Online checks
 
-Six checks, and the input, secret and output checks of any action and reusable workflow, need to ask GitHub about the actions a workflow uses, so they are off unless you give `--online` (or set `online: true` in
+Seven checks, and the input, secret and output checks of any action and reusable workflow, need to ask GitHub about the actions a workflow uses, so they are off unless you give `--online` (or set `online: true` in
 [the configuration](config.md#configuration-file), or `JACTIONLINT_ONLINE=1` in the environment). **Without it jactionlint never uses
 the network.**
 
@@ -739,6 +739,7 @@ export it by itself:
 | [`stale-action-refs`](checks.md#check-stale-action-refs) | A pinned commit that no tag points to |
 | [`archived-uses`](checks.md#check-archived-uses) | An action in an archived repository |
 | [`ref-version-mismatch`](checks.md#check-ref-version-mismatch) | A `# v1.2.3` comment that does not match the pinned commit |
+| [`unpinnable-action`](checks.md#check-unpinnable-action) | A hash-pinned action which itself uses an action by a tag or a Docker image by a tag (only with the option `pedantic`, on under `profile: pedantic`) |
 
 These rules run without `--online` too, and gain coverage with it:
 
@@ -800,7 +801,7 @@ jactionlint --online
   used. Server errors (500, 502, 503, 504), a secondary rate limit and a request which timed out once are repeated with
   exponential backoff and jitter, at most twice (`retries`).
 - **How many requests.** An action which is not in the built-in data set costs one request (two when its file is `action.yaml`), and a reusable workflow
-  of another repository one, for each distinct action or workflow, path and ref in the run, on top of the requests of the other rules, and none when the answer is in the cache. A
+  of another repository one, for each distinct action or workflow, path and ref in the run (and `unpinnable-action`, when it is on, one for every action pinned to a commit), on top of the requests of the other rules, and none when the answer is in the cache. A
   run over 20 large public repositories made 2231 requests with a cold cache, 427 of them
   for these files, and none with a warm one. Without a token GitHub allows 60 requests an hour: set one (see **Token**) when a repository
   uses many actions.

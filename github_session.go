@@ -155,6 +155,7 @@ type onlineSession struct {
 	files      memo[fileKey, repoFile]
 	actions    memo[remoteActionKey, *ActionMetadata]
 	workflows  memo[remoteWorkflowKey, *ReusableWorkflowMetadata]
+	pins       memo[pinProblemsKey, []pinProblem]
 }
 
 type originKey struct {
