@@ -3887,8 +3887,11 @@ The table, from the `action.yml` of each action (the source of each entry is in 
 | `mikepenz/action-junit-report` | `require_tests: true` | `false` | always |
 
 A step which gives the input with any value (`if-no-files-found: warn` or `ignore` included) has decided and is not reported. A step
-that runs only `if: failure()`, `always()` or `cancelled()`, which uploads logs and reports on a best effort basis, a step with
-`continue-on-error` and a step that never runs are not reported either.
+that can only run after a failure or a cancellation (`if: failure()`, `if: cancelled()`, `if: failure() && matrix.os == 'linux'`),
+which uploads logs on a best effort basis, a step with `continue-on-error` and a step that never runs are not reported either. The
+condition of a job, or of a group of `parallel:` steps, counts for the steps in it. A condition which is true after a success too
+(`always()`, `!cancelled()`, `!failure()`, `success() || failure()`) does not make a step best effort, because a missing file
+would keep the job green.
 
 `jactionlint --fix=unsafe` adds the input under `with:` of the step (and the `with:` when there is none). The fix is **unsafe**:
 a build which was green without the files is red with the input. That is the point of the finding, but it changes what the workflow

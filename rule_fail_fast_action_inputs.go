@@ -2,7 +2,6 @@ package jactionlint
 
 import (
 	"fmt"
-	"regexp"
 	"strings"
 
 	"go.yaml.in/yaml/v4"
@@ -15,9 +14,10 @@ import (
 // action has an input that makes it fail (the table of action_fail_fast.go); the finding asks for it.
 //
 // It is in the pedantic profile: a missing file is sometimes fine, and nothing says which jobs it is for. A step which sets
-// the input, with any value, has decided; a step that only runs after a failure or always (`if: failure()`,
-// `if: always()`, which upload logs and reports on a best effort basis) and a step with `continue-on-error` are not
-// reported.
+// the input, with any value, has decided; a step (or a job, or a group of parallel steps) that can only run after a
+// failure or a cancellation (`if: failure()`, `if: cancelled()`), which upload logs on a best effort basis, and a step
+// with `continue-on-error` are not reported. A condition which is true after a success too (`always()`, `!cancelled()`,
+// `!failure()`, `success() || failure()`) does not make a step best effort: a missing file would keep the job green.
 //
 // The fix adds the input to the `with:` of the step, creating it when there is none. It is unsafe: a build that was
 // green without the files fails with it, which is the point, but it changes what the workflow does.
@@ -56,27 +56,93 @@ func (rule *RuleFailFastActionInputs) VisitWorkflowPre(n *Workflow) error {
 	return nil
 }
 
-// statusFunctionRe matches the status functions of an `if:` condition.
-var statusFunctionRe = regexp.MustCompile(`(?i)\b(always|failure|cancelled)\s*\(`)
+// onlyAfterFailure reports whether the condition is certainly false while everything before it succeeded: it can be
+// true only after a failure or a cancellation, which is what a step does that collects logs on a best effort basis
+// (`if: failure()`, `if: cancelled()`, `if: failure() && matrix.os == 'linux'`). `always()` and `!cancelled()` are true
+// after a success too, so a step with them is not best effort; neither is `success() || failure()`.
+func onlyAfterFailure(c *String) bool {
+	if c == nil {
+		return false
+	}
+	node, _, _, ok := parseWholeExpr(c)
+	return ok && evalOnSuccess(node) == condFalse
+}
+
+// evalOnSuccess evaluates a condition for a run in which every earlier step succeeded and nothing was cancelled:
+// success() and always() are true, failure() and cancelled() are false, and anything else is not known.
+func evalOnSuccess(n ExprNode) condTruth {
+	switch n := n.(type) {
+	case *FuncCallNode:
+		switch strings.ToLower(n.Callee) {
+		case "success", "always":
+			return condTrue
+		case "failure", "cancelled":
+			return condFalse
+		}
+	case *BoolNode:
+		if n.Value {
+			return condTrue
+		}
+		return condFalse
+	case *NotOpNode:
+		return triNot(evalOnSuccess(n.Operand))
+	case *LogicalOpNode:
+		l, r := evalOnSuccess(n.Left), evalOnSuccess(n.Right)
+		switch n.Kind {
+		case LogicalOpNodeKindAnd:
+			if l == condFalse || r == condFalse {
+				return condFalse
+			}
+			if l == condTrue && r == condTrue {
+				return condTrue
+			}
+		case LogicalOpNodeKindOr:
+			if l == condTrue || r == condTrue {
+				return condTrue
+			}
+			if l == condFalse && r == condFalse {
+				return condFalse
+			}
+		}
+	}
+	return condUnknown
+}
+
+// bestEffort reports whether a step (or a group of parallel steps) is not judged: it never runs, it only runs after a
+// failure, or it is allowed to fail.
+func bestEffort(s *Step) bool {
+	if isStaticallyFalse(s.If) || onlyAfterFailure(s.If) {
+		return true
+	}
+	return s.ContinueOnError != nil && (s.ContinueOnError.Expression != nil || s.ContinueOnError.Value)
+}
 
 // VisitJobPre is callback when visiting Job node before visiting its children.
 func (rule *RuleFailFastActionInputs) VisitJobPre(n *Job) error {
-	if !rule.Config().RuleEnabled("fail-fast-action-inputs") || isStaticallyFalse(n.If) {
+	if !rule.Config().RuleEnabled("fail-fast-action-inputs") || isStaticallyFalse(n.If) || onlyAfterFailure(n.If) {
 		return nil
 	}
-	for _, s := range flattenSteps(n.Steps) {
+	rule.checkSteps(n.Steps)
+	return nil
+}
+
+// checkSteps judges the steps of a job or of a group of parallel steps. The condition of a group applies to the steps
+// in it.
+func (rule *RuleFailFastActionInputs) checkSteps(steps []*Step) {
+	for _, s := range steps {
+		if bestEffort(s) {
+			continue
+		}
+		if p, ok := s.Exec.(*ExecParallel); ok {
+			rule.checkSteps(p.Steps)
+			continue
+		}
 		a, ref := stepAction(s)
-		if a == nil || ref.Kind != UsesAction || a.InputsUnknown() || isStaticallyFalse(s.If) {
+		if a == nil || ref.Kind != UsesAction || a.InputsUnknown() {
 			continue
 		}
 		entry, ok := failFastTable[ref.CanonicalName()]
 		if !ok || hasInput(a, entry.Name) || (entry.Relevant != nil && !entry.Relevant(a)) {
-			continue
-		}
-		if s.ContinueOnError != nil && (s.ContinueOnError.Expression != nil || s.ContinueOnError.Value) {
-			continue
-		}
-		if s.If != nil && statusFunctionRe.MatchString(s.If.Value) {
 			continue
 		}
 		if entry.NoInput != nil && entry.NoInput(ref, rule.comment(a)) {
@@ -87,7 +153,6 @@ func (rule *RuleFailFastActionInputs) VisitJobPre(n *Job) error {
 			ref.CanonicalName(), entry.Problem, entry.Name+": "+entry.Value, entry.Default)
 		rule.attachFix(a, entry)
 	}
-	return nil
 }
 
 // comment returns the comment at the end of the line of `uses:`.
