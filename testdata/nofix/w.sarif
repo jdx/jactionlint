@@ -1,0 +1,224 @@
+{
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "jactionlint",
+          "version": "(devel)",
+          "informationUri": "https://github.com/jdx/jactionlint",
+          "rules": [
+            {
+              "id": "insecure-commands",
+              "name": "InsecureCommands",
+              "shortDescription": {
+                "text": "ACTIONS_ALLOW_UNSECURE_COMMANDS enables the deprecated set-env and add-path commands."
+              },
+              "helpUri": "https://jactionlint.jdx.dev/rules#insecure-commands",
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "profile": "default",
+                "tags": [
+                  "security"
+                ]
+              }
+            },
+            {
+              "id": "missing-timeout",
+              "name": "MissingTimeout",
+              "shortDescription": {
+                "text": "A job does not set timeout-minutes."
+              },
+              "helpUri": "https://jactionlint.jdx.dev/rules#missing-timeout",
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "profile": "default",
+                "tags": [
+                  "policy"
+                ]
+              }
+            },
+            {
+              "id": "template-injection",
+              "name": "TemplateInjection",
+              "shortDescription": {
+                "text": "A potentially untrusted input is expanded in a script, a container option or the prompt of an AI agent. With the option pedantic, so is any other expression."
+              },
+              "helpUri": "https://jactionlint.jdx.dev/rules#template-injection",
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "profile": "correctness",
+                "tags": [
+                  "security"
+                ]
+              }
+            },
+            {
+              "id": "unpinned-uses",
+              "name": "UnpinnedUses",
+              "shortDescription": {
+                "text": "An action, reusable workflow or Docker image is not pinned to a commit SHA or digest."
+              },
+              "helpUri": "https://jactionlint.jdx.dev/rules#unpinned-uses",
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "profile": "default",
+                "tags": [
+                  "policy"
+                ]
+              }
+            }
+          ]
+        }
+      },
+      "artifacts": [
+        {
+          "location": {
+            "uri": "testdata/nofix/w.yaml"
+          },
+          "sourceLanguage": "yaml"
+        }
+      ],
+      "columnKind": "unicodeCodePoints",
+      "results": [
+        {
+          "ruleId": "insecure-commands",
+          "ruleIndex": 0,
+          "level": "error",
+          "message": {
+            "text": "the workflow enables the deprecated insecure workflow commands \"set-env\" and \"add-path\" with ACTIONS_ALLOW_UNSECURE_COMMANDS. any output of a step can inject environment variables with them. remove the variable and write to the files $GITHUB_ENV and $GITHUB_PATH instead"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "testdata/nofix/w.yaml",
+                  "index": 0
+                },
+                "region": {
+                  "startLine": 3,
+                  "startColumn": 3,
+                  "endLine": 3,
+                  "endColumn": 35
+                }
+              }
+            }
+          ],
+          "properties": {
+            "noFixCode": "unsafe-edit",
+            "noFixReason": "a fix exists (Remove ACTIONS_ALLOW_UNSECURE_COMMANDS) but it may change the behavior of the workflow, so it is not offered here: review it and apply it with --fix=unsafe"
+          },
+          "partialFingerprints": {
+            "primaryLocationLineHash": "c0396432f10c2be1:1"
+          }
+        },
+        {
+          "ruleId": "missing-timeout",
+          "ruleIndex": 1,
+          "level": "error",
+          "message": {
+            "text": "\"timeout-minutes\" is not set at this job. Set it to avoid wasting runner minutes when the job hangs. Set \"default-minutes\" in the \"missing-timeout\" rule options of the configuration to turn on the --fix fix"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "testdata/nofix/w.yaml",
+                  "index": 0
+                },
+                "region": {
+                  "startLine": 5,
+                  "startColumn": 3,
+                  "endLine": 5,
+                  "endColumn": 5
+                }
+              }
+            }
+          ],
+          "properties": {
+            "kind": "timeout-check",
+            "noFixCode": "option-required",
+            "noFixOption": "missing-timeout.default-minutes",
+            "noFixReason": "set the missing-timeout option default-minutes to enable the fix, jactionlint does not choose a timeout"
+          },
+          "partialFingerprints": {
+            "primaryLocationLineHash": "b69078b07f90fc50:1"
+          }
+        },
+        {
+          "ruleId": "unpinned-uses",
+          "ruleIndex": 3,
+          "level": "error",
+          "message": {
+            "text": "action \"actions/checkout@v4\" must be pinned to a full-length commit SHA like \"{owner}/{repo}@{sha}\" because the \"unpinned-uses\" rule is enabled"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "testdata/nofix/w.yaml",
+                  "index": 0
+                },
+                "region": {
+                  "startLine": 8,
+                  "startColumn": 15,
+                  "endLine": 8,
+                  "endColumn": 34
+                }
+              }
+            }
+          ],
+          "properties": {
+            "kind": "action",
+            "noFixCode": "online-required",
+            "noFixReason": "pinning needs GitHub to resolve the tag, run with --online to enable the fix"
+          },
+          "partialFingerprints": {
+            "primaryLocationLineHash": "9ed8c288d1f8ddd3:1"
+          }
+        },
+        {
+          "ruleId": "template-injection",
+          "ruleIndex": 2,
+          "level": "error",
+          "message": {
+            "text": "\"github.head_ref\" is potentially untrusted. avoid using it directly in inline scripts. instead, pass it through an environment variable. see https://docs.github.com/en/actions/reference/security/secure-use#good-practices-for-mitigating-script-injection-attacks for more details"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "testdata/nofix/w.yaml",
+                  "index": 0
+                },
+                "region": {
+                  "startLine": 9,
+                  "startColumn": 23,
+                  "endLine": 9,
+                  "endColumn": 38
+                }
+              }
+            }
+          ],
+          "properties": {
+            "kind": "expression",
+            "noFixCode": "needs-judgment",
+            "noFixReason": "the expression is an unquoted argument of the script, so quoting it would change word splitting and globbing when the value is meant to expand to several words. quote it by hand, or pass it through an environment variable and expand it the way the script needs"
+          },
+          "partialFingerprints": {
+            "primaryLocationLineHash": "0f6b45ebff707eaa:1"
+          }
+        }
+      ]
+    }
+  ]
+}

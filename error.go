@@ -98,6 +98,11 @@ const (
 	// NoFixNeedsJudgment means the right change depends on a decision of a person, or an automatic change
 	// would not be safe.
 	NoFixNeedsJudgment NoFixCode = "needs-judgment"
+	// NoFixUnsafeEdit means a fix exists but may change the behavior of the workflow. The SARIF log (which has
+	// no unsafe fixes) says so with this code; the JSON has the fix itself, marked unsafe.
+	NoFixUnsafeEdit NoFixCode = "unsafe-edit"
+	// NoFixEditConflict means a fix exists but its edit overlaps the fix of another finding of the same SARIF log.
+	NoFixEditConflict NoFixCode = "edit-conflict"
 )
 
 // NoFix explains why a finding has no Fix. It is part of the JSON of the template fields and the SARIF log (the

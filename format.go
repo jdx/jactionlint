@@ -484,14 +484,18 @@ func (s *editSet) add(e TextEdit) {
 // like "hk util sarif-diff" apply the fixes of all results together and give up when any of them is
 // broken, so a fix which could not be applied is better left out: the finding is then reported as one
 // which needs the fixer.
-func sarifFixes(e *Error, x *lineIndex, accepted *editSet) []sarifFix {
+func sarifFixes(e *Error, x *lineIndex, accepted *editSet) ([]sarifFix, *NoFix) {
 	f := e.Fix
-	if f == nil || f.Unsafe || !f.validFor(x.src) {
-		return nil
+	if f == nil || !f.validFor(x.src) {
+		return nil, nil
+	}
+	if f.Unsafe {
+		// The fix exists but code scanning must not offer it: say so instead of leaving the result looking like advice
+		return nil, &NoFix{Code: NoFixUnsafeEdit, Reason: "a fix exists (" + f.Description + ") but it may change the behavior of the workflow, so it is not offered here: review it and apply it with --fix=unsafe"}
 	}
 	for _, edit := range f.Edits {
 		if accepted.conflicts(edit) {
-			return nil
+			return nil, &NoFix{Code: NoFixEditConflict, Reason: "a fix exists (" + f.Description + ") but its edit overlaps the fix of another finding in this log: apply that one, then run jactionlint again"}
 		}
 	}
 
@@ -517,7 +521,7 @@ func sarifFixes(e *Error, x *lineIndex, accepted *editSet) []sarifFix {
 	if desc == "" {
 		desc = "Fix " + e.ID
 	}
-	return []sarifFix{{Description: sarifMessage{desc}, ArtifactChanges: []sarifArtifactChange{change}}}
+	return []sarifFix{{Description: sarifMessage{desc}, ArtifactChanges: []sarifArtifactChange{change}}}, nil
 }
 
 func (p sarifPrinter) print(w io.Writer, results []fileResult, info runInfo) error {
@@ -610,16 +614,6 @@ func (p sarifPrinter) print(w io.Writer, results []fileResult, info runInfo) err
 			if e.Kind != "" && e.Kind != e.ID {
 				res.Properties = map[string]string{"kind": e.Kind}
 			}
-			if e.NoFix != nil && e.Fix == nil {
-				if res.Properties == nil {
-					res.Properties = map[string]string{}
-				}
-				res.Properties["noFixCode"] = string(e.NoFix.Code)
-				res.Properties["noFixReason"] = e.NoFix.Reason
-				if e.NoFix.Option != "" {
-					res.Properties["noFixOption"] = e.NoFix.Option
-				}
-			}
 			if e.Baselined {
 				res.Suppressions = []sarifSuppression{{Kind: "external", Justification: "accepted by the jactionlint baseline"}}
 			}
@@ -633,7 +627,22 @@ func (p sarifPrinter) print(w io.Writer, results []fileResult, info runInfo) err
 				}
 				res.Locations[0].PhysicalLocation.Region = reg
 			}
-			res.Fixes = sarifFixes(e, x, &accepted)
+			var why *NoFix
+			res.Fixes, why = sarifFixes(e, x, &accepted)
+			if e.NoFix != nil && e.Fix == nil {
+				why = e.NoFix
+			}
+			if why != nil {
+				// A result without fixes stays without them (hk's sarif-diff relies on it): the reason is a property
+				if res.Properties == nil {
+					res.Properties = map[string]string{}
+				}
+				res.Properties["noFixCode"] = string(why.Code)
+				res.Properties["noFixReason"] = why.Reason
+				if why.Option != "" {
+					res.Properties["noFixOption"] = why.Option
+				}
+			}
 			run.Results = append(run.Results, res)
 		}
 	}
