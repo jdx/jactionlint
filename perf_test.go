@@ -32,21 +32,22 @@ type scalingLimits struct {
 	ceiling time.Duration
 	growth  float64
 	floor   time.Duration
+	// measure runs a workload and returns how long it took. It is runWithin unless a test replaces the clock.
+	measure func(ceiling time.Duration, f func() error) (time.Duration, error)
 }
 
 var defaultScaling = scalingLimits{ceiling: scalingCeiling, growth: scalingGrowth, floor: scalingFloor}
 
-// runWithin runs f and returns how long it took, or an error when it takes more than the ceiling.
-func runWithin(ceiling time.Duration, f func()) (time.Duration, error) {
+// runWithin runs f and returns how long it took, or an error when it takes more than the ceiling. The ceiling
+// only stops the wait: a run which does not end goes on in the background, so f must not use the test (it
+// returns its error instead), which may be over by the time f is done.
+func runWithin(ceiling time.Duration, f func() error) (time.Duration, error) {
 	start := time.Now()
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		f()
-	}()
+	done := make(chan error, 1) // buffered, so that an abandoned run can still end
+	go func() { done <- f() }()
 	select {
-	case <-done:
-		return time.Since(start), nil
+	case err := <-done:
+		return time.Since(start), err
 	case <-time.After(ceiling):
 		return 0, fmt.Errorf("did not finish within %s", ceiling)
 	}
@@ -64,12 +65,16 @@ func (lim scalingLimits) growthError(small, full time.Duration) error {
 // outside of the measured time), and fails when the larger one grows faster than the size. A run which
 // grew too much is measured once more: a noisy runner can slow down one run, a quadratic does not get
 // faster.
-func (lim scalingLimits) check(n int, prepare func(n int) func()) (small, full time.Duration, err error) {
+func (lim scalingLimits) check(n int, prepare func(n int) func() error) (small, full time.Duration, err error) {
+	measure := lim.measure
+	if measure == nil {
+		measure = runWithin
+	}
 	for attempt := 0; attempt < 2; attempt++ {
-		if small, err = runWithin(lim.ceiling, prepare(n/scalingShrink)); err != nil {
+		if small, err = measure(lim.ceiling, prepare(n/scalingShrink)); err != nil {
 			return small, full, fmt.Errorf("at a size of 1/%d: %w", scalingShrink, err)
 		}
-		if full, err = runWithin(lim.ceiling, prepare(n)); err != nil {
+		if full, err = measure(lim.ceiling, prepare(n)); err != nil {
 			return small, full, err
 		}
 		if err = lim.growthError(small, full); err == nil {
@@ -79,7 +84,7 @@ func (lim scalingLimits) check(n int, prepare func(n int) func()) (small, full t
 	return small, full, err
 }
 
-func checkScaling(t *testing.T, n int, prepare func(n int) func()) {
+func checkScaling(t *testing.T, n int, prepare func(n int) func() error) {
 	t.Helper()
 	small, full, err := defaultScaling.check(n, prepare)
 	if err != nil {
@@ -88,30 +93,68 @@ func checkScaling(t *testing.T, n int, prepare func(n int) func()) {
 	t.Logf("took %s at a size of 1/%d and %s at the size of the test", small.Round(time.Millisecond), scalingShrink, full.Round(time.Millisecond))
 }
 
-// The check has to tell quadratic code from linear code, or the tests above pass whatever the code does.
+// The check has to tell quadratic code from linear code, or the tests above pass whatever the code does. The
+// clock is replaced by a cost per size, so that the result does not depend on the speed or the load of the
+// machine.
 func TestScalingCheckTellsQuadraticFromLinear(t *testing.T) {
-	lim := scalingLimits{ceiling: 10 * time.Second, growth: scalingGrowth, floor: 10 * time.Millisecond}
-	work := func(cost func(n int) time.Duration) func(n int) func() {
-		return func(n int) func() { return func() { time.Sleep(cost(n)) } }
+	var ran int
+	prepare := func(n int) func() error { return func() error { ran = n; return nil } }
+	// limits measures the call-th run (counted from 1) of the size which was last prepared with cost
+	limits := func(cost func(call, n int) time.Duration) scalingLimits {
+		calls := 0
+		return scalingLimits{ceiling: time.Minute, growth: scalingGrowth, floor: time.Millisecond,
+			measure: func(_ time.Duration, f func() error) (time.Duration, error) {
+				if err := f(); err != nil {
+					return 0, err
+				}
+				calls++
+				return cost(calls, ran), nil
+			}}
 	}
-	linear := work(func(n int) time.Duration { return time.Duration(n) * 100 * time.Microsecond })
-	nlogn := work(func(n int) time.Duration {
-		return time.Duration(float64(n) * 100 * float64(time.Microsecond) * (1 + float64(n)/400))
-	})
-	quadratic := work(func(n int) time.Duration { return time.Duration(n) * time.Duration(n) * 2 * time.Microsecond })
-	if small, full, err := lim.check(400, linear); err != nil {
-		t.Errorf("linear code is reported (%s, %s): %v", small, full, err)
+	linear := func(_, n int) time.Duration { return time.Duration(n) * time.Millisecond }
+	nlogn := func(_, n int) time.Duration {
+		return time.Duration(float64(n) * float64(time.Millisecond) * (1 + float64(n)/400))
 	}
-	if small, full, err := lim.check(400, nlogn); err != nil {
-		t.Errorf("code which is a little worse than linear is reported (%s, %s): %v", small, full, err)
+	quadratic := func(_, n int) time.Duration { return time.Duration(n) * time.Duration(n) * 10 * time.Microsecond }
+	// the first measurement of the two is slowed down by a noisy neighbor, the second is not
+	noisy := func(call, n int) time.Duration {
+		if call <= 2 {
+			return quadratic(call, n)
+		}
+		return linear(call, n)
 	}
-	if small, full, err := lim.check(400, quadratic); err == nil {
-		t.Errorf("quadratic code is not reported (%s, %s)", small, full)
+	for name, tc := range map[string]struct {
+		cost    func(call, n int) time.Duration
+		wantErr bool
+	}{
+		"linear":              {linear, false},
+		"a little worse":      {nlogn, false},
+		"quadratic":           {quadratic, true},
+		"noise in one of two": {noisy, false},
+	} {
+		if _, _, err := limits(tc.cost).check(400, prepare); (err != nil) != tc.wantErr {
+			t.Errorf("%s: want an error: %v, got %v", name, tc.wantErr, err)
+		}
 	}
-	hang := func(int) func() { return func() { time.Sleep(time.Second) } }
-	short := scalingLimits{ceiling: 50 * time.Millisecond, growth: scalingGrowth, floor: scalingFloor}
-	if _, _, err := short.check(400, hang); err == nil {
+	// below the floor nothing is judged, however much it grows
+	lim := limits(quadratic)
+	lim.floor = time.Hour
+	if _, _, err := lim.check(400, prepare); err != nil {
+		t.Errorf("a run under the floor is reported: %v", err)
+	}
+}
+
+func TestScalingCheckReportsARunWhichDoesNotEnd(t *testing.T) {
+	release := make(chan struct{})
+	t.Cleanup(func() { close(release) })
+	hang := func(int) func() error { return func() error { <-release; return nil } }
+	lim := scalingLimits{ceiling: 20 * time.Millisecond, growth: scalingGrowth, floor: scalingFloor}
+	if _, _, err := lim.check(400, hang); err == nil {
 		t.Error("a run which does not end is not reported")
+	}
+	failing := func(int) func() error { return func() error { return fmt.Errorf("boom") } }
+	if _, _, err := defaultScaling.check(400, failing); err == nil {
+		t.Error("the error of a run is not reported")
 	}
 }
 
@@ -162,16 +205,21 @@ func perfWorkflowMatrix(n int) string {
 
 func perfLint(tb testing.TB, profile Profile, src string) []*Error {
 	tb.Helper()
-	l, err := NewLinter(io.Discard, &LinterOptions{})
-	if err != nil {
-		tb.Fatal(err)
-	}
-	l.defaultConfig = withoutMissingTimeout(&Config{Profile: profile})
-	errs, err := l.Lint("test.yaml", []byte(src), nil)
+	errs, err := perfLintErr(profile, src)
 	if err != nil {
 		tb.Fatal(err)
 	}
 	return errs
+}
+
+// perfLintErr does not use a test, so that it can run on a goroutine which outlives the test.
+func perfLintErr(profile Profile, src string) ([]*Error, error) {
+	l, err := NewLinter(io.Discard, &LinterOptions{})
+	if err != nil {
+		return nil, err
+	}
+	l.defaultConfig = withoutMissingTimeout(&Config{Profile: profile})
+	return l.Lint("test.yaml", []byte(src), nil)
 }
 
 // TestScalingBudget guards against quadratic behavior in the number of steps: linting the workload takes
@@ -197,9 +245,12 @@ func TestScalingBudget(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			checkScaling(t, tc.n, func(n int) func() {
+			checkScaling(t, tc.n, func(n int) func() error {
 				src := tc.gen(n)
-				return func() { perfLint(t, tc.profile, src) }
+				return func() error {
+					_, err := perfLintErr(tc.profile, src)
+					return err
+				}
 			})
 		})
 	}
@@ -255,7 +306,7 @@ func TestScalingBudgetWorkflowRunRepository(t *testing.T) {
 	if testing.Short() {
 		t.Skip("scaling budget tests are skipped in short mode")
 	}
-	checkScaling(t, 1000, func(n int) func() {
+	checkScaling(t, 1000, func(n int) func() error {
 		dir := t.TempDir()
 		wfDir := filepath.Join(dir, ".github", "workflows")
 		if err := os.MkdirAll(wfDir, 0o755); err != nil {
@@ -270,16 +321,14 @@ func TestScalingBudgetWorkflowRunRepository(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		return func() {
+		return func() error {
 			l, err := NewLinter(io.Discard, &LinterOptions{})
 			if err != nil {
-				t.Error(err)
-				return
+				return err
 			}
 			l.defaultConfig = &Config{Profile: ProfilePedantic}
-			if _, err := l.LintRepository(dir); err != nil {
-				t.Error(err)
-			}
+			_, err = l.LintRepository(dir)
+			return err
 		}
 	})
 }
@@ -290,7 +339,7 @@ func TestScalingBudgetBaselineWrite(t *testing.T) {
 	if testing.Short() {
 		t.Skip("scaling budget tests are skipped in short mode")
 	}
-	checkScaling(t, 20000, func(n int) func() {
+	checkScaling(t, 20000, func(n int) func() error {
 		dir := t.TempDir()
 		wfDir := filepath.Join(dir, ".github", "workflows")
 		for _, d := range []string{wfDir, filepath.Join(dir, ".git")} {
@@ -306,20 +355,19 @@ func TestScalingBudgetBaselineWrite(t *testing.T) {
 		if err := os.WriteFile(filepath.Join(wfDir, "w.yaml"), []byte(b.String()), 0o644); err != nil {
 			t.Fatal(err)
 		}
-		return func() {
+		return func() error {
 			l, err := NewLinter(io.Discard, &LinterOptions{WorkingDir: dir})
 			if err != nil {
-				t.Error(err)
-				return
+				return err
 			}
 			res, err := l.WriteBaseline(nil, "")
 			if err != nil {
-				t.Error(err)
-				return
+				return err
 			}
 			if res.Entries < n/4 {
-				t.Errorf("want an entry for a quarter of the %d steps, got %d", n, res.Entries)
+				return fmt.Errorf("want an entry for a quarter of the %d steps, got %d", n, res.Entries)
 			}
+			return nil
 		}
 	})
 }
