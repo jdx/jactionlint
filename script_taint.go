@@ -38,8 +38,8 @@ const (
 	kindText  = 1
 	kindMulti = 2
 	kindName  = 4
-	// kindPerson is the display name of an author or a committer: one line like a name, which cannot add a variable to the
-	// environment, but free text for a program (it can start with a dash), unlike a branch, a label or a login.
+	// kindPerson is the display name (or the email, the bio ...) of a person: one line like a name, which cannot add a
+	// variable to the environment, but free text for a program (it can start with a dash), unlike a branch, a label or a login.
 	kindPerson = 8
 )
 
@@ -72,12 +72,21 @@ var ghJQTokens = []struct {
 }{
 	{regexp.MustCompile(`\.body\b|\bbody\b|messageBody|\.message\b|\.filename\b|\bpath\b|\bcomments\b|\bfiles\b|\breviews\b|\blatestReviews\b|\bcommits\b`), kindMulti},
 	{regexp.MustCompile(`\.title\b|\btitle\b|messageHeadline`), kindText},
-	{regexp.MustCompile(`headRefName|\.head\.ref\b|\.head\b|\.user\b|\.login\b|\bauthor\b`), kindName},
+	{regexp.MustCompile(`headRefName|\.head\.ref\b|\.head\b|\.login\b|\b(?:` + jqUserObjects + `)\b`), kindName},
 }
 
+// jqUserObjects are the properties of the JSON of GitHub that hold a user: `.login` of one is the login (no free text), its
+// `.name`, `.email`, `.bio`, `.company`, `.location` and `.blog` are free text that the person typed, and the object itself
+// holds both.
+const jqUserObjects = `user|author|committer|assignees?|requested_reviewers|reviewers?|sender|actor|owner|creator|merged_by|closed_by|reviewed_by|mergedBy`
+
 var (
-	reJQAuthorLogin  = regexp.MustCompile(`\bauthor\.login\b`)
-	reJQAuthorObject = regexp.MustCompile(`\bauthor\b|\bcommitter\b`)
+	// a field of a user that is no free text: the login, the numbers, the type and the urls
+	reJQUserPlain = regexp.MustCompile(`\b(?:` + jqUserObjects + `)\b(?:\[[^\]]*\])?\??\.(?:login|id|node_id|type|site_admin|avatar_url|html_url|url|gravatar_id)\b`)
+	reJQUserWord  = regexp.MustCompile(`\b(?:` + jqUserObjects + `)\b`)
+)
+
+var (
 	// the path of the API that lists or reads pull requests and issues, also with a query (`pulls?state=open`)
 	reGhAPIPath = regexp.MustCompile(`(^|/)repos/(?:\$\{\{.*?\}\}|\S)+/(pulls|issues)(?:[/?#]|$)`)
 	// the part of that path that holds text of many people: `pulls/7/comments`, `issues/comments`, `pulls/7/files`
@@ -198,9 +207,10 @@ func jqKinds(filter string) (kinds int) {
 			kinds |= t.kind
 		}
 	}
-	// `.author` is the object (the login and the display name); only `.author.login` is the login alone
-	if reJQAuthorObject.MatchString(reJQAuthorLogin.ReplaceAllString(filter, "")) {
-		kinds |= kindPerson
+	// what is left of a user object after the login and the plain fields is the object itself or a field with text of the
+	// person: the strictest of the two
+	if reJQUserWord.MatchString(reJQUserPlain.ReplaceAllString(filter, "")) {
+		kinds |= kindName | kindPerson
 	}
 	if kinds != 0 && strings.Contains(filter, "[]") {
 		kinds |= kindMulti // a filter that iterates prints one line for each element

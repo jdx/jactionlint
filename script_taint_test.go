@@ -100,6 +100,8 @@ func TestScriptTaintSources(t *testing.T) {
 		{"a checkout in a group of steps that ran before", "      - parallel:\n          - uses: actions/checkout@v4\n            with:\n              ref: ${{ github.event.pull_request.head.sha || github.head_ref }}\n          - run: echo hi\n", "V=$(git log -1 --format=%s)\n" + env, "github-env", 1},
 		{"gh pr checkout in a group of steps that ran before", "      - parallel:\n          - run: gh pr checkout \"$N\"\n", "V=$(git log -1 --format=%s)\n" + env, "github-env", 1},
 		{"a group of steps that checks out nothing", "      - parallel:\n          - run: echo hi\n", "V=$(git log -1 --format=%s)\n" + env, "github-env", 0},
+		{"the display name of a user is one line for the environment", "", "V=$(gh api \"repos/$R/pulls/$N\" --jq .user.name)\n" + env, "github-env", 0},
+		{"the display name of a user is run by eval", "", "V=$(gh api \"repos/$R/pulls/$N\" --jq .user.name)\neval \"echo $V\"", "command-injection", 1},
 		{"a path named diff is not git diff", checkout, "V=$(git add diff)\n" + env, "github-env", 0},
 		{"a path named log is not git log", checkout, "V=$(git restore log --source=HEAD)\n" + env, "github-env", 0},
 		{"a branch named show is not git show", checkout, "V=$(git checkout show)\n" + env, "github-env", 0},
