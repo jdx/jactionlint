@@ -8,6 +8,8 @@ This document describes how to use [jactionlint](https://github.com/jdx/jactionl
 With no argument, jactionlint finds all workflow files in the current repository and checks them. It checks the Dependabot
 configuration `.github/dependabot.yml` (or `.github/dependabot.yaml`) of the repository and its [composite actions](checks.md#check-composite-actions)
 (`action.yml` in the root, under `.github/actions`, in any other directory of the repository, and the directories which a local `uses: ./path` refers to) as well.
+The repository is the nearest directory upwards which has a `.git` (a directory, or a file in a worktree or a submodule) or a `.jj` (a [Jujutsu][jujutsu]
+workspace, a secondary one of which has no `.git`) and a `.github/workflows` directory, a root `action.yml` or a `.github/actions` directory.
 
 ```sh
 jactionlint
@@ -1234,6 +1236,7 @@ You can also see actionlint issues inline in VS Code via the [Trunk VS Code exte
 [jactionlint-matcher]: https://raw.githubusercontent.com/jdx/jactionlint/main/.github/jactionlint-matcher.json
 [preinstall-ubuntu]: https://github.com/actions/runner-images/blob/main/images/ubuntu/Ubuntu2404-Readme.md
 [pre-commit]: https://pre-commit.com
+[jujutsu]: https://jj-vcs.github.io/jj/
 [go-shellcheck]: https://github.com/wasilibs/go-shellcheck
 [go-install]: https://go.dev/doc/install
 [docker]: https://www.docker.com/
