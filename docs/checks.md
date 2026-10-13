@@ -23,6 +23,7 @@ List of checks:
 - [Parallel steps](#check-parallel-step-refs)
 - [Background step results read before a wait](#check-background-step-not-waited)
 - [Timeout minutes of jobs](#check-timeout-minutes)
+- [Limits of ubuntu-slim](#check-ubuntu-slim-limits)
 - [Workflow names of `workflow_run` event](#check-workflow-run-names)
 - [Matrix values](#check-matrix-values)
 - [Webhook events validation](#check-webhook-events)
@@ -1591,11 +1592,69 @@ is the only way it can change a workflow, and one which really needs longer sets
 `runs-on:` (or after `name:`, or as the first key of the job when it has neither), with the indentation of the job's other keys
 and the line endings of the file. Without `default-minutes` the finding has no fix.
 
-When `timeout-too-long` has a `max` smaller than `default-minutes`, the fix uses `max` so the result stays clean. Jobs calling a
+When `timeout-too-long` has a `max` smaller than `default-minutes`, the fix uses `max` so the result stays clean. On a job that runs only on
+`ubuntu-slim` the fix writes at most 15, the [limit of that runner](#check-ubuntu-slim-limits), so that it does not add a finding of that check. Jobs calling a
 reusable workflow are skipped since they do not support `timeout-minutes`. A job written in the flow style (`job: {runs-on: ...}`)
 or with a YAML anchor is still reported but has no fix: jactionlint does not guess where to put a key there.
 
 [timeout-minutes-doc]: https://docs.github.com/en/actions/writing-workflows/workflow-syntax-for-github-actions#jobsjob_idtimeout-minutes
+
+<a id="check-ubuntu-slim-limits"></a>
+## Limits of ubuntu-slim
+
+Example input:
+
+```yaml
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-slim
+    container: node:22
+    services:
+      redis:
+        image: redis
+    steps:
+      - uses: docker://alpine:3.22
+```
+
+Output:
+
+```
+test.yaml:5:5: "container" cannot be used on ubuntu-slim: ubuntu-slim runs the job inside an unprivileged container, which has no Docker daemon, so the job container cannot start. use a runner with a VM such as ubuntu-latest [ubuntu-slim-limits]
+  |
+5 |     container: node:22
+  |     ^~~~~~~~~~
+test.yaml:7:7: "services" cannot be used on ubuntu-slim: ubuntu-slim runs the job inside an unprivileged container, which has no Docker daemon, so the service containers cannot start. use a runner with a VM such as ubuntu-latest [ubuntu-slim-limits]
+  |
+7 |       redis:
+  |       ^~~~~~
+test.yaml:10:15: the Docker container action "docker://alpine:3.22" cannot run on ubuntu-slim: ubuntu-slim runs the job inside an unprivileged container, which has no Docker daemon. use a runner with a VM such as ubuntu-latest [ubuntu-slim-limits]
+   |
+10 |       - uses: docker://alpine:3.22
+   |               ^~~~~~~~~~~~~~~~~~~~
+```
+
+<!-- Skip playground link -->
+
+`ubuntu-slim` is the single-CPU runner of GitHub. It runs a job inside an unprivileged container instead of a virtual machine. GitHub
+[documents][single-cpu-doc] that Docker-in-Docker is not supported there, and the image has a Docker client but no daemon. GitHub has told users that
+`container:` is not available on the runner (actions/runner-images#13541). So the job `container:`, the `services:` of the job and a Docker container
+action (a step with `uses: docker://...`, or a local action whose `runs.using` is `docker`) cannot work, and the rule `ubuntu-slim-limits` (in the
+`default` profile, as an error) reports each of them. A `run:` step which calls `docker` is not reported.
+
+It reports a job whose `runs-on` is only `ubuntu-slim`: the label itself, or a matrix whose values are all `ubuntu-slim`. A job that may also get
+another runner (a second label, a matrix with another value, a matrix or a runner that comes from an expression, `self-hosted`, a runner group) is never
+reported. Remote actions whose `action.yml` declares `runs.using: docker` are not known without the online checks and are not reported.
+
+The pedantic tier of the rule (the option `pedantic`, true under `profile: pedantic`) adds the job timeout: "The job timeout for single-CPU runners is
+15 minutes", so a `timeout-minutes` above 15 never takes effect and a job that runs longer fails at 15 minutes. It is pedantic because it is a
+setting that does nothing, not a failing job, until a job really runs that long; generated workflows set 45 on jobs that finish in seconds (the 334 jobs
+of github/gh-aw were the corpus for this decision). A `timeout-minutes` that is an expression is not reported.
+
+There is no automatic fix: the right change (a longer-running runner, no container) is a decision of the author. The fix of `missing-timeout` does not
+write more than 15 on such a job, so that it does not add a finding of this check.
+
+[single-cpu-doc]: https://docs.github.com/en/actions/reference/runners/github-hosted-runners#single-cpu-runners
 
 <a id="check-workflow-run-names"></a>
 ## Workflow names of `workflow_run` event
@@ -7817,7 +7876,7 @@ How the rules treat actions:
 
 - **Applies** to the steps (and the metadata) of an action: `action-syntax`, `adhoc-packages`, `archived-uses`, `artipacked`, `background-step-not-waited`, `checkout-static-credentials`, `constant-condition`, `context-availability`, `continue-on-error`, `deprecated-action-input`, `deprecated-commands`, `duplicate-key`, `duplicate-step-id`, `expired-ignore`, `expression-syntax`, `expression-type`, `forbidden-uses`, `github-app`, `if-always-true`, `impostor-commit`, `insecure-commands`, `insecure-ssh-keyscan`, `insecure-url-scheme`, `invalid-env-var-name`, `invalid-function-call`, `invalid-id`, `invalid-ignore-comment`, `invalid-local-action`, `invalid-parallel-step`, `invalid-shell-name`, `invalid-uses`, `invisible-characters`, `known-vulnerable-actions`, `max-run-lines`, `merge-key`, `misfeature`, `missing-action-input`, `obfuscation`, `outdated-action-runner`, `pipeline-without-pipefail`, `pyflakes`, `recursive-alias`, `ref-confusion`, `ref-version-mismatch`, `require-expression-wrapping`, `self-repository`, `shellcheck`, `stale-action-refs`, `superfluous-actions`, `template-injection`, `typosquat-uses`, `undefined-function`, `undefined-property`, `unknown-action-input`, `unlocked-install`, `unpinned-images`, `unpinned-tools`, `unpinned-uses`, `unsound-contains`, `unsound-prefix-match`, `unsound-ternary`, `unused-anchor`, `unused-ignore`, `unverified-download`, `use-trusted-publishing`, `yaml-syntax`.
 - **Caller-dependent**: `agentic-actions`, `bot-conditions`, `cache-poisoning`, `github-env` (its findings about untrusted input do not depend on the caller), `untrusted-artifact` and `untrusted-checkout`.
-- **Not applicable** because an action does not have what the rule checks, or because only the calling job can decide (`unused-baseline-entry` is about the baseline file, not about a workflow or an action): `anonymous-definition`, `concurrency-cancels-prs`, `concurrency-cancels-release`, `concurrency-limits`, `conflicting-runner-labels`, `cron-too-frequent`, `cyclic-job-needs`, `dangerous-triggers`, `dependabot-cooldown`, `dependabot-execution`, `dependabot-missing-actions-update`, `dependabot-syntax`, `duplicate-job-id`, `duplicate-job-needs`, `duplicate-triggers`, `excessive-permissions`, `gate-job-skipped-on-failure`, `hardcoded-container-credentials`, `invalid-activity-type`, `invalid-cron`, `invalid-event-config`, `invalid-event-filter`, `invalid-glob`, `invalid-label-pattern`, `invalid-local-workflow`, `invalid-permissions`, `invalid-timezone`, `invalid-workflow-call`, `invalid-workflow-call-input`, `invalid-workflow-dispatch-input`, `local-action-checkout`, `matrix-duplicate-value`, `matrix-invalid-exclude`, `missing-permissions`, `missing-timeout`, `missing-workflow-input`, `missing-workflow-secret`, `mutable-runner-label`, `overprovisioned-secrets`, `require-shell`, `required-actions`, `secrets-inherit`, `secrets-outside-env`, `self-hosted-runner`, `timeout-too-long`, `undefined-job-needs`, `undocumented-permissions`, `unknown-event`, `unknown-runner-label`, `unknown-workflow-input`, `unknown-workflow-secret`, `unredacted-secrets`, `unused-baseline-entry`, `unused-job-output`, `unused-needs`, `unused-workflow-input`, `workflow-call-permissions`, `workflow-input-type`, `workflow-run-names`, `workflow-secret-scope`, `workflow-syntax`.
+- **Not applicable** because an action does not have what the rule checks, or because only the calling job can decide (`unused-baseline-entry` is about the baseline file, not about a workflow or an action): `anonymous-definition`, `concurrency-cancels-prs`, `concurrency-cancels-release`, `concurrency-limits`, `conflicting-runner-labels`, `cron-too-frequent`, `cyclic-job-needs`, `dangerous-triggers`, `dependabot-cooldown`, `dependabot-execution`, `dependabot-missing-actions-update`, `dependabot-syntax`, `duplicate-job-id`, `duplicate-job-needs`, `duplicate-triggers`, `excessive-permissions`, `gate-job-skipped-on-failure`, `hardcoded-container-credentials`, `invalid-activity-type`, `invalid-cron`, `invalid-event-config`, `invalid-event-filter`, `invalid-glob`, `invalid-label-pattern`, `invalid-local-workflow`, `invalid-permissions`, `invalid-timezone`, `invalid-workflow-call`, `invalid-workflow-call-input`, `invalid-workflow-dispatch-input`, `local-action-checkout`, `matrix-duplicate-value`, `matrix-invalid-exclude`, `missing-permissions`, `missing-timeout`, `missing-workflow-input`, `missing-workflow-secret`, `mutable-runner-label`, `overprovisioned-secrets`, `require-shell`, `required-actions`, `secrets-inherit`, `secrets-outside-env`, `self-hosted-runner`, `timeout-too-long`, `ubuntu-slim-limits`, `undefined-job-needs`, `undocumented-permissions`, `unknown-event`, `unknown-runner-label`, `unknown-workflow-input`, `unknown-workflow-secret`, `unredacted-secrets`, `unused-baseline-entry`, `unused-job-output`, `unused-needs`, `unused-workflow-input`, `workflow-call-permissions`, `workflow-input-type`, `workflow-run-names`, `workflow-secret-scope`, `workflow-syntax`.
 
 Example input:
 
