@@ -94,7 +94,8 @@ func (rule *RuleOutputClobbering) VisitStep(n *Step) error {
 				c.d = c.dLine
 			}
 			if open != nil {
-				if t == open.text {
+				// the closer is compared as the shell expands it: printf '%s\n' "$d" prints the delimiter held by $d
+				if printfDelimiter(c.cmd, t, t) == open.text {
 					open = nil
 					continue
 				}
