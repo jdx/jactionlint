@@ -197,9 +197,10 @@ func jobHasGate(j *Job) bool {
 }
 
 // neededJobGated reports whether a job that the job needs, at any depth, is skipped or fails unless the user is trusted:
-// its condition is a guard, it has an environment or a permission gate. The job is skipped with it, unless its own
-// condition lets it run after a skipped job (`always()`).
-func neededJobGated(w *Workflow, j *Job, seen map[*Job]bool) bool {
+// its condition is a guard or is false for the events (it is skipped), it has an environment that holds it back (envHolds,
+// see environmentHolds) or a permission gate. The job is skipped with it, unless its own condition lets it run after a
+// skipped job (`always()`).
+func neededJobGated(w *Workflow, j *Job, events []string, envHolds func(*Job) bool, seen map[*Job]bool) bool {
 	if w == nil || j == nil || seen[j] || runsAfterSkippedNeeds(j.If) {
 		return false
 	}
@@ -212,7 +213,7 @@ func neededJobGated(w *Workflow, j *Job, seen map[*Job]bool) bool {
 		if need == nil {
 			continue
 		}
-		if conditionIsGuard(need.If) || (need.Environment != nil && need.Environment.Name != nil) || jobHasGate(need) || neededJobGated(w, need, seen) {
+		if len(eventsAfterCondition(events, need.If)) == 0 || conditionIsGuard(need.If) || envHolds(need) || jobHasGate(need) || neededJobGated(w, need, events, envHolds, seen) {
 			return true
 		}
 	}

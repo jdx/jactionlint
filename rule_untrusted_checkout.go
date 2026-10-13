@@ -171,7 +171,7 @@ func (rule *RuleUntrustedCheckout) VisitJobPre(n *Job) error {
 	// each checkout: a job with thousands of checkouts is not quadratic.
 	rule.job = n
 	rule.fetches, rule.carried = nil, nil
-	if neededJobGated(rule.wf, n, map[*Job]bool{}) {
+	if neededJobGated(rule.wf, n, rule.privileged, rule.environmentHolds, map[*Job]bool{}) {
 		return nil // a job that this one needs is skipped or stops unless the user is trusted
 	}
 	rule.stepActions = map[string]string{}
@@ -246,6 +246,20 @@ func (rule *RuleUntrustedCheckout) VisitJobPre(n *Job) error {
 		}
 	}
 	return nil
+}
+
+// environmentHolds tells whether the environment of the job holds it back: it does unless the online checks prove that it has no
+// required reviewers. It is the one predicate for the environment of the job being checked, of the jobs that it needs and of
+// the jobs that call it.
+func (rule *RuleUntrustedCheckout) environmentHolds(job *Job) bool {
+	if job == nil || job.Environment == nil || job.Environment.Name == nil {
+		return false
+	}
+	if rule.gates == nil {
+		return true
+	}
+	_, none := rule.gates.noGate(job)
+	return !none
 }
 
 // environmentNote tells whether a finding of the job is reported. A job with an environment is trusted, as it always was,
