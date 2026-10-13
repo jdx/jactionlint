@@ -54,3 +54,22 @@ func TestActionsLockNoPinFixInLockedWorkflow(t *testing.T) {
 		t.Errorf("want 2 fixes in the workflow which is not listed, got %d: %v", fixes, lineIDsOf(errs))
 	}
 }
+
+// With "actions-lock: false" the lock file is ignored, also by the pin fix: the workflow is fixed as if it was not listed.
+func TestActionsLockOptionOffKeepsThePinFix(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, ".github", "workflows", "actions.lock"), "version: 'v0.0.3'\nworkflows:\n    '.github/workflows/ci.yml':\n        - 'actions/checkout@v4.2.2'\n"+
+		"dependencies:\n    'actions/checkout@v4.2.2':\n        ref: 'v4.2.2'\n        commit: 'sha1-"+pinCheckoutV422+"'\n        owner_id: 1\n        repo_id: 2\n")
+	l, err := NewLinter(io.Discard, &LinterOptions{Online: true, GitHubClient: onlineFixtureClient(t), LogWriter: io.Discard, WorkingDir: root})
+	if err != nil {
+		t.Fatal(err)
+	}
+	l.defaultConfig = mustParseConfigFixture(t, "rules:\n  unpinned-uses:\n    level: error\n    actions-lock: false\n")
+	errs, err := l.Lint(filepath.Join(root, ".github", "workflows", "ci.yml"), []byte(workflowWith("uses: actions/setup-node@v4")), &Project{root: root})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(errs) != 1 || errs[0].Fix == nil {
+		t.Fatalf("the finding must carry the pin fix: %+v", errs)
+	}
+}

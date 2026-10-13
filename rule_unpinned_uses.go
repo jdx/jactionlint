@@ -212,8 +212,15 @@ func (rule *RuleAction) lockPins(ref *UsesRef) bool {
 	if rule.lock == nil {
 		return false
 	}
-	if v, set := rule.config.ruleOptionBool("unpinned-uses", "actions-lock"); set && !v {
+	if !rule.config.readsActionsLock() {
 		return false
 	}
 	return rule.lock.pins(ref)
+}
+
+// readsActionsLock reports whether the Actions lock file is read for the rule unpinned-uses: the option "actions-lock"
+// is not false. It decides the findings and the pin fix alike.
+func (c *Config) readsActionsLock() bool {
+	v, set := c.ruleOptionBool("unpinned-uses", "actions-lock")
+	return !set || v
 }
