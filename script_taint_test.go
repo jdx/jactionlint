@@ -48,6 +48,16 @@ func TestScriptTaintSources(t *testing.T) {
 		{"the api, the comments", "", "V=$(gh api repos/$R/issues/$N/comments --jq '.[].body')\n" + env, "github-env", 1},
 		{"the api, the whole object", "", "V=$(gh api repos/$R/pulls/$N)\n" + env, "github-env", 1},
 		{"a variable that holds it, read by another command", "", "J=$(gh pr view \"$N\" --json title --jq .title)\nV=\"x-$J\"\n" + env, "github-env", 1},
+		{"the api with a filter in a variable", "", "V=$(gh api \"repos/$R/pulls/$N\" --jq \"$F\")\n" + env, "github-env", 1},
+		{"the pr view with a filter in a variable", "", "V=$(gh pr view \"$N\" --json body --jq \"$F\")\n" + env, "github-env", 1},
+		{"the api with a query", "", "V=$(gh api \"repos/$R/pulls?state=open\" --jq '.[].title')\n" + env, "github-env", 1},
+		{"the api with a filter that names no property", "", "V=$(gh api \"repos/$R/pulls/$N\" --jq .)\n" + env, "github-env", 1},
+		{"the api for the pulls of a commit", "", "V=$(gh api \"repos/$R/commits/$S/pulls\" --jq '.[].title')\n" + env, "github-env", 1},
+		{"the api for the pulls of a commit, the numbers", "", "V=$(gh api \"repos/$R/commits/$S/pulls\" --jq '.[].number')\n" + env, "github-env", 1}, // a filter that is not proven harmless
+		{"the comments as a parent field", "", "V=$(gh pr view \"$N\" --json comments --jq .comments)\n" + env, "github-env", 1},
+		{"the files as a parent field", "", "V=$(gh pr view \"$N\" --json files --jq '.files')\n" + env, "github-env", 1},
+		{"the whole object", "", "V=$(gh pr view \"$N\" --json body --jq .)\n" + env, "github-env", 1},
+		{"the number of comments", "", "V=$(gh pr view \"$N\" --json comments --jq '.comments | length')\n" + env, "github-env", 0},
 		// --- not a source ---
 		{"a number", "", "V=$(gh pr view \"$N\" --json number --jq .number)\n" + env, "github-env", 0},
 		{"the state", "", "V=$(gh pr view \"$N\" --json state,mergeable -q .state)\n" + env, "github-env", 0},
@@ -121,6 +131,10 @@ func TestScriptTaintOutputClobbering(t *testing.T) {
 		{"the files", "V=$(gh pr view \"$N\" --json files --jq '.files[].path')\necho \"f=$V\" " + out, 1},
 		{"the title is one line", "V=$(gh pr view \"$N\" --json title --jq .title)\necho \"t=$V\" " + out, 0},
 		{"the branch is one line", "V=$(gh pr view \"$N\" --json headRefName --jq .headRefName)\necho \"b=$V\" " + out, 0},
+		{"the json of a pull request has one line", "V=$(gh pr view \"$N\" --json body,comments)\necho \"b=$V\" " + out, 0},
+		{"the json of the api has one line", "V=$(gh api \"repos/$R/pulls/$N\")\necho \"b=$V\" " + out, 0},
+		{"the body printed raw by a filter", "V=$(gh api \"repos/$R/pulls/$N\" --jq .body)\necho \"b=$V\" " + out, 1},
+		{"the comments of an issue", "V=$(gh issue view \"$N\" --json comments --jq '.comments[].body')\necho \"b=$V\" " + out, 1},
 		{"the first line of the body", "V=$(gh pr view \"$N\" --json body --jq .body | head -n 1)\necho \"b=$V\" " + out, 0},
 	}
 	for _, tc := range tests {
