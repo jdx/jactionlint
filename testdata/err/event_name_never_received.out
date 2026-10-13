@@ -1,0 +1,7 @@
+test.yaml:7:14: "github.event_name == 'pull_request'" is always false: this workflow is never run by the event "pull_request", it runs on push, workflow_dispatch [event-name-never-received]
+test.yaml:12:9: "github.event_name == 'release'" is always false: this workflow is never run by the event "release", it runs on push, workflow_dispatch [event-name-never-received]
+test.yaml:14:27: "github.event_name == 'issues'" is always false: this workflow is never run by the event "issues", it runs on push, workflow_dispatch [event-name-never-received]
+test.yaml:15:17: "github.event_name == 'pull_request'" is always false: this workflow is never run by the event "pull_request", it runs on push, workflow_dispatch [event-name-never-received]
+test.yaml:17:14: "github.event_name == 'schedule'" is always false: this workflow is never run by the event "schedule", it runs on push, workflow_dispatch [event-name-never-received]
+test.yaml:19:48: "github.event_name == 'Pull_Request_Target'" is always false: this workflow is never run by the event "Pull_Request_Target", it runs on push, workflow_dispatch [event-name-never-received]
+test.yaml:24:61: "github.event_name == 'workflow_dispatch'" is always false here: the same condition needs the event to be "push" as well, and a run has one event [event-name-never-received]

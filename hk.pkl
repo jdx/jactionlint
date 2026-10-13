@@ -51,6 +51,12 @@ local slow = new Mapping<String, Step> {
         fix = "go run ./scripts/generate-rules-doc"
         exclusive = true
     }
+    ["config_schema"] {
+        glob = List("schema/*.json", "scripts/generate-config-schema/**", "*.go")
+        check = "go run ./scripts/generate-config-schema -check"
+        fix = "go run ./scripts/generate-config-schema"
+        exclusive = true
+    }
     ["checks_doc"] {
         glob = List("docs/checks.md", "scripts/check-checks/**", "*.go")
         check = "go run ./scripts/check-checks -quiet ./docs/checks.md"
