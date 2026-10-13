@@ -240,6 +240,10 @@ func (cmd *Command) Main(args []string) int {
 	if flags.Changed("online-cache-ttl") {
 		opts.OnlineOptions.CacheTTL = &onlineTTL
 	}
+	if flags.Changed("online-github-com-fallback") {
+		v := f.onlineGitHubComFallback
+		opts.OnlineOptions.GitHubComFallback = &v
+	}
 	if flags.Changed("online-max-wait") {
 		opts.OnlineOptions.MaxRateLimitWait = &onlineMaxWait
 	}

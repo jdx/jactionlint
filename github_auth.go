@@ -35,6 +35,10 @@ type tokenDiscovery struct {
 	tokenEnv  string
 	tokenFile string
 	useGH     bool
+	// envNames replaces the variables which are read after tokenEnv and tokenFile ($GITHUB_TOKEN and $GH_TOKEN, and the
+	// Enterprise ones for a Server). The token of github.com in the fallback of a Server reads $GITHUB_COM_TOKEN only,
+	// because $GITHUB_TOKEN is the token of the Server there.
+	envNames []string
 
 	getenv   func(string) string
 	readFile func(string) ([]byte, error)
@@ -98,6 +102,9 @@ func (d tokenDiscovery) discover(ctx context.Context) (tok discoveredToken, noti
 	names := []string{"GITHUB_TOKEN", "GH_TOKEN"}
 	if !d.dotCom {
 		names = append([]string{"GITHUB_ENTERPRISE_TOKEN", "GH_ENTERPRISE_TOKEN"}, names...)
+	}
+	if d.envNames != nil {
+		names = d.envNames
 	}
 	for _, n := range names {
 		v := strings.TrimSpace(d.getenv(n))

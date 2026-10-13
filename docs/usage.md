@@ -127,6 +127,9 @@ cat action.yml | jactionlint --stdin-filename action.yml -
 | `--online-api-url=URL` |  | REST API URL of a GitHub Enterprise Server, e.g. https://ghe.example.com/api/v3 |
 | `--online-token-env=NAME` |  | Name of the environment variable that holds the GitHub token |
 | `--online-token-file=FILE` |  | File that holds the GitHub token |
+| `--online-github-com-fallback` |  | On a GitHub Enterprise Server, look up the repositories which the Server does not have on api.github.com (actions synced with GitHub Connect). The token for it is GITHUB_COM_TOKEN. Their names are sent to github.com |
+| `--online-github-com-token-env=NAME` |  | With the fallback: name of the environment variable that holds the token for api.github.com (default GITHUB_COM_TOKEN) |
+| `--online-github-com-token-file=FILE` |  | With the fallback: file that holds the token for api.github.com |
 | `--online-allow=PATTERN` |  | Look up only repositories matching owner/repo PATTERN ("*" is a wildcard). Repeatable |
 | `--online-deny=PATTERN` |  | Never look up repositories matching owner/repo PATTERN. Repeatable |
 | `--online-cache-ttl=DURATION` |  | How long a cached GitHub answer is used without revalidation (default 1h; 0 always revalidates) |
@@ -785,6 +788,20 @@ jactionlint --online
 - **GitHub Enterprise Server.** The API is `--online-api-url`, else `$GITHUB_API_URL` (set by GitHub Actions), else derived from
   `$GITHUB_SERVER_URL` or `$GH_HOST` (`https://HOST/api/v3`, or `https://api.NAME.ghe.com` for data residency), else
   `api.github.com`. Answers are cached per host.
+  - **Actions from github.com (`--online-github-com-fallback`).** With GitHub Connect an Enterprise Server runs `uses: actions/checkout@v4`
+    from github.com, so the Server's API answers 404 for the repository and every check which needs it is skipped. The option
+    `--online-github-com-fallback` (or `github-com-fallback: true` in [`online-options`](config.md#online-options)) asks the
+    Server first and, only for a repository which it answers 404 for, `api.github.com`; the host which has the repository
+    answers every later question about it, and the Server wins when both have it, as it does when it runs the action. It is off by
+    default, because **the names of the repositories which the Server does not have are sent to github.com**: list the internal
+    ones under `--online-deny` (they are never looked up) before you turn it on. It has no effect when the API is `api.github.com`.
+    The token for `api.github.com` is `$GITHUB_COM_TOKEN` (or the variable of `--online-github-com-token-env`, or the file of
+    `--online-github-com-token-file`, or `gh auth token --hostname github.com`). **The token of the Server is never sent to
+    github.com** (`GITHUB_TOKEN` and `GH_TOKEN` are not read for it) and the token for github.com is never sent to the Server. Without a
+    token the requests to github.com are unauthenticated (60 an hour; a notice says so). Advisories (`known-vulnerable-actions`)
+    always come from github.com, which is where the database of advisories for actions is. One more request is needed for every
+    repository which the Server does not have (a 404, cached like any answer, so the next runs do not repeat it); a
+    repository the Server has costs nothing more. `--online-report` and the other counts add up both hosts.
 - **Rate limits.** `X-RateLimit-*` and `Retry-After` are read. A limit which resets within 30 seconds (`--online-max-wait`) is waited
   for; one which resets later skips the remaining lookups with a message naming the reset time, and answers in the cache are still
   used. Server errors (500, 502, 503, 504), a secondary rate limit and a request which timed out once are repeated with
