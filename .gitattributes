@@ -4,3 +4,4 @@
 /scripts/generate-availability/testdata/** -text
 /scripts/generate-jactionlint-matcher/test/** -text
 /internal/runscript/testdata/** -text
+/schema/*.json -text

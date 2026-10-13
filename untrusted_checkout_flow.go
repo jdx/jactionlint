@@ -58,7 +58,8 @@ type revTaint struct {
 	// comment is on only has the contexts of that number and no refs.
 	pred func(string) (string, bool)
 	refs bool
-	// num follows the number of the pull request that a comment is on, for gh pr checkout; nil when there is none.
+	// num follows the number of the pull request that a comment is on (or that a caller passes), for gh pr checkout; nil when
+	// there is none.
 	num *revTaint
 	// base is the environment the script starts with: for each name where an untrusted value comes from, "" for a
 	// variable that is exported but clean.
@@ -85,9 +86,9 @@ func (rule *RuleUntrustedCheckout) newTaint(s *runscript.Script, base map[string
 
 // newNumberTaint follows the number of the pull request that a comment is on, which `gh pr checkout` takes as a
 // revision.
-func newNumberTaint(s *runscript.Script, base map[string]string) *revTaint {
+func newNumberTaint(s *runscript.Script, base map[string]string, pred func(string) (string, bool)) *revTaint {
 	t := newRevTaint(s, base)
-	t.pred, t.refs = issueNumberValue, false
+	t.pred, t.refs = pred, false
 	return t
 }
 
@@ -340,7 +341,7 @@ func firstWorkTree(cmds []*runscript.Command) int {
 func (rule *RuleUntrustedCheckout) scriptChecksOut(sc *runscript.Script, base, numBase map[string]string, dir string, depth int) (what, how string, ok bool) {
 	t := rule.newTaint(sc, base)
 	if numBase != nil {
-		t.num = newNumberTaint(sc, numBase)
+		t.num = newNumberTaint(sc, numBase, rule.numberValue)
 	}
 	for i, c := range sc.Commands {
 		var env map[string]bool

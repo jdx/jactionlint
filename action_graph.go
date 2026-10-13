@@ -190,6 +190,9 @@ type callGraph struct {
 	callers map[graphNode][]graphNode
 	// calls are the steps of a node that run the local action of another node.
 	calls map[[2]graphNode][]*ExecAction
+	// groups are the concurrency groups of each workflow by path, for the workflows that have a group which can be compared
+	// (see groupsOfWorkflow).
+	groups map[string]*workflowGroups
 	// notInheriting holds the edges from a workflow to a reusable workflow that has a job calling it without
 	// "secrets: inherit".
 	notInheriting map[[2]graphNode]bool
@@ -226,6 +229,7 @@ func newCallGraph(root string) *callGraph {
 		callers:       map[graphNode][]graphNode{},
 		calls:         map[[2]graphNode][]*ExecAction{},
 
+		groups:        map[string]*workflowGroups{},
 		notInheriting: map[[2]graphNode]bool{},
 		memo:          map[string]*ActionCallers{},
 	}
@@ -249,6 +253,9 @@ func newCallGraph(root string) *callGraph {
 		}
 		g.workflowFiles[rel] = f
 		n := graphNode{'w', rel}
+		if gr := groupsOfWorkflow(w); gr != nil {
+			g.groups[rel] = gr
+		}
 		for _, j := range w.Jobs {
 			if j == nil {
 				continue
@@ -408,6 +415,22 @@ func (g *callGraph) triggersOf(rel string) []Event {
 	}
 	g.workflowOn[rel] = on
 	return on
+}
+
+// calleeGroupsOf returns the concurrency groups of the local reusable workflows which the workflow at the path (relative to
+// the root with "/") calls, by their paths.
+func (g *callGraph) calleeGroupsOf(rel string) map[string]*workflowGroups {
+	var ret map[string]*workflowGroups
+	for _, to := range g.callees[graphNode{'w', rel}] {
+		if to.kind != 'w' || g.groups[to.path] == nil {
+			continue
+		}
+		if ret == nil {
+			ret = map[string]*workflowGroups{}
+		}
+		ret[to.path] = g.groups[to.path]
+	}
+	return ret
 }
 
 // callersOf returns the workflows which run the action in the directory (relative to the root with "/").

@@ -1,0 +1,10 @@
+on:
+  issue_comment:
+    types: [created]
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    steps:
+      - run: sed "s/PLACEHOLDER/$BODY/g" template.txt > out.txt
+        env:
+          BODY: ${{ github.event.comment.body }}

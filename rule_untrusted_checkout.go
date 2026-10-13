@@ -34,6 +34,16 @@ type RuleUntrustedCheckout struct {
 	envJob bool
 	// guard is which events of the workflow the protection of actions/checkout covers, see untrusted_checkout_guard.go.
 	guard checkoutEvents
+	// path is the file being linted. calls are the calls of it as a reusable workflow or composite action that reach it with a
+	// privileged event, inputTaint the inputs that they fill with the head of a pull request.
+	path       string
+	calls      []callContext
+	inputTaint map[string]callInput
+	// inputNumber are the inputs that the calls fill with the number of the pull request that a comment is on, with where it
+	// comes from.
+	inputNumber map[string]string
+	// actions are the local composite actions that were read, by directory
+	actions map[string]*Workflow
 	// allPrivileged are the privileged events of the workflow, privileged those that the job being judged runs for.
 	allPrivileged []string
 	// stepActions are the steps of the job that have an id and run an action, by id: the lower case name of the action.
@@ -80,6 +90,9 @@ type untrustedCheckout struct {
 	// guarded is whether actions/checkout refuses this checkout for a pull request from a fork, so only a pull request
 	// from a branch of the repository gets through. Only an `actions/checkout` step can be guarded.
 	guarded bool
+	// afterFailure is whether the checkout is behind a failed permission check of an action: only a step that runs after a
+	// failure runs it.
+	afterFailure bool
 	// note says why a checkout that the protection could cover is not guarded: the version of actions/checkout predates it.
 	note string
 }
@@ -138,13 +151,33 @@ func isMergedContext(e ExprNode) bool {
 
 // VisitWorkflowPre is callback when visiting Workflow node before visiting its children.
 func (rule *RuleUntrustedCheckout) VisitWorkflowPre(n *Workflow) error {
-	rule.privileged, rule.wf = nil, n
+	rule.privileged, rule.wf, rule.calls, rule.inputTaint, rule.inputNumber = nil, n, nil, nil, nil
 	if !rule.Config().RuleEnabled("untrusted-checkout") {
 		return nil
 	}
 	rule.privileged = privilegedEvents(n, rule.project, rule.siblings)
+	calleeKnown := false
+	if _, reusable := n.FindWorkflowCallEvent(); reusable || n.Action != nil {
+		// a reusable workflow and a composite action run for the events of the workflows that call them
+		if key := calleeKey(rule.project, rule.path); key != "" {
+			rule.calls = rule.callContexts(key, 0, map[string]bool{}, inputDefaults(n))
+			rule.inputTaint, rule.inputNumber = map[string]callInput{}, map[string]string{}
+			events := slices.Clone(rule.privileged)
+			for _, c := range rule.calls {
+				events = append(events, c.events...)
+				mergeInputs(rule.inputTaint, c.inputs)
+				for name, d := range c.numbers {
+					if _, ok := rule.inputNumber[name]; !ok {
+						rule.inputNumber[name] = d
+					}
+				}
+			}
+			rule.privileged = sortedEvents(events)
+			calleeKnown = len(rule.calls) > 0 && ((n.Action != nil && n.Action.Callers.Known()) || (n.callerEvents != nil && n.callerEvents.Known))
+		}
+	}
 	rule.allPrivileged = rule.privileged
-	rule.guard = checkoutGuardEvents(n, rule.privileged, rule.project, rule.siblings)
+	rule.guard = checkoutGuardEvents(n, rule.privileged, rule.project, rule.siblings, calleeKnown)
 	rule.loose = rule.pedantic("untrusted-checkout")
 	rule.setEvents(rule.privileged)
 	return nil
@@ -182,19 +215,20 @@ func (rule *RuleUntrustedCheckout) VisitJobPre(n *Job) error {
 			rule.stepActions[strings.ToLower(s.ID.Value)] = strings.ToLower(u.CanonicalName())
 		}
 	}
-	gated := false
+	var gate permissionGateState
 	jobEvents := rule.privileged
 	defer rule.setEvents(jobEvents)
 	pending := map[string][]*untrustedCheckout{}
 	var dirs []string // the keys of pending in the order they were added
 	jobMerged := conditionRequiresMerged(n.If)
-	for _, s := range flattenSteps(n.Steps) {
-		if gated {
-			break // the steps after a permission check only run for a user who may write
-		}
+	steps, groups := flattenStepsGroup(n.Steps)
+	for i, s := range steps {
 		if isPermissionGate(s) {
-			gated = true
+			gate.see(groups[i])
 			continue
+		}
+		if gate.holds(groups[i]) && !stepRunsAfterFailure(s) {
+			continue // the steps after a permission check only run for a user who may write
 		}
 		stepEvents := eventsAfterCondition(jobEvents, s.If)
 		if len(stepEvents) == 0 {
@@ -217,6 +251,10 @@ func (rule *RuleUntrustedCheckout) VisitJobPre(n *Job) error {
 				for _, c := range cs {
 					if merged && c.immutable() {
 						kept = append(kept, c) // a later step that does not need the merge runs it
+						continue
+					}
+					if c.afterFailure && !stepRunsAfterFailure(s) {
+						kept = append(kept, c) // the step does not run after the check of the action failed
 						continue
 					}
 					rule.report(c, how)
@@ -402,59 +440,90 @@ func tokenIsReadOnly(w *Workflow, j *Job) bool {
 	return true
 }
 
+// actionCheckout judges a step of actions/checkout: the checkout of code that someone else controls, nil if it is not one.
+// subst turns a value of the step into what it is in the run (nil for itself): the values that a call passes replace the
+// inputs of a composite action. pos is where to report, nil for the value of the input.
+func (rule *RuleUntrustedCheckout) actionCheckout(s *Step, e *ExecAction, u *UsesRef, comments *CommentIndex, subst func(string) string, pos *Pos) *untrustedCheckout {
+	if subst == nil {
+		subst = func(v string) string { return v }
+	}
+	dir := ""
+	if p, ok := e.input("path"); ok {
+		dir = normalizeDir(subst(p))
+	}
+	var found *untrustedCheckout
+	forks := false
+	for _, name := range []string{"ref", "repository"} {
+		in := e.Inputs[name]
+		if in == nil || in.Value == nil {
+			continue
+		}
+		// the protection is decided for the value that the step gets: with the values of the call in place of the inputs of the
+		// action (subst is the identity for the steps of the workflow)
+		v := in.Value.Value
+		sub := subst(v)
+		if (checkoutInputForksPR(name, v) || checkoutInputForksPR(name, sub) || rule.inputForksPR(name, v) || rule.callsForkPR(name, v)) && !rule.uncoveredUntrusted(name, sub) {
+			forks = true
+		}
+		if found != nil {
+			continue
+		}
+		if what, bad := rule.untrustedStr(in.Value); bad {
+			at := pos
+			if at == nil {
+				at = in.Value.Pos
+			}
+			found = &untrustedCheckout{pos: at, what: what, dir: dir, step: s}
+		}
+	}
+	if found == nil {
+		return nil
+	}
+	if forks && rule.guard.all {
+		var comment *Comment
+		if e.Uses != nil {
+			comment = comments.Inline(e.Uses.Pos.Line)
+		}
+		ver := versionOfCheckout(u, comment)
+		optOut := false
+		if opt := e.Inputs["allow-unsafe-pr-checkout"]; opt != nil && opt.Value != nil {
+			optOut = checkoutOptOut(subst(opt.Value.Value))
+		}
+		switch {
+		case optOut:
+		case ver.guarded:
+			found.guarded = true
+		case ver.known && ver.floor != "":
+			found.note = "the pinned actions/checkout (" + ver.text + ") predates the protection that refuses the code of a fork pull request here, upgrade to " + ver.floor + " or later"
+		case ver.known:
+			found.note = "the pinned actions/checkout (" + ver.text + ") has no protection that refuses the code of a fork pull request, upgrade to v7 or to a release of a supported major version that has it"
+		}
+	}
+	return found
+}
+
 // checkoutsOf returns the untrusted code that the step checks out.
 func (rule *RuleUntrustedCheckout) checkoutsOf(j *Job, s *Step) []*untrustedCheckout {
 	switch e := s.Exec.(type) {
 	case *ExecAction:
 		_, u := stepAction(s)
-		if u == nil || !u.isRepoAction("actions/checkout") {
+		if u == nil {
 			return nil
 		}
-		dir := ""
-		if p, ok := e.input("path"); ok {
-			dir = normalizeDir(p)
+		if u.Kind == UsesLocal {
+			return rule.localActionCheckouts(s, e)
 		}
-		var found *untrustedCheckout
-		forks := false
-		for _, name := range []string{"ref", "repository"} {
-			in := e.Inputs[name]
-			if in == nil || in.Value == nil {
-				continue
-			}
-			if checkoutInputForksPR(name, in.Value.Value) {
-				forks = true
-			}
-			if found != nil {
-				continue
-			}
-			if what, bad := rule.untrustedStr(in.Value); bad {
-				found = &untrustedCheckout{pos: in.Value.Pos, what: what, dir: dir, step: s}
-			}
-		}
-		if found == nil {
+		if !u.isRepoAction("actions/checkout") {
 			return nil
 		}
-		if forks && rule.guard.all {
-			var comment *Comment
-			if rule.wf != nil && e.Uses != nil {
-				comment = rule.wf.Comments.Inline(e.Uses.Pos.Line)
-			}
-			ver := versionOfCheckout(u, comment)
-			optOut := false
-			if opt := e.Inputs["allow-unsafe-pr-checkout"]; opt != nil && opt.Value != nil {
-				optOut = checkoutOptOut(opt.Value.Value)
-			}
-			switch {
-			case optOut:
-			case ver.guarded:
-				found.guarded = true
-			case ver.known && ver.floor != "":
-				found.note = "the pinned actions/checkout (" + ver.text + ") predates the protection that refuses the code of a fork pull request here, upgrade to " + ver.floor + " or later"
-			case ver.known:
-				found.note = "the pinned actions/checkout (" + ver.text + ") has no protection that refuses the code of a fork pull request, upgrade to v7 or to a release of a supported major version that has it"
-			}
+		var comments *CommentIndex
+		if rule.wf != nil {
+			comments = rule.wf.Comments
 		}
-		return []*untrustedCheckout{found}
+		if c := rule.actionCheckout(s, e, u, comments, nil, nil); c != nil {
+			return []*untrustedCheckout{c}
+		}
+		return nil
 	case *ExecRun:
 		script, _ := analyzeRun(e)
 		if script == nil {
@@ -474,12 +543,12 @@ func (rule *RuleUntrustedCheckout) checkoutsOf(j *Job, s *Step) []*untrustedChec
 		if rule.comment && !rule.ghAny {
 			numEnv := map[string]string{}
 			if rule.wf != nil {
-				envDescs(rule.wf.Env, numEnv, issueNumberString)
+				envDescs(rule.wf.Env, numEnv, rule.numberStr)
 			}
-			envDescs(j.Env, numEnv, issueNumberString)
+			envDescs(j.Env, numEnv, rule.numberStr)
 			maps.Copy(numEnv, rule.carriedNum) // what earlier steps wrote to $GITHUB_ENV
-			envDescs(s.Env, numEnv, issueNumberString)
-			number = newNumberTaint(script, numEnv)
+			envDescs(s.Env, numEnv, rule.numberStr)
+			number = newNumberTaint(script, numEnv, rule.numberValue)
 			taint.num = number
 		}
 		var ret []*untrustedCheckout
@@ -703,6 +772,7 @@ func init() {
 	registerRuleFactory("untrusted-checkout", func(env *RuleEnv) []Rule {
 		r := NewRuleUntrustedCheckout(env.project)
 		r.siblings = env.localActions.siblings()
+		r.path = env.path
 		r.gates = newEnvironmentGates(env, r.Debug)
 		return []Rule{r}
 	})

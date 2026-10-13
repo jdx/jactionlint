@@ -86,7 +86,7 @@ func conditionIsGuard(s *String) bool {
 			if len(r.chain) == 4 && refCovers(r.chain, []string{"github", "event", "workflow_run", "event"}) && !workflowRunEventIsGuard(r) {
 				continue
 			}
-			if len(r.chain) == 4 && r.chain[3] == "author_association" && !associationIsGuard(exprs) {
+			if len(r.chain) == 4 && r.chain[3] == "author_association" && !associationRestricts(exprs) {
 				continue
 			}
 			return true
@@ -590,6 +590,9 @@ type siblingWorkflows struct {
 
 	namesOnce sync.Once
 	nameSet   workflowNames
+
+	// calls are the calls of local reusable workflows and actions, see untrusted_checkout_callers.go
+	calls callIndex
 }
 
 // parsed returns, for the workflows of the project by their lower-cased names, whether they have events and all of
