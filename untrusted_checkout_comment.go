@@ -131,6 +131,37 @@ func associationIsNegated(r exprRef) bool {
 	return ok && c.Kind == CompareOpNodeKindNotEq
 }
 
+// associationIsCompared reports whether the condition compares an expression that reads an association with false (`... ==
+// false`, `... != true`), which turns the check around the same way.
+func associationIsCompared(exprs []ExprNode) bool {
+	found := false
+	for _, e := range exprs {
+		VisitExprNode(e, func(n, _ ExprNode, entering bool) {
+			c, ok := n.(*CompareOpNode)
+			if !ok || !entering || !c.Kind.IsEqualityOp() {
+				return
+			}
+			other := c.Left
+			b, isBool := c.Right.(*BoolNode)
+			if !isBool {
+				b, isBool = c.Left.(*BoolNode)
+				other = c.Right
+			}
+			if !isBool || (c.Kind == CompareOpNodeKindEq) == b.Value {
+				return // `== true` and `!= false` keep the check
+			}
+			var refs []exprRef
+			collectExprRefs(other, nil, &refs)
+			for _, r := range refs {
+				if len(r.chain) == 4 && r.chain[3] == "author_association" {
+					found = true
+				}
+			}
+		})
+	}
+	return found
+}
+
 var reAssociation = regexp.MustCompile(`[A-Z_]+`)
 
 // isPermissionGate reports whether the step stops the job unless the user who started it, the author of the comment, has
@@ -188,8 +219,31 @@ func isPermissionGate(s *Step) bool {
 // collaborator, or the membership in an organization or a team.
 var reScriptChecksUser = regexp.MustCompile(`getCollaboratorPermissionLevel|getMembershipForUserInOrg|checkMembershipForUser|checkCollaborator|getMembershipForUser|getTeamMembershipForUserInOrg`)
 
-// numberValue reports whether the string reads the number of the pull request that a comment is on, or an input of a
-// dispatch that holds one.
+// neededEvents narrows the events by the conditions of the jobs that the job needs, at any depth: the job runs for the events
+// for which all of them run, and is skipped for the others (unless its own condition lets it run after a skipped job).
+func neededEvents(w *Workflow, j *Job, events []string, seen map[*Job]bool) []string {
+	if w == nil || j == nil || seen[j] || runsAfterSkippedNeeds(j.If) {
+		return events
+	}
+	seen[j] = true
+	for _, n := range j.Needs {
+		if n == nil {
+			continue
+		}
+		need := w.Jobs[strings.ToLower(n.Value)]
+		if need == nil {
+			continue
+		}
+		if events = eventsAfterCondition(events, need.If); len(events) == 0 {
+			return nil
+		}
+		events = neededEvents(w, need, events, seen)
+	}
+	return events
+}
+
+// numberValue reports whether the string reads the number of the pull request that a comment is on, an input of a dispatch
+// that holds one, or an input that the calls fill with it.
 func (rule *RuleUntrustedCheckout) numberValue(value string) (string, bool) {
 	refs, _ := stringExprRefs(value)
 	return rule.numberRefs(refs)

@@ -26,6 +26,50 @@ func eventsAfterCondition(events []string, cond *String) []string {
 	return ret
 }
 
+// flattenStepsGroup is flattenSteps with, for each step, the number of the parallel group it is in (0 outside of one).
+func flattenStepsGroup(steps []*Step) ([]*Step, []int) {
+	var out []*Step
+	var groups []int
+	next := 0
+	var walk func(steps []*Step, g int)
+	walk = func(steps []*Step, g int) {
+		for _, s := range steps {
+			if p, ok := s.Exec.(*ExecParallel); ok {
+				gid := g
+				if g == 0 {
+					next++
+					gid = next
+				}
+				walk(p.Steps, gid)
+				continue
+			}
+			out = append(out, s)
+			groups = append(groups, g)
+		}
+	}
+	walk(steps, 0)
+	return out, groups
+}
+
+// permissionGateState tells which steps a permission check holds back. The steps of a parallel group run together: a check
+// in a group does not hold back its siblings, only what comes after the group.
+type permissionGateState struct {
+	set   bool
+	group int
+}
+
+// see records a permission check in the group.
+func (g *permissionGateState) see(group int) {
+	if group == 0 || !g.set {
+		g.set, g.group = true, group
+	}
+}
+
+// holds reports whether the check holds back a step of the group.
+func (g permissionGateState) holds(group int) bool {
+	return g.set && (g.group == 0 || g.group != group)
+}
+
 // stepRunsAfterFailure reports whether the step can run after an earlier step failed, so that a permission check that failed
 // does not hold it back. A condition without a status function has an implicit success(); with one it is evaluated for a run in
 // which a step failed and nothing was cancelled: always() and failure() are true, success() and cancelled() are false (a failed
