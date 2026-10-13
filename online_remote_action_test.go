@@ -28,6 +28,8 @@ type filesClient struct {
 	mu    sync.Mutex
 	asked []string
 	err   error // fails every lookup when set
+	// errFor fails the lookups of the keys ("o/r@ref:path")
+	errFor map[string]error
 }
 
 func (c *filesClient) FileContent(_ context.Context, owner, repo, ref, path string) ([]byte, error) {
@@ -38,6 +40,9 @@ func (c *filesClient) FileContent(_ context.Context, owner, repo, ref, path stri
 	c.mu.Unlock()
 	if c.err != nil {
 		return nil, c.err
+	}
+	if err, ok := c.errFor[key]; ok {
+		return nil, err
 	}
 	if s, ok := c.files[key]; ok {
 		return []byte(s), nil
@@ -343,5 +348,46 @@ func TestDecodeActionMetadataLenient(t *testing.T) {
 		if m, err := decodeActionMetadata([]byte(bad), true); err == nil {
 			t.Errorf("%q is not valid metadata: %+v", bad, m)
 		}
+	}
+}
+
+// In the cache mode a ref which is not in the cache says nothing about the other refs of the repository.
+func TestRemoteActionNotCachedDoesNotSkipTheOtherRefs(t *testing.T) {
+	c := newFilesClient(t, map[string]string{"o/tool@v2:action.yml": remoteComposite})
+	c.errFor = map[string]error{"o/tool@v1:action.yml": fmt.Errorf("o/tool: %w", ErrGitHubNotCached)}
+	s := newOnlineSession(context.Background(), c, nil)
+	if _, err := s.RemoteAction("o", "tool", "", "v1"); !errors.Is(err, ErrGitHubNotCached) {
+		t.Fatalf("v1: %v", err)
+	}
+	m, err := s.RemoteAction("o", "tool", "", "v2")
+	if err != nil || m == nil {
+		t.Errorf("v2 is cached and must be read: %v, %v", m, err)
+	}
+}
+
+// The files of a repository which fails are asked for once, also when many refs are looked up at the same time,
+// so that the failures of one repository do not add up to an outage of the API.
+func TestRemoteActionFailureOfARepositoryIsKnownToConcurrentLookups(t *testing.T) {
+	c := failingFilesClient(t, &GitHubStatusError{Status: 500})
+	s := newOnlineSession(context.Background(), c, nil)
+	var wg sync.WaitGroup
+	for i := 0; i < 16; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if _, err := s.RemoteAction("o", "tool", "", fmt.Sprintf("v%d", i)); err == nil {
+				t.Error("want an error")
+			}
+		}()
+	}
+	wg.Wait()
+	if n := c.calls.Load(); n != 1 {
+		t.Errorf("%d lookups for a repository which fails: %v", n, c.asked)
+	}
+	if s.skippedLookups() != 16 {
+		t.Errorf("every action which could not be checked counts: %d", s.skippedLookups())
+	}
+	if err := s.blockedErr(); err != nil {
+		t.Errorf("one repository must not look like an outage: %v", err)
 	}
 }

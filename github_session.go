@@ -143,6 +143,7 @@ type onlineSession struct {
 	seen       map[failureKind]bool
 	// fileFailures is the failure of the first file lookup of a repository which failed, see file.
 	fileFailures map[repoKey]error
+	fileLocks    map[repoKey]*sync.Mutex
 
 	repos      memo[repoKey, *GitHubRepo]
 	tags       memo[repoKey, *tagIndex]

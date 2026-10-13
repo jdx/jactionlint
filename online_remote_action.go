@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 )
 
 // This file reads the metadata of an action which is not in the data set built into jactionlint
@@ -56,9 +57,16 @@ func (s *onlineSession) file(owner, repo, ref, path string) (repoFile, error) {
 	ref = normalizeFileRef(ref)
 	rk := newRepoKey(owner, repo)
 	return s.files.get(fileKey{rk, ref, path}, func() (repoFile, error) {
+		// The files of one repository are read one after the other, so that a failure is known to the lookups
+		// which follow it (see below)
+		lock := s.fileLock(rk)
+		lock.Lock()
+		defer lock.Unlock()
+
 		// A repository whose files could not be read is not asked again: the answer will be the same, every
 		// try can take several retries, and the failures of one repository must not add up to what the session takes
-		// for an outage of the API (see maxConsecutiveGitHubFailures)
+		// for an outage of the API (see maxConsecutiveGitHubFailures). "Not cached" is no such failure: the
+		// cache mode may know the next ref.
 		s.mu.Lock()
 		prev := s.fileFailures[rk]
 		if prev != nil {
@@ -79,16 +87,36 @@ func (s *onlineSession) file(owner, repo, ref, path string) (repoFile, error) {
 			}
 			return repoFile{content: b, found: err == nil}, err
 		})
-		if err != nil && !errors.Is(err, context.Canceled) {
-			s.mu.Lock()
-			if s.fileFailures == nil {
-				s.fileFailures = map[repoKey]error{}
+		if err != nil {
+			switch classifyFailure(err) {
+			case failForbidden, failServer, failTimeout, failOther:
+				if !errors.Is(err, context.Canceled) {
+					s.mu.Lock()
+					if s.fileFailures == nil {
+						s.fileFailures = map[repoKey]error{}
+					}
+					s.fileFailures[rk] = err
+					s.mu.Unlock()
+				}
 			}
-			s.fileFailures[rk] = err
-			s.mu.Unlock()
 		}
 		return f, err
 	})
+}
+
+// fileLock returns the lock which orders the file lookups of a repository.
+func (s *onlineSession) fileLock(rk repoKey) *sync.Mutex {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.fileLocks == nil {
+		s.fileLocks = map[repoKey]*sync.Mutex{}
+	}
+	l := s.fileLocks[rk]
+	if l == nil {
+		l = &sync.Mutex{}
+		s.fileLocks[rk] = l
+	}
+	return l
 }
 
 // RemoteAction returns the metadata of the action owner/repo[/subpath] at the ref, read from its action.yml (or
