@@ -60,3 +60,11 @@ jobs:
     runs-on: macos-15
     steps:
       - run: date -d yesterday
+  quoted-options:
+    runs-on: macos-latest
+    steps:
+      - run: sed "-i" 's/a/b/' file.txt
+      - run: date '-d' yesterday
+      - run: grep "-P" x file
+      - run: stat "-c" %s file
+      - run: grep '-e' -P file && grep -P x file2 && true

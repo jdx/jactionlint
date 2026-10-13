@@ -85,6 +85,10 @@ jobs:
       - run: |
           sed -i bak 's/a/b/' file.txt
           sed -i 's/c/d/' other.txt
+      # The quoted options of the form of macOS, and the value of a quoted option
+      - run: |
+          date "-j" -f '%F' 2024-01-01 +%s || date -d 2024-01-01 +%s
+          grep "-e" -P file || true
       # A tool that is not the BSD one
       - run: gdate -d yesterday
       - run: echo 'tee --append and sed -i x y are text'
@@ -92,6 +96,15 @@ jobs:
       # Not bash or sh
       - run: print('sed -i x y')
         shell: python
+  macos-excluded-by-index:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        exclude:
+          - os: macos-latest
+    runs-on: ${{ matrix['os'] }}
+    steps:
+      - run: sed -i 's/a/b/' file.txt
   macos-excluded:
     strategy:
       matrix:

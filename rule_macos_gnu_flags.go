@@ -154,15 +154,34 @@ func macosLabelOf(j *Job) string {
 	return ""
 }
 
+// matrixKeyOfLabel returns the lower case key of `runs-on: ${{ matrix.key }}` (or `matrix['key']`), read like
+// matrixLabelValues does so that the values and the exclude entries are about the same key.
+func matrixKeyOfLabel(label *String) (string, bool) {
+	if label == nil || !label.IsExpressionAssigned() {
+		return "", false
+	}
+	exprs, ok := label.templateExprs()
+	if !ok || len(exprs) != 1 {
+		return "", false
+	}
+	chain, _, ok := chainOf(exprs[0])
+	if !ok || len(chain) != 2 || chain[0] != "matrix" {
+		return "", false
+	}
+	return strings.ToLower(chain[1]), true
+}
+
 // runnersAfterExclude drops the values of `runs-on: ${{ matrix.key }}` that no job gets: a value of the row which an
 // `exclude` entry with only that key removes. A value that `include` adds is a new job and stays, and when an
 // `exclude` has an expression the values of the row are not known, so only the ones of `include` are kept.
 func runnersAfterExclude(vs []string, label *String, m *Matrix) []string {
-	r := matrixRefRe.FindStringSubmatch(strings.TrimSpace(label.Value))
-	if r == nil || m == nil || m.Exclude == nil {
+	if m == nil || m.Exclude == nil {
 		return vs
 	}
-	key := strings.ToLower(r[1])
+	key, ok := matrixKeyOfLabel(label)
+	if !ok {
+		return vs
+	}
 	removed, included := map[string]bool{}, map[string]bool{}
 	unknown := m.Exclude.Expression != nil
 	for _, c := range m.Exclude.Combinations {
@@ -220,19 +239,19 @@ func portableTools(s *runscript.Script) map[string]bool {
 			}
 			switch c.Name {
 			case "date":
-				if dateBSDOptionRe.MatchString(w.Raw) {
+				if dateBSDOptionRe.MatchString(w.Value) {
 					out["date"] = true
 				}
 			case "stat":
-				if w.Raw == "-f" || strings.HasPrefix(w.Raw, "-f") && len(w.Raw) > 2 && w.Raw[2] == '%' {
+				if w.Value == "-f" || strings.HasPrefix(w.Value, "-f") && len(w.Value) > 2 && w.Value[2] == '%' {
 					out["stat"] = true
 				}
 			case "sed":
-				if sedInPlaceRe.MatchString(w.Raw) && i+1 < len(c.Args) && c.Args[i+1] != nil && !c.Args[i+1].Dynamic() && isSedSuffix(c.Args[i+1].Value) {
+				if sedInPlaceRe.MatchString(w.Value) && !sedAttachedEmptyRe.MatchString(w.Raw) && i+1 < len(c.Args) && c.Args[i+1] != nil && !c.Args[i+1].Dynamic() && isSedSuffix(c.Args[i+1].Value) {
 					out["sed"] = true
 				}
 			case "tee":
-				if w.Raw == "-a" {
+				if w.Value == "-a" {
 					out["tee"] = true
 				}
 			}
@@ -264,6 +283,9 @@ var (
 	dateOptionRe = regexp.MustCompile(`^-u?d`)
 	// statFormatRe is the -c option of GNU stat, alone or with its value attached (-c%s, -Lc).
 	statFormatRe = regexp.MustCompile(`^-[LFlnqrsx]*c`)
+	// sedAttachedEmptyRe is the form -i'' or -i"" of a script which is written for both seds: the empty suffix is part of the
+	// word, which GNU sed reads as -i without a backup.
+	sedAttachedEmptyRe = regexp.MustCompile(`^-[A-Za-z]*i(?:''|"")$`)
 	// sedSuffixRe is a word that BSD sed takes as the suffix of the backup: ".bak", ".orig", "~", "bak".
 	sedSuffixRe = regexp.MustCompile(`^(?:\.[A-Za-z0-9_~.-]*|~|[A-Za-z]{3,})$`)
 )
@@ -278,8 +300,8 @@ func macosGnuForms(c *runscript.Command) []macosGnuForm {
 		if w == nil {
 			continue
 		}
-		v := w.Raw
-		if c.Name == "grep" && i > 0 && c.Args[i-1] != nil && grepValueFlags[c.Args[i-1].Raw] {
+		v := w.Value // without the quotes: sed "-i" is sed -i
+		if c.Name == "grep" && i > 0 && c.Args[i-1] != nil && grepValueFlags[c.Args[i-1].Value] {
 			continue // the value of an option: grep -e -P
 		}
 		switch c.Name {
@@ -291,9 +313,9 @@ func macosGnuForms(c *runscript.Command) []macosGnuForm {
 			switch {
 			case strings.HasPrefix(v, "--in-place") || v == "--in-place":
 				add(w, `"sed --in-place" is rejected by the sed of macOS: it has no long options.`, `Use "sed -i.bak" (and remove the backup), which both seds understand.`)
-			case sedInPlaceRe.MatchString(v) && i+1 < len(c.Args):
+			case sedInPlaceRe.MatchString(v) && !sedAttachedEmptyRe.MatchString(w.Raw) && i+1 < len(c.Args):
 				next := c.Args[i+1]
-				if _, plain := next.Var(); plain || strings.HasPrefix(next.Raw, "-") || (!next.Dynamic() && (next.Value == "" || sedSuffixRe.MatchString(next.Value))) {
+				if _, plain := next.Var(); plain || strings.HasPrefix(next.Value, "-") || (!next.Dynamic() && (next.Value == "" || sedSuffixRe.MatchString(next.Value))) {
 					continue // a suffix (-i '' or -i .bak), a variable that may be one, or an option that makes it unclear what follows
 				}
 				add(w, `"sed -i" without a suffix takes the script as the suffix of the backup on macOS, so the file is read as the script ("invalid command code").`, `Use "sed -i.bak" (and remove the backup), which both seds understand, or "sed -i ''" on macOS only.`)
