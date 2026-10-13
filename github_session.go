@@ -151,6 +151,8 @@ type onlineSession struct {
 	origins    memo[originKey, originResult]
 	owners     memo[string, *GitHubOwner]
 	releases   memo[releaseKey, *GitHubRelease]
+
+	environments memo[environmentKey, environmentResult]
 }
 
 type originKey struct {

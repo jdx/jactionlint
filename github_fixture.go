@@ -36,6 +36,8 @@ type fixtureRepo struct {
 	Advisories *fixtureAdvisories             `json:"advisories,omitempty"`
 	// Releases are the answers about the release of a tag by the name of the tag, see GitHubReleaseClient.
 	Releases map[string]*fixtureRelease `json:"releases,omitempty"`
+	// Environments are the answers about the environments by their lower case name, see GitHubEnvironmentClient.
+	Environments map[string]*fixtureEnvironment `json:"environments,omitempty"`
 }
 
 type fixtureRef struct {
