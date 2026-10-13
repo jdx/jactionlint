@@ -27,7 +27,16 @@ var toolValueFlags = map[string]map[string]bool{
 	"yarn":     set(`--cwd --mode --registry --tag --otp --access --mutex --network-timeout --network-concurrency --modules-folder --cache-folder --link-folder --global-folder --prefix --proxy --https-proxy --cpu --os -p --package`),
 	"bun":      set(`--cwd --registry --cache-dir --backend --concurrent-scripts --network-concurrency --tag --access --otp --config -c --filter -F --omit --os --cpu --package -p --revision --minimum-release-age`),
 	"bunx":     set(`--package -p --registry --cwd --config -c`),
-	"aube":     set(`--filter -F -C --dir --registry --store-dir --tag --reporter --loglevel --config --prefix --cpu --os --lockfile-dir --modules-dir`),
+	// aube: the flags of the usage spec of aube 2.7 (https://github.com/aubepkg/aube, aube.usage.kdl) that take the next word.
+	// `--allow-build`, `--deny-build` and `--inspect` need `=`, and the value of `--fix` and `--diag` is optional: they are left out.
+	"aube": set(`-C --dir --cd --prefix -F --filter --filter-prod --loglevel --reporter --diag-file --diag-threshold-ms
+		--registry --fetch-retries --fetch-retry-factor --fetch-retry-maxtimeout --fetch-retry-mintimeout --fetch-timeout
+		-p --package --otp --access --tag --audit-level --ignore --save-catalog-name --global-pnpmfile --pnpmfile --lockfile-dir
+		--network-concurrency --node-linker --package-import-method --public-hoist-pattern --resolution-mode --resume-from
+		--workspace-concurrency --pack-destination --location --init-type --scope --auth-type --depth --format --on-fail
+		--edit-dir --patches-dir --age-days -m --message --preid --bin --min-delta-ms --min-pct`),
+	"aubx": set(`-C --dir --cd --prefix -F --filter --filter-prod --loglevel --reporter -p --package --registry --fetch-retries
+		--fetch-retry-factor --fetch-retry-maxtimeout --fetch-retry-mintimeout --fetch-timeout`),
 	"cargo": set(`--version --vers --git --branch --tag --rev --path --root --registry --index --features -F --target --bin
 		--example --profile -j --jobs --target-dir --config -Z --message-format --color --manifest-path --targets --pkg-url
 		--pkg-fmt --bin-dir --install-path --strategies --disable-strategies --timeout --token --package -p

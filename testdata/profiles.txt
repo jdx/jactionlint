@@ -46,6 +46,7 @@ impostor-commit online security error
 insecure-commands default security error
 insecure-ssh-keyscan default security error
 insecure-url-scheme default security error
+insufficient-permissions default correctness error
 invalid-activity-type correctness correctness error
 invalid-cron correctness correctness error
 invalid-env-var-name correctness correctness error
@@ -80,6 +81,7 @@ missing-permissions default policy error
 missing-timeout default policy error
 missing-workflow-input correctness correctness error
 missing-workflow-secret correctness correctness error
+multiline-plain-run correctness correctness error
 mutable-runner-label pedantic policy warn
 obfuscation default security error
 outdated-action-runner correctness correctness error
@@ -103,6 +105,7 @@ superfluous-actions default security error
 template-injection correctness security error
 timeout-too-long configured policy error
 typosquat-uses default security error
+ubuntu-slim-limits default correctness error
 undefined-function correctness correctness error
 undefined-job-needs correctness correctness error
 undefined-property correctness correctness error

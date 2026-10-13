@@ -249,6 +249,9 @@ func (cmd *Command) Main(args []string) int {
 		}
 	}
 	opts.IgnorePatterns = f.ignorePats
+	// A command the user named must exist: the default is looked up on PATH and a missing one only costs a note
+	opts.ShellcheckRequired = flags.Changed("shellcheck") && opts.Shellcheck != ""
+	opts.PyflakesRequired = flags.Changed("pyflakes") && opts.Pyflakes != ""
 	opts.OnRulesCreated = cmd.onRulesCreated
 	opts.RunHints = !f.noHints && !HintsDisabledByEnv()
 	opts.LogWriter = cmd.Stderr

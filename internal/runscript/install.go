@@ -107,7 +107,7 @@ func installOf(c *Command) *Install {
 		ok = in.pipx(c)
 	case "npm", "pnpm", "yarn", "bun", "aube":
 		ok = in.node(c)
-	case "npx", "bunx", "pnpm-dlx":
+	case "npx", "bunx", "pnpm-dlx", "aubx":
 		in.Ecosystem, in.Run, in.Verb = "npm", true, "run"
 		in.runTarget(c, c.Positional, "--package", npmPackage, "-p")
 		ok = true
@@ -278,9 +278,10 @@ func npmPackage(w *Word) *Package {
 		p.Kind, p.Name = KindURL, v
 		p.Pinned = reDigest.MatchString(v)
 	default:
-		name, ver := v, ""
-		if i := strings.LastIndex(v, "@"); i > 0 {
-			name, ver = v[:i], v[i+1:]
+		// `jsr:@std/path@1.0.0` (pnpm, yarn 4, bun, aube) and `npm:left-pad@1.3.0` name a registry package
+		name, ver := strings.TrimPrefix(strings.TrimPrefix(v, "jsr:"), "npm:"), ""
+		if i := strings.LastIndex(name, "@"); i > 0 {
+			name, ver = name[:i], name[i+1:]
 		}
 		p.Name, p.Version = name, ver
 		p.Pinned = ver != "" && (reExactNPM.MatchString(ver) || versionIsDynamic(ver))
@@ -416,6 +417,15 @@ func (in *Install) pipx(c *Command) bool {
 var (
 	nodeInstallVerbs = set("install i add in ins inst insta instal isnt isnta isntal isntall a")
 	nodeCIVerbs      = set("ci clean-install cit clean-install-test install-ci-test")
+
+	// The commands of aube (the usage spec of aube 2.7). `install` takes no package: `aube add` does. `ci` is a frozen
+	// install that deletes node_modules first. `exec` (alias `x`) only runs a binary that is installed; it never fetches
+	// one, unlike `npm exec`: the commands that fetch a tool are `dlx` and `aubx`. `recursive` (`multi`, `m`) runs
+	// another command in every package of the workspace, like `-r`.
+	aubeInstallVerbs   = set("install i install-test it")
+	aubeAddVerbs       = set("add a")
+	aubeCIVerbs        = set("ci clean-install ic install-clean")
+	aubeRecursiveVerbs = set("recursive multi m")
 )
 
 // node handles npm, pnpm, yarn, bun and aube.
@@ -440,6 +450,9 @@ func (in *Install) node(c *Command) bool {
 	if pos[0].Dynamic() {
 		return false
 	}
+	if c.Tool == "aube" {
+		return in.aube(c, pos)
+	}
 	verb := pos[0].Value
 	switch {
 	case verb == "dlx" && (c.Tool == "pnpm" || c.Tool == "yarn"), verb == "x" && c.Tool == "bun", (verb == "exec" || verb == "x") && c.Tool == "npm":
@@ -451,12 +464,47 @@ func (in *Install) node(c *Command) bool {
 		return true
 	case nodeInstallVerbs[verb]:
 		in.Verb = verb
-		if verb == "a" && c.Tool != "bun" && c.Tool != "aube" {
+		if verb == "a" && c.Tool != "bun" {
 			return false
 		}
-		if c.Tool == "bun" || c.Tool == "aube" || c.Tool == "pnpm" || c.Tool == "yarn" || c.Tool == "npm" {
+		if c.Tool == "bun" || c.Tool == "pnpm" || c.Tool == "yarn" || c.Tool == "npm" {
 			in.addAll(pos[1:], npmPackage)
 		}
+		return true
+	}
+	return false
+}
+
+// aubeVerb returns the command of an aube command line: the first positional word, or the one after `recursive` (`multi`, `m`),
+// which runs another command in every package of the workspace like `-r` does. "" if there is none or it is dynamic.
+func aubeVerb(c *Command) string {
+	if v := c.Verb(); aubeRecursiveVerbs[v] && c.Sub(1) != "" {
+		return c.Sub(1)
+	}
+	return c.Verb()
+}
+
+// aube handles `aube`, whose positional words start with the command (and `aube recursive` with another command).
+// pos is not empty and its first word is not dynamic.
+func (in *Install) aube(c *Command, pos []*Word) bool {
+	if aubeRecursiveVerbs[pos[0].Value] && len(pos) > 1 && !pos[1].Dynamic() {
+		pos = pos[1:]
+	}
+	verb := pos[0].Value
+	switch {
+	case verb == "dlx":
+		in.Verb, in.Run = verb, true
+		in.runTarget(c, pos[1:], "--package", npmPackage, "-p")
+		return true
+	case aubeCIVerbs[verb]:
+		in.Verb, in.Locked = "ci", true
+		return true
+	case aubeInstallVerbs[verb]:
+		in.Verb = "install"
+		return true
+	case aubeAddVerbs[verb]:
+		in.Verb = "add"
+		in.addAll(pos[1:], npmPackage)
 		return true
 	}
 	return false
