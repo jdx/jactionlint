@@ -739,6 +739,7 @@ export it by itself:
 | [`stale-action-refs`](checks.md#check-stale-action-refs) | A pinned commit that no tag points to |
 | [`archived-uses`](checks.md#check-archived-uses) | An action in an archived repository |
 | [`ref-version-mismatch`](checks.md#check-ref-version-mismatch) | A `# v1.2.3` comment that does not match the pinned commit |
+| [`action-release-cooldown`](checks.md#check-action-release-cooldown) | A version released less than N days ago. It runs only when `rules` has an entry for it (opt-in) |
 
 ```sh
 export GITHUB_TOKEN=$(gh auth token)   # or GH_TOKEN

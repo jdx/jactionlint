@@ -33,6 +33,7 @@ rules:
 
 | ID | Group | Default level | Profile |
 | --- | --- | --- | --- |
+| [action-release-cooldown](#action-release-cooldown) | security | warn | only with `--online` |
 | [action-syntax](#action-syntax) | correctness | error | correctness |
 | [adhoc-packages](#adhoc-packages) | security | error | default |
 | [agentic-actions](#agentic-actions) | security | error | default |
@@ -169,6 +170,17 @@ rules:
 | [workflow-secret-scope](#workflow-secret-scope) | security | warn | pedantic |
 | [workflow-syntax](#workflow-syntax) | correctness | error | correctness |
 | [yaml-syntax](#yaml-syntax) | correctness | error | correctness |
+
+## action-release-cooldown
+
+An action is pinned to a version released less than the cooldown ago.
+
+- Group: security
+- Default level: warn
+- Profile: only with `--online`
+- Needs network access: yes (only with `--online`)
+- Option `days` (int, default 7): How many days a version must be old. The date is the publication of its release on GitHub, else the date of its commit. The rule runs only when "rules" has an entry for it, and only with the online checks.
+- Details and examples: [checks](./checks.md#check-action-release-cooldown)
 
 ## action-syntax
 

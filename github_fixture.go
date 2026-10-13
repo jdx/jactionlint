@@ -32,6 +32,8 @@ type fixtureRepo struct {
 	Refs       map[string]*fixtureRef         `json:"refs,omitempty"`    // "heads/main", "tags/v1"
 	Compare    map[string]GitHubCompareStatus `json:"compare,omitempty"` // "base...head"; "not-found" for unknown commits
 	Advisories *fixtureAdvisories             `json:"advisories,omitempty"`
+	// Releases are the dates of a release, by "tags/<tag>" or, for a commit without a tag, "commits/<sha>".
+	Releases map[string]*GitHubReleaseDate `json:"releases,omitempty"`
 }
 
 type fixtureRef struct {

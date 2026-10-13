@@ -149,6 +149,7 @@ type onlineSession struct {
 	compares   memo[compareKey, GitHubCompareStatus]
 	advisories memo[string, []GitHubAdvisory]
 	origins    memo[originKey, originResult]
+	releases   memo[releaseKey, *GitHubReleaseDate]
 }
 
 type originKey struct {

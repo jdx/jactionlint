@@ -1,0 +1,24 @@
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      # ERROR: v1.2.0 was released 2 days ago (the comment does not matter, the tags of the commit do)
+      - uses: example/fresh@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa # v1
+      # ERROR: the tag v1 is at the commit of v1.2.0, which was released 2 days ago
+      - uses: example/fresh@v1
+      # OK: v1.1.0 was released more than a week ago
+      - uses: example/fresh@bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb # v1.1.0
+      # ERROR: v2.0.0 has no release, and its commit is a day old
+      - uses: example/fresh@cccccccccccccccccccccccccccccccccccccccc # v2.0.0
+      # OK: v0.9.0 has no release, and its commit is old
+      - uses: example/fresh@dddddddddddddddddddddddddddddddddddddddd # v0.9.0
+      # ERROR: no tag points to the commit, which is a few hours old
+      - uses: example/fresh@eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
+      # OK: no tag, but the commit is old
+      - uses: example/fresh@ffffffffffffffffffffffffffffffffffffffff
+      # OK: a branch moves by design and has no release
+      - uses: example/fresh@main
+      # OK: not a repository on GitHub
+      - uses: ./.github/actions/local
+      - uses: docker://alpine:3.19

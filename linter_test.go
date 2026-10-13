@@ -14,6 +14,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/go-cmp/cmp"
 	"golang.org/x/sys/execabs"
@@ -30,6 +31,8 @@ func TestMain(m *testing.M) {
 	// The tests of the rules and the golden files were written for the rules of the correctness profile. A
 	// test of the default profile selects it (see withDefaultProfile).
 	implicitProfile = ProfileCorrectness
+	// The release cooldown compares with "now": the dates of testdata/online/github.json are around this one
+	releaseNow = func() time.Time { return time.Date(2026, 10, 13, 12, 0, 0, 0, time.UTC) }
 	code := m.Run()
 	os.RemoveAll(dir)
 	os.Exit(code)

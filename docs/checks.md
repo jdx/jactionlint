@@ -94,6 +94,7 @@ List of checks:
 - [Archived repositories (online)](#check-archived-uses)
 - [Version comments of pinned actions (online)](#check-ref-version-mismatch)
 - [Pinned actions without a version comment (pedantic)](#check-missing-version-comment)
+- [Release cooldown of actions (online, opt-in)](#check-action-release-cooldown)
 - [Concurrency that cancels unrelated pull requests](#check-concurrency-cancels-prs)
 - [Concurrency that cancels a release](#check-concurrency-cancels-release)
 - [Gate jobs that are skipped when a job fails](#check-gate-job-skipped-on-failure)
@@ -7187,6 +7188,59 @@ comment is already there (it may say something else that matters), when no tag o
 no version to name), or when the commit has several versions of the same specificity (`v2.0.1` and `v2.0.2`). Without `--online` the finding says
 that the fix needs it.
 
+<a id="check-action-release-cooldown"></a>
+## Release cooldown of actions (online, opt-in)
+
+A compromised release of an action is usually found and taken down within days, and a project which waits for a release to age
+is not hit by it. The rule `action-release-cooldown` reports an action which is at a version younger than a number of days:
+a pin to a commit, or a reference to a tag. It is the check of the option `--min-age` of [pinact](https://github.com/suzuki-shunsuke/pinact/blob/main/docs/update.md),
+and the counterpart of [`dependabot-cooldown`](#check-dependabot-cooldown), which asks the same of the updates that Dependabot proposes.
+It needs `--online`, and runs only when the configuration has an entry for it, because the number of days is a decision of the project.
+
+Example input:
+
+```yaml
+# requires --online
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      # ERROR: v1.2.0 was released 2 days ago
+      - uses: example/fresh@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa # v1.2.0
+      # OK: v1.1.0 was released more than a week ago
+      - uses: example/fresh@bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb # v1.1.0
+```
+
+Output:
+<!-- Skip update output -->
+```
+test.yaml:8:15: warning: action "example/fresh@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" is at a version that is younger than the cooldown of 7 days: v1.2.0 was released 2 days ago, on 2026-10-11. wait for the version to age before you use it: a compromised release is usually found within days [action-release-cooldown]
+  |
+8 |       - uses: example/fresh@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa # v1.2.0
+  |               ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+```
+
+<!-- Skip playground link -->
+
+The output above is from the following `rules` section of the [configuration file](config.md), run with the recorded answers of GitHub:
+
+```yaml
+rules:
+  action-release-cooldown:
+    level: warning
+    days: 7
+```
+
+`days` is the number of days a version must be old, 7 when it is not set. The date of a version is the publication of its release on GitHub
+(`published_at`, the date a person sees in the list of releases). A tag which has no release has the date of its commit, and so does a commit pinned
+without a tag. **That date is not always the date of the release**: a tag which was moved to an older commit looks older than it is, and a commit
+can be made long before it is released. The finding says which date it used. The version of a pin is the most specific version tag of its commit
+(`v4.2.2` for `v4`), so that the date is the one of the release, not of the moving tag.
+
+A branch is not checked: it moves by design and has no release. Without a lookup that works (no network, a rate limit, a repository left out by
+`--online-deny`) the action is not reported. There is no fix: waiting is the fix, and which older version to use is for you to choose.
+
 <a id="check-invisible-characters"></a>
 ## Invisible characters
 
@@ -8122,7 +8176,7 @@ way because any caller can pass attacker-controlled text. jactionlint does not l
 
 How the rules treat actions:
 
-- **Applies** to the steps (and the metadata) of an action: `action-syntax`, `adhoc-packages`, `archived-uses`, `artipacked`, `background-step-not-waited`, `checkout-static-credentials`, `constant-condition`, `context-availability`, `continue-on-error`, `deprecated-action-input`, `deprecated-commands`, `duplicate-key`, `duplicate-step-id`, `environment-file-redirect`, `expired-ignore`, `expression-syntax`, `expression-type`, `forbidden-uses`, `github-app`, `if-always-true`, `impostor-commit`, `insecure-commands`, `insecure-ssh-keyscan`, `insecure-url-scheme`, `invalid-env-var-name`, `invalid-function-call`, `invalid-id`, `invalid-ignore-comment`, `invalid-local-action`, `invalid-parallel-step`, `invalid-shell-name`, `invalid-uses`, `invisible-characters`, `known-vulnerable-actions`, `max-run-lines`, `merge-key`, `misfeature`, `missing-action-input`, `missing-version-comment`, `obfuscation`, `outdated-action-runner`, `pipeline-without-pipefail`, `pyflakes`, `recursive-alias`, `ref-confusion`, `ref-version-mismatch`, `require-expression-wrapping`, `self-repository`, `shellcheck`, `stale-action-refs`, `superfluous-actions`, `template-injection`, `typosquat-uses`, `undefined-function`, `undefined-property`, `unknown-action-input`, `unlocked-install`, `unpinned-images`, `unpinned-tools`, `unpinned-uses`, `unsound-contains`, `unsound-prefix-match`, `unsound-ternary`, `unused-anchor`, `unused-ignore`, `unverified-download`, `use-trusted-publishing`, `yaml-syntax`.
+- **Applies** to the steps (and the metadata) of an action: `action-release-cooldown`, `action-syntax`, `adhoc-packages`, `archived-uses`, `artipacked`, `background-step-not-waited`, `checkout-static-credentials`, `constant-condition`, `context-availability`, `continue-on-error`, `deprecated-action-input`, `deprecated-commands`, `duplicate-key`, `duplicate-step-id`, `environment-file-redirect`, `expired-ignore`, `expression-syntax`, `expression-type`, `forbidden-uses`, `github-app`, `if-always-true`, `impostor-commit`, `insecure-commands`, `insecure-ssh-keyscan`, `insecure-url-scheme`, `invalid-env-var-name`, `invalid-function-call`, `invalid-id`, `invalid-ignore-comment`, `invalid-local-action`, `invalid-parallel-step`, `invalid-shell-name`, `invalid-uses`, `invisible-characters`, `known-vulnerable-actions`, `max-run-lines`, `merge-key`, `misfeature`, `missing-action-input`, `missing-version-comment`, `obfuscation`, `outdated-action-runner`, `pipeline-without-pipefail`, `pyflakes`, `recursive-alias`, `ref-confusion`, `ref-version-mismatch`, `require-expression-wrapping`, `self-repository`, `shellcheck`, `stale-action-refs`, `superfluous-actions`, `template-injection`, `typosquat-uses`, `undefined-function`, `undefined-property`, `unknown-action-input`, `unlocked-install`, `unpinned-images`, `unpinned-tools`, `unpinned-uses`, `unsound-contains`, `unsound-prefix-match`, `unsound-ternary`, `unused-anchor`, `unused-ignore`, `unverified-download`, `use-trusted-publishing`, `yaml-syntax`.
 - **Caller-dependent**: `agentic-actions`, `bot-conditions`, `cache-poisoning`, `github-env` (its findings about untrusted input do not depend on the caller), `untrusted-artifact` and `untrusted-checkout`.
 - **Not applicable** because an action does not have what the rule checks, or because only the calling job can decide (`unused-baseline-entry` is about the baseline file, not about a workflow or an action): `anonymous-definition`, `concurrency-cancels-prs`, `concurrency-cancels-release`, `concurrency-limits`, `conflicting-runner-labels`, `cron-too-frequent`, `cyclic-job-needs`, `dangerous-triggers`, `dependabot-cooldown`, `dependabot-execution`, `dependabot-missing-actions-update`, `dependabot-syntax`, `duplicate-job-id`, `duplicate-job-needs`, `duplicate-triggers`, `excessive-permissions`, `gate-job-skipped-on-failure`, `gh-without-token`, `hardcoded-container-credentials`, `invalid-activity-type`, `invalid-cron`, `invalid-event-config`, `invalid-event-filter`, `invalid-glob`, `invalid-label-pattern`, `invalid-local-workflow`, `invalid-permissions`, `invalid-timezone`, `invalid-workflow-call`, `invalid-workflow-call-input`, `invalid-workflow-dispatch-input`, `local-action-checkout`, `matrix-duplicate-value`, `matrix-invalid-exclude`, `missing-permissions`, `missing-timeout`, `missing-workflow-input`, `missing-workflow-secret`, `mutable-runner-label`, `overprovisioned-secrets`, `require-shell`, `required-actions`, `secrets-inherit`, `secrets-outside-env`, `self-hosted-runner`, `timeout-too-long`, `undefined-job-needs`, `undocumented-permissions`, `unknown-event`, `unknown-runner-label`, `unknown-workflow-input`, `unknown-workflow-secret`, `unredacted-secrets`, `unused-baseline-entry`, `unused-job-output`, `unused-needs`, `unused-workflow-input`, `workflow-call-permissions`, `workflow-input-type`, `workflow-run-names`, `workflow-secret-scope`, `workflow-syntax`.
 

@@ -30,6 +30,7 @@ var actionRuleScope = map[string]struct {
 	except []string
 }{
 	"action":                      {scope: actionApplies},
+	"action-release-cooldown":     {scope: actionApplies},
 	"adhoc-packages":              {scope: actionApplies},         // package installs in the scripts of the steps
 	"agentic-actions":             {scope: actionCallerDependent}, // an agent is steerable depending on the events of the callers
 	"checkout-static-credentials": {scope: actionApplies},         // the inputs of actions/checkout steps
