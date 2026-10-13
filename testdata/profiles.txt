@@ -24,6 +24,7 @@ dependabot-missing-actions-update pedantic policy warn
 dependabot-syntax correctness correctness error
 deprecated-action-input correctness correctness error
 deprecated-commands correctness correctness error
+deprecated-runner-label pedantic policy warn
 duplicate-job-id correctness correctness error
 duplicate-job-needs correctness correctness error
 duplicate-key correctness correctness error

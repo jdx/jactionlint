@@ -1,0 +1,34 @@
+on: push
+jobs:
+  mac:
+    runs-on: macos-14
+    steps:
+      - run: echo ...
+  mac-sized:
+    runs-on: [macos-14-large]
+    steps:
+      - run: echo ...
+  linux-arm:
+    runs-on: ubuntu-22.04-arm
+    steps:
+      - run: echo ...
+  matrix:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-24.04, ubuntu-22.04]
+    steps:
+      - run: echo ...
+  # not reported: the label of a pool of self-hosted runners, a current label, and a value which is not known
+  pool:
+    runs-on: [self-hosted, macos-14]
+    steps:
+      - run: echo ...
+  current:
+    runs-on: macos-15
+    steps:
+      - run: echo ...
+  unresolved:
+    runs-on: ${{ vars.RUNNER }}
+    steps:
+      - run: echo ...
