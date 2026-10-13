@@ -126,6 +126,16 @@ func TestUbuntuSlimLimitsLocalDockerAction(t *testing.T) {
 	write(".git/HEAD", "ref: refs/heads/main\n")
 	write(".github/actions/dock/action.yml", "name: dock\ndescription: d\nruns:\n  using: docker\n  image: Dockerfile\n")
 	write(".github/actions/node/action.yml", "name: node\ndescription: d\nruns:\n  using: node24\n  main: index.js\n")
+	// A composite action which runs a Docker step, one which calls it, two which call each other and one with nothing to report
+	write(".github/actions/comp-docker/action.yml", "name: c\ndescription: d\nruns:\n  using: composite\n  steps:\n    - run: echo\n      shell: bash\n    - uses: docker://alpine:3.22\n")
+	write(".github/actions/comp-outer/action.yml", "name: c\ndescription: d\nruns:\n  using: composite\n  steps:\n    - uses: ./.github/actions/comp-docker\n")
+	write(".github/actions/comp-local-docker/action.yml", "name: c\ndescription: d\nruns:\n  using: composite\n  steps:\n    - uses: ./.github/actions/comp-outer2\n")
+	write(".github/actions/comp-outer2/action.yml", "name: c\ndescription: d\nruns:\n  using: composite\n  steps:\n    - uses: ./.github/actions/dock\n")
+	write(".github/actions/cycle-a/action.yml", "name: c\ndescription: d\nruns:\n  using: composite\n  steps:\n    - uses: ./.github/actions/cycle-b\n")
+	write(".github/actions/cycle-b/action.yml", "name: c\ndescription: d\nruns:\n  using: composite\n  steps:\n    - uses: ./.github/actions/cycle-a\n    - uses: ./.github/actions/cycle-b\n")
+	write(".github/actions/cycle-docker-a/action.yml", "name: c\ndescription: d\nruns:\n  using: composite\n  steps:\n    - uses: ./.github/actions/cycle-docker-b\n")
+	write(".github/actions/cycle-docker-b/action.yml", "name: c\ndescription: d\nruns:\n  using: composite\n  steps:\n    - uses: ./.github/actions/cycle-docker-a\n    - uses: docker://busybox\n")
+	write(".github/actions/comp-node/action.yml", "name: c\ndescription: d\nruns:\n  using: composite\n  steps:\n    - uses: ./.github/actions/node\n    - uses: actions/checkout@v4\n")
 	write(".github/workflows/ci.yaml", `on: push
 jobs:
   slim:
@@ -133,6 +143,12 @@ jobs:
     steps:
       - uses: ./.github/actions/dock
       - uses: ./.github/actions/node
+      - uses: ./.github/actions/comp-docker
+      - uses: ./.github/actions/comp-outer
+      - uses: ./.github/actions/comp-local-docker
+      - uses: ./.github/actions/cycle-a
+      - uses: ./.github/actions/cycle-docker-a
+      - uses: ./.github/actions/comp-node
   full:
     runs-on: ubuntu-latest
     steps:
@@ -148,8 +164,21 @@ jobs:
 		t.Fatal(err)
 	}
 	got := slimFindings(errs)
-	if len(got) != 1 || !strings.Contains(got[0], `"./.github/actions/dock" is a Docker container action (runs.using: docker)`) {
-		t.Errorf("want one finding for the Docker action of the slim job but got %q (all: %v)", got, errs)
+	wants := []string{
+		`the action "./.github/actions/dock" runs a Docker container action (runs.using: docker), which cannot run on ubuntu-slim`,
+		`the action "./.github/actions/comp-docker" runs the Docker container action "docker://alpine:3.22" in a step of the composite action`,
+		`the action "./.github/actions/comp-outer" runs "./.github/actions/comp-docker", which runs the Docker container action "docker://alpine:3.22"`,
+		`the action "./.github/actions/comp-local-docker" runs "./.github/actions/comp-outer2", which runs "./.github/actions/dock", which runs a Docker container action (runs.using: docker)`,
+		// the cycle does not hide the Docker step of the action that is part of it
+		`the action "./.github/actions/cycle-docker-a" runs "./.github/actions/cycle-docker-b", which runs the Docker container action "docker://busybox"`,
+	}
+	if len(got) != len(wants) {
+		t.Fatalf("want %d findings, all for the slim job, but got %q (all: %v)", len(wants), got, errs)
+	}
+	for i, w := range wants {
+		if !strings.Contains(got[i], w) {
+			t.Errorf("%q is not in %q", w, got[i])
+		}
 	}
 }
 

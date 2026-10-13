@@ -1640,7 +1640,7 @@ test.yaml:10:15: the Docker container action "docker://alpine:3.22" cannot run o
 `ubuntu-slim` is the single-CPU runner of GitHub. It runs a job inside an unprivileged container instead of a virtual machine. GitHub
 [documents][single-cpu-doc] that Docker-in-Docker is not supported there, and the image has a Docker client but no daemon. GitHub has told users that
 `container:` is not available on the runner (actions/runner-images#13541). So the job `container:`, the `services:` of the job and a Docker container
-action (a step with `uses: docker://...`, or a local action whose `runs.using` is `docker`) cannot work, and the rule `ubuntu-slim-limits` (in the
+action (a step with `uses: docker://...`, a local action whose `runs.using` is `docker`, or a local composite action which has such a step, at any depth of local composite actions that call each other) cannot work, and the rule `ubuntu-slim-limits` (in the
 `default` profile, as an error) reports each of them. A `run:` step which calls `docker` is not reported.
 
 It reports a job whose `runs-on` is only `ubuntu-slim`: the label itself, or a matrix whose values are all `ubuntu-slim`. A job that may also get

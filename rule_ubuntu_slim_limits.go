@@ -1,6 +1,7 @@
 package jactionlint
 
 import (
+	"fmt"
 	"strings"
 )
 
@@ -153,13 +154,66 @@ func (rule *RuleUbuntuSlimLimits) VisitJobPre(n *Job) error {
 		switch {
 		case strings.HasPrefix(spec, "docker://"):
 			rule.ReportIDf("ubuntu-slim-limits", a.Uses.Pos, "the Docker container action %q cannot run on ubuntu-slim: %s. use a runner with a VM such as ubuntu-latest", spec, noDaemon)
-		case rule.localActions != nil && (strings.HasPrefix(spec, "./") || strings.HasPrefix(spec, "$/")):
-			if md, _ := rule.localActions.Lookup(spec); md != nil && strings.EqualFold(md.Runs.Using, "docker") {
-				rule.ReportIDf("ubuntu-slim-limits", a.Uses.Pos, "the action %q is a Docker container action (runs.using: docker) and cannot run on ubuntu-slim: %s. use a runner with a VM such as ubuntu-latest", spec, noDaemon)
+		case isLocalUsesSpec(spec):
+			if why := rule.dockerActionIn(spec, map[string]bool{}); why != "" {
+				rule.ReportIDf("ubuntu-slim-limits", a.Uses.Pos, "the action %q runs %s, which cannot run on ubuntu-slim: %s. use a runner with a VM such as ubuntu-latest", spec, why, noDaemon)
 			}
 		}
 	}
 	return nil
+}
+
+func isLocalUsesSpec(spec string) bool {
+	return strings.HasPrefix(spec, "./") || strings.HasPrefix(spec, selfRepositoryUsesPrefix)
+}
+
+// dockerActionIn returns what a local action runs that needs a Docker daemon, or "". The action is one itself
+// (runs.using: docker), or a composite action with a step that is a Docker container action, or that calls a local action
+// which is one of those, at any depth. visited holds the actions of the path being followed, so that actions which call
+// each other end the search.
+func (rule *RuleUbuntuSlimLimits) dockerActionIn(spec string, visited map[string]bool) string {
+	if rule.localActions == nil {
+		return ""
+	}
+	md, _ := rule.localActions.Lookup(spec)
+	if md == nil {
+		return ""
+	}
+	key := md.Dir()
+	if visited[key] {
+		return ""
+	}
+	visited[key] = true
+	defer delete(visited, key)
+
+	if strings.EqualFold(md.Runs.Using, "docker") {
+		return "a Docker container action (runs.using: docker)"
+	}
+	for _, raw := range md.Runs.Steps {
+		uses := stepUses(raw)
+		switch {
+		case strings.HasPrefix(uses, "docker://"):
+			return fmt.Sprintf("the Docker container action %q in a step of the composite action", uses)
+		case isLocalUsesSpec(uses):
+			if why := rule.dockerActionIn(uses, visited); why != "" {
+				return fmt.Sprintf("%q, which runs %s", uses, why)
+			}
+		}
+	}
+	return ""
+}
+
+// stepUses returns the "uses" of a step of a composite action as it was read from action.yml, or "".
+func stepUses(raw any) string {
+	switch m := raw.(type) {
+	case map[string]any:
+		s, _ := m["uses"].(string)
+		return s
+	case map[any]any:
+		s, _ := m["uses"].(string)
+		return s
+	}
+	return ""
 }
 
 func init() {
