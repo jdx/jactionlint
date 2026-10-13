@@ -1,0 +1,1 @@
+test.yaml:8:14: command "gh pr list" stops with "set the GH_TOKEN environment variable" because neither GH_TOKEN nor GITHUB_TOKEN is set for this step, its job or the workflow. set `GH_TOKEN: ${{ github.token }}` in the `env:` of the step [gh-without-token]

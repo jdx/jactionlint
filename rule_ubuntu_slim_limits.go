@@ -29,10 +29,10 @@ func NewRuleUbuntuSlimLimits(localActions *LocalActionsCache) *RuleUbuntuSlimLim
 	}
 }
 
-// matrixLabelValues returns every value that `${{ matrix.<key> }}` can take, or false when the matrix is not fully known
+// ubuntuSlimMatrixValues returns every value that `${{ matrix.<key> }}` can take, or false when the matrix is not fully known
 // (an expression somewhere in it, or a key that no row or include defines). Unlike matrixLabels it never drops a value
 // that it cannot read, because the caller concludes something from all of them.
-func matrixLabelValues(label *String, m *Matrix) ([]string, bool) {
+func ubuntuSlimMatrixValues(label *String, m *Matrix) ([]string, bool) {
 	if m == nil || m.Expression != nil || !label.IsExpressionAssigned() {
 		return nil, false
 	}
@@ -107,7 +107,7 @@ func runsOnlyOnUbuntuSlim(n *Job) bool {
 	}
 	for _, l := range labels {
 		if l.ContainsExpression() {
-			vs, ok := matrixLabelValues(l, m)
+			vs, ok := ubuntuSlimMatrixValues(l, m)
 			if !ok {
 				return false
 			}

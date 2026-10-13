@@ -1,0 +1,38 @@
+on: push
+jobs:
+  plain:
+    runs-on: ubuntu-latest
+    steps:
+      - run: gh pr list
+      - run: |
+          echo hi
+          gh release create v1 --notes "é" # one finding for each step
+          gh pr view 1
+      - run: sudo gh issue comment 1 --body ok
+      - run: if gh pr view 1; then echo y; fi
+      # a token of another step does not reach this one
+      - run: echo
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - run: gh api repos/octo/repo
+  hosted-matrix:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - run: gh workflow run ci.yaml
+  windows-with-bash:
+    runs-on: windows-latest
+    steps:
+      - run: gh run list
+        shell: bash
+  larger-runner:
+    runs-on: ubuntu-latest-8-cores
+    steps:
+      - run: gh cache list
+  a-later-step-sets-the-token:
+    runs-on: ubuntu-latest
+    steps:
+      - run: gh pr list
+      - run: echo "GH_TOKEN=x" >> "$GITHUB_ENV"

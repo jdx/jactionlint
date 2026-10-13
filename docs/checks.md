@@ -53,6 +53,7 @@ List of checks:
 - [ID naming convention](#id-naming-convention)
 - [Availability of contexts and special functions](#ctx-spfunc-availability)
 - [Deprecated workflow commands](#check-deprecated-workflow-commands)
+- [The gh command without a token](#check-gh-without-token)
 - [Constant conditions at `if:`](#if-cond-constant)
 - [Action metadata syntax validation](#action-metadata-syntax)
 - [Deprecated inputs usage](#deprecated-inputs-usage)
@@ -4614,6 +4615,62 @@ GitHub deprecated the following workflow commands.
 jactionlint detects these commands are used in `run:` and reports them as errors suggesting alternatives. See
 [the official document][workflow-commands-doc] for the comprehensive list of workflow commands to know the usage.
 
+<a id="check-gh-without-token"></a>
+## The gh command without a token
+
+Example input:
+
+```yaml
+on: push
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      # ERROR: gh stops because neither GH_TOKEN nor GITHUB_TOKEN is set
+      - run: gh pr list --state open
+      # OK: the token is set for the step
+      - run: gh pr list --state open
+        env:
+          GH_TOKEN: ${{ github.token }}
+      # OK: gh --version and gh help need no token
+      - run: gh --version
+```
+
+Output:
+
+```
+test.yaml:8:14: command "gh pr list" stops with "set the GH_TOKEN environment variable" because neither GH_TOKEN nor GITHUB_TOKEN is set for this step, its job or the workflow. set `GH_TOKEN: ${{ github.token }}` in the `env:` of the step [gh-without-token]
+  |
+8 |       - run: gh pr list --state open
+  |              ^~~~~~~~~~~~~~~~~~~~~~~
+```
+
+[Playground](https://jactionlint.jdx.dev/#eNqUzLEKAjEMxvH9nuIbXOMDdBcFQRd3uUK4Vo+0NMktx727VMHFySmE/4+vSEB1TcPwKFHDABir9Qs0F6UOPLqY0zz29k5qXPWjAOoyYEqoDXNWA5HaaIxSWf5BAMsSvg9wPN1v1/PhErBbV0zZkse9lScLtu1nmWjhprnIawBNrD3Z)
+
+The GitHub CLI is installed on the GitHub-hosted runners, but it is not logged in. It stops with `gh: To use GitHub CLI in a
+GitHub Actions workflow, set the GH_TOKEN environment variable` unless one of `GH_TOKEN`, `GITHUB_TOKEN`,
+`GH_ENTERPRISE_TOKEN` or `GITHUB_ENTERPRISE_TOKEN` is in its environment. The rule `gh-without-token` (in the `correctness`
+profile, [actionlint#246](https://github.com/rhysd/actionlint/issues/246)) reports a `gh` command of a `run:` script (found by
+parsing the script, so a name in a comment, a string, a heredoc or `echo` is not one) when the token is set neither in the `env:`
+of the step, of the job (and its `container:`) nor of the workflow. It reports the first `gh` command of each step.
+
+It is silent when it cannot be sure that the token is missing:
+
+- the script names `GH_TOKEN`, `GITHUB_TOKEN`, `github.token`, `hosts.yml` or `gh auth login`, for example `GH_TOKEN=... gh ...`,
+  `export GH_TOKEN=...` and `gh auth login --with-token`
+- an earlier step of the job writes a token to `$GITHUB_ENV`, runs `gh auth login`, exports a variable in a `github-script` or calls a
+  local action (whose metadata is not read, and which could do any of that): the steps after it are not reported
+- an `env:` is an expression
+- the command is `gh auth`, `gh config`, `gh extension`, `gh help`, `gh completion`, `gh --version`, `gh --help` or a command of an
+  extension, which need no token
+- the job does not run on a runner that is shown to be GitHub-hosted: a `self-hosted` label, a runner group, a custom label or a
+  `matrix` value that is not a hosted label (a self-hosted runner can be logged in already)
+- the script is not bash or sh (the default shell of a Windows runner is PowerShell)
+
+There is no fix: the rule does not choose the token for you. `${{ github.token }}` is the token of the workflow, `permissions:`
+decides what it can do.
+
 <a id="if-cond-constant"></a>
 ## Constant conditions at `if:`
 
@@ -7876,7 +7933,7 @@ How the rules treat actions:
 
 - **Applies** to the steps (and the metadata) of an action: `action-syntax`, `adhoc-packages`, `archived-uses`, `artipacked`, `background-step-not-waited`, `checkout-static-credentials`, `constant-condition`, `context-availability`, `continue-on-error`, `deprecated-action-input`, `deprecated-commands`, `duplicate-key`, `duplicate-step-id`, `expired-ignore`, `expression-syntax`, `expression-type`, `forbidden-uses`, `github-app`, `if-always-true`, `impostor-commit`, `insecure-commands`, `insecure-ssh-keyscan`, `insecure-url-scheme`, `invalid-env-var-name`, `invalid-function-call`, `invalid-id`, `invalid-ignore-comment`, `invalid-local-action`, `invalid-parallel-step`, `invalid-shell-name`, `invalid-uses`, `invisible-characters`, `known-vulnerable-actions`, `max-run-lines`, `merge-key`, `misfeature`, `missing-action-input`, `obfuscation`, `outdated-action-runner`, `pipeline-without-pipefail`, `pyflakes`, `recursive-alias`, `ref-confusion`, `ref-version-mismatch`, `require-expression-wrapping`, `self-repository`, `shellcheck`, `stale-action-refs`, `superfluous-actions`, `template-injection`, `typosquat-uses`, `undefined-function`, `undefined-property`, `unknown-action-input`, `unlocked-install`, `unpinned-images`, `unpinned-tools`, `unpinned-uses`, `unsound-contains`, `unsound-prefix-match`, `unsound-ternary`, `unused-anchor`, `unused-ignore`, `unverified-download`, `use-trusted-publishing`, `yaml-syntax`.
 - **Caller-dependent**: `agentic-actions`, `bot-conditions`, `cache-poisoning`, `github-env` (its findings about untrusted input do not depend on the caller), `untrusted-artifact` and `untrusted-checkout`.
-- **Not applicable** because an action does not have what the rule checks, or because only the calling job can decide (`unused-baseline-entry` is about the baseline file, not about a workflow or an action): `anonymous-definition`, `concurrency-cancels-prs`, `concurrency-cancels-release`, `concurrency-limits`, `conflicting-runner-labels`, `cron-too-frequent`, `cyclic-job-needs`, `dangerous-triggers`, `dependabot-cooldown`, `dependabot-execution`, `dependabot-missing-actions-update`, `dependabot-syntax`, `duplicate-job-id`, `duplicate-job-needs`, `duplicate-triggers`, `excessive-permissions`, `gate-job-skipped-on-failure`, `hardcoded-container-credentials`, `invalid-activity-type`, `invalid-cron`, `invalid-event-config`, `invalid-event-filter`, `invalid-glob`, `invalid-label-pattern`, `invalid-local-workflow`, `invalid-permissions`, `invalid-timezone`, `invalid-workflow-call`, `invalid-workflow-call-input`, `invalid-workflow-dispatch-input`, `local-action-checkout`, `matrix-duplicate-value`, `matrix-invalid-exclude`, `missing-permissions`, `missing-timeout`, `missing-workflow-input`, `missing-workflow-secret`, `mutable-runner-label`, `overprovisioned-secrets`, `require-shell`, `required-actions`, `secrets-inherit`, `secrets-outside-env`, `self-hosted-runner`, `timeout-too-long`, `ubuntu-slim-limits`, `undefined-job-needs`, `undocumented-permissions`, `unknown-event`, `unknown-runner-label`, `unknown-workflow-input`, `unknown-workflow-secret`, `unredacted-secrets`, `unused-baseline-entry`, `unused-job-output`, `unused-needs`, `unused-workflow-input`, `workflow-call-permissions`, `workflow-input-type`, `workflow-run-names`, `workflow-secret-scope`, `workflow-syntax`.
+- **Not applicable** because an action does not have what the rule checks, or because only the calling job can decide (`unused-baseline-entry` is about the baseline file, not about a workflow or an action): `anonymous-definition`, `concurrency-cancels-prs`, `concurrency-cancels-release`, `concurrency-limits`, `conflicting-runner-labels`, `cron-too-frequent`, `cyclic-job-needs`, `dangerous-triggers`, `dependabot-cooldown`, `dependabot-execution`, `dependabot-missing-actions-update`, `dependabot-syntax`, `duplicate-job-id`, `duplicate-job-needs`, `duplicate-triggers`, `excessive-permissions`, `gate-job-skipped-on-failure`, `gh-without-token`, `hardcoded-container-credentials`, `invalid-activity-type`, `invalid-cron`, `invalid-event-config`, `invalid-event-filter`, `invalid-glob`, `invalid-label-pattern`, `invalid-local-workflow`, `invalid-permissions`, `invalid-timezone`, `invalid-workflow-call`, `invalid-workflow-call-input`, `invalid-workflow-dispatch-input`, `local-action-checkout`, `matrix-duplicate-value`, `matrix-invalid-exclude`, `missing-permissions`, `missing-timeout`, `missing-workflow-input`, `missing-workflow-secret`, `mutable-runner-label`, `overprovisioned-secrets`, `require-shell`, `required-actions`, `secrets-inherit`, `secrets-outside-env`, `self-hosted-runner`, `timeout-too-long`, `ubuntu-slim-limits`, `undefined-job-needs`, `undocumented-permissions`, `unknown-event`, `unknown-runner-label`, `unknown-workflow-input`, `unknown-workflow-secret`, `unredacted-secrets`, `unused-baseline-entry`, `unused-job-output`, `unused-needs`, `unused-workflow-input`, `workflow-call-permissions`, `workflow-input-type`, `workflow-run-names`, `workflow-secret-scope`, `workflow-syntax`.
 
 Example input:
 

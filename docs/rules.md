@@ -70,6 +70,7 @@ rules:
 | [expression-type](#expression-type) | correctness | error | correctness |
 | [forbidden-uses](#forbidden-uses) | policy | error | only when configured |
 | [gate-job-skipped-on-failure](#gate-job-skipped-on-failure) | correctness | error | default |
+| [gh-without-token](#gh-without-token) | correctness | error | correctness |
 | [github-app](#github-app) | security | error | default |
 | [github-env](#github-env) | security | error | default |
 | [hardcoded-container-credentials](#hardcoded-container-credentials) | security | error | correctness |
@@ -518,6 +519,15 @@ A job that reads the results of the jobs it needs is skipped when one of them fa
 - Default level: error
 - Profile: default
 - Details and examples: [checks](./checks.md#check-gate-job-skipped-on-failure)
+
+## gh-without-token
+
+A script runs the gh command although no GH_TOKEN or GITHUB_TOKEN reaches the step, so gh stops.
+
+- Group: correctness
+- Default level: error
+- Profile: correctness
+- Details and examples: [checks](./checks.md#check-gh-without-token)
 
 ## github-app
 
