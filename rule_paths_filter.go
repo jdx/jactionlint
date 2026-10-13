@@ -340,10 +340,9 @@ func walkRepoPaths(root string) *repoPaths {
 	tooMany := false
 	err := filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
-			if d != nil && d.IsDir() {
-				return filepath.SkipDir // a directory which cannot be read has no files to see
-			}
-			return nil
+			// Something cannot be read, so the files are not all known: an entry could be about the ones that are not
+			// seen. The rule says nothing then.
+			return err
 		}
 		rel, err := filepath.Rel(root, p)
 		if err != nil || rel == "." {
