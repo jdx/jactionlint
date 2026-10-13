@@ -147,6 +147,8 @@ try 3 jactionlint --format = js
 try 2 jactionlint --profile pe
 try 2 jactionlint --ignore unpinned-u
 try 2 jactionlint --fix-rules missing-timeout,unpinned-u
+try 2 jactionlint --fix-rules missing-timeout,unpinned-uses,missing-t
+try 2 jactionlint --fix-rules a,b,c,missing-t
 try 1 jactionlint --pro
 try 1 jactionlint --col
 try 2 jactionlint --completion ''
@@ -166,6 +168,8 @@ try 2 jactionlint --config-file nothing-here
 		"pedantic",
 		"unpinned-uses",
 		"missing-timeout,unpinned-uses",
+		"missing-timeout,unpinned-uses,missing-timeout", // the middle elements stay
+		"a,b,c,missing-timeout",
 		"--profile",
 		"--color=",
 		"bash zsh fish powershell",

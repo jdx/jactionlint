@@ -130,6 +130,8 @@ func writeBashCompletion(w io.Writer, opts []compOption, ids []string) error {
 		}
 		switch {
 		case o.rules == compRuleList:
+			// In the format string "%%" is a literal "%": the script has ${val%,*} (up to the last comma), which keeps
+			// all the elements before the one being completed
 			fmt.Fprintf(&b, "            %s)\n                pre=${val%%,*}; [[ $val == *,* ]] && pre=${val%%,*}, || pre=\n                COMPREPLY=($(compgen -P \"$pre\" -W \"$rules\" -- \"${val##*,}\"))\n                compopt -o nospace 2>/dev/null; return ;;\n", names)
 		case o.rules == compRuleID:
 			fmt.Fprintf(&b, "            %s) COMPREPLY=($(compgen -W \"$rules\" -- \"$val\")); return ;;\n", names)
