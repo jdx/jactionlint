@@ -189,6 +189,13 @@ func (cmd *Command) Main(args []string) int {
 		return ExitStatusSuccessNoProblem
 	}
 
+	if f.listRules {
+		if err := writeRuleList(cmd.Stdout, opts.Format); err != nil {
+			fmt.Fprintln(cmd.Stderr, err)
+			return ExitStatusInvalidCommandOption
+		}
+		return ExitStatusSuccessNoProblem
+	}
 	if flags.Changed("completion") {
 		if err := writeCompletion(cmd.Stdout, f.completion); err != nil {
 			fmt.Fprintln(cmd.Stderr, err)
@@ -220,6 +227,20 @@ func (cmd *Command) Main(args []string) int {
 	}
 	if baselineWrite.set && (baseline.set || f.noBaseline || opts.BaselineCheck) {
 		fmt.Fprintln(cmd.Stderr, "--baseline-write cannot be combined with --baseline or --baseline-check: it records every finding")
+		return ExitStatusInvalidCommandOption
+	}
+	if f.noIgnores {
+		if baseline.set || opts.BaselineCheck || baselineWrite.set {
+			fmt.Fprintln(cmd.Stderr, "--no-ignores cannot be combined with --baseline, --baseline-check or --baseline-write: it turns the baseline off")
+			return ExitStatusInvalidCommandOption
+		}
+		opts.NoIgnores = true
+	}
+	for _, v := range f.selectRules {
+		opts.Select = append(opts.Select, strings.Split(v, ",")...)
+	}
+	if flags.Changed("select") && len(opts.Select) == 0 {
+		fmt.Fprintln(cmd.Stderr, "--select lists no rule ID")
 		return ExitStatusInvalidCommandOption
 	}
 	opts.Baseline = baseline.set

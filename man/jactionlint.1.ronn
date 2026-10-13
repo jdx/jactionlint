@@ -132,6 +132,21 @@ single-dash long options of v1 are removed; the error names the replacement.
     Rewrite the trailing `# zizmor: ignore[...]` comments of the files (the workflows of the project
     by default) into `# jactionlint ignore=...` comments. zizmor comments are also honored as they are
 
+  * `--select` <ID>[,<ID>...]:
+    Report only the findings of these rule IDs, also of the rules which the profile does not enable.
+    A level which the configuration sets for a selected rule stays, and a selected rule which the
+    configuration turns off runs at its default level. It can be repeated. `shellcheck` and
+    `pyflakes` run only when they are selected
+
+  * `--no-ignores`:
+    Apply no ignore comment, no `ignores` and `paths` ignore of the configuration file and no baseline,
+    so that the run shows what they hide. The `--ignore` options of the command stay. It cannot be
+    combined with `--baseline`, `--baseline-check` and `--baseline-write`
+
+  * `--list-rules`:
+    List every rule ID with its group, the profile which enables it, its default level and a
+    summary, and exit. With `--format json` or `jsonl` the list is JSON
+
   * `--min-severity` <LEVEL>:
     Hide the errors less severe than this level: `info` (default), `warn` or `error`
 
