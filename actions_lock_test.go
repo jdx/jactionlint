@@ -80,6 +80,14 @@ func TestActionsLockIgnoredWhenNotUsable(t *testing.T) {
 		{"no dependency entry", "version: 'v0.0.3'\nworkflows:\n" + entry, false},
 		{"workflow is not listed", "version: 'v0.0.3'\nworkflows:\n    '.github/workflows/other.yml':\n        - 'actions/checkout@v6.0.2'\n" + dep, false},
 		{"path is not the one of the workflow", "version: 'v0.0.3'\nworkflows:\n    'ci.yml':\n        - 'actions/checkout@v6.0.2'\n" + dep, false},
+		// The official parser rejects a repeated key, so the file is not trusted: neither the first nor the last entry wins
+		{"a workflow listed twice, the first pins", "version: 'v0.0.3'\nworkflows:\n" + entry + "    '.github/workflows/ci.yml':\n        - 'other/action@v1'\n" + dep, false},
+		{"a workflow listed twice, the last pins", "version: 'v0.0.3'\nworkflows:\n    '.github/workflows/ci.yml':\n        - 'other/action@v1'\n" + entry + dep, false},
+		{"a dependency listed twice", "version: 'v0.0.3'\nworkflows:\n" + entry + dep + strings.Replace(dep, "dependencies:\n", "", 1), false},
+		{"a key twice in a dependency", "version: 'v0.0.3'\nworkflows:\n" + entry + dep + "        commit: 'sha1-0000000000000000000000000000000000000000'\n", false},
+		{"version twice", "version: 'v0.0.3'\nversion: 'v0.0.3'\nworkflows:\n" + entry + dep, false},
+		{"a dependency under two spellings with other metadata", "version: 'v0.0.3'\nworkflows:\n" + entry + dep + "    'Actions/Checkout@v6.0.2':\n        ref: 'v6.0.2'\n        commit: 'sha1-0000000000000000000000000000000000000000'\n        owner_id: 1\n        repo_id: 2\n", false},
+		{"a dependency under two spellings with the same metadata", "version: 'v0.0.3'\nworkflows:\n" + entry + dep + "    'Actions/Checkout@v6.0.2':\n        ref: 'v6.0.2'\n        commit: 'sha1-de0fac2e4500dabe0009e67214ff5f5447ce83dd'\n        owner_id: 1\n        repo_id: 2\n", true},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

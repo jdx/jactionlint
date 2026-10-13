@@ -230,8 +230,14 @@ func (l *actionsLock) parse(b []byte) {
 	}
 
 	var versionNode, workflowsNode, depsNode *yaml.Node
+	seenTop := map[string]bool{}
 	for i := 0; i+1 < len(root.Content); i += 2 {
 		k, v := root.Content[i], root.Content[i+1]
+		if seenTop[k.Value] {
+			l.fail(k.Line, k.Column, "the key "+strconv.Quote(k.Value)+" is repeated, which the lock file does not allow: the file is not read")
+			return
+		}
+		seenTop[k.Value] = true
 		switch k.Value { // Other keys are ignored: the format may add some
 		case "version":
 			versionNode = v
@@ -283,8 +289,9 @@ func (l *actionsLock) parseWorkflows(n *yaml.Node) bool {
 			continue
 		}
 		if _, dup := l.workflows[w.Key]; dup {
-			l.problem(k, "the workflow "+strconv.Quote(w.Key)+" is listed twice")
-			continue
+			// The official parser rejects a repeated key: no entry is the effective one
+			l.fail(k.Line, k.Column, "the workflow "+strconv.Quote(w.Key)+" is listed twice, which the lock file does not allow: the file is not read")
+			return false
 		}
 		switch {
 		case v.Kind == yaml.ScalarNode && v.Tag == "!!null":
@@ -320,6 +327,7 @@ func (l *actionsLock) parseDependencies(n *yaml.Node) bool {
 		l.fail(n.Line, n.Column, "\"dependencies\" must be a mapping from \"owner/repo@ref\" to what was resolved")
 		return false
 	}
+	seenDeps := map[string]bool{}
 	for i := 0; i+1 < len(n.Content); i += 2 {
 		k, v := n.Content[i], n.Content[i+1]
 		pin, ok := parseLockPin(k.Value, k.Line, k.Column)
@@ -327,19 +335,26 @@ func (l *actionsLock) parseDependencies(n *yaml.Node) bool {
 			l.problem(k, strconv.Quote(k.Value)+" is not a valid dependency, which must look like \"owner/repo@ref\"")
 			continue
 		}
-		if _, dup := l.deps[pin.Key]; dup {
-			l.problem(k, "the dependency "+strconv.Quote(pin.Raw)+" is listed twice")
-			continue
+		if seenDeps[pin.Raw] {
+			// The official parser rejects a repeated key: no entry is the effective one
+			l.fail(k.Line, k.Column, "the dependency "+strconv.Quote(pin.Raw)+" is listed twice, which the lock file does not allow: the file is not read")
+			return false
 		}
+		seenDeps[pin.Raw] = true
 		d := &lockDependency{Pin: pin, Line: k.Line, Col: k.Column}
-		l.Dependencies = append(l.Dependencies, d)
-		l.deps[pin.Key] = d
 		if v.Kind != yaml.MappingNode {
 			l.problem(v, "the dependency "+strconv.Quote(pin.Raw)+" must be a mapping with \"ref\", \"commit\", \"owner_id\" and \"repo_id\"")
+			l.addDependency(d)
 			continue
 		}
+		seenField := map[string]bool{}
 		for j := 0; j+1 < len(v.Content); j += 2 {
 			fk, fv := v.Content[j], v.Content[j+1]
+			if seenField[fk.Value] {
+				l.fail(fk.Line, fk.Column, "the key "+strconv.Quote(fk.Value)+" of the dependency "+strconv.Quote(pin.Raw)+" is repeated, which the lock file does not allow: the file is not read")
+				return false
+			}
+			seenField[fk.Value] = true
 			switch fk.Value { // Other keys are ignored
 			case "ref":
 				d.Ref, d.HasRef = scalarOf(fv)
@@ -369,6 +384,37 @@ func (l *actionsLock) parseDependencies(n *yaml.Node) bool {
 					d.Uses = append(d.Uses, p)
 				}
 			}
+		}
+		if !l.addDependency(d) {
+			return false
+		}
+	}
+	return true
+}
+
+// addDependency records the dependency. The key is canonical (the owner and the repository in lower case), so two
+// spellings of one key are one entry: the official parser accepts them when they say the same and rejects the
+// file when they do not. It returns false when the file is rejected.
+func (l *actionsLock) addDependency(d *lockDependency) bool {
+	if prev, dup := l.deps[d.Pin.Key]; dup {
+		if !sameLockDependency(prev, d) {
+			l.fail(d.Line, d.Col, "the dependency "+strconv.Quote(d.Pin.Raw)+" is listed twice with other contents, which the lock file does not allow: the file is not read")
+			return false
+		}
+		return true
+	}
+	l.Dependencies = append(l.Dependencies, d)
+	l.deps[d.Pin.Key] = d
+	return true
+}
+
+func sameLockDependency(a, b *lockDependency) bool {
+	if a.Ref != b.Ref || a.Commit != b.Commit || a.OwnerID != b.OwnerID || a.RepoID != b.RepoID || a.Hostname != b.Hostname || len(a.Uses) != len(b.Uses) {
+		return false
+	}
+	for i := range a.Uses {
+		if a.Uses[i].Key != b.Uses[i].Key {
+			return false
 		}
 	}
 	return true
