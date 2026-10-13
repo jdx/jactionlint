@@ -70,6 +70,8 @@ func TestParseUses(t *testing.T) {
 	}{
 		{"action with tag", "actions/checkout@v4", UsesRef{Kind: UsesAction, Owner: "actions", Repo: "checkout", Ref: "v4", HasRef: true, RefKind: RefSemverTag}},
 		{"action with full sha", "actions/checkout@" + sha, UsesRef{Kind: UsesAction, Owner: "actions", Repo: "checkout", Ref: sha, HasRef: true, RefKind: RefFullSHA}},
+		{"action with a 64 digit sha of the SHA-256 object format", "actions/checkout@" + sha + sha[:24], UsesRef{Kind: UsesAction, Owner: "actions", Repo: "checkout", Ref: sha + sha[:24], HasRef: true, RefKind: RefFullSHA}},
+		{"action with a 41 digit hex ref", "actions/checkout@" + sha + "0", UsesRef{Kind: UsesAction, Owner: "actions", Repo: "checkout", Ref: sha + "0", HasRef: true, RefKind: RefOther}},
 		{"action with uppercase sha", "a/b@" + strings.ToUpper(sha), UsesRef{Kind: UsesAction, Owner: "a", Repo: "b", Ref: strings.ToUpper(sha), HasRef: true, RefKind: RefFullSHA}},
 		{"action with short sha", "a/b@abc1234", UsesRef{Kind: UsesAction, Owner: "a", Repo: "b", Ref: "abc1234", HasRef: true, RefKind: RefShortSHA}},
 		{"39 hex digits is short", "a/b@" + sha[:39], UsesRef{Kind: UsesAction, Owner: "a", Repo: "b", Ref: sha[:39], HasRef: true, RefKind: RefShortSHA}},

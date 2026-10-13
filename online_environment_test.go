@@ -27,7 +27,7 @@ jobs:
 `
 
 // environmentConfig leaves the online rules off, so that the requests of the tests are the ones for the environments
-const environmentConfig = "profile: default\nrules:\n  missing-timeout: off\n  impostor-commit: off\n  known-vulnerable-actions: off\n  ref-confusion: off\n  stale-action-refs: off\n  archived-uses: off\n  ref-version-mismatch: off\n  unpinned-uses: off\n"
+const environmentConfig = "profile: default\nrules:\n  missing-timeout: off\n  impostor-commit: off\n  known-vulnerable-actions: off\n  ref-confusion: off\n  stale-action-refs: off\n  archived-uses: off\n  ref-version-mismatch: off\n  unpinned-uses: off\n  repojacking: off\n"
 
 // environmentRun lints the workflow of a job in the environment with the online checks and returns the output and
 // the skipped lookups of the report.
