@@ -355,6 +355,21 @@
               "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
             },
             {
+              "id": "github-script-syntax",
+              "name": "GithubScriptSyntax",
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "description": "Checks the JavaScript of the script of actions/github-script for syntax errors with node --check",
+                "queryURI": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+              },
+              "fullDescription": {
+                "text": "Checks the JavaScript of the script of actions/github-script for syntax errors with node --check"
+              },
+              "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+            },
+            {
               "id": "glob",
               "name": "Glob",
               "defaultConfiguration": {
