@@ -76,6 +76,8 @@ type RuleGitHubEnv struct {
 	// freeTextOnly makes the name of a branch, of a label or of an account an ordinary value: the argument-injection rule
 	// is about text that a person types.
 	freeTextOnly bool
+	// checkouts caches, for the earlier steps of the job, whether the script checks out a pull request.
+	checkouts map[*Step]bool
 }
 
 // NewRuleGitHubEnv creates a new RuleGitHubEnv instance.

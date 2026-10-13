@@ -255,7 +255,8 @@ func (rule *RuleArgumentInjection) isEnvValue(s *runscript.Script, c *runscript.
 		return false
 	}
 	for _, a := range s.Assignments {
-		if a.Name == m[1] && a.Offset < c.Offset {
+		// `VAR=value cmd` only sets the environment of cmd: it does not change what a later command expands
+		if a.Name == m[1] && a.Offset < c.Offset && (a.Cmd == nil || a.Cmd.Decl) {
 			return false
 		}
 	}

@@ -72,8 +72,9 @@ var (
 	// the part of that path that holds text of many people: `pulls/7/comments`, `issues/comments`, `pulls/7/files`
 	reGhTextPath = regexp.MustCompile(`/(?:pulls|issues)/(?:[^/\s]+/)?(?:comments|reviews|files|commits)(?:[/?#]|$)`)
 	// a filter that provably prints a number, a state, a date or a count and no text
-	reJQHarmless   = regexp.MustCompile(`^\s*\.(?:number|state|id|url|mergeable|isDraft|draft|merged|mergedAt|createdAt|updatedAt|closedAt|additions|deletions|changedFiles|changed_files|headRefOid|locked|stateReason)(?:\s*\|\s*(?:tostring|not))?\s*$|^\s*\.(?:comments|files|reviews|commits|labels)\s*\|\s*length\s*$`)
-	rePullRefText  = regexp.MustCompile(`refs/pull/|\bpull/[^\s/]+/(head|merge)\b`)
+	reJQHarmless = regexp.MustCompile(`^\s*\.(?:number|state|id|url|mergeable|isDraft|draft|merged|mergedAt|createdAt|updatedAt|closedAt|additions|deletions|changedFiles|changed_files|headRefOid|locked|stateReason)(?:\s*\|\s*(?:tostring|not))?\s*$|^\s*\.(?:comments|files|reviews|commits|labels)\s*\|\s*length\s*$`)
+	// the ref of a pull request as an argument of git: `pull/7/head`, `+refs/pull/7/merge:pr`; a url of GitHub is not one
+	rePullRefText  = regexp.MustCompile(`^\+?(?:refs/)?pull/[^\s/]+/(?:head|merge)\b`)
 	gitSourceVerbs = map[string]bool{"log": true, "show": true, "diff": true, "diff-tree": true, "branch": true, "rev-parse": true, "symbolic-ref": true}
 	// the placeholders of a pretty format that print text of an outsider, by kind
 	reGitSubject = regexp.MustCompile(`%(s|ae|aE|ce|cE)\b|oneline`)
@@ -272,22 +273,8 @@ func gitTaint(c *runscript.Command, verb string) (taintSource, bool) {
 // step of the job checks out a head that outsiders control, or the script did it before the command (`gh pr checkout`,
 // a fetch of refs/pull/N/head).
 func (rule *RuleGitHubEnv) prHeadCheckedOut(s *runscript.Script, c *runscript.Command) bool {
-	if s != nil {
-		for _, other := range s.Commands {
-			if other.Offset >= c.Offset {
-				break
-			}
-			if other.Tool == "gh" && other.Verb() == "pr" && other.Sub(1) == "checkout" {
-				return true
-			}
-			if other.Name == "git" {
-				for _, w := range other.Words {
-					if rePullRefText.MatchString(w.Value) {
-						return true
-					}
-				}
-			}
-		}
+	if scriptChecksOutPR(s, c.Offset) {
+		return true
 	}
 	if rule.job == nil {
 		return false
@@ -302,14 +289,56 @@ func (rule *RuleGitHubEnv) prHeadCheckedOut(s *runscript.Script, c *runscript.Co
 			if u == nil || !u.isRepoAction("actions/checkout") {
 				continue
 			}
-			if in, ok := e.Inputs["ref"]; ok && in != nil && in.Value != nil {
-				if _, bad := untrustedString(in.Value); bad {
-					return true
+			// the ref and the repository of the checkout, like untrusted-checkout reads them
+			for _, name := range []string{"ref", "repository"} {
+				if in, ok := e.Inputs[name]; ok && in != nil && in.Value != nil {
+					if _, bad := untrustedString(in.Value); bad {
+						return true
+					}
 				}
 			}
 		case *ExecRun:
-			if e.Run != nil && (strings.Contains(e.Run.Value, "gh pr checkout") || rePullRefText.MatchString(e.Run.Value)) {
+			if e.Run == nil {
+				continue
+			}
+			if rule.checkouts == nil {
+				rule.checkouts = map[*Step]bool{}
+			}
+			done, ok := rule.checkouts[st]
+			if !ok {
+				if es, err := runscript.Analyze(e.Run.Value, "bash"); err == nil {
+					done = scriptChecksOutPR(es, len(e.Run.Value)+1)
+				}
+				rule.checkouts[st] = done
+			}
+			if done {
 				return true
+			}
+		}
+	}
+	return false
+}
+
+// scriptChecksOutPR reports whether a command of the script before the offset checks out a pull request: `gh pr checkout`,
+// or git with the ref of a pull request in a fetch, a checkout and the like. The text of a comment, of an echo or of a url is not a command.
+func scriptChecksOutPR(s *runscript.Script, before int) bool {
+	if s == nil {
+		return false
+	}
+	for _, other := range s.Commands {
+		if other.Offset >= before {
+			break
+		}
+		if other.Tool == "gh" && other.Verb() == "pr" && other.Sub(1) == "checkout" {
+			return true
+		}
+		if other.Name == "git" {
+			for _, w := range other.Words {
+				if !w.Dynamic() || strings.Contains(w.Value, "pull/") {
+					if rePullRefText.MatchString(w.Value) || rePullRefText.MatchString(strings.TrimLeft(w.Value, "+")) {
+						return true
+					}
+				}
 			}
 		}
 	}
