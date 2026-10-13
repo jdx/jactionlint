@@ -346,7 +346,7 @@ func (rule *RuleExpression) VisitStep(n *Step) error {
 		rule.checkString(e.Shell, "")
 		rule.checkString(e.WorkingDirectory, "jobs.<job_id>.steps.working-directory")
 	case *ExecAction:
-		rule.checkString(e.Uses, "")
+		rule.checkUsesString(e.Uses)
 		for n, i := range e.Inputs {
 			if e.Uses != nil && isCodeExecInput(e.Uses.Value, n) {
 				rule.checkScriptString(i.Value, "jobs.<job_id>.steps.with")
@@ -591,7 +591,7 @@ func (rule *RuleExpression) checkWorkflowCall(c *WorkflowCall) {
 		return
 	}
 
-	rule.checkString(c.Uses, "")
+	rule.checkUsesString(c.Uses)
 
 	m, err := rule.localWorkflows.FindMetadata(c.Uses.Value)
 	if err != nil {
@@ -667,6 +667,35 @@ func (rule *RuleExpression) checkWebhookEventFilter(f *WebhookEventFilter) {
 		return
 	}
 	rule.checkStrings(f.Values, "")
+}
+
+// checkUsesString reports an expression in the "uses" of a step or of a job which calls a reusable workflow. The action
+// or the workflow is resolved when the workflow file is read, before any expression is evaluated, so the schema of
+// the runner gives "uses" no context at all and the parser rejects every "${{ }}" in it ('A template expression is
+// not allowed in this context'), whatever the expression is.
+// https://github.com/actions/runner/blob/main/src/Sdk/WorkflowParser/workflow-v1.0.json (step-uses, workflow-job)
+func (rule *RuleExpression) checkUsesString(str *String) {
+	if str == nil || !str.ContainsExpression() {
+		return
+	}
+	parsed := str.placeholders()
+	off := 0
+	switch {
+	case len(parsed.list) > 0:
+		off = parsed.list[0].after - len("${{")
+	case parsed.failed:
+		off = parsed.errAfter - len("${{")
+	}
+	pos := str.Pos
+	if rule.src != nil {
+		line, col := rule.src.valuePosition(str, min(max(off, 0), len(str.Value)))
+		pos = &Pos{Line: line, Col: col}
+	}
+	rule.ReportID(
+		"context-availability",
+		pos,
+		"an expression is not allowed in \"uses\": the action or the reusable workflow is resolved when the workflow file is read, before any expression is evaluated. write the name of the action literally and choose its behavior with \"with:\"",
+	)
 }
 
 func (rule *RuleExpression) checkStrings(ss []*String, workflowKey string) {
@@ -949,6 +978,9 @@ func (rule *RuleExpression) checkSemanticsOfExprNode(expr ExprNode, line, col in
 	}
 	if workflowKey != "" {
 		ctx, sp := WorkflowKeyAvailability(workflowKey)
+		if a, ok := actionKeyAvailability[workflowKey]; ok {
+			ctx, sp = a.contexts, a.functions
+		}
 		if len(ctx) == 0 {
 			rule.Debug("No context availability was found for workflow key %q", workflowKey)
 		}
@@ -1344,8 +1376,10 @@ func compositeContexts(ctx []string) []string {
 func (rule *RuleExpression) visitActionPre(a *ActionFile) {
 	// The default of an input is evaluated before the inputs exist
 	rule.inputsTy = NewEmptyStrictObjectType()
+	// The matrix of the job which calls the action is not known here
+	rule.matrixTy = NewEmptyObjectType()
 	for _, in := range a.Inputs {
-		rule.checkString(in.Default, "jobs.<job_id>.steps.run")
+		rule.checkString(in.Default, actionInputDefaultKey)
 	}
 
 	ity := NewEmptyStrictObjectType()
@@ -1353,6 +1387,20 @@ func (rule *RuleExpression) visitActionPre(a *ActionFile) {
 		ity.Props[strings.ToLower(in.ID.Value)] = StringType{}
 	}
 	rule.inputsTy = ity
+
+	// The conditions of "pre" and "post" are expressions without "${{ }}", like the one of a step
+	if a.Runs != nil {
+		// The steps of the job which uses the action are not known either
+		if !a.Runs.IsComposite() {
+			rule.stepsTy = NewEmptyObjectType()
+		}
+		rule.checkIfCondition(a.Runs.PreIf, actionRunsIfKey)
+		rule.checkIfCondition(a.Runs.PostIf, actionRunsIfKey)
+		if !a.Runs.IsComposite() {
+			rule.stepsTy = nil
+		}
+	}
+	rule.matrixTy = nil
 }
 
 // compositeExprErrors tells what to do instead when a composite action reads the secrets context.

@@ -1,0 +1,16 @@
+name: Defaults and conditions
+description: What a default and a pre or post condition of an action may read
+inputs:
+  sha:
+    description: The default is evaluated with github, strategy, matrix, job and runner and hashFiles()
+    default: ${{ github.sha }}-${{ runner.os }}-${{ job.status }}-${{ strategy.job-index }}-${{ matrix.os }}-${{ hashFiles('**/go.sum') }}
+  plain:
+    description: A default without an expression
+    default: value
+runs:
+  using: node24
+  main: dist/index.js
+  pre: dist/setup.js
+  pre-if: runner.os == 'Linux' && inputs.sha != '' && env.CI == 'true' && always()
+  post: dist/cleanup.js
+  post-if: ${{ success() || failure() && steps.main.outcome == 'failure' }}

@@ -834,6 +834,8 @@ type Step struct {
 	Background *Bool
 	// Pos is a position in source.
 	Pos *Pos
+	// timeoutKey is the position of the "timeout-minutes" key, or nil.
+	timeoutKey *Pos
 }
 
 // Credentials is credentials configuration.

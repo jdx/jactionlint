@@ -1762,6 +1762,10 @@ jactionlint validates the Webhook configurations:
 The table of available Webhooks and their types are defined in [`all_webhooks.go`](https://github.com/jdx/jactionlint/blob/main/all_webhooks.go). It is generated
 by [a script][generate-webhook-events] and kept to the latest by CI workflow triggered weekly.
 
+`merge_group` runs a workflow only for the `checks_requested` activity type (the documentation and the workflow schema of GitHub list only that type, not the `destroyed` type of the webhook), so
+`types: [destroyed]` is reported. The events of classic Projects (`project`, `project_card` and `project_column`) and `pull_request_comment`
+are reported as unknown events, with a message that says why and what to use instead (`issue_comment` for a comment on a pull request).
+
 <a id="check-workflow-dispatch-events"></a>
 ## Workflow dispatch event validation
 
@@ -2032,7 +2036,8 @@ jactionlint checks the CRON syntax and frequency of running a job. [The official
 
 When the job is run more frequently than once every 5 minutes, jactionlint reports it as an error.
 
-jactionlint also checks the `timezone` configuration [is a valid IANA timezone string][schedule-item-doc].
+jactionlint also checks the `timezone` configuration [is a valid IANA timezone string][schedule-item-doc], and that every entry of `schedule`
+has a `cron`: an entry with only a `timezone` does not schedule anything.
 
 <a id="check-runner-labels"></a>
 ## Runner labels
@@ -2192,7 +2197,15 @@ The self-repository form resolves against the repository running the workflow at
 needs no checkout and takes no `@ref`. It is accepted everywhere the workspace-relative `./` form is, and jactionlint
 resolves both to the same path in the repository.
 
-Note that jactionlint does not report any error when a directory for a local action does not exist in the repository because it is
+For that reason `$/` is checked more strictly than `./`: a `$/path@ref` is reported (a self-repository reference cannot have a ref), so is a path
+which leaves the repository (`$/../x`), and so is a `$/path` without an `action.yml` or `action.yaml` in the repository, which is a certain
+failure at run time. The last one is not reported when the path is in a submodule or when the repository is not known (standard input). The same
+checks apply to the steps of a composite action and, for the ref and the path, to a reusable workflow called with `$/`.
+
+An expression (`${{ }}`) is not allowed in `uses:` of a step or of a job which calls a reusable workflow: GitHub resolves the action when it reads the
+workflow file, before any expression is evaluated, so the reference must be written out.
+
+Note that jactionlint does not report any error when a directory for a local action (`./path`) does not exist in the repository because it is
 a common case where the action is managed in a separate repository and the action directory is cloned at running the workflow.
 (See [#25][issue-25] and [#40][issue-40] for more details).
 
@@ -7923,6 +7936,11 @@ The syntax of the metadata file is checked like the syntax of workflows: unknown
 belong to another kind of action (`steps` in a `node24` action), values of the wrong type, and `run:` steps of a composite action
 without `shell:`. They are reported with the rule ID `action-syntax`. `runs.using` accepts `composite`, `docker` and `node` followed by
 a version number.
+
+The keys and the contexts which the runner rejects in an `action.yml` are reported too, with the rule ID `action-syntax` or the ID of the
+expression check: `timeout-minutes` in a step of a composite action (the steps of an action have no such key, set it on the step that uses the
+action), a context other than `github`, `strategy`, `matrix`, `job` and `runner` (and `hashFiles()`) in the `default` of an input, and an
+unknown context or function in `runs.pre-if` and `runs.post-if`.
 
 Example input:
 
