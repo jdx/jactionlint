@@ -266,6 +266,8 @@ func isBuildCommand(c *runscript.Command) bool {
 		return sub == "build" || sub == "test" || sub == "check" || sub == "package"
 	case c.Tool == "go":
 		return sub == "build" || sub == "test" || sub == "generate"
+	case name == "nuget" || name == "nuget.exe":
+		return sub == "restore"
 	case name == "dotnet":
 		return sub == "build" || sub == "pack" || sub == "restore" || sub == "test"
 	case c.Tool == "npm" || c.Tool == "pnpm" || c.Tool == "yarn" || c.Tool == "bun":
