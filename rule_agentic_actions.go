@@ -124,12 +124,14 @@ func (rule *RuleAgenticActions) checkAgent(job *Job, prev []*Step, step *Step, a
 			}
 		}
 	}
-	if guarded, gate := rule.agentGuarded(job, prev, step); !agent.Gated && rule.trigger != "" && !guarded {
-		exposed = true
-		if !limited {
-			rule.ReportIDf("agentic-actions", a.Uses.Pos,
-				"%s does not check who started it, and this workflow runs on %q, which anyone can cause on a public repository. the text they write steers the agent, which has the secrets of the job%s%s. restrict the job with an if: on github.event.comment.author_association (OWNER, MEMBER or COLLABORATOR) or on a label that only maintainers add, run it in an environment with required reviewers, or limit the agent to the few tools it needs",
-				agent.Title, rule.trigger, token, gate)
+	if !agent.Gated && rule.trigger != "" {
+		if guarded, gate := rule.agentGuarded(job, prev, step); !guarded {
+			exposed = true
+			if !limited {
+				rule.ReportIDf("agentic-actions", a.Uses.Pos,
+					"%s does not check who started it, and this workflow runs on %q, which anyone can cause on a public repository. the text they write steers the agent, which has the secrets of the job%s%s. restrict the job with an if: on github.event.comment.author_association (OWNER, MEMBER or COLLABORATOR) or on a label that only maintainers add, run it in an environment with required reviewers, or limit the agent to the few tools it needs",
+					agent.Title, rule.trigger, token, gate)
+			}
 		}
 	}
 
@@ -302,37 +304,35 @@ func checksOutPullRequest(s *Step) bool {
 // reviewers (or does not exist). Then it guards nothing, and the second result says so for the message, as ". text"
 // (empty when an environment was not the reason).
 func (rule *RuleAgenticActions) agentGuarded(job *Job, prev []*Step, step *Step) (bool, string) {
-	gate := ""
-	// environmentGuards is whether the environment of the job guards it. Environments without a gate are noted once.
-	environmentGuards := func(j *Job) bool {
-		if j.Environment == nil {
-			return false
-		}
-		if note, ok := rule.gates.noGate(j); ok {
-			if gate == "" {
-				gate = ". " + note
-			}
-			return false
-		}
-		return true
-	}
-	if environmentGuards(job) {
+	// What needs no lookup comes first: a condition or a step that guards the job decides without asking GitHub
+	if guardInCond(job.If) || guardInCond(step.If) || stepsGuard(prev) {
 		return true, ""
 	}
-	if guardInCond(job.If) || guardInCond(step.If) {
-		return true, ""
-	}
-	if stepsGuard(prev) {
-		return true, ""
-	}
+	var needed []*Job
 	for _, id := range job.Needs {
 		if id == nil {
 			continue
 		}
 		if j := rule.wf.Jobs[strings.ToLower(id.Value)]; j != nil {
-			if environmentGuards(j) || guardInCond(j.If) || stepsGuard(flattenSteps(j.Steps)) {
+			if guardInCond(j.If) || stepsGuard(flattenSteps(j.Steps)) {
 				return true, ""
 			}
+			needed = append(needed, j)
+		}
+	}
+	// The reviewers of an environment guard the job, unless the online checks find that it has none. The first
+	// environment which is no gate is told in the message.
+	gate := ""
+	for _, j := range append([]*Job{job}, needed...) {
+		if j.Environment == nil {
+			continue
+		}
+		note, noGate := rule.gates.noGate(j)
+		if !noGate {
+			return true, ""
+		}
+		if gate == "" {
+			gate = ". " + note
 		}
 	}
 	return false, gate

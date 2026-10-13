@@ -109,6 +109,25 @@ func TestEnvironmentGateRequests(t *testing.T) {
 			requests: map[string]int{"/repos/o/r/environments/release": 1, "/repos/o/r": 1},
 		},
 		{
+			// An internal repository, or an answer which does not say that the repository is public, is not public
+			name: "not found, the repository does not say it is public",
+			env:  "release",
+			answer: func(f *fakeGitHub) {
+				f.json("/repos/o/r", `{"default_branch":"main"}`)
+			},
+			skipped:  1,
+			requests: map[string]int{"/repos/o/r/environments/release": 1, "/repos/o/r": 1},
+		},
+		{
+			name: "not found in an internal repository",
+			env:  "release",
+			answer: func(f *fakeGitHub) {
+				f.json("/repos/o/r", `{"private":true,"visibility":"internal","default_branch":"main"}`)
+			},
+			skipped:  1,
+			requests: map[string]int{"/repos/o/r/environments/release": 1, "/repos/o/r": 1},
+		},
+		{
 			name: "forbidden",
 			env:  "release",
 			answer: func(f *fakeGitHub) {
@@ -286,5 +305,33 @@ func TestEnvironmentFixtureRoundTrip(t *testing.T) {
 	}
 	if _, err := fx.Environment(ctx, "o", "r", "unknown"); err == nil || errors.Is(err, ErrGitHubNotFound) {
 		t.Errorf("a lookup which is not recorded must fail: %v", err)
+	}
+}
+
+// A job which a condition guards is not looked up: nothing is asked when the environment would not decide.
+func TestEnvironmentIsNotLookedUpForAGuardedAgent(t *testing.T) {
+	f := newFakeGitHub(t)
+	f.handle("/repos/o/r/environments/release", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+		fmt.Fprint(w, `{"message":"no"}`)
+	})
+	setOnlineEnv(t, f, "tok")
+	t.Setenv("GITHUB_REPOSITORY", "o/r")
+	wf := `on: issue_comment
+jobs:
+  guarded:
+    runs-on: ubuntu-latest
+    environment: release
+    if: github.event.comment.author_association == 'OWNER'
+    steps:
+      - uses: google-github-actions/run-gemini-cli@v0
+        with:
+          prompt: Answer the comment
+`
+	_, path := onlineProject(t, wf, environmentConfig+"  agentic-actions: error\n")
+	report := filepath.Join(t.TempDir(), "report.json")
+	_, stdout, stderr := runOnlineCommand(t, "--online", "--online-report", report, path)
+	if f.count("/repos/o/r/environments/release") != 0 || strings.Contains(stdout, "[agentic-actions]") {
+		t.Errorf("%v\n%s%s", f.hits, stdout, stderr)
 	}
 }
