@@ -1,0 +1,72 @@
+on: push
+jobs:
+  # ERROR: the input "name" and the secret "token" are required
+  missing:
+    uses: example/workflows/.github/workflows/ci.yml@v1
+  # ERROR: a typo in an input and in a secret, and the wrong type of "count"
+  unknown:
+    uses: example/workflows/.github/workflows/ci.yml@v1
+    with:
+      name: x
+      nmae: y
+      count: many
+    secrets:
+      token: ${{ secrets.T }}
+      tokn: ${{ secrets.T }}
+  ok:
+    uses: example/workflows/.github/workflows/ci.yml@v1
+    with:
+      name: x
+      count: 2
+      dry-run: true
+    secrets:
+      token: ${{ secrets.T }}
+  # OK: all secrets are inherited, so none is missing
+  inherit:
+    uses: example/workflows/.github/workflows/ci.yml@v1
+    with:
+      name: x
+    secrets: inherit
+  # ERROR: the workflow at a commit is read too: "token" is required
+  pinned:
+    uses: example/workflows/.github/workflows/ci.yml@3333333333333333333333333333333333333333
+    with:
+      name: x
+    secrets:
+      extra: x
+  # ERROR: a real workflow of another repository, "scan-arg" is a typo of "scan-args"
+  osv:
+    uses: google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml@v2.7.0
+    with:
+      scan-arg: -r ./
+      upload-sarif: false
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+  outputs:
+    needs: ok
+    runs-on: ubuntu-latest
+    steps:
+      # OK
+      - run: echo ${{ needs.ok.outputs.result }}
+      # ERROR: the workflow declares only "result"
+      - run: echo ${{ needs.ok.outputs.reslt }}
+  # OK: nothing is reported when the workflow cannot be read, or is not a reusable workflow
+  not-reusable:
+    uses: example/workflows/.github/workflows/not-reusable.yml@v1
+    with:
+      anything: goes
+  gone:
+    uses: example/workflows/.github/workflows/gone.yml@v1
+    with:
+      anything: goes
+  private:
+    uses: example/private-action/.github/workflows/ci.yml@v1
+    with:
+      anything: goes
+  unknown-outputs:
+    needs: [not-reusable, gone, private]
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo ${{ needs.gone.outputs.anything }} ${{ needs.private.outputs.anything }} ${{ needs.not-reusable.outputs.anything }}

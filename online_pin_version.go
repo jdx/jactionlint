@@ -13,6 +13,12 @@ import "strings"
 // choice when the commit has two different versions of the same specificity: nothing then says
 // which one the author means. The boolean is false in all of those cases.
 func specificVersionTag(names []string, given string) (string, bool) {
+	return pickVersionTag(names, given, given == "" || hasVPrefix(given))
+}
+
+// pickVersionTag is specificVersionTag with the spelling of the result chosen by the caller: wantV
+// prefers the tag written with the "v" when the commit has the same version both ways.
+func pickVersionTag(names []string, given string, wantV bool) (string, bool) {
 	var gv advisoryVersion
 	if given != "" {
 		var ok bool
@@ -54,7 +60,6 @@ func specificVersionTag(names []string, given string) (string, bool) {
 		return "", false
 	}
 	// The same version may be spelled with and without the "v": follow the way the author writes
-	wantV := given == "" || hasVPrefix(given)
 	pick := best[0]
 	for _, c := range best[1:] {
 		if c.v.compare(pick.v) != 0 {

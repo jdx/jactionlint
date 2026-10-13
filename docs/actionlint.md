@@ -76,7 +76,7 @@ a key it does not know, so a file shared by both tools can keep `profile: correc
 | Format of `uses:` | `invalid-uses` |
 | Inputs of local and popular actions (and of any action with `--online`) | `missing-action-input`, `unknown-action-input`, `invalid-local-action`, `deprecated-action-input` |
 | Outdated popular actions | `outdated-action-runner` |
-| Reusable workflows (`workflow_call`) | `invalid-workflow-call`, `invalid-workflow-call-input`, `missing-workflow-input`, `unknown-workflow-input`, `missing-workflow-secret`, `unknown-workflow-secret`, `workflow-input-type`, `workflow-call-permissions`, `invalid-local-workflow` |
+| Reusable workflows (`workflow_call`, and with `--online` those of other repositories) | `invalid-workflow-call`, `invalid-workflow-call-input`, `missing-workflow-input`, `unknown-workflow-input`, `missing-workflow-secret`, `unknown-workflow-secret`, `workflow-input-type`, `workflow-call-permissions`, `invalid-local-workflow` |
 | Shell names | `invalid-shell-name` |
 | Job and step IDs | `duplicate-job-id`, `duplicate-step-id`, `invalid-id` |
 | Hardcoded credentials of containers | `hardcoded-container-credentials` |
@@ -124,6 +124,7 @@ is an error; actionlint does not type this object, see [rhysd/actionlint#39](htt
 careful: a property is reported only when no webhook event has it, and the whole payload is skipped for the triggers whose payload
 is not known (`workflow_dispatch`, `workflow_call`, `schedule`). See [the check](checks.md#check-contextual-github-event).
 `workflow-syntax` accepts `needs: []` and a filter without a value (`tags:`), which GitHub runs and actionlint 1.7 reports as an empty section.
+`if-always-true` does not report the newline at the end of a block scalar (`if: |` and `${{ }}` alone), which GitHub trims and actionlint 1.7 reports.
 The checks follow the workflow schema of GitHub where it is newer than actionlint 1.7, so these are not reported: a top-level `description:`,
 `cancel-timeout-minutes` on a job, `types` of the `image_version` event, the `stacked` type of `pull_request` and `pull_request_target`, the
 `drives` permission, `github.artifacts` and `github.artifacts_list`, an empty string in the `options` of a `choice` input of `workflow_dispatch`,

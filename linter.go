@@ -241,6 +241,7 @@ type Linter struct {
 	noIgnores      bool
 	warned         sync.Map    // *Config -> struct{}: configs whose deprecations were already reported
 	graphs         sync.Map    // root directory -> *sync.Once-guarded *callGraph, see callGraphOf
+	locks          sync.Map    // root directory -> *sync.Once-guarded *actionsLock, see actionsLockOf
 	runHints       bool        // LinterOptions.RunHints
 	hintBaseline   atomic.Bool // a baseline was applied to a file
 	// hintBeyondCorrectness is true when a file was linted with a profile above correctness
@@ -924,12 +925,18 @@ func (l *Linter) check(
 		if err != nil {
 			return nil, err
 		}
+		var lockWorkflows []string
+		if isAction {
+			lockWorkflows = l.lockWorkflowsOf(project, path)
+		}
 		env := &RuleEnv{
 			online:                 sess,
 			path:                   path,
 			src:                    content,
 			action:                 isAction,
 			project:                project,
+			lockWorkflows:          lockWorkflows,
+			actionsLock:            l.actionsLockOf(project),
 			localActions:           localActions,
 			localReusableWorkflows: localReusableWorkflows,
 			config:                 cfg,
@@ -1085,7 +1092,7 @@ func (l *Linter) finishCheck(path string, content []byte, all []*Error, cfg *Con
 	l.attachImageFixes(l.onlineSessionOrNil(cfg), content, all)
 	if isWorkflow {
 		sess, _ := l.onlineSession(cfg)
-		l.attachPinFixes(sess, cfg, content, all)
+		l.attachPinFixes(sess, cfg, content, all, ic != nil && cfg.readsActionsLock() && l.lockListsWorkflow(ic.project, path))
 	}
 
 	for _, err := range all {
