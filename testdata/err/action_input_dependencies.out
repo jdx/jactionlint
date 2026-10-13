@@ -1,0 +1,4 @@
+test.yaml:11:11: input "run-id" of action "actions/download-artifact@v4" needs "github-token", without it the action ignores it and downloads from the current run. add "github-token" [missing-action-input]
+test.yaml:12:11: input "repository" of action "actions/download-artifact@v4" needs "github-token", without it the action ignores it and downloads from the current repository. add "github-token" [missing-action-input]
+test.yaml:20:15: missing input: action "nick-fields/retry@v3" needs "timeout_minutes" or "timeout_seconds", the action fails with "Must specify either timeout_minutes or timeout_seconds inputs". give one of them [missing-action-input]
+test.yaml:28:11: inputs "workload_identity_provider" and "credentials_json" of action "google-github-actions/auth@v2" exclude each other, the action fails with "must specify exactly one of". give only one of "workload_identity_provider" and "credentials_json" [conflicting-action-inputs]
