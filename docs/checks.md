@@ -7186,8 +7186,8 @@ Output:
 <!-- Skip playground link -->
 
 The rule is `hardcoded-registry-credentials`. It is enabled by default as an error. It reads a value as a reference when it has
-an expression (`${{ ... }}`), so `${{secrets.NAME}}` is not reported, and neither are a username, the settings of OIDC
-(`tenant-id`, `client-id`, ...). There is no automatic
+an expression (`${{ ... }}`), so `${{secrets.NAME}}` is not reported. Usernames and OIDC settings (`tenant-id`, `client-id`, ...)
+are also not reported. There is no automatic
 fix because jactionlint cannot know the name of the secret, and a credential that was committed has to be rotated anyway.
 Only `password`, `token`, `key`, `auth-key` and a password in the `url` are checked: a user name in the user information of the
 `url` (`https://token@host/`) is not.
