@@ -24,6 +24,8 @@ import (
 type RuleExpressionDelimiters struct {
 	RuleBase
 	src *sourceIndex
+	// inAction is whether the file is the metadata of a composite action, where github.action_path exists.
+	inAction bool
 }
 
 // NewRuleExpressionDelimiters creates a new RuleExpressionDelimiters instance. The source of the file lets the rule
@@ -40,6 +42,7 @@ func NewRuleExpressionDelimiters(src []byte) *RuleExpressionDelimiters {
 
 // VisitWorkflowPre is callback when visiting Workflow node before visiting its children.
 func (rule *RuleExpressionDelimiters) VisitWorkflowPre(n *Workflow) error {
+	rule.inAction = n.Action != nil
 	rule.walk(n.Name, false)
 	rule.walk(n.RunName, false)
 	rule.walk(n.Env, false)
@@ -274,7 +277,10 @@ func (rule *RuleExpressionDelimiters) shellVariable(s *String, off int, m []stri
 		name = m[2]
 	}
 	use := "pass it with `${{ env." + name + " }}`, which reads a variable of the workflow, the job or the step"
-	if ctx, ok := contextOfRunnerVariable(name); ok {
+	if name == "GITHUB_ACTION_PATH" && rule.inAction {
+		// the context exists only in a composite action
+		use = "use `${{ github.action_path }}`"
+	} else if ctx, ok := contextOfRunnerVariable(name); ok {
 		use = "use `${{ " + ctx + " }}`"
 	} else if strings.HasPrefix(name, "GITHUB_") || strings.HasPrefix(name, "RUNNER_") || name == "HOME" || name == "PATH" || name == "USER" {
 		use = "no context has it (`env` has only the variables the workflow sets), so compute it in an earlier step and pass it as an output"
@@ -293,7 +299,9 @@ func contextOfRunnerVariable(name string) (string, bool) {
 		"GITHUB_SERVER_URL": "github.server_url", "GITHUB_API_URL": "github.api_url", "GITHUB_JOB": "github.job",
 		"GITHUB_WORKFLOW": "github.workflow", "GITHUB_TRIGGERING_ACTOR": "github.triggering_actor",
 		"RUNNER_TEMP": "runner.temp", "RUNNER_OS": "runner.os", "RUNNER_ARCH": "runner.arch", "RUNNER_NAME": "runner.name",
-		"RUNNER_TOOL_CACHE": "runner.tool_cache",
+		"RUNNER_TOOL_CACHE": "runner.tool_cache", "RUNNER_DEBUG": "runner.debug", "RUNNER_ENVIRONMENT": "runner.environment",
+		"GITHUB_TOKEN": "github.token", "GITHUB_EVENT_PATH": "github.event_path", "GITHUB_ACTION_REPOSITORY": "github.action_repository",
+		"GITHUB_RETENTION_DAYS": "github.retention_days",
 	}
 	c, ok := m[name]
 	return c, ok

@@ -1,6 +1,10 @@
 package jactionlint
 
-import "testing"
+import (
+	"fmt"
+	"strings"
+	"testing"
+)
 
 const delimID = "malformed-expression-delimiters"
 
@@ -71,6 +75,7 @@ func TestExpressionDelimitersPedantic(t *testing.T) {
 		{"variable", step("          path: $HOME/x\n"), []int{8}},
 		{"braces", step("          path: ${HOME}/x\n"), []int{8}},
 		{"workspace", step("          path: $GITHUB_WORKSPACE/x\n"), []int{8}},
+		{"token", step("          path: $GITHUB_TOKEN ${GITHUB_EVENT_PATH} $GITHUB_ACTION_REPOSITORY $GITHUB_RETENTION_DAYS $RUNNER_DEBUG $RUNNER_ENVIRONMENT\n"), []int{8, 8, 8, 8, 8, 8}},
 		{"two", step("          path: $A:${B}\n"), []int{8, 8}},
 		{"escaped dollar", step("          path: $$HOME \\$HOME\n"), nil},
 		{"a number or a special variable", step("          path: $1 $? $(pwd) ${HOME:-x} $\n"), nil},
@@ -150,4 +155,35 @@ func TestExpressionDelimitersPositionWithNonASCII(t *testing.T) {
 	if len(errs) != 1 || errs[0].Line != 8 || errs[0].Column != 19 {
 		t.Fatalf("unexpected findings: %v", errs)
 	}
+}
+
+func TestExpressionDelimitersRunnerVariableAdvice(t *testing.T) {
+	pedantic := ruleConfig(delimID)
+	pedantic.Rules[delimID] = RuleConfig{Level: SeverityError, Options: map[string]any{"pedantic": true}}
+	const wf = "on: push\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: a/b@v1\n        with:\n          x: %s\n"
+	tests := []struct{ name, want string }{
+		{"GITHUB_TOKEN", "`${{ github.token }}`"},
+		{"GITHUB_EVENT_PATH", "`${{ github.event_path }}`"},
+		{"GITHUB_ACTION_REPOSITORY", "`${{ github.action_repository }}`"},
+		{"GITHUB_RETENTION_DAYS", "`${{ github.retention_days }}`"},
+		{"RUNNER_DEBUG", "`${{ runner.debug }}`"},
+		{"RUNNER_ENVIRONMENT", "`${{ runner.environment }}`"},
+		// github.action_path exists only in a composite action
+		{"GITHUB_ACTION_PATH", "no context has it"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			errs := errsWithID(lintFileWithConfig(t, pedantic, "ci.yaml", fmt.Sprintf(wf, "$"+tc.name)), delimID)
+			if len(errs) != 1 || !strings.Contains(errs[0].Message, tc.want) {
+				t.Fatalf("want advice %q: %v", tc.want, errs)
+			}
+		})
+	}
+	t.Run("GITHUB_ACTION_PATH in a composite action", func(t *testing.T) {
+		src := "name: x\ndescription: y\nruns:\n  using: composite\n  steps:\n    - uses: a/b@v1\n      with:\n        x: $GITHUB_ACTION_PATH\n"
+		errs := errsWithID(lintFileWithConfig(t, pedantic, "action.yml", src), delimID)
+		if len(errs) != 1 || !strings.Contains(errs[0].Message, "`${{ github.action_path }}`") {
+			t.Fatalf("want the context of the composite action: %v", errs)
+		}
+	})
 }
