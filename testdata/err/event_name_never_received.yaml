@@ -1,0 +1,34 @@
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  IS_PR: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  never:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'release'
+    steps:
+      - run: echo "é" ${{ github.event_name == 'issues' }}
+        if: ${{ github.event_name == 'pull_request' || github.event_name == 'push' }}
+      - run: echo
+        if: "'schedule' == github.event_name"
+      - run: echo
+        if: github.ref == 'refs/heads/main' && github.event_name == 'Pull_Request_Target'
+  both:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo
+        if: github.event_name == 'push' && github.run_id && github.event_name == 'workflow_dispatch'
+  possible:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    steps:
+      - run: echo
+        if: github.event_name == 'PUSH'
+      - run: echo
+        if: github.event_name != 'pull_request'
+      - run: echo
+        if: github.event_name == 'push' && github.event_name == 'push'
