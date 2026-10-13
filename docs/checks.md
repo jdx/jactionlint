@@ -6840,6 +6840,9 @@ updates:
       interval: weekly
 ```
 
+An update which is disabled, with `open-pull-requests-limit: 0` or an `ignore` of every dependency, opens no pull request and does not
+count for either check: with only disabled `github-actions` updates, the repository is reported as one whose actions are not updated.
+
 The fix replaces `directory: /` of an update that is the only `github-actions` one by `directories: ["/", "/.github/actions/**/*"]` (the
 actions that are not below `.github/actions` are listed by their directory). It makes Dependabot propose pull requests it did not, so it is
 unsafe and only applied by `--fix=unsafe`. It is not offered when the file has several `github-actions` updates or writes the key in a way

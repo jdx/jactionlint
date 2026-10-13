@@ -47,8 +47,26 @@ func (r *RuleDependabotMissingActionsUpdate) VisitDependabotPost(d *Dependabot) 
 		}
 	}
 	if len(updates) > 0 {
-		if !usesRenovate(r.project.RootDir()) {
-			r.checkLocalActions(updates)
+		if usesRenovate(r.project.RootDir()) {
+			return nil
+		}
+		// An update which is disabled (open-pull-requests-limit: 0, or an ignore of every dependency) opens no pull request: it
+		// updates nothing, in its directory or anywhere
+		var active []*DependabotUpdate
+		for _, u := range updates {
+			if !dependabotUpdatesDisabled(u) {
+				active = append(active, u)
+			}
+		}
+		switch {
+		case len(active) > 0:
+			r.checkLocalActions(active)
+		case hasExternalActions(r.project.WorkflowsDir()):
+			pos := updates[0].Pos
+			if pos == nil {
+				pos = d.Pos
+			}
+			r.ReportID("dependabot-missing-actions-update", pos, "this repository uses actions in its workflows but every update with the \"github-actions\" package ecosystem is disabled (\"open-pull-requests-limit: 0\", or an \"ignore\" of every dependency), so Dependabot never updates them. enable one of them")
 		}
 		return nil
 	}
