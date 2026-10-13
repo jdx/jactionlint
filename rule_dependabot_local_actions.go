@@ -57,14 +57,6 @@ func isUpdatableUses(uses *String) bool {
 	return !u.Dynamic && (u.Kind == UsesAction || u.Kind == UsesReusableWorkflow)
 }
 
-// projectUsesExternalActions reports whether the repository has a file which uses an action or a reusable workflow that
-// Dependabot can update: a workflow of .github/workflows or a local composite action (isUpdatableUses and the one walk of
-// workflowHasExternalActions). Both checks of dependabot-missing-actions-update ask it, so a repository whose external actions are
-// all in its local actions is judged like one whose workflows use them.
-func projectUsesExternalActions(p *Project) bool {
-	return hasExternalActions(p.WorkflowsDir()) || len(localActionsWithExternalUses(p)) > 0
-}
-
 // workflowHasExternalActions reports whether a job of the workflow calls a reusable workflow, or a step of it (a step of the
 // synthetic job of a composite action too) uses an action, that Dependabot can update (isUpdatableUses). It is the one walk
 // of the jobs and the steps for both checks.
