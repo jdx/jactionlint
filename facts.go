@@ -89,7 +89,8 @@ type EventFacts struct {
 type PermissionFacts struct {
 	// Declared is false when the file has no "permissions:" at this level.
 	Declared bool `json:"declared"`
-	// Scopes maps a scope to "read", "write" or "none", or to "unknown" when an expression decides it. The scope "*"
+	// Scopes maps a scope to "read", "write" or "none", or to "unknown" when an expression decides it or the value is
+	// not one that GitHub accepts (jactionlint reports it as invalid-permissions). The scope "*"
 	// is read-all or write-all, and "none" for an empty mapping.
 	Scopes   map[string]string `json:"scopes,omitempty"`
 	Location *Location         `json:"location,omitempty"`
@@ -305,7 +306,15 @@ func permissionFacts(p *Permissions) PermissionFacts {
 	if p == nil {
 		return PermissionFacts{}
 	}
-	return PermissionFacts{Declared: true, Scopes: permissionMap(p), Location: locationOf(p.Pos)}
+	scopes := permissionMap(p)
+	for k, v := range scopes {
+		switch v {
+		case "read", "write", "none", "unknown":
+		default:
+			scopes[k] = "unknown" // GitHub rejects the file (invalid-permissions), so what the token has is not known
+		}
+	}
+	return PermissionFacts{Declared: true, Scopes: scopes, Location: locationOf(p.Pos)}
 }
 
 func effectiveFacts(w, j PermissionFacts) EffectivePermissions {

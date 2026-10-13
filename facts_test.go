@@ -402,3 +402,24 @@ func TestExportFactsRealWorldCorpus(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestExportFactsInvalidPermissionIsUnknown(t *testing.T) {
+	repo := copyFactsRepo(t)
+	file := filepath.Join(repo, ".github", "workflows", "bad.yaml")
+	src := "on: push\npermissions:\n  contents: Write\n  issues: ${{ vars.LEVEL }}\n  checks: read\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo\n"
+	if err := os.WriteFile(file, []byte(src), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	l, err := NewLinter(&bytes.Buffer{}, &LinterOptions{WorkingDir: repo})
+	if err != nil {
+		t.Fatal(err)
+	}
+	f, err := l.ExportFacts([]string{file}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]string{"contents": "unknown", "issues": "unknown", "checks": "read"}
+	if diff := cmp.Diff(want, f.Workflows[0].Permissions.Scopes); diff != "" {
+		t.Errorf("scopes (-want +got): %s", diff)
+	}
+}
