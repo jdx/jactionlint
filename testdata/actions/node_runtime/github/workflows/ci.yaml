@@ -1,0 +1,12 @@
+name: ci
+on: push
+permissions: {}
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: ./.github/actions/old
+      - uses: ./.github/actions/legacy
+      - uses: ./.github/actions/current
+      - uses: ./.github/actions/composite

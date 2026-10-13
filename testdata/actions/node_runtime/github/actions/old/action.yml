@@ -1,0 +1,5 @@
+name: old
+description: Declares a runtime that GitHub removed
+runs:
+  using: node20
+  main: dist/index.js
