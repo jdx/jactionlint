@@ -60,6 +60,7 @@ rules:
 | [dependabot-syntax](#dependabot-syntax) | correctness | error | correctness |
 | [deprecated-action-input](#deprecated-action-input) | correctness | error | correctness |
 | [deprecated-commands](#deprecated-commands) | correctness | error | correctness |
+| [deprecated-runner-label](#deprecated-runner-label) | policy | warn | pedantic |
 | [duplicate-job-id](#duplicate-job-id) | correctness | error | correctness |
 | [duplicate-job-needs](#duplicate-job-needs) | correctness | error | correctness |
 | [duplicate-key](#duplicate-key) | correctness | error | correctness |
@@ -125,6 +126,7 @@ rules:
 | [recursive-alias](#recursive-alias) | correctness | error | correctness |
 | [ref-confusion](#ref-confusion) | security | warn | only with `--online` |
 | [ref-version-mismatch](#ref-version-mismatch) | security | warn | only with `--online` |
+| [repojacking](#repojacking) | security | warn | only with `--online` |
 | [require-expression-wrapping](#require-expression-wrapping) | style | error | pedantic |
 | [require-shell](#require-shell) | style | error | pedantic |
 | [required-actions](#required-actions) | policy | error | only when configured |
@@ -365,11 +367,12 @@ Jobs depend on each other in a cycle.
 
 ## dangerous-triggers
 
-A workflow uses pull_request_target, workflow_run or issue_comment.
+A workflow uses pull_request_target, workflow_run or issue_comment. With the option pedantic, also one that cannot write and uses no secret.
 
 - Group: security
 - Default level: error
 - Profile: default
+- Option `pedantic` (bool, no default): Also report the pedantic checks, which are noisier. Unset, they run under the pedantic profile.
 - Details and examples: [checks](./checks.md#check-dangerous-triggers)
 
 ## dependabot-cooldown
@@ -429,6 +432,15 @@ A deprecated workflow command such as ::set-output is used.
 - Default level: error
 - Profile: correctness
 - Details and examples: [checks](./checks.md#check-deprecated-workflow-commands)
+
+## deprecated-runner-label
+
+A runner label is deprecated and GitHub is going to retire it on a known date, such as macos-14.
+
+- Group: policy
+- Default level: warn
+- Profile: pedantic
+- Details and examples: [checks](./checks.md#check-deprecated-runner-label)
 
 ## duplicate-job-id
 
@@ -1038,6 +1050,16 @@ The version comment of a hash-pinned action does not match the pinned commit.
 - Needs network access: yes (only with `--online`)
 - Details and examples: [checks](./checks.md#check-ref-version-mismatch)
 
+## repojacking
+
+An action or reusable workflow has an owner whose name anyone can register.
+
+- Group: security
+- Default level: warn
+- Profile: only with `--online`
+- Needs network access: yes (only with `--online`)
+- Details and examples: [checks](./checks.md#check-repojacking)
+
 ## require-expression-wrapping
 
 An if: condition is not wrapped in ${{ }}.
@@ -1085,11 +1107,13 @@ A job uses a secret but has no environment.
 
 ## self-hosted-runner
 
-A job runs on a self-hosted runner.
+A job runs on a self-hosted runner: the label self-hosted, a label of self-hosted-runner.labels or a runner group.
 
 - Group: security
 - Default level: info
 - Profile: pedantic
+- Option `allow` (strings, empty by default): Glob patterns of the labels and the runner groups of runners which are ephemeral or trusted. A job with one of them is not reported.
+- Option `pull-request-only` (bool, default false): Report only the jobs of workflows that a pull request event can start, which is the case that poutine reports.
 - Details and examples: [checks](./checks.md#check-self-hosted-runner)
 
 ## self-repository
@@ -1219,7 +1243,7 @@ An unknown Webhook event is used.
 
 ## unknown-runner-label
 
-A runner label is unknown.
+A runner label is unknown, or is one that GitHub has retired.
 
 - Group: correctness
 - Default level: error
@@ -1246,7 +1270,7 @@ A secret which the reusable workflow does not define is passed.
 
 ## unlocked-install
 
-cargo install runs without --locked, or npm, yarn or pnpm install without freezing a lock file that the repository has.
+cargo install runs without --locked, or npm, yarn or pnpm install without freezing a lock file that the repository has. With the option pedantic, also installs without a lock file npm, Yarn and bun installs that run the lifecycle scripts of the dependencies, and installs without a release-age cooldown.
 
 - Group: security
 - Default level: error
