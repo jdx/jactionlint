@@ -54,3 +54,15 @@ jobs:
     runs-on: ${{ matrix.os }}-latest
     steps:
       - run: echo ...
+  # An exclude with an expression can remove any value of the row, but not the one that include adds
+  expression-and-included:
+    strategy:
+      matrix:
+        os: [ubuntu]
+        exclude:
+          - os: ${{ github.event_name }}
+        include:
+          - os: haiku
+    runs-on: ${{ matrix.os }}-latest
+    steps:
+      - run: echo ...

@@ -27,7 +27,7 @@ jobs:
     runs-on: ${{ matrix.os }}-latest
     steps:
       - run: echo ...
-  # An exclude with an expression can remove any value
+  # An exclude with an expression can remove any value of the row
   excluded-by-expression:
     strategy:
       matrix:

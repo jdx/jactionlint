@@ -14,7 +14,8 @@ import (
 // decide which pairs run and the product of the values has pairs that do not. A value that is not a string without an
 // expression, or a number that GitHub prints differently from the text of the file (`20.10` is `20.1`), is skipped, and
 // so is a value of the matrix that an `exclude` entry which has only that name removes (a value that `include` adds
-// is a new job and stays). An `exclude` with an expression for the name is not looked through at all.
+// is a new job and stays). When an `exclude` has an expression the values of the row are not known, so only the ones that `include`
+// adds are checked.
 func concatenatedRunnerLabels(label *String, m *Matrix) []*String {
 	if m == nil || m.Expression != nil || !strings.Contains(label.Value, "${{") {
 		return nil
@@ -82,13 +83,15 @@ func concatenatedRunnerLabels(label *String, m *Matrix) []*String {
 	}
 
 	removed := map[string]bool{}
+	rowsUnknown := false // an expression in exclude can remove any value of the row
 	if m.Exclude != nil {
 		if m.Exclude.Expression != nil {
-			return nil // which jobs are removed is not known
+			rowsUnknown = true
 		}
 		for _, c := range m.Exclude.Combinations {
 			if c.Expression != nil {
-				return nil
+				rowsUnknown = true
+				continue
 			}
 			a, ok := c.Assigns[name]
 			if !ok {
@@ -99,9 +102,8 @@ func concatenatedRunnerLabels(label *String, m *Matrix) []*String {
 				continue // an object or an array never equals a string of the row
 			}
 			if ContainsExpression(s.Value) {
-				return nil // an expression can match any value
-			}
-			if len(c.Assigns) == 1 {
+				rowsUnknown = true
+			} else if len(c.Assigns) == 1 {
 				removed[s.Value] = true
 			}
 		}
@@ -111,7 +113,7 @@ func concatenatedRunnerLabels(label *String, m *Matrix) []*String {
 	seen := map[string]bool{}
 	for _, cand := range values {
 		v := cand.v
-		if !isStableMatrixString(v) || (cand.fromRow && removed[v.Value]) {
+		if !isStableMatrixString(v) || (cand.fromRow && (rowsUnknown || removed[v.Value])) {
 			continue
 		}
 		var b strings.Builder
