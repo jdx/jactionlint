@@ -38,3 +38,4 @@ go run ./scripts/generate-webhook-events ./input.html -
 - `Not applicable` activity types are generated as an empty slice: `[]string{}`
 - `Custom` activity types are generated as `nil`
 - The output is sorted by webhook name so the generated file is stable
+- Activity types that the documentation lacks but jactionlint must accept are listed in `extraTypes` in `main.go` (currently none: `merge_group` has only `checks_requested`) and are added to the scraped types, so that regenerating does not drop them. The script fails when the event of such an entry is missing in the document

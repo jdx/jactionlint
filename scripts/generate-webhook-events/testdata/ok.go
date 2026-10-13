@@ -10,5 +10,6 @@ package jactionlint
 var AllWebhookTypes = map[string][]string{
 	"check_run":           {"created", "rerequested", "completed", "requested_action"},
 	"fork":                {},
+	"merge_group":         {"checks_requested"},
 	"repository_dispatch": nil,
 }

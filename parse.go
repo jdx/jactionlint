@@ -407,6 +407,15 @@ func (p *parser) parseMapping(where delayedSprintf, n *yaml.Node, allowEmpty, ca
 				continue
 			}
 
+			if isInsertDirective(k) {
+				// `${{ insert }}` is not a name: a mapping can have it more than once
+				if !yield(workflowMappingEntry{insertDirectiveID, k, n.Content[i+1]}) {
+					break
+				}
+				empty = false
+				continue
+			}
+
 			id := k.Value
 			if !caseSensitive {
 				// Keys of mappings are sometimes case insensitive. For example, following matrix is invalid.
@@ -438,6 +447,23 @@ func (p *parser) parseMapping(where delayedSprintf, n *yaml.Node, allowEmpty, ca
 			p.errorf(n, "%s should not be empty. please remove this section if it's unnecessary", where.String())
 		}
 	}
+}
+
+// insertDirectiveID is the id of the entries of a mapping whose key is `${{ insert }}`.
+const insertDirectiveID = "${{ insert }}"
+
+// isInsertDirective reports whether the key is the `${{ insert }}` directive of the template language of GitHub
+// Actions. The value of the entry is a mapping, or an expression which evaluates to a mapping, whose entries are
+// inserted into the mapping.
+func isInsertDirective(k *String) bool {
+	if k == nil {
+		return false
+	}
+	v := strings.TrimSpace(k.Value)
+	if !strings.HasPrefix(v, "${{") || !strings.HasSuffix(v, "}}") {
+		return false
+	}
+	return strings.TrimSpace(v[len("${{"):len(v)-len("}}")]) == "insert"
 }
 
 func (p *parser) parseSectionMapping(section string, n *yaml.Node, allowEmpty, caseSensitive bool) iter.Seq[workflowMappingEntry] {
@@ -858,19 +884,44 @@ func (p *parser) parseEnv(n *yaml.Node) *Env {
 		}
 	}
 
-	vars := map[string]*EnvVar{}
+	env := &Env{Vars: map[string]*EnvVar{}}
+	p.parseEnvEntries(env, n)
+	return env
+}
+
+func (p *parser) parseEnvEntries(env *Env, n *yaml.Node) {
 	for e := range p.parseSectionMapping("env", n, false, false) {
-		vars[e.id] = &EnvVar{
+		if e.id == insertDirectiveID {
+			// `${{ insert }}: ${{ matrix.env }}`, or `${{ insert }}:` with a mapping
+			if e.val.Kind == yaml.MappingNode {
+				p.parseEnvEntries(env, e.val)
+			} else if v := p.parseInsertedMapping(e.val); v != nil {
+				env.Inserts = append(env.Inserts, v)
+			}
+			continue
+		}
+		env.Vars[e.id] = &EnvVar{
 			Name:  e.key,
 			Value: p.parseString(e.val, true),
 		}
 	}
+}
 
-	return &Env{Vars: vars}
+// parseInsertedMapping parses the value of a `${{ insert }}` key which is not a mapping: it must be an expression which
+// evaluates to a mapping.
+func (p *parser) parseInsertedMapping(n *yaml.Node) *String {
+	if n.Kind != yaml.ScalarNode {
+		p.errorf(n, "the value of the \"${{ insert }}\" key must be a mapping or an expression which evaluates to a mapping but found %s node", nodeKindName(n.Kind))
+		return nil
+	}
+	return p.parseExpression(n, "mapping value for \"${{ insert }}\" key")
 }
 
 // https://docs.github.com/en/actions/learn-github-actions/workflow-syntax-for-github-actions#defaults
-func (p *parser) parseDefaults(pos *Pos, n *yaml.Node) *Defaults {
+//
+// The "run" section of the defaults of a job can be one expression. The schema of GitHub does not allow an expression there
+// in the defaults of a workflow, so exprRun is false for it.
+func (p *parser) parseDefaults(pos *Pos, n *yaml.Node, exprRun bool) *Defaults {
 	ret := &Defaults{Pos: pos}
 
 	for e := range p.parseSectionMapping("defaults", n, false, true) {
@@ -879,6 +930,14 @@ func (p *parser) parseDefaults(pos *Pos, n *yaml.Node) *Defaults {
 			continue
 		}
 		ret.Run = &DefaultsRun{Pos: e.key.Pos}
+
+		if exprRun {
+			if x := p.mayParseExpression(e.val); x != nil {
+				// The shell and the working directory are chosen by the expression: rules treat them as unknown
+				ret.Run.Expression, ret.Run.Shell, ret.Run.WorkingDirectory = x, x, x
+				continue
+			}
+		}
 
 		for e := range p.parseSectionMapping("run", e.val, false, true) {
 			switch e.id {
@@ -905,7 +964,11 @@ func (p *parser) parseConcurrency(pos *Pos, n *yaml.Node) *Concurrency {
 
 	if n.Kind == yaml.ScalarNode {
 		ret.Group = p.parseString(n, false)
-		ret.Bare = true
+		if p.mayParseExpression(n) != nil {
+			ret.Expression = ret.Group
+		} else {
+			ret.Bare = true
+		}
 		return ret
 	}
 
@@ -917,12 +980,13 @@ func (p *parser) parseConcurrency(pos *Pos, n *yaml.Node) *Concurrency {
 			ret.CancelInProgress = p.parseBool(e.val)
 		case "queue":
 			ret.Queue = p.parseString(e.val, false)
-			if ret.Queue != nil && !ret.Queue.ContainsExpression() {
-				switch ret.Queue.Value {
+			// A literal such as `${{ 'max' }}` is known as well as `max`
+			if q, ok := ret.Queue.literalString(); ok {
+				switch q {
 				case "max", "single":
 					// ok
 				default:
-					p.errorf(e.val, "invalid value %q for \"queue\" in \"concurrency\" section. valid values are \"max\" and \"single\"", ret.Queue.Value)
+					p.errorf(e.val, "invalid value %q for \"queue\" in \"concurrency\" section. valid values are \"max\" and \"single\"", q)
 				}
 			}
 		default:
@@ -932,7 +996,7 @@ func (p *parser) parseConcurrency(pos *Pos, n *yaml.Node) *Concurrency {
 	if ret.Group == nil {
 		p.errorAt(pos, "group name is missing in \"concurrency\" section")
 	}
-	if ret.Queue != nil && ret.CancelInProgress != nil && !ret.Queue.ContainsExpression() && ret.Queue.Value == "max" && ret.CancelInProgress.Expression == nil && ret.CancelInProgress.Value {
+	if q, ok := ret.Queue.literalString(); ok && q == "max" && ret.CancelInProgress.literalTrue() {
 		p.errorfAt(ret.Queue.Pos, "\"queue: max\" cannot be combined with \"cancel-in-progress: true\" in \"concurrency\" section")
 	}
 	return ret
@@ -944,6 +1008,9 @@ func (p *parser) parseEnvironment(pos *Pos, n *yaml.Node) *Environment {
 
 	if n.Kind == yaml.ScalarNode {
 		ret.Name = p.parseString(n, false)
+		if p.mayParseExpression(n) != nil {
+			ret.Expression = ret.Name
+		}
 		return ret
 	}
 
@@ -1096,6 +1163,13 @@ func (p *parser) parseMaxParallel(n *yaml.Node) *Int {
 func (p *parser) parseStrategy(pos *Pos, n *yaml.Node) *Strategy {
 	ret := &Strategy{Pos: pos}
 
+	if x := p.mayParseExpression(n); x != nil {
+		// `strategy: ${{ fromJSON(needs.setup.outputs.strategy) }}`: the matrix is not known
+		ret.Expression = x
+		ret.Matrix = &Matrix{Expression: x, Pos: posAt(n)}
+		return ret
+	}
+
 	for e := range p.parseSectionMapping("strategy", n, false, true) {
 		switch e.id {
 		case "matrix":
@@ -1157,6 +1231,10 @@ func (p *parser) parseContainer(sec string, pos *Pos, n *yaml.Node) *Container {
 	if n.Kind == yaml.ScalarNode {
 		// When you only specify a container image, you can omit the image keyword.
 		ret.Image = p.parseString(n, false)
+		if p.mayParseExpression(n) != nil {
+			// `container: ${{ matrix.container }}`: an image name or a whole configuration
+			ret.Expression = ret.Image
+		}
 		return ret
 	}
 
@@ -1169,8 +1247,16 @@ func (p *parser) parseContainer(sec string, pos *Pos, n *yaml.Node) *Container {
 		case "env":
 			ret.Env = p.parseEnv(e.val)
 		case "ports":
+			if x := p.mayParseExpression(e.val); x != nil {
+				ret.PortsExpression = x
+				continue
+			}
 			ret.Ports = p.parseStringSequence("ports", e.val, true, false)
 		case "volumes":
+			if x := p.mayParseExpression(e.val); x != nil {
+				ret.VolumesExpression = x
+				continue
+			}
 			ret.Volumes = p.parseStringSequence("volumes", e.val, true, false)
 		case "options":
 			ret.Options = p.parseString(e.val, true)
@@ -1234,9 +1320,18 @@ func (p *parser) parseStepExecAction(entries []workflowMappingEntry, isDocker bo
 			ret.Uses = p.parseString(e.val, false)
 		case "with":
 			ret.Inputs = map[string]*Input{}
+			if x := p.mayParseExpression(e.val); x != nil {
+				// `with: ${{ fromJSON(vars.INPUTS) }}`: the inputs are not known
+				ret.InputsExpression = x
+				continue
+			}
 			with := p.parseSectionMapping("with", e.val, false, false)
 			if isDocker {
 				for e := range with {
+					if e.id == insertDirectiveID {
+						p.parseInputInsert(ret, e.val)
+						continue
+					}
 					switch e.id {
 					case "entrypoint":
 						// https://docs.github.com/en/actions/learn-github-actions/workflow-syntax-for-github-actions#jobsjob_idstepswithentrypoint
@@ -1250,6 +1345,10 @@ func (p *parser) parseStepExecAction(entries []workflowMappingEntry, isDocker bo
 				}
 			} else {
 				for e := range with {
+					if e.id == insertDirectiveID {
+						p.parseInputInsert(ret, e.val)
+						continue
+					}
 					ret.Inputs[e.id] = &Input{e.key, p.parseString(e.val, true)}
 				}
 			}
@@ -1272,6 +1371,24 @@ func (p *parser) parseStepExecAction(entries []workflowMappingEntry, isDocker bo
 
 	// Note: `ret.Uses` is never `nil` because `parseStep` checks `uses` key in advance
 	return ret
+}
+
+// parseInputInsert parses the value of a `${{ insert }}` key in the "with" section of a step.
+func (p *parser) parseInputInsert(a *ExecAction, n *yaml.Node) {
+	if n.Kind == yaml.MappingNode {
+		// `${{ insert }}:` with a mapping is the same as writing the entries in the section
+		for e := range p.parseSectionMapping("with", n, false, false) {
+			if e.id == insertDirectiveID {
+				p.parseInputInsert(a, e.val)
+				continue
+			}
+			a.Inputs[e.id] = &Input{e.key, p.parseString(e.val, true)}
+		}
+		return
+	}
+	if v := p.parseInsertedMapping(n); v != nil {
+		a.InputInserts = append(a.InputInserts, v)
+	}
 }
 
 func (p *parser) parseStepExecRun(entries []workflowMappingEntry) *ExecRun {
@@ -1596,7 +1713,7 @@ func (p *parser) parseJob(id *String, n *yaml.Node) *Job {
 			ret.Env = p.parseEnv(v)
 			stepsOnlyKey = k
 		case "defaults":
-			ret.Defaults = p.parseDefaults(k.Pos, v)
+			ret.Defaults = p.parseDefaults(k.Pos, v, true)
 			stepsOnlyKey = k
 		case "if":
 			ret.If = p.parseString(v, false)
@@ -1751,7 +1868,7 @@ func (p *parser) parse(n *yaml.Node) *Workflow {
 		case "env":
 			w.Env = p.parseEnv(v)
 		case "defaults":
-			w.Defaults = p.parseDefaults(k.Pos, v)
+			w.Defaults = p.parseDefaults(k.Pos, v, false)
 		case "concurrency":
 			w.Concurrency = p.parseConcurrency(k.Pos, v)
 		case "jobs":

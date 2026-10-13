@@ -235,7 +235,11 @@ func (rule *RuleExpression) VisitJobPre(n *Job) error {
 	//         matrix:
 	//           os: [ubuntu-latest, macos-latest, windows-latest]
 	//       runs-on: ${{ matrix.os }}
-	if n.Strategy != nil && n.Strategy.Matrix != nil {
+	if n.Strategy != nil && n.Strategy.Expression != nil {
+		// `strategy: ${{ ... }}`: the matrix is whatever the expression says
+		rule.checkObjectExpression(n.Strategy.Expression, "strategy", "jobs.<job_id>.strategy")
+		rule.matrixTy = NewEmptyObjectType()
+	} else if n.Strategy != nil && n.Strategy.Matrix != nil {
 		// Check and guess type of the matrix
 		rule.matrixTy = rule.checkMatrix(n.Strategy.Matrix)
 	}
@@ -246,9 +250,15 @@ func (rule *RuleExpression) VisitJobPre(n *Job) error {
 	if n.RunsOn != nil {
 		if n.RunsOn.LabelsExpr != nil {
 			if ty := rule.checkOneExpression(n.RunsOn.LabelsExpr, "runner label at \"runs-on\" section", "jobs.<job_id>.runs-on"); ty != nil {
-				switch ty.(type) {
+				switch o := ty.(type) {
 				case *ArrayType, StringType, AnyType:
 					// OK
+				case *ObjectType:
+					// An object is the `group` and `labels` of the runs-on section. Only an object whose properties are
+					// all known and which has neither of them is a mistake.
+					if o.IsStrict() && len(o.Props) > 0 && o.Props["group"] == nil && o.Props["labels"] == nil {
+						rule.ReportIDf("expression-type", n.RunsOn.LabelsExpr.Pos, "type of expression at \"runs-on\" must be string or array but found type %q", ty.String())
+					}
 				default:
 					rule.ReportIDf("expression-type", n.RunsOn.LabelsExpr.Pos, "type of expression at \"runs-on\" must be string or array but found type %q", ty.String())
 				}
@@ -304,7 +314,12 @@ func (rule *RuleExpression) VisitJobPost(n *Job) error {
 	rule.curJob, rule.tiMatrix = nil, nil
 	// 'environment' and 'outputs' sections are evaluated after all steps are run
 	if n.Environment != nil {
-		rule.checkString(n.Environment.Name, "jobs.<job_id>.environment")
+		if n.Environment.Expression != nil {
+			// `environment: ${{ ... }}` is a name or a whole configuration. Name is the same expression.
+			rule.checkStringOrObjectExpression(n.Environment.Expression, "jobs.<job_id>.environment")
+		} else {
+			rule.checkString(n.Environment.Name, "jobs.<job_id>.environment")
+		}
 		rule.checkString(n.Environment.URL, "jobs.<job_id>.environment.url")
 		rule.checkBool(n.Environment.Deployment, "jobs.<job_id>.environment")
 	}
@@ -347,6 +362,10 @@ func (rule *RuleExpression) VisitStep(n *Step) error {
 		rule.checkString(e.WorkingDirectory, "jobs.<job_id>.steps.working-directory")
 	case *ExecAction:
 		rule.checkUsesString(e.Uses)
+		rule.checkObjectExpression(e.InputsExpression, "with", "jobs.<job_id>.steps.with")
+		for _, v := range e.InputInserts {
+			rule.checkObjectExpression(v, "${{ insert }}", "jobs.<job_id>.steps.with")
+		}
 		for n, i := range e.Inputs {
 			if e.Uses != nil && isCodeExecInput(e.Uses.Value, n) {
 				rule.checkScriptString(i.Value, "jobs.<job_id>.steps.with")
@@ -526,6 +545,20 @@ func (rule *RuleExpression) checkNumberExpression(s *String, what, workflowKey s
 	return rule.checkNumberTy(ty, s.Pos, what)
 }
 
+// checkStringOrObjectExpression checks a value which is a string or a mapping and is written as one expression, such
+// as `concurrency: ${{ ... }}`. The expression can evaluate to either.
+func (rule *RuleExpression) checkStringOrObjectExpression(s *String, workflowKey string) {
+	ts, ok := rule.checkExprsIn(s, false, workflowKey)
+	if !ok {
+		return
+	}
+	ts = slices.DeleteFunc(slices.Clone(ts), func(t typedExpr) bool {
+		_, isObject := t.ty.(*ObjectType)
+		return isObject
+	})
+	rule.checkTemplateEvaluatedType(ts)
+}
+
 func (rule *RuleExpression) checkEnv(env *Env, workflowKey string) {
 	if env == nil {
 		return
@@ -535,6 +568,9 @@ func (rule *RuleExpression) checkEnv(env *Env, workflowKey string) {
 		for _, e := range env.Vars {
 			rule.checkString(e.Name, workflowKey)
 			rule.checkString(e.Value, workflowKey)
+		}
+		for _, v := range env.Inserts {
+			rule.checkObjectExpression(v, "${{ insert }}", workflowKey)
 		}
 		return
 	}
@@ -551,7 +587,12 @@ func (rule *RuleExpression) checkContainer(c *Container, workflowKey, childWorkf
 	if childWorkflowKeyPrefix != "" {
 		childWorkflowKey += "." + childWorkflowKeyPrefix
 	}
-	rule.checkString(c.Image, workflowKey)
+	if c.Expression != nil {
+		// `container: ${{ ... }}` is an image name or a whole configuration. Image is the same expression.
+		rule.checkStringOrObjectExpression(c.Expression, workflowKey)
+	} else {
+		rule.checkString(c.Image, workflowKey)
+	}
 	if c.Credentials != nil {
 		k := childWorkflowKey + ".credentials" // e.g. jobs.<job_id>.container.credentials
 		if c.Credentials.Expression != nil {
@@ -563,7 +604,9 @@ func (rule *RuleExpression) checkContainer(c *Container, workflowKey, childWorkf
 	}
 	rule.checkEnv(c.Env, childWorkflowKey+".env.<env_id>") // e.g. jobs.<job_id>.container.env.<env_id>
 	rule.checkStrings(c.Ports, workflowKey)
+	rule.checkArrayExpression(c.PortsExpression, "ports", workflowKey)
 	rule.checkStrings(c.Volumes, workflowKey)
+	rule.checkArrayExpression(c.VolumesExpression, "volumes", workflowKey)
 	rule.checkString(c.Options, workflowKey)
 	rule.checkString(c.Command, workflowKey)
 	rule.checkString(c.Entrypoint, workflowKey)
@@ -573,13 +616,23 @@ func (rule *RuleExpression) checkConcurrency(c *Concurrency, workflowKey string)
 	if c == nil {
 		return
 	}
-	rule.checkString(c.Group, workflowKey)
+	if c.Expression != nil {
+		// `concurrency: ${{ ... }}` is a group name or a whole configuration. Group is the same expression.
+		rule.checkStringOrObjectExpression(c.Expression, workflowKey)
+	} else {
+		rule.checkString(c.Group, workflowKey)
+	}
 	rule.checkBool(c.CancelInProgress, workflowKey)
 	rule.checkString(c.Queue, workflowKey)
 }
 
 func (rule *RuleExpression) checkDefaults(d *Defaults, workflowKey string) {
 	if d == nil || d.Run == nil {
+		return
+	}
+	if d.Run.Expression != nil {
+		// `run: ${{ ... }}`. Shell and WorkingDirectory are the same expression.
+		rule.checkObjectExpression(d.Run.Expression, "run", workflowKey)
 		return
 	}
 	rule.checkString(d.Run.Shell, workflowKey)
