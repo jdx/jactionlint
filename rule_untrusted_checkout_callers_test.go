@@ -415,3 +415,37 @@ func TestUntrustedCheckoutCallersToctou(t *testing.T) {
 		})
 	}
 }
+
+// A command that checks out what a caller passes is judged for what every caller passes.
+func TestUntrustedCheckoutCallersToctouCommand(t *testing.T) {
+	const label = "    if: github.event.label.name == 'safe to test'\n"
+	const build = "on:\n  workflow_call:\n    inputs:\n      ref:\n        type: string\njobs:\n  build:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2\n      - run: |\n          git fetch origin ${{ inputs.ref }} && git checkout FETCH_HEAD\n          make\n"
+	branch := "${{ github.event.pull_request.head.ref }}"
+	tests := []struct {
+		name  string
+		files map[string]string
+		want  int
+	}{
+		{"a commit and a branch", map[string]string{"a.yml": ucCaller("pull_request_target", label, headSHA), "b.yml": ucCaller("pull_request_target", label, branch)}, 1},
+		{"a branch and a commit", map[string]string{"a.yml": ucCaller("pull_request_target", label, branch), "b.yml": ucCaller("pull_request_target", label, headSHA)}, 1},
+		{"two commits", map[string]string{"a.yml": ucCaller("pull_request_target", label, headSHA), "b.yml": ucCaller("pull_request_target", label, "${{ github.event.pull_request.merge_commit_sha }}")}, 0},
+		{"a commit with a branch as a fallback", map[string]string{"a.yml": ucCaller("pull_request_target", label, "${{ github.event.pull_request.head.sha || github.head_ref }}")}, 1},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			files := map[string]string{".github/workflows/build.yml": build}
+			for k, v := range tc.files {
+				files[".github/workflows/"+k] = v
+			}
+			root := writeProject(t, files)
+			l := newActionLinter(t, root, io.Discard, LinterOptions{}, "rules:\n  untrusted-checkout: error\n")
+			errs, err := l.LintFiles([]string{filepath.Join(root, ".github", "workflows", "build.yml")}, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if errs = errsWithID(errs, "untrusted-checkout"); len(errs) != tc.want {
+				t.Fatalf("want %d findings but got %v", tc.want, errs)
+			}
+		})
+	}
+}

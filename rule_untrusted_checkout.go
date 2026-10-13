@@ -368,7 +368,7 @@ func (rule *RuleUntrustedCheckout) VisitJobPre(n *Job) error {
 			}
 			c.gates = c.gates.merge(here) // the gates of a step of a composite action are in c.gates already
 			if c.sources == nil {
-				c.sources = sourcesOfText(c.what) // a command: the ref it checks out is what describes it
+				c.sources = rule.sourcesOfDescription(c.what) // a command: the ref it checks out is what describes it
 			}
 			c.events = stepEvents
 			if c.how != "" {

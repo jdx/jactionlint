@@ -87,6 +87,26 @@ func sourceKindOfChain(r exprRef) (refKind, bool) {
 	return 0, false
 }
 
+var reInputToken = regexp.MustCompile(`(?i)\binputs\.([\w-]+)`)
+
+// sourcesOfDescription returns the sources of a checkout by a command, whose description names what it checks out: the sources of
+// the text, and for each input of the callee that the description reads, the sources of what every caller passes (the
+// description itself names the first caller only).
+func (rule *RuleUntrustedCheckout) sourcesOfDescription(what string) []refSource {
+	out := sourcesOfText(what)
+	for _, m := range reInputToken.FindAllStringSubmatch(what, -1) {
+		name := strings.ToLower(m[1])
+		if in, ok := rule.inputTaint[name]; ok {
+			for _, src := range in.sources {
+				out = append(out, sourcesOfText(src)...)
+			}
+		} else if slices.Contains(rule.dispatch, name) {
+			out = append(out, refSource{kindOther, "inputs." + name})
+		}
+	}
+	return out
+}
+
 // refSourcesOfValue returns the sources of the value of a `ref:`: the ones of the text of the value (with the inputs of a
 // composite action replaced by the values of the call), and for each input of the callee that it reads, the sources of the
 // value that each caller passes. An input of a dispatch that names the pull request is a source that is not known to be a commit.
