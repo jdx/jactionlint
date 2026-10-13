@@ -59,6 +59,22 @@ func TestScriptIsForMoreSystems(t *testing.T) {
 		`echo GNU; grep -P x f`:             false,
 		`grep GNU notes.txt`:                false,
 		`echo GNU; sed --version | head -1`: false,
+		// The long options with an argument in a separate word, and with the argument glued
+		`xargs --max-args 1 gsed -i x f`:                true,
+		`xargs --max-args=1 gsed -i x f`:                true,
+		`ionice --class 2 gsed -i x f`:                  true,
+		`ionice --class 2 --classdata 7 gsed x`:         true,
+		`sudo --user deploy gsed -i x f`:                true,
+		`sudo --user=deploy gsed -i x f`:                true,
+		`sudo --chdir /tmp --group ci gsed x`:           true,
+		`env --unset FOO gsed -i x f`:                   true,
+		`env --chdir /tmp gsed -i x f`:                  true,
+		`timeout --signal KILL --kill-after 1 5 gsed x`: true,
+		`nice --adjustment 5 gsed -i x f`:               true,
+		`stdbuf --output L --error 0 gsed x`:            true,
+		`xargs --max-args 1 sed -i x f`:                 false,
+		`ionice --class 2 sed -i x f`:                   false,
+		`sudo --user gsed sed -i x f`:                   false,
 		// A script that cannot be read is not known
 		`if [ -z "$X" ]; then`: true,
 		// Words that only look like them

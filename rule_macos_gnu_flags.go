@@ -129,11 +129,15 @@ func macosLabelOf(j *Job) string {
 			labels = append(labels, l.Value)
 		} else if vs, ok := matrixRunnerValues(l, m); ok {
 			labels = append(labels, vs...)
+		} else {
+			return "" // a label that is not known: the runner is not
 		}
 	}
 	if j.RunsOn.LabelsExpr != nil {
 		if vs, ok := matrixRunnerValues(j.RunsOn.LabelsExpr, m); ok {
 			labels = append(labels, vs...)
+		} else {
+			return ""
 		}
 	}
 	// A runs-on of one label that the matrix chooses makes one job for each value, so a value self-hosted is a job of

@@ -16,8 +16,13 @@ func TestMacosLabelOfSeveralLabels(t *testing.T) {
 		"ubuntu-latest":               "",
 		"[xcode-27, ARM64]":           "xcode-27",
 		"[xcode-27, some-pool]":       "",
+		// A label that is not known makes the runner unknown
+		"[macos-latest, '${{ inputs.extra }}']":     "",
+		"[macos-latest, '${{ fromJSON(vars.X) }}']": "",
+		"'${{ fromJSON(vars.X) }}'":                 "",
+		"'${{ inputs.runner }}'":                    "",
 	} {
-		w, _ := Parse([]byte("on: push\njobs:\n  a:\n    runs-on: " + runsOn + "\n    steps:\n      - run: echo\n"))
+		w, _ := Parse([]byte("on:\n  workflow_dispatch:\n    inputs:\n      extra:\n        type: string\n      runner:\n        type: string\njobs:\n  a:\n    runs-on: " + runsOn + "\n    steps:\n      - run: echo\n"))
 		if w == nil || w.Jobs["a"] == nil {
 			t.Fatalf("no job for %q", runsOn)
 		}

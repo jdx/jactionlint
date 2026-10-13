@@ -39,20 +39,23 @@ func options(names ...string) map[string]bool {
 
 // wrapperCommands are the commands that run the command that follows them, with the options that take a value.
 var wrapperCommands = map[string]wrapperSpec{
-	"sudo":    {withValue: options("-u", "-g", "-h", "-p", "-C", "-D", "-r", "-t", "-U", "-T", "--user", "--group", "--host", "--prompt", "--chdir")},
+	// Taken from the --help of each tool: the options with an argument in a separate word, short and long
+	"sudo": {withValue: options("-C", "--close-from", "-D", "--chdir", "-g", "--group", "-h", "--host", "-p", "--prompt", "-R", "--chroot",
+		"-r", "--role", "-t", "--type", "-T", "--command-timeout", "-U", "--other-user", "-u", "--user")},
 	"doas":    {withValue: options("-u", "-C")},
-	"env":     {withValue: options("-u", "-C", "--unset", "--chdir")},
+	"env":     {withValue: options("-u", "--unset", "-C", "--chdir")}, // -S and --split-string are read by envSplitString
 	"command": {},
 	"exec":    {withValue: options("-a")},
-	"time":    {withValue: options("-f", "-o", "--format", "--output")},
+	"time":    {withValue: options("-f", "--format", "-o", "--output")},
 	"nohup":   {},
 	"nice":    {withValue: options("-n", "--adjustment")},
-	"timeout": {withValue: options("-s", "-k", "--signal", "--kill-after"), positional: 1},
-	"stdbuf":  {withValue: options("-i", "-o", "-e")},
-	"ionice":  {withValue: options("-c", "-n", "-p", "-P", "-u")},
+	"timeout": {withValue: options("-k", "--kill-after", "-s", "--signal"), positional: 1},
+	"stdbuf":  {withValue: options("-i", "--input", "-o", "--output", "-e", "--error")},
+	"ionice":  {withValue: options("-c", "--class", "-n", "--classdata", "-p", "--pid", "-P", "--pgid", "-u", "--uid")},
 	"setsid":  {},
 	"chronic": {},
-	"xargs":   {withValue: options("-I", "-n", "-P", "-L", "-s", "-E", "-d", "-a", "-J", "-R", "-S")},
+	"xargs": {withValue: options("-a", "--arg-file", "-d", "--delimiter", "-E", "-I", "-L", "--max-lines", "-n", "--max-args", "-P",
+		"--max-procs", "-s", "--max-chars", "--process-slot-var", "-J", "-R", "-S")},
 }
 
 // isAssignmentWord reports whether the word is a variable assignment (`VAR=value`), as `env VAR=value cmd` has.
