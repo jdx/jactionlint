@@ -336,6 +336,35 @@ func gateAllows(cond string, scenarios []triggerScenario, offWhenTrue bool) bool
 	return len(scenarios) == 0
 }
 
+// gateAllowsInput is gateAllows for an input of a cache gate. An input which the action reads with a list of values of its
+// own (offValue) is judged by that list: a boolean is the text "true" or "false", and the text of a string is what the
+// action reads, in the case it has.
+func gateAllowsInput(cond string, scenarios []triggerScenario, g cacheGate) bool {
+	if !g.offWhenTrue || g.offValue == nil {
+		return gateAllows(cond, scenarios, g.offWhenTrue)
+	}
+	e := parseGateExpression(cond)
+	for _, sc := range scenarios {
+		if e == nil {
+			if looksAtTrigger(cond) {
+				continue
+			}
+			return true
+		}
+		v := evalGate(e, sc)
+		if v.kind == 1 || v.kind == 2 {
+			if !valueSwitchesOff(v, g) {
+				return true // the action restores the cache for this value
+			}
+			continue
+		}
+		if !looksAtTrigger(cond) || !unknownMentionsTrigger(e, sc) {
+			return true
+		}
+	}
+	return len(scenarios) == 0
+}
+
 // gateInputIsRedundant reports whether the input is one of two switches of an action which the other one keeps on: the
 // action turns the cache of maturin-action on for "cache: sccache" whatever "sccache" says, so a condition in "sccache"
 // alone does not keep it away. Another literal does not turn it on. An expression in "cache" does when it is not known
@@ -375,7 +404,7 @@ func cacheCanRunOnReleaseTrigger(job *Job, s *Step, a *ExecAction, name string, 
 		return false
 	}
 	for _, g := range cacheGateInputs[name] {
-		if v, ok := a.input(g.input); ok && !gateInputIsRedundant(name, a, g.input, scenarios) && strings.Contains(v, "${{") && !gateAllows(v, scenarios, g.offWhenTrue) {
+		if v, ok := a.input(g.input); ok && !gateInputIsRedundant(name, a, g.input, scenarios) && strings.Contains(v, "${{") && !gateAllowsInput(v, scenarios, g) {
 			return false
 		}
 	}

@@ -65,6 +65,8 @@ var cliOptions = []cliOption{
 	{"Rules and configuration", "select", "", "RULES", false, "", "Report only these comma separated rule IDs, also those the profile does not enable. Repeatable"},
 	{"Rules and configuration", "no-ignores", "", "", false, "", "Apply no ignore comment, no \"ignores\" or \"paths\" ignore of the config file and no baseline (--ignore still applies)"},
 	{"Rules and configuration", "list-rules", "", "", false, "", "List every rule ID with its group, profile, level and summary, and exit. --format json prints it as JSON"},
+	{"Rules and configuration", "print-config-schema", "", "", false, "", "Print the JSON Schema of the config file (rule IDs and options included) and exit"},
+	{"Rules and configuration", "print-output-schema", "", "", false, "", "Print the JSON Schema of --format json and jsonl and exit"},
 	{"Rules and configuration", "explain", "", "RULE", false, "", "Print the documentation of a rule ID (summary, group, profile, level, options, fixes and its section of the checks document) and exit"},
 
 	{"Fixing", "fix", "", "unsafe", true, "-fix", "Apply the safe automatic fixes in place. --fix=unsafe also applies the fixes that may change behavior"},
@@ -269,6 +271,8 @@ type commandFlags struct {
 	selectRules              []string
 	noIgnores                bool
 	listRules                bool
+	printConfigSchema        bool
+	printOutputSchema        bool
 	completion               string
 	explain                  string
 	fix                      fixFlag
@@ -337,6 +341,8 @@ func newCommandFlags() *commandFlags {
 	fs.StringArrayVar(&f.selectRules, "select", nil, "")
 	fs.BoolVar(&f.noIgnores, "no-ignores", false, "")
 	fs.BoolVar(&f.listRules, "list-rules", false, "")
+	fs.BoolVar(&f.printConfigSchema, "print-config-schema", false, "")
+	fs.BoolVar(&f.printOutputSchema, "print-output-schema", false, "")
 	fs.StringVar(&f.completion, "completion", "", "")
 	fs.StringVar(&f.explain, "explain", "", "")
 

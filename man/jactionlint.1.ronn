@@ -146,6 +146,12 @@ single-dash long options of v1 are removed; the error names the replacement.
   * `--list-rules`:
     List every rule ID with its group, the profile which enables it, its default level and a
     summary, and exit. With `--format json` or `jsonl` the list is JSON
+  * `--print-config-schema`:
+    Print the JSON Schema of the config file, with the rule IDs and the options of each rule, and exit.
+    `--init-config` writes a comment which points editors to it
+
+  * `--print-output-schema`:
+    Print the JSON Schema of the output of `--format json` and `jsonl`, and exit
 
   * `--min-severity` <LEVEL>:
     Hide the errors less severe than this level: `info` (default), `warn` or `error`
