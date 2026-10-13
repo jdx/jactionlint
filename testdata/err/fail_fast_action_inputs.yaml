@@ -1,0 +1,31 @@
+on:
+  push:
+    tags: [v*]
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: make dist
+      # ERROR: warns and goes on when "dist" has no file, the release has no assets
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist
+      # ERROR: the release is created without the files that match nothing
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+      # OK: logs of a failed run may be missing, so the step is best effort
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: logs
+          path: build/logs
+      # OK: the decision is written down
+      - uses: actions/upload-artifact@v4
+        with:
+          name: optional
+          path: extras
+          if-no-files-found: ignore
