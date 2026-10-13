@@ -113,17 +113,12 @@ func commandWordOf(words []cmdWord) ([]cmdWord, int) {
 						if value == "" && used > 1 {
 							return words, -1 // the value is not a literal word
 						}
-						from := words[i].src
-						if used > 1 {
-							from = words[i+1].src
-						}
+						// The words of the operand have no place of their own in the script (and are split on white space,
+						// without the quoting of a shell): src is nil, so only the check of what a script is written for
+						// uses them, and a command in an operand of env -S is not reported.
 						expanded := append([]cmdWord{}, words[:i]...)
 						for _, f := range strings.Fields(value) {
-							var w *runscript.Word
-							if from != nil {
-								w = &runscript.Word{Loc: from.Loc, Raw: f, Value: f}
-							}
-							expanded = append(expanded, cmdWord{f, w})
+							expanded = append(expanded, cmdWord{text: f})
 						}
 						expanded = append(expanded, words[i+used:]...)
 						words = expanded
@@ -144,10 +139,14 @@ func commandWordOf(words []cmdWord) ([]cmdWord, int) {
 	return words, -1
 }
 
-// realCommand returns the command that a simple command of a script really runs, when runscript names another one: the
-// command behind `xargs`, `ionice`, `setsid`, `chronic`, `env -S '...'`, ... as the wrappers of commandWordOf. It is the
-// command itself when runscript has already found the real command (sudo, env, nice, timeout, ...).
+// realCommand returns the command that a simple command of a script really runs. runscript has found it for the wrappers
+// that it knows (sudo, env, nice, timeout, ...) and that is trusted, unless commandWordOf finds a command further on in
+// the same words (`xargs`, `ionice`, `setsid`, `chronic`, or a cluster such as `sudo -Eu root`). A command in the operand
+// of `env -S` is not found: its words have no place in the script.
 func realCommand(c *runscript.Command) *runscript.Command {
+	if c.NameWord == nil {
+		return c
+	}
 	words := make([]cmdWord, 0, len(c.Words))
 	for _, w := range c.Words {
 		t := w.Value
@@ -160,8 +159,11 @@ func realCommand(c *runscript.Command) *runscript.Command {
 	if i < 0 || i >= len(words) {
 		return c
 	}
+	// runscript knows wrappers that commandWordOf does not (so commandWordOf can stop earlier, at one of them), and
+	// commandWordOf knows options that runscript does not (so it can go further). Only a command that is after the one of
+	// runscript is taken, and the words of an operand of env -S, which have no place in the script, never are.
 	name := path.Base(words[i].text)
-	if name == c.Name {
+	if words[i].src == nil || words[i].src.Offset <= c.NameWord.Offset || name == c.Name {
 		return c
 	}
 	nc := *c

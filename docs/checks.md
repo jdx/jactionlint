@@ -7343,9 +7343,10 @@ whose `if:` reads the `runner` or `matrix` context, or whose script is written f
 from the parsed script, not from its text: it expands `$OSTYPE` or `$RUNNER_OS`, reads `runner.os` or `matrix.os` in an
 expression, calls `uname` or `sw_vers`, has a GNU tool by its Homebrew name as a command word (`gsed`, `gdate`, ...), or names a
 `gnubin` directory. `brew install coreutils` (or `grep`, `gnu-sed`, ...) alone is not enough: the formulas are keg-only, so the BSD
-tool stays first on the `PATH` until the `gnubin` directory is put on it. The real command is found behind `sudo`, `env` (also
-`env -S '...'`), `timeout`, `nice`, `xargs`, `ionice`, `setsid`, `chronic` and the like, with their options. Scripts of other shells than bash and
-sh are not looked at.
+tool stays first on the `PATH` until the `gnubin` directory is put on it. The real command is found behind `sudo`, `env`, `timeout`,
+`nice`, `xargs`, `ionice`, `setsid`, `chronic` and the like, with their options. The command line in the operand of `env -S '...'` is read
+for the check of what the script is written for (`env -S 'gsed ...'`), but a GNU-only option in it is not reported, because its words have no place of their
+own in the script. Scripts of other shells than bash and sh are not looked at.
 
 There is no automatic fix: the portable form depends on the script.
 

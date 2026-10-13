@@ -147,6 +147,7 @@ jobs:
       - run: ionice -c 2 -n 7 grep -P x file.txt
       - run: setsid date -d yesterday
       - run: chronic stat -c %s file.txt
+      # The operand of env -S has no place of its own in the script: not reported
       - run: env -S 'sed -i s/a/b/ file.txt'
       - run: sudo -Eu root cp --parents a b
   wrappers-of-gnu-tools:
