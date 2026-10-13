@@ -5145,8 +5145,8 @@ Two other actions which issue app tokens are checked with their own inputs:
 
 | Action | Reported |
 | --- | --- |
-| `tibdex/github-app-token` (archived) | no `permissions` (a JSON object like `'{"contents": "read"}'`): every permission of the app; no `repositories` (a JSON array, since version 2: the version 1 has `repository`, the current repository by default): every repository of the installation; `revoke: false` (the version 1 has neither `repositories` nor `revoke`) |
-| `peter-murray/workflow-application-token-action` | no `permissions` (`contents:read,issues:write`): every permission of the app; `revoke_token` missing or false, since the token is revoked only when it is `true`. The action has no list of repositories, `organization` only picks the installation |
+| `tibdex/github-app-token` (archived) | no `permissions` (a JSON object like `'{"contents": "read"}'`): every permission of the app; no `repositories` (a JSON array of the repository names without the owner, like `'["repo"]'`, since version 2: the version 1 has `repository`, the current repository by default): every repository of the installation; `revoke: false` (the version 1 has neither `repositories` nor `revoke`, and a commit whose version is not in a `# v2.1.0` comment is not checked for them) |
+| `peter-murray/workflow-application-token-action` | no `permissions` (`contents:read,issues:write`): every permission of the app; `revoke_token` missing or false, since the token is revoked only when it is `true`; the input and the post step that revokes the token are in version 3 and later, so for version 1 and 2 the advice is to upgrade. The action has no list of repositories, `organization` only picks the installation |
 
 Other actions which issue app tokens are not known to the rule.
 
@@ -6956,8 +6956,8 @@ local path or a `docker://` image). It is a policy of jactionlint; zizmor has no
 
 The check does nothing when the repository has a Renovate configuration (`renovate.json`, `.github/renovate.json`,
 `.renovaterc` and so on), since another tool may update the actions. A repository which does not have `dependabot.yml` at all
-is not reported: there is no file to report. There is no automatic fix because the update needs a schedule that only you can
-choose.
+is not reported: there is no file to report. A missing update has no automatic fix because the update needs a schedule that only
+you can choose (the local composite actions that an update does not cover have an unsafe fix, see below).
 
 Example input:
 
@@ -6995,7 +6995,8 @@ calls with `./path`) are never updated, which is the same mistake one level down
 local composite actions that use an action or a reusable workflow and that no `github-actions` update names, either as `directory`
 or as an entry of `directories`. Only `directories` takes globs (Dependabot documents globbing and the wildcard for `directories`, not
 for `directory`): `*` is one name and `**` any number of directories, so `/.github/actions/**/*` covers every directory below
-`.github/actions`, and `directory: /.github/actions/*` covers nothing:
+`.github/actions` (`/**/*` alone is Dependabot's "current directory and the recursive subdirectories" and covers the root as well), and
+`directory: /.github/actions/*` covers nothing:
 
 ```yaml
 updates:

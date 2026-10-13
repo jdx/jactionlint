@@ -89,7 +89,12 @@ func normalizeDependabotDirectory(d string) string {
 // "?" one of them, and "**" any number of directories ("a/**/b" matches "a/b" and "a/x/y/b"; "a/**/*" matches every
 // directory below a).
 func dependabotGlob(pattern string) (*regexp.Regexp, error) {
-	segs := strings.Split(normalizeDependabotDirectory(pattern), "/")[1:]
+	norm := normalizeDependabotDirectory(pattern)
+	if norm == "/**/*" {
+		// "**/*" is documented as "the current directory and the recursive subdirectories": it covers the root too
+		return regexp.Compile(`^/.*$`)
+	}
+	segs := strings.Split(norm, "/")[1:]
 	var b strings.Builder
 	b.WriteString("^")
 	for i, seg := range segs {

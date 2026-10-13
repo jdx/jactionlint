@@ -24,7 +24,7 @@ func TestDependabotDirectoryGlobs(t *testing.T) {
 		{"/.github/actions/*-ci", "/.github/actions/build-ci", true},
 		{"/.github/actions/*-ci", "/.github/actions/build", false},
 		{"/**/*", "/tools/custom", true},
-		{"/**/*", "/", false},
+		{"/**/*", "/", true},
 		{"/.github/**/setup", "/.github/actions/setup", true},
 		{"/.github/**/setup", "/.github/setup", true},
 		{"/.github/*", "/.github/actions/setup", false},
