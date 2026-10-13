@@ -4854,6 +4854,13 @@ its password when the anonymous request is refused, and to no other host. The fi
 and the digest is the image of this moment, so look at what you are pinning. It never updates a pin to a newer image. `--online-allow` and `--online-deny`
 apply to images as `owner/image` (`library/ubuntu` for an official image of Docker Hub), whichever registry it is on, and `--online=cache` does not look images up at all (a digest is not kept in the cache, because a tag moves; the finding says that the fix needs `--online`, and it is no skipped lookup for `strict`). It does not ask
 the registry. A tag that does not exist, a private image and a registry which fails leave the finding without a fix, with the reason.
+What the answers of the registries mean (the same for Docker Hub and ghcr.io):
+
+| Request | Answer | Meaning |
+| --- | --- | --- |
+| token service | 401, 403, 404, 429, 5xx, no answer | the registry fails: the finding says so, and after three failures in a row (at once for a rate limit) the registry is not asked again in this run |
+| manifest | 401, 403, 404 | the registry answered: the image is private or does not exist for this token. No failure, no backoff. ghcr.io is asked once more with the GitHub token first |
+| manifest | 429, 5xx, no answer | the registry fails, as above |
 
 <a id="check-self-repository"></a>
 ## Self-repository syntax (pedantic)

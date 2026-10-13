@@ -75,6 +75,17 @@ func newRegistryClient(ep registryEndpoints, githubToken func() string, offline 
 	return &registryClient{hc: hc, ep: ep, githubToken: githubToken, offline: offline, tokens: map[string]cachedRegistryToken{}, now: time.Now}
 }
 
+// What the statuses mean, by request. Docker Hub and ghcr.io both answer 401, 403 or 404 for an image which is private, absent or not
+// visible to the token (ghcr.io answers 403 or 404 for a package which a token cannot read), so the manifest of an image
+// is judged as follows, and the same on both registries:
+//
+//	request           status               meaning
+//	token service     401, 403, 404, 429,  failure of the registry: kept with its status, classified (unauthorized, forbidden,
+//	                  5xx, no answer       not found, rate limit, server error), counted for the backoff
+//	manifest          401, 403, 404        the host answered: the image is private or does not exist for this token
+//	                                       (ErrImageNotFound, no backoff). ghcr.io is asked once more with the GitHub token
+//	manifest          429, 5xx, no answer  failure of the registry (backoff)
+//
 // ImageDigest implements ImageDigestClient.
 func (c *registryClient) ImageDigest(ctx context.Context, registry, repository, tag string) (string, error) {
 	if c.offline {
@@ -104,15 +115,8 @@ func (c *registryClient) ImageDigest(ctx context.Context, registry, repository, 
 	return d, err
 }
 
-// isDeniedManifest reports whether the registry refused the manifest request: an image which is private or absent (401, 404), or
-// refused to this token (403). A refused token service is not that.
-func isDeniedManifest(err error) bool {
-	var se *registryStatusError
-	if errors.As(err, &se) {
-		return !se.token && se.status == http.StatusForbidden
-	}
-	return errors.Is(err, ErrImageNotFound)
-}
+// isDeniedManifest reports whether the registry answered that the image is not accessible to this token (see the table above).
+func isDeniedManifest(err error) bool { return errors.Is(err, ErrImageNotFound) }
 
 func (c *registryClient) manifestDigest(ctx context.Context, registry, base, repository, tag string, withCreds bool) (string, error) {
 	token, err := c.token(ctx, registry, repository, withCreds)
@@ -144,7 +148,7 @@ func (c *registryClient) manifestDigest(ctx context.Context, registry, base, rep
 		return strings.ToLower(d), nil
 	case res.StatusCode == http.StatusNotFound:
 		return "", fmt.Errorf("%s/%s:%s: %w", registry, repository, tag, ErrImageNotFound)
-	case res.StatusCode == http.StatusUnauthorized:
+	case res.StatusCode == http.StatusUnauthorized, res.StatusCode == http.StatusForbidden:
 		// The registry answered, and the token it gave cannot read the image: it is private, or it does not exist
 		return "", fmt.Errorf("%s/%s:%s is private or does not exist: %w", registry, repository, tag, ErrImageNotFound)
 	case res.StatusCode == http.StatusTooManyRequests:

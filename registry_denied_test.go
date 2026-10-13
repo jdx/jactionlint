@@ -5,57 +5,69 @@ package jactionlint
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"testing"
 )
 
-// 401 and 403 mean different things in different places: a manifest which is refused after a good anonymous token is an image which
-// is private or absent, and a token service or a registry which refuses is a failure of the registry.
-func TestRegistryDeniedStatuses(t *testing.T) {
+// What a status means depends on the registry and on the request (see the table in registry_http.go): a token service which refuses is
+// a failure of the registry, a manifest which the registry refuses after it gave a token is an image which is private or absent.
+func TestRegistryStatusesOfBothRegistriesAtBothStages(t *testing.T) {
 	ctx := context.Background()
 	status := func(code int) func(w http.ResponseWriter, r *http.Request) {
 		return func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(code) }
 	}
-	tests := []struct {
-		name     string
-		token    int // status of the token service, 0 for a token
-		manifest int
-		notFound bool // ErrImageNotFound
-		status   int  // the status of the registry error, 0 for none
-		kind     failureKind
-	}{
-		{"manifest 401 after a token", 0, 401, true, 0, failNotFound},
-		{"manifest 404", 0, 404, true, 0, failNotFound},
-		{"manifest 403", 0, 403, false, 403, failForbidden},
-		{"token service 401", 401, 0, false, 401, failUnauthorized},
-		{"token service 403", 403, 0, false, 403, failForbidden},
-		{"token service 429", 429, 0, false, 429, failRateLimit},
-		{"manifest 429", 0, 429, false, 429, failRateLimit},
+	type want struct {
+		notFound bool        // ErrImageNotFound: the host answered, the image is not accessible to us
+		kind     failureKind // of the failure otherwise
 	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			hub := newFakeRegistry(t)
-			if tc.token != 0 {
-				hub.token = status(tc.token)
+	token := map[int]want{
+		401: {false, failUnauthorized}, 403: {false, failForbidden}, 404: {false, failNotFound},
+		429: {false, failRateLimit}, 500: {false, failServer},
+	}
+	manifest := map[int]want{
+		401: {true, failNotFound}, 403: {true, failNotFound}, 404: {true, failNotFound},
+		429: {false, failRateLimit}, 500: {false, failServer},
+	}
+	for _, reg := range []string{registryDockerHub, registryGHCR} {
+		for stage, table := range map[string]map[int]want{"token service": token, "manifest": manifest} {
+			for code, w := range table {
+				t.Run(fmt.Sprintf("%s %s %d", reg, stage, code), func(t *testing.T) {
+					f := newFakeRegistry(t)
+					if stage == "manifest" {
+						f.manifest = status(code)
+					} else {
+						f.token = status(code)
+					}
+					var hub, ghcr *fakeRegistry
+					if reg == registryDockerHub {
+						hub = f
+					} else {
+						ghcr = f
+					}
+					_, err := testRegistryClient(hub, ghcr, "").ImageDigest(ctx, reg, "acme/img", "1")
+					if err == nil {
+						t.Fatal("an error is expected")
+					}
+					if got := errors.Is(err, ErrImageNotFound); got != w.notFound {
+						t.Errorf("not found = %v, want %v: %v", got, w.notFound, err)
+					}
+					if w.notFound {
+						if kind := classifyRegistryFailure(err); kind != failNotFound {
+							t.Errorf("kind %s", kind)
+						}
+						return
+					}
+					var se *registryStatusError
+					if !errors.As(err, &se) || se.status != code {
+						t.Errorf("the status %d is kept: %v", code, err)
+					}
+					if kind := classifyRegistryFailure(err); kind != w.kind {
+						t.Errorf("kind %s, want %s (%v)", kind, w.kind, err)
+					}
+				})
 			}
-			if tc.manifest != 0 {
-				hub.manifest = status(tc.manifest)
-			}
-			_, err := testRegistryClient(hub, nil, "").ImageDigest(ctx, registryDockerHub, "library/alpine", "1")
-			if err == nil {
-				t.Fatal("an error is expected")
-			}
-			if got := errors.Is(err, ErrImageNotFound); got != tc.notFound {
-				t.Errorf("not found = %v, want %v: %v", got, tc.notFound, err)
-			}
-			var se *registryStatusError
-			if tc.status != 0 && (!errors.As(err, &se) || se.status != tc.status) {
-				t.Errorf("the status %d is kept: %v", tc.status, err)
-			}
-			if kind := classifyRegistryFailure(err); kind != tc.kind {
-				t.Errorf("kind %s, want %s (%v)", kind, tc.kind, err)
-			}
-		})
+		}
 	}
 }
 
