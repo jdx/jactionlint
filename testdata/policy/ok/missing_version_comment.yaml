@@ -1,0 +1,28 @@
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # 4.2.2
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # tag=v4.2.2 (updated by a bot)
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+      - uses: "actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683" # v4.2.2
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # ratchet:actions/checkout@v4.2.2
+      - uses: github/codeql-action/analyze@11bd71901bbe5b1630ceea73d27597364c9af683 # ratchet:github/codeql-action/analyze@v3
+      # a version which is not at the start of the comment: it still says which version the pin is
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # pin@v7.0.1
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # Release v4.4.1
+      - uses: github/codeql-action/analyze@11bd71901bbe5b1630ceea73d27597364c9af683 # codeql-bundle-v2.19.0
+      # the pin follows a branch on purpose: there is no version to name
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # main
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # master (light installs, no custom container)
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # branch=develop
+      # not pinned to a commit: the business of unpinned-uses
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd719
+      # not a repository
+      - uses: ./.github/actions/local
+      - uses: docker://alpine@sha256:c5b1261d6d3e43071626931fc004f70149baeba2c8ec672bd4f27761f8e1ad6b
+  call:
+    uses: octo-org/octo-repo/.github/workflows/ci.yml@11bd71901bbe5b1630ceea73d27597364c9af683 # v1.0.0

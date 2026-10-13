@@ -91,47 +91,12 @@ func lineStarts(src []byte) []int {
 // the line that starts at lineStart. With short the comment names the tag as written and not the most
 // specific one.
 func pinFix(sess *onlineSession, src []byte, lineStart, col int, short bool) (*Fix, error) {
-	lineEnd := len(src)
-	if i := bytes.IndexByte(src[lineStart:], '\n'); i >= 0 {
-		lineEnd = lineStart + i
+	v, err := scanUsesValue(src, lineStart, col)
+	if err != nil {
+		return nil, err
 	}
-	line := src[lineStart:lineEnd]
-	line = bytes.TrimSuffix(line, []byte("\r"))
-
-	// Byte offset of the value in the line
-	off := 0
-	for n := 1; n < col; n++ {
-		if off >= len(line) {
-			return nil, shapeErr("the position of the value is outside its line")
-		}
-		_, w := utf8.DecodeRune(line[off:])
-		off += w
-	}
-
-	// The value: quoted or plain, on this line
-	var spec string
-	valueStart, valueEnd, tokenEnd := off, 0, 0
-	quote := byte(0)
-	if off < len(line) && (line[off] == '"' || line[off] == '\'') {
-		quote = line[off]
-		valueStart = off + 1
-		i := bytes.IndexByte(line[valueStart:], quote)
-		if i < 0 {
-			return nil, shapeErr("the quoted value is not closed on its line")
-		}
-		valueEnd = valueStart + i
-		tokenEnd = valueEnd + 1
-	} else {
-		valueEnd = off
-		for valueEnd < len(line) && line[valueEnd] != ' ' && line[valueEnd] != '\t' && line[valueEnd] != '#' {
-			valueEnd++
-		}
-		tokenEnd = valueEnd
-	}
-	spec = string(line[valueStart:valueEnd])
-	if strings.ContainsAny(spec, "\\{}[],") {
-		return nil, shapeErr("the value %q is not a plain action reference", spec)
-	}
+	line, spec, quote := v.line, v.spec, v.quote
+	valueStart, valueEnd, tokenEnd := v.valueStart, v.valueEnd, v.tokenEnd
 
 	ref := ParseUses(spec)
 	if ref.Dynamic || (ref.Kind != UsesAction && ref.Kind != UsesReusableWorkflow) || (ref.RefKind != RefSemverTag && ref.RefKind != RefOther) {
@@ -206,4 +171,60 @@ func pinCommentVersion(sess *onlineSession, ref *UsesRef, sha string, short bool
 		return name
 	}
 	return ref.Ref
+}
+
+// usesValueOnLine is a `uses:` value found in the source: plain or quoted, on one line.
+type usesValueOnLine struct {
+	line []byte // the line, without its line break
+	spec string // the value
+	// valueStart and valueEnd are the byte offsets of the value in the line, without the quotes. tokenEnd is
+	// the end of the value with its closing quote.
+	valueStart, valueEnd, tokenEnd int
+	quote                          byte // the quote character, or 0
+}
+
+// scanUsesValue finds the `uses:` value which starts at the column (1-based, in characters) of the line
+// that starts at lineStart. It refuses what an edit could not keep intact: a value which is not plain or
+// closed on its line, or with characters of a flow collection or an escape in it.
+func scanUsesValue(src []byte, lineStart, col int) (usesValueOnLine, error) {
+	lineEnd := len(src)
+	if i := bytes.IndexByte(src[lineStart:], '\n'); i >= 0 {
+		lineEnd = lineStart + i
+	}
+	line := src[lineStart:lineEnd]
+	line = bytes.TrimSuffix(line, []byte("\r"))
+
+	// Byte offset of the value in the line
+	off := 0
+	for n := 1; n < col; n++ {
+		if off >= len(line) {
+			return usesValueOnLine{}, shapeErr("the position of the value is outside its line")
+		}
+		_, w := utf8.DecodeRune(line[off:])
+		off += w
+	}
+
+	// The value: quoted or plain, on this line
+	v := usesValueOnLine{line: line, valueStart: off}
+	if off < len(line) && (line[off] == '"' || line[off] == '\'') {
+		v.quote = line[off]
+		v.valueStart = off + 1
+		i := bytes.IndexByte(line[v.valueStart:], v.quote)
+		if i < 0 {
+			return usesValueOnLine{}, shapeErr("the quoted value is not closed on its line")
+		}
+		v.valueEnd = v.valueStart + i
+		v.tokenEnd = v.valueEnd + 1
+	} else {
+		v.valueEnd = off
+		for v.valueEnd < len(line) && line[v.valueEnd] != ' ' && line[v.valueEnd] != '\t' && line[v.valueEnd] != '#' {
+			v.valueEnd++
+		}
+		v.tokenEnd = v.valueEnd
+	}
+	v.spec = string(line[v.valueStart:v.valueEnd])
+	if strings.ContainsAny(v.spec, "\\{}[],") {
+		return usesValueOnLine{}, shapeErr("the value %q is not a plain action reference", v.spec)
+	}
+	return v, nil
 }

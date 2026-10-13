@@ -93,6 +93,7 @@ List of checks:
 - [Stale action refs (online)](#check-stale-action-refs)
 - [Archived repositories (online)](#check-archived-uses)
 - [Version comments of pinned actions (online)](#check-ref-version-mismatch)
+- [Pinned actions without a version comment (pedantic)](#check-missing-version-comment)
 - [Concurrency that cancels unrelated pull requests](#check-concurrency-cancels-prs)
 - [Concurrency that cancels a release](#check-concurrency-cancels-release)
 - [Gate jobs that are skipped when a job fails](#check-gate-job-skipped-on-failure)
@@ -7126,6 +7127,66 @@ or by someone else). The commit is what runs, so the fix of this rule, which nee
 is wrong when the SHA is the part that has to change. There is no fix when the commit has no tag, or has several versions of the
 same specificity (`v2.0.1` and `v2.0.2`), or the repository has more tags than were read, because the version to write is then a choice.
 
+<a id="check-missing-version-comment"></a>
+## Pinned actions without a version comment (pedantic)
+
+A bare commit SHA tells a reader nothing, and Dependabot and Renovate do not know which release it is: they read the comment after
+it (`uses: actions/checkout@<sha> # v4.2.2`) to find the newer ones. The rule `missing-version-comment` reports an action or reusable
+workflow pinned to a full commit SHA whose comment names no version. It is the part of the
+[zizmor audit][zizmor-ref-version-mismatch] that is about a missing comment; the comment that names another version than the commit is
+[`ref-version-mismatch`](#check-ref-version-mismatch). This rule needs no network.
+
+Example input:
+
+```yaml
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      # OK: the comment names the version
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      # ERROR: no comment
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+      # ERROR: the comment names no version
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # speeds up the build
+```
+
+Output:
+<!-- Skip update output -->
+```
+test.yaml:9:15: warning: action "actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020" is pinned to a commit but has no comment which names its version. add one like "# v1.2.3" after it: Dependabot and Renovate read it to update the pin, and it tells a reader what the commit is [missing-version-comment]
+  |
+9 |       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+  |               ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+test.yaml:11:15: warning: action "actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830" is pinned to a commit but its comment "# speeds up the build" names no version. write the version at its start like "# v1.2.3": Dependabot and Renovate read it to update the pin, and it tells a reader what the commit is [missing-version-comment]
+   |
+11 |       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # speeds up the build
+   |               ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+```
+
+<!-- Skip playground link -->
+
+The output above is from the following `rules` section of the [configuration file](config.md):
+
+```yaml
+rules:
+  missing-version-comment: warning
+```
+
+The rule is in the `pedantic` profile, as a warning. The same forms of a version comment as in `ref-version-mismatch` are read:
+`# v4.2.2`, `# 4.2.2`, `# v4`, `# tag=v4.2.2`, `# v4.2.2 (some note)` and the comment of [ratchet](https://github.com/sethvargo/ratchet),
+`# ratchet:actions/checkout@v4.2.2`. A comment which has a version somewhere (`# pin@v7.0.1`, `# Release v4.4.1`) is accepted too, because it says which version the pin is; only a
+comment that starts with the version is read by `ref-version-mismatch`. A comment that starts with the name of a branch which is usually followed (`# main`, `# master`, `# develop`, `# branch=main`) is
+not reported: the pin follows the branch on purpose, and its commit is not a release. A version on the line above the action is not read by any tool and is reported. An action which is
+not pinned to a commit is the business of `unpinned-uses`, and local actions and Docker images have no version comment.
+
+With `--online --fix` the finding is fixed by adding the comment: the most specific version tag which points to the commit
+(`# v4.2.2`, not `# v4`), the way [the pin fix](usage.md#online-checks) names it. The fix is safe, it only adds a comment. There is no fix when a
+comment is already there (it may say something else that matters), when no tag of the repository points to the commit (a commit between releases has
+no version to name), or when the commit has several versions of the same specificity (`v2.0.1` and `v2.0.2`). Without `--online` the finding says
+that the fix needs it.
+
 <a id="check-invisible-characters"></a>
 ## Invisible characters
 
@@ -8061,7 +8122,7 @@ way because any caller can pass attacker-controlled text. jactionlint does not l
 
 How the rules treat actions:
 
-- **Applies** to the steps (and the metadata) of an action: `action-syntax`, `adhoc-packages`, `archived-uses`, `artipacked`, `background-step-not-waited`, `checkout-static-credentials`, `constant-condition`, `context-availability`, `continue-on-error`, `deprecated-action-input`, `deprecated-commands`, `duplicate-key`, `duplicate-step-id`, `environment-file-redirect`, `expired-ignore`, `expression-syntax`, `expression-type`, `forbidden-uses`, `github-app`, `if-always-true`, `impostor-commit`, `insecure-commands`, `insecure-ssh-keyscan`, `insecure-url-scheme`, `invalid-env-var-name`, `invalid-function-call`, `invalid-id`, `invalid-ignore-comment`, `invalid-local-action`, `invalid-parallel-step`, `invalid-shell-name`, `invalid-uses`, `invisible-characters`, `known-vulnerable-actions`, `max-run-lines`, `merge-key`, `misfeature`, `missing-action-input`, `obfuscation`, `outdated-action-runner`, `pipeline-without-pipefail`, `pyflakes`, `recursive-alias`, `ref-confusion`, `ref-version-mismatch`, `require-expression-wrapping`, `self-repository`, `shellcheck`, `stale-action-refs`, `superfluous-actions`, `template-injection`, `typosquat-uses`, `undefined-function`, `undefined-property`, `unknown-action-input`, `unlocked-install`, `unpinned-images`, `unpinned-tools`, `unpinned-uses`, `unsound-contains`, `unsound-prefix-match`, `unsound-ternary`, `unused-anchor`, `unused-ignore`, `unverified-download`, `use-trusted-publishing`, `yaml-syntax`.
+- **Applies** to the steps (and the metadata) of an action: `action-syntax`, `adhoc-packages`, `archived-uses`, `artipacked`, `background-step-not-waited`, `checkout-static-credentials`, `constant-condition`, `context-availability`, `continue-on-error`, `deprecated-action-input`, `deprecated-commands`, `duplicate-key`, `duplicate-step-id`, `environment-file-redirect`, `expired-ignore`, `expression-syntax`, `expression-type`, `forbidden-uses`, `github-app`, `if-always-true`, `impostor-commit`, `insecure-commands`, `insecure-ssh-keyscan`, `insecure-url-scheme`, `invalid-env-var-name`, `invalid-function-call`, `invalid-id`, `invalid-ignore-comment`, `invalid-local-action`, `invalid-parallel-step`, `invalid-shell-name`, `invalid-uses`, `invisible-characters`, `known-vulnerable-actions`, `max-run-lines`, `merge-key`, `misfeature`, `missing-action-input`, `missing-version-comment`, `obfuscation`, `outdated-action-runner`, `pipeline-without-pipefail`, `pyflakes`, `recursive-alias`, `ref-confusion`, `ref-version-mismatch`, `require-expression-wrapping`, `self-repository`, `shellcheck`, `stale-action-refs`, `superfluous-actions`, `template-injection`, `typosquat-uses`, `undefined-function`, `undefined-property`, `unknown-action-input`, `unlocked-install`, `unpinned-images`, `unpinned-tools`, `unpinned-uses`, `unsound-contains`, `unsound-prefix-match`, `unsound-ternary`, `unused-anchor`, `unused-ignore`, `unverified-download`, `use-trusted-publishing`, `yaml-syntax`.
 - **Caller-dependent**: `agentic-actions`, `bot-conditions`, `cache-poisoning`, `github-env` (its findings about untrusted input do not depend on the caller), `untrusted-artifact` and `untrusted-checkout`.
 - **Not applicable** because an action does not have what the rule checks, or because only the calling job can decide (`unused-baseline-entry` is about the baseline file, not about a workflow or an action): `anonymous-definition`, `concurrency-cancels-prs`, `concurrency-cancels-release`, `concurrency-limits`, `conflicting-runner-labels`, `cron-too-frequent`, `cyclic-job-needs`, `dangerous-triggers`, `dependabot-cooldown`, `dependabot-execution`, `dependabot-missing-actions-update`, `dependabot-syntax`, `duplicate-job-id`, `duplicate-job-needs`, `duplicate-triggers`, `excessive-permissions`, `gate-job-skipped-on-failure`, `gh-without-token`, `hardcoded-container-credentials`, `invalid-activity-type`, `invalid-cron`, `invalid-event-config`, `invalid-event-filter`, `invalid-glob`, `invalid-label-pattern`, `invalid-local-workflow`, `invalid-permissions`, `invalid-timezone`, `invalid-workflow-call`, `invalid-workflow-call-input`, `invalid-workflow-dispatch-input`, `local-action-checkout`, `matrix-duplicate-value`, `matrix-invalid-exclude`, `missing-permissions`, `missing-timeout`, `missing-workflow-input`, `missing-workflow-secret`, `mutable-runner-label`, `overprovisioned-secrets`, `require-shell`, `required-actions`, `secrets-inherit`, `secrets-outside-env`, `self-hosted-runner`, `timeout-too-long`, `undefined-job-needs`, `undocumented-permissions`, `unknown-event`, `unknown-runner-label`, `unknown-workflow-input`, `unknown-workflow-secret`, `unredacted-secrets`, `unused-baseline-entry`, `unused-job-output`, `unused-needs`, `unused-workflow-input`, `workflow-call-permissions`, `workflow-input-type`, `workflow-run-names`, `workflow-secret-scope`, `workflow-syntax`.
 

@@ -111,6 +111,7 @@ rules:
 | [missing-action-input](#missing-action-input) | correctness | error | correctness |
 | [missing-permissions](#missing-permissions) | policy | error | default |
 | [missing-timeout](#missing-timeout) | policy | error | default |
+| [missing-version-comment](#missing-version-comment) | policy | warn | pedantic |
 | [missing-workflow-input](#missing-workflow-input) | correctness | error | correctness |
 | [missing-workflow-secret](#missing-workflow-secret) | correctness | error | correctness |
 | [mutable-runner-label](#mutable-runner-label) | policy | warn | pedantic |
@@ -900,6 +901,16 @@ A job does not set timeout-minutes.
 - Fixable: yes
 - Option `default-minutes` (int, no default): The timeout-minutes which --fix adds to a job. There is no default: the rule has no fix unless this is set. It is lowered to the max of timeout-too-long when that is smaller.
 - Details and examples: [checks](./checks.md#check-timeout-minutes)
+
+## missing-version-comment
+
+A hash-pinned action has no comment which names its version.
+
+- Group: policy
+- Default level: warn
+- Profile: pedantic
+- Fixable: yes
+- Details and examples: [checks](./checks.md#check-missing-version-comment)
 
 ## missing-workflow-input
 
