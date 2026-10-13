@@ -113,6 +113,17 @@ func githubTokenNeeds(source, input string, exact bool, scopes ...string) action
 	}}
 }
 
+// attestNeeds is the entry of an attestation action: "id-token: write" is the OIDC token of the signing certificate and
+// does not depend on the input github-token, which only carries the "attestations: write" that persists the attestation.
+func attestNeeds(source string) actionPermission {
+	return actionPermission{Source: source, Needs: func(s actionStep) permNeeds {
+		if !s.tokenIsGitHubToken("github-token") {
+			return permNeeds{All: writes("id-token")}
+		}
+		return permNeeds{All: writes("id-token", "attestations")}
+	}}
+}
+
 // anyTokenNeeds is an entry for an action which works with one of the scopes.
 func anyTokenNeeds(source, input string, scopes ...string) actionPermission {
 	return actionPermission{Source: source, Needs: func(s actionStep) permNeeds {
@@ -179,8 +190,8 @@ var actionPermissionTable = map[string]actionPermission{
 	// id-token: write, attestations: write" (+ artifact-metadata: write for the storage record, which the table
 	// does not require).
 	// https://github.com/actions/attest#usage
-	"actions/attest":                  githubTokenNeeds("https://github.com/actions/attest#usage", "github-token", false, "id-token", "attestations"),
-	"actions/attest-build-provenance": githubTokenNeeds("https://github.com/actions/attest-build-provenance#usage", "github-token", false, "id-token", "attestations"),
+	"actions/attest":                  attestNeeds("https://github.com/actions/attest#usage"),
+	"actions/attest-build-provenance": attestNeeds("https://github.com/actions/attest-build-provenance#usage"),
 
 	// actions/stale: the README lists "issues: write" and "pull-requests: write" for what the options do (labels,
 	// comments, closing). The action fails when the token can write neither, unless it only logs (`debug-only`).
@@ -318,7 +329,11 @@ var actionPermissionTable = map[string]actionPermission{
 	"enricomi/publish-unit-test-result-action": {
 		Source: "https://github.com/EnricoMi/publish-unit-test-result-action#permissions",
 		Needs: func(s actionStep) permNeeds {
-			if !s.tokenIsGitHubToken("github_token") || s.set("check_run") {
+			if !s.tokenIsGitHubToken("github_token") {
+				return permNeeds{}
+			}
+			// Only a literal false creates no check run; true, or a value which cannot be told, still may
+			if v, ok := s.literal("check_run"); s.set("check_run") && (!ok || isFalseLiteral(v)) {
 				return permNeeds{}
 			}
 			return permNeeds{All: writes("checks")}
@@ -365,7 +380,11 @@ var actionPermissionTable = map[string]actionPermission{
 	"azure/login": {
 		Source: "https://github.com/Azure/login#login-with-openid-connect-oidc-recommended",
 		Needs: func(s actionStep) permNeeds {
-			if !s.set("client-id") || s.set("creds") || s.set("auth-type") {
+			if !s.set("client-id") || s.set("creds") {
+				return permNeeds{}
+			}
+			// SERVICE_PRINCIPAL (the default) with a client-id is the OIDC login; IDENTITY is a managed identity
+			if v, ok := s.literal("auth-type"); s.set("auth-type") && (!ok || !strings.EqualFold(v, "SERVICE_PRINCIPAL")) {
 				return permNeeds{}
 			}
 			return permNeeds{All: writes("id-token"), Exact: true}
@@ -424,6 +443,8 @@ func (s actionStep) envTokenIsGitHubToken(name string) bool {
 func (c *runContext) jobMentions(words ...string) bool {
 	has := func(s string) bool {
 		s = strings.ToLower(s)
+		// The input of actions/checkout which keeps the token is not a sign that the job sets up its own credentials
+		s = strings.ReplaceAll(s, "persist-credentials", "")
 		for _, w := range words {
 			if strings.Contains(s, w) {
 				return true

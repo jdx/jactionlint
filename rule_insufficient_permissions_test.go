@@ -62,7 +62,19 @@ func TestRuleInsufficientPermissions(t *testing.T) {
 		{"git push with config of the user", head + job + "    permissions:\n      contents: read\n    steps:\n      - uses: actions/checkout@v4\n      - run: |\n          git config user.name bot\n          git config user.email bot@example.com\n          git push # want\n"},
 		{"auto commit", head + job + "    permissions:\n      contents: read\n    steps:\n      - uses: actions/checkout@v4\n      - uses: stefanzweifel/git-auto-commit-action@v5 # want\n"},
 
+		{"git push after a checkout with persist-credentials: true", head + job + "    permissions:\n      contents: read\n    steps:\n      - uses: actions/checkout@v4\n        with:\n          persist-credentials: true\n      - run: git push # want\n"},
+		{"auto commit after a checkout with persist-credentials: true", head + job + "    permissions:\n      contents: read\n    steps:\n      - uses: actions/checkout@v4\n        with:\n          persist-credentials: true\n      - uses: stefanzweifel/git-auto-commit-action@v5 # want\n"},
+		{"test results with check_run: true", head + job + "    permissions:\n      contents: read\n    steps:\n      - uses: EnricoMi/publish-unit-test-result-action@v2 # want\n        with:\n          check_run: true\n"},
+		{"azure with the auth type written out", head + job + "    permissions:\n      contents: read\n    steps:\n      - uses: azure/login@v2 # want\n        with:\n          auth-type: SERVICE_PRINCIPAL\n          client-id: ${{ secrets.ID }}\n"},
+		{"attest with a token of its own still needs the OIDC token", head + job + "    permissions:\n      attestations: write\n    steps:\n      - uses: actions/attest-build-provenance@v2 # want\n        with:\n          github-token: ${{ secrets.PAT }}\n          subject-path: a\n"},
+		{"attest without a token of its own", head + job + "    permissions:\n      contents: read\n    steps:\n      - uses: actions/attest@v2 # want\n"},
+
 		// What is not reported: the permissions are not explicit or are enough
+		{"attest with a token of its own and the OIDC token", head + job + "    permissions:\n      id-token: write\n    steps:\n      - uses: actions/attest-build-provenance@v2\n        with:\n          github-token: ${{ secrets.PAT }}\n          subject-path: a\n"},
+		{"test results with check_run: false quoted", head + job + "    permissions: {}\n    steps:\n      - uses: EnricoMi/publish-unit-test-result-action@v2\n        with:\n          check_run: 'false'\n"},
+		{"test results with check_run from an expression", head + job + "    permissions: {}\n    steps:\n      - uses: EnricoMi/publish-unit-test-result-action@v2\n        with:\n          check_run: ${{ inputs.check }}\n"},
+		{"azure with the auth type from an expression", head + job + "    permissions: {}\n    steps:\n      - uses: azure/login@v2\n        with:\n          auth-type: ${{ inputs.type }}\n          client-id: ${{ secrets.ID }}\n"},
+
 		{"no permissions", head + job + "    steps:\n      - uses: actions/deploy-pages@v4\n"},
 		{"write-all", head + job + "    permissions: write-all\n    steps:\n      - uses: actions/deploy-pages@v4\n      - uses: github/codeql-action/upload-sarif@v3\n"},
 		{"enough at the job", head + "permissions: {}\n" + job + "    permissions:\n      pages: write\n      id-token: write\n    steps:\n      - uses: actions/deploy-pages@v4\n"},
