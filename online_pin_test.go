@@ -43,7 +43,7 @@ func TestPinFixes(t *testing.T) {
 		{"an unknown tag", "uses: actions/checkout@v99", ""},
 		{"a comment about something else", "uses: actions/checkout@v4 # needed for the cache", ""},
 		{"an unknown repository", "uses: example/forgotten@v1", ""},
-		{"a docker image", "uses: docker://alpine:3.19", ""},
+		{"a docker image of a registry which is not asked", "uses: docker://quay.io/example/tool:1", ""},
 		{"an abbreviated sha", "uses: actions/checkout@abc1234", ""},
 		{"a dynamic ref", "uses: actions/checkout@${{ matrix.ref }}", ""},
 		{"a flow mapping", "{uses: actions/checkout@v4, name: x}", ""},

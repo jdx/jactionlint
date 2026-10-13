@@ -26,7 +26,12 @@ func TestSecretsOutsideEnv(t *testing.T) {
 		{"matrix include", "on: push\njobs:\n  a:\n    runs-on: ubuntu-latest\n    strategy:\n      matrix:\n        include:\n          - t: ${{ secrets.A }}\n    steps:\n      - run: echo\n", []int{8}},
 		{"timeout", "on: push\njobs:\n  a:\n    runs-on: ubuntu-latest\n    timeout-minutes: ${{ secrets.A }}\n    steps:\n      - run: echo\n", []int{5}},
 		{"workflow level env is not a job", "on: push\nenv:\n  X: ${{ secrets.A }}\njobs:\n  a:\n" + batchAJob, nil},
-		{"job calling a workflow", "on: push\njobs:\n  a:\n    uses: octo/repo/.github/workflows/w.yaml@v1\n    secrets:\n      s: ${{ secrets.A }}\n", nil},
+		{"job calling a workflow", "on: push\njobs:\n  a:\n    uses: octo/repo/.github/workflows/w.yaml@v1\n    secrets:\n      s: ${{ secrets.A }}\n", []int{6}},
+		{"job calling a workflow with an allowed secret", "on: push\njobs:\n  a:\n    uses: octo/repo/.github/workflows/w.yaml@v1\n    secrets:\n      s: ${{ secrets.Coverage_Token }}\n", nil},
+		{"job calling a workflow with the token", "on: push\njobs:\n  a:\n    uses: octo/repo/.github/workflows/w.yaml@v1\n    secrets:\n      s: ${{ secrets.GITHUB_TOKEN }}\n", nil},
+		{"job calling a workflow with inherit", "on: push\njobs:\n  a:\n    uses: octo/repo/.github/workflows/w.yaml@v1\n    secrets: inherit\n", nil},
+		{"job calling a workflow with several secrets", "on: push\njobs:\n  a:\n    uses: octo/repo/.github/workflows/w.yaml@v1\n    secrets:\n      s: ${{ secrets.A }}\n      t: ${{ secrets.B }}\n", []int{6, 7}},
+		{"job calling a workflow without secrets", "on: push\njobs:\n  a:\n    uses: octo/repo/.github/workflows/w.yaml@v1\n    with:\n      x: 1\n", nil},
 	}
 	for _, tc := range tests {
 		t.Run(tc.what, func(t *testing.T) {
