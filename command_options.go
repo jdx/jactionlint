@@ -50,6 +50,8 @@ var cliOptions = []cliOption{
 	{"Output", "rule-ids", "", "", false, "-rule-ids", "Accepted for compatibility. The text output always shows the rule ID at the end of each finding"},
 	{"Output", "color", "", "WHEN", true, "-color", "Colorize the output: always, never or auto (default). Bare --color means always"},
 	{"Output", "no-color", "", "", false, "-no-color", "Same as --color=never"},
+	{"Output", "show-doc-urls", "", "", false, "", "Print the documentation URL of the rule of each finding: under the finding (text) or in the message (github)"},
+	{"Output", "finding-context", "", "", false, "", "Add the events of the workflow and the permissions of the token of the job to each finding of json, jsonl and sarif"},
 	{"Output", "no-hints", "", "", false, "-no-hints", "Do not print the hint line after a text run with many findings, nor the note that shellcheck or pyflakes was not found"},
 	{"Output", "min-severity", "", "LEVEL", false, "-min-severity", "Hide findings less severe than LEVEL: info (default), warn or error"},
 	{"Output", "strict-exit", "", "", false, "-strict-exit", "Exit with status 1 also for findings of level warn and info"},
@@ -88,6 +90,7 @@ var cliOptions = []cliOption{
 
 	{"External tools", "shellcheck", "", "CMD", false, "-shellcheck", "Command or path of shellcheck (default shellcheck). Empty disables the integration. A command given here must exist (exit status 3 otherwise)"},
 	{"External tools", "pyflakes", "", "CMD", false, "-pyflakes", "Command or path of pyflakes (default pyflakes). Empty disables the integration. A command given here must exist (exit status 3 otherwise)"},
+	{"External tools", "ruff", "", "CMD", false, "", "Check the Python scripts with ruff (its pyflakes rules F) instead of pyflakes. The command must exist (exit status 3 otherwise)"},
 	{"External tools", "shellcheck-rcfile", "", "FILE", false, "", "Let shellcheck read this shellcheckrc instead of passing --norc. Overrides \"shellcheck.rcfile\" of the config file"},
 }
 
@@ -320,6 +323,8 @@ func newCommandFlags() *commandFlags {
 	opt("color", "always")
 	fs.BoolVar(&f.noColor, "no-color", false, "")
 	fs.BoolVar(&f.noHints, "no-hints", false, "")
+	fs.BoolVar(&o.ShowDocURLs, "show-doc-urls", false, "")
+	fs.BoolVar(&o.FindingContext, "finding-context", false, "")
 	fs.StringVar(&f.minSeverity, "min-severity", "info", "")
 	fs.BoolVar(&f.strictExit, "strict-exit", false, "")
 
@@ -362,6 +367,7 @@ func newCommandFlags() *commandFlags {
 
 	fs.StringVar(&o.Shellcheck, "shellcheck", "shellcheck", "")
 	fs.StringVar(&o.Pyflakes, "pyflakes", "pyflakes", "")
+	fs.StringVar(&o.Ruff, "ruff", "", "")
 	fs.StringVar(&o.ShellcheckRCFile, "shellcheck-rcfile", "", "")
 	return f
 }
