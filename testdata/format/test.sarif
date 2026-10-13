@@ -355,6 +355,21 @@
               "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
             },
             {
+              "id": "malformed-expression-delimiters",
+              "name": "MalformedExpressionDelimiters",
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "description": "Checks for expressions written with the wrong delimiters, like \"${ github.ref }\" or \"{{ github.sha }}\"",
+                "queryURI": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+              },
+              "fullDescription": {
+                "text": "Checks for expressions written with the wrong delimiters, like \"${ github.ref }\" or \"{{ github.sha }}\""
+              },
+              "helpUri": "https://github.com/jdx/jactionlint/blob/main/docs/checks.md"
+            },
+            {
               "id": "matrix",
               "name": "Matrix",
               "defaultConfiguration": {
