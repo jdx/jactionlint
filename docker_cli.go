@@ -75,8 +75,9 @@ func builtImagesOf(c *runscript.Command) bool {
 	return true
 }
 
-// imageWordRe matches a word which can be a reference to an image with a tag or a registry: "app:ci", "ghcr.io/o/app".
-var imageWordRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._/-]*(:[A-Za-z0-9._-]+)?(@sha256:[0-9a-f]+)?$`)
+// imageWordRe matches a word which can be a reference to an image with a tag or a registry (with a port too): "app:ci", "ghcr.io/o/app",
+// "registry.local:5000/app:ci".
+var imageWordRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*(?::[0-9]+)?(?:/[A-Za-z0-9._-]+)*(?::[A-Za-z0-9._-]+)?(?:@sha256:[0-9a-f]+)?$`)
 
 // imageIDRe matches the id of an image, which a registry does not serve.
 var imageIDRe = regexp.MustCompile(`^(sha256:)?[0-9a-f]{12,64}$`)

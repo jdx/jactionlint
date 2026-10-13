@@ -29,6 +29,12 @@ jobs:
           docker buildx --builder b build -t tool:ci2 .
           docker commit -m msg c tool:ci3
           docker run tool:ci2 && docker run tool:ci3
+      # ERROR: a build tag which is a variable does not hide the other images
+      - run: |
+          docker build -t "$IMAGE" .
+          docker run --rm busybox:1
+      # OK: a registry with a port, which the workflow pushes
+      - run: docker push registry.local:5000/app:ci && docker run registry.local:5000/app:ci
       # OK: the image is a value that is only known when the script runs
       - run: docker run --rm "$IMAGE" && docker run ${{ env.IMAGE }}
         env:

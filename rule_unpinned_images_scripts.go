@@ -70,14 +70,14 @@ func (rule *RuleUnpinnedImages) collectLocalImages() {
 				}
 				name := strings.ToLower(ParseUses(e.Uses.Value).CanonicalName())
 				switch name {
-				case "docker/build-push-action", "docker/bake-action", "docker/metadata-action":
+				case "docker/build-push-action":
 					// the tags it builds ("tags:", multi-line or separated by commas) are local images
-					if in := e.Inputs["tags"]; in != nil && in.Value != nil {
-						rule.local = append(rule.local, strings.FieldsFunc(in.Value.Value, func(r rune) bool { return r == '\n' || r == ',' || r == ' ' })...)
-					}
-					if name == "docker/bake-action" {
-						rule.localUnknown = true
-					}
+					rule.addImageList(e, "tags")
+				case "docker/metadata-action":
+					// its "tags" are rules for the tags of the images, not image names; "images" names the images it is for
+					rule.addImageList(e, "images")
+				case "docker/bake-action":
+					rule.localUnknown = true
 				case "docker/load-action":
 					rule.localUnknown = true
 				}
@@ -95,19 +95,32 @@ func (rule *RuleUnpinnedImages) collectLocalImages() {
 	}
 }
 
-// isLocalImage reports whether the image is one of the images that the workflow builds: the same name, whatever the tag.
+// isLocalImage reports whether the image is one of the images that the workflow builds: the same literal name, whatever
+// the tag. A name which is written with an expression or a shell variable is not one that can be compared, so it
+// suppresses nothing: the suppression is only for an image that is provably built here.
 func (rule *RuleUnpinnedImages) isLocalImage(ref string) bool {
 	name, _, _ := imageRefParts(ref)
 	name = normalizedImageName(name)
 	for _, l := range rule.local {
 		n, _, _ := imageRefParts(l)
-		if strings.Contains(n, "$") {
-			// a name which is built from an expression or a variable can be any image
-			return true
+		if !isLiteralImageName(n) {
+			continue
 		}
 		if normalizedImageName(n) == name {
 			return true
 		}
 	}
 	return false
+}
+
+// isLiteralImageName reports whether the name of an image is plain text: no expression, variable, substitution or glob.
+func isLiteralImageName(n string) bool {
+	return n != "" && !strings.ContainsAny(n, "${}*?`()\\\"' \t")
+}
+
+// addImageList adds the names of a list input (lines or commas) of an action to the local images.
+func (rule *RuleUnpinnedImages) addImageList(e *ExecAction, input string) {
+	if in := e.Inputs[input]; in != nil && in.Value != nil {
+		rule.local = append(rule.local, strings.FieldsFunc(in.Value.Value, func(r rune) bool { return r == '\n' || r == ',' || r == ' ' })...)
+	}
 }
