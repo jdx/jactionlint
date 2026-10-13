@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"sync"
 
@@ -251,7 +252,167 @@ func commandRunsCode(c *runscript.Command) bool {
 			}
 		}
 	}
-	return !nonExecutingCommands[c.Name]
+	if nonExecutingCommands[c.Name] {
+		return workspaceFileOf(c) != nil
+	}
+	return true
+}
+
+// tarValued are the short options of tar that take a value.
+const tarValued = "fCTXbLHIVKNs"
+
+// workspaceFileOf returns the file of the workspace that makes a command run it, nil if there is none. It is for a command that normally only reads files and runs, or lets a file of
+// the workspace write anywhere, because of an option: `sed -f script.sed` and `awk -f prog.awk` run the program of the
+// file (GNU sed's `e` command runs a shell), `tar -xPf a.tar` keeps absolute and `..` names so that the archive
+// overwrites files of the runner, and so does `unzip -: a.zip`. The file must be one of the workspace: a relative path,
+// or one below $GITHUB_WORKSPACE; a path that is absolute, computed or a standard stream is not known to be the code of
+// the checkout. poutine and CodeQL list these commands as well (build_commands tar/unzip, poisonable_steps sed/awk).
+func workspaceFileOf(c *runscript.Command) *runscript.Word {
+	switch c.Name {
+	case "sed", "gsed":
+		// -i takes its suffix attached to the option, -e a script and -l a number
+		return workspaceFile(optionValue(c.Args, 'f', "file", "efl", "i", false))
+	case "awk", "gawk", "mawk", "nawk":
+		return workspaceFile(optionValue(c.Args, 'f', "file", "FvfeEilW", "", false))
+	case "tar", "gtar", "bsdtar":
+		extracts := hasOption(c.Args, 'x', "extract", tarValued, "", true) || hasOption(c.Args, 'x', "get", tarValued, "", true)
+		if !extracts || !hasOption(c.Args, 'P', "absolute-names", tarValued, "", true) {
+			return nil
+		}
+		return workspaceFile(optionValue(c.Args, 'f', "file", tarValued, "", true))
+	case "unzip":
+		// -: keeps `../` in the names of the entries. The archive is the first word that is not an option.
+		if !slices.ContainsFunc(c.Args, func(w *runscript.Word) bool {
+			return !w.Dynamic() && len(w.Value) > 1 && w.Value[0] == '-' && w.Value[1] != '-' && strings.Contains(w.Value, ":")
+		}) {
+			return nil
+		}
+		for i := 0; i < len(c.Args); i++ {
+			w := c.Args[i]
+			if w.Dynamic() || !strings.HasPrefix(w.Value, "-") {
+				return workspaceFile(w)
+			}
+			if w.Value == "-d" || w.Value == "-P" {
+				i++ // the directory or the password
+			}
+		}
+	}
+	return nil
+}
+
+// optionValue returns the value of the option in a command line, nil if it is not given or has no value. short is the
+// one letter option, long its long name. valued are the letters of the short options that take a value, that is the
+// rest of the cluster or the next word, attached are the ones whose value is only the rest of the cluster (`sed
+// -i.bak`). oldStyle accepts a first word without a dash, like `tar xf a.tar`. The scan stops at "--".
+func optionValue(args []*runscript.Word, short byte, long, valued, attached string, oldStyle bool) *runscript.Word {
+	var ret *runscript.Word
+	scanOptions(args, valued, attached, oldStyle, func(name string, val *runscript.Word) {
+		if ret == nil && (name == string(short) || name == "--"+long) {
+			ret = val
+		}
+	})
+	return ret
+}
+
+// hasOption reports whether the short letter or the long option is given, see optionValue.
+func hasOption(args []*runscript.Word, short byte, long, valued, attached string, oldStyle bool) bool {
+	found := false
+	scanOptions(args, valued, attached, oldStyle, func(name string, _ *runscript.Word) {
+		if name == string(short) || name == "--"+long {
+			found = true
+		}
+	})
+	return found
+}
+
+// scanOptions calls fn for each option of a command line: the letter for a short option (with its value when it takes
+// one), "--name" for a long option (with the value of `--name=value` or `--file value`; no other long option is known
+// to take a value in a separate word). A word that is computed is skipped.
+func scanOptions(args []*runscript.Word, valued, attached string, oldStyle bool, fn func(string, *runscript.Word)) {
+	for i := 0; i < len(args); i++ {
+		w := args[i]
+		if w.Dynamic() {
+			continue
+		}
+		a := w.Value
+		switch {
+		case a == "--":
+			return
+		case strings.HasPrefix(a, "--"):
+			name, _, hasVal := strings.Cut(a, "=")
+			var v *runscript.Word
+			switch {
+			case hasVal:
+				v = subWordOf(w, len(name)+1)
+			case name == "--file" && i+1 < len(args):
+				v = args[i+1]
+				i++
+			}
+			fn(name, v)
+		case (strings.HasPrefix(a, "-") && len(a) > 1) || (oldStyle && i == 0 && a != "" && a[0] != '/'):
+			start := 0
+			if a[0] == '-' {
+				start = 1
+			}
+			for j := start; j < len(a); j++ {
+				l := a[j]
+				switch {
+				case strings.IndexByte(attached, l) >= 0:
+					fn(string(l), subWordOf(w, j+1))
+					j = len(a)
+				case strings.IndexByte(valued, l) >= 0:
+					var v *runscript.Word
+					if j+1 < len(a) {
+						v = subWordOf(w, j+1)
+					} else if i+1 < len(args) {
+						v = args[i+1]
+						i++
+					}
+					fn(string(l), v)
+					j = len(a)
+				default:
+					fn(string(l), nil)
+				}
+			}
+		}
+	}
+}
+
+// subWordOf returns the part of a word from byte i of its value, as a word, nil if nothing is left.
+func subWordOf(w *runscript.Word, i int) *runscript.Word {
+	if i >= len(w.Value) {
+		return nil
+	}
+	v := *w
+	v.Value = w.Value[i:]
+	v.Raw = w.Value[i:]
+	return &v
+}
+
+// workspaceFile returns the word when it names a file of the workspace, nil otherwise. See isWorkspaceFile.
+func workspaceFile(w *runscript.Word) *runscript.Word {
+	if isWorkspaceFile(w) {
+		return w
+	}
+	return nil
+}
+
+// isWorkspaceFile reports whether the word names a file of the workspace: a relative path, ./x, or a path below
+// $GITHUB_WORKSPACE. An absolute path, "-", a path that starts with a variable (`$RUNNER_TEMP/x`) or goes up
+// (`../x`) is not known to be one.
+func isWorkspaceFile(w *runscript.Word) bool {
+	if w == nil {
+		return false
+	}
+	v := strings.ReplaceAll(w.Value, "\\", "/")
+	for _, p := range []string{"${{ github.workspace }}/", "$GITHUB_WORKSPACE/", "${GITHUB_WORKSPACE}/"} {
+		v = strings.TrimPrefix(v, p)
+	}
+	if v == "" || v == "-" || strings.HasPrefix(v, "/") || strings.HasPrefix(v, "~") || strings.HasPrefix(v, "$") ||
+		strings.HasPrefix(v, "-") || v == ".." || strings.HasPrefix(v, "../") || strings.Contains(v, "/../") {
+		return false
+	}
+	return true
 }
 
 // buildActions are actions that run what is in the workspace.
@@ -354,8 +515,15 @@ func stepRunsCode(s *Step, dir string, after int) (string, bool) {
 			if c.Offset < after || !commandRunsCode(c) {
 				continue
 			}
-			if dir != "" && !inDir && (!commandTouches(c, dir) || runsFromOtherDir(c, dir)) {
-				continue
+			if dir != "" && !inDir {
+				if f := workspaceFileOf(c); f != nil {
+					// the file of the option is what runs: data of the checkout in the arguments is not
+					if !wordIsUnder(f, dir) {
+						continue
+					}
+				} else if !commandTouches(c, dir) || runsFromOtherDir(c, dir) {
+					continue
+				}
 			}
 			name := c.Name
 			if name == "" {

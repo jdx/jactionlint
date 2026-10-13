@@ -393,7 +393,7 @@ Not reported: archives that are downloaded, extracted and run, `go install` or `
 - `untrusted-checkout` follows `actions/checkout`, `gh pr checkout` and `git` commands with a literal reference. A ref that comes from
   an output of an earlier step is not followed. "Runs it" is a list of commands: an unusual build tool that is not in the list of
   commands that only read files counts as running code, while an action that builds the workspace and is not in the short list does
-  not. Conditions on `needs` and `steps` are guards.
+  not. Conditions on `needs` and `steps` are guards, and so is `github.event.pull_request.merged == true` for a checkout of the merged commit.
 - `untrusted-artifact` links the use to the download by the `path` of the artifact, or its `name` (a file in the root of the workspace
   that has another name is not linked), and takes any `=~`, numeric test or checksum as validation.
 - `concurrency-cancels-release` knows a fixed list of publish and deploy actions and commands. A release done by a script of the

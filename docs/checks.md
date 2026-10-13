@@ -7270,7 +7270,9 @@ A step is reported at its checkout when it puts untrusted code in the workspace 
 
 - `actions/checkout` with a `ref` or `repository` that names the head of a pull request or of the triggering run
   (`github.event.pull_request.head.*`, `github.head_ref`, `github.event.pull_request.merge_commit_sha`,
-  `github.event.workflow_run.head_sha`, `head_branch`, `head_repository`, ...) or `refs/pull/...`.
+  `github.event.workflow_run.head_sha`, `head_branch`, `head_repository`, ...) or `refs/pull/...`. In a `git` command the short
+  form `pull/<number>/head` (or `merge`) counts as well, because git looks a name up below `refs/` too: `git fetch origin
+  pull/${{ github.event.number }}/head:pr` then `git checkout pr`. A name below a remote (`origin/pull/1/head`) is not it.
 - `gh pr checkout`, and `git checkout`, `switch`, `merge`, `pull`, `clone` ... with such a reference in the arguments or
   in an environment variable they use. A `git fetch` of the head only downloads the objects: it counts when a later command
   of the same script (`git checkout FETCH_HEAD`, `git merge`, `git reset --hard`, ...) puts them in the working tree.
@@ -7301,9 +7303,12 @@ A step is reported at its checkout when it puts untrusted code in the workspace 
   holds for a revision that a step passes to a command other than `git`.
 - "Runs it" is a later step with a `run:` command that can execute workspace code (a script, `npm`, `cargo`, `make`, an
   interpreter, ...), a local action (`uses: ./...`), or one of a few actions that build the workspace. Commands that only read or
-  move files (`cat`, `git diff`, `grep`, `jq`, `tar`, `gh`, ...) do not count, and neither do shell keywords and builtins
-  (`break`, `continue`, `compgen`, ...), programs that only print or convert data (`xxd`, `base64`, `seq`, ...) and the system package managers
-  (`apt-get install -y valgrind`) unless they are given a path or a package file. A checkout with `path:` only counts when a later
+  move files (`cat`, `git diff`, `grep`, `jq`, `tar`, `gh`, ...) do not count, except when an option makes them run a file of
+  the workspace (a relative path or one below `$GITHUB_WORKSPACE`, not `/tmp/x` or `$RUNNER_TEMP/x`): `sed -f script.sed`,
+  `awk -f prog.awk`, `tar -xPf a.tar` (absolute names) and `unzip -: a.zip` (`../` in names), which poutine and CodeQL list as
+  well. Shell keywords and builtins (`break`, `continue`, `compgen`, ...), programs that only print or convert data (`xxd`,
+  `base64`, `seq`, ...) and the system package managers (`apt-get install -y valgrind`) do not count either, unless they are given
+  a path or a package file. A checkout with `path:` only counts when a later
   step works in that directory (`working-directory`, `cd`, or an argument below it); `python3 base/check.py --root pr-head` runs a
   script from the base checkout and only reads `pr-head`, so it does not count either.
 
@@ -7312,7 +7317,10 @@ In a job that sets `permissions: {}` the message does not claim a token, because
 What is **not** reported: a checkout of the base (no `ref`, or `github.event.pull_request.base.*`), a checkout that nothing runs,
 a job with an `environment:` (its reviewers decide), and a job or step whose `if:` reads who or what started the workflow:
 `github.actor`, the author or labels of the pull request, `github.event.pull_request.head.repo`, `github.event.workflow_run.event`,
-`needs` or `steps`. A `workflow_run` workflow is not reported when every workflow in `workflows:` is in the repository and only
+`needs` or `steps`. A job or step that only runs for a pull request that was merged (`if: github.event.pull_request.merged == true`,
+alone or in a conjunction) is not reported for a checkout of `github.event.pull_request.merge_commit_sha` or `head.sha`: that is
+code that a maintainer merged, as trusted as a `push` workflow. A branch name (`head.ref`, `github.head_ref`) or `refs/pull/N/head`
+stays reported, because the author can still push to it. A `workflow_run` workflow is not reported when every workflow in `workflows:` is in the repository and only
 runs for `push`, `schedule`, `workflow_dispatch`, `release`, `merge_group` or `repository_dispatch`. The rule cannot tell that
 a `labeled` pull request was reviewed or that an earlier step vouched for the code in a way other than a condition on `needs` or
 `steps`. Code that other steps fetch from an output (`ref: ${{ steps.x.outputs.sha }}`) is not followed.

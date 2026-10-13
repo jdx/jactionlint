@@ -62,6 +62,58 @@ type untrustedCheckout struct {
 	how string
 }
 
+// mergedCommits are the contexts of a pull request that name a commit that cannot change after the pull request was
+// merged: the head the maintainer merged and the merge commit.
+var mergedCommits = []string{"github.event.pull_request.head.sha", "github.event.pull_request.merge_commit_sha"}
+
+// immutable reports whether the code is a commit of a pull request, which a branch name or `refs/pull/N/head` are not.
+func (c *untrustedCheckout) immutable() bool {
+	for _, m := range mergedCommits {
+		if strings.EqualFold(c.what, m) {
+			return true
+		}
+	}
+	return false
+}
+
+// conditionRequiresMerged reports whether the condition is only true for a pull request that was merged:
+// `github.event.pull_request.merged == true` (or the context alone), alone or in a conjunction. The merge is a fact of
+// the event that cannot be set by the author of the pull request. gato-x treats the check as safe as well
+// (SAFE_IF_CHECKS).
+func conditionRequiresMerged(s *String) bool {
+	exprs, ok := conditionExprs(s)
+	return s != nil && ok && len(exprs) == 1 && exprRequiresMerged(exprs[0])
+}
+
+func exprRequiresMerged(e ExprNode) bool {
+	switch n := e.(type) {
+	case *LogicalOpNode:
+		if n.Kind == LogicalOpNodeKindAnd {
+			return exprRequiresMerged(n.Left) || exprRequiresMerged(n.Right)
+		}
+		return exprRequiresMerged(n.Left) && exprRequiresMerged(n.Right)
+	case *CompareOpNode:
+		if n.Kind != CompareOpNodeKindEq {
+			return false
+		}
+		other := n.Right
+		if isMergedContext(n.Right) {
+			other = n.Left
+		} else if !isMergedContext(n.Left) {
+			return false
+		}
+		b, ok := other.(*BoolNode)
+		return ok && b.Value
+	default:
+		return isMergedContext(e)
+	}
+}
+
+func isMergedContext(e ExprNode) bool {
+	chain, _, ok := chainOf(e)
+	return ok && len(chain) == 4 && chain[0] == "github" && chain[1] == "event" && chain[2] == "pull_request" && chain[3] == "merged"
+}
+
 // VisitWorkflowPre is callback when visiting Workflow node before visiting its children.
 func (rule *RuleUntrustedCheckout) VisitWorkflowPre(n *Workflow) error {
 	rule.privileged, rule.wf = nil, n
@@ -84,23 +136,35 @@ func (rule *RuleUntrustedCheckout) VisitJobPre(n *Job) error {
 	rule.fetches, rule.carried = nil, nil
 	pending := map[string][]*untrustedCheckout{}
 	var dirs []string // the keys of pending in the order they were added
+	jobMerged := conditionRequiresMerged(n.If)
 	for _, s := range flattenSteps(n.Steps) {
 		if conditionIsGuard(s.If) {
 			continue // a step a maintainer has to allow neither runs the code nor fetches it
 		}
+		// A step that only runs when the pull request was merged runs code that a maintainer merged, when the code is
+		// the immutable commit that was merged. A branch name is not: the author can push to it after the merge.
+		merged := jobMerged || conditionRequiresMerged(s.If)
 		for _, dir := range dirs {
 			cs := pending[dir]
 			if len(cs) == 0 {
 				continue
 			}
 			if how, ok := stepRunsCode(s, dir, 0); ok {
+				var kept []*untrustedCheckout
 				for _, c := range cs {
+					if merged && c.immutable() {
+						kept = append(kept, c) // a later step that does not need the merge runs it
+						continue
+					}
 					rule.report(c, how)
 				}
-				pending[dir] = nil
+				pending[dir] = kept
 			}
 		}
 		for _, c := range rule.checkoutsOf(n, s) {
+			if merged && c.immutable() {
+				continue // the code is only checked out, or only run, once it was merged
+			}
 			if c.how != "" {
 				rule.report(c, c.how)
 				continue
@@ -346,7 +410,7 @@ func commandNamesUntrusted(c *runscript.Command, envNames map[string]bool) (stri
 				return "$" + v, true
 			}
 		}
-		if strings.Contains(w.Value, "refs/pull/") {
+		if namesPullRef(w.Value) {
 			return w.Value, true
 		}
 	}

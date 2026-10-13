@@ -35,3 +35,19 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha }}
       - run: git diff --stat origin/main
+  short-ref:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          git fetch origin pull/${{ github.event.number }}/head:pr
+          git checkout pr
+          make
+  merged-branch:
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.merged == true
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+      - run: make
