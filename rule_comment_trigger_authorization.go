@@ -141,6 +141,17 @@ func (rule *RuleCommentTriggerAuthorization) VisitJobPre(n *Job) error {
 // AI agent action that checks the write access of the user itself, or the check of the user of agentic-actions. agents
 // are the steps that count for the agent, prev the steps before the one that is judged (nil step: the job as a whole).
 func (rule *RuleCommentTriggerAuthorization) guardedByContext(n *Job, site *String, agents, prev []*Step, step *Step) bool {
+	// An earlier step that is started by another comment (`@claude`) does not run for this one, so its agent guards
+	// nothing here; the step that is judged may be the agent itself.
+	if step != nil {
+		own := make([]*Step, 0, len(agents))
+		for _, a := range agents {
+			if a == step || !readsCommentBody(a.If) {
+				own = append(own, a)
+			}
+		}
+		agents = own
+	}
 	if readsEarlierDecision(site) || runsGatedAgent(agents) {
 		return true
 	}

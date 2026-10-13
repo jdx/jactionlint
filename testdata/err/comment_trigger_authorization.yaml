@@ -225,6 +225,23 @@ jobs:
         with:
           permission: none
 
+  # A gated agent that runs on another comment does not guard a command after it
+  agent-then-command:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: anthropics/claude-code-action@64c7a0ef71df67b14cb4d6fdbf1b77a1c6fc1d3c # v1.0.9
+        if: contains(github.event.comment.body, '@claude')
+      - run: ./deploy.sh
+        if: startsWith(github.event.comment.body, '/deploy')
+
+  # ... but the step that is the agent is guarded by it
+  agent-step:
+    runs-on: ubuntu-latest
+    steps:
+      - run: ./prepare.sh
+      - uses: anthropics/claude-code-action@64c7a0ef71df67b14cb4d6fdbf1b77a1c6fc1d3c # v1.0.9
+        if: contains(github.event.comment.body, '@claude')
+
   # The command action itself
   command-action:
     runs-on: ubuntu-latest
