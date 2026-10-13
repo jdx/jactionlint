@@ -8,6 +8,7 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -307,6 +308,8 @@ type RuleAction struct {
 	wf *Workflow
 	// lock is the Actions lock file as it applies to the workflow, nil when it does not (see RuleEnv.workflowLock).
 	lock *workflowLock
+	// online reads the metadata of the actions which are not in the data set; nil when the online checks are off.
+	online *onlineSession
 }
 
 // NewRuleAction creates new RuleAction instance.
@@ -380,6 +383,7 @@ func (rule *RuleAction) checkRepoAction(ref *UsesRef, exec *ExecAction) {
 	ps, found := resolvePopularSpec(ref, exec.Uses, comments, knownPopularAction)
 	if !found {
 		rule.Debug("This action is not found in popular actions data set: %s", spec)
+		rule.checkRemoteAction(ref, exec)
 		return
 	}
 	meta, ok := PopularActions[ps.Key]
@@ -399,6 +403,36 @@ func (rule *RuleAction) checkRepoAction(ref *UsesRef, exec *ExecAction) {
 
 	rule.checkAction(meta, exec, func(m *ActionMetadata) string {
 		return ps.describe(spec)
+	})
+}
+
+// remoteActionLookup returns the repository action of the `uses:` value for which GitHub can be asked for
+// the metadata, or false for a value which cannot be looked up: not a repository action, an expression, a short
+// SHA (which GitHub does not accept in `uses:`) or a name that is not a plain GitHub name.
+func remoteActionLookup(ref *UsesRef) bool {
+	if ref.Kind != UsesAction || ref.Dynamic || !ref.HasRef || ref.RefKind == RefShortSHA {
+		return false
+	}
+	if !validGitHubOwner(ref.Owner) || !validGitHubRepo(ref.Repo) || !validGitRefName(ref.Ref) {
+		return false
+	}
+	return ref.Subpath == "" || validRepoFilePath(strings.Trim(ref.Subpath, "/"))
+}
+
+// checkRemoteAction checks the inputs of an action which is not in the data set against its action.yml at
+// the pinned ref, read from GitHub with --online. When the metadata cannot be read nothing is reported.
+func (rule *RuleAction) checkRemoteAction(ref *UsesRef, exec *ExecAction) {
+	if rule.online == nil || !remoteActionLookup(ref) {
+		return
+	}
+	meta, err := rule.online.RemoteAction(ref.Owner, ref.Repo, ref.Subpath, ref.Ref)
+	if err != nil || meta == nil {
+		rule.Debug("%s: no action metadata to check the inputs against: %v", ref.Raw, err)
+		return
+	}
+	rule.Debug("Checking the inputs of %s against its metadata read from GitHub", ref.Raw)
+	rule.checkAction(meta, exec, func(*ActionMetadata) string {
+		return strconv.Quote(ref.Raw) + " (action.yml read from GitHub with --online)"
 	})
 }
 
@@ -806,6 +840,7 @@ func init() {
 	registerRuleFactory("action", func(env *RuleEnv) []Rule {
 		r := NewRuleAction(env.localActions)
 		r.lock = env.workflowLock()
+		r.online = env.online
 		return []Rule{r}
 	})
 }
