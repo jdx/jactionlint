@@ -285,8 +285,8 @@ func foldedScalarOf(s *String) *foldedScalar {
 	return f
 }
 
-// commandWords are the commands which, at the start of a line of a folded script, make the line a command of its own.
-var commandWords = set("echo cd export mkdir rm cp mv cat ls chmod chown touch ln tar unzip zip curl wget npm npx yarn pnpm bun pip pip3 pipx uv poetry make cmake cargo rustup go git gh apt apt-get dpkg brew choco dotnet mvn gradle ./gradlew docker kubectl helm terraform aws gcloud az source set unset exit sleep printf pwd python python3 node bash sh pytest tox nox flake8 black ruff mypy rsync scp mkdocs sphinx-build")
+// lineStartCommands are the commands which, at the start of a line of a folded script, make the line a command of its own.
+var lineStartCommands = set("echo cd export mkdir rm cp mv cat ls chmod chown touch ln tar unzip zip curl wget npm npx yarn pnpm bun pip pip3 pipx uv poetry make cmake cargo rustup go git gh apt apt-get dpkg brew choco dotnet mvn gradle ./gradlew docker kubectl helm terraform aws gcloud az source set unset exit sleep printf pwd python python3 node bash sh pytest tox nox flake8 black ruff mypy rsync scp mkdocs sphinx-build")
 
 // launcherWords are the commands which take another command as an argument, so a command of the next line may be it.
 var launcherWords = set("docker kubectl helm ssh sudo doas env time nice nohup xargs exec timeout watch parallel find bash sh python python3 node xvfb-run command builtin xcrun")
@@ -418,7 +418,7 @@ func effectiveWord(line string) string {
 // isNewCommand reports whether the line which starts with the word is a command of its own after the text, which is
 // the command cmd and the lines folded into it.
 func isNewCommand(cmd, text, w string) bool {
-	if !commandWords[cmd] {
+	if !lineStartCommands[cmd] {
 		return false // what the text is is not known: a script of the repository, a variable, an assignment, ...
 	}
 	if launcherWords[cmd] {
@@ -435,7 +435,7 @@ func isNewCommand(cmd, text, w string) bool {
 	if opensMore(text) {
 		return false
 	}
-	if commandWords[w] {
+	if lineStartCommands[w] {
 		return true
 	}
 	return assignmentRe.MatchString(w) && assignmentFree[cmd]
