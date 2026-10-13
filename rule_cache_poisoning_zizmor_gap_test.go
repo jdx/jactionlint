@@ -1,10 +1,12 @@
 package jactionlint
 
 import (
+	"fmt"
 	"io"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // cacheCount lints a workflow with the cache-poisoning rule only (the pedantic option as given) and returns how many
@@ -393,6 +395,82 @@ func TestCachePoisoningSccacheInACompositeAction(t *testing.T) {
 			}
 			if got := policyErrorsOf(errs, "cache-poisoning"); len(got) != tc.want {
 				t.Errorf("want %d findings but got %v", tc.want, got)
+			}
+		})
+	}
+}
+
+func TestCachePoisoningDependencyJudgedByItsOwnNeeds(t *testing.T) {
+	const head = "on:\n  push:\n    tags: ['v*']\n  workflow_dispatch:\npermissions:\n  contents: read\n"
+	const build = "jobs:\n  build:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: Swatinem/rust-cache@v2\n      - uses: actions/upload-artifact@v4\n        with:\n          name: d\n          path: d\n"
+	const pub = "    runs-on: ubuntu-latest\n    permissions:\n      contents: write\n    steps:\n      - run: echo\n"
+	check := func(cond string) string {
+		c := "  check:\n"
+		if cond != "" {
+			c += "    if: " + cond + "\n"
+		}
+		return c + "    runs-on: ubuntu-latest\n    steps:\n      - run: echo\n"
+	}
+	cleanup := func(cond string) string {
+		return "  cleanup:\n    needs: check\n    if: " + cond + "\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo\n"
+	}
+	publish := "  publish:\n    needs: [build, cleanup]\n    if: ${{ always() && needs.cleanup.result == 'success' }}\n" + pub
+	tests := []struct {
+		name string
+		src  string
+		want int
+	}{
+		{"cleanup runs when the check fails", head + build + check("") + cleanup("failure()") + publish, 1},
+		{"cleanup runs when the check does not succeed", head + build + check("") + cleanup("!success()") + publish, 1},
+		{"cleanup after a check that is skipped on tags", head + build + check("github.event_name == 'workflow_dispatch'") + cleanup("failure()") + publish, 0},
+		{"a job that is not named: !success() is true when one of them may fail", head + build + check("") + "  publish:\n    needs: [build, check]\n    if: ${{ !success() }}\n" + pub, 1},
+		{"a job that is not named: success() is true when all succeed", head + build + check("") + "  publish:\n    needs: [build, check]\n    if: ${{ success() && github.event_name == 'workflow_dispatch' }}\n" + pub, 0},
+		{"a needed job with an open condition on the trigger may have succeeded", head + build + check("github.ref == format('refs/tags/{0}', inputs.t)") + "  publish:\n    needs: [build, check]\n    if: ${{ always() && needs.check.result == 'success' }}\n" + pub, 1},
+		{"a needed job whose condition is true on tags is not skipped", head + build + check("github.event_name == 'push'") + "  publish:\n    needs: [build, check]\n    if: ${{ always() && needs.check.result == 'skipped' }}\n" + pub, 0},
+		{"a needed job whose condition is open may be skipped", head + build + check("github.ref == format('refs/tags/{0}', inputs.t)") + "  publish:\n    needs: [build, check]\n    if: ${{ always() && needs.check.result == 'skipped' }}\n" + pub, 1},
+		{"cleanup that needs a check that always runs", head + build + check("") + cleanup("success()") + publish, 1},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := cacheCount(t, false, tc.src); got != tc.want {
+				t.Errorf("want %d findings but got %d", tc.want, got)
+			}
+		})
+	}
+}
+
+func TestCachePoisoningManyNamedResultsAreFast(t *testing.T) {
+	const head = "on:\n  push:\n    tags: ['v*']\n  workflow_dispatch:\npermissions:\n  contents: read\n"
+	const build = "jobs:\n  build:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: Swatinem/rust-cache@v2\n      - uses: actions/upload-artifact@v4\n        with:\n          name: d\n          path: d\n"
+	var jobs, names []string
+	var checks []string
+	for i := 0; i < 16; i++ {
+		jobs = append(jobs, fmt.Sprintf("  c%d:\n    needs: build\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo\n", i))
+		names = append(names, fmt.Sprintf("c%d", i))
+		checks = append(checks, fmt.Sprintf("needs.c%d.result == 'success'", i))
+	}
+	publish := func(cond string) string {
+		return strings.Join(jobs, "") + "  publish:\n    needs: [" + strings.Join(names, ", ") + "]\n    if: ${{ " + cond + " }}\n    runs-on: ubuntu-latest\n    permissions:\n      contents: write\n    steps:\n      - run: echo\n"
+	}
+	all := strings.Join(checks, " && ")
+	tests := []struct {
+		name string
+		cond string
+		want int
+	}{
+		{"an event that tags do not have", "always() && github.event_name == 'workflow_dispatch' && " + all, 0},
+		{"an event that tags have", "always() && github.event_name == 'push' && " + all, 1},
+		{"results that no job has: past the bound it may run", "always() && " + strings.ReplaceAll(all, "'success'", "'neutral'"), 1},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			start := time.Now()
+			got := cacheCount(t, false, head+build+publish(tc.cond))
+			if got != tc.want {
+				t.Errorf("want %d findings but got %d", tc.want, got)
+			}
+			if d := time.Since(start); d > time.Second {
+				t.Errorf("took %v", d)
 			}
 		})
 	}

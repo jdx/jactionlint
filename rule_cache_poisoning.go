@@ -721,19 +721,25 @@ func (rule *RuleCachePoisoning) feedsPublishingJob(j *Job, scenarios []triggerSc
 	if j.ID == nil || rule.wf == nil || !uploadsArtifact(j, scenarios) {
 		return false
 	}
-	// The jobs that depend on j, directly or not, in a fixed order: the result must not depend on the order of the map.
+	// Invariant. Every job has a set of possible results among success, failure, cancelled and skipped. The set of j
+	// is the three that ran. The set of any other job comes from its `if:` evaluated over the sets of ITS needs
+	// (recursively, memoised): {skipped} when the condition is false for every choice of their results, the three that
+	// ran when it is true for every choice, all four when it is open (or the job is not known). One evaluation of a
+	// condition uses ONE choice of the results of the needed jobs, from which success(), failure(), cancelled() and
+	// needs.<job>.result all follow. A publisher counts when its condition is not false for some choice (unknown means
+	// possibly publishing); a condition that is false whatever the results are is settled first, and past a bound on
+	// the choices the job counts as possibly running.
 	root := strings.ToLower(j.ID.Value)
-	ids := make([]string, 0, len(rule.wf.Jobs))
 	jobs := map[string]*Job{}
+	var ids []string
 	for id, dep := range rule.wf.Jobs {
 		if dep != nil && strings.ToLower(id) != root {
-			ids = append(ids, strings.ToLower(id))
 			jobs[strings.ToLower(id)] = dep
+			ids = append(ids, strings.ToLower(id))
 		}
 	}
 	slices.Sort(ids)
-	needs := func(dep *Job) []string {
-		var ret []string
+	needsOf := func(dep *Job) (ret []string) {
 		for _, n := range dep.Needs {
 			if n != nil {
 				ret = append(ret, strings.ToLower(n.Value))
@@ -745,85 +751,40 @@ func (rule *RuleCachePoisoning) feedsPublishingJob(j *Job, scenarios []triggerSc
 	for grew := true; grew; {
 		grew = false
 		for _, id := range ids {
-			if !reach[id] && slices.ContainsFunc(needs(jobs[id]), func(n string) bool { return reach[n] }) {
+			if !reach[id] && slices.ContainsFunc(needsOf(jobs[id]), func(n string) bool { return reach[n] }) {
 				reach[id], grew = true, true
 			}
 		}
 	}
-	// Invariant of this analysis (the third version of it; the cases of the tests follow from it):
-	//   - every job that a publisher needs has a SET of possible results, among success, failure, cancelled and
-	//     skipped: {skipped} when its own `if:` is false on the release runs, {success, failure, cancelled} when it
-	//     certainly runs, and all four when that is not decided (a condition that is open, a job that needs others);
-	//   - the status functions of the condition follow from the results: success() is true when every needed job
-	//     succeeded, failure() when one failed, cancelled() when one was cancelled, always() is true;
-	//   - a job without a status function in its condition has success() added, so it runs only when every needed
-	//     job succeeded; one with a status function runs when its condition is true;
-	//   - the publisher is taken to run when its condition is not false for SOME choice of the results (unknown means
-	//     possibly publishing: this is a security rule). Only a condition that is false for every choice leaves it out.
-	// The jobs are decided in a fixpoint over sorted ids, so that the result does not depend on the order of the map.
-	skipped := map[string]bool{}
-	decided := map[string]bool{root: true}
-	resultSets := func(n string) []string {
-		all := []string{"success", "failure", "cancelled", "skipped"}
-		ran := []string{"success", "failure", "cancelled"}
-		switch {
-		case n == root:
-			return ran
-		case reach[n]:
-			if skipped[n] {
-				return []string{"skipped"}
-			}
-		default: // not a dependent of the job: judged by its own condition
-			other := rule.wf.Jobs[n]
-			if other == nil {
-				for id, jb := range rule.wf.Jobs {
-					if strings.ToLower(id) == n {
-						other = jb
-					}
-				}
-			}
-			if other == nil {
-				return all
-			}
-			if other.If != nil && !gateAllowsRun(other.If.Value, scenarios) {
-				return []string{"skipped"}
-			}
-			if other.If == nil && len(other.Needs) == 0 {
-				return ran
-			}
+	all := []string{"success", "failure", "cancelled", "skipped"}
+	ran := all[:3]
+	memo := map[string][]string{root: ran}
+	var results func(id string) []string
+	results = func(id string) []string {
+		if r, ok := memo[id]; ok {
+			return r
+		}
+		memo[id] = all // a cycle, while it is worked out
+		job := jobs[id]
+		if job == nil {
 			return all
 		}
-		if jobs[n] != nil && jobs[n].If == nil && len(jobs[n].Needs) == 0 {
-			return ran
+		sets := map[string][]string{}
+		for _, n := range needsOf(job) {
+			sets[n] = results(n)
 		}
-		return all
+		canRun, canSkip := runsWithNeeds(jobIf(job), scenarios, sets)
+		switch {
+		case !canRun:
+			memo[id] = []string{"skipped"}
+		case !canSkip:
+			memo[id] = ran
+		}
+		return memo[id]
 	}
-	for grew := true; grew; {
-		grew = false
-		for _, id := range ids {
-			if decided[id] || !reach[id] {
-				continue
-			}
-			ready := true
-			sets := map[string][]string{}
-			for _, n := range needs(jobs[id]) {
-				if reach[n] && !decided[n] {
-					ready = false
-				}
-				sets[n] = resultSets(n)
-			}
-			if !ready {
-				continue
-			}
-			dep := jobs[id]
-			cond := ""
-			if dep.If != nil {
-				cond = dep.If.Value
-			}
-			decided[id], grew = true, true
-			if !runsWithNeeds(cond, scenarios, sets) {
-				skipped[id] = true
-			} else if rule.canPublish(dep) {
+	for _, id := range ids {
+		if reach[id] && rule.canPublish(jobs[id]) {
+			if canRun, _ := runsWithNeeds(jobIf(jobs[id]), scenarios, setsOf(needsOf(jobs[id]), results)); canRun {
 				return true
 			}
 		}
@@ -831,17 +792,31 @@ func (rule *RuleCachePoisoning) feedsPublishingJob(j *Job, scenarios []triggerSc
 	return false
 }
 
-// runsWithNeeds reports whether a job with this condition (empty for none) may run, given the possible results of the
-// jobs that it needs (see the invariant in feedsPublishingJob). The result of a job that the condition names
-// (needs.<job>.result) is tried for each of its possible results; the others only matter through the status
-// functions, so together they are one free choice for failure() and one for cancelled(), and success() needs every one
-// of them to be able to succeed. Nothing is cut off over a limit: the cost is the product of the possible results of
-// the named jobs, and a condition names a few.
-func runsWithNeeds(cond string, scenarios []triggerScenario, sets map[string][]string) bool {
+func jobIf(j *Job) string {
+	if j.If != nil {
+		return j.If.Value
+	}
+	return ""
+}
+
+func setsOf(needs []string, results func(string) []string) map[string][]string {
+	sets := map[string][]string{}
+	for _, n := range needs {
+		sets[n] = results(n)
+	}
+	return sets
+}
+
+// runsWithNeeds evaluates the condition of a job (empty for none) over the possible results of the jobs that it needs
+// (see the invariant in feedsPublishingJob) and tells whether the job can run and whether it can be skipped. Without a
+// status function success() is added to the condition. The needed jobs that the condition names (needs.<job>.result)
+// are tried one by one; the others only matter through success(), failure() and cancelled(), which they can each
+// make true or false.
+func runsWithNeeds(cond string, scenarios []triggerScenario, sets map[string][]string) (canRun, canSkip bool) {
 	var e ExprNode
 	if cond != "" {
 		if e = parseGateExpression(cond); e == nil {
-			return true // not an expression that can be evaluated: possibly running
+			return true, true
 		}
 	}
 	hasStatus := e != nil && exprCallsStatus(e)
@@ -858,61 +833,77 @@ func runsWithNeeds(cond string, scenarios []triggerScenario, sets map[string][]s
 		}
 	}
 	slices.Sort(tried)
-	restFail, restCancel, restSuccess := false, false, true
+	has := func(n, r string) bool { return slices.Contains(sets[n], r) }
+	canFail, canCancel, allSucceed, anyOther := false, false, true, false
 	for _, n := range rest {
-		restFail = restFail || slices.Contains(sets[n], "failure")
-		restCancel = restCancel || slices.Contains(sets[n], "cancelled")
-		restSuccess = restSuccess && slices.Contains(sets[n], "success")
+		canFail, canCancel = canFail || has(n, "failure"), canCancel || has(n, "cancelled")
+		allSucceed = allSucceed && has(n, "success")
+		anyOther = anyOther || has(n, "failure") || has(n, "cancelled") || has(n, "skipped")
 	}
-	combos := 1
+	// the choices for the jobs that are not named: success() (all succeeded, or not), failure() and cancelled()
+	type flags struct{ success, failure, cancelled bool }
+	var restChoices []flags
+	for _, f := range []flags{{true, false, false}, {false, false, false}, {false, true, false}, {false, false, true}} {
+		if f.success && !allSucceed || f.failure && !canFail || f.cancelled && !canCancel || !f.success && !f.failure && !f.cancelled && !anyOther {
+			continue
+		}
+		restChoices = append(restChoices, f)
+	}
+	if len(restChoices) == 0 {
+		return true, true
+	}
+	const maxChoices = 1 << 14
+	choices := len(restChoices)
 	for _, n := range tried {
-		combos *= len(sets[n])
-	}
-	failures, cancels := []bool{false}, []bool{false}
-	if restFail {
-		failures = append(failures, true)
-	}
-	if restCancel {
-		cancels = append(cancels, true)
+		if choices *= len(sets[n]); choices > maxChoices {
+			choices = -1
+			break
+		}
 	}
 	for _, sc := range scenarios {
+		// a condition that is false whatever the results are is settled first, with them left unknown
+		cp := triggerScenario{"status.success": "?", "status.failure": "?", "status.cancelled": "?"}
+		for k, v := range sc {
+			cp[k] = v
+		}
+		if e != nil && evalGate(e, cp).truth() == triFalse {
+			canSkip = true
+			continue
+		}
+		if choices < 0 {
+			return true, true
+		}
+		combos := choices / len(restChoices)
 		for c := 0; c < combos; c++ {
-			for _, restFailed := range failures {
-				for _, restCancelled := range cancels {
-					cp := triggerScenario{}
-					for k, v := range sc {
-						cp[k] = v
-					}
-					success, failed, cancelled := restSuccess, restFailed, restCancelled
-					left := c
-					for _, n := range tried {
-						res := sets[n][left%len(sets[n])]
-						left /= len(sets[n])
-						cp["needs."+n+".result"] = res
-						success = success && res == "success"
-						failed = failed || res == "failure"
-						cancelled = cancelled || res == "cancelled"
-					}
-					cp["status.success"] = strconv.FormatBool(success)
-					cp["status.failure"] = strconv.FormatBool(failed)
-					cp["status.cancelled"] = strconv.FormatBool(cancelled)
-					if e == nil {
-						if success {
-							return true
-						}
-						continue
-					}
-					if !hasStatus && !success {
-						continue // success() is added, and it is false
-					}
-					if evalGate(e, cp).truth() != triFalse {
-						return true
-					}
+			for _, rc := range restChoices {
+				cp := triggerScenario{}
+				for k, v := range sc {
+					cp[k] = v
+				}
+				success, failed, cancelled := rc.success, rc.failure, rc.cancelled
+				left := c
+				for _, n := range tried {
+					res := sets[n][left%len(sets[n])]
+					left /= len(sets[n])
+					cp["needs."+n+".result"] = res
+					success, failed, cancelled = success && res == "success", failed || res == "failure", cancelled || res == "cancelled"
+				}
+				cp["status.success"], cp["status.failure"], cp["status.cancelled"] = strconv.FormatBool(success), strconv.FormatBool(failed), strconv.FormatBool(cancelled)
+				v := triTrue
+				if e != nil {
+					v = evalGate(e, cp).truth()
+				}
+				if !hasStatus && !success {
+					v = triFalse
+				}
+				canRun, canSkip = canRun || v != triFalse, canSkip || v != triTrue
+				if canRun && canSkip {
+					return true, true
 				}
 			}
 		}
 	}
-	return false
+	return canRun, canSkip
 }
 
 // namedNeedResults lists the jobs whose result the expression reads (needs.<job>.result), in lower case.

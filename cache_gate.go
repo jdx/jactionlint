@@ -234,6 +234,9 @@ func evalGate(n ExprNode, sc triggerScenario) gateValue {
 		case "success", "failure", "cancelled":
 			// the status of the run: success() unless the scenario says what it is after a skipped job
 			if v, ok := sc["status."+strings.ToLower(n.Callee)]; ok {
+				if v == "?" {
+					return gateValue{} // not known
+				}
 				return gateBool(v == "true")
 			}
 			if strings.EqualFold(n.Callee, "success") {
