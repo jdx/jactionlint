@@ -8490,9 +8490,9 @@ test.yaml:8:16: this step checks out code from a pull request (github.event.pull
 
 [Playground](https://jactionlint.jdx.dev/#eNpMj8FOwzAMhu97il8C7dawtFtLc+JNpiT1lkJJS2yPw7R3Rx1o4mRb/yfr/+bssOg0HQt9KbEcxZczyeZ9Duw2gBDLOoGimasV16BZtJr8mt0jFlr4lwIqKBM7+CjjnPklJoofs8qbtWHobL+zIdAh2LbZRSLfNUPdHfquafex96f2tcETLntTm/rvIfA9SnKPCyh0cni+XnEeJWkwdKEs5r+GSeQHw8njdnv0Kpod8vKJOGK7vW+rws8AsOBOKw==)
 
-The rule `untrusted-checkout` (in the `default` profile, as an error) reports a `pull_request_target` or `workflow_run`
-workflow that checks out the code of a pull request and then runs it. These events run in the context of the base repository,
-with a token that can write and with the secrets, while the code is what the author of the pull request wrote. A build script,
+The rule `untrusted-checkout` (in the `default` profile, as an error) reports a `pull_request_target`, `workflow_run` or
+`issue_comment` workflow that checks out the code of a pull request and then runs it. These events run in the context of the base
+repository, with a token that can write and with the secrets, while the code is what the author of the pull request wrote. A build script,
 a test, a `package.json` hook or a local action is enough to take over the token.
 
 Run untrusted code in a `pull_request` workflow, which has no secrets for pull requests from forks. If a privileged workflow
@@ -8521,6 +8521,45 @@ or merge commit of the pull request. The input `allow-unsafe-pr-checkout: true` 
   that also has the event `issue_comment`, `issues` or `workflow_call` are **not covered by the protection**, so they are
   reported as before. So is a `workflow_run` workflow unless every workflow in `workflows:` is in the repository and only runs
   for `pull_request*` events.
+
+**Workflows that a comment starts** (`issue_comment`, the "/test" bots) carry no head in the event, so the pull request has to
+come from somewhere: `gh pr checkout ${{ github.event.issue.number }}` (also the `html_url` of the issue or of its
+`pull_request`, directly, through `env:` of the step, the job or the workflow, or a variable of the script), `refs/pull/<number>/head`
+or `/merge` with that number (`actions/checkout`, `git fetch`, `git checkout`), and the head that an action looks up
+(`steps.<id>.outputs.head_sha`, `head_ref`, ... of `xt0rted/pull-request-comment-branch`, `alessbell/pull-request-comment-branch`,
+`eficode/resolve-pr-refs`, `potiuk/get-workflow-origin` and `github/branch-deploy`; the `gotson` fork named by poutine and CodeQL
+does not exist any more). `gh pr checkout` of anything else, a branch named after the number (`git checkout -b fix-${{
+github.event.issue.number }}`), a revision from a step output of another action, and `github.head_ref` or
+`github.event.pull_request.*` (empty in a comment run) are not reported there. The `issues` event is not handled: its payload
+never names a pull request, and the text of an issue that does is an injection (`template-injection`).
+
+A comment run is safe when the person who commented, or the pull request author, is trusted, and the rule accepts what CodeQL
+(`ControlChecks`) and poutine accept, with the checks made stricter:
+
+- a job or step `if:` on `github.event.comment.author_association` (or `github.event.issue.author_association`, or the
+  association of the pull request) that names no association of someone without access: `NONE`, `CONTRIBUTOR`, `FIRST_TIMER`,
+  `FIRST_TIME_CONTRIBUTOR` and `MANNEQUIN` are not trusted, so `!= 'NONE'` and a list that has `CONTRIBUTOR` are not gates. The
+  same holds for the association of the author of a pull request in a `pull_request_target` workflow. A condition on
+  `github.actor`, `github.event.comment.user` or `github.event.sender` is a guard, as before;
+- an earlier step of the job (that always runs and does not use `continue-on-error`) of one of these actions, which fail
+  the job for a user who may not write: `sushichop/action-repository-permission` (`required-permission` of `write` or `admin`, which
+  is the default, without `relax`), `prince-chrismc/check-actor-permissions-action` and `lannonbr/repo-permission-check-action`
+  (`permission: write` or `admin`), `xt0rted/slash-command-action` (`permission-level` of `write` (the default) or `admin`),
+  `TheModdingInquisition/actions-team-membership` (`exit` is not `false`), `actions-cool/check-user-permission` (`require` of
+  `write` or `admin` and `error-if-missing: true`, without `username`), and `actions/github-script` that asks for the permission
+  or the membership of the user (`getCollaboratorPermissionLevel`, `getMembershipForUserInOrg`, ...) and throws or calls
+  `core.setFailed`. CodeQL also accepts `octokit/request-action` and any use of `actions-cool/check-user-permission`, which is
+  not enough: without `error-if-missing` it only sets an output, and a condition on `steps` is a guard of its own;
+- an `environment:` (as before), and a job that this one needs (at any depth) whose `if:` is a guard, which has an
+  `environment:` or has a gate step: when it is skipped or fails, so does this job, unless its own `if:` calls `always()`,
+  `cancelled()` or `failure()`.
+
+These gates do not protect against a pull request that changes after the person has looked at it: a maintainer comments
+`/test`, the author pushes, and the job checks out the new head, which the author controls (a time-of-check to time-of-use
+race). The rule does not report that yet.
+
+A job or step whose `if:` is false for the privileged events of the workflow, as far as it reads `github.event_name`
+(`if: github.event_name == 'workflow_dispatch'`), is not judged for them, and a job that needs a skipped job is skipped too.
 
 A step is reported at its checkout when it puts untrusted code in the workspace and a later step in the same job runs it:
 
@@ -8568,7 +8607,8 @@ A step is reported at its checkout when it puts untrusted code in the workspace 
   step works in that directory (`working-directory`, `cd`, or an argument below it); `python3 base/check.py --root pr-head` runs a
   script from the base checkout and only reads `pr-head`, so it does not count either.
 
-In a job that sets `permissions: {}` the message does not claim a token, because the job has none.
+In a job that sets `permissions: {}` the message does not claim a token, because the job has none, and in a job whose
+permissions are all `read` it says that the token can only read.
 
 What is **not** reported: a checkout of the base (no `ref`, or `github.event.pull_request.base.*`), a checkout that nothing runs,
 a job with an `environment:` (its reviewers decide, unless `--online` finds that it has none, see
