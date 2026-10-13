@@ -1,0 +1,7 @@
+name: ok
+description: An action of the repository
+runs:
+  using: composite
+  steps:
+    - run: echo ok
+      shell: bash

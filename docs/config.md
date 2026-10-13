@@ -32,6 +32,9 @@ self-hosted-runner:
   # When true, only the labels listed above are accepted at 'runs-on:'. Built-in labels such as 'ubuntu-latest' and
   # 'self-hosted' are reported unless listed. (default: false)
   strict-labels: false
+  # Hosted-runner providers whose labels are accepted: blacksmith, depot, namespace, runson, ubicloud and warpbuild.
+  # (default: all of them. [] accepts none)
+  providers: [blacksmith, depot]
 
 # Configuration variables in array of strings defined in your repository or organization.
 config-variables:
@@ -87,6 +90,17 @@ ignores:
     reason: pinned by an organization ruleset
     expires: 2027-06-30
 
+# How shellcheck is run for the scripts of 'run:' steps. All keys are optional. By default shellcheck runs with --norc.
+shellcheck:
+  # A shellcheckrc to read instead, relative to the repository root. The file must exist.
+  rcfile: .shellcheckrc
+  # More arguments for shellcheck. One option per item, with its value attached.
+  args:
+    - --exclude=SC2129
+  # Optional checks of shellcheck to turn on (shellcheck --enable=NAME,...).
+  enable:
+    - avoid-nullary-conditions
+
 # Profile: the set of rules which are enabled. 'correctness', 'default' or 'pedantic'. (default: default)
 profile: pedantic
 
@@ -112,13 +126,19 @@ extends:
 
 - `self-hosted-runner`: Configuration for your self-hosted runner environment.
   - `labels`: Label names added to your self-hosted runners as list of pattern. Glob syntax supported by [`path.Match`][pat]
-    is available.
+    is available. The [`self-hosted-runner` rule](checks.md#check-self-hosted-runner) takes them for self-hosted runners too.
   - `strict-labels`: When `true`, the [runner label check](checks.md#check-runner-labels) accepts only the labels listed in
     `labels` (glob patterns supported). The built-in labels (GitHub-hosted runner labels such as `ubuntu-latest` and the preset
     self-hosted labels such as `self-hosted`, `linux`, and `x64`) are reported as errors unless they are listed in `labels`.
     This is useful when all jobs must run on your own runners, or when your runners (e.g. Actions Runner Controller runner
     sets) do not have the default `self-hosted` label. Label conflict checks still apply to listed built-in labels. The default
     is `false`.
+  - `providers`: The hosted-runner providers whose labels the runner label check accepts without them being listed in `labels`:
+    `blacksmith` (`blacksmith-*`), `depot` (`depot-ubuntu-*`, `depot-windows-*`, `depot-macos-*`), `namespace` (`namespace-profile-*`,
+    `nscloud-*`, `namespace-features:*`), `runson` (`runs-on=...`, `runner=...`, `family=...`, `image=...` and the other keys of the
+    labels of RunsOn), `ubicloud` (`ubicloud`, `ubicloud-arm`, `ubicloud-standard-*`, `ubicloud-premium-*`) and `warpbuild` (`warp-*`). The default, when the key is
+    not set, is all of them. A list accepts only the providers in it, and an empty list none of them. Another service goes in `labels`. It is not
+    used when `strict-labels` is `true`.
 - `config-variables`: [Configuration variables][vars]. When an array is set, jactionlint will check `vars` properties strictly.
   An empty array means no variable is allowed. The default value `null` disables the check.
 - `required-actions`: List of actions which must be used in each checked workflow. This check is disabled unless the list
@@ -193,6 +213,27 @@ extends:
 - `fix`: Configuration of [`--fix`](usage.md#fix-errors-automatically).
   - `rules`: A list of [rule IDs](rules.md). `--fix` applies only the fixes of these rules, like `--fix --fix-rules a,b` on the command
     line (which overrides it). The default, an empty list, applies the fixes of every rule. Unknown IDs are errors.
+- <a id="shellcheck"></a>`shellcheck`: Tunes the [shellcheck integration](checks.md#check-shellcheck-integ). By default jactionlint runs
+  shellcheck with `--norc`, so a `.shellcheckrc` which happens to be in the working directory cannot change the results. Use these
+  keys when you want a rc file or arguments in the run: `SHELLCHECK_OPTS`, which shellcheck still reads, cannot be set everywhere (for
+  example on pre-commit.ci). Every key is optional and the command line flag `--shellcheck-rcfile` wins over `rcfile`.
+  - `rcfile`: A shellcheckrc file to read instead of `--norc` (`--rcfile=FILE`). A relative path is resolved from the repository root
+    (the directory which has `.github`), and the file must exist: the run fails with exit status 3 when it does not. A config
+    file of the repository can name only a file inside the repository; the user-global config file and `--config-file` can name any file.
+    Inside the rc file, `disable=SC2086`, `enable=...`, `source-path=...` and the other shellcheckrc settings apply.
+  - `args`: A list of more arguments for shellcheck, such as `--exclude=SC2129`, `--severity=warning` or `-eSC2129`. Write one option per
+    item and attach its value with `=`: items are not file names. jactionlint sets the output format (`-f json`), the shell of each
+    script (`--shell`), `-x` and the script itself, so `--format`, `--color`, `--shell`, `--norc`, `--rcfile`, `--version` and
+    `--wiki-link-count` are errors. jactionlint always passes `-e SC1091,SC2194,SC2050,SC2153,SC2154,SC2157,SC2043`
+    (the checks that conflict with `${{ }}`); an `--exclude` adds to them, and `--include` narrows what is left.
+  - `enable`: Optional checks of shellcheck to turn on, like `--enable=NAME,NAME`. `all` turns on every optional check. A name is
+    lowercase letters, digits and dashes.
+
+  ```yaml
+  shellcheck:
+    rcfile: .github/shellcheckrc
+    enable: [avoid-nullary-conditions, require-variable-braces]
+  ```
 - `profile`, `rules` and `extends`: See [Profiles](#profiles), [Rules](#rules) and [Extending config files](#extending-config-files).
 
 Unknown keys are errors. jactionlint reports the key with its position and suggests the closest known key when it looks

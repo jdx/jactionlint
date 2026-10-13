@@ -59,6 +59,7 @@ rules:
 | [dependabot-syntax](#dependabot-syntax) | correctness | error | correctness |
 | [deprecated-action-input](#deprecated-action-input) | correctness | error | correctness |
 | [deprecated-commands](#deprecated-commands) | correctness | error | correctness |
+| [deprecated-runner-label](#deprecated-runner-label) | policy | warn | pedantic |
 | [duplicate-job-id](#duplicate-job-id) | correctness | error | correctness |
 | [duplicate-job-needs](#duplicate-job-needs) | correctness | error | correctness |
 | [duplicate-key](#duplicate-key) | correctness | error | correctness |
@@ -80,6 +81,7 @@ rules:
 | [insecure-commands](#insecure-commands) | security | error | default |
 | [insecure-ssh-keyscan](#insecure-ssh-keyscan) | security | error | default |
 | [insecure-url-scheme](#insecure-url-scheme) | security | error | default |
+| [insufficient-permissions](#insufficient-permissions) | correctness | error | default |
 | [invalid-activity-type](#invalid-activity-type) | correctness | error | correctness |
 | [invalid-cron](#invalid-cron) | correctness | error | correctness |
 | [invalid-env-var-name](#invalid-env-var-name) | correctness | error | correctness |
@@ -103,6 +105,7 @@ rules:
 | [invisible-characters](#invisible-characters) | security | error | default |
 | [known-vulnerable-actions](#known-vulnerable-actions) | security | error | only with `--online` |
 | [local-action-checkout](#local-action-checkout) | correctness | error | correctness |
+| [malformed-expression-delimiters](#malformed-expression-delimiters) | correctness | error | correctness |
 | [matrix-duplicate-value](#matrix-duplicate-value) | correctness | error | correctness |
 | [matrix-invalid-exclude](#matrix-invalid-exclude) | correctness | error | correctness |
 | [max-run-lines](#max-run-lines) | style | error | pedantic |
@@ -113,6 +116,7 @@ rules:
 | [missing-timeout](#missing-timeout) | policy | error | default |
 | [missing-workflow-input](#missing-workflow-input) | correctness | error | correctness |
 | [missing-workflow-secret](#missing-workflow-secret) | correctness | error | correctness |
+| [multiline-plain-run](#multiline-plain-run) | correctness | error | correctness |
 | [mutable-runner-label](#mutable-runner-label) | policy | warn | pedantic |
 | [obfuscation](#obfuscation) | security | error | default |
 | [outdated-action-runner](#outdated-action-runner) | correctness | error | correctness |
@@ -122,6 +126,7 @@ rules:
 | [recursive-alias](#recursive-alias) | correctness | error | correctness |
 | [ref-confusion](#ref-confusion) | security | warn | only with `--online` |
 | [ref-version-mismatch](#ref-version-mismatch) | security | warn | only with `--online` |
+| [repojacking](#repojacking) | security | warn | only with `--online` |
 | [require-expression-wrapping](#require-expression-wrapping) | style | error | pedantic |
 | [require-shell](#require-shell) | style | error | pedantic |
 | [required-actions](#required-actions) | policy | error | only when configured |
@@ -135,6 +140,7 @@ rules:
 | [template-injection](#template-injection) | security | error | correctness |
 | [timeout-too-long](#timeout-too-long) | policy | error | only when configured |
 | [typosquat-uses](#typosquat-uses) | security | error | default |
+| [ubuntu-slim-limits](#ubuntu-slim-limits) | correctness | error | default |
 | [undefined-function](#undefined-function) | correctness | error | correctness |
 | [undefined-job-needs](#undefined-job-needs) | correctness | error | correctness |
 | [undefined-property](#undefined-property) | correctness | error | correctness |
@@ -180,7 +186,7 @@ The action metadata does not follow the syntax of action.yml.
 
 ## adhoc-packages
 
-A package is installed by name with npm, yarn, pnpm, bun, gem or bundle add outside of a lock file.
+A package is installed by name with npm, yarn, pnpm, bun, aube, gem or bundle add outside of a lock file.
 
 - Group: security
 - Default level: error
@@ -353,11 +359,12 @@ Jobs depend on each other in a cycle.
 
 ## dangerous-triggers
 
-A workflow uses pull_request_target, workflow_run or issue_comment.
+A workflow uses pull_request_target, workflow_run or issue_comment. With the option pedantic, also one that cannot write and uses no secret.
 
 - Group: security
 - Default level: error
 - Profile: default
+- Option `pedantic` (bool, no default): Also report the pedantic checks, which are noisier. Unset, they run under the pedantic profile.
 - Details and examples: [checks](./checks.md#check-dangerous-triggers)
 
 ## dependabot-cooldown
@@ -417,6 +424,15 @@ A deprecated workflow command such as ::set-output is used.
 - Default level: error
 - Profile: correctness
 - Details and examples: [checks](./checks.md#check-deprecated-workflow-commands)
+
+## deprecated-runner-label
+
+A runner label is deprecated and GitHub is going to retire it on a known date, such as macos-14.
+
+- Group: policy
+- Default level: warn
+- Profile: pedantic
+- Details and examples: [checks](./checks.md#check-deprecated-runner-label)
 
 ## duplicate-job-id
 
@@ -613,6 +629,16 @@ A download uses http, ftp or git instead of https.
 - Default level: error
 - Profile: default
 - Details and examples: [checks](./checks.md#check-insecure-url-scheme)
+
+## insufficient-permissions
+
+The explicit permissions of a job do not grant what an action or command of the job needs from the GITHUB_TOKEN.
+
+- Group: correctness
+- Default level: error
+- Profile: default
+- Option `pedantic` (bool, no default): Also report actions/checkout without "contents: read", which only a private repository needs. Unset, it runs under the pedantic profile.
+- Details and examples: [checks](./checks.md#check-insufficient-permissions)
 
 ## invalid-activity-type
 
@@ -824,6 +850,17 @@ A local action is used before any step checks out the repository.
 - Profile: correctness
 - Details and examples: [checks](./checks.md#check-local-action-checkout)
 
+## malformed-expression-delimiters
+
+Text such as ${ github.ref }, $ {{ x }} or {{ github.sha }} is meant to be an expression but is not one. With the option pedantic, so is a shell variable in the input of an action.
+
+- Group: correctness
+- Default level: error
+- Profile: correctness
+- Fixable: yes
+- Option `pedantic` (bool, no default): Also report the pedantic checks, which are noisier. Unset, they run under the pedantic profile.
+- Details and examples: [checks](./checks.md#check-malformed-expression-delimiters)
+
 ## matrix-duplicate-value
 
 A matrix has a duplicate value.
@@ -898,7 +935,7 @@ A job does not set timeout-minutes.
 - Default level: error
 - Profile: default
 - Fixable: yes
-- Option `default-minutes` (int, no default): The timeout-minutes which --fix adds to a job. There is no default: the rule has no fix unless this is set. It is lowered to the max of timeout-too-long when that is smaller.
+- Option `default-minutes` (int, no default): The timeout-minutes which --fix adds to a job. There is no default: the rule has no fix unless this is set. It is lowered to the max of timeout-too-long when that is smaller, and to 15 on a job that runs only on ubuntu-slim.
 - Details and examples: [checks](./checks.md#check-timeout-minutes)
 
 ## missing-workflow-input
@@ -918,6 +955,16 @@ A required secret of a reusable workflow is not passed.
 - Default level: error
 - Profile: correctness
 - Details and examples: [checks](./checks.md#check-reusable-workflows)
+
+## multiline-plain-run
+
+A run: is written over several lines without |, so YAML folds the lines into one command.
+
+- Group: correctness
+- Default level: error
+- Profile: correctness
+- Fixable: yes
+- Details and examples: [checks](./checks.md#check-multiline-plain-run)
 
 ## mutable-runner-label
 
@@ -1006,6 +1053,16 @@ The version comment of a hash-pinned action does not match the pinned commit.
 - Needs network access: yes (only with `--online`)
 - Details and examples: [checks](./checks.md#check-ref-version-mismatch)
 
+## repojacking
+
+An action or reusable workflow has an owner whose name anyone can register.
+
+- Group: security
+- Default level: warn
+- Profile: only with `--online`
+- Needs network access: yes (only with `--online`)
+- Details and examples: [checks](./checks.md#check-repojacking)
+
 ## require-expression-wrapping
 
 An if: condition is not wrapped in ${{ }}.
@@ -1053,11 +1110,13 @@ A job uses a secret but has no environment.
 
 ## self-hosted-runner
 
-A job runs on a self-hosted runner.
+A job runs on a self-hosted runner: the label self-hosted, a label of self-hosted-runner.labels or a runner group.
 
 - Group: security
 - Default level: info
 - Profile: pedantic
+- Option `allow` (strings, empty by default): Glob patterns of the labels and the runner groups of runners which are ephemeral or trusted. A job with one of them is not reported.
+- Option `pull-request-only` (bool, default false): Report only the jobs of workflows that a pull request event can start, which is the case that poutine reports.
 - Details and examples: [checks](./checks.md#check-self-hosted-runner)
 
 ## self-repository
@@ -1130,6 +1189,16 @@ An action is one typo away from a popular action of another owner.
 - Option `allow` (strings, empty by default): Slugs (owner/repo) of actions which are never reported, e.g. a legitimate fork.
 - Details and examples: [checks](./checks.md#check-typosquat-uses)
 
+## ubuntu-slim-limits
+
+A job on ubuntu-slim has a container, services or a Docker container action, which the single-CPU runner cannot run. With the option pedantic, a timeout-minutes above its limit of 15 minutes counts too.
+
+- Group: correctness
+- Default level: error
+- Profile: default
+- Option `pedantic` (bool, no default): Also report the pedantic checks, which are noisier. Unset, they run under the pedantic profile.
+- Details and examples: [checks](./checks.md#check-ubuntu-slim-limits)
+
 ## undefined-function
 
 An undefined function is called in an expression.
@@ -1187,7 +1256,7 @@ An unknown Webhook event is used.
 
 ## unknown-runner-label
 
-A runner label is unknown.
+A runner label is unknown, or is one that GitHub has retired.
 
 - Group: correctness
 - Default level: error
@@ -1214,7 +1283,7 @@ A secret which the reusable workflow does not define is passed.
 
 ## unlocked-install
 
-cargo install runs without --locked, or npm, yarn or pnpm install without freezing a lock file that the repository has.
+cargo install runs without --locked, or npm, yarn or pnpm install without freezing a lock file that the repository has. With the option pedantic, also installs without a lock file, npm, Yarn and bun installs that run the lifecycle scripts of the dependencies (and aube installs that allow every build), and installs without a release-age cooldown.
 
 - Group: security
 - Default level: error
@@ -1231,6 +1300,7 @@ A container or service image is not pinned by a digest.
 - Default level: error
 - Profile: default
 - Option `require-digest` (bool, default true): Report images pinned by a tag other than latest too. Turn it off to report only images without a tag or with the latest tag.
+- Option `pedantic` (bool, no default): Also report the pedantic checks, which are noisier. Unset, they run under the pedantic profile.
 - Details and examples: [checks](./checks.md#check-unpinned-images)
 
 ## unpinned-tools

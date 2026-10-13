@@ -1,0 +1,15 @@
+on: push
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - run: aube add http://example.com/pkg-1.0.0.tgz
+      - run: aube install --registry http://registry.example.com
+      - run: aubx --registry http://registry.example.com cowsay
+      - run: aube dlx git+http://example.com/o/r.git
+      # Not reported
+      - run: aube add https://example.com/pkg-1.0.0.tgz
+      - run: aube install --registry https://registry.example.com
+      - run: aube install --registry http://localhost:4873
+      - run: aube add lodash

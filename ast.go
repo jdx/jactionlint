@@ -352,6 +352,9 @@ func (e *WorkflowCallEvent) EventName() string {
 // ImageVersionEvent is image_version event configuration.
 // https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#image_version_ready
 type ImageVersionEvent struct {
+	// Types is a list of activity types of the event: created, ready or deleted. They are in the workflow
+	// schema of GitHub but not in the documentation of the event.
+	Types []*String
 	// Names is a list of names which match to the created image names.
 	Names []*String
 	// Versions is a list of names which match to the created image versions. Glob patterns are available.
@@ -874,6 +877,8 @@ type Step struct {
 	Background *Bool
 	// Pos is a position in source.
 	Pos *Pos
+	// timeoutKey is the position of the "timeout-minutes" key, or nil.
+	timeoutKey *Pos
 }
 
 // Credentials is credentials configuration.
@@ -1061,6 +1066,10 @@ type Job struct {
 	// TimeoutMinutes is timeout value of running the job in minutes.
 	// https://docs.github.com/en/actions/learn-github-actions/workflow-syntax-for-github-actions#jobsjob_idtimeout-minutes
 	TimeoutMinutes *Float
+	// CancelTimeoutMinutes is the number of minutes the runner waits for the job to finish after it is
+	// cancelled. It is accepted by the workflow schema of the runner but not documented yet.
+	// https://github.com/actions/runner/blob/main/src/Sdk/WorkflowParser/workflow-v1.0.json (job-factory)
+	CancelTimeoutMinutes *Float
 	// Strategy is strategy configuration of running the job.
 	// https://docs.github.com/en/actions/learn-github-actions/workflow-syntax-for-github-actions#jobsjob_idstrategy
 	Strategy *Strategy
@@ -1093,6 +1102,9 @@ type Workflow struct {
 	// Name is name of the workflow. This field can be nil when user didn't specify the name explicitly.
 	// https://docs.github.com/en/actions/learn-github-actions/workflow-syntax-for-github-actions#name
 	Name *String
+	// Description is the description of the workflow. It has no effect on a run.
+	// https://github.com/actions/runner/blob/main/src/Sdk/WorkflowParser/workflow-v1.0.json (workflow-root)
+	Description *String
 	// RunName is the name of workflow runs. This field can be set dynamically using ${{ }}.
 	// https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions#run-name
 	RunName *String
