@@ -2,26 +2,19 @@
 
 # Rules
 
-Every diagnostic of jactionlint has a stable ID such as `unpinned-uses`. IDs are never renamed or reused, so they are safe to write in
-[the configuration](./config.md), in [ignore comments](./usage.md#ignore-some-errors) and in CI annotations. The ID of a
-finding is in the `id` field of `--format json`, in the `ruleId` of `--format sarif` and at the end of each finding of the text format.
+Every finding of jactionlint carries the ID of the rule that reports it, such as `unpinned-uses`. This page lists every rule with its group, default level, profile, fix and options. The IDs of released versions are never renamed or reused, so you can rely on them in [the configuration](./config.md), in [ignore comments](./ignore.md#ignore-some-errors) and in CI annotations.
+
+To find the ID of a finding, look at the end of its line in the text format, at the `id` field of `--format json` or at the `ruleId` of `--format sarif`. `jactionlint --explain ID` prints what a rule does and the section of the [checks](./checks.md) page that describes it.
 
 Each rule has:
 
-- a **group**: `correctness` (mistakes which make a workflow fail or misbehave), `security` (insecure constructs), `policy`
-  (good practices which are not mistakes by themselves) or `style`.
-- a **default level**: `error`, `warn` or `info`. Only errors make jactionlint exit with status 1 unless `--strict-exit` is given.
-- a **profile**: the first [profile](./config.md#profiles) which enables the rule. There are three, and each includes the rules
-  of the one before it: `correctness` (what actionlint checks and the bug detectors of jactionlint), `default` (adds the
-  security posture and policy rules, and is used when no profile is configured) and `pedantic` (adds the noisy and opinionated
-  rules). Rules which no profile enables run only when the configuration turns them on, and the rules marked "only with
-  `--online`" run with that flag whatever the profile is. The profile comes from the `profile` key of the configuration or the
-  `--profile` flag.
-- a **pedantic option**: a few audits report their noisier findings too when the option `pedantic` is true. It is true under
-  the `pedantic` profile and false otherwise, and `rules: {<id>: {pedantic: true}}` turns it on for one audit.
+- a **group**: `correctness` (mistakes that make a workflow fail or misbehave), `security` (insecure constructs), `policy` (good practices that are not mistakes by themselves) or `style`.
+- a **default level**: `error`, `warn` or `info`. Only errors make jactionlint exit with status 1, unless you pass `--strict-exit`.
+- a **profile**: the first [profile](./config.md#profiles) that enables the rule. Each profile includes the rules of the one before it: `correctness` (what actionlint checks and the bug detectors of jactionlint), `default` (adds the security and policy rules, and applies when you configure nothing) and `pedantic` (adds the noisy and opinionated rules). A rule marked "only when configured" runs only when the configuration turns it on. A rule marked "only with `--online`" belongs to the [online checks](./online.md) and runs with that option whatever the profile is. The profile comes from the `profile` key of the configuration or from `--profile`.
+- a **fix**: whether `jactionlint --fix` can repair its findings. `--fix` applies the safe fixes and `--fix=unsafe` the others, see [Fix findings automatically](./fix.md).
+- a **pedantic option**: a few rules report their noisier findings too when the option `pedantic` is true. It is true under the `pedantic` profile and false otherwise, and `rules: {<id>: {pedantic: true}}` turns it on for one rule.
 
-The rules of the security, policy and style groups do not look at a job or a step whose `if:` is the literal `false`, because it
-never runs. The rules of the correctness group still do: a mistake in it breaks the file whether it runs or not.
+The rules of the security, policy and style groups skip a job or a step whose `if:` is the literal `false`, because it never runs. The rules of the correctness group still look at it: a mistake in it breaks the file whether it runs or not.
 
 ```yaml
 # .github/jactionlint.yaml
@@ -31,164 +24,164 @@ rules:
   require-shell: off # turn a rule off
 ```
 
-| ID | Group | Default level | Profile |
-| --- | --- | --- | --- |
-| [action-syntax](#action-syntax) | correctness | error | correctness |
-| [actions-lock](#actions-lock) | security | error | default |
-| [actions-lock-drift](#actions-lock-drift) | security | error | only with `--online` |
-| [adhoc-packages](#adhoc-packages) | security | error | default |
-| [agentic-actions](#agentic-actions) | security | error | default |
-| [anonymous-definition](#anonymous-definition) | policy | warn | pedantic |
-| [archived-uses](#archived-uses) | security | warn | only with `--online` |
-| [argument-injection](#argument-injection) | security | warn | pedantic |
-| [artipacked](#artipacked) | security | error | default |
-| [background-step-not-waited](#background-step-not-waited) | correctness | error | correctness |
-| [bot-conditions](#bot-conditions) | security | error | default |
-| [cache-poisoning](#cache-poisoning) | security | error | default |
-| [checkout-static-credentials](#checkout-static-credentials) | security | error | default |
-| [command-injection](#command-injection) | security | warn | pedantic |
-| [comment-trigger-authorization](#comment-trigger-authorization) | security | warn | pedantic |
-| [concurrency-cancels-prs](#concurrency-cancels-prs) | correctness | error | default |
-| [concurrency-cancels-release](#concurrency-cancels-release) | correctness | error | default |
-| [concurrency-deadlock](#concurrency-deadlock) | correctness | error | correctness |
-| [concurrency-limits](#concurrency-limits) | policy | error | default |
-| [conflicting-action-inputs](#conflicting-action-inputs) | correctness | error | correctness |
-| [conflicting-runner-labels](#conflicting-runner-labels) | correctness | error | correctness |
-| [constant-condition](#constant-condition) | correctness | error | correctness |
-| [context-availability](#context-availability) | correctness | error | correctness |
-| [continue-on-error](#continue-on-error) | policy | info | pedantic |
-| [cron-too-frequent](#cron-too-frequent) | correctness | error | correctness |
-| [cyclic-job-needs](#cyclic-job-needs) | correctness | error | correctness |
-| [dangerous-triggers](#dangerous-triggers) | security | error | default |
-| [dependabot-cooldown](#dependabot-cooldown) | security | error | default |
-| [dependabot-execution](#dependabot-execution) | security | error | default |
-| [dependabot-missing-actions-update](#dependabot-missing-actions-update) | policy | warn | pedantic |
-| [dependabot-syntax](#dependabot-syntax) | correctness | error | correctness |
-| [deprecated-action-input](#deprecated-action-input) | correctness | error | correctness |
-| [deprecated-commands](#deprecated-commands) | correctness | error | correctness |
-| [deprecated-node-runtime](#deprecated-node-runtime) | policy | warn | pedantic |
-| [deprecated-runner-label](#deprecated-runner-label) | policy | warn | pedantic |
-| [duplicate-job-id](#duplicate-job-id) | correctness | error | correctness |
-| [duplicate-job-needs](#duplicate-job-needs) | correctness | error | correctness |
-| [duplicate-key](#duplicate-key) | correctness | error | correctness |
-| [duplicate-step-id](#duplicate-step-id) | correctness | error | correctness |
-| [duplicate-triggers](#duplicate-triggers) | policy | error | default |
-| [environment-file-redirect](#environment-file-redirect) | correctness | error | correctness |
-| [event-name-never-received](#event-name-never-received) | correctness | warn | pedantic |
-| [excessive-permissions](#excessive-permissions) | security | error | default |
-| [expired-ignore](#expired-ignore) | policy | error | correctness |
-| [expression-syntax](#expression-syntax) | correctness | error | correctness |
-| [expression-type](#expression-type) | correctness | error | correctness |
-| [fail-fast-action-inputs](#fail-fast-action-inputs) | correctness | warn | pedantic |
-| [forbidden-uses](#forbidden-uses) | policy | error | only when configured |
-| [gate-job-skipped-on-failure](#gate-job-skipped-on-failure) | correctness | error | default |
-| [gh-without-token](#gh-without-token) | correctness | error | correctness |
-| [github-app](#github-app) | security | error | default |
-| [github-env](#github-env) | security | error | default |
-| [github-script-syntax](#github-script-syntax) | correctness | error | correctness |
-| [hardcoded-container-credentials](#hardcoded-container-credentials) | security | error | correctness |
-| [if-always-true](#if-always-true) | correctness | error | correctness |
-| [impostor-commit](#impostor-commit) | security | error | only with `--online` |
-| [insecure-commands](#insecure-commands) | security | error | default |
-| [insecure-ssh-keyscan](#insecure-ssh-keyscan) | security | error | default |
-| [insecure-url-scheme](#insecure-url-scheme) | security | error | default |
-| [insufficient-permissions](#insufficient-permissions) | correctness | error | default |
-| [invalid-activity-type](#invalid-activity-type) | correctness | error | correctness |
-| [invalid-cron](#invalid-cron) | correctness | error | correctness |
-| [invalid-env-var-name](#invalid-env-var-name) | correctness | error | correctness |
-| [invalid-event-config](#invalid-event-config) | correctness | error | correctness |
-| [invalid-event-filter](#invalid-event-filter) | correctness | error | correctness |
-| [invalid-function-call](#invalid-function-call) | correctness | error | correctness |
-| [invalid-glob](#invalid-glob) | correctness | error | correctness |
-| [invalid-id](#invalid-id) | correctness | error | correctness |
-| [invalid-ignore-comment](#invalid-ignore-comment) | correctness | error | correctness |
-| [invalid-label-pattern](#invalid-label-pattern) | correctness | error | correctness |
-| [invalid-local-action](#invalid-local-action) | correctness | error | correctness |
-| [invalid-local-workflow](#invalid-local-workflow) | correctness | error | correctness |
-| [invalid-parallel-step](#invalid-parallel-step) | correctness | error | correctness |
-| [invalid-permissions](#invalid-permissions) | correctness | error | correctness |
-| [invalid-shell-name](#invalid-shell-name) | correctness | error | correctness |
-| [invalid-timezone](#invalid-timezone) | correctness | error | correctness |
-| [invalid-uses](#invalid-uses) | correctness | error | correctness |
-| [invalid-workflow-call](#invalid-workflow-call) | correctness | error | correctness |
-| [invalid-workflow-call-input](#invalid-workflow-call-input) | correctness | error | correctness |
-| [invalid-workflow-dispatch-input](#invalid-workflow-dispatch-input) | correctness | error | correctness |
-| [invisible-characters](#invisible-characters) | security | error | default |
-| [known-vulnerable-actions](#known-vulnerable-actions) | security | error | only with `--online` |
-| [local-action-checkout](#local-action-checkout) | correctness | error | correctness |
-| [malformed-expression-delimiters](#malformed-expression-delimiters) | correctness | error | correctness |
-| [matrix-duplicate-value](#matrix-duplicate-value) | correctness | error | correctness |
-| [matrix-invalid-exclude](#matrix-invalid-exclude) | correctness | error | correctness |
-| [max-run-lines](#max-run-lines) | style | error | pedantic |
-| [merge-key](#merge-key) | correctness | error | correctness |
-| [misfeature](#misfeature) | security | error | default |
-| [missing-action-input](#missing-action-input) | correctness | error | correctness |
-| [missing-permissions](#missing-permissions) | policy | error | default |
-| [missing-timeout](#missing-timeout) | policy | error | default |
-| [missing-workflow-input](#missing-workflow-input) | correctness | error | correctness |
-| [missing-workflow-secret](#missing-workflow-secret) | correctness | error | correctness |
-| [multiline-plain-run](#multiline-plain-run) | correctness | error | correctness |
-| [mutable-runner-label](#mutable-runner-label) | policy | warn | pedantic |
-| [obfuscation](#obfuscation) | security | error | default |
-| [outdated-action-runner](#outdated-action-runner) | correctness | error | correctness |
-| [output-clobbering](#output-clobbering) | security | warn | pedantic |
-| [overprovisioned-secrets](#overprovisioned-secrets) | security | error | default |
-| [pipeline-without-pipefail](#pipeline-without-pipefail) | correctness | error | default |
-| [pyflakes](#pyflakes) | correctness | error | correctness |
-| [recursive-alias](#recursive-alias) | correctness | error | correctness |
-| [ref-confusion](#ref-confusion) | security | warn | only with `--online` |
-| [ref-version-mismatch](#ref-version-mismatch) | security | warn | only with `--online` |
-| [repojacking](#repojacking) | security | warn | only with `--online` |
-| [require-expression-wrapping](#require-expression-wrapping) | style | error | pedantic |
-| [require-shell](#require-shell) | style | error | pedantic |
-| [required-actions](#required-actions) | policy | error | only when configured |
-| [secrets-inherit](#secrets-inherit) | security | error | default |
-| [secrets-outside-env](#secrets-outside-env) | security | warn | pedantic |
-| [self-hosted-runner](#self-hosted-runner) | security | info | pedantic |
-| [self-repository](#self-repository) | security | info | pedantic |
-| [shellcheck](#shellcheck) | correctness | error | correctness |
-| [stale-action-refs](#stale-action-refs) | security | info | only with `--online` |
-| [superfluous-actions](#superfluous-actions) | security | error | default |
-| [template-injection](#template-injection) | security | error | correctness |
-| [timeout-too-long](#timeout-too-long) | policy | error | only when configured |
-| [typosquat-uses](#typosquat-uses) | security | error | default |
-| [ubuntu-slim-limits](#ubuntu-slim-limits) | correctness | error | default |
-| [undefined-function](#undefined-function) | correctness | error | correctness |
-| [undefined-job-needs](#undefined-job-needs) | correctness | error | correctness |
-| [undefined-property](#undefined-property) | correctness | error | correctness |
-| [undocumented-permissions](#undocumented-permissions) | policy | info | pedantic |
-| [unknown-action-input](#unknown-action-input) | correctness | error | correctness |
-| [unknown-event](#unknown-event) | correctness | error | correctness |
-| [unknown-runner-label](#unknown-runner-label) | correctness | error | correctness |
-| [unknown-workflow-input](#unknown-workflow-input) | correctness | error | correctness |
-| [unknown-workflow-secret](#unknown-workflow-secret) | correctness | error | correctness |
-| [unlocked-install](#unlocked-install) | security | error | default |
-| [unmatched-paths-filter](#unmatched-paths-filter) | correctness | warn | pedantic |
-| [unpinnable-action](#unpinnable-action) | security | warn | only with `--online` |
-| [unpinned-images](#unpinned-images) | security | error | default |
-| [unpinned-tools](#unpinned-tools) | security | error | default |
-| [unpinned-uses](#unpinned-uses) | policy | error | default |
-| [unredacted-secrets](#unredacted-secrets) | security | error | default |
-| [unsound-contains](#unsound-contains) | security | error | default |
-| [unsound-prefix-match](#unsound-prefix-match) | security | error | default |
-| [unsound-ternary](#unsound-ternary) | correctness | error | correctness |
-| [untrusted-artifact](#untrusted-artifact) | security | error | default |
-| [untrusted-checkout](#untrusted-checkout) | security | error | default |
-| [unused-anchor](#unused-anchor) | correctness | error | correctness |
-| [unused-baseline-entry](#unused-baseline-entry) | policy | info | correctness |
-| [unused-ignore](#unused-ignore) | policy | error | pedantic |
-| [unused-job-output](#unused-job-output) | policy | error | default |
-| [unused-needs](#unused-needs) | style | info | pedantic |
-| [unused-workflow-input](#unused-workflow-input) | policy | warn | pedantic |
-| [unused-workflow-secret](#unused-workflow-secret) | policy | warn | pedantic |
-| [unverified-download](#unverified-download) | security | error | default |
-| [use-trusted-publishing](#use-trusted-publishing) | security | error | default |
-| [workflow-call-permissions](#workflow-call-permissions) | correctness | error | correctness |
-| [workflow-input-type](#workflow-input-type) | correctness | error | correctness |
-| [workflow-run-names](#workflow-run-names) | correctness | error | correctness |
-| [workflow-secret-scope](#workflow-secret-scope) | security | warn | pedantic |
-| [workflow-syntax](#workflow-syntax) | correctness | error | correctness |
-| [yaml-syntax](#yaml-syntax) | correctness | error | correctness |
+| ID | Summary | Group | Default level | Profile | Fixable |
+| --- | --- | --- | --- | --- | --- |
+| [action-syntax](#action-syntax) | The action metadata does not follow the syntax of action.yml. | correctness | error | correctness | no |
+| [actions-lock](#actions-lock) | The Actions lock file does not match the workflows: an action is missing from it, an entry is stale or malformed. | security | error | default | no |
+| [actions-lock-drift](#actions-lock-drift) | A pin of the Actions lock file no longer matches GitHub: the repository changed owner or was replaced, a version tag moved, or the commit is not in the history of the repository. | security | error | only with `--online` | no |
+| [adhoc-packages](#adhoc-packages) | A package is installed by name with npm, yarn, pnpm, bun, aube, gem or bundle add outside of a lock file. | security | error | default | no |
+| [agentic-actions](#agentic-actions) | An AI agent action can be steered by outsiders, runs on code of a pull request, or has its safeguards turned off. | security | error | default | no |
+| [anonymous-definition](#anonymous-definition) | A workflow has no top-level name:. | policy | warn | pedantic | yes |
+| [archived-uses](#archived-uses) | An action or reusable workflow is in an archived repository. | security | warn | only with `--online` | no |
+| [argument-injection](#argument-injection) | Free text that an outsider writes is expanded into the program text or the options of sed, awk, find, curl, wget and git clone. | security | warn | pedantic | no |
+| [artipacked](#artipacked) | actions/checkout persists the GITHUB_TOKEN credential in the git config. | security | error | default | yes |
+| [background-step-not-waited](#background-step-not-waited) | Outputs or results of a background step are read before a wait step covers it. | correctness | error | correctness | no |
+| [bot-conditions](#bot-conditions) | A condition trusts a bot by github.actor, which can be spoofed. | security | error | default | yes |
+| [cache-poisoning](#cache-poisoning) | A cache is restored in a release job or written by a privileged trigger. With the option pedantic, a tag that only starts checks and a branch filter that names a release branch among others count as releases too, and a cache that saves a file with credentials is reported. | security | error | default | no |
+| [checkout-static-credentials](#checkout-static-credentials) | actions/checkout is given an SSH key or a token that does not expire. | security | error | default | no |
+| [command-injection](#command-injection) | Input that an outsider controls is run as code by a script after it was moved to an environment variable: eval, sh -c, a variable as a command, a pipe into a shell, an inline program, child_process in github-script. | security | warn | pedantic | no |
+| [comment-trigger-authorization](#comment-trigger-authorization) | A job of a comment-triggered workflow is started by the text of the comment and nothing checks who wrote it. | security | warn | pedantic | no |
+| [concurrency-cancels-prs](#concurrency-cancels-prs) | A concurrency group that cancels runs is shared by all pull requests, so unrelated pull requests cancel each other. | correctness | error | default | no |
+| [concurrency-cancels-release](#concurrency-cancels-release) | cancel-in-progress can cancel a release or a deployment which is still running. | correctness | error | default | yes |
+| [concurrency-deadlock](#concurrency-deadlock) | The concurrency group of a workflow is the same as the group of a local reusable workflow it calls, so GitHub detects a deadlock and cancels the run. | correctness | error | correctness | no |
+| [concurrency-limits](#concurrency-limits) | A workflow does not cancel superseded runs with concurrency:. | policy | error | default | yes |
+| [conflicting-action-inputs](#conflicting-action-inputs) | Two inputs of a well-known action exclude each other. | correctness | error | correctness | no |
+| [conflicting-runner-labels](#conflicting-runner-labels) | The runner labels of a job conflict with each other. | correctness | error | correctness | no |
+| [constant-condition](#constant-condition) | An if: condition is a constant expression. | correctness | error | correctness | no |
+| [context-availability](#context-availability) | A context or special function is used where it is not available. | correctness | error | correctness | no |
+| [continue-on-error](#continue-on-error) | A job has continue-on-error: true, so its failure does not fail the workflow. | policy | info | pedantic | no |
+| [cron-too-frequent](#cron-too-frequent) | A scheduled job runs more often than once every 5 minutes. | correctness | error | correctness | no |
+| [cyclic-job-needs](#cyclic-job-needs) | Jobs depend on each other in a cycle. | correctness | error | correctness | no |
+| [dangerous-triggers](#dangerous-triggers) | A workflow uses pull_request_target, workflow_run or issue_comment. With the option pedantic, also one that cannot write and uses no secret. | security | error | default | no |
+| [dependabot-cooldown](#dependabot-cooldown) | An update in dependabot.yml has no cooldown or a cooldown shorter than the minimum. | security | error | default | yes |
+| [dependabot-execution](#dependabot-execution) | An update in dependabot.yml allows insecure external code execution. | security | error | default | yes |
+| [dependabot-missing-actions-update](#dependabot-missing-actions-update) | dependabot.yml has no github-actions update although the repository has workflows using actions. | policy | warn | pedantic | no |
+| [dependabot-syntax](#dependabot-syntax) | The Dependabot configuration does not follow the syntax of dependabot.yml. | correctness | error | correctness | no |
+| [deprecated-action-input](#deprecated-action-input) | A deprecated input of an action is used. | correctness | error | correctness | no |
+| [deprecated-commands](#deprecated-commands) | A deprecated workflow command such as ::set-output is used. | correctness | error | correctness | no |
+| [deprecated-node-runtime](#deprecated-node-runtime) | A Node.js runtime that GitHub Actions removed is declared, used or selected by an environment variable. | policy | warn | pedantic | no |
+| [deprecated-runner-label](#deprecated-runner-label) | A runner label is deprecated and GitHub is going to retire it on a known date, such as macos-14. | policy | warn | pedantic | no |
+| [duplicate-job-id](#duplicate-job-id) | A job ID is defined more than once. | correctness | error | correctness | no |
+| [duplicate-job-needs](#duplicate-job-needs) | A job ID is listed more than once in needs. | correctness | error | correctness | no |
+| [duplicate-key](#duplicate-key) | A key is defined more than once in a mapping. | correctness | error | correctness | no |
+| [duplicate-step-id](#duplicate-step-id) | A step ID is not unique within its job. | correctness | error | correctness | no |
+| [duplicate-triggers](#duplicate-triggers) | push and pull_request both run the workflow for the same commit. | policy | error | default | no |
+| [environment-file-redirect](#environment-file-redirect) | A script writes to GITHUB_OUTPUT or another environment file of the runner without the $, or empties it with > after it wrote to it. | correctness | error | correctness | yes |
+| [event-name-never-received](#event-name-never-received) | github.event_name is compared with an event that the workflow never receives, so the comparison is always false. | correctness | warn | pedantic | no |
+| [excessive-permissions](#excessive-permissions) | The GITHUB_TOKEN gets write access that is broader than needed. | security | error | default | no |
+| [expired-ignore](#expired-ignore) | An entry of "ignores" in the config file has expired or is about to. | policy | error | correctness | no |
+| [expression-syntax](#expression-syntax) | A ${{ }} expression has a syntax error. | correctness | error | correctness | no |
+| [expression-type](#expression-type) | A ${{ }} expression has a type error. | correctness | error | correctness | no |
+| [fail-fast-action-inputs](#fail-fast-action-inputs) | An action which passes by default when nothing was produced or found is not told to fail. | correctness | warn | pedantic | yes |
+| [forbidden-uses](#forbidden-uses) | An action or reusable workflow is not allowed or is denied by the configuration. | policy | error | only when configured | no |
+| [gate-job-skipped-on-failure](#gate-job-skipped-on-failure) | A job that reads the results of the jobs it needs is skipped when one of them fails. | correctness | error | default | no |
+| [gh-without-token](#gh-without-token) | A script runs the gh command although no GH_TOKEN or GITHUB_TOKEN reaches the step, so gh stops. | correctness | error | correctness | no |
+| [github-app](#github-app) | A GitHub App token is issued with more access or a longer life than needed. | security | error | default | no |
+| [github-env](#github-env) | Input that an outsider controls, or a value that is not a literal in a workflow triggered by pull_request_target or workflow_run, is written to GITHUB_ENV or GITHUB_PATH. | security | error | default | no |
+| [github-script-syntax](#github-script-syntax) | The script of actions/github-script has a JavaScript syntax error. | correctness | error | correctness | no |
+| [hardcoded-container-credentials](#hardcoded-container-credentials) | A password for a container registry is written directly in the workflow. | security | error | correctness | no |
+| [if-always-true](#if-always-true) | An if: condition is always true because of the characters around ${{ }}. | correctness | error | correctness | no |
+| [impostor-commit](#impostor-commit) | A hash-pinned action uses a commit which is not part of the repository's own history (it exists only in a fork). | security | error | only with `--online` | no |
+| [insecure-commands](#insecure-commands) | ACTIONS_ALLOW_UNSECURE_COMMANDS enables the deprecated set-env and add-path commands. | security | error | default | yes |
+| [insecure-ssh-keyscan](#insecure-ssh-keyscan) | ssh-keyscan output is trusted as the host key without verification. | security | error | default | no |
+| [insecure-url-scheme](#insecure-url-scheme) | A download uses http, ftp or git instead of https. | security | error | default | no |
+| [insufficient-permissions](#insufficient-permissions) | The explicit permissions of a job do not grant what an action or command of the job needs from the GITHUB_TOKEN. | correctness | error | default | no |
+| [invalid-activity-type](#invalid-activity-type) | An activity type is not available for the Webhook event. | correctness | error | correctness | no |
+| [invalid-cron](#invalid-cron) | A cron schedule has an invalid format. | correctness | error | correctness | no |
+| [invalid-env-var-name](#invalid-env-var-name) | An environment variable name contains characters which are not allowed. | correctness | error | correctness | no |
+| [invalid-event-config](#invalid-event-config) | An event is configured with options it does not support. | correctness | error | correctness | no |
+| [invalid-event-filter](#invalid-event-filter) | An event filter is not available for the event or conflicts with another filter. | correctness | error | correctness | no |
+| [invalid-function-call](#invalid-function-call) | A built-in function is called with wrong arguments. | correctness | error | correctness | no |
+| [invalid-glob](#invalid-glob) | A glob filter pattern is invalid. | correctness | error | correctness | no |
+| [invalid-id](#invalid-id) | A job or step ID does not follow the naming convention. | correctness | error | correctness | no |
+| [invalid-ignore-comment](#invalid-ignore-comment) | An inline ignore comment is invalid. | correctness | error | correctness | no |
+| [invalid-label-pattern](#invalid-label-pattern) | A runner label pattern in the configuration is not a valid glob. | correctness | error | correctness | no |
+| [invalid-local-action](#invalid-local-action) | A local action cannot be loaded or its metadata is invalid. | correctness | error | correctness | no |
+| [invalid-local-workflow](#invalid-local-workflow) | A local reusable workflow cannot be loaded or is invalid. | correctness | error | correctness | no |
+| [invalid-parallel-step](#invalid-parallel-step) | A step is not allowed inside a parallel group or refers to a wrong step. | correctness | error | correctness | no |
+| [invalid-permissions](#invalid-permissions) | A permission scope or its value is invalid. | correctness | error | correctness | no |
+| [invalid-shell-name](#invalid-shell-name) | A shell name is not available on the runner. | correctness | error | correctness | no |
+| [invalid-timezone](#invalid-timezone) | A timezone of a schedule is not a valid IANA timezone name. | correctness | error | correctness | no |
+| [invalid-uses](#invalid-uses) | A uses: value does not follow the format of an action or a Docker image. | correctness | error | correctness | no |
+| [invalid-workflow-call](#invalid-workflow-call) | A reusable workflow call does not follow the format of a reusable workflow. | correctness | error | correctness | no |
+| [invalid-workflow-call-input](#invalid-workflow-call-input) | An input of the workflow_call event is invalid. | correctness | error | correctness | no |
+| [invalid-workflow-dispatch-input](#invalid-workflow-dispatch-input) | An input of the workflow_dispatch event is invalid. | correctness | error | correctness | no |
+| [invisible-characters](#invisible-characters) | A file contains an invisible or bidirectional control character which hides what the text says. | security | error | default | yes |
+| [known-vulnerable-actions](#known-vulnerable-actions) | An action version is affected by a published GitHub security advisory. | security | error | only with `--online` | no |
+| [local-action-checkout](#local-action-checkout) | A local action is used before any step checks out the repository. | correctness | error | correctness | no |
+| [malformed-expression-delimiters](#malformed-expression-delimiters) | Text such as ${ github.ref }, $ {{ x }} or {{ github.sha }} is meant to be an expression but is not one. With the option pedantic, so is a shell variable in the input of an action. | correctness | error | correctness | yes |
+| [matrix-duplicate-value](#matrix-duplicate-value) | A matrix has a duplicate value. | correctness | error | correctness | no |
+| [matrix-invalid-exclude](#matrix-invalid-exclude) | An exclude entry of a matrix does not match the matrix. | correctness | error | correctness | no |
+| [max-run-lines](#max-run-lines) | A run: script has more lines than allowed. | style | error | pedantic | no |
+| [merge-key](#merge-key) | The YAML merge key << is used, which GitHub Actions does not support. | correctness | error | correctness | no |
+| [misfeature](#misfeature) | A misfeature of GitHub Actions is used: the pip-install input of setup-python or the cmd shell. With the option pedantic, a shell that GitHub does not document too. | security | error | default | no |
+| [missing-action-input](#missing-action-input) | A required input of an action is not specified. | correctness | error | correctness | no |
+| [missing-permissions](#missing-permissions) | Neither the workflow nor the job sets permissions:. | policy | error | default | yes |
+| [missing-timeout](#missing-timeout) | A job does not set timeout-minutes. | policy | error | default | yes |
+| [missing-workflow-input](#missing-workflow-input) | A required input of a reusable workflow is not specified. | correctness | error | correctness | no |
+| [missing-workflow-secret](#missing-workflow-secret) | A required secret of a reusable workflow is not passed. | correctness | error | correctness | no |
+| [multiline-plain-run](#multiline-plain-run) | A run: is written over several lines without \|, so YAML folds the lines into one command. | correctness | error | correctness | yes |
+| [mutable-runner-label](#mutable-runner-label) | A runner label is an alias that GitHub moves to newer images, such as ubuntu-latest. | policy | warn | pedantic | yes |
+| [obfuscation](#obfuscation) | A path at uses: or an expression is written in an obfuscated way. | security | error | default | yes |
+| [outdated-action-runner](#outdated-action-runner) | An action runs on a runtime which GitHub Actions no longer supports. | correctness | error | correctness | no |
+| [output-clobbering](#output-clobbering) | Input that an outsider controls is written to GITHUB_OUTPUT as a record, so a line break in it sets the other outputs of the step. | security | warn | pedantic | no |
+| [overprovisioned-secrets](#overprovisioned-secrets) | An expression uses the whole secrets context. | security | error | default | no |
+| [pipeline-without-pipefail](#pipeline-without-pipefail) | A failing command in a pipeline of a run: script is hidden because the shell does not enable pipefail. | correctness | error | default | yes |
+| [pyflakes](#pyflakes) | pyflakes reported an issue in a Python script. | correctness | error | correctness | no |
+| [recursive-alias](#recursive-alias) | A YAML alias refers to itself. | correctness | error | correctness | no |
+| [ref-confusion](#ref-confusion) | The ref of an action is both a branch and a tag of its repository. | security | warn | only with `--online` | no |
+| [ref-version-mismatch](#ref-version-mismatch) | The version comment of a hash-pinned action does not match the pinned commit. | security | warn | only with `--online` | yes |
+| [repojacking](#repojacking) | An action or reusable workflow has an owner whose name anyone can register. | security | warn | only with `--online` | no |
+| [require-expression-wrapping](#require-expression-wrapping) | An if: condition is not wrapped in ${{ }}. | style | error | pedantic | no |
+| [require-shell](#require-shell) | A run: step does not set the shell explicitly. | style | error | pedantic | no |
+| [required-actions](#required-actions) | An action listed in required-actions is not used by a workflow. | policy | error | only when configured | no |
+| [secrets-inherit](#secrets-inherit) | A reusable workflow is called with secrets: inherit. | security | error | default | no |
+| [secrets-outside-env](#secrets-outside-env) | A job uses a secret but has no environment, or passes one to a reusable workflow. | security | warn | pedantic | no |
+| [self-hosted-runner](#self-hosted-runner) | A job runs on a self-hosted runner: the label self-hosted, a label of self-hosted-runner.labels or a runner group. | security | info | pedantic | no |
+| [self-repository](#self-repository) | A local action or workflow is referenced as ./path instead of $/path. | security | info | pedantic | yes |
+| [shellcheck](#shellcheck) | shellcheck reported an issue in a shell script. | correctness | error | correctness | no |
+| [stale-action-refs](#stale-action-refs) | A hash-pinned action uses a commit which no tag of the repository points to. | security | info | only with `--online` | no |
+| [superfluous-actions](#superfluous-actions) | An action does what a tool of the runner image does as well, such as gh release create. | security | error | default | no |
+| [template-injection](#template-injection) | A potentially untrusted input is expanded in a script, a container option or the prompt of an AI agent. With the option pedantic, so is any other expression. | security | error | correctness | yes |
+| [timeout-too-long](#timeout-too-long) | timeout-minutes of a job exceeds the configured maximum. | policy | error | only when configured | no |
+| [typosquat-uses](#typosquat-uses) | An action is one typo away from a popular action of another owner. | security | error | default | no |
+| [ubuntu-slim-limits](#ubuntu-slim-limits) | A job on ubuntu-slim has a container, services or a Docker container action, which the single-CPU runner cannot run. With the option pedantic, a timeout-minutes above its limit of 15 minutes counts too. | correctness | error | default | no |
+| [undefined-function](#undefined-function) | An undefined function is called in an expression. | correctness | error | correctness | no |
+| [undefined-job-needs](#undefined-job-needs) | A job needs a job which does not exist. | correctness | error | correctness | no |
+| [undefined-property](#undefined-property) | An undefined variable or property is accessed in an expression. | correctness | error | correctness | no |
+| [undocumented-permissions](#undocumented-permissions) | A permission scope above read has no comment explaining it. | policy | info | pedantic | no |
+| [unknown-action-input](#unknown-action-input) | An input which the action does not define is specified. | correctness | error | correctness | no |
+| [unknown-event](#unknown-event) | An unknown Webhook event is used. | correctness | error | correctness | no |
+| [unknown-runner-label](#unknown-runner-label) | A runner label is unknown, or is one that GitHub has retired. | correctness | error | correctness | no |
+| [unknown-workflow-input](#unknown-workflow-input) | An input which the reusable workflow does not define is specified. | correctness | error | correctness | no |
+| [unknown-workflow-secret](#unknown-workflow-secret) | A secret which the reusable workflow does not define is passed. | correctness | error | correctness | no |
+| [unlocked-install](#unlocked-install) | cargo install runs without --locked, or npm, yarn or pnpm install without freezing a lock file that the repository has. With the option pedantic, also installs without a lock file, npm, Yarn and bun installs that run the lifecycle scripts of the dependencies (and aube installs that allow every build), and installs without a release-age cooldown. | security | error | default | yes |
+| [unmatched-paths-filter](#unmatched-paths-filter) | An entry of paths or paths-ignore matches no file of the repository. | correctness | warn | pedantic | no |
+| [unpinnable-action](#unpinnable-action) | A hash-pinned action pulls in an action or a Docker image by a tag or a branch, so its pin does not freeze what runs. Only with the option pedantic. | security | warn | only with `--online` | no |
+| [unpinned-images](#unpinned-images) | A container or service image is not pinned by a digest. | security | error | default | yes |
+| [unpinned-tools](#unpinned-tools) | An action installs the newest version of its tool because no version is set or it is latest. | security | error | default | no |
+| [unpinned-uses](#unpinned-uses) | An action, reusable workflow or Docker image is not pinned to a commit SHA or digest. | policy | error | default | yes |
+| [unredacted-secrets](#unredacted-secrets) | A secret is parsed with fromJSON(), so the fields of it are not redacted in logs. With the option pedantic, also a value that a script cuts from a secret and prints without masking it. | security | error | default | no |
+| [unsound-contains](#unsound-contains) | A condition uses contains() on a string literal, which also matches substrings. | security | error | default | no |
+| [unsound-prefix-match](#unsound-prefix-match) | An account, an owner or a repository is identified by a prefix, a suffix or a part of its name. | security | error | default | no |
+| [unsound-ternary](#unsound-ternary) | The a && b \|\| c idiom has a falsy b so it always evaluates to c. | correctness | error | correctness | no |
+| [untrusted-artifact](#untrusted-artifact) | A workflow_run workflow uses an artifact of the triggering run without validating it. With the option pedantic, also one that downloads every artifact of the run. | security | error | default | no |
+| [untrusted-checkout](#untrusted-checkout) | A pull_request_target, workflow_run or issue_comment workflow checks out the code of a pull request and runs it, or turns off the protection of actions/checkout against the code of fork pull requests. It also reports a gate that holds at one moment (an environment, a label, the comment of a maintainer) in front of a branch that the author can still push to, and a label that survives a push. With the option pedantic, a checkout that actions/checkout refuses for a fork and a dispatch with the number of a pull request and no commit are reported too, and with the option any-checkout a checkout that nothing visibly runs. | security | error | default | no |
+| [unused-anchor](#unused-anchor) | A YAML anchor is defined but never used. | correctness | error | correctness | no |
+| [unused-baseline-entry](#unused-baseline-entry) | A baseline entry matches no finding any more, so the baseline can shrink. | policy | info | correctness | no |
+| [unused-ignore](#unused-ignore) | An ignore comment or an entry of "ignores" in the config file did not suppress anything. | policy | error | pedantic | yes |
+| [unused-job-output](#unused-job-output) | An output of a job is never read by another job or by a workflow_call output. | policy | error | default | no |
+| [unused-needs](#unused-needs) | A needs entry is neither read by the job nor needed for the order of jobs. | style | info | pedantic | no |
+| [unused-workflow-input](#unused-workflow-input) | An input of workflow_dispatch or workflow_call is never used. | policy | warn | pedantic | no |
+| [unused-workflow-secret](#unused-workflow-secret) | A secret of workflow_call is never used. | policy | warn | pedantic | no |
+| [unverified-download](#unverified-download) | A script runs what it downloads without verifying it. | security | error | default | no |
+| [use-trusted-publishing](#use-trusted-publishing) | A package is published with a long-lived credential although the registry supports trusted publishing. With the option pedantic, also trusted publishing in a job that builds the package or has no environment, and attestations that are switched off. | security | error | default | no |
+| [workflow-call-permissions](#workflow-call-permissions) | A caller job grants fewer permissions than a reusable workflow requires. | correctness | error | correctness | no |
+| [workflow-input-type](#workflow-input-type) | The type of a value passed to a reusable workflow does not match its input. | correctness | error | correctness | no |
+| [workflow-run-names](#workflow-run-names) | A workflow_run event refers to a workflow which does not exist in the repository. | correctness | error | correctness | no |
+| [workflow-secret-scope](#workflow-secret-scope) | A secret is assigned to the workflow-level env and reaches multiple jobs. With the option job-level, also one of the env of a job that reaches its steps. | security | warn | pedantic | no |
+| [workflow-syntax](#workflow-syntax) | The workflow does not follow the syntax of GitHub Actions workflows. | correctness | error | correctness | no |
+| [yaml-syntax](#yaml-syntax) | The file is not valid YAML. | correctness | error | correctness | no |
 
 ## action-syntax
 
@@ -197,7 +190,7 @@ The action metadata does not follow the syntax of action.yml.
 - Group: correctness
 - Default level: error
 - Profile: correctness
-- Details and examples: [checks](./checks.md#check-composite-action-syntax)
+- [Details and examples](./checks.md#check-composite-action-syntax)
 
 ## actions-lock
 
@@ -207,7 +200,7 @@ The Actions lock file does not match the workflows: an action is missing from it
 - Default level: error
 - Profile: default
 - Option `pedantic` (bool, no default): Also report the pedantic checks, which are noisier. Unset, they run under the pedantic profile.
-- Details and examples: [checks](./checks.md#check-actions-lock)
+- [Details and examples](./checks.md#check-actions-lock)
 
 ## actions-lock-drift
 
@@ -217,7 +210,7 @@ A pin of the Actions lock file no longer matches GitHub: the repository changed 
 - Default level: error
 - Profile: only with `--online`
 - Needs network access: yes (only with `--online`)
-- Details and examples: [checks](./checks.md#check-actions-lock)
+- [Details and examples](./checks.md#check-actions-lock)
 
 ## adhoc-packages
 
@@ -226,7 +219,7 @@ A package is installed by name with npm, yarn, pnpm, bun, aube, gem or bundle ad
 - Group: security
 - Default level: error
 - Profile: default
-- Details and examples: [checks](./checks.md#check-adhoc-packages)
+- [Details and examples](./checks.md#check-adhoc-packages)
 
 ## agentic-actions
 
@@ -236,7 +229,7 @@ An AI agent action can be steered by outsiders, runs on code of a pull request, 
 - Default level: error
 - Profile: default
 - Option `any-trigger` (bool, default false): Also report the unsafe settings of an agent (tools that allow any command, permission checks switched off) in a workflow that no outsider can trigger.
-- Details and examples: [checks](./checks.md#check-agentic-actions)
+- [Details and examples](./checks.md#check-agentic-actions)
 
 ## anonymous-definition
 
@@ -246,7 +239,7 @@ A workflow has no top-level name:.
 - Default level: warn
 - Profile: pedantic
 - Fixable: yes
-- Details and examples: [checks](./checks.md#check-anonymous-definition)
+- [Details and examples](./checks.md#check-anonymous-definition)
 
 ## archived-uses
 
@@ -256,7 +249,7 @@ An action or reusable workflow is in an archived repository.
 - Default level: warn
 - Profile: only with `--online`
 - Needs network access: yes (only with `--online`)
-- Details and examples: [checks](./checks.md#check-archived-uses)
+- [Details and examples](./checks.md#check-archived-uses)
 
 ## argument-injection
 
@@ -265,7 +258,7 @@ Free text that an outsider writes is expanded into the program text or the optio
 - Group: security
 - Default level: warn
 - Profile: pedantic
-- Details and examples: [checks](./checks.md#check-argument-injection)
+- [Details and examples](./checks.md#check-argument-injection)
 
 ## artipacked
 
@@ -275,7 +268,7 @@ actions/checkout persists the GITHUB_TOKEN credential in the git config.
 - Default level: error
 - Profile: default
 - Fixable: yes
-- Details and examples: [checks](./checks.md#check-artipacked)
+- [Details and examples](./checks.md#check-artipacked)
 
 ## background-step-not-waited
 
@@ -284,7 +277,7 @@ Outputs or results of a background step are read before a wait step covers it.
 - Group: correctness
 - Default level: error
 - Profile: correctness
-- Details and examples: [checks](./checks.md#check-background-step-not-waited)
+- [Details and examples](./checks.md#check-background-step-not-waited)
 
 ## bot-conditions
 
@@ -294,7 +287,7 @@ A condition trusts a bot by github.actor, which can be spoofed.
 - Default level: error
 - Profile: default
 - Fixable: yes
-- Details and examples: [checks](./checks.md#check-bot-conditions)
+- [Details and examples](./checks.md#check-bot-conditions)
 
 ## cache-poisoning
 
@@ -304,7 +297,7 @@ A cache is restored in a release job or written by a privileged trigger. With th
 - Default level: error
 - Profile: default
 - Option `pedantic` (bool, no default): Also report the pedantic checks, which are noisier. Unset, they run under the pedantic profile.
-- Details and examples: [checks](./checks.md#check-cache-poisoning)
+- [Details and examples](./checks.md#check-cache-poisoning)
 
 ## checkout-static-credentials
 
@@ -315,7 +308,7 @@ actions/checkout is given an SSH key or a token that does not expire.
 - Profile: default
 - Option `secret-tokens` (bool, no default): Also report a token input taken from a secret other than GITHUB_TOKEN (a personal access token). The ssh-key input is always reported. Unset, it is on under the pedantic profile and off otherwise.
 - Option `allow` (strings, empty by default): Names of secrets which may be given to actions/checkout (for example a deploy key).
-- Details and examples: [checks](./checks.md#check-checkout-static-credentials)
+- [Details and examples](./checks.md#check-checkout-static-credentials)
 
 ## command-injection
 
@@ -324,7 +317,7 @@ Input that an outsider controls is run as code by a script after it was moved to
 - Group: security
 - Default level: warn
 - Profile: pedantic
-- Details and examples: [checks](./checks.md#check-command-injection)
+- [Details and examples](./checks.md#check-command-injection)
 
 ## comment-trigger-authorization
 
@@ -333,7 +326,7 @@ A job of a comment-triggered workflow is started by the text of the comment and 
 - Group: security
 - Default level: warn
 - Profile: pedantic
-- Details and examples: [checks](./checks.md#check-comment-trigger-authorization)
+- [Details and examples](./checks.md#check-comment-trigger-authorization)
 
 ## concurrency-cancels-prs
 
@@ -342,7 +335,7 @@ A concurrency group that cancels runs is shared by all pull requests, so unrelat
 - Group: correctness
 - Default level: error
 - Profile: default
-- Details and examples: [checks](./checks.md#check-concurrency-cancels-prs)
+- [Details and examples](./checks.md#check-concurrency-cancels-prs)
 
 ## concurrency-cancels-release
 
@@ -352,7 +345,7 @@ cancel-in-progress can cancel a release or a deployment which is still running.
 - Default level: error
 - Profile: default
 - Fixable: yes
-- Details and examples: [checks](./checks.md#check-concurrency-cancels-release)
+- [Details and examples](./checks.md#check-concurrency-cancels-release)
 
 ## concurrency-deadlock
 
@@ -361,7 +354,7 @@ The concurrency group of a workflow is the same as the group of a local reusable
 - Group: correctness
 - Default level: error
 - Profile: correctness
-- Details and examples: [checks](./checks.md#check-concurrency-deadlock)
+- [Details and examples](./checks.md#check-concurrency-deadlock)
 
 ## concurrency-limits
 
@@ -371,7 +364,7 @@ A workflow does not cancel superseded runs with concurrency:.
 - Default level: error
 - Profile: default
 - Fixable: yes
-- Details and examples: [checks](./checks.md#check-concurrency-limits)
+- [Details and examples](./checks.md#check-concurrency-limits)
 
 ## conflicting-action-inputs
 
@@ -380,7 +373,7 @@ Two inputs of a well-known action exclude each other.
 - Group: correctness
 - Default level: error
 - Profile: correctness
-- Details and examples: [checks](./checks.md#check-action-input-dependencies)
+- [Details and examples](./checks.md#check-action-input-dependencies)
 
 ## conflicting-runner-labels
 
@@ -389,7 +382,7 @@ The runner labels of a job conflict with each other.
 - Group: correctness
 - Default level: error
 - Profile: correctness
-- Details and examples: [checks](./checks.md#check-runner-labels)
+- [Details and examples](./checks.md#check-runner-labels)
 
 ## constant-condition
 
@@ -398,7 +391,7 @@ An if: condition is a constant expression.
 - Group: correctness
 - Default level: error
 - Profile: correctness
-- Details and examples: [checks](./checks.md#if-cond-constant)
+- [Details and examples](./checks.md#if-cond-constant)
 
 ## context-availability
 
@@ -407,7 +400,7 @@ A context or special function is used where it is not available.
 - Group: correctness
 - Default level: error
 - Profile: correctness
-- Details and examples: [checks](./checks.md#ctx-spfunc-availability)
+- [Details and examples](./checks.md#ctx-spfunc-availability)
 
 ## continue-on-error
 
@@ -417,7 +410,7 @@ A job has continue-on-error: true, so its failure does not fail the workflow.
 - Default level: info
 - Profile: pedantic
 - Option `steps` (bool, default false): Also report steps with continue-on-error: true. By default only jobs are reported.
-- Details and examples: [checks](./checks.md#check-continue-on-error)
+- [Details and examples](./checks.md#check-continue-on-error)
 
 ## cron-too-frequent
 
@@ -426,7 +419,7 @@ A scheduled job runs more often than once every 5 minutes.
 - Group: correctness
 - Default level: error
 - Profile: correctness
-- Details and examples: [checks](./checks.md#check-cron-syntax-and-timezone)
+- [Details and examples](./checks.md#check-cron-syntax-and-timezone)
 
 ## cyclic-job-needs
 
@@ -435,7 +428,7 @@ Jobs depend on each other in a cycle.
 - Group: correctness
 - Default level: error
 - Profile: correctness
-- Details and examples: [checks](./checks.md#check-job-deps)
+- [Details and examples](./checks.md#check-job-deps)
 
 ## dangerous-triggers
 
@@ -445,7 +438,7 @@ A workflow uses pull_request_target, workflow_run or issue_comment. With the opt
 - Default level: error
 - Profile: default
 - Option `pedantic` (bool, no default): Also report the pedantic checks, which are noisier. Unset, they run under the pedantic profile.
-- Details and examples: [checks](./checks.md#check-dangerous-triggers)
+- [Details and examples](./checks.md#check-dangerous-triggers)
 
 ## dependabot-cooldown
 
@@ -457,7 +450,7 @@ An update in dependabot.yml has no cooldown or a cooldown shorter than the minim
 - Fixable: yes
 - Option `days` (int, default 7): The minimum number of days "cooldown.default-days" must be. Defaults to 7.
 - Option `default-days` (int, no default): The number of days --fix writes as "cooldown.default-days". It must be at least "days". There is no default: without it findings have no fix.
-- Details and examples: [checks](./checks.md#check-dependabot-cooldown)
+- [Details and examples](./checks.md#check-dependabot-cooldown)
 
 ## dependabot-execution
 
@@ -467,7 +460,7 @@ An update in dependabot.yml allows insecure external code execution.
 - Default level: error
 - Profile: default
 - Fixable: yes
-- Details and examples: [checks](./checks.md#check-dependabot-execution)
+- [Details and examples](./checks.md#check-dependabot-execution)
 
 ## dependabot-missing-actions-update
 
@@ -476,7 +469,7 @@ dependabot.yml has no github-actions update although the repository has workflow
 - Group: policy
 - Default level: warn
 - Profile: pedantic
-- Details and examples: [checks](./checks.md#check-dependabot-missing-actions-update)
+- [Details and examples](./checks.md#check-dependabot-missing-actions-update)
 
 ## dependabot-syntax
 
@@ -485,7 +478,7 @@ The Dependabot configuration does not follow the syntax of dependabot.yml.
 - Group: correctness
 - Default level: error
 - Profile: correctness
-- Details and examples: [checks](./checks.md#check-dependabot-syntax)
+- [Details and examples](./checks.md#check-dependabot-syntax)
 
 ## deprecated-action-input
 
@@ -494,7 +487,7 @@ A deprecated input of an action is used.
 - Group: correctness
 - Default level: error
 - Profile: correctness
-- Details and examples: [checks](./checks.md#deprecated-inputs-usage)
+- [Details and examples](./checks.md#deprecated-inputs-usage)
 
 ## deprecated-commands
 
@@ -503,7 +496,7 @@ A deprecated workflow command such as ::set-output is used.
 - Group: correctness
 - Default level: error
 - Profile: correctness
-- Details and examples: [checks](./checks.md#check-deprecated-workflow-commands)
+- [Details and examples](./checks.md#check-deprecated-workflow-commands)
 
 ## deprecated-node-runtime
 
@@ -512,7 +505,7 @@ A Node.js runtime that GitHub Actions removed is declared, used or selected by a
 - Group: policy
 - Default level: warn
 - Profile: pedantic
-- Details and examples: [checks](./checks.md#check-deprecated-node-runtime)
+- [Details and examples](./checks.md#check-deprecated-node-runtime)
 
 ## deprecated-runner-label
 
@@ -521,7 +514,7 @@ A runner label is deprecated and GitHub is going to retire it on a known date, s
 - Group: policy
 - Default level: warn
 - Profile: pedantic
-- Details and examples: [checks](./checks.md#check-deprecated-runner-label)
+- [Details and examples](./checks.md#check-deprecated-runner-label)
 
 ## duplicate-job-id
 
@@ -530,7 +523,7 @@ A job ID is defined more than once.
 - Group: correctness
 - Default level: error
 - Profile: correctness
-- Details and examples: [checks](./checks.md#check-job-deps)
+- [Details and examples](./checks.md#check-job-deps)
 
 ## duplicate-job-needs
 
@@ -539,7 +532,7 @@ A job ID is listed more than once in needs.
 - Group: correctness
 - Default level: error
 - Profile: correctness
-- Details and examples: [checks](./checks.md#check-job-deps)
+- [Details and examples](./checks.md#check-job-deps)
 
 ## duplicate-key
 
@@ -548,7 +541,7 @@ A key is defined more than once in a mapping.
 - Group: correctness
 - Default level: error
 - Profile: correctness
-- Details and examples: [checks](./checks.md#check-missing-required-duplicate-keys)
+- [Details and examples](./checks.md#check-missing-required-duplicate-keys)
 
 ## duplicate-step-id
 
@@ -557,7 +550,7 @@ A step ID is not unique within its job.
 - Group: correctness
 - Default level: error
 - Profile: correctness
-- Details and examples: [checks](./checks.md#check-job-step-ids)
+- [Details and examples](./checks.md#check-job-step-ids)
 
 ## duplicate-triggers
 
@@ -566,7 +559,7 @@ push and pull_request both run the workflow for the same commit.
 - Group: policy
 - Default level: error
 - Profile: default
-- Details and examples: [checks](./checks.md#check-duplicate-triggers)
+- [Details and examples](./checks.md#check-duplicate-triggers)
 
 ## environment-file-redirect
 
@@ -576,7 +569,7 @@ A script writes to GITHUB_OUTPUT or another environment file of the runner witho
 - Default level: error
 - Profile: correctness
 - Fixable: yes
-- Details and examples: [checks](./checks.md#check-environment-file-redirect)
+- [Details and examples](./checks.md#check-environment-file-redirect)
 
 ## event-name-never-received
 
@@ -585,7 +578,7 @@ github.event_name is compared with an event that the workflow never receives, so
 - Group: correctness
 - Default level: warn
 - Profile: pedantic
-- Details and examples: [checks](./checks.md#check-event-name-never-received)
+- [Details and examples](./checks.md#check-event-name-never-received)
 
 ## excessive-permissions
 
@@ -595,7 +588,7 @@ The GITHUB_TOKEN gets write access that is broader than needed.
 - Default level: error
 - Profile: default
 - Option `require-workflow-permissions` (bool, no default): Also report a workflow which has no top-level permissions, even when its jobs set their own. Unset, it runs under the pedantic profile.
-- Details and examples: [checks](./checks.md#check-excessive-permissions)
+- [Details and examples](./checks.md#check-excessive-permissions)
 
 ## expired-ignore
 
@@ -604,7 +597,7 @@ An entry of "ignores" in the config file has expired or is about to.
 - Group: policy
 - Default level: error
 - Profile: correctness
-- Details and examples: [checks](./checks.md#check-unused-ignore)
+- [Details and examples](./checks.md#check-unused-ignore)
 
 ## expression-syntax
 
@@ -613,7 +606,7 @@ A ${{ }} expression has a syntax error.
 - Group: correctness
 - Default level: error
 - Profile: correctness
-- Details and examples: [checks](./checks.md#check-syntax-expression)
+- [Details and examples](./checks.md#check-syntax-expression)
 
 ## expression-type
 
@@ -622,7 +615,7 @@ A ${{ }} expression has a type error.
 - Group: correctness
 - Default level: error
 - Profile: correctness
-- Details and examples: [checks](./checks.md#check-type-check-expression)
+- [Details and examples](./checks.md#check-type-check-expression)
 
 ## fail-fast-action-inputs
 
@@ -632,7 +625,7 @@ An action which passes by default when nothing was produced or found is not told
 - Default level: warn
 - Profile: pedantic
 - Fixable: yes
-- Details and examples: [checks](./checks.md#check-fail-fast-action-inputs)
+- [Details and examples](./checks.md#check-fail-fast-action-inputs)
 
 ## forbidden-uses
 
@@ -645,7 +638,7 @@ An action or reusable workflow is not allowed or is denied by the configuration.
 - Option `deny` (strings, empty by default): Patterns of actions and reusable workflows which must not be used.
 - Option `images-allow` (strings, empty by default): Glob patterns of the only container images which may be used (container:, services:, docker:// and docker run in a script), e.g. "ghcr.io/my-org/*" or "node:20". Docker Hub names can leave out the registry ("node" is "docker.io/library/node").
 - Option `images-deny` (strings, empty by default): Glob patterns of container images which must not be used.
-- Details and examples: [checks](./checks.md#check-forbidden-uses)
+- [Details and examples](./checks.md#check-forbidden-uses)
 
 ## gate-job-skipped-on-failure
 
@@ -654,7 +647,7 @@ A job that reads the results of the jobs it needs is skipped when one of them fa
 - Group: correctness
 - Default level: error
 - Profile: default
-- Details and examples: [checks](./checks.md#check-gate-job-skipped-on-failure)
+- [Details and examples](./checks.md#check-gate-job-skipped-on-failure)
 
 ## gh-without-token
 
@@ -663,7 +656,7 @@ A script runs the gh command although no GH_TOKEN or GITHUB_TOKEN reaches the st
 - Group: correctness
 - Default level: error
 - Profile: correctness
-- Details and examples: [checks](./checks.md#check-gh-without-token)
+- [Details and examples](./checks.md#check-gh-without-token)
 
 ## github-app
 
@@ -672,7 +665,7 @@ A GitHub App token is issued with more access or a longer life than needed.
 - Group: security
 - Default level: error
 - Profile: default
-- Details and examples: [checks](./checks.md#check-github-app)
+- [Details and examples](./checks.md#check-github-app)
 
 ## github-env
 
@@ -681,7 +674,7 @@ Input that an outsider controls, or a value that is not a literal in a workflow 
 - Group: security
 - Default level: error
 - Profile: default
-- Details and examples: [checks](./checks.md#check-github-env)
+- [Details and examples](./checks.md#check-github-env)
 
 ## github-script-syntax
 
@@ -690,7 +683,7 @@ The script of actions/github-script has a JavaScript syntax error.
 - Group: correctness
 - Default level: error
 - Profile: correctness
-- Details and examples: [checks](./checks.md#check-github-script-syntax)
+- [Details and examples](./checks.md#check-github-script-syntax)
 
 ## hardcoded-container-credentials
 
@@ -699,7 +692,7 @@ A password for a container registry is written directly in the workflow.
 - Group: security
 - Default level: error
 - Profile: correctness
-- Details and examples: [checks](./checks.md#check-hardcoded-credentials)
+- [Details and examples](./checks.md#check-hardcoded-credentials)
 
 ## if-always-true
 
@@ -708,7 +701,7 @@ An if: condition is always true because of the characters around ${{ }}.
 - Group: correctness
 - Default level: error
 - Profile: correctness
-- Details and examples: [checks](./checks.md#if-cond-constant)
+- [Details and examples](./checks.md#if-cond-constant)
 
 ## impostor-commit
 
@@ -719,7 +712,7 @@ A hash-pinned action uses a commit which is not part of the repository's own his
 - Profile: only with `--online`
 - Needs network access: yes (only with `--online`)
 - Option `max-branches` (int, default 1000): How many branches of the action repository a commit is compared with before giving up without a verdict. Without a token each branch costs a request, so at most 100 are compared.
-- Details and examples: [checks](./checks.md#check-impostor-commit)
+- [Details and examples](./checks.md#check-impostor-commit)
 
 ## insecure-commands
 
@@ -729,7 +722,7 @@ ACTIONS_ALLOW_UNSECURE_COMMANDS enables the deprecated set-env and add-path comm
 - Default level: error
 - Profile: default
 - Fixable: yes
-- Details and examples: [checks](./checks.md#check-insecure-commands)
+- [Details and examples](./checks.md#check-insecure-commands)
 
 ## insecure-ssh-keyscan
 
@@ -738,7 +731,7 @@ ssh-keyscan output is trusted as the host key without verification.
 - Group: security
 - Default level: error
 - Profile: default
-- Details and examples: [checks](./checks.md#check-insecure-ssh-keyscan)
+- [Details and examples](./checks.md#check-insecure-ssh-keyscan)
 
 ## insecure-url-scheme
 
@@ -747,7 +740,7 @@ A download uses http, ftp or git instead of https.
 - Group: security
 - Default level: error
 - Profile: default
-- Details and examples: [checks](./checks.md#check-insecure-url-scheme)
+- [Details and examples](./checks.md#check-insecure-url-scheme)
 
 ## insufficient-permissions
 
@@ -757,7 +750,7 @@ The explicit permissions of a job do not grant what an action or command of the 
 - Default level: error
 - Profile: default
 - Option `pedantic` (bool, no default): Also report actions/checkout without "contents: read", which only a private repository needs. Unset, it runs under the pedantic profile.
-- Details and examples: [checks](./checks.md#check-insufficient-permissions)
+- [Details and examples](./checks.md#check-insufficient-permissions)
 
 ## invalid-activity-type
 
@@ -766,7 +759,7 @@ An activity type is not available for the Webhook event.
 - Group: correctness
 - Default level: error
 - Profile: correctness
-- Details and examples: [checks](./checks.md#check-webhook-events)
+- [Details and examples](./checks.md#check-webhook-events)
 
 ## invalid-cron
 
@@ -775,7 +768,7 @@ A cron schedule has an invalid format.
 - Group: correctness
 - Default level: error
 - Profile: correctness
-- Details and examples: [checks](./checks.md#check-cron-syntax-and-timezone)
+- [Details and examples](./checks.md#check-cron-syntax-and-timezone)
 
 ## invalid-env-var-name
 
@@ -784,7 +777,7 @@ An environment variable name contains characters which are not allowed.
 - Group: correctness
 - Default level: error
 - Profile: correctness
-- Details and examples: [checks](./checks.md#check-env-var-names)
+- [Details and examples](./checks.md#check-env-var-names)
 
 ## invalid-event-config
 
@@ -793,7 +786,7 @@ An event is configured with options it does not support.
 - Group: correctness
 - Default level: error
 - Profile: correctness
-- Details and examples: [checks](./checks.md#check-webhook-events)
+- [Details and examples](./checks.md#check-webhook-events)
 
 ## invalid-event-filter
 
@@ -802,7 +795,7 @@ An event filter is not available for the event or conflicts with another filter.
 - Group: correctness
 - Default level: error
 - Profile: correctness
-- Details and examples: [checks](./checks.md#check-webhook-events)
+- [Details and examples](./checks.md#check-webhook-events)
 
 ## invalid-function-call
 
@@ -811,7 +804,7 @@ A built-in function is called with wrong arguments.
 - Group: correctness
 - Default level: error
 - Profile: correctness
-- Details and examples: [checks](./checks.md#check-contexts-and-builtin-func)
+- [Details and examples](./checks.md#check-contexts-and-builtin-func)
 
 ## invalid-glob
 
@@ -820,7 +813,7 @@ A glob filter pattern is invalid.
 - Group: correctness
 - Default level: error
 - Profile: correctness
-- Details and examples: [checks](./checks.md#check-glob-pattern)
+- [Details and examples](./checks.md#check-glob-pattern)
 
 ## invalid-id
 
@@ -829,7 +822,7 @@ A job or step ID does not follow the naming convention.
 - Group: correctness
 - Default level: error
 - Profile: correctness
-- Details and examples: [checks](./checks.md#id-naming-convention)
+- [Details and examples](./checks.md#id-naming-convention)
 
 ## invalid-ignore-comment
 
@@ -838,7 +831,7 @@ An inline ignore comment is invalid.
 - Group: correctness
 - Default level: error
 - Profile: correctness
-- Details and examples: [checks](./checks.md#check-unused-ignore)
+- [Details and examples](./checks.md#check-unused-ignore)
 
 ## invalid-label-pattern
 
@@ -847,7 +840,7 @@ A runner label pattern in the configuration is not a valid glob.
 - Group: correctness
 - Default level: error
 - Profile: correctness
-- Details and examples: [checks](./checks.md#check-runner-labels)
+- [Details and examples](./checks.md#check-runner-labels)
 
 ## invalid-local-action
 
@@ -856,7 +849,7 @@ A local action cannot be loaded or its metadata is invalid.
 - Group: correctness
 - Default level: error
 - Profile: correctness
-- Details and examples: [checks](./checks.md#action-metadata-syntax)
+- [Details and examples](./checks.md#action-metadata-syntax)
 
 ## invalid-local-workflow
 
@@ -865,7 +858,7 @@ A local reusable workflow cannot be loaded or is invalid.
 - Group: correctness
 - Default level: error
 - Profile: correctness
-- Details and examples: [checks](./checks.md#check-reusable-workflows)
+- [Details and examples](./checks.md#check-reusable-workflows)
 
 ## invalid-parallel-step
 
@@ -874,7 +867,7 @@ A step is not allowed inside a parallel group or refers to a wrong step.
 - Group: correctness
 - Default level: error
 - Profile: correctness
-- Details and examples: [checks](./checks.md#check-parallel-step-refs)
+- [Details and examples](./checks.md#check-parallel-step-refs)
 
 ## invalid-permissions
 
@@ -883,7 +876,7 @@ A permission scope or its value is invalid.
 - Group: correctness
 - Default level: error
 - Profile: correctness
-- Details and examples: [checks](./checks.md#check-permissions)
+- [Details and examples](./checks.md#check-permissions)
 
 ## invalid-shell-name
 
@@ -892,7 +885,7 @@ A shell name is not available on the runner.
 - Group: correctness
 - Default level: error
 - Profile: correctness
-- Details and examples: [checks](./checks.md#check-shell-names)
+- [Details and examples](./checks.md#check-shell-names)
 
 ## invalid-timezone
 
@@ -901,7 +894,7 @@ A timezone of a schedule is not a valid IANA timezone name.
 - Group: correctness
 - Default level: error
 - Profile: correctness
-- Details and examples: [checks](./checks.md#check-cron-syntax-and-timezone)
+- [Details and examples](./checks.md#check-cron-syntax-and-timezone)
 
 ## invalid-uses
 
@@ -910,7 +903,7 @@ A uses: value does not follow the format of an action or a Docker image.
 - Group: correctness
 - Default level: error
 - Profile: correctness
-- Details and examples: [checks](./checks.md#check-action-format)
+- [Details and examples](./checks.md#check-action-format)
 
 ## invalid-workflow-call
 
@@ -919,7 +912,7 @@ A reusable workflow call does not follow the format of a reusable workflow.
 - Group: correctness
 - Default level: error
 - Profile: correctness
-- Details and examples: [checks](./checks.md#check-reusable-workflows)
+- [Details and examples](./checks.md#check-reusable-workflows)
 
 ## invalid-workflow-call-input
 
@@ -928,7 +921,7 @@ An input of the workflow_call event is invalid.
 - Group: correctness
 - Default level: error
 - Profile: correctness
-- Details and examples: [checks](./checks.md#check-reusable-workflows)
+- [Details and examples](./checks.md#check-reusable-workflows)
 
 ## invalid-workflow-dispatch-input
 
@@ -937,7 +930,7 @@ An input of the workflow_dispatch event is invalid.
 - Group: correctness
 - Default level: error
 - Profile: correctness
-- Details and examples: [checks](./checks.md#check-workflow-dispatch-events)
+- [Details and examples](./checks.md#check-workflow-dispatch-events)
 
 ## invisible-characters
 
@@ -947,7 +940,7 @@ A file contains an invisible or bidirectional control character which hides what
 - Default level: error
 - Profile: default
 - Fixable: yes
-- Details and examples: [checks](./checks.md#check-invisible-characters)
+- [Details and examples](./checks.md#check-invisible-characters)
 
 ## known-vulnerable-actions
 
@@ -958,7 +951,7 @@ An action version is affected by a published GitHub security advisory.
 - Profile: only with `--online`
 - Needs network access: yes (only with `--online`)
 - Option `allow` (strings, empty by default): Advisory IDs (GHSA-...) which are not reported.
-- Details and examples: [checks](./checks.md#check-known-vulnerable-actions)
+- [Details and examples](./checks.md#check-known-vulnerable-actions)
 
 ## local-action-checkout
 
@@ -967,7 +960,7 @@ A local action is used before any step checks out the repository.
 - Group: correctness
 - Default level: error
 - Profile: correctness
-- Details and examples: [checks](./checks.md#check-local-action-checkout)
+- [Details and examples](./checks.md#check-local-action-checkout)
 
 ## malformed-expression-delimiters
 
@@ -978,7 +971,7 @@ Text such as ${ github.ref }, $ {{ x }} or {{ github.sha }} is meant to be an ex
 - Profile: correctness
 - Fixable: yes
 - Option `pedantic` (bool, no default): Also report the pedantic checks, which are noisier. Unset, they run under the pedantic profile.
-- Details and examples: [checks](./checks.md#check-malformed-expression-delimiters)
+- [Details and examples](./checks.md#check-malformed-expression-delimiters)
 
 ## matrix-duplicate-value
 
@@ -987,7 +980,7 @@ A matrix has a duplicate value.
 - Group: correctness
 - Default level: error
 - Profile: correctness
-- Details and examples: [checks](./checks.md#check-matrix-values)
+- [Details and examples](./checks.md#check-matrix-values)
 
 ## matrix-invalid-exclude
 
@@ -996,7 +989,7 @@ An exclude entry of a matrix does not match the matrix.
 - Group: correctness
 - Default level: error
 - Profile: correctness
-- Details and examples: [checks](./checks.md#check-matrix-values)
+- [Details and examples](./checks.md#check-matrix-values)
 
 ## max-run-lines
 
@@ -1006,7 +999,7 @@ A run: script has more lines than allowed.
 - Default level: error
 - Profile: pedantic
 - Option `max` (int, default 100): The maximum number of non-blank lines of a run: script.
-- Details and examples: [checks](./checks.md#check-run-policy)
+- [Details and examples](./checks.md#check-run-policy)
 
 ## merge-key
 
@@ -1015,7 +1008,7 @@ The YAML merge key << is used, which GitHub Actions does not support.
 - Group: correctness
 - Default level: error
 - Profile: correctness
-- Details and examples: [checks](./checks.md#yaml-anchors)
+- [Details and examples](./checks.md#yaml-anchors)
 
 ## misfeature
 
@@ -1025,7 +1018,7 @@ A misfeature of GitHub Actions is used: the pip-install input of setup-python or
 - Default level: error
 - Profile: default
 - Option `pedantic` (bool, no default): Also report the pedantic checks, which are noisier. Unset, they run under the pedantic profile.
-- Details and examples: [checks](./checks.md#check-misfeature)
+- [Details and examples](./checks.md#check-misfeature)
 
 ## missing-action-input
 
@@ -1034,7 +1027,7 @@ A required input of an action is not specified.
 - Group: correctness
 - Default level: error
 - Profile: correctness
-- Details and examples: [checks](./checks.md#check-local-action-inputs)
+- [Details and examples](./checks.md#check-local-action-inputs)
 
 ## missing-permissions
 
@@ -1044,7 +1037,7 @@ Neither the workflow nor the job sets permissions:.
 - Default level: error
 - Profile: default
 - Fixable: yes
-- Details and examples: [checks](./checks.md#permissions)
+- [Details and examples](./checks.md#permissions)
 
 ## missing-timeout
 
@@ -1056,7 +1049,7 @@ A job does not set timeout-minutes.
 - Fixable: yes
 - Option `default-minutes` (int, no default): The timeout-minutes which --fix adds to a job. There is no default: the rule has no fix unless this is set. It is lowered to the max of timeout-too-long when that is smaller, and to 15 on a job that runs only on ubuntu-slim.
 - Option `accept-step-timeouts` (bool, default false): Do not report a job without timeout-minutes when every one of its steps sets timeout-minutes (ghalint's exception). Off by default: the timeout of a step does not cover setting up the job, the post steps of actions or completing the job.
-- Details and examples: [checks](./checks.md#check-timeout-minutes)
+- [Details and examples](./checks.md#check-timeout-minutes)
 
 ## missing-workflow-input
 
@@ -1065,7 +1058,7 @@ A required input of a reusable workflow is not specified.
 - Group: correctness
 - Default level: error
 - Profile: correctness
-- Details and examples: [checks](./checks.md#check-reusable-workflows)
+- [Details and examples](./checks.md#check-reusable-workflows)
 
 ## missing-workflow-secret
 
@@ -1074,7 +1067,7 @@ A required secret of a reusable workflow is not passed.
 - Group: correctness
 - Default level: error
 - Profile: correctness
-- Details and examples: [checks](./checks.md#check-reusable-workflows)
+- [Details and examples](./checks.md#check-reusable-workflows)
 
 ## multiline-plain-run
 
@@ -1084,7 +1077,7 @@ A run: is written over several lines without |, so YAML folds the lines into one
 - Default level: error
 - Profile: correctness
 - Fixable: yes
-- Details and examples: [checks](./checks.md#check-multiline-plain-run)
+- [Details and examples](./checks.md#check-multiline-plain-run)
 
 ## mutable-runner-label
 
@@ -1095,7 +1088,7 @@ A runner label is an alias that GitHub moves to newer images, such as ubuntu-lat
 - Profile: pedantic
 - Fixable: yes
 - Option `pin` (string-map, no default): Maps a moving label to the fixed label that --fix writes in its place, e.g. ubuntu-latest: ubuntu-24.04. There is no default: without an entry the finding has no fix.
-- Details and examples: [checks](./checks.md#check-mutable-runner-label)
+- [Details and examples](./checks.md#check-mutable-runner-label)
 
 ## obfuscation
 
@@ -1105,7 +1098,7 @@ A path at uses: or an expression is written in an obfuscated way.
 - Default level: error
 - Profile: default
 - Fixable: yes
-- Details and examples: [checks](./checks.md#check-obfuscation)
+- [Details and examples](./checks.md#check-obfuscation)
 
 ## outdated-action-runner
 
@@ -1114,7 +1107,7 @@ An action runs on a runtime which GitHub Actions no longer supports.
 - Group: correctness
 - Default level: error
 - Profile: correctness
-- Details and examples: [checks](./checks.md#detect-outdated-popular-actions)
+- [Details and examples](./checks.md#detect-outdated-popular-actions)
 
 ## output-clobbering
 
@@ -1123,7 +1116,7 @@ Input that an outsider controls is written to GITHUB_OUTPUT as a record, so a li
 - Group: security
 - Default level: warn
 - Profile: pedantic
-- Details and examples: [checks](./checks.md#check-output-clobbering)
+- [Details and examples](./checks.md#check-output-clobbering)
 
 ## overprovisioned-secrets
 
@@ -1132,7 +1125,7 @@ An expression uses the whole secrets context.
 - Group: security
 - Default level: error
 - Profile: default
-- Details and examples: [checks](./checks.md#check-overprovisioned-secrets)
+- [Details and examples](./checks.md#check-overprovisioned-secrets)
 
 ## pipeline-without-pipefail
 
@@ -1142,7 +1135,7 @@ A failing command in a pipeline of a run: script is hidden because the shell doe
 - Default level: error
 - Profile: default
 - Fixable: yes
-- Details and examples: [checks](./checks.md#check-pipeline-without-pipefail)
+- [Details and examples](./checks.md#check-pipeline-without-pipefail)
 
 ## pyflakes
 
@@ -1151,7 +1144,7 @@ pyflakes reported an issue in a Python script.
 - Group: correctness
 - Default level: error
 - Profile: correctness
-- Details and examples: [checks](./checks.md#check-pyflakes-integ)
+- [Details and examples](./checks.md#check-pyflakes-integ)
 
 ## recursive-alias
 
@@ -1160,7 +1153,7 @@ A YAML alias refers to itself.
 - Group: correctness
 - Default level: error
 - Profile: correctness
-- Details and examples: [checks](./checks.md#yaml-anchors)
+- [Details and examples](./checks.md#yaml-anchors)
 
 ## ref-confusion
 
@@ -1170,7 +1163,7 @@ The ref of an action is both a branch and a tag of its repository.
 - Default level: warn
 - Profile: only with `--online`
 - Needs network access: yes (only with `--online`)
-- Details and examples: [checks](./checks.md#check-ref-confusion)
+- [Details and examples](./checks.md#check-ref-confusion)
 
 ## ref-version-mismatch
 
@@ -1181,7 +1174,7 @@ The version comment of a hash-pinned action does not match the pinned commit.
 - Profile: only with `--online`
 - Needs network access: yes (only with `--online`)
 - Fixable: yes
-- Details and examples: [checks](./checks.md#check-ref-version-mismatch)
+- [Details and examples](./checks.md#check-ref-version-mismatch)
 
 ## repojacking
 
@@ -1191,7 +1184,7 @@ An action or reusable workflow has an owner whose name anyone can register.
 - Default level: warn
 - Profile: only with `--online`
 - Needs network access: yes (only with `--online`)
-- Details and examples: [checks](./checks.md#check-repojacking)
+- [Details and examples](./checks.md#check-repojacking)
 
 ## require-expression-wrapping
 
@@ -1200,7 +1193,7 @@ An if: condition is not wrapped in ${{ }}.
 - Group: style
 - Default level: error
 - Profile: pedantic
-- Details and examples: [checks](./checks.md#check-require-expression-wrapping)
+- [Details and examples](./checks.md#check-require-expression-wrapping)
 
 ## require-shell
 
@@ -1209,7 +1202,7 @@ A run: step does not set the shell explicitly.
 - Group: style
 - Default level: error
 - Profile: pedantic
-- Details and examples: [checks](./checks.md#check-run-policy)
+- [Details and examples](./checks.md#check-run-policy)
 
 ## required-actions
 
@@ -1226,7 +1219,7 @@ A reusable workflow is called with secrets: inherit.
 - Group: security
 - Default level: error
 - Profile: default
-- Details and examples: [checks](./checks.md#check-secrets-inherit)
+- [Details and examples](./checks.md#check-secrets-inherit)
 
 ## secrets-outside-env
 
@@ -1236,7 +1229,7 @@ A job uses a secret but has no environment, or passes one to a reusable workflow
 - Default level: warn
 - Profile: pedantic
 - Option `allow` (strings, empty by default): Names of secrets which may be used outside of an environment. GITHUB_TOKEN is always allowed.
-- Details and examples: [checks](./checks.md#check-secrets-outside-env)
+- [Details and examples](./checks.md#check-secrets-outside-env)
 
 ## self-hosted-runner
 
@@ -1247,7 +1240,7 @@ A job runs on a self-hosted runner: the label self-hosted, a label of self-hoste
 - Profile: pedantic
 - Option `allow` (strings, empty by default): Glob patterns of the labels and the runner groups of runners which are ephemeral or trusted. A job with one of them is not reported.
 - Option `pull-request-only` (bool, default false): Report only the jobs of workflows that a pull request event can start, which is the case that poutine reports.
-- Details and examples: [checks](./checks.md#check-self-hosted-runner)
+- [Details and examples](./checks.md#check-self-hosted-runner)
 
 ## self-repository
 
@@ -1257,7 +1250,7 @@ A local action or workflow is referenced as ./path instead of $/path.
 - Default level: info
 - Profile: pedantic
 - Fixable: yes
-- Details and examples: [checks](./checks.md#check-self-repository)
+- [Details and examples](./checks.md#check-self-repository)
 
 ## shellcheck
 
@@ -1266,7 +1259,7 @@ shellcheck reported an issue in a shell script.
 - Group: correctness
 - Default level: error
 - Profile: correctness
-- Details and examples: [checks](./checks.md#check-shellcheck-integ)
+- [Details and examples](./checks.md#check-shellcheck-integ)
 
 ## stale-action-refs
 
@@ -1276,7 +1269,7 @@ A hash-pinned action uses a commit which no tag of the repository points to.
 - Default level: info
 - Profile: only with `--online`
 - Needs network access: yes (only with `--online`)
-- Details and examples: [checks](./checks.md#check-stale-action-refs)
+- [Details and examples](./checks.md#check-stale-action-refs)
 
 ## superfluous-actions
 
@@ -1286,7 +1279,7 @@ An action does what a tool of the runner image does as well, such as gh release 
 - Default level: error
 - Profile: default
 - Option `pedantic` (bool, no default): Also report the pedantic checks, which are noisier. Unset, they run under the pedantic profile.
-- Details and examples: [checks](./checks.md#check-superfluous-actions)
+- [Details and examples](./checks.md#check-superfluous-actions)
 
 ## template-injection
 
@@ -1297,7 +1290,7 @@ A potentially untrusted input is expanded in a script, a container option or the
 - Profile: correctness
 - Fixable: yes
 - Option `pedantic` (bool, no default): Also report the pedantic checks, which are noisier. Unset, they run under the pedantic profile.
-- Details and examples: [checks](./checks.md#untrusted-inputs)
+- [Details and examples](./checks.md#untrusted-inputs)
 
 ## timeout-too-long
 
@@ -1307,7 +1300,7 @@ timeout-minutes of a job exceeds the configured maximum.
 - Default level: error
 - Profile: only when configured
 - Option `max` (number, no default): The maximum allowed timeout-minutes. The rule does nothing without it.
-- Details and examples: [checks](./checks.md#check-timeout-minutes)
+- [Details and examples](./checks.md#check-timeout-minutes)
 
 ## typosquat-uses
 
@@ -1317,7 +1310,7 @@ An action is one typo away from a popular action of another owner.
 - Default level: error
 - Profile: default
 - Option `allow` (strings, empty by default): Slugs (owner/repo) of actions which are never reported, e.g. a legitimate fork.
-- Details and examples: [checks](./checks.md#check-typosquat-uses)
+- [Details and examples](./checks.md#check-typosquat-uses)
 
 ## ubuntu-slim-limits
 
@@ -1327,7 +1320,7 @@ A job on ubuntu-slim has a container, services or a Docker container action, whi
 - Default level: error
 - Profile: default
 - Option `pedantic` (bool, no default): Also report the pedantic checks, which are noisier. Unset, they run under the pedantic profile.
-- Details and examples: [checks](./checks.md#check-ubuntu-slim-limits)
+- [Details and examples](./checks.md#check-ubuntu-slim-limits)
 
 ## undefined-function
 
@@ -1336,7 +1329,7 @@ An undefined function is called in an expression.
 - Group: correctness
 - Default level: error
 - Profile: correctness
-- Details and examples: [checks](./checks.md#check-contexts-and-builtin-func)
+- [Details and examples](./checks.md#check-contexts-and-builtin-func)
 
 ## undefined-job-needs
 
@@ -1345,7 +1338,7 @@ A job needs a job which does not exist.
 - Group: correctness
 - Default level: error
 - Profile: correctness
-- Details and examples: [checks](./checks.md#check-job-deps)
+- [Details and examples](./checks.md#check-job-deps)
 
 ## undefined-property
 
@@ -1355,7 +1348,7 @@ An undefined variable or property is accessed in an expression.
 - Default level: error
 - Profile: correctness
 - Option `strict-event-payloads` (bool, no default): Report a property of github.event which the events of the workflow do not have, also when another event has it. Unset, a property is reported only when no webhook event has it, and the pedantic profile turns the option on.
-- Details and examples: [checks](./checks.md#check-contexts-and-builtin-func)
+- [Details and examples](./checks.md#check-contexts-and-builtin-func)
 
 ## undocumented-permissions
 
@@ -1365,7 +1358,7 @@ A permission scope above read has no comment explaining it.
 - Default level: info
 - Profile: pedantic
 - Option `include-read` (bool, no default): Also require a comment for scopes granted with read, except contents: read. Unset, it runs under the pedantic profile.
-- Details and examples: [checks](./checks.md#check-undocumented-permissions)
+- [Details and examples](./checks.md#check-undocumented-permissions)
 
 ## unknown-action-input
 
@@ -1374,7 +1367,7 @@ An input which the action does not define is specified.
 - Group: correctness
 - Default level: error
 - Profile: correctness
-- Details and examples: [checks](./checks.md#check-local-action-inputs)
+- [Details and examples](./checks.md#check-local-action-inputs)
 
 ## unknown-event
 
@@ -1383,7 +1376,7 @@ An unknown Webhook event is used.
 - Group: correctness
 - Default level: error
 - Profile: correctness
-- Details and examples: [checks](./checks.md#check-webhook-events)
+- [Details and examples](./checks.md#check-webhook-events)
 
 ## unknown-runner-label
 
@@ -1392,7 +1385,7 @@ A runner label is unknown, or is one that GitHub has retired.
 - Group: correctness
 - Default level: error
 - Profile: correctness
-- Details and examples: [checks](./checks.md#check-runner-labels)
+- [Details and examples](./checks.md#check-runner-labels)
 
 ## unknown-workflow-input
 
@@ -1401,7 +1394,7 @@ An input which the reusable workflow does not define is specified.
 - Group: correctness
 - Default level: error
 - Profile: correctness
-- Details and examples: [checks](./checks.md#check-reusable-workflows)
+- [Details and examples](./checks.md#check-reusable-workflows)
 
 ## unknown-workflow-secret
 
@@ -1410,7 +1403,7 @@ A secret which the reusable workflow does not define is passed.
 - Group: correctness
 - Default level: error
 - Profile: correctness
-- Details and examples: [checks](./checks.md#check-reusable-workflows)
+- [Details and examples](./checks.md#check-reusable-workflows)
 
 ## unlocked-install
 
@@ -1421,7 +1414,7 @@ cargo install runs without --locked, or npm, yarn or pnpm install without freezi
 - Profile: default
 - Fixable: yes
 - Option `pedantic` (bool, no default): Also report the pedantic checks, which are noisier. Unset, they run under the pedantic profile.
-- Details and examples: [checks](./checks.md#check-unlocked-install)
+- [Details and examples](./checks.md#check-unlocked-install)
 
 ## unmatched-paths-filter
 
@@ -1430,7 +1423,7 @@ An entry of paths or paths-ignore matches no file of the repository.
 - Group: correctness
 - Default level: warn
 - Profile: pedantic
-- Details and examples: [checks](./checks.md#check-unmatched-paths-filter)
+- [Details and examples](./checks.md#check-unmatched-paths-filter)
 
 ## unpinnable-action
 
@@ -1441,7 +1434,7 @@ A hash-pinned action pulls in an action or a Docker image by a tag or a branch, 
 - Profile: only with `--online`
 - Needs network access: yes (only with `--online`)
 - Option `pedantic` (bool, no default): Also report the pedantic checks, which are noisier. Unset, they run under the pedantic profile.
-- Details and examples: [checks](./checks.md#check-unpinnable-action)
+- [Details and examples](./checks.md#check-unpinnable-action)
 
 ## unpinned-images
 
@@ -1454,7 +1447,7 @@ A container or service image is not pinned by a digest.
 - Option `require-digest` (bool, default true): Report images pinned by a tag other than latest too. Turn it off to report only images without a tag or with the latest tag.
 - Option `policies` (string-map, default empty): How strongly to pin the images matching a pattern: hash-pin (a digest, the default of require-digest), tag-pin (a tag other than latest, or a digest) or any. The most specific pattern that matches wins over require-digest: more literal characters before the first *, in the pattern with the registry written out, then fewer *, then a tag, then the longer pattern. Patterns are globs of the image name, where * matches any characters: "*", "ghcr.io/my-org/*", "registry.example.com/team/tool" or "node:20". The registry of Docker Hub can be left out ("node" is "docker.io/library/node").
 - Option `pedantic` (bool, no default): Also report the pedantic checks, which are noisier. Unset, they run under the pedantic profile.
-- Details and examples: [checks](./checks.md#check-unpinned-images)
+- [Details and examples](./checks.md#check-unpinned-images)
 
 ## unpinned-tools
 
@@ -1464,7 +1457,7 @@ An action installs the newest version of its tool because no version is set or i
 - Default level: error
 - Profile: default
 - Option `pedantic` (bool, no default): Also report the pedantic checks, which are noisier. Unset, they run under the pedantic profile.
-- Details and examples: [checks](./checks.md#check-unpinned-tools)
+- [Details and examples](./checks.md#check-unpinned-tools)
 
 ## unpinned-uses
 
@@ -1477,7 +1470,7 @@ An action, reusable workflow or Docker image is not pinned to a commit SHA or di
 - Option `policies` (string-map, default empty): How strongly to pin the actions matching a pattern: hash-pin (full commit SHA, the default for everything), ref-pin (any tag, branch or SHA), immutable-release (a full commit SHA, or with --online the tag of an immutable GitHub release) or any. The most specific pattern wins. Patterns are "*", "owner/*", "owner/repo" and "owner/repo/path". Docker images follow the "*" policy.
 - Option `actions-lock` (bool, default true): Accept an action which is not pinned to a commit in a workflow when the Actions lock file of the repository (.github/workflows/actions.lock) pins it to a full commit for that workflow. The lock file is a technical preview of GitHub whose format may change. Set it to false to ignore the lock file.
 - Option `short-pin-comment` (bool, default false): Make `--online --fix` name the tag as written in the comment of a pin (`# v4`), not the most specific version tag of the commit (`# v4.2.4`).
-- Details and examples: [checks](./checks.md#check-action-format)
+- [Details and examples](./checks.md#check-action-format)
 
 ## unredacted-secrets
 
@@ -1487,7 +1480,7 @@ A secret is parsed with fromJSON(), so the fields of it are not redacted in logs
 - Default level: error
 - Profile: default
 - Option `pedantic` (bool, no default): Also report the pedantic checks, which are noisier. Unset, they run under the pedantic profile.
-- Details and examples: [checks](./checks.md#check-unredacted-secrets)
+- [Details and examples](./checks.md#check-unredacted-secrets)
 
 ## unsound-contains
 
@@ -1496,7 +1489,7 @@ A condition uses contains() on a string literal, which also matches substrings.
 - Group: security
 - Default level: error
 - Profile: default
-- Details and examples: [checks](./checks.md#check-unsound-contains)
+- [Details and examples](./checks.md#check-unsound-contains)
 
 ## unsound-prefix-match
 
@@ -1506,7 +1499,7 @@ An account, an owner or a repository is identified by a prefix, a suffix or a pa
 - Default level: error
 - Profile: default
 - Option `refs` (bool, default false): Also check the names of branches and tags (github.ref, github.head_ref, ...). A prefix test of a ref is often meant, so this is noisy.
-- Details and examples: [checks](./checks.md#check-unsound-prefix-match)
+- [Details and examples](./checks.md#check-unsound-prefix-match)
 
 ## unsound-ternary
 
@@ -1515,7 +1508,7 @@ The a && b || c idiom has a falsy b so it always evaluates to c.
 - Group: correctness
 - Default level: error
 - Profile: correctness
-- Details and examples: [checks](./checks.md#check-falsy-ternary)
+- [Details and examples](./checks.md#check-falsy-ternary)
 
 ## untrusted-artifact
 
@@ -1525,7 +1518,7 @@ A workflow_run workflow uses an artifact of the triggering run without validatin
 - Default level: error
 - Profile: default
 - Option `pedantic` (bool, no default): Also report the pedantic checks, which are noisier. Unset, they run under the pedantic profile.
-- Details and examples: [checks](./checks.md#check-untrusted-artifact)
+- [Details and examples](./checks.md#check-untrusted-artifact)
 
 ## untrusted-checkout
 
@@ -1536,7 +1529,7 @@ A pull_request_target, workflow_run or issue_comment workflow checks out the cod
 - Profile: default
 - Option `pedantic` (bool, no default): Also report the pedantic checks, which are noisier. Unset, they run under the pedantic profile.
 - Option `any-checkout` (bool, no default): Also report a checkout of the code of a pull request in a privileged workflow when no later step visibly runs it, like Scorecard and Semgrep do. Unset, it is true under the pedantic profile.
-- Details and examples: [checks](./checks.md#check-untrusted-checkout)
+- [Details and examples](./checks.md#check-untrusted-checkout)
 
 ## unused-anchor
 
@@ -1545,7 +1538,7 @@ A YAML anchor is defined but never used.
 - Group: correctness
 - Default level: error
 - Profile: correctness
-- Details and examples: [checks](./checks.md#yaml-anchors)
+- [Details and examples](./checks.md#yaml-anchors)
 
 ## unused-baseline-entry
 
@@ -1564,7 +1557,7 @@ An ignore comment or an entry of "ignores" in the config file did not suppress a
 - Profile: pedantic
 - Fixable: yes
 - Option `zizmor` (bool, default false): Also report "# zizmor: ignore[...]" comments which suppressed nothing. Turn it on after zizmor is gone.
-- Details and examples: [checks](./checks.md#check-unused-ignore)
+- [Details and examples](./checks.md#check-unused-ignore)
 
 ## unused-job-output
 
@@ -1573,7 +1566,7 @@ An output of a job is never read by another job or by a workflow_call output.
 - Group: policy
 - Default level: error
 - Profile: default
-- Details and examples: [checks](./checks.md#check-unused-job-output)
+- [Details and examples](./checks.md#check-unused-job-output)
 
 ## unused-needs
 
@@ -1582,7 +1575,7 @@ A needs entry is neither read by the job nor needed for the order of jobs.
 - Group: style
 - Default level: info
 - Profile: pedantic
-- Details and examples: [checks](./checks.md#check-unused-needs)
+- [Details and examples](./checks.md#check-unused-needs)
 
 ## unused-workflow-input
 
@@ -1591,7 +1584,7 @@ An input of workflow_dispatch or workflow_call is never used.
 - Group: policy
 - Default level: warn
 - Profile: pedantic
-- Details and examples: [checks](./checks.md#check-unused-workflow-input)
+- [Details and examples](./checks.md#check-unused-workflow-input)
 
 ## unused-workflow-secret
 
@@ -1600,7 +1593,7 @@ A secret of workflow_call is never used.
 - Group: policy
 - Default level: warn
 - Profile: pedantic
-- Details and examples: [checks](./checks.md#check-unused-workflow-secret)
+- [Details and examples](./checks.md#check-unused-workflow-secret)
 
 ## unverified-download
 
@@ -1610,7 +1603,7 @@ A script runs what it downloads without verifying it.
 - Default level: error
 - Profile: default
 - Option `allow` (strings, empty by default): Hosts, or URL prefixes (entries with "://"), whose downloads are accepted without verification.
-- Details and examples: [checks](./checks.md#check-unverified-download)
+- [Details and examples](./checks.md#check-unverified-download)
 
 ## use-trusted-publishing
 
@@ -1620,7 +1613,7 @@ A package is published with a long-lived credential although the registry suppor
 - Default level: error
 - Profile: default
 - Option `pedantic` (bool, no default): Also report the pedantic checks, which are noisier. Unset, they run under the pedantic profile.
-- Details and examples: [checks](./checks.md#check-use-trusted-publishing)
+- [Details and examples](./checks.md#check-use-trusted-publishing)
 
 ## workflow-call-permissions
 
@@ -1629,7 +1622,7 @@ A caller job grants fewer permissions than a reusable workflow requires.
 - Group: correctness
 - Default level: error
 - Profile: correctness
-- Details and examples: [checks](./checks.md#check-reusable-workflows)
+- [Details and examples](./checks.md#check-reusable-workflows)
 
 ## workflow-input-type
 
@@ -1638,7 +1631,7 @@ The type of a value passed to a reusable workflow does not match its input.
 - Group: correctness
 - Default level: error
 - Profile: correctness
-- Details and examples: [checks](./checks.md#check-reusable-workflows)
+- [Details and examples](./checks.md#check-reusable-workflows)
 
 ## workflow-run-names
 
@@ -1647,7 +1640,7 @@ A workflow_run event refers to a workflow which does not exist in the repository
 - Group: correctness
 - Default level: error
 - Profile: correctness
-- Details and examples: [checks](./checks.md#check-workflow-run-names)
+- [Details and examples](./checks.md#check-workflow-run-names)
 
 ## workflow-secret-scope
 
@@ -1657,7 +1650,7 @@ A secret is assigned to the workflow-level env and reaches multiple jobs. With t
 - Default level: warn
 - Profile: pedantic
 - Option `job-level` (bool, default false): Also report a secret assigned to the env of a job with two or more steps, which reaches those that do not set the variable themselves.
-- Details and examples: [checks](./checks.md#check-workflow-secret-scope)
+- [Details and examples](./checks.md#check-workflow-secret-scope)
 
 ## workflow-syntax
 
@@ -1666,7 +1659,7 @@ The workflow does not follow the syntax of GitHub Actions workflows.
 - Group: correctness
 - Default level: error
 - Profile: correctness
-- Details and examples: [checks](./checks.md#check-unexpected-keys)
+- [Details and examples](./checks.md#check-unexpected-keys)
 
 ## yaml-syntax
 
@@ -1678,10 +1671,7 @@ The file is not valid YAML.
 
 ## Retired rule IDs
 
-An audit is one rule with one ID. These IDs existed while 2.0 was in development, before the first release, and were merged into
-the rule that reports their findings now. `--ignore`, the `ignore` lists of `paths` and the `# jactionlint ignore=` comments still
-take them: such an ignore matches only the findings that had the old ID, and jactionlint warns that the ID is deprecated.
-`rules`, `ignores`, `fix.rules` and `--fix-rules` do not take them.
+These IDs existed while 2.0 was in development, before the first release, and were merged into the rule that reports their findings now. `--ignore`, the `ignore` lists of `paths` and the `# jactionlint ignore=` comments still accept them: such an ignore matches only the findings that had the old ID, and jactionlint warns that the ID is deprecated. `rules`, `ignores`, `fix.rules` and `--fix-rules` do not accept them.
 
 | Retired ID | Rule | Findings are on with |
 | --- | --- | --- |
