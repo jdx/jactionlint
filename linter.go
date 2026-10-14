@@ -153,7 +153,8 @@ type LinterOptions struct {
 	// impostor-commit and known-vulnerable-actions, and the pinning fix of unpinned-uses, see Error.Fix).
 	// Nothing reaches the network while the online checks are off. They are off unless this is true, the
 	// configuration sets "online: true", or OnlineOptions.Mode (or the "mode" of "online-options") is
-	// "cache" or "strict". The token is
+	// "cache" or "strict". A mode in the configuration does not turn them on when it also says
+	// "online: false"; OnlineOptions.Mode of the options does. The token is
 	// read from $GITHUB_TOKEN or $GH_TOKEN; without one the API allows very few requests. When the
 	// API cannot be used (rate limit, no network) the online rules stop with one warning. It
 	// is an error in builds without network access such as the WebAssembly one, unless
