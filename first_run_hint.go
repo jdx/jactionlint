@@ -10,7 +10,7 @@ import (
 // runHintMinFindings is the number of findings from which a run prints the hint about adopting the checks
 // gradually with --baseline-write. A handful of findings is something to fix, not to adopt; the default profile
 // reports a median of 37 findings per repository on the corpus, so 20 is below what most repositories see on the
-// first run and above what a repository that already follows the checks sees. docs/usage.md names the number.
+// first run and above what a repository that already follows the checks sees. docs/usage.md ("The first run") names the number.
 const runHintMinFindings = 20
 
 // noteRunProfile remembers whether a file was linted with more than the checks of actionlint, which the
