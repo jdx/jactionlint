@@ -6,7 +6,7 @@
 // The card is an SVG rendered with resvg and the fonts next to this file, so the build needs no browser. Without git
 // or tags (a shallow clone, a tarball) the card shows only the current rules.
 import { execFileSync } from "node:child_process";
-import { readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -246,6 +246,7 @@ export function generateOgImage(outDir: string): void {
 // `node .vitepress/og/og.ts [file]` writes the card without building the site, to look at it.
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const file = resolve(process.argv[2] ?? "og.png");
+  mkdirSync(dirname(file), { recursive: true });
   writeFileSync(file, renderPng(cardSvg(collectReleases())));
   console.log(`wrote ${file}`);
 }
