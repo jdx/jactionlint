@@ -98,7 +98,7 @@ Every section needs at least one example. A `## ` heading with no `Example input
 
 ### Examples that need the online checks
 
-Start the example input with the line `# requires --online`, as its very first line. The tool then lints the example with the online checks on, using the recorded GitHub answers of `testdata/online/github.json` instead of the network, and with `GITHUB_REPOSITORY` set to `example/environments`. The playground has no network, so give such a section the skip marker for the link (see below).
+Put the line `# requires --online` in the head of the example input (the marker lines at the very top). The tool then lints the example with the online checks on, using the recorded GitHub answers of `testdata/online/github.json` instead of the network, and with `GITHUB_REPOSITORY` set to `example/environments`. The playground has no network, so give such a section the skip marker for the link (see below).
 
 ### Examples that need another configuration, rules or files
 
@@ -109,6 +109,7 @@ An example that shows a rule the example configuration turns off, a pedantic or 
 | Marker | Effect |
 | --- | --- |
 | `# requires --online` | The online checks, with the recorded answers (see above). |
+| `# without shellcheck` | Run with `--shellcheck=`, whether or not the machine has the command: for a check that runs only without shellcheck. |
 | `# select: id[,id]` | Report only the findings of these rules, as `--select` does. A rule that is off in the configuration runs at its default level. Use it when the output of the section shows one rule (or a few) and other rules of the example would add findings. An unknown ID fails the tool. |
 | `# profile: pedantic` | Run the profile, as `--profile` does. |
 | `# file: .github/workflows/ci.yml` | Name the example. Findings print this path instead of `test.yaml`, and the project has the file, so a rule that reads the workflows of the repository sees it. |

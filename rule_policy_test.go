@@ -30,7 +30,7 @@ var updatePolicyGolden = flag.Bool("update-policy-golden", false, "write the exp
 // policyRuleIDs are the rules whose goldens are in testdata/policy.
 var policyRuleIDs = []string{
 	"excessive-permissions", "undocumented-permissions", "unpinned-uses", "unpinned-images",
-	"self-repository", "github-app", "artipacked", "cache-poisoning",
+	"self-repository", "github-app", "artipacked", "cache-poisoning", "missing-version-comment",
 }
 
 func lintPolicyFixture(t *testing.T, path string) []*Error {

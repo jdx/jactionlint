@@ -1,10 +1,12 @@
 package jactionlint
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 )
 
 // Project represents one GitHub project. One Git repository corresponds to one project.
@@ -152,12 +154,31 @@ func (p *Project) ActionFiles() []string {
 
 var reGitHubRemote = regexp.MustCompile(`(?i)github\.com[:/]+([^/\s]+)/([^/\s]+?)(?:\.git)?/?\s*$`)
 
+// githubRepositoryFromGit is githubRepositoryOf for a clone whose .git is a file (a linked work tree, a submodule),
+// read with the command git itself.
+func githubRepositoryFromGit(root string) string {
+	if s, err := os.Stat(filepath.Join(root, ".git")); err != nil || s.IsDir() {
+		return "" // no clone, or a directory without a configuration
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	out, err := gitReadCommand(ctx, root, "config", "--get", "remote.origin.url").Output()
+	if err != nil {
+		return ""
+	}
+	if m := reGitHubRemote.FindStringSubmatch(strings.TrimSpace(string(out))); m != nil {
+		return strings.ToLower(m[1] + "/" + m[2])
+	}
+	return ""
+}
+
 // githubRepositoryOf returns the "owner/repo" in lower case of the GitHub repository whose clone is at root, read
 // from the url of the remote "origin" in .git/config, and "" when there is none.
 func githubRepositoryOf(root string) string {
 	b, err := os.ReadFile(filepath.Join(root, ".git", "config"))
 	if err != nil {
-		return ""
+		// A linked work tree and a submodule have a .git file, and the configuration is elsewhere: ask git
+		return githubRepositoryFromGit(root)
 	}
 	inOrigin := false
 	for _, line := range strings.Split(string(b), "\n") {

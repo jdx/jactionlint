@@ -1,13 +1,14 @@
 # generate-config-schema
 
-generate-config-schema writes the two JSON Schemas of jactionlint into [schema/](../../schema): one for the config file and one for the output of `--format json`. Run it after you add or change a rule, a rule option or a config key, and commit the result.
+generate-config-schema writes the three JSON Schemas of jactionlint into [schema/](../../schema): one for the config file, one for the output of `--format json` and one for the document of `--export-facts`. Run it after you add or change a rule, a rule option or a config key, and commit the result.
 
 | File | Describes | Built from |
 | --- | --- | --- |
 | `jactionlint-config.json` | The config file `.github/jactionlint.yaml`. | The rule IDs and the options of each rule come from the rule registry of the `jactionlint` package. The other keys are written in [config_schema.go](../../config_schema.go). |
 | `jactionlint-output.json` | The findings of `--format json` and `--format jsonl`. | `OutputSchema` in [config_schema.go](../../config_schema.go). |
+| `jactionlint-facts.json` | The document of `--export-facts`. | `FactsSchema` of the `jactionlint` package. |
 
-`jactionlint --print-config-schema` and `jactionlint --print-output-schema` print the same two documents.
+`jactionlint --print-config-schema`, `jactionlint --print-output-schema` and `jactionlint --print-facts-schema` print the same three documents.
 
 ## When to run it
 
@@ -15,7 +16,7 @@ Run it whenever the registry or the config keys change, because the rule IDs and
 
 | Command | Use |
 | --- | --- |
-| `mise run schema` | Writes both files. |
+| `mise run schema` | Writes the three files. |
 | `mise run schema:check` | Fails when a file is outdated and writes nothing. |
 
 An outdated file fails in each of these places:
@@ -39,7 +40,7 @@ generate-config-schema [-check] [dstdir]
 | Argument | Meaning | Default |
 | --- | --- | --- |
 | `-check` | Compares the files with what the registry produces, writes nothing and exits with status 1 for an outdated file. It names the file and the command that fixes it. | off |
-| `dstdir` | The directory that holds the two files. | `schema` |
+| `dstdir` | The directory that holds the three files. | `schema` |
 
 The flag has one dash only: `--check` is a usage error. A Windows checkout with CRLF line endings is compared as if it had LF.
 
@@ -50,7 +51,7 @@ go run ./scripts/generate-config-schema -check
 
 ## How it works
 
-The tool calls `ConfigSchema` and `OutputSchema` of the `jactionlint` package in the working tree and writes the two documents as indented JSON in the JSON Schema draft-07 format. The config schema has an entry for every rule ID with the options of that rule, so editors complete and check them.
+The tool calls `ConfigSchema`, `OutputSchema` and `FactsSchema` of the `jactionlint` package in the working tree and writes the three documents as indented JSON in the JSON Schema draft-07 format. The config schema has an entry for every rule ID with the options of that rule, so editors complete and check them.
 
 The published location of the config schema is the constant `ConfigSchemaURL`, the raw URL of the file on the `main` branch. `jactionlint --init-config` writes a `# yaml-language-server: $schema=` comment with that URL at the top of the config file, so editors that read the comment use the schema without any registration. A schema change reaches those editors when it reaches `main`.
 

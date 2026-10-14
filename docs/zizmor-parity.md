@@ -115,7 +115,7 @@ An audit with findings of more than one persona is one rule with one ID. The opt
 
 | zizmor audit | zizmor persona | jactionlint |
 | --- | --- | --- |
-| `concurrency-limits` | pedantic | `default` profile |
+| `concurrency-limits` | pedantic | `default` profile; a workflow that only a schedule or a manual run starts is reported with the option `pedantic` |
 | `self-repository` | regular | `pedantic` profile, level `info` |
 | `template-injection` | regular, with pedantic findings | `correctness` profile (so also `default`); the pedantic findings are the option `pedantic` |
 | `unpinned-images` | regular for an image without a tag or with the `latest` tag, pedantic for another tag without a digest | `default` profile; the option `require-digest` chooses between the two |
@@ -123,7 +123,7 @@ An audit with findings of more than one persona is one rule with one ID. The opt
 | `superfluous-actions` | regular, with `dtolnay/rust-toolchain` in the pedantic persona | `default` profile; the option `pedantic` adds `dtolnay/rust-toolchain` |
 | `hardcoded-container-credentials`, `unsound-condition`, `unsound-ternary` | regular | `correctness` profile (so also `default`) |
 | `forbidden-uses` | regular | no profile: it runs only when `allow` or `deny` is set |
-| `ref-version-mismatch` | regular for a wrong version comment, pedantic for a missing one | online rule; a missing comment is not reported |
+| `ref-version-mismatch` | regular for a wrong version comment, pedantic for a missing one | online rule for a wrong comment; a missing or version-less comment is the rule [`missing-version-comment`](./rules.md#missing-version-comment), which needs no network and is in the `pedantic` profile |
 | `stale-action-refs` | pedantic | online rule |
 | the other online audits | regular | online rules |
 
@@ -143,17 +143,17 @@ The last column holds the difference that matters most; [where a rule differs on
 | --- | --- | --- | --- |
 | `adhoc-packages` | [`adhoc-packages`](./rules.md#adhoc-packages) | differs | `--prefix` values and local tarballs are not ad hoc; installs behind `sudo` are reported. |
 | `anonymous-definition` | [`anonymous-definition`](./rules.md#anonymous-definition) | differs | Skipped in generated files and for `copilot-setup-steps.yml`; not applied to `action.yml`, whose `name` GitHub requires. |
-| `archived-uses` | [`archived-uses`](./rules.md#archived-uses) | differs | Asks GitHub, so it needs the online checks; zizmor reports offline. |
+| `archived-uses` | [`archived-uses`](./rules.md#archived-uses) | differs | Asks GitHub, so it needs the online checks. zizmor ships a list of archived repositories and reports offline. |
 | `artipacked` | [`artipacked`](./rules.md#artipacked) | differs | Not reported when a later step pushes, for `actions/checkout@v1` or for an expression value. The fix is safe, zizmor's is unsafe. |
 | `bot-conditions` | [`bot-conditions`](./rules.md#bot-conditions) | differs | Judged by the events that reach the job, also through local reusable workflows; a negated test and a conjunction with a check of the pull request author are not reported. The fix is unsafe, zizmor's is safe. |
 | `cache-poisoning` | [`cache-poisoning`](./rules.md#cache-poisoning) | differs | Fewer findings by default, because `tags-ignore` is not a release trigger; the option `pedantic` adds zizmor's heuristics. See [the check](./checks.md#check-cache-poisoning). |
-| `concurrency-limits` | [`concurrency-limits`](./rules.md#concurrency-limits) | differs | In `default`, not pedantic. Not reported: a workflow that only `schedule` or `workflow_dispatch` starts, `copilot-setup-steps.yml`, generated files. For a release workflow it advises `cancel-in-progress: false`, as `concurrency-cancels-release` does. |
+| `concurrency-limits` | [`concurrency-limits`](./rules.md#concurrency-limits) | differs | In `default`, not pedantic. A workflow that only `schedule` or `workflow_dispatch` starts is reported with the option `pedantic`, and the advice for it never cancels runs. Not reported: `copilot-setup-steps.yml`, generated files, a `concurrency:` that is one expression. For a release workflow it advises `cancel-in-progress: false`, as `concurrency-cancels-release` does. |
 | `dangerous-triggers` | [`dangerous-triggers`](./rules.md#dangerous-triggers) | differs | Also reports `issue_comment`, at the trigger instead of `on:`; a workflow that cannot write and reads no secret needs the option `pedantic`. |
 | `dependabot-cooldown` | [`dependabot-cooldown`](./rules.md#dependabot-cooldown) | differs | Reports every update below the minimum, where zizmor stops at the first update that meets it; an update that proposes nothing is not reported. `--fix` writes the value of the option `default-days`, where zizmor writes 7. |
 | `dependabot-execution` | [`dependabot-execution`](./rules.md#dependabot-execution) | same | The fix is unsafe in both. |
 | `excessive-permissions` | [`excessive-permissions`](./rules.md#excessive-permissions), [`missing-permissions`](./rules.md#missing-permissions) | differs | Two rules: the workflow level and jobs without `permissions:`. See [permissions](#where-a-rule-differs-on-purpose). |
 | `forbidden-uses` | [`forbidden-uses`](./rules.md#forbidden-uses) | not comparable | Opt-in; `allow` and `deny` have the names of zizmor's, and no run compared them. |
-| `github-app` | [`github-app`](./rules.md#github-app) | differs | Covers `actions/create-github-app-token` only: `skip-token-revoke`, `owner` without `repositories`, missing `permission-*` inputs. |
+| `github-app` | [`github-app`](./rules.md#github-app) | differs | `actions/create-github-app-token`: `skip-token-revoke`, `owner` without `repositories`, missing `permission-*` inputs. Also checks `tibdex/github-app-token` and `peter-murray/workflow-application-token-action`, for which zizmor reports nothing. |
 | `github-env` | [`github-env`](./rules.md#github-env) | differs | Accepts values it can show are not attacker controlled (runner paths, `date`, a checked number); reports at the line that writes. See [the check](./checks.md#check-github-env). |
 | `hardcoded-container-credentials` | [`hardcoded-container-credentials`](./rules.md#hardcoded-container-credentials) | same | The credentials check of actionlint reports it, at the password. |
 | `impostor-commit` | [`impostor-commit`](./rules.md#impostor-commit) | same | Online; no verdict beyond `max-branches` branches. |
@@ -164,13 +164,13 @@ The last column holds the difference that matters most; [where a rule differs on
 | `obfuscation` | [`obfuscation`](./rules.md#obfuscation) | differs | Not reported: a constant `if:` (`constant-condition` reports it), an index chosen by the matrix, a trailing slash in `owner/repo/@sha`. |
 | `overprovisioned-secrets` | [`overprovisioned-secrets`](./rules.md#overprovisioned-secrets) | differs | Also reports a bare `${{ secrets }}` and `secrets` passed to another function such as `format()`; zizmor reports `toJSON(secrets)` and a computed name. |
 | `ref-confusion` | [`ref-confusion`](./rules.md#ref-confusion) | not comparable | Online; neither tool had a finding on the compared corpus. |
-| `ref-version-mismatch` | [`ref-version-mismatch`](./rules.md#ref-version-mismatch) | differs | Online; a missing, version-less or branch comment is not reported. |
+| `ref-version-mismatch` | [`ref-version-mismatch`](./rules.md#ref-version-mismatch), [`missing-version-comment`](./rules.md#missing-version-comment) | differs | Two rules, as for permissions: the online rule compares the comment with the tags, and a missing or version-less comment is `missing-version-comment`, which needs no network and is in the `pedantic` profile. A comment that names a branch is not compared. See [version comments](#where-a-rule-differs-on-purpose). |
 | `secrets-inherit` | [`secrets-inherit`](./rules.md#secrets-inherit) | same | Reported at the `uses:` of the job. |
 | `secrets-outside-env` | [`secrets-outside-env`](./rules.md#secrets-outside-env) | differs | Reported at the expression that reads the secret, as zizmor does; also a secret passed with `secrets:` to a reusable workflow. `toJSON(secrets)` and a computed name are left to `overprovisioned-secrets`. |
 | `self-hosted-runner` | [`self-hosted-runner`](./rules.md#self-hosted-runner) | differs | Also reads matrix values, groups and `self-hosted-runner.labels`; options `allow` and `pull-request-only`. |
 | `self-repository` | [`self-repository`](./rules.md#self-repository) | same | The fix is unsafe in both. |
 | `stale-action-refs` | [`stale-action-refs`](./rules.md#stale-action-refs) | same | Online; no verdict beyond 1,000 tags of a repository. |
-| `superfluous-actions` | [`superfluous-actions`](./rules.md#superfluous-actions) | differs | Not reported when the runner may be self-hosted, including a `runs-on:` expression it cannot resolve; adds two archived release actions. |
+| `superfluous-actions` | [`superfluous-actions`](./rules.md#superfluous-actions) | differs | Not reported when the runner may be self-hosted. A `runs-on:` expression counts as self-hosted unless the repository tells every label it can have, see [the runner](#where-a-rule-differs-on-purpose). Adds two archived release actions. |
 | `template-injection` | [`template-injection`](./rules.md#template-injection) | differs | See [template injection](#template-injection). |
 | `typosquat-uses` | [`typosquat-uses`](./rules.md#typosquat-uses) | differs | Both report an omitted, repeated, swapped or look-alike character (`doker/login-action`, `acti0ns/checkout`); jactionlint also reports any other added or replaced character (`dockers/login-action`). |
 | `undocumented-permissions` | [`undocumented-permissions`](./rules.md#undocumented-permissions) | differs | A comment above a scope counts; each scope is a finding. |
@@ -178,7 +178,7 @@ The last column holds the difference that matters most; [where a rule differs on
 | `unpinned-tools` | [`unpinned-tools`](./rules.md#unpinned-tools) | differs | Same for the actions zizmor knows; an input that is an expression is not reported; the option `pedantic` adds more. |
 | `unpinned-uses` | [`unpinned-uses`](./rules.md#unpinned-uses) | differs | Skipped in generated files; adds the policy `immutable-release` and the Actions lock file (the option `actions-lock`, see [the check](./checks.md#check-actions-lock)). |
 | `unredacted-secrets` | [`unredacted-secrets`](./rules.md#unredacted-secrets) | same | The option `pedantic` adds a printed value cut from a secret; zizmor has no counterpart. |
-| `unsound-condition` | [`if-always-true`](./rules.md#if-always-true) | differs | The rule has another ID; composite action steps are checked too. A block scalar (`if: \|`) with one expression is not reported, because GitHub trims its trailing newline; see [the check](./checks.md#if-cond-constant). |
+| `unsound-condition` | [`if-always-true`](./rules.md#if-always-true) | differs | The rule has another ID; composite action steps are checked too. A block scalar (`if: \|`) with one expression is not reported, because GitHub trims its trailing newline, where zizmor reports `if: >` and `if: \|` for it; see [the check](./checks.md#if-cond-constant). |
 | `unsound-contains` | [`unsound-contains`](./rules.md#unsound-contains) | same | |
 | `unsound-ternary` | [`unsound-ternary`](./rules.md#unsound-ternary) | same | Reported at the same positions. |
 | `use-trusted-publishing` | [`use-trusted-publishing`](./rules.md#use-trusted-publishing) | differs | Skips registries without trusted publishing; reports a long-lived credential next to `id-token: write`. |
@@ -191,6 +191,9 @@ These differences are choices, not gaps. Each entry gives the effect you see fir
 - **Permissions.** zizmor reports a workflow without a top-level `permissions:` and a job without permissions as `excessive-permissions`. Here the workflow-level finding is the option `require-workflow-permissions` of `excessive-permissions`, and a job without permissions is `missing-permissions`. That policy rule skips generated files and leaves the jobs of a reusable-only workflow (`on: workflow_call` alone) to its callers, because the callee gets at most what the caller grants. `undocumented-permissions` reports each scope without a comment, where zizmor reports one finding per `permissions:` block.
 - **`use-trusted-publishing`** does not report a publish to a registry without trusted publishing (GitHub Packages, MyGet, a local registry, the Visual Studio marketplace), a script that is not a publish command (`pnpm run publish`) or a reusable workflow without `permissions:`, because the caller may grant `id-token: write`. The option `pedantic` adds a job that publishes with the OIDC token and also builds (zizmor#1968), a job without `environment:` (zizmor#237) and a job that switches attestations off (zizmor#938).
 - **`self-hosted-runner` and `secrets-outside-env`.** `self-hosted-runner` does not resolve labels from other expressions (zizmor reports `runs-on: ["${{ inputs.runner }}"]`), and `self-hosted-runner.providers` lists the hosted-runner providers, such as namespace or blacksmith, whose labels `unknown-runner-label` accepts. `secrets-outside-env` skips `workflow_call` workflows, as zizmor does.
+- **`concurrency-limits`.** A workflow that only a `schedule` or a `workflow_dispatch` starts is reported only with the option `pedantic` (on under the `pedantic` profile), because nothing supersedes such a run. The advice there is a top-level `concurrency:` with a `group:` and not `cancel-in-progress: true`, because a cancelled scheduled run is not started again and can lose its work. A bare group name (`concurrency: nightly`) is reported with the advice to write `cancel-in-progress: false` explicitly, and neither finding has a fix. zizmor reports both shapes in these workflows like in any other. Neither tool reports `cancel-in-progress: false`. A `concurrency:` that is one expression (`${{ github.workflow }}`) is not taken for a group name, because an expression can be a whole configuration; zizmor reports it. The default profile does not report the scheduled and manual workflows, so it does not change.
+- **`superfluous-actions` and the runner.** A job whose runner may be self-hosted is not reported, because the tools of the hosted images are not there. A `runs-on:` expression is resolved when the repository tells every label it can have: matrix values, a condition between labels (`cond && 'a' || 'b'`, without evaluating the condition), `fromJSON()` of a text, and `inputs.*` of a reusable workflow that only `workflow_call` starts, when every caller in the repository passes a known value. Any other expression counts as self-hosted: `${{ vars.RUNNER }}`, `${{ inputs.runner }}` with no caller or with a caller that passes a variable, a runner group, the labels of a provider. A resolved label is judged like a written one, so a label other than `self-hosted` (the name of a larger runner) counts as GitHub-hosted. zizmor reports the job whatever its `runs-on:` holds.
+- **Version comments.** The missing-comment finding of zizmor's `ref-version-mismatch` is the separate rule `missing-version-comment`, because `ref-version-mismatch` is an online rule and this one needs no network. It reports a hash-pinned action without a comment that names its version, and a comment that names none (`# the checkout action`). It also reports a pin whose commit no release tag points to, where zizmor stays silent because it has no version to suggest. It accepts a comment that has a version anywhere (`# v4.2.2 (source v4)`, `# Release v4.2.2`), which zizmor calls version-less, and a comment that starts with a branch such as `# main`. `--online --fix` adds the version of the tag that points at the commit, and the fix is safe because it only adds a comment, where zizmor's fix is unsafe. A pin with no tag, or with a comment of other text, gets no fix.
 
 <a id="where-zizmor-is-wrong"></a>
 ### Findings that zizmor reports and jactionlint does not
@@ -240,12 +243,15 @@ These rules have no audit in zizmor. Some follow an idea from its issue tracker,
 | [`unsound-prefix-match`](./rules.md#unsound-prefix-match) | `startsWith()`, `endsWith()` or `contains()` on the name of an account or repository | [#1533](https://github.com/zizmorcore/zizmor/issues/1533) |
 | [`untrusted-checkout`](./rules.md#untrusted-checkout), [`untrusted-artifact`](./rules.md#untrusted-artifact) | a privileged workflow that runs the code of a pull request or uses the artifact of the triggering run unchecked | [#195](https://github.com/zizmorcore/zizmor/issues/195) |
 | [`repojacking`](./rules.md#repojacking), [`unpinnable-action`](./rules.md#unpinnable-action) | an action whose owner name anyone can register; a pinned action that pulls in another by a tag | [#479](https://github.com/zizmorcore/zizmor/issues/479) |
+| [`shell-syntax`](./rules.md#shell-syntax) | a syntax error in a shell script of a `run:` step, found by a parser built into jactionlint when shellcheck does not run (see [the check](./checks.md#check-shell-syntax)) | [#2322](https://github.com/zizmorcore/zizmor/issues/2322) |
+| [`hardcoded-registry-credentials`](./rules.md#hardcoded-registry-credentials) | a `password`, `token`, `key` or `auth-key` of a `registries` entry of `dependabot.yml` written in plain text, and a password in its `url` (see [the check](./checks.md#check-hardcoded-registry-credentials)) | [#1222](https://github.com/zizmorcore/zizmor/issues/1222) |
+| [`dependabot-missing-actions-update`](./rules.md#dependabot-missing-actions-update) | no `github-actions` update in `dependabot.yml`, or one that does not name the directories of the local composite actions that use actions (the fix of that case is unsafe) | [#1806](https://github.com/zizmorcore/zizmor/issues/1806) |
 
 Rules with no zizmor issue behind them, by what they check:
 
-- **Concurrency and jobs.** [`concurrency-cancels-prs`](./rules.md#concurrency-cancels-prs), [`concurrency-cancels-release`](./rules.md#concurrency-cancels-release), [`gate-job-skipped-on-failure`](./rules.md#gate-job-skipped-on-failure), [`unused-job-output`](./rules.md#unused-job-output), [`duplicate-triggers`](./rules.md#duplicate-triggers), [`unused-needs`](./rules.md#unused-needs), [`continue-on-error`](./rules.md#continue-on-error), [`unused-workflow-input`](./rules.md#unused-workflow-input).
-- **Scripts and inputs.** [`command-injection`](./rules.md#command-injection), [`output-clobbering`](./rules.md#output-clobbering), [`argument-injection`](./rules.md#argument-injection), [`fail-fast-action-inputs`](./rules.md#fail-fast-action-inputs).
-- **Runners, permissions and actions.** [`mutable-runner-label`](./rules.md#mutable-runner-label) (fixable with the option `pin`), [`deprecated-node-runtime`](./rules.md#deprecated-node-runtime), [`deprecated-runner-label`](./rules.md#deprecated-runner-label), [`insufficient-permissions`](./rules.md#insufficient-permissions), [`ubuntu-slim-limits`](./rules.md#ubuntu-slim-limits), [`required-actions`](./rules.md#required-actions) (opt-in), [`dependabot-missing-actions-update`](./rules.md#dependabot-missing-actions-update).
+- **Concurrency and jobs.** [`concurrency-cancels-prs`](./rules.md#concurrency-cancels-prs), [`concurrency-cancels-release`](./rules.md#concurrency-cancels-release), [`gate-job-skipped-on-failure`](./rules.md#gate-job-skipped-on-failure), [`unused-job-output`](./rules.md#unused-job-output), [`duplicate-triggers`](./rules.md#duplicate-triggers), [`unused-needs`](./rules.md#unused-needs), [`continue-on-error`](./rules.md#continue-on-error), [`unused-workflow-input`](./rules.md#unused-workflow-input), [`concurrency-deadlock`](./rules.md#concurrency-deadlock).
+- **Scripts and inputs.** [`command-injection`](./rules.md#command-injection), [`output-clobbering`](./rules.md#output-clobbering), [`argument-injection`](./rules.md#argument-injection), [`fail-fast-action-inputs`](./rules.md#fail-fast-action-inputs), [`macos-gnu-flags`](./rules.md#macos-gnu-flags).
+- **Runners, permissions and actions.** [`mutable-runner-label`](./rules.md#mutable-runner-label) (fixable with the option `pin`), [`deprecated-node-runtime`](./rules.md#deprecated-node-runtime), [`deprecated-runner-label`](./rules.md#deprecated-runner-label), [`insufficient-permissions`](./rules.md#insufficient-permissions), [`ubuntu-slim-limits`](./rules.md#ubuntu-slim-limits), [`required-actions`](./rules.md#required-actions) (opt-in), [`action-release-cooldown`](./rules.md#action-release-cooldown) (online, opt-in).
 - **Conventions and triggers.** [`require-shell`](./rules.md#require-shell), [`require-expression-wrapping`](./rules.md#require-expression-wrapping), [`max-run-lines`](./rules.md#max-run-lines), [`unmatched-paths-filter`](./rules.md#unmatched-paths-filter), [`event-name-never-received`](./rules.md#event-name-never-received).
 - **Ignores.** [`unused-ignore`](./rules.md#unused-ignore), [`expired-ignore`](./rules.md#expired-ignore) and [`unused-baseline-entry`](./rules.md#unused-baseline-entry) report an ignore that suppresses nothing, an entry past its date and a baseline entry that matches no finding.
 
@@ -273,8 +279,8 @@ The online rules ask GitHub about the actions a workflow uses. [Online checks](.
 
 - **When they run.** zizmor runs its online audits whenever it finds a token. jactionlint never uses the network unless `--online`, `online: true` or `JACTIONLINT_ONLINE` asks, so a token in the environment is not enough: pass `--online` or set `JACTIONLINT_ONLINE=1` in the CI job. `--no-online` turns the checks off even when the configuration file turns them on.
 - **Which rules.** The online rules with a zizmor counterpart are `impostor-commit`, `known-vulnerable-actions`, `ref-confusion`, `stale-action-refs`, `archived-uses` and `ref-version-mismatch`. `repojacking`, `unpinnable-action` and `actions-lock-drift` have none.
-- **`archived-uses`.** zizmor ships a list of archived repositories and reports with `--offline`. jactionlint asks GitHub, so the answer is always current and needs `--online`; without it the rule reports nothing.
-- **`ref-version-mismatch`.** jactionlint reads comments that start with a version, and ratchet comments (`# ratchet:actions/checkout@v4`). It does not report a missing, version-less or branch comment, which zizmor reports (see [known gaps](#known-gaps)). `--fix` writes the version comment and is unsafe.
+- **`archived-uses`.** zizmor ships a fixed list of archived repositories and reports with `--offline`. jactionlint asks GitHub, so the answer is always current and needs `--online`; without it the rule reports nothing.
+- **`ref-version-mismatch`.** jactionlint reads comments that start with a version, and ratchet comments (`# ratchet:actions/checkout@v4`). It does not compare a comment that names a branch with that branch, which zizmor does (see [known gaps](#known-gaps)). A missing or version-less comment is the rule `missing-version-comment`, which needs no network (see [version comments](#where-a-rule-differs-on-purpose)). `--fix` rewrites the version comment and is unsafe.
 - **Large repositories.** `stale-action-refs` reads up to 1,000 tags per repository and says nothing about a commit it did not find in a truncated list. `impostor-commit` compares a commit with up to `max-branches` branches (default 1000, at most 100 without a token) and gives no verdict beyond that.
 
 <a id="online-client-where-it-differs-from-zizmor"></a>
@@ -310,6 +316,7 @@ zizmor marks each fix safe or unsafe, and jactionlint does the same: `--fix` app
 | `known-vulnerable-actions` | unsafe | none |
 | `obfuscation` | safe | unsafe |
 | `ref-version-mismatch` | unsafe | unsafe; needs `--online` |
+| `ref-version-mismatch`, a missing comment | unsafe | safe, as the rule `missing-version-comment`; needs `--online` |
 | `self-repository` | unsafe | unsafe |
 | `template-injection` | unsafe | safe for a quoted reference in bash and sh; unsafe for an unquoted value of an assignment |
 | `unpinned-uses` | unsafe | safe; needs `--online` |
@@ -322,15 +329,13 @@ jactionlint also fixes rules that zizmor has no audit for, such as `missing-time
 
 jactionlint does not do these things that zizmor does or proposes:
 
-- **Missing or branch version comments.** `ref-version-mismatch` does not report a hash-pinned action without a version comment, or a comment that names a branch.
-- **Archived repositories offline.** zizmor reports `archived-uses` without the network.
+- **Branch version comments.** `ref-version-mismatch` does not compare a comment that names a branch (`# main`) with that branch.
+- **Archived repositories offline.** zizmor reports `archived-uses` without the network, from a list of archived repositories that it ships.
 - **Grading.** There is no `--min-confidence`, and a rule has one level whatever the trigger or the confidence.
 - **Inputs.** jactionlint does not audit pre-commit configurations, a repository by its slug (`zizmor owner/repo`) or in a language server mode (`--lsp`).
 - **`zizmor.yml`.** It is not read, see [move from zizmor](#move-from-zizmor-to-jactionlint).
 - **A negated bot test.** `bot-conditions` does not report `!(github.actor == 'dependabot[bot]')`.
 - **Policy patterns with `@ref`.** `unpinned-uses` rejects them when it reads the configuration.
-- **Shell syntax without shellcheck.** zizmor#2322 proposes a `shell-syntax` audit. jactionlint reports shell findings through shellcheck.
-- **Dependabot registries.** zizmor#1222 proposes a check of credentials in the `registries` of `dependabot.yml`.
 - **Positions.** Some rules report at another line than zizmor (`dangerous-triggers` at the trigger, `unpinned-images` at the matrix value, `github-env` at the write), so a comparison by line shows differences that are not missing findings.
 
 ### Limits of the workflow rules

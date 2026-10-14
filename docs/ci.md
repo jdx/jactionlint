@@ -358,6 +358,94 @@ jobs:
 
 The matcher reads the first line of each finding in the default text output, with or without color, and in the `oneline` and `gcc` formats. It does not read `--format github`, whose lines are annotations already. Copy the file again when the text output changes.
 
+## Show only what a pull request changed
+
+`--changed-since REV` shows only the findings on the lines that changed since `REV`, so that a pull request check reports what the pull request adds and not what the repository already has. It filters what is shown: jactionlint still checks every file and reads the whole call graph of the repository, so each finding that it shows is one that a full run reports.
+
+The workflow below checks out the full history, because the option compares with the merge base of the revision and `HEAD`, and passes the option to the action:
+
+```yaml
+# .github/workflows/jactionlint.yaml
+name: jactionlint
+on:
+  pull_request:
+permissions: {}
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  jactionlint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: jdx/jactionlint@a0bb9f012b6b5760c17c9ccd040001d08002a10e # v2.1.0
+        with:
+          args: --changed-since=origin/main
+```
+
+A release that does not have the option fails with `unknown option`, and `jactionlint --help` shows what the installed release supports. The action installs the release that it was published with: set its `version` input to a release that has the option, or its `executable` input to a build.
+
+Run the option on your machine to see the effect. In this example, the workflow file is committed on `main` without the job `lint`, and the branch `feature` adds that job. The job `test` already has no `timeout-minutes`:
+
+```yaml
+name: CI
+on:
+  pull_request:
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - run: echo testing
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - run: echo linting
+```
+
+```sh
+jactionlint --changed-since main
+```
+
+```
+.github/workflows/ci.yaml:17:3: "timeout-minutes" is not set at this job. Set it to avoid wasting runner minutes when the job hangs. Set "default-minutes" in the "missing-timeout" rule options of the configuration to turn on the --fix fix [missing-timeout]
+   |
+17 |   lint:
+   |   ^~~~~
+.github/workflows/ci.yaml:20:15: action "actions/checkout@v4" must be pinned to a full-length commit SHA like "{owner}/{repo}@{sha}" because the "unpinned-uses" rule is enabled [unpinned-uses]
+   |
+20 |       - uses: actions/checkout@v4
+   |               ^~~~~~~~~~~~~~~~~~~
+note: 1 finding(s) outside the changed lines since main are not shown (--changed-since)
+```
+
+The note on stderr counts the finding of the job `test`, which a full run reports. `--changed-scope files` shows every finding of a file that changed, for a team that wants the whole file clean once it touches it. The default is `lines`.
+
+How the option behaves:
+
+- **What changed** is what `git` reports between the merge base of `REV` and `HEAD` and the working tree: the commits of the branch, the staged and unstaged changes of tracked files, and every line of a file that is not tracked and not ignored. A moved file counts as new. A block that was only deleted marks the lines on both sides of the place, because removing a `permissions:` or a guard can cause a finding next to it.
+- **The baseline and the exit status.** The baseline applies first, so the two combine: the baseline hides the findings that you accepted, and `--changed-since` hides the ones in code that you did not touch. The exit status is that of the findings that are shown, so a run whose findings are all hidden exits with status 0.
+- **A finding somewhere else is not shown there.** When a pull request changes the events of a caller so that an unchanged line of a reusable workflow becomes a finding, that finding is at a line and in a file that did not change. Run the full check on the default branch too.
+- **It fails when it cannot compare.** An unknown revision, a shallow clone that lacks the merge base, or a missing `git` exits with status 3 and says why, and never prints an empty report that looks clean. Give `actions/checkout` `fetch-depth: 0`, as the workflow above does.
+- **Some options cannot be combined with it.** `--fix`, `--diff`, `--baseline-write`, `--migrate-ignores`, `--init-config`, `--migrate-config`, `--export-facts`, `--suggest-timeouts` and stdin exit with status 2, and so does `--changed-scope` without `--changed-since`. [Option combinations that fail](./cli.md#option-combinations-that-fail) lists the messages.
+- **What it prints.** The `text` and `oneline` formats print the note to stderr. The SARIF log has `properties.changedSince` with `since`, `scope` and `hidden`, so that a consumer can tell it from a full log. `json` and `jsonl` have no place for run data and print no note. Without the option nothing changes in any format.
+
 ## Next steps
 
 - [Run jactionlint from Git hooks](./hooks.md#pre-commit) to check before a commit or a push.

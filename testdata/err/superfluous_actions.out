@@ -9,3 +9,4 @@ test.yaml:15:15: action "actions-ecosystem/action-add-labels@v1" is superfluous:
 test.yaml:16:15: action "actions-ecosystem/action-remove-labels@v1" is superfluous: the runner already has the tools to do this. use `gh issue edit --remove-label` or `gh pr edit --remove-label` in a script step [superfluous-actions]
 test.yaml:17:15: action "addnab/docker-run-action@v3" is superfluous: the runner already has the tools to do this. use `docker run` in a script step [superfluous-actions]
 test.yaml:18:15: action "sergeysova/jq-action@v2" is superfluous: the runner already has the tools to do this. use `jq`, which the runner images include, in a script step [superfluous-actions]
+test.yaml:19:15: action "benc-uk/workflow-dispatch@v1" is superfluous: the runner already has the tools to do this. use `gh workflow run` (with `--ref` and `-f name=value` for the inputs) in a script step [superfluous-actions]

@@ -102,6 +102,7 @@
           "description": "Apply only the fixes of these rules, like --fix-rules (which overrides it). All fixes are applied when the list is empty.",
           "items": {
             "enum": [
+              "action-release-cooldown",
               "action-syntax",
               "actions-lock",
               "actions-lock-drift",
@@ -156,6 +157,7 @@
               "github-env",
               "github-script-syntax",
               "hardcoded-container-credentials",
+              "hardcoded-registry-credentials",
               "if-always-true",
               "impostor-commit",
               "insecure-commands",
@@ -185,6 +187,7 @@
               "invisible-characters",
               "known-vulnerable-actions",
               "local-action-checkout",
+              "macos-gnu-flags",
               "malformed-expression-delimiters",
               "matrix-duplicate-value",
               "matrix-invalid-exclude",
@@ -194,6 +197,7 @@
               "missing-action-input",
               "missing-permissions",
               "missing-timeout",
+              "missing-version-comment",
               "missing-workflow-input",
               "missing-workflow-secret",
               "multiline-plain-run",
@@ -215,6 +219,7 @@
               "secrets-outside-env",
               "self-hosted-runner",
               "self-repository",
+              "shell-syntax",
               "shellcheck",
               "stale-action-refs",
               "superfluous-actions",
@@ -333,6 +338,7 @@
             "oneOf": [
               {
                 "enum": [
+                  "action-release-cooldown",
                   "action-syntax",
                   "actions-lock",
                   "actions-lock-drift",
@@ -387,6 +393,7 @@
                   "github-env",
                   "github-script-syntax",
                   "hardcoded-container-credentials",
+                  "hardcoded-registry-credentials",
                   "if-always-true",
                   "impostor-commit",
                   "insecure-commands",
@@ -416,6 +423,7 @@
                   "invisible-characters",
                   "known-vulnerable-actions",
                   "local-action-checkout",
+                  "macos-gnu-flags",
                   "malformed-expression-delimiters",
                   "matrix-duplicate-value",
                   "matrix-invalid-exclude",
@@ -425,6 +433,7 @@
                   "missing-action-input",
                   "missing-permissions",
                   "missing-timeout",
+                  "missing-version-comment",
                   "missing-workflow-input",
                   "missing-workflow-secret",
                   "multiline-plain-run",
@@ -446,6 +455,7 @@
                   "secrets-outside-env",
                   "self-hosted-runner",
                   "self-repository",
+                  "shell-syntax",
                   "shellcheck",
                   "stale-action-refs",
                   "superfluous-actions",
@@ -495,6 +505,7 @@
               {
                 "items": {
                   "enum": [
+                    "action-release-cooldown",
                     "action-syntax",
                     "actions-lock",
                     "actions-lock-drift",
@@ -549,6 +560,7 @@
                     "github-env",
                     "github-script-syntax",
                     "hardcoded-container-credentials",
+                    "hardcoded-registry-credentials",
                     "if-always-true",
                     "impostor-commit",
                     "insecure-commands",
@@ -578,6 +590,7 @@
                     "invisible-characters",
                     "known-vulnerable-actions",
                     "local-action-checkout",
+                    "macos-gnu-flags",
                     "malformed-expression-delimiters",
                     "matrix-duplicate-value",
                     "matrix-invalid-exclude",
@@ -587,6 +600,7 @@
                     "missing-action-input",
                     "missing-permissions",
                     "missing-timeout",
+                    "missing-version-comment",
                     "missing-workflow-input",
                     "missing-workflow-secret",
                     "multiline-plain-run",
@@ -608,6 +622,7 @@
                     "secrets-outside-env",
                     "self-hosted-runner",
                     "self-repository",
+                    "shell-syntax",
                     "shellcheck",
                     "stale-action-refs",
                     "superfluous-actions",
@@ -894,6 +909,34 @@
       "additionalProperties": false,
       "description": "The level and the options of each rule by its rule ID. A rule which is not listed follows the profile. See https://jactionlint.jdx.dev/rules",
       "properties": {
+        "action-release-cooldown": {
+          "description": "An action is pinned to a version released less than the cooldown ago. Group: security. Runs only with --online. Default level: warn. https://jactionlint.jdx.dev/rules#action-release-cooldown",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "days": {
+                  "default": 7,
+                  "description": "How many days a version must be old (at least 1). The date is the publication of its release on GitHub, else the date of its commit. The rule runs only when \"rules\" has an entry for it, and only with the online checks.",
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
         "action-syntax": {
           "description": "The action metadata does not follow the syntax of action.yml. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#action-syntax",
           "oneOf": [
@@ -1330,6 +1373,10 @@
                     }
                   ],
                   "description": "The level of the rule: error, warn, info or off."
+                },
+                "pedantic": {
+                  "description": "Also report the pedantic checks, which are noisier. Unset, they run under the pedantic profile.",
+                  "type": "boolean"
                 }
               },
               "type": "object"
@@ -1577,7 +1624,7 @@
           ]
         },
         "dependabot-missing-actions-update": {
-          "description": "dependabot.yml has no github-actions update although the repository has workflows using actions. Group: policy. Profile: pedantic. Default level: warn. https://jactionlint.jdx.dev/rules#dependabot-missing-actions-update",
+          "description": "dependabot.yml has no github-actions update although the repository has workflows using actions, or its github-actions updates do not cover the local composite actions that use actions. Group: policy. Profile: pedantic. Default level: warn. https://jactionlint.jdx.dev/rules#dependabot-missing-actions-update",
           "oneOf": [
             {
               "$ref": "#/definitions/level"
@@ -2071,7 +2118,7 @@
           ]
         },
         "github-app": {
-          "description": "A GitHub App token is issued with more access or a longer life than needed. Group: security. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#github-app",
+          "description": "A GitHub App token (actions/create-github-app-token, tibdex/github-app-token, peter-murray/workflow-application-token-action) is issued with more access or a longer life than needed. Group: security. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#github-app",
           "oneOf": [
             {
               "$ref": "#/definitions/level"
@@ -2138,6 +2185,28 @@
         },
         "hardcoded-container-credentials": {
           "description": "A password for a container registry is written directly in the workflow. Group: security. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#hardcoded-container-credentials",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "hardcoded-registry-credentials": {
+          "description": "A registry in dependabot.yml has a password, token or key written in plain text. Group: security. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#hardcoded-registry-credentials",
           "oneOf": [
             {
               "$ref": "#/definitions/level"
@@ -2813,6 +2882,28 @@
             }
           ]
         },
+        "macos-gnu-flags": {
+          "description": "A command at run: has a GNU-only option and the job runs on macOS, which has the BSD command. Group: correctness. Profile: pedantic. Default level: warn. https://jactionlint.jdx.dev/rules#macos-gnu-flags",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
         "malformed-expression-delimiters": {
           "description": "Text such as ${ github.ref }, $ {{ x }} or {{ github.sha }} is meant to be an expression but is not one. With the option pedantic, so is a shell variable in the input of an action. Group: correctness. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#malformed-expression-delimiters",
           "oneOf": [
@@ -3022,6 +3113,28 @@
                   "minimum": 0,
                   "type": "integer"
                 },
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "missing-version-comment": {
+          "description": "A hash-pinned action has no comment which names its version. Group: policy. Profile: pedantic. Default level: warn. https://jactionlint.jdx.dev/rules#missing-version-comment",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
                 "level": {
                   "allOf": [
                     {
@@ -3503,6 +3616,28 @@
         },
         "self-repository": {
           "description": "A local action or workflow is referenced as ./path instead of $/path. Group: security. Profile: pedantic. Default level: info. https://jactionlint.jdx.dev/rules#self-repository",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "shell-syntax": {
+          "description": "A shell script at \"run:\" has a syntax error (found without shellcheck). Group: correctness. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#shell-syntax",
           "oneOf": [
             {
               "$ref": "#/definitions/level"

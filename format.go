@@ -70,6 +70,8 @@ type runInfo struct {
 	notes  []string
 	online *OnlineCoverage
 	tools  map[string]ExternalToolStatus // shellcheck and pyflakes: did they run?
+	// changed is what --changed-since did, nil when it is off
+	changed *ChangedInfo
 }
 
 // structured reports whether the printer makes a document which other tools parse. For such a format the
@@ -117,6 +119,8 @@ type textPrinter struct {
 	oneline bool
 	// docURLs prints the URL of the documentation of the rule under each finding (--show-doc-urls)
 	docURLs bool
+	// fixStatus prints the fix of each finding, or the reason it has none, under the finding (--show-fix-status)
+	fixStatus bool
 }
 
 // withDocURLs turns on the documentation URLs of the formats for people, the text and the github format. The other
@@ -136,6 +140,42 @@ func withDocURLs(p printer, on bool) printer {
 	return p
 }
 
+// withFixStatus turns on the fix status of the formats for people, the text and the github format. The other formats
+// have it as data already (fix and no_fix of json, fixes and noFixCode of sarif).
+func withFixStatus(p printer, on bool) printer {
+	if !on {
+		return p
+	}
+	switch p := p.(type) {
+	case textPrinter:
+		p.fixStatus = !p.oneline // a line per finding stays one line
+		return p
+	case githubPrinter:
+		p.fixStatus = true
+		return p
+	}
+	return p
+}
+
+// fixStatusLine says what the fix of the finding is: the fix and what applies it, or the reason there is none. It is
+// empty for a finding that is advice only (the rule never fixes it).
+func (e *Error) fixStatusLine() string {
+	switch {
+	case e.Fix != nil:
+		d := e.Fix.Description
+		if d == "" {
+			d = "fix available"
+		}
+		if e.Fix.Unsafe {
+			return "fix: " + d + " (may change behavior: apply it with --fix=unsafe)"
+		}
+		return "fix: " + d + " (apply it with --fix)"
+	case e.NoFix != nil:
+		return "no fix (" + string(e.NoFix.Code) + "): " + e.NoFix.Reason
+	}
+	return ""
+}
+
 func (p textPrinter) print(w io.Writer, results []fileResult, _ runInfo) error {
 	for _, r := range results {
 		var x *lineIndex
@@ -146,6 +186,9 @@ func (p textPrinter) print(w io.Writer, results []fileResult, _ runInfo) error {
 			e.prettyPrint(w, x, true)
 			if p.docURLs && e.DocURL != "" {
 				gray.Fprintf(w, "  = docs: %s\n", e.DocURL)
+			}
+			if l := e.fixStatusLine(); p.fixStatus && l != "" {
+				gray.Fprintf(w, "  = %s\n", l)
 			}
 		}
 	}
@@ -230,6 +273,8 @@ func (s Severity) gccName() string {
 type githubPrinter struct {
 	// docURLs adds the URL of the documentation of the rule to the message (--show-doc-urls)
 	docURLs bool
+	// fixStatus adds the fix of the finding, or the reason it has none, to the message (--show-fix-status)
+	fixStatus bool
 }
 
 var (
@@ -265,6 +310,9 @@ func (p githubPrinter) print(w io.Writer, results []fileResult, _ runInfo) error
 			msg := e.Message
 			if p.docURLs && e.DocURL != "" {
 				msg += "\ndocs: " + e.DocURL
+			}
+			if l := e.fixStatusLine(); p.fixStatus && l != "" {
+				msg += "\n" + l
 			}
 			fmt.Fprintf(w, "::%s %s::%s\n", cmd, strings.Join(props, ","), githubDataEscaper.Replace(msg))
 		}
@@ -578,8 +626,11 @@ func (p sarifPrinter) print(w io.Writer, results []fileResult, info runInfo) err
 		}
 		run.Invocations = []sarifInvocation{inv}
 	}
-	if info.online != nil || len(info.tools) > 0 {
+	if info.online != nil || len(info.tools) > 0 || info.changed != nil {
 		run.Properties = map[string]any{}
+		if info.changed != nil {
+			run.Properties["changedSince"] = info.changed
+		}
 		if info.online != nil {
 			run.Properties["onlineCoverage"] = info.online
 		}

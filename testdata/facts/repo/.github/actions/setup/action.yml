@@ -1,0 +1,16 @@
+name: Setup
+inputs:
+  cache:
+    default: "false"
+  version:
+    required: true
+runs:
+  using: composite
+  steps:
+    - uses: actions/cache@v4
+      if: inputs.cache == 'true'
+      with:
+        path: ~/.cache
+        key: ${{ inputs.version }}
+    - run: echo setup
+      shell: bash

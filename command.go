@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -73,7 +74,7 @@ type fixRequest struct {
 	result *FixResult
 }
 
-func (cmd *Command) runLinter(args []string, opts *LinterOptions, initConfig, migrateConfig, migrateIgnores bool, fix *fixRequest, baselineWrite *optionalValueFlag, onlineFailed *int, onlineReport string) ([]*Error, error) {
+func (cmd *Command) runLinter(args []string, opts *LinterOptions, initConfig, migrateConfig, migrateIgnores, exportFacts bool, suggest *TimeoutOptions, fix *fixRequest, baselineWrite *optionalValueFlag, onlineFailed *int, onlineReport string) ([]*Error, error) {
 	l, err := NewLinter(cmd.Stdout, opts)
 	if err != nil {
 		return nil, err
@@ -94,6 +95,53 @@ func (cmd *Command) runLinter(args []string, opts *LinterOptions, initConfig, mi
 	}
 	if migrateConfig {
 		return nil, l.MigrateConfig("")
+	}
+
+	if exportFacts {
+		if suggest != nil {
+			return nil, &usageError{errors.New("--export-facts and --suggest-timeouts print different documents, so they cannot be combined")}
+		}
+		if len(args) == 1 && args[0] == "-" {
+			return nil, &usageError{errors.New("--export-facts cannot be used with stdin because the facts are about the files of a repository")}
+		}
+		if fix.mode != 0 || baselineWrite.set || migrateIgnores {
+			return nil, &usageError{errors.New("--export-facts cannot be combined with --fix, --diff, --baseline-write or --migrate-ignores: it only reads")}
+		}
+		facts, err := l.ExportFacts(args, nil)
+		if err != nil {
+			return nil, err
+		}
+		b, err := facts.Marshal()
+		if err != nil {
+			return nil, err
+		}
+		_, err = cmd.Stdout.Write(b)
+		return nil, err
+	}
+
+	if suggest != nil {
+		if len(args) == 1 && args[0] == "-" {
+			return nil, &usageError{errors.New("--suggest-timeouts cannot be used with stdin because the report is about the workflows of a repository")}
+		}
+		if fix.mode != 0 || baselineWrite.set || migrateIgnores {
+			return nil, &usageError{errors.New("--suggest-timeouts cannot be combined with --fix, --diff, --baseline-write or --migrate-ignores: it only reads")}
+		}
+		if opts.Format != "" && opts.Format != FormatText && opts.Format != FormatJSON {
+			return nil, &usageError{errors.New("--suggest-timeouts prints the formats text and json only")}
+		}
+		rep, err := l.SuggestTimeouts(args, nil, *suggest)
+		if err != nil {
+			return nil, err
+		}
+		if opts.Format == FormatJSON {
+			b, err := rep.JSON()
+			if err != nil {
+				return nil, err
+			}
+			_, err = cmd.Stdout.Write(b)
+			return nil, err
+		}
+		return nil, rep.WriteText(cmd.Stdout)
 	}
 
 	if baselineWrite.set {
@@ -196,14 +244,17 @@ func (cmd *Command) Main(args []string) int {
 		}
 		return ExitStatusSuccessNoProblem
 	}
-	if f.printConfigSchema || f.printOutputSchema {
-		if f.printConfigSchema && f.printOutputSchema {
-			fmt.Fprintln(cmd.Stderr, "--print-config-schema and --print-output-schema cannot be combined")
+	if f.printConfigSchema || f.printOutputSchema || f.printFactsSchema {
+		if n := countTrue(f.printConfigSchema, f.printOutputSchema, f.printFactsSchema); n > 1 {
+			fmt.Fprintln(cmd.Stderr, "--print-config-schema, --print-output-schema and --print-facts-schema cannot be combined")
 			return ExitStatusInvalidCommandOption
 		}
 		schema := OutputSchema()
-		if f.printConfigSchema {
+		switch {
+		case f.printConfigSchema:
 			schema = ConfigSchema()
+		case f.printFactsSchema:
+			schema = FactsSchema()
 		}
 		if _, err := cmd.Stdout.Write(schema); err != nil {
 			fmt.Fprintf(cmd.Stderr, "could not write the schema: %v\n", err)
@@ -251,6 +302,38 @@ func (cmd *Command) Main(args []string) int {
 		}
 		opts.NoIgnores = true
 	}
+	if flags.Changed("changed-scope") && f.changedSince == "" {
+		fmt.Fprintln(cmd.Stderr, "--changed-scope can be used only with --changed-since")
+		return ExitStatusInvalidCommandOption
+	}
+	if flags.Changed("changed-since") {
+		if f.changedSince == "" {
+			fmt.Fprintln(cmd.Stderr, "--changed-since needs a revision, such as --changed-since origin/main")
+			return ExitStatusInvalidCommandOption
+		}
+		scope, err := ParseChangedScope(f.changedScope)
+		if err != nil {
+			fmt.Fprintln(cmd.Stderr, err)
+			return ExitStatusInvalidCommandOption
+		}
+		if f.suggestTimeouts {
+			fmt.Fprintln(cmd.Stderr, "--changed-since filters findings and --suggest-timeouts prints no findings, so they cannot be combined")
+			return ExitStatusInvalidCommandOption
+		}
+		if f.exportFacts {
+			fmt.Fprintln(cmd.Stderr, "--changed-since filters findings and --export-facts prints no findings but the facts of the whole repository, so they cannot be combined")
+			return ExitStatusInvalidCommandOption
+		}
+		if fix.mode != 0 || diff || baselineWrite.set || f.migrateIgnores || f.initConfig || f.migrateConfig {
+			fmt.Fprintln(cmd.Stderr, "--changed-since only filters what is reported, so it cannot be combined with --fix, --diff, --baseline-write, --migrate-ignores, --init-config or --migrate-config")
+			return ExitStatusInvalidCommandOption
+		}
+		if args := flags.Args(); len(args) == 1 && args[0] == "-" {
+			fmt.Fprintln(cmd.Stderr, "--changed-since cannot be used with stdin because there is no file to compare")
+			return ExitStatusInvalidCommandOption
+		}
+		opts.ChangedSince, opts.ChangedScope = f.changedSince, scope
+	}
 	for _, v := range f.selectRules {
 		opts.Select = append(opts.Select, strings.Split(v, ",")...)
 	}
@@ -283,6 +366,26 @@ func (cmd *Command) Main(args []string) int {
 		if off {
 			f.noOnline = true
 		}
+	}
+	var suggest *TimeoutOptions
+	if f.suggestTimeouts {
+		if f.noOnline {
+			fmt.Fprintln(cmd.Stderr, "--suggest-timeouts reads the runs of the workflows from GitHub, so it cannot be combined with --no-online or JACTIONLINT_ONLINE=0")
+			return ExitStatusInvalidCommandOption
+		}
+		if f.timeoutRuns < 1 || f.timeoutRuns > maxWorkflowRuns {
+			fmt.Fprintf(cmd.Stderr, "--timeout-history-runs must be between 1 and %d\n", maxWorkflowRuns)
+			return ExitStatusInvalidCommandOption
+		}
+		if !(f.timeoutBuffer >= 1) || math.IsInf(f.timeoutBuffer, 0) {
+			fmt.Fprintln(cmd.Stderr, "--timeout-buffer must be a number of at least 1")
+			return ExitStatusInvalidCommandOption
+		}
+		online.set = true
+		suggest = &TimeoutOptions{Runs: f.timeoutRuns, Buffer: f.timeoutBuffer}
+	} else if flags.Changed("timeout-history-runs") || flags.Changed("timeout-buffer") {
+		fmt.Fprintln(cmd.Stderr, "--timeout-history-runs and --timeout-buffer can be used only with --suggest-timeouts")
+		return ExitStatusInvalidCommandOption
 	}
 	opts.IgnorePatterns = f.ignorePats
 	// A command the user named must exist: the default is looked up on PATH and a missing one only costs a note
@@ -359,7 +462,7 @@ func (cmd *Command) Main(args []string) int {
 		}
 	}
 	var onlineFailed int
-	errs, err := cmd.runLinter(flags.Args(), &opts, f.initConfig, f.migrateConfig, f.migrateIgnores, req, &baselineWrite, &onlineFailed, f.onlineReport)
+	errs, err := cmd.runLinter(flags.Args(), &opts, f.initConfig, f.migrateConfig, f.migrateIgnores, f.exportFacts, suggest, req, &baselineWrite, &onlineFailed, f.onlineReport)
 	if err != nil {
 		fmt.Fprintln(cmd.Stderr, err.Error())
 		var ue *usageError
@@ -404,4 +507,14 @@ func displayPath(wd, p string) string {
 		return r
 	}
 	return p
+}
+
+func countTrue(bs ...bool) int {
+	n := 0
+	for _, b := range bs {
+		if b {
+			n++
+		}
+	}
+	return n
 }

@@ -1,6 +1,6 @@
 # Installation
 
-Install jactionlint with mise, Homebrew, a release archive, the download script, a Docker image or `go install`, and check that the installation works. jactionlint is a single executable that needs no other program: shellcheck, pyflakes and node are optional companions.
+Install jactionlint with mise, Homebrew, pip, a release archive, the download script, a Docker image or `go install`, and check that the installation works. jactionlint is a single executable that needs no other program: shellcheck, pyflakes and node are optional companions.
 
 > [!NOTE]
 > This site documents the development version (the `main` branch). A release can lack options and rules that these pages describe: `jactionlint --help` lists what the installed version supports, and an option that is newer than your version fails with `unknown option`. To get everything on this site, [build the `main` branch](#build-from-source).
@@ -13,6 +13,7 @@ Each method installs the same program. They differ in how the download is verifi
 | --- | --- | --- | --- |
 | [mise](#mise) | You work on a laptop or in CI and want one command to install and update. | A checksum and the provenance that mise records in `mise.lock`. | `mise upgrade jactionlint` |
 | [Homebrew cask](#homebrew) | You use Homebrew, on macOS or Linux. | The sha256 in the cask. | Homebrew. Each release updates the cask. |
+| [PyPI](#pypi) | You manage your tools with pip, pipx or uv, for example in a Python project. | PyPI, over HTTPS. The checksums file and the attestation of a release do not cover the wheels. | `pip install --upgrade jactionlint`, `pipx upgrade jactionlint` or `uv tool upgrade jactionlint` |
 | [Release archive](#prebuilt-binaries) | You want a file for any supported platform, installed by hand or by your own tooling. | The checksums file and the attestation, which you check. | Download the new archive. |
 | [Download script](#download-script) | You need a one-command install in a script or on a throwaway CI runner. | Nothing: the script does not verify the archive. | Run the script again. |
 | [Docker image](#docker-image) | You run jactionlint in a container and want shellcheck and pyflakes in it. | The image digest, when you pin it. | `docker pull` |
@@ -65,6 +66,29 @@ brew install --cask jdx/jactionlint/jactionlint
 The cask downloads the release archive for macOS or Linux, on Intel or Arm, and installs the executable and the man page, so `man jactionlint` works. It also installs the `shellcheck` formula as a dependency. It does not install pyflakes, which jactionlint needs only for steps with `shell: python` (see [Companion programs](#companion-programs)).
 
 The release workflow signs the macOS executables with a Developer ID certificate and has Apple notarize them, and it fails the release unless Apple accepts them. The cask and the macOS archives hold the same executables. Releases from before that step existed are not signed.
+
+## PyPI
+
+The release workflow publishes jactionlint to [PyPI](https://pypi.org/project/jactionlint/) as wheels, which are the Python packages that pip, pipx and uv install. A wheel holds the same program as a release archive, so use it when one of these tools already manages the programs of your machine or project:
+
+```sh
+pip install jactionlint
+pipx install jactionlint
+uv tool install jactionlint
+uvx jactionlint --version
+```
+
+`pip install` adds jactionlint to the current Python environment. `pipx install` and `uv tool install` give it an isolated environment and put the `jactionlint` command on your `PATH`. `uvx` runs jactionlint from the cache of uv without installing it. To update, run `pip install --upgrade jactionlint`, `pipx upgrade jactionlint` or `uv tool upgrade jactionlint`.
+
+What differs from the other methods:
+
+- **Platforms.** There is a wheel for Linux, macOS and Windows, each on x86-64 and on Arm. The other platforms of [the release archives](#prebuilt-binaries), such as FreeBSD and 32-bit Linux, have none.
+- **Python.** The wheel declares Python 3.10 or later. The `jactionlint` command that it installs is a small Python script that starts the executable inside the wheel, so Python stays installed. jactionlint itself does not use Python, except through the optional pyflakes (see [Companion programs](#companion-programs)).
+- **Version.** The wheel has the version of the release, and `jactionlint --version` prints `installed from PyPI` on its second line (see [Check the installation](#check-the-installation)).
+- **Verification.** A separate job of the release workflow builds the wheels from the tag, not from the release archives, and uploads them with PyPI trusted publishing. The checksums file and the attestation of [Verify the download](#verify-the-download) do not cover them, and the macOS executables are not signed with the Developer ID certificate of the archives.
+- **Releases.** A release has wheels only when the workflow that made it had that job. Releases from before then are not on PyPI.
+
+In a workflow, prefer the `jdx/jactionlint` action or mise: see [the action](./ci.md#the-action) and [mise in CI](./ci.md#mise). A `run:` step that installs from PyPI names the version, as in `pip install jactionlint==<version>` or `uvx jactionlint@<version>`. With the pedantic profile, jactionlint reports a call without it as [`unpinned-tools`](./rules.md#unpinned-tools).
 
 ## Prebuilt binaries
 
@@ -204,6 +228,7 @@ The first line is the version and the third names the Go compiler and the platfo
 | Installed with | First line | Second line |
 | --- | --- | --- |
 | mise, Homebrew cask, release archive, download script | The release version without a leading `v` | `installed by downloading from release page` |
+| PyPI wheel (pip, pipx, uv) | The release version without a leading `v` | `installed from PyPI` |
 | Docker image | The release version without a leading `v` | `installed by building from source` |
 | `go install` with `@latest` | The release version with a leading `v` | `installed by building from source` |
 | `go install` with `@main`, or a build in a clone | A pseudo-version of the commit | `installed by building from source` |

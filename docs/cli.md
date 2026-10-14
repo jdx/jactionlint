@@ -16,7 +16,7 @@ jactionlint [OPTIONS] -
 - **`-`:** jactionlint reads one input from stdin. The `-` must be the only operand: `jactionlint ci.yaml -` exits with status 3 and the message `could not read "-"`. Use `--stdin-filename` to name the input and to say what it is.
 - **`--`:** everything after it is an operand, so `jactionlint -- -odd.yaml` checks a file named `-odd.yaml`.
 
-Standard output carries the result you asked for: the findings, the diff of `--diff`, the text of `--help`, `--version`, `--list-rules`, `--explain`, `--completion`, `--print-config-schema` and `--print-output-schema`, and the messages of `--baseline-write`, `--init-config`, `--migrate-config` and `--migrate-ignores`. Everything else goes to stderr: the summaries of `--fix` and `--diff`, hints, notes, warnings, the logs of `--verbose` and `--debug`, and error messages. [Streams and color](./output.md#streams-and-color) covers the cases of `--diff`, `--fix` and `--format sarif`.
+Standard output carries the result you asked for: the findings, the diff of `--diff`, the text of `--help`, `--version`, `--list-rules`, `--explain`, `--completion`, `--print-config-schema`, `--print-output-schema` and `--print-facts-schema`, the JSON document of `--export-facts`, the report of `--suggest-timeouts`, and the messages of `--baseline-write`, `--init-config`, `--migrate-config` and `--migrate-ignores`. Everything else goes to stderr: the summaries of `--fix` and `--diff`, hints, notes (the count of the findings that `--changed-since` hides is one), warnings, the logs of `--verbose` and `--debug`, and error messages. [Streams and color](./output.md#streams-and-color) covers the cases of `--diff`, `--fix` and `--format sarif`.
 
 ## Option syntax
 
@@ -28,7 +28,7 @@ Standard output carries the result you asked for: the findings, the diff of `--d
 - **Repeated options:** `--ignore`, `--select`, `--online-allow` and `--online-deny` can be given several times. `--select`, `--online-allow` and `--online-deny` also accept a comma-separated list. `--ignore` does not: `--ignore a,b` is one [pattern](./ignore.md#write-a-pattern), the regular expression `a,b`, so repeat `--ignore`. `--fix-rules` takes one comma-separated list.
 - **No abbreviations:** `--form` is not `--format`. An unknown option, a missing value or a value that cannot be parsed prints one line, for example `jactionlint: unknown option --form (try --help)`, and exits with status 2.
 - **Single-dash long options:** the old spellings that actionlint uses, with one dash, are rejected with a message that names the replacement, and exit with status 2. See [the migration table](./v2-migration.md#command-line-options).
-- **Options that print and exit:** when you give several, the first one in this order runs and the others are ignored, whatever their order on the command line: `--help`, `--version`, `--list-rules`, `--print-config-schema` or `--print-output-schema` (giving both is one of the [option combinations that fail](#option-combinations-that-fail)), `--completion`, `--explain`. A command line that cannot be parsed exits with status 2 before any of them, `--help` included.
+- **Options that print and exit:** when you give several, the first one in this order runs and the others are ignored, whatever their order on the command line: `--help`, `--version`, `--list-rules`, `--print-config-schema`, `--print-output-schema` or `--print-facts-schema` (giving two of the three is one of the [option combinations that fail](#option-combinations-that-fail)), `--completion`, `--explain`. A command line that cannot be parsed exits with status 2 before any of them, `--help` included. `--export-facts` and `--suggest-timeouts` also print a document and exit, but they read the repository, so every option of this list wins over them.
 
 <a id="command-line-options"></a>
 
@@ -57,9 +57,12 @@ Each table lists the options of one group of `jactionlint --help`, in the order 
 | `--color` | | `[=WHEN]` | `auto` | Colorize the output. WHEN is `always`, `never` or `auto`, which colors only on a terminal. `yes` and `true` mean `always`, `no` and `false` mean `never`, and a bare `--color` means `always`. A non-empty `NO_COLOR` turns color off in every mode, `always` included. Only `text` and `oneline` use color. |
 | `--no-color` | | | | Same as `--color=never`. |
 | `--show-doc-urls` | | | | Print the documentation URL of the rule of each finding: as a `= docs:` line under the finding in the `text` format and inside the message in the `github` format. |
+| `--show-fix-status` | | | | Print what the fix of each finding is, or why it has none: as a `= fix:` or `= no fix (CODE):` line under the finding in the `text` format (not with `oneline`) and inside the message in the `github` format. A finding that its rule never fixes gets no line. The other formats do not change: `json`, `jsonl` and `sarif` always carry `fix` and `no_fix`. See [why a finding was not fixed](./fix.md#why-a-finding-was-not-fixed). |
 | `--finding-context` | | | | Add the events of the workflow and the permissions of the token of the job to each finding of the `json`, `jsonl` and `sarif` formats. See [the fields](./output.md#events-and-token-permissions-of-a-finding). |
 | `--no-hints` | | | | Print no first-run hint and no note about a missing shellcheck, pyflakes or node, and leave the SARIF notification for it out. `JACTIONLINT_NO_HINTS` does the same. See [the first run](./usage.md#the-first-run). |
 | `--min-severity` | | `LEVEL` | `info` | Hide the findings below LEVEL: `info`, `warn` or `error`. `warning` is accepted as `warn`. Hidden findings do not count for the exit status. |
+| `--changed-since` | | `REV` | | Show only the findings on the lines that changed since the merge base of `REV` and `HEAD`: the commits, the staged and unstaged changes of tracked files, and every line of an untracked file. jactionlint still checks every file and reads the whole call graph of the repository, so a finding it shows is one that a full run reports. A finding that a change causes on a line that did not change is not shown. The baseline applies first, and the exit status counts only the findings that are shown. The `text` and `oneline` formats print a note on stderr with the number of hidden findings, and the SARIF log has `properties.changedSince`. A revision that git does not know, a missing merge base or a missing `git` exits with status 3. See [option combinations](#option-combinations-that-fail). See [show only what a pull request changed](./ci.md#show-only-what-a-pull-request-changed). |
+| `--changed-scope` | | `SCOPE` | `lines` | With `--changed-since`: `lines` shows the findings on the changed lines and `files` shows every finding of a file that changed. Any other value exits with status 2, and so does the option without `--changed-since`. |
 | `--strict-exit` | | | | Exit with status 1 for a finding of any level, not only for `error`. |
 
 ### Rules and configuration
@@ -77,7 +80,9 @@ Each table lists the options of one group of `jactionlint --help`, in the order 
 | `--list-rules` | | | | Print every rule with its group, profile, level and summary, then exit. With `--format json` or `--format jsonl` it prints JSON, and `--format oneline` prints the same table as `text`; any other format exits with status 2. See [list the rules](./usage.md#list-the-rules). |
 | `--print-config-schema` | | | | Print the JSON Schema of the config file, with the rule IDs and rule options, then exit. See [the schema](./config.md#json-schema). |
 | `--print-output-schema` | | | | Print the JSON Schema of the `json` and `jsonl` output, then exit. See [the output schema](./output.md#json-schema-of-the-output). |
-| `--explain` | | `RULE` | | Print the documentation of a rule, then exit. It needs no network. An unknown rule ID exits with status 2. See [explain a rule](./usage.md#explain-a-rule). |
+| `--export-facts` | | | | Print what the workflows and composite actions of the repository declare, and what its call graph knows, as one versioned JSON document, then exit: events, permissions, concurrency, calls and who calls them, and inputs, each with its position. A value that is not known says so (`dynamic`, `unknown` or `repository-setting`) and is never guessed. It checks nothing and writes nothing, and `--profile`, `--select` and `--ignore` do not change it. File operands choose the files that are exported, and the callers are still those of the whole repository. See [option combinations](#option-combinations-that-fail) for what it refuses, and [the output page](./output.md) for the document. See [export the facts of the repository](./output.md#export-the-facts-of-the-repository). |
+| `--print-facts-schema` | | | | Print the JSON Schema of the `--export-facts` document, then exit. The repository holds the same schema as [`schema/jactionlint-facts.json`](https://github.com/jdx/jactionlint/blob/main/schema/jactionlint-facts.json). |
+| `--explain` | | `RULE` | | Print the documentation of a rule, with what its fix needs, then exit. It needs no network. An unknown rule ID exits with status 2. See [explain a rule](./usage.md#explain-a-rule). |
 
 ### Fixing
 
@@ -99,7 +104,7 @@ Each table lists the options of one group of `jactionlint --help`, in the order 
 
 ### GitHub API (online checks)
 
-These options configure the checks that query the GitHub API. The checks run only when you turn them on, and nothing uses the network otherwise. [Online checks](./online.md#online-checks) explains the rules, the token lookup and the cache.
+These options configure the checks that query the GitHub API. The checks run only when you turn them on, and nothing uses the network otherwise. `--suggest-timeouts` turns them on for its own report. [Online checks](./online.md#online-checks) explains the rules, the token lookup and the cache.
 
 | Option | Short | Value | Default | Effect |
 | --- | --- | --- | --- | --- |
@@ -114,6 +119,9 @@ These options configure the checks that query the GitHub API. The checks run onl
 | `--online-allow` | | `PATTERN` | | Look up only the repositories that match an `owner/repo` pattern. `*` matches within one part and case does not matter. Repeat the option or separate the patterns with commas. A pattern that has another shape exits with status 2. |
 | `--online-deny` | | `PATTERN` | | Never look up the repositories that match an `owner/repo` pattern. It wins over `--online-allow`. Repeat the option or separate the patterns with commas. A pattern that has another shape exits with status 2. |
 | `--online-cache-ttl` | | `DURATION` | `1h` | How long a cached answer is used without asking GitHub whether it changed. `0` revalidates every answer. A duration is a Go duration such as `30m` or `1h`. |
+| `--suggest-timeouts` | | | | Report how long the jobs of each workflow took in its latest successful runs, read from the GitHub API, with a `timeout-minutes` to consider for each job that has at least 3 samples. It implies `--online`, so `--online=cache` and `--online=strict` still apply, and it refuses `--no-online`. It writes no file, and no rule or fix uses its numbers. It reads the files you name, or the workflow files of the repository. `--format` is `text` or `json`, and any other format exits with status 2. The repository is `GITHUB_REPOSITORY`, else the `origin` remote on github.com; when neither names one, the exit status is 3. A lookup that fails makes the report incomplete and says so, and only `--online=strict` turns that into exit status 3. See [the history of the runs](./online.md) and [option combinations](#option-combinations-that-fail). See [suggest timeouts from the history of the runs](./online.md#suggest-timeouts). |
+| `--timeout-history-runs` | | `N` | `20` | With `--suggest-timeouts`: how many of the latest successful runs of each workflow to read, from 1 to 100. Each run costs one request, plus one request for each workflow. A value outside the range exits with status 2, and so does the option without `--suggest-timeouts`. |
+| `--timeout-buffer` | | `FACTOR` | `2` | With `--suggest-timeouts`: the factor by which the longest duration on record is multiplied before it is rounded up to whole minutes. FACTOR is a number of at least 1: a smaller value exits with status 2, and so does the option without `--suggest-timeouts`. |
 | `--online-report` | | `FILE` | | Write how complete the online checks were (checked and excluded repositories, skipped lookups, cache age) to FILE as JSON, whatever `--format` says. The file also says whether the online checks ran. |
 | `--online-max-wait` | | `DURATION` | `30s` | The longest wait for a GitHub rate limit to reset. `0` never waits. A limit that resets later skips the lookups. |
 
@@ -139,7 +147,21 @@ These combinations exit with status 2 and one message. Where a message is quoted
 | `--baseline-write` with `--fix` or `--diff` | `--baseline-write cannot be combined with --fix` |
 | `--no-ignores` with `--baseline`, `--baseline-check` or `--baseline-write` | `--no-ignores cannot be combined with --baseline, --baseline-check or --baseline-write: it turns the baseline off` |
 | `--online` with `--no-online` | `--online and --no-online cannot be combined` |
-| `--print-config-schema` with `--print-output-schema` | `--print-config-schema and --print-output-schema cannot be combined` |
+| Two of `--print-config-schema`, `--print-output-schema` and `--print-facts-schema` | `--print-config-schema, --print-output-schema and --print-facts-schema cannot be combined` |
+| `--changed-scope` without `--changed-since` | `--changed-scope can be used only with --changed-since` |
+| `--changed-since` with an empty revision, as in `--changed-since ''` | `--changed-since needs a revision, such as --changed-since origin/main` |
+| `--changed-since` with `--fix`, `--diff`, `--baseline-write`, `--migrate-ignores`, `--init-config` or `--migrate-config` | `--changed-since only filters what is reported, so it cannot be combined with --fix, --diff, --baseline-write, --migrate-ignores, --init-config or --migrate-config` |
+| `--changed-since` with `--export-facts` | `--changed-since filters findings and --export-facts prints no findings but the facts of the whole repository, so they cannot be combined` |
+| `--changed-since` with `--suggest-timeouts` | `--changed-since filters findings and --suggest-timeouts prints no findings, so they cannot be combined` |
+| `--changed-since` with the operand `-` | `--changed-since cannot be used with stdin because there is no file to compare` |
+| `--export-facts` with `--suggest-timeouts` | `--export-facts and --suggest-timeouts print different documents, so they cannot be combined` |
+| `--export-facts` with `--fix`, `--diff`, `--baseline-write` or `--migrate-ignores` | `--export-facts cannot be combined with --fix, --diff, --baseline-write or --migrate-ignores: it only reads` |
+| `--export-facts` with the operand `-` | `--export-facts cannot be used with stdin because the facts are about the files of a repository` |
+| `--suggest-timeouts` with `--no-online`, or with `JACTIONLINT_ONLINE=0` | `--suggest-timeouts reads the runs of the workflows from GitHub, so it cannot be combined with --no-online or JACTIONLINT_ONLINE=0` |
+| `--suggest-timeouts` with `--fix`, `--diff`, `--baseline-write` or `--migrate-ignores` | `--suggest-timeouts cannot be combined with --fix, --diff, --baseline-write or --migrate-ignores: it only reads` |
+| `--suggest-timeouts` with the operand `-` | `--suggest-timeouts cannot be used with stdin because the report is about the workflows of a repository` |
+| `--suggest-timeouts` with a `--format` other than `text` and `json` | `--suggest-timeouts prints the formats text and json only` |
+| `--timeout-history-runs` or `--timeout-buffer` without `--suggest-timeouts` | `--timeout-history-runs and --timeout-buffer can be used only with --suggest-timeouts` |
 | `--fix-rules` without `--fix` or `--diff` | `--fix-rules can be used only with --fix or --diff` |
 | `--fix` or `--diff` with the operand `-` | `--fix cannot be used with stdin because the fixed file would not be saved` |
 | `--baseline-write` with the operand `-` | `--baseline-write cannot be used with stdin because the baseline would not know the file` |
@@ -154,7 +176,7 @@ These combinations exit with status 2 and one message. Where a message is quoted
 
 | Variable | Effect | Accepted values |
 | --- | --- | --- |
-| `JACTIONLINT_ONLINE` | The default of `--online` and `--no-online`. The command line wins. | Empty: not set. `0`, `false`, `off` or `no`: no online checks. `1`, `true` or `on`: the plain online mode. `cache`, `strict` or `cache,strict`, in any order and separated by a comma, `+` or a space: that mode. Case does not matter. Anything else exits with status 2. |
+| `JACTIONLINT_ONLINE` | The default of `--online` and `--no-online`. The command line wins. `--suggest-timeouts` refuses the value that turns the online checks off. | Empty: not set. `0`, `false`, `off` or `no`: no online checks. `1`, `true` or `on`: the plain online mode. `cache`, `strict` or `cache,strict`, in any order and separated by a comma, `+` or a space: that mode. Case does not matter. Anything else exits with status 2. |
 | `JACTIONLINT_NO_HINTS` | Same as `--no-hints`. | Any value except empty, `0` and `false`. |
 | `CI` | Lets the first-run hint appear when stderr is not a terminal. | Any value except empty, `false` and `0`. |
 | `GITHUB_ACTIONS` | Same as `CI` for the first-run hint. | Any value except empty and `false`. |
@@ -165,7 +187,7 @@ These combinations exit with status 2 and one message. Where a message is quoted
 | `GITHUB_COM_TOKEN` | The token for api.github.com with `--online-github-com-fallback`, read after the variable and the file that the options name. `GITHUB_TOKEN` and `GH_TOKEN` are never sent there. | A token without white space. |
 | `GITHUB_API_URL`, `GITHUB_SERVER_URL`, `GH_HOST` | The API URL when no option or key gives one, tried in this order. GitHub Actions sets the first two. | A URL for the first two, a host name for `GH_HOST`. |
 | `GITHUB_GRAPHQL_URL` | The GraphQL endpoint of the branch scan of `impostor-commit`. jactionlint ignores it, with a notice, unless it has the scheme and host of the REST API. | A URL. |
-| `GITHUB_REPOSITORY` | The repository for the environment lookups of the online checks. Without it jactionlint reads the `origin` remote. | `owner/repo`. |
+| `GITHUB_REPOSITORY` | The repository for the environment lookups of the online checks, and the repository that `--suggest-timeouts` asks about. Without it jactionlint reads the `origin` remote. | `owner/repo`. |
 
 [Find the token](./online.md#find-the-token) gives the order of the token sources, and [the cache](./online.md#the-cache) explains the cache directory.
 
@@ -198,7 +220,7 @@ jactionlint does not read these itself, but they change what a run does.
 | The baseline file, `.github/jactionlint-baseline.json` or the file you name | With `--baseline`, `--baseline-check` and `baseline:` in the config file. |
 | The shellcheckrc | With `--shellcheck-rcfile` or `shellcheck.rcfile`. |
 | The token files | With `--online-token-file`, `--online-github-com-token-file` or their keys. |
-| The cache directory, `$XDG_CACHE_HOME/jactionlint` or `~/.cache/jactionlint` | With the online checks. It holds answers of GitHub and has a size limit: see [the cache](./online.md#the-cache). |
+| The cache directory, `$XDG_CACHE_HOME/jactionlint` or `~/.cache/jactionlint` | With the online checks and `--suggest-timeouts`. It holds answers of GitHub and has a size limit: see [the cache](./online.md#the-cache). |
 | Files of the repository that some checks read, such as `.gitmodules`, `.git/config`, `package.json` and lock files | When a check needs them. The section of each check in [the checks page](./checks.md) names its files. |
 
 ### Files it writes
@@ -211,32 +233,34 @@ jactionlint does not read these itself, but they change what a run does.
 | The config file | `--migrate-config` | It rewrites the file in place. |
 | The workflow files and the root `action.yml` or `action.yaml` | `--migrate-ignores` | It rewrites the files that hold zizmor comments, the same way as `--fix`. |
 | The report file | `--online-report` | It writes JSON, also when the online checks did not run. |
-| The cache directory | The online checks | It stores answers of GitHub. |
+| The cache directory | The online checks and `--suggest-timeouts` | It stores answers of GitHub. |
 
 ## Programs and network
 
 ### Programs
 
-jactionlint starts these programs when it needs them. A missing program never stops a run unless you named the command yourself.
+jactionlint starts these programs when it needs them. A missing program never stops a run unless you named the command yourself, or `--changed-since` needs `git`.
 
 | Program | Used for | When it is missing |
 | --- | --- | --- |
-| shellcheck | The `shellcheck` rule, for `run:` scripts | A note on stderr and no check of the scripts. A command named with `--shellcheck` that does not exist exits with status 3. |
+| shellcheck | The `shellcheck` rule, for `run:` scripts | A note on stderr and no `shellcheck` findings. The rule [`shell-syntax`](./checks.md#check-shell-syntax) then reports the syntax errors of `bash` and `sh` scripts, which its built-in parser finds, and nothing else. A command named with `--shellcheck` that does not exist exits with status 3. |
 | pyflakes | The `pyflakes` rule, for `shell: python` scripts | The same as shellcheck, with `--pyflakes`. |
 | ruff | The `pyflakes` rule instead of pyflakes, with `--ruff` | Exit status 3. |
 | node 20 or later | The `github-script-syntax` rule, for the scripts of `actions/github-script` | A note on stderr and no check of the scripts. Turn the rule off to silence the note. |
 | git | The `unmatched-paths-filter` rule, which lists the files of the repository with `git ls-files` | The rule walks the directory tree instead. |
+| git | `--changed-since`, which asks for the merge base, the diff against it and the untracked files | Exit status 3: jactionlint cannot compare, and it never prints an empty report instead. |
 | gh | Finding a token for the online checks: `gh auth token --hostname HOST` | jactionlint skips it. `gh-cli: false` in `online-options` turns it off. |
 
 [External tools](./usage.md#external-tools) has the note texts and the setup of each tool.
 
 ### Network
 
-Without the online checks, jactionlint contacts no host. With them it contacts only these hosts, which matters for a runner behind an egress allow list.
+Without the online checks and `--suggest-timeouts`, jactionlint contacts no host. With them it contacts only these hosts, which matters for a runner behind an egress allow list.
 
 | Host | Used for | When |
 | --- | --- | --- |
 | `api.github.com`, or the host of `--online-api-url` | The REST and GraphQL requests of the online rules | `--online` and `--online=strict`. `--online=cache` uses no network. |
+| `api.github.com`, or the host of `--online-api-url` | The successful runs of each workflow and the jobs of each run | `--suggest-timeouts`, also with `--online=strict`. `--online=cache` uses no network. |
 | `api.github.com` | The lookups of repositories that a Server does not have | `--online-github-com-fallback` on an Enterprise Server. |
 | `auth.docker.io` and `registry-1.docker.io` | The digest of a Docker Hub image, for the unsafe fix of the findings of `unpinned-images` and of `unpinned-uses` on a `docker://` reference | `--online` and `--online=strict`, also without `--fix`. `--online=cache` uses no network. |
 | `ghcr.io` | The digest of an image of ghcr.io, for the same fix | `--online` and `--online=strict`, also without `--fix`. `--online=cache` uses no network. |
@@ -249,15 +273,16 @@ jactionlint exits with status 0, 1, 2 or 3. This table is the complete list of c
 
 | Status | Meaning | Cause |
 | --- | --- | --- |
-| `0` | Success | The run finished and left no finding that counts: findings of level `warn` and `info` do not count, and neither do findings that an ignore, a baseline or `--min-severity` hides. |
-| `0` | Success | `--help`, `--version`, `--list-rules`, `--explain`, `--completion`, `--print-config-schema` and `--print-output-schema` finished. |
+| `0` | Success | The run finished and left no finding that counts: findings of level `warn` and `info` do not count, and neither do findings that an ignore, a baseline, `--min-severity` or `--changed-since` hides. |
+| `0` | Success | `--help`, `--version`, `--list-rules`, `--explain`, `--completion`, `--print-config-schema`, `--print-output-schema` and `--print-facts-schema` finished. |
+| `0` | Success | `--export-facts` and `--suggest-timeouts` finished. A `--suggest-timeouts` report that says it is incomplete still exits with status 0, unless `--online=strict` is set. |
 | `0` | Success | `--init-config`, `--migrate-config`, `--migrate-ignores` and `--baseline-write` finished. |
 | `0` | Success | `--fix` fixed every finding that counts. |
-| `1` | Findings left | At least one finding of level `error` is left after ignores, baseline and `--min-severity`. |
+| `1` | Findings left | At least one finding of level `error` is left after ignores, baseline, `--min-severity` and `--changed-since`. |
 | `1` | Findings left | `--strict-exit` is set and a finding of any level is left. |
 | `1` | Findings left | `--diff` prints a diff that is not empty, also when only findings of level `warn` or `info` would change. |
 | `1` | Findings left | `--fix` leaves a finding that counts. |
-| `2` | Invalid command line | An unknown option, a missing value, or a value that cannot be parsed or is not allowed: `--profile`, `--format`, `--min-severity`, `--color`, `--fix`, `--baseline`, `--online`, `--online-api-url`, `--online-allow`, `--online-deny`, durations, `--completion` and `JACTIONLINT_ONLINE`. A `--format` template that does not parse is one of them. |
+| `2` | Invalid command line | An unknown option, a missing value, or a value that cannot be parsed or is not allowed: `--profile`, `--format`, `--min-severity`, `--color`, `--fix`, `--baseline`, `--online`, `--online-api-url`, `--online-allow`, `--online-deny`, durations, `--completion`, `--changed-scope`, `--timeout-history-runs`, `--timeout-buffer` and `JACTIONLINT_ONLINE`. A `--format` template that does not parse is one of them. |
 | `2` | Invalid command line | A rule ID that does not exist in `--select`, `--fix-rules` or `--explain`, or a `--list-rules` format that is not supported. |
 | `2` | Invalid command line | An `--ignore` pattern that is not a valid regular expression. |
 | `2` | Invalid command line | One of the [option combinations that fail](#option-combinations-that-fail), or `--fix`, `--diff` or `--baseline-write` with stdin. |
@@ -269,7 +294,9 @@ jactionlint exits with status 0, 1, 2 or 3. This table is the complete list of c
 | `3` | Failure | A command named with `--shellcheck`, `--pyflakes` or `--ruff` does not exist, or the shellcheckrc of `--shellcheck-rcfile` or `shellcheck.rcfile` does not exist. |
 | `3` | Failure | `--fix` or `--baseline-write` cannot write a file, or `--fix` refuses a fix that would damage the file or does not converge. |
 | `3` | Failure | A `--format` template fails while it runs, for example because it names a field that does not exist. |
-| `3` | Failure | `--online=strict` skipped a lookup. This wins over status 1. |
+| `3` | Failure | `--changed-since` cannot compare: git does not know the revision, which a shallow clone causes, finds no merge base of it and `HEAD`, rejects a revision that starts with `-`, or is not installed. |
+| `3` | Failure | `--suggest-timeouts` cannot tell the GitHub repository: neither `GITHUB_REPOSITORY` nor an `origin` remote on github.com names it. |
+| `3` | Failure | `--online=strict` skipped a lookup, also in a `--suggest-timeouts` run. This wins over status 1. |
 
 The level of a finding decides whether it counts. The rules of the `correctness` and `default` profiles have the level `error` by default, except `unused-baseline-entry`, which has the level `info`; many rules of `pedantic` and many online rules have the level `warn` or `info`. [The rules page](./rules.md) lists the default level of each rule, and `rules:` in [the config file](./config.md#rules) changes it. `--min-severity warn` hides the findings below `warn`, and `--strict-exit` makes every finding count.
 
@@ -283,7 +310,7 @@ jactionlint --min-severity error   # show only findings of level error
 When the same setting has several sources, the first of these wins:
 
 - **Profile:** `--profile`, then `profile` of the config file (applied after `extends`), then `default`.
-- **Online checks:** `--online` or `--no-online`, then `JACTIONLINT_ONLINE`, then `online` and `online-options.mode`, then off.
+- **Online checks:** `--online` or `--no-online`, then `JACTIONLINT_ONLINE`, then `online` and `online-options.mode`, then off. `--suggest-timeouts` counts as `--online` and refuses `--no-online` and `JACTIONLINT_ONLINE=0`.
 - **Other online options:** the option, then the key of `online-options`, then the built-in default. For the API URL, the order is the option, the key, the variables `GITHUB_API_URL`, `GITHUB_SERVER_URL` and `GH_HOST`, then `https://api.github.com`. A list option replaces the list of the key; it does not extend it.
 - **Baseline:** `--baseline`, `--baseline-write` or `--no-baseline`, then the `baseline` key.
 - **Fix rules:** `--fix-rules`, then `fix.rules`.
@@ -315,7 +342,7 @@ Most names agree. The names of the keys that differ are `online-options.max-rate
 | `--no-hints` | | `JACTIONLINT_NO_HINTS` |
 | `--color`, `--no-color` | | `NO_COLOR` |
 
-The keys `online-options.retries`, `online-options.concurrency` and `online-options.gh-cli` have no option. The other options have no key: `--ignore` has no key that means the same, because `paths.<glob>.ignore` ignores patterns in the files that match a glob and `ignores` records [durable ignores](./config.md#durable-ignores). [The online keys](./config.md#online-options) are listed with their defaults in the configuration page.
+The keys `online-options.retries`, `online-options.concurrency` and `online-options.gh-cli` have no option. The other options have no key. `--show-fix-status`, `--changed-since`, `--changed-scope`, `--export-facts`, `--suggest-timeouts`, `--timeout-history-runs` and `--timeout-buffer` have no variable either, and `--ignore` has no key that means the same, because `paths.<glob>.ignore` ignores patterns in the files that match a glob and `ignores` records [durable ignores](./config.md#durable-ignores). [The online keys](./config.md#online-options) are listed with their defaults in the configuration page.
 
 ## Next steps
 

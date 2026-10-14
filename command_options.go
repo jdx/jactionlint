@@ -51,9 +51,12 @@ var cliOptions = []cliOption{
 	{"Output", "color", "", "WHEN", true, "-color", "Colorize the output: always, never or auto (default). Bare --color means always"},
 	{"Output", "no-color", "", "", false, "-no-color", "Same as --color=never"},
 	{"Output", "show-doc-urls", "", "", false, "", "Print the documentation URL of the rule of each finding: under the finding (text) or in the message (github)"},
+	{"Output", "show-fix-status", "", "", false, "", "Print what the fix of each finding is, or why it has none: under the finding (text) or in the message (github)"},
 	{"Output", "finding-context", "", "", false, "", "Add the events of the workflow and the permissions of the token of the job to each finding of json, jsonl and sarif"},
 	{"Output", "no-hints", "", "", false, "-no-hints", "Do not print the hint line after a text run with many findings, nor the note that shellcheck or pyflakes was not found"},
 	{"Output", "min-severity", "", "LEVEL", false, "-min-severity", "Hide findings less severe than LEVEL: info (default), warn or error"},
+	{"Output", "changed-since", "", "REV", false, "", "Show only the findings on the lines that changed since the merge base of REV and HEAD (commits, index, working tree, and every line of an untracked file). Every file is still checked, so the findings are those of a full run"},
+	{"Output", "changed-scope", "", "SCOPE", false, "", "With --changed-since: lines (default) shows the findings on the changed lines, files shows every finding of a changed file"},
 	{"Output", "strict-exit", "", "", false, "-strict-exit", "Exit with status 1 also for findings of level warn and info"},
 
 	{"Rules and configuration", "profile", "p", "NAME", false, "-profile", "Rule profile: correctness, default or pedantic. Overrides \"profile\" of the config file"},
@@ -67,6 +70,8 @@ var cliOptions = []cliOption{
 	{"Rules and configuration", "list-rules", "", "", false, "", "List every rule ID with its group, profile, level and summary, and exit. --format json prints it as JSON"},
 	{"Rules and configuration", "print-config-schema", "", "", false, "", "Print the JSON Schema of the config file (rule IDs and options included) and exit"},
 	{"Rules and configuration", "print-output-schema", "", "", false, "", "Print the JSON Schema of --format json and jsonl and exit"},
+	{"Rules and configuration", "export-facts", "", "", false, "", "Print the facts of the workflows and actions (events, permissions, concurrency, calls and who calls them, inputs; with positions and explicit unknowns) as versioned JSON and exit. Nothing is checked"},
+	{"Rules and configuration", "print-facts-schema", "", "", false, "", "Print the JSON Schema of --export-facts and exit"},
 	{"Rules and configuration", "explain", "", "RULE", false, "", "Print the documentation of a rule ID (summary, group, profile, level, options, fixes and its section of the checks document) and exit"},
 
 	{"Fixing", "fix", "", "unsafe", true, "-fix", "Apply the safe automatic fixes in place. --fix=unsafe also applies the fixes that may change behavior"},
@@ -90,6 +95,9 @@ var cliOptions = []cliOption{
 	{"GitHub API (online checks)", "online-allow", "", "PATTERN", false, "-online-allow", "Look up only repositories matching owner/repo PATTERN (\"*\" is a wildcard). Repeatable"},
 	{"GitHub API (online checks)", "online-deny", "", "PATTERN", false, "-online-deny", "Never look up repositories matching owner/repo PATTERN. Repeatable"},
 	{"GitHub API (online checks)", "online-cache-ttl", "", "DURATION", false, "-online-cache-ttl", "How long a cached GitHub answer is used without revalidation (default 1h; 0 always revalidates)"},
+	{"GitHub API (online checks)", "suggest-timeouts", "", "", false, "", "Report how long the jobs of the workflows really took in their latest successful runs, with a timeout-minutes to consider for each. Implies --online, writes nothing and suggests no value without enough runs. --format text or json"},
+	{"GitHub API (online checks)", "timeout-history-runs", "", "N", false, "", "With --suggest-timeouts: how many of the latest successful runs of each workflow are read (1 to 100, default 20). Each run costs a request"},
+	{"GitHub API (online checks)", "timeout-buffer", "", "FACTOR", false, "", "With --suggest-timeouts: the longest duration on record is multiplied by FACTOR (at least 1, default 2) and rounded up to whole minutes"},
 	{"GitHub API (online checks)", "online-report", "", "FILE", false, "", "Write how complete the online checks were (checked, excluded, skipped lookups, cache age) to FILE as JSON, whatever the --format. The file always says whether they ran"},
 	{"GitHub API (online checks)", "online-max-wait", "", "DURATION", false, "-online-max-wait", "The longest to wait for a GitHub rate limit to reset (default 30s; 0 never waits)"},
 
@@ -276,6 +284,8 @@ type commandFlags struct {
 	listRules                bool
 	printConfigSchema        bool
 	printOutputSchema        bool
+	printFactsSchema         bool
+	exportFacts              bool
 	completion               string
 	explain                  string
 	fix                      fixFlag
@@ -289,6 +299,11 @@ type commandFlags struct {
 	minSeverity              string
 	profileName              string
 	strictExit               bool
+	suggestTimeouts          bool
+	timeoutRuns              int
+	timeoutBuffer            float64
+	changedSince             string
+	changedScope             string
 	onlineTTL, onlineMaxWait time.Duration
 	baseline, baselineWrite  optionalValueFlag
 	noBaseline, noOnline     bool
@@ -332,9 +347,12 @@ func newCommandFlags() *commandFlags {
 	fs.BoolVar(&f.noColor, "no-color", false, "")
 	fs.BoolVar(&f.noHints, "no-hints", false, "")
 	fs.BoolVar(&o.ShowDocURLs, "show-doc-urls", false, "")
+	fs.BoolVar(&o.ShowFixStatus, "show-fix-status", false, "")
 	fs.BoolVar(&o.FindingContext, "finding-context", false, "")
 	fs.StringVar(&f.minSeverity, "min-severity", "info", "")
 	fs.BoolVar(&f.strictExit, "strict-exit", false, "")
+	fs.StringVar(&f.changedSince, "changed-since", "", "")
+	fs.StringVar(&f.changedScope, "changed-scope", "", "")
 
 	fs.StringVarP(&f.profileName, "profile", sh("profile"), "", "")
 	fs.StringVarP(&o.ConfigFile, "config-file", sh("config-file"), "", "")
@@ -347,6 +365,8 @@ func newCommandFlags() *commandFlags {
 	fs.BoolVar(&f.listRules, "list-rules", false, "")
 	fs.BoolVar(&f.printConfigSchema, "print-config-schema", false, "")
 	fs.BoolVar(&f.printOutputSchema, "print-output-schema", false, "")
+	fs.BoolVar(&f.printFactsSchema, "print-facts-schema", false, "")
+	fs.BoolVar(&f.exportFacts, "export-facts", false, "")
 	fs.StringVar(&f.completion, "completion", "", "")
 	fs.StringVar(&f.explain, "explain", "", "")
 
@@ -374,6 +394,9 @@ func newCommandFlags() *commandFlags {
 	fs.StringVar(&o.OnlineOptions.GitHubComTokenFile, "online-github-com-token-file", "", "")
 	fs.Var(&f.onlineAllow, "online-allow", "")
 	fs.Var(&f.onlineDeny, "online-deny", "")
+	fs.BoolVar(&f.suggestTimeouts, "suggest-timeouts", false, "")
+	fs.IntVar(&f.timeoutRuns, "timeout-history-runs", DefaultTimeoutHistoryRuns, "")
+	fs.Float64Var(&f.timeoutBuffer, "timeout-buffer", DefaultTimeoutBuffer, "")
 	fs.DurationVar(&f.onlineTTL, "online-cache-ttl", defaultOnlineCacheTTL, "")
 	fs.StringVar(&f.onlineReport, "online-report", "", "")
 	fs.DurationVar(&f.onlineMaxWait, "online-max-wait", defaultOnlineMaxWait, "")

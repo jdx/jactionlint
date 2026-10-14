@@ -264,7 +264,7 @@ Nothing in this table changes a run until you use it, except where [What breaks]
 | Baseline | `--baseline-write` records today's findings, and runs with `--baseline` or `baseline: auto` fail only on new ones. `--fix` also fixes the findings that the baseline hides: preview with `--diff`. | [Baseline](./baseline.md#baseline) |
 | Durable ignores | `ignores` in the config file matches findings by structure and can expire. | [Durable ignores](./config.md#durable-ignores) |
 | zizmor ignore comments | `# zizmor: ignore[...]` comments are honored, and `--migrate-ignores` converts them. | [zizmor ignore comments](./ignore.md#zizmor-ignore-comments) |
-| Online checks | `--online` adds rules that ask GitHub about the actions in use, and `--online --fix` pins tags to commits. They are off by default. | [Online checks](./online.md#online-checks) |
+| Online checks | `--online` adds rules that ask GitHub about the actions in use, and `--online --fix` pins tags to commits. The rule `action-release-cooldown` (the version of an action is younger than a number of days) is online too, but runs only when `rules` has an entry for it. They are off by default. | [Online checks](./online.md#online-checks) |
 | Composite actions and Dependabot | `action.yml` files and `.github/dependabot.yml` are checked with the workflow files. | [Composite actions](./checks.md#check-composite-actions), [Dependabot](./checks.md#check-dependabot-syntax) |
 | hk | A SARIF step gives hk findings with rule IDs and fixes. | [hk](./hooks.md#hk) |
 | Explaining rules | `--explain RULE` and `--list-rules` describe the rules, and `--select RULES` runs only some of them. | [Explain a rule](./usage.md#explain-a-rule) |

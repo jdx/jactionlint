@@ -176,15 +176,20 @@ func (rule *RuleEnvironmentFileRedirect) truncation(s *runscript.Script, origin 
 		op = "`tee` without `-a`"
 	}
 	e := rule.errorIDAt("environment-file-redirect", start, op+" empties $"+name+" before it writes, so what this script wrote to it before is lost. append with "+map[bool]string{true: "`tee -a`", false: "`>>`"}[r.Tee]).endAt(end)
+	// Only a plain `>` of the script is edited; anything else is appended to by hand
+	noFix := &NoFix{Code: NoFixUnsupportedShape, Reason: "the redirect is not a plain `>` that the fix can edit exactly, append with `>>` (or `tee -a`) by hand"}
 	if r.Tee || r.Op != ">" || r.Fd != "" || rule.src == nil {
+		e.NoFix = noFix
 		return
 	}
 	p := s.Position(origin, r.Offset)
 	if !p.Exact {
+		e.NoFix = noFix
 		return
 	}
 	off, ok := rule.src.offset(p.Line, p.Col)
 	if !ok || !rule.src.matches(off, ">") || rule.src.matches(off, ">>") || rule.src.matches(off, ">|") || rule.src.matches(off, ">&") {
+		e.NoFix = noFix
 		return
 	}
 	// the reset may be meant, so the fix is not applied unless it is asked for

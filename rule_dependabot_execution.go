@@ -31,8 +31,10 @@ func (r *RuleDependabotExecution) VisitDependabotUpdate(u *DependabotUpdate) err
 		if edit, ok := r.src.replaceScalar(v.Pos, v.Value, v.Quoted, "deny"); ok {
 			// Dependabot may fail to update dependencies which need the code to be executed
 			r.errs[len(r.errs)-1].Fix = &Fix{Description: "Set insecure-external-code-execution to deny", Unsafe: true, Edits: []TextEdit{edit}}
+			return nil
 		}
 	}
+	r.errs[len(r.errs)-1].NoFix = &NoFix{Code: NoFixUnsupportedShape, Reason: "the value is not written in a way the fix can edit exactly, set it to \"deny\" by hand"}
 	return nil
 }
 

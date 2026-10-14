@@ -1,0 +1,26 @@
+# without shellcheck
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          echo "building ${{ github.sha }}"
+          if [ -f build.log ]; then
+            cat build.log
+      - run: |
+          # OK: [[ ]], arrays, here-strings and process substitution are bash
+          arr=(a b c)
+          [[ ${#arr[@]} -gt 2 ]] && diff <(sort a) <(sort b) <<< "$arr"
+      # OK: pwsh is not read
+      - shell: pwsh
+        run: |
+          if ($true) { Write-Host "x"
+  test-win:
+    runs-on: windows-latest
+    steps:
+      # OK: the default shell of a Windows runner is pwsh
+      - run: Write-Host "x"
+      # This script is run with bash (Git Bash) due to 'shell:' configuration
+      - shell: bash
+        run: echo "unclosed

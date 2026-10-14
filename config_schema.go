@@ -346,6 +346,9 @@ func optionSchema(o RuleOption) jsonObject {
 	switch o.Kind {
 	case RuleOptionInt:
 		s = sInt(o.Summary)
+		if o.Min > 0 {
+			s["minimum"] = o.Min
+		}
 	case RuleOptionNumber:
 		s = sType(o.Summary, "number")
 		s["minimum"] = 0

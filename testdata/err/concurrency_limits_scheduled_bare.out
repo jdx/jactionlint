@@ -1,0 +1,1 @@
+test.yaml:5:1: "concurrency:" is only a group name. nothing supersedes a run that a schedule or a person starts, so a new run should wait for the running one and not cancel it, which is what the group name does. write the mapping form with "group:" and an explicit "cancel-in-progress: false", so that the choice is visible [concurrency-limits]

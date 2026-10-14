@@ -30,6 +30,10 @@ var exampleDay = time.Date(2026, time.October, 13, 0, 0, 0, 0, time.UTC)
 // instead (the same ones the tests of the checks use).
 const requiresOnlineMarker = "# requires --online"
 
+// withoutShellcheckMarker is a line of the head of the example of a check that runs only when shellcheck does not: the
+// example is run with `--shellcheck=`, whether or not the machine has the command.
+const withoutShellcheckMarker = "# without shellcheck"
+
 // selectMarker and profileMarker start a line of the head of an example input which runs the example under
 // other rules than the example configuration: `# select: id[,id]` runs only those rules (the option --select) and
 // `# profile: pedantic` runs the profile (the option --profile).
@@ -54,6 +58,7 @@ type example struct {
 // markers are the options that the head of an example input sets.
 type markers struct {
 	online  bool
+	noShell bool
 	select_ []string
 	profile string
 	file    string
@@ -67,6 +72,8 @@ func parseMarkers(src []byte) (markers, error) {
 		switch {
 		case l == requiresOnlineMarker:
 			m.online = true
+		case l == withoutShellcheckMarker:
+			m.noShell = true
 		case strings.HasPrefix(l, selectMarker):
 			for _, id := range strings.Split(strings.TrimPrefix(l, selectMarker), ",") {
 				if id = strings.TrimSpace(id); id != "" {
@@ -166,6 +173,10 @@ func Actionlint(ex example) ([]byte, error) {
 		// The outputs of the examples must not change when a date of the checks passes (the retirement of a runner
 		// label changes the list of the available labels), so they are made as of this day
 		Now: func() time.Time { return exampleDay },
+	}
+
+	if m.noShell {
+		opts.Shellcheck = ""
 	}
 
 	// The tool runs in the root of this repository, whose testdata the online examples read

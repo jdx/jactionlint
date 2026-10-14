@@ -101,6 +101,9 @@ type RuleOption struct {
 	Default any
 	// Summary describes the option.
 	Summary string
+	// Min is the smallest value of an int option, when it is not 0. It is checked when the configuration is read and is the
+	// "minimum" of the JSON schema.
+	Min int
 	// Validate checks the value after it was normalized to the type of Kind. It can be nil.
 	Validate func(v any) error
 }
@@ -125,6 +128,9 @@ type RuleInfo struct {
 	// Online is whether the rule needs network access. Online rules run only with --online and are
 	// independent of the profile.
 	Online bool
+	// OptIn is whether the rule runs only when the "rules" of the configuration has an entry for it, whatever the profile and
+	// the online checks are. A rule of a number of days, for example, is a decision of the project.
+	OptIn bool
 	// Fixable is whether the rule can attach an automatic fix (Error.Fix) to its findings.
 	Fixable bool
 	// DocsAnchor is the anchor of the section describing the rule in docs/checks.md. It can be empty.

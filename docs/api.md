@@ -146,7 +146,7 @@ Each finding is an `*jactionlint.Error`. Its fields:
 | `Severity` | `jactionlint.SeverityError`, `SeverityWarning` or `SeverityInfo`. `String()` gives `error`, `warn` or `info`. It is never `SeverityOff`. |
 | `DocURL` | The URL of the documentation of the rule. Empty for a rule you add. |
 | `Fix` | An automatic correction, or nil. |
-| `NoFix` | Why a finding that the rule can fix has no `Fix`. Nil when `Fix` is set, and for findings that no fix exists for. |
+| `NoFix` | Why a finding of a rule that can fix some findings has no `Fix`. Nil when `Fix` is set, and for advice only: a finding that the rule never fixes, even though it fixes others, has no reason either. |
 | `Baselined` | The `Lint*` methods never return a finding that the baseline accepts. The field is set only on the way to the SARIF log and the summary format. |
 | `Events`, `Permissions` | The events of the workflow and the permissions of the job token. Set only with `FindingContext`. |
 | `RetiredID` | The retired rule ID that the finding had before its rule was merged into `ID`. Ignores of the old ID still match. |
@@ -224,9 +224,12 @@ Fields in the same row belong together. [Command-line options](./cli.md#command-
 | `Oneline` | `--oneline` | none | The same as `FormatOneline`. It affects only the text format. |
 | `Color` | `--color`, `--no-color` | none | `ColorOptionKindAuto` (the zero value), `ColorOptionKindAlways` or `ColorOptionKindNever`. `Always` and `Never` set a process-wide switch of the color library. |
 | `ShowDocURLs` | `--show-doc-urls` | none | Prints the documentation URL of the rule under each finding of the text format and in the message of the `github` format. |
+| `ShowFixStatus` | `--show-fix-status` | none | Prints under each finding of the text format (not with `Oneline`) and in the message of the `github` format what its fix is, or why it has none (`Error.NoFix`). A finding that is advice only has no line. The JSON and SARIF formats carry the same data anyway. |
 | `ShowRuleIDs` | `--rule-ids` | none | Accepted and without effect: the text format always shows the rule ID. |
 | `FindingContext` | `--finding-context` | none | Fills `Error.Events` and `Error.Permissions`, which the JSON, JSON Lines and SARIF formats print. |
 | `MinSeverity` | `--min-severity` | none | Hides the findings less severe than the value. The zero value shows every finding. |
+| `ChangedSince` | `--changed-since` | none | A git revision. Only the findings on the lines that changed since the merge base of the revision and `HEAD` are returned: the lines of the commits, the index and the working tree, and every line of a file that git does not track. Every file is still checked, so the findings are those of a full run. A revision that git does not know makes the first `Lint*` call fail. |
+| `ChangedScope` | `--changed-scope` | none | With `ChangedSince`: `ChangedScopeLines` (the default, and the zero value) or `ChangedScopeFiles`, which returns every finding of a changed file. `NewLinter` fails for any other value, and `ParseChangedScope(s)` parses a string. Without `ChangedSince` the field has no effect, where the command refuses the combination. |
 | `StdinFileName` | `--stdin-filename` | none | The name that `LintStdin` reports. Empty means `<stdin>`. |
 | `Verbose`, `Debug` | `--verbose`, `--debug` | none | Write logs to `LogWriter`. |
 | `LogWriter` | none (the command uses stderr) | none | Receives logs, deprecation warnings and notes. Nil discards them. |
@@ -475,7 +478,7 @@ coverage: complete skipped lookups: 0
 
 `NewFixtureGitHubClient(data)` reads JSON and serves it. The JSON has the keys `repos`, `images` and `owners`:
 
-- `repos` maps a lower-case `owner/repo` to its recorded data: `repo`, `tags`, `branches`, `refs` (keyed `heads/main` or `tags/v1`), `compare` (keyed `base...head`), `advisories`, `files` (keyed `ref:path`, each with `found` and `content`), `releases`, `environments` and `missing` for a repository that does not exist.
+- `repos` maps a lower-case `owner/repo` to its recorded data: `repo`, `tags`, `branches`, `refs` (keyed `heads/main` or `tags/v1`), `compare` (keyed `base...head`), `advisories`, `files` (keyed `ref:path`, each with `found` and `content`), `releases`, `release_dates` (keyed `tags/v1`, or `commits/<sha>` for a commit without a tag, each with `published_at` and `committed_at`), `environments`, `workflow_runs` (keyed by the file name of the workflow, such as `ci.yaml`, each with its `runs` and the `jobs` of every run by the ID of the run) and `missing` for a repository that does not exist.
 - `images` maps `registry/repository:tag` to a digest, or to `not-found`.
 - `owners` maps a lower-case login to whether the user or organization exists.
 
@@ -494,6 +497,8 @@ A client can also implement these interfaces. The linter checks for each one and
 | `GitHubContentClient` | `FileContent` | Reading the `action.yml` of an action that is not in `PopularActions`, and the declaration of a reusable workflow of another repository ([inputs and outputs of any action](./checks.md#check-remote-action-metadata)). | The checks that need those files report nothing for such actions. |
 | `GitHubReleaseClient` | `Release` | The `immutable-release` policy of `unpinned-uses`, which accepts the tag of an [immutable release](./checks.md#check-immutable-release). | The policy behaves like `hash-pin`. |
 | `GitHubEnvironmentClient` | `Environment` | Telling whether an environment has required reviewers ([environments without reviewers](./checks.md#check-untrusted-checkout-environment)). | The environment is trusted as it is without the online checks. |
+| `GitHubReleaseDateClient` | `ReleaseDate` | When a version was released, for the rule [`action-release-cooldown`](./checks.md#check-action-release-cooldown): the publication of the release of a tag, or the date of the commit when the tag has no release. A tag or a commit that does not exist gets an answer without dates, not an error. | The rule checks nothing, and the lookup counts as skipped. |
+| `GitHubRunsClient` | `WorkflowRuns`, `RunJobs` | The runs of a workflow file that ended with success, newest first, and the jobs of a run, which [`SuggestTimeouts`](#export-facts-and-timeout-reports) reads. `WorkflowRuns` returns `ErrGitHubNotFound` for a workflow that GitHub does not know. | `SuggestTimeouts` fails with the error that the client cannot look up workflow runs. |
 | `GitHubOwnerClient` | `Owner` | Telling whether a user or organization exists, for the [`repojacking`](./checks.md#check-repojacking) check. | The `repojacking` check does nothing. |
 | `GitHubPackageAdvisoryClient` | `AdvisoriesForPackages` | Finding the advisories that GitHub files under the full package name of an action in a subdirectory, such as `gradle/actions/setup-gradle`, in one lookup. | The `owner/repo` lookup of `Advisories` does not find them. |
 | `ImageDigestClient` | `ImageDigest` | The digest of a container image tag, which `--online --fix=unsafe` writes after the tag ([pin images to digests](./online.md#pin-container-images-to-digests-with-online-fix-unsafe)). It returns `ErrImageNotFound` for an image that does not exist. | No digest is known, so images are not pinned. |
@@ -509,6 +514,99 @@ A lookup that fails never makes a `Lint*` call fail. The checks that needed it r
 - `OnlineReport` is the JSON that `--online-report` writes: a `Version` and the coverage, with the status `disabled` when the checks were off.
 
 Warnings about the online checks, such as a rate limit, go to `LogWriter`, except with the SARIF format, which carries them in its own output.
+
+## Export facts and timeout reports
+
+These calls return a document instead of findings. They only read, and each has an option of the command: see [Command-line options](./cli.md#command-line-options).
+
+| Call | Returns | Command |
+| --- | --- | --- |
+| `linter.ExportFacts(files, project)` | The `*Facts` of the workflows and the `action.yml` files: events, permissions, concurrency, the calls between them and who calls each one, with positions and an explicit marker for a value that is not known. `facts.Marshal()` writes the JSON. | `--export-facts` |
+| `FactsSchema()` | The JSON Schema of that document. `FactsSchemaURL` is where it is published. | `--print-facts-schema` |
+| `linter.SuggestTimeouts(files, project, options)` | The `*TimeoutReport`: how long the jobs of the latest successful runs took, with a `timeout-minutes` to consider for each. | `--suggest-timeouts` |
+
+`ExportFacts` checks nothing, so the config, the profile and the ignores do not change the result. Without files it reads the workflow files and the `action.yml` files of the repository, and not the Dependabot configuration. A `project` of nil is found from the first file. `Facts.Version` is the version of the document: a field is not removed and does not change its meaning within a version, and fields can be added, so ignore the ones you do not know.
+
+```go
+facts, err := linter.ExportFacts(nil, nil)
+if err != nil {
+	log.Fatal(err)
+}
+document, err := facts.Marshal()
+```
+
+`SuggestTimeouts` asks GitHub, so it needs `LinterOptions.Online` and a `GitHubClient` that implements [`GitHubRunsClient`](#implement-your-own-client), which the built-in client does. It also needs to know the repository: it reads the environment variable `GITHUB_REPOSITORY`, or else the remote `origin` on github.com. Without the online checks it fails with an error and writes nothing. `TimeoutOptions.Runs` is how many of the latest successful runs of each workflow are read (1 to 100, the option `--timeout-history-runs`), and `TimeoutOptions.Buffer` is the factor that multiplies the longest duration (at least 1, the option `--timeout-buffer`). Zero means `DefaultTimeoutHistoryRuns` and `DefaultTimeoutBuffer`.
+
+This program serves three recorded runs of the workflow of the first example. Run it in the repository that holds that workflow, with `GITHUB_REPOSITORY=example/demo go run .`.
+
+```go
+package main
+
+import (
+	"fmt"
+	"io"
+	"log"
+
+	"github.com/jdx/jactionlint/v2"
+)
+
+// Recorded successful runs of ci.yaml, newest first, and the jobs of each run by the ID of the run.
+const fixtures = `{
+  "repos": {
+    "example/demo": {
+      "workflow_runs": {
+        "ci.yaml": {
+          "runs": [
+            {"id": 3, "created_at": "2026-10-03T10:00:00Z"},
+            {"id": 2, "created_at": "2026-10-02T10:00:00Z"},
+            {"id": 1, "created_at": "2026-10-01T10:00:00Z"}
+          ],
+          "jobs": {
+            "1": {"jobs": [{"name": "test", "conclusion": "success", "started_at": "2026-10-01T10:00:00Z", "completed_at": "2026-10-01T10:04:10Z"}]},
+            "2": {"jobs": [{"name": "test", "conclusion": "success", "started_at": "2026-10-02T10:00:00Z", "completed_at": "2026-10-02T10:05:30Z"}]},
+            "3": {"jobs": [{"name": "test", "conclusion": "success", "started_at": "2026-10-03T10:00:00Z", "completed_at": "2026-10-03T10:04:50Z"}]}
+          }
+        }
+      }
+    }
+  }
+}`
+
+func main() {
+	client, err := jactionlint.NewFixtureGitHubClient([]byte(fixtures))
+	if err != nil {
+		log.Fatal(err)
+	}
+	// SuggestTimeouts needs the online checks, and a client that knows the runs.
+	linter, err := jactionlint.NewLinter(io.Discard, &jactionlint.LinterOptions{Online: true, GitHubClient: client})
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	report, err := linter.SuggestTimeouts(nil, nil, jactionlint.TimeoutOptions{})
+	if err != nil {
+		log.Fatal(err)
+	}
+	for _, workflow := range report.Workflows {
+		for _, job := range workflow.Jobs {
+			if job.SuggestedMinutes == 0 {
+				fmt.Printf("%s %s: no suggestion: %s\n", workflow.Path, job.ID, job.Note)
+				continue
+			}
+			fmt.Printf("%s %s: %d samples, longest %.1f minutes, suggested %d\n",
+				workflow.Path, job.ID, job.Samples, *job.MaxMinutes, job.SuggestedMinutes)
+		}
+	}
+	fmt.Println("complete:", report.Complete)
+}
+```
+
+```
+.github/workflows/ci.yaml test: 3 samples, longest 5.5 minutes, suggested 11
+complete: true
+```
+
+A job has a suggestion only with at least `report.MinSamples` samples, and `Note` says why it has none. `Complete` is false when a lookup failed (a rate limit, a 403, a timeout): the numbers then come from what could be read. `report.JSON()` and `report.WriteText(w)` write the two formats of the command. The report is a record of past runs and not a limit for the next one, and jactionlint writes none of its numbers into a file: set `timeout-minutes`, or the option `default-minutes` of the rule `missing-timeout`, yourself.
 
 ## Add your own rule
 

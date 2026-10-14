@@ -102,6 +102,11 @@ type LinterOptions struct {
 	// with Oneline) and in the message of the github format (the option --show-doc-urls). The json and sarif
 	// formats have it anyway.
 	ShowDocURLs bool
+	// ShowFixStatus prints what the fix of each finding is under it in the text format (not with Oneline) and in the
+	// message of the github format (the option --show-fix-status): the fix that --fix or --fix=unsafe applies, or the
+	// reason why a finding which the rule can fix has none (Error.NoFix). A finding that is advice only has no line. The
+	// json and sarif formats have the same data as fix, no_fix and noFixCode anyway.
+	ShowFixStatus bool
 	// Ruff is the command or the path of ruff (the option --ruff). When it is not empty ruff checks the Python
 	// scripts of "run:" instead of Pyflakes, with the rules of pyflakes (F) and without the configuration of
 	// the working directory. NewLinter fails when the command cannot be found.
@@ -110,6 +115,15 @@ type LinterOptions struct {
 	// (Error.Events and Error.Permissions), which the json, jsonl and sarif formats print (the option
 	// --finding-context).
 	FindingContext bool
+	// ChangedSince reports only the findings on what changed since the revision (the option --changed-since): the lines
+	// that differ from the merge base of the revision and HEAD, in the commits, the index and the working tree, and every
+	// line of a file that is not tracked. The checks run over every file as always, so the findings that depend on a
+	// caller or another file are the ones of a full run; only what is shown is filtered. A revision that is not known
+	// fails the run.
+	ChangedSince string
+	// ChangedScope is how much of a changed file ChangedSince shows: "lines" (the default) or "files" (every finding of
+	// a changed file).
+	ChangedScope ChangedScope
 	// IgnorePatterns is list of regular expression to filter errors. The pattern is applied to error
 	// messages. When an error is matched, the error is ignored.
 	IgnorePatterns []string
@@ -247,7 +261,8 @@ type Linter struct {
 	// hintBeyondCorrectness is true when a file was linted with a profile above correctness
 	hintBeyondCorrectness atomic.Bool
 	notesMu               sync.Mutex
-	notes                 []string // deprecation warnings found while linting
+	notes                 []string       // deprecation warnings found while linting
+	changed               *changedFilter // LinterOptions.ChangedSince, nil when off
 }
 
 // NewLinter creates a new Linter instance.
@@ -333,6 +348,7 @@ func NewLinter(out io.Writer, opts *LinterOptions) (*Linter, error) {
 		return nil, &usageError{err}
 	}
 	prn = withDocURLs(prn, opts.ShowDocURLs)
+	prn = withFixStatus(prn, opts.ShowFixStatus)
 
 	cwd := "."
 	if opts.WorkingDir != "" {
@@ -388,6 +404,13 @@ func NewLinter(out io.Writer, opts *LinterOptions) (*Linter, error) {
 		}
 	}
 	l.noIgnores = opts.NoIgnores
+	if opts.ChangedSince != "" {
+		scope, err := ParseChangedScope(string(opts.ChangedScope))
+		if err != nil {
+			return nil, &usageError{err}
+		}
+		l.changed = newChangedFilter(opts.ChangedSince, scope)
+	}
 	if err := l.tools.checkRequired(); err != nil {
 		return nil, err
 	}
@@ -628,6 +651,9 @@ func (l *Linter) LintFiles(filepaths []string, project *Project) ([]*Error, erro
 	}
 
 	results = l.finishRun(results)
+	if err := l.changedError(); err != nil {
+		return nil, err
+	}
 	total := 0
 	for _, r := range results {
 		total += len(r.errs)
@@ -640,6 +666,7 @@ func (l *Linter) LintFiles(filepaths []string, project *Project) ([]*Error, erro
 		return nil, err
 	}
 	l.reportBaselineNote(results)
+	l.reportChangedNote()
 	l.reportRunHint(results)
 	l.reportToolNotes()
 
@@ -651,7 +678,7 @@ func (l *Linter) LintFiles(filepaths []string, project *Project) ([]*Error, erro
 // finishRun adds the results which belong to the run and not to a file: the problems of the ignores of
 // the config files (expired and unused entries) and the unused entries of the baseline files.
 func (l *Linter) finishRun(results []fileResult) []fileResult {
-	return l.withBaselineResults(l.finishIgnoreRun(results))
+	return l.filterChanged(l.withBaselineResults(l.finishIgnoreRun(results)))
 }
 
 // lintFilesQuietly lints the files in parallel and returns the results without printing them. The
@@ -721,6 +748,9 @@ func (l *Linter) lintFilesQuietly(filepaths []string, project *Project) ([]fileR
 	if err := eg.Wait(); err != nil {
 		return nil, err
 	}
+	// --changed-since first: of the copies of a shared finding the one that is shown is the first of those that are
+	// left, not the first of all (which may be in a file that did not change)
+	ws = l.filterChanged(ws)
 	l.shared.dropRepeatedInFiles(ws)
 
 	// Ensure that all processes finish. `proc.wait()` must be called after `eg.Wait()`.
@@ -912,6 +942,7 @@ func (l *Linter) check(
 		if w != nil && project != nil {
 			w.inheritedSecrets = l.callersInheritSecrets(project, l.absFilePath(path))
 			w.callerEvents = l.workflowCallers(project, l.absFilePath(path))
+			w.callerJobs = l.workflowCallerJobs(project, l.absFilePath(path))
 			w.calleeGroups = l.calleeGroups(project, l.absFilePath(path))
 		}
 	}
@@ -1260,7 +1291,7 @@ func (l *Linter) runInfo() runInfo {
 	if l.runHints {
 		notes = append(notes, l.tools.notes()...)
 	}
-	return runInfo{notes: notes, online: l.OnlineCoverage(), tools: l.ExternalTools()}
+	return runInfo{notes: notes, online: l.OnlineCoverage(), tools: l.ExternalTools(), changed: l.changedInfo()}
 }
 
 // ExternalTools says whether shellcheck and pyflakes ran in this run, keyed by "shellcheck" and "pyflakes". It
@@ -1341,6 +1372,16 @@ func (l *Linter) workflowCallers(p *Project, file string) *WorkflowCallers {
 		return nil
 	}
 	return l.callGraphOf(p).callerEventsOf(filepath.ToSlash(rel))
+}
+
+// workflowCallerJobs returns the jobs of the local workflows which call the reusable workflow in the file directly, or
+// nil when the file is not in the project.
+func (l *Linter) workflowCallerJobs(p *Project, file string) []*Job {
+	rel, err := filepath.Rel(absPath(p.root), absPath(file))
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return nil
+	}
+	return l.callGraphOf(p).callerJobsOf(filepath.ToSlash(rel))
 }
 
 // calleeGroups returns the concurrency groups of the local reusable workflows which the workflow in the file calls, or nil

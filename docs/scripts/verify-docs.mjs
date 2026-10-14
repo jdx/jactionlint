@@ -121,7 +121,8 @@ for (const [page, m] of Object.entries(pages)) {
 const root = resolve(docsDir, "..");
 const tracked = execSync("git ls-files -z", { cwd: root, encoding: "utf8", maxBuffer: 1 << 28 })
   .split("\0")
-  .filter((f) => f && !/^(testdata\/|CHANGELOG\.md$|docs\/package-lock\.json$|docs\/tests\/)|\.(png|ico|svg|wasm|gif|zip)$/.test(f));
+  // This file describes the references it looks for (jactionlint.jdx.dev/page#id): it is not one of them
+  .filter((f) => f && f !== "docs/scripts/verify-docs.mjs" && !/^(testdata\/|CHANGELOG\.md$|docs\/package-lock\.json$|docs\/tests\/)|\.(png|ico|svg|wasm|gif|zip)$/.test(f));
 let checked = 0;
 const seen = new Set();
 for (const file of tracked) {

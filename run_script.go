@@ -32,7 +32,7 @@ func analyzeRun(e *ExecRun) (*runscript.Script, runscript.Origin) {
 	if e.Shell != nil {
 		shell = e.Shell.Value
 	}
-	s, err := runscript.Analyze(e.Run.Value, shell)
+	s, err := e.Run.analyzeScript(shell)
 	if err != nil {
 		return nil, runscript.Origin{}
 	}
