@@ -316,6 +316,7 @@ func TestChangedSinceCommand(t *testing.T) {
 		{[]string{"--changed-since", "main", "--changed-scope", "all"}, "invalid value"},
 		{[]string{"--changed-since", "main", "--fix"}, "cannot be combined"},
 		{[]string{"--changed-since", "main", "--diff"}, "cannot be combined"},
+		{[]string{"--changed-since", "main", "--export-facts"}, "--export-facts prints no findings"},
 		{[]string{"--changed-since", "main", "-"}, "stdin"},
 		{[]string{"--changed-since="}, "needs a revision"},
 	} {

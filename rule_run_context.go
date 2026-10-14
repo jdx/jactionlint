@@ -128,7 +128,7 @@ func (c *runContext) script(run *ExecRun) (*runscript.Script, runscript.Origin) 
 	if shell != "bash" && shell != "sh" {
 		return nil, runscript.Origin{}
 	}
-	s, err := runscript.Analyze(run.Run.Value, shell)
+	s, err := run.Run.analyzeScript(shell)
 	if err != nil {
 		return nil, runscript.Origin{}
 	}

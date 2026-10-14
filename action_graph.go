@@ -196,6 +196,8 @@ type callGraph struct {
 	// notInheriting holds the edges from a workflow to a reusable workflow that has a job calling it without
 	// "secrets: inherit".
 	notInheriting map[[2]graphNode]bool
+	// jobCalls are the jobs of a workflow that call the local reusable workflow of another node, by the edge.
+	jobCalls map[[2]graphNode][]*Job
 
 	mu   sync.Mutex
 	memo map[string]*ActionCallers
@@ -231,6 +233,7 @@ func newCallGraph(root string) *callGraph {
 
 		groups:        map[string]*workflowGroups{},
 		notInheriting: map[[2]graphNode]bool{},
+		jobCalls:      map[[2]graphNode][]*Job{},
 		memo:          map[string]*ActionCallers{},
 	}
 
@@ -263,6 +266,9 @@ func newCallGraph(root string) *callGraph {
 			if j.WorkflowCall != nil && j.WorkflowCall.Uses != nil {
 				if t, ok := localTarget(j.WorkflowCall.Uses.Value); ok {
 					g.addEdge(n, t, &queue)
+					if t.kind == 'w' {
+						g.jobCalls[[2]graphNode{n, t}] = append(g.jobCalls[[2]graphNode{n, t}], j)
+					}
 					if !j.WorkflowCall.InheritSecrets {
 						g.notInheriting[[2]graphNode{n, t}] = true
 					}
@@ -524,6 +530,19 @@ func (g *callGraph) allCallersInheritSecrets(rel string) bool {
 		}
 	}
 	return len(froms) > 0
+}
+
+// callerJobsOf returns the jobs of the local workflows that call the reusable workflow at the path (relative to the
+// root with "/") directly, sorted by the path of their workflow. It does not look at the workflows that call those.
+func (g *callGraph) callerJobsOf(rel string) []*Job {
+	to := graphNode{'w', rel}
+	var ret []*Job
+	for _, from := range g.callers[to] {
+		if from.kind == 'w' {
+			ret = append(ret, g.jobCalls[[2]graphNode{from, to}]...)
+		}
+	}
+	return ret
 }
 
 // WorkflowCallers are the events of the local workflows which run a reusable workflow. Unlike the callers of an

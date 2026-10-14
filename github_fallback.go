@@ -219,6 +219,23 @@ func (c *fallbackGitHubClient) AdvisoriesForPackages(ctx context.Context, packag
 	return v, c.fromSecondary(err)
 }
 
+// ActionAdvisories implements GitHubAdvisoryListClient: the list of github.com, like every other advisory lookup.
+func (c *fallbackGitHubClient) ActionAdvisories(ctx context.Context) ([]GitHubAdvisory, error) {
+	if down := c.secondaryDown(); down != nil {
+		return nil, down
+	}
+	lc, ok := c.secondary.(GitHubAdvisoryListClient)
+	if !ok {
+		return nil, errAdvisoryListUnavailable
+	}
+	v, err := lc.ActionAdvisories(ctx)
+	if errors.Is(err, ErrGitHubListTruncated) {
+		c.answered() // github.com answered; the list is only longer than is read
+		return nil, err
+	}
+	return v, c.fromSecondary(err)
+}
+
 // fromHost marks the error of a call to the host of the route as the one of that host when it is github.com.
 func (c *fallbackGitHubClient) fromHost(r fallbackRoute, err error) error {
 	if r.secondary {
