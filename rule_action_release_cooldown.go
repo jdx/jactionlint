@@ -194,6 +194,6 @@ func init() {
 		if v, ok := env.config.ruleOptionNumber("action-release-cooldown", "days"); ok {
 			days = int(v)
 		}
-		return []Rule{NewRuleActionReleaseCooldown(env.online, days, env.Now)}
+		return []Rule{NewRuleActionReleaseCooldown(env.online, days, env.now)}
 	})
 }
