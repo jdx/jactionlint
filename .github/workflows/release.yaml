@@ -159,6 +159,8 @@ jobs:
         with:
           path: ./tmp-jactionlint-for-update-ver
           ref: main
+          # fetch-depth: 0 fetches all history and every tag (+refs/tags/*), which the version bump step below needs to find
+          # the commit of the tag it bumps to. The fetch-tags input matters only when fetch-depth is greater than 0.
           fetch-depth: 0
           # main is protected: pushing the version bump commit needs the PAT, GITHUB_TOKEN cannot bypass it
           token: ${{ secrets.RELEASE_PLZ_TOKEN }}
