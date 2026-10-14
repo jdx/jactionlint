@@ -1143,6 +1143,9 @@ type Workflow struct {
 	// callerEvents are the events of the local workflows which run this reusable workflow, directly or through other
 	// reusable workflows. It is nil when the linter did not look (no project), and then nothing is known about the callers.
 	callerEvents *WorkflowCallers
+	// callerJobs are the jobs of the local workflows which call this reusable workflow directly. They tell what the
+	// callers pass in "with:". It is nil when the linter did not look or nothing in the repository calls the workflow.
+	callerJobs []*Job
 	// calleeGroups are the concurrency groups of the local reusable workflows which this workflow calls, by their paths
 	// relative to the root of the repository. It is nil when the linter did not look or there is nothing to compare.
 	calleeGroups map[string]*workflowGroups

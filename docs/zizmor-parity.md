@@ -50,7 +50,7 @@ How to read the table:
 | `self-hosted-runner` | `self-hosted-runner` | pedantic (info) | partial: literal `self-hosted` labels and matrix values, the labels of `self-hosted-runner.labels` of the configuration (ARC runner sets), and `runs-on: {group: ...}`; labels from other expressions are not resolved, and zizmor's list of GitHub-hosted labels is not used. Labels of hosted-runner providers such as namespace or blacksmith are not reported (and are not unknown labels for `unknown-runner-label`, see `self-hosted-runner.providers`). Options `allow` and `pull-request-only` (zizmor has none). Not compared with zizmor on a corpus |
 | `self-repository` | `self-repository` | pedantic (info) | full on the corpus, with an unsafe fix (the one miss is a step with `if: false`, whose findings are dropped) |
 | `stale-action-refs` | `stale-action-refs` | online | partial: same findings except repositories with more than 1000 tags; see [online audits](#online-audits) |
-| `superfluous-actions` | `superfluous-actions` | default | partial: the same findings as zizmor, split like its personas (regular, and the pedantic ones with the option `pedantic`, which the `pedantic` profile turns on). jactionlint adds the archived `actions/create-release` and `actions/upload-release-asset`. A job whose runner may be self-hosted is not reported: a `runs-on:` that is an expression other than matrix values (`${{ inputs.runner }}`, a runner group, the labels of a provider such as `runs-on=...`) counts as one, which is 72 of the 74 misses (the other 2 have a literal `self-hosted` label). See [the check](checks.md#check-superfluous-actions) |
+| `superfluous-actions` | `superfluous-actions` | default | partial: the same findings as zizmor, split like its personas (regular, and the pedantic ones with the option `pedantic`, which the `pedantic` profile turns on). jactionlint adds the archived `actions/create-release` and `actions/upload-release-asset`. A job whose runner may be self-hosted is not reported. A `runs-on:` that is an expression is resolved when the repository tells every label it can have (matrix values, a condition between labels, `fromJSON()` of a text, `inputs.*` of a reusable workflow that only `workflow_call` starts and whose callers in the repository pass known values); one that is not known (`${{ inputs.runner }}` with no caller, `${{ vars.RUNNER }}`, a runner group, the labels of a provider such as `runs-on=...`) counts as self-hosted. The 74 misses of the larger corpus were 72 expressions and 2 with a literal `self-hosted` label; that corpus could not be run again, so how many of the 72 are resolved now is not measured (see [where a rule differs on purpose](#where-a-rule-differs-on-purpose)). See [the check](checks.md#check-superfluous-actions) |
 | `template-injection` | `template-injection` | correctness | partial: see [template injection](#template-injection) |
 | `typosquat-uses` | `typosquat-uses` | default | partial: one typo of the slug, not all of the transformations of zizmor |
 | `undocumented-permissions` | `undocumented-permissions` | pedantic | partial: scopes granted with `write` and, with `include-read` (on under the `pedantic` profile), `read` other than `contents: read`. A comment above a scope counts, where zizmor accepts only a comment at the end of the line; a `none` scope is not reported; one finding per scope, where zizmor reports one per `permissions:` block. 68.7% of the findings of zizmor on the corpus are reported; most of the rest are generated files, see [permissions against zizmor](#permissions-against-zizmor) |
@@ -186,7 +186,7 @@ Known causes of differences between the tools:
 
 ### Refresh of 2026-10-13 on smaller corpora
 
-`mise run zizmor-diff` was run again with jactionlint from `main` (`ac37b698`, 2026-10-14), zizmor 1.30.1 (still the newest version that mise
+`mise run zizmor-diff` was run again with jactionlint from `main` (`ea0ac90a`, 2026-10-14), zizmor 1.30.1 (still the newest version that mise
 lists, so the pin is unchanged), the `pedantic` profile of `scripts/zizmor-diff/pedantic.yaml` and `--line-tolerance 3`, the settings of the
 run above, over the repositories that were on the machine. **These are subsets, not the 1,109 repositories**, and whether they are part of
 them is not known, so their percentages are not comparable with the 92.8% above.
@@ -199,9 +199,9 @@ them is not known, so their percentages are not comparable with the 92.8% above.
 
 | | zizmor | also reported | missed | share |
 | --- | --: | --: | --: | --: |
-| A, 287 repositories | 36,733 | 35,227 | 1,506 | 95.9% |
+| A, 287 repositories | 36,733 | 35,244 | 1,489 | 95.9% |
 | B, 23 repositories | 998 | 955 | 43 | 95.7% |
-| C, 73 repositories | 11,319 | 10,484 | 835 | 92.6% |
+| C, 73 repositories | 11,319 | 10,490 | 829 | 92.7% |
 
 Audits with misses, A and C (B has `excessive-permissions` 35, `artipacked` 7 and `undocumented-permissions` 1, nothing else):
 
@@ -216,7 +216,7 @@ Audits with misses, A and C (B has `excessive-permissions` 35, `artipacked` 7 an
 | `archived-uses` | 63 | 63 | 8 | 8 |
 | `dangerous-triggers` | 274 | 28 | 78 | 4 |
 | `github-env` | 26 | 23 | 10 | 10 |
-| `superfluous-actions` | 338 | 17 | 120 | 6 |
+| `superfluous-actions` | 338 | 0 | 120 | 0 |
 | `use-trusted-publishing` | 25 | 15 | 6 | 5 |
 | `obfuscation` | 39 | 11 | 7 | 1 |
 | `unpinned-images` | 387 | 10 | 169 | 12 |
@@ -226,21 +226,24 @@ Audits with misses, A and C (B has `excessive-permissions` 35, `artipacked` 7 an
 | `template-injection` | 7,584 | 2 | 1,781 | 0 |
 | `unsound-condition` | 7 | 2 | 3 | 1 |
 
-On both A and C these audits have findings and no misses: `unpinned-uses`, `self-repository`, `secrets-inherit`, `misfeature`, `github-app`
-and `unsound-ternary` (and `overprovisioned-secrets` on A, with 10 findings). Every audit not listed has no finding in that run. The
+On both A and C these audits have findings and no misses: `unpinned-uses`, `self-repository`, `secrets-inherit`, `misfeature`, `github-app`,
+`superfluous-actions` and `unsound-ternary` (and `overprovisioned-secrets` on A, with 10 findings). Every audit not listed has no finding in that run. The
 harness reported no unmapped audit: all 41 audits whose documentation anchor is in the zizmor 1.30.1 binary have a row in the table above.
 
 **What changed since the last measurement.** To say why, the same three runs were repeated with jactionlint built from `b1ac9f23`, the
-commit of the 1,109 run (the harness did not change between the two). Two mapped audits have other misses, each by one change:
+commit of the 1,109 run (the harness did not change between the two). Three mapped audits have other misses, each by one change:
 
 - `concurrency-limits`: 574 to 47 misses on A and 281 to 37 on C (B had none). Cause: #266, which reports a workflow that only a schedule
   or a manual run starts with the option `pedantic`, which the `pedantic` profile of the harness turns on. That is the group that the
   1,109 run counted as 1,363 of its 1,440 misses (see [where a rule differs on purpose](#where-a-rule-differs-on-purpose), whose
   numbers are those of the 1,109 run). The 47 and 37 that are left were not sorted by cause.
+- `superfluous-actions`: 17 to 0 misses on A and 6 to 0 on C (B had none). Cause: #271 (a `runs-on:` expression that the repository
+  resolves is judged, so the job is no longer taken for self-hosted). #271 reports the same 6 misses before its change on the same repositories (`astral-sh/uv`, `denoland/deno`).
+  Its own prose stays under [where a rule differs on purpose](#where-a-rule-differs-on-purpose), whose 72-of-74 count is the 1,109 run's.
 - `unsound-condition`: 0 to 2 misses on A and 0 to 1 on C. Cause: #226 (`if-always-true` no longer reports the newlines at the end of a
   block scalar), which GitHub trims. The misses are the `if: >` conditions of `home-assistant/core` and `github/codeql`.
 
-Totals: A 2,031 to 1,506 misses, C 1,078 to 835, B unchanged at 43. Every other number in the table is the same before and after, so the
+Totals: A 2,031 to 1,489 misses, C 1,078 to 829, B unchanged at 43. Every other number in the table is the same before and after, so the
 other merged rules did not add or remove a shared finding of a mapped audit on these corpora. **Not done**: the causes of the misses in
 the table were not sorted again. [Where a rule differs on purpose](#where-a-rule-differs-on-purpose) holds the causes of the 1,109 run;
 whether the same causes explain the misses of the subsets was not checked. The shares differ from the 1,109 run for reasons that are not
@@ -364,7 +367,7 @@ actions.
 - `dependabot-cooldown` does not report an update that cannot propose anything: `open-pull-requests-limit: 0` or an `ignore` of every dependency (40 of the 44 misses). The other 4 are positions: zizmor reports at the `package-ecosystem` key and jactionlint at the first key of the update.
 - `dangerous-triggers`: 72 misses, all of them the position of the `on:` block.
 - `unsound-condition` (`if-always-true`) does not report an `if:` whose only characters around `${{ }}` are the trailing newlines of a block scalar, because GitHub trims them (changelog 2026-01-29); zizmor reports an `if: >` condition for its newline. These are all the misses on the smaller corpora of 2026-10-13 (2 of 7 on A, 1 of 3 on C). Not measured on the 1,109 run, which predates the change.
-- `superfluous-actions` does not report a job whose runner may be self-hosted, and a `runs-on:` that is an expression the rule cannot resolve counts as one (72 of the 74 misses; the other 2 have a literal `self-hosted` label).
+- `superfluous-actions` does not report a job whose runner may be self-hosted, and a `runs-on:` that is an expression the rule cannot resolve counts as one (72 of the 74 misses of the larger corpus; the other 2 have a literal `self-hosted` label). An expression is resolved when the repository tells every label it can have: matrix values, a condition between labels (`cond && 'a' || 'b'`, without evaluating the condition), `fromJSON()` of a text, and `inputs.*` of a reusable workflow that only `workflow_call` starts, when every caller in the repository passes a known value (callers are followed one level). Measured on 100 local repositories (the 22 of `corpus.txt` and 76 well-known public repositories, `--line-tolerance 3`, `pedantic` profile): zizmor reports 122 findings of this audit, jactionlint also reported 116 before this change and 122 after it. The 6 misses were 6 jobs whose `runs-on:` is a condition between literal labels (1 in astral-sh/uv with a larger runner, 5 in the generated `ci.generated.yml` of denoland/deno). A run over 412 local directories (many are copies of the same repositories) found those 6 and no other new finding. No finding came from `inputs.*` or `fromJSON()` in these repositories, so those two shapes are covered by tests only, not by a measurement. Still not reported, on purpose: `${{ vars.RUNNER }}`, `${{ inputs.runner }}` without a caller or with a caller that passes a variable, a secret or its own input, `vars.X || 'label'` (the variable may be the runner), a runner group, the labels of a provider, and a matrix computed by `fromJSON(needs...)`. A resolved label is judged like a written one, so a label other than `self-hosted` (the name of a larger runner) counts as GitHub-hosted.
 - `unpinned-images` reports an image from the matrix at the value in the matrix, zizmor at the `container:` (31 of the 33 misses).
 - `adhoc-packages` does not call an install from a local path or tarball ad hoc (12 of the 30 misses), and does not take the value of `--prefix` for a package (18).
 - `use-trusted-publishing` does not report publishes to a registry that has no trusted publishing: GitHub Packages and MyGet (10 of the 30 misses), a local registry (1) and the Visual Studio marketplace (`vsce publish`, 2). It does not report a reusable workflow without `permissions:` (3, the caller may grant `id-token: write`), nor a script that is not a publish command (`pnpm run publish`, `bun upload-npm -- publish`, 2). `pkg-pr-new publish` (8) and `electron-builder --publish never` (2) are not publishes either, see below. The other 2 are positions.
