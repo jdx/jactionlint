@@ -172,13 +172,18 @@ jobs:
           # -i.bak works with both GNU and BSD sed (this runs on macOS)
           sed -i.bak -E "s/version=\"[0-9]+\\.[0-9]+\\.[0-9]+\"/version=\"${VERSION}\"/" ./scripts/download-jactionlint.bash
           rm ./scripts/download-jactionlint.bash.bak
-          # The example of the action in the usage document names the latest release
-          sed -i.bak -E "s#(- uses: jdx/jactionlint@v)[0-9]+\.[0-9]+\.[0-9]+#\1${VERSION}#" ./docs/usage.md
-          rm ./docs/usage.md.bak
-          grep -q "uses: jdx/jactionlint@v${VERSION}" ./docs/usage.md
+          # The examples of the action in the CI guide and in the online checks page pin the latest release by commit
+          # hash, as the default profile asks of every action, and name its version in a comment. The delimiter of the
+          # s command is | because the pattern contains a #.
+          SHA="$(git rev-list -n 1 "v${VERSION}")"
+          for doc in ./docs/ci.md ./docs/online.md; do
+            sed -i.bak -E "s|(uses: jdx/jactionlint@)[0-9a-f]{40}( # v)[0-9]+\.[0-9]+\.[0-9]+|\1${SHA}\2${VERSION}|" "$doc"
+            rm "$doc.bak"
+            grep -q "uses: jdx/jactionlint@${SHA} # v${VERSION}" "$doc"
+          done
           git diff
-          git add ./scripts/download-jactionlint.bash ./docs/usage.md
-          git -c user.email='41898282+github-actions[bot]@users.noreply.github.com' -c user.name='github-actions[bot]' commit -m "update version to $VERSION in download-jactionlint.bash and the action example"
+          git add ./scripts/download-jactionlint.bash ./docs/ci.md ./docs/online.md
+          git -c user.email='41898282+github-actions[bot]@users.noreply.github.com' -c user.name='github-actions[bot]' commit -m "update version to $VERSION in download-jactionlint.bash and the action examples"
           git log -n 1
           git push
   docker:
