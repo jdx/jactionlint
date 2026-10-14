@@ -738,22 +738,24 @@ func TestDuplicateErrorsKeepTheUnsafeFixWhateverTheOrder(t *testing.T) {
 	}
 }
 
-// TestErrorNamesTheRuleID: Error and PrettyPrint print the rule ID in the brackets, like the command, and
-// the kind only for an error without an ID.
-func TestErrorNamesTheRuleID(t *testing.T) {
+// TestPrettyPrintNamesTheRuleID: PrettyPrint prints the rule ID in the brackets, like the command, and the
+// kind only for an error without an ID. Error keeps the kind.
+func TestPrettyPrintNamesTheRuleID(t *testing.T) {
 	e := &Error{Message: "no timeout", Filepath: "w.yml", Line: 3, Column: 5, Kind: "timeout-check", ID: "missing-timeout"}
-	if have, want := e.Error(), "w.yml:3:5: no timeout [missing-timeout]"; have != want {
-		t.Errorf("Error(): want %q, have %q", want, have)
-	}
 	var b bytes.Buffer
 	e.PrettyPrint(&b, nil)
 	if have, want := b.String(), "w.yml:3:5: no timeout [missing-timeout]\n"; have != want {
 		t.Errorf("PrettyPrint(): want %q, have %q", want, have)
 	}
+	if have, want := e.Error(), "w.yml:3:5: no timeout [timeout-check]"; have != want {
+		t.Errorf("Error(): want %q, have %q", want, have)
+	}
 
 	e.ID = ""
-	if have, want := e.Error(), "w.yml:3:5: no timeout [timeout-check]"; have != want {
-		t.Errorf("Error() without an ID: want %q, have %q", want, have)
+	b.Reset()
+	e.PrettyPrint(&b, nil)
+	if have, want := b.String(), "w.yml:3:5: no timeout [timeout-check]\n"; have != want {
+		t.Errorf("PrettyPrint() without an ID: want %q, have %q", want, have)
 	}
 }
 

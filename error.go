@@ -164,15 +164,15 @@ func (f *Fix) validFor(src []byte) bool {
 	return true
 }
 
-// Error returns summary of the error as string. The name in the brackets is the rule ID (the Kind when
-// the error has no ID), the same name the command prints at the end of a finding.
+// Error returns summary of the error as string. It keeps the form of actionlint, so the name in the
+// brackets is the Kind, which several rules share and which is not always a rule ID ("timeout-check").
+// Use ID, or PrettyPrint which shows it, for the name that the configuration and --ignore accept.
 func (e *Error) Error() string {
-	return fmt.Sprintf("%s:%d:%d: %s [%s]", e.Filepath, e.Line, e.Column, e.Message, e.label())
+	return fmt.Sprintf("%s:%d:%d: %s [%s]", e.Filepath, e.Line, e.Column, e.Message, e.Kind)
 }
 
-// label is the name printed in the brackets: the rule ID, which is what the configuration, --ignore and the
-// ignore comments accept. The kind is shared by several rules ("action", "expression") or is no ID at all
-// ("timeout-check"), so it is shown only for an error without an ID.
+// label is the name printed in the brackets by PrettyPrint: the rule ID, which is what the configuration,
+// --ignore and the ignore comments accept. It is the Kind only for an error without an ID.
 func (e *Error) label() string {
 	if e.ID != "" {
 		return e.ID
