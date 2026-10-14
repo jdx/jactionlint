@@ -10,7 +10,7 @@ import (
 // the one of dependabot-cooldown.
 const actionReleaseCooldownDefaultDays = 7
 
-// releaseNow is the clock of the rule. The tests fix it.
+// releaseNow is the clock of the rule when the linter has none (LinterOptions.Now). The tests fix it.
 var releaseNow = time.Now
 
 // RuleActionReleaseCooldown reports an action pinned to a version which was released less than a number of days
@@ -24,13 +24,16 @@ var releaseNow = time.Now
 type RuleActionReleaseCooldown struct {
 	onlineUsesRule
 	days int
+	now  func() time.Time
 }
 
-// NewRuleActionReleaseCooldown creates a new RuleActionReleaseCooldown instance.
-func NewRuleActionReleaseCooldown(sess *onlineSession, days int) *RuleActionReleaseCooldown {
+// NewRuleActionReleaseCooldown creates a new RuleActionReleaseCooldown instance. now returns the current time; nil
+// means releaseNow.
+func NewRuleActionReleaseCooldown(sess *onlineSession, days int, now func() time.Time) *RuleActionReleaseCooldown {
 	return &RuleActionReleaseCooldown{
 		onlineUsesRule: newOnlineUsesRule("action-release-cooldown", "Checks that the version of an action is older than the cooldown", sess),
 		days:           days,
+		now:            now,
 	}
 }
 
@@ -52,8 +55,11 @@ func (r *RuleActionReleaseCooldown) VisitWorkflowPost(*Workflow) error {
 			r.Debug("%s: no date for %s", s.ref.Raw, firstNonEmpty(tag, shortSHA(sha)))
 			continue
 		}
-		now := releaseNow()
-		age := now.Sub(at)
+		now := releaseNow
+		if r.now != nil {
+			now = r.now
+		}
+		age := now().Sub(at)
 		if age >= cooldown {
 			continue
 		}
@@ -188,6 +194,6 @@ func init() {
 		if v, ok := env.config.ruleOptionNumber("action-release-cooldown", "days"); ok {
 			days = int(v)
 		}
-		return []Rule{NewRuleActionReleaseCooldown(env.online, days)}
+		return []Rule{NewRuleActionReleaseCooldown(env.online, days, env.Now)}
 	})
 }
