@@ -159,7 +159,7 @@ func (o *OnlineOptions) validate() error {
 		return fmt.Errorf("\"online-options.retries\" must be between 0 and %d", maxOnlineRetries)
 	}
 	if o.Concurrency < 0 || o.Concurrency > maxOnlineInFlight {
-		return fmt.Errorf("\"online-options.concurrency\" must be between 1 and %d", maxOnlineInFlight)
+		return fmt.Errorf("\"online-options.concurrency\" must be 0 (the default) or between 1 and %d", maxOnlineInFlight)
 	}
 	return nil
 }
@@ -289,7 +289,9 @@ type defaultClientOptions struct {
 	// TTL is the cache time-to-live. Zero revalidates every answer.
 	TTL    time.Duration
 	Notify func(string)
-	Debug  func(string, ...any)
+	// Note receives the notices which are no problem of the run (a setting without effect). Nil sends them to Notify.
+	Note  func(string)
+	Debug func(string, ...any)
 	// Verbose receives which token source is used.
 	Verbose func(string, ...any)
 	// Context bounds "gh auth token".

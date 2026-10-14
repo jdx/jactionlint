@@ -144,7 +144,7 @@ cat action.yml | jactionlint --stdin-filename action.yml -
 | `--online-token-env=NAME` |  | Name of the environment variable that holds the GitHub token |
 | `--online-token-file=FILE` |  | File that holds the GitHub token |
 | `--online-github-com-fallback` |  | On a GitHub Enterprise Server, look up the repositories which the Server does not have on api.github.com (actions synced with GitHub Connect). The token for it is GITHUB_COM_TOKEN. Their names are sent to github.com |
-| `--online-github-com-token-env=NAME` |  | With the fallback: name of the environment variable that holds the token for api.github.com (default GITHUB_COM_TOKEN) |
+| `--online-github-com-token-env=NAME` |  | With the fallback: name of the environment variable that holds the token for api.github.com, tried before --online-github-com-token-file, $GITHUB_COM_TOKEN and gh |
 | `--online-github-com-token-file=FILE` |  | With the fallback: file that holds the token for api.github.com |
 | `--online-allow=PATTERN` |  | Look up only repositories matching owner/repo PATTERN ("*" is a wildcard). Repeatable |
 | `--online-deny=PATTERN` |  | Never look up repositories matching owner/repo PATTERN. Repeatable |

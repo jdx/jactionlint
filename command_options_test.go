@@ -174,7 +174,7 @@ func TestCLIHelpAndVersion(t *testing.T) {
 		if code != ExitStatusSuccessNoProblem || stderr != "" {
 			t.Errorf("%s: exit %d, stderr %q", arg, code, stderr)
 		}
-		if !strings.HasPrefix(stdout, "Usage: jactionlint [OPTIONS] [FILES...] [-]") {
+		if !strings.HasPrefix(stdout, "Usage: jactionlint [OPTIONS] [FILES...]\n       jactionlint [OPTIONS] -\n") {
 			t.Errorf("%s: unexpected help %q", arg, stdout)
 		}
 		for _, o := range cliOptions {

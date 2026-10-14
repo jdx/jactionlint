@@ -294,7 +294,7 @@ func migrateZizmorIgnores(src []byte) ([]byte, []string, []zizmorSkip) {
 			}
 		}
 		if len(moved) == 0 {
-			skipped = append(skipped, zizmorSkip{c.line, "jactionlint has no rule for " + strings.Join(kept, ", ") + ", so the zizmor comment stays"})
+			skipped = append(skipped, zizmorSkip{c.line, keptReason(kept) + ", so the zizmor comment stays"})
 			continue
 		}
 		// A comment above a line covers what the line opens, and the whole item for a line which starts a sequence
@@ -305,12 +305,16 @@ func migrateZizmorIgnores(src []byte) ([]byte, []string, []zizmorSkip) {
 			wantEnd = e
 		}
 		if ignoreTargetEnd(lines, c.line-1) != wantEnd {
-			skipped = append(skipped, zizmorSkip{c.line, "the comment is on the first key of a step with more keys, and a comment above would cover the whole step. Move it to a later key of the step (for instance \"name:\") or keep it"})
+			advice := "Move it to a later key of the step (for instance \"name:\") or keep it"
+			if onNameKey(lines[c.line-1][:c.start]) {
+				advice = "Move it to a later key of the step than \"name:\" or keep it"
+			}
+			skipped = append(skipped, zizmorSkip{c.line, "the comment is on the first key of a step with more keys, and a comment above would cover the whole step. " + advice})
 			continue
 		}
 		migrated = append(migrated, moved...)
 		if len(kept) > 0 {
-			skipped = append(skipped, zizmorSkip{c.line, "jactionlint has no rule for " + strings.Join(kept, ", ") + ", so these names stay in the zizmor comment"})
+			skipped = append(skipped, zizmorSkip{c.line, keptReason(kept) + ", so these names stay in the zizmor comment"})
 		}
 
 		line := lines[c.line-1]
@@ -396,6 +400,43 @@ func migrationIDs(name string) []string {
 		}
 	}
 	return ret
+}
+
+// keptReason says why the audit names stay in the zizmor comment: jactionlint has no rule for them, or the
+// only diagnostic that stands for them covers a part of the findings of another rule, which a comment of
+// jactionlint cannot select.
+func keptReason(names []string) string {
+	var noRule, partial []string
+	for _, n := range names {
+		if _, ok := LookupRule(n); !ok && len(zizmorAliases[n]) == 0 {
+			noRule = append(noRule, n)
+		} else {
+			partial = append(partial, n)
+		}
+	}
+	var parts []string
+	if len(noRule) > 0 {
+		parts = append(parts, "jactionlint has no rule for "+strings.Join(noRule, ", "))
+	}
+	for _, n := range partial {
+		part := n + " covers only a part of the findings of a rule"
+		for _, a := range zizmorAliases[n] {
+			if a.MessageContains != "" {
+				part = n + " stands for only the " + a.MessageContains + " findings of " + a.ID + ", which a comment above cannot select"
+				break
+			}
+		}
+		parts = append(parts, part)
+	}
+	return strings.Join(parts, "; ")
+}
+
+// onNameKey returns whether the text of a line before its comment is the "name:" key of a step, with or
+// without the dash of the sequence item.
+func onNameKey(head string) bool {
+	head = strings.TrimSpace(head)
+	head = strings.TrimSpace(strings.TrimPrefix(head, "-"))
+	return strings.HasPrefix(head, "name:")
 }
 
 func containsString(list []string, s string) bool {
