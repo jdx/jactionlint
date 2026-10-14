@@ -207,6 +207,23 @@ type GitHubPackageAdvisoryClient interface {
 	AdvisoriesForPackages(ctx context.Context, packages []string) ([]GitHubAdvisory, error)
 }
 
+// ErrGitHubListTruncated is returned by GitHubAdvisoryListClient.ActionAdvisories when the list is longer than the
+// client reads. The caller must not use the part it has: it asks about each action instead.
+var ErrGitHubListTruncated = errors.New("the list has more pages than are read")
+
+// errAdvisoryListUnavailable is why a client has no list of advisories: it cannot list them.
+var errAdvisoryListUnavailable = errors.New("the client cannot list the advisories of the actions")
+
+// GitHubAdvisoryListClient is an optional interface of a GitHubClient. A client which implements it can list every
+// advisory of the GitHub Actions ecosystem in one lookup (a few pages of one list request), which is cheaper than one
+// lookup for each action when a run uses more than a handful of them, and names no repository to GitHub. The
+// online checks use it when they can and ask with GitHubPackageAdvisoryClient or GitHubClient.Advisories for each action when the
+// list fails or is truncated (ErrGitHubListTruncated). Withdrawn advisories are not returned, and only the vulnerabilities of
+// the actions ecosystem are kept, as for the lookups by package.
+type GitHubAdvisoryListClient interface {
+	ActionAdvisories(ctx context.Context) ([]GitHubAdvisory, error)
+}
+
 // GitHubContentClient is an optional interface of a GitHubClient. A client which implements it can read a
 // file of a repository at a ref, which lets the online checks read the metadata (action.yml) of an action
 // or the declaration of a reusable workflow that is not in the data set built into jactionlint. A client

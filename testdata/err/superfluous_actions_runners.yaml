@@ -1,0 +1,31 @@
+on: push
+jobs:
+  # the labels are known: GitHub-hosted
+  condition:
+    runs-on: ${{ github.event_name == 'push' && 'ubuntu-24.04' || 'macos-14' }}
+    steps:
+      - uses: softprops/action-gh-release@v2
+  json:
+    runs-on: ${{ fromJSON('["ubuntu-24.04", "x64"]') }}
+    steps:
+      - uses: softprops/action-gh-release@v2
+  matrix:
+    strategy:
+      matrix:
+        os: [ubuntu-24.04, macos-14]
+    runs-on: ${{ github.event_name == 'push' && matrix.os || 'ubuntu-24.04' }}
+    steps:
+      - uses: softprops/action-gh-release@v2
+  # the runner may be self-hosted: not reported
+  variable:
+    runs-on: ${{ vars.RUNNER || 'ubuntu-24.04' }}
+    steps:
+      - uses: softprops/action-gh-release@v2
+  self-hosted-branch:
+    runs-on: ${{ github.event_name == 'push' && fromJSON('["self-hosted", "linux"]') || 'ubuntu-24.04' }}
+    steps:
+      - uses: softprops/action-gh-release@v2
+  provider:
+    runs-on: runs-on=${{ github.run_id }}/runner=2cpu-linux-x64
+    steps:
+      - uses: softprops/action-gh-release@v2

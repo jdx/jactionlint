@@ -53,6 +53,7 @@ github-app default security error
 github-env default security error
 github-script-syntax correctness correctness error
 hardcoded-container-credentials correctness security error
+hardcoded-registry-credentials default security error
 if-always-true correctness correctness error
 impostor-commit online security error
 insecure-commands default security error

@@ -51,6 +51,7 @@ func TestReportingNeverWritesSourcesForEveryFixture(t *testing.T) {
 		{"--diff"},
 		{"--fix=unsafe", "--diff"},
 		{"--diff", "--format", "sarif"},
+		{"--export-facts"},
 	}
 	for _, f := range fixtureWorkflows(t) {
 		raw, err := os.ReadFile(f)

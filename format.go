@@ -70,6 +70,8 @@ type runInfo struct {
 	notes  []string
 	online *OnlineCoverage
 	tools  map[string]ExternalToolStatus // shellcheck and pyflakes: did they run?
+	// changed is what --changed-since did, nil when it is off
+	changed *ChangedInfo
 }
 
 // structured reports whether the printer makes a document which other tools parse. For such a format the
@@ -624,8 +626,11 @@ func (p sarifPrinter) print(w io.Writer, results []fileResult, info runInfo) err
 		}
 		run.Invocations = []sarifInvocation{inv}
 	}
-	if info.online != nil || len(info.tools) > 0 {
+	if info.online != nil || len(info.tools) > 0 || info.changed != nil {
 		run.Properties = map[string]any{}
+		if info.changed != nil {
+			run.Properties["changedSince"] = info.changed
+		}
 		if info.online != nil {
 			run.Properties["onlineCoverage"] = info.online
 		}

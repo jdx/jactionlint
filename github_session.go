@@ -138,9 +138,11 @@ type onlineSession struct {
 	blockUntil time.Time
 	transient  int // lookups in a row which failed in a way that suggests an outage
 	skipped    int
-	skippedBy  map[failureKind]int // skipped by the kind of failure
-	excluded   map[string]bool     // repositories left out by the allow and deny lists
-	seen       map[failureKind]bool
+	// advisoryListNoted is set once the failure of the advisory list was said (--verbose).
+	advisoryListNoted bool
+	skippedBy         map[failureKind]int // skipped by the kind of failure
+	excluded          map[string]bool     // repositories left out by the allow and deny lists
+	seen              map[failureKind]bool
 	// fileFailures is the failure of the first file lookup of a repository which failed, see file.
 	fileFailures map[repoKey]error
 	fileLocks    map[repoKey]*sync.Mutex
@@ -151,7 +153,9 @@ type onlineSession struct {
 	branches   memo[repoKey, *GitHubBranchList]
 	compares   memo[compareKey, GitHubCompareStatus]
 	advisories memo[string, []GitHubAdvisory]
-	origins    memo[originKey, originResult]
+	// advisoryList is the list of all advisories of the actions ecosystem, asked for once (see actionAdvisories).
+	advisoryList memo[struct{}, []GitHubAdvisory]
+	origins      memo[originKey, originResult]
 
 	// images answers the digest of container images. It is nil when the client itself can (ImageDigestClient).
 	images           ImageDigestClient
@@ -441,6 +445,42 @@ func (s *onlineSession) record(err error, what string) {
 	}
 	kind := classifyFailure(err)
 	s.failedLocked(kind, what, err)
+	s.streakLocked(err, kind)
+}
+
+// recordList accounts for the request of the list of advisories like record does, except that a failure which leaves the
+// run able to go on is not a skipped lookup and is not warned about: the lookups by action which follow it are, if they fail as well.
+// A failure which blocks the run is counted and warned about like any other (failedLocked), as nothing follows to do it. A list which worked ends
+// the streak of failures in a row, a list which is too long is an answer too, and a failure counts in the streak like any other.
+func (s *onlineSession) recordList(err error) {
+	if errors.Is(err, errAdvisoryListUnavailable) {
+		return // nothing was asked
+	}
+	if errors.Is(err, ErrGitHubListTruncated) {
+		err = nil // the API answered
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	switch {
+	case err == nil, errors.Is(err, ErrGitHubNotFound):
+		s.transient = 0
+		return
+	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded) && s.ctx.Err() != nil:
+		s.stopLocked(err)
+		return
+	}
+	kind := classifyFailure(err)
+	wasBlocked := s.blocked != nil
+	s.streakLocked(err, kind)
+	if s.blocked != nil && !wasBlocked {
+		// The list stopped the lookups of the run (a rate limit, a rejected token, an unreachable host, a streak of
+		// failures): the lookups which follow are skipped without a request, so this is the one that is warned about
+		s.failedLocked(kind, "the advisories", err)
+	}
+}
+
+// streakLocked counts the failure in the streak of failures in a row and blocks the run when asking again cannot work.
+func (s *onlineSession) streakLocked(err error, kind failureKind) {
 	var scoped *hostScopedError
 	if errors.As(err, &scoped) {
 		return // the failure of one host does not stop the lookups of the other one
@@ -598,6 +638,9 @@ func (s *onlineSession) Advisories(owner, repo, subpath string) ([]GitHubAdvisor
 		packages = append(packages, packages[0]+"/"+sub)
 	}
 	return s.advisories.get(strings.Join(packages, ","), func() ([]GitHubAdvisory, error) {
+		if list, ok := s.actionAdvisories(); ok {
+			return advisoriesOfPackages(list, packages), nil
+		}
 		return callFor(s, owner+"/"+repo, func(ctx context.Context) ([]GitHubAdvisory, error) {
 			if pc, ok := s.client.(GitHubPackageAdvisoryClient); ok {
 				return pc.AdvisoriesForPackages(ctx, packages)
@@ -605,4 +648,57 @@ func (s *onlineSession) Advisories(owner, repo, subpath string) ([]GitHubAdvisor
 			return s.client.Advisories(ctx, owner, repo)
 		})
 	})
+}
+
+// actionAdvisories returns every advisory of the actions ecosystem, from one list request for the whole run instead
+// of one request for each action. It reports false, and the caller asks about its action, when the client cannot list them,
+// the run was stopped or is blocked, or the list failed or is longer than the client reads. A failed
+// list is not counted as a skipped lookup: the lookups by action that follow are, if they fail too, and say why.
+func (s *onlineSession) actionAdvisories() ([]GitHubAdvisory, bool) {
+	lc, ok := s.client.(GitHubAdvisoryListClient)
+	if !ok {
+		return nil, false
+	}
+	list, err := s.advisoryList.get(struct{}{}, func() ([]GitHubAdvisory, error) {
+		if err := s.stopped(); err != nil {
+			return nil, err
+		}
+		if err := s.blockedErr(); err != nil {
+			return nil, err
+		}
+		l, err := lc.ActionAdvisories(s.ctx)
+		s.recordList(err)
+		return l, err
+	})
+	if err != nil {
+		s.advisoryListFailed(err)
+		return nil, false
+	}
+	return list, true
+}
+
+// advisoryListFailed says once, with --verbose, why the advisories are asked for one action at a time.
+func (s *onlineSession) advisoryListFailed(err error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.advisoryListNoted || s.detail == nil {
+		return
+	}
+	s.advisoryListNoted = true
+	s.detail("online: the list of advisories is not available (%v); asking about each action instead", err)
+}
+
+// advisoriesOfPackages returns the advisories of the list which have a vulnerability in one of the packages
+// ("owner/repo" or "owner/repo/subpath", lower case), as the lookup by package does.
+func advisoriesOfPackages(list []GitHubAdvisory, packages []string) []GitHubAdvisory {
+	var ret []GitHubAdvisory
+	for _, a := range list {
+		for _, v := range a.Vulnerabilities {
+			if slices.Contains(packages, strings.ToLower(v.Package)) {
+				ret = append(ret, a)
+				break
+			}
+		}
+	}
+	return ret
 }

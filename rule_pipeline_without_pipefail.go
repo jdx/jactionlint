@@ -126,7 +126,7 @@ func (rule *RulePipelineWithoutPipefail) VisitStep(n *Step) error {
 		return nil // the default shell of Windows is pwsh, and the runner is not known to be anything else
 	}
 
-	script, err := runscript.Analyze(run.Run.Value, value)
+	script, err := run.Run.analyzeScript(value)
 	if err != nil || len(script.Pipelines) == 0 {
 		return nil
 	}

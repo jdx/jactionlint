@@ -1,5 +1,5 @@
 // Command generate-config-schema writes the JSON Schemas of jactionlint, schema/jactionlint-config.json (the config
-// file, from the rule registry) and schema/jactionlint-output.json (--format json), from the jactionlint package.
+// file, from the rule registry) and schema/jactionlint-output.json (--format json) and schema/jactionlint-facts.json (--export-facts), from the jactionlint package.
 // With -check it only verifies that the files are up to date.
 package main
 
@@ -33,6 +33,7 @@ func run(args []string) error {
 	files := []schemaFile{
 		{filepath.Join(dir, "jactionlint-config.json"), jactionlint.ConfigSchema()},
 		{filepath.Join(dir, "jactionlint-output.json"), jactionlint.OutputSchema()},
+		{filepath.Join(dir, "jactionlint-facts.json"), jactionlint.FactsSchema()},
 	}
 	stale := false
 	for _, f := range files {
