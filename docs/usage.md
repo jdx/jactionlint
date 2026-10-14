@@ -122,7 +122,7 @@ In the `text` format a finding shows where it is, what is wrong, the rule ID in 
   | ^~~
 ```
 
-The location is `file:line:column`. The rule ID is the name that `--ignore`, the config file and ignore comments accept. `--show-doc-urls` adds the documentation URL of the rule under each finding, and `--oneline` and `--format` change the layout: see [the output formats](./output.md#format-error-messages).
+The location is `file:line:column`. The rule ID is the name that `--ignore`, the config file and ignore comments accept. `--show-doc-urls` adds the documentation URL of the rule under each finding, `--show-fix-status` adds what the fix of the finding is or why it has none (see [Why a finding was not fixed](./fix.md#why-a-finding-was-not-fixed)), and `--oneline` and `--format` change the layout: see [the output formats](./output.md#format-error-messages).
 
 Every rule has a default level, listed on [the rules page](./rules.md). Only findings of level `error` make the exit status 1, unless you pass `--strict-exit`: see [Exit status](#exit-status). [The command line reference](./cli.md#command-line-options) lists every option.
 
@@ -183,7 +183,7 @@ Three commands inspect or narrow the rule set: `--explain` for one rule, `--sele
 
 ### Explain a rule
 
-`jactionlint --explain RULE` prints what the installed version knows about a rule: its summary, group, profile, default level, whether it has a fix, its options, the configuration and ignore comment to use, and its section of [the checks page](./checks.md) with the examples. It needs no network.
+`jactionlint --explain RULE` prints what the installed version knows about a rule: its summary, group, profile, default level, whether it has a fix and what that fix needs (an option or `--online`), its options, the configuration and ignore comment to use, and its section of [the checks page](./checks.md) with the examples. It needs no network.
 
 ```sh
 jactionlint --explain missing-timeout
@@ -305,6 +305,7 @@ note: node 20 or later was not found, so it did not check 1 JavaScript script. i
 ```
 
 - A tool gets a note once per run, and only when a script needed it: a repository whose steps are all `uses:` gets none.
+- Without shellcheck, the rule [`shell-syntax`](./checks.md#check-shell-syntax) still reads the `bash` and `sh` scripts with a parser that is built into jactionlint and reports the syntax errors that stop a script, such as a missing `fi`. It reports nothing else, so it does not replace shellcheck.
 - Silence a note with `--shellcheck=` or `--pyflakes=`, which say that you do not want the tool, or with `--no-hints` or `JACTIONLINT_NO_HINTS`, which silence the other notes too.
 - `--format sarif` prints no line. The log has a notification in `invocations[].toolConfigurationNotifications` instead, which `--no-hints` leaves out, and the property `externalTools` in `runs[].properties`. A tool that ran has `status` `ran`. A tool that was missing has `status` `not found`, and `skippedScripts` counts the scripts that it would have checked. A tool that no script needed, and a tool that you turned off with an empty command, are not listed.
 
@@ -362,7 +363,7 @@ The exit status is `0` when no finding counts, `1` when a finding counts, `2` fo
 <a id="fix-errors-automatically"></a>
 ### Fix findings automatically
 
-`jactionlint --fix` applies the safe fixes in place, `--fix=unsafe` also applies the fixes that can change behavior, and `--diff` previews them. [Fix findings automatically](./fix.md#fix-errors-automatically) explains the safe and the unsafe fixes, how to find the rules that have a fix, and how fixing converges.
+`jactionlint --fix` applies the safe fixes in place, `--fix=unsafe` also applies the fixes that can change behavior, and `--diff` previews them. [Fix findings automatically](./fix.md#fix-errors-automatically) explains the safe and the unsafe fixes, how to find the rules that have a fix, why a finding has none (`--show-fix-status` prints it under the finding), and how fixing converges.
 
 <a id="ignore-some-errors"></a>
 ### Ignore a finding
@@ -378,6 +379,10 @@ Silence a finding with an ignore comment `# jactionlint ignore=RULE` above the l
 ### Turn on the online checks
 
 Some checks need the GitHub API, for example whether a pinned commit belongs to the repository. They are off by default, and jactionlint does not use the network unless you turn them on with `--online`, `JACTIONLINT_ONLINE` or the `online` key. [Online checks](./online.md#online-checks) covers tokens, the cache and GitHub Enterprise Server.
+
+### Check only what a pull request changed
+
+`jactionlint --changed-since origin/main` shows only the findings on the lines that changed since the merge base with `origin/main`, so a pull request check reports what the pull request adds. [Show only what a pull request changed](./ci.md#show-only-what-a-pull-request-changed) gives the workflow and the limits.
 
 <a id="hk"></a>
 ### Run it in CI and Git hooks

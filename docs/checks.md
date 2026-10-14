@@ -5,7 +5,7 @@ jactionlint reports every finding with the ID of the rule that found it at the e
 
 **How to read a section.**
 
-- A heading that ends in **(pedantic)**, **(online)** or **(opt-in)** names a check that is off by default. A pedantic check runs only under the `pedantic` profile, an online check runs only with the [online checks](online.md), and an opt-in check runs only after you configure it. [Rules](rules.md) lists the group, default level, profile and fix of every rule ID.
+- A heading that ends in **(pedantic)**, **(online)**, **(opt-in)** or **(online, opt-in)** names a check that is off by default. A pedantic check runs only under the `pedantic` profile, an online check runs only with the [online checks](online.md), and an opt-in check runs only after you configure it. [Rules](rules.md) lists the group, default level, profile and fix of every rule ID.
 - An example is a small workflow with the output that jactionlint prints for it. The examples run with a shared configuration that turns off a few rules that every short example would break, such as `missing-timeout` and `unpinned-uses`, so that the output shows the check of the section. To see one rule on your own file, run `jactionlint --select RULE`. The playground link under an example opens it in the [online playground](https://jactionlint.jdx.dev/playground).
 - To turn a rule off, set `RULE: off` under `rules` in [the configuration file](config.md#rules). To silence one finding, see [Ignore findings](ignore.md).
 
@@ -74,10 +74,12 @@ jactionlint reports every finding with the ID of the rule that found it at the e
 
 - [Shell name validation at `shell:`](#check-shell-names)
 - [shellcheck integration for `run:`](#check-shellcheck-integ)
+- [Syntax errors in shell scripts without shellcheck](#check-shell-syntax)
 - [pyflakes integration for `run:`](#check-pyflakes-integ)
 - [JavaScript syntax of `actions/github-script`](#check-github-script-syntax)
 - [Scripts folded into one line](#check-multiline-plain-run)
 - [Pipelines that hide failures](#check-pipeline-without-pipefail)
+- [GNU-only options on macOS runners (pedantic)](#check-macos-gnu-flags)
 - [Writes to the environment files that lose data](#check-environment-file-redirect)
 - [Deprecated workflow commands](#check-deprecated-workflow-commands)
 - [Insecure workflow commands](#check-insecure-commands)
@@ -172,6 +174,8 @@ jactionlint reports every finding with the ID of the rule that found it at the e
 - [Archived repositories (online)](#check-archived-uses)
 - [Repojacking (online)](#check-repojacking)
 - [Version comments of pinned actions (online)](#check-ref-version-mismatch)
+- [Pinned actions without a version comment (pedantic)](#check-missing-version-comment)
+- [Release cooldown of actions (online, opt-in)](#check-action-release-cooldown)
 
 **Policy and style**
 
@@ -184,6 +188,7 @@ jactionlint reports every finding with the ID of the rule that found it at the e
 - [Dependabot configuration syntax](#check-dependabot-syntax)
 - [Dependabot cooldown](#check-dependabot-cooldown)
 - [Dependabot insecure code execution](#check-dependabot-execution)
+- [Dependabot registry credentials in plain text](#check-hardcoded-registry-credentials)
 - [Dependabot updates of actions (pedantic)](#check-dependabot-missing-actions-update)
 
 **Composite actions and action files**
@@ -2846,6 +2851,8 @@ Then `--fix` adds `timeout-minutes: 15` to every job which has none. It is a saf
 
 When `timeout-too-long` has a `max` smaller than `default-minutes`, the fix uses `max` so the result stays clean. On a job that runs only on `ubuntu-slim` the fix writes at most 15, the [limit of that runner](#check-ubuntu-slim-limits), so that it does not add a finding of that check. Jobs calling a reusable workflow are skipped, since they do not support `timeout-minutes`. A job written in the flow style (`job: {runs-on: ...}`) or with a YAML anchor is still reported but has no fix: jactionlint does not guess where to put a key there.
 
+To choose the number from data, run `jactionlint --suggest-timeouts`. It reports how long the jobs of the latest successful runs of each workflow took, read from GitHub, with the number of samples and a `timeout-minutes` to consider for each job. It implies `--online`, writes nothing and suggests no value for a job that has too few samples. [Suggest timeouts from the history of the runs](./online.md#suggest-timeouts) shows the report, and [the online options](./cli.md#github-api-online-checks) list `--timeout-history-runs` and `--timeout-buffer`, which tune it.
+
 <a id="check-concurrency-limits"></a>
 ## Concurrency limits
 
@@ -2904,11 +2911,21 @@ For such a workflow the advice is `cancel-in-progress: false`, so that a new run
 **What is not reported.** Whether to cancel is a choice, so a `concurrency:` mapping that does not cancel (to serialize releases, for example) is accepted, and so is a `queue:`. The rule skips:
 
 - workflows that only run through `workflow_call` (the caller decides);
-- workflows that only run on a `schedule` or by `workflow_dispatch` (no new commit supersedes such a run);
+- workflows that only run on a `schedule` or by `workflow_dispatch` (no new commit supersedes such a run, but see the option `pedantic` in this section);
 - workflows where every job sets its own `concurrency:`;
 - the workflow `.github/workflows/copilot-setup-steps.yml`: GitHub runs it when the Copilot coding agent starts, from a job with a fixed ID, and a concurrency group has no use there.
 
 A caller workflow whose jobs all call reusable workflows is reported like any other, because a `concurrency:` in the called workflow can deadlock with the one of its caller (see [concurrency deadlock](#check-concurrency-deadlock)), so the caller is where the limit belongs.
+
+**Schedule-only and manual-only workflows.** With the option `pedantic` (on under the `pedantic` profile, off otherwise, so the `default` profile reports what it always did) the rule also reports a workflow that only a `schedule` or a `workflow_dispatch` starts, as zizmor does. A run of such a workflow is not superseded by a commit, but it can overlap with the next scheduled run, with a manual one, or with itself when it takes longer than the interval. The advice differs from the one for pull requests on purpose:
+
+- It asks for a top-level `concurrency:` with a `group:` such as `${{ github.workflow }}` and does **not** suggest `cancel-in-progress: true`. A scheduled run that is cancelled is not started again, so the work of the run (a release, a synchronization, a report) is lost or left half done. A group without `cancel-in-progress` makes a new run wait for the running one. Set `cancel-in-progress: true` only when a run can be thrown away without loss.
+- Only one run can wait in a group: while one run is going and two more start, the newer waiting run replaces the older waiting one, so an occurrence of the schedule can be skipped. The message says so and names `queue: max` (up to 100 runs wait) for a workflow in which every occurrence must run. For a manual run that takes inputs it adds that the inputs belong in the group, so that runs with other inputs do not replace each other.
+- The group of a workflow and the groups of its jobs are one set of names, and at most one run holds a group at a time, so a job whose `concurrency.group` equals the group of its own workflow run waits for the run that contains it. When a job already uses the suggested group (compared without regard to spaces inside `${{ }}`), the message suggests `${{ github.workflow }}-workflow` instead, and so on if that one is used too.
+- A `concurrency:` that is only a group name (`concurrency: nightly`) is reported too, because zizmor reports it. It already behaves like `cancel-in-progress: false`, so the advice is to write the mapping form with an explicit `cancel-in-progress: false`. It is not reported for a workflow that releases or deploys, where the plain group is what is wanted.
+- There is no fix. The group is the choice of the author, and the fix of this rule only ever adds a group per pull request.
+
+The mapping form without `cancel-in-progress`, or with `cancel-in-progress: false`, is accepted for every kind of workflow, also with the option. A `concurrency:` that is an expression (`concurrency: ${{ github.workflow }}`) can be a whole configuration, so it is not taken for a group name. A workflow in which every job has a `concurrency:` of its own is not reported.
 
 **What `--fix` does.** `jactionlint --fix` adds the `concurrency:` block of the fix after `on:`, with a blank line between `on:` and the block (as it does for the `permissions:` it adds). It does this only when it is safe to do so, that is, for a workflow where:
 
@@ -3410,6 +3427,80 @@ On GitHub Actions:
     SHELLCHECK_OPTS: --exclude=SC2129
 ```
 
+**Related.** When shellcheck does not run, [`shell-syntax`](#check-shell-syntax) reports the syntax errors of a script with a parser that is built into jactionlint.
+
+<a id="check-shell-syntax"></a>
+## Syntax errors in shell scripts without shellcheck
+
+The rule `shell-syntax` (in the `default` profile, at the level `error`) reports a syntax error in the script of a `run:` step when [shellcheck](https://github.com/koalaman/shellcheck) does not check that script. shellcheck reports a script that bash cannot read, such as an unclosed quote or a missing `fi`, with its SC1xxx codes, but only when it is installed. This rule reads the script with a bash parser that is built into jactionlint ([mvdan.cc/sh](https://github.com/mvdan/sh)), offline, and reports a syntax error where the step would stop with status 2.
+
+Example input:
+
+```yaml
+# without shellcheck
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          echo "building ${{ github.sha }}"
+          if [ -f build.log ]; then
+            cat build.log
+      - run: |
+          # OK: [[ ]], arrays, here-strings and process substitution are bash
+          arr=(a b c)
+          [[ ${#arr[@]} -gt 2 ]] && diff <(sort a) <(sort b) <<< "$arr"
+      # OK: pwsh is not read
+      - shell: pwsh
+        run: |
+          if ($true) { Write-Host "x"
+  test-win:
+    runs-on: windows-latest
+    steps:
+      # OK: the default shell of a Windows runner is pwsh
+      - run: Write-Host "x"
+      # This script is run with bash (Git Bash) due to 'shell:' configuration
+      - shell: bash
+        run: echo "unclosed
+```
+
+Output:
+
+```
+test.yaml:9:11: syntax error in the bash script of this step (line 2 of the script): `if` statement must end with `fi`. found by the built-in parser because shellcheck did not run [shell-syntax]
+  |
+9 |           if [ -f build.log ]; then
+  |           ^~
+test.yaml:26:19: syntax error in the bash script of this step (line 1 of the script): reached EOF without closing quote `"`. found by the built-in parser because shellcheck did not run [shell-syntax]
+   |
+26 |         run: echo "unclosed
+   |                   ^~~~~~~~~
+```
+
+<!-- Skip playground link -->
+
+The output of the example is what jactionlint prints when shellcheck does not run (`--shellcheck=` turns it off). To turn the rule off, set it in [the configuration file](config.md#rules):
+
+```yaml
+rules:
+  shell-syntax: off
+```
+
+**What is reported.** The rule is for runs in which shellcheck does not check the script. It stays silent whenever shellcheck runs, so that a mistake is never reported twice. It reports when shellcheck was not found, when it was turned off with `--shellcheck=` and when the rule `shellcheck` is `off` in the configuration. Install shellcheck for the checks of everything else: this rule finds the errors that stop a script and nothing about quoting or style.
+
+The finding is at the token where the parser stopped, which is the opening token (the quote, the `if`, the `$(`) for a construct that is not closed. Only the mistakes that bash finds while it reads a script are reported: an unclosed quote or substitution, a `fi`, `done` or `esac` that is missing or has nothing to close, a keyword where it does not belong, and an operator without its operand.
+
+**What is not reported.** jactionlint reads only what it can read as faithfully as bash does, and reports less rather than a script that bash accepts:
+
+- The shell must be `bash` or `sh`, or a custom template that starts with one of them (`bash -el {0}`). `pwsh`, `powershell`, `cmd`, `python` and every other shell are not read. A step without `shell:` is read only when the job runs on a runner that is known to be Linux or macOS (labels written out, none of them Windows): the default shell of a Windows runner is `pwsh`, and a runner chosen with an expression (`${{ matrix.os }}`) or a self-hosted runner without an operating system in its labels can be one.
+- `sh` is read with the bash grammar as well, and reports only what is a syntax error in bash. The `/bin/sh` of a runner is `dash` on Ubuntu but `bash` on macOS and in Git Bash for Windows, so `[[ ]]` or an array in a `shell: sh` script is not called an error here.
+- `${{ }}` expressions are replaced by underscores of the same length before the script is read, so a finding is at the right place in the workflow file even when an expression spans several lines. The end of an expression is found with the expression lexer, so a `}}` inside a string literal such as `'}}'` does not end it, unlike for the shellcheck integration, which stops at the first `}}`. A script with an expression that cannot be delimited (not closed, or not valid) is not read at all.
+- Bash finds some mistakes only when it runs the command (a bad `${...}` substitution, the syntax of an arithmetic expression), and it treats a here-document that is not closed as a warning, so these are not reported.
+- Nothing after the first here-document (`<<`) or the first backquote of a script is reported, and a script with a carriage return is not read. Bash does not read the body of a here-document, and it parses a command in backquotes only when it runs it, while the parser reads both.
+
+**Fix.** There is no automatic fix: correct the script.
+
 <a id="check-pyflakes-integ"></a>
 ## pyflakes integration for `run:`
 
@@ -3665,6 +3756,81 @@ The rule decides from the words of a script without running it, so it is wrong i
 - `grep`, `rg` and `diff` as the first stage are never blamed, although a failure of `grep` with status 2, which is not a missing match, is hidden too.
 
 The rule has no option that makes it more conservative: it would have to guess which of these a finding is, and the guesses are the cases in this list.
+
+<a id="check-macos-gnu-flags"></a>
+## GNU-only options on macOS runners (pedantic)
+
+The rule `macos-gnu-flags` (in the `pedantic` profile, as a warning) reports an option of a command in a `run:` script that the GNU version of the command has and the BSD version on macOS does not, in a job that runs on macOS. A workflow that was written and tried on Linux fails with `tee: illegal option -- -` on the first macOS job.
+
+Example input:
+
+```yaml
+on: push
+jobs:
+  build:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - run: make 2>&1 | tee --append build.log
+      - run: sed -i 's/0.0.0/1.2.3/' version.txt
+      - run: grep -oP 'v\K[0-9.]+' version.txt
+```
+
+Output:
+<!-- Skip update output -->
+```
+test.yaml:9:30: warning: "tee --append" is rejected by the tee of macOS ("illegal option -- -"): it has only short options. The job runs on macOS (macos-latest), whose tee is the BSD one. Use "tee -a". [macos-gnu-flags]
+  |
+9 |       - run: make 2>&1 | tee --append build.log
+  |                              ^~~~~~~~
+test.yaml:10:18: warning: "sed -i" without a suffix takes the script as the suffix of the backup on macOS, so the file is read as the script ("invalid command code"). The job runs on macOS (macos-latest), whose sed is the BSD one. Use "sed -i.bak" (and remove the backup), which both seds understand, or "sed -i ''" on macOS only. [macos-gnu-flags]
+   |
+10 |       - run: sed -i 's/0.0.0/1.2.3/' version.txt
+   |                  ^~
+test.yaml:11:19: warning: "grep -P" is rejected by the grep of macOS ("invalid option -- P"): it has no Perl regular expressions. The job runs on macOS (macos-latest), whose grep is the BSD one. Use "grep -E" if the pattern allows it, or "perl -ne", which macOS has too. [macos-gnu-flags]
+   |
+11 |       - run: grep -oP 'v\K[0-9.]+' version.txt
+   |                   ^~~
+```
+
+<!-- Skip playground link -->
+
+The example output comes from this `rules` section of the [configuration file](config.md#rules). The `pedantic` profile turns the rule on as well:
+
+```yaml
+rules:
+  macos-gnu-flags: warn
+```
+
+**What is reported.** A job runs on macOS when a `runs-on` label is the label of a GitHub-hosted macOS runner (`macos-latest`, `macos-15`, `macos-14-large`, `xcode-27` and the like), or when a value of `runs-on: ${{ matrix.os }}` is one. The rule reports only what the sources that Apple publishes for the commands of macOS (`shell_cmds`, `file_cmds` and `text_cmds` of [apple-oss-distributions](https://github.com/apple-oss-distributions)) show to fail:
+
+| Form | macOS |
+| --- | --- |
+| `tee --append` | `tee` has only `-a` and `-i`, and no long option |
+| `sed -i 's/a/b/' file` (no suffix) | `-i` takes the next word as the suffix of the backup, so the script is taken for it |
+| `sed --in-place` | `sed` has no long option |
+| `date -d`, `date --date` | `date` has no `-d`; BSD `date` reads a time with `-j -f` and `-v` |
+| `grep -P`, `grep --perl-regexp` | the options of the macOS `grep` have no `P` |
+| `stat -c`, `stat --format` | the format option of BSD `stat` is `-f` |
+| `find -printf`, `-regextype`, `-xtype` | they are not primaries of the macOS `find` |
+| `cp --parents` | `cp` has no long option |
+
+Forms that look GNU-only and work on macOS are not reported: `xargs -r` (accepted for compatibility), `sort -V` and `readlink -f` (since macOS 12.3). The real command is found behind `sudo`, `env`, `timeout`, `xargs` and similar wrappers, with their options.
+
+**What is not reported.** The rule leaves out what may be meant for another system:
+
+- A job on a self-hosted runner, because its owner can have installed the GNU tools, and a job that runs in a `container:`.
+- A command whose failure the script handles (`if grep -P ...`).
+- A script that also calls the command in the form of macOS: `date -j -f ... || date -d ...`, `stat -f` next to `stat -c`, `sed -i bak` next to `sed -i`, `tee -a` next to `tee --append`.
+- A step whose `if:` reads the `runner` or `matrix` context, or whose script is written for more than one system.
+- The command line in the operand of `env -S '...'`: it is read to decide what the script is written for (`env -S 'gsed ...'`), but a GNU-only option in it is not reported, because its words have no place of their own in the script.
+- Scripts of other shells than bash and sh.
+
+Whether a script is written for more than one system is decided from the parsed script, not from its text. It is when the script expands `$OSTYPE` or `$RUNNER_OS`, reads `runner.os` or `matrix.os` in an expression, calls `uname` or `sw_vers`, has a GNU tool by its Homebrew name as a command word (`gsed`, `gdate` and the like), or names a `gnubin` directory. `brew install coreutils` (or `grep`, `gnu-sed` and so on) alone is not enough: the formulas are keg-only, so the BSD tool stays first on the `PATH` until the `gnubin` directory is put on it.
+
+**Fix.** There is no automatic fix: the portable form depends on the script.
 
 <a id="check-environment-file-redirect"></a>
 ## Writes to the environment files that lose data
@@ -4860,11 +5026,18 @@ test.yaml:6:15: action "softprops/action-gh-release@c95fe1489396fe8a9eb87c0abf8a
 
 [Playground](https://jactionlint.jdx.dev/#eNo8jcGOgzAMRO98haW9rRRYsgWSnPorDjglFUoi7LS/X9Gi3mY0T29yclAqr809e3YNwE4bIdMRAfaaWB1I9TVJVRsKsbwnFir8oQAUVCZ2wDlI2XPhDmeJOanbqk7hdbZDoP5i7L8dAxm05M00/6EPBnHwmoIep7Ag/MBDt7rtTzfAM8rqvg0gxO04WyJL9/saALZkOPY=)
 
-An action like that is a dependency that can be compromised, with nothing gained. The rule reports the ones with a simple replacement: the release actions (`softprops/action-gh-release`, `ncipollo/release-action`, `elgohr/Github-Release-Action`, `svenstaro/upload-release-action` and the archived `actions/create-release` and `actions/upload-release-asset`), which `gh release` replaces, `dacbd/create-issue-action`, `actions-ecosystem/action-add-labels` and `action-remove-labels` (`gh issue`, `gh pr`), `addnab/docker-run-action` (`docker run`) and `sergeysova/jq-action` (`jq`). The rule has no automatic fix: replace the action with the command in a `run:` step.
+An action like that is a dependency that can be compromised, with nothing gained. The rule reports the ones with a simple replacement: the release actions (`softprops/action-gh-release`, `ncipollo/release-action`, `elgohr/Github-Release-Action`, `svenstaro/upload-release-action` and the archived `actions/create-release` and `actions/upload-release-asset`), which `gh release` replaces, `dacbd/create-issue-action`, `actions-ecosystem/action-add-labels` and `action-remove-labels` (`gh issue`, `gh pr`), `addnab/docker-run-action` (`docker run`), `benc-uk/workflow-dispatch` (`gh workflow run`, [zizmor#2181](https://github.com/zizmorcore/zizmor/issues/2181)) and `sergeysova/jq-action` (`jq`). The rule has no automatic fix: replace the action with the command in a `run:` step.
 
 With the option `pedantic` (on under the `pedantic` profile) the rule reports the ones whose replacement takes several commands or misses a feature: `peter-evans/create-pull-request`, `peter-evans/create-or-update-comment`, `dtolnay/rust-toolchain`, `stefanzweifel/git-auto-commit-action` and `EndBug/add-and-commit`. The rule follows the `superfluous-actions` audit of zizmor; [the parity page](zizmor-parity.md) lists the differences.
 
-**What is not reported.** Nothing is reported for a job that runs on a `self-hosted` runner, because the tools of the GitHub-hosted images are not there and the action is what installs them. A runner that cannot be shown to be hosted counts as self-hosted, so nothing is reported for a `runs-on:` that is an expression of anything but the matrix (`${{ inputs.runner }}`, a runner group, a label of a provider such as `runs-on=...`), or a matrix that is computed or has a value that is not known. A label that is text and matrix values (`${{ matrix.os }}-latest`, `${{ matrix.target.os }}`) is resolved for each value of the matrix.
+**What is not reported.** Nothing is reported for a job that runs on a `self-hosted` runner, because the tools of the GitHub-hosted images are not there and the action is what installs them. A runner that cannot be shown to be hosted counts as self-hosted. A `runs-on:` that is an expression is resolved to the labels it can have, and the job is reported when the repository tells all of them and none is `self-hosted`:
+
+- A label that is text and matrix values (`${{ matrix.os }}-latest`, `${{ matrix.target.os }}`) is resolved for each value of the matrix, and so is `${{ matrix.os }}` with a list of labels as a value.
+- A condition between labels, `${{ github.event_name == 'push' && 'ubuntu-24.04' || 'macos-14' }}`. The condition is not evaluated: every label of the result counts, so one `self-hosted` branch, or one branch that is not known (`vars.RUNNER`, `inputs.runner` without a caller), keeps the job unreported. `${{ vars.RUNNER || 'ubuntu-24.04' }}` is not resolved either, because the variable may be the runner.
+- `fromJSON()` of a text that is known: `${{ fromJSON('["ubuntu-24.04", "x64"]') }}`, or `${{ fromJSON(inputs.runner) }}` when the callers pass a JSON text.
+- `${{ inputs.<name> }}` in a reusable workflow that only `workflow_call` starts and that workflows of the same repository call (`uses: ./.github/workflows/x.yml`), when every caller passes a value that is resolved the same way, or leaves the input out and the `default:` of the input is a text. A workflow that nothing in the repository calls, or that a person can also start, is not resolved, and neither is a caller that passes its own input down (`inputs.runner` of the caller): the callers are followed one level.
+
+Nothing else is resolved, so nothing is reported for `${{ vars.RUNNER }}`, `${{ env.RUNNER }}`, `${{ secrets.RUNNER }}`, an output of another job, a runner group, a label of a provider such as `runs-on=${{ github.run_id }}/runner=...`, or a matrix that is computed (`fromJSON(needs.setup.outputs.matrix)`). A resolved label is judged like one written in the file: a label other than `self-hosted`, such as the name of a larger runner, counts as GitHub-hosted. Calls of the reusable workflow from other repositories are not known.
 
 <a id="check-misfeature"></a>
 ## Misfeatures
@@ -5977,7 +6150,7 @@ rules:
 <a id="check-github-app"></a>
 ## GitHub App tokens
 
-`github-app` (in the `default` profile) reports a use of [`actions/create-github-app-token`](https://github.com/actions/create-github-app-token) that issues a token more powerful or longer lived than the job needs. An installation token is not a problem by itself, but the defaults of the action are generous.
+`github-app` (in the `default` profile) reports a use of [`actions/create-github-app-token`](https://github.com/actions/create-github-app-token), or of one of two other actions that issue app tokens, that issues a token more powerful or longer lived than the job needs. An installation token is not a problem by itself, but the defaults of the action are generous.
 
 Example input:
 
@@ -6031,13 +6204,20 @@ rules:
   github-app: error
 ```
 
-**What is reported.**
+**What is reported.** For `actions/create-github-app-token`:
 
 - No `permission-*` input (such as `permission-contents: read`), which gives the token every permission that the app has been granted on the installation.
 - `owner:` without `repositories:`, which gives the token access to every repository of the owner where the app is installed.
 - `skip-token-revoke: true`, which keeps the token valid after the job instead of revoking it in the post step.
 
-**What is not reported.** `owner` without `repositories` is not reported when every `permission-*` input is an organization permission (`permission-members`, `permission-organization-*` and the like), because such a token has no repository to list. Only `actions/create-github-app-token` is checked. Other actions that issue app tokens are not known to the rule.
+**What is not reported.** `owner` without `repositories` is not reported when every `permission-*` input is an organization permission (`permission-members`, `permission-organization-*` and the like), because such a token has no repository to list.
+
+**Other actions that issue app tokens.** Two other actions are checked with their own inputs:
+
+- `tibdex/github-app-token` (archived) is reported for no `permissions` (a JSON object like `'{"contents": "read"}'`), which gives the token every permission of the app, for no `repositories` (a JSON array of the repository names without the owner, like `'["repo"]'`), which gives it every repository of the installation, and for `revoke: false`. `repositories` and `revoke` are inputs of version 2: version 1 has `repository` (the current repository by default) and neither of them, and a commit whose version is not in a comment such as `# v2.1.0` is not checked for them.
+- `peter-murray/workflow-application-token-action` is reported for no `permissions` (`contents:read,issues:write`), which gives the token every permission of the app, and for a `revoke_token` that is missing or false, because the token is revoked only when it is `true`. The input and the post step that revokes the token are in version 3 and later, so for version 1 and 2 the advice is to upgrade. The action has no list of repositories: `organization` only picks the installation.
+
+Other actions that issue app tokens are not known to the rule.
 
 <a id="check-hardcoded-credentials"></a>
 ## Hardcoded credentials
@@ -8973,7 +9153,9 @@ test.yaml:10:15: info: action "actions/checkout@2f547d07f23dec7f4a96fc091165260d
 <a id="check-known-vulnerable-actions"></a>
 ## Known vulnerable actions (online)
 
-The rule `known-vulnerable-actions` reports an action or reusable workflow whose version is covered by a GitHub security advisory, such as the leak of secrets through `tj-actions/changed-files`. It looks the advisories of the GitHub Actions ecosystem up for every action and reusable workflow, works out which version the workflow runs, and reports it when an advisory covers that version. It is an online rule: it runs only with `--online`, see [online checks](./online.md#online-checks).
+The rule `known-vulnerable-actions` reports an action or reusable workflow whose version is covered by a GitHub security advisory, such as the leak of secrets through `tj-actions/changed-files`. It reads the advisories of the GitHub Actions ecosystem, works out which version the workflow runs, and reports it when an advisory covers that version. It is an online rule: it runs only with `--online`, see [online checks](./online.md#online-checks).
+
+**Where the advisories come from.** The rule reads the list of all advisories of the actions ecosystem with one request for the whole run, which also names no repository of yours to GitHub. If that list cannot be read (the endpoint answers an error, or the list is longer than the pages jactionlint reads), the rule asks about each action instead, and the findings are the same. The data is always live (or the cache of the last live answer, see [online checks](./online.md#online-checks)), never a copy shipped with jactionlint.
 
 **Which version is checked.** The version comes from the ref: a version tag such as `v45.0.2` is the version. For `v45`, or a commit SHA, the rule takes the most specific version tag on the same commit. A branch has no version and is never reported. The finding names the first patched version when there is one.
 
@@ -9183,6 +9365,8 @@ The repository of the example is made up: the output comes from recorded answers
 
 **Fix.** Replace the action with a maintained one, or with the commands it wraps in a `run:` step (many actions are thin wrappers around the `gh` CLI, which is on the GitHub-hosted runners). There is no automatic fix.
 
+For the well-known archived actions the message names the successor ([zizmor#2028](https://github.com/zizmorcore/zizmor/issues/2028)): `actions-rs/*` (`dtolnay/rust-toolchain` or `cargo ...` in a script step), `crazy-max/ghaction-docker-meta` (`docker/metadata-action`), `nick-invision/retry` (`nick-fields/retry`), `actions/setup-ruby` (`ruby/setup-ruby`), `actions/setup-elixir` (`erlef/setup-beam`), `actions/setup-haskell` (`haskell-actions/setup`), `8398a7/action-slack` (`slackapi/slack-github-action`), `marvinpinto/action-automatic-releases` (`gh release create`), and for `actions/create-release` and `actions/upload-release-asset` the `gh release` command that [`superfluous-actions`](#check-superfluous-actions) names. The table matters only for a repository that the check found archived, and any other gets the general advice.
+
 **Related.** The audit of the same name in zizmor is [`archived-uses`](https://docs.zizmor.sh/audits/#archived-uses); [zizmor parity](./zizmor-parity.md) compares the two.
 
 <a id="check-repojacking"></a>
@@ -9251,7 +9435,7 @@ The rule `ref-version-mismatch` reports a hash-pinned action whose version comme
 
 **How the comment is read.** A comment gives a version when it starts with one (`v4.2.2`, `4.2.2`, `v4`, `tag=v4.2.2`), as the bots write it; other comments are left alone. The comment matches when a tag with that version points to the pinned commit; the `v` prefix does not matter. A less specific version is not enough: `# v4` on the commit of `v4.2.2` is reported when the tag `v4` points to another commit, because the comment no longer describes what is pinned.
 
-The version can also be written the way [ratchet](https://github.com/sethvargo/ratchet) does it, `# ratchet:actions/checkout@v4.2.2`. The comment is read only when it names the action it follows (`ratchet:exclude` and a comment about another action are left alone). A pinned action without a version comment is not reported.
+The version can also be written the way [ratchet](https://github.com/sethvargo/ratchet) does it, `# ratchet:actions/checkout@v4.2.2`. The comment is read only when it names the action it follows (`ratchet:exclude` and a comment about another action are left alone). A pinned action without a version comment is not reported by this rule: the pedantic rule [`missing-version-comment`](#check-missing-version-comment) reports it.
 
 Example input:
 
@@ -9287,7 +9471,104 @@ The example output has a second finding, of `outdated-action-runner`: that rule 
 
 **Fix.** A mismatch has two possible causes: the comment is stale, or the SHA is not the commit that was meant (it was replaced by hand, or by someone else). The commit is what runs, so the fix of this rule rewrites the version in the comment (and only that, words around it stay) to the tag of the pinned commit, `# v3.0.0` to `# v4.2.2`. The fix needs `--online --fix=unsafe`. Review the change like any other: it is wrong when the SHA is the part that has to change. There is no fix when the commit has no tag, or has several versions of the same specificity (`v2.0.1` and `v2.0.2`), or the repository has more tags than were read, because the version to write is then a choice.
 
-**Related.** `--online --fix` can pin tags to commits and add this comment, see [pin tags to commits](./online.md#pin-tags-to-commits-with-online-fix). The audit of the same name in zizmor is [`ref-version-mismatch`](https://docs.zizmor.sh/audits/#ref-version-mismatch); [zizmor parity](./zizmor-parity.md) lists the differences, among them the pinned action without a version comment.
+**Related.** `--online --fix` can pin tags to commits and add this comment, see [pin tags to commits](./online.md#pin-tags-to-commits-with-online-fix). The audit of the same name in zizmor is [`ref-version-mismatch`](https://docs.zizmor.sh/audits/#ref-version-mismatch); [zizmor parity](./zizmor-parity.md) lists the differences; the part of the audit about a missing comment is [`missing-version-comment`](#check-missing-version-comment).
+
+<a id="check-missing-version-comment"></a>
+## Pinned actions without a version comment (pedantic)
+
+The rule `missing-version-comment` (in the `pedantic` profile, as a warning) reports an action or reusable workflow that is pinned to a full commit SHA whose comment names no version. A bare commit SHA tells a reader nothing, and Dependabot and Renovate do not know which release it is: they read the comment after it (`uses: actions/checkout@<sha> # v4.2.2`) to find the newer ones. The rule needs no network. It is the part of the [zizmor audit](https://docs.zizmor.sh/audits/#ref-version-mismatch) that is about a missing comment; a comment that names another version than the commit is the business of [`ref-version-mismatch`](#check-ref-version-mismatch).
+
+Example input:
+
+```yaml
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      # OK: the comment names the version
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      # ERROR: no comment
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+      # ERROR: the comment names no version
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # speeds up the build
+```
+
+Output:
+<!-- Skip update output -->
+```
+test.yaml:9:15: warning: action "actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020" is pinned to a commit but has no comment which names its version. add one like "# v1.2.3" after it: Dependabot and Renovate read it to update the pin, and it tells a reader what the commit is [missing-version-comment]
+  |
+9 |       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+  |               ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+test.yaml:11:15: warning: action "actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830" is pinned to a commit but its comment "# speeds up the build" names no version. write the version at its start like "# v1.2.3": Dependabot and Renovate read it to update the pin, and it tells a reader what the commit is [missing-version-comment]
+   |
+11 |       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # speeds up the build
+   |               ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+```
+
+<!-- Skip playground link -->
+
+The example output comes from this `rules` section of the [configuration file](config.md#rules). The `pedantic` profile turns the rule on as well:
+
+```yaml
+rules:
+  missing-version-comment: warning
+```
+
+**What is reported.** A pin to a full commit SHA that has no comment, or whose comment names no version. The forms of a version comment are the same as for `ref-version-mismatch`: `# v4.2.2`, `# 4.2.2`, `# v4`, `# tag=v4.2.2`, `# v4.2.2 (some note)` and the comment of [ratchet](https://github.com/sethvargo/ratchet), `# ratchet:actions/checkout@v4.2.2`. A comment that has a version somewhere (`# pin@v7.0.1`, `# Release v4.4.1`) is accepted too, because it says which version the pin is. Only a comment that starts with the version is read by `ref-version-mismatch`. A version on the line before the action is not read by any tool and is reported.
+
+**What is not reported.** A comment that starts with the name of a branch that is usually followed (`# main`, `# master`, `# develop`, `# branch=main`): the pin follows the branch on purpose, and its commit is not a release. An action that is not pinned to a commit is the business of `unpinned-uses`, and local actions and Docker images have no version comment.
+
+**Fix.** With `--online --fix` the finding is fixed by adding the comment: the most specific version tag that points to the commit (`# v4.2.2`, not `# v4`), the way [the pin fix](./online.md#pin-tags-to-commits-with-online-fix) names it. The fix is safe, because it only adds a comment. There is no fix when a comment is already there (it may say something else that matters), when no tag of the repository points to the commit (a commit between releases has no version to name), or when the commit has several versions of the same specificity (`v2.0.1` and `v2.0.2`). Without `--online` the finding says that the fix needs it.
+
+<a id="check-action-release-cooldown"></a>
+## Release cooldown of actions (online, opt-in)
+
+The rule `action-release-cooldown` reports an action that is at a version younger than a number of days: a pin to a commit, or a reference to a tag. A compromised release of an action is usually found and taken down within days, and a project that waits for a release to age is not hit by it. The rule is the check of the option `--min-age` of [pinact](https://github.com/suzuki-shunsuke/pinact/blob/main/docs/update.md), and the counterpart of [`dependabot-cooldown`](#check-dependabot-cooldown), which asks the same of the updates that Dependabot proposes. It runs only with `--online`, see [online checks](./online.md#online-checks), and only when the configuration has an entry for it, because the number of days is a decision of the project.
+
+Example input:
+
+```yaml
+# requires --online
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      # ERROR: v1.2.0 was released 2 days ago
+      - uses: example/fresh@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa # v1.2.0
+      # OK: v1.1.0 was released more than a week ago
+      - uses: example/fresh@bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb # v1.1.0
+```
+
+Output:
+<!-- Skip update output -->
+```
+test.yaml:8:15: warning: action "example/fresh@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" is at a version that is younger than the cooldown of 7 days: v1.2.0 was released 2 days ago, on 2026-10-11. wait for the version to age before you use it: a compromised release is usually found within days [action-release-cooldown]
+  |
+8 |       - uses: example/fresh@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa # v1.2.0
+  |               ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+```
+
+<!-- Skip playground link -->
+
+The example output comes from this `rules` section of the [configuration file](config.md#rules), run with the recorded answers of GitHub:
+
+```yaml
+rules:
+  action-release-cooldown:
+    level: warning
+    days: 7
+```
+
+**Configure.** `days` is the number of days a version must be old (at least 1, and 7 when it is not set). The rule is off until `rules` has an entry for it, as in the example.
+
+**What is reported.** An action at a version younger than `days`. The date of a version is the publication of its release on GitHub (`published_at`, the date a person sees in the list of releases). A tag that has no release has the date of its commit, and so does a commit pinned without a tag. That date is not always the date of the release: a tag that was moved to an older commit looks older than it is, and a commit can be made long before it is released. The finding says which date it used. The version of a pin is the most specific version tag of its commit (`v4.2.2` for `v4`), so that the date is the one of the release, not of the moving tag.
+
+**What is not reported.** A branch is not checked: it moves by design and has no release. A repository with more tags than were read may hide the version tag of a commit, so a pin to it is judged only by a tag written out in full (`v4.2.2`) or by the tag that its comment names when the repository confirms it. Without a lookup that works (no network, a rate limit, a repository left out by `--online-deny`) the action is not reported.
+
+**Fix.** There is no fix: waiting is the fix, and which older version to use is for you to choose.
 
 <a id="check-run-policy"></a>
 ## Run script policy (pedantic)
@@ -9629,10 +9910,69 @@ Output:
 
 **Configure.** If you need `allow` for a registry, ignore the finding for that file with `paths:` in [the config file](./config.md#configuration-file), or with an [ignore comment](./ignore.md#ignore-some-errors).
 
+<a id="check-hardcoded-registry-credentials"></a>
+## Dependabot registry credentials in plain text
+
+The rule `hardcoded-registry-credentials` (in the `default` profile, at the level `error`) reports a credential that is written as plain text in the `registries` of `dependabot.yml`. The `registries` tell Dependabot how to sign in to a private package registry. Dependabot reads a secret from the Dependabot secrets of the repository when a value is written as `${{secrets.NAME}}`, so a `password`, `token`, `key` or `auth-key` that is a literal puts the credential in the repository and its history, where everybody who can read the code (and every fork) has it. A password in the user information of the `url` (`https://user:password@host/`) is the same. The rule is the counterpart of [`hardcoded-container-credentials`](#check-hardcoded-credentials) for `dependabot.yml`. zizmor has no audit for it yet (see [zizmor#1222](https://github.com/zizmorcore/zizmor/issues/1222)).
+
+Example input:
+
+```yaml
+version: 2
+registries:
+  dockerhub:
+    type: docker-registry
+    url: https://registry.hub.docker.com
+    username: octocat
+    # ERROR: the password is written in the repository
+    password: not-a-real-password
+  npm-github:
+    type: npm-registry
+    url: https://npm.pkg.github.com
+    # OK: a Dependabot secret
+    token: ${{secrets.NPM_TOKEN}}
+updates:
+  - package-ecosystem: docker
+    directory: "/"
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    registries:
+      - dockerhub
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    registries:
+      - npm-github
+```
+
+Output:
+
+```
+.github/dependabot.yml:8:15: "password" of registry "dockerhub" is written in plain text. store it as a Dependabot secret and write ${{secrets.NAME}} instead, and rotate the credential because it is in the history of the repository [hardcoded-registry-credentials]
+  |
+8 |     password: not-a-real-password
+  |               ^~~~~~~~~~~~~~~~~~~
+```
+
+<!-- Skip playground link -->
+
+**What is reported.** A `password`, `token`, `key` or `auth-key` of a registry that is not empty and is not an expression, and a password in the user information of the `url`. The message does not repeat the value.
+
+**What is not reported.** A value that has an expression (`${{ ... }}`) is read as a reference, so `${{secrets.NAME}}` is not reported. User names and the other settings, such as the OIDC settings (`tenant-id`, `client-id` and so on), are not credentials and are not reported. A user name in the user information of the `url` (`https://token@host/`) is not reported either.
+
+**Fix.** Store the credential as a Dependabot secret and write `${{secrets.NAME}}` instead, and rotate the credential, because it is in the history of the repository. There is no automatic fix, because jactionlint cannot know the name of the secret, and a credential that was committed has to be rotated anyway.
+
+**Configure.** To turn the rule off, set `hardcoded-registry-credentials: off` in `rules` of [the configuration file](config.md#rules).
+
 <a id="check-dependabot-missing-actions-update"></a>
 ## Dependabot updates of actions (pedantic)
 
-The rule `dependabot-missing-actions-update` reports a `dependabot.yml` that has no update with `package-ecosystem: github-actions` while `.github/workflows` has a workflow that uses an action or a reusable workflow (not a local path or a `docker://` image). A repository that uses Dependabot for its dependencies often forgets that the actions in its workflows are dependencies too: they are never updated, or updated by hand when someone notices.
+The rule `dependabot-missing-actions-update` reports a `dependabot.yml` that has no update with `package-ecosystem: github-actions` while `.github/workflows` has a workflow that uses an action or a reusable workflow (not a local path or a `docker://` image). A repository that uses Dependabot for its dependencies often forgets that the actions in its workflows are dependencies too: they are never updated, or updated by hand when someone notices. The rule also reports the local composite actions that no `github-actions` update covers.
 
 The rule is in the `pedantic` profile, at the level `warn`. It is a policy of jactionlint; zizmor has no such audit ([jactionlint and zizmor](./zizmor-parity.md)).
 
@@ -9668,9 +10008,27 @@ The output is that of a repository with a workflow that uses `actions/checkout` 
 - A repository with a Renovate configuration, because another tool may update the actions. jactionlint looks for `renovate.json`, `renovate.json5`, `.renovaterc`, `.renovaterc.json`, `.renovaterc.json5`, `.github/renovate.json`, `.github/renovate.json5`, `.gitlab/renovate.json`, `.gitlab/renovate.json5` and the `renovate` key of `package.json`.
 - A repository without `dependabot.yml`: there is no file to report.
 
-**Fix.** There is no automatic fix, because the update needs a schedule that only you can choose.
+**Fix.** A missing update has no automatic fix, because the update needs a schedule that only you can choose. The local composite actions that an update does not cover have an unsafe fix, see **Local composite actions** in this section.
 
 **Configure.** The `pedantic` profile enables the rule. To enable it in another profile, set `rules: {dependabot-missing-actions-update: warn}`. A finding of the level `warn` does not change the exit status unless you use `--strict-exit`.
+
+**Local composite actions.** A `github-actions` update reads the workflows of `.github/workflows` and the `action.yml` of the directory it is given. With `directory: /` the local composite actions (`.github/actions/*/action.yml`, or any other action of the repository that a workflow calls with `./path`) are never updated, which is the same mistake one level down (zizmor [#1806](https://github.com/zizmorcore/zizmor/issues/1806), dependabot-core [#6345](https://github.com/dependabot/dependabot-core/issues/6345)). When the file has a `github-actions` update, the check also reports the local composite actions that use an action or a reusable workflow and that no `github-actions` update names, either as `directory` or as an entry of `directories`.
+
+Only `directories` takes globs (Dependabot documents globbing and the wildcard for `directories`, not for `directory`). `*` is one name and `**` any number of directories, so `/.github/actions/**/*` covers every directory under `.github/actions`, and `/**/*` alone is Dependabot's "current directory and the recursive subdirectories" and covers the root as well. `directory: /.github/actions/*` covers nothing:
+
+```yaml
+updates:
+  - package-ecosystem: github-actions
+    directories:
+      - /
+      - /.github/actions/**/*
+    schedule:
+      interval: weekly
+```
+
+**Disabled updates.** An update that is disabled, with `open-pull-requests-limit: 0` or an `ignore` of every dependency, opens no pull request and does not count for either check: with only disabled `github-actions` updates, the repository is reported as one whose actions are not updated. The rule asks whether the repository uses actions that Dependabot can update of both the workflows and the local composite actions, for the missing update as well as for the disabled ones. The message says where the actions are. When only the workflows use them it asks for `directory: /`, and when the local composite actions use them, alone or besides the workflows, it names those actions and asks for `directories` with `/` and those actions. The advice is the same whether the file has no `github-actions` update, only disabled ones or an active one that misses the local actions.
+
+**Fix for local composite actions.** The fix replaces `directory: /` of an update that is the only `github-actions` one by `directories: ["/", "/.github/actions/**/*"]`; the actions that are not under `.github/actions` are listed by their directory. It makes Dependabot propose pull requests it did not, so it is unsafe and applied only by `--fix=unsafe`. It is not offered when the file has several `github-actions` updates or writes the key in a way it cannot edit. The check is silent when the repository has a Renovate configuration.
 
 <a id="check-composite-actions"></a>
 ## Composite actions
@@ -9698,9 +10056,9 @@ When no local workflow calls the action (it is published for other repositories,
 
 **How the rules treat actions.** Every rule ID is in one of these three lists.
 
-- **Applies** to the steps (and the metadata) of an action: `action-syntax`, `actions-lock`, `actions-lock-drift`, `adhoc-packages`, `archived-uses`, `argument-injection`, `artipacked`, `background-step-not-waited`, `checkout-static-credentials`, `command-injection`, `conflicting-action-inputs`, `constant-condition`, `context-availability`, `continue-on-error`, `deprecated-action-input`, `deprecated-commands`, `deprecated-node-runtime`, `duplicate-key`, `duplicate-step-id`, `environment-file-redirect`, `expired-ignore`, `expression-syntax`, `expression-type`, `fail-fast-action-inputs`, `forbidden-uses`, `github-app`, `github-script-syntax`, `if-always-true`, `impostor-commit`, `insecure-commands`, `insecure-ssh-keyscan`, `insecure-url-scheme`, `invalid-env-var-name`, `invalid-function-call`, `invalid-id`, `invalid-ignore-comment`, `invalid-local-action`, `invalid-parallel-step`, `invalid-shell-name`, `invalid-uses`, `invisible-characters`, `known-vulnerable-actions`, `malformed-expression-delimiters`, `max-run-lines`, `merge-key`, `misfeature`, `missing-action-input`, `multiline-plain-run`, `obfuscation`, `outdated-action-runner`, `output-clobbering`, `pipeline-without-pipefail`, `pyflakes`, `recursive-alias`, `ref-confusion`, `ref-version-mismatch`, `repojacking`, `require-expression-wrapping`, `self-repository`, `shellcheck`, `stale-action-refs`, `superfluous-actions`, `template-injection`, `typosquat-uses`, `undefined-function`, `undefined-property`, `unknown-action-input`, `unlocked-install`, `unpinnable-action`, `unpinned-images`, `unpinned-tools`, `unpinned-uses`, `unsound-contains`, `unsound-prefix-match`, `unsound-ternary`, `unused-anchor`, `unused-ignore`, `unverified-download`, `use-trusted-publishing`, `yaml-syntax`.
+- **Applies** to the steps (and the metadata) of an action: `action-release-cooldown`, `action-syntax`, `actions-lock`, `actions-lock-drift`, `adhoc-packages`, `archived-uses`, `argument-injection`, `artipacked`, `background-step-not-waited`, `checkout-static-credentials`, `command-injection`, `conflicting-action-inputs`, `constant-condition`, `context-availability`, `continue-on-error`, `deprecated-action-input`, `deprecated-commands`, `deprecated-node-runtime`, `duplicate-key`, `duplicate-step-id`, `environment-file-redirect`, `expired-ignore`, `expression-syntax`, `expression-type`, `fail-fast-action-inputs`, `forbidden-uses`, `github-app`, `github-script-syntax`, `if-always-true`, `impostor-commit`, `insecure-commands`, `insecure-ssh-keyscan`, `insecure-url-scheme`, `invalid-env-var-name`, `invalid-function-call`, `invalid-id`, `invalid-ignore-comment`, `invalid-local-action`, `invalid-parallel-step`, `invalid-shell-name`, `invalid-uses`, `invisible-characters`, `known-vulnerable-actions`, `malformed-expression-delimiters`, `max-run-lines`, `merge-key`, `misfeature`, `missing-action-input`, `missing-version-comment`, `multiline-plain-run`, `obfuscation`, `outdated-action-runner`, `output-clobbering`, `pipeline-without-pipefail`, `pyflakes`, `recursive-alias`, `ref-confusion`, `ref-version-mismatch`, `repojacking`, `require-expression-wrapping`, `self-repository`, `shell-syntax`, `shellcheck`, `stale-action-refs`, `superfluous-actions`, `template-injection`, `typosquat-uses`, `undefined-function`, `undefined-property`, `unknown-action-input`, `unlocked-install`, `unpinnable-action`, `unpinned-images`, `unpinned-tools`, `unpinned-uses`, `unsound-contains`, `unsound-prefix-match`, `unsound-ternary`, `unused-anchor`, `unused-ignore`, `unverified-download`, `use-trusted-publishing`, `yaml-syntax`.
 - **Caller-dependent**: `agentic-actions`, `bot-conditions`, `cache-poisoning`, `github-env` (its findings about untrusted input do not depend on the caller), `untrusted-artifact` and `untrusted-checkout`.
-- **Not applicable** because an action does not have what the rule checks, or because only the calling job can decide (`unused-baseline-entry` is about the baseline file, not about a workflow or an action): `anonymous-definition`, `comment-trigger-authorization`, `concurrency-cancels-prs`, `concurrency-cancels-release`, `concurrency-deadlock`, `concurrency-limits`, `conflicting-runner-labels`, `cron-too-frequent`, `cyclic-job-needs`, `dangerous-triggers`, `dependabot-cooldown`, `dependabot-execution`, `dependabot-missing-actions-update`, `dependabot-syntax`, `deprecated-runner-label`, `duplicate-job-id`, `duplicate-job-needs`, `duplicate-triggers`, `event-name-never-received`, `excessive-permissions`, `gate-job-skipped-on-failure`, `gh-without-token`, `hardcoded-container-credentials`, `insufficient-permissions`, `invalid-activity-type`, `invalid-cron`, `invalid-event-config`, `invalid-event-filter`, `invalid-glob`, `invalid-label-pattern`, `invalid-local-workflow`, `invalid-permissions`, `invalid-timezone`, `invalid-workflow-call`, `invalid-workflow-call-input`, `invalid-workflow-dispatch-input`, `local-action-checkout`, `matrix-duplicate-value`, `matrix-invalid-exclude`, `missing-permissions`, `missing-timeout`, `missing-workflow-input`, `missing-workflow-secret`, `mutable-runner-label`, `overprovisioned-secrets`, `require-shell`, `required-actions`, `secrets-inherit`, `secrets-outside-env`, `self-hosted-runner`, `timeout-too-long`, `ubuntu-slim-limits`, `undefined-job-needs`, `undocumented-permissions`, `unknown-event`, `unknown-runner-label`, `unknown-workflow-input`, `unknown-workflow-secret`, `unmatched-paths-filter`, `unredacted-secrets`, `unused-baseline-entry`, `unused-job-output`, `unused-needs`, `unused-workflow-input`, `unused-workflow-secret`, `workflow-call-permissions`, `workflow-input-type`, `workflow-run-names`, `workflow-secret-scope`, `workflow-syntax`.
+- **Not applicable** because an action does not have what the rule checks, or because only the calling job can decide (`unused-baseline-entry` is about the baseline file, not about a workflow or an action): `anonymous-definition`, `comment-trigger-authorization`, `concurrency-cancels-prs`, `concurrency-cancels-release`, `concurrency-deadlock`, `concurrency-limits`, `conflicting-runner-labels`, `cron-too-frequent`, `cyclic-job-needs`, `dangerous-triggers`, `dependabot-cooldown`, `dependabot-execution`, `dependabot-missing-actions-update`, `dependabot-syntax`, `deprecated-runner-label`, `duplicate-job-id`, `duplicate-job-needs`, `duplicate-triggers`, `event-name-never-received`, `excessive-permissions`, `gate-job-skipped-on-failure`, `gh-without-token`, `hardcoded-container-credentials`, `hardcoded-registry-credentials`, `insufficient-permissions`, `invalid-activity-type`, `invalid-cron`, `invalid-event-config`, `invalid-event-filter`, `invalid-glob`, `invalid-label-pattern`, `invalid-local-workflow`, `invalid-permissions`, `invalid-timezone`, `invalid-workflow-call`, `invalid-workflow-call-input`, `invalid-workflow-dispatch-input`, `local-action-checkout`, `macos-gnu-flags`, `matrix-duplicate-value`, `matrix-invalid-exclude`, `missing-permissions`, `missing-timeout`, `missing-workflow-input`, `missing-workflow-secret`, `mutable-runner-label`, `overprovisioned-secrets`, `require-shell`, `required-actions`, `secrets-inherit`, `secrets-outside-env`, `self-hosted-runner`, `timeout-too-long`, `ubuntu-slim-limits`, `undefined-job-needs`, `undocumented-permissions`, `unknown-event`, `unknown-runner-label`, `unknown-workflow-input`, `unknown-workflow-secret`, `unmatched-paths-filter`, `unredacted-secrets`, `unused-baseline-entry`, `unused-job-output`, `unused-needs`, `unused-workflow-input`, `unused-workflow-secret`, `workflow-call-permissions`, `workflow-input-type`, `workflow-run-names`, `workflow-secret-scope`, `workflow-syntax`.
 
 Example input:
 

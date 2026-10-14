@@ -26,6 +26,7 @@ rules:
 
 | ID | Summary | Group | Default level | Profile | Fixable |
 | --- | --- | --- | --- | --- | --- |
+| [action-release-cooldown](#action-release-cooldown) | An action is pinned to a version released less than the cooldown ago. | security | warn | only with `--online`, and only when `rules` has an entry for it (opt-in) | no |
 | [action-syntax](#action-syntax) | The action metadata does not follow the syntax of action.yml. | correctness | error | correctness | no |
 | [actions-lock](#actions-lock) | The Actions lock file does not match the workflows: an action is missing from it, an entry is stale or malformed. | security | error | default | no |
 | [actions-lock-drift](#actions-lock-drift) | A pin of the Actions lock file no longer matches GitHub: the repository changed owner or was replaced, a version tag moved, or the commit is not in the history of the repository. | security | error | only with `--online` | no |
@@ -55,7 +56,7 @@ rules:
 | [dangerous-triggers](#dangerous-triggers) | A workflow uses pull_request_target, workflow_run or issue_comment. With the option pedantic, also one that cannot write and uses no secret. | security | error | default | no |
 | [dependabot-cooldown](#dependabot-cooldown) | An update in dependabot.yml has no cooldown or a cooldown shorter than the minimum. | security | error | default | yes |
 | [dependabot-execution](#dependabot-execution) | An update in dependabot.yml allows insecure external code execution. | security | error | default | yes |
-| [dependabot-missing-actions-update](#dependabot-missing-actions-update) | dependabot.yml has no github-actions update although the repository has workflows using actions. | policy | warn | pedantic | no |
+| [dependabot-missing-actions-update](#dependabot-missing-actions-update) | dependabot.yml has no github-actions update although the repository has workflows using actions, or its github-actions updates do not cover the local composite actions that use actions. | policy | warn | pedantic | yes |
 | [dependabot-syntax](#dependabot-syntax) | The Dependabot configuration does not follow the syntax of dependabot.yml. | correctness | error | correctness | no |
 | [deprecated-action-input](#deprecated-action-input) | A deprecated input of an action is used. | correctness | error | correctness | no |
 | [deprecated-commands](#deprecated-commands) | A deprecated workflow command such as ::set-output is used. | correctness | error | correctness | no |
@@ -76,10 +77,11 @@ rules:
 | [forbidden-uses](#forbidden-uses) | An action or reusable workflow is not allowed or is denied by the configuration. | policy | error | only when configured | no |
 | [gate-job-skipped-on-failure](#gate-job-skipped-on-failure) | A job that reads the results of the jobs it needs is skipped when one of them fails. | correctness | error | default | no |
 | [gh-without-token](#gh-without-token) | A script runs the gh command although no GH_TOKEN or GITHUB_TOKEN reaches the step, so gh stops. | correctness | error | correctness | no |
-| [github-app](#github-app) | A GitHub App token is issued with more access or a longer life than needed. | security | error | default | no |
+| [github-app](#github-app) | A GitHub App token (actions/create-github-app-token, tibdex/github-app-token, peter-murray/workflow-application-token-action) is issued with more access or a longer life than needed. | security | error | default | no |
 | [github-env](#github-env) | Input that an outsider controls, or a value that is not a literal in a workflow triggered by pull_request_target or workflow_run, is written to GITHUB_ENV or GITHUB_PATH. | security | error | default | no |
 | [github-script-syntax](#github-script-syntax) | The script of actions/github-script has a JavaScript syntax error. | correctness | error | correctness | no |
 | [hardcoded-container-credentials](#hardcoded-container-credentials) | A password for a container registry is written directly in the workflow. | security | error | correctness | no |
+| [hardcoded-registry-credentials](#hardcoded-registry-credentials) | A registry in dependabot.yml has a password, token or key written in plain text. | security | error | default | no |
 | [if-always-true](#if-always-true) | An if: condition is always true because of the characters around ${{ }}. | correctness | error | correctness | no |
 | [impostor-commit](#impostor-commit) | A hash-pinned action uses a commit which is not part of the repository's own history (it exists only in a fork). | security | error | only with `--online` | no |
 | [insecure-commands](#insecure-commands) | ACTIONS_ALLOW_UNSECURE_COMMANDS enables the deprecated set-env and add-path commands. | security | error | default | yes |
@@ -109,6 +111,7 @@ rules:
 | [invisible-characters](#invisible-characters) | A file contains an invisible or bidirectional control character which hides what the text says. | security | error | default | yes |
 | [known-vulnerable-actions](#known-vulnerable-actions) | An action version is affected by a published GitHub security advisory. | security | error | only with `--online` | no |
 | [local-action-checkout](#local-action-checkout) | A local action is used before any step checks out the repository. | correctness | error | correctness | no |
+| [macos-gnu-flags](#macos-gnu-flags) | A command at run: has a GNU-only option and the job runs on macOS, which has the BSD command. | correctness | warn | pedantic | no |
 | [malformed-expression-delimiters](#malformed-expression-delimiters) | Text such as ${ github.ref }, $ {{ x }} or {{ github.sha }} is meant to be an expression but is not one. With the option pedantic, so is a shell variable in the input of an action. | correctness | error | correctness | yes |
 | [matrix-duplicate-value](#matrix-duplicate-value) | A matrix has a duplicate value. | correctness | error | correctness | no |
 | [matrix-invalid-exclude](#matrix-invalid-exclude) | An exclude entry of a matrix does not match the matrix. | correctness | error | correctness | no |
@@ -118,6 +121,7 @@ rules:
 | [missing-action-input](#missing-action-input) | A required input of an action is not specified. | correctness | error | correctness | no |
 | [missing-permissions](#missing-permissions) | Neither the workflow nor the job sets permissions:. | policy | error | default | yes |
 | [missing-timeout](#missing-timeout) | A job does not set timeout-minutes. | policy | error | default | yes |
+| [missing-version-comment](#missing-version-comment) | A hash-pinned action has no comment which names its version. | policy | warn | pedantic | yes |
 | [missing-workflow-input](#missing-workflow-input) | A required input of a reusable workflow is not specified. | correctness | error | correctness | no |
 | [missing-workflow-secret](#missing-workflow-secret) | A required secret of a reusable workflow is not passed. | correctness | error | correctness | no |
 | [multiline-plain-run](#multiline-plain-run) | A run: is written over several lines without \|, so YAML folds the lines into one command. | correctness | error | correctness | yes |
@@ -139,6 +143,7 @@ rules:
 | [secrets-outside-env](#secrets-outside-env) | A job uses a secret but has no environment, or passes one to a reusable workflow. | security | warn | pedantic | no |
 | [self-hosted-runner](#self-hosted-runner) | A job runs on a self-hosted runner: the label self-hosted, a label of self-hosted-runner.labels or a runner group. | security | info | pedantic | no |
 | [self-repository](#self-repository) | A local action or workflow is referenced as ./path instead of $/path. | security | info | pedantic | yes |
+| [shell-syntax](#shell-syntax) | A shell script at "run:" has a syntax error (found without shellcheck). | correctness | error | default | no |
 | [shellcheck](#shellcheck) | shellcheck reported an issue in a shell script. | correctness | error | correctness | no |
 | [stale-action-refs](#stale-action-refs) | A hash-pinned action uses a commit which no tag of the repository points to. | security | info | only with `--online` | no |
 | [superfluous-actions](#superfluous-actions) | An action does what a tool of the runner image does as well, such as gh release create. | security | error | default | no |
@@ -182,6 +187,17 @@ rules:
 | [workflow-secret-scope](#workflow-secret-scope) | A secret is assigned to the workflow-level env and reaches multiple jobs. With the option job-level, also one of the env of a job that reaches its steps. | security | warn | pedantic | no |
 | [workflow-syntax](#workflow-syntax) | The workflow does not follow the syntax of GitHub Actions workflows. | correctness | error | correctness | no |
 | [yaml-syntax](#yaml-syntax) | The file is not valid YAML. | correctness | error | correctness | no |
+
+## action-release-cooldown
+
+An action is pinned to a version released less than the cooldown ago.
+
+- Group: security
+- Default level: warn
+- Profile: only with `--online`, and only when `rules` has an entry for it (opt-in)
+- Needs network access: yes (only with `--online`)
+- Option `days` (int, default 7): How many days a version must be old (at least 1). The date is the publication of its release on GitHub, else the date of its commit. The rule runs only when "rules" has an entry for it, and only with the online checks.
+- [Details and examples](./checks.md#check-action-release-cooldown)
 
 ## action-syntax
 
@@ -364,6 +380,7 @@ A workflow does not cancel superseded runs with concurrency:.
 - Default level: error
 - Profile: default
 - Fixable: yes
+- Option `pedantic` (bool, no default): Also report the pedantic checks, which are noisier. Unset, they run under the pedantic profile.
 - [Details and examples](./checks.md#check-concurrency-limits)
 
 ## conflicting-action-inputs
@@ -464,11 +481,12 @@ An update in dependabot.yml allows insecure external code execution.
 
 ## dependabot-missing-actions-update
 
-dependabot.yml has no github-actions update although the repository has workflows using actions.
+dependabot.yml has no github-actions update although the repository has workflows using actions, or its github-actions updates do not cover the local composite actions that use actions.
 
 - Group: policy
 - Default level: warn
 - Profile: pedantic
+- Fixable: yes
 - [Details and examples](./checks.md#check-dependabot-missing-actions-update)
 
 ## dependabot-syntax
@@ -660,7 +678,7 @@ A script runs the gh command although no GH_TOKEN or GITHUB_TOKEN reaches the st
 
 ## github-app
 
-A GitHub App token is issued with more access or a longer life than needed.
+A GitHub App token (actions/create-github-app-token, tibdex/github-app-token, peter-murray/workflow-application-token-action) is issued with more access or a longer life than needed.
 
 - Group: security
 - Default level: error
@@ -693,6 +711,15 @@ A password for a container registry is written directly in the workflow.
 - Default level: error
 - Profile: correctness
 - [Details and examples](./checks.md#check-hardcoded-credentials)
+
+## hardcoded-registry-credentials
+
+A registry in dependabot.yml has a password, token or key written in plain text.
+
+- Group: security
+- Default level: error
+- Profile: default
+- [Details and examples](./checks.md#check-hardcoded-registry-credentials)
 
 ## if-always-true
 
@@ -962,6 +989,15 @@ A local action is used before any step checks out the repository.
 - Profile: correctness
 - [Details and examples](./checks.md#check-local-action-checkout)
 
+## macos-gnu-flags
+
+A command at run: has a GNU-only option and the job runs on macOS, which has the BSD command.
+
+- Group: correctness
+- Default level: warn
+- Profile: pedantic
+- [Details and examples](./checks.md#check-macos-gnu-flags)
+
 ## malformed-expression-delimiters
 
 Text such as ${ github.ref }, $ {{ x }} or {{ github.sha }} is meant to be an expression but is not one. With the option pedantic, so is a shell variable in the input of an action.
@@ -1050,6 +1086,16 @@ A job does not set timeout-minutes.
 - Option `default-minutes` (int, no default): The timeout-minutes which --fix adds to a job. There is no default: the rule has no fix unless this is set. It is lowered to the max of timeout-too-long when that is smaller, and to 15 on a job that runs only on ubuntu-slim.
 - Option `accept-step-timeouts` (bool, default false): Do not report a job without timeout-minutes when every one of its steps sets timeout-minutes (ghalint's exception). Off by default: the timeout of a step does not cover setting up the job, the post steps of actions or completing the job.
 - [Details and examples](./checks.md#check-timeout-minutes)
+
+## missing-version-comment
+
+A hash-pinned action has no comment which names its version.
+
+- Group: policy
+- Default level: warn
+- Profile: pedantic
+- Fixable: yes
+- [Details and examples](./checks.md#check-missing-version-comment)
 
 ## missing-workflow-input
 
@@ -1251,6 +1297,15 @@ A local action or workflow is referenced as ./path instead of $/path.
 - Profile: pedantic
 - Fixable: yes
 - [Details and examples](./checks.md#check-self-repository)
+
+## shell-syntax
+
+A shell script at "run:" has a syntax error (found without shellcheck).
+
+- Group: correctness
+- Default level: error
+- Profile: default
+- [Details and examples](./checks.md#check-shell-syntax)
 
 ## shellcheck
 

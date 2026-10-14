@@ -285,6 +285,7 @@ func (rule *RuleExpressionDelimiters) shellVariable(s *String, off int, m []stri
 	} else if strings.HasPrefix(name, "GITHUB_") || strings.HasPrefix(name, "RUNNER_") || name == "HOME" || name == "PATH" || name == "USER" {
 		use = "no context has it (`env` has only the variables the workflow sets), so compute it in an earlier step and pass it as an output"
 	}
+	// Advice only: the text may be meant as it is, and where the value comes from is a choice, so the rule has no fix for it
 	rule.errorIDAt("malformed-expression-delimiters", rule.pos(s, off), quote(m[0])+" is not expanded here: GitHub passes the value of this input as it is, and no shell reads it. "+use).endAt(rule.pos(s, off+len(m[0])))
 }
 

@@ -367,7 +367,7 @@ func (rule *RuleGitHubEnv) stepChecksOutPR(st *Step) bool {
 		}
 		done, ok := rule.checkouts[st]
 		if !ok {
-			if es, err := runscript.Analyze(e.Run.Value, "bash"); err == nil {
+			if es, err := e.Run.analyzeScript("bash"); err == nil {
 				done = scriptChecksOutPR(es, len(e.Run.Value)+1)
 			}
 			rule.checkouts[st] = done

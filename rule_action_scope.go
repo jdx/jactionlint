@@ -31,6 +31,7 @@ var actionRuleScope = map[string]struct {
 }{
 	"action-input-dependencies":       {scope: actionApplies},
 	"action":                          {scope: actionApplies},
+	"action-release-cooldown":         {scope: actionApplies},
 	"adhoc-packages":                  {scope: actionApplies},         // package installs in the scripts of the steps
 	"agentic-actions":                 {scope: actionCallerDependent}, // an agent is steerable depending on the events of the callers
 	"command-injection":               {scope: actionApplies},         // the scripts of the steps
@@ -59,6 +60,7 @@ var actionRuleScope = map[string]struct {
 	"unpinned-tools":                  {scope: actionApplies},         // the inputs of the actions the steps use
 	"github-script-syntax":            {scope: actionApplies},         // the script input of the github-script steps
 	"unmatched-paths-filter":          {scope: actionNotApplicable},   // on.<event>.paths: belongs to the workflow
+	"macos-gnu-flags":                 {scope: actionNotApplicable},   // the runner is the one of the calling job
 	"unsound-prefix-match":            {scope: actionApplies},         // the if: conditions and expressions of the steps
 	"untrusted-artifact":              {scope: actionCallerDependent}, // privileged only when a caller runs on workflow_run
 	"untrusted-checkout":              {scope: actionCallerDependent}, // privileged only when a caller runs on pull_request_target or workflow_run
@@ -100,6 +102,7 @@ var actionRuleScope = map[string]struct {
 	"local-action-checkout":           {scope: actionNotApplicable},
 	"matrix":                          {scope: actionNotApplicable},
 	"misfeature":                      {scope: actionApplies},
+	"missing-version-comment":         {scope: actionApplies},
 	"obfuscation":                     {scope: actionApplies},
 	"overprovisioned-secrets":         {scope: actionNotApplicable},
 	"parallel-steps":                  {scope: actionApplies},
@@ -116,6 +119,7 @@ var actionRuleScope = map[string]struct {
 	"self-hosted-runner":              {scope: actionNotApplicable},
 	"self-repository":                 {scope: actionApplies},
 	"shell-name":                      {scope: actionApplies},
+	"shell-syntax":                    {scope: actionApplies},
 	"shellcheck":                      {scope: actionApplies},
 	"stale-action-refs":               {scope: actionApplies},
 	"timeout-check":                   {scope: actionNotApplicable},

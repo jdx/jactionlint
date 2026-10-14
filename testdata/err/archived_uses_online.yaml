@@ -5,6 +5,8 @@ jobs:
     steps:
       # ERROR: the repository is archived
       - uses: example/archived-action@v1
+      # ERROR: archived, and the successor is known
+      - uses: actions-rs/cargo@v1
       # OK: maintained
       - uses: actions/checkout@v4
   call:

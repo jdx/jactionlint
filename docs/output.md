@@ -1,6 +1,6 @@
 # Output formats
 
-Choose the output format for people, annotations, code scanning or scripts, and look up the fields of a finding, the SARIF log and the template syntax.
+Choose the output format for people, annotations, code scanning or scripts, and look up the fields of a finding, the SARIF log and the template syntax. It also covers `--export-facts`, which prints a JSON document about the repository instead of findings.
 
 <a id="format"></a>
 <a id="format-error-messages"></a>
@@ -39,14 +39,15 @@ Stdout carries:
 
 - the findings in the chosen format;
 - the result line of `--baseline-write`;
-- the unified diff of `--diff`.
+- the unified diff of `--diff`;
+- the document of [`--export-facts`](#export-the-facts-of-the-repository) and the report of `--suggest-timeouts`, which replace the findings.
 
 Stderr carries:
 
 - the logs of `--verbose` and `--debug`;
 - warnings: a deprecated key of the config file, a retired rule ID in an ignore, a skipped online lookup;
 - the note about a tool that was not found;
-- the note about findings that the [baseline](./baseline.md#baseline) hides and the [first-run hint](./usage.md#the-first-run), for `text` and `oneline` only;
+- the note about findings that the [baseline](./baseline.md#baseline) or [`--changed-since`](./ci.md#show-only-what-a-pull-request-changed) hides, and the [first-run hint](./usage.md#the-first-run), for `text` and `oneline` only;
 - the summary of `--fix` (`Fixed N problem(s)`) and of `--diff` (`Would fix N problem(s)`).
 
 With `--diff`, the findings that remain go to stderr in the chosen format, because stdout holds the diff. With `--fix`, they stay on stdout. With `--format sarif`, the warnings and the notes about the run are in the log (`invocations[].toolConfigurationNotifications` and `properties.externalTools`) and stderr stays empty unless you pass `--verbose` or `--debug`, or a `--fix` or `--diff` run prints its summary there.
@@ -130,6 +131,8 @@ jactionlint --profile correctness --select undefined-property --show-doc-urls
   = docs: https://jactionlint.jdx.dev/rules#undefined-property
 ```
 
+`--show-fix-status` adds a line in the same way: the fix of the finding, or the reason it has none. [Print the status of each finding](./fix.md#print-the-status-of-each-finding) shows it.
+
 ### gcc
 
 `gcc` prints `file:line:col: level: message [id]` like a compiler.
@@ -159,7 +162,7 @@ jactionlint --profile correctness --format github
 ::error file=.github/workflows/ci.yaml,line=11,endLine=11,col=23,endColumn=32,title=undefined-property::property "msg" is not defined in object type {}
 ```
 
-The format escapes `%` as `%25`, a carriage return as `%0D` and a line feed as `%0A` in the message, and also `:` as `%3A` and `,` as `%2C` in the properties, as the command syntax requires. `--show-doc-urls` ends the message with a second line, `docs: URL`. A region over several lines has no `endColumn`. [Annotations and code scanning](./ci.md#annotations-and-code-scanning) shows the workflow step.
+The format escapes `%` as `%25`, a carriage return as `%0D` and a line feed as `%0A` in the message, and also `:` as `%3A` and `,` as `%2C` in the properties, as the command syntax requires. `--show-doc-urls` ends the message with a second line, `docs: URL`, and `--show-fix-status` adds a line with `fix: ...` or `no fix (CODE): ...` in the same way. A region over several lines has no `endColumn`. [Annotations and code scanning](./ci.md#annotations-and-code-scanning) shows the workflow step.
 
 ### summary
 
@@ -285,7 +288,7 @@ The `no_fix` object has three keys:
 - `reason` is a sentence for people.
 - `option` names the option to set, such as `missing-timeout.default-minutes`. It is present only for `option-required` and `option-invalid`.
 
-A finding never has both `fix` and `no_fix`, and an advice-only finding has neither. [Why a finding was not fixed](./fix.md#why-a-finding-was-not-fixed) says what to do for each code. This is the object of a finding that needs an option:
+A finding never has both `fix` and `no_fix`, and an advice-only finding has neither. [Why a finding was not fixed](./fix.md#why-a-finding-was-not-fixed) says what to do for each code, and `--show-fix-status` prints the status in the `text` and `github` formats. This is the object of a finding that needs an option:
 
 ```sh
 jactionlint --select missing-timeout --format json | jq '.[0].no_fix'
@@ -579,6 +582,96 @@ jactionlint --profile correctness --format '{{range $err := .}}{{$err.Filepath}}
 .github/workflows/ci.yaml:9 malformed-expression-delimiters (fixable)
 .github/workflows/ci.yaml:11 undefined-property
 ```
+
+## Export the facts of the repository
+
+`jactionlint --export-facts` prints what the workflows and the composite actions of the repository declare, and what the call graph of the repository knows, as one JSON document instead of checking them. It is for tools that apply a policy of their own to the same model as jactionlint, such as a [Conftest](https://www.conftest.dev/) policy or a script, without parsing the YAML and the rules of GitHub Actions again.
+
+Without operands it exports the workflows and the actions of the repository. With files it exports those, and the callers are still those of the whole repository. It only reads: it exits with status 2 with stdin, `--fix`, `--diff`, `--baseline-write`, `--migrate-ignores`, `--suggest-timeouts` or `--changed-since`, as [Option combinations that fail](./cli.md#option-combinations-that-fail) lists.
+
+This example has a workflow that calls a reusable workflow from a job with write access. Save them as `.github/workflows/ci.yaml` and `.github/workflows/release.yaml` in a Git repository:
+
+```yaml
+name: CI
+on:
+  pull_request:
+    branches: [main]
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - run: echo testing
+  release:
+    needs: [test]
+    permissions:
+      contents: write
+    uses: ./.github/workflows/release.yaml
+    with:
+      channel: stable
+```
+
+```yaml
+name: Release
+on:
+  workflow_call:
+    inputs:
+      channel:
+        type: string
+        required: true
+permissions:
+  contents: read
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo publishing
+```
+
+The document is large, so read it with a tool such as `jq`. This command lists the jobs whose token is the default token of the repository:
+
+```sh
+jactionlint --export-facts | jq -r '.workflows[].jobs[] | select(.effective_permissions.source == "repository-setting") | .id'
+```
+
+```
+test
+```
+
+This one lists the reusable workflows that a job with write access calls, and on which events:
+
+```sh
+jactionlint --export-facts | jq -c '.calls[] | select(.permissions.scopes.contents == "write") | {from, job, to, events}'
+```
+
+```
+{"from":".github/workflows/ci.yaml","job":"release","to":".github/workflows/release.yaml","events":["pull_request"]}
+```
+
+The top level of the document has `version`, `tool`, `tool_version`, `workflows`, `actions` and `calls`:
+
+| Part | Facts |
+| --- | --- |
+| `workflows[]` | `path` (relative to the root of the repository), `parsed`, `name`, `events[]` (`name`, `types`, `filters`, `schedules`, `inputs`), `callable`, `called_by`, `permissions`, `concurrency`, `cache_mode`, `jobs[]` |
+| `jobs[]` | `id`, `name`, `needs`, `runs_on`, `permissions` (as declared), `effective_permissions`, `concurrency`, `environment`, `timeout_minutes`, `cache_mode`, `if` (as written, not evaluated), `uses` (a call of a reusable workflow, with `secrets_inherit`, `secrets` and `inputs`), `steps[]` |
+| `steps[]` | `index`, `id`, `name`, `kind`, `if`, `shell`, `uses` (with `kind` and, for an action, `repository`, `ref` and `ref_kind` such as `full-sha`), `inputs` of `with:` |
+| `actions[]` | `path`, `parsed`, `name`, `using`, `inputs`, `steps[]`, and `called_by`: the workflows that run the action, with the actions between them (`via`), their `events` and the `inputs` they pass |
+| `calls[]` | Each local call, either a job that calls a reusable workflow or a step that runs a local action: `kind`, `from`, `job`, `step`, `to` and `location`, with the `permissions` of the calling job and the `events` of the calling workflow |
+
+Every position is a `location` with a 1-based `line` and `column`, and the column counts Unicode code points, as in the findings. The document says what it does not know instead of leaving it out or guessing:
+
+- A value with a `${{ }}` expression has `dynamic: true` and the text as written, for example `concurrency.group`, `environment`, a `with:` input or a name. `concurrency.cancel_in_progress` is `true`, `false`, `unset` (not written, so nothing is cancelled) or `unknown` (an expression), and a `concurrency` written as one expression has `form: expression`. `timeout_minutes` has a `dynamic` flag and a job has `runs_on_dynamic`.
+- `effective_permissions` has a `source`: `job`, `workflow` or `repository-setting`. The last one means that neither the job nor the workflow declares permissions, so the default token of the repository applies, which the file does not say: `scopes` is absent, and that means unknown, not `none`. A scope that an expression decides is `"unknown"`.
+- `called_by.known` is `false` when nothing in the repository calls a reusable workflow: another repository may call it on any event, so `events` is not all of them. For an action it is `false` when no workflow of the repository runs it.
+- A file that is not valid YAML has `parsed: false` and no facts of its content.
+
+The facts are not findings: jactionlint judges none of them, and it never evaluates an expression. `jactionlint --print-facts-schema` prints the JSON Schema (draft-07) of the document, and [`schema/jactionlint-facts.json`](https://github.com/jdx/jactionlint/blob/main/schema/jactionlint-facts.json) is the committed copy. Like the schema of the findings, it does not set `additionalProperties: false`: fields are added within a `version`, so a reader ignores the fields that it does not know.
 
 ## Next steps
 

@@ -1,3 +1,4 @@
+action-release-cooldown online security warn
 action-syntax correctness correctness error
 actions-lock default security error
 actions-lock-drift online security error
@@ -52,6 +53,7 @@ github-app default security error
 github-env default security error
 github-script-syntax correctness correctness error
 hardcoded-container-credentials correctness security error
+hardcoded-registry-credentials default security error
 if-always-true correctness correctness error
 impostor-commit online security error
 insecure-commands default security error
@@ -81,6 +83,7 @@ invalid-workflow-dispatch-input correctness correctness error
 invisible-characters default security error
 known-vulnerable-actions online security error
 local-action-checkout correctness correctness error
+macos-gnu-flags pedantic correctness warn
 malformed-expression-delimiters correctness correctness error
 matrix-duplicate-value correctness correctness error
 matrix-invalid-exclude correctness correctness error
@@ -90,6 +93,7 @@ misfeature default security error
 missing-action-input correctness correctness error
 missing-permissions default policy error
 missing-timeout default policy error
+missing-version-comment pedantic policy warn
 missing-workflow-input correctness correctness error
 missing-workflow-secret correctness correctness error
 multiline-plain-run correctness correctness error
@@ -111,6 +115,7 @@ secrets-inherit default security error
 secrets-outside-env pedantic security warn
 self-hosted-runner pedantic security info
 self-repository pedantic security info
+shell-syntax default correctness error
 shellcheck correctness correctness error
 stale-action-refs online security info
 superfluous-actions default security error

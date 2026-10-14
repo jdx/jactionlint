@@ -186,6 +186,60 @@ jobs:
           git -c user.email='41898282+github-actions[bot]@users.noreply.github.com' -c user.name='github-actions[bot]' commit -m "update version to $VERSION in download-jactionlint.bash and the action examples"
           git log -n 1
           git push
+  # Wheels for pip, pipx and uv, built with go-to-wheel (https://github.com/simonw/go-to-wheel). Built and published in
+  # separate jobs so that only the publish job holds the id-token permission and no build step can reach it.
+  # Needs a trusted publisher for jdx/jactionlint, workflow release.yaml and environment pypi, configured on PyPI.
+  wheels:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version: '1.27'
+          check-latest: true
+          cache: false
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          enable-cache: false
+      - name: Build the wheels
+        run: >-
+          uvx go-to-wheel@0.2 .
+          --name jactionlint
+          --version "${GITHUB_REF_NAME#v}"
+          --output-dir dist
+          --go-binary "$PWD/scripts/go-to-wheel-go.bash"
+          --set-version-var github.com/jdx/jactionlint/v2.version
+          --ldflags '-X "github.com/jdx/jactionlint/v2.installedFrom=installed from PyPI"'
+          --platforms linux-amd64,linux-arm64,darwin-amd64,darwin-arm64,windows-amd64,windows-arm64
+          --description 'Static checker for GitHub Actions workflow files'
+          --url https://github.com/jdx/jactionlint
+          --license MIT
+          --readme README.md
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: wheels
+          path: dist/*.whl
+          if-no-files-found: error
+  pypi:
+    needs: wheels
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: pypi
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: wheels
+          path: dist
+      - uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
+        with:
+          skip-existing: true
   docker:
     runs-on: ubuntu-latest
     timeout-minutes: 30

@@ -1,0 +1,454 @@
+package jactionlint
+
+import (
+	"regexp"
+	"strings"
+
+	"github.com/jdx/jactionlint/v2/internal/runscript"
+)
+
+// RuleMacosGnuFlags reports options of the commands in `run:` scripts that exist in the GNU version of the command
+// and not in the BSD one that macOS has, in a job that runs on macOS.
+//
+// The runners of GitHub (and the machines of developers) have the BSD sed, grep, date, stat, find, cp and tee. They
+// are rejected by the macOS command with a message such as `tee: illegal option -- -`, which a workflow tested only on
+// Linux does not show until a macOS job is added to the matrix. Only forms are reported for which the sources of the
+// commands that Apple publishes (apple-oss-distributions: shell_cmds, file_cmds and text_cmds) show that macOS fails:
+//
+//   - `tee --append` (tee has only -a and -i, and no long option)
+//   - `sed -i` followed by the script: the option takes the next word as the suffix of the backup, so the script is
+//     taken for the suffix and the file for the script. `sed -i ”` or `sed -i.bak` is what BSD understands. Long
+//     options (`--in-place`) do not exist
+//   - `date -d` and `date --date` (date has no such option; BSD date reads a time with -f and -v)
+//   - `grep -P` and `grep --perl-regexp` (the options of the macOS grep have no P)
+//   - `stat -c` and `stat --format` (the format of BSD stat is -f)
+//   - `find -printf`, `-regextype` and `-xtype` (they are not in the table of primaries of find)
+//   - `cp --parents` (cp has no long options)
+//
+// Forms that look as GNU-only and work on macOS are not reported: `xargs -r` (a no-op that BSD accepts for
+// compatibility), `sort -V`, and `readlink -f` since macOS 12.3.
+//
+// The job must run on macOS: a `runs-on` label with `macos`, or a matrix value of `runs-on: ${{ matrix.x }}` that is.
+// A job on a self-hosted runner is not looked at (its owner can have installed the GNU tools), and neither is a
+// command whose failure the script handles (`date -d ... || date -v ...`). A step is skipped
+// when it may be meant for another system: its `if:` reads the runner or the matrix, or its script mentions the
+// system or GNU tools (`RUNNER_OS`, `uname`, `gsed`, `brew`, ...).
+type RuleMacosGnuFlags struct {
+	RuleBase
+	runContext
+	macos string // the label that makes the job run on macOS, "" when the job does not
+}
+
+// NewRuleMacosGnuFlags creates a new RuleMacosGnuFlags instance.
+func NewRuleMacosGnuFlags() *RuleMacosGnuFlags {
+	return &RuleMacosGnuFlags{
+		RuleBase: NewRuleBase("macos-gnu-flags", "Checks for GNU-only options of commands at \"run:\" in jobs that run on macOS"),
+	}
+}
+
+// VisitWorkflowPre is callback when visiting Workflow node before visiting its children.
+func (rule *RuleMacosGnuFlags) VisitWorkflowPre(n *Workflow) error {
+	rule.enterWorkflow(n)
+	return nil
+}
+
+// VisitJobPre is callback when visiting Job node before visiting its children.
+func (rule *RuleMacosGnuFlags) VisitJobPre(n *Job) error {
+	rule.enterJob(n)
+	rule.macos = macosLabelOf(n)
+	return nil
+}
+
+// VisitJobPost is callback when visiting Job node after visiting its children.
+func (rule *RuleMacosGnuFlags) VisitJobPost(n *Job) error {
+	rule.leaveJob()
+	rule.macos = ""
+	return nil
+}
+
+// VisitStep is callback when visiting Step node.
+func (rule *RuleMacosGnuFlags) VisitStep(n *Step) error {
+	run, ok := n.Exec.(*ExecRun)
+	if !ok || rule.macos == "" || run.Run == nil || rule.mayBeForAnotherSystem(n, run) {
+		return nil
+	}
+	s, origin := rule.script(run)
+	if s == nil {
+		return nil
+	}
+	cmds := realCommands(s)
+	portable := portableTools(cmds)
+	for _, c := range cmds {
+		if (c.Tested && !c.AndOnly) || portable[c.Name] {
+			// the script handles the failure (`if grep -P ...`, `date -d ... || date -v ...`: not the left side of &&,
+			// whose failure is the status of the list) or has the form of macOS too
+			continue
+		}
+		for _, f := range macosGnuForms(c) {
+			start, end := scriptPos(s, origin, f.word.Offset), scriptPos(s, origin, f.word.End)
+			e := rule.errorIDAt("macos-gnu-flags", start, f.message+" The job runs on macOS ("+rule.macos+"), whose "+c.Name+" is the BSD one. "+f.hint)
+			if end != nil {
+				e.endAt(end)
+			}
+		}
+	}
+	return nil
+}
+
+// mayBeForAnotherSystem reports whether the step may not run on macOS, or may run with GNU tools.
+func (rule *RuleMacosGnuFlags) mayBeForAnotherSystem(n *Step, run *ExecRun) bool {
+	if stepConditionReadsTheSystem(n.If) {
+		return true
+	}
+	if rule.job != nil && rule.job.Container != nil {
+		return true // the steps run in a Linux container
+	}
+	return scriptIsForMoreSystems(run.Run.Value)
+}
+
+// macosLabelOf returns the label of the runner that makes the job run on macOS: a `macos` label of `runs-on`, or a
+// value of the matrix that `runs-on: ${{ matrix.x }}` takes. It returns "" for a job that is not known to run on macOS
+// and for a job of a self-hosted runner.
+func macosLabelOf(j *Job) string {
+	if j == nil || j.RunsOn == nil || j.Container != nil {
+		return ""
+	}
+	var m *Matrix
+	if j.Strategy != nil {
+		m = j.Strategy.Matrix
+	}
+	var labels []string
+	for _, l := range j.RunsOn.Labels {
+		if l == nil {
+			continue
+		}
+		if strings.EqualFold(l.Value, "self-hosted") {
+			return ""
+		}
+		if !l.ContainsExpression() {
+			labels = append(labels, l.Value)
+		} else if vs, ok := matrixRunnerValues(l, m); ok {
+			labels = append(labels, vs...)
+		} else {
+			return "" // a label that is not known: the runner is not
+		}
+	}
+	if j.RunsOn.LabelsExpr != nil {
+		if vs, ok := matrixRunnerValues(j.RunsOn.LabelsExpr, m); ok {
+			labels = append(labels, vs...)
+		} else {
+			return ""
+		}
+	}
+	// A runs-on of one label that the matrix chooses makes one job for each value, so a value self-hosted is a job of
+	// its own and the GitHub-hosted macOS value is another one. With several labels the values are labels of the same
+	// job, and a self-hosted one makes the runner the one of its owner.
+	if len(j.RunsOn.Labels)+boolInt(j.RunsOn.LabelsExpr != nil) > 1 {
+		for _, l := range labels {
+			// A label that GitHub does not give to its macOS runners selects a runner of the owner
+			if strings.EqualFold(l, "self-hosted") || !(isMacOSRunnerLabel(l) || isOSOrArchLabel(l)) {
+				return ""
+			}
+		}
+	}
+	for _, l := range labels {
+		if isMacOSRunnerLabel(l) {
+			return l
+		}
+	}
+	return ""
+}
+
+// isOSOrArchLabel reports whether the label is one of the labels of the operating system and the architecture that go
+// with the label of a GitHub-hosted runner (macOS, ARM64, X64).
+func isOSOrArchLabel(l string) bool {
+	switch strings.ToLower(l) {
+	case "macos", "arm64", "x64":
+		return true
+	}
+	return false
+}
+
+func boolInt(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
+}
+
+// matrixKeyOfLabel returns the lower case key of `runs-on: ${{ matrix.key }}` (or `matrix['key']`), read like
+// matrixLabelValues does so that the values and the exclude entries are about the same key.
+func matrixKeyOfLabel(label *String) (string, bool) {
+	if label == nil || !label.IsExpressionAssigned() {
+		return "", false
+	}
+	exprs, ok := label.templateExprs()
+	if !ok || len(exprs) != 1 {
+		return "", false
+	}
+	chain, _, ok := chainOf(exprs[0])
+	if !ok || len(chain) != 2 || chain[0] != "matrix" {
+		return "", false
+	}
+	return strings.ToLower(chain[1]), true
+}
+
+// matrixRunnerValues returns the values of `runs-on: ${{ matrix.key }}` that some job certainly gets: the values of the
+// row that survive `exclude` (survivingRowValues, which treats an expression as "may match") and the values that
+// `include` adds, which are a job of their own.
+func matrixRunnerValues(label *String, m *Matrix) ([]string, bool) {
+	if m == nil || m.Expression != nil {
+		return nil, false
+	}
+	key, ok := matrixKeyOfLabel(label)
+	if !ok {
+		return nil, false
+	}
+	var out []string
+	if row, ok := m.Rows[key]; ok && row.Expression == nil {
+		survive := survivingRowValues(m, key)
+		for _, v := range row.Values {
+			if str, ok := v.(*RawYAMLString); ok && survive[str] {
+				out = append(out, str.Value)
+			}
+		}
+	}
+	if m.Include != nil {
+		for _, c := range m.Include.Combinations {
+			for k, a := range c.Assigns {
+				if str, ok := a.Value.(*RawYAMLString); ok && strings.ToLower(k) == key && !ContainsExpression(str.Value) {
+					out = append(out, str.Value)
+				}
+			}
+		}
+	}
+	return out, len(out) > 0
+}
+
+// isMacOSRunnerLabel reports whether the label is a GitHub-hosted macOS runner: macos-latest, macos-14, macos-15-intel,
+// macos-26-xlarge, xcode-27, ... A label such as macOS-ARM64 is the label of a self-hosted runner.
+func isMacOSRunnerLabel(l string) bool {
+	l = strings.ToLower(l)
+	return (strings.HasPrefix(l, "macos-") || strings.HasPrefix(l, "xcode-")) && isGitHubHostedLabel(l)
+}
+
+// portableTools returns the names of the commands which the script also calls in a form that is the one of macOS, as in
+// `date -j -f ... "$x" || date -d "$x"` or when a script prints `stat -c` and `stat -f` to see which one works: the author
+// handles both systems, so the GNU form is not a mistake.
+func portableTools(cmds []*runscript.Command) map[string]bool {
+	out := map[string]bool{}
+	for _, c := range cmds {
+		for i, w := range c.Args {
+			if w == nil {
+				continue
+			}
+			if w.Value == "--" && c.Name != "find" {
+				break // the words after -- are not options
+			}
+			switch c.Name {
+			case "date":
+				// The options of BSD date: -j, -v (with its adjustment) and -z. -f is also an option of GNU date (--file)
+				if optionClusterHasAny(w.Value, "jnRu", "frvzI", "jvz") {
+					out["date"] = true
+				}
+			case "stat":
+				// The options of BSD stat that GNU stat has no letter for (-x, -s, -r, -F, -l, -n, -q), and -f with a format,
+				// which is the BSD form (GNU -f takes no argument, and a format has a %): `-f %m`, `-Lf %m`, `-f%m`
+				if optionClusterHasAny(w.Value, "FlLnqrsx", "ft", "xsrFlnq") ||
+					(optionClusterHasAny(w.Value, "FlLnqrsx", "ft", "f") && (strings.Contains(w.Value, "%") || i+1 < len(c.Args) && c.Args[i+1] != nil && strings.Contains(c.Args[i+1].Value, "%"))) {
+					out["stat"] = true
+				}
+			case "sed":
+				if sedInPlaceRe.MatchString(w.Value) && i+1 < len(c.Args) && c.Args[i+1] != nil && !c.Args[i+1].Dynamic() && isSedSuffix(c.Args[i+1].Value) {
+					out["sed"] = true
+				}
+			case "tee":
+				if w.Value == "-a" {
+					out["tee"] = true
+				}
+			}
+		}
+	}
+	return out
+}
+
+// isSedSuffix reports whether the word is what BSD sed takes as the suffix of the backup of -i: the empty string,
+// `.bak`, `~` or a word of letters (`bak`, `orig`). A word like `1d` is a script.
+func isSedSuffix(v string) bool {
+	return v == "" || sedSuffixRe.MatchString(v)
+}
+
+// macosGnuForm is one GNU-only form in a command.
+type macosGnuForm struct {
+	word    *runscript.Word
+	message string
+	hint    string
+}
+
+var (
+	// sedInPlaceRe is a word that is the in-place option of sed, alone or last of a cluster (-i, -Ei, -ni).
+	sedInPlaceRe = regexp.MustCompile(`^-[A-Za-z]*i$`)
+	// sedSuffixRe is a word that BSD sed takes as the suffix of the backup: ".bak", ".orig", "~", "bak".
+	sedSuffixRe = regexp.MustCompile(`^(?:\.[A-Za-z0-9_~.-]*|~|[A-Za-z]{3,})$`)
+)
+
+// macosGnuForms returns the GNU-only forms of the command.
+func macosGnuForms(c *runscript.Command) []macosGnuForm {
+	var out []macosGnuForm
+	add := func(w *runscript.Word, msg, hint string) {
+		out = append(out, macosGnuForm{word: w, message: msg, hint: hint})
+	}
+	for i, w := range c.Args {
+		if w == nil {
+			continue
+		}
+		if w.Value == "--" && c.Name != "find" {
+			// What follows is a pattern or a file name, not an option: grep -- -P file. For find it only ends the
+			// leading options (the paths may follow) and the primaries are still read: find -- . -printf '%p'.
+			break
+		}
+		v := w.Value // without the quotes: sed "-i" is sed -i
+		if c.Name == "grep" && i > 0 && c.Args[i-1] != nil && clusterTakesNextWord(c.Args[i-1].Value, grepNoValueLetters, grepValueLetters, grepValueFlags) {
+			continue // the value of an option: grep -e -P
+		}
+		switch c.Name {
+		case "tee":
+			if v == "--append" {
+				add(w, `"tee --append" is rejected by the tee of macOS ("illegal option -- -"): it has only short options.`, `Use "tee -a".`)
+			}
+		case "sed":
+			switch {
+			case strings.HasPrefix(v, "--in-place") || v == "--in-place":
+				add(w, `"sed --in-place" is rejected by the sed of macOS: it has no long options.`, `Use "sed -i.bak" (and remove the backup), which both seds understand.`)
+			case sedInPlaceRe.MatchString(v) && i+1 < len(c.Args):
+				next := c.Args[i+1]
+				if next.Dynamic() || strings.HasPrefix(next.Value, "-") || next.Value == "" || sedSuffixRe.MatchString(next.Value) {
+					// A suffix (-i '' or -i .bak), a word with an expansion ($suffix.bak, "$SUF", ${{ matrix.x }}: it may be one), or
+					// an option that makes it unclear what follows. Only a word that is statically a script is reported.
+					continue
+				}
+				add(w, `"sed -i" without a suffix takes the script as the suffix of the backup on macOS, so the file is read as the script ("invalid command code").`, `Use "sed -i.bak" (and remove the backup), which both seds understand, or "sed -i ''" on macOS only.`)
+			}
+		case "date":
+			if hasDateOption(v) || v == "--date" || strings.HasPrefix(v, "--date=") {
+				add(w, `"date -d" does not exist in the date of macOS ("illegal option -- d").`, `Use "date -j -f FORMAT ..." or "date -v", or install coreutils and call "gdate".`)
+			}
+		case "grep":
+			if v == "--perl-regexp" || optionClusterHasAny(v, grepNoValueLetters, grepValueLetters, "P") {
+				add(w, `"grep -P" is rejected by the grep of macOS ("invalid option -- P"): it has no Perl regular expressions.`, `Use "grep -E" if the pattern allows it, or "perl -ne", which macOS has too.`)
+			}
+		case "stat":
+			if hasStatFormatOption(v) || v == "--format" || strings.HasPrefix(v, "--format=") || v == "--printf" || strings.HasPrefix(v, "--printf=") {
+				add(w, `"stat -c" does not exist in the stat of macOS: its format option is -f.`, `Use "stat -f FORMAT" on macOS, or read the value in another way (wc -c < file for the size).`)
+			}
+		case "find":
+			if v == "-printf" || v == "-regextype" || v == "-xtype" {
+				add(w, `"find `+v+`" is not a primary of the find of macOS ("unknown primary or operator").`, `Use "-print" with other commands, or "-exec stat -f", or install findutils and call "gfind".`)
+			}
+		case "cp":
+			if v == "--parents" {
+				add(w, `"cp --parents" is rejected by the cp of macOS: it has no long options.`, `Use "mkdir -p" for the directory and "cp" for the file.`)
+			}
+		}
+	}
+	return out
+}
+
+// The options of grep, for reading a cluster of letters like getopt: the letters without a value, the letters that
+// take a value (the rest of the word, or the next word when the letter ends the word), and the long options that take
+// the next word.
+const (
+	grepNoValueLetters = "EFGHILOPRSUVXZabchilnopqrsuvwxyz0123456789"
+	grepValueLetters   = "efmABCdD"
+)
+
+var grepValueFlags = map[string]bool{"--regexp": true, "--file": true, "--max-count": true, "--include": true, "--exclude": true,
+	"--after-context": true, "--before-context": true, "--directories": true, "--devices": true}
+
+// clusterTakesNextWord reports whether the word is an option which takes the next word as its value: a long option of
+// the list, or a cluster of single letters whose last letter takes a value (`-e`, `-ne`, `-rnf`). A letter that takes
+// a value and is followed by more letters has its value in the word (`-A3`, `-ePATTERN`), so the next word is free.
+func clusterTakesNextWord(word, withoutValue, withValue string, long map[string]bool) bool {
+	if long[word] {
+		return true
+	}
+	if len(word) < 2 || word[0] != '-' || word[1] == '-' {
+		return false
+	}
+	rest := word[1:]
+	for i, c := range rest {
+		switch {
+		case strings.ContainsRune(withValue, c):
+			return i == len(rest)-1
+		case strings.ContainsRune(withoutValue, c):
+		default:
+			return false
+		}
+	}
+	return false
+}
+
+func init() {
+	registerRules(
+		RuleInfo{ID: "macos-gnu-flags", Group: RuleGroupCorrectness, Summary: "A command at run: has a GNU-only option and the job runs on macOS, which has the BSD command.", DefaultLevel: SeverityWarning, Profile: ProfilePedantic, DocsAnchor: "check-macos-gnu-flags"},
+	)
+	registerRuleFactory("macos-gnu-flags", func(env *RuleEnv) []Rule {
+		return []Rule{NewRuleMacosGnuFlags()}
+	})
+}
+
+// hasStatFormatOption reports whether the word is the -c option of GNU stat, read left to right like getopt: the
+// options of BSD stat without a value (F, l, L, n, q, r, s, x) may come before it, and f or t takes the rest of the word
+// as its value, so `-fc` is the BSD -f with the format `c`, and `-cf` is GNU -c with the format `f`.
+func hasStatFormatOption(w string) bool {
+	if len(w) < 2 || w[0] != '-' || w[1] == '-' {
+		return false
+	}
+	for _, c := range w[1:] {
+		switch c {
+		case 'F', 'l', 'L', 'n', 'q', 'r', 's', 'x':
+		case 'c':
+			return true
+		default:
+			return false // f and t take the rest of the word; another letter is not an option of stat
+		}
+	}
+	return false
+}
+
+// hasDateOption reports whether the word is the -d option of GNU date, read left to right like getopt: the options of
+// BSD date without a value (j, n, R, u) may come before it, and f, r, v, z and I take the rest of the word as value, so
+// `-ud` and `-d@1700000000` are GNU -d and `-rd` is the BSD -r with the file `d`.
+func hasDateOption(w string) bool {
+	if len(w) < 2 || w[0] != '-' || w[1] == '-' {
+		return false
+	}
+	for _, c := range w[1:] {
+		switch c {
+		case 'j', 'n', 'R', 'u':
+		case 'd':
+			return true
+		default:
+			return false
+		}
+	}
+	return false
+}
+
+// optionClusterHasAny reports whether the word is a cluster of single letter options that has one of the wanted letters,
+// read left to right like getopt: the letters of withoutValue may follow each other, a letter of withValue takes the
+// rest of the word as its value (so it ends the cluster, after it is looked at), and another letter is not an option.
+func optionClusterHasAny(word, withoutValue, withValue, wanted string) bool {
+	if len(word) < 2 || word[0] != '-' || word[1] == '-' {
+		return false
+	}
+	for _, c := range word[1:] {
+		if strings.ContainsRune(wanted, c) {
+			return true
+		}
+		if !strings.ContainsRune(withoutValue, c) {
+			return false // a letter with a value ends the cluster, and the others are not options
+		}
+	}
+	return false
+}

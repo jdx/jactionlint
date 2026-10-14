@@ -105,7 +105,10 @@ func (rule *RuleUnlockedInstall) checkCargo(s *runscript.Script, origin runscrip
 			Unsafe:      true,
 			Edits:       []TextEdit{edit},
 		}
+		return
 	}
+	// Only this finding has a fix: the others (npm, yarn, pnpm, bun, pip, aube) are advice
+	e.NoFix = &NoFix{Code: NoFixUnsupportedShape, Reason: "the command is not written in a way the fix can edit exactly (quoted, or in a position the file does not show), add --locked by hand"}
 }
 
 // insertAfter returns the edit which inserts text right after the word in the file. The word must be a plain,

@@ -1,0 +1,178 @@
+on:
+  workflow_dispatch:
+    inputs:
+      runner:
+        type: string
+
+jobs:
+  linux:
+    # Not a macOS job
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo hi | tee --append out.txt
+      - run: sed -i 's/a/b/' file.txt
+      - run: date -d yesterday
+  windows:
+    runs-on: windows-latest
+    steps:
+      - run: grep -P x file
+        shell: bash
+  self-hosted:
+    # The owner of the machine can have the GNU tools
+    runs-on: [self-hosted, macOS]
+    steps:
+      - run: sed -i 's/a/b/' file.txt
+  container:
+    runs-on: ubuntu-latest
+    container: alpine
+    steps:
+      - run: date -d yesterday
+  mac:
+    runs-on: macos-latest
+    steps:
+      # What both seds understand, and what macOS has
+      - run: sed -i.bak 's/a/b/' file.txt && rm file.txt.bak
+      - run: sed -i '' 's/a/b/' file.txt
+      - run: sed -i "$SUFFIX" 's/a/b/' file.txt
+      - run: sed -i -e 's/a/b/' file.txt
+      - run: sed -n 's/a/b/p' file.txt
+      - run: echo hi | tee -a out.txt
+      - run: date -j -f '%Y-%m-%d' 2024-01-01 +%s
+      - run: date -u +%FT%TZ
+      - run: grep -E 'a+' file
+      - run: grep -e -P file
+      - run: grep -A3 -n 'P' file
+      - run: stat -f %z file.txt
+      - run: find . -name '*.go' -print
+      - run: cp -R src dist
+      # Not GNU-only on macOS
+      - run: git ls-files | xargs -r wc -l
+      - run: sort -V versions.txt
+      - run: readlink -f ./link
+      # The commands are the GNU ones, or the script chooses by the system
+      - run: |
+          brew install gnu-sed
+          gsed -i 's/a/b/' file.txt
+      - run: |
+          if [ "$RUNNER_OS" = "macOS" ]; then sed -i '' 's/a/b/' f; else sed -i 's/a/b/' f; fi
+      - run: |
+          case "$(uname -s)" in
+            Darwin) sed -i '' 's/a/b/' f ;;
+            *) sed -i 's/a/b/' f ;;
+          esac
+      - run: sed -i 's/a/b/' file.txt
+        if: runner.os == 'Linux'
+      - run: date -d yesterday
+        if: ${{ runner.os != 'macOS' }}
+      # The script handles the failure of the command
+      - run: |
+          PAST=$(date -d '1 hour ago' '+%Y%m%d%H%M.%S' 2>/dev/null || date -v-1H '+%Y%m%d%H%M.%S')
+          echo "$PAST"
+          if grep -qP 'x' file; then echo found; fi
+      # The script has the form of macOS too (-jf is a cluster of options of macOS), so it handles both systems
+      - run: |
+          end=$(date -jf "%b %d %T %Y %Z" "$not_after" +%s 2>/dev/null || date -d "$not_after" +%s)
+          echo "$end"
+      # The script has the form of macOS too, so it handles both systems
+      - run: |
+          end=$(date -j -f "%b %d %T %Y %Z" "$not_after" +%s 2>/dev/null)
+          [ -z "$end" ] && end=$(date -d "$not_after" +%s 2>/dev/null)
+          echo "$end"
+      - run: |
+          echo "stat -f %m : $(stat -f %m file.txt 2>&1 | head -1)"
+          echo "stat -c %Y : $(stat -c %Y file.txt 2>&1 | head -1)"
+      - run: |
+          sed -i bak 's/a/b/' file.txt
+          sed -i 's/c/d/' other.txt
+      # The quoted options of the form of macOS, and the value of a quoted option
+      - run: |
+          date "-j" -f '%F' 2024-01-01 +%s || date -d 2024-01-01 +%s
+          grep "-e" -P file || true
+      # The adjustments of date of macOS, with and without a sign
+      - run: |
+          date -v1d +%F || date -d 'first day' +%F
+          date -v-1H +%s || date -d '1 hour ago' +%s
+          date -vmon +%F || date -d monday +%F
+      # An attached value is not a further option: -fc is the format c of stat of macOS
+      - run: |
+          stat -fc file.txt
+          date -rd file.txt
+      # Clustered options of stat of macOS: the script handles both systems
+      - run: |
+          stat -Lf %m file.txt || stat -c %Y file.txt
+      # The GNU grep is on the PATH under its plain name
+      - run: |
+          brew install grep
+          gnubin="$(brew --prefix grep)/libexec/gnubin"
+          PATH="$gnubin:$PATH"
+          grep -P x file.txt
+      # The value of an option that ends a cluster is the next word: -P is the pattern here
+      - run: |
+          grep -ne -P file.txt
+          grep -n -e -P file.txt
+      # The command after the options of a wrapper is the GNU one
+      - run: |
+          sudo -u deploy gsed -i 's/a/b/' file.txt
+          env -u FOO gdate -d yesterday
+      # Any word with an expansion after -i may be the suffix of the backup
+      - run: |
+          sed -i "$SUFFIX" 's/a/b/' file.txt
+          sed -i "${suffix}.bak" 's/a/b/' file.txt
+          sed -i "s/$OLD/$NEW/" config.yml
+          sed -i ${{ github.run_id }} 's/a/b/' file.txt
+      # After -- come the patterns and the file names
+      - run: |
+          grep -- -P file.txt
+          cp -- --parents a b
+          sed -n -- -i file.txt
+          tee -- --append
+          date -- -d
+          stat -- -c file
+      # A tool that is not the BSD one
+      - run: gdate -d yesterday
+      - run: echo 'tee --append and sed -i x y are text'
+      - run: echo "date -d is text"
+      # Not bash or sh
+      - run: print('sed -i x y')
+        shell: python
+  # An expression on another key of the entry may remove the macOS jobs: it is not known that one runs
+  expression-on-another-key-of-the-exclude:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        node: [18, 20]
+        exclude:
+          - os: macos-latest
+            node: ${{ fromJSON(vars.NODES) }}
+    runs-on: ${{ matrix.os }}
+    steps:
+      - run: date -d yesterday
+  macos-excluded-by-index:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        exclude:
+          - os: macos-latest
+    runs-on: ${{ matrix['os'] }}
+    steps:
+      - run: sed -i 's/a/b/' file.txt
+  macos-excluded:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        exclude:
+          - os: macos-latest
+    runs-on: ${{ matrix.os }}
+    steps:
+      - run: sed -i 's/a/b/' file.txt
+  matrix-without-mac:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, ubuntu-24.04]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - run: sed -i 's/a/b/' file.txt
+  runner-unknown:
+    runs-on: ${{ inputs.runner }}
+    steps:
+      - run: sed -i 's/a/b/' file.txt

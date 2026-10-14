@@ -1,0 +1,168 @@
+on: push
+
+jobs:
+  mac:
+    runs-on: macos-latest
+    steps:
+      - run: echo hi | tee --append out.txt
+      - run: sed -i 's/a/b/' file.txt
+      - run: sed -Ei 's/a+/b/' file.txt
+      - run: sed --in-place 's/a/b/' file.txt
+      - run: date -d '2 days ago' +%F
+      - run: grep -oP 'v\K[0-9.]+' version.txt
+      - run: git ls-files | grep --perl-regexp '^src/'
+      - run: stat -c %s file.txt
+      - run: find . -name '*.go' -printf '%p\n'
+      - run: cp --parents src/a.go dist/
+      - run: |
+          set -eu
+          sed -i "s/old/new/" config.yml
+          cat config.yml | tee --append log.txt
+      # The value of the option is glued to it, and other options come before
+      - run: date -d@1700000000 +%F
+      - run: stat -c%s file.txt
+      - run: cp -f --parents src/a.go dist/
+  xcode:
+    runs-on: xcode-27
+    steps:
+      - run: date -d yesterday
+  matrix:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-15]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - run: date -d yesterday
+  words-that-are-not-the-system:
+    runs-on: macos-latest
+    steps:
+      # MY_OSTYPE_FILE is not $OSTYPE, and the left side of && has no fallback
+      - run: |
+          echo "${MY_OSTYPE_FILE:-none}"
+          sed -i 's/a/b/' file.txt
+      - run: date -d yesterday && echo done
+      - run: grep -P x file && echo found
+  macos-excluded-and-included:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        exclude:
+          - os: macos-latest
+        include:
+          - os: macos-latest
+            extra: yes
+    runs-on: ${{ matrix.os }}
+    steps:
+      - run: date -d yesterday
+  job-with-condition:
+    # the condition cannot read the runner or the matrix, so the job runs on macOS whenever it runs
+    if: github.event_name == 'push'
+    runs-on: macos-15
+    steps:
+      - run: date -d yesterday
+  quoted-options:
+    runs-on: macos-latest
+    steps:
+      - run: sed "-i" 's/a/b/' file.txt
+      - run: date '-d' yesterday
+      - run: grep "-P" x file
+      - run: stat "-c" %s file
+      - run: grep '-e' -P file && grep -P x file2 && true
+  attached-empty-suffix:
+    runs-on: macos-latest
+    steps:
+      # The shell removes the quotes, so this is sed -i and the script is the suffix
+      - run: sed -i'' 's/a/b/' file.txt
+      - run: sed -i"" 's/a/b/' file.txt
+  self-hosted-leg:
+    # The matrix chooses the whole runner: one job is self-hosted and another is GitHub-hosted macOS
+    strategy:
+      matrix:
+        os: [self-hosted, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - run: date -d yesterday
+  end-of-options:
+    runs-on: macos-latest
+    steps:
+      # The option comes before --
+      - run: grep -P -- x file.txt
+      - run: find -- . -name '*.go' -printf '%p\n'
+  portable-looking-file-names:
+    runs-on: macos-latest
+    steps:
+      # What follows -- is a file name that looks like an option of macOS: it does not make the GNU option portable
+      - run: |
+          date -- -j
+          date -d yesterday
+      - run: |
+          tee -- -a
+          echo x | tee --append out.txt
+  clusters-like-getopt:
+    runs-on: macos-latest
+    steps:
+      - run: |
+          stat -cf file.txt
+          stat -Lc%s file.txt
+          date -ud yesterday
+  scripts-that-only-look-portable:
+    runs-on: macos-latest
+    steps:
+      # GCP and gcloud are not gcp and the GNU tools
+      - run: |
+          gcloud auth login
+          echo "$GCP_PROJECT"
+          sed -i 's/a/b/' file.txt
+  not-written-for-other-systems:
+    runs-on: macos-latest
+    steps:
+      # grep after the install of something else is the grep of macOS
+      - run: brew install jq && grep -P x file.txt
+      # -f is also an option of GNU date (--file): it does not show the form of macOS
+      - run: |
+          date -f dates.txt
+          date -d yesterday
+  grep-clusters:
+    runs-on: macos-latest
+    steps:
+      - run: grep -nP x file.txt
+      - run: grep -nA3 -P x file.txt
+  wrappers:
+    runs-on: macos-latest
+    steps:
+      # gsed is the value of the user here, not the command
+      - run: sudo -u gsed sed -i 's/a/b/' file.txt
+  keg-only-formulas:
+    runs-on: macos-latest
+    steps:
+      # The formulas are keg-only: the BSD tools stay first on the PATH, and the GNU ones have a g in front
+      - run: |
+          brew install grep coreutils
+          grep -P x file.txt
+          date -d yesterday
+  behind-wrappers:
+    runs-on: macos-latest
+    steps:
+      - run: echo a b | xargs -n 1 sed -i 's/a/b/'
+      - run: ionice -c 2 -n 7 grep -P x file.txt
+      - run: setsid date -d yesterday
+      - run: chronic stat -c %s file.txt
+      # The operand of env -S has no place of its own in the script: not reported
+      - run: env -S 'sed -i s/a/b/ file.txt'
+      - run: sudo -Eu root cp --parents a b
+  wrappers-of-gnu-tools:
+    runs-on: macos-latest
+    steps:
+      - run: xargs -n 1 gsed -i 's/a/b/'
+      - run: env -S 'gsed -i s/a/b/ file.txt'
+  gnu-only-as-a-word:
+    runs-on: macos-latest
+    steps:
+      # GNU is only a word here, the script does not look for it in the version of a tool
+      - run: |
+          echo GNU
+          grep -P x file.txt
+  labels-of-github:
+    runs-on: [macos-14, ARM64]
+    steps:
+      - run: date -d yesterday

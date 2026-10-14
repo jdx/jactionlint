@@ -472,6 +472,56 @@
         }
       }
     },
+    "example/fresh": {
+      "repo": {
+        "archived": false,
+        "default_branch": "main"
+      },
+      "tags": {
+        "tags": [
+          {
+            "name": "v1",
+            "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          {
+            "name": "v1.2.0",
+            "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          {
+            "name": "v1.1.0",
+            "sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          },
+          {
+            "name": "v2.0.0",
+            "sha": "cccccccccccccccccccccccccccccccccccccccc"
+          },
+          {
+            "name": "v0.9.0",
+            "sha": "dddddddddddddddddddddddddddddddddddddddd"
+          }
+        ]
+      },
+      "release_dates": {
+        "tags/v1.2.0": {
+          "published_at": "2026-10-11T09:00:00Z"
+        },
+        "tags/v1.1.0": {
+          "published_at": "2026-09-01T09:00:00Z"
+        },
+        "tags/v2.0.0": {
+          "committed_at": "2026-10-12T08:00:00Z"
+        },
+        "tags/v0.9.0": {
+          "committed_at": "2026-01-01T00:00:00Z"
+        },
+        "commits/eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee": {
+          "committed_at": "2026-10-13T06:00:00Z"
+        },
+        "commits/ffffffffffffffffffffffffffffffffffffffff": {
+          "committed_at": "2026-01-01T00:00:00Z"
+        }
+      }
+    },
     "example/confusing": {
       "repo": {
         "archived": false,

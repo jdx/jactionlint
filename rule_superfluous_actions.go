@@ -39,6 +39,7 @@ var superfluousActions = []superfluousAction{
 	{action: "actions-ecosystem/action-add-labels", instead: "use `gh issue edit --add-label` or `gh pr edit --add-label` in a script step", source: sourceZizmor},
 	{action: "actions-ecosystem/action-remove-labels", instead: "use `gh issue edit --remove-label` or `gh pr edit --remove-label` in a script step", source: sourceZizmor},
 	{action: "addnab/docker-run-action", instead: "use `docker run` in a script step", source: sourceZizmor},
+	{action: "benc-uk/workflow-dispatch", instead: "use `gh workflow run` (with `--ref` and `-f name=value` for the inputs) in a script step", source: "zizmor#2181"},
 	{action: "sergeysova/jq-action", instead: "use `jq`, which the runner images include, in a script step", source: sourceZizmor},
 	// The following replacements take more than one command or miss a feature of the action. zizmor puts them in
 	// its pedantic persona as well.
@@ -54,6 +55,7 @@ var superfluousActions = []superfluousAction{
 type RuleSuperfluousActions struct {
 	RuleBase
 	selfHosted bool // the job runs, or may run, on a self-hosted runner: it cannot be shown to be hosted
+	wf         *Workflow
 }
 
 // NewRuleSuperfluousActions creates a new RuleSuperfluousActions instance.
@@ -63,16 +65,19 @@ func NewRuleSuperfluousActions() *RuleSuperfluousActions {
 	}
 }
 
+// VisitWorkflowPre is callback when visiting Workflow node before visiting its children.
+func (rule *RuleSuperfluousActions) VisitWorkflowPre(n *Workflow) error {
+	rule.wf = n
+	return nil
+}
+
 // VisitJobPre is callback when visiting Job node before visiting its children.
 func (rule *RuleSuperfluousActions) VisitJobPre(n *Job) error {
 	rule.selfHosted = false
 	if n.RunsOn == nil {
 		return nil
 	}
-	var m *Matrix
-	if n.Strategy != nil {
-		m = n.Strategy.Matrix
-	}
+	scope := &runnerScope{job: n, wf: rule.wf}
 	check := func(l *String) {
 		if l == nil {
 			return
@@ -93,8 +98,27 @@ func (rule *RuleSuperfluousActions) VisitJobPre(n *Job) error {
 			}
 			return
 		}
-		if mayBeSelfHosted(l, m) {
+		// An expression is resolved to the labels it can have when the repository tells all of them (a condition
+		// between labels, the inputs that every caller passes, fromJSON() of a text). Whatever cannot be resolved
+		// (`vars.RUNNER`, `inputs.runner` without a caller, a matrix computed by fromJSON) counts as maybe self-hosted.
+		if !l.IsExpressionAssigned() {
 			rule.selfHosted = true
+			return
+		}
+		exprs, ok := l.templateExprs()
+		if !ok || len(exprs) != 1 {
+			rule.selfHosted = true
+			return
+		}
+		labels, ok := scope.staticRunnerLabels(exprs[0])
+		if !ok {
+			rule.selfHosted = true
+			return
+		}
+		for _, v := range labels {
+			if strings.EqualFold(strings.TrimSpace(v), "self-hosted") {
+				rule.selfHosted = true
+			}
 		}
 	}
 	check(n.RunsOn.LabelsExpr)
@@ -148,77 +172,4 @@ func init() {
 		}
 		return []Rule{NewRuleSuperfluousActions()}
 	})
-}
-
-// mayBeSelfHosted reports whether a runs-on label that contains an expression may be "self-hosted". The rule tells
-// users that an action is superfluous on a hosted runner, so it must be able to show that the runner is hosted:
-// whatever cannot be resolved statically (an expression other than matrix.<name>, a matrix computed by fromJSON, a
-// value that is itself an expression or an object) counts as maybe self-hosted.
-func mayBeSelfHosted(label *String, m *Matrix) bool {
-	if m == nil || m.Expression != nil || !label.IsExpressionAssigned() {
-		return true
-	}
-	exprs, ok := label.templateExprs()
-	if !ok || len(exprs) != 1 {
-		return true
-	}
-	chain, _, ok := chainOf(exprs[0])
-	if !ok || len(chain) != 2 || chain[0] != "matrix" {
-		return true
-	}
-	prop := chain[1]
-	found := false
-	for name, row := range m.Rows {
-		if !strings.EqualFold(name, prop) {
-			continue
-		}
-		found = true
-		if row.Expression != nil {
-			return true
-		}
-		for _, v := range row.Values {
-			if rawMayBeSelfHosted(v) {
-				return true
-			}
-		}
-	}
-	if m.Include != nil {
-		if m.Include.Expression != nil {
-			return true
-		}
-		for _, c := range m.Include.Combinations {
-			if c.Expression != nil {
-				return true
-			}
-			for key, a := range c.Assigns {
-				if !strings.EqualFold(key, prop) {
-					continue
-				}
-				found = true
-				if rawMayBeSelfHosted(a.Value) {
-					return true
-				}
-			}
-		}
-	}
-	// a property that the matrix does not define has no value to show that the runner is hosted
-	return !found
-}
-
-// rawMayBeSelfHosted reports whether a matrix value may be, or may contain, the label "self-hosted". Sequences
-// are searched at any depth.
-func rawMayBeSelfHosted(v RawYAMLValue) bool {
-	switch v := v.(type) {
-	case *RawYAMLString:
-		return ContainsExpression(v.Value) || strings.EqualFold(v.Value, "self-hosted")
-	case *RawYAMLArray:
-		for _, e := range v.Elems {
-			if rawMayBeSelfHosted(e) {
-				return true
-			}
-		}
-		return false
-	default:
-		return true
-	}
 }

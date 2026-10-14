@@ -16,6 +16,12 @@ func reportWithFix(r *RuleBase, id string, pos *Pos, msg string, fix *Fix) {
 	r.errs[len(r.errs)-1].Fix = fix
 }
 
+// noFixLast says why the rule has no fix for the error it reported last, so that a finding whose fix is unavailable
+// can be told from advice only (see NoFix). It is for the findings of a rule which can fix others.
+func (r *RuleBase) noFixLast(why *NoFix) {
+	r.errs[len(r.errs)-1].NoFix = why
+}
+
 // srcLineStart returns the byte offset of the first byte of the 1-based line, or -1.
 func srcLineStart(src []byte, line int) int {
 	return newLineIndex(src).startOf(line)

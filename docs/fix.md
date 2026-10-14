@@ -1,7 +1,7 @@
 <a id="fix-errors-automatically"></a>
 # Fix findings automatically
 
-`jactionlint --fix` rewrites the files that it checks to repair the findings that have a mechanical fix, and `--diff` shows the changes first. This page covers previewing, applying and limiting fixes, safe and unsafe fixes, the fixes that need the online checks, the reasons a finding is not fixed and what a fix run guarantees.
+`jactionlint --fix` rewrites the files that it checks to repair the findings that have a mechanical fix, and `--diff` shows the changes first. This page covers previewing, applying and limiting fixes, safe and unsafe fixes, the fixes that need the online checks, the reason a finding is not fixed and how to print it, and what a fix run guarantees.
 
 ## Preview and apply fixes
 
@@ -193,7 +193,7 @@ Some rules have a fix that writes a value which jactionlint does not choose, so 
 | --- | --- | --- |
 | `missing-timeout` | `default-minutes` | `timeout-minutes` with that number of minutes. |
 | `dependabot-cooldown` | `default-days` | `cooldown.default-days` with that number of days. |
-| `mutable-runner-label` | `pin` | The label that `pin` maps the moving label to, for example `ubuntu-24.04` for `ubuntu-latest`. Without `pin` the finding has neither a fix nor a reason. |
+| `mutable-runner-label` | `pin` | The label that `pin` maps the moving label to, for example `ubuntu-24.04` for `ubuntu-latest`. Without an entry for the label, the finding has the reason `option-required`, which names `mutable-runner-label.pin`. |
 
 ```yaml
 # .github/jactionlint.yaml
@@ -219,9 +219,10 @@ See [rule options](./config.md#rules) for the options and their limits.
 
 ## Fixes that need the online checks
 
-Some fixes need a lookup, so they work only with `--online`. Without it, the findings of `unpinned-uses` and `unpinned-images` carry `online-required`, and `ref-version-mismatch`, an online rule, does not run.
+Some fixes need a lookup, so they work only with `--online`. Without it, the findings of `unpinned-uses`, `unpinned-images` and `missing-version-comment` carry `online-required`, and `ref-version-mismatch`, an online rule, does not run.
 
 - `unpinned-uses` with `--online --fix` replaces a tag with its commit and names the tag in a comment. The fix is safe. See [pin tags to commits](./online.md#pin-tags-to-commits-with-online-fix).
+- `missing-version-comment` (a rule of the `pedantic` profile) with `--online --fix` adds the version comment to a pin that has none: the most specific version tag of the commit, such as `# v4.2.2`. The fix is safe, because it only adds a comment. See [pin tags to commits](./online.md#pin-tags-to-commits-with-online-fix).
 - `unpinned-images` with `--online --fix=unsafe` pins an image tag to a digest. The fix is unsafe, because the image behind a tag moves. See [pin container images to digests](./online.md#pin-container-images-to-digests-with-online-fix-unsafe).
 - `ref-version-mismatch` has an unsafe fix that rewrites the version in the comment to the tag of the pinned commit.
 
@@ -230,14 +231,15 @@ Some fixes need a lookup, so they work only with `--online`. Without it, the fin
 Look a rule up instead of reading a list: the rules page and the command line say whether a rule has a fix.
 
 - The `Fixable` column of the table on [the rules page](./rules.md) says whether a rule has a fix.
-- `jactionlint --explain RULE` prints a `Fix:` line:
+- `jactionlint --explain RULE` prints a `Fix:` line, and a `Fix needs:` line for a rule whose fix needs an option or `--online`:
 
   ```sh
-  jactionlint --explain missing-timeout | grep '^Fix:'
+  jactionlint --explain missing-timeout | grep '^Fix'
   ```
 
   ```
   Fix:            yes. --fix applies the safe fixes; a fix which may change the behavior of the workflow needs --fix=unsafe
+  Fix needs:      the option default-minutes (jactionlint does not choose a timeout). Without it a finding says why it has no fix (no_fix of json, noFixCode of sarif, --show-fix-status)
   ```
 
 - `jactionlint --list-rules --format json` has a `fixable` field for each rule. The text form of `--list-rules` has no such column.
@@ -246,11 +248,46 @@ Look a rule up instead of reading a list: the rules page and the command line sa
   jactionlint --list-rules --format json | jq -r '.[] | select(.fixable) | .id'
   ```
 
-A rule is fixable when it can fix some of its findings. Whether one finding has a fix depends on its shape, on the options of the rule and on `--online`.
+A rule is fixable when it can fix some of its findings. Whether one finding has a fix depends on its shape, on the options of the rule and on `--online`. Setting an option does not make every finding of the rule fixable: the reason of a finding says what its own fix needs.
 
 ## Why a finding was not fixed
 
-A finding of a fixable rule that has no fix usually says why in its `no_fix` object, which the JSON, JSON Lines and SARIF formats carry. The text format has no such field.
+A finding of a rule that can fix some of its findings is in one of four states, and the output formats tell them apart:
+
+| State | `json`, `jsonl` | SARIF | `--show-fix-status` |
+| --- | --- | --- | --- |
+| A safe fix, which `--fix` applies | `fix` | `fixes` | `= fix: DESCRIPTION (apply it with --fix)` |
+| A fix that may change behavior, which `--fix=unsafe` applies | `fix` with `unsafe: true` | `noFixCode: unsafe-edit`, because the log never carries an unsafe fix | `= fix: DESCRIPTION (may change behavior: apply it with --fix=unsafe)` |
+| No fix, with a reason | `no_fix` with a `code` and a `reason` | `noFixCode` and `noFixReason` | `= no fix (CODE): REASON` |
+| Advice only: the rule never fixes this kind of finding | neither | neither | no line |
+
+<a id="fix-status"></a>
+### Print the status of each finding
+
+The text format is one line per finding that other tools parse, so it shows no status by default. `--show-fix-status` adds a line under each finding of the `text` format: the fix, or the reason there is none. These findings are those of the workflow file of [the first example](#preview-and-apply-fixes) before `--fix` changed it, with two rules selected:
+
+```sh
+jactionlint --show-fix-status --select artipacked,missing-timeout
+```
+
+```
+.github/workflows/ci.yaml:5:3: "timeout-minutes" is not set at this job. Set it to avoid wasting runner minutes when the job hangs. Set "default-minutes" in the "missing-timeout" rule options of the configuration to turn on the --fix fix [missing-timeout]
+  |
+5 |   build:
+  |   ^~~~~~
+  = no fix (option-required): set the missing-timeout option default-minutes to enable the fix, jactionlint does not choose a timeout
+.github/workflows/ci.yaml:8:15: actions/checkout leaves the GITHUB_TOKEN in the git config of the workspace, where a later step such as an artifact upload can publish it. set "persist-credentials: false" under "with:" unless a later step needs to push [artipacked]
+  |
+8 |       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+  |               ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  = fix: Set persist-credentials: false (apply it with --fix)
+```
+
+`missing-timeout` has no fix because its fix needs `default-minutes` (see [choose which fixes to apply](#choose-which-fixes-to-apply)), and `artipacked` has a safe fix. With `--format oneline` the option prints nothing more, `--format github` appends the status to the message as a second line, and `json`, `jsonl`, `sarif`, `gcc` and `summary` print the same with and without it, because the data is in them already.
+
+### Read the reason as data
+
+A finding of a fixable rule that has no fix usually says why in its `no_fix` object, which the JSON, JSON Lines and SARIF formats carry:
 
 ```sh
 jactionlint --format json | jq -r '.[] | select(.no_fix) | "\(.id) \(.no_fix.code): \(.no_fix.reason)"'
@@ -260,7 +297,7 @@ jactionlint --format json | jq -r '.[] | select(.no_fix) | "\(.id) \(.no_fix.cod
 missing-timeout option-required: set the missing-timeout option default-minutes to enable the fix, jactionlint does not choose a timeout
 ```
 
-In SARIF, the result has the properties `noFixCode` and `noFixReason`. A finding with neither `fix` nor `no_fix` has no fix and no reason: its rule has no fix, its rule fixes only some of its findings (`concurrency-limits` fixes only a workflow that pull requests alone start), or `mutable-runner-label` has no `pin`.
+In SARIF, the result has the properties `noFixCode` and `noFixReason`. A finding with neither `fix` nor `no_fix` is advice only: its rule has no fix, or it never fixes this kind of finding (`concurrency-limits` fixes only a workflow that pull requests alone start).
 
 | Code | Meaning | What to do |
 | --- | --- | --- |
@@ -268,7 +305,7 @@ In SARIF, the result has the properties `noFixCode` and `noFixReason`. A finding
 | `option-invalid` | The option has a value that the fix cannot use, such as `default-minutes: 0`. | Correct the value: the reason gives the limit. |
 | `online-required` | The fix needs GitHub to resolve a tag or an image. | Add `--online` (see [fixes that need the online checks](#fixes-that-need-the-online-checks)). |
 | `lookup-failed` | The online checks are on but the lookup failed, for example for a repository that does not exist or because of a rate limit. | Fix the cause that the reason names, such as the name or a token, and run again. |
-| `unsupported-shape` | The YAML is written in a shape that the fix does not edit exactly, such as a job in flow style (`build: {runs-on: ubuntu-24.04, steps: [...]}`), a job with a YAML anchor or a file with a bare carriage return. | Make the change by hand: the reason says what to add. |
+| `unsupported-shape` | The YAML is written in a shape that the fix does not edit exactly, such as a job in flow style (`build: {runs-on: ubuntu-24.04, steps: [...]}`), a job with a YAML anchor, a scalar written with an escape, a script that is not a literal block or a file with a bare carriage return. | Make the change by hand: the reason says what to add. |
 | `needs-judgment` | The right change depends on a decision, or an automatic change would not be safe, such as an unquoted argument that holds an expression. | Edit the workflow by hand: the reason says how. |
 
 SARIF adds codes of its own, because its log carries the safe fixes alone. A finding with an unsafe fix has `unsafe-edit`: apply it with `--fix=unsafe`. `edit-conflict` means that the fix overlaps the fix of another finding in the same log: apply that one and run jactionlint again. `invalid-edit` means that a fix attached by a custom rule does not fit the source.

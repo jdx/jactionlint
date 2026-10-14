@@ -1,12 +1,12 @@
 # Online checks
 
-Turn on the online checks that ask GitHub about your actions, and learn what they send, what they cost and what happens when GitHub does not answer. They are off by default: without them jactionlint never uses the network.
+Turn on the online checks that ask GitHub about your actions, and learn what they send, what they cost and what happens when GitHub does not answer. They are off by default: without them jactionlint never uses the network. The page also covers `--suggest-timeouts`, a report of how long your jobs really took.
 
 ## Quick start
 
 The steps below show the online checks on one workflow. A token is optional but raises the rate limit.
 
-1. Give jactionlint a token. Without one GitHub allows 60 requests an hour. jactionlint reads `GITHUB_TOKEN` or `GH_TOKEN` and, when `gh` is installed, asks `gh auth token`, so this step is only needed when neither is available.
+1. Give jactionlint a token. Without one GitHub allows 60 requests an hour. jactionlint reads `GITHUB_TOKEN` or `GH_TOKEN` and, when `gh` is installed, asks `gh auth token`, so this step is only needed when neither is available. The command below needs `gh`; without it, set `GITHUB_TOKEN` or `GH_TOKEN` to a token that you created yourself.
 
    ```sh
    export GITHUB_TOKEN=$(gh auth token)
@@ -98,14 +98,15 @@ To run the online checks from a Git hook, see [Add the online checks](./hooks.md
 
 ## What the online rules check
 
-The online rules run only with the online checks, whatever the profile: they belong to no profile, and `--profile correctness --online` runs them too. Each rule has its own default level, and `rules` sets another level or `off` as for any rule. `jactionlint --list-rules` is the list of these rules: it shows `online` in the `PROFILE` column, and `--list-rules --format json` marks them with `"online": true`. The [rules page](./rules.md) shows `only with --online` in the Profile column.
+The online rules run only with the online checks, whatever the profile: they belong to no profile, and `--profile correctness --online` runs them too. Each rule has its own default level, and `rules` sets another level or `off` as for any rule. `jactionlint --list-rules` is the list of these rules: it shows `online` in the `PROFILE` column, and `--list-rules --format json` marks them with `"online": true`. The [rules page](./rules.md) shows `only with --online` in the Profile column. `action-release-cooldown` is also opt-in: it runs only when `rules` has an entry for it.
 
 | Rule | Default level | Reports | Asks GitHub for |
 | --- | --- | --- | --- |
+| [`action-release-cooldown`](./checks.md#check-action-release-cooldown) | warn | An action pinned to a version that is younger than a number of days (the option `days`, 7 by default). It runs only when `rules` has an entry for it | The release of the tag, or the date of its commit |
 | [`actions-lock-drift`](./checks.md#check-actions-lock) | error | A pin of the Actions lock file that no longer matches GitHub: the repository was replaced or changed owner, a version tag moved, or the commit is not in the repository's history | The repository, the tag and the commit's history |
 | [`archived-uses`](./checks.md#check-archived-uses) | warn | An action or reusable workflow in an archived repository | The repository |
 | [`impostor-commit`](./checks.md#check-impostor-commit) | error | A hash-pinned action whose commit is on no branch or tag of its repository, so it can come from a fork | The tags and branches, compared with the commit |
-| [`known-vulnerable-actions`](./checks.md#check-known-vulnerable-actions) | error | An action version covered by a GitHub security advisory | The advisories and the tags of the action |
+| [`known-vulnerable-actions`](./checks.md#check-known-vulnerable-actions) | error | An action version covered by a GitHub security advisory | The list of the advisories of the actions ecosystem, and the tags of the action |
 | [`ref-confusion`](./checks.md#check-ref-confusion) | warn | A ref that is both a branch and a tag | The tag and the branch of that name |
 | [`ref-version-mismatch`](./checks.md#check-ref-version-mismatch) | warn | A `# v1.2.3` comment that does not match the pinned commit | The tags of the repository |
 | [`repojacking`](./checks.md#check-repojacking) | warn | An action or reusable workflow whose owner does not exist, or whose repository moved to another owner and left the old name free, so anyone can register the name | The repository and its owner |
@@ -123,6 +124,7 @@ Other rules run without `--online` and gain coverage with it:
 | `missing-workflow-input`, `unknown-workflow-input`, `workflow-input-type`, `missing-workflow-secret`, `unknown-workflow-secret` | A call of a reusable workflow of another repository (`owner/repo/.github/workflows/x.yml@ref`) is checked against the workflow file at that ref, as a call of a local workflow is, see [reusable workflows of other repositories](./checks.md#check-remote-reusable-workflows). |
 | `unpinned-uses` | With the policy `immutable-release`, the tag of an immutable GitHub release is accepted like a commit SHA, see [tags of immutable releases](./checks.md#check-immutable-release). |
 | `unpinned-images`, `unpinned-uses` | The digest of an image tag is looked up so that the finding carries a fix, see [pin container images](#pin-container-images-to-digests-with-online-fix-unsafe). |
+| `missing-version-comment` | The tags of the repository are read so that the finding carries a fix, which adds the version comment, see [pin tags to commits](#pin-tags-to-commits-with-online-fix). |
 | `untrusted-checkout`, `untrusted-artifact`, `agentic-actions` | The `environment:` of a job counts as a gate only when it has required reviewers. See below. |
 
 The rules `untrusted-checkout`, `untrusted-artifact` and `agentic-actions` trust the `environment:` of a job ("its reviewers decide"). With the online checks they look the environment up with `GET /repos/{owner}/{repo}/environments/{name}`. The repository comes from `GITHUB_REPOSITORY`, or else from the `origin` remote. They report the job when the environment has no required reviewers or does not exist, see [environments without reviewers](./checks.md#check-untrusted-checkout-environment).
@@ -191,6 +193,27 @@ rules:
 jactionlint --online --fix=unsafe
 ```
 
+`missing-version-comment` is the other half: it reports a pin to a commit that has no comment that names its version, which Dependabot and Renovate read and a reviewer needs. The rule belongs to the `pedantic` profile and needs no network. With `--online`, its fix adds the comment, the most specific version tag that points to the commit. The fix is safe, because it only adds a comment. Without `--online`, the finding says `no fix (online-required)`. This example uses the workflow above with the tag replaced by the commit of `v4.2.2` and no comment, and selects the rule:
+
+```sh
+jactionlint --online --select missing-version-comment --diff
+```
+
+```
+--- a/.github/workflows/ci.yaml
++++ b/.github/workflows/ci.yaml
+@@ -9,6 +9,6 @@
+     runs-on: ubuntu-latest
+     timeout-minutes: 10
+     steps:
+-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
++      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+         with:
+           persist-credentials: false
+Would fix 1 problem(s) in 1 file(s)
+  missing-version-comment: 1
+```
+
 ### Pin container images to digests with `--online --fix=unsafe`
 
 The images of `container:`, `services:`, `uses: docker://` and `runs.image: docker://` (the findings of `unpinned-images` and of `unpinned-uses`) get the digest that their tag has in the registry. This workflow has one unpinned image:
@@ -234,17 +257,79 @@ Would fix 1 problem(s) in 1 file(s)
 
 Docker Hub and ghcr.io are asked. Another registry is not: the finding then has no fix, and its `no_fix` reason in the JSON and SARIF formats says so, see [why a finding was not fixed](./fix.md#why-a-finding-was-not-fixed). Every image and tag is asked once per run, with a timeout, and `--online-allow` and `--online-deny` apply (an image is matched as `owner/image`). The lookup happens in every `--online` run that meets an unpinned image, because the fix is part of the finding, and a failed lookup counts as skipped. See [the check](./checks.md#check-unpinned-images).
 
+<a id="suggest-timeouts"></a>
+<a id="timeouts-from-the-history-of-the-runs"></a>
+## Suggest timeouts from the history of the runs
+
+`jactionlint --suggest-timeouts` reports how long the jobs of your workflows took in their latest successful runs, so that you have data for a `timeout-minutes` and for the `default-minutes` that the fix of `missing-timeout` needs. jactionlint never chooses that number: the report writes no file, and no rule or fix uses it.
+
+The report is made of what GitHub says about your runs, so the option turns the online checks on by itself and refuses `--no-online`. The repository is `GITHUB_REPOSITORY`, or else the `origin` remote of the clone on github.com, and the workflow files must have been pushed: a file that GitHub does not know has no runs. This example reads the five latest runs of one workflow of the jactionlint repository. The numbers are those of the day it ran, so yours differ:
+
+```sh
+jactionlint --suggest-timeouts --timeout-history-runs 5 .github/workflows/ci.yaml
+```
+
+```
+Durations of the jobs of jdx/jactionlint: the latest 5 successful runs of each workflow, from the start of a job on a runner to its end.
+A suggestion is the longest duration on record times 2, rounded up to whole minutes, and needs at least 3 samples.
+
+.github/workflows/ci.yaml (5 runs, 2026-10-14 to 2026-10-14)
+  unit-tests (matrix, 3 legs)  timeout-minutes: 30  samples 15  min 3.6  median 6.8  max 12.5  suggested 26
+  wasm                         timeout-minutes: 30  samples 5   min 0.5  median 0.6  max 0.7   suggested 2
+  lint                         timeout-minutes: 30  samples 5   min 1.6  median 2.5  max 2.6   suggested 6
+  docker                       timeout-minutes: 30  samples 5   min 0.8  median 0.8  max 0.9   suggested 2
+  final                        timeout-minutes: 2   samples 5   min 0.1  median 0.1  max 0.1   suggested 1
+
+The largest suggestion is 26 minutes: a single default-minutes of the rule missing-timeout has to be at least this long not to cancel the slowest job on record.
+Read this before using a number: it is what happened in the runs on record, not a bound on the next one. A job can be slower on a busy runner, with a cold cache, or after a change that
+the runs on record predate. Runs that failed or were cancelled are left out, a matrix is one job whose legs share the timeout, and a job is matched to the file by its name, so a job that
+was renamed is not. jactionlint writes none of these numbers: set timeout-minutes by hand, or default-minutes of missing-timeout, after you have looked at them.
+```
+
+Each row is a job of the file with its `timeout-minutes` today. `samples` counts the successful executions that were measured (every leg of a matrix counts), and `min`, `median` and `max` are minutes from the start of the job on a runner to its end: the wait for a runner is not in them.
+
+### How to read the report
+
+- **The suggestion** is the longest duration on record multiplied by `--timeout-buffer` (default 2, at least 1) and rounded up to whole minutes, for a job with at least 3 samples. A job with fewer gets a note instead of a number. The last line gives the largest suggestion: the least that a single `default-minutes` of `missing-timeout` can be without cancelling the slowest job on record. The longest run on record is not a bound on the next one, so choose the buffer for the runs that can be slower: a busy runner, a cold cache, or a change that the runs on record predate.
+- **Which runs.** The latest `--timeout-history-runs` successful runs of each workflow file (default 20, from 1 to 100), of any event and any branch. A job that failed, was cancelled or was skipped in those runs is left out, and the runs can predate the current file.
+- **Matching a job to the file is by name.** A job of a run is matched by its `name:` (an expression in it matches any text) or by its ID, with the values of the matrix in parentheses that GitHub adds. A matrix is one job whose legs share the timeout, so its numbers are those of all the legs. A job that calls a reusable workflow has no numbers, because its timeouts belong to the jobs of the called workflow, which the report does not follow. A name in the runs that fits no job of the file, such as a job that was renamed since, is listed as not matched and is in no number.
+- **It can be incomplete.** A lookup that fails (a rate limit, a token that cannot read the runs, a timeout) is counted, and the report ends with an `Incomplete:` line. A workflow that GitHub has no runs for says so. A run with more than 100 jobs is read in part, and the report says so. The exit status stays 0, and `--online=strict` turns a failed lookup into status 3, as [Fail when a lookup is skipped](#fail-when-a-lookup-is-skipped) describes.
+- **The cost** is one request for each workflow file and one for each run, so N workflows with R runs each read N + N × R requests, on top of the other lookups. The answers go through [the cache](#the-cache): the same report again within the time to live makes no request. Without a token GitHub allows 60 requests an hour, so give it one (see [Find the token](#find-the-token)).
+- **What is sent.** The file names of your workflows and the IDs of their runs, to the API host with the token, and no workflow content. `--online-allow` and `--online-deny` apply: a repository that they leave out is not asked, and the report says so. On a GitHub Enterprise Server only the Server is asked, also with `--online-github-com-fallback`.
+
+### Read the report as data
+
+`--format json` prints the same data as one document, and any format other than `text` and `json` exits with status 2. This command prints one line for each job of the workflow above:
+
+```sh
+jactionlint --suggest-timeouts --timeout-history-runs 5 --format json .github/workflows/ci.yaml | jq -c '.workflows[0].jobs[] | {id, kind, samples, max_minutes, suggested_minutes}'
+```
+
+```
+{"id":"unit-tests","kind":"matrix","samples":15,"max_minutes":12.5,"suggested_minutes":26}
+{"id":"wasm","kind":"job","samples":5,"max_minutes":0.7,"suggested_minutes":2}
+{"id":"lint","kind":"job","samples":5,"max_minutes":2.6,"suggested_minutes":6}
+{"id":"docker","kind":"job","samples":5,"max_minutes":0.9,"suggested_minutes":2}
+{"id":"final","kind":"job","samples":5,"max_minutes":0.1,"suggested_minutes":1}
+```
+
+| Level | Fields |
+| --- | --- |
+| The document | `version`, `repository`, `runs_per_workflow`, `buffer`, `min_samples`, `complete`, `skipped_lookups`, `largest_suggested_minutes` (absent without a suggestion) and `workflows[]` |
+| `workflows[]` | `path`, `runs`, `oldest` and `newest` (the dates of the runs), `error` (why the workflow has no numbers), `truncated_runs`, `unmatched[]` (`name` and `samples`) and `jobs[]` |
+| `jobs[]` | `id`, `line`, `kind` (`job`, `matrix` or `reusable-workflow`), `declared_minutes` or `declared_dynamic`, `legs`, `samples`, `min_minutes`, `median_minutes`, `max_minutes`, `suggested_minutes` and `note` (why there is no suggestion) |
+
 ## Token and privacy
 
 The online checks send the names of what your workflows use to a few hosts, and a token to one of them. This section lists the hosts, the order in which jactionlint looks for a token and the cases in which it refuses to send one.
 
 ### Hosts and data
 
-A request names a repository, a ref, a commit or a file path of something that one of your workflows uses: an action, a reusable workflow, an image or an environment. jactionlint sends no workflow content. Every request is a `GET` or `HEAD`, except the GraphQL query that `impostor-commit` uses to compare branches. The requests to GitHub carry the user agent `jactionlint/` and the version.
+A request names a repository, a ref, a commit or a file path of something that one of your workflows uses: an action, a reusable workflow, an image or an environment. jactionlint sends no workflow content. The request for the advisories names none of your actions: it asks for the list of the whole actions ecosystem. `--suggest-timeouts` names your repository, the file names of your workflows and the IDs of their runs. Every request is a `GET` or `HEAD`, except the GraphQL query that `impostor-commit` uses to compare branches. The requests to GitHub carry the user agent `jactionlint/` and the version.
 
 | Host | Asked for | Token |
 | --- | --- | --- |
-| The API host: `api.github.com`, or your GitHub Enterprise Server | Repositories, tags, branches, commits, advisories, files such as `action.yml` and reusable workflows, owners, releases and environments, over REST and GraphQL | Yes |
+| The API host: `api.github.com`, or your GitHub Enterprise Server | Repositories, tags, branches, commits, advisories, files such as `action.yml` and reusable workflows, owners, releases and environments, over REST and GraphQL, and for `--suggest-timeouts` the runs of your workflow files and their jobs | Yes |
 | `api.github.com`, with the [github.com fallback](#github-enterprise-server) of a Server | The repositories that the Server does not have, and the advisories | Its own token (`GITHUB_COM_TOKEN`), never the one of the Server |
 | `auth.docker.io` and `registry-1.docker.io` (Docker Hub) | The digest of an image tag | No |
 | `ghcr.io` | The digest of an image tag | Only when ghcr.io refuses the anonymous request, and then only the token for `api.github.com` |
@@ -468,6 +553,7 @@ Every repository, tag and commit is asked for once per run however often it appe
 - An action that is not in the built-in data set costs one request for its metadata for each distinct action, path and ref, and two when its file is `action.yaml` instead of `action.yml`.
 - A reusable workflow of another repository costs one request for each distinct workflow, path and ref.
 - With the `pedantic` option, `unpinnable-action` costs one request for every action pinned to a commit, and one for each commit-pinned action that the composite steps of those actions use. It reads two levels.
+- `known-vulnerable-actions` reads the advisories of the whole actions ecosystem with one list request per run (up to 5 pages of 100) and picks the ones of your actions itself, so its cost does not grow with the number of actions. The list is live data, kept in the cache like every answer, and nothing of it is built into the binary. When the list cannot be read or has more than 5 pages, jactionlint asks about each action instead, and `--verbose` says so.
 
 An answer in the cache costs no request. Without a token GitHub allows 60 requests an hour, so set one when a repository uses many actions.
 
@@ -483,6 +569,8 @@ An answer in the cache costs no request. Without a token GitHub allows 60 reques
 | Retries | 2, up to 10 (`retries`) |
 | Longest wait for a rate limit | 30 seconds (`--online-max-wait`) |
 | Pages read from a list of tags or branches | 10 |
+| Pages read from the list of advisories | 5 |
+| Runs of a workflow that `--suggest-timeouts` reads | 100 at most (`--timeout-history-runs`, default 20) |
 | Branches that `impostor-commit` compares | `max-branches` (default 1000), and at most 100 without a token |
 | Token file | 4096 bytes |
 | `gh auth token` | 5 seconds |
@@ -527,7 +615,7 @@ How the fallback treats tokens and failures:
 
 ## Options and keys
 
-Every online option has a key in the config file, except `--online-report`. The keys `retries`, `concurrency` and `gh-cli` have no option. An option wins over its key. The keys apply to the whole run: when one run checks files of several projects, the config file of the first file for which the online checks run decides for all of them.
+Every online option has a key in the config file, except `--online-report`, `--suggest-timeouts`, `--timeout-history-runs` and `--timeout-buffer`. The keys `retries`, `concurrency` and `gh-cli` have no option. An option wins over its key. The keys apply to the whole run: when one run checks files of several projects, the config file of the first file for which the online checks run decides for all of them.
 
 - [The online options](./cli.md#github-api-online-checks) are listed with their defaults.
 - [The mapping table](./cli.md#flag-environment-variable-and-configuration-key) pairs each option with its key and its environment variable. Two names differ: the key of `--online-max-wait` is `max-rate-limit-wait`, and the mode of `--online` is the key `mode`.

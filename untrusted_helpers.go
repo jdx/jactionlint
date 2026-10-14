@@ -584,15 +584,32 @@ func scriptValidates(s *Step) bool {
 // again for each of them. One value serves the files linted in one run (LocalActionsCache.siblings), so
 // the files are read when the first rule asks and not again.
 type siblingWorkflows struct {
-	parseOnce sync.Once
-	byName    map[string]upstreamFacts
-	parseOK   bool
+	scanOnce sync.Once
+	scan     siblingScan
 
 	namesOnce sync.Once
 	nameSet   workflowNames
+}
 
-	// calls are the calls of local reusable workflows and actions, see untrusted_checkout_callers.go
-	calls callIndex
+// siblingScan is what one read of the workflows of the project gives. The calls and the events are found in one parse of
+// each workflow: a project with hundreds of large workflows was parsed once for each of them.
+type siblingScan struct {
+	// refs are the calls of local reusable workflows and actions, see untrusted_checkout_callers.go
+	refs map[string][]callRef
+	// byName are the facts of the workflows by their lower-cased names, and parseOK is false when they could not be
+	// determined, see parsed.
+	byName  map[string]upstreamFacts
+	parseOK bool
+}
+
+// scanned returns the workflows of the project read once for the run. A nil value reads them on every call.
+func (s *siblingWorkflows) scanned(project *Project) *siblingScan {
+	if s == nil {
+		sc := readSiblings(project)
+		return &sc
+	}
+	s.scanOnce.Do(func() { s.scan = readSiblings(project) })
+	return &s.scan
 }
 
 // parsed returns, for the workflows of the project by their lower-cased names, whether they have events and all of
@@ -600,11 +617,8 @@ type siblingWorkflows struct {
 // read or parsed, or a name with an expression. A nil value reads the files on every call. Only that is kept of a
 // workflow, not the workflow: a project with hundreds of large workflows would keep them all in memory for the run.
 func (s *siblingWorkflows) parsed(project *Project) (map[string]upstreamFacts, bool) {
-	if s == nil {
-		return readParsedWorkflows(project)
-	}
-	s.parseOnce.Do(func() { s.byName, s.parseOK = readParsedWorkflows(project) })
-	return s.byName, s.parseOK
+	sc := s.scanned(project)
+	return sc.byName, sc.parseOK
 }
 
 // names returns the names of the workflows of the project (see readWorkflowNames).
@@ -616,13 +630,20 @@ func (s *siblingWorkflows) names(project *Project) workflowNames {
 	return s.nameSet
 }
 
-func readParsedWorkflows(project *Project) (map[string]upstreamFacts, bool) {
+// readSiblings reads and parses the workflows of the project once, and keeps from each the calls of local workflows and
+// actions (see callRefs) and the facts about its events (see parsed).
+func readSiblings(project *Project) siblingScan {
+	refs := map[string][]callRef{}
+	if project == nil {
+		return siblingScan{refs: refs}
+	}
 	dir := project.WorkflowsDir()
 	entries, err := os.ReadDir(dir)
 	if err != nil {
-		return nil, false
+		return siblingScan{refs: refs}
 	}
 	byName := map[string]upstreamFacts{}
+	parseOK := true // the facts stop at the first workflow that cannot be read; the calls go on with the others
 	for _, e := range entries {
 		ext := filepath.Ext(e.Name())
 		if e.IsDir() || (ext != ".yml" && ext != ".yaml") {
@@ -631,34 +652,47 @@ func readParsedWorkflows(project *Project) (map[string]upstreamFacts, bool) {
 		p := filepath.Join(dir, e.Name())
 		b, err := os.ReadFile(p)
 		if err != nil {
-			return nil, false
+			parseOK = false
+			continue
 		}
 		w, _ := Parse(b)
 		if w == nil {
-			return nil, false
+			parseOK = false
+			continue
 		}
-		name := ""
-		if w.Name != nil && w.Name.Value != "" {
-			name = w.Name.Value
-		} else if rel, err := filepath.Rel(project.RootDir(), p); err == nil {
-			name = filepath.ToSlash(rel)
-		}
-		if strings.Contains(name, "${{") {
-			return nil, false
-		}
-		var facts upstreamFacts
-		if len(w.On) > 0 {
-			facts = upstreamTrusted | upstreamPROnly
-		}
-		for _, e := range w.On {
-			if !trustedUpstreamEvents[e.EventName()] {
-				facts &^= upstreamTrusted
+		rel, relErr := filepath.Rel(project.RootDir(), p)
+		if parseOK {
+			name := ""
+			if w.Name != nil && w.Name.Value != "" {
+				name = w.Name.Value
+			} else if relErr == nil {
+				name = filepath.ToSlash(rel)
 			}
-			if !strings.HasPrefix(e.EventName(), "pull_request") {
-				facts &^= upstreamPROnly
+			if strings.Contains(name, "${{") {
+				parseOK = false
+			} else {
+				var facts upstreamFacts
+				if len(w.On) > 0 {
+					facts = upstreamTrusted | upstreamPROnly
+				}
+				for _, e := range w.On {
+					if !trustedUpstreamEvents[e.EventName()] {
+						facts &^= upstreamTrusted
+					}
+					if !strings.HasPrefix(e.EventName(), "pull_request") {
+						facts &^= upstreamPROnly
+					}
+				}
+				byName[strings.ToLower(name)] = facts
 			}
 		}
-		byName[strings.ToLower(name)] = facts
+		if relErr == nil {
+			addCallRefs(refs, filepath.ToSlash(rel), w)
+		}
 	}
-	return byName, true
+	sortCallRefs(refs)
+	if !parseOK {
+		byName = nil
+	}
+	return siblingScan{refs: refs, byName: byName, parseOK: parseOK}
 }

@@ -104,7 +104,8 @@ The report has these parts:
 An audit without an entry shows up under "Unmapped zizmor audits" and is never matched.
 
 - Take the rule IDs from `jactionlint --list-rules`. An entry with an ID that is not a rule matches nothing, and nothing warns you.
-- Several audits can map to one rule, and one audit can map to several rules.
+- Several audits can map to one rule, and one audit can map to several rules. An audit and its rule can have different names: `unsound-condition` maps to `if-always-true`, and `unsound-ternary` (the falsy ternary idiom `a && b || c`, where `b` can be falsy) to the rule of the same name.
+- Write in `notes` what differs, and update it when a rule changes. The note of `unsound-condition` says that `if-always-true` ignores the trailing newlines of a block scalar, which GitHub trims and zizmor reports.
 - The pinned zizmor version appears in the default of `--zizmor` here and in [fix-corpus](../fix-corpus/README.md), in `mise.toml`, in `mapping.json` and in the sentences of [the parity page](../../docs/zizmor-parity.md) and [the measurements ledger](../../docs/zizmor-measurements.md) that name the compared version. Change all of them together when you pin another version.
 
 The output shapes of both tools are read in [adapter.go](./adapter.go) and nowhere else. When the JSON output of jactionlint changes, edit `jactionlintArgs` and `parseJactionlint` there. When the SARIF of zizmor changes, edit `parseZizmor`.

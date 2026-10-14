@@ -202,6 +202,7 @@ The jobs of `ci.yaml` besides the unit tests:
 - `Dockerfile` builds the image, runs it on the repository and lints the Dockerfile with hadolint.
 - `final` gathers the results of the other jobs for the branch protection.
 
+<a id="policy-for-jactionlints-features"></a>
 ## Policy for jactionlint's features
 
 Every rule belongs to one group, and its profile decides whether it runs for someone who configured nothing. The two are separate decisions. The group says what the rule is about. [Profiles](docs/config.md#profiles) defines the profiles, and this section says where a new check goes and when it is accepted.
@@ -319,6 +320,7 @@ A rule without an entry does not run for actions. The `except` list of an entry 
 
 - A rule that fixes a finding sets `Error.Fix` and `Fixable: true`. A fix is a list of byte-range `TextEdit` values with a `Description`, and the edits of one fix must not overlap. `Unsafe` marks a fix that may change the behavior of the workflow: `--fix` applies the safe fixes, and `--fix=unsafe` also applies the others. Unsafe fixes are not in the SARIF output.
 - When a finding could be fixed but the fix cannot be offered, set `Error.NoFix` with a `NoFixCode`. `option-required` names the rule option that supplies the missing value, and `online-required` says the fix needs the online checks. The [policy](#profiles-what-runs-without-configuration) forbids inventing a value.
+- A rule with `Fixable: true` gives every finding a `Fix` or a `NoFix`, with one exception: a finding that the rule never fixes is advice only and has neither, which is how a consumer tells advice from a fix that is unavailable. `TestFixableRulesExplainMissingFix` fails for a finding without both unless its kind is in `adviceOnlyKinds` in `no_fix_invariant_test.go`. Add a kind there only when the rule never fixes it, with a comment that says why. `NoFix` never changes what `--fix` does.
 - Never build YAML by concatenating strings. `RenderYAMLValue` renders a whole new value of a mapping entry: plain when that reads back as the same string, else double quoted. `YAMLSiteAt` and `YAMLSite.Insert` insert text into a scalar that exists, escaped for plain, flow, single quoted, double quoted and block scalars, or refuse it.
 - `--fix` verifies every pass: the result must be valid YAML that differs only where the edits are. A fixer that breaks a file is refused and reported, but write a test that applies the fix and lints again anyway. The verification compares parsed trees, and it takes a node to end where the next node starts. It therefore accepts a difference next to an edit even when another edit caused it, and it cannot tell that an edit put a wrong value in the right key: assert the fixed text in the test. It compares anchors by the aliases that use them, not by name.
 - When the edits of your fix can overlap with those of another rule, add the ID to `fixPriority` in `fix.go`. The rule with the lower number claims the text first, and the other fix is retried in the next pass, when its finding is reported again against the new text or is gone. The order is the map `fixPriority` in `fix.go`: fixes that remove a security problem first, then fixes that change values, then fixes that add metadata, then every rule that is not listed in alphabetical order, and `unused-ignore` last. A safe fix always goes before an unsafe one. [What fixing guarantees](docs/fix.md#what-fixing-guarantees) describes the passes.
@@ -405,6 +407,7 @@ Add a section to [`docs/checks.md`](docs/checks.md) with the anchor of the `Docs
 | `TestRulesDocIsUpToDate` | `docs/rules.md` differs from the registry. | `mise run rules-doc` |
 | `TestLinterFormatErrorMessageInSARIF` | The factory creates the rule although the rule is off. | Add the `RuleEnabled` gate. |
 | `TestEveryRuleWhichSetsAFixIsMarkedFixable` | A finding has a fix but `Fixable` is false. | Set `Fixable: true`. |
+| `TestFixableRulesExplainMissingFix` | A finding of a rule with `Fixable: true` has neither a `Fix` nor a `NoFix` and is not one of the `adviceOnlyKinds`. | Set `NoFix` with the reason, or list the kind as advice only. |
 | `TestOwnWorkflowsPassTheDefaultProfile` and the `jactionlint` step of hk | A new rule of the default profile reports a finding on a workflow of this repository. | Fix the workflow: pin every action to a commit SHA with a version comment, and set `permissions`, `timeout-minutes` and `concurrency`. |
 | The `checks_doc` step of hk | An output or a link of `docs/checks.md` is outdated. | `go run ./scripts/check-checks -fix ./docs/checks.md` |
 
@@ -586,13 +589,29 @@ This section is for maintainers. Releases are automated with [release-please](ht
    7. Attest the build provenance of the checksum file.
    8. Run the post-release download check: `scripts/download-jactionlint.bash` with the new version.
    9. Commit the version bump to `main`: the default version of `scripts/download-jactionlint.bash`, and the commit hash and the `# vX.Y.Z` comment of the `jdx/jactionlint` action examples in `docs/ci.md` and `docs/online.md`. They name a tag that exists only after the release is published, so the release pull request cannot hold them. `action.yml` is in the release pull request, because the tag must carry the version that it installs.
-6. **The other jobs of the workflow** run beside `binaries` or after it. `docker` does not wait for `binaries`: it pushes the Docker image `ghcr.io/jdx/jactionlint` with the tags `X.Y.Z` and `latest` for `linux/amd64` and `linux/arm64`. `enhance-release` and `comment-release-fixes` need `binaries` to succeed. The first rewrites the release notes with [communique](https://github.com/jdx/communique) (`communique.toml` configures it) and appends a sponsor section, and the second comments on the issues and pull requests that the release fixes. Release notes stay editable on an immutable release.
+6. **The other jobs of the workflow** run beside `binaries` or after it. `docker` does not wait for `binaries`: it pushes the Docker image `ghcr.io/jdx/jactionlint` with the tags `X.Y.Z` and `latest` for `linux/amd64` and `linux/arm64`. `wheels` and `pypi` do not wait for `binaries` either: they publish the Python wheels, as [Wheels and PyPI](#wheels-and-pypi) describes. `enhance-release` and `comment-release-fixes` need `binaries` to succeed. The first rewrites the release notes with [communique](https://github.com/jdx/communique) (`communique.toml` configures it) and appends a sponsor section, and the second comments on the issues and pull requests that the release fixes. Release notes stay editable on an immutable release.
+
+### Wheels and PyPI
+
+Each release also goes to [PyPI](https://pypi.org/project/jactionlint/) as wheels for pip, pipx and uv. Two jobs of `release.yaml` do it, and neither is part of the draft release: the wheels are not in the checksums file or the provenance attestation, and nothing waits for them.
+
+1. **`wheels`** runs on a Linux runner with `contents: read`. It runs [go-to-wheel](https://github.com/simonw/go-to-wheel) (`uvx go-to-wheel@0.2`) at the version of the tag without the leading `v`, and builds one wheel for each of Linux, macOS and Windows on amd64 and arm64. The step sets the version variable of the package, and sets `installedFrom` to `installed from PyPI`, so `jactionlint --version` says where the executable came from. The wheels are uploaded as the artifact `wheels`.
+2. **`pypi`** needs `wheels`, runs in the GitHub environment `pypi` and downloads the artifact. Of the two jobs only `pypi` has the permission `id-token: write`, so no build step of `wheels` can reach the credentials. It uploads the wheels with `pypa/gh-action-pypi-publish` and PyPI trusted publishing, and `skip-existing: true` makes a re-run skip the files that PyPI already has.
+
+[`scripts/go-to-wheel-go.bash`](scripts/go-to-wheel-go.bash) is the `--go-binary` of go-to-wheel. go-to-wheel builds the module root, which is the library, and the command is `cmd/jactionlint`, so the wrapper replaces the last argument `.` of `go build` with `./cmd/jactionlint`.
+
+Before the first release that has these jobs, configure the publisher once:
+
+- On PyPI, add a trusted publisher to the project `jactionlint` with the owner `jdx`, the repository `jactionlint`, the workflow `release.yaml` and the environment `pypi`.
+- In the settings of the repository, create the environment `pypi`.
+
+To try the wheels before a release, run the `go-to-wheel` command of the step `Build the wheels` from the root of a clone, with `--version` set to a test version, `--output-dir` set to a directory outside the clone and `--platforms` set to your platform. Install the wheel into a virtual environment, or with `pipx install` or `uv tool install`. `jactionlint --version` then prints the test version and `installed from PyPI`. A change to the step must keep `--go-binary` pointing at the wrapper.
 
 ### When a step fails
 
 Before `Publish the release`, fix the cause and re-run the workflow. GoReleaser replaces the assets that are already on the draft, and the packslip action uploads its bundle with `--clobber`. The Homebrew cask commit lands on `main` before the release is published, so after a failed run it can point at a release that is still a draft until the re-run succeeds.
 
-After `Publish the release`, a re-run of `binaries` cannot upload assets again. Finish its remaining steps by hand: the provenance attestation, the download check and the version bump. `docker` does not depend on `binaries`, so a failed `docker` job can run again on its own. A failed `binaries` skips `enhance-release` and `comment-release-fixes`, so do their work by hand too: the release notes and the comments on the issues that the release fixes.
+After `Publish the release`, a re-run of `binaries` cannot upload assets again. Finish its remaining steps by hand: the provenance attestation, the download check and the version bump. `docker` does not depend on `binaries`, so a failed `docker` job can run again on its own. The same holds for `wheels` and `pypi`: run them again on their own, and `pypi` needs the configuration of [Wheels and PyPI](#wheels-and-pypi). A failed `binaries` skips `enhance-release` and `comment-release-fixes`, so do their work by hand too: the release notes and the comments on the issues that the release fixes.
 
 ### Version markers
 

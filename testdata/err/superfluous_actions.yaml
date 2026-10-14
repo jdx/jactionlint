@@ -16,6 +16,9 @@ jobs:
       - uses: actions-ecosystem/action-remove-labels@v1
       - uses: addnab/docker-run-action@v3
       - uses: sergeysova/jq-action@v2
+      - uses: benc-uk/workflow-dispatch@v1
+        with:
+          workflow: deploy.yml
       # Not in the table, or not a repository action
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - uses: docker://alpine:3.20

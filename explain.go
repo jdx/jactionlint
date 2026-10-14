@@ -72,6 +72,18 @@ func checksSection(doc, anchor string) string {
 	return strings.TrimSpace(strings.Join(kept, "\n"))
 }
 
+// fixNeeds says what a rule that can fix its findings needs before it does for all of them, for --explain. It is what the
+// reasons of Error.NoFix (option-required, online-required) say for the finding; the rest of the cases (a shape of the
+// source that is not edited, an edit that may change behavior, a decision of a person) depend on the finding.
+var fixNeeds = map[string]string{
+	"missing-timeout":         "the option default-minutes (jactionlint does not choose a timeout)",
+	"dependabot-cooldown":     "the option default-days (jactionlint does not choose a number of days)",
+	"mutable-runner-label":    "the option pin, an entry for each label that --fix may replace (jactionlint does not choose an image)",
+	"unpinned-uses":           "--online, to resolve the tag of an action to its commit",
+	"missing-version-comment": "--online, to read the tags of the repository",
+	"unpinned-images":         "--online, to resolve the tag of an image to its digest, and --fix=unsafe, because the image behind a tag moves",
+}
+
 // docsBase is where the documents of the version are published.
 const docsBase = "https://jactionlint.jdx.dev/"
 
@@ -95,6 +107,9 @@ func explainRule(w io.Writer, id string) error {
 		b.WriteString("Fix:            yes. --fix applies the safe fixes; a fix which may change the behavior of the workflow needs --fix=unsafe\n")
 	} else {
 		b.WriteString("Fix:            no\n")
+	}
+	if n := fixNeeds[info.ID]; n != "" {
+		fmt.Fprintf(&b, "Fix needs:      %s. Without it a finding says why it has no fix (no_fix of json, noFixCode of sarif, --show-fix-status)\n", n)
 	}
 	fmt.Fprintf(&b, "Rules page:     %s\n", info.DocURL())
 	if info.DocsAnchor != "" {

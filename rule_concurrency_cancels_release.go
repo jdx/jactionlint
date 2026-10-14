@@ -478,18 +478,22 @@ func (rule *RuleConcurrencyCancelsRelease) report(c *Concurrency, why string) {
 		"\"cancel-in-progress\" is enabled here (%s), so a new run cancels a release or deployment which is still running and can leave it half done. set \"cancel-in-progress: false\" (or remove it) to let the running one finish first. keep the group per ref or tag so that unrelated releases do not wait for each other, and add \"queue: max\" when no release may be skipped (otherwise a newer pending run replaces an older pending one)",
 		why,
 	)
+	errs := rule.Errs()
 	if c.CancelInProgress.Expression != nil || !c.CancelInProgress.Value {
+		// An expression decides at run time which runs cancel: setting a literal would change that
+		errs[len(errs)-1].NoFix = &NoFix{Code: NoFixNeedsJudgment, Reason: "\"cancel-in-progress\" is an expression, so which runs it cancels is decided when the workflow runs. write the condition that keeps releases from being cancelled by hand"}
 		return
 	}
 	if edit, ok := rule.cancelEdit(c.CancelInProgress.Pos); ok {
-		errs := rule.Errs()
 		errs[len(errs)-1].Fix = &Fix{
 			Description: "Set cancel-in-progress to false",
 			// A queued run now waits for the running one instead of replacing it
 			Unsafe: true,
 			Edits:  []TextEdit{edit},
 		}
+		return
 	}
+	errs[len(errs)-1].NoFix = &NoFix{Code: NoFixUnsupportedShape, Reason: "\"cancel-in-progress\" is not a plain true that the fix can edit exactly, set it to false by hand"}
 }
 
 // cancelEdit returns the edit that changes the literal `true` at the position to `false`.
