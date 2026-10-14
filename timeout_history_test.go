@@ -291,6 +291,7 @@ func TestSuggestTimeoutsFailures(t *testing.T) {
 		{[]string{"--suggest-timeouts", "--fix"}, "only reads"},
 		{[]string{"--suggest-timeouts", "-"}, "stdin"},
 		{[]string{"--suggest-timeouts", "--export-facts"}, "cannot be combined"},
+		{[]string{"--suggest-timeouts", "--changed-since", "main"}, "cannot be combined"},
 	} {
 		if status, _, stderr := runOnlineCommand(t, c.args...); status != ExitStatusInvalidCommandOption || !strings.Contains(stderr, c.want) {
 			t.Errorf("%v: status %d: %s", c.args, status, stderr)
