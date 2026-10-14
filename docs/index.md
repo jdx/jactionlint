@@ -1,7 +1,7 @@
 ---
 layout: home
 title: Static checker for GitHub Actions workflow files
-description: jactionlint is a static checker for GitHub Actions workflow files. It checks syntax, type-checks ${{ }} expressions, validates action inputs and reusable workflows, runs shellcheck and pyflakes, and finds security problems.
+description: jactionlint is a static checker for GitHub Actions workflow files, composite actions and dependabot.yml. It checks syntax and expressions, validates action inputs and reusable workflows, runs shellcheck and pyflakes on scripts, and reports security and policy findings.
 
 hero:
   name: jactionlint
@@ -9,7 +9,7 @@ hero:
   image:
     src: /logo.svg
     alt: jactionlint
-  tagline: An actively maintained fork of rhysd/actionlint. Catch mistakes in your workflows before they run, with as few false positives as possible.
+  tagline: A fork of rhysd/actionlint that merges its pull requests and adds security and policy checks, automatic fixes and a baseline.
   actions:
     - theme: brand
       text: Get started
@@ -23,32 +23,32 @@ hero:
 
 features:
   - title: Syntax check
-    details: Checks workflow files for unexpected or missing keys following the workflow syntax.
+    details: 'Reports unexpected or missing keys, event names, glob patterns, runner labels, cron syntax and <code>needs:</code> dependencies.'
     link: /checks#check-unexpected-keys
-  - title: Strong type check for expressions
-    details: 'Catches access to not existing properties, type mismatches and other semantic errors in <code>${{ }}</code> expressions.'
+  - title: Typed expressions
+    details: 'Type-checks <code>${{ }}</code> expressions and reports unknown properties and type mismatches.'
     link: /checks#check-type-check-expression
-  - title: Actions usage check
-    details: 'Checks that inputs at <code>with:</code> and outputs in <code>steps.{id}.outputs</code> are correct.'
-    link: /checks#check-action-format
-  - title: Reusable workflow check
-    details: Checks inputs, outputs and secrets of reusable workflows and workflow calls.
-    link: /checks
+  - title: Action inputs
+    details: 'Checks the <code>with:</code> inputs and the <code>steps.{id}.outputs</code> of the actions a step uses.'
+    link: /checks#check-popular-action-inputs
+  - title: Reusable workflows
+    details: Checks the inputs, outputs and secrets of reusable workflows and of the jobs that call them.
+    link: /checks#check-reusable-workflows
   - title: shellcheck and pyflakes
-    details: 'Integrates with shellcheck and pyflakes for scripts at <code>run:</code>.'
+    details: 'Runs shellcheck on the shell scripts of <code>run:</code> and pyflakes on the Python ones. You install both separately.'
     link: /checks#check-shellcheck-integ
-  - title: Security and policy checks
-    details: Detects script injection by untrusted inputs, unpinned actions, excessive permissions, dangerous triggers and hard-coded credentials.
-    link: /checks#untrusted-inputs
+  - title: Security and policy
+    details: Reports script injection, unpinned actions, excessive permissions, dangerous triggers and hard-coded credentials.
+    link: /rules
   - title: Profiles
     details: 'Choose how much is checked: <code>correctness</code> (what actionlint checks), <code>default</code> or <code>pedantic</code>.'
     link: /config#profiles
-  - title: Fixes and a baseline
-    details: 'Apply the safe fixes with <code>--fix</code> and adopt the stricter checks step by step with a baseline.'
-    link: /usage#fix-errors-automatically
-  - title: Other useful checks
-    details: 'Glob syntax validation, dependencies check for <code>needs:</code>, runner label validation, cron syntax validation and more.'
-    link: /checks
+  - title: Fixes
+    details: 'Preview the automatic fixes with <code>--diff</code> and apply the safe ones with <code>--fix</code>.'
+    link: /fix
+  - title: CI and hooks
+    details: Run it as a GitHub Action, with mise or Docker, from hk or pre-commit, and in your editor.
+    link: /ci
 ---
 
 <div class="home-section">
@@ -62,76 +62,95 @@ mise use -g jactionlint
 jactionlint --version
 ```
 
-Then run it in your repository. jactionlint finds all workflow files and checks them.
+Run `jactionlint` in a Git repository that has workflow files to check its workflows, composite actions, `dependabot.yml` and Actions lock file.
 
 ```sh
 jactionlint
 ```
 
-Other ways to install are described in the [installation document](/install). You can also try it in the
-[online playground](/playground); your browser runs jactionlint through WebAssembly.
+[Installation](./install.md) lists the other methods. To try jactionlint first, use the [playground](./playground.md): your browser runs it through WebAssembly.
 
 ## Example of a broken workflow
 
+This workflow has a typo in a trigger, an untrusted value in a script, an undefined matrix property, an unpinned action, and no permissions, timeout or concurrency group. Save it as `test.yaml`:
+
+<!-- demo:input -->
 ```yaml
 on:
   push:
     branch: main
-    tags:
-      - 'v\d+'
 jobs:
   test:
-    strategy:
-      matrix:
-        os: [macos-latest, linux-latest]
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-latest
     steps:
-      - run: echo "Checking commit '${{ github.event.head_commit.message }}'"
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node_version: 18.x
-      - uses: actions/cache@v4
-        with:
-          path: ~/.npm
-          key: ${{ matrix.platform }}-node-${{ hashFiles('**/package-lock.json') }}
-        if: ${{ github.repository.permissions.admin == true }}
-      - run: npm install && npm test
+      - run: echo "${{ github.event.head_commit.message }}"
+      - run: echo "${{ matrix.os }}"
 ```
 
-## jactionlint reports 7 errors
+Run it on the file:
 
+```sh
+jactionlint test.yaml
+```
+
+<a id="jactionlint-reports-7-errors"></a>
+## What jactionlint reports
+
+The default profile applies when you configure nothing. Each finding shows its position, its message, a code frame and the rule ID in brackets:
+
+<!-- demo:output -->
 ```text
+test.yaml:1:1: workflow has no "concurrency:", so every run of it executes at the same time even when a newer run supersedes the older ones. add a top-level "concurrency:" with a "group:" and "cancel-in-progress: true" [concurrency-limits]
+  |
+1 | on:
+  | ^~~
 test.yaml:3:5: unexpected key "branch" for "push" section. expected one of "branches", "branches-ignore", "paths", "paths-ignore", "tags", "tags-ignore", "types", "workflows" [workflow-syntax]
   |
 3 |     branch: main
   |     ^~~~~~~
-test.yaml:5:11: character '\' is invalid for branch and tag names. only special characters [, ?, +, *, \, ! can be escaped with \. see `man git-check-ref-format` for more details. note that regular expression is unavailable. note: filter pattern syntax is explained at https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions#filter-pattern-cheat-sheet [invalid-glob]
+test.yaml:5:3: "timeout-minutes" is not set at this job. Set it to avoid wasting runner minutes when the job hangs. Set "default-minutes" in the "missing-timeout" rule options of the configuration to turn on the --fix fix [missing-timeout]
   |
-5 |       - 'v\d+'
-  |           ^~~~
-test.yaml:10:28: label "linux-latest" is unknown. available labels are "windows-latest", "windows-latest-8-cores", "windows-2025", "windows-2025-vs2026", windows-2022", "windows-11-arm", "windows-11-vs2026-arm", "ubuntu-slim", "ubuntu-latest", "ubuntu-latest-4-cores", "ubuntu-latest-8-cores", "ubuntu-latest-16-cores", "ubuntu-26.04", "ubuntu-26.04-arm", "ubuntu-24.04", "ubuntu-24.04-arm", "ubuntu-22.04", "ubuntu-22.04-arm", "macos-latest", "macos-latest-xlarge", "macos-latest-large", "macos-26-intel", "macos-26-xlarge", "macos-26-large", "macos-26", "macos-15-intel", "macos-15-xlarge", "macos-15-large", "macos-15", "macos-14-xlarge", "macos-14-large", "macos-14", "xcode-27", "xcode-27-xlarge", "self-hosted", "x64", "arm", "arm64", "linux", "macos", "windows". if it is a custom label for self-hosted runner, set list of labels in jactionlint.yaml config file [unknown-runner-label]
+5 |   test:
+  |   ^~~~~
+test.yaml:5:3: neither the workflow nor this job sets "permissions:" so the GITHUB_TOKEN gets the default permissions of the repository. set "permissions:" at workflow-level or job-level (use "permissions: {}" for no permissions) because the "missing-permissions" rule is enabled [missing-permissions]
+  |
+5 |   test:
+  |   ^~~~~
+test.yaml:8:15: action "actions/checkout@v4" must be pinned to a full-length commit SHA like "{owner}/{repo}@{sha}" because the "unpinned-uses" rule is enabled [unpinned-uses]
+  |
+8 |       - uses: actions/checkout@v4
+  |               ^~~~~~~~~~~~~~~~~~~
+test.yaml:8:15: actions/checkout leaves the GITHUB_TOKEN in the git config of the workspace, where a later step such as an artifact upload can publish it. set "persist-credentials: false" under "with:" unless a later step needs to push [artipacked]
+  |
+8 |       - uses: actions/checkout@v4
+  |               ^~~~~~~~~~~~~~~~~~~
+test.yaml:9:24: "github.event.head_commit.message" is potentially untrusted. avoid using it directly in inline scripts. instead, pass it through an environment variable. see https://docs.github.com/en/actions/reference/security/secure-use#good-practices-for-mitigating-script-injection-attacks for more details [template-injection]
+  |
+9 |       - run: echo "${{ github.event.head_commit.message }}"
+  |                        ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+test.yaml:10:24: property "os" is not defined in object type {} [undefined-property]
    |
-10 |         os: [macos-latest, linux-latest]
-   |                            ^~~~~~~~~~~~~
-test.yaml:13:41: "github.event.head_commit.message" is potentially untrusted. avoid using it directly in inline scripts. instead, pass it through an environment variable. see https://docs.github.com/en/actions/reference/security/secure-use#good-practices-for-mitigating-script-injection-attacks for more details [template-injection]
-   |
-13 |       - run: echo "Checking commit '${{ github.event.head_commit.message }}'"
-   |                                         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-test.yaml:17:11: input "node_version" is not defined in action "actions/setup-node@v4". available inputs are "always-auth", "architecture", "cache", "cache-dependency-path", "check-latest", "node-version", "node-version-file", "registry-url", "scope", "token" [unknown-action-input]
-   |
-17 |           node_version: 18.x
-   |           ^~~~~~~~~~~~~
-test.yaml:21:20: property "platform" is not defined in object type {os: string} [undefined-property]
-   |
-21 |           key: ${{ matrix.platform }}-node-${{ hashFiles('**/package-lock.json') }}
-   |                    ^~~~~~~~~~~~~~~
-test.yaml:22:17: receiver of object dereference "permissions" must be type of object but got "string" [expression-type]
-   |
-22 |         if: ${{ github.repository.permissions.admin == true }}
-   |                 ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+10 |       - run: echo "${{ matrix.os }}"
+   |                        ^~~~~~~~~
 ```
 
-See the [full list of checks](/checks), or learn how to [use jactionlint](/usage) locally and on GitHub Actions.
+`jactionlint --profile correctness test.yaml` reports only `workflow-syntax`, `template-injection` and `undefined-property`. The other findings come from the security and policy rules of the default profile. `jactionlint --diff test.yaml` prints the safe fixes of `artipacked`, `missing-permissions` and `template-injection` as a diff and writes nothing.
+
+## Where to go next
+
+| You want to | Read |
+| ----------- | ---- |
+| Run jactionlint on a repository and read the result | [Run jactionlint](./usage.md) |
+| Understand a finding | [Explain a rule](./usage.md#explain-a-rule) and the [rules](./rules.md) |
+| Preview and apply the automatic fixes | [Fix findings automatically](./fix.md) |
+| Silence a finding on purpose | [Ignore findings](./ignore.md) |
+| Adopt the default profile on an existing repository | [Adopt new checks with a baseline](./baseline.md) |
+| Run it in CI | [Run jactionlint in CI](./ci.md) |
+| Run it before each commit or from an editor | [Git hooks and editors](./hooks.md) |
+| Set profiles, rule levels and runner labels | [Configuration](./config.md) |
+| Switch from actionlint | [Coming from actionlint](./actionlint.md) |
+| Compare it with zizmor | [jactionlint and zizmor](./zizmor-parity.md) |
+| Use it from a Go program | [Go API](./api.md) |
 
 </div>

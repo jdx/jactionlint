@@ -1,5 +1,6 @@
 import { defineConfig } from "vitepress";
 import { generateLlms } from "./llms.ts";
+import { redirects } from "./redirects.ts";
 import { sidebar } from "./sidebar.ts";
 
 const siteUrl = "https://jactionlint.jdx.dev";
@@ -78,6 +79,19 @@ export default defineConfig({
   }
 })();`,
     ],
+    [
+      "script",
+      {},
+      // Sections moved to other pages when the usage and zizmor pages were split. The fragment never reaches the
+      // server, so a link such as /usage#online-checks (released binaries print it) is redirected here. Navigation
+      // inside the site is handled by theme/index.ts.
+      `(function () {
+  var moved = ${JSON.stringify(redirects)};
+  var path = location.pathname.replace(/\\.html$/, "").replace(/\\/$/, "") || "/";
+  var to = moved[path + location.hash];
+  if (to) location.replace(to);
+})();`,
+    ],
     ["link", { rel: "icon", href: "/favicon.ico", sizes: "48x48" }],
     ["link", { rel: "icon", href: "/favicon.svg", type: "image/svg+xml" }],
     ["link", { rel: "apple-touch-icon", href: "/apple-touch-icon.png" }],
@@ -134,7 +148,11 @@ export default defineConfig({
     logo: "/logo.svg",
 
     nav: [
-      { text: "Guide", link: "/install" },
+      {
+        text: "Guide",
+        link: "/install",
+        activeMatch: "^/(install|usage|ignore|baseline|fix|ci|hooks|online|config|cli|output)",
+      },
       { text: "Checks", link: "/checks" },
       { text: "Go API", link: "/api" },
       { text: "Playground", link: "/playground" },

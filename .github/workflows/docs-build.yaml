@@ -9,6 +9,11 @@ on:
       - 'go.sum'
       - 'mise.toml'
       - 'scripts/build-wasm.bash'
+      - 'scripts/**/README.md'
+      - 'README.md'
+      - 'CONTRIBUTING.md'
+      - 'NOTICE.md'
+      - 'man/**'
       - '.github/workflows/docs-build.yaml'
   push:
     branches: [main]
@@ -20,6 +25,11 @@ on:
       - 'go.sum'
       - 'mise.toml'
       - 'scripts/build-wasm.bash'
+      - 'scripts/**/README.md'
+      - 'README.md'
+      - 'CONTRIBUTING.md'
+      - 'NOTICE.md'
+      - 'man/**'
       - '.github/workflows/docs-build.yaml'
   workflow_dispatch:
 
@@ -43,7 +53,8 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
-      # Builds the playground wasm too. VitePress fails the build on dead links
+      # Builds the playground wasm too. VitePress fails the build on dead links, and the verifier on a lost anchor or a
+      # dead #fragment, which VitePress does not check
       - run: mise run docs:build
         env:
           GITHUB_TOKEN: ${{ github.token }}
