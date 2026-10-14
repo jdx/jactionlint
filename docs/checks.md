@@ -1351,8 +1351,10 @@ jactionlint reads only what it can read as faithfully as bash does, and reports 
   an expression (`${{ matrix.os }}`) or a self-hosted runner without an operating system in its labels can be one.
 - `sh` is read with the bash grammar as well, and reports only what is a syntax error in bash. The `/bin/sh` of a runner is `dash` on
   Ubuntu but `bash` on macOS and in Git Bash for Windows, so `[[ ]]` or an array in a `shell: sh` script is not called an error here.
-- `${{ }}` expressions are replaced by underscores of the same length before the script is read, as for shellcheck, so a finding is
-  at the right place in the workflow file even when an expression spans several lines.
+- `${{ }}` expressions are replaced by underscores of the same length before the script is read, so a finding is at the right place
+  in the workflow file even when an expression spans several lines. The end of an expression is found with the expression lexer (a
+  `}}` inside a string literal such as `'}}'` does not end it, unlike for the shellcheck integration, which stops at the first `}}`),
+  and a script with an expression that cannot be delimited (not closed, or not valid) is not read at all.
 - Only the mistakes that bash finds while it reads a script are reported: an unclosed quote or substitution, a `fi`, `done` or `esac`
   that is missing or has nothing to close, a keyword where it does not belong, an operator without its operand. Bash finds the others
   when it runs the command (a bad `${...}` substitution, the syntax of an arithmetic expression), and treats a here-document that is not

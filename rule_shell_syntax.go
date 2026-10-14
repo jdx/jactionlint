@@ -26,8 +26,9 @@ import (
 // dash on Ubuntu but bash on macOS and Git Bash, so a script that is only valid in bash ("[[ ]]", arrays, process
 // substitution) is not a syntax error of "shell: sh" on every runner, and the rule does not call it one.
 //
-// ${{ }} expressions are replaced by underscores of the same length before parsing, exactly as for shellcheck
-// (see sanitizeExpressionsInScript), so the offset of an error is also an offset of the script in the workflow.
+// ${{ }} expressions are replaced by underscores of the same length before parsing (see sanitizeScriptExpressions: the
+// end of an expression is found by the expression lexer, and a script with an expression that cannot be delimited is
+// not read), so the offset of an error is also an offset of the script in the workflow.
 type RuleShellSyntax struct {
 	RuleBase
 	runContext
@@ -74,9 +75,9 @@ func (rule *RuleShellSyntax) VisitStep(n *Step) error {
 	if strings.Contains(src, "\r") || strings.IndexByte(src, 0) >= 0 {
 		return nil
 	}
-	src = sanitizeExpressionsInScript(src)
-	if strings.Contains(src, "${{") {
-		return nil // an expression which is not closed: the text is not what the shell gets
+	src, ok = sanitizeScriptExpressions(run.Run)
+	if !ok {
+		return nil // an expression which cannot be delimited: the text is not what the shell gets
 	}
 
 	perr := runscript.SyntaxError(src)
@@ -92,7 +93,9 @@ func (rule *RuleShellSyntax) VisitStep(n *Step) error {
 		return nil
 	}
 	loc := *pos
-	line := strings.Count(src[:perr.Offset], "\n") + 1
+	// The line is counted in the script as written: the placeholders have the length of the expressions but not their
+	// line breaks, so the sanitized text can have fewer lines
+	line := strings.Count(run.Run.Value[:perr.Offset], "\n") + 1
 	if l, c, ok := run.Run.valueAt(perr.Offset); ok {
 		loc = Pos{Line: l, Col: c}
 	} else if run.Run.Literal && run.Run.Pos != nil {
@@ -100,6 +103,38 @@ func (rule *RuleShellSyntax) VisitStep(n *Step) error {
 	}
 	rule.ReportIDf("shell-syntax", &loc, "syntax error in the %s script of this step (line %d of the script): %s. found by the built-in parser because shellcheck did not run", rule.shellKind(run), line, perr.Text)
 	return nil
+}
+
+// sanitizeScriptExpressions replaces each ${{ }} expression of the script with underscores of the same byte length, so
+// that an offset of the result is an offset of the script. The end of an expression is found by the lexer of the
+// expressions, as the rule `expression` does, so a "}}" inside a string literal ('}}') does not end it. It returns
+// false when an expression cannot be delimited (it is not closed or does not parse): then the text between the
+// expressions is not known, and the script is not read. sanitizeExpressionsInScript, which the integration of
+// shellcheck uses, closes an expression at the first "}}"; it is left as it is because shellcheck's output depends on it.
+func sanitizeScriptExpressions(str *String) (string, bool) {
+	value := str.Value
+	c := str.placeholders()
+	if c.failed {
+		return "", false
+	}
+	if len(c.list) == 0 {
+		return value, !strings.Contains(value, "${{")
+	}
+	b := []byte(value)
+	for _, p := range c.list {
+		start, end := p.after-len("${{"), p.after+p.n
+		if start < 0 || end > len(b) || end-start < len("${{}}") || value[end-2:end] != "}}" {
+			return "", false
+		}
+		for i := start; i < end; i++ {
+			b[i] = '_'
+		}
+	}
+	out := string(b)
+	if strings.Contains(out, "${{") {
+		return "", false
+	}
+	return out, true
 }
 
 // readsShell reports whether the script of the step is read: the shell is bash or sh, and the step is not one that

@@ -72,6 +72,18 @@ func TestRuleShellSyntaxReported(t *testing.T) {
 	}
 }
 
+// The line of the finding is the one of the script as written, also after an expression that spans lines.
+func TestRuleShellSyntaxLineAfterMultilineExpression(t *testing.T) {
+	src := syntaxJob("ubuntu-latest", "run: |\n          echo ${{ format('{0}',\n            github.sha) }}\n          echo ok\n          done\n")
+	errs := lintShellSyntax(t, src, nil, nil)
+	if len(errs) != 1 {
+		t.Fatalf("want one finding, got %v", errs)
+	}
+	if !strings.Contains(errs[0].Message, "(line 4 of the script)") || errs[0].Line != 10 {
+		t.Errorf("line = %d, message = %q", errs[0].Line, errs[0].Message)
+	}
+}
+
 func TestRuleShellSyntaxNotReported(t *testing.T) {
 	tests := []struct {
 		what string
@@ -87,6 +99,11 @@ func TestRuleShellSyntaxNotReported(t *testing.T) {
 		{"case with fallthrough", syntaxJob("ubuntu-latest", "run: |\n          case \"$X\" in\n            a) echo a ;;&\n            b) echo b ;&\n            *) echo other ;;\n          esac\n")},
 		{"expressions as words", syntaxJob("ubuntu-latest", "run: |\n          if ${{ contains(github.ref, 'x') }}; then\n            echo \"${{ matrix.os }}\" > ${{ env.OUT }}\n          fi\n          for f in ${{ inputs.files }}; do echo $f; done\n")},
 		{"expression with quotes and braces", syntaxJob("ubuntu-latest", "run: echo '${{ toJSON(github.event) }}' \"${{ format('{0}}', 'a') }}\"\n")},
+		{"}} inside a string literal of an expression", syntaxJob("ubuntu-latest", "run: |\n          if ${{ contains(github.event.head_commit.message, '}}') }}; then echo \"${{ format('{0}}', 'a') }}\"; fi\n")},
+		{"escaped quote and braces in an expression", syntaxJob("ubuntu-latest", "run: echo \"${{ format('it''s }} {{0}}', github.sha) }}\" '${{ '}}' }}'\n")},
+		{"nested braces in format()", syntaxJob("ubuntu-latest", "run: echo \"${{ format('{{{0}}}', github.sha) }}\"\n")},
+		{"expression with an unterminated string literal is not read", syntaxJob("ubuntu-latest", "run: |\n          echo ${{ 'abc }}\n          fi\n")},
+		{"expression that does not parse is not read", syntaxJob("ubuntu-latest", "run: |\n          echo ${{ 1 + }}\n          fi\n")},
 		{"expression inside arithmetic", syntaxJob("ubuntu-latest", "run: echo $(( ${{ github.run_number }} + 1 ))\n")},
 		{"arrays in sh (only valid in bash, and a bash on some runners)", syntaxJob("ubuntu-latest", "shell: sh\n        run: |\n          arr=(1 2)\n          [[ -n $arr ]]\n")},
 		{"pwsh script", syntaxJob("ubuntu-latest", "shell: pwsh\n        run: |\n          if ($true) { Write-Host \"x\n")},
