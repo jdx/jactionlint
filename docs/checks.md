@@ -9742,7 +9742,7 @@ rules:
 Output:
 
 ```
-test.yaml:8:15: warning: action "example/fresh@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" is at a version that is younger than the cooldown of 7 days: v1.2.0 was released 2 days ago, on 2026-10-11. wait for the version to age before you use it: a compromised release is usually found within days [action-release-cooldown]
+test.yaml:8:15: warning: action "example/fresh@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" is at a version that is younger than the cooldown of 7 days: v1.2.0 was released 39 hours ago, on 2026-10-11. wait for the version to age before you use it: a compromised release is usually found within days [action-release-cooldown]
   |
 8 |       - uses: example/fresh@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa # v1.2.0
   |               ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
