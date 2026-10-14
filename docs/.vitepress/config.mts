@@ -1,5 +1,6 @@
 import { defineConfig } from "vitepress";
 import { generateLlms } from "./llms.ts";
+import { generateOgImage } from "./og/og.ts";
 import { redirects } from "./redirects.ts";
 import { sidebar } from "./sidebar.ts";
 
@@ -114,6 +115,7 @@ export default defineConfig({
 
   buildEnd({ srcDir, outDir }) {
     generateLlms(srcDir, outDir);
+    generateOgImage(outDir);
   },
 
   transformHead({ pageData, title, description }) {

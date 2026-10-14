@@ -10,6 +10,7 @@
     "test:wasm": "vitest run tests/wasm.test.ts"
   },
   "devDependencies": {
+    "@resvg/resvg-js": "^2.6.2",
     "@types/node": "^26.6.4",
     "@types/pako": "^2.0.4",
     "@vitejs/plugin-vue": "^6.0.9",

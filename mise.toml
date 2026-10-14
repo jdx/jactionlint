@@ -142,6 +142,11 @@ depends = ["docs:wasm"]
 dir = "docs"
 run = "npm ci && npm run docs:build && npm run verify"
 
+[tasks."docs:og"]
+description = "Render the social card (og.png, made by the docs build) into docs/.vitepress/cache/og.png to look at it"
+dir = "docs"
+run = "npm ci && node .vitepress/og/og.ts .vitepress/cache/og.png"
+
 [tasks."docs:preview"]
 description = "Serve the built documentation site"
 dir = "docs"
