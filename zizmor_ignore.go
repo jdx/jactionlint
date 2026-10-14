@@ -32,7 +32,7 @@ type zizmorAlias struct {
 
 // zizmorAliases lists the zizmor audits whose findings jactionlint reports under another ID. An
 // audit whose name is the ID of a rule of jactionlint needs no entry: the name is used as is. See
-// docs/v2-migration.md, which documents this table.
+// docs/ignore.md ("Audit names that differ"), which documents this table.
 var zizmorAliases = map[string][]zizmorAlias{
 	// jactionlint reports a missing permissions block, which is one case of excessive-permissions
 	"excessive-permissions": {{ID: "missing-permissions"}},

@@ -20,8 +20,8 @@ inputs:
     default: ""
   files:
     description: |
-      The files to check, separated by whitespace. By default jactionlint checks the workflows of the nearest
-      .github/workflows directory.
+      The files to check, separated by whitespace. Without it jactionlint checks the workflow files, the composite
+      actions, the Dependabot configuration and the Actions lock file of the repository.
     required: false
     default: ""
   profile:
