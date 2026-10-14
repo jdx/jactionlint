@@ -1,4 +1,5 @@
 import { defineConfig } from "vitepress";
+import { diffLines, jactionlintOutput } from "./highlight.ts";
 import { generateLlms } from "./llms.ts";
 import { generateOgImage } from "./og/og.ts";
 import { redirects } from "./redirects.ts";
@@ -19,6 +20,8 @@ export default defineConfig({
   srcExclude: ["README.md"],
 
   markdown: {
+    languages: [jactionlintOutput],
+    codeTransformers: [diffLines],
     config(md) {
       // The docs talk about GitHub's ${{ }} expression syntax in plain text.
       // Keep Vue from treating it as an interpolation.

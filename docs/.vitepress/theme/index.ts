@@ -4,6 +4,7 @@ import { h, onMounted, onUnmounted } from "vue";
 import { initBanner } from "./banner";
 import EndevFooter from "./EndevFooter.vue";
 import EndevSponsors from "./EndevSponsors.vue";
+import HomePage from "./HomePage.vue";
 import Playground from "./playground/Playground.vue";
 import { redirectFor } from "../redirects";
 import { data as starsData } from "../stars.data";
@@ -18,6 +19,7 @@ export default {
   },
   enhanceApp({ app, router }) {
     initBanner();
+    app.component("HomePage", HomePage);
     app.component("Playground", Playground);
     // A link to a section that moved to another page (see redirects.ts). The first load is handled by a head
     // script in config.mts, because that never runs again on navigation inside the site. go() calls this before it

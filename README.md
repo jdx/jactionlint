@@ -1,22 +1,55 @@
+<div align="center">
+
+<a href="https://jactionlint.jdx.dev"><img src="https://jactionlint.jdx.dev/logo.svg" alt="" width="88" height="88"></a>
+
 # jactionlint
 
+**Catch broken and insecure GitHub Actions workflows before they run.**
+
 [![CI status](https://github.com/jdx/jactionlint/actions/workflows/ci.yaml/badge.svg)](https://github.com/jdx/jactionlint/actions/workflows/ci.yaml)
+[![Latest release](https://img.shields.io/github/v/release/jdx/jactionlint?label=release&color=0f766e)](https://github.com/jdx/jactionlint/releases/latest)
 [![Go reference](https://pkg.go.dev/badge/github.com/jdx/jactionlint/v2.svg)](https://pkg.go.dev/github.com/jdx/jactionlint/v2)
 
-jactionlint is a static checker for GitHub Actions workflow files, composite actions and `dependabot.yml`. It is a fork of [rhysd/actionlint](https://github.com/rhysd/actionlint) that merges the pull requests of upstream and adds security and policy checks, automatic fixes and a baseline. Try it in the [playground](https://jactionlint.jdx.dev/playground) without installing anything.
+[Documentation](https://jactionlint.jdx.dev) · [Playground](https://jactionlint.jdx.dev/playground) · [Rules](https://jactionlint.jdx.dev/rules) · [Changelog](https://github.com/jdx/jactionlint/blob/main/CHANGELOG.md)
 
-## What it checks
+</div>
 
-- [Syntax and schema](https://jactionlint.jdx.dev/checks#check-unexpected-keys): unexpected or missing keys, event names, glob patterns, runner labels, cron syntax and `needs:` dependencies.
-- [Typed expressions](https://jactionlint.jdx.dev/checks#check-type-check-expression): `${{ }}` expressions are type-checked, so an unknown property or a type mismatch is a finding.
-- [Action inputs](https://jactionlint.jdx.dev/checks#check-popular-action-inputs) and [reusable workflows](https://jactionlint.jdx.dev/checks#check-reusable-workflows): the `with:` inputs and `steps.<id>.outputs` of actions, and the inputs, outputs and secrets of reusable workflows.
-- [Scripts](https://jactionlint.jdx.dev/checks#check-shellcheck-integ): the shell scripts of `run:` go through shellcheck and the Python scripts (`shell: python`) through pyflakes, which you install yourself.
-- [Security and policy](https://jactionlint.jdx.dev/rules): untrusted input in scripts, unpinned actions, excessive permissions, dangerous triggers, cache poisoning, hard-coded credentials and missing timeouts. [jactionlint and zizmor](https://jactionlint.jdx.dev/zizmor-parity) compares these rules with zizmor.
-- [Online checks](https://jactionlint.jdx.dev/online): opt-in checks of the actions a workflow uses against the GitHub API. Without them, jactionlint does not use the network.
+jactionlint is a static checker for GitHub Actions. It reads your workflows, composite actions and `dependabot.yml` and reports two kinds of problems: the mistakes that make a run fail or misbehave, and the patterns that let an outsider run code in your repository or steal its token. It started as a fork of [actionlint](https://github.com/rhysd/actionlint) and covers its checks, and its security rules follow the audits of [zizmor](https://github.com/zizmorcore/zizmor).
+
+- **Correctness.** Unknown keys and events, type errors in `${{ }}` expressions, wrong inputs of actions and reusable workflows, and broken `needs:`, cron and glob patterns. [shellcheck](https://github.com/koalaman/shellcheck) and [pyflakes](https://github.com/PyCQA/pyflakes) check the scripts of `run:` steps.
+- **Security.** Script injection, excessive token permissions, dangerous triggers such as `pull_request_target`, cache poisoning, credentials left in the checkout and AI agent actions that outsiders can steer.
+- **Policy.** Actions used by a tag instead of a commit, and workflows without `permissions:`, a job timeout or a concurrency group.
+- **Fixes.** `jactionlint --fix` repairs what has a mechanical fix, and `--diff` shows the change first.
+- **Gradual adoption.** Profiles choose how much is checked, and a baseline fails the build only on new findings.
+- **No network unless you ask.** The [online checks](https://jactionlint.jdx.dev/online), which ask GitHub about archived repositories, impostor commits and published advisories, run only with `--online`.
+
+Try it without installing anything in the [playground](https://jactionlint.jdx.dev/playground), which runs jactionlint in your browser.
+
+<a id="quick-start"></a>
+## Quick start
+
+Install jactionlint with [mise](https://mise.jdx.dev) and run it at the root of a repository:
+
+```sh
+mise use -g jactionlint
+jactionlint
+```
+
+With no arguments, jactionlint checks the workflows, composite actions, `dependabot.yml` and Actions lock file of the repository. Pass file names to check only those, or `-` to read standard input. It exits with status 1 when a finding of level `error` is left.
+
+Other ways to install it:
+
+- **Homebrew:** `brew tap jdx/jactionlint https://github.com/jdx/jactionlint`, then `brew install --cask jdx/jactionlint/jactionlint`.
+- **PyPI:** `uvx jactionlint` runs it without installing it, and `pipx install jactionlint` or `uv tool install jactionlint` installs it.
+- **Docker:** the image `ghcr.io/jdx/jactionlint` also holds shellcheck and pyflakes. [Run the image](https://jactionlint.jdx.dev/ci#run-the-image) shows the command.
+- **Go:** `go install github.com/jdx/jactionlint/v2/cmd/jactionlint@latest`.
+- **Release archives:** download the archive for your platform from the [releases](https://github.com/jdx/jactionlint/releases) and [verify it](https://jactionlint.jdx.dev/install#verify-the-download).
+
+Packages named `actionlint`, as in Homebrew core, install the original project, not this fork. [Installation](https://jactionlint.jdx.dev/install) covers every method.
 
 ## Example
 
-Save this workflow as `test.yaml`. It has a typo in a trigger, an untrusted value in a script, an undefined matrix property, an unpinned action, and no permissions, timeout or concurrency group:
+This workflow has a typo in a trigger, untrusted input in a script and an undefined matrix property. It also uses an action by tag and sets no permissions, timeout or concurrency group. Save it as `test.yaml`:
 
 <!-- demo:input -->
 ```yaml
@@ -32,7 +65,7 @@ jobs:
       - run: echo "${{ matrix.os }}"
 ```
 
-Run `jactionlint test.yaml`. The default profile, which applies when you configure nothing, reports these findings (without colors):
+`jactionlint test.yaml` prints each finding with its position, a message, the line it points at and, in brackets, the ID of its rule:
 
 <!-- demo:output -->
 ```
@@ -70,71 +103,42 @@ test.yaml:10:24: property "os" is not defined in object type {} [undefined-prope
    |                        ^~~~~~~~~
 ```
 
-`jactionlint --profile correctness test.yaml` reports only `workflow-syntax`, `template-injection` and `undefined-property`. `jactionlint --diff test.yaml` prints the safe fixes of `artipacked`, `missing-permissions` and `template-injection` as a diff and writes nothing. The [playground](https://jactionlint.jdx.dev/playground) turns off the default rules that a minimal example breaks, so it reports the findings of the `correctness` profile for this workflow.
+`jactionlint --explain template-injection` prints what a rule checks, why it matters and how to fix it. With `--profile correctness`, jactionlint reports only `workflow-syntax`, `template-injection` and `undefined-property`. The other five findings come from the security and policy rules of the default profile, which applies when you configure nothing.
 
-<a id="quick-start"></a>
-## Install
+`jactionlint --diff test.yaml` previews the safe fixes, and `jactionlint --fix test.yaml` applies them. Here they stop `actions/checkout` from persisting the token, give the token read-only permissions and pass the untrusted message through an environment variable:
 
-```sh
-mise use -g jactionlint
-jactionlint --version
+<!-- demo:diff -->
+```diff
+--- a/test.yaml
++++ b/test.yaml
+@@ -1,10 +1,17 @@
+ on:
+   push:
+     branch: main
++
++permissions:
++  contents: read
+ jobs:
+   test:
+     runs-on: ubuntu-latest
+     steps:
+       - uses: actions/checkout@v4
+-      - run: echo "${{ github.event.head_commit.message }}"
++        with:
++          persist-credentials: false
++      - run: echo "${HEAD_COMMIT_MESSAGE}"
++        env:
++          HEAD_COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+       - run: echo "${{ matrix.os }}"
 ```
-
-Without `-g`, `mise use jactionlint` records the tool in the `mise.toml` of the current project. The other methods:
-
-- Download an archive for your platform from the [releases](https://github.com/jdx/jactionlint/releases). It holds the executable, the man page and the docs.
-- Install the Homebrew cask: `brew tap jdx/jactionlint https://github.com/jdx/jactionlint`, then `brew install --cask jdx/jactionlint/jactionlint`.
-- Run the [download script](https://jactionlint.jdx.dev/install#download-script), which downloads the archive of your platform and extracts the executable. It does not verify the archive.
-- Pull the Docker image `ghcr.io/jdx/jactionlint`, which also holds shellcheck and pyflakes.
-- Build it with Go: `go install github.com/jdx/jactionlint/v2/cmd/jactionlint@latest`.
-
-Distribution packages named `actionlint` install the original project, not this fork. These docs describe the main branch: `jactionlint --help` shows what the installed version supports. [Installation](https://jactionlint.jdx.dev/install) has the details and how to verify a download.
-
-## Run it
-
-```sh
-jactionlint
-```
-
-With no arguments, jactionlint checks the workflows, composite actions, `dependabot.yml` and Actions lock file of the repository ([what a run checks](https://jactionlint.jdx.dev/usage#what-a-run-checks)). Run it in a Git or Jujutsu repository that has a `.github/workflows` directory: outside a repository it exits with status 3. Pass file names to check only those, wherever they are (for example the `test.yaml` above), or `-` to read standard input.
-
-- The exit status is `0` for success, `1` when a finding of level `error` is left, `2` for an invalid command line and `3` for a failure. [Exit status](https://jactionlint.jdx.dev/cli#exit-status) lists every cause.
-- The name in brackets at the end of a finding is its rule ID. `jactionlint --explain unpinned-uses` prints what the rule checks, its group, profile, level, options and fix. These pages describe the development version, so a release can lack an option such as `--explain`: when `jactionlint --help` of your install does not list an option, [build the main branch](https://jactionlint.jdx.dev/install#build-from-source) with `go install github.com/jdx/jactionlint/v2/cmd/jactionlint@main`.
-- To silence a finding you accept, put `# jactionlint ignore=unpinned-uses` on the line above it ([Ignore findings](https://jactionlint.jdx.dev/ignore)).
-- shellcheck and pyflakes are separate programs. When one is missing, jactionlint prints a note and skips the scripts it would have checked, and the missing program does not fail the run.
-- `jactionlint --init-config` writes `.github/jactionlint.yaml` ([Configuration](https://jactionlint.jdx.dev/config)).
-
-<a id="choose-how-much-is-checked"></a>
-## Choose a profile
-
-| Profile | Checks |
-| ------- | ------ |
-| `correctness` | What actionlint checks and the bug detectors of jactionlint. It has almost no security posture or policy rules. |
-| `default` | `correctness` plus the security and policy rules worth failing a build on. It applies when you configure nothing. |
-| `pedantic` | `default` plus the noisy and opinionated rules. |
-
-Choose a profile with `--profile` or with `profile:` in the config file. The default profile can fail on the first run in a repository that never followed it. When a text run on a terminal or in CI reports many findings and applies no baseline, jactionlint prints a hint about the baseline; `--no-hints` turns it off.
-
-To adopt the default profile step by step, fix what `--profile correctness` reports first, because those findings are mistakes and not debt to record. Then record the findings that are left and apply the record. A plain run applies the baseline only when the config file sets `baseline: auto`; `--baseline` applies it to one run.
-
-```sh
-# the checks of actionlint plus the bug detectors: fix what this reports first
-jactionlint --profile correctness
-
-# then record the findings of the default profile that are left, and apply the record
-jactionlint --baseline-write
-jactionlint --baseline
-```
-
-See [Profiles](https://jactionlint.jdx.dev/config#profiles), [Adopt new checks with a baseline](https://jactionlint.jdx.dev/baseline#write-and-apply-the-baseline), [Coming from actionlint](https://jactionlint.jdx.dev/actionlint) and [Migrating to v2](https://jactionlint.jdx.dev/v2-migration).
 
 <a id="in-ci-with-mise"></a>
-## Use it in CI
+## Run it in CI
 
-[`jdx/mise-action`](https://github.com/jdx/mise-action) installs the tools of the `mise.toml` of the repository, so add jactionlint with `mise use jactionlint` first. The step fails on a finding of level `error`. This workflow reports nothing under the default profile:
+The jactionlint action installs jactionlint, checks the repository and annotates the pull request with the findings. This workflow passes the default profile itself:
 
 ```yaml
-name: Lint GitHub Actions workflows
+name: jactionlint
 on:
   push:
     branches: [main]
@@ -153,35 +157,56 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           persist-credentials: false
-      - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
-      - run: jactionlint
+      - uses: jdx/jactionlint@1027f0a131ab98bc7e191d995bfa15dbed5bbf8f # v2.2.0
 ```
 
-[Run jactionlint in CI](https://jactionlint.jdx.dev/ci#the-action) also covers the jactionlint action, which annotates pull requests or reports to code scanning, the [Docker image](https://jactionlint.jdx.dev/ci#docker) and [problem matchers](https://jactionlint.jdx.dev/ci#problem-matchers). [Git hooks and editors](https://jactionlint.jdx.dev/hooks) covers [hk](https://jactionlint.jdx.dev/hooks#hk) and [pre-commit](https://jactionlint.jdx.dev/hooks#pre-commit).
+Set `advanced-security: true` under `with:` to upload the findings to code scanning instead, which needs `security-events: write`. [Run jactionlint in CI](https://jactionlint.jdx.dev/ci) also covers mise, which verifies the download, the Docker image and problem matchers. [Git hooks and editors](https://jactionlint.jdx.dev/hooks) covers hk and pre-commit.
+
+<a id="choose-how-much-is-checked"></a>
+## Adopt it on an existing repository
+
+The default profile can fail the first run on a repository that never followed it. Choose how much is checked with `--profile`, or with `profile:` in `.github/jactionlint.yaml`:
+
+| Profile | What it checks |
+| --- | --- |
+| `correctness` | The checks of actionlint and the bug detectors of jactionlint. |
+| `default` | `correctness`, plus the security and policy rules worth failing a build on. It applies when you configure nothing. |
+| `pedantic` | `default`, plus the noisier and opinionated rules. |
+
+Fix what the `correctness` profile reports first, because those findings are mistakes, not debt. Then record what the default profile still finds, and let the build fail only on new findings:
+
+```sh
+jactionlint --profile correctness   # fix these first
+jactionlint --baseline-write        # record the findings that are left
+jactionlint --baseline              # fail only on new findings
+```
+
+Silence a finding that you accept with a comment such as `# jactionlint ignore=unpinned-uses` on the line above it. `jactionlint --init-config` writes a config file to start from. See [Profiles](https://jactionlint.jdx.dev/config#profiles), [Adopt new checks with a baseline](https://jactionlint.jdx.dev/baseline) and [Ignore findings](https://jactionlint.jdx.dev/ignore).
+
+## Coming from actionlint or zizmor
+
+- **From actionlint.** jactionlint reads the config file of actionlint. `--profile correctness` keeps the checks that you have, and the default profile adds the security and policy rules when you are ready for them. [Coming from actionlint](https://jactionlint.jdx.dev/actionlint) lists the renamed options and the differences.
+- **From zizmor.** Each audit of zizmor 1.30.1 has a rule, under the same ID in every case but one, and `# zizmor: ignore[...]` comments keep working. [jactionlint and zizmor](https://jactionlint.jdx.dev/zizmor-parity) maps the audits, the personas and the settings of `zizmor.yml`.
 
 <a id="documents"></a>
 ## Documentation
 
-The site [jactionlint.jdx.dev](https://jactionlint.jdx.dev) renders the pages in `docs/`, and the release archives hold the same files. Start with these pages:
+[jactionlint.jdx.dev](https://jactionlint.jdx.dev) has the full documentation, and the release archives hold the same pages. These are the ones to start with:
 
-| Page | Read it when |
-| ---- | ------------ |
-| [Installation](https://jactionlint.jdx.dev/install) | you choose how to install jactionlint (mise, Homebrew, a release archive, the download script, Docker or Go) and check that it works. |
-| [Run jactionlint](https://jactionlint.jdx.dev/usage) | you run jactionlint on a repository, files or stdin, choose a profile, explain a rule or set up shellcheck, pyflakes and completion. |
-| [Ignore findings](https://jactionlint.jdx.dev/ignore) | you accept a finding and silence it with a comment, an option, the config file or a zizmor comment. |
-| [Adopt new checks with a baseline](https://jactionlint.jdx.dev/baseline) | you adopt a stricter profile before everything is fixed: record a baseline so that only new findings fail. |
-| [Run jactionlint in CI](https://jactionlint.jdx.dev/ci) | you run jactionlint on GitHub Actions with the action, mise, Docker or the download script and show findings as annotations or code scanning alerts. |
-| [Configuration](https://jactionlint.jdx.dev/config) | you create `.github/jactionlint.yaml` or look up a key, a profile or the level of a rule. |
-| [Checks](https://jactionlint.jdx.dev/checks) | you hold a finding or a rule ID and want to know what is checked, with an example and the fix. |
+- [Installation](https://jactionlint.jdx.dev/install) and [Run jactionlint](https://jactionlint.jdx.dev/usage): install it, run it and read a finding.
+- [Checks](https://jactionlint.jdx.dev/checks) and [Rules](https://jactionlint.jdx.dev/rules): what each rule finds, with an example and the fix.
+- [Fix findings automatically](https://jactionlint.jdx.dev/fix): safe and unsafe fixes, and why a finding has none.
+- [Configuration](https://jactionlint.jdx.dev/config): `.github/jactionlint.yaml`, profiles and rule levels.
+- [Go API](https://jactionlint.jdx.dev/api): use jactionlint from a Go program.
 
-The full list of pages is in [docs/README.md](docs/README.md).
+The site documents the `main` branch. `jactionlint --help` lists what your installed version supports.
 
 <a id="bug-reporting"></a>
-## Contributing and bugs
+## Contributing
 
-To report a bug, a false positive or an idea for a check, [open an issue](https://github.com/jdx/jactionlint/issues/new) with a minimal workflow that shows it. [CONTRIBUTING.md](CONTRIBUTING.md) explains how to build and test jactionlint and how to propose a change.
+To report a bug, a false positive or an idea for a check, [open an issue](https://github.com/jdx/jactionlint/issues/new) with a minimal workflow that shows it. [CONTRIBUTING.md](https://github.com/jdx/jactionlint/blob/main/CONTRIBUTING.md) explains how to build and test jactionlint and how to propose a change.
 
 <a id="license"></a>
 ## License and acknowledgments
 
-jactionlint is distributed under the [MIT license](LICENSE.txt). [NOTICE.md](NOTICE.md) names the projects it builds on, including actionlint, zizmor and ghlint.
+jactionlint is distributed under the [MIT license](https://github.com/jdx/jactionlint/blob/main/LICENSE.txt). It is a fork of [actionlint](https://github.com/rhysd/actionlint) by [rhysd](https://github.com/rhysd), and its security rules follow the audits of [zizmor](https://github.com/zizmorcore/zizmor). [NOTICE.md](https://github.com/jdx/jactionlint/blob/main/NOTICE.md) names every project that it builds on.

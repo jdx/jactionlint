@@ -9,18 +9,20 @@ import (
 	"testing"
 )
 
-// The README and the home page of the site show the same demo: a broken workflow and what jactionlint reports for it.
-// The blocks are marked with an HTML comment on the line directly above the code fence:
+// The README and the home page of the site show the same demo: a broken workflow, what jactionlint reports for it and
+// what --fix changes. The blocks are marked with an HTML comment on the line directly above the code fence:
 //
 //	<!-- demo:input -->               the workflow; it is saved as test.yaml
 //	<!-- demo:output -->              the output of `jactionlint --no-color --no-hints test.yaml` (default profile)
 //	<!-- demo:output-correctness -->  optional: the same with `--profile correctness`
+//	<!-- demo:diff -->                optional: the standard output of the same command with `--diff`
 //
 // TestDocsDemoIsCurrent runs the command on the input and compares, so the demo cannot go stale. (It did: it claimed
 // 7 errors, which is what the correctness profile reports, while a run without configuration reports more.) When it
 // fails after a change of a rule, regenerate the output blocks of both files by running the command above in an empty
 // Git repository. The demo avoids data that changes without a code change (the list of runner labels, the inputs of
-// popular actions), so that this test does not fail whenever the generated data is refreshed.
+// popular actions), so that this test does not fail whenever the generated data is refreshed. The home page also draws
+// its picture of the findings from these blocks (docs/.vitepress/home.data.ts).
 func TestDocsDemoIsCurrent(t *testing.T) {
 	for _, tool := range []string{"shellcheck", "pyflakes"} {
 		if _, err := exec.LookPath(tool); err != nil {
@@ -50,7 +52,7 @@ func TestDocsDemoIsCurrent(t *testing.T) {
 		} else if in != input {
 			t.Errorf("the demo input of %s differs from the one of %s", file, files[0])
 		}
-		for _, name := range []string{"demo:output", "demo:output-correctness"} {
+		for _, name := range []string{"demo:output", "demo:output-correctness", "demo:diff"} {
 			out, ok := demoBlock(src, name)
 			if !ok {
 				if name == "demo:output" {
@@ -67,8 +69,11 @@ func TestDocsDemoIsCurrent(t *testing.T) {
 
 	for name, want := range outputs {
 		args := []string{"--no-color", "--no-hints"}
-		if name == "demo:output-correctness" {
+		switch name {
+		case "demo:output-correctness":
 			args = append(args, "--profile", "correctness")
+		case "demo:diff":
+			args = append(args, "--diff") // the diff goes to stdout, the findings that are left to stderr
 		}
 		got := runDemo(t, input, args)
 		if got != want {
