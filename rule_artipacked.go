@@ -5,8 +5,6 @@ import (
 	"strings"
 
 	"go.yaml.in/yaml/v4"
-
-	"github.com/jdx/jactionlint/v2/internal/runscript"
 )
 
 // gitCredentialUseRegex matches a command of a `run:` script that talks to a git remote or creates
@@ -193,7 +191,7 @@ func scriptRuns(e *ExecRun, re *regexp.Regexp) bool {
 		shell = e.Shell.Value
 	}
 	if shell == "" || shell == "bash" || shell == "sh" {
-		if s, err := runscript.Analyze(e.Run.Value, shell); err == nil {
+		if s, err := e.Run.analyzeScript(shell); err == nil {
 			for _, c := range s.Commands {
 				if printingCommands[c.Name] {
 					continue

@@ -8,7 +8,6 @@ import (
 	"slices"
 	"sort"
 	"strings"
-	"sync"
 )
 
 // This file lets untrusted-checkout follow the head of a pull request into local reusable workflows and local composite
@@ -43,81 +42,47 @@ type callRef struct {
 	step int    // the index among flattenSteps(job.Steps), -1 for a job that calls a reusable workflow
 }
 
-// callIndex is the list of the calls of local workflows and actions in the workflows of the project, by the key of the
-// callee: "w:<file>" for a reusable workflow and "a:<directory>" for an action (relative to the root with "/").
-type callIndex struct {
-	once sync.Once
-	refs map[string][]callRef
-}
-
 // callRefs returns the calls of the callee. A nil value reads the workflows on every call.
 func (s *siblingWorkflows) callRefs(project *Project, key string) []callRef {
-	if s == nil {
-		return readCallRefs(project)[key]
-	}
-	s.calls.once.Do(func() { s.calls.refs = readCallRefs(project) })
-	return s.calls.refs[key]
+	return s.scanned(project).refs[key]
 }
 
-func readCallRefs(project *Project) map[string][]callRef {
-	ret := map[string][]callRef{}
-	if project == nil {
-		return ret
-	}
-	dir := project.WorkflowsDir()
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return ret
-	}
-	for _, e := range entries {
-		ext := filepath.Ext(e.Name())
-		if e.IsDir() || (ext != ".yml" && ext != ".yaml") {
+// addCallRefs adds the calls of local workflows and actions in the jobs of the workflow, which is the file relative to the
+// root of the project with "/", to the index by the key of the callee.
+func addCallRefs(refs map[string][]callRef, file string, w *Workflow) {
+	for id, j := range w.Jobs {
+		if j == nil {
 			continue
 		}
-		p := filepath.Join(dir, e.Name())
-		b, err := os.ReadFile(p)
-		if err != nil {
-			continue
-		}
-		w, _ := Parse(b)
-		if w == nil {
-			continue
-		}
-		rel, err := filepath.Rel(project.RootDir(), p)
-		if err != nil {
-			continue
-		}
-		rel = filepath.ToSlash(rel)
-		for id, j := range w.Jobs {
-			if j == nil {
-				continue
+		if j.WorkflowCall != nil && j.WorkflowCall.Uses != nil {
+			if t, ok := localTarget(j.WorkflowCall.Uses.Value); ok && t.kind == 'w' {
+				refs["w:"+t.path] = append(refs["w:"+t.path], callRef{file: file, job: id, step: -1})
 			}
-			if j.WorkflowCall != nil && j.WorkflowCall.Uses != nil {
-				if t, ok := localTarget(j.WorkflowCall.Uses.Value); ok && t.kind == 'w' {
-					ret["w:"+t.path] = append(ret["w:"+t.path], callRef{file: rel, job: id, step: -1})
-				}
-			}
-			for i, s := range flattenSteps(j.Steps) {
-				if a, ok := s.Exec.(*ExecAction); ok && a.Uses != nil {
-					if t, ok := localTarget(a.Uses.Value); ok && t.kind == 'a' {
-						ret["a:"+t.path] = append(ret["a:"+t.path], callRef{file: rel, job: id, step: i})
-					}
+		}
+		for i, s := range flattenSteps(j.Steps) {
+			if a, ok := s.Exec.(*ExecAction); ok && a.Uses != nil {
+				if t, ok := localTarget(a.Uses.Value); ok && t.kind == 'a' {
+					refs["a:"+t.path] = append(refs["a:"+t.path], callRef{file: file, job: id, step: i})
 				}
 			}
 		}
 	}
-	for _, refs := range ret {
-		sort.Slice(refs, func(i, j int) bool {
-			if refs[i].file != refs[j].file {
-				return refs[i].file < refs[j].file
+}
+
+// sortCallRefs puts the calls of each callee in the order of the file, the job and the step: the calls of one workflow are
+// next to each other.
+func sortCallRefs(refs map[string][]callRef) {
+	for _, rs := range refs {
+		sort.Slice(rs, func(i, j int) bool {
+			if rs[i].file != rs[j].file {
+				return rs[i].file < rs[j].file
 			}
-			if refs[i].job != refs[j].job {
-				return refs[i].job < refs[j].job
+			if rs[i].job != rs[j].job {
+				return rs[i].job < rs[j].job
 			}
-			return refs[i].step < refs[j].step
+			return rs[i].step < rs[j].step
 		})
 	}
-	return ret
 }
 
 // callInput is an input of a callee that a call gives an untrusted value.
@@ -197,12 +162,18 @@ func (rule *RuleUntrustedCheckout) callContexts(key string, depth int, seen map[
 	seen[key] = true
 	defer delete(seen, key)
 	var ret []callContext
+	// The calls of one workflow are next to each other, so the last workflow read is kept and its other calls do not read and
+	// parse it again. Only one is kept: a project can have hundreds of large callers.
+	var lastFile string
+	var last *Workflow
 	for _, ref := range rule.siblings.callRefs(rule.project, key) {
-		src, err := os.ReadFile(filepath.Join(rule.project.RootDir(), filepath.FromSlash(ref.file)))
-		if err != nil {
-			continue
+		if last == nil || lastFile != ref.file {
+			lastFile, last = ref.file, nil
+			if src, err := os.ReadFile(filepath.Join(rule.project.RootDir(), filepath.FromSlash(ref.file))); err == nil {
+				last, _ = Parse(src)
+			}
 		}
-		cw, _ := Parse(src)
+		cw := last
 		if cw == nil {
 			continue
 		}

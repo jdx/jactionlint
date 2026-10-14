@@ -21,8 +21,9 @@ const (
 // dependabotRuleFixtures are the fixtures which test a rule of dependabot.yml. The other fixtures test
 // the syntax, so they run with these rules turned off.
 var dependabotRuleFixtures = map[string]string{
-	"dependabot_cooldown":  "dependabot-cooldown",
-	"dependabot_execution": "dependabot-execution",
+	"dependabot_cooldown":             "dependabot-cooldown",
+	"dependabot_execution":            "dependabot-execution",
+	"dependabot_registry_credentials": "hardcoded-registry-credentials",
 }
 
 func dependabotFixtureConfig(base string) *Config {

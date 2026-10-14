@@ -1,0 +1,885 @@
+{
+  "$id": "https://raw.githubusercontent.com/jdx/jactionlint/main/schema/jactionlint-facts.json",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "action": {
+      "description": "An action.yml.",
+      "properties": {
+        "called_by": {
+          "description": "The local workflows that run the action. Absent when the file is in no repository.",
+          "properties": {
+            "callers": {
+              "description": "The callers.",
+              "items": {
+                "$ref": "#/definitions/actionCaller"
+              },
+              "type": "array"
+            },
+            "known": {
+              "description": "False when no workflow of the repository runs the action: it may be published for other repositories, and its events are unknown.",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "known",
+            "callers"
+          ],
+          "type": "object"
+        },
+        "inputs": {
+          "description": "The names of the inputs.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "name": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/stringFact"
+            }
+          ],
+          "description": "The name."
+        },
+        "parsed": {
+          "description": "False when the file is not valid YAML.",
+          "type": "boolean"
+        },
+        "path": {
+          "description": "The path relative to the root of the repository, with / as the separator.",
+          "type": "string"
+        },
+        "steps": {
+          "description": "The steps of a composite action.",
+          "items": {
+            "$ref": "#/definitions/step"
+          },
+          "type": "array"
+        },
+        "syntax_errors": {
+          "description": "The number of syntax errors.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "using": {
+          "description": "The runtime: composite, docker, node20 and the like.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "parsed"
+      ],
+      "type": "object"
+    },
+    "actionCaller": {
+      "description": "A workflow that runs an action.",
+      "properties": {
+        "events": {
+          "description": "The events of the workflow, without workflow_call. Empty means they are not known.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "inputs": {
+          "description": "What the steps of the workflow pass in with:. Given only when a step of the workflow runs the action itself.",
+          "items": {
+            "$ref": "#/definitions/inputFact"
+          },
+          "type": "array"
+        },
+        "via": {
+          "description": "The local actions and reusable workflows between the workflow and the action, outermost first. Empty when a step of the workflow runs the action.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "workflow": {
+          "description": "The workflow file.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "workflow",
+        "events"
+      ],
+      "type": "object"
+    },
+    "call": {
+      "description": "A call of a local reusable workflow or action.",
+      "properties": {
+        "events": {
+          "description": "The events of the calling workflow, without workflow_call. Empty means that no event of its own is known.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "from": {
+          "description": "The file with the call.",
+          "type": "string"
+        },
+        "job": {
+          "description": "The job with the call.",
+          "type": "string"
+        },
+        "kind": {
+          "description": "What is called.",
+          "enum": [
+            "reusable-workflow",
+            "action"
+          ],
+          "type": "string"
+        },
+        "location": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/location"
+            }
+          ],
+          "description": "Where it is in the file."
+        },
+        "permissions": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/effectivePermissions"
+            }
+          ],
+          "description": "The permissions of the token of the calling job: what the callee can have at most."
+        },
+        "step": {
+          "description": "The index of the step, absent for a job that calls a workflow.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "to": {
+          "description": "The file or the directory of the callee, relative to the root of the repository.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "from",
+        "to",
+        "events"
+      ],
+      "type": "object"
+    },
+    "calledBy": {
+      "description": "The local callers of a reusable workflow.",
+      "properties": {
+        "callers": {
+          "description": "The files of the repository that call it directly, sorted.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "events": {
+          "description": "The events of the workflows that reach it, directly or through other reusable workflows, without workflow_call. Sorted.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "known": {
+          "description": "True when every chain of calls ends in a workflow of this repository with events of its own. False when nothing in the repository calls the workflow, or a caller is itself only called: another repository may call it on any event, and events is not all of them.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "callers",
+        "events",
+        "known"
+      ],
+      "type": "object"
+    },
+    "concurrency": {
+      "description": "A concurrency: of a workflow or a job.",
+      "properties": {
+        "cancel_in_progress": {
+          "description": "unset means not written, so nothing is cancelled; unknown means an expression decides it.",
+          "enum": [
+            "true",
+            "false",
+            "unset",
+            "unknown"
+          ],
+          "type": "string"
+        },
+        "form": {
+          "description": "mapping (group and cancel-in-progress), group (only a group name, which cannot cancel) or expression (the whole key is an expression, so the group and the flag are unknown).",
+          "enum": [
+            "mapping",
+            "group",
+            "expression"
+          ],
+          "type": "string"
+        },
+        "group": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/stringFact"
+            }
+          ],
+          "description": "The group."
+        },
+        "location": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/location"
+            }
+          ],
+          "description": "Where it is in the file."
+        },
+        "queue": {
+          "description": "The queue strategy, when written.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "form",
+        "cancel_in_progress"
+      ],
+      "type": "object"
+    },
+    "effectivePermissions": {
+      "description": "The permissions that the token of a job has.",
+      "properties": {
+        "scopes": {
+          "additionalProperties": {
+            "description": "The level of the scope.",
+            "enum": [
+              "read",
+              "write",
+              "none",
+              "unknown"
+            ],
+            "type": "string"
+          },
+          "description": "The scopes by name.",
+          "type": "object"
+        },
+        "source": {
+          "description": "Where they come from. repository-setting means neither the job nor the workflow declares them, so the default token of the repository applies, which the file does not say: scopes is empty and that is unknown, not none.",
+          "enum": [
+            "job",
+            "workflow",
+            "repository-setting"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "source"
+      ],
+      "type": "object"
+    },
+    "event": {
+      "description": "An event of on:.",
+      "properties": {
+        "filters": {
+          "additionalProperties": {
+            "description": "The patterns.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "description": "The filters by their key (branches, branches-ignore, tags, tags-ignore, paths, paths-ignore, workflows).",
+          "type": "object"
+        },
+        "inputs": {
+          "description": "The names of the inputs of workflow_dispatch and workflow_call.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "location": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/location"
+            }
+          ],
+          "description": "Where it is in the file."
+        },
+        "name": {
+          "description": "The name of the event.",
+          "type": "string"
+        },
+        "schedules": {
+          "description": "The cron expressions of the event schedule.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "types": {
+          "description": "The activity types. Empty or absent means the default types of the event.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
+    "inputFact": {
+      "description": "A key of with: of a step or of a job that calls a reusable workflow.",
+      "properties": {
+        "dynamic": {
+          "description": "An expression decides the value. It is omitted when false.",
+          "type": "boolean"
+        },
+        "location": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/location"
+            }
+          ],
+          "description": "Where it is in the file."
+        },
+        "name": {
+          "description": "The name of the input.",
+          "type": "string"
+        },
+        "value": {
+          "description": "The value as written.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "value"
+      ],
+      "type": "object"
+    },
+    "job": {
+      "description": "A job.",
+      "properties": {
+        "cache_mode": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/stringFact"
+            }
+          ],
+          "description": "The cache-mode."
+        },
+        "concurrency": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/concurrency"
+            }
+          ],
+          "description": "The job's concurrency."
+        },
+        "effective_permissions": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/effectivePermissions"
+            }
+          ],
+          "description": "The permissions its token has."
+        },
+        "environment": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/stringFact"
+            }
+          ],
+          "description": "The environment."
+        },
+        "id": {
+          "description": "The ID of the job.",
+          "type": "string"
+        },
+        "if": {
+          "description": "The condition as written, without ${{ }}. It is not evaluated.",
+          "type": "string"
+        },
+        "location": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/location"
+            }
+          ],
+          "description": "Where it is in the file."
+        },
+        "name": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/stringFact"
+            }
+          ],
+          "description": "The name."
+        },
+        "needs": {
+          "description": "The jobs it needs.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "permissions": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/permissions"
+            }
+          ],
+          "description": "The permissions the job declares."
+        },
+        "runs_on": {
+          "description": "The labels of runs-on.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "runs_on_dynamic": {
+          "description": "An expression decides the labels, so runs_on is not all of them.",
+          "type": "boolean"
+        },
+        "steps": {
+          "description": "The steps.",
+          "items": {
+            "$ref": "#/definitions/step"
+          },
+          "type": "array"
+        },
+        "timeout_minutes": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/numberFact"
+            }
+          ],
+          "description": "The timeout."
+        },
+        "uses": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/jobUses"
+            }
+          ],
+          "description": "Set when the job calls a reusable workflow."
+        }
+      },
+      "required": [
+        "id",
+        "permissions",
+        "effective_permissions"
+      ],
+      "type": "object"
+    },
+    "jobUses": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/uses"
+        },
+        {
+          "description": "",
+          "properties": {
+            "inputs": {
+              "description": "The inputs passed with with:.",
+              "items": {
+                "$ref": "#/definitions/inputFact"
+              },
+              "type": "array"
+            },
+            "secrets": {
+              "description": "The secrets passed by name.",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "secrets_inherit": {
+              "description": "secrets: inherit.",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "secrets_inherit"
+          ],
+          "type": "object"
+        }
+      ],
+      "description": "A job that calls a reusable workflow."
+    },
+    "location": {
+      "description": "A position in a file: 1-based, the column counted in Unicode code points.",
+      "properties": {
+        "column": {
+          "description": "The column.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "line": {
+          "description": "The line.",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "line",
+        "column"
+      ],
+      "type": "object"
+    },
+    "numberFact": {
+      "description": "A number of the file, or an expression that decides it.",
+      "properties": {
+        "dynamic": {
+          "description": "An expression decides the value. It is omitted when false.",
+          "type": "boolean"
+        },
+        "expression": {
+          "description": "The expression, when dynamic.",
+          "type": "string"
+        },
+        "location": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/location"
+            }
+          ],
+          "description": "Where it is in the file."
+        },
+        "value": {
+          "description": "The number. It is 0 when dynamic is true.",
+          "minimum": 0,
+          "type": "number"
+        }
+      },
+      "required": [
+        "value"
+      ],
+      "type": "object"
+    },
+    "permissions": {
+      "description": "The permissions of the token that a file declares at one level.",
+      "properties": {
+        "declared": {
+          "description": "False when the file has no permissions: at this level.",
+          "type": "boolean"
+        },
+        "location": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/location"
+            }
+          ],
+          "description": "Where it is in the file."
+        },
+        "scopes": {
+          "additionalProperties": {
+            "description": "The level of the scope.",
+            "enum": [
+              "read",
+              "write",
+              "none",
+              "unknown"
+            ],
+            "type": "string"
+          },
+          "description": "The scopes by name. The scope * is read-all, write-all, or none for an empty mapping. unknown means that an expression decides it.",
+          "type": "object"
+        }
+      },
+      "required": [
+        "declared"
+      ],
+      "type": "object"
+    },
+    "step": {
+      "description": "A step. A step of a parallel: group is listed after the group.",
+      "properties": {
+        "id": {
+          "description": "The id of the step.",
+          "type": "string"
+        },
+        "if": {
+          "description": "The condition as written, without ${{ }}. It is not evaluated.",
+          "type": "string"
+        },
+        "index": {
+          "description": "The position in the job, from 0.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "inputs": {
+          "description": "The keys of with: of an action step.",
+          "items": {
+            "$ref": "#/definitions/inputFact"
+          },
+          "type": "array"
+        },
+        "inputs_dynamic": {
+          "description": "The whole with: is an expression, or has an insert, so inputs is not all of them.",
+          "type": "boolean"
+        },
+        "kind": {
+          "description": "What the step does.",
+          "enum": [
+            "run",
+            "action",
+            "parallel"
+          ],
+          "type": "string"
+        },
+        "location": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/location"
+            }
+          ],
+          "description": "Where it is in the file."
+        },
+        "name": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/stringFact"
+            }
+          ],
+          "description": "The name."
+        },
+        "shell": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/stringFact"
+            }
+          ],
+          "description": "The shell of a run step, when written."
+        },
+        "uses": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/uses"
+            }
+          ],
+          "description": "The action of an action step."
+        }
+      },
+      "required": [
+        "index",
+        "kind"
+      ],
+      "type": "object"
+    },
+    "stringFact": {
+      "description": "A string of the file. When dynamic is true it has a ${{ }} expression, so its value is known only when the workflow runs, and value is the text as written.",
+      "properties": {
+        "dynamic": {
+          "description": "An expression decides the value. It is omitted when false.",
+          "type": "boolean"
+        },
+        "location": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/location"
+            }
+          ],
+          "description": "Where it is in the file."
+        },
+        "value": {
+          "description": "The text.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "value"
+      ],
+      "type": "object"
+    },
+    "uses": {
+      "description": "A uses: value.",
+      "properties": {
+        "dynamic": {
+          "description": "The value has an expression.",
+          "type": "boolean"
+        },
+        "kind": {
+          "description": "What it names.",
+          "enum": [
+            "action",
+            "reusable-workflow",
+            "docker",
+            "local",
+            "invalid"
+          ],
+          "type": "string"
+        },
+        "path": {
+          "description": "The canonical ./path of a local action or workflow.",
+          "type": "string"
+        },
+        "ref": {
+          "description": "What follows @ (the digest of a docker image).",
+          "type": "string"
+        },
+        "ref_kind": {
+          "description": "What the ref is.",
+          "enum": [
+            "full-sha",
+            "short-sha",
+            "semver-tag",
+            "other-tag-or-branch",
+            "digest",
+            "none"
+          ],
+          "type": "string"
+        },
+        "repository": {
+          "description": "owner/repo of an action or a reusable workflow of another repository.",
+          "type": "string"
+        },
+        "uses": {
+          "description": "The value as written.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "uses",
+        "kind"
+      ],
+      "type": "object"
+    },
+    "workflow": {
+      "description": "A workflow file.",
+      "properties": {
+        "cache_mode": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/stringFact"
+            }
+          ],
+          "description": "The cache-mode."
+        },
+        "callable": {
+          "description": "The workflow has the event workflow_call.",
+          "type": "boolean"
+        },
+        "called_by": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/calledBy"
+            }
+          ],
+          "description": "Who calls a callable workflow in this repository. Absent when it is not callable or the file is in no repository."
+        },
+        "concurrency": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/concurrency"
+            }
+          ],
+          "description": "The concurrency."
+        },
+        "events": {
+          "description": "The events of on:.",
+          "items": {
+            "$ref": "#/definitions/event"
+          },
+          "type": "array"
+        },
+        "jobs": {
+          "description": "The jobs in the order of the source.",
+          "items": {
+            "$ref": "#/definitions/job"
+          },
+          "type": "array"
+        },
+        "name": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/stringFact"
+            }
+          ],
+          "description": "The name."
+        },
+        "parsed": {
+          "description": "False when the file is not valid YAML: it has no other fact then.",
+          "type": "boolean"
+        },
+        "path": {
+          "description": "The path relative to the root of the repository, with / as the separator (relative to the working directory when the file is in no repository).",
+          "type": "string"
+        },
+        "permissions": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/permissions"
+            }
+          ],
+          "description": "The permissions the workflow declares."
+        },
+        "syntax_errors": {
+          "description": "The number of syntax errors. The facts are what could be read.",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "path",
+        "parsed",
+        "events",
+        "callable",
+        "permissions",
+        "jobs"
+      ],
+      "type": "object"
+    }
+  },
+  "description": "The output of `jactionlint --export-facts`: what the workflows and actions of a repository declare and what the call graph knows, with positions and an explicit word wherever a value is unknown. Fields are never removed or renamed within a version; new fields can appear, so readers must ignore the fields they do not know. Generated by `jactionlint --print-facts-schema`.",
+  "properties": {
+    "actions": {
+      "description": "The action.yml files.",
+      "items": {
+        "$ref": "#/definitions/action"
+      },
+      "type": "array"
+    },
+    "calls": {
+      "description": "The local calls of the exported files. The callee need not be in workflows or actions.",
+      "items": {
+        "$ref": "#/definitions/call"
+      },
+      "type": "array"
+    },
+    "tool": {
+      "description": "jactionlint.",
+      "type": "string"
+    },
+    "tool_version": {
+      "description": "The version of jactionlint.",
+      "type": "string"
+    },
+    "version": {
+      "description": "The version of the document. It changes only when a field changes meaning.",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "workflows": {
+      "description": "The workflow files.",
+      "items": {
+        "$ref": "#/definitions/workflow"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "version",
+    "tool",
+    "tool_version",
+    "workflows",
+    "actions",
+    "calls"
+  ],
+  "title": "jactionlint facts",
+  "type": "object"
+}

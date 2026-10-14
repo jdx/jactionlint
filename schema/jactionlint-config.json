@@ -157,6 +157,7 @@
               "github-env",
               "github-script-syntax",
               "hardcoded-container-credentials",
+              "hardcoded-registry-credentials",
               "if-always-true",
               "impostor-commit",
               "insecure-commands",
@@ -392,6 +393,7 @@
                   "github-env",
                   "github-script-syntax",
                   "hardcoded-container-credentials",
+                  "hardcoded-registry-credentials",
                   "if-always-true",
                   "impostor-commit",
                   "insecure-commands",
@@ -558,6 +560,7 @@
                     "github-env",
                     "github-script-syntax",
                     "hardcoded-container-credentials",
+                    "hardcoded-registry-credentials",
                     "if-always-true",
                     "impostor-commit",
                     "insecure-commands",
@@ -1370,6 +1373,10 @@
                     }
                   ],
                   "description": "The level of the rule: error, warn, info or off."
+                },
+                "pedantic": {
+                  "description": "Also report the pedantic checks, which are noisier. Unset, they run under the pedantic profile.",
+                  "type": "boolean"
                 }
               },
               "type": "object"
@@ -2178,6 +2185,28 @@
         },
         "hardcoded-container-credentials": {
           "description": "A password for a container registry is written directly in the workflow. Group: security. Profile: correctness. Default level: error. https://jactionlint.jdx.dev/rules#hardcoded-container-credentials",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "hardcoded-registry-credentials": {
+          "description": "A registry in dependabot.yml has a password, token or key written in plain text. Group: security. Profile: default. Default level: error. https://jactionlint.jdx.dev/rules#hardcoded-registry-credentials",
           "oneOf": [
             {
               "$ref": "#/definitions/level"

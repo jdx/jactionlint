@@ -1,0 +1,532 @@
+{
+  "version": 1,
+  "tool": "jactionlint",
+  "tool_version": "test",
+  "workflows": [
+    {
+      "path": ".github/workflows/broken.yaml",
+      "parsed": false,
+      "events": [],
+      "callable": false,
+      "permissions": {
+        "declared": false
+      },
+      "jobs": []
+    },
+    {
+      "path": ".github/workflows/ci.yaml",
+      "parsed": true,
+      "name": {
+        "value": "CI",
+        "location": {
+          "line": 1,
+          "column": 7
+        }
+      },
+      "events": [
+        {
+          "name": "push",
+          "location": {
+            "line": 3,
+            "column": 3
+          },
+          "filters": {
+            "branches": [
+              "main"
+            ]
+          }
+        },
+        {
+          "name": "pull_request",
+          "location": {
+            "line": 5,
+            "column": 3
+          },
+          "types": [
+            "opened",
+            "synchronize"
+          ]
+        }
+      ],
+      "callable": false,
+      "permissions": {
+        "declared": true,
+        "scopes": {
+          "contents": "read"
+        },
+        "location": {
+          "line": 7,
+          "column": 1
+        }
+      },
+      "concurrency": {
+        "form": "mapping",
+        "group": {
+          "value": "ci-${{ github.ref }}",
+          "dynamic": true,
+          "location": {
+            "line": 10,
+            "column": 10
+          }
+        },
+        "cancel_in_progress": "unknown",
+        "location": {
+          "line": 9,
+          "column": 1
+        }
+      },
+      "jobs": [
+        {
+          "id": "test",
+          "location": {
+            "line": 13,
+            "column": 3
+          },
+          "runs_on": [
+            "self-hosted",
+            "${{ matrix.os }}"
+          ],
+          "runs_on_dynamic": true,
+          "permissions": {
+            "declared": false
+          },
+          "effective_permissions": {
+            "source": "workflow",
+            "scopes": {
+              "contents": "read"
+            }
+          },
+          "timeout_minutes": {
+            "value": 0,
+            "dynamic": true,
+            "expression": "${{ fromJSON(vars.TIMEOUT) }}",
+            "location": {
+              "line": 15,
+              "column": 22
+            }
+          },
+          "steps": [
+            {
+              "index": 0,
+              "location": {
+                "line": 17,
+                "column": 9
+              },
+              "kind": "action",
+              "uses": {
+                "uses": "actions/checkout@v4",
+                "kind": "action",
+                "repository": "actions/checkout",
+                "ref": "v4",
+                "ref_kind": "semver-tag"
+              }
+            },
+            {
+              "index": 1,
+              "location": {
+                "line": 18,
+                "column": 9
+              },
+              "kind": "action",
+              "uses": {
+                "uses": "./.github/actions/setup",
+                "kind": "local",
+                "path": "./.github/actions/setup"
+              },
+              "inputs": [
+                {
+                  "name": "cache",
+                  "value": "${{ github.event_name == 'push' }}",
+                  "dynamic": true,
+                  "location": {
+                    "line": 20,
+                    "column": 18
+                  }
+                },
+                {
+                  "name": "version",
+                  "value": "20",
+                  "location": {
+                    "line": 21,
+                    "column": 20
+                  }
+                }
+              ]
+            },
+            {
+              "index": 2,
+              "location": {
+                "line": 22,
+                "column": 9
+              },
+              "kind": "run",
+              "shell": {
+                "value": "bash",
+                "location": {
+                  "line": 23,
+                  "column": 16
+                }
+              }
+            }
+          ]
+        },
+        {
+          "id": "release",
+          "location": {
+            "line": 24,
+            "column": 3
+          },
+          "needs": [
+            "test"
+          ],
+          "permissions": {
+            "declared": true,
+            "scopes": {
+              "contents": "write",
+              "id-token": "write"
+            },
+            "location": {
+              "line": 27,
+              "column": 5
+            }
+          },
+          "effective_permissions": {
+            "source": "job",
+            "scopes": {
+              "contents": "write",
+              "id-token": "write"
+            }
+          },
+          "if": "github.ref_type == 'tag'",
+          "uses": {
+            "uses": "./.github/workflows/release.yaml",
+            "kind": "local",
+            "path": "./.github/workflows/release.yaml",
+            "secrets_inherit": true,
+            "inputs": [
+              {
+                "name": "channel",
+                "value": "stable",
+                "location": {
+                  "line": 32,
+                  "column": 16
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "path": ".github/workflows/orphan.yaml",
+      "parsed": true,
+      "events": [
+        {
+          "name": "workflow_call",
+          "location": {
+            "line": 2,
+            "column": 3
+          }
+        }
+      ],
+      "callable": true,
+      "called_by": {
+        "callers": [],
+        "events": [],
+        "known": false
+      },
+      "permissions": {
+        "declared": false
+      },
+      "jobs": [
+        {
+          "id": "noop",
+          "location": {
+            "line": 4,
+            "column": 3
+          },
+          "runs_on": [
+            "ubuntu-latest"
+          ],
+          "permissions": {
+            "declared": false
+          },
+          "effective_permissions": {
+            "source": "repository-setting"
+          },
+          "steps": [
+            {
+              "index": 0,
+              "location": {
+                "line": 7,
+                "column": 9
+              },
+              "kind": "run"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": ".github/workflows/release.yaml",
+      "parsed": true,
+      "name": {
+        "value": "Release",
+        "location": {
+          "line": 1,
+          "column": 7
+        }
+      },
+      "events": [
+        {
+          "name": "workflow_call",
+          "location": {
+            "line": 3,
+            "column": 3
+          },
+          "inputs": [
+            "channel"
+          ]
+        },
+        {
+          "name": "workflow_dispatch",
+          "location": {
+            "line": 7,
+            "column": 3
+          }
+        }
+      ],
+      "callable": true,
+      "called_by": {
+        "callers": [
+          ".github/workflows/ci.yaml"
+        ],
+        "events": [
+          "pull_request",
+          "push"
+        ],
+        "known": true
+      },
+      "permissions": {
+        "declared": false
+      },
+      "concurrency": {
+        "form": "mapping",
+        "group": {
+          "value": "release",
+          "location": {
+            "line": 9,
+            "column": 10
+          }
+        },
+        "cancel_in_progress": "false",
+        "location": {
+          "line": 8,
+          "column": 1
+        }
+      },
+      "jobs": [
+        {
+          "id": "publish",
+          "location": {
+            "line": 12,
+            "column": 3
+          },
+          "runs_on": [
+            "ubuntu-latest"
+          ],
+          "permissions": {
+            "declared": false
+          },
+          "effective_permissions": {
+            "source": "repository-setting"
+          },
+          "environment": {
+            "value": "production",
+            "location": {
+              "line": 14,
+              "column": 18
+            }
+          },
+          "timeout_minutes": {
+            "value": 30,
+            "location": {
+              "line": 15,
+              "column": 22
+            }
+          },
+          "steps": [
+            {
+              "index": 0,
+              "location": {
+                "line": 17,
+                "column": 9
+              },
+              "kind": "action",
+              "uses": {
+                "uses": "actions/checkout@0123456789abcdef0123456789abcdef01234567",
+                "kind": "action",
+                "repository": "actions/checkout",
+                "ref": "0123456789abcdef0123456789abcdef01234567",
+                "ref_kind": "full-sha"
+              }
+            },
+            {
+              "index": 1,
+              "location": {
+                "line": 18,
+                "column": 9
+              },
+              "kind": "run"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "actions": [
+    {
+      "path": ".github/actions/setup/action.yml",
+      "parsed": true,
+      "name": {
+        "value": "Setup",
+        "location": {
+          "line": 1,
+          "column": 7
+        }
+      },
+      "using": "composite",
+      "inputs": [
+        "cache",
+        "version"
+      ],
+      "called_by": {
+        "known": true,
+        "callers": [
+          {
+            "workflow": ".github/workflows/ci.yaml",
+            "events": [
+              "pull_request",
+              "push"
+            ],
+            "inputs": [
+              {
+                "name": "cache",
+                "value": "${{ github.event_name == 'push' }}",
+                "dynamic": true,
+                "location": {
+                  "line": 20,
+                  "column": 18
+                }
+              },
+              {
+                "name": "version",
+                "value": "20",
+                "location": {
+                  "line": 21,
+                  "column": 20
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "steps": [
+        {
+          "index": 0,
+          "location": {
+            "line": 10,
+            "column": 7
+          },
+          "kind": "action",
+          "if": "inputs.cache == 'true'",
+          "uses": {
+            "uses": "actions/cache@v4",
+            "kind": "action",
+            "repository": "actions/cache",
+            "ref": "v4",
+            "ref_kind": "semver-tag"
+          },
+          "inputs": [
+            {
+              "name": "key",
+              "value": "${{ inputs.version }}",
+              "dynamic": true,
+              "location": {
+                "line": 14,
+                "column": 14
+              }
+            },
+            {
+              "name": "path",
+              "value": "~/.cache",
+              "location": {
+                "line": 13,
+                "column": 15
+              }
+            }
+          ]
+        },
+        {
+          "index": 1,
+          "location": {
+            "line": 15,
+            "column": 7
+          },
+          "kind": "run",
+          "shell": {
+            "value": "bash",
+            "location": {
+              "line": 16,
+              "column": 14
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "calls": [
+    {
+      "kind": "reusable-workflow",
+      "from": ".github/workflows/ci.yaml",
+      "job": "release",
+      "location": {
+        "line": 24,
+        "column": 3
+      },
+      "to": ".github/workflows/release.yaml",
+      "permissions": {
+        "source": "job",
+        "scopes": {
+          "contents": "write",
+          "id-token": "write"
+        }
+      },
+      "events": [
+        "pull_request",
+        "push"
+      ]
+    },
+    {
+      "kind": "action",
+      "from": ".github/workflows/ci.yaml",
+      "job": "test",
+      "step": 1,
+      "location": {
+        "line": 18,
+        "column": 9
+      },
+      "to": ".github/actions/setup",
+      "permissions": {
+        "source": "workflow",
+        "scopes": {
+          "contents": "read"
+        }
+      },
+      "events": [
+        "pull_request",
+        "push"
+      ]
+    }
+  ]
+}
