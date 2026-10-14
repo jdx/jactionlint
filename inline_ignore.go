@@ -177,11 +177,13 @@ func parseInlineIgnoresWithOrphans(src []byte) ([]inlineIgnore, []*inlineIgnoreE
 	}
 
 	for i, line := range lines {
-		comment, blank := isCommentOrBlank(line)
+		_, blank := isCommentOrBlank(line)
 		if blank {
 			continue
 		}
-		if comment {
+		// Only a real YAML comment on a line of its own is a directive. A line of a block scalar or of a
+		// multi-line quoted scalar which starts with '#' is text, so the comment index decides.
+		if c := comments.At(i + 1); c != nil && !c.Inline {
 			m := inlineIgnoreRe.FindStringSubmatch(line)
 			if m == nil {
 				continue

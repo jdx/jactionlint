@@ -102,7 +102,8 @@ Things which key on the line of a finding see this difference when moving from a
 
 - **An ignore comment keeps working.** A `# jactionlint ignore=shellcheck` comment on the step (above it, or at the end of its first
   line), above the `run:` key, or at the end of the `run: |` line covers every line of the script, because a comment covers the
-  line it belongs to and everything nested under it. A comment you moved to a script line to ignore one finding covers that line only.
+  line it belongs to and everything nested under it. A line of the script which starts with `# jactionlint ignore=` is not a comment
+  but text of the script, so it ignores nothing: put the comment on the `run:` key or the step.
 - **An `ignore:` pattern or `--ignore` is not tied to a line.** It matches the message or the rule ID, so it is not affected.
 - **A line-based tool needs the new lines.** A problem matcher or a script that keeps a list of `file:line` pairs written for
   actionlint has to be refreshed once. A [baseline](usage.md#baseline) written by jactionlint does not use line numbers.
