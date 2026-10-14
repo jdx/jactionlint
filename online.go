@@ -85,7 +85,7 @@ func (l *Linter) onlineSession(cfg *Config) (*onlineSession, error) {
 			trusted := o.opts.APIURL != "" || eff.APIURL == "" || (cfg != nil && cfg.userOwned)
 			c, err := newDefaultGitHubClient(defaultClientOptions{
 				Options: eff, OptionsTrusted: trusted, TTL: ttl,
-				Notify: l.warnOnline, Debug: l.debug, Verbose: l.logf, Context: o.ctx,
+				Notify: l.warnOnline, Note: l.noteOnline, Debug: l.debug, Verbose: l.logf, Context: o.ctx,
 			})
 			if err != nil {
 				o.err = err
@@ -244,6 +244,15 @@ func (l *Linter) OnlineFailed() bool {
 // the deprecated keys of the configuration it goes to the log output, or into the output document
 // of a structured format.
 func (l *Linter) warnOnline(msg string) {
+	l.reportOnline("warning:", msg)
+}
+
+// noteOnline is warnOnline for a notice, which is no problem of the run: it is printed as a "note:".
+func (l *Linter) noteOnline(msg string) {
+	l.reportOnline("note:", msg)
+}
+
+func (l *Linter) reportOnline(prefix, msg string) {
 	l.notesMu.Lock()
 	for _, n := range l.notes {
 		if n == msg {
@@ -256,5 +265,5 @@ func (l *Linter) warnOnline(msg string) {
 	if structured(l.printer) {
 		return
 	}
-	fmt.Fprintln(l.logOut, "warning:", msg)
+	fmt.Fprintln(l.logOut, prefix, msg)
 }

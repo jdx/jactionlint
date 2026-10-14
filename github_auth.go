@@ -77,7 +77,7 @@ func validToken(s string) bool {
 // to the next source. A token found in the wrong shape is a notice too, and never printed.
 func (d tokenDiscovery) discover(ctx context.Context) (tok discoveredToken, notices []string) {
 	if !d.trusted {
-		return discoveredToken{}, []string{"the API URL comes from the config file of the repository, so no token is sent to it. set GITHUB_API_URL or pass --online-api-url to choose the host yourself"}
+		return discoveredToken{}, []string{"the API URL comes from the config file of the repository, so no token is sent to it. pass --online-api-url, or set api-url in your user-global config or in the file of --config-file, to choose the host yourself (GITHUB_API_URL cannot replace it)"}
 	}
 	if d.tokenEnv != "" {
 		v := strings.TrimSpace(d.getenv(d.tokenEnv))

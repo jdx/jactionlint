@@ -3,8 +3,6 @@ package jactionlint
 import (
 	"context"
 	"errors"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -189,51 +187,5 @@ func TestReleaseDateTime(t *testing.T) {
 	}
 	if _, _, ok := (GitHubReleaseDate{}).Time(); ok {
 		t.Error("no date")
-	}
-}
-
-// The example of the document is what the linter prints.
-func TestActionReleaseCooldownDocsExample(t *testing.T) {
-	b, err := os.ReadFile(filepath.Join("docs", "checks.md"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	doc := strings.ReplaceAll(string(b), "\r\n", "\n")
-	start := strings.Index(doc, `<a id="check-action-release-cooldown"></a>`)
-	if start < 0 {
-		t.Fatal("no section")
-	}
-	section := doc[start+1:]
-	if i := strings.Index(section, `<a id="`); i >= 0 {
-		section = section[:i]
-	}
-	input, ok := docsBlock(section, "Example input:\n\n```yaml\n")
-	if !ok {
-		t.Fatal("no example input")
-	}
-	output, ok := docsBlock(section, "Output:\n<!-- Skip update output -->\n```\n")
-	if !ok {
-		t.Fatal("no output")
-	}
-	cfgText, ok := docsBlock(section, "```yaml\nrules:\n")
-	if !ok {
-		t.Fatal("no configuration")
-	}
-	cfg, err := parseConfig([]byte("rules:\n" + cfgText + "  archived-uses: off\n  impostor-commit: off\n  known-vulnerable-actions: off\n  ref-confusion: off\n  ref-version-mismatch: off\n  stale-action-refs: off\n"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	var out strings.Builder
-	l, err := NewLinter(&out, &LinterOptions{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	l.online = onlineSettings{enabled: true, client: onlineFixtureClient(t)}
-	l.defaultConfig = withFixtureRules(cfg)
-	if _, err := l.Lint("test.yaml", []byte(input), nil); err != nil {
-		t.Fatal(err)
-	}
-	if got, want := strings.TrimRight(out.String(), "\n"), strings.TrimRight(output, "\n"); got != want {
-		t.Errorf("the output in docs/checks.md is outdated.\ngot:\n%s\nwant:\n%s", got, want)
 	}
 }

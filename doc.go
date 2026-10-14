@@ -23,8 +23,8 @@ some breaking changes.
 # Go version compatibility
 
 Minimum supported Go version is written in go.mod file in this library. That said, older Go versions
-are actually not tested on CI. Last two major Go versions are recommended because they're tested on
-CI. For example, when the latest Go version is v1.22, v1.21 and v1.22 are nice to use.
+are actually not tested on CI. CI tests with one Go version, the toolchain which go.mod names, so
+that version or a newer one is recommended.
 
 https://github.com/jdx/jactionlint/blob/main/go.mod
 

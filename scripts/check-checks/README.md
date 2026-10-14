@@ -80,8 +80,9 @@ The parts, in order:
 1. **Anchor.** `<a id="..."></a>` alone on a line. The id is not empty and appears once in the file. Several anchor lines in a row may precede one heading. The anchor is the public name of the section: `jactionlint --explain` and the documentation URLs use it. An anchor that no `## ` heading follows, such as one above a `###` heading, starts no section, but its id must be unique too.
 2. **Heading.** The next line starts with `## ` and its text appears once in the file. The text also selects the kind of file the examples are (see below).
 3. **Example input.** The line `Example input:`, then a fence of exactly ```` ```yaml ````. The input is not empty and must make jactionlint report at least one finding, otherwise the tool stops with `the input example caused no error`.
-4. **Output.** The line `Output:`, then a fence of exactly three backticks. The tool replaces the content of the fence.
-5. **Link.** A line that starts with `[Playground](` and ends with `)`. The tool replaces the line.
+4. **Configuration and files (optional).** The blocks `Example config:` and `Example file: PATH` that an example needs, between the input and the output (see below).
+5. **Output.** The line `Output:`, then a fence of exactly three backticks. The tool replaces the content of the fence.
+6. **Link.** A line that starts with `[Playground](` and ends with `)`. The tool replaces the line.
 
 Prose goes anywhere else in the section: between the heading and the first example, after the link, between examples. A section may have several examples: write another `Example input:` after the link, and each one is linted on its own. The page may use `###` headings inside a section.
 
@@ -97,44 +98,107 @@ Every section needs at least one example. A `## ` heading with no `Example input
 
 ### Examples that need the online checks
 
-Start the example input with the line `# requires --online`, as its very first line. The tool then lints the example with the online checks on, using the recorded GitHub answers of `testdata/online/github.json` instead of the network, and with `GITHUB_REPOSITORY` set to `example/environments`. The playground has no network, so give such a section the skip marker for the link (see below).
+Put the line `# requires --online` in the head of the example input (the marker lines at the very top). The tool then lints the example with the online checks on, using the recorded GitHub answers of `testdata/online/github.json` instead of the network, and with `GITHUB_REPOSITORY` set to `example/environments`. The playground has no network, so give such a section the skip marker for the link (see below).
 
-### Hand-written outputs and links
+### Examples that need another configuration, rules or files
+
+An example that shows a rule the example configuration turns off, a pedantic or opt-in rule, a check of several files, or a message about a file of the repository does not need a hand-written output. Describe what it needs and the tool generates the output like any other. Three things set it up. Each applies to one example: the next `Example input:` of the section starts again from the example configuration.
+
+**Marker lines.** Comment lines at the very top of the input, before any other line, choose how it runs. The head ends at the first line that is not a marker, so a comment of the example that follows stays a comment. The playground link drops them like every comment line.
+
+| Marker | Effect |
+| --- | --- |
+| `# requires --online` | The online checks, with the recorded answers (see above). |
+| `# without shellcheck` | Run with `--shellcheck=`, whether or not the machine has the command: for a check that runs only without shellcheck. |
+| `# select: id[,id]` | Report only the findings of these rules, as `--select` does. A rule that is off in the configuration runs at its default level. Use it when the output of the section shows one rule (or a few) and other rules of the example would add findings. An unknown ID fails the tool. |
+| `# profile: pedantic` | Run the profile, as `--profile` does. |
+| `# file: .github/workflows/ci.yml` | Name the example. Findings print this path instead of `test.yaml`, and the project has the file, so a rule that reads the workflows of the repository sees it. |
+
+**`Example config:`.** The line, a blank line and a fence of exactly ```` ```yaml ````, after the input. The block is the configuration file the example runs with. It is merged over the [example configuration](#the-example-configuration): a key of the block replaces the same key, and an entry of `rules` replaces the entry of the same rule, so every other rule keeps its level. To turn on an opt-in rule write `rules: {my-rule: warn}`. A section has one `Example config:` per example, the block is not empty and the configuration must be valid.
+
+**`Example file:`.** The line `Example file: PATH`, a blank line and a fence, after the input. The tool writes the content to PATH in a temporary directory that is the repository of the example (it has `.git`, `.github/workflows` and nothing else), and lints the example there. The path is relative to the repository, uses slashes, and has no empty, `.`, `..` or `.git` part. The fence names any language (```` ```yaml ````, ```` ```go ````), and an empty fence makes an empty file, which is how an example shows that a directory exists. Use it for the local action or reusable workflow that the example calls, the files that a path filter matches, or the second workflow of a deadlock. Because the repository is a directory of its own, a message about a file of the jactionlint repository cannot leak into the output.
+
+This is a complete example. Its rules are on in no profile of the default configuration, so it says which one it shows:
+
+````markdown
+Example input:
+
+```yaml
+# select: unknown-action-input
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: ./.github/actions/greet
+        with:
+          nmae: octocat
+```
+
+Example file: .github/actions/greet/action.yml
+
+```yaml
+name: Greet
+description: Says hello
+inputs:
+  name:
+    description: Who to greet
+runs:
+  using: composite
+  steps:
+    - run: echo hello
+      shell: bash
+```
+
+Example config:
+
+```yaml
+rules:
+  unknown-action-input: warn
+```
+
+Output:
+
+```
+THIS CODE BLOCK WILL BE AUTO-GENERATED
+```
+
+<!-- Skip playground link -->
+````
+
+The blocks and the markers reach the documentation as they are. Prose of the section should say, in a sentence, what the example config and the files are for, and must not repeat the config in a second block: a second copy is not checked.
+
+### Playground links and hand-written outputs
 
 Two comments switch the generation off for one example. Write them as plain lines of the page, outside any code fence:
 
-- `<!-- Skip update output -->` goes after the `Output:` line and before the fence. The tool keeps the fence as you wrote it.
-- `<!-- Skip playground link -->` takes the place of the `[Playground](...)` line.
+- `<!-- Skip playground link -->` takes the place of the `[Playground](...)` line. The playground lints with the example configuration and one file, so it cannot reproduce an example that needs another configuration, a marker or a file. `docs/tests/wasm.test.ts` decodes every link and compares it with the output, so such an example must keep this comment.
+- `<!-- Skip update output -->` goes after the `Output:` line and before the fence. The tool keeps the fence as you wrote it. Do not use it on the checks page (see below).
 
 Without a link line or a skip comment after the output, the section fails with `unexpected state "after output"`.
 
-Skip a part when the example cannot show what the tool generates:
+Skip the link whenever the example runs with a configuration, a marker or files. Never skip the output of the checks page: a skipped output is not verified, goes stale when a message changes, and `TestChecksPageSkipsNoOutput` fails when the page has one. The tool still supports the comment for other documents and for its own tests.
 
-| The rule that the example shows | What to write |
+| The example shows | What to write |
 | --- | --- |
-| Runs under the example configuration | The generated output and link, with no marker. |
-| Does not run under it: a rule of the `pedantic` profile, an opt-in rule, a rule that needs configuration | Both skip comments, the output by hand, and the `rules:` block of the configuration that enables the rule right after the example. |
-| Is an online rule | `# requires --online` and the generated output, with the link skipped. |
-| Needs several files | Both skip comments and a Go test that lints the files and compares the output. |
+| A rule that runs under the example configuration | The generated output and link, with no marker. |
+| A rule of the `pedantic` profile, an opt-in rule, a rule that needs configuration | `# select:` when other rules add findings, an `Example config:` block, the generated output and `<!-- Skip playground link -->`. |
+| Several files, or a message about a file of the repository | `Example file:` blocks (and `# file:` to name the example), the generated output and `<!-- Skip playground link -->`. |
+| An online rule | `# requires --online`, the generated output and `<!-- Skip playground link -->`. |
 
 [The contributing guide](../../CONTRIBUTING.md#about-checks-doc) owns the policy of which rules get which kind of example.
-
-A skipped output is never verified by this tool, so it goes stale when a message changes. Only some Go tests read hand-written outputs and compare them with the linter:
-
-- `TestPolicyDocsExamples` lints the examples of the policy rules with the first `rules:` block of the section as the configuration.
-- One test per section covers the others: `TestActionsLockDocsExample`, `TestConcurrencyDeadlockDocsExample`, `TestEventNameNeverReceivedDocsExample`, `TestFailFastDocsExample` and `TestUnmatchedPathsFilterDocsExample`.
-
-These tests find the blocks by their exact surrounding lines, so copy the layout of a covered section. The output of a skipped example in any other section is checked by nothing: run the example with `jactionlint --no-color` and compare.
 
 ## How it works
 
 1. The tool parses the page with a small state machine: anchor, heading, example input, output header, output block and link.
-2. For every example input it lints the text with the `jactionlint` package of the working tree, not an installed binary, under the configuration of `internal/exampleconfig` and with these settings:
-   - The file has the name of its kind (see above), so findings read `test.yaml:5:14`.
+2. For every example input it lints the text with the `jactionlint` package of the working tree, not an installed binary, under the configuration of `internal/exampleconfig` (with the `Example config:` block merged over it) and with these settings:
+   - The example runs in a new temporary directory that is a repository: it has `.git`, `.github/workflows` and the `Example file:` blocks, and the tool changes into it. A file of the jactionlint repository is never seen, so a message about a missing file is the same on every machine.
+   - The file has the name of its kind (see above), or the path of `# file:`, so findings read `test.yaml:5:14`.
+   - The markers `# select:` and `# profile:` set the options `--select` and `--profile`.
    - Color is off.
    - `shellcheck` and `pyflakes` run from `PATH`.
    - The date is a fixed day (`exampleDay` in `main.go`), so an output does not change when a date-dependent check passes, such as the retirement of a runner label.
-   - The repository root in a message is replaced by `/path/to/repo`, so an output does not depend on your file system.
+   - The root of the temporary repository in a message is replaced by `/path/to/repo`, so an output does not depend on your file system.
 3. It writes the findings into the output block and the permalink into the link line.
 4. It compares the result with the original. `check-checks -fix` writes the file. Without that flag the tool prints a diff and exits with status 1.
 
@@ -153,7 +217,9 @@ The link goes to the site root on purpose. A script of the home page moves a has
 ## Pitfalls
 
 - Write the markers of the section as plain lines. A skip comment inside a code fence is text of the fence, not a marker.
-- The fences are exact: ```` ```yaml ```` around an input and three backticks around an output. Any other info string, such as ```` ```text ````, is not recognized.
+- The fences are exact: ```` ```yaml ```` around an input and an `Example config:`, and three backticks around an output. Any other info string, such as ```` ```text ````, is not recognized there. An `Example file:` fence may name any language.
+- `Example config:` and `Example file:` go between the input and `Output:`, and a section must not repeat the config in another block: the copy is not checked and goes stale.
+- A skipped playground link is not a reason to skip the output. Only `<!-- Skip update output -->` stops the check, and `TestChecksPageSkipsNoOutput` rejects it on the checks page.
 - Do not edit a generated block or a `[Playground]` link by hand. The next run overwrites them.
 - The index at the top of the page is written by hand. The tool leaves everything above the first anchor alone, and `TestChecksIndexListsEverySection` keeps the index complete.
 - A change to the message of any rule changes the output of every example that shows it. Review the diff before you commit it.
@@ -166,7 +232,8 @@ The link goes to the site root on purpose. A script of the home page moves a has
 - `TestEveryRuleCanBeExplained` and `TestRuleRegistryIsWellFormed` require an anchor for the `DocsAnchor` of every rule.
 - `TestActionScopeIsDocumented` requires the section `check-composite-actions` to name every rule ID in backticks.
 - `TestChecksIndexListsEverySection` requires the index above the first anchor of the page to link every section and every subsection that has an anchor of its own. Add the link there when you add a section.
-- The `Test...DocsExample` tests of the previous section lint the hand-written outputs.
+- `TestChecksPageSkipsNoOutput` (in this directory) fails when the checks page has an `<!-- Skip update output -->` line.
+- `TestActionsLockDocsExample` lints the repository of the lock file section, whose example is a whole repository and not an `Example input:`.
 
 ## Next steps
 

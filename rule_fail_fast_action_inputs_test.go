@@ -1,8 +1,6 @@
 package jactionlint
 
 import (
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -227,51 +225,6 @@ jobs:
 		if e.ID == "fail-fast-action-inputs" {
 			t.Errorf("left: %v", e)
 		}
-	}
-}
-
-// What the docs show is what the rule prints.
-func TestFailFastDocsExample(t *testing.T) {
-	b, err := os.ReadFile(filepath.Join("docs", "checks.md"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	doc := strings.ReplaceAll(string(b), "\r\n", "\n")
-	start := strings.Index(doc, `<a id="check-fail-fast-action-inputs"></a>`)
-	if start < 0 {
-		t.Fatal("no section")
-	}
-	section := doc[start+1:]
-	if i := strings.Index(section, `<a id="`); i >= 0 {
-		section = section[:i]
-	}
-	input, ok := docsBlock(section, "Example input:\n\n```yaml\n")
-	if !ok {
-		t.Fatal("no example input")
-	}
-	output, ok := docsBlock(section, "Output:\n<!-- Skip update output -->\n```\n")
-	if !ok {
-		t.Fatal("no output block")
-	}
-	cfgText, ok := docsBlock(section, "```yaml\nrules:\n")
-	if !ok {
-		t.Fatal("no rules block")
-	}
-	cfg, err := parseConfig([]byte("rules:\n" + cfgText))
-	if err != nil {
-		t.Fatal(err)
-	}
-	var out strings.Builder
-	l, err := NewLinter(&out, &LinterOptions{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	l.defaultConfig = withFixtureRules(cfg)
-	if _, err := l.Lint("test.yaml", []byte(input), nil); err != nil {
-		t.Fatal(err)
-	}
-	if diff := cmp.Diff(strings.TrimRight(output, "\n"), strings.TrimRight(out.String(), "\n")); diff != "" {
-		t.Errorf("the output in docs/checks.md is outdated (-docs +linter):\n%s", diff)
 	}
 }
 

@@ -125,7 +125,8 @@ type RuleInfo struct {
 	// Profile is the first profile which enables the rule. The empty value means that no profile
 	// enables the rule; it only runs when the configuration turns it on.
 	Profile Profile
-	// Online is whether the rule needs network access. Online rules run only with --online and are
+	// Online is whether the rule needs the GitHub API. Online rules run only when the online checks are on
+	// (--online, "online: true" in the configuration, or an online mode such as "cache" or "strict") and are
 	// independent of the profile.
 	Online bool
 	// OptIn is whether the rule runs only when the "rules" of the configuration has an entry for it, whatever the profile and

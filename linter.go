@@ -149,9 +149,12 @@ type LinterOptions struct {
 	// MinSeverity hides the errors less severe than it. The zero value shows every error. For example
 	// SeverityWarning hides the errors of info level.
 	MinSeverity Severity
-	// Online turns on the rules which query the GitHub API: impostor-commit, known-vulnerable-actions,
-	// ref-confusion, stale-action-refs, archived-uses and ref-version-mismatch (and the pinning
-	// fix of unpinned-uses, see Error.Fix). Nothing reaches the network when it is false. The token is
+	// Online turns on the rules which query the GitHub API (the ones which Rules marks as Online, such as
+	// impostor-commit and known-vulnerable-actions, and the pinning fix of unpinned-uses, see Error.Fix).
+	// Nothing reaches the network while the online checks are off. They are off unless this is true, the
+	// configuration sets "online: true", or OnlineOptions.Mode (or the "mode" of "online-options") is
+	// "cache" or "strict". A mode in the configuration does not turn them on when it also says
+	// "online: false"; OnlineOptions.Mode of the options does. The token is
 	// read from $GITHUB_TOKEN or $GH_TOKEN; without one the API allows very few requests. When the
 	// API cannot be used (rate limit, no network) the online rules stop with one warning. It
 	// is an error in builds without network access such as the WebAssembly one, unless
@@ -268,8 +271,12 @@ type Linter struct {
 // NewLinter creates a new Linter instance.
 // The out parameter is used to output errors from Linter instance. Set io.Discard if you don't
 // want the outputs.
-// The opts parameter is LinterOptions instance which configures behavior of linting.
+// The opts parameter is LinterOptions instance which configures behavior of linting. Nil means the zero
+// value, the default behavior.
 func NewLinter(out io.Writer, opts *LinterOptions) (*Linter, error) {
+	if opts == nil {
+		opts = &LinterOptions{}
+	}
 	level := LogLevelNone
 	if opts.Verbose {
 		level = LogLevelVerbose
@@ -511,10 +518,10 @@ func (l *Linter) GenerateDefaultConfig(dir string) error {
 	return nil
 }
 
-// LintRepository lints YAML workflow files and outputs the errors to given writer. It finds the
-// nearest `.github/workflows` directory based on `dir` and applies lint rules to all YAML workflow
-// files under the directory. When the directory path is empty, the current working directory will
-// be used instead.
+// LintRepository lints the files of a repository and outputs the errors to given writer. It finds the
+// nearest project based on `dir` and lints the YAML workflow files directly in its `.github/workflows`
+// directory, the composite actions (action.yml files), `.github/dependabot.yml` and the Actions lock
+// file. When the directory path is empty, the current working directory will be used instead.
 func (l *Linter) LintRepository(dir string) ([]*Error, error) {
 	if dir == "" {
 		dir = l.cwd
@@ -1294,7 +1301,7 @@ func (l *Linter) runInfo() runInfo {
 	return runInfo{notes: notes, online: l.OnlineCoverage(), tools: l.ExternalTools(), changed: l.changedInfo()}
 }
 
-// ExternalTools says whether shellcheck and pyflakes ran in this run, keyed by "shellcheck" and "pyflakes". It
+// ExternalTools says whether shellcheck, pyflakes and node ran in this run, keyed by "shellcheck", "pyflakes" and "node". It
 // has an entry for each tool which some checked workflow or action needed, and it is nil when none did. A tool
 // which was not found checked nothing: SkippedScripts is the number of scripts it would have checked.
 func (l *Linter) ExternalTools() map[string]ExternalToolStatus {

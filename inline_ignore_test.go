@@ -248,3 +248,34 @@ func TestUnusedTrailingIgnoreFix(t *testing.T) {
 		})
 	}
 }
+
+// Only a YAML comment is a directive: a line of a block scalar which looks like one is script text.
+func TestParseInlineIgnoresOwnLineDirectiveNeedsRealComment(t *testing.T) {
+	tests := []struct {
+		name    string
+		src     string
+		ignores int
+		start   int // the first line covered, when ignores is 1
+		orphans int
+	}{
+		{"real comment", "steps:\n  # jactionlint ignore=x\n  - run: echo\n", 1, 3, 0},
+		{"block scalar line", "steps:\n  - run: |\n      # jactionlint ignore=x\n      echo a\n", 0, 0, 0},
+		{"block scalar line then a real comment", "steps:\n  - run: |\n      # jactionlint ignore=x\n      echo a\n  # jactionlint ignore=y\n  - run: b\n", 1, 6, 0},
+		{"multi-line quoted scalar line", "a: \"x\n  # jactionlint ignore=x\n  y\"\nb: 1\n", 0, 0, 0},
+		{"orphan directive", "steps:\n  - run: echo\n  # jactionlint ignore=x\n", 0, 0, 1},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			ignores, orphans, errs := parseInlineIgnoresWithOrphans([]byte(tc.src))
+			if len(errs) != 0 {
+				t.Fatal(errs)
+			}
+			if len(ignores) != tc.ignores || len(orphans) != tc.orphans {
+				t.Fatalf("want %d ignores and %d orphans but have %v and %v", tc.ignores, tc.orphans, ignores, orphans)
+			}
+			if tc.ignores == 1 && ignores[0].start != tc.start {
+				t.Errorf("want the target line %d but have %d", tc.start, ignores[0].start)
+			}
+		})
+	}
+}

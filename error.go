@@ -164,9 +164,20 @@ func (f *Fix) validFor(src []byte) bool {
 	return true
 }
 
-// Error returns summary of the error as string.
+// Error returns summary of the error as string. It keeps the form of actionlint, so the name in the
+// brackets is the Kind, which several rules share and which is not always a rule ID ("timeout-check").
+// Use ID, or PrettyPrint which shows it, for the name that the configuration and --ignore accept.
 func (e *Error) Error() string {
 	return fmt.Sprintf("%s:%d:%d: %s [%s]", e.Filepath, e.Line, e.Column, e.Message, e.Kind)
+}
+
+// label is the name printed in the brackets by PrettyPrint: the rule ID, which is what the configuration,
+// --ignore and the ignore comments accept. It is the Kind only for an error without an ID.
+func (e *Error) label() string {
+	if e.ID != "" {
+		return e.ID
+	}
+	return e.Kind
 }
 
 func (e *Error) String() string {
@@ -238,20 +249,20 @@ func (e *Error) templateFields(x *lineIndex) *ErrorTemplateFields {
 
 // PrettyPrint prints the error with user-friendly way. It prints file name, source position, error
 // message with colorful output and source snippet with indicator. When nil is set to source, no
-// source snippet is not printed. To disable colorful output, set true to fatih/color.NoColor.
+// source snippet is not printed. The name at the end of the first line is the rule ID, like the command
+// prints it. To disable colorful output, set true to fatih/color.NoColor.
 func (e *Error) PrettyPrint(w io.Writer, source []byte) {
 	var x *lineIndex
 	if len(source) > 0 {
 		x = newLineIndex(source)
 	}
-	e.prettyPrint(w, x, false)
+	e.prettyPrint(w, x)
 }
 
-// prettyPrint is PrettyPrint which can show the rule ID instead of the kind. The command line does; the
-// exported method keeps the kind of the library API of actionlint. The output format of an
+// prettyPrint is PrettyPrint with the lines of the source found by the index. The output format of an
 // error of error level is the one of the former versions. Errors of the other levels are prefixed
 // with their level so that they can be told apart from errors.
-func (e *Error) prettyPrint(w io.Writer, x *lineIndex, showID bool) {
+func (e *Error) prettyPrint(w io.Writer, x *lineIndex) {
 	yellow.Fprint(w, e.Filepath)
 	gray.Fprint(w, ":")
 	fmt.Fprint(w, e.Line)
@@ -266,13 +277,7 @@ func (e *Error) prettyPrint(w io.Writer, x *lineIndex, showID bool) {
 		prefix = "info: "
 	}
 	bold.Fprint(w, prefix+e.Message)
-	// The ID is what the configuration, --ignore and the ignore comments accept. The kind is shared by
-	// several rules ("action", "expression") or is no ID at all ("timeout-check")
-	label := e.Kind
-	if showID && e.ID != "" {
-		label = e.ID
-	}
-	gray.Fprintf(w, " [%s]\n", label)
+	gray.Fprintf(w, " [%s]\n", e.label())
 
 	if x == nil || len(x.src) == 0 || e.Line <= 0 {
 		return
@@ -481,22 +486,25 @@ func equalsErrors(lhs, rhs *Error) bool {
 type ErrorTemplateFields struct {
 	// Message is error message body.
 	Message string `json:"message"`
-	// Filepath is a canonical relative file path. This is empty when input was read from stdin.
-	// When encoding into JSON, this field may be omitted when the file path is empty.
+	// Filepath is the file path as the linter reports it, relative to the working directory when
+	// possible. For input read from stdin it is "<stdin>", or the value of LinterOptions.StdinFileName.
+	// The linter always sets it, so the JSON has it; omitempty only matters for an Error built by hand.
 	Filepath string `json:"filepath,omitempty"`
 	// Line is a line number of error position.
 	Line int `json:"line"`
 	// Column is a column number of error position.
 	Column int `json:"column"`
-	// Kind is a rule name the error belongs to.
+	// Kind is the legacy name of the checker which reported the error. Several rules share one kind, and
+	// it is not always a rule ID. Use ID.
 	Kind string `json:"kind"`
 	// Snippet is a code snippet and indicator to indicate where the error occurred.
 	// When encoding into JSON, this field may be omitted when the snippet is empty.
 	Snippet string `json:"snippet,omitempty"`
 	// EndColumn is a column number where the error indicator (^~~~~~~) ends. When no indicator
 	// can be shown, EndColumn is equal to Column. Note that it is the column of the last character
-	// of the indicator and counts the display width of the characters, which differs from
-	// Error.EndColumn that is the exclusive end of the region counted in Unicode code points.
+	// of the indicator, counted in Unicode code points like Column (not in display width, so five wide
+	// CJK characters from column 11 end at column 15). It differs from Error.EndColumn, which is the
+	// exclusive end of the region.
 	EndColumn int `json:"end_column"`
 	// ID is the stable ID of the rule which found the error such as "unpinned-uses".
 	ID string `json:"id"`

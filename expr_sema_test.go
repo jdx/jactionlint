@@ -2109,3 +2109,25 @@ func TestExprIsConstant(t *testing.T) {
 }
 
 // vim: nofoldenable
+
+// TestContextAvailabilityDefaultsToNone: without SetContextAvailability, and with an empty slice (what
+// WorkflowKeyAvailability returns for a key without contexts), every context is rejected.
+func TestContextAvailabilityDefaultsToNone(t *testing.T) {
+	for name, set := range map[string]bool{"not called": false, "empty slice": true} {
+		t.Run(name, func(t *testing.T) {
+			p := NewExprParser()
+			e, perr := p.Parse(NewExprLexer("github.event_name }}"))
+			if perr != nil {
+				t.Fatal(perr)
+			}
+			c := NewExprSemanticsChecker(false, nil, nil)
+			if set {
+				c.SetContextAvailability([]string{})
+			}
+			_, errs := c.Check(e)
+			if len(errs) != 1 || !strings.Contains(errs[0].Message, "no context is available here") {
+				t.Fatalf("want one error saying no context is available, have %v", errs)
+			}
+		})
+	}
+}

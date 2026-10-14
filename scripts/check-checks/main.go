@@ -12,12 +12,14 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/jdx/jactionlint/v2"
 	"github.com/jdx/jactionlint/v2/internal/exampleconfig"
+	"go.yaml.in/yaml/v4"
 )
 
 // exampleDay is the day the outputs of the examples of the document are made on.
@@ -26,28 +28,138 @@ var exampleDay = time.Date(2026, time.October, 13, 0, 0, 0, 0, time.UTC)
 // requiresOnlineMarker is the first line of the examples of the online checks. Those checks need the
 // GitHub API, so the example is run with the recorded answers in testdata/online/github.json
 // instead (the same ones the tests of the checks use).
-const requiresOnlineMarker = "# requires --online\n"
+const requiresOnlineMarker = "# requires --online"
 
-// withoutShellcheckMarker is the first line of the example of a check that runs only when shellcheck does not: the
+// withoutShellcheckMarker is a line of the head of the example of a check that runs only when shellcheck does not: the
 // example is run with `--shellcheck=`, whether or not the machine has the command.
-const withoutShellcheckMarker = "# without shellcheck\n"
+const withoutShellcheckMarker = "# without shellcheck"
 
-// Actionlint lints the example. The examples in the sections whose headings start with "Dependabot" are
-// Dependabot configuration files, and the ones in the sections whose headings start with "Composite action"
-// are the metadata of an action. The others are workflows.
-func Actionlint(src []byte, heading string) ([]byte, error) {
+// selectMarker and profileMarker start a line of the head of an example input which runs the example under
+// other rules than the example configuration: `# select: id[,id]` runs only those rules (the option --select) and
+// `# profile: pedantic` runs the profile (the option --profile).
+const (
+	selectMarker  = "# select:"
+	profileMarker = "# profile:"
+	// fileMarker names the file of the example in the project, `# file: .github/workflows/ci.yml`. The findings name it
+	// and the project has it, so a rule that reads the workflows of the repository sees the example too.
+	fileMarker = "# file:"
+)
+
+// example is what the tool needs to lint one example: the input, the kind of file it is, and what it runs with.
+type example struct {
+	src     []byte
+	heading string
+	// config is the YAML of an `Example config:` block, merged over the example configuration, or empty.
+	config string
+	// files are the `Example file:` blocks, by the path in the project.
+	files map[string]string
+}
+
+// markers are the options that the head of an example input sets.
+type markers struct {
+	online  bool
+	noShell bool
+	select_ []string
+	profile string
+	file    string
+}
+
+// parseMarkers reads the marker lines at the head of an example input. The head ends at the first line which is
+// not a marker, so a comment of the example that comes after it stays a comment.
+func parseMarkers(src []byte) (markers, error) {
+	var m markers
+	for _, l := range strings.Split(string(src), "\n") {
+		switch {
+		case l == requiresOnlineMarker:
+			m.online = true
+		case l == withoutShellcheckMarker:
+			m.noShell = true
+		case strings.HasPrefix(l, selectMarker):
+			for _, id := range strings.Split(strings.TrimPrefix(l, selectMarker), ",") {
+				if id = strings.TrimSpace(id); id != "" {
+					m.select_ = append(m.select_, id)
+				}
+			}
+			if len(m.select_) == 0 {
+				return m, fmt.Errorf("%q lists no rule ID", l)
+			}
+		case strings.HasPrefix(l, fileMarker):
+			m.file = strings.TrimSpace(strings.TrimPrefix(l, fileMarker))
+			if err := checkExampleFilePath(m.file); err != nil {
+				return m, err
+			}
+		case strings.HasPrefix(l, profileMarker):
+			m.profile = strings.TrimSpace(strings.TrimPrefix(l, profileMarker))
+			if m.profile == "" {
+				return m, fmt.Errorf("%q names no profile", l)
+			}
+		default:
+			return m, nil
+		}
+	}
+	return m, nil
+}
+
+// mergeConfig returns the example configuration with the configuration of the example merged over it: a key of
+// the example replaces the key of the example configuration, and a rule of `rules` replaces the rule of the same
+// ID, so the other rules keep their level.
+func mergeConfig(base, over string) ([]byte, error) {
+	if strings.TrimSpace(over) == "" {
+		return []byte(base), nil
+	}
+	var b, o map[string]any
+	if err := yaml.Unmarshal([]byte(base), &b); err != nil {
+		return nil, err
+	}
+	if err := yaml.Unmarshal([]byte(over), &o); err != nil {
+		return nil, fmt.Errorf("the example config is not YAML: %w", err)
+	}
+	for k, v := range o {
+		if k == "rules" {
+			br, _ := b[k].(map[string]any)
+			or, ok := v.(map[string]any)
+			if br != nil && ok {
+				for id, rc := range or {
+					br[id] = rc
+				}
+				continue
+			}
+		}
+		b[k] = v
+	}
+	return yaml.Marshal(b)
+}
+
+// Actionlint lints the example in a project of its own, which has the files of the example and nothing else. The
+// examples in the sections whose headings start with "Dependabot" are Dependabot configuration files, and the ones
+// in the sections whose headings start with "Composite action" are the metadata of an action. The others are
+// workflows.
+func Actionlint(ex example) ([]byte, error) {
 	var out bytes.Buffer
 
-	cfg, err := jactionlint.ParseConfig([]byte(exampleconfig.YAML))
+	m, err := parseMarkers(ex.src)
 	if err != nil {
 		return nil, err
 	}
 
+	cfgYAML, err := mergeConfig(exampleconfig.YAML, ex.config)
+	if err != nil {
+		return nil, err
+	}
+	cfg, err := jactionlint.ParseConfig(cfgYAML)
+	if err != nil {
+		return nil, fmt.Errorf("the example config is invalid: %w", err)
+	}
+
 	name := "test.yaml"
-	if strings.HasPrefix(heading, "Dependabot") {
+	if strings.HasPrefix(ex.heading, "Dependabot") {
 		name = ".github/dependabot.yml"
-	} else if strings.HasPrefix(heading, "Composite action") {
+	} else if strings.HasPrefix(ex.heading, "Composite action") {
 		name = ".github/actions/example/action.yml"
+	}
+
+	if m.file != "" {
+		name = m.file
 	}
 
 	opts := &jactionlint.LinterOptions{
@@ -56,22 +168,25 @@ func Actionlint(src []byte, heading string) ([]byte, error) {
 		Shellcheck:    "shellcheck",
 		Pyflakes:      "pyflakes",
 		Color:         jactionlint.ColorOptionKindNever,
+		Select:        m.select_,
+		Profile:       jactionlint.Profile(m.profile),
 		// The outputs of the examples must not change when a date of the checks passes (the retirement of a runner
 		// label changes the list of the available labels), so they are made as of this day
 		Now: func() time.Time { return exampleDay },
 	}
 
-	p, err := jactionlint.NewProjects().At(".")
+	if m.noShell {
+		opts.Shellcheck = ""
+	}
+
+	// The tool runs in the root of this repository, whose testdata the online examples read
+	repoRoot, err := os.Getwd()
 	if err != nil {
 		return nil, err
 	}
 
-	if bytes.HasPrefix(src, []byte(withoutShellcheckMarker)) {
-		opts.Shellcheck = ""
-	}
-
-	if bytes.HasPrefix(src, []byte(requiresOnlineMarker)) {
-		b, err := os.ReadFile(filepath.Join(p.RootDir(), "testdata", "online", "github.json"))
+	if m.online {
+		b, err := os.ReadFile(filepath.Join(repoRoot, "testdata", "online", "github.json"))
 		if err != nil {
 			return nil, err
 		}
@@ -85,11 +200,57 @@ func Actionlint(src []byte, heading string) ([]byte, error) {
 		os.Setenv("GITHUB_REPOSITORY", "example/environments")
 	}
 
+	// The project of the example. A message that names a file or a directory of the repository (a local action,
+	// a path filter) is about these files, not about the ones of this repository.
+	dir, err := os.MkdirTemp("", "check-checks-")
+	if err != nil {
+		return nil, err
+	}
+	defer os.RemoveAll(dir)
+	// The temporary directory may be a link (macOS), and the project reports the real path
+	if d, err := filepath.EvalSymlinks(dir); err == nil {
+		dir = d
+	}
+	if err := os.MkdirAll(filepath.Join(dir, ".git"), 0o755); err != nil {
+		return nil, err
+	}
+	if err := os.MkdirAll(filepath.Join(dir, ".github", "workflows"), 0o755); err != nil {
+		return nil, err
+	}
+	files := map[string]string{}
+	for path, content := range ex.files {
+		files[path] = content
+	}
+	if m.file != "" {
+		if _, ok := files[m.file]; ok {
+			return nil, fmt.Errorf("the example is the file %q, which an `Example file:` block also gives", m.file)
+		}
+		files[m.file] = string(ex.src)
+	}
+	for _, path := range sortedKeys(files) {
+		full := filepath.Join(dir, filepath.FromSlash(path))
+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+			return nil, err
+		}
+		if err := os.WriteFile(full, []byte(files[path]), 0o644); err != nil {
+			return nil, err
+		}
+	}
+	if err := os.Chdir(dir); err != nil {
+		return nil, err
+	}
+	defer os.Chdir(repoRoot)
+
+	p, err := jactionlint.NewProjects().At(".")
+	if err != nil {
+		return nil, err
+	}
+
 	l, err := jactionlint.NewLinter(&out, opts)
 	if err != nil {
 		return nil, err
 	}
-	errs, err := l.Lint(name, src, p)
+	errs, err := l.Lint(name, ex.src, p)
 	if err != nil {
 		return nil, err
 	}
@@ -104,6 +265,22 @@ func Actionlint(src []byte, heading string) ([]byte, error) {
 	return b, nil
 }
 
+func sortedKeys(m map[string]string) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+// exampleConfigHeader and exampleFileHeader start the blocks that follow an example input and before its output: the
+// configuration to lint with (merged over internal/exampleconfig) and a file of the project to lint in.
+const (
+	exampleConfigHeader = "Example config:"
+	exampleFileHeader   = "Example file: "
+)
+
 type state int
 
 const (
@@ -113,6 +290,8 @@ const (
 	stateInputHeader
 	stateInputBlock
 	stateAfterInput
+	stateExtraHeader
+	stateExtraBlock
 	stateOutputHeader
 	stateAfterOutput
 	stateOutputBlock
@@ -131,6 +310,10 @@ func (s state) String() string {
 		return "input block"
 	case stateAfterInput:
 		return "after input"
+	case stateExtraHeader:
+		return "example config or file header"
+	case stateExtraBlock:
+		return "example config or file block"
 	case stateOutputHeader:
 		return "output header"
 	case stateAfterOutput:
@@ -150,6 +333,11 @@ type Updater struct {
 	out       bytes.Buffer
 	heading   string
 	input     bytes.Buffer
+	// config and files are the `Example config:` and `Example file:` blocks of the example being read
+	config    string
+	files     map[string]string
+	extra     bytes.Buffer
+	extraPath string // the path of the `Example file:` block being read, empty for an `Example config:` block
 	lnum      int
 	ids       map[string]int
 	headings  map[string]int
@@ -229,12 +417,37 @@ func (u *Updater) expect(states ...state) {
 	u.err(fmt.Errorf("unexpected state %q. expected %q", u.cur, states))
 }
 
+// resetExample forgets the example that was read, when the next one starts.
+func (u *Updater) resetExample() {
+	u.input.Reset()
+	u.config = ""
+	u.files = nil
+}
+
+// checkExampleFilePath rejects a path that is not inside the project of the example.
+func checkExampleFilePath(path string) error {
+	if path == "" {
+		return errors.New("`Example file:` needs the path of the file in the project")
+	}
+	if strings.HasPrefix(path, "/") || strings.Contains(path, `\`) {
+		return fmt.Errorf("the path %q of `Example file:` must be relative and use slashes", path)
+	}
+	for _, part := range strings.Split(path, "/") {
+		if part == "" || part == "." || part == ".." || part == ".git" {
+			return fmt.Errorf("the path %q of `Example file:` must not have an empty, \".\", \"..\" or \".git\" part", path)
+		}
+	}
+	return nil
+}
+
 func (u *Updater) Update() {
 	l := u.lines.Text()
 
 	isHeading := strings.HasPrefix(l, "## ")
 	isInputHeader := l == "Example input:"
 	isOutputHeader := l == "Output:"
+	isConfigHeader := l == exampleConfigHeader
+	isFileHeader := strings.HasPrefix(l, exampleFileHeader)
 	isSkipOutput := l == "<!-- Skip update output -->"
 	isSkipPlaygroundLink := l == "<!-- Skip playground link -->"
 	isPlaygroundLink := strings.HasPrefix(l, "[Playground](") && strings.HasSuffix(l, ")")
@@ -245,7 +458,7 @@ func (u *Updater) Update() {
 		u.expect(stateAnchor)
 	case isInputHeader:
 		u.expect(stateHeading, stateEnd)
-	case isOutputHeader:
+	case isOutputHeader, isConfigHeader, isFileHeader:
 		u.expect(stateAfterInput)
 	case isSkipOutput:
 		u.expect(stateOutputHeader)
@@ -323,9 +536,54 @@ func (u *Updater) Update() {
 			u.input.WriteByte('\n')
 		}
 	case stateAfterInput:
-		if isOutputHeader {
+		switch {
+		case isOutputHeader:
 			u.state(stateOutputHeader, "Found example output header")
+		case isConfigHeader:
+			if u.config != "" {
+				u.err(errors.New("an example has one `Example config:` block"))
+				return
+			}
+			u.extraPath = ""
+			u.state(stateExtraHeader, "Found example config header")
+		case isFileHeader:
+			path := strings.TrimSpace(strings.TrimPrefix(l, exampleFileHeader))
+			if err := checkExampleFilePath(path); err != nil {
+				u.err(err)
+				return
+			}
+			if _, ok := u.files[path]; ok {
+				u.err(fmt.Errorf("the file %q of the example is given twice", path))
+				return
+			}
+			u.extraPath = path
+			u.state(stateExtraHeader, "Found example file header")
 		}
+	case stateExtraHeader:
+		// The fence of a config is yaml. A file may be of any kind, so its fence may name any language
+		if (u.extraPath == "" && l == "```yaml") || (u.extraPath != "" && strings.HasPrefix(l, "```") && l != "```") {
+			u.extra.Reset()
+			u.state(stateExtraBlock, "Start code block for the example config or file")
+		}
+	case stateExtraBlock:
+		if l != "```" {
+			u.extra.WriteString(l)
+			u.extra.WriteByte('\n')
+			break
+		}
+		if u.extraPath == "" && strings.TrimSpace(u.extra.String()) == "" {
+			u.err(errors.New("an empty `Example config:` block is not allowed"))
+			return
+		}
+		if u.extraPath == "" {
+			u.config = u.extra.String()
+		} else {
+			if u.files == nil {
+				u.files = map[string]string{}
+			}
+			u.files[u.extraPath] = u.extra.String()
+		}
+		u.state(stateAfterInput, "End code block for the example config or file")
 	case stateOutputHeader:
 		if isSkipOutput {
 			u.state(stateAfterOutput, "Skip updating output due to the comment")
@@ -336,19 +594,19 @@ func (u *Updater) Update() {
 		if l != "```" {
 			return // Output block will be generated by jactionlint
 		}
-		out, err := Actionlint(u.input.Bytes(), u.heading)
+		out, err := Actionlint(example{src: u.input.Bytes(), heading: u.heading, config: u.config, files: u.files})
 		u.err(err)
 		u.out.Write(out)
 		u.state(stateAfterOutput, "End code block for output and generate jactionlint output")
 	case stateAfterOutput:
 		if isSkipPlaygroundLink {
-			u.input.Reset()
+			u.resetExample()
 			u.state(stateEnd, "Skip updating playground link due to the comment")
 		} else if isPlaygroundLink {
 			ln := u.PlaygroundLink(u.input.Bytes())
 			u.out.WriteString(ln)
 			u.out.WriteByte('\n')
-			u.input.Reset()
+			u.resetExample()
 			u.state(stateEnd, "Generate playground link "+ln)
 			return
 		}

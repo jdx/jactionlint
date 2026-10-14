@@ -65,7 +65,7 @@ To rewrite a file that uses [deprecated keys](#deprecated-keys), run `jactionlin
 <a id="configuration-file-location-and-priority"></a>
 ## Where jactionlint reads the config file
 
-jactionlint uses one config file per project and never merges these files. It uses the first of these that exists:
+jactionlint uses one config file per project and never merges these files. It uses the first of these that exists, even when that file is broken: a parse error, or a missing file in its `extends`, stops the run with exit status 3 and jactionlint does not try the next one:
 
 1. The file of `--config-file` (`-c`). It replaces both files below, and its `extends` entries still apply.
 2. The repository config file: the first that exists of `.github/jactionlint.yaml`, `.github/jactionlint.yml`, `.github/actionlint.yaml` and `.github/actionlint.yml`.
@@ -410,7 +410,7 @@ rules:
 - A relative path is resolved from the directory of the file that lists it, not from the working directory. An absolute path is accepted.
 - Later files win over earlier ones, and the file itself wins over all of them. A key that a later file does not write keeps the value of the earlier files.
 - A listed file can extend other files, up to ten levels deep. jactionlint rejects a cycle and a deeper chain.
-- With `--config-file`, a listed file that does not exist stops the run with exit status 3. Without that option, jactionlint treats a repository or user-global config file that lists a missing file as if it did not exist: none of its keys apply, jactionlint falls back to the next file of [the lookup order](#where-jactionlint-reads-the-config-file) or to the defaults, and it prints no message. Run `jactionlint --config-file .github/jactionlint.yaml` once after you add an entry: it exits with status 3 and names the missing file.
+- A listed file that does not exist stops the run with exit status 3, whichever config file lists it: the file of `--config-file`, the repository config file or the user-global file. The message names the config file and the listed file. jactionlint does not skip the config file that lists it, and it does not fall back to the next file of [the lookup order](#where-jactionlint-reads-the-config-file) or to the defaults. Only a config file that does not exist itself counts as "no config file here".
 
 The keys merge as follows when more than one file writes them:
 
@@ -525,7 +525,7 @@ jactionlint checks the whole config file before it lints anything. A file that c
 | A value of the wrong type | `invalid value 1.5 for option "max" of rule "max-run-lines" in "rules": it must be a non-negative integer` |
 | A value outside the allowed set | `invalid value "bitbucket" for "platform". available values are "github", "forgejo" and "gitea"` |
 
-A file that the config names must exist too. The run exits with status 3 for a missing `baseline` file, a missing `shellcheck.rcfile`, and for a missing `extends` file when you pass `--config-file` (see [Extending config files](#extending-config-files)). `--init-config` and `--migrate-config` exit with status 3 when they cannot do their work.
+A file that the config names must exist too. The run exits with status 3 for a missing `baseline` file, a missing `shellcheck.rcfile`, and for a missing `extends` file, in any config file (see [Extending config files](#extending-config-files)). `--init-config` and `--migrate-config` exit with status 3 when they cannot do their work.
 
 ## Next steps
 

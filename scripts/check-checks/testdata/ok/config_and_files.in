@@ -1,0 +1,68 @@
+<a id="local-action"></a>
+## Local action
+
+Example input:
+
+```yaml
+# select: missing-action-input,unknown-action-input
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: ./.github/actions/greet
+        with:
+          nmae: octocat
+```
+
+Example file: .github/actions/greet/action.yml
+
+```yaml
+name: Greet
+description: Says hello
+inputs:
+  name:
+    description: Who to greet
+    required: true
+runs:
+  using: composite
+  steps:
+    - run: echo hello
+      shell: bash
+```
+
+Example config:
+
+```yaml
+rules:
+  unknown-action-input: warn
+```
+
+Output:
+
+```
+THIS WILL BE GENERATED
+```
+
+<!-- Skip playground link -->
+
+A second example of the section has no config and no file of the first one.
+
+Example input:
+
+```yaml
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: ./.github/actions/greet
+```
+
+Output:
+
+```
+THIS WILL BE GENERATED
+```
+
+<!-- Skip playground link -->

@@ -139,12 +139,12 @@ The comment at the end of the `run: |` line is an ordinary YAML comment and cove
           echo '${{ github.event.pull_request.title }}'
 ```
 
-Inside the script, a `#` that follows other text on a line, or sits in a quoted YAML string, is not a comment and is not read. A line of the script that starts with `# jactionlint ignore=` is read as an own-line comment. It covers the next line of the script and the lines nested under it:
+Inside the script nothing is a comment, because the text of a block scalar or a quoted YAML string belongs to the value, not to the YAML file. A line of the script that starts with `# jactionlint ignore=` is a line of the script, like any other, and it ignores nothing. Put the comment at the end of the `run: |` line, or above the `run:` key or the step, as in the example above:
 
 ```yaml
       - run: |
           echo start
-          # jactionlint ignore=template-injection
+          # jactionlint ignore=template-injection   # not read: this is script text
           echo '${{ github.event.pull_request.title }}'
 ```
 

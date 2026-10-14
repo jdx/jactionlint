@@ -140,7 +140,7 @@ Run both checks before you extract the archive.
 
 [`scripts/download-jactionlint.bash`](https://github.com/jdx/jactionlint/blob/main/scripts/download-jactionlint.bash) downloads the release archive for the platform it runs on, extracts the executable and prints its version. It needs bash and curl, plus `tar` on Linux, macOS and FreeBSD, or `unzip` on Windows, where you run it from a bash such as Git Bash.
 
-The script picks the archive from `$OSTYPE` and `uname -m`. `x86_64` selects `amd64`, `aarch64` and `arm64` select `arm64`, names such as `i686` select `386`, and any other name that starts with `arm` selects `armv6`.
+The script picks the archive from `$OSTYPE` and `uname -m`. `x86_64` and `amd64` (what FreeBSD prints) select `amd64`, `aarch64` and `arm64` select `arm64`, names such as `i686` select `386`, and any other name that starts with `arm` selects `armv6`.
 
 The command line is `bash download-jactionlint.bash [[VERSION] DIR]`. The table lists the two arguments and the two environment variables that change what the script downloads:
 
@@ -151,7 +151,7 @@ The command line is `bash download-jactionlint.bash [[VERSION] DIR]`. The table 
 | `JACTIONLINT_REPO` | `jdx/jactionlint` | The GitHub repository whose releases the script downloads from. |
 | `JACTIONLINT_NAME` | `jactionlint` | The name of the executable and the prefix of the archive name. |
 
-Pass a version that has archives: for any other version curl downloads GitHub's not-found page and `tar` stops with `gzip: stdin: not in gzip format`. `bash download-jactionlint.bash --help` prints these inputs. Inside a GitHub Actions step the script also writes the path of the executable to the step output `executable`.
+For a version that has no archive, the script prints a message that names the version and the URL, and exits with status 1. `bash download-jactionlint.bash --help` prints these inputs. Inside a GitHub Actions step the script also writes the path of the executable to the step output `executable`.
 
 Run the script from a URL that names a commit, with the version that you want and a directory that exists:
 

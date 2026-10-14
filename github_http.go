@@ -285,8 +285,12 @@ func newDefaultGitHubClient(o defaultClientOptions) (GitHubClient, error) {
 		return primary, nil
 	}
 	if base.Host == "api.github.com" {
-		if o.Notify != nil {
-			o.Notify("online-options.github-com-fallback has no effect: the API is api.github.com already")
+		note := o.Note
+		if note == nil {
+			note = o.Notify
+		}
+		if note != nil {
+			note("online-options.github-com-fallback has no effect: the API is api.github.com already")
 		}
 		return primary, nil
 	}

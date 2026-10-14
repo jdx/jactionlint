@@ -98,6 +98,48 @@ if bash "$script" '999999999999999999.9.9'; then
     ((fails++))
 fi
 
+# A version without an archive must be reported as such, naming the version and the URL, and leave nothing behind.
+# The script keeps the download in a temporary directory: in the current directory on Windows, in $TMPDIR elsewhere.
+mkdir ./tmpdir
+out="$(TMPDIR="$(pwd)/tmpdir" bash "$script" '9.9.9' 2>&1)"
+status=$?
+if [[ "$status" != "1" ]]; then
+    echo "FAIL: Version without an archive exited with ${status}, not 1: '${out}'" >&2
+    ((fails++))
+fi
+if [[ "$out" != *'jactionlint v9.9.9 was not found'* || "$out" != *'/releases/download/v9.9.9/jactionlint_9.9.9_'* || "$out" == *gzip* ]]; then
+    echo "FAIL: Version without an archive did not cause the not found message: '${out}'" >&2
+    ((fails++))
+fi
+if [[ -n "$(ls -A ./tmpdir)" ]]; then
+    echo "FAIL: Version without an archive left files in TMPDIR: '$(ls -A ./tmpdir)'" >&2
+    ((fails++))
+fi
+rmdir ./tmpdir
+if [[ -n "$(ls -A)" ]]; then
+    echo "FAIL: Version without an archive left files behind: '$(ls -A)'" >&2
+    ((fails++))
+fi
+
+# The architecture is detected from "uname -m". A version without an archive stops the script right after the
+# detection, so this works on any OS and does not run a downloaded binary.
+for pair in x86_64:amd64 amd64:amd64 i386:386 i686:386 aarch64:arm64 arm64:arm64 armv7l:armv6; do
+    machine="${pair%%:*}"
+    arch="${pair##*:}"
+    # shellcheck disable=SC2329 # called by the script that runs below, through the exported function
+    uname() {
+        if [[ "$1" == '-m' ]]; then echo "$machine"; else command uname "$@"; fi
+    }
+    export machine
+    export -f uname
+    out="$(bash "$script" '9.9.9' 2>&1)"
+    unset -f uname
+    if [[ "$out" != *" arch=${arch}"$'\n'* ]]; then
+        echo "FAIL: 'uname -m' printing '${machine}' did not select arch=${arch}: '${out}'" >&2
+        ((fails++))
+    fi
+done
+
 set -e
 if [[ "$fails" != "0" ]]; then
     echo "${fails} error cases failed. Check the above log" >&2

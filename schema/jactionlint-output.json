@@ -16,7 +16,7 @@
           "type": "string"
         },
         "end_column": {
-          "description": "The column of the last character of the indicator in snippet, counted in display width. It equals column when no indicator can be shown. It is not the exclusive end of the region.",
+          "description": "The column of the last character of the indicator in snippet, counted in Unicode code points like column, not in display width. It equals column when no indicator can be shown. It is not the exclusive end of the region.",
           "minimum": 1,
           "type": "integer"
         },
@@ -33,7 +33,7 @@
           "type": "array"
         },
         "filepath": {
-          "description": "The path of the file, relative to the working directory when possible. It is omitted for the input of stdin without a name.",
+          "description": "The path of the file, relative to the working directory when possible. It is <stdin> for the input of stdin without a name, or the value of --stdin-filename.",
           "type": "string"
         },
         "fix": {
@@ -87,7 +87,7 @@
           "type": "string"
         },
         "kind": {
-          "description": "The group of the rule which reported the finding. Legacy: use id.",
+          "description": "The legacy name of the checker which reported the finding. Several rules share a kind, and it is not always a rule ID. Legacy: use id.",
           "type": "string"
         },
         "line": {

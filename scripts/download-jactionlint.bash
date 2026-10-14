@@ -2,6 +2,10 @@
 
 set -e -o pipefail
 
+# Default value is updated by the release workflow after each release
+version="2.1.0"
+default_version="$version"
+
 function usage() {
     echo 'USAGE:' >&2
     echo '  bash download-jactionlint.bash [[VERSION] DIR]' >&2
@@ -24,25 +28,28 @@ function usage() {
     echo >&2
     echo 'VERSION:' >&2
     echo '   Version of jactionlint to download. Version must be a specific version' >&2
-    echo '   "{major}.{minor}.{patch}" such as "1.6.9" or "latest". When "latest" is' >&2
-    echo '   specified or this argument is omitted, the latest version will be selected.' >&2
+    echo '   "{major}.{minor}.{patch}" such as "2.0.2" or "latest". When "latest" is' >&2
+    echo "   specified or this argument is omitted, the default version of this script" >&2
+    echo "   (${default_version}) will be selected. The release workflow updates the default after" >&2
+    echo '   each release, so it is the latest release when this script was last updated.' >&2
+    echo '   An older copy of this script selects an older release.' >&2
     echo >&2
     echo 'EXAMPLE:' >&2
-    echo '  - Download the latest binary to the current directory' >&2
+    echo '  - Download the default version to the current directory' >&2
     echo >&2
     echo '      $ bash download-jactionlint.bash' >&2
     echo >&2
-    echo '  - Download the latest binary to /usr/bin' >&2
+    echo '  - Download the default version to /usr/bin' >&2
     echo >&2
     echo '      $ bash download-jactionlint.bash latest /usr/bin' >&2
     echo >&2
-    echo '  - Download version 1.6.9 to the current directory' >&2
+    echo '  - Download version 2.0.2 to the current directory' >&2
     echo >&2
-    echo '      $ bash download-jactionlint.bash 1.6.9' >&2
+    echo '      $ bash download-jactionlint.bash 2.0.2' >&2
     echo >&2
-    echo '  - Download version 1.6.9 to /usr/bin' >&2
+    echo '  - Download version 2.0.2 to /usr/bin' >&2
     echo >&2
-    echo '      $ bash download-jactionlint.bash 1.6.9 /usr/bin' >&2
+    echo '      $ bash download-jactionlint.bash 2.0.2 /usr/bin' >&2
 }
 
 if [[ "$1" == "-h" || "$1" == "--help" ]]; then
@@ -53,8 +60,6 @@ fi
 repo="${JACTIONLINT_REPO:-jdx/jactionlint}"
 name="${JACTIONLINT_NAME:-jactionlint}"
 
-# Default value is updated manually on release
-version="2.1.0"
 if [ -n "$1" ]; then
     if [[ "$1" != 'latest' && "$1" != 'LATEST' ]]; then
         if [[ "$1" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
@@ -108,7 +113,7 @@ esac
 
 machine="$(uname -m)"
 case "$machine" in
-    x86_64) arch=amd64 ;;
+    x86_64|amd64) arch=amd64 ;; # FreeBSD prints amd64
     i?86) arch=386 ;;
     aarch64|arm64) arch=arm64 ;;
     arm*) arch=armv6 ;;
@@ -126,14 +131,34 @@ url="https://github.com/${repo}/releases/download/v${version}/${file}"
 
 echo "Downloading ${url} with curl"
 
+# Download to a file before extracting it. A version without an archive makes GitHub answer with a short "Not Found"
+# body, which tar and unzip would report as a broken archive.
 if [[ "$os" == "windows" ]]; then
     tempdir="$(mktemp -d "${name}.XXXXXXXXXXXXXXXX")"
-    curl -L -o "$tempdir/tmp.zip" "${url}"
-    unzip "$tempdir/tmp.zip" "${name}.exe" -d "$target_dir"
-    rm -r "$tempdir"
+else
+    # Give mktemp a template: not every mktemp (e.g. the one of FreeBSD) works without one
+    tempdir="$(mktemp -d "${TMPDIR:-/tmp}/${name}.XXXXXXXXXXXXXXXX")"
+fi
+trap 'rm -rf "$tempdir"' EXIT
+archive="$tempdir/${file}"
+
+# -f makes curl fail on an HTTP error and print no body. The HTTP status is the only output on stdout.
+if ! status="$(curl -fL -o "$archive" -w '%{http_code}' "${url}")"; then
+    echo >&2
+    if [[ "$status" == "404" ]]; then
+        echo "jactionlint v${version} was not found: there is no ${url}" >&2
+        echo "Check that the release v${version} exists and has the archive ${file} at https://github.com/${repo}/releases" >&2
+    else
+        echo "Could not download jactionlint v${version} from ${url}" >&2
+    fi
+    exit 1
+fi
+
+if [[ "$os" == "windows" ]]; then
+    unzip "$archive" "${name}.exe" -d "$target_dir"
     exe="$target_dir/${name}.exe"
 else
-    curl -L "${url}" | tar xvz -C "$target_dir" "$name"
+    tar xvzf "$archive" -C "$target_dir" "$name"
     exe="$target_dir/${name}"
 fi
 

@@ -90,7 +90,7 @@ var cliOptions = []cliOption{
 	{"GitHub API (online checks)", "online-token-env", "", "NAME", false, "-online-token-env", "Name of the environment variable that holds the GitHub token"},
 	{"GitHub API (online checks)", "online-token-file", "", "FILE", false, "-online-token-file", "File that holds the GitHub token"},
 	{"GitHub API (online checks)", "online-github-com-fallback", "", "", false, "", "On a GitHub Enterprise Server, look up the repositories which the Server does not have on api.github.com (actions synced with GitHub Connect). The token for it is GITHUB_COM_TOKEN. Their names are sent to github.com"},
-	{"GitHub API (online checks)", "online-github-com-token-env", "", "NAME", false, "", "With the fallback: name of the environment variable that holds the token for api.github.com (default GITHUB_COM_TOKEN)"},
+	{"GitHub API (online checks)", "online-github-com-token-env", "", "NAME", false, "", "With the fallback: name of the environment variable that holds the token for api.github.com, tried before --online-github-com-token-file, $GITHUB_COM_TOKEN and gh"},
 	{"GitHub API (online checks)", "online-github-com-token-file", "", "FILE", false, "", "With the fallback: file that holds the token for api.github.com"},
 	{"GitHub API (online checks)", "online-allow", "", "PATTERN", false, "-online-allow", "Look up only repositories matching owner/repo PATTERN (\"*\" is a wildcard). Repeatable"},
 	{"GitHub API (online checks)", "online-deny", "", "PATTERN", false, "-online-deny", "Never look up repositories matching owner/repo PATTERN. Repeatable"},
@@ -469,12 +469,16 @@ func usageMessage(err error) error {
 
 // printHelp writes the help text, which --help prints to stdout.
 func printHelp(out io.Writer) {
-	fmt.Fprint(out, `Usage: jactionlint [OPTIONS] [FILES...] [-]
+	fmt.Fprint(out, `Usage: jactionlint [OPTIONS] [FILES...]
+       jactionlint [OPTIONS] -
 
 jactionlint is a linter for GitHub Actions workflow files and Dependabot configuration.
 
-With no FILES it checks the workflows of the nearest '.github/workflows'
-directory. A lone '-' reads stdin. '--' ends the options.
+Without FILES it checks the repository: the workflows of the nearest '.github/workflows'
+directory, the composite actions (action.yml and action.yaml in any directory, except
+.git, node_modules, vendor, testdata and similar ones), '.github/dependabot.yml' and
+'.github/dependabot.yaml', and the Actions lock file '.github/workflows/actions.lock'.
+'-' reads stdin, and only as the sole operand. '--' ends the options.
 
 Examples:
   jactionlint                               check the repository
