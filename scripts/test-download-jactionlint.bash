@@ -98,8 +98,10 @@ if bash "$script" '999999999999999999.9.9'; then
     ((fails++))
 fi
 
-# A version without an archive must be reported as such, naming the version and the URL, and leave nothing behind
-out="$(bash "$script" '9.9.9' 2>&1)"
+# A version without an archive must be reported as such, naming the version and the URL, and leave nothing behind.
+# The script keeps the download in a temporary directory: in the current directory on Windows, in $TMPDIR elsewhere.
+mkdir ./tmpdir
+out="$(TMPDIR="$(pwd)/tmpdir" bash "$script" '9.9.9' 2>&1)"
 status=$?
 if [[ "$status" != "1" ]]; then
     echo "FAIL: Version without an archive exited with ${status}, not 1: '${out}'" >&2
@@ -109,6 +111,11 @@ if [[ "$out" != *'jactionlint v9.9.9 was not found'* || "$out" != *'/releases/do
     echo "FAIL: Version without an archive did not cause the not found message: '${out}'" >&2
     ((fails++))
 fi
+if [[ -n "$(ls -A ./tmpdir)" ]]; then
+    echo "FAIL: Version without an archive left files in TMPDIR: '$(ls -A ./tmpdir)'" >&2
+    ((fails++))
+fi
+rmdir ./tmpdir
 if [[ -n "$(ls -A)" ]]; then
     echo "FAIL: Version without an archive left files behind: '$(ls -A)'" >&2
     ((fails++))
