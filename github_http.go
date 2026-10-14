@@ -1337,47 +1337,80 @@ func (c *httpGitHubClient) Advisories(ctx context.Context, owner, repo string) (
 // AdvisoriesForPackages implements GitHubPackageAdvisoryClient. The API takes a comma separated list of
 // packages in "affects", so a repository and one of its subdirectories cost one request.
 func (c *httpGitHubClient) AdvisoriesForPackages(ctx context.Context, packages []string) ([]GitHubAdvisory, error) {
-	var ret []GitHubAdvisory
-	seen := map[string]bool{}
 	q := url.Values{"ecosystem": {"actions"}, "affects": {strings.Join(packages, ",")}, "per_page": {"100"}}
-	_, err := c.getPages(ctx, "/advisories?"+q.Encode(), maxGitHubPages, func(body []byte) error {
-		var as []struct {
-			ID              string `json:"ghsa_id"`
-			CVE             string `json:"cve_id"`
-			Summary         string `json:"summary"`
-			Severity        string `json:"severity"`
-			URL             string `json:"html_url"`
-			WithdrawnAt     string `json:"withdrawn_at"`
-			Vulnerabilities []struct {
-				Package struct {
-					Ecosystem string `json:"ecosystem"`
-					Name      string `json:"name"`
-				} `json:"package"`
-				Range        string `json:"vulnerable_version_range"`
-				FirstPatched any    `json:"first_patched_version"`
-			} `json:"vulnerabilities"`
+	var ret []GitHubAdvisory
+	acc := newAdvisoryAccumulator(&ret)
+	_, err := c.getPages(ctx, "/advisories?"+q.Encode(), maxGitHubPages, acc.page)
+	return ret, err
+}
+
+// maxBulkAdvisoryPages bounds how many pages of 100 the list of all advisories of the actions ecosystem may take
+// (at the time of writing it is one page, see ActionAdvisories). A longer list is not read to the end.
+const maxBulkAdvisoryPages = 5
+
+// ActionAdvisories implements GitHubAdvisoryListClient: every published advisory of the actions ecosystem, in the
+// pages of one list request, instead of one request for each action. Names no repository.
+func (c *httpGitHubClient) ActionAdvisories(ctx context.Context) ([]GitHubAdvisory, error) {
+	q := url.Values{"ecosystem": {"actions"}, "per_page": {"100"}}
+	var ret []GitHubAdvisory
+	acc := newAdvisoryAccumulator(&ret)
+	truncated, err := c.getPages(ctx, "/advisories?"+q.Encode(), maxBulkAdvisoryPages, acc.page)
+	if err != nil {
+		return nil, err
+	}
+	if truncated {
+		return nil, ErrGitHubListTruncated
+	}
+	return ret, nil
+}
+
+// advisoryAccumulator turns the pages of an advisory list into GitHubAdvisory values: it drops withdrawn
+// advisories and duplicates, and keeps the vulnerabilities of the actions ecosystem only.
+type advisoryAccumulator struct {
+	out  *[]GitHubAdvisory
+	seen map[string]bool
+}
+
+func newAdvisoryAccumulator(out *[]GitHubAdvisory) *advisoryAccumulator {
+	return &advisoryAccumulator{out: out, seen: map[string]bool{}}
+}
+
+func (a *advisoryAccumulator) page(body []byte) error {
+	var as []struct {
+		ID              string `json:"ghsa_id"`
+		CVE             string `json:"cve_id"`
+		Summary         string `json:"summary"`
+		Severity        string `json:"severity"`
+		URL             string `json:"html_url"`
+		WithdrawnAt     string `json:"withdrawn_at"`
+		Vulnerabilities []struct {
+			Package struct {
+				Ecosystem string `json:"ecosystem"`
+				Name      string `json:"name"`
+			} `json:"package"`
+			Range        string `json:"vulnerable_version_range"`
+			FirstPatched any    `json:"first_patched_version"`
+		} `json:"vulnerabilities"`
+	}
+	if err := json.Unmarshal(body, &as); err != nil {
+		return err
+	}
+	for _, x := range as {
+		if x.WithdrawnAt != "" || a.seen[x.ID] {
+			continue
 		}
-		if err := json.Unmarshal(body, &as); err != nil {
-			return err
-		}
-		for _, a := range as {
-			if a.WithdrawnAt != "" || seen[a.ID] {
+		a.seen[x.ID] = true
+		adv := GitHubAdvisory{ID: x.ID, CVE: x.CVE, Summary: x.Summary, Severity: x.Severity, URL: x.URL}
+		for _, v := range x.Vulnerabilities {
+			if !strings.EqualFold(v.Package.Ecosystem, "actions") {
 				continue
 			}
-			seen[a.ID] = true
-			adv := GitHubAdvisory{ID: a.ID, CVE: a.CVE, Summary: a.Summary, Severity: a.Severity, URL: a.URL}
-			for _, v := range a.Vulnerabilities {
-				if !strings.EqualFold(v.Package.Ecosystem, "actions") {
-					continue
-				}
-				patched, _ := v.FirstPatched.(string)
-				adv.Vulnerabilities = append(adv.Vulnerabilities, GitHubVulnerability{Package: v.Package.Name, VulnerableRange: v.Range, FirstPatched: patched})
-			}
-			ret = append(ret, adv)
+			patched, _ := v.FirstPatched.(string)
+			adv.Vulnerabilities = append(adv.Vulnerabilities, GitHubVulnerability{Package: v.Package.Name, VulnerableRange: v.Range, FirstPatched: patched})
 		}
-		return nil
-	})
-	return ret, err
+		*a.out = append(*a.out, adv)
+	}
+	return nil
 }
 
 // onlineSupported is false where the GitHub API cannot be used (the WebAssembly build).

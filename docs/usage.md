@@ -92,6 +92,8 @@ cat action.yml | jactionlint --stdin-filename action.yml -
 | `--finding-context` |  | Add the events of the workflow and the permissions of the token of the job to each finding of json, jsonl and sarif |
 | `--no-hints` |  | Do not print the hint line after a text run with many findings, nor the note that shellcheck or pyflakes was not found |
 | `--min-severity=LEVEL` |  | Hide findings less severe than LEVEL: info (default), warn or error |
+| `--changed-since=REV` |  | Show only the findings on the lines that changed since the merge base of REV and HEAD (commits, index, working tree, and every line of an untracked file). Every file is still checked, so the findings are those of a full run |
+| `--changed-scope=SCOPE` |  | With --changed-since: lines (default) shows the findings on the changed lines, files shows every finding of a changed file |
 | `--strict-exit` |  | Exit with status 1 also for findings of level warn and info |
 
 **Rules and configuration**
@@ -109,6 +111,8 @@ cat action.yml | jactionlint --stdin-filename action.yml -
 | `--list-rules` |  | List every rule ID with its group, profile, level and summary, and exit. --format json prints it as JSON |
 | `--print-config-schema` |  | Print the JSON Schema of the config file (rule IDs and options included) and exit |
 | `--print-output-schema` |  | Print the JSON Schema of --format json and jsonl and exit |
+| `--export-facts` |  | Print the facts of the workflows and actions (events, permissions, concurrency, calls and who calls them, inputs; with positions and explicit unknowns) as versioned JSON and exit. Nothing is checked |
+| `--print-facts-schema` |  | Print the JSON Schema of --export-facts and exit |
 | `--explain=RULE` |  | Print the documentation of a rule ID (summary, group, profile, level, options, fixes and its section of the checks document) and exit |
 
 **Fixing**
@@ -658,6 +662,50 @@ In `{{ }}` placeholder, input can be piped and action can be used to transform t
 
 Note that special characters escaped with backslash like `\n` in the format string are automatically unescaped.
 
+### Export the facts of the repository
+
+`jactionlint --export-facts` prints what the workflows and actions of the repository declare, and what the call graph of the
+repository knows, as one JSON document, instead of checking them. It is for tools that apply a policy of their own to the same
+model as jactionlint, such as [Conftest](https://www.conftest.dev/), [Lintnet](https://github.com/lintnet-modules/ghalint) or a
+script, without parsing the YAML and the rules of GitHub Actions again. [`schema/jactionlint-facts.json`](https://github.com/jdx/jactionlint/blob/main/schema/jactionlint-facts.json)
+(`--print-facts-schema`) describes it. Like `--format json` it is versioned: `version` is 1, a field is not removed and does not change its
+meaning within a version, and a reader ignores the fields it does not know. Without files it exports the workflows and the actions of the
+repository; with files it exports those, and the callers are still those of the whole repository. It reads and writes nothing, and the
+configuration, the profile and the ignores do not change it (they decide the findings, not the facts).
+
+| Document | Facts |
+| --- | --- |
+| `workflows[]` | `path` (relative to the root of the repository), `name`, `events[]` (name, `types`, branch, tag and path `filters`, `schedules`, `inputs`), `callable`, `called_by`, `permissions`, `concurrency`, `cache_mode`, `jobs[]` |
+| `jobs[]` | `needs`, `runs_on`, `permissions` (declared) and `effective_permissions`, `concurrency`, `environment`, `timeout_minutes`, `cache_mode`, `if` (as written, not evaluated), `uses` (a call of a reusable workflow: `secrets_inherit`, `secrets`, `inputs`), `steps[]` (`uses` with `ref_kind` such as `full-sha`, the `inputs` of `with:`, `shell`) |
+| `actions[]` | `path`, `using`, `inputs`, `steps[]` of a composite action, and `called_by`: the workflows that run it, the actions between them (`via`), their `events` and the `inputs` they pass |
+| `calls[]` | Each local call: a job that calls a reusable workflow, or a step that runs a local action (`from`, `job`, `step`, `to`), with the `permissions` of the calling job (what the callee gets at most) and the `events` of the calling workflow |
+
+Every position is a `location` with a 1-based `line` and `column`, the column counted in Unicode code points like the findings. **What is
+not known is said, not left out or guessed:**
+
+- A value with a `${{ }}` expression has `dynamic: true` and the text as written (`concurrency.group`, `environment`, a `with:` input, a name).
+  `concurrency.cancel_in_progress` is `true`, `false`, `unset` (not written, so nothing is cancelled) or `unknown` (an expression), and a
+  `concurrency` written as one expression has `form: expression`. `timeout_minutes` and `runs_on` have a `dynamic` flag.
+- `effective_permissions` has a `source`: `job`, `workflow` or `repository-setting`. The last one means neither the job nor the workflow
+  declares the permissions, so the default token of the repository applies, which the file does not say: `scopes` is absent and that is
+  unknown, not `none`. A scope that an expression decides is `"unknown"`.
+- `called_by.known` is `false` when nothing in the repository calls a reusable workflow (or a caller is itself only called): another
+  repository may call it on any event, so `events` is not all of them. For an action it is `false` when no workflow of the repository runs
+  it, and its events are unknown.
+- A file that is not valid YAML has `parsed: false` and no other fact. `syntax_errors` counts the errors of a file that was read in part.
+
+```sh
+# the jobs whose token is the default of the repository
+jactionlint --export-facts | jq -r '.workflows[].jobs[] | select(.effective_permissions.source == "repository-setting") | .id'
+# the reusable workflows that a job with write access calls, and on which events
+jactionlint --export-facts | jq -c '.calls[] | select(.permissions.scopes.contents == "write") | {from, job, to, events}'
+```
+
+The facts are not findings: jactionlint does not judge them here, and the model is the one the rules use (the events and permissions of
+`--finding-context`, the call graph of the repository), so a policy written on the facts sees the same workflow as the rules do. The
+document is not a promise that every fact the rules compute is in it: the facts that depend on a run (the result of an expression) are not
+evaluated, and the variables of a matrix are not expanded.
+
 ### Exit status
 
 `jactionlint` command exits with one of the following exit statuses.
@@ -781,6 +829,37 @@ How an entry matches a finding, so that you know what an edit does to the baseli
 
 `--baseline` and `--baseline-write` do not take the file as a separate argument: write `--baseline=FILE`, because a following
 argument is a workflow file to check.
+
+### Show only what a pull request changed
+
+`--changed-since REV` shows only the findings on the lines that changed since `REV`, so a pull request check reports what the pull
+request adds and not what the repository already had:
+
+```sh
+jactionlint --changed-since origin/main
+```
+
+It is a filter of what is shown, not a way to check less. **Every file is checked and the whole call graph of the repository is read, as in
+a full run**: a finding on a changed line of a reusable workflow is still judged by the events and permissions of its callers, which did
+not change. The baseline is applied first, so the two combine (the baseline hides the findings you accepted, `--changed-since` the ones in
+code you did not touch). The exit status is that of the findings that are shown.
+
+- **What changed** is what the version control says between the merge base of `REV` and `HEAD` and the working tree (this uses `git`): the commits of
+  the branch, the staged and unstaged changes of tracked files, and every line of a file that is not tracked and not ignored. A moved file counts
+  as new. A block that was only deleted marks the lines on both sides of the place, since removing a `permissions:` or a guard can be the cause of
+  a finding next to it.
+- `--changed-scope files` shows every finding of a file that changed, for a team that wants the whole file clean once it touches it. The
+  default is `lines`.
+- **A change that makes a finding somewhere else is not shown there.** If a pull request changes the events of a caller so that the unchanged
+  line of a reusable workflow becomes a finding, that finding is at a line and in a file that did not change, so it is not shown. A full run shows
+  it, so run one on the default branch too. This is what a filter by position does; jactionlint does not guess which findings "belong" to a change.
+- **It fails when it cannot compare.** An unknown revision, a shallow clone without the merge base (give `actions/checkout` `fetch-depth: 0`),
+  or no `git` is an error with exit status 3, never an empty report that looks clean. It cannot be used with stdin, `--fix`, `--diff` or
+  `--baseline-write`, which would apply to a part of the file.
+- **What it says.** The text format prints `note: N finding(s) outside the changed lines since REV are not shown (--changed-since)` to stderr. The SARIF log has
+  `properties.changedSince` (`since`, `scope`, `hidden`), so a consumer can tell it from a full log. `json` and `jsonl` have no place for run
+  data and print no note. Without the option nothing changes in any format.
+- It is not `--diff` or `hk util sarif-diff`, which compute the patch of the fixes.
 
 ### Fix errors automatically
 
@@ -992,6 +1071,11 @@ jactionlint --online
   run over 20 large public repositories made 2231 requests with a cold cache, 427 of them
   for these files, and none with a warm one. Without a token GitHub allows 60 requests an hour: set one (see **Token**) when a repository
   uses many actions.
+- **Advisories in one request.** `known-vulnerable-actions` reads the advisories of the whole actions ecosystem with one list request
+  (`GET /advisories?ecosystem=actions&per_page=100`, up to 5 pages) and picks the ones of your actions itself, instead of one request
+  for each action. Cold-cache runs over three public repositories went from 104, 136 and 118 requests to 79, 102 and 83, with the same findings. The list is live data, kept
+  in the cache like every answer; nothing is built into the binary. If it cannot be read or is longer than 5 pages, each action is asked
+  about as before (`--verbose` says so). On an Enterprise Server with `--online-github-com-fallback` the list is the one of github.com.
 - **Skip private or internal actions.** `--online-deny 'mycorp/*'` (repeatable, or `deny:` in `online-options`) never asks
   about matching repositories, `--online-allow 'actions/*'` asks only about matching ones. They are not failures and not warned about.
 - **Cache.** Answers are kept in `$XDG_CACHE_HOME/jactionlint` (`~/.cache/jactionlint`), at most 32 MiB, shared safely by parallel

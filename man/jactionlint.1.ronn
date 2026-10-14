@@ -153,6 +153,14 @@ single-dash long options of v1 are removed; the error names the replacement.
   * `--print-output-schema`:
     Print the JSON Schema of the output of `--format json` and `jsonl`, and exit
 
+  * `--export-facts`:
+    Print the facts of the workflows and actions of the repository as versioned JSON and exit: the events,
+    permissions, concurrency, the local calls and who calls them, and the inputs, with positions and an explicit
+    `dynamic`, `unknown` or `repository-setting` wherever a value is not known. Nothing is checked or written
+
+  * `--print-facts-schema`:
+    Print the JSON Schema of the output of `--export-facts`, and exit
+
   * `--min-severity` <LEVEL>:
     Hide the errors less severe than this level: `info` (default), `warn` or `error`
 
@@ -274,6 +282,16 @@ single-dash long options of v1 are removed; the error names the replacement.
     Let shellcheck read this shellcheckrc file instead of running it with `--norc`. A relative path is
     resolved from the working directory and the file must exist (exit status 3 otherwise). It
     overrides `shellcheck.rcfile` of the configuration file, which also has `args` and `enable`
+
+  * `--changed-since` <REV>:
+    Show only the findings on the lines that changed since the merge base of <REV> and `HEAD`: the commits, the
+    index and the working tree, and every line of a file that is not tracked. Every file is still checked and the
+    call graph of the repository is read as in a full run; only what is shown is filtered. It fails (status 3) when
+    the comparison is not possible, and cannot be combined with `--fix`, `--diff`, `--baseline-write` or stdin
+
+  * `--changed-scope` <SCOPE>:
+    With `--changed-since`: `lines` (default) shows the findings on the changed lines, `files` shows every
+    finding of a changed file
 
   * `--strict-exit`:
     Exit with status 1 also when only errors of `warn` or `info` level are found. By default only
