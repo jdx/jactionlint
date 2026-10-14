@@ -1,7 +1,6 @@
 package jactionlint
 
 import (
-	"github.com/google/go-cmp/cmp"
 	"io"
 	"os"
 	"path/filepath"
@@ -268,60 +267,6 @@ jobs:
 			}
 		}
 	})
-}
-
-// TestUnmatchedPathsFilterDocsExample checks the example of docs/checks.md, which scripts/check-checks cannot lint
-// because the rule needs the files of a repository.
-func TestUnmatchedPathsFilterDocsExample(t *testing.T) {
-	b, err := os.ReadFile(filepath.Join("docs", "checks.md"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	doc := strings.ReplaceAll(string(b), "\r\n", "\n")
-	info, ok := LookupRule("unmatched-paths-filter")
-	if !ok {
-		t.Fatal("the rule is not registered")
-	}
-	start := strings.Index(doc, `<a id="`+info.DocsAnchor+`"></a>`)
-	if start < 0 {
-		t.Fatal("the section is missing")
-	}
-	section := doc[start+1:]
-	if i := strings.Index(section, `<a id="`); i >= 0 {
-		section = section[:i]
-	}
-	input, ok1 := docsBlock(section, "Example input:\n\n```yaml\n")
-	output, ok2 := docsBlock(section, "Output:\n<!-- Skip update output -->\n```\n")
-	cfgText, ok3 := docsBlock(section, "```yaml\nrules:\n")
-	if !ok1 || !ok2 || !ok3 {
-		t.Fatal("the section has no example input, output or rules block")
-	}
-	dir := t.TempDir()
-	for _, f := range []string{"src/main.go", "docs/index.md"} {
-		p := filepath.Join(dir, filepath.FromSlash(f))
-		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(p, nil, 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
-	cfg, err := parseConfig([]byte("rules:\n" + cfgText))
-	if err != nil {
-		t.Fatal(err)
-	}
-	var out strings.Builder
-	l, err := NewLinter(&out, &LinterOptions{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	l.defaultConfig = withFixtureRules(cfg)
-	if _, err := l.Lint("test.yaml", []byte(input), &Project{root: dir}); err != nil {
-		t.Fatal(err)
-	}
-	if diff := cmp.Diff(strings.TrimRight(output, "\n"), strings.TrimRight(out.String(), "\n")); diff != "" {
-		t.Errorf("the output in docs/checks.md is outdated (-docs +linter):\n%s", diff)
-	}
 }
 
 // TestUnmatchedPathsFilterDoesNotWalkWhenOff checks that the repository is not read when the rule is off, which is

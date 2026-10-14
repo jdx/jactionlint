@@ -1,0 +1,43 @@
+<a id="deadlock"></a>
+## Two workflows
+
+Example input:
+
+```yaml
+# file: .github/workflows/ci.yml
+# select: concurrency-deadlock
+on: push
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.sha }}
+
+jobs:
+  build:
+    uses: ./.github/workflows/build.yml
+```
+
+Example file: .github/workflows/build.yml
+
+```yaml
+on: workflow_call
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.sha }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - run: make
+```
+
+Output:
+
+```
+.github/workflows/ci.yml:6:10: the concurrency group "${{ github.workflow }}-${{ github.sha }}" is the same as the group of the workflow of .github/workflows/build.yml (line 4), which job "build" calls. the called workflow runs inside this one with its `github` context, so both groups are one: this run holds the group while it waits for the called workflow, which waits for the group. GitHub detects the deadlock and cancels the run. give one of the groups a part of its own, for example a suffix such as "-caller" [concurrency-deadlock]
+  |
+6 |   group: ${{ github.workflow }}-${{ github.sha }}
+  |          ^~~
+```
+
+<!-- Skip playground link -->

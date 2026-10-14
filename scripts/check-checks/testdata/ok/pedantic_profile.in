@@ -1,0 +1,23 @@
+<a id="pedantic"></a>
+## Pedantic rule
+
+Example input:
+
+```yaml
+# profile: pedantic
+# select: mutable-runner-label
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo hello
+```
+
+Output:
+
+```
+THIS WILL BE GENERATED
+```
+
+<!-- Skip playground link -->

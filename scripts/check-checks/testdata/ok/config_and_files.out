@@ -1,0 +1,78 @@
+<a id="local-action"></a>
+## Local action
+
+Example input:
+
+```yaml
+# select: missing-action-input,unknown-action-input
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: ./.github/actions/greet
+        with:
+          nmae: octocat
+```
+
+Example file: .github/actions/greet/action.yml
+
+```yaml
+name: Greet
+description: Says hello
+inputs:
+  name:
+    description: Who to greet
+    required: true
+runs:
+  using: composite
+  steps:
+    - run: echo hello
+      shell: bash
+```
+
+Example config:
+
+```yaml
+rules:
+  unknown-action-input: warn
+```
+
+Output:
+
+```
+test.yaml:7:15: missing input "name" which is required by action "Greet" defined at "./.github/actions/greet". all required inputs are "name" [missing-action-input]
+  |
+7 |       - uses: ./.github/actions/greet
+  |               ^~~~~~~~~~~~~~~~~~~~~~~
+test.yaml:9:11: warning: input "nmae" is not defined in action "Greet" defined at "./.github/actions/greet". available inputs are "name" [unknown-action-input]
+  |
+9 |           nmae: octocat
+  |           ^~~~~
+```
+
+<!-- Skip playground link -->
+
+A second example of the section has no config and no file of the first one.
+
+Example input:
+
+```yaml
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: ./.github/actions/greet
+```
+
+Output:
+
+```
+test.yaml:6:15: local action "./.github/actions/greet" is used before any checkout step in this job. the repository is not on the runner yet so the action cannot be found. add "actions/checkout" before this step or use "$/" syntax. this is reported because the "local-action-checkout" rule is enabled [local-action-checkout]
+  |
+6 |       - uses: ./.github/actions/greet
+  |               ^~~~~~~~~~~~~~~~~~~~~~~
+```
+
+<!-- Skip playground link -->

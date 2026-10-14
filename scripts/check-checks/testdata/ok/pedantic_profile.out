@@ -1,0 +1,26 @@
+<a id="pedantic"></a>
+## Pedantic rule
+
+Example input:
+
+```yaml
+# profile: pedantic
+# select: mutable-runner-label
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo hello
+```
+
+Output:
+
+```
+test.yaml:6:14: warning: runner label "ubuntu-latest" is an alias that GitHub moves to newer images, so the job can break without a change in this repository. use a fixed label such as "ubuntu-24.04", the image it points to until GitHub moves it to "ubuntu-26.04" in a rollout from 2026-10-19 to 2026-11-19 [mutable-runner-label]
+  |
+6 |     runs-on: ubuntu-latest
+  |              ^~~~~~~~~~~~~
+```
+
+<!-- Skip playground link -->

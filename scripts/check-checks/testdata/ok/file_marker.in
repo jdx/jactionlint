@@ -1,0 +1,40 @@
+<a id="deadlock"></a>
+## Two workflows
+
+Example input:
+
+```yaml
+# file: .github/workflows/ci.yml
+# select: concurrency-deadlock
+on: push
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.sha }}
+
+jobs:
+  build:
+    uses: ./.github/workflows/build.yml
+```
+
+Example file: .github/workflows/build.yml
+
+```yaml
+on: workflow_call
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.sha }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - run: make
+```
+
+Output:
+
+```
+THIS WILL BE GENERATED
+```
+
+<!-- Skip playground link -->
