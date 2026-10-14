@@ -89,18 +89,21 @@ gh attestation verify -R jdx/jactionlint jactionlint_1.7.12_linux_amd64.tar.gz
 ## Download script
 
 To install `jactionlint` executable with one command, [the download script](https://github.com/jdx/jactionlint/blob/main/scripts/download-jactionlint.bash) is available.
-It downloads the latest version of jactionlint (`jactionlint.exe` on Windows and `jactionlint` on other OSes) to the current
-directory automatically. This is a recommended way if you install jactionlint in some shell script.
+It downloads jactionlint (`jactionlint.exe` on Windows and `jactionlint` on other OSes) to the current
+directory automatically. The version it selects by default is written into the script and updated by the release workflow
+after each release, so a copy of the script from the `main` branch installs the latest release. This is a recommended way if
+you install jactionlint in some shell script.
 
 ```sh
 bash <(curl https://raw.githubusercontent.com/jdx/jactionlint/main/scripts/download-jactionlint.bash)
 ```
 
 When you need to install specific version of jactionlint, please give the version to the 1st command line argument. The following
-example installs v1.6.17.
+example installs v2.0.2. When that version has no archive, the script prints a message naming the version and the URL
+and exits with status 1.
 
 ```sh
-bash <(curl https://raw.githubusercontent.com/jdx/jactionlint/main/scripts/download-jactionlint.bash) 1.6.17
+bash <(curl https://raw.githubusercontent.com/jdx/jactionlint/main/scripts/download-jactionlint.bash) 2.0.2
 ```
 
 This script downloads `jactionlint` (or `jactionlint.exe` on Windows) binary to the current working directory. When you need to put
