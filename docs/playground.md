@@ -28,7 +28,7 @@ The playground checks one workflow with a fixed configuration, so it does not re
 | Profile | `default`, with the rules below turned off | The profile of your config file, `default` when you configure nothing |
 | Config file and baseline | None of yours: the fixed configuration below | `.github/jactionlint.yaml`, or else the [user-global config file](./config.md#where-jactionlint-reads-the-config-file), with its durable ignores, and a baseline |
 | shellcheck and pyflakes | Not run, so the scripts of `run:` get no shellcheck or pyflakes findings | Run when installed |
-| Network | None, so the [online checks](./online.md#online-checks) are not available | Used by the online checks when you turn them on |
+| Network | The playground runs no [online checks](./online.md#online-checks), so linting uses no network. It fetches a workflow only when you load one from a URL | Used by the online checks when you turn them on |
 | Files | One workflow | Workflows, composite actions, `dependabot.yml` and the Actions lock file |
 
 The fixed configuration is the one that the examples of the [checks page](./checks.md) use. Each example is a minimal workflow, so it lacks what the default profile asks of every real workflow. The configuration turns these rules off, so that an output shows the check it explains:
