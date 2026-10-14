@@ -598,6 +598,12 @@ func TestConfigLoadRepoConfigNames(t *testing.T) {
 	}
 }
 
+// slashedErrorMessage returns the message of err with the separators of the paths in it as slashes. A path
+// in a message is quoted with %q, which doubles the backslashes of a Windows path.
+func slashedErrorMessage(err error) string {
+	return strings.NewReplacer(`\\`, "/", `\`, "/").Replace(err.Error())
+}
+
 // A config file which exists but extends a file which does not is an error. It is not "no config file here",
 // even though errors.Is(err, os.ErrNotExist) is true for it.
 func TestConfigLoadRepoConfigMissingExtends(t *testing.T) {
@@ -646,7 +652,7 @@ func TestConfigLoadRepoConfigMissingExtends(t *testing.T) {
 			if !errors.Is(err, os.ErrNotExist) {
 				t.Errorf("the cause must stay in the chain: %v", err)
 			}
-			msg := filepath.ToSlash(err.Error())
+			msg := slashedErrorMessage(err)
 			for _, w := range tc.want {
 				if !strings.Contains(msg, w) {
 					t.Errorf("error message must contain %q: %q", w, msg)
@@ -670,7 +676,7 @@ func TestConfigLoadGlobalConfigMissingExtends(t *testing.T) {
 	if c != nil || p != "" {
 		t.Errorf("config must not be returned with an error: config=%v path=%q", c, p)
 	}
-	msg := filepath.ToSlash(err.Error())
+	msg := slashedErrorMessage(err)
 	for _, w := range []string{"global config file", "jactionlint/jactionlint.yaml", `"nope.yaml"`, `"extends"`} {
 		if !strings.Contains(msg, w) {
 			t.Errorf("error message must contain %q: %q", w, msg)
@@ -691,11 +697,11 @@ func TestConfigLoadConfigErrorNamesFileOnce(t *testing.T) {
 		if err == nil {
 			t.Fatal("error did not occur")
 		}
-		msg := err.Error()
+		msg := slashedErrorMessage(err)
 		if n := strings.Count(msg, prefix); n != 1 {
 			t.Errorf("%q must be there once but is there %d times: %q", prefix, n, msg)
 		}
-		if n := strings.Count(msg, p); n != 1 {
+		if n := strings.Count(msg, filepath.ToSlash(p)); n != 1 {
 			t.Errorf("the path must be there once but is there %d times: %q", n, msg)
 		}
 		if !strings.HasPrefix(msg, prefix+" ") {
@@ -711,11 +717,11 @@ func TestConfigLoadConfigErrorNamesFileOnce(t *testing.T) {
 		if err == nil {
 			t.Fatal("error did not occur")
 		}
-		msg := err.Error()
+		msg := slashedErrorMessage(err)
 		if n := strings.Count(msg, prefix); n != 1 {
 			t.Errorf("%q must be there once but is there %d times: %q", prefix, n, msg)
 		}
-		if n := strings.Count(msg, p); n != 1 {
+		if n := strings.Count(msg, filepath.ToSlash(p)); n != 1 {
 			t.Errorf("the path must be there once but is there %d times: %q", n, msg)
 		}
 		if !strings.Contains(msg, "global config file") {
