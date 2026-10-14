@@ -46,7 +46,7 @@ function parseRules(md: string): Map<string, RuleRow> {
 
 /** The content of the code fence on the line after "<!-- marker -->", as demoBlock in docs_demo_test.go reads it. */
 function demoBlock(md: string, marker: string): string {
-  const lines = md.replace(/\r\n/g, "\n").split("\n");
+  const lines = md.split("\n");
   const at = lines.findIndex((l) => l.trim() === `<!-- ${marker} -->`);
   if (at < 0 || !lines[at + 1]?.startsWith("```")) throw new Error(`home.data.ts: index.md has no <!-- ${marker} --> block`);
   const end = lines.findIndex((l, i) => i > at + 1 && l.startsWith("```"));
@@ -87,7 +87,7 @@ export default {
     const read = (name: string) => {
       const file = files.find((f) => basename(f) === name);
       if (!file) throw new Error(`home.data.ts: ${name} is not among the watched files`);
-      return readFileSync(file, "utf8");
+      return readFileSync(file, "utf8").replace(/\r\n/g, "\n"); // a Windows checkout can have CRLF
     };
     const rules = parseRules(read("rules.md"));
     const all = [...rules.values()];
