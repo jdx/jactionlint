@@ -95,8 +95,7 @@ can narrow a rule with `message_contains`. Once findings carry stable rule IDs, 
 ID and drop `message_contains`. Add an entry whenever a new jactionlint rule covers a zizmor audit. Audits
 without an entry show up under "Unmapped zizmor audits".
 
-`unsound-ternary` stays in the file for the falsy ternary check, but zizmor 1.30.1 has no audit of that name, so
-its row is always zero.
+`unsound-ternary` is the audit of zizmor 1.30.1 for the falsy ternary check (`a && b || c` where `b` can be falsy); the corpus runs of 2026-10-13 had one finding of it, which jactionlint reports.
 
 ## Retargeting for jactionlint v2
 

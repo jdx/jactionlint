@@ -98,19 +98,23 @@ func (rule *RuleMutableRunnerLabel) check(l *String, direct bool) {
 		msg += " use a label with a version"
 	}
 	rule.ReportID("mutable-runner-label", l.Pos, msg)
+	errs := rule.Errs()
 	if !direct {
 		// The value is also used by expressions on the matrix, so it is not replaced by a fix
+		errs[len(errs)-1].NoFix = &NoFix{Code: NoFixUnsupportedShape, Reason: "the label comes from a matrix, whose value expressions of the job may also read, so the fix does not replace it. change it in the matrix by hand"}
 		return
 	}
 	pins, _ := rule.Config().ruleOptionStringMap("mutable-runner-label", "pin")
 	to, ok := lookupFold(pins, l.Value)
 	if !ok {
+		errs[len(errs)-1].NoFix = &NoFix{Code: NoFixOptionRequired, Option: "mutable-runner-label.pin", Reason: fmt.Sprintf("set an entry for %q in the mutable-runner-label option pin to enable the fix, jactionlint does not choose an image", l.Value)}
 		return
 	}
 	if edit, ok := rule.labelEdit(l, to); ok {
-		errs := rule.Errs()
 		errs[len(errs)-1].Fix = &Fix{Description: fmt.Sprintf("Use %s as configured in the pin option", to), Edits: []TextEdit{edit}}
+		return
 	}
+	errs[len(errs)-1].NoFix = &NoFix{Code: NoFixUnsupportedShape, Reason: "the label is not written as a plain or quoted scalar that the fix can edit exactly (an escape, an anchor or a folded scalar), change it by hand"}
 }
 
 func lookupFold(m map[string]string, key string) (string, bool) {

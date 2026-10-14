@@ -89,6 +89,7 @@ cat action.yml | jactionlint --stdin-filename action.yml -
 | `--color[=WHEN]` |  | Colorize the output: always, never or auto (default). Bare --color means always |
 | `--no-color` |  | Same as --color=never |
 | `--show-doc-urls` |  | Print the documentation URL of the rule of each finding: under the finding (text) or in the message (github) |
+| `--show-fix-status` |  | Print what the fix of each finding is, or why it has none: under the finding (text) or in the message (github) |
 | `--finding-context` |  | Add the events of the workflow and the permissions of the token of the job to each finding of json, jsonl and sarif |
 | `--no-hints` |  | Do not print the hint line after a text run with many findings, nor the note that shellcheck or pyflakes was not found |
 | `--min-severity=LEVEL` |  | Hide findings less severe than LEVEL: info (default), warn or error |
@@ -471,6 +472,28 @@ An error object of `json` and `jsonl` has these fields.
 | `fix`          | The automatic fix of the error: its `description` and the byte-range `edits`. It is omitted when there is no fix  |
 | `no_fix`       | Why a finding which the rule can fix has no fix (the SARIF log adds `unsafe-edit`, `edit-conflict` and `invalid-edit`, see the SARIF section below): a `code` (`option-required`, `option-invalid`, `online-required`, `lookup-failed`, `unsupported-shape` or `needs-judgment`), a `reason` and, for the options, the `option` to configure such as `missing-timeout.default-minutes`. It is omitted when there is a fix and for findings which are advice only |
 
+<a id="fix-status"></a>
+#### The fix of a finding, or why there is none
+
+A finding of a rule that can fix some of its findings is one of four things, and the formats tell them apart:
+
+| What | JSON | SARIF | `--show-fix-status` |
+| --- | --- | --- | --- |
+| A safe fix, applied by `--fix` | `fix` | `fixes` | `= fix: ... (apply it with --fix)` |
+| A fix that may change behavior, applied by `--fix=unsafe` | `fix` with `unsafe: true` | `noFixCode: unsafe-edit` (SARIF never carries an unsafe fix) | `= fix: ... (may change behavior: apply it with --fix=unsafe)` |
+| No fix now, with a reason | `no_fix` with a `code` and a `reason` | `noFixCode`, `noFixReason` | `= no fix (code): reason` |
+| Advice only: the rule never fixes this kind of finding | neither | neither | no line |
+
+The codes of `no_fix` say what stands in the way, so a tool can tell what to do about it: `option-required` and `option-invalid`
+(a rule option has to be configured: the field `option` names it, such as `missing-timeout.default-minutes`, `dependabot-cooldown.default-days`
+or `mutable-runner-label.pin`; jactionlint never chooses a number of minutes or days or an image), `online-required` and `lookup-failed` (pinning
+needs `--online`, or the lookup it ran failed), `unsupported-shape` (the source is written in a way the fix does not edit exactly, such as a flow
+mapping, an anchor, an escape, or a script that is not a literal block) and `needs-judgment` (the right change is a decision, or an automatic
+one would not be safe). Setting an option does not make every finding of the rule fixable: the reason of a finding says what its own fix needs.
+`jactionlint --explain RULE` lists what a rule needs for its fix (`Fix needs`).
+
+`--show-fix-status` prints this for the people who read the text output. It is not on by default because the text format is one line
+per finding that other tools parse; with `--format oneline` it prints nothing more, and `json`, `jsonl` and `sarif` have the data always.
 #### Events and token permissions of a finding
 
 `--finding-context` adds two fields to each finding of `json`, `jsonl` and `sarif` (to `properties` of the result), so that the findings of many
@@ -589,7 +612,7 @@ their summary, group and a link to the documentation. A result which the rule co
 `properties` (`noFixCode`, `noFixReason` and `noFixOption`), so that code scanning consumers can tell it from advice-only findings,
 which have no `noFixCode`. A result never has both `fixes` and `noFixCode`. A fix which may change behavior (an unsafe fix) is never in the
 log, so its result says `noFixCode: unsafe-edit` (the JSON has the fix itself, with `unsafe: true`), and a fix whose edit overlaps the fix
-of another result of the same log says `edit-conflict`, and one whose edits do not fit the source (from a custom rule) says `invalid-edit`. The reasons are in JSON and SARIF only; the text output is one line per finding.
+of another result of the same log says `edit-conflict`, and one whose edits do not fit the source (from a custom rule) says `invalid-edit`. The reasons are in JSON and SARIF; the text output is one line per finding unless `--show-fix-status` asks for the status (see [the fix status of a finding](#fix-status)).
 
 A custom template still works. This is [the template file in test data](https://github.com/jdx/jactionlint/blob/main/testdata/format/sarif_template.txt)
 which was used before `--format sarif`. [The output example in test data](https://github.com/jdx/jactionlint/blob/main/testdata/format/test.sarif)
@@ -855,7 +878,7 @@ code you did not touch). The exit status is that of the findings that are shown.
   it, so run one on the default branch too. This is what a filter by position does; jactionlint does not guess which findings "belong" to a change.
 - **It fails when it cannot compare.** An unknown revision, a shallow clone without the merge base (give `actions/checkout` `fetch-depth: 0`),
   or no `git` is an error with exit status 3, never an empty report that looks clean. It cannot be used with stdin, `--fix`, `--diff` or
-  `--baseline-write`, which would apply to a part of the file.
+  `--baseline-write`, which would apply to a part of the file, nor with `--export-facts`, which has no findings to filter.
 - **What it says.** The text format prints `note: N finding(s) outside the changed lines since REV are not shown (--changed-since)` to stderr. The SARIF log has
   `properties.changedSince` (`since`, `scope`, `hidden`), so a consumer can tell it from a full log. `json` and `jsonl` have no place for run
   data and print no note. Without the option nothing changes in any format.

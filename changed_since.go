@@ -67,8 +67,11 @@ type changedFilter struct {
 
 	mu     sync.Mutex
 	states map[string]*changedState // by project root
-	hidden int
-	err    error
+	// hiddenErrs are the findings that were left out and shownShared the keys (ID and message) of the shared findings that a
+	// copy of is shown: ChangedInfo.Hidden counts them as a full run reports them, a shared finding once
+	hiddenErrs  map[*Error]bool
+	shownShared map[string]bool
+	err         error
 }
 
 // changedState is what git said about one repository.
@@ -99,7 +102,7 @@ func (c *changedLines) touches(from, to int) bool {
 }
 
 func newChangedFilter(rev string, scope ChangedScope) *changedFilter {
-	return &changedFilter{rev: rev, scope: scope, states: map[string]*changedState{}}
+	return &changedFilter{rev: rev, scope: scope, states: map[string]*changedState{}, hiddenErrs: map[*Error]bool{}, shownShared: map[string]bool{}}
 }
 
 // info returns what the filter did, or nil when --changed-since is off.
@@ -110,7 +113,29 @@ func (l *Linter) changedInfo() *ChangedInfo {
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	return &ChangedInfo{Since: c.rev, Scope: string(c.scope), Hidden: c.hidden}
+	// A finding that every use of a local action reports is one finding in a full run (see sharedFindings): it is hidden
+	// once, when no copy of it is shown, and not at all when a copy is
+	hidden := 0
+	counted := map[string]bool{}
+	for e := range c.hiddenErrs {
+		if _, shared := l.shared.errs.Load(e); shared {
+			k := sharedKey(e)
+			if c.shownShared[k] || counted[k] {
+				continue
+			}
+			counted[k] = true
+		}
+		hidden++
+	}
+	return &ChangedInfo{Since: c.rev, Scope: string(c.scope), Hidden: hidden}
+}
+
+func sharedKey(e *Error) string { return e.ID + "\x00" + e.Message }
+
+// outsideRoot reports whether a relative path from filepath.Rel leaves the root. A name that only starts with two dots
+// ("..foo/x.yaml") is a path in it.
+func outsideRoot(rel string) bool {
+	return rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
 // changedError returns the reason --changed-since could not be applied: git is missing, the revision is unknown, or the
@@ -147,7 +172,7 @@ func (l *Linter) filterChanged(results []fileResult) []fileResult {
 		}
 		root := absPath(p.RootDir())
 		rel, err := filepath.Rel(root, abs)
-		if err != nil || strings.HasPrefix(rel, "..") {
+		if err != nil || outsideRoot(rel) {
 			continue
 		}
 		st := c.stateFor(root)
@@ -161,20 +186,25 @@ func (l *Linter) filterChanged(results []fileResult) []fileResult {
 		}
 		lines := st.files[filepath.ToSlash(rel)]
 		kept := r.errs[:0:0]
-		hidden := 0
+		var hidden []*Error
 		for _, e := range r.errs {
 			if lines != nil && (c.scope == ChangedScopeFiles || e.Line <= 0 || lines.touches(e.Line, e.EndLine)) {
 				kept = append(kept, e)
 				continue
 			}
-			hidden++
+			hidden = append(hidden, e)
 		}
 		r.errs = kept
-		if hidden > 0 {
-			c.mu.Lock()
-			c.hidden += hidden
-			c.mu.Unlock()
+		c.mu.Lock()
+		for _, e := range kept {
+			if _, shared := l.shared.errs.Load(e); shared {
+				c.shownShared[sharedKey(e)] = true
+			}
 		}
+		for _, e := range hidden {
+			c.hiddenErrs[e] = true
+		}
+		c.mu.Unlock()
 	}
 	return results
 }

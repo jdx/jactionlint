@@ -60,23 +60,24 @@ func fixMissingPermissionsWhy(w *Workflow) (*Fix, *NoFix) {
 		// files, so there is no value that is right to write. The rule does not report it, and no fix exists.
 		return nil, nil
 	}
+	shape := &NoFix{Code: NoFixUnsupportedShape, Reason: "the workflow is not written in a way the fix can edit exactly, add the top-level \"permissions:\" by hand"}
 	d := newSrcDoc(w.Source)
 	if d == nil {
-		return nil, nil
+		return nil, shape
 	}
 	if _, _, _, ok := d.topLevelKey("permissions"); ok {
-		return nil, nil // the parser did not see it, so the shape is not understood
+		return nil, shape // the parser did not see it, so the shape is not understood
 	}
 	line, indent, inline, ok := d.topLevelKey("on")
 	if !ok {
 		line, indent, inline, ok = d.topLevelKey(`"on"`)
 	}
 	if !ok {
-		return nil, nil
+		return nil, shape
 	}
 	end, ok := d.entryEnd(line, indent, inline)
 	if !ok {
-		return nil, nil
+		return nil, shape
 	}
 	line = end
 	// The new key goes at the indentation of the other keys of the root mapping

@@ -26,6 +26,7 @@ func TestExplain(t *testing.T) {
 		"Profile:        default (so also pedantic)",
 		"Default level:  error",
 		"Fix:            yes.",
+		"Fix needs:      the option default-minutes (jactionlint does not choose a timeout).",
 		"https://jactionlint.jdx.dev/rules#missing-timeout",
 		"https://jactionlint.jdx.dev/checks#check-timeout-minutes",
 		"default-minutes (int, no default)",
@@ -108,5 +109,18 @@ func TestChecksSection(t *testing.T) {
 	}
 	if got := checksSection(doc, "three"); got != "" {
 		t.Errorf("three: %q", got)
+	}
+}
+
+// fixNeeds describes rules that have a fix, and a rule without one has no line about it.
+func TestExplainFixNeeds(t *testing.T) {
+	for id := range fixNeeds {
+		if info, ok := ruleIndex[id]; !ok || !info.Fixable {
+			t.Errorf("fixNeeds has %q, which is not a rule with a fix", id)
+		}
+	}
+	_, out, _ := explain(t, "--explain", "template-injection")
+	if strings.Contains(out, "Fix needs:") {
+		t.Errorf("a rule without a prerequisite has a line for it:\n%s", out)
 	}
 }

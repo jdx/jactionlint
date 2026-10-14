@@ -327,14 +327,18 @@ func unusedInlineIgnores(ignores []inlineIgnore, orphans []*inlineIgnoreEntry, c
 		if e.zizmor != "" {
 			msg = fmt.Sprintf("zizmor ignore comment for %q %s. remove it", e.zizmor, what)
 		}
-		errs = append(errs, &Error{
+		ue := &Error{
 			Message: msg,
 			Line:    e.line,
 			Column:  e.col,
 			Kind:    "ignore",
 			ID:      "unused-ignore",
 			Fix:     e.comment.removeStale(func(o *inlineIgnoreEntry) bool { return stale(o) && o.comment == e.comment }),
-		})
+		}
+		if ue.Fix == nil {
+			ue.NoFix = noFixIgnoreComment
+		}
+		errs = append(errs, ue)
 	}
 	for _, ig := range ignores {
 		for _, e := range ig.entries {
@@ -346,6 +350,9 @@ func unusedInlineIgnores(ignores []inlineIgnore, orphans []*inlineIgnoreEntry, c
 	}
 	return errs
 }
+
+// noFixIgnoreComment is the reason for an unused ignore comment whose removal is not offered.
+var noFixIgnoreComment = &NoFix{Code: NoFixUnsupportedShape, Reason: "removing the comment would change what the YAML file means, or its text cannot be found in the file. remove it by hand"}
 
 // removeStale makes the fix removing the patterns of the comment for which stale is true. The
 // comment line is deleted when nothing else is left in it. Otherwise the list is rewritten with the
@@ -378,6 +385,13 @@ func (c *ignoreComment) removeStale(stale func(*inlineIgnoreEntry) bool) *Fix {
 // thousands of times. Only when that changes the file are the fixes split in halves to find the ones
 // which do.
 func dropFixesChangingYAML(src []byte, errs []*Error) {
+	defer func() {
+		for _, e := range errs {
+			if e.Fix == nil && e.NoFix == nil {
+				e.NoFix = noFixIgnoreComment
+			}
+		}
+	}()
 	var withFix []*Error
 	for _, e := range errs {
 		if e.Fix != nil {

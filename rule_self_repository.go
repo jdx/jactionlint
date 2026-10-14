@@ -51,7 +51,9 @@ func (rule *RuleSelfRepository) check(u *String, workflowCall bool) {
 			u.Value, suggested,
 		)
 	}
+	noFix := &NoFix{Code: NoFixUnsupportedShape, Reason: "the value is not written in a way the fix can edit exactly (quoted with an escape, an anchor or a folded scalar), write the \"$/\" form by hand"}
 	if rule.src == nil {
+		rule.errs[len(rule.errs)-1].NoFix = noFix
 		return
 	}
 	if rule.idx == nil {
@@ -63,7 +65,9 @@ func (rule *RuleSelfRepository) check(u *String, workflowCall bool) {
 			Unsafe:      true,
 			Edits:       []TextEdit{edit},
 		}
+		return
 	}
+	rule.errs[len(rule.errs)-1].NoFix = noFix
 }
 
 // VisitStep is callback when visiting Step node.

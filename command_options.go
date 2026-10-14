@@ -51,6 +51,7 @@ var cliOptions = []cliOption{
 	{"Output", "color", "", "WHEN", true, "-color", "Colorize the output: always, never or auto (default). Bare --color means always"},
 	{"Output", "no-color", "", "", false, "-no-color", "Same as --color=never"},
 	{"Output", "show-doc-urls", "", "", false, "", "Print the documentation URL of the rule of each finding: under the finding (text) or in the message (github)"},
+	{"Output", "show-fix-status", "", "", false, "", "Print what the fix of each finding is, or why it has none: under the finding (text) or in the message (github)"},
 	{"Output", "finding-context", "", "", false, "", "Add the events of the workflow and the permissions of the token of the job to each finding of json, jsonl and sarif"},
 	{"Output", "no-hints", "", "", false, "-no-hints", "Do not print the hint line after a text run with many findings, nor the note that shellcheck or pyflakes was not found"},
 	{"Output", "min-severity", "", "LEVEL", false, "-min-severity", "Hide findings less severe than LEVEL: info (default), warn or error"},
@@ -346,6 +347,7 @@ func newCommandFlags() *commandFlags {
 	fs.BoolVar(&f.noColor, "no-color", false, "")
 	fs.BoolVar(&f.noHints, "no-hints", false, "")
 	fs.BoolVar(&o.ShowDocURLs, "show-doc-urls", false, "")
+	fs.BoolVar(&o.ShowFixStatus, "show-fix-status", false, "")
 	fs.BoolVar(&o.FindingContext, "finding-context", false, "")
 	fs.StringVar(&f.minSeverity, "min-severity", "info", "")
 	fs.BoolVar(&f.strictExit, "strict-exit", false, "")

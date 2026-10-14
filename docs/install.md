@@ -39,6 +39,19 @@ brew install --cask jdx/jactionlint/jactionlint
 > Since the `jactionlint` executable is unsigned, macOS displays a warning and tries to move it to the Trash. To allow it to run,
 > go to 'Settings -> Privacy & Security' and grant the permission.
 
+## PyPI
+
+Wheels with the prebuilt binary are published to [PyPI](https://pypi.org/project/jactionlint/) at each release, built with
+[go-to-wheel](https://github.com/simonw/go-to-wheel) for Linux, macOS and Windows (x86_64, arm64). Python is only the
+delivery vehicle: nothing runs on it.
+
+```sh
+pip install jactionlint
+pipx install jactionlint
+uv tool install jactionlint
+uvx jactionlint --version
+```
+
 ## Prebuilt binaries
 
 Download an archive file from [the releases page][releases] for your platform, unarchive it and put the executable file to a
