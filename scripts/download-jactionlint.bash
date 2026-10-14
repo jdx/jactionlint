@@ -136,7 +136,8 @@ echo "Downloading ${url} with curl"
 if [[ "$os" == "windows" ]]; then
     tempdir="$(mktemp -d "${name}.XXXXXXXXXXXXXXXX")"
 else
-    tempdir="$(mktemp -d)"
+    # Give mktemp a template: not every mktemp (e.g. the one of FreeBSD) works without one
+    tempdir="$(mktemp -d "${TMPDIR:-/tmp}/${name}.XXXXXXXXXXXXXXXX")"
 fi
 trap 'rm -rf "$tempdir"' EXIT
 archive="$tempdir/${file}"
